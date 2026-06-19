@@ -55,8 +55,9 @@ starts) and **layout** (`--step` or not), which compose freely.
 - `base` — branch to diff against, taken from `reviewworkflow.base` (see below);
   a positional argument overrides it. **Required for a full review** — there is
   no built-in default, so a full review with no base set fails and asks you to
-  configure one. Not needed with `--delta` or `--from`, which carry their own
-  starting point.
+  configure one. Not used with `--delta` or `--from`, which carry their own
+  starting point — passing an explicit base alongside them is an error (a base
+  from config is simply ignored).
 - `--delta` — review only the commits added **since your last review** of this
   branch, instead of the whole PR. Perfect for re-reviewing an updated PR. The
   recorded tip survives `clean-review` (unless `--forget`), so this works even
@@ -195,8 +196,9 @@ empieza) y **layout** (`--step` o no), que se combinan libremente.
 - `base` — rama contra la que comparar, tomada de `reviewworkflow.base` (ver
   abajo); el argumento posicional la sobreescribe. **Obligatoria para una review
   completa** — no hay default, así que una review completa sin base configurada
-  falla y te pide que la configures. No hace falta con `--delta` ni `--from`, que
-  ya traen su propio punto de inicio.
+  falla y te pide que la configures. No se usa con `--delta` ni `--from`, que ya
+  traen su propio punto de inicio — pasar una base explícita junto con ellos es
+  un error (una base que viene de config simplemente se ignora).
 - `--delta` — revisar solo los commits agregados **desde tu última review** de
   esta rama, en vez de todo el PR. Ideal para re-revisar un PR actualizado. El
   tip registrado sobrevive a `clean-review` (salvo `--forget`), así que funciona

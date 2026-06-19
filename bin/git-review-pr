@@ -41,6 +41,7 @@ show_commit() {
 
 src=""
 base=""
+base_explicit=0
 from=""
 delta=0
 step=0
@@ -68,6 +69,7 @@ while [ $# -gt 0 ]; do
 			src="$1"
 		elif [ -z "$base" ]; then
 			base="$1"
+			base_explicit=1
 		else
 			die "unexpected argument $1"
 		fi
@@ -83,6 +85,10 @@ done
 
 if [ "$delta" -eq 1 ] && [ -n "$from" ]; then
 	die "use only one of --delta and --from"
+fi
+
+if [ "$base_explicit" -eq 1 ] && { [ "$delta" -eq 1 ] || [ -n "$from" ]; }; then
+	die "base is ignored with --delta/--from; pass only one"
 fi
 
 git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"

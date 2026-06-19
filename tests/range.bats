@@ -97,6 +97,19 @@ push_more() {
 	[[ "$output" == *"only one of --delta and --from"* ]]
 }
 
+@test "an explicit base cannot be combined with --delta" {
+	run git review-pr feature/x develop --delta
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"base is ignored with --delta/--from"* ]]
+}
+
+@test "an explicit base cannot be combined with --from" {
+	c1="$(git rev-parse feature/x~1)"
+	run git review-pr feature/x develop --from "$c1"
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"base is ignored with --delta/--from"* ]]
+}
+
 @test "--delta --step walks only the new commits after a prior review" {
 	git review-pr feature/x
 	git switch --quiet develop

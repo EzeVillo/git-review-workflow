@@ -48,7 +48,8 @@ irm https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-inst
 ```
 
 This installs the commands into `~\.local\bin` and adds that folder to your
-user `PATH` automatically. Open a new terminal after it finishes.
+user `PATH` automatically. Open a new terminal after it finishes. To update,
+re-run the same command.
 
 **Windows — [Scoop](https://scoop.sh)** (alternative if you already have it):
 
@@ -56,6 +57,8 @@ user `PATH` automatically. Open a new terminal after it finishes.
 scoop bucket add git-review-workflow https://github.com/EzeVillo/git-review-workflow
 scoop install git-review-workflow/git-review-workflow
 ```
+
+To update with Scoop: `scoop update git-review-workflow/git-review-workflow`.
 
 With Homebrew, the PowerShell installer, or Scoop you can stop here — they put
 the commands somewhere your terminal already looks, so `git review-pr` just
@@ -72,6 +75,7 @@ curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/w
 
 It installs into the folder `~/.local/bin`. If that folder isn't on your `PATH`,
 the installer will tell you — see [About your PATH](#about-your-path-command-not-found).
+To update, re-run the same command — it always installs the latest release.
 
 > **Git Bash on Windows — SSL error?** If you see a message like
 > `schannel: next InitializeSecurityContext failed` or `revocation check`, your
@@ -91,6 +95,8 @@ If you cloned or downloaded the project, open its folder in a terminal and run:
 
 This installs all eight commands into `~/.local/bin` (change the location with
 `PREFIX=/usr/local/bin ./install.sh`). Undo it any time with `./uninstall.sh`.
+To update, just `git pull` inside the repo — the symlinks pick up changes
+automatically.
 
 #### About your PATH ("command not found")
 
@@ -329,7 +335,8 @@ irm https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-inst
 ```
 
 Instala los comandos en `~\.local\bin` y agrega esa carpeta al `PATH` de tu
-usuario automáticamente. Abrí una terminal nueva cuando termine.
+usuario automáticamente. Abrí una terminal nueva cuando termine. Para
+actualizar, volvé a correr el mismo comando.
 
 **Windows — [Scoop](https://scoop.sh)** (alternativa si ya lo tenés instalado):
 
@@ -337,6 +344,8 @@ usuario automáticamente. Abrí una terminal nueva cuando termine.
 scoop bucket add git-review-workflow https://github.com/EzeVillo/git-review-workflow
 scoop install git-review-workflow/git-review-workflow
 ```
+
+Para actualizar con Scoop: `scoop update git-review-workflow/git-review-workflow`.
 
 Con Homebrew, el instalador de PowerShell o Scoop podés parar acá — dejan los
 comandos en un lugar donde tu terminal ya busca, así `git review-pr` funciona
@@ -353,6 +362,7 @@ curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/w
 
 Instala en la carpeta `~/.local/bin`. Si esa carpeta no está en tu `PATH`, el
 instalador te avisa — mirá [Sobre tu PATH](#sobre-tu-path-command-not-found).
+Para actualizar, volvé a correr el mismo comando — siempre instala la última versión.
 
 > **Git Bash en Windows — ¿error de SSL?** Si ves un mensaje como
 > `schannel: next InitializeSecurityContext failed` o `revocation check`, tu Git
@@ -372,7 +382,8 @@ Si clonaste o descargaste el proyecto, abrí su carpeta en una terminal y corré
 
 Instala los ocho comandos en `~/.local/bin` (cambiá la ubicación con
 `PREFIX=/usr/local/bin ./install.sh`). Lo deshacés cuando quieras con
-`./uninstall.sh`.
+`./uninstall.sh`. Para actualizar, simplemente hacé `git pull` dentro del repo
+— los symlinks toman los cambios automáticamente.
 
 #### Sobre tu PATH ("command not found")
 

@@ -26,62 +26,89 @@ PR branch itself).
 
 ### Install
 
-```sh
-./install.sh
-```
+These commands plug into `git` — you run them as `git review-pr`,
+`git finish-review`, and so on. Pick whichever method matches your setup. The
+first options are the easiest and **set everything up for you**.
 
-This symlinks all eight commands (`git-review-pr`, `git-review-next`,
-`git-review-prev`, `git-review-status`, `git-review-list`, `git-review-abort`,
-`git-finish-review` and `git-clean-review`) into `~/.local/bin` (override with
-`PREFIX=/usr/local/bin ./install.sh`). Make sure that directory is on your
-`PATH`. Remove them with `./uninstall.sh`.
+#### Easiest: a package manager (handles your PATH for you)
 
-#### One-line install (Linux, macOS, WSL, Git Bash)
-
-No clone needed — download and install the commands straight into your `PATH`:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/HEAD/web-install.sh | sh
-```
-
-Override the install dir with `PREFIX`, or the version with `REF`:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/HEAD/web-install.sh \
-    | PREFIX=/usr/local/bin REF=v0.0.1 sh
-```
-
-With no `REF` it installs the latest release, falling back to the default branch.
-
-#### Homebrew (macOS and Linux)
-
-Homebrew works the same on macOS and Linux (Linuxbrew) with one formula. Until a
-tagged release exists, install the tip of the default branch via a tap:
+**macOS or Linux — [Homebrew](https://brew.sh):**
 
 ```sh
 brew tap EzeVillo/git-review-workflow https://github.com/EzeVillo/git-review-workflow
 brew install --HEAD EzeVillo/git-review-workflow/git-review-workflow
 ```
 
-This installs the commands and all shell completions (`Formula/git-review-workflow.rb`).
-After a release, drop `--HEAD` to install the tagged version.
-
-#### Scoop (Windows)
-
-On Windows, install via [Scoop](https://scoop.sh) (the commands run under the
-bash that ships with Git for Windows, which you also need):
+**Windows — [Scoop](https://scoop.sh)** (you also need
+[Git for Windows](https://gitforwindows.org); it provides the shell these
+commands run in):
 
 ```powershell
 scoop bucket add git-review-workflow https://github.com/EzeVillo/git-review-workflow
 scoop install git-review-workflow/git-review-workflow
 ```
 
-The bucket manifest lives at `bucket/git-review-workflow.json`.
+*(Once a version is released, drop `--HEAD` from the Homebrew command.)*
 
-#### Tab completion
+With Homebrew or Scoop you can stop here — they put the commands somewhere your
+terminal already looks, so `git review-pr` just works. Everything below only
+matters if you install manually.
 
-Source the completion for your shell. **bash** (requires git's own bash
-completion loaded first):
+#### One-line install (Linux, macOS, WSL, Git Bash)
+
+No package manager? This downloads the commands and installs them for you — you
+don't even need to download the project first:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/HEAD/web-install.sh | sh
+```
+
+It installs into the folder `~/.local/bin`. If that folder isn't on your `PATH`,
+the installer will tell you — see [About your PATH](#about-your-path-command-not-found).
+
+#### From a downloaded copy
+
+If you cloned or downloaded the project, open its folder in a terminal and run:
+
+```sh
+./install.sh
+```
+
+This installs all eight commands into `~/.local/bin` (change the location with
+`PREFIX=/usr/local/bin ./install.sh`). Undo it any time with `./uninstall.sh`.
+
+#### About your PATH ("command not found")
+
+Your `PATH` is simply the list of folders your terminal looks inside when you
+type a command. When you run `git review-pr`, your terminal goes through those
+folders one by one until it finds a program with that name. If the folder where
+these commands were installed isn't on the list, the terminal can't find them
+and you'll see something like `git: 'review-pr' is not a git command` or
+`command not found` — it's not broken, it just doesn't know where to look.
+
+- **Homebrew and Scoop add their folder to your `PATH` automatically**, so if
+  you installed that way there's nothing to do.
+- The **one-line** and **manual** installs use the folder `~/.local/bin`, which
+  is already on the `PATH` on most systems. If it isn't, the installer prints a
+  short note, and you add it **once** by pasting one line into your shell's
+  config file:
+
+| If your terminal uses… | Add this line to the file… | The line to add |
+| --- | --- | --- |
+| **bash** | `~/.bashrc` | `export PATH="$HOME/.local/bin:$PATH"` |
+| **zsh** (default on recent macOS) | `~/.zshrc` | `export PATH="$HOME/.local/bin:$PATH"` |
+| **fish** | *(no file — just run this once)* | `fish_add_path ~/.local/bin` |
+
+Not sure which one you use? Run `echo $0` — it prints `bash`, `zsh`, or similar.
+After editing the file, **open a new terminal window** (or run `source ~/.bashrc`
+/ `source ~/.zshrc`). To check it worked, run `git review-pr --help`: if you see
+a usage message, you're all set.
+
+#### Tab completion (optional)
+
+This is a nice-to-have, not required — it lets you press Tab to complete
+command names and branches. Source the completion for your shell. **bash**
+(requires git's own bash completion loaded first):
 
 ```sh
 source /path/to/git-review-workflow/completions/git-review-workflow.bash
@@ -240,63 +267,90 @@ PR).
 
 ### Instalación
 
-```sh
-./install.sh
-```
+Estos comandos se enchufan a `git` — los usás como `git review-pr`,
+`git finish-review`, etc. Elegí el método que mejor te quede. Las primeras
+opciones son las más fáciles y **te configuran todo solas**.
 
-Hace symlink de los ocho comandos (`git-review-pr`, `git-review-next`,
-`git-review-prev`, `git-review-status`, `git-review-list`, `git-review-abort`,
-`git-finish-review` y `git-clean-review`) en `~/.local/bin` (cambialo con
-`PREFIX=/usr/local/bin ./install.sh`). Asegurate de que ese directorio esté en
-tu `PATH`. Para quitarlos: `./uninstall.sh`.
+#### Lo más fácil: un gestor de paquetes (te configura el PATH solo)
 
-#### Instalación en una línea (Linux, macOS, WSL, Git Bash)
-
-Sin clonar — descarga e instala los comandos directo en tu `PATH`:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/HEAD/web-install.sh | sh
-```
-
-Cambiá el directorio con `PREFIX`, o la versión con `REF`:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/HEAD/web-install.sh \
-    | PREFIX=/usr/local/bin REF=v0.0.1 sh
-```
-
-Sin `REF` instala el último release, con fallback a la rama por defecto.
-
-#### Homebrew (macOS y Linux)
-
-Homebrew funciona igual en macOS y en Linux (Linuxbrew) con la misma formula.
-Hasta que exista un release con tag, instalá el tip de la rama por defecto vía un
-tap:
+**macOS o Linux — [Homebrew](https://brew.sh):**
 
 ```sh
 brew tap EzeVillo/git-review-workflow https://github.com/EzeVillo/git-review-workflow
 brew install --HEAD EzeVillo/git-review-workflow/git-review-workflow
 ```
 
-Instala los comandos y todas las completions (`Formula/git-review-workflow.rb`).
-Después de un release, sacá `--HEAD` para instalar la versión tageada.
-
-#### Scoop (Windows)
-
-En Windows, instalá vía [Scoop](https://scoop.sh) (los comandos corren sobre el
-bash que trae Git for Windows, que también necesitás):
+**Windows — [Scoop](https://scoop.sh)** (también necesitás
+[Git for Windows](https://gitforwindows.org); es el que provee la shell donde
+corren estos comandos):
 
 ```powershell
 scoop bucket add git-review-workflow https://github.com/EzeVillo/git-review-workflow
 scoop install git-review-workflow/git-review-workflow
 ```
 
-El manifest del bucket está en `bucket/git-review-workflow.json`.
+*(Cuando haya un release, sacá `--HEAD` del comando de Homebrew.)*
 
-#### Autocompletado
+Con Homebrew o Scoop podés parar acá — dejan los comandos en un lugar donde tu
+terminal ya busca, así `git review-pr` funciona sin más. Todo lo de abajo solo
+importa si instalás a mano.
 
-Sourceá la completion de tu shell. **bash** (necesita la completion de git
-cargada antes):
+#### Instalación en una línea (Linux, macOS, WSL, Git Bash)
+
+¿Sin gestor de paquetes? Esto descarga los comandos y te los instala — ni
+siquiera necesitás bajar el proyecto antes:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/HEAD/web-install.sh | sh
+```
+
+Instala en la carpeta `~/.local/bin`. Si esa carpeta no está en tu `PATH`, el
+instalador te avisa — mirá [Sobre tu PATH](#sobre-tu-path-command-not-found).
+
+#### Desde una copia descargada
+
+Si clonaste o descargaste el proyecto, abrí su carpeta en una terminal y corré:
+
+```sh
+./install.sh
+```
+
+Instala los ocho comandos en `~/.local/bin` (cambiá la ubicación con
+`PREFIX=/usr/local/bin ./install.sh`). Lo deshacés cuando quieras con
+`./uninstall.sh`.
+
+#### Sobre tu PATH ("command not found")
+
+Tu `PATH` es, simplemente, la lista de carpetas donde tu terminal busca cuando
+escribís un comando. Cuando corrés `git review-pr`, la terminal recorre esas
+carpetas una por una hasta encontrar un programa con ese nombre. Si la carpeta
+donde se instalaron estos comandos no está en la lista, la terminal no los
+encuentra y vas a ver algo como `git: 'review-pr' is not a git command` o
+`command not found` — no está roto, solo no sabe dónde mirar.
+
+- **Homebrew y Scoop agregan su carpeta al `PATH` automáticamente**, así que si
+  instalaste por ahí no tenés que hacer nada.
+- La instalación **en una línea** y la **manual** usan la carpeta `~/.local/bin`,
+  que en la mayoría de los sistemas ya está en el `PATH`. Si no lo está, el
+  instalador te deja un aviso y lo agregás **una sola vez** pegando una línea en
+  el archivo de configuración de tu shell:
+
+| Si tu terminal usa… | Agregá esta línea al archivo… | La línea a agregar |
+| --- | --- | --- |
+| **bash** | `~/.bashrc` | `export PATH="$HOME/.local/bin:$PATH"` |
+| **zsh** (default en macOS reciente) | `~/.zshrc` | `export PATH="$HOME/.local/bin:$PATH"` |
+| **fish** | *(sin archivo — corré esto una vez)* | `fish_add_path ~/.local/bin` |
+
+¿No sabés cuál usás? Corré `echo $0` — te dice `bash`, `zsh`, o similar. Después
+de editar el archivo, **abrí una terminal nueva** (o corré `source ~/.bashrc` /
+`source ~/.zshrc`). Para comprobar que funcionó, corré `git review-pr --help`: si
+ves un mensaje de uso, ya está.
+
+#### Autocompletado (opcional)
+
+Es un extra, no hace falta — te deja apretar Tab para completar nombres de
+comandos y ramas. Sourceá la completion de tu shell. **bash** (necesita la
+completion de git cargada antes):
 
 ```sh
 source /ruta/a/git-review-workflow/completions/git-review-workflow.bash

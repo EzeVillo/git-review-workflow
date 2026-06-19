@@ -1,19 +1,19 @@
 {
-    "version": "0.0.1",
-    "description": "Git commands to review a pull request branch locally as one staged diff",
-    "homepage": "https://github.com/EzeVillo/git-review-workflow",
-    "license": "MIT",
-    "url": "https://github.com/EzeVillo/git-review-workflow/archive/refs/tags/v0.0.1.tar.gz",
-    "hash": "0000000000000000000000000000000000000000000000000000000000000000",
-    "extract_dir": "git-review-workflow-0.0.1",
-    "env_add_path": "bin",
-    "notes": [
-        "Requires Git for Windows (it provides the bash these commands run under).",
-        "The commands are invoked as git subcommands, e.g. 'git review-pr'."
-    ],
-    "checkver": "github",
-    "autoupdate": {
-        "url": "https://github.com/EzeVillo/git-review-workflow/archive/refs/tags/v$version.tar.gz",
-        "extract_dir": "git-review-workflow-$version"
-    }
+  "version": "0.0.1",
+  "description": "Git commands to review a pull request branch locally as one staged diff",
+  "homepage": "https://github.com/EzeVillo/git-review-workflow",
+  "license": "MIT",
+  "url": "https://github.com/EzeVillo/git-review-workflow/archive/refs/tags/v0.0.1.tar.gz",
+  "hash": "c3dc344693d7b4a7aa649b757b9ed7f4aa5cd5148bb0af0f0620f57b8fc83295",
+  "extract_dir": "git-review-workflow-0.0.1",
+  "env_add_path": "bin",
+  "notes": [
+    "Requires Git for Windows (it provides the bash these commands run under).",
+    "The commands are invoked as git subcommands, e.g. 'git review-pr'."
+  ],
+  "checkver": "github",
+  "autoupdate": {
+    "url": "https://github.com/EzeVillo/git-review-workflow/archive/refs/tags/v$version.tar.gz",
+    "extract_dir": "git-review-workflow-$version"
+  }
 }

@@ -24,6 +24,18 @@ PR branch itself).
 
 ### Install
 
+**Via web (no git clone needed):**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.sh | sh
+```
+
+Copies the commands into `~/.local/bin`. Make sure that directory is on your
+`PATH`. To update, re-run the same command — it always installs the latest
+release.
+
+**From a local clone:**
+
 ```sh
 ./install.sh
 ```
@@ -31,6 +43,9 @@ PR branch itself).
 This symlinks `git-review-pr`, `git-finish-review` and `git-clean-review` into
 `~/.local/bin` (override with `PREFIX=/usr/local/bin ./install.sh`). Make sure
 that directory is on your `PATH`. Remove them with `./uninstall.sh`.
+
+To update, just `git pull` inside the repo — the symlinks pick up changes
+automatically.
 
 For tab completion, source the completion script from your shell rc:
 
@@ -168,6 +183,18 @@ PR).
 
 ### Instalación
 
+**Por web (sin necesidad de clonar el repo):**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.sh | sh
+```
+
+Copia los comandos en `~/.local/bin`. Asegurate de que ese directorio esté en tu
+`PATH`. Para actualizar, volvé a correr el mismo comando — siempre instala la
+última versión.
+
+**Desde un clon local:**
+
 ```sh
 ./install.sh
 ```
@@ -175,6 +202,9 @@ PR).
 Hace symlink de `git-review-pr`, `git-finish-review` y `git-clean-review` en
 `~/.local/bin` (cambialo con `PREFIX=/usr/local/bin ./install.sh`). Asegurate de
 que ese directorio esté en tu `PATH`. Para quitarlos: `./uninstall.sh`.
+
+Para actualizar, simplemente hacé `git pull` dentro del repo — los symlinks
+toman los cambios automáticamente.
 
 Para autocompletado, sourceá el script de completion desde tu rc:
 

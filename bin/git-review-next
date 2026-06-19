@@ -71,10 +71,11 @@ commits="$(git rev-list --reverse --first-parent "$start..$tip")"
 # commit, then restore the target's previously banked edits (if any).
 goto_step() {
 	target="$1"
+	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
 	git add -A
-	if ! git diff --cached --quiet; then
-		tree="$(git write-tree)"
-		edit="$(git commit-tree "$tree" -p "$(git rev-parse HEAD)" -m "review edits step $step")"
+	tree="$(git write-tree)"
+	if [ "$tree" != "$(git rev-parse "$cstep^{tree}")" ]; then
+		edit="$(git commit-tree "$tree" -p "$cstep" -m "review edits step $step")"
 		git update-ref "refs/review-edits/$src/$step" "$edit"
 	fi
 	ctarget="$(printf '%s\n' "$commits" | sed -n "${target}p")"
@@ -86,6 +87,7 @@ goto_step() {
 			exit 1
 		}
 	fi
+	git reset -q --soft "$ctarget^"
 	git config "branch.$cur.reviewstep" "$target"
 	show_commit "$ctarget" "$target" "$count"
 }

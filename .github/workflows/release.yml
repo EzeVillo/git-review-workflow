@@ -30,6 +30,20 @@ jobs:
           curl -fsSL "$url" -o source.tar.gz
           echo "sha256=$(sha256sum source.tar.gz | cut -d' ' -f1)" >>"$GITHUB_OUTPUT"
 
+      - name: Verify the tagged tarball carries the matching VERSION
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -eu
+          # VERSION and bin/git-review ship inside the tarball, so they must be
+          # bumped in the tagged commit. Fail loudly if the tag got ahead.
+          shipped="$(tar -xzOf source.tar.gz --wildcards '*/VERSION' | tr -d '[:space:]')"
+          if [ "$shipped" != "$VERSION" ]; then
+            echo "tag is v${VERSION} but the tarball ships VERSION=${shipped}." >&2
+            echo "Bump VERSION (and bin/git-review) in the commit you tag." >&2
+            exit 1
+          fi
+
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -54,8 +68,9 @@ jobs:
 
           url="https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
 
-          # Dispatcher script: update the embedded VERSION variable.
-          sed -i -E "s#^(VERSION=\")[^\"]*(\")#\1${VERSION}\2#" "bin/git-review"
+          # NOTE: VERSION and bin/git-review ship *inside* the tarball, so they
+          # are bumped in the commit that gets tagged — not here (this commit
+          # lands after the tag and would not reach the artifact).
 
           # Homebrew formula (Ruby): anchored single-line replacements.
           f="Formula/git-review-workflow.rb"
@@ -70,12 +85,12 @@ jobs:
             '.version=$v | .url=$url | .hash=$hash | .extract_dir=$ed' \
             "$m" >"$m.tmp" && mv "$m.tmp" "$m"
 
-          if git diff --quiet -- "bin/git-review" "$f" "$m"; then
+          if git diff --quiet -- "$f" "$m"; then
             echo "packaging already pinned to ${GITHUB_REF_NAME}; nothing to commit"
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -qm "Pin Homebrew formula and Scoop manifest to ${GITHUB_REF_NAME} [skip ci]" -- "bin/git-review" "$f" "$m"
+          git commit -qm "Pin Homebrew formula and Scoop manifest to ${GITHUB_REF_NAME} [skip ci]" -- "$f" "$m"
           git push origin "HEAD:${DEFAULT_BRANCH}"

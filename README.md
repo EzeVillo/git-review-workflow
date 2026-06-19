@@ -8,7 +8,7 @@ Comandos de git para revisar la rama de un pull request localmente como un únic
 diff staged — hacer correcciones inline y luego separar tus cambios en una rama
 limpia (o directo sobre la rama del PR) lista para subir.
 
-**Version:** `0.0.1` (see [`VERSION`](VERSION)).
+**Version:** see [`VERSION`](VERSION).
 
 ---
 
@@ -607,15 +607,21 @@ CI runs both on every push and pull request (see `.github/workflows/ci.yml`).
 Releases are cut by pushing a `v*` tag:
 
 ```sh
-# bump the snapshot to the release version first
-printf '0.0.1\n' >VERSION
-git commit -am "Release 0.0.1"
-git tag v0.0.1
+# Bump the version everything that ships *inside* the tarball, then tag that
+# commit — so the artifact GitHub builds for the tag carries the right version.
+V=0.0.3
+printf '%s\n' "$V" >VERSION
+sed -i -E "s#^(VERSION=\")[^\"]*(\")#\1${V}\2#" bin/git-review
+git commit -am "Release $V"
+git tag "v$V"
 git push origin HEAD --tags
 ```
 
-The release workflow (`.github/workflows/release.yml`) then:
+The release workflow (`.github/workflows/release.yml`) then handles only the
+files that point *at* the tarball (they need its `sha256`, and don't live inside
+it):
 
 - creates a GitHub Release for the tag with auto-generated notes, and
-- pins the Homebrew formula (`url`, `sha256`, `version`) to the tag on the
-  default branch, so `brew install` (without `--HEAD`) installs that version.
+- pins the Homebrew formula and Scoop manifest (`url`, `sha256`, `version`) to
+  the tag on the default branch, so `brew install` (without `--HEAD`) installs
+  that version.

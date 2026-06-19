@@ -1,5 +1,5 @@
 {
-    "version": "0.0.1-snapshot",
+    "version": "0.0.1",
     "description": "Git commands to review a pull request branch locally as one staged diff",
     "homepage": "https://github.com/EzeVillo/git-review-workflow",
     "license": "MIT",

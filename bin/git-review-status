@@ -1,0 +1,78 @@
+#!/usr/bin/env sh
+#
+# git-review-status — show the state of the review on the current branch.
+#
+set -eu
+
+prog="git review-status"
+
+usage() {
+	cat <<EOF
+usage: $prog
+
+Show the state of the review on the current review/* branch: source PR, mode,
+and (in commit-by-commit mode) which commit you are on and which steps have
+banked edits.
+EOF
+}
+
+case "${1:-}" in
+-h | --help)
+	usage
+	exit 0
+	;;
+"") ;;
+*)
+	echo "error: unexpected argument $1" >&2
+	usage >&2
+	exit 1
+	;;
+esac
+
+cur="$(git symbolic-ref --quiet --short HEAD || true)"
+case "$cur" in
+review/*) ;;
+*)
+	echo "not on a review/* branch (HEAD is ${cur:-detached})" >&2
+	exit 1
+	;;
+esac
+
+src="$(git config "branch.$cur.reviewsource" || true)"
+tip="$(git config "branch.$cur.reviewtip" || true)"
+mode="$(git config "branch.$cur.reviewmode" || echo whole)"
+if [ -z "$src" ] || [ -z "$tip" ]; then
+	echo "error: missing review metadata; was $cur created with git review-pr?" >&2
+	exit 1
+fi
+
+printf 'review of %s (tip %s)\n' "$src" "$(git rev-parse --short "$tip")"
+printf '  branch  %s\n' "$cur"
+
+if [ "$mode" = "step" ]; then
+	count="$(git config "branch.$cur.reviewcount")"
+	step="$(git config "branch.$cur.reviewstep")"
+	start="$(git config "branch.$cur.reviewstart")"
+	commits="$(git rev-list --reverse --first-parent "$start..$tip")"
+	cnow="$(printf '%s\n' "$commits" | sed -n "${step}p")"
+	printf '  mode    step  [%s/%s] on %s %s\n' "$step" "$count" \
+		"$(git rev-parse --short "$cnow")" "$(git log -1 --format='%s' "$cnow")"
+
+	banked=""
+	i=1
+	while [ "$i" -le "$count" ]; do
+		if git rev-parse --verify --quiet "refs/review-edits/$src/$i" >/dev/null; then
+			banked="$banked $i"
+		fi
+		i=$((i + 1))
+	done
+	printf '  banked  %s\n' "${banked:- none}"
+
+	hint="git review-next"
+	[ "$step" -gt 1 ] && hint="$hint / git review-prev"
+	printf '  next    edit, then %s  (git finish-review when done)\n' "$hint"
+else
+	base="$(git config "branch.$cur.reviewbase" || true)"
+	printf '  mode    whole%s\n' "${base:+  (base $base)}"
+	printf '  next    edit, then git finish-review\n'
+fi

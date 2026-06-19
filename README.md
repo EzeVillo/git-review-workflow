@@ -43,8 +43,10 @@ source /path/to/git-review-workflow/completions/git-review-workflow.bash
 | Command | What it does |
 | --- | --- |
 | `git review-pr <branch> [base] [--delta\|--from <commit>] [--step]` | Fetch `origin`, then stage the PR diff on a new `review/<branch>` branch. |
-| `git review-next` | Advance a `--step` review to the next commit. |
-| `git finish-review [--onto-source] [--push]` | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch). |
+| `git review-next` / `git review-prev` | Move a `--step` review to the next / previous commit. |
+| `git review-status` | Show the state of the review on the current branch. |
+| `git finish-review [--onto-source] [--push] [--resume]` | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch). |
+| `git review-abort` | Cancel the current review and return to where you started. |
 | `git clean-review [branch] [--forget]` | Delete the `review/*` and `review-fixes/*` branches for `<branch>`, or all of them. |
 
 **`git review-pr`** has two independent axes — **range** (where the review
@@ -73,12 +75,28 @@ starts) and **layout** (`--step` or not), which compose freely.
   built from `origin/<branch>`, never a stale local copy.
 - Refuses to run if you have local changes — start from a clean branch.
 
+**`git review-next` / `git review-prev`** move a `--step` review forward or
+backward. Each move banks the current commit's edits and restores any edits you
+had banked on the commit you move to, so you can walk back and forth without
+losing work.
+
+**`git review-status`** shows the current review: source PR, mode, and — in
+`--step` mode — which commit you are on (`[k/N]`) and which steps have banked
+edits. Useful for picking up where you left off.
+
 **`git finish-review`**
 - Default — create `review-fixes/<branch>` on top of the PR tip with your edits
   staged, so you can review and commit them yourself.
 - `--onto-source` — add your edits as a commit on the PR branch itself.
 - `--push` — push the resulting branch to `origin`. With `--onto-source` it
   refuses to push if `origin/<branch>` moved since your review.
+- `--resume` — in `--step` mode, if banked edits overlap the PR tip, the replay
+  leaves conflict markers and stops. Resolve them in the working tree, then run
+  `git finish-review --resume` (with the same flags) to continue.
+
+**`git review-abort`** cancels the current review in one step: it returns you to
+the branch you started from, then deletes the `review/<branch>` branch and its
+banked edits. The recorded last-reviewed tip is kept, so `--delta` still works.
 
 **`git clean-review`**
 - With no `<branch>`, deletes every `review/*` and `review-fixes/*` branch.
@@ -165,8 +183,10 @@ source /ruta/a/git-review-workflow/completions/git-review-workflow.bash
 | Comando | Qué hace |
 | --- | --- |
 | `git review-pr <rama> [base] [--delta\|--from <commit>] [--step]` | Hace fetch de `origin` y deja el diff del PR staged en una nueva rama `review/<rama>`. |
-| `git review-next` | Avanza una review `--step` al siguiente commit. |
-| `git finish-review [--onto-source] [--push]` | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR). |
+| `git review-next` / `git review-prev` | Mueve una review `--step` al commit siguiente / anterior. |
+| `git review-status` | Muestra el estado de la review en la rama actual. |
+| `git finish-review [--onto-source] [--push] [--resume]` | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR). |
+| `git review-abort` | Cancela la review actual y vuelve a donde empezaste. |
 | `git clean-review [rama] [--forget]` | Borra las ramas `review/*` y `review-fixes/*` de `<rama>`, o todas. |
 
 **`git review-pr`** tiene dos ejes independientes — **rango** (desde dónde
@@ -196,13 +216,29 @@ empieza) y **layout** (`--step` o no), que se combinan libremente.
   se arma desde `origin/<rama>`, nunca desde una copia local vieja.
 - No corre si tenés cambios locales — arrancá desde una rama limpia.
 
+**`git review-next` / `git review-prev`** mueven una review `--step` para
+adelante o para atrás. Cada movimiento banca las ediciones del commit actual y
+restaura las que tenías bancadas en el commit al que vas, así podés ir y venir
+sin perder trabajo.
+
+**`git review-status`** muestra la review actual: PR de origen, modo, y — en modo
+`--step` — en qué commit estás (`[k/N]`) y qué pasos tienen ediciones bancadas.
+Útil para retomar donde dejaste.
+
 **`git finish-review`**
 - Por defecto — crea `review-fixes/<rama>` sobre el tip del PR con tus ediciones
   staged, para que las revises y commitees vos.
 - `--onto-source` — agrega tus ediciones como un commit sobre la rama del PR
   misma.
+- `--resume` — en modo `--step`, si las ediciones bancadas chocan con el tip del
+  PR, el replay deja marcadores de conflicto y se detiene. Resolvélos en el
+  árbol y corré `git finish-review --resume` (con los mismos flags) para seguir.
 - `--push` — pushea la rama resultante a `origin`. Con `--onto-source` se niega a
   pushear si `origin/<rama>` se movió desde tu review.
+
+**`git review-abort`** cancela la review actual en un paso: te devuelve a la rama
+desde la que empezaste y borra la rama `review/<rama>` y sus ediciones bancadas.
+El tip de la última review se conserva, así que `--delta` sigue funcionando.
 
 **`git clean-review`**
 - Sin `<rama>`, borra todas las ramas `review/*` y `review-fixes/*`.

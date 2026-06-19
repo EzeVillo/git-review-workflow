@@ -1,22 +1,21 @@
 #!/usr/bin/env sh
 #
-# git-review-next — advance a commit-by-commit review (started with review-pr --step).
+# git-review-prev — step a commit-by-commit review back to the previous commit.
 #
-# Moving banks the edits you made on the current commit into a ref of its own and
-# restores any edits you had previously banked on the commit you move to, so you
-# can walk back and forth without losing work. git finish-review replays every
-# banked edit onto the PR tip.
+# Like git review-next but backwards: it banks the current commit's edits and
+# restores any edits you had banked on the previous commit, so you can revisit
+# and keep editing them.
 #
 set -eu
 
-prog="git review-next"
+prog="git review-prev"
 
 usage() {
 	cat <<EOF
 usage: $prog
 
-Advance a commit-by-commit review to the next commit. Your edits are remembered;
-run git review-prev to go back, or git finish-review when you are done.
+Go back to the previous commit of a commit-by-commit review. Your edits are
+remembered in both directions.
 EOF
 }
 
@@ -67,8 +66,6 @@ step="$(git config "branch.$cur.reviewstep")"
 
 commits="$(git rev-list --reverse --first-parent "$start..$tip")"
 
-# Move to <target>: bank the current commit's edits, reset clean to the target
-# commit, then restore the target's previously banked edits (if any).
 goto_step() {
 	target="$1"
 	git add -A
@@ -90,8 +87,8 @@ goto_step() {
 	show_commit "$ctarget" "$target" "$count"
 }
 
-if [ "$step" -lt "$count" ]; then
-	goto_step "$((step + 1))"
+if [ "$step" -gt 1 ]; then
+	goto_step "$((step - 1))"
 else
-	echo "no more commits — run git finish-review"
+	echo "already at the first commit"
 fi

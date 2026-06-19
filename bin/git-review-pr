@@ -87,6 +87,9 @@ fi
 
 git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 
+# Remember where to return to when the review is aborted.
+returnbranch="$(git symbolic-ref --quiet --short HEAD || true)"
+
 if [ -z "$base" ]; then
 	base="$(git config reviewworkflow.base || true)"
 fi
@@ -150,6 +153,9 @@ if [ "$step" -eq 1 ]; then
 	git config "branch.$rb.reviewcount" "$count"
 	git config "branch.$rb.reviewstep" "1"
 	git config "reviewworkflow.$src.reviewed" "$tip"
+	if [ -n "$returnbranch" ]; then
+		git config "branch.$rb.reviewreturn" "$returnbranch"
+	fi
 
 	echo "$rb ready ($range) — walking $count commit(s) one at a time"
 	show_commit "$first" 1 "$count"
@@ -163,5 +169,8 @@ git config "branch.$rb.reviewsource" "$src"
 git config "branch.$rb.reviewbase" "$base"
 git config "branch.$rb.reviewtip" "$tip"
 git config "reviewworkflow.$src.reviewed" "$tip"
+if [ -n "$returnbranch" ]; then
+	git config "branch.$rb.reviewreturn" "$returnbranch"
+fi
 
 echo "$rb ready ($range) — the staged diff is the PR; edit, then run git finish-review"

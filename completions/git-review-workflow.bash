@@ -23,8 +23,20 @@ _git_review_next() {
 	__gitcomp "--help"
 }
 
+_git_review_prev() {
+	__gitcomp "--help"
+}
+
+_git_review_status() {
+	__gitcomp "--help"
+}
+
+_git_review_abort() {
+	__gitcomp "--help"
+}
+
 _git_finish_review() {
-	__gitcomp "--onto-source --push --help"
+	__gitcomp "--onto-source --push --resume --help"
 }
 
 _git_clean_review() {

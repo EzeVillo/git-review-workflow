@@ -12,18 +12,20 @@ prog="git finish-review"
 
 usage() {
 	cat <<EOF
-usage: $prog [--onto-source] [--push]
+usage: $prog [--onto-source] [--push] [--resume]
 
 Extract your review edits from the current review/* branch.
 
   (default)        create review-fixes/<branch> on top of the PR tip and stage your edits
   --onto-source    instead, add your edits as a commit on the PR branch itself
   --push           push the resulting branch to origin
+  --resume         continue after resolving conflicts from a commit-by-commit replay
 EOF
 }
 
 onto=0
 push=0
+resume=0
 while [ $# -gt 0 ]; do
 	case "$1" in
 	-h | --help)
@@ -32,6 +34,7 @@ while [ $# -gt 0 ]; do
 		;;
 	--onto-source) onto=1 ;;
 	--push) push=1 ;;
+	--resume) resume=1 ;;
 	*)
 		echo "error: unknown option $1" >&2
 		usage >&2
@@ -63,8 +66,9 @@ fi
 
 # In commit-by-commit mode, bank the current commit's edits, move to the tip and
 # replay every banked edit there, so what follows sees the same state as a normal
-# whole-PR review.
-if [ "$(git config "branch.$cur.reviewmode" || true)" = "step" ]; then
+# whole-PR review. With --resume we skip the replay: the working tree already
+# holds the resolved edits.
+if [ "$(git config "branch.$cur.reviewmode" || true)" = "step" ] && [ "$resume" -eq 0 ]; then
 	count="$(git config "branch.$cur.reviewcount" || echo 0)"
 	step="$(git config "branch.$cur.reviewstep" || echo 1)"
 	git add -A
@@ -74,20 +78,37 @@ if [ "$(git config "branch.$cur.reviewmode" || true)" = "step" ]; then
 		git update-ref "refs/review-edits/$src/$step" "$edit"
 	fi
 	git reset -q --hard "$tip"
+	conflict=0
 	i=1
 	while [ "$i" -le "$count" ]; do
 		ref="refs/review-edits/$src/$i"
 		if git rev-parse --verify --quiet "$ref" >/dev/null; then
 			editpatch="$(git diff --binary "${ref}^" "$ref")"
 			if [ -n "$editpatch" ]; then
-				printf "%s\n" "$editpatch" | git apply --3way --index || {
-					echo "error: review edits from step $i conflict on the tip; resolve manually" >&2
-					exit 1
-				}
+				# Keep going on conflict so every edit lands; conflicts are
+				# left as markers for the user to resolve.
+				printf "%s\n" "$editpatch" | git apply --3way ||
+					conflict=1
 			fi
 		fi
 		i=$((i + 1))
 	done
+	if [ "$conflict" -eq 1 ]; then
+		git config "branch.$cur.reviewresume" conflict
+		flags=""
+		[ "$onto" -eq 1 ] && flags="$flags --onto-source"
+		[ "$push" -eq 1 ] && flags="$flags --push"
+		echo "conflict: some banked edits overlap the PR tip." >&2
+		echo "the working tree has conflict markers — resolve them, then run:" >&2
+		echo "    git finish-review --resume$flags" >&2
+		exit 1
+	fi
+elif [ "$resume" -eq 1 ]; then
+	if [ "$(git config "branch.$cur.reviewresume" || true)" != "conflict" ]; then
+		echo "error: nothing to resume" >&2
+		exit 1
+	fi
+	git config --unset "branch.$cur.reviewresume" || true
 fi
 
 # Fold any edits into the review branch so we can diff them back out cleanly.

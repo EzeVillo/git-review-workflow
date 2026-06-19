@@ -1,0 +1,136 @@
+#!/usr/bin/env sh
+#
+# git-review-pr — stage a pull request diff on a review/<branch> branch.
+#
+# The review branch keeps the PR tip in the working tree but parks HEAD at the
+# merge-base with the base branch, so the whole PR shows up as a staged diff you
+# can read, edit and run. With --delta it parks HEAD at the tip you last
+# reviewed, so only the new commits show up.
+#
+set -eu
+
+prog="git review-pr"
+
+usage() {
+	cat <<EOF
+usage: $prog <branch> [base] [--delta]
+
+Stage a pull request diff on a review/<branch> branch for inline review.
+
+  base       base branch to diff against
+             (default: reviewworkflow.base config, or 'develop')
+  --delta    review only the commits added since your last review of <branch>
+EOF
+}
+
+src=""
+base=""
+delta=0
+while [ $# -gt 0 ]; do
+	case "$1" in
+	-h | --help)
+		usage
+		exit 0
+		;;
+	-d | --delta) delta=1 ;;
+	-*)
+		echo "error: unknown option $1" >&2
+		usage >&2
+		exit 1
+		;;
+	*)
+		if [ -z "$src" ]; then
+			src="$1"
+		elif [ -z "$base" ]; then
+			base="$1"
+		else
+			echo "error: unexpected argument $1" >&2
+			exit 1
+		fi
+		;;
+	esac
+	shift
+done
+
+[ -n "$src" ] || {
+	usage >&2
+	exit 1
+}
+
+git rev-parse --git-dir >/dev/null 2>&1 || {
+	echo "error: not a git repository" >&2
+	exit 1
+}
+
+if [ -z "$base" ]; then
+	base="$(git config reviewworkflow.base || true)"
+	[ -n "$base" ] || base="develop"
+fi
+
+if ! git diff --quiet || ! git diff --cached --quiet; then
+	echo "error: you have local changes; commit or stash them first" >&2
+	exit 1
+fi
+
+if ! git fetch --quiet origin; then
+	echo "error: could not update from origin" >&2
+	exit 1
+fi
+
+git rev-parse --verify --quiet "refs/remotes/origin/$src" >/dev/null || {
+	echo "error: origin/$src not found" >&2
+	exit 1
+}
+git rev-parse --verify --quiet "refs/remotes/origin/$base" >/dev/null || {
+	echo "error: origin/$base not found" >&2
+	exit 1
+}
+
+rb="review/$src"
+git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null && {
+	echo "error: $rb already exists; run git clean-review $src first" >&2
+	exit 1
+}
+
+tip="$(git rev-parse "origin/$src")"
+prev="$(git config "reviewworkflow.$src.reviewed" || true)"
+
+if [ "$delta" -eq 1 ]; then
+	[ -n "$prev" ] || {
+		echo "error: no previous review of $src recorded; run a full review first" >&2
+		exit 1
+	}
+	if [ "$prev" = "$tip" ]; then
+		echo "error: no new commits since your last review of $src" >&2
+		exit 1
+	fi
+	if ! git merge-base --is-ancestor "$prev" "$tip"; then
+		echo "error: $src was force-pushed since your last review; run a full review instead" >&2
+		exit 1
+	fi
+	target="$prev"
+	range="since last review ($(git rev-parse --short "$prev"))"
+else
+	target="$(git merge-base "origin/$base" "origin/$src")" || {
+		echo "error: could not compute merge-base with origin/$base" >&2
+		exit 1
+	}
+	range="vs origin/$base"
+	if [ -n "$prev" ] && [ "$prev" != "$tip" ] && git merge-base --is-ancestor "$prev" "$tip"; then
+		n="$(git rev-list --count "$prev..$tip")"
+		echo "note: previously reviewed at $(git rev-parse --short "$prev"); $n new commit(s) since (use --delta to review only those)" >&2
+	fi
+fi
+
+git switch -q -c "$rb" "$tip" || {
+	echo "error: could not create $rb" >&2
+	exit 1
+}
+git reset -q --soft "$target"
+
+git config "branch.$rb.reviewsource" "$src"
+git config "branch.$rb.reviewbase" "$base"
+git config "branch.$rb.reviewtip" "$tip"
+git config "reviewworkflow.$src.reviewed" "$tip"
+
+echo "$rb ready ($range) — the staged diff is the PR; edit, then run git finish-review"

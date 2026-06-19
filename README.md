@@ -1,11 +1,12 @@
 # git-review-workflow
 
-Git aliases to review a pull request branch locally as a single, staged diff —
-make fixes inline, then split your changes onto a clean branch ready to push.
+Git commands to review a pull request branch locally as a single, staged diff —
+make fixes inline, then split your changes onto a clean branch (or straight onto
+the PR branch) ready to push.
 
-Aliases de git para revisar la rama de un pull request localmente como un único
+Comandos de git para revisar la rama de un pull request localmente como un único
 diff staged — hacer correcciones inline y luego separar tus cambios en una rama
-limpia lista para subir.
+limpia (o directo sobre la rama del PR) lista para subir.
 
 ---
 
@@ -13,12 +14,13 @@ limpia lista para subir.
 
 ### What it does
 
-When you review a PR, you usually want to see **all** of its changes at once and
-poke at them. These aliases create a `review/<branch>` branch whose working tree
-holds the PR tip, but whose `HEAD` sits at the merge-base with your base branch.
-The result: the entire PR shows up as **staged, uncommitted changes**. You read
-it, edit it, run it — and when you are done, your edits are extracted onto a
-separate `review-fixes/<branch>` branch on top of the original PR tip.
+When you review a PR you usually want to see **all** of its changes at once and
+poke at them. `git review-pr` creates a `review/<branch>` branch whose working
+tree holds the PR tip, but whose `HEAD` sits at the merge-base with your base
+branch. The result: the entire PR shows up as **staged, uncommitted changes**.
+You read it, edit it, run it — and when you are done, `git finish-review`
+extracts your edits onto a separate `review-fixes/<branch>` branch (or onto the
+PR branch itself).
 
 ### Install
 
@@ -26,47 +28,73 @@ separate `review-fixes/<branch>` branch on top of the original PR tip.
 ./install.sh
 ```
 
-This registers three global aliases. Remove them with `./uninstall.sh`.
+This symlinks `git-review-pr`, `git-finish-review` and `git-clean-review` into
+`~/.local/bin` (override with `PREFIX=/usr/local/bin ./install.sh`). Make sure
+that directory is on your `PATH`. Remove them with `./uninstall.sh`.
+
+For tab completion, source the completion script from your shell rc:
+
+```sh
+source /path/to/git-review-workflow/completions/git-review-workflow.bash
+```
 
 ### Commands
 
 | Command | What it does |
 | --- | --- |
-| `git review-pr <branch> [base]` | Fetch `origin`, then stage the whole PR diff on a new `review/<branch>` branch. `base` defaults to `develop`. |
-| `git finish-review` | From a `review/*` branch, extract your edits onto a new `review-fixes/<branch>` branch based on the PR tip. |
-| `git clean-review [branch]` | Delete the `review/*` and `review-fixes/*` branches for `<branch>`, or all of them if no argument is given. |
+| `git review-pr <branch> [base] [--delta]` | Fetch `origin`, then stage the whole PR diff on a new `review/<branch>` branch. |
+| `git finish-review [--onto-source] [--push]` | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch). |
+| `git clean-review [branch] [--forget]` | Delete the `review/*` and `review-fixes/*` branches for `<branch>`, or all of them. |
+
+**`git review-pr`**
+- `base` — branch to diff against. Defaults to `reviewworkflow.base` (see below),
+  otherwise `develop`. A positional argument overrides it.
+- `--delta` — review only the commits added **since your last review** of this
+  branch, instead of the whole PR. Perfect for re-reviewing an updated PR.
+- Always updates from `origin` first and **fails** if it cannot. The review is
+  built from `origin/<branch>`, never a stale local copy.
+- Refuses to run if you have local changes — start from a clean branch.
+
+**`git finish-review`**
+- Default — create `review-fixes/<branch>` on top of the PR tip with your edits
+  staged, so you can review and commit them yourself.
+- `--onto-source` (alias `--rebase`) — add your edits as a commit on the PR
+  branch itself.
+- `--push` — push the resulting branch to `origin`. With `--onto-source` it
+  refuses to push if `origin/<branch>` moved since your review.
+
+**`git clean-review`**
+- With no `<branch>`, deletes every `review/*` and `review-fixes/*` branch.
+- Never deletes the branch you are currently on.
+- `--forget` also discards the recorded last-reviewed tip (which disables
+  `--delta` for that branch).
+
+### Configuring the base branch
+
+The base branch is where PRs are integrated (`develop`, `main`, `master`, …) and
+varies per team. Set it once per repository:
+
+```sh
+git config reviewworkflow.base develop
+```
+
+Resolution order: positional `base` argument → `reviewworkflow.base` → `develop`.
 
 ### Typical workflow
 
 ```sh
-# 1. Start reviewing PR branch "feature/login" against develop
-git review-pr feature/login
+git config reviewworkflow.base develop      # once per repo
 
-# 2. Inspect the staged diff, edit files, leave fixes, run tests...
-git status
-git diff --cached
+git review-pr feature/login                 # stage the whole PR
+git status                                   # inspect the staged diff
+# ...edit files, leave fixes, run tests...
+git finish-review                            # extract fixes to review-fixes/feature/login
+git diff --cached && git commit -m "address review comments"
+git clean-review feature/login              # tidy up
 
-# 3. Extract your fixes onto review-fixes/feature/login
-git finish-review
-
-# 4. Review and commit your fixes, then push if you want
-git diff --cached
-git commit -m "address review comments"
-
-# 5. Clean up the temporary review branches
-git clean-review feature/login
+# Re-review after the author pushes more commits:
+git review-pr feature/login --delta          # only the new commits
 ```
-
-### Notes
-
-- `review-pr` **always updates from `origin` first** and fails if it cannot. The
-  review is built from `origin/<branch>`, never a stale local copy.
-- `review-pr` refuses to run if you have local changes — start from a clean
-  branch (for example `develop`).
-- `finish-review` records the exact PR tip it reviewed, so your fixes always
-  apply cleanly even if the PR moved on `origin` in the meantime.
-- `clean-review` will not delete the branch you are currently on; switch away
-  first.
 
 ### Requirements
 
@@ -80,11 +108,12 @@ git clean-review feature/login
 ### Qué hace
 
 Cuando revisás un PR normalmente querés ver **todos** sus cambios de una y
-toquetearlos. Estos aliases crean una rama `review/<rama>` cuyo working tree
+toquetearlos. `git review-pr` crea una rama `review/<rama>` cuyo working tree
 tiene el tip del PR, pero con el `HEAD` parado en el merge-base con tu rama base.
 El resultado: todo el PR aparece como **cambios staged sin commitear**. Lo leés,
-lo editás, lo corrés — y cuando terminás, tus ediciones se extraen a una rama
-separada `review-fixes/<rama>` sobre el tip original del PR.
+lo editás, lo corrés — y cuando terminás, `git finish-review` extrae tus
+ediciones a una rama separada `review-fixes/<rama>` (o directo sobre la rama del
+PR).
 
 ### Instalación
 
@@ -92,49 +121,89 @@ separada `review-fixes/<rama>` sobre el tip original del PR.
 ./install.sh
 ```
 
-Registra tres aliases globales. Para quitarlos: `./uninstall.sh`.
+Hace symlink de `git-review-pr`, `git-finish-review` y `git-clean-review` en
+`~/.local/bin` (cambialo con `PREFIX=/usr/local/bin ./install.sh`). Asegurate de
+que ese directorio esté en tu `PATH`. Para quitarlos: `./uninstall.sh`.
+
+Para autocompletado, sourceá el script de completion desde tu rc:
+
+```sh
+source /ruta/a/git-review-workflow/completions/git-review-workflow.bash
+```
 
 ### Comandos
 
 | Comando | Qué hace |
 | --- | --- |
-| `git review-pr <rama> [base]` | Hace fetch de `origin` y deja todo el diff del PR staged en una nueva rama `review/<rama>`. `base` por defecto es `develop`. |
-| `git finish-review` | Desde una rama `review/*`, extrae tus ediciones a una nueva rama `review-fixes/<rama>` basada en el tip del PR. |
-| `git clean-review [rama]` | Borra las ramas `review/*` y `review-fixes/*` de `<rama>`, o todas si no pasás argumento. |
+| `git review-pr <rama> [base] [--delta]` | Hace fetch de `origin` y deja todo el diff del PR staged en una nueva rama `review/<rama>`. |
+| `git finish-review [--onto-source] [--push]` | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR). |
+| `git clean-review [rama] [--forget]` | Borra las ramas `review/*` y `review-fixes/*` de `<rama>`, o todas. |
+
+**`git review-pr`**
+- `base` — rama contra la que comparar. Por defecto `reviewworkflow.base` (ver
+  abajo), si no `develop`. El argumento posicional la sobreescribe.
+- `--delta` — revisar solo los commits agregados **desde tu última review** de
+  esta rama, en vez de todo el PR. Ideal para re-revisar un PR actualizado.
+- Siempre actualiza desde `origin` primero y **falla** si no puede. La revisión
+  se arma desde `origin/<rama>`, nunca desde una copia local vieja.
+- No corre si tenés cambios locales — arrancá desde una rama limpia.
+
+**`git finish-review`**
+- Por defecto — crea `review-fixes/<rama>` sobre el tip del PR con tus ediciones
+  staged, para que las revises y commitees vos.
+- `--onto-source` (alias `--rebase`) — agrega tus ediciones como un commit sobre
+  la rama del PR misma.
+- `--push` — pushea la rama resultante a `origin`. Con `--onto-source` se niega a
+  pushear si `origin/<rama>` se movió desde tu review.
+
+**`git clean-review`**
+- Sin `<rama>`, borra todas las ramas `review/*` y `review-fixes/*`.
+- Nunca borra la rama en la que estás parado.
+- `--forget` además descarta el tip de la última review (lo que desactiva
+  `--delta` para esa rama).
+
+### Configurar la rama base
+
+La rama base es donde se integran los PRs (`develop`, `main`, `master`, …) y
+varía por equipo. Configurala una vez por repositorio:
+
+```sh
+git config reviewworkflow.base develop
+```
+
+Orden de resolución: argumento posicional `base` → `reviewworkflow.base` →
+`develop`.
 
 ### Flujo típico
 
 ```sh
-# 1. Empezar a revisar la rama del PR "feature/login" contra develop
-git review-pr feature/login
+git config reviewworkflow.base develop      # una vez por repo
 
-# 2. Inspeccionar el diff staged, editar archivos, dejar fixes, correr tests...
-git status
-git diff --cached
+git review-pr feature/login                 # dejar todo el PR staged
+git status                                   # inspeccionar el diff staged
+# ...editar archivos, dejar fixes, correr tests...
+git finish-review                            # extraer fixes a review-fixes/feature/login
+git diff --cached && git commit -m "address review comments"
+git clean-review feature/login              # limpiar
 
-# 3. Extraer tus fixes a review-fixes/feature/login
-git finish-review
-
-# 4. Revisar y commitear tus fixes, después subir si querés
-git diff --cached
-git commit -m "address review comments"
-
-# 5. Limpiar las ramas temporales de review
-git clean-review feature/login
+# Re-revisar después de que el autor pushea más commits:
+git review-pr feature/login --delta          # solo los commits nuevos
 ```
-
-### Notas
-
-- `review-pr` **siempre actualiza desde `origin` primero** y falla si no puede.
-  La revisión se arma desde `origin/<rama>`, nunca desde una copia local vieja.
-- `review-pr` no corre si tenés cambios locales — arrancá desde una rama limpia
-  (por ejemplo `develop`).
-- `finish-review` guarda el tip exacto del PR que revisaste, así tus fixes
-  siempre aplican limpio aunque el PR se haya movido en `origin`.
-- `clean-review` no borra la rama en la que estás parado; cambiate de rama
-  primero.
 
 ### Requisitos
 
 - Git 2.23+ (usa `git switch`).
 - Un remoto llamado `origin`.
+
+---
+
+## Development
+
+Run the checks locally:
+
+```sh
+shellcheck bin/* install.sh uninstall.sh
+bats tests/
+```
+
+CI runs both on every push and pull request (see `.github/workflows/ci.yml`).

@@ -1,0 +1,132 @@
+#!/usr/bin/env sh
+#
+# git-finish-review — extract your review edits from the current review/* branch.
+#
+# By default it creates review-fixes/<branch> on top of the PR tip with your
+# edits staged. With --onto-source it adds your edits as a commit on the PR
+# branch itself. With --push it pushes the result to origin.
+#
+set -eu
+
+prog="git finish-review"
+
+usage() {
+	cat <<EOF
+usage: $prog [--onto-source] [--push]
+
+Extract your review edits from the current review/* branch.
+
+  (default)        create review-fixes/<branch> on top of the PR tip and stage your edits
+  --onto-source    instead, add your edits as a commit on the PR branch itself
+  --rebase         alias for --onto-source
+  --push           push the resulting branch to origin
+EOF
+}
+
+onto=0
+push=0
+while [ $# -gt 0 ]; do
+	case "$1" in
+	-h | --help)
+		usage
+		exit 0
+		;;
+	--onto-source | --rebase) onto=1 ;;
+	--push) push=1 ;;
+	*)
+		echo "error: unknown option $1" >&2
+		usage >&2
+		exit 1
+		;;
+	esac
+	shift
+done
+
+cur="$(git symbolic-ref --quiet --short HEAD || true)"
+[ -n "$cur" ] || {
+	echo "error: not on a branch" >&2
+	exit 1
+}
+case "$cur" in
+review/*) ;;
+*)
+	echo "error: not on a review/* branch (HEAD is $cur)" >&2
+	exit 1
+	;;
+esac
+
+src="$(git config "branch.$cur.reviewsource" || true)"
+tip="$(git config "branch.$cur.reviewtip" || true)"
+if [ -z "$src" ] || [ -z "$tip" ]; then
+	echo "error: missing review metadata; was $cur created with git review-pr?" >&2
+	exit 1
+fi
+
+# Fold any edits into the review branch so we can diff them back out cleanly.
+git add -A
+if ! git diff --cached --quiet; then
+	git commit -q -m "review session ($src)"
+fi
+patch="$(git diff --binary "$tip" "$cur")"
+
+if [ -z "$patch" ]; then
+	echo "no review changes to apply" >&2
+	exit 0
+fi
+
+if [ "$onto" -eq 1 ]; then
+	if [ "$push" -eq 1 ]; then
+		git fetch --quiet origin || {
+			echo "error: could not update from origin" >&2
+			exit 1
+		}
+		if [ "$(git rev-parse "origin/$src")" != "$tip" ]; then
+			echo "error: origin/$src advanced since your review; re-review before pushing" >&2
+			exit 1
+		fi
+	fi
+	if git rev-parse --verify --quiet "refs/heads/$src" >/dev/null; then
+		if [ "$(git rev-parse "$src")" != "$tip" ]; then
+			echo "error: local $src is not at the reviewed tip; move or delete it first" >&2
+			exit 1
+		fi
+		git switch -q "$src"
+	else
+		git switch -q -c "$src" "$tip"
+	fi
+	printf "%s\n" "$patch" | git apply --index --3way || {
+		echo "error: could not apply review changes onto $src" >&2
+		exit 1
+	}
+	git commit -q -m "review fixes ($src)"
+	if [ "$push" -eq 1 ]; then
+		git push --quiet origin "$src" || {
+			echo "error: could not push $src" >&2
+			exit 1
+		}
+		echo "pushed review fixes to origin/$src"
+	else
+		echo "committed review fixes on $src"
+	fi
+else
+	fb="review-fixes/$src"
+	git rev-parse --verify --quiet "refs/heads/$fb" >/dev/null && {
+		echo "error: $fb already exists; remove it first" >&2
+		exit 1
+	}
+	git switch -q -c "$fb" "$tip"
+	printf "%s\n" "$patch" | git apply --index --3way || {
+		echo "error: could not apply review changes onto $fb" >&2
+		exit 1
+	}
+	if [ "$push" -eq 1 ]; then
+		git commit -q -m "review fixes ($src)"
+		git push --quiet -u origin "$fb" || {
+			echo "error: could not push $fb" >&2
+			exit 1
+		}
+		echo "pushed $fb to origin"
+	else
+		echo "$fb ready with your edits staged — review and commit"
+	fi
+fi

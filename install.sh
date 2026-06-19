@@ -1,14 +1,25 @@
 #!/usr/bin/env sh
 #
-# Installs the git review aliases globally (review-pr, finish-review, clean-review).
-# Re-running this script is safe; it overwrites the existing alias definitions.
+# Installs the git review commands by symlinking them into a directory on PATH.
+# Override the target with PREFIX, e.g. `PREFIX=/usr/local/bin ./install.sh`.
 #
-set -e
+set -eu
 
-git config --global alias.review-pr '!f() { src="$1"; base="${2:-develop}"; if [ -z "$src" ]; then echo "usage: git review-pr <branch> [base]" >&2; return 1; fi; if ! git diff --quiet || ! git diff --cached --quiet; then echo "error: you have local changes; commit or stash them first" >&2; return 1; fi; if ! git fetch --quiet origin; then echo "error: could not update from origin" >&2; return 1; fi; if ! git rev-parse --verify --quiet "refs/remotes/origin/$src" >/dev/null; then echo "error: origin/$src not found" >&2; return 1; fi; if ! git rev-parse --verify --quiet "refs/remotes/origin/$base" >/dev/null; then echo "error: origin/$base not found" >&2; return 1; fi; rb="review/$src"; if git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null; then echo "error: $rb already exists; run git clean-review $src first" >&2; return 1; fi; tip=$(git rev-parse "origin/$src"); mb=$(git merge-base "origin/$base" "origin/$src") || { echo "error: could not compute merge-base with origin/$base" >&2; return 1; }; git switch -c "$rb" "$tip" || return 1; git reset --soft "$mb"; git config "branch.$rb.reviewsource" "$src"; git config "branch.$rb.reviewbase" "$base"; git config "branch.$rb.reviewtip" "$tip"; }; f'
+SRC_DIR="$(dirname -- "$0")"
+SRC_DIR="$(cd -- "$SRC_DIR" && pwd)"
+BIN_DIR="${PREFIX:-$HOME/.local/bin}"
 
-git config --global alias.finish-review '!f() { cur=$(git symbolic-ref --quiet --short HEAD); if [ -z "$cur" ]; then echo "error: not on a branch" >&2; return 1; fi; case "$cur" in review/*) ;; *) echo "error: not on a review/* branch (HEAD is $cur)" >&2; return 1;; esac; src=$(git config "branch.$cur.reviewsource"); tip=$(git config "branch.$cur.reviewtip"); if [ -z "$src" ] || [ -z "$tip" ]; then echo "error: missing review metadata; was $cur created with git review-pr?" >&2; return 1; fi; fb="review-fixes/$src"; if git rev-parse --verify --quiet "refs/heads/$fb" >/dev/null; then echo "error: $fb already exists; remove it first" >&2; return 1; fi; git add -A; if ! git diff --cached --quiet; then git commit --quiet -m "review session ($src)"; fi; patch=$(git diff --binary "$tip" "$cur"); git switch -c "$fb" "$tip" || return 1; if [ -n "$patch" ]; then printf "%s\n" "$patch" | git apply --index --3way || { echo "error: could not apply review changes onto $fb" >&2; return 1; }; else echo "no review changes to apply"; fi; }; f'
+mkdir -p "$BIN_DIR"
+for f in git-review-pr git-finish-review git-clean-review; do
+	chmod +x "$SRC_DIR/bin/$f"
+	ln -sf "$SRC_DIR/bin/$f" "$BIN_DIR/$f"
+done
 
-git config --global alias.clean-review '!f() { arg="$1"; cur=$(git symbolic-ref --quiet --short HEAD); if [ -n "$arg" ]; then list="review/$arg review-fixes/$arg"; else list=$(git for-each-ref --format="%(refname:short)" refs/heads/review/ refs/heads/review-fixes/); fi; if [ -z "$list" ]; then echo "no review branches found"; return 0; fi; for b in $list; do if ! git rev-parse --verify --quiet "refs/heads/$b" >/dev/null; then continue; fi; if [ "$b" = "$cur" ]; then echo "error: skipping $b (currently checked out)" >&2; continue; fi; git branch -D "$b"; done; }; f'
+echo "Installed git review commands to $BIN_DIR"
 
-echo "Installed git aliases: review-pr, finish-review, clean-review"
+case ":$PATH:" in
+*":$BIN_DIR:"*) ;;
+*) echo "note: $BIN_DIR is not on your PATH; add it to use the commands" ;;
+esac
+
+echo "For tab completion, source completions/git-review-workflow.bash from your shell rc"

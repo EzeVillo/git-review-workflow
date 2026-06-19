@@ -1,12 +1,15 @@
 #!/usr/bin/env sh
 #
-# Removes the git review aliases (review-pr, finish-review, clean-review).
-# It does not touch any review/* or review-fixes/* branches you may have created.
+# Removes the git review command symlinks. Override the target with PREFIX,
+# e.g. `PREFIX=/usr/local/bin ./uninstall.sh`. This does not touch any
+# review/* or review-fixes/* branches you may have created.
 #
-set -e
+set -eu
 
-git config --global --unset alias.review-pr || true
-git config --global --unset alias.finish-review || true
-git config --global --unset alias.clean-review || true
+BIN_DIR="${PREFIX:-$HOME/.local/bin}"
 
-echo "Removed git aliases: review-pr, finish-review, clean-review"
+for f in git-review-pr git-finish-review git-clean-review; do
+	rm -f "$BIN_DIR/$f"
+done
+
+echo "Removed git review commands from $BIN_DIR"

@@ -154,6 +154,7 @@ if [ "$step" -eq 1 ]; then
 	first="$(printf '%s\n' "$commits" | sed -n '1p')"
 
 	git switch -q -c "$rb" "$first" || die "could not create $rb"
+	git reset --soft HEAD^
 	git config "branch.$rb.reviewsource" "$src"
 	git config "branch.$rb.reviewbase" "$base"
 	git config "branch.$rb.reviewtip" "$tip"

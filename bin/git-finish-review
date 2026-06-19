@@ -71,10 +71,13 @@ fi
 if [ "$(git config "branch.$cur.reviewmode" || true)" = "step" ] && [ "$resume" -eq 0 ]; then
 	count="$(git config "branch.$cur.reviewcount" || echo 0)"
 	step="$(git config "branch.$cur.reviewstep" || echo 1)"
+	start="$(git config "branch.$cur.reviewstart")"
+	commits="$(git rev-list --reverse --first-parent "$start..$tip")"
+	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
 	git add -A
-	if ! git diff --cached --quiet; then
-		tree="$(git write-tree)"
-		edit="$(git commit-tree "$tree" -p "$(git rev-parse HEAD)" -m "review edits step $step")"
+	tree="$(git write-tree)"
+	if [ "$tree" != "$(git rev-parse "$cstep^{tree}")" ]; then
+		edit="$(git commit-tree "$tree" -p "$cstep" -m "review edits step $step")"
 		git update-ref "refs/review-edits/$src/$step" "$edit"
 	fi
 	git reset -q --hard "$tip"

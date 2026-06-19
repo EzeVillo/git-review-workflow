@@ -50,8 +50,10 @@ teardown() {
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
 	[[ "$output" == *"[1/2]"* ]]
 	[[ "$output" == *"c1-touch-a"* ]]
-	# clean working tree, parked exactly on the first commit
-	run git status --porcelain
+	# the first commit's diff is staged; working tree is clean
+	run git diff --cached --name-only
+	[ "$output" = "a.txt" ]
+	run git diff --name-only
 	[ -z "$output" ]
 }
 
@@ -65,7 +67,10 @@ teardown() {
 	# the C1 edit is banked, not lingering in the tree
 	run cat a.txt
 	[[ "$output" != *"FIXA"* ]]
-	run git status --porcelain
+	# the C2 diff is staged; working tree is clean
+	run git diff --cached --name-only
+	[ "$output" = "b.txt" ]
+	run git diff --name-only
 	[ -z "$output" ]
 }
 

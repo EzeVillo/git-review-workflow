@@ -11,12 +11,16 @@
 _git_review_pr() {
 	case "$cur" in
 	--*)
-		__gitcomp "--delta --help"
+		__gitcomp "--delta --step --help"
 		;;
 	*)
 		__gitcomp_nl "$(__git_refs)"
 		;;
 	esac
+}
+
+_git_review_next() {
+	__gitcomp "--help"
 }
 
 _git_finish_review() {

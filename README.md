@@ -42,7 +42,8 @@ source /path/to/git-review-workflow/completions/git-review-workflow.bash
 
 | Command | What it does |
 | --- | --- |
-| `git review-pr <branch> [base] [--delta]` | Fetch `origin`, then stage the whole PR diff on a new `review/<branch>` branch. |
+| `git review-pr <branch> [base] [--delta\|--step]` | Fetch `origin`, then stage the whole PR diff on a new `review/<branch>` branch. |
+| `git review-next` | Advance a `--step` review to the next commit. |
 | `git finish-review [--onto-source] [--push]` | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch). |
 | `git clean-review [branch] [--forget]` | Delete the `review/*` and `review-fixes/*` branches for `<branch>`, or all of them. |
 
@@ -51,6 +52,12 @@ source /path/to/git-review-workflow/completions/git-review-workflow.bash
   otherwise `develop`. A positional argument overrides it.
 - `--delta` — review only the commits added **since your last review** of this
   branch, instead of the whole PR. Perfect for re-reviewing an updated PR.
+- `--step` — review the PR **one commit at a time**. You start on the first
+  commit after the merge-base; the command prints its author message. Edit
+  files, then run `git review-next` to bank your edits and move to the next
+  commit with a clean tree (no leftover from earlier commits or your own
+  edits). When the commits run out, run `git finish-review` and all your banked
+  edits are replayed onto the PR tip — exactly as in a whole-PR review.
 - Always updates from `origin` first and **fails** if it cannot. The review is
   built from `origin/<branch>`, never a stale local copy.
 - Refuses to run if you have local changes — start from a clean branch.
@@ -93,6 +100,13 @@ git clean-review feature/login              # tidy up
 
 # Re-review after the author pushes more commits:
 git review-pr feature/login --delta          # only the new commits
+
+# Or walk the PR commit by commit:
+git review-pr feature/login --step           # start on the first commit
+# ...edit, then...
+git review-next                              # bank edits, move to the next commit
+git review-next                              # ...until "no more commits"
+git finish-review                            # replay all your edits onto the tip
 ```
 
 ### Requirements
@@ -134,7 +148,8 @@ source /ruta/a/git-review-workflow/completions/git-review-workflow.bash
 
 | Comando | Qué hace |
 | --- | --- |
-| `git review-pr <rama> [base] [--delta]` | Hace fetch de `origin` y deja todo el diff del PR staged en una nueva rama `review/<rama>`. |
+| `git review-pr <rama> [base] [--delta\|--step]` | Hace fetch de `origin` y deja todo el diff del PR staged en una nueva rama `review/<rama>`. |
+| `git review-next` | Avanza una review `--step` al siguiente commit. |
 | `git finish-review [--onto-source] [--push]` | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR). |
 | `git clean-review [rama] [--forget]` | Borra las ramas `review/*` y `review-fixes/*` de `<rama>`, o todas. |
 
@@ -143,6 +158,13 @@ source /ruta/a/git-review-workflow/completions/git-review-workflow.bash
   abajo), si no `develop`. El argumento posicional la sobreescribe.
 - `--delta` — revisar solo los commits agregados **desde tu última review** de
   esta rama, en vez de todo el PR. Ideal para re-revisar un PR actualizado.
+- `--step` — revisar el PR **de a un commit por vez**. Arrancás en el primer
+  commit después del merge-base y el comando imprime el mensaje del autor.
+  Editás y corrés `git review-next` para bancar tus cambios y pasar al siguiente
+  commit con el árbol limpio (sin nada de los commits anteriores ni de tus
+  propias ediciones). Cuando se acaban los commits, corrés `git finish-review` y
+  todas tus ediciones bancadas se re-aplican sobre el tip del PR — igual que en
+  una review completa.
 - Siempre actualiza desde `origin` primero y **falla** si no puede. La revisión
   se arma desde `origin/<rama>`, nunca desde una copia local vieja.
 - No corre si tenés cambios locales — arrancá desde una rama limpia.
@@ -187,6 +209,13 @@ git clean-review feature/login              # limpiar
 
 # Re-revisar después de que el autor pushea más commits:
 git review-pr feature/login --delta          # solo los commits nuevos
+
+# O recorrer el PR commit por commit:
+git review-pr feature/login --step           # arrancar en el primer commit
+# ...editar, y después...
+git review-next                              # bancar cambios, pasar al siguiente
+git review-next                              # ...hasta "no more commits"
+git finish-review                            # re-aplicar todos tus cambios sobre el tip
 ```
 
 ### Requisitos

@@ -71,6 +71,16 @@ for b in $list; do
 	git branch -D "$b"
 done
 
+# Drop any banked commit-by-commit edit refs.
+if [ -n "$arg" ]; then
+	editns="refs/review-edits/$arg/"
+else
+	editns="refs/review-edits/"
+fi
+git for-each-ref --format='%(refname)' "$editns" | while read -r ref; do
+	git update-ref -d "$ref"
+done
+
 if [ "$forget" -eq 1 ]; then
 	if [ -n "$arg" ]; then
 		git config --unset "reviewworkflow.$arg.reviewed" 2>/dev/null || true

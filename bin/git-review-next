@@ -1,0 +1,86 @@
+#!/usr/bin/env sh
+#
+# git-review-next — advance a commit-by-commit review (started with review-pr --step).
+#
+# It banks the edits you made on the current commit into a ref of its own, then
+# resets the working tree clean to the next commit and shows you its message.
+# When there are no more commits it tells you to run git finish-review, which
+# replays every banked edit onto the PR tip.
+#
+set -eu
+
+prog="git review-next"
+
+usage() {
+	cat <<EOF
+usage: $prog
+
+Advance a commit-by-commit review to the next commit. Your edits on the current
+commit are remembered; run git finish-review when there are no more commits.
+EOF
+}
+
+case "${1:-}" in
+-h | --help)
+	usage
+	exit 0
+	;;
+"") ;;
+*)
+	echo "error: unexpected argument $1" >&2
+	usage >&2
+	exit 1
+	;;
+esac
+
+show_commit() {
+	# show_commit <commit> <n> <total>
+	printf '\n[%s/%s] %s\n' "$2" "$3" "$(git rev-parse --short "$1")"
+	git --no-pager show --stat --format='%an <%ae>%n%n%s%n%n%b' "$1"
+	printf -- '----\nreview this commit, edit files, then run git review-next\n'
+}
+
+cur="$(git symbolic-ref --quiet --short HEAD || true)"
+[ -n "$cur" ] || {
+	echo "error: not on a branch" >&2
+	exit 1
+}
+case "$cur" in
+review/*) ;;
+*)
+	echo "error: not on a review/* branch (HEAD is $cur)" >&2
+	exit 1
+	;;
+esac
+
+mode="$(git config "branch.$cur.reviewmode" || true)"
+[ "$mode" = "step" ] || {
+	echo "error: $cur was not started with git review-pr --step" >&2
+	exit 1
+}
+
+src="$(git config "branch.$cur.reviewsource")"
+tip="$(git config "branch.$cur.reviewtip")"
+mb="$(git config "branch.$cur.reviewmergebase")"
+count="$(git config "branch.$cur.reviewcount")"
+step="$(git config "branch.$cur.reviewstep")"
+
+# Bank the edits made on the current commit (if any) under a ref of its own.
+git add -A
+if ! git diff --cached --quiet; then
+	tree="$(git write-tree)"
+	edit="$(git commit-tree "$tree" -p "$(git rev-parse HEAD)" -m "review edits step $step")"
+	git update-ref "refs/review-edits/$src/$step" "$edit"
+fi
+
+if [ "$step" -lt "$count" ]; then
+	next="$((step + 1))"
+	commits="$(git rev-list --reverse --first-parent "$mb..$tip")"
+	cnext="$(printf '%s\n' "$commits" | sed -n "${next}p")"
+	git reset -q --hard "$cnext"
+	git config "branch.$cur.reviewstep" "$next"
+	show_commit "$cnext" "$next" "$count"
+else
+	git reset -q --hard "$tip"
+	echo "no more commits — run git finish-review"
+fi

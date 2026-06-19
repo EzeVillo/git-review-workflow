@@ -5,7 +5,8 @@
 # The review branch keeps the PR tip in the working tree but parks HEAD at the
 # merge-base with the base branch, so the whole PR shows up as a staged diff you
 # can read, edit and run. With --delta it parks HEAD at the tip you last
-# reviewed, so only the new commits show up.
+# reviewed, so only the new commits show up. With --step you walk the PR one
+# commit at a time (see git review-next).
 #
 set -eu
 
@@ -13,19 +14,28 @@ prog="git review-pr"
 
 usage() {
 	cat <<EOF
-usage: $prog <branch> [base] [--delta]
+usage: $prog <branch> [base] [--delta | --step]
 
 Stage a pull request diff on a review/<branch> branch for inline review.
 
   base       base branch to diff against
              (default: reviewworkflow.base config, or 'develop')
   --delta    review only the commits added since your last review of <branch>
+  --step     review the PR one commit at a time; advance with git review-next
 EOF
+}
+
+show_commit() {
+	# show_commit <commit> <n> <total>
+	printf '\n[%s/%s] %s\n' "$2" "$3" "$(git rev-parse --short "$1")"
+	git --no-pager show --stat --format='%an <%ae>%n%n%s%n%n%b' "$1"
+	printf -- '----\nreview this commit, edit files, then run git review-next\n'
 }
 
 src=""
 base=""
 delta=0
+step=0
 while [ $# -gt 0 ]; do
 	case "$1" in
 	-h | --help)
@@ -33,6 +43,7 @@ while [ $# -gt 0 ]; do
 		exit 0
 		;;
 	-d | --delta) delta=1 ;;
+	--step) step=1 ;;
 	-*)
 		echo "error: unknown option $1" >&2
 		usage >&2
@@ -56,6 +67,11 @@ done
 	usage >&2
 	exit 1
 }
+
+if [ "$delta" -eq 1 ] && [ "$step" -eq 1 ]; then
+	echo "error: --delta and --step cannot be combined" >&2
+	exit 1
+fi
 
 git rev-parse --git-dir >/dev/null 2>&1 || {
 	echo "error: not a git repository" >&2
@@ -94,6 +110,36 @@ git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null && {
 
 tip="$(git rev-parse "origin/$src")"
 prev="$(git config "reviewworkflow.$src.reviewed" || true)"
+
+if [ "$step" -eq 1 ]; then
+	mb="$(git merge-base "origin/$base" "origin/$src")" || {
+		echo "error: could not compute merge-base with origin/$base" >&2
+		exit 1
+	}
+	commits="$(git rev-list --reverse --first-parent "$mb..$tip")"
+	[ -n "$commits" ] || {
+		echo "error: no commits to review between origin/$base and origin/$src" >&2
+		exit 1
+	}
+	count="$(printf '%s\n' "$commits" | wc -l | tr -d ' ')"
+	first="$(printf '%s\n' "$commits" | sed -n '1p')"
+
+	git switch -q -c "$rb" "$first" || {
+		echo "error: could not create $rb" >&2
+		exit 1
+	}
+	git config "branch.$rb.reviewsource" "$src"
+	git config "branch.$rb.reviewbase" "$base"
+	git config "branch.$rb.reviewtip" "$tip"
+	git config "branch.$rb.reviewmergebase" "$mb"
+	git config "branch.$rb.reviewmode" "step"
+	git config "branch.$rb.reviewcount" "$count"
+	git config "branch.$rb.reviewstep" "1"
+	git config "reviewworkflow.$src.reviewed" "$tip"
+
+	show_commit "$first" 1 "$count"
+	exit 0
+fi
 
 if [ "$delta" -eq 1 ]; then
 	[ -n "$prev" ] || {

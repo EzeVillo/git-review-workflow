@@ -61,6 +61,35 @@ if [ -z "$src" ] || [ -z "$tip" ]; then
 	exit 1
 fi
 
+# In commit-by-commit mode, bank the current commit's edits, move to the tip and
+# replay every banked edit there, so what follows sees the same state as a normal
+# whole-PR review.
+if [ "$(git config "branch.$cur.reviewmode" || true)" = "step" ]; then
+	count="$(git config "branch.$cur.reviewcount" || echo 0)"
+	step="$(git config "branch.$cur.reviewstep" || echo 1)"
+	git add -A
+	if ! git diff --cached --quiet; then
+		tree="$(git write-tree)"
+		edit="$(git commit-tree "$tree" -p "$(git rev-parse HEAD)" -m "review edits step $step")"
+		git update-ref "refs/review-edits/$src/$step" "$edit"
+	fi
+	git reset -q --hard "$tip"
+	i=1
+	while [ "$i" -le "$count" ]; do
+		ref="refs/review-edits/$src/$i"
+		if git rev-parse --verify --quiet "$ref" >/dev/null; then
+			editpatch="$(git diff --binary "${ref}^" "$ref")"
+			if [ -n "$editpatch" ]; then
+				printf "%s\n" "$editpatch" | git apply --3way --index || {
+					echo "error: review edits from step $i conflict on the tip; resolve manually" >&2
+					exit 1
+				}
+			fi
+		fi
+		i=$((i + 1))
+	done
+fi
+
 # Fold any edits into the review branch so we can diff them back out cleanly.
 git add -A
 if ! git diff --cached --quiet; then

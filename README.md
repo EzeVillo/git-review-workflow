@@ -36,23 +36,30 @@ first options are the easiest and **set everything up for you**.
 
 ```sh
 brew tap EzeVillo/git-review-workflow https://github.com/EzeVillo/git-review-workflow
-brew install --HEAD EzeVillo/git-review-workflow/git-review-workflow
+brew install EzeVillo/git-review-workflow/git-review-workflow
 ```
 
-**Windows — [Scoop](https://scoop.sh)** (you also need
-[Git for Windows](https://gitforwindows.org); it provides the shell these
-commands run in):
+**Windows — PowerShell** (no Scoop needed; you still need
+[Git for Windows](https://gitforwindows.org), which provides the shell these
+commands run in). Open PowerShell and run:
+
+```powershell
+irm https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.ps1 | iex
+```
+
+This installs the commands into `~\.local\bin` and adds that folder to your
+user `PATH` automatically. Open a new terminal after it finishes.
+
+**Windows — [Scoop](https://scoop.sh)** (alternative if you already have it):
 
 ```powershell
 scoop bucket add git-review-workflow https://github.com/EzeVillo/git-review-workflow
 scoop install git-review-workflow/git-review-workflow
 ```
 
-*(Once a version is released, drop `--HEAD` from the Homebrew command.)*
-
-With Homebrew or Scoop you can stop here — they put the commands somewhere your
-terminal already looks, so `git review-pr` just works. Everything below only
-matters if you install manually.
+With Homebrew, the PowerShell installer, or Scoop you can stop here — they put
+the commands somewhere your terminal already looks, so `git review-pr` just
+works. Everything below only matters if you install manually.
 
 #### One-line install (Linux, macOS, WSL, Git Bash)
 
@@ -60,11 +67,19 @@ No package manager? This downloads the commands and installs them for you — yo
 don't even need to download the project first:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/HEAD/web-install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.sh | sh
 ```
 
 It installs into the folder `~/.local/bin`. If that folder isn't on your `PATH`,
 the installer will tell you — see [About your PATH](#about-your-path-command-not-found).
+
+> **Git Bash on Windows — SSL error?** If you see a message like
+> `schannel: next InitializeSecurityContext failed` or `revocation check`, your
+> Git for Windows is using the Windows SSL backend. Fix it once with:
+> ```sh
+> git config --global http.sslBackend openssl
+> ```
+> Then re-run the installer.
 
 #### From a downloaded copy
 
@@ -302,23 +317,30 @@ opciones son las más fáciles y **te configuran todo solas**.
 
 ```sh
 brew tap EzeVillo/git-review-workflow https://github.com/EzeVillo/git-review-workflow
-brew install --HEAD EzeVillo/git-review-workflow/git-review-workflow
+brew install EzeVillo/git-review-workflow/git-review-workflow
 ```
 
-**Windows — [Scoop](https://scoop.sh)** (también necesitás
-[Git for Windows](https://gitforwindows.org); es el que provee la shell donde
-corren estos comandos):
+**Windows — PowerShell** (sin necesidad de Scoop; sí necesitás
+[Git for Windows](https://gitforwindows.org), que provee la shell donde corren
+estos comandos). Abrí PowerShell y ejecutá:
+
+```powershell
+irm https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.ps1 | iex
+```
+
+Instala los comandos en `~\.local\bin` y agrega esa carpeta al `PATH` de tu
+usuario automáticamente. Abrí una terminal nueva cuando termine.
+
+**Windows — [Scoop](https://scoop.sh)** (alternativa si ya lo tenés instalado):
 
 ```powershell
 scoop bucket add git-review-workflow https://github.com/EzeVillo/git-review-workflow
 scoop install git-review-workflow/git-review-workflow
 ```
 
-*(Cuando haya un release, sacá `--HEAD` del comando de Homebrew.)*
-
-Con Homebrew o Scoop podés parar acá — dejan los comandos en un lugar donde tu
-terminal ya busca, así `git review-pr` funciona sin más. Todo lo de abajo solo
-importa si instalás a mano.
+Con Homebrew, el instalador de PowerShell o Scoop podés parar acá — dejan los
+comandos en un lugar donde tu terminal ya busca, así `git review-pr` funciona
+sin más. Todo lo de abajo solo importa si instalás a mano.
 
 #### Instalación en una línea (Linux, macOS, WSL, Git Bash)
 
@@ -326,11 +348,19 @@ importa si instalás a mano.
 siquiera necesitás bajar el proyecto antes:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/HEAD/web-install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.sh | sh
 ```
 
 Instala en la carpeta `~/.local/bin`. Si esa carpeta no está en tu `PATH`, el
 instalador te avisa — mirá [Sobre tu PATH](#sobre-tu-path-command-not-found).
+
+> **Git Bash en Windows — ¿error de SSL?** Si ves un mensaje como
+> `schannel: next InitializeSecurityContext failed` o `revocation check`, tu Git
+> for Windows está usando el backend SSL de Windows. Arreglalo con:
+> ```sh
+> git config --global http.sslBackend openssl
+> ```
+> Después volvé a correr el instalador.
 
 #### Desde una copia descargada
 

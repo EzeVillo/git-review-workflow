@@ -125,3 +125,42 @@ teardown() {
 	run git for-each-ref refs/review-edits/feature/x/
 	[ -z "$output" ]
 }
+
+@test "review-next with no edits leaves no banked ref and stages the next diff" {
+	git review-pr feature/x --step
+	# advance without editing — the tree matches the commit so no ref should be created
+	git review-next
+	run git for-each-ref refs/review-edits/feature/x/1
+	[ -z "$output" ]
+	# step 2 diff is staged; working tree is clean
+	run git diff --cached --name-only
+	[ "$output" = "b.txt" ]
+	run git diff --name-only
+	[ -z "$output" ]
+}
+
+@test "finish-review with no edits exits early" {
+	git review-pr feature/x --step
+	run git finish-review
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"no review changes"* ]]
+}
+
+@test "--step on a single-commit PR stages its diff then ends" {
+	git switch --quiet develop
+	git switch --quiet -c feature/solo
+	printf 'solo\n' >solo.txt
+	git add solo.txt
+	git commit --quiet -m solo-commit
+	git push --quiet -u origin feature/solo
+	git switch --quiet develop
+
+	git review-pr feature/solo --step
+	run git diff --cached --name-only
+	[ "$output" = "solo.txt" ]
+	run git diff --name-only
+	[ -z "$output" ]
+	run git review-next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"no more commits"* ]]
+}

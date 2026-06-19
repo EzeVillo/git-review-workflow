@@ -133,3 +133,32 @@ teardown() {
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"nothing to resume"* ]]
 }
+
+@test "review-prev stages the previous commit's diff" {
+	git review-pr feature/x --step
+	git review-next
+	# at step 2: f.txt staged, working tree clean
+	run git diff --cached --name-only
+	[ "$output" = "f.txt" ]
+	run git diff --name-only
+	[ -z "$output" ]
+	git review-prev
+	# back at step 1: f.txt still staged, working tree still clean
+	run git diff --cached --name-only
+	[ "$output" = "f.txt" ]
+	run git diff --name-only
+	[ -z "$output" ]
+}
+
+@test "review-prev at the first commit reports already at the start and keeps staging" {
+	git review-pr feature/x --step
+	run git review-prev
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"already at the first commit"* ]]
+	[ "$(git config branch.review/feature/x.reviewstep)" = "1" ]
+	# staging must be intact — same invariant as the original staging bug
+	run git diff --cached --name-only
+	[ "$output" = "f.txt" ]
+	run git diff --name-only
+	[ -z "$output" ]
+}

@@ -17,6 +17,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - name: Check bin scripts are executable
+        run: |
+          missing=$(git ls-files -s bin/ | awk '$1 != "100755" {print $4}')
+          if [ -n "$missing" ]; then
+            echo "These files in bin/ are missing the executable bit (100755):" >&2
+            echo "$missing" >&2
+            echo "Fix with: git update-index --chmod=+x <file>" >&2
+            exit 1
+          fi
       - name: Install shellcheck
         run: |
           case "$RUNNER_OS" in

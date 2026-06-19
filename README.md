@@ -393,3 +393,21 @@ bats tests/
 ```
 
 CI runs both on every push and pull request (see `.github/workflows/ci.yml`).
+
+### Releasing
+
+Releases are cut by pushing a `v*` tag:
+
+```sh
+# bump the snapshot to the release version first
+printf '0.0.1\n' >VERSION
+git commit -am "Release 0.0.1"
+git tag v0.0.1
+git push origin HEAD --tags
+```
+
+The release workflow (`.github/workflows/release.yml`) then:
+
+- creates a GitHub Release for the tag with auto-generated notes, and
+- pins the Homebrew formula (`url`, `sha256`, `version`) to the tag on the
+  default branch, so `brew install` (without `--HEAD`) installs that version.

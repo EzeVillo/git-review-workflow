@@ -39,7 +39,7 @@ brew tap EzeVillo/git-review-workflow https://github.com/EzeVillo/git-review-wor
 brew install EzeVillo/git-review-workflow/git-review-workflow
 ```
 
-**Windows — PowerShell** (no Scoop needed; you still need
+**Windows — PowerShell** (you still need
 [Git for Windows](https://gitforwindows.org), which provides the shell these
 commands run in). Open PowerShell and run:
 
@@ -49,20 +49,16 @@ irm https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-inst
 
 This installs the commands into `~\.local\bin` and adds that folder to your
 user `PATH` automatically. Open a new terminal after it finishes. To update,
-re-run the same command.
-
-**Windows — [Scoop](https://scoop.sh)** (alternative if you already have it):
+re-run the same command. To uninstall (removes the commands and the `PATH`
+entry it added):
 
 ```powershell
-scoop bucket add git-review-workflow https://github.com/EzeVillo/git-review-workflow
-scoop install git-review-workflow/git-review-workflow
+irm https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-uninstall.ps1 | iex
 ```
 
-To update with Scoop: `scoop update git-review-workflow/git-review-workflow`.
-
-With Homebrew, the PowerShell installer, or Scoop you can stop here — they put
-the commands somewhere your terminal already looks, so `git review-pr` just
-works. Everything below only matters if you install manually.
+With Homebrew or the PowerShell installer you can stop here — they put the
+commands somewhere your terminal already looks, so `git review-pr` just works.
+Everything below only matters if you install manually.
 
 #### One-line install (Linux, macOS, WSL, Git Bash)
 
@@ -75,7 +71,12 @@ curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/w
 
 It installs into the folder `~/.local/bin`. If that folder isn't on your `PATH`,
 the installer will tell you — see [About your PATH](#about-your-path-command-not-found).
-To update, re-run the same command — it always installs the latest release.
+To update, re-run the same command — it always installs the latest release. To
+uninstall, run the matching one-liner (pass the same `PREFIX` if you overrode it):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-uninstall.sh | sh
+```
 
 > **Git Bash on Windows — SSL error?** If you see a message like
 > `schannel: next InitializeSecurityContext failed` or `revocation check`, your
@@ -107,8 +108,8 @@ these commands were installed isn't on the list, the terminal can't find them
 and you'll see something like `git: 'review-pr' is not a git command` or
 `command not found` — it's not broken, it just doesn't know where to look.
 
-- **Homebrew and Scoop add their folder to your `PATH` automatically**, so if
-  you installed that way there's nothing to do.
+- **Homebrew and the PowerShell installer add their folder to your `PATH`
+  automatically**, so if you installed that way there's nothing to do.
 - The **one-line** and **manual** installs use the folder `~/.local/bin`, which
   is already on the `PATH` on most systems. If it isn't, the installer prints a
   short note, and you add it **once** by pasting one line into your shell's
@@ -329,7 +330,7 @@ brew tap EzeVillo/git-review-workflow https://github.com/EzeVillo/git-review-wor
 brew install EzeVillo/git-review-workflow/git-review-workflow
 ```
 
-**Windows — PowerShell** (sin necesidad de Scoop; sí necesitás
+**Windows — PowerShell** (necesitás
 [Git for Windows](https://gitforwindows.org), que provee la shell donde corren
 estos comandos). Abrí PowerShell y ejecutá:
 
@@ -339,20 +340,16 @@ irm https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-inst
 
 Instala los comandos en `~\.local\bin` y agrega esa carpeta al `PATH` de tu
 usuario automáticamente. Abrí una terminal nueva cuando termine. Para
-actualizar, volvé a correr el mismo comando.
-
-**Windows — [Scoop](https://scoop.sh)** (alternativa si ya lo tenés instalado):
+actualizar, volvé a correr el mismo comando. Para desinstalar (borra los
+comandos y la entrada de `PATH` que agregó):
 
 ```powershell
-scoop bucket add git-review-workflow https://github.com/EzeVillo/git-review-workflow
-scoop install git-review-workflow/git-review-workflow
+irm https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-uninstall.ps1 | iex
 ```
 
-Para actualizar con Scoop: `scoop update git-review-workflow/git-review-workflow`.
-
-Con Homebrew, el instalador de PowerShell o Scoop podés parar acá — dejan los
-comandos en un lugar donde tu terminal ya busca, así `git review-pr` funciona
-sin más. Todo lo de abajo solo importa si instalás a mano.
+Con Homebrew o el instalador de PowerShell podés parar acá — dejan los comandos
+en un lugar donde tu terminal ya busca, así `git review-pr` funciona sin más.
+Todo lo de abajo solo importa si instalás a mano.
 
 #### Instalación en una línea (Linux, macOS, WSL, Git Bash)
 
@@ -365,7 +362,13 @@ curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/w
 
 Instala en la carpeta `~/.local/bin`. Si esa carpeta no está en tu `PATH`, el
 instalador te avisa — mirá [Sobre tu PATH](#sobre-tu-path-command-not-found).
-Para actualizar, volvé a correr el mismo comando — siempre instala la última versión.
+Para actualizar, volvé a correr el mismo comando — siempre instala la última
+versión. Para desinstalar, corré el one-liner correspondiente (pasale el mismo
+`PREFIX` si lo cambiaste):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-uninstall.sh | sh
+```
 
 > **Git Bash en Windows — ¿error de SSL?** Si ves un mensaje como
 > `schannel: next InitializeSecurityContext failed` o `revocation check`, tu Git
@@ -397,8 +400,8 @@ donde se instalaron estos comandos no está en la lista, la terminal no los
 encuentra y vas a ver algo como `git: 'review-pr' is not a git command` o
 `command not found` — no está roto, solo no sabe dónde mirar.
 
-- **Homebrew y Scoop agregan su carpeta al `PATH` automáticamente**, así que si
-  instalaste por ahí no tenés que hacer nada.
+- **Homebrew y el instalador de PowerShell agregan su carpeta al `PATH`
+  automáticamente**, así que si instalaste por ahí no tenés que hacer nada.
 - La instalación **en una línea** y la **manual** usan la carpeta `~/.local/bin`,
   que en la mayoría de los sistemas ya está en el `PATH`. Si no lo está, el
   instalador te deja un aviso y lo agregás **una sola vez** pegando una línea en
@@ -600,7 +603,7 @@ git review-pr feature/login --from a1b2c3d
 Run the checks locally:
 
 ```sh
-shellcheck bin/* install.sh uninstall.sh web-install.sh
+shellcheck bin/* install.sh uninstall.sh web-install.sh web-uninstall.sh
 bats tests/
 ```
 
@@ -626,6 +629,5 @@ files that point *at* the tarball (they need its `sha256`, and don't live inside
 it):
 
 - creates a GitHub Release for the tag with auto-generated notes, and
-- pins the Homebrew formula and Scoop manifest (`url`, `sha256`, `version`) to
-  the tag on the default branch, so `brew install` (without `--HEAD`) installs
-  that version.
+- pins the Homebrew formula (`url`, `sha256`, `version`) to the tag on the
+  default branch, so `brew install` (without `--HEAD`) installs that version.

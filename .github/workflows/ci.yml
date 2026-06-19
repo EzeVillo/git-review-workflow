@@ -34,7 +34,7 @@ jobs:
             *) sudo apt-get update && sudo apt-get install -y shellcheck ;;
           esac
       - name: shellcheck
-        run: shellcheck bin/* install.sh uninstall.sh web-install.sh
+        run: shellcheck bin/* install.sh uninstall.sh web-install.sh web-uninstall.sh
 
   test:
     strategy:

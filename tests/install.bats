@@ -34,9 +34,27 @@ teardown() {
 
 @test "uninstall.sh removes every command" {
 	sh "$REPO/install.sh"
+	# Guard against a false positive: removal only means something if the links
+	# were actually there to begin with.
+	for c in $CMDS; do
+		[ -e "$PREFIX/$c" ]
+	done
+
 	run sh "$REPO/uninstall.sh"
 	[ "$status" -eq 0 ]
 	for c in $CMDS; do
 		[ ! -e "$PREFIX/$c" ]
 	done
+}
+
+@test "uninstall.sh leaves unrelated files in PREFIX untouched" {
+	sh "$REPO/install.sh"
+	printf 'keep me\n' > "$PREFIX/unrelated.txt"
+	printf '#!/bin/sh\n' > "$PREFIX/git-other-tool"
+
+	run sh "$REPO/uninstall.sh"
+	[ "$status" -eq 0 ]
+	[ -e "$PREFIX/unrelated.txt" ]
+	[ -e "$PREFIX/git-other-tool" ]
+	[ "$(cat "$PREFIX/unrelated.txt")" = "keep me" ]
 }

@@ -1,13 +1,12 @@
 #!/usr/bin/env bats
 #
-# Structural tests for the Homebrew formula and Scoop manifest.
+# Structural tests for the Homebrew formula.
 # These catch stale metadata (wrong version, missing files, broken field names)
-# without requiring Homebrew or Scoop to be installed.
+# without requiring Homebrew to be installed.
 
 setup() {
 	REPO="$BATS_TEST_DIRNAME/.."
 	FORMULA="$REPO/Formula/git-review-workflow.rb"
-	MANIFEST="$REPO/bucket/git-review-workflow.json"
 	VERSION="$(cat "$REPO/VERSION")"
 }
 
@@ -50,16 +49,4 @@ setup() {
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"usage: git finish-review"* ]]
 	rm -rf "$TMP"
-}
-
-# ── Scoop manifest ────────────────────────────────────────────────────────────
-
-@test "scoop: manifest is valid JSON" {
-	python3 -c "" 2>/dev/null || skip "python3 not available"
-	python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$MANIFEST"
-}
-
-@test "scoop: manifest version, fields, and extract_dir are consistent" {
-	python3 -c "" 2>/dev/null || skip "python3 not available"
-	python3 "$BATS_TEST_DIRNAME/helpers/check_scoop_fields.py" "$MANIFEST" "$VERSION"
 }

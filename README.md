@@ -36,10 +36,27 @@ This symlinks all eight commands (`git-review-pr`, `git-review-next`,
 `PREFIX=/usr/local/bin ./install.sh`). Make sure that directory is on your
 `PATH`. Remove them with `./uninstall.sh`.
 
-#### Homebrew
+#### One-line install (Linux, macOS, WSL, Git Bash)
 
-Until a tagged release exists you can install the tip of the default branch via
-a tap:
+No clone needed — download and install the commands straight into your `PATH`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/HEAD/web-install.sh | sh
+```
+
+Override the install dir with `PREFIX`, or the version with `REF`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/HEAD/web-install.sh \
+    | PREFIX=/usr/local/bin REF=v0.0.1 sh
+```
+
+With no `REF` it installs the latest release, falling back to the default branch.
+
+#### Homebrew (macOS and Linux)
+
+Homebrew works the same on macOS and Linux (Linuxbrew) with one formula. Until a
+tagged release exists, install the tip of the default branch via a tap:
 
 ```sh
 brew tap EzeVillo/git-review-workflow https://github.com/EzeVillo/git-review-workflow
@@ -47,6 +64,19 @@ brew install --HEAD EzeVillo/git-review-workflow/git-review-workflow
 ```
 
 This installs the commands and all shell completions (`Formula/git-review-workflow.rb`).
+After a release, drop `--HEAD` to install the tagged version.
+
+#### Scoop (Windows)
+
+On Windows, install via [Scoop](https://scoop.sh) (the commands run under the
+bash that ships with Git for Windows, which you also need):
+
+```powershell
+scoop bucket add git-review-workflow https://github.com/EzeVillo/git-review-workflow
+scoop install git-review-workflow/git-review-workflow
+```
+
+The bucket manifest lives at `bucket/git-review-workflow.json`.
 
 #### Tab completion
 
@@ -220,10 +250,28 @@ Hace symlink de los ocho comandos (`git-review-pr`, `git-review-next`,
 `PREFIX=/usr/local/bin ./install.sh`). Asegurate de que ese directorio esté en
 tu `PATH`. Para quitarlos: `./uninstall.sh`.
 
-#### Homebrew
+#### Instalación en una línea (Linux, macOS, WSL, Git Bash)
 
-Hasta que exista un release con tag, podés instalar el tip de la rama por
-defecto vía un tap:
+Sin clonar — descarga e instala los comandos directo en tu `PATH`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/HEAD/web-install.sh | sh
+```
+
+Cambiá el directorio con `PREFIX`, o la versión con `REF`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/HEAD/web-install.sh \
+    | PREFIX=/usr/local/bin REF=v0.0.1 sh
+```
+
+Sin `REF` instala el último release, con fallback a la rama por defecto.
+
+#### Homebrew (macOS y Linux)
+
+Homebrew funciona igual en macOS y en Linux (Linuxbrew) con la misma formula.
+Hasta que exista un release con tag, instalá el tip de la rama por defecto vía un
+tap:
 
 ```sh
 brew tap EzeVillo/git-review-workflow https://github.com/EzeVillo/git-review-workflow
@@ -231,6 +279,19 @@ brew install --HEAD EzeVillo/git-review-workflow/git-review-workflow
 ```
 
 Instala los comandos y todas las completions (`Formula/git-review-workflow.rb`).
+Después de un release, sacá `--HEAD` para instalar la versión tageada.
+
+#### Scoop (Windows)
+
+En Windows, instalá vía [Scoop](https://scoop.sh) (los comandos corren sobre el
+bash que trae Git for Windows, que también necesitás):
+
+```powershell
+scoop bucket add git-review-workflow https://github.com/EzeVillo/git-review-workflow
+scoop install git-review-workflow/git-review-workflow
+```
+
+El manifest del bucket está en `bucket/git-review-workflow.json`.
 
 #### Autocompletado
 
@@ -388,7 +449,7 @@ git review-pr feature/login --from a1b2c3d
 Run the checks locally:
 
 ```sh
-shellcheck bin/* install.sh uninstall.sh
+shellcheck bin/* install.sh uninstall.sh web-install.sh
 bats tests/
 ```
 

@@ -39,7 +39,7 @@ jobs:
             --title "$GITHUB_REF_NAME" \
             --generate-notes
 
-      - name: Pin the Homebrew formula on the default branch
+      - name: Pin the Homebrew formula and Scoop manifest on the default branch
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.ver.outputs.version }}
@@ -52,20 +52,27 @@ jobs:
             "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$work"
           cd "$work"
 
-          f="Formula/git-review-workflow.rb"
           url="https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
 
-          # Anchored, single-line replacements keep the formula valid Ruby.
+          # Homebrew formula (Ruby): anchored single-line replacements.
+          f="Formula/git-review-workflow.rb"
           sed -i -E "s#^(  version ).*#\1\"${VERSION}\"#" "$f"
           sed -i -E "s#^(  url ).*#\1\"${url}\"#" "$f"
           sed -i -E "s#^(  sha256 ).*#\1\"${SHA256}\"#" "$f"
 
-          if git diff --quiet -- "$f"; then
-            echo "formula already pinned to ${GITHUB_REF_NAME}; nothing to commit"
+          # Scoop manifest (JSON): rewrite with jq.
+          m="bucket/git-review-workflow.json"
+          jq --arg v "$VERSION" --arg url "$url" --arg hash "$SHA256" \
+            --arg ed "git-review-workflow-${VERSION}" \
+            '.version=$v | .url=$url | .hash=$hash | .extract_dir=$ed' \
+            "$m" >"$m.tmp" && mv "$m.tmp" "$m"
+
+          if git diff --quiet -- "$f" "$m"; then
+            echo "packaging already pinned to ${GITHUB_REF_NAME}; nothing to commit"
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -qm "Pin Homebrew formula to ${GITHUB_REF_NAME} [skip ci]" -- "$f"
+          git commit -qm "Pin Homebrew formula and Scoop manifest to ${GITHUB_REF_NAME} [skip ci]" -- "$f" "$m"
           git push origin "HEAD:${DEFAULT_BRANCH}"

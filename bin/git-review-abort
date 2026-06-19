@@ -9,6 +9,7 @@
 set -eu
 
 prog="git review-abort"
+version="0.0.1"
 
 usage() {
 	cat <<EOF
@@ -16,12 +17,18 @@ usage: $prog
 
 Cancel the current review: return to the starting branch, then delete the
 review/<branch> branch and any banked commit-by-commit edits.
+
+  -V, --version    print the version and exit
 EOF
 }
 
 case "${1:-}" in
 -h | --help)
 	usage
+	exit 0
+	;;
+-V | --version)
+	echo "$prog $version"
 	exit 0
 	;;
 "") ;;

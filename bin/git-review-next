@@ -10,6 +10,7 @@
 set -eu
 
 prog="git review-next"
+version="0.0.1"
 
 usage() {
 	cat <<EOF
@@ -17,12 +18,18 @@ usage: $prog
 
 Advance a commit-by-commit review to the next commit. Your edits are remembered;
 run git review-prev to go back, or git finish-review when you are done.
+
+  -V, --version    print the version and exit
 EOF
 }
 
 case "${1:-}" in
 -h | --help)
 	usage
+	exit 0
+	;;
+-V | --version)
+	echo "$prog $version"
 	exit 0
 	;;
 "") ;;

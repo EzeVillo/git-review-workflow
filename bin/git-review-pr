@@ -12,6 +12,7 @@
 set -eu
 
 prog="git review-pr"
+version="0.0.1"
 
 usage() {
 	cat <<EOF
@@ -24,6 +25,7 @@ Stage a pull request diff on a review/<branch> branch for inline review.
   --delta           review only the commits added since your last review
   --from <commit>   review only the commits after <commit>
   --step            review one commit at a time; advance with git review-next
+  -V, --version     print the version and exit
 EOF
 }
 
@@ -49,6 +51,10 @@ while [ $# -gt 0 ]; do
 	case "$1" in
 	-h | --help)
 		usage
+		exit 0
+		;;
+	-V | --version)
+		echo "$prog $version"
 		exit 0
 		;;
 	-d | --delta) delta=1 ;;

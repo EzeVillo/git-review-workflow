@@ -5,6 +5,7 @@
 set -eu
 
 prog="git review-status"
+version="0.0.1"
 
 usage() {
 	cat <<EOF
@@ -13,12 +14,18 @@ usage: $prog
 Show the state of the review on the current review/* branch: source PR, mode,
 and (in commit-by-commit mode) which commit you are on and which steps have
 banked edits.
+
+  -V, --version    print the version and exit
 EOF
 }
 
 case "${1:-}" in
 -h | --help)
 	usage
+	exit 0
+	;;
+-V | --version)
+	echo "$prog $version"
 	exit 0
 	;;
 "") ;;

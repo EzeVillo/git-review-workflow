@@ -11,7 +11,7 @@
 _git_review_pr() {
 	case "$cur" in
 	--*)
-		__gitcomp "--delta --from --step --help"
+		__gitcomp "--delta --from --step --version --help"
 		;;
 	*)
 		__gitcomp_nl "$(__git_refs)"
@@ -20,29 +20,29 @@ _git_review_pr() {
 }
 
 _git_review_next() {
-	__gitcomp "--help"
+	__gitcomp "--version --help"
 }
 
 _git_review_prev() {
-	__gitcomp "--help"
+	__gitcomp "--version --help"
 }
 
 _git_review_status() {
-	__gitcomp "--help"
+	__gitcomp "--version --help"
 }
 
 _git_review_abort() {
-	__gitcomp "--help"
+	__gitcomp "--version --help"
 }
 
 _git_finish_review() {
-	__gitcomp "--onto-source --push --resume --help"
+	__gitcomp "--onto-source --push --resume --version --help"
 }
 
 _git_clean_review() {
 	case "$cur" in
 	--*)
-		__gitcomp "--forget --help"
+		__gitcomp "--forget --version --help"
 		;;
 	*)
 		__gitcomp_nl "$(__git_heads | sed -n 's#^review/##p')"

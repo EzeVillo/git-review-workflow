@@ -9,6 +9,7 @@
 set -eu
 
 prog="git review-prev"
+version="0.0.1"
 
 usage() {
 	cat <<EOF
@@ -16,12 +17,18 @@ usage: $prog
 
 Go back to the previous commit of a commit-by-commit review. Your edits are
 remembered in both directions.
+
+  -V, --version    print the version and exit
 EOF
 }
 
 case "${1:-}" in
 -h | --help)
 	usage
+	exit 0
+	;;
+-V | --version)
+	echo "$prog $version"
 	exit 0
 	;;
 "") ;;

@@ -12,7 +12,7 @@ jobs:
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
       - name: shellcheck
-        run: shellcheck bin/git-review-* install.sh uninstall.sh
+        run: shellcheck bin/* install.sh uninstall.sh
 
   test:
     runs-on: ubuntu-latest

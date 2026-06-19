@@ -9,6 +9,7 @@
 set -eu
 
 prog="git clean-review"
+version="0.0.1"
 
 usage() {
 	cat <<EOF
@@ -17,7 +18,8 @@ usage: $prog [branch] [--forget]
 Delete the review/<branch> and review-fixes/<branch> branches.
 With no <branch>, delete all of them.
 
-  --forget    also discard the recorded last-reviewed tip (disables --delta)
+  --forget         also discard the recorded last-reviewed tip (disables --delta)
+  -V, --version    print the version and exit
 EOF
 }
 
@@ -27,6 +29,10 @@ while [ $# -gt 0 ]; do
 	case "$1" in
 	-h | --help)
 		usage
+		exit 0
+		;;
+	-V | --version)
+		echo "$prog $version"
 		exit 0
 		;;
 	--forget) forget=1 ;;

@@ -8,6 +8,9 @@ Comandos de git para revisar la rama de un pull request localmente como un únic
 diff staged — hacer correcciones inline y luego separar tus cambios en una rama
 limpia (o directo sobre la rama del PR) lista para subir.
 
+Current version: **0.0.1** — see [CHANGELOG.md](CHANGELOG.md). Check it at any
+time with `git review-pr --version`.
+
 ---
 
 ## English
@@ -28,9 +31,11 @@ PR branch itself).
 ./install.sh
 ```
 
-This symlinks `git-review-pr`, `git-finish-review` and `git-clean-review` into
-`~/.local/bin` (override with `PREFIX=/usr/local/bin ./install.sh`). Make sure
-that directory is on your `PATH`. Remove them with `./uninstall.sh`.
+This symlinks all seven `git-review-*` / `git-finish-review` commands
+(`git-review-pr`, `git-review-next`, `git-review-prev`, `git-review-status`,
+`git-review-abort`, `git-finish-review`, `git-clean-review`) into `~/.local/bin`
+(override with `PREFIX=/usr/local/bin ./install.sh`). Make sure that directory is
+on your `PATH`. Remove them with `./uninstall.sh`.
 
 For tab completion, source the completion script from your shell rc:
 
@@ -172,9 +177,11 @@ PR).
 ./install.sh
 ```
 
-Hace symlink de `git-review-pr`, `git-finish-review` y `git-clean-review` en
-`~/.local/bin` (cambialo con `PREFIX=/usr/local/bin ./install.sh`). Asegurate de
-que ese directorio esté en tu `PATH`. Para quitarlos: `./uninstall.sh`.
+Hace symlink de los siete comandos `git-review-*` / `git-finish-review`
+(`git-review-pr`, `git-review-next`, `git-review-prev`, `git-review-status`,
+`git-review-abort`, `git-finish-review`, `git-clean-review`) en `~/.local/bin`
+(cambialo con `PREFIX=/usr/local/bin ./install.sh`). Asegurate de que ese
+directorio esté en tu `PATH`. Para quitarlos: `./uninstall.sh`.
 
 Para autocompletado, sourceá el script de completion desde tu rc:
 

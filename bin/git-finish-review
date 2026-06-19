@@ -9,6 +9,7 @@
 set -eu
 
 prog="git finish-review"
+version="0.0.1"
 
 usage() {
 	cat <<EOF
@@ -20,6 +21,7 @@ Extract your review edits from the current review/* branch.
   --onto-source    instead, add your edits as a commit on the PR branch itself
   --push           push the resulting branch to origin
   --resume         continue after resolving conflicts from a commit-by-commit replay
+  -V, --version    print the version and exit
 EOF
 }
 
@@ -30,6 +32,10 @@ while [ $# -gt 0 ]; do
 	case "$1" in
 	-h | --help)
 		usage
+		exit 0
+		;;
+	-V | --version)
+		echo "$prog $version"
 		exit 0
 		;;
 	--onto-source) onto=1 ;;

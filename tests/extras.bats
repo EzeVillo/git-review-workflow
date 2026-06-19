@@ -64,8 +64,9 @@ teardown() {
 	git review-pr feature/x --step
 	printf 'edited1\n' >f.txt
 	git review-next
-	# the edit is banked, gone from the tree at step 2
+	# the edit is banked, gone from the tree at step 2: f.txt is C2's content
 	run cat f.txt
+	[[ "$output" == *"extra"* ]]
 	[[ "$output" != *"edited1"* ]]
 	# going back restores it
 	git review-prev

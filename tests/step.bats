@@ -64,8 +64,9 @@ teardown() {
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"[2/2]"* ]]
 	[[ "$output" == *"c2-touch-b"* ]]
-	# the C1 edit is banked, not lingering in the tree
+	# the C1 edit is banked, not lingering in the tree: a.txt is back to C1's content
 	run cat a.txt
+	[[ "$output" == *"a2"* ]]
 	[[ "$output" != *"FIXA"* ]]
 	# the C2 diff is staged; working tree is clean
 	run git diff --cached --name-only

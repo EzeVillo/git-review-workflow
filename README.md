@@ -58,8 +58,7 @@ source /path/to/git-review-workflow/completions/git-review-workflow.bash
 **`git finish-review`**
 - Default — create `review-fixes/<branch>` on top of the PR tip with your edits
   staged, so you can review and commit them yourself.
-- `--onto-source` (alias `--rebase`) — add your edits as a commit on the PR
-  branch itself.
+- `--onto-source` — add your edits as a commit on the PR branch itself.
 - `--push` — push the resulting branch to `origin`. With `--onto-source` it
   refuses to push if `origin/<branch>` moved since your review.
 
@@ -151,8 +150,8 @@ source /ruta/a/git-review-workflow/completions/git-review-workflow.bash
 **`git finish-review`**
 - Por defecto — crea `review-fixes/<rama>` sobre el tip del PR con tus ediciones
   staged, para que las revises y commitees vos.
-- `--onto-source` (alias `--rebase`) — agrega tus ediciones como un commit sobre
-  la rama del PR misma.
+- `--onto-source` — agrega tus ediciones como un commit sobre la rama del PR
+  misma.
 - `--push` — pushea la rama resultante a `origin`. Con `--onto-source` se niega a
   pushear si `origin/<rama>` se movió desde tu review.
 

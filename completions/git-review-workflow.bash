@@ -20,7 +20,7 @@ _git_review_pr() {
 }
 
 _git_finish_review() {
-	__gitcomp "--onto-source --rebase --push --help"
+	__gitcomp "--onto-source --push --help"
 }
 
 _git_clean_review() {

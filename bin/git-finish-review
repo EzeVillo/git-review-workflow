@@ -18,7 +18,6 @@ Extract your review edits from the current review/* branch.
 
   (default)        create review-fixes/<branch> on top of the PR tip and stage your edits
   --onto-source    instead, add your edits as a commit on the PR branch itself
-  --rebase         alias for --onto-source
   --push           push the resulting branch to origin
 EOF
 }
@@ -31,7 +30,7 @@ while [ $# -gt 0 ]; do
 		usage
 		exit 0
 		;;
-	--onto-source | --rebase) onto=1 ;;
+	--onto-source) onto=1 ;;
 	--push) push=1 ;;
 	*)
 		echo "error: unknown option $1" >&2

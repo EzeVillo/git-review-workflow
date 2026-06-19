@@ -65,7 +65,7 @@ start="$(git config "branch.$cur.reviewstart")"
 count="$(git config "branch.$cur.reviewcount")"
 step="$(git config "branch.$cur.reviewstep")"
 
-commits="$(git rev-list --reverse --first-parent "$start..$tip")"
+commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
 
 # Move to <target>: bank the current commit's edits, reset clean to the target
 # commit, then restore the target's previously banked edits (if any).

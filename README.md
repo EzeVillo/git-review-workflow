@@ -183,6 +183,11 @@ starts) and **layout** (`--step` or not), which compose freely.
 - Always updates from `origin` first and **fails** if it cannot. The review is
   built from `origin/<branch>`, never a stale local copy.
 - Refuses to run if you have local changes — start from a clean branch.
+- **Merges of the base branch are excluded.** If the author merged the base
+  (e.g. `develop`) into the PR, that merged-in content is left out of the review
+  in every mode, so you only see the author's own changes — not the base. (In
+  `--step` the base merge is simply skipped; in `--delta`/`--from` it is folded
+  out of the staged diff using the base branch.)
 
 **`git review-next` / `git review-prev`** move a `--step` review forward or
 backward. Each move banks the current commit's edits and restores any edits you
@@ -261,7 +266,10 @@ git review-pr feature/login --from a1b2c3d
 
 ### Requirements
 
-- Git 2.23+ (uses `git switch`).
+- Git 2.23+ (uses `git switch`). Git 2.38+ is recommended: excluding base
+  content that was merged into the PR uses `git merge-tree --write-tree`, and on
+  older git that one step is skipped (the merged base content would then show in
+  `--delta`/`--from`).
 - A remote named `origin`.
 - A POSIX shell. On Linux and macOS this is the default. On Windows the commands
   run under Git Bash or WSL, not in `cmd.exe` or PowerShell; under Git Bash,
@@ -443,6 +451,11 @@ empieza) y **layout** (`--step` o no), que se combinan libremente.
 - Siempre actualiza desde `origin` primero y **falla** si no puede. La revisión
   se arma desde `origin/<rama>`, nunca desde una copia local vieja.
 - No corre si tenés cambios locales — arrancá desde una rama limpia.
+- **Los merges de la rama base se excluyen.** Si el autor mergeó la base (ej.
+  `develop`) dentro del PR, ese contenido mergeado queda afuera de la review en
+  todos los modos, así ves solo los cambios del autor — no los de la base. (En
+  `--step` el merge de la base se saltea; en `--delta`/`--from` se descuenta del
+  diff staged usando la rama base.)
 
 **`git review-next` / `git review-prev`** mueven una review `--step` para
 adelante o para atrás. Cada movimiento banca las ediciones del commit actual y
@@ -522,7 +535,10 @@ git review-pr feature/login --from a1b2c3d
 
 ### Requisitos
 
-- Git 2.23+ (usa `git switch`).
+- Git 2.23+ (usa `git switch`). Se recomienda Git 2.38+: excluir el contenido
+  de la base mergeado dentro del PR usa `git merge-tree --write-tree`, y en git
+  más viejo ese paso se saltea (el contenido de la base mergeado aparecería en
+  `--delta`/`--from`).
 - Un remoto llamado `origin`.
 - Una shell POSIX. En Linux y macOS es la de por defecto. En Windows los
   comandos corren bajo Git Bash o WSL, no en `cmd.exe` ni PowerShell; bajo Git

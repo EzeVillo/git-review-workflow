@@ -64,7 +64,7 @@ start="$(git config "branch.$cur.reviewstart")"
 count="$(git config "branch.$cur.reviewcount")"
 step="$(git config "branch.$cur.reviewstep")"
 
-commits="$(git rev-list --reverse --first-parent "$start..$tip")"
+commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
 
 goto_step() {
 	target="$1"

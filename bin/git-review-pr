@@ -145,7 +145,10 @@ else
 fi
 
 if [ "$step" -eq 1 ]; then
-	commits="$(git rev-list --reverse --first-parent "$start..$tip")"
+	# --first-parent --no-merges: walk only the branch's own commits, skipping
+	# merge commits (e.g. merges of the base branch) so changes that came from
+	# the base are never shown as a step.
+	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
 	[ -n "$commits" ] || die "no commits to review in range"
 	count="$(printf '%s\n' "$commits" | wc -l | tr -d ' ')"
 	first="$(printf '%s\n' "$commits" | sed -n '1p')"
@@ -171,8 +174,25 @@ if [ "$step" -eq 1 ]; then
 	exit 0
 fi
 
+# Lower bound for the staged diff. Normally it is the range start, but if the
+# base branch has been merged into the PR, fold that already-merged base content
+# into the lower bound so changes that came from the base do not appear as part
+# of the review. This is a no-op when the base was not merged in (it never
+# invents deletions), and degrades gracefully on git without merge-tree.
+lower="$start"
+if [ -n "$base" ] && git rev-parse --verify --quiet "refs/remotes/origin/$base" >/dev/null; then
+	mb="$(git merge-base "origin/$base" "$tip" 2>/dev/null || true)"
+	if [ -n "$mb" ] && ! git merge-base --is-ancestor "$mb" "$start"; then
+		if ltree="$(git merge-tree --write-tree "$start" "$mb" 2>/dev/null)"; then
+			lower="$(git commit-tree "$ltree" -p "$start" -m 'review lower bound')"
+		else
+			echo "note: could not exclude merged base content from the review diff" >&2
+		fi
+	fi
+fi
+
 git switch -q -c "$rb" "$tip" || die "could not create $rb"
-git reset -q --soft "$start"
+git reset -q --soft "$lower"
 
 git config "branch.$rb.reviewsource" "$src"
 git config "branch.$rb.reviewbase" "$base"

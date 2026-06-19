@@ -53,7 +53,7 @@ if [ "$mode" = "step" ]; then
 	count="$(git config "branch.$cur.reviewcount")"
 	step="$(git config "branch.$cur.reviewstep")"
 	start="$(git config "branch.$cur.reviewstart")"
-	commits="$(git rev-list --reverse --first-parent "$start..$tip")"
+	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
 	cnow="$(printf '%s\n' "$commits" | sed -n "${step}p")"
 	printf '  mode    step  [%s/%s] on %s %s\n' "$step" "$count" \
 		"$(git rev-parse --short "$cnow")" "$(git log -1 --format='%s' "$cnow")"

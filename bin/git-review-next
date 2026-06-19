@@ -1,0 +1,104 @@
+#!/usr/bin/env sh
+#
+# git-review-next — advance a commit-by-commit review (started with review-pr --step).
+#
+# Moving banks the edits you made on the current commit into a ref of its own and
+# restores any edits you had previously banked on the commit you move to, so you
+# can walk back and forth without losing work. git finish-review replays every
+# banked edit onto the PR tip.
+#
+set -eu
+
+prog="git review-next"
+version="0.0.1"
+
+usage() {
+	cat <<EOF
+usage: $prog
+
+Advance a commit-by-commit review to the next commit. Your edits are remembered;
+run git review-prev to go back, or git finish-review when you are done.
+
+  -V, --version    print the version and exit
+EOF
+}
+
+case "${1:-}" in
+-h | --help)
+	usage
+	exit 0
+	;;
+-V | --version)
+	echo "$prog $version"
+	exit 0
+	;;
+"") ;;
+*)
+	echo "error: unexpected argument $1" >&2
+	usage >&2
+	exit 1
+	;;
+esac
+
+show_commit() {
+	# show_commit <commit> <n> <total>
+	printf '\n[%s/%s] %s\n' "$2" "$3" "$(git rev-parse --short "$1")"
+	git --no-pager show --stat --format='%an <%ae>%n%n%s%n%n%b' "$1"
+	printf -- '----\nreview this commit, edit files, then run git review-next\n'
+}
+
+cur="$(git symbolic-ref --quiet --short HEAD || true)"
+[ -n "$cur" ] || {
+	echo "error: not on a branch" >&2
+	exit 1
+}
+case "$cur" in
+review/*) ;;
+*)
+	echo "error: not on a review/* branch (HEAD is $cur)" >&2
+	exit 1
+	;;
+esac
+
+mode="$(git config "branch.$cur.reviewmode" || true)"
+[ "$mode" = "step" ] || {
+	echo "error: $cur was not started with git review-pr --step" >&2
+	exit 1
+}
+
+src="$(git config "branch.$cur.reviewsource")"
+tip="$(git config "branch.$cur.reviewtip")"
+start="$(git config "branch.$cur.reviewstart")"
+count="$(git config "branch.$cur.reviewcount")"
+step="$(git config "branch.$cur.reviewstep")"
+
+commits="$(git rev-list --reverse --first-parent "$start..$tip")"
+
+# Move to <target>: bank the current commit's edits, reset clean to the target
+# commit, then restore the target's previously banked edits (if any).
+goto_step() {
+	target="$1"
+	git add -A
+	if ! git diff --cached --quiet; then
+		tree="$(git write-tree)"
+		edit="$(git commit-tree "$tree" -p "$(git rev-parse HEAD)" -m "review edits step $step")"
+		git update-ref "refs/review-edits/$src/$step" "$edit"
+	fi
+	ctarget="$(printf '%s\n' "$commits" | sed -n "${target}p")"
+	git reset -q --hard "$ctarget"
+	ref="refs/review-edits/$src/$target"
+	if git rev-parse --verify --quiet "$ref" >/dev/null; then
+		git diff --binary "${ref}^" "$ref" | git apply || {
+			echo "error: could not restore banked edits for step $target" >&2
+			exit 1
+		}
+	fi
+	git config "branch.$cur.reviewstep" "$target"
+	show_commit "$ctarget" "$target" "$count"
+}
+
+if [ "$step" -lt "$count" ]; then
+	goto_step "$((step + 1))"
+else
+	echo "no more commits — run git finish-review"
+fi

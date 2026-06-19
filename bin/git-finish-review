@@ -1,0 +1,189 @@
+#!/usr/bin/env sh
+#
+# git-finish-review — extract your review edits from the current review/* branch.
+#
+# By default it creates review-fixes/<branch> on top of the PR tip with your
+# edits staged. With --onto-source it adds your edits as a commit on the PR
+# branch itself. With --push it pushes the result to origin.
+#
+set -eu
+
+prog="git finish-review"
+version="0.0.1"
+
+usage() {
+	cat <<EOF
+usage: $prog [--onto-source] [--push] [--resume]
+
+Extract your review edits from the current review/* branch.
+
+  (default)        create review-fixes/<branch> on top of the PR tip and stage your edits
+  --onto-source    instead, add your edits as a commit on the PR branch itself
+  --push           push the resulting branch to origin
+  --resume         continue after resolving conflicts from a commit-by-commit replay
+  -V, --version    print the version and exit
+EOF
+}
+
+onto=0
+push=0
+resume=0
+while [ $# -gt 0 ]; do
+	case "$1" in
+	-h | --help)
+		usage
+		exit 0
+		;;
+	-V | --version)
+		echo "$prog $version"
+		exit 0
+		;;
+	--onto-source) onto=1 ;;
+	--push) push=1 ;;
+	--resume) resume=1 ;;
+	*)
+		echo "error: unknown option $1" >&2
+		usage >&2
+		exit 1
+		;;
+	esac
+	shift
+done
+
+cur="$(git symbolic-ref --quiet --short HEAD || true)"
+[ -n "$cur" ] || {
+	echo "error: not on a branch" >&2
+	exit 1
+}
+case "$cur" in
+review/*) ;;
+*)
+	echo "error: not on a review/* branch (HEAD is $cur)" >&2
+	exit 1
+	;;
+esac
+
+src="$(git config "branch.$cur.reviewsource" || true)"
+tip="$(git config "branch.$cur.reviewtip" || true)"
+if [ -z "$src" ] || [ -z "$tip" ]; then
+	echo "error: missing review metadata; was $cur created with git review-pr?" >&2
+	exit 1
+fi
+
+# In commit-by-commit mode, bank the current commit's edits, move to the tip and
+# replay every banked edit there, so what follows sees the same state as a normal
+# whole-PR review. With --resume we skip the replay: the working tree already
+# holds the resolved edits.
+if [ "$(git config "branch.$cur.reviewmode" || true)" = "step" ] && [ "$resume" -eq 0 ]; then
+	count="$(git config "branch.$cur.reviewcount" || echo 0)"
+	step="$(git config "branch.$cur.reviewstep" || echo 1)"
+	git add -A
+	if ! git diff --cached --quiet; then
+		tree="$(git write-tree)"
+		edit="$(git commit-tree "$tree" -p "$(git rev-parse HEAD)" -m "review edits step $step")"
+		git update-ref "refs/review-edits/$src/$step" "$edit"
+	fi
+	git reset -q --hard "$tip"
+	conflict=0
+	i=1
+	while [ "$i" -le "$count" ]; do
+		ref="refs/review-edits/$src/$i"
+		if git rev-parse --verify --quiet "$ref" >/dev/null; then
+			editpatch="$(git diff --binary "${ref}^" "$ref")"
+			if [ -n "$editpatch" ]; then
+				# Keep going on conflict so every edit lands; conflicts are
+				# left as markers for the user to resolve.
+				printf "%s\n" "$editpatch" | git apply --3way ||
+					conflict=1
+			fi
+		fi
+		i=$((i + 1))
+	done
+	if [ "$conflict" -eq 1 ]; then
+		git config "branch.$cur.reviewresume" conflict
+		flags=""
+		[ "$onto" -eq 1 ] && flags="$flags --onto-source"
+		[ "$push" -eq 1 ] && flags="$flags --push"
+		echo "conflict: some banked edits overlap the PR tip." >&2
+		echo "the working tree has conflict markers — resolve them, then run:" >&2
+		echo "    git finish-review --resume$flags" >&2
+		exit 1
+	fi
+elif [ "$resume" -eq 1 ]; then
+	if [ "$(git config "branch.$cur.reviewresume" || true)" != "conflict" ]; then
+		echo "error: nothing to resume" >&2
+		exit 1
+	fi
+	git config --unset "branch.$cur.reviewresume" || true
+fi
+
+# Fold any edits into the review branch so we can diff them back out cleanly.
+git add -A
+if ! git diff --cached --quiet; then
+	git commit -q -m "review session ($src)"
+fi
+patch="$(git diff --binary "$tip" "$cur")"
+
+if [ -z "$patch" ]; then
+	echo "no review changes to apply" >&2
+	exit 0
+fi
+
+if [ "$onto" -eq 1 ]; then
+	if [ "$push" -eq 1 ]; then
+		git fetch --quiet origin || {
+			echo "error: could not update from origin" >&2
+			exit 1
+		}
+		if [ "$(git rev-parse "origin/$src")" != "$tip" ]; then
+			echo "error: origin/$src advanced since your review; re-review before pushing" >&2
+			exit 1
+		fi
+	fi
+	if git rev-parse --verify --quiet "refs/heads/$src" >/dev/null; then
+		if [ "$(git rev-parse "$src")" != "$tip" ]; then
+			echo "error: local $src is not at the reviewed tip; move or delete it first" >&2
+			exit 1
+		fi
+		git switch -q "$src"
+	else
+		git switch -q -c "$src" "$tip"
+	fi
+	printf "%s\n" "$patch" | git apply --index --3way || {
+		echo "error: could not apply review changes onto $src" >&2
+		exit 1
+	}
+	git commit -q -m "review fixes ($src)"
+	if [ "$push" -eq 1 ]; then
+		git push --quiet origin "$src" || {
+			echo "error: could not push $src" >&2
+			exit 1
+		}
+		# The PR tip now includes our fixes; record it so --delta skips them.
+		git config "reviewworkflow.$src.reviewed" "$(git rev-parse HEAD)"
+		echo "pushed review fixes to origin/$src"
+	else
+		echo "committed review fixes on $src"
+	fi
+else
+	fb="review-fixes/$src"
+	git rev-parse --verify --quiet "refs/heads/$fb" >/dev/null && {
+		echo "error: $fb already exists; remove it first" >&2
+		exit 1
+	}
+	git switch -q -c "$fb" "$tip"
+	printf "%s\n" "$patch" | git apply --index --3way || {
+		echo "error: could not apply review changes onto $fb" >&2
+		exit 1
+	}
+	if [ "$push" -eq 1 ]; then
+		git commit -q -m "review fixes ($src)"
+		git push --quiet -u origin "$fb" || {
+			echo "error: could not push $fb" >&2
+			exit 1
+		}
+		echo "pushed $fb to origin"
+	else
+		echo "$fb ready with your edits staged — review and commit"
+	fi
+fi

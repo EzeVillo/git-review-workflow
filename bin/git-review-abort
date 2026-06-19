@@ -1,0 +1,87 @@
+#!/usr/bin/env sh
+#
+# git-review-abort — cancel the review on the current branch in one step.
+#
+# Returns you to the branch you started from (or the base), deletes the
+# review/<branch> branch and its banked edits. Because the review was cancelled,
+# it also rolls the --delta marker back to your last actual review.
+#
+set -eu
+
+prog="git review-abort"
+version="0.0.1"
+
+usage() {
+	cat <<EOF
+usage: $prog
+
+Cancel the current review: return to the starting branch, then delete the
+review/<branch> branch and any banked commit-by-commit edits.
+
+  -V, --version    print the version and exit
+EOF
+}
+
+case "${1:-}" in
+-h | --help)
+	usage
+	exit 0
+	;;
+-V | --version)
+	echo "$prog $version"
+	exit 0
+	;;
+"") ;;
+*)
+	echo "error: unexpected argument $1" >&2
+	usage >&2
+	exit 1
+	;;
+esac
+
+cur="$(git symbolic-ref --quiet --short HEAD || true)"
+case "$cur" in
+review/*) ;;
+*)
+	echo "error: not on a review/* branch (HEAD is ${cur:-detached})" >&2
+	exit 1
+	;;
+esac
+
+src="$(git config "branch.$cur.reviewsource" || true)"
+[ -n "$src" ] || {
+	echo "error: missing review metadata; was $cur created with git review-pr?" >&2
+	exit 1
+}
+base="$(git config "branch.$cur.reviewbase" || true)"
+ret="$(git config "branch.$cur.reviewreturn" || true)"
+prevreviewed="$(git config "branch.$cur.reviewprevreviewed" || true)"
+
+target=""
+if [ -n "$ret" ] && git rev-parse --verify --quiet "refs/heads/$ret" >/dev/null; then
+	target="$ret"
+elif [ -n "$base" ] && git rev-parse --verify --quiet "refs/heads/$base" >/dev/null; then
+	target="$base"
+fi
+[ -n "$target" ] || {
+	echo "error: could not determine a branch to return to; switch away manually, then run git clean-review $src" >&2
+	exit 1
+}
+
+git switch -q --discard-changes "$target"
+git branch -D "$cur" >/dev/null
+
+# This review was cancelled, not completed: undo the reviewed marker it set,
+# restoring the tip of your last actual review (or clearing it if there was none)
+# so a later --delta does not skip commits you never reviewed.
+if [ -n "$prevreviewed" ]; then
+	git config "reviewworkflow.$src.reviewed" "$prevreviewed"
+else
+	git config --unset "reviewworkflow.$src.reviewed" 2>/dev/null || true
+fi
+
+git for-each-ref --format='%(refname)' "refs/review-edits/$src/" | while read -r ref; do
+	git update-ref -d "$ref"
+done
+
+echo "aborted review of $src; returned to $target"

@@ -114,11 +114,11 @@ and you'll see something like `git: 'review-pr' is not a git command` or
   short note, and you add it **once** by pasting one line into your shell's
   config file:
 
-| If your terminal uses… | Add this line to the file… | The line to add |
-| --- | --- | --- |
-| **bash** | `~/.bashrc` | `export PATH="$HOME/.local/bin:$PATH"` |
-| **zsh** (default on recent macOS) | `~/.zshrc` | `export PATH="$HOME/.local/bin:$PATH"` |
-| **fish** | *(no file — just run this once)* | `fish_add_path ~/.local/bin` |
+| If your terminal uses…            | Add this line to the file…       | The line to add                        |
+|-----------------------------------|----------------------------------|----------------------------------------|
+| **bash**                          | `~/.bashrc`                      | `export PATH="$HOME/.local/bin:$PATH"` |
+| **zsh** (default on recent macOS) | `~/.zshrc`                       | `export PATH="$HOME/.local/bin:$PATH"` |
+| **fish**                          | *(no file — just run this once)* | `fish_add_path ~/.local/bin`           |
 
 Not sure which one you use? Run `echo $0` — it prints `bash`, `zsh`, or similar.
 After editing the file, **open a new terminal window** (or run `source ~/.bashrc`
@@ -168,16 +168,16 @@ offer your branch names.
 > *where the review starts* — you choose **at most one** of them (combining them
 > is an error).
 
-| Command | What it does |
-| --- | --- |
-| `git review [--help \| --version]` | List all commands or print the installed version. |
-| `git review-pr <branch> [base \| --delta \| --from <commit>] [--step]` | Fetch `origin`, then stage the PR diff on a new `review/<branch>` branch. |
-| `git review-next` / `git review-prev` | Move a `--step` review to the next / previous commit. |
-| `git review-status` | Show the state of the review on the current branch. |
-| `git review-list` | List every `review/*` branch in progress (current one marked `*`). |
-| `git finish-review [--onto-source] [--push] [--resume]` | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch). |
-| `git review-abort` | Cancel the current review and return to where you started. |
-| `git clean-review [branch] [--forget]` | Delete the `review/*` and `review-fixes/*` branches for `<branch>`, or all of them. |
+| Command                                                                | What it does                                                                                  |
+|------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
+| `git review [--help \| --version]`                                     | List all commands or print the installed version.                                             |
+| `git review-pr <branch> [base \| --delta \| --from <commit>] [--step]` | Fetch `origin`, then stage the PR diff on a new `review/<branch>` branch.                     |
+| `git review-next` / `git review-prev`                                  | Move a `--step` review to the next / previous commit.                                         |
+| `git review-status`                                                    | Show the state of the review on the current branch.                                           |
+| `git review-list`                                                      | List every `review/*` branch in progress (current one marked `*`).                            |
+| `git finish-review [--onto-source] [--push] [--resume]`                | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch). |
+| `git review-abort`                                                     | Cancel the current review and return to where you started.                                    |
+| `git clean-review [branch] [--forget]`                                 | Delete the `review/*` and `review-fixes/*` branches for `<branch>`, or all of them.           |
 
 **`git review-pr`** has two independent axes — **range** (where the review
 starts) and **layout** (`--step` or not), which compose freely.
@@ -225,6 +225,7 @@ its source PR, mode and step position), so you can see what you have open across
 branches. The branch you are currently on is marked with a `*`.
 
 **`git finish-review`**
+
 - Default — create `review-fixes/<branch>` on top of the PR tip with your edits
   staged, so you can review and commit them yourself.
 - `--onto-source` — add your edits as a commit on the PR branch itself.
@@ -242,6 +243,7 @@ skip commits you never reviewed. (`clean-review`, by contrast, keeps the marker 
 cleaning up after a real review is not the same as cancelling one.)
 
 **`git clean-review`**
+
 - With no `<branch>`, deletes every `review/*` and `review-fixes/*` branch.
 - Never deletes the branch you are currently on.
 - `--forget` also discards the recorded last-reviewed tip (which disables
@@ -402,11 +404,11 @@ encuentra y vas a ver algo como `git: 'review-pr' is not a git command` o
   instalador te deja un aviso y lo agregás **una sola vez** pegando una línea en
   el archivo de configuración de tu shell:
 
-| Si tu terminal usa… | Agregá esta línea al archivo… | La línea a agregar |
-| --- | --- | --- |
-| **bash** | `~/.bashrc` | `export PATH="$HOME/.local/bin:$PATH"` |
-| **zsh** (default en macOS reciente) | `~/.zshrc` | `export PATH="$HOME/.local/bin:$PATH"` |
-| **fish** | *(sin archivo — corré esto una vez)* | `fish_add_path ~/.local/bin` |
+| Si tu terminal usa…                 | Agregá esta línea al archivo…        | La línea a agregar                     |
+|-------------------------------------|--------------------------------------|----------------------------------------|
+| **bash**                            | `~/.bashrc`                          | `export PATH="$HOME/.local/bin:$PATH"` |
+| **zsh** (default en macOS reciente) | `~/.zshrc`                           | `export PATH="$HOME/.local/bin:$PATH"` |
+| **fish**                            | *(sin archivo — corré esto una vez)* | `fish_add_path ~/.local/bin`           |
 
 ¿No sabés cuál usás? Corré `echo $0` — te dice `bash`, `zsh`, o similar. Después
 de editar el archivo, **abrí una terminal nueva** (o corré `source ~/.bashrc` /
@@ -456,16 +458,16 @@ Después abrí una terminal nueva. Ahora, escribiendo `git review-pr ` y apretan
 > *desde dónde empieza la review* — elegís **a lo sumo una** (combinarlas es un
 > error).
 
-| Comando | Qué hace |
-| --- | --- |
-| `git review [--help \| --version]` | Lista todos los comandos o imprime la versión instalada. |
-| `git review-pr <rama> [base \| --delta \| --from <commit>] [--step]` | Hace fetch de `origin` y deja el diff del PR staged en una nueva rama `review/<rama>`. |
-| `git review-next` / `git review-prev` | Mueve una review `--step` al commit siguiente / anterior. |
-| `git review-status` | Muestra el estado de la review en la rama actual. |
-| `git review-list` | Lista todas las ramas `review/*` en curso (la actual marcada con `*`). |
-| `git finish-review [--onto-source] [--push] [--resume]` | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR). |
-| `git review-abort` | Cancela la review actual y vuelve a donde empezaste. |
-| `git clean-review [rama] [--forget]` | Borra las ramas `review/*` y `review-fixes/*` de `<rama>`, o todas. |
+| Comando                                                              | Qué hace                                                                                    |
+|----------------------------------------------------------------------|---------------------------------------------------------------------------------------------|
+| `git review [--help \| --version]`                                   | Lista todos los comandos o imprime la versión instalada.                                    |
+| `git review-pr <rama> [base \| --delta \| --from <commit>] [--step]` | Hace fetch de `origin` y deja el diff del PR staged en una nueva rama `review/<rama>`.      |
+| `git review-next` / `git review-prev`                                | Mueve una review `--step` al commit siguiente / anterior.                                   |
+| `git review-status`                                                  | Muestra el estado de la review en la rama actual.                                           |
+| `git review-list`                                                    | Lista todas las ramas `review/*` en curso (la actual marcada con `*`).                      |
+| `git finish-review [--onto-source] [--push] [--resume]`              | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR). |
+| `git review-abort`                                                   | Cancela la review actual y vuelve a donde empezaste.                                        |
+| `git clean-review [rama] [--forget]`                                 | Borra las ramas `review/*` y `review-fixes/*` de `<rama>`, o todas.                         |
 
 **`git review-pr`** tiene dos ejes independientes — **rango** (desde dónde
 empieza) y **layout** (`--step` o no), que se combinan libremente.
@@ -514,6 +516,7 @@ su PR de origen, modo y posición de paso), así ves qué tenés abierto entre
 ramas. La rama en la que estás parado se marca con un `*`.
 
 **`git finish-review`**
+
 - Por defecto — crea `review-fixes/<rama>` sobre el tip del PR con tus ediciones
   staged, para que las revises y commitees vos.
 - `--onto-source` — agrega tus ediciones como un commit sobre la rama del PR
@@ -532,6 +535,7 @@ revisaste. (`clean-review`, en cambio, conserva el marcador — limpiar después
 una review real no es lo mismo que cancelarla.)
 
 **`git clean-review`**
+
 - Sin `<rama>`, borra todas las ramas `review/*` y `review-fixes/*`.
 - Nunca borra la rama en la que estás parado.
 - `--forget` además descarta el tip de la última review (lo que desactiva

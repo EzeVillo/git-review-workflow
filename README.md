@@ -8,6 +8,8 @@ Comandos de git para revisar la rama de un pull request localmente como un únic
 diff staged — hacer correcciones inline y luego separar tus cambios en una rama
 limpia (o directo sobre la rama del PR) lista para subir.
 
+**Version:** `0.0.1-snapshot` (unreleased — see [`VERSION`](VERSION)).
+
 ---
 
 ## English

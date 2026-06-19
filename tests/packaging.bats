@@ -18,7 +18,7 @@ setup() {
 }
 
 @test "homebrew: all bin files referenced in the formula exist and are executable" {
-	for f in git-review-pr git-review-next git-review-prev git-review-status \
+	for f in git-review git-review-pr git-review-next git-review-prev git-review-status \
 	          git-review-list git-review-abort git-finish-review git-clean-review; do
 		[ -f "$REPO/bin/$f" ]
 		[ -x "$REPO/bin/$f" ]
@@ -37,6 +37,12 @@ setup() {
 		cp "$f" "$TMP/"
 		chmod +x "$TMP/$(basename "$f")"
 	done
+	run "$TMP/git-review" --help
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"git review workflow"* ]]
+	run "$TMP/git-review" --version
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"$VERSION"* ]]
 	run "$TMP/git-review-pr" --help
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"usage: git review-pr"* ]]

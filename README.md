@@ -170,6 +170,7 @@ offer your branch names.
 
 | Command | What it does |
 | --- | --- |
+| `git review [--help \| --version]` | List all commands or print the installed version. |
 | `git review-pr <branch> [base \| --delta \| --from <commit>] [--step]` | Fetch `origin`, then stage the PR diff on a new `review/<branch>` branch. |
 | `git review-next` / `git review-prev` | Move a `--step` review to the next / previous commit. |
 | `git review-status` | Show the state of the review on the current branch. |
@@ -457,6 +458,7 @@ Después abrí una terminal nueva. Ahora, escribiendo `git review-pr ` y apretan
 
 | Comando | Qué hace |
 | --- | --- |
+| `git review [--help \| --version]` | Lista todos los comandos o imprime la versión instalada. |
 | `git review-pr <rama> [base \| --delta \| --from <commit>] [--step]` | Hace fetch de `origin` y deja el diff del PR staged en una nueva rama `review/<rama>`. |
 | `git review-next` / `git review-prev` | Mueve una review `--step` al commit siguiente / anterior. |
 | `git review-status` | Muestra el estado de la review en la rama actual. |

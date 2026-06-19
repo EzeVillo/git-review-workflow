@@ -1,0 +1,47 @@
+#!/usr/bin/env sh
+#
+# git-review — entry point: --help lists all commands, --version prints the version.
+#
+set -eu
+
+prog="git review"
+VERSION="0.0.2"
+
+usage() {
+	cat <<EOF
+git review workflow — review a pull request branch locally
+
+usage: $prog (--help | --version)
+
+Commands:
+  git review-pr <branch> [base | --delta | --from <commit>] [--step]
+                     stage a PR diff on a new review/<branch> branch
+  git review-next    advance a --step review to the next commit
+  git review-prev    go back to the previous commit in a --step review
+  git review-status  show the state of the review on the current branch
+  git review-list    list every review/* branch in progress
+  git review-abort   cancel the current review and return to where you started
+  git finish-review [--onto-source] [--push] [--resume]
+                     extract your edits onto review-fixes/<branch>
+  git clean-review [branch] [--forget]
+                     delete review/* and review-fixes/* branches
+
+Run 'git <command> --help' for details on each command.
+EOF
+}
+
+case "${1:-}" in
+-h | --help | "")
+	usage
+	exit 0
+	;;
+-V | --version)
+	echo "$VERSION"
+	exit 0
+	;;
+*)
+	echo "error: unknown option $1" >&2
+	usage >&2
+	exit 1
+	;;
+esac

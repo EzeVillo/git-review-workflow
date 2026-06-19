@@ -24,6 +24,10 @@ function __grw_review_branches
         | string replace -r '^review/' ''
 end
 
+# git review
+complete -c git -n '__grw_using review' -f -l help    -d 'list all available commands'
+complete -c git -n '__grw_using review' -f -s V -l version -d 'print the installed version'
+
 # git review-pr
 complete -c git -n '__grw_using review-pr' -f -l delta -d 'review only commits since your last review'
 complete -c git -n '__grw_using review-pr' -f -l from -d 'review only commits after <commit>'

@@ -15,6 +15,12 @@
 #
 #     source /path/to/git-review-workflow/completions/git-review-workflow.zsh
 
+_git-review() {
+	_arguments \
+		'(-h --help)'{-h,--help}'[list all available commands]' \
+		'(-V --version)'{-V,--version}'[print the installed version]'
+}
+
 _git-review-pr() {
 	_arguments -S \
 		'(-h --help)'{-h,--help}'[show help]' \

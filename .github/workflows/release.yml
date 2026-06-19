@@ -54,6 +54,9 @@ jobs:
 
           url="https://github.com/${GITHUB_REPOSITORY}/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
 
+          # Dispatcher script: update the embedded VERSION variable.
+          sed -i -E "s#^(VERSION=\")[^\"]*(\")#\1${VERSION}\2#" "bin/git-review"
+
           # Homebrew formula (Ruby): anchored single-line replacements.
           f="Formula/git-review-workflow.rb"
           sed -i -E "s#^(  version ).*#\1\"${VERSION}\"#" "$f"
@@ -67,12 +70,12 @@ jobs:
             '.version=$v | .url=$url | .hash=$hash | .extract_dir=$ed' \
             "$m" >"$m.tmp" && mv "$m.tmp" "$m"
 
-          if git diff --quiet -- "$f" "$m"; then
+          if git diff --quiet -- "bin/git-review" "$f" "$m"; then
             echo "packaging already pinned to ${GITHUB_REF_NAME}; nothing to commit"
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -qm "Pin Homebrew formula and Scoop manifest to ${GITHUB_REF_NAME} [skip ci]" -- "$f" "$m"
+          git commit -qm "Pin Homebrew formula and Scoop manifest to ${GITHUB_REF_NAME} [skip ci]" -- "bin/git-review" "$f" "$m"
           git push origin "HEAD:${DEFAULT_BRANCH}"

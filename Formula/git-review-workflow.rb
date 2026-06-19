@@ -21,15 +21,17 @@ class GitReviewWorkflow < Formula
   depends_on "git"
 
   def install
-    bin.install Dir["bin/git-review-pr", "bin/git-review-next", "bin/git-review-prev",
-                    "bin/git-review-status", "bin/git-review-list", "bin/git-review-abort",
-                    "bin/git-finish-review", "bin/git-clean-review"]
+    bin.install Dir["bin/git-review", "bin/git-review-pr", "bin/git-review-next",
+                    "bin/git-review-prev", "bin/git-review-status", "bin/git-review-list",
+                    "bin/git-review-abort", "bin/git-finish-review", "bin/git-clean-review"]
     bash_completion.install "completions/git-review-workflow.bash"
     zsh_completion.install "completions/git-review-workflow.zsh" => "_git-review-workflow"
     fish_completion.install "completions/git-review-workflow.fish"
   end
 
   test do
+    assert_match "git review workflow", shell_output("#{bin}/git-review --help")
+    assert_match version.to_s, shell_output("#{bin}/git-review --version")
     assert_match "usage: git review-pr", shell_output("#{bin}/git-review-pr --help")
     assert_match "usage: git finish-review", shell_output("#{bin}/git-finish-review --help")
   end

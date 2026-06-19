@@ -8,6 +8,10 @@
 # zsh users: run `autoload -U +X bashcompinit && bashcompinit` first, then
 # source this file.
 
+_git_review() {
+	__gitcomp "--help --version"
+}
+
 _git_review_pr() {
 	case "$cur" in
 	--*)

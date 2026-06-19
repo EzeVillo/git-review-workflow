@@ -28,9 +28,11 @@ PR branch itself).
 ./install.sh
 ```
 
-This symlinks `git-review-pr`, `git-finish-review` and `git-clean-review` into
-`~/.local/bin` (override with `PREFIX=/usr/local/bin ./install.sh`). Make sure
-that directory is on your `PATH`. Remove them with `./uninstall.sh`.
+This symlinks all seven commands (`git-review-pr`, `git-review-next`,
+`git-review-prev`, `git-review-status`, `git-review-abort`, `git-finish-review`
+and `git-clean-review`) into `~/.local/bin` (override with
+`PREFIX=/usr/local/bin ./install.sh`). Make sure that directory is on your
+`PATH`. Remove them with `./uninstall.sh`.
 
 For tab completion, source the completion script from your shell rc:
 
@@ -151,6 +153,10 @@ git review-pr feature/login --from a1b2c3d
 
 - Git 2.23+ (uses `git switch`).
 - A remote named `origin`.
+- A POSIX shell. On Linux and macOS this is the default. On Windows the commands
+  run under Git Bash or WSL, not in `cmd.exe` or PowerShell; under Git Bash,
+  `install.sh` may copy the scripts instead of symlinking them unless symlinks
+  are enabled (`MSYS=winsymlinks:nativestrict` and developer mode).
 
 ---
 
@@ -172,9 +178,11 @@ PR).
 ./install.sh
 ```
 
-Hace symlink de `git-review-pr`, `git-finish-review` y `git-clean-review` en
-`~/.local/bin` (cambialo con `PREFIX=/usr/local/bin ./install.sh`). Asegurate de
-que ese directorio esté en tu `PATH`. Para quitarlos: `./uninstall.sh`.
+Hace symlink de los siete comandos (`git-review-pr`, `git-review-next`,
+`git-review-prev`, `git-review-status`, `git-review-abort`, `git-finish-review`
+y `git-clean-review`) en `~/.local/bin` (cambialo con
+`PREFIX=/usr/local/bin ./install.sh`). Asegurate de que ese directorio esté en
+tu `PATH`. Para quitarlos: `./uninstall.sh`.
 
 Para autocompletado, sourceá el script de completion desde tu rc:
 
@@ -297,6 +305,11 @@ git review-pr feature/login --from a1b2c3d
 
 - Git 2.23+ (usa `git switch`).
 - Un remoto llamado `origin`.
+- Una shell POSIX. En Linux y macOS es la de por defecto. En Windows los
+  comandos corren bajo Git Bash o WSL, no en `cmd.exe` ni PowerShell; bajo Git
+  Bash, `install.sh` puede copiar los scripts en vez de hacer symlink salvo que
+  los symlinks estén habilitados (`MSYS=winsymlinks:nativestrict` y modo
+  desarrollador).
 
 ---
 

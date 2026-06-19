@@ -31,6 +31,10 @@ _git_review_status() {
 	__gitcomp "--help"
 }
 
+_git_review_list() {
+	__gitcomp "--help"
+}
+
 _git_review_abort() {
 	__gitcomp "--help"
 }

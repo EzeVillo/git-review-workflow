@@ -28,16 +28,45 @@ PR branch itself).
 ./install.sh
 ```
 
-This symlinks all seven commands (`git-review-pr`, `git-review-next`,
-`git-review-prev`, `git-review-status`, `git-review-abort`, `git-finish-review`
-and `git-clean-review`) into `~/.local/bin` (override with
+This symlinks all eight commands (`git-review-pr`, `git-review-next`,
+`git-review-prev`, `git-review-status`, `git-review-list`, `git-review-abort`,
+`git-finish-review` and `git-clean-review`) into `~/.local/bin` (override with
 `PREFIX=/usr/local/bin ./install.sh`). Make sure that directory is on your
 `PATH`. Remove them with `./uninstall.sh`.
 
-For tab completion, source the completion script from your shell rc:
+#### Homebrew
+
+Until a tagged release exists you can install the tip of the default branch via
+a tap:
+
+```sh
+brew tap EzeVillo/git-review-workflow https://github.com/EzeVillo/git-review-workflow
+brew install --HEAD EzeVillo/git-review-workflow/git-review-workflow
+```
+
+This installs the commands and all shell completions (`Formula/git-review-workflow.rb`).
+
+#### Tab completion
+
+Source the completion for your shell. **bash** (requires git's own bash
+completion loaded first):
 
 ```sh
 source /path/to/git-review-workflow/completions/git-review-workflow.bash
+```
+
+**zsh** — put the completions dir on your `fpath` before `compinit`, or source
+the file directly:
+
+```sh
+source /path/to/git-review-workflow/completions/git-review-workflow.zsh
+```
+
+**fish** — symlink the completion into your fish completions directory:
+
+```sh
+ln -s /path/to/git-review-workflow/completions/git-review-workflow.fish \
+    ~/.config/fish/completions/
 ```
 
 ### Commands
@@ -47,6 +76,7 @@ source /path/to/git-review-workflow/completions/git-review-workflow.bash
 | `git review-pr <branch> [base] [--delta\|--from <commit>] [--step]` | Fetch `origin`, then stage the PR diff on a new `review/<branch>` branch. |
 | `git review-next` / `git review-prev` | Move a `--step` review to the next / previous commit. |
 | `git review-status` | Show the state of the review on the current branch. |
+| `git review-list` | List every `review/*` branch in progress (current one marked `*`). |
 | `git finish-review [--onto-source] [--push] [--resume]` | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch). |
 | `git review-abort` | Cancel the current review and return to where you started. |
 | `git clean-review [branch] [--forget]` | Delete the `review/*` and `review-fixes/*` branches for `<branch>`, or all of them. |
@@ -86,6 +116,10 @@ losing work.
 **`git review-status`** shows the current review: source PR, mode, and — in
 `--step` mode — which commit you are on (`[k/N]`) and which steps have banked
 edits. Useful for picking up where you left off.
+
+**`git review-list`** shows *every* `review/*` branch in progress at once (with
+its source PR, mode and step position), so you can see what you have open across
+branches. The branch you are currently on is marked with a `*`.
 
 **`git finish-review`**
 - Default — create `review-fixes/<branch>` on top of the PR tip with your edits
@@ -178,16 +212,45 @@ PR).
 ./install.sh
 ```
 
-Hace symlink de los siete comandos (`git-review-pr`, `git-review-next`,
-`git-review-prev`, `git-review-status`, `git-review-abort`, `git-finish-review`
-y `git-clean-review`) en `~/.local/bin` (cambialo con
+Hace symlink de los ocho comandos (`git-review-pr`, `git-review-next`,
+`git-review-prev`, `git-review-status`, `git-review-list`, `git-review-abort`,
+`git-finish-review` y `git-clean-review`) en `~/.local/bin` (cambialo con
 `PREFIX=/usr/local/bin ./install.sh`). Asegurate de que ese directorio esté en
 tu `PATH`. Para quitarlos: `./uninstall.sh`.
 
-Para autocompletado, sourceá el script de completion desde tu rc:
+#### Homebrew
+
+Hasta que exista un release con tag, podés instalar el tip de la rama por
+defecto vía un tap:
+
+```sh
+brew tap EzeVillo/git-review-workflow https://github.com/EzeVillo/git-review-workflow
+brew install --HEAD EzeVillo/git-review-workflow/git-review-workflow
+```
+
+Instala los comandos y todas las completions (`Formula/git-review-workflow.rb`).
+
+#### Autocompletado
+
+Sourceá la completion de tu shell. **bash** (necesita la completion de git
+cargada antes):
 
 ```sh
 source /ruta/a/git-review-workflow/completions/git-review-workflow.bash
+```
+
+**zsh** — poné el directorio de completions en tu `fpath` antes de `compinit`, o
+sourceá el archivo directo:
+
+```sh
+source /ruta/a/git-review-workflow/completions/git-review-workflow.zsh
+```
+
+**fish** — symlinkeá la completion a tu directorio de completions de fish:
+
+```sh
+ln -s /ruta/a/git-review-workflow/completions/git-review-workflow.fish \
+    ~/.config/fish/completions/
 ```
 
 ### Comandos
@@ -197,6 +260,7 @@ source /ruta/a/git-review-workflow/completions/git-review-workflow.bash
 | `git review-pr <rama> [base] [--delta\|--from <commit>] [--step]` | Hace fetch de `origin` y deja el diff del PR staged en una nueva rama `review/<rama>`. |
 | `git review-next` / `git review-prev` | Mueve una review `--step` al commit siguiente / anterior. |
 | `git review-status` | Muestra el estado de la review en la rama actual. |
+| `git review-list` | Lista todas las ramas `review/*` en curso (la actual marcada con `*`). |
 | `git finish-review [--onto-source] [--push] [--resume]` | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR). |
 | `git review-abort` | Cancela la review actual y vuelve a donde empezaste. |
 | `git clean-review [rama] [--forget]` | Borra las ramas `review/*` y `review-fixes/*` de `<rama>`, o todas. |
@@ -237,6 +301,10 @@ sin perder trabajo.
 **`git review-status`** muestra la review actual: PR de origen, modo, y — en modo
 `--step` — en qué commit estás (`[k/N]`) y qué pasos tienen ediciones bancadas.
 Útil para retomar donde dejaste.
+
+**`git review-list`** muestra *todas* las ramas `review/*` en curso a la vez (con
+su PR de origen, modo y posición de paso), así ves qué tenés abierto entre
+ramas. La rama en la que estás parado se marca con un `*`.
 
 **`git finish-review`**
 - Por defecto — crea `review-fixes/<rama>` sobre el tip del PR con tus ediciones

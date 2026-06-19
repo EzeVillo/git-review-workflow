@@ -132,6 +132,74 @@ push_more() {
 	git review-next
 	run git finish-review
 	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
+	# the reviewer touched only c.txt; the author's C4 (d.txt) must not leak in
+	run git diff --cached --name-only
+	[ "$output" = "c.txt" ]
 	run git diff --cached
 	[[ "$output" == *"+FIXC"* ]]
+	# a modification of c.txt, not c.txt re-added as a whole new file
+	[[ "$output" != *"new file"* ]]
+}
+
+@test "--from then finish extracts only the reviewer edits" {
+	c1="$(git rev-parse feature/x~1)"
+	git review-pr feature/x --from "$c1"
+	printf 'b\nFIXB\n' >b.txt
+	run git finish-review
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
+	run git diff --cached --name-only
+	[ "$output" = "b.txt" ]
+	run git diff --cached
+	[[ "$output" == *"+FIXB"* ]]
+	# only the reviewer's added line is extracted, not the author's C2 as a whole:
+	# b.txt is modified, never re-added as a new file.
+	[[ "$output" != *"new file"* ]]
+}
+
+@test "--from --step then finish extracts only the reviewer edits" {
+	c1="$(git rev-parse feature/x~1)"
+	git review-pr feature/x --from "$c1" --step
+	printf 'b\nFIXB\n' >b.txt
+	run git finish-review
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
+	run git diff --cached --name-only
+	[ "$output" = "b.txt" ]
+	run git diff --cached
+	[[ "$output" == *"+FIXB"* ]]
+	[[ "$output" != *"new file"* ]]
+}
+
+@test "--from --onto-source commits only the reviewer edits on the PR branch" {
+	c1="$(git rev-parse feature/x~1)"
+	git review-pr feature/x --from "$c1"
+	printf 'b\nFIXB\n' >b.txt
+	run git finish-review --onto-source
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "feature/x" ]
+	run git log -1 --pretty=%s
+	[[ "$output" == *"review fixes (feature/x)"* ]]
+	run git show HEAD
+	[[ "$output" == *"+FIXB"* ]]
+	[[ "$output" != *"new file"* ]]
+}
+
+@test "--delta then finish extracts only the reviewer edits" {
+	git review-pr feature/x
+	git switch --quiet develop
+	git clean-review feature/x
+	push_more
+	git review-pr feature/x --delta
+	printf 'c\nFIXC\n' >c.txt
+	run git finish-review
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
+	# the reviewer touched only c.txt; the author's C4 (d.txt) must not leak in
+	run git diff --cached --name-only
+	[ "$output" = "c.txt" ]
+	run git diff --cached
+	[[ "$output" == *"+FIXC"* ]]
+	[[ "$output" != *"new file"* ]]
 }

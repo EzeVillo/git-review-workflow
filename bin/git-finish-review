@@ -72,7 +72,7 @@ if [ "$(git config "branch.$cur.reviewmode" || true)" = "step" ] && [ "$resume" 
 	count="$(git config "branch.$cur.reviewcount" || echo 0)"
 	step="$(git config "branch.$cur.reviewstep" || echo 1)"
 	start="$(git config "branch.$cur.reviewstart")"
-	commits="$(git rev-list --reverse --first-parent "$start..$tip")"
+	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
 	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
 	git add -A
 	tree="$(git write-tree)"

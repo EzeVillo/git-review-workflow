@@ -1,0 +1,208 @@
+#!/usr/bin/env sh
+#
+# git-review-pr — stage a pull request diff on a review/<branch> branch.
+#
+# Two independent axes:
+#   range  — where the review starts: the merge-base with the base branch
+#            (default), your last review (--delta), or an explicit commit
+#            (--from <commit>).
+#   layout — how you see it: the whole range as one staged diff (default), or
+#            one commit at a time (--step, advance with git review-next).
+#
+set -eu
+
+prog="git review-pr"
+
+usage() {
+	cat <<EOF
+usage: $prog <branch> [base | --delta | --from <commit>] [--step]
+
+Stage a pull request diff on a review/<branch> branch for inline review.
+
+  base              base branch to diff against (required for a full review;
+                    set a default with: git config reviewworkflow.base <branch>)
+  --delta           review only the commits added since your last review
+  --from <commit>   review only the commits after <commit>
+  --step            review one commit at a time; advance with git review-next
+EOF
+}
+
+die() {
+	echo "error: $1" >&2
+	exit 1
+}
+
+show_commit() {
+	# show_commit <commit> <n> <total>
+	printf '\n[%s/%s] %s\n' "$2" "$3" "$(git rev-parse --short "$1")"
+	git --no-pager show --stat --format='%an <%ae>%n%n%s%n%n%b' "$1"
+	printf -- '----\nreview this commit, edit files, then run git review-next\n'
+}
+
+src=""
+base=""
+base_explicit=0
+from=""
+delta=0
+step=0
+while [ $# -gt 0 ]; do
+	case "$1" in
+	-h | --help)
+		usage
+		exit 0
+		;;
+	-d | --delta) delta=1 ;;
+	--step) step=1 ;;
+	--from)
+		shift
+		[ $# -gt 0 ] || die "--from requires a commit"
+		from="$1"
+		;;
+	--from=*) from="${1#--from=}" ;;
+	-*)
+		echo "error: unknown option $1" >&2
+		usage >&2
+		exit 1
+		;;
+	*)
+		if [ -z "$src" ]; then
+			src="$1"
+		elif [ -z "$base" ]; then
+			base="$1"
+			base_explicit=1
+		else
+			die "unexpected argument $1"
+		fi
+		;;
+	esac
+	shift
+done
+
+[ -n "$src" ] || {
+	usage >&2
+	exit 1
+}
+
+if [ "$delta" -eq 1 ] && [ -n "$from" ]; then
+	die "use only one of --delta and --from"
+fi
+
+if [ "$base_explicit" -eq 1 ] && { [ "$delta" -eq 1 ] || [ -n "$from" ]; }; then
+	die "base is ignored with --delta/--from; pass only one"
+fi
+
+git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
+
+# Remember where to return to when the review is aborted.
+returnbranch="$(git symbolic-ref --quiet --short HEAD || true)"
+
+if [ -z "$base" ]; then
+	base="$(git config reviewworkflow.base || true)"
+fi
+
+if ! git diff --quiet || ! git diff --cached --quiet; then
+	die "you have local changes; commit or stash them first"
+fi
+
+git fetch --quiet origin || die "could not update from origin"
+
+git rev-parse --verify --quiet "refs/remotes/origin/$src" >/dev/null ||
+	die "origin/$src not found"
+
+rb="review/$src"
+git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null &&
+	die "$rb already exists; run git clean-review $src first"
+
+tip="$(git rev-parse "origin/$src")"
+prev="$(git config "reviewworkflow.$src.reviewed" || true)"
+
+# Resolve the lower bound of the review range (exclusive).
+if [ "$delta" -eq 1 ]; then
+	[ -n "$prev" ] || die "no previous review of $src recorded; run a full review first"
+	[ "$prev" != "$tip" ] || die "no new commits since your last review of $src"
+	git merge-base --is-ancestor "$prev" "$tip" ||
+		die "$src was force-pushed since your last review; run a full review instead"
+	start="$prev"
+	range="since last review ($(git rev-parse --short "$prev"))"
+elif [ -n "$from" ]; then
+	start="$(git rev-parse --verify --quiet "$from^{commit}")" || die "unknown commit: $from"
+	git merge-base --is-ancestor "$start" "$tip" ||
+		die "$from is not an ancestor of origin/$src"
+	[ "$start" != "$tip" ] || die "no commits to review after $from"
+	range="since $(git rev-parse --short "$start")"
+else
+	[ -n "$base" ] ||
+		die "no base branch set; pass one as an argument or run: git config reviewworkflow.base <branch>"
+	git rev-parse --verify --quiet "refs/remotes/origin/$base" >/dev/null ||
+		die "origin/$base not found"
+	start="$(git merge-base "origin/$base" "origin/$src")" ||
+		die "could not compute merge-base with origin/$base"
+	range="vs origin/$base"
+	if [ -n "$prev" ] && [ "$prev" != "$tip" ] && git merge-base --is-ancestor "$prev" "$tip"; then
+		n="$(git rev-list --count "$prev..$tip")"
+		echo "note: previously reviewed at $(git rev-parse --short "$prev"); $n new commit(s) since (use --delta to review only those)" >&2
+	fi
+fi
+
+if [ "$step" -eq 1 ]; then
+	# --first-parent --no-merges: walk only the branch's own commits, skipping
+	# merge commits (e.g. merges of the base branch) so changes that came from
+	# the base are never shown as a step.
+	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
+	[ -n "$commits" ] || die "no commits to review in range"
+	count="$(printf '%s\n' "$commits" | wc -l | tr -d ' ')"
+	first="$(printf '%s\n' "$commits" | sed -n '1p')"
+
+	git switch -q -c "$rb" "$first" || die "could not create $rb"
+	git config "branch.$rb.reviewsource" "$src"
+	git config "branch.$rb.reviewbase" "$base"
+	git config "branch.$rb.reviewtip" "$tip"
+	git config "branch.$rb.reviewstart" "$start"
+	git config "branch.$rb.reviewmode" "step"
+	git config "branch.$rb.reviewcount" "$count"
+	git config "branch.$rb.reviewstep" "1"
+	if [ -n "$prev" ]; then
+		git config "branch.$rb.reviewprevreviewed" "$prev"
+	fi
+	git config "reviewworkflow.$src.reviewed" "$tip"
+	if [ -n "$returnbranch" ]; then
+		git config "branch.$rb.reviewreturn" "$returnbranch"
+	fi
+
+	echo "$rb ready ($range) — walking $count commit(s) one at a time"
+	show_commit "$first" 1 "$count"
+	exit 0
+fi
+
+# Lower bound for the staged diff. Normally it is the range start, but if the
+# base branch has been merged into the PR, fold that already-merged base content
+# into the lower bound so changes that came from the base do not appear as part
+# of the review. This is a no-op when the base was not merged in (it never
+# invents deletions), and degrades gracefully on git without merge-tree.
+lower="$start"
+if [ -n "$base" ] && git rev-parse --verify --quiet "refs/remotes/origin/$base" >/dev/null; then
+	mb="$(git merge-base "origin/$base" "$tip" 2>/dev/null || true)"
+	if [ -n "$mb" ] && ! git merge-base --is-ancestor "$mb" "$start"; then
+		if ltree="$(git merge-tree --write-tree "$start" "$mb" 2>/dev/null)"; then
+			lower="$(git commit-tree "$ltree" -p "$start" -m 'review lower bound')"
+		else
+			echo "note: could not exclude merged base content from the review diff" >&2
+		fi
+	fi
+fi
+
+git switch -q -c "$rb" "$tip" || die "could not create $rb"
+git reset -q --soft "$lower"
+
+git config "branch.$rb.reviewsource" "$src"
+git config "branch.$rb.reviewbase" "$base"
+git config "branch.$rb.reviewtip" "$tip"
+if [ -n "$prev" ]; then
+	git config "branch.$rb.reviewprevreviewed" "$prev"
+fi
+git config "reviewworkflow.$src.reviewed" "$tip"
+if [ -n "$returnbranch" ]; then
+	git config "branch.$rb.reviewreturn" "$returnbranch"
+fi
+
+echo "$rb ready ($range) — the staged diff is the PR; edit, then run git finish-review"

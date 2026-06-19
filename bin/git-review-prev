@@ -1,0 +1,94 @@
+#!/usr/bin/env sh
+#
+# git-review-prev — step a commit-by-commit review back to the previous commit.
+#
+# Like git review-next but backwards: it banks the current commit's edits and
+# restores any edits you had banked on the previous commit, so you can revisit
+# and keep editing them.
+#
+set -eu
+
+prog="git review-prev"
+
+usage() {
+	cat <<EOF
+usage: $prog
+
+Go back to the previous commit of a commit-by-commit review. Your edits are
+remembered in both directions.
+EOF
+}
+
+case "${1:-}" in
+-h | --help)
+	usage
+	exit 0
+	;;
+"") ;;
+*)
+	echo "error: unexpected argument $1" >&2
+	usage >&2
+	exit 1
+	;;
+esac
+
+show_commit() {
+	# show_commit <commit> <n> <total>
+	printf '\n[%s/%s] %s\n' "$2" "$3" "$(git rev-parse --short "$1")"
+	git --no-pager show --stat --format='%an <%ae>%n%n%s%n%n%b' "$1"
+	printf -- '----\nreview this commit, edit files, then run git review-next\n'
+}
+
+cur="$(git symbolic-ref --quiet --short HEAD || true)"
+[ -n "$cur" ] || {
+	echo "error: not on a branch" >&2
+	exit 1
+}
+case "$cur" in
+review/*) ;;
+*)
+	echo "error: not on a review/* branch (HEAD is $cur)" >&2
+	exit 1
+	;;
+esac
+
+mode="$(git config "branch.$cur.reviewmode" || true)"
+[ "$mode" = "step" ] || {
+	echo "error: $cur was not started with git review-pr --step" >&2
+	exit 1
+}
+
+src="$(git config "branch.$cur.reviewsource")"
+tip="$(git config "branch.$cur.reviewtip")"
+start="$(git config "branch.$cur.reviewstart")"
+count="$(git config "branch.$cur.reviewcount")"
+step="$(git config "branch.$cur.reviewstep")"
+
+commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
+
+goto_step() {
+	target="$1"
+	git add -A
+	if ! git diff --cached --quiet; then
+		tree="$(git write-tree)"
+		edit="$(git commit-tree "$tree" -p "$(git rev-parse HEAD)" -m "review edits step $step")"
+		git update-ref "refs/review-edits/$src/$step" "$edit"
+	fi
+	ctarget="$(printf '%s\n' "$commits" | sed -n "${target}p")"
+	git reset -q --hard "$ctarget"
+	ref="refs/review-edits/$src/$target"
+	if git rev-parse --verify --quiet "$ref" >/dev/null; then
+		git diff --binary "${ref}^" "$ref" | git apply || {
+			echo "error: could not restore banked edits for step $target" >&2
+			exit 1
+		}
+	fi
+	git config "branch.$cur.reviewstep" "$target"
+	show_commit "$ctarget" "$target" "$count"
+}
+
+if [ "$step" -gt 1 ]; then
+	goto_step "$((step - 1))"
+else
+	echo "already at the first commit"
+fi

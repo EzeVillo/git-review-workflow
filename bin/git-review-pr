@@ -19,8 +19,8 @@ usage: $prog <branch> [base] [--delta | --from <commit>] [--step]
 
 Stage a pull request diff on a review/<branch> branch for inline review.
 
-  base              base branch to diff against
-                    (default: reviewworkflow.base config, or 'develop')
+  base              base branch to diff against (required for a full review;
+                    set a default with: git config reviewworkflow.base <branch>)
   --delta           review only the commits added since your last review
   --from <commit>   review only the commits after <commit>
   --step            review one commit at a time; advance with git review-next
@@ -89,7 +89,6 @@ git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 
 if [ -z "$base" ]; then
 	base="$(git config reviewworkflow.base || true)"
-	[ -n "$base" ] || base="develop"
 fi
 
 if ! git diff --quiet || ! git diff --cached --quiet; then
@@ -123,6 +122,8 @@ elif [ -n "$from" ]; then
 	[ "$start" != "$tip" ] || die "no commits to review after $from"
 	range="since $(git rev-parse --short "$start")"
 else
+	[ -n "$base" ] ||
+		die "no base branch set; pass one as an argument or run: git config reviewworkflow.base <branch>"
 	git rev-parse --verify --quiet "refs/remotes/origin/$base" >/dev/null ||
 		die "origin/$base not found"
 	start="$(git merge-base "origin/$base" "origin/$src")" ||

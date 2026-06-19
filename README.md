@@ -50,8 +50,11 @@ source /path/to/git-review-workflow/completions/git-review-workflow.bash
 **`git review-pr`** has two independent axes — **range** (where the review
 starts) and **layout** (`--step` or not), which compose freely.
 
-- `base` — branch to diff against. Defaults to `reviewworkflow.base` (see below),
-  otherwise `develop`. A positional argument overrides it.
+- `base` — branch to diff against, taken from `reviewworkflow.base` (see below);
+  a positional argument overrides it. **Required for a full review** — there is
+  no built-in default, so a full review with no base set fails and asks you to
+  configure one. Not needed with `--delta` or `--from`, which carry their own
+  starting point.
 - `--delta` — review only the commits added **since your last review** of this
   branch, instead of the whole PR. Perfect for re-reviewing an updated PR. The
   recorded tip survives `clean-review` (unless `--forget`), so this works even
@@ -86,13 +89,14 @@ starts) and **layout** (`--step` or not), which compose freely.
 ### Configuring the base branch
 
 The base branch is where PRs are integrated (`develop`, `main`, `master`, …) and
-varies per team. Set it once per repository:
+varies per team, so there is no default — set it once per repository:
 
 ```sh
 git config reviewworkflow.base develop
 ```
 
-Resolution order: positional `base` argument → `reviewworkflow.base` → `develop`.
+Resolution order: positional `base` argument → `reviewworkflow.base`. If neither
+is set, a full review fails and asks you to configure one.
 
 ### Typical workflow
 
@@ -168,8 +172,11 @@ source /ruta/a/git-review-workflow/completions/git-review-workflow.bash
 **`git review-pr`** tiene dos ejes independientes — **rango** (desde dónde
 empieza) y **layout** (`--step` o no), que se combinan libremente.
 
-- `base` — rama contra la que comparar. Por defecto `reviewworkflow.base` (ver
-  abajo), si no `develop`. El argumento posicional la sobreescribe.
+- `base` — rama contra la que comparar, tomada de `reviewworkflow.base` (ver
+  abajo); el argumento posicional la sobreescribe. **Obligatoria para una review
+  completa** — no hay default, así que una review completa sin base configurada
+  falla y te pide que la configures. No hace falta con `--delta` ni `--from`, que
+  ya traen su propio punto de inicio.
 - `--delta` — revisar solo los commits agregados **desde tu última review** de
   esta rama, en vez de todo el PR. Ideal para re-revisar un PR actualizado. El
   tip registrado sobrevive a `clean-review` (salvo `--forget`), así que funciona
@@ -206,14 +213,14 @@ empieza) y **layout** (`--step` o no), que se combinan libremente.
 ### Configurar la rama base
 
 La rama base es donde se integran los PRs (`develop`, `main`, `master`, …) y
-varía por equipo. Configurala una vez por repositorio:
+varía por equipo, así que no hay default — configurala una vez por repositorio:
 
 ```sh
 git config reviewworkflow.base develop
 ```
 
-Orden de resolución: argumento posicional `base` → `reviewworkflow.base` →
-`develop`.
+Orden de resolución: argumento posicional `base` → `reviewworkflow.base`. Si no
+hay ninguno, una review completa falla y te pide que la configures.
 
 ### Flujo típico
 

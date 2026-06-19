@@ -19,6 +19,7 @@ setup() {
 	git init --quiet "$WORK"
 	cd "$WORK"
 	git remote add origin "$ORIGIN"
+	git config reviewworkflow.base develop
 
 	printf 'a\nb\nc\n' >app.txt
 	git add app.txt
@@ -76,6 +77,13 @@ push_pr2() {
 	run git review-pr feature/x
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/feature/x.reviewbase)" = "develop" ]
+}
+
+@test "a full review with no base configured fails asking to set one" {
+	git config --unset reviewworkflow.base
+	run git review-pr feature/x
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"no base branch set"* ]]
 }
 
 @test "finish-review extracts only the reviewer edits" {

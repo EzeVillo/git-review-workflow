@@ -19,6 +19,7 @@ setup() {
 	git init --quiet "$WORK"
 	cd "$WORK"
 	git remote add origin "$ORIGIN"
+	git config reviewworkflow.base develop
 
 	printf 'base\n' >base.txt
 	git add base.txt

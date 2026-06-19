@@ -106,33 +106,50 @@ a usage message, you're all set.
 
 #### Tab completion (optional)
 
-This is a nice-to-have, not required — it lets you press Tab to complete
-command names and branches. Source the completion for your shell. **bash**
-(requires git's own bash completion loaded first):
+Tab completion lets you press **Tab** and have your terminal finish a command
+name or branch for you, so you don't have to type — or remember — them in full.
+It's a convenience, not a requirement.
 
-```sh
-source /path/to/git-review-workflow/completions/git-review-workflow.bash
-```
+**If you installed with Homebrew, this is already set up for you** — you can skip
+this. Otherwise, turn it on by telling your shell to load the matching file
+every time it starts. Replace `/path/to/git-review-workflow` with the folder
+where you downloaded the project.
 
-**zsh** — put the completions dir on your `fpath` before `compinit`, or source
-the file directly:
+- **bash** — add this line to the file `~/.bashrc`:
 
-```sh
-source /path/to/git-review-workflow/completions/git-review-workflow.zsh
-```
+  ```sh
+  source /path/to/git-review-workflow/completions/git-review-workflow.bash
+  ```
 
-**fish** — symlink the completion into your fish completions directory:
+- **zsh** (default on recent macOS) — add this line to the file `~/.zshrc`:
 
-```sh
-ln -s /path/to/git-review-workflow/completions/git-review-workflow.fish \
-    ~/.config/fish/completions/
-```
+  ```sh
+  source /path/to/git-review-workflow/completions/git-review-workflow.zsh
+  ```
+
+- **fish** — copy the file into fish's completions folder (no config line
+  needed):
+
+  ```sh
+  cp /path/to/git-review-workflow/completions/git-review-workflow.fish \
+      ~/.config/fish/completions/
+  ```
+
+Then open a new terminal. Now typing `git review-pr ` and pressing **Tab** will
+offer your branch names.
 
 ### Commands
 
+> **How to read the syntax:** `<x>` is **required**, `[x]` is **optional**, and
+> `a | b` means **pick one, not both**. So in
+> `git review-pr <branch> [base | --delta | --from <commit>]`, `branch` is
+> required, and `base`, `--delta` and `--from` are three different ways to say
+> *where the review starts* — you choose **at most one** of them (combining them
+> is an error).
+
 | Command | What it does |
 | --- | --- |
-| `git review-pr <branch> [base] [--delta\|--from <commit>] [--step]` | Fetch `origin`, then stage the PR diff on a new `review/<branch>` branch. |
+| `git review-pr <branch> [base \| --delta \| --from <commit>] [--step]` | Fetch `origin`, then stage the PR diff on a new `review/<branch>` branch. |
 | `git review-next` / `git review-prev` | Move a `--step` review to the next / previous commit. |
 | `git review-status` | Show the state of the review on the current branch. |
 | `git review-list` | List every `review/*` branch in progress (current one marked `*`). |
@@ -348,33 +365,50 @@ ves un mensaje de uso, ya está.
 
 #### Autocompletado (opcional)
 
-Es un extra, no hace falta — te deja apretar Tab para completar nombres de
-comandos y ramas. Sourceá la completion de tu shell. **bash** (necesita la
-completion de git cargada antes):
+El autocompletado te deja apretar **Tab** para que la terminal complete sola un
+nombre de comando o de rama, así no tenés que escribirlos —ni acordártelos—
+enteros. Es una comodidad, no un requisito.
 
-```sh
-source /ruta/a/git-review-workflow/completions/git-review-workflow.bash
-```
+**Si instalaste con Homebrew, ya viene configurado** — podés saltearlo. Si no,
+lo activás diciéndole a tu shell que cargue el archivo correspondiente cada vez
+que arranca. Reemplazá `/ruta/a/git-review-workflow` por la carpeta donde
+descargaste el proyecto.
 
-**zsh** — poné el directorio de completions en tu `fpath` antes de `compinit`, o
-sourceá el archivo directo:
+- **bash** — agregá esta línea al archivo `~/.bashrc`:
 
-```sh
-source /ruta/a/git-review-workflow/completions/git-review-workflow.zsh
-```
+  ```sh
+  source /ruta/a/git-review-workflow/completions/git-review-workflow.bash
+  ```
 
-**fish** — symlinkeá la completion a tu directorio de completions de fish:
+- **zsh** (default en macOS reciente) — agregá esta línea al archivo `~/.zshrc`:
 
-```sh
-ln -s /ruta/a/git-review-workflow/completions/git-review-workflow.fish \
-    ~/.config/fish/completions/
-```
+  ```sh
+  source /ruta/a/git-review-workflow/completions/git-review-workflow.zsh
+  ```
+
+- **fish** — copiá el archivo a la carpeta de completions de fish (sin línea de
+  configuración):
+
+  ```sh
+  cp /ruta/a/git-review-workflow/completions/git-review-workflow.fish \
+      ~/.config/fish/completions/
+  ```
+
+Después abrí una terminal nueva. Ahora, escribiendo `git review-pr ` y apretando
+**Tab**, te ofrece los nombres de tus ramas.
 
 ### Comandos
 
+> **Cómo leer la sintaxis:** `<x>` es **obligatorio**, `[x]` es **opcional**, y
+> `a | b` significa **elegí uno, no los dos**. Así, en
+> `git review-pr <rama> [base | --delta | --from <commit>]`, `rama` es
+> obligatoria, y `base`, `--delta` y `--from` son tres formas distintas de decir
+> *desde dónde empieza la review* — elegís **a lo sumo una** (combinarlas es un
+> error).
+
 | Comando | Qué hace |
 | --- | --- |
-| `git review-pr <rama> [base] [--delta\|--from <commit>] [--step]` | Hace fetch de `origin` y deja el diff del PR staged en una nueva rama `review/<rama>`. |
+| `git review-pr <rama> [base \| --delta \| --from <commit>] [--step]` | Hace fetch de `origin` y deja el diff del PR staged en una nueva rama `review/<rama>`. |
 | `git review-next` / `git review-prev` | Mueve una review `--step` al commit siguiente / anterior. |
 | `git review-status` | Muestra el estado de la review en la rama actual. |
 | `git review-list` | Lista todas las ramas `review/*` en curso (la actual marcada con `*`). |

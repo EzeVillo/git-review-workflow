@@ -15,7 +15,7 @@ prog="git review-pr"
 
 usage() {
 	cat <<EOF
-usage: $prog <branch> [base] [--delta | --from <commit>] [--step]
+usage: $prog <branch> [base | --delta | --from <commit>] [--step]
 
 Stage a pull request diff on a review/<branch> branch for inline review.
 

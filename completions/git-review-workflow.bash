@@ -11,7 +11,7 @@
 _git_review_pr() {
 	case "$cur" in
 	--*)
-		__gitcomp "--delta --step --help"
+		__gitcomp "--delta --from --step --help"
 		;;
 	*)
 		__gitcomp_nl "$(__git_refs)"

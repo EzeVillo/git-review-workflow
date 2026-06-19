@@ -132,6 +132,8 @@ if [ "$onto" -eq 1 ]; then
 			echo "error: could not push $src" >&2
 			exit 1
 		}
+		# The PR tip now includes our fixes; record it so --delta skips them.
+		git config "reviewworkflow.$src.reviewed" "$(git rev-parse HEAD)"
 		echo "pushed review fixes to origin/$src"
 	else
 		echo "committed review fixes on $src"

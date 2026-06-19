@@ -61,7 +61,7 @@ mode="$(git config "branch.$cur.reviewmode" || true)"
 
 src="$(git config "branch.$cur.reviewsource")"
 tip="$(git config "branch.$cur.reviewtip")"
-mb="$(git config "branch.$cur.reviewmergebase")"
+start="$(git config "branch.$cur.reviewstart")"
 count="$(git config "branch.$cur.reviewcount")"
 step="$(git config "branch.$cur.reviewstep")"
 
@@ -75,7 +75,7 @@ fi
 
 if [ "$step" -lt "$count" ]; then
 	next="$((step + 1))"
-	commits="$(git rev-list --reverse --first-parent "$mb..$tip")"
+	commits="$(git rev-list --reverse --first-parent "$start..$tip")"
 	cnext="$(printf '%s\n' "$commits" | sed -n "${next}p")"
 	git reset -q --hard "$cnext"
 	git config "branch.$cur.reviewstep" "$next"

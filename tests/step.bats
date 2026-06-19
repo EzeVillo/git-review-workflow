@@ -108,12 +108,6 @@ teardown() {
 	[[ "$output" == *"not started with git review-pr --step"* ]]
 }
 
-@test "--step and --delta cannot be combined" {
-	run git review-pr feature/x --step --delta
-	[ "$status" -ne 0 ]
-	[[ "$output" == *"cannot be combined"* ]]
-}
-
 @test "clean-review removes banked edit refs" {
 	git review-pr feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt

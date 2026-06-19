@@ -82,6 +82,24 @@ teardown() {
 	[ "$status" -ne 0 ]
 }
 
+@test "review-abort clears the delta marker when there was no prior review" {
+	git review-pr feature/x
+	git review-abort
+	run git config reviewworkflow.feature/x.reviewed
+	[ "$status" -ne 0 ]
+	run git review-pr feature/x --delta
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"no previous review"* ]]
+}
+
+@test "review-abort restores the delta marker from a prior review" {
+	prior="$(git rev-parse develop)"
+	git config reviewworkflow.feature/x.reviewed "$prior"
+	git review-pr feature/x
+	git review-abort
+	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$prior" ]
+}
+
 @test "review-abort drops banked edit refs" {
 	git review-pr feature/x --step
 	printf 'edited1\n' >f.txt

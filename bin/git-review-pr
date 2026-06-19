@@ -158,6 +158,9 @@ if [ "$step" -eq 1 ]; then
 	git config "branch.$rb.reviewmode" "step"
 	git config "branch.$rb.reviewcount" "$count"
 	git config "branch.$rb.reviewstep" "1"
+	if [ -n "$prev" ]; then
+		git config "branch.$rb.reviewprevreviewed" "$prev"
+	fi
 	git config "reviewworkflow.$src.reviewed" "$tip"
 	if [ -n "$returnbranch" ]; then
 		git config "branch.$rb.reviewreturn" "$returnbranch"
@@ -174,6 +177,9 @@ git reset -q --soft "$start"
 git config "branch.$rb.reviewsource" "$src"
 git config "branch.$rb.reviewbase" "$base"
 git config "branch.$rb.reviewtip" "$tip"
+if [ -n "$prev" ]; then
+	git config "branch.$rb.reviewprevreviewed" "$prev"
+fi
 git config "reviewworkflow.$src.reviewed" "$tip"
 if [ -n "$returnbranch" ]; then
 	git config "branch.$rb.reviewreturn" "$returnbranch"

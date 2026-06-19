@@ -97,7 +97,10 @@ edits. Useful for picking up where you left off.
 
 **`git review-abort`** cancels the current review in one step: it returns you to
 the branch you started from, then deletes the `review/<branch>` branch and its
-banked edits. The recorded last-reviewed tip is kept, so `--delta` still works.
+banked edits. Because the review was cancelled (not completed), it rolls the
+`--delta` marker back to your last actual review, so a later `--delta` does not
+skip commits you never reviewed. (`clean-review`, by contrast, keeps the marker —
+cleaning up after a real review is not the same as cancelling one.)
 
 **`git clean-review`**
 - With no `<branch>`, deletes every `review/*` and `review-fixes/*` branch.
@@ -240,7 +243,10 @@ sin perder trabajo.
 
 **`git review-abort`** cancela la review actual en un paso: te devuelve a la rama
 desde la que empezaste y borra la rama `review/<rama>` y sus ediciones bancadas.
-El tip de la última review se conserva, así que `--delta` sigue funcionando.
+Como la review se canceló (no se completó), vuelve el marcador de `--delta` a tu
+última review real, así un `--delta` posterior no se saltea commits que nunca
+revisaste. (`clean-review`, en cambio, conserva el marcador — limpiar después de
+una review real no es lo mismo que cancelarla.)
 
 **`git clean-review`**
 - Sin `<rama>`, borra todas las ramas `review/*` y `review-fixes/*`.

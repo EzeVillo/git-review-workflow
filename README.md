@@ -306,6 +306,18 @@ git config reviewworkflow.base develop
 Resolution order: positional `base` argument → `reviewworkflow.base`. If neither
 is set, a full review fails and asks you to configure one.
 
+## Configure the remote
+
+By default the commands fetch and push against `origin`. If you review a
+repository you do not own (an `upstream`, with your `origin` as a fork, say),
+point the workflow at that remote:
+
+```sh
+git config reviewworkflow.remote upstream
+```
+
+It affects `review-pr`, `finish-review --push`, and `review-forget --stale`.
+
 ## Typical workflow
 
 ```sh
@@ -338,7 +350,7 @@ git review-pr feature/login --from a1b2c3d
   content that was merged into the PR uses `git merge-tree --write-tree`, and on
   older git that one step is skipped (the merged base content would then show in
   `--delta`/`--from`).
-- A remote named `origin`.
+- A remote named `origin` (or whatever you set with `reviewworkflow.remote`).
 - A POSIX shell. On Linux and macOS this is the default. On Windows the commands
   run under Git Bash or WSL, not in `cmd.exe` or PowerShell.
 

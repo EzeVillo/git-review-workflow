@@ -93,6 +93,9 @@ fi
 
 git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 
+# Remote to review from; defaults to origin, override with reviewworkflow.remote.
+remote="$(git config reviewworkflow.remote || echo origin)"
+
 # Remember where to return to when the review is aborted.
 returnbranch="$(git symbolic-ref --quiet --short HEAD || true)"
 
@@ -104,16 +107,16 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
 	die "you have local changes; commit or stash them first"
 fi
 
-git fetch --quiet origin || die "could not update from origin"
+git fetch --quiet "$remote" || die "could not update from $remote"
 
-git rev-parse --verify --quiet "refs/remotes/origin/$src" >/dev/null ||
-	die "origin/$src not found"
+git rev-parse --verify --quiet "refs/remotes/$remote/$src" >/dev/null ||
+	die "$remote/$src not found"
 
 rb="review/$src"
 git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null &&
 	die "$rb already exists; run git clean-review $src first"
 
-tip="$(git rev-parse "origin/$src")"
+tip="$(git rev-parse "$remote/$src")"
 prev="$(git config "reviewworkflow.$src.reviewed" || true)"
 
 # Resolve the lower bound of the review range (exclusive).
@@ -127,17 +130,17 @@ if [ "$delta" -eq 1 ]; then
 elif [ -n "$from" ]; then
 	start="$(git rev-parse --verify --quiet "$from^{commit}")" || die "unknown commit: $from"
 	git merge-base --is-ancestor "$start" "$tip" ||
-		die "$from is not an ancestor of origin/$src"
+		die "$from is not an ancestor of $remote/$src"
 	[ "$start" != "$tip" ] || die "no commits to review after $from"
 	range="since $(git rev-parse --short "$start")"
 else
 	[ -n "$base" ] ||
 		die "no base branch set; pass one as an argument or run: git config reviewworkflow.base <branch>"
-	git rev-parse --verify --quiet "refs/remotes/origin/$base" >/dev/null ||
-		die "origin/$base not found"
-	start="$(git merge-base "origin/$base" "origin/$src")" ||
-		die "could not compute merge-base with origin/$base"
-	range="vs origin/$base"
+	git rev-parse --verify --quiet "refs/remotes/$remote/$base" >/dev/null ||
+		die "$remote/$base not found"
+	start="$(git merge-base "$remote/$base" "$remote/$src")" ||
+		die "could not compute merge-base with $remote/$base"
+	range="vs $remote/$base"
 	if [ -n "$prev" ] && [ "$prev" != "$tip" ] && git merge-base --is-ancestor "$prev" "$tip"; then
 		n="$(git rev-list --count "$prev..$tip")"
 		echo "note: previously reviewed at $(git rev-parse --short "$prev"); $n new commit(s) since (use --delta to review only those)" >&2
@@ -181,8 +184,8 @@ fi
 # of the review. This is a no-op when the base was not merged in (it never
 # invents deletions), and degrades gracefully on git without merge-tree.
 lower="$start"
-if [ -n "$base" ] && git rev-parse --verify --quiet "refs/remotes/origin/$base" >/dev/null; then
-	mb="$(git merge-base "origin/$base" "$tip" 2>/dev/null || true)"
+if [ -n "$base" ] && git rev-parse --verify --quiet "refs/remotes/$remote/$base" >/dev/null; then
+	mb="$(git merge-base "$remote/$base" "$tip" 2>/dev/null || true)"
 	if [ -n "$mb" ] && ! git merge-base --is-ancestor "$mb" "$start"; then
 		if ltree="$(git merge-tree --write-tree "$start" "$mb" 2>/dev/null)"; then
 			lower="$(git commit-tree "$ltree" -p "$start" -m 'review lower bound')"

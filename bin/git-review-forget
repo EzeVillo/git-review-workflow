@@ -90,6 +90,10 @@ fi
 
 git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 
+# Remote whose branches back the markers; defaults to origin, override with
+# reviewworkflow.remote.
+remote="$(git config reviewworkflow.remote || echo origin)"
+
 # ── one branch ────────────────────────────────────────────────────────────────
 if [ -n "$arg" ]; then
 	if [ -z "$(git config "reviewworkflow.$arg.reviewed" || true)" ]; then
@@ -113,19 +117,19 @@ fi
 
 # ── --stale ───────────────────────────────────────────────────────────────────
 if [ "$stale" -eq 1 ]; then
-	git fetch --prune --quiet origin || die "could not fetch from origin"
+	git fetch --prune --quiet "$remote" || die "could not fetch from $remote"
 
 	any=0
 	while read -r key _; do
 		[ -n "$key" ] || continue
 		mid="${key#reviewworkflow.}"
 		src="${mid%.reviewed}"
-		git rev-parse --verify --quiet "refs/remotes/origin/$src" >/dev/null && continue
-		forget "$key" "$src" " (origin/$src no longer exists)"
+		git rev-parse --verify --quiet "refs/remotes/$remote/$src" >/dev/null && continue
+		forget "$key" "$src" " ($remote/$src no longer exists)"
 		any=1
 	done <"$tmp"
 
-	[ "$any" -eq 1 ] || echo "no stale delta markers (every origin branch still exists)"
+	[ "$any" -eq 1 ] || echo "no stale delta markers (every $remote branch still exists)"
 	exit 0
 fi
 

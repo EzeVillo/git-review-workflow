@@ -310,6 +310,18 @@ git config reviewworkflow.base develop
 Orden de resolución: argumento posicional `base` → `reviewworkflow.base`. Si no
 hay ninguno, una review completa falla y te pide que la configures.
 
+## Configurar el remoto
+
+Por defecto los comandos hacen fetch y push contra `origin`. Si revisás un
+repositorio que no es tuyo (un `upstream` con tu `origin` como fork, por
+ejemplo), apuntá el flujo a ese remoto:
+
+```sh
+git config reviewworkflow.remote upstream
+```
+
+Afecta a `review-pr`, `finish-review --push` y `review-forget --stale`.
+
 ## Flujo típico
 
 ```sh
@@ -342,7 +354,7 @@ git review-pr feature/login --from a1b2c3d
   la base mergeado dentro del PR usa `git merge-tree --write-tree`, y en git más
   viejo ese paso se saltea (el contenido de la base mergeado aparecería en
   `--delta`/`--from`).
-- Un remoto llamado `origin`.
+- Un remoto llamado `origin` (o el que configures con `reviewworkflow.remote`).
 - Una shell POSIX. En Linux y macOS es la de por defecto. En Windows los comandos
   corren bajo Git Bash o WSL, no en `cmd.exe` ni PowerShell.
 

@@ -55,7 +55,7 @@ _git-finish-review() {
 	_arguments -S \
 		'(-h --help)'{-h,--help}'[show help]' \
 		'--onto-source[add your edits as a commit on the PR branch itself]' \
-		'--push[push the resulting branch to origin]' \
+		'--push[push the resulting branch to the remote]' \
 		'--resume[continue after resolving replay conflicts]'
 }
 
@@ -75,7 +75,7 @@ _git-review-forget() {
 	_arguments -S \
 		'(-h --help)'{-h,--help}'[show help]' \
 		'--all[forget every recorded marker]' \
-		'--stale[forget markers whose origin branch no longer exists]' \
+		'--stale[forget markers whose remote branch no longer exists]' \
 		'--dry-run[with --stale, list what would be forgotten]' \
 		'1:marked branch:->markedbranches'
 

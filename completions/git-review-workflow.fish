@@ -44,7 +44,7 @@ complete -c git -n '__grw_using review-pr' -f -a '(__grw_branches)'
 
 # git finish-review
 complete -c git -n '__grw_using finish-review' -f -l onto-source -d 'add edits as a commit on the PR branch'
-complete -c git -n '__grw_using finish-review' -f -l push -d 'push the resulting branch to origin'
+complete -c git -n '__grw_using finish-review' -f -l push -d 'push the resulting branch to the remote'
 complete -c git -n '__grw_using finish-review' -f -l resume -d 'continue after resolving replay conflicts'
 complete -c git -n '__grw_using finish-review' -f -l help -d 'show help'
 
@@ -54,7 +54,7 @@ complete -c git -n '__grw_using clean-review' -f -a '(__grw_review_branches)'
 
 # git review-forget
 complete -c git -n '__grw_using review-forget' -f -l all -d 'forget every recorded marker'
-complete -c git -n '__grw_using review-forget' -f -l stale -d 'forget markers whose origin branch is gone'
+complete -c git -n '__grw_using review-forget' -f -l stale -d 'forget markers whose remote branch is gone'
 complete -c git -n '__grw_using review-forget' -f -l dry-run -d 'with --stale, list what would be forgotten'
 complete -c git -n '__grw_using review-forget' -f -l help -d 'show help'
 complete -c git -n '__grw_using review-forget' -f -a '(__grw_marked_branches)'

@@ -16,26 +16,29 @@ When you review a PR you usually want to see **all** of its changes at once and
 poke at them. `git review-pr` creates a `review/<branch>` branch whose working
 tree holds the PR tip, but whose `HEAD` sits at the merge-base with your base
 branch. The result: the entire PR shows up as **staged, uncommitted changes**.
-You read it, edit it, run it — and when you are done, `git finish-review`
-extracts your edits onto a separate `review-fixes/<branch>` branch (or onto the
-PR branch itself).
+Because it is just your working tree, you open the whole PR in your favourite
+IDE — read the diff, edit inline, run it — and when you are done,
+`git finish-review` extracts your edits onto a separate `review-fixes/<branch>`
+branch (or onto the PR branch itself).
 
 ## Quick start
 
 ```sh
-# 1. Install (macOS/Linux via Homebrew — see Installation for other methods)
-brew tap EzeVillo/git-review-workflow https://github.com/EzeVillo/git-review-workflow
-brew install EzeVillo/git-review-workflow/git-review-workflow
+# 1. Install (Linux, macOS, WSL, and Windows via Git Bash)
+curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.sh | sh
 
 # 2. Tell it where PRs are integrated, once per repo
 git config reviewworkflow.base develop
 
-# 3. Review a PR branch as one staged diff
+# 3. Stage a PR branch as a single diff, then open the repo in your IDE
 git review-pr feature/login
-git status                      # inspect everything at once
-# ...edit files, leave fixes, run tests...
+# ...read and edit the staged diff in your editor, run tests...
 git finish-review               # extract your edits onto review-fixes/feature/login
 ```
+
+Prefer Homebrew or a native Windows (PowerShell) installer? See
+[Installation](#installation). For the full flow — re-reviewing updates, walking
+a PR commit by commit, cleanup — see [Typical workflow](#typical-workflow).
 
 ## Installation
 
@@ -263,8 +266,7 @@ is set, a full review fails and asks you to configure one.
 git config reviewworkflow.base develop      # once per repo
 
 git review-pr feature/login                 # stage the whole PR
-git status                                   # inspect the staged diff
-# ...edit files, leave fixes, run tests...
+# ...open the repo in your IDE, read the staged diff, edit inline, run tests...
 git finish-review                            # extract fixes to review-fixes/feature/login
 git diff --cached && git commit -m "address review comments"
 git clean-review feature/login              # tidy up

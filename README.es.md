@@ -15,27 +15,30 @@
 Cuando revisás un PR normalmente querés ver **todos** sus cambios de una y
 toquetearlos. `git review-pr` crea una rama `review/<rama>` cuyo working tree
 tiene el tip del PR, pero con el `HEAD` parado en el merge-base con tu rama base.
-El resultado: todo el PR aparece como **cambios staged sin commitear**. Lo leés,
-lo editás, lo corrés — y cuando terminás, `git finish-review` extrae tus
+El resultado: todo el PR aparece como **cambios staged sin commitear**. Como es
+simplemente tu working tree, abrís todo el PR en tu IDE favorito — leés el diff,
+lo editás inline, lo corrés — y cuando terminás, `git finish-review` extrae tus
 ediciones a una rama separada `review-fixes/<rama>` (o directo sobre la rama del
 PR).
 
 ## Inicio rápido
 
 ```sh
-# 1. Instalar (macOS/Linux con Homebrew — ver Instalación para otros métodos)
-brew tap EzeVillo/git-review-workflow https://github.com/EzeVillo/git-review-workflow
-brew install EzeVillo/git-review-workflow/git-review-workflow
+# 1. Instalar (Linux, macOS, WSL, y Windows vía Git Bash)
+curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.sh | sh
 
 # 2. Decirle dónde se integran los PRs, una vez por repo
 git config reviewworkflow.base develop
 
-# 3. Revisar la rama de un PR como un único diff staged
+# 3. Dejar la rama de un PR staged como un único diff y abrir el repo en tu IDE
 git review-pr feature/login
-git status                      # inspeccionar todo de una
-# ...editar archivos, dejar fixes, correr tests...
+# ...leer y editar el diff staged en tu editor, correr tests...
 git finish-review               # extraer tus ediciones a review-fixes/feature/login
 ```
+
+¿Preferís Homebrew o un instalador nativo de Windows (PowerShell)? Mirá
+[Instalación](#instalación). Para el flujo completo — re-revisar actualizaciones,
+recorrer un PR commit por commit, limpieza — mirá [Flujo típico](#flujo-típico).
 
 ## Instalación
 
@@ -266,8 +269,7 @@ hay ninguno, una review completa falla y te pide que la configures.
 git config reviewworkflow.base develop      # una vez por repo
 
 git review-pr feature/login                 # dejar todo el PR staged
-git status                                   # inspeccionar el diff staged
-# ...editar archivos, dejar fixes, correr tests...
+# ...abrir el repo en tu IDE, leer el diff staged, editar inline, correr tests...
 git finish-review                            # extraer fixes a review-fixes/feature/login
 git diff --cached && git commit -m "address review comments"
 git clean-review feature/login              # limpiar

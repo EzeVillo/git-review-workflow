@@ -110,6 +110,38 @@ teardown() {
 	[ -z "$output" ]
 }
 
+@test "review-abort falls back to the base when the return branch is gone" {
+	# Start the review from a throwaway branch, then delete it: the recorded
+	# return branch no longer resolves, so abort must fall back to the base.
+	git switch --quiet -c throwaway
+	git review-pr feature/x
+	[ "$(git config branch.review/feature/x.reviewreturn)" = "throwaway" ]
+	[ "$(git config branch.review/feature/x.reviewbase)" = "develop" ]
+	git branch -D throwaway
+	run git review-abort
+	[ "$status" -eq 0 ]
+	# Landed on the base, not the (now-missing) return branch.
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "develop" ]
+	[[ "$output" == *"returned to develop"* ]]
+	# The review branch was still cleaned up despite the fallback.
+	run git rev-parse --verify --quiet refs/heads/review/feature/x
+	[ "$status" -ne 0 ]
+}
+
+@test "review-abort errors when neither the return branch nor the base exists" {
+	# Started on develop, so both the return branch and the base point at it;
+	# deleting it leaves abort with nowhere to return to.
+	git review-pr feature/x
+	git branch -D develop
+	run git review-abort
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"could not determine a branch to return to"* ]]
+	# It must bail before touching anything: no switch, review branch intact.
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
+	run git rev-parse --verify --quiet refs/heads/review/feature/x
+	[ "$status" -eq 0 ]
+}
+
 @test "finish-review surfaces replay conflicts and resumes after resolution" {
 	git review-pr feature/x --step
 	printf 'FIX1\n' >f.txt

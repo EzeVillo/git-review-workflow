@@ -52,6 +52,12 @@ _run_ps1_test() {
 }
 
 @test "web-uninstall.ps1 removes its dir from PATH and keeps the rest" {
+	# The 'User' PATH scope is Windows-only; on Unix .NET treats it as a no-op
+	# (Get returns null, Set is ignored), so there is nothing to assert there.
+	case "$(uname -s)" in
+		CYGWIN* | MINGW* | MSYS*) ;;
+		*) skip "User PATH scope is Windows-only" ;;
+	esac
 	run _run_ps1_test "path_cleanup"
 	[ "$status" -eq 0 ]
 }

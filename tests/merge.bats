@@ -140,3 +140,56 @@ second_merge() {
 	[[ "$output" == *"+FIX"* ]]
 	[[ "$output" != *"DEV"* ]]
 }
+
+@test "finish-review --onto-source on a merged branch commits only reviewer edits" {
+	git review-pr feature/x
+	printf 'f1\nf2\nFIX\n' >feature.txt
+	run git finish-review --onto-source
+	[ "$status" -eq 0 ]
+	# The fix lands as a new commit on the PR branch itself.
+	run git log -1 --format=%s feature/x
+	[[ "$output" == *"review fixes"* ]]
+	run git show feature/x
+	[[ "$output" == *"+FIX"* ]]
+	# Anti-false-positive: the author's own change (f2, an added line in c3) and
+	# the merged base content (DEV) must not be re-introduced by this commit.
+	[[ "$output" != *"+f2"* ]]
+	[[ "$output" != *"DEV"* ]]
+}
+
+@test "review degrades gracefully when merge-tree is unavailable" {
+	# Simulate a git without `merge-tree --write-tree` (the plumbing the exclusion
+	# relies on) by shadowing git with a shim that fails only on `merge-tree` and
+	# delegates everything else to the real git.
+	#
+	# The shim must be hit by git-review-pr's *internal* git calls. When invoked
+	# as `git review-pr`, the parent git prepends its own bindir to PATH for the
+	# subprocess, so the real git wins and the shim is bypassed. Invoking the
+	# script directly leaves our PATH intact — which is exactly the code path an
+	# old real git would take, so the fallback branch is exercised faithfully.
+	real="$(command -v git)"
+	shim="$TMP/shim"
+	mkdir -p "$shim"
+	cat >"$shim/git" <<EOF
+#!/usr/bin/env sh
+[ "\$1" = "merge-tree" ] && exit 1
+exec "$real" "\$@"
+EOF
+	chmod +x "$shim/git"
+
+	# --from with a later base merge forces the merge-tree exclusion path: the
+	# range start predates the merge, so the base content can only be excluded by
+	# folding the merge-base into the lower bound (the merge-tree call).
+	from="$(git rev-parse origin/feature/x)"
+	second_merge
+
+	out="$(PATH="$shim:$PATH" git-review-pr feature/x --from "$from" 2>&1)"
+	[[ "$out" == *"could not exclude merged base content"* ]]
+
+	# Anti-false-positive: with the exclusion disabled the lower bound stays at
+	# the range start, so the merged base file (dev-only2.txt) leaks into the
+	# diff. That proves the note reflects the real degraded behavior, not a no-op.
+	run git diff --cached --name-only
+	[[ "$output" == *"feature.txt"* ]]
+	[[ "$output" == *"dev-only2.txt"* ]]
+}

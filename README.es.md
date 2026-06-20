@@ -1,8 +1,9 @@
 # git-review-workflow
 
-> Revisá la rama de un pull request localmente como un único diff staged — hacé
-> correcciones inline y luego separá tus cambios en una rama limpia (o directo
-> sobre la rama del PR) lista para subir.
+> Revisá un pull request **editándolo y corriéndolo**, no solo leyéndolo. Todo el
+> PR aparece en tu working tree como un único diff staged; después tus
+> correcciones se extraen a una rama limpia automáticamente. Re-revisá solo lo
+> que cambió.
 
 [![CI](https://github.com/EzeVillo/git-review-workflow/actions/workflows/ci.yml/badge.svg)](https://github.com/EzeVillo/git-review-workflow/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -12,14 +13,45 @@
 
 ---
 
-Cuando revisás un PR normalmente querés ver **todos** sus cambios de una y
-toquetearlos. `git review-pr` crea una rama `review/<rama>` cuyo working tree
-tiene el tip del PR, pero con el `HEAD` parado en el merge-base con tu rama base.
-El resultado: todo el PR aparece como **cambios staged sin commitear**. Como es
-simplemente tu working tree, abrís todo el PR en tu IDE favorito — leés el diff,
-lo editás inline, lo corrés — y cuando terminás, `git finish-review` extrae tus
-ediciones a una rama separada `review-fixes/<rama>` (o directo sobre la rama del
-PR).
+Revisar en una web está bien para dejar comentarios, pero es malo para realmente
+*correr* y *editar* el código. `git review-pr` pone todo el PR en tu working tree
+como **cambios staged sin commitear**: crea una rama `review/<rama>` cuyo working
+tree tiene el tip del PR, pero con el `HEAD` parado en el merge-base con tu rama
+base. Como es simplemente tu working tree, abrís todo el PR en cualquier editor —
+leés el diff, lo editás inline, corrés los tests — y cuando terminás,
+`git finish-review` extrae *tus* ediciones a una rama separada `review-fixes/<rama>`
+(o directo sobre la rama del PR), manteniéndolas limpiamente aparte del trabajo
+del autor. Re-revisá solo los commits nuevos tras una actualización con `--delta`.
+
+## ¿Por qué no usar la vista de PR de tu IDE?
+
+La mayoría de las herramientas te dejan *ver* un PR. Lo que esto resuelve es
+*actuar* sobre uno — editarlo y correrlo como cambios normales del working tree y
+después devolver tus correcciones sin stash ni cherry-pick manuales.
+
+|                                  |     Ver el PR      | Editar y correr como working tree | Extraer tus fixes automáticamente | Re-review incremental (`--delta`) | Independiente del editor |
+|----------------------------------|:------------------:|:---------------------------------:|:---------------------------------:|:---------------------------------:|:------------------------:|
+| **git-review-workflow**          |         ✅          |                 ✅                 |                 ✅                 |                 ✅                 |            ✅             |
+| `gh pr checkout` / `glab`        | ⚠️ checkout pelado |                 ✅                 |                 ❌                 |                 ❌                 |            ✅             |
+| JetBrains *Review Pull Request*  |         ✅          |         ⚠️ solo en el IDE         |                 ❌                 |                 ❌                 |            ❌             |
+| Extensión *GitHub PR* de VS Code |         ✅          |         ⚠️ solo en el IDE         |                 ❌                 |                 ❌                 |            ❌             |
+| Web de GitHub / GitLab           |         ✅          |                 ❌                 |                 ❌                 |            ⚠️ parcial             |            ✅             |
+
+Como el PR son simplemente cambios staged, cualquier cosa que lea un diff de Git
+lo ve entero — incluidos agentes de IA como Claude Code o Codex que no tienen una
+función propia para revisar PRs. Apuntás uno al diff staged y puede revisar o
+corregir todo el PR ahí mismo.
+
+Y para las cosas chicas — un rename, un typo, un nombre de variable más claro —
+arreglarlo vos mismo es más rápido y menos burocrático que dejar un comentario y
+esperar la ida y vuelta, sobre todo cuando ya estás mirando el PR en tu editor.
+Como tus ediciones se extraen automáticamente, el arreglo te cuesta más o menos
+lo mismo que habría costado el comentario. O le pasás el diff staged a un agente
+y que haga el cambio por vos.
+
+Si mayormente *comentás*, el panel nativo de PR de tu IDE alcanza. Si revisás
+editando y corriendo el código — en cualquier editor o agente — esto es lo que
+falta.
 
 ## Inicio rápido
 

@@ -14,6 +14,27 @@
 #
 $ErrorActionPreference = 'Stop'
 
+# User PATH accessors. In production these read and write the real user PATH.
+# Tests set $env:GRW_USER_PATH_STORE to a file to redirect them there instead,
+# keeping each run isolated from the machine and from other tests (the real user
+# PATH is a single shared global, which otherwise makes parallel runs flaky).
+function _grw_GetUserPath {
+    if ($env:GRW_USER_PATH_STORE) {
+        if (Test-Path $env:GRW_USER_PATH_STORE) {
+            [System.IO.File]::ReadAllText($env:GRW_USER_PATH_STORE)
+        }
+    } else {
+        [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+    }
+}
+function _grw_SetUserPath([string]$Value) {
+    if ($env:GRW_USER_PATH_STORE) {
+        [System.IO.File]::WriteAllText($env:GRW_USER_PATH_STORE, $Value)
+    } else {
+        [System.Environment]::SetEnvironmentVariable('PATH', $Value, 'User')
+    }
+}
+
 $installDir = if ($env:PREFIX) { $env:PREFIX } else { "$env:USERPROFILE\.local\bin" }
 
 $cmds = @(
@@ -46,13 +67,13 @@ if ($removed.Count -gt 0) {
 $dirHasOtherFiles = (Test-Path $installDir) -and `
     ($null -ne (Get-ChildItem -Force $installDir | Select-Object -First 1))
 if (-not $dirHasOtherFiles) {
-    $userPath = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+    $userPath = _grw_GetUserPath
     if ($userPath) {
         $sep = [System.IO.Path]::PathSeparator
         $entries = $userPath -split [regex]::Escape($sep)
         $kept = $entries | Where-Object { $_ -ne '' -and $_ -ne $installDir }
         if ($kept.Count -ne ($entries | Where-Object { $_ -ne '' }).Count) {
-            [System.Environment]::SetEnvironmentVariable('PATH', ($kept -join $sep), 'User')
+            _grw_SetUserPath ($kept -join $sep)
             Write-Host "note: removed $installDir from your user PATH - open a new terminal for the change to take effect"
         }
     }

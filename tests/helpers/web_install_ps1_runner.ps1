@@ -24,10 +24,10 @@ $env:PREFIX = $_installDir
 $_savedPath = $env:PATH
 $env:PATH = "$_installDir$([System.IO.Path]::PathSeparator)$_savedPath"
 
-# The installer reads/writes the *User*-scope PATH from the registry, which the
-# process-PATH tweak above does NOT shadow. Snapshot it now and restore it in
-# the finally block so the test never pollutes the real user PATH.
-$_savedUserPath = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+# The installer reads/writes the *User*-scope PATH. Redirect it to a per-run
+# store file (honoured via $env:GRW_USER_PATH_STORE) so the test never touches
+# or races on the real user PATH.
+$env:GRW_USER_PATH_STORE = Join-Path $TestTmpDir 'userpath.txt'
 
 # Track which URIs Invoke-RestMethod is called with.
 $script:_apiCalls = [System.Collections.Generic.List[string]]::new()
@@ -91,9 +91,7 @@ try {
     }
 } finally {
     $env:PATH = $_savedPath
-    # Undo any registry write the installer made to the User-scope PATH.
-    $_currentUserPath = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
-    if ($_currentUserPath -ne $_savedUserPath) {
-        [System.Environment]::SetEnvironmentVariable('PATH', $_savedUserPath, 'User')
-    }
+    # The installer's user-PATH writes went to the store file, not the registry,
+    # so there is nothing to undo on the real machine.
+    $env:GRW_USER_PATH_STORE = $null
 }

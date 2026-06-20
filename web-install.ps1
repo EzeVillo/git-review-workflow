@@ -14,6 +14,27 @@
 #
 $ErrorActionPreference = 'Stop'
 
+# User PATH accessors. In production these read and write the real user PATH.
+# Tests set $env:GRW_USER_PATH_STORE to a file to redirect them there instead,
+# keeping each run isolated from the machine and from other tests (the real user
+# PATH is a single shared global, which otherwise makes parallel runs flaky).
+function _grw_GetUserPath {
+    if ($env:GRW_USER_PATH_STORE) {
+        if (Test-Path $env:GRW_USER_PATH_STORE) {
+            [System.IO.File]::ReadAllText($env:GRW_USER_PATH_STORE)
+        }
+    } else {
+        [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+    }
+}
+function _grw_SetUserPath([string]$Value) {
+    if ($env:GRW_USER_PATH_STORE) {
+        [System.IO.File]::WriteAllText($env:GRW_USER_PATH_STORE, $Value)
+    } else {
+        [System.Environment]::SetEnvironmentVariable('PATH', $Value, 'User')
+    }
+}
+
 $repo       = 'EzeVillo/git-review-workflow'
 $installDir = if ($env:PREFIX) { $env:PREFIX } else { "$env:USERPROFILE\.local\bin" }
 $api        = "https://api.github.com/repos/$repo"
@@ -60,9 +81,9 @@ try {
     Write-Host "Installed: $($installed -join ', ')"
 
     # Add installDir to the user PATH if it isn't already there.
-    $userPath = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+    $userPath = _grw_GetUserPath
     if ($userPath -notlike "*$installDir*") {
-        [System.Environment]::SetEnvironmentVariable('PATH', "$installDir;$userPath", 'User')
+        _grw_SetUserPath "$installDir;$userPath"
         Write-Host "note: added $installDir to your PATH — open a new terminal for the change to take effect"
     }
 } finally {

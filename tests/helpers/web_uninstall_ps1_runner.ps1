@@ -79,19 +79,20 @@ switch ($TestName) {
     }
 
     'path_cleanup' {
-        # Exercise the User PATH cleanup. Save and restore the real value so the
-        # machine is never left modified, even on failure.
+        # Exercise the User PATH cleanup against a per-test PATH store file, so
+        # the run never touches (or races with other tests on) the real user
+        # PATH. The uninstaller honours $env:GRW_USER_PATH_STORE.
         $sep   = [System.IO.Path]::PathSeparator
         $keep  = Join-Path $TestTmpDir 'keep-on-path'
-        $saved = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+        $env:GRW_USER_PATH_STORE = Join-Path $TestTmpDir 'userpath-cleanup.txt'
         try {
-            [System.Environment]::SetEnvironmentVariable(
-                'PATH', "$_installDir$sep$keep", 'User')
+            [System.IO.File]::WriteAllText(
+                $env:GRW_USER_PATH_STORE, "$_installDir$sep$keep")
 
             _populate_install_dir
             _invoke_uninstaller
 
-            $after = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+            $after = [System.IO.File]::ReadAllText($env:GRW_USER_PATH_STORE)
             $entries = $after -split [regex]::Escape($sep)
             if ($entries -contains $_installDir) {
                 throw "install dir was not removed from PATH: $after"
@@ -100,7 +101,7 @@ switch ($TestName) {
                 throw "an unrelated PATH entry was lost: $after"
             }
         } finally {
-            [System.Environment]::SetEnvironmentVariable('PATH', $saved, 'User')
+            $env:GRW_USER_PATH_STORE = $null
         }
     }
 
@@ -112,10 +113,10 @@ switch ($TestName) {
         $sep   = [System.IO.Path]::PathSeparator
         $keep  = Join-Path $TestTmpDir 'keep-on-path'
         $other = Join-Path $_installDir 'someone-elses-tool'
-        $saved = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+        $env:GRW_USER_PATH_STORE = Join-Path $TestTmpDir 'userpath-shared.txt'
         try {
-            [System.Environment]::SetEnvironmentVariable(
-                'PATH', "$_installDir$sep$keep", 'User')
+            [System.IO.File]::WriteAllText(
+                $env:GRW_USER_PATH_STORE, "$_installDir$sep$keep")
 
             _populate_install_dir
             Set-Content $other 'not ours'
@@ -123,7 +124,7 @@ switch ($TestName) {
             # Guard against false positives: the dir must really be on PATH and
             # our commands must really be present before we uninstall, otherwise
             # the post-conditions below would pass for the wrong reasons.
-            $pre = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+            $pre = [System.IO.File]::ReadAllText($env:GRW_USER_PATH_STORE)
             if (($pre -split [regex]::Escape($sep)) -notcontains $_installDir) {
                 throw "setup failed: install dir was not on PATH before uninstall"
             }
@@ -148,7 +149,7 @@ switch ($TestName) {
                 throw "uninstaller altered an unrelated file's contents"
             }
             # And, the point of this test: PATH must be left intact.
-            $after   = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+            $after   = [System.IO.File]::ReadAllText($env:GRW_USER_PATH_STORE)
             $entries = $after -split [regex]::Escape($sep)
             if ($entries -notcontains $_installDir) {
                 throw "install dir was wrongly removed from a shared PATH: $after"
@@ -157,7 +158,7 @@ switch ($TestName) {
                 throw "an unrelated PATH entry was lost: $after"
             }
         } finally {
-            [System.Environment]::SetEnvironmentVariable('PATH', $saved, 'User')
+            $env:GRW_USER_PATH_STORE = $null
         }
     }
 

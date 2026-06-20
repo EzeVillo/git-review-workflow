@@ -67,6 +67,31 @@ mark() {
 	[ "$(git config reviewworkflow.feature/y.reviewed)" = "$(git rev-parse origin/feature/y)" ]
 }
 
+@test "review-forget <branch> handles a branch name containing a dot" {
+	# A dotted name (e.g. release-1.2) is the fragile case: the marker key is
+	# reviewworkflow.release-1.2.reviewed, and git config must round-trip the
+	# subsection without splitting on the dot.
+	git config "reviewworkflow.release-1.2.reviewed" deadbeef
+
+	run git review-forget release-1.2
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"release-1.2"* ]]
+
+	run git config "reviewworkflow.release-1.2.reviewed"
+	[ "$status" -ne 0 ]
+}
+
+@test "review-forget --all forgets a dotted-name marker too" {
+	# --all reconstructs the source from the key; the dot must survive that.
+	git config "reviewworkflow.release-1.2.reviewed" deadbeef
+
+	run git review-forget --all
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"release-1.2"* ]]
+	run git config "reviewworkflow.release-1.2.reviewed"
+	[ "$status" -ne 0 ]
+}
+
 @test "review-forget <branch> with no marker is a no-op note and exits 0" {
 	# precondition: there is nothing to forget
 	run git config reviewworkflow.feature/x.reviewed

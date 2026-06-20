@@ -58,13 +58,20 @@ _git_clean_review() {
 	esac
 }
 
+# Source branches that have a recorded --delta marker. These outlive the
+# review/* branches, so they — not local heads — are what review-forget acts on.
+__grw_marked_branches() {
+	git config --get-regexp '^reviewworkflow\..*\.reviewed$' 2>/dev/null |
+		sed -n 's/^reviewworkflow\.\(.*\)\.reviewed .*/\1/p'
+}
+
 _git_review_forget() {
 	case "$cur" in
 	--*)
 		__gitcomp "--all --stale --dry-run --help"
 		;;
 	*)
-		__gitcomp_nl "$(__git_heads | sed -n 's#^review/##p')"
+		__gitcomp_nl "$(__grw_marked_branches)"
 		;;
 	esac
 }

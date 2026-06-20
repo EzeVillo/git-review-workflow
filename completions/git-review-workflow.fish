@@ -24,6 +24,13 @@ function __grw_review_branches
         | string replace -r '^review/' ''
 end
 
+# Source branches that have a recorded --delta marker, for review-forget. The
+# markers outlive the review/* branches, so this is the right candidate set.
+function __grw_marked_branches
+    git config --get-regexp '^reviewworkflow\..*\.reviewed$' 2>/dev/null \
+        | string replace -r '^reviewworkflow\.(.*)\.reviewed .*$' '$1'
+end
+
 # git review
 complete -c git -n '__grw_using review' -f -l help    -d 'list all available commands'
 complete -c git -n '__grw_using review' -f -s V -l version -d 'print the installed version'
@@ -50,7 +57,7 @@ complete -c git -n '__grw_using review-forget' -f -l all -d 'forget every record
 complete -c git -n '__grw_using review-forget' -f -l stale -d 'forget markers whose origin branch is gone'
 complete -c git -n '__grw_using review-forget' -f -l dry-run -d 'with --stale, list what would be forgotten'
 complete -c git -n '__grw_using review-forget' -f -l help -d 'show help'
-complete -c git -n '__grw_using review-forget' -f -a '(__grw_review_branches)'
+complete -c git -n '__grw_using review-forget' -f -a '(__grw_marked_branches)'
 
 # Commands that take no arguments beyond --help.
 for sub in review-next review-prev review-status review-list review-abort

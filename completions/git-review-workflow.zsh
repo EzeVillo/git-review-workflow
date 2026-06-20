@@ -77,11 +77,13 @@ _git-review-forget() {
 		'--all[forget every recorded marker]' \
 		'--stale[forget markers whose origin branch no longer exists]' \
 		'--dry-run[with --stale, list what would be forgotten]' \
-		'1:review branch:->reviewbranches'
+		'1:marked branch:->markedbranches'
 
-	if [ "$state" = reviewbranches ]; then
+	# The --delta markers outlive the review/* branches, so complete from the
+	# recorded markers, not from local heads.
+	if [ "$state" = markedbranches ]; then
 		local -a names
-		names=(${(f)"$(git for-each-ref --format='%(refname:short)' refs/heads/review/ 2>/dev/null | sed 's#^review/##')"})
-		_describe 'review branch' names
+		names=(${(f)"$(git config --get-regexp '^reviewworkflow\..*\.reviewed$' 2>/dev/null | sed -n 's/^reviewworkflow\.\(.*\)\.reviewed .*/\1/p')"})
+		_describe 'marked branch' names
 	fi
 }

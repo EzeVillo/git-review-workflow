@@ -14,7 +14,7 @@ git review workflow — review a pull request branch locally
 usage: $prog (--help | --version)
 
 Commands:
-  git review-pr <branch> [base | --delta | --from <commit>] [--step]
+  git review-pr <branch> [base | --delta | --from <commit>] [--step] [--local]
                      stage a PR diff on a new review/<branch> branch
   git review-next    advance a --step review to the next commit
   git review-prev    go back to the previous commit in a --step review

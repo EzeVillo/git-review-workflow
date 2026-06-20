@@ -198,17 +198,17 @@ git config --global http.sslBackend openssl
 > **Cómo leer la sintaxis:** `<x>` es **obligatorio**, `[x]` es **opcional**, y
 > `a | b` significa **elegí uno, no los dos**.
 
-| Comando                                                              | Qué hace                                                                                    |
-|----------------------------------------------------------------------|---------------------------------------------------------------------------------------------|
-| `git review [--help \| --version]`                                   | Lista todos los comandos o imprime la versión instalada.                                    |
-| `git review-pr <rama> [base \| --delta \| --from <commit>] [--step]` | Hace fetch de `origin` y deja el diff del PR staged en una nueva rama `review/<rama>`.      |
-| `git review-next` / `git review-prev`                                | Mueve una review `--step` al commit siguiente / anterior.                                   |
-| `git review-status`                                                  | Muestra el estado de la review en la rama actual.                                           |
-| `git review-list`                                                    | Lista todas las ramas `review/*` en curso (la actual marcada con `*`).                      |
-| `git finish-review [--onto-source] [--push] [--resume]`              | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR). |
-| `git review-abort`                                                   | Cancela la review actual y vuelve a donde empezaste.                                        |
-| `git clean-review [rama]`                                            | Borra las ramas `review/*` y `review-fixes/*` de `<rama>`, o todas.                         |
-| `git review-forget (<rama> \| --all \| --stale [--dry-run])`         | Descarta el marcador de `--delta` de una rama, de todas, o solo de las obsoletas.           |
+| Comando                                                                        | Qué hace                                                                                                                                |
+|--------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|
+| `git review [--help \| --version]`                                             | Lista todos los comandos o imprime la versión instalada.                                                                                |
+| `git review-pr <rama> [base \| --delta \| --from <commit>] [--step] [--local]` | Hace fetch de `origin` y deja el diff del PR staged en una nueva rama `review/<rama>` (`--local` revisa ramas locales sin hacer fetch). |
+| `git review-next` / `git review-prev`                                          | Mueve una review `--step` al commit siguiente / anterior.                                                                               |
+| `git review-status`                                                            | Muestra el estado de la review en la rama actual.                                                                                       |
+| `git review-list`                                                              | Lista todas las ramas `review/*` en curso (la actual marcada con `*`).                                                                  |
+| `git finish-review [--onto-source] [--push] [--resume]`                        | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR).                                             |
+| `git review-abort`                                                             | Cancela la review actual y vuelve a donde empezaste.                                                                                    |
+| `git clean-review [rama]`                                                      | Borra las ramas `review/*` y `review-fixes/*` de `<rama>`, o todas.                                                                     |
+| `git review-forget (<rama> \| --all \| --stale [--dry-run])`                   | Descarta el marcador de `--delta` de una rama, de todas, o solo de las obsoletas.                                                       |
 
 ### `git review-pr`
 
@@ -235,8 +235,16 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   con el árbol limpio. Cuando se acaban los commits, corrés `git finish-review` y
   todas tus ediciones bancadas se re-aplican sobre el tip del PR — igual que en
   una review completa.
-- Siempre actualiza desde `origin` primero y **falla** si no puede. La revisión
-  se arma desde `origin/<rama>`, nunca desde una copia local vieja.
+- `--local` — revisar tus ramas **locales** directamente, sin hacer fetch. La
+  review se arma desde tu `<rama>` local y se compara contra tu base local, así
+  que funciona offline y te deja revisar tu propio trabajo antes de pushear.
+  Mantiene su propio marcador de `--delta`, separado del remoto, así una review
+  local y una remota de la misma rama nunca se pisan el progreso. `finish-review
+  --push` se rechaza en una review local — extraé tus cambios localmente y
+  pusheá a mano si querés.
+- Siempre actualiza desde `origin` primero y **falla** si no puede (salvo con
+  `--local`). La revisión se arma desde `origin/<rama>`, nunca desde una copia
+  local vieja.
 - No corre si tenés cambios locales — arrancá desde una rama limpia.
 - **Los merges de la rama base se excluyen.** Si el autor mergeó la base (ej.
   `develop`) dentro del PR, ese contenido mergeado queda afuera de la review en
@@ -290,10 +298,12 @@ real, así un `--delta` posterior no se saltea commits que nunca revisaste.
 Descarta el tip de la última review que usa `--delta`. El marcador se conserva a
 propósito para que `--delta` sobreviva a `clean-review`; así es como lo borrás.
 
-- `<rama>` — olvidar el marcador de una rama de origen.
+- `<rama>` — olvidar el/los marcador(es) de una rama de origen: el remoto y el de
+  `--local` si existe.
 - `--all` — olvidar todos los marcadores (no toca `reviewworkflow.base`).
 - `--stale` — hace fetch y prune de `origin`, y olvida solo los marcadores cuya
-  `origin/<rama>` ya no existe (PRs mergeados y borrados). Si el fetch falla,
+  rama ya no existe: los remotos cuya `origin/<rama>` se fue (PRs mergeados y
+  borrados) y los de `--local` cuya `<rama>` local se fue. Si el fetch falla,
   aborta sin borrar nada.
 - `--dry-run` — con `--stale`, lista lo que olvidaría sin hacerlo. Se rechaza con
   los otros modos, donde el objetivo ya es explícito.
@@ -320,7 +330,8 @@ ejemplo), apuntá el flujo a ese remoto:
 git config reviewworkflow.remote upstream
 ```
 
-Afecta a `review-pr`, `finish-review --push` y `review-forget --stale`.
+Afecta a `review-pr`, `finish-review --push` y `review-forget --stale`. Una review
+`--local` ignora el remoto por completo.
 
 ## Flujo típico
 
@@ -346,6 +357,9 @@ git finish-review                            # re-aplicar todos tus cambios sobr
 
 # Elegir un commit de inicio explícito:
 git review-pr feature/login --from a1b2c3d
+
+# Revisar tu propia rama local antes de pushear, offline:
+git review-pr feature/login --local
 ```
 
 ## Requisitos

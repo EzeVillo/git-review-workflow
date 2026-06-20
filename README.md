@@ -195,17 +195,17 @@ git config --global http.sslBackend openssl
 > **How to read the syntax:** `<x>` is **required**, `[x]` is **optional**, and
 > `a | b` means **pick one, not both**.
 
-| Command                                                                | What it does                                                                                  |
-|------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------|
-| `git review [--help \| --version]`                                     | List all commands or print the installed version.                                             |
-| `git review-pr <branch> [base \| --delta \| --from <commit>] [--step]` | Fetch `origin`, then stage the PR diff on a new `review/<branch>` branch.                     |
-| `git review-next` / `git review-prev`                                  | Move a `--step` review to the next / previous commit.                                         |
-| `git review-status`                                                    | Show the state of the review on the current branch.                                           |
-| `git review-list`                                                      | List every `review/*` branch in progress (current one marked `*`).                            |
-| `git finish-review [--onto-source] [--push] [--resume]`                | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch). |
-| `git review-abort`                                                     | Cancel the current review and return to where you started.                                    |
-| `git clean-review [branch]`                                            | Delete the `review/*` and `review-fixes/*` branches for `<branch>`, or all of them.           |
-| `git review-forget (<branch> \| --all \| --stale [--dry-run])`         | Discard the `--delta` marker for one branch, all of them, or only stale ones.                 |
+| Command                                                                          | What it does                                                                                                                  |
+|----------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------|
+| `git review [--help \| --version]`                                               | List all commands or print the installed version.                                                                             |
+| `git review-pr <branch> [base \| --delta \| --from <commit>] [--step] [--local]` | Fetch `origin`, then stage the PR diff on a new `review/<branch>` branch (`--local` reviews local branches without fetching). |
+| `git review-next` / `git review-prev`                                            | Move a `--step` review to the next / previous commit.                                                                         |
+| `git review-status`                                                              | Show the state of the review on the current branch.                                                                           |
+| `git review-list`                                                                | List every `review/*` branch in progress (current one marked `*`).                                                            |
+| `git finish-review [--onto-source] [--push] [--resume]`                          | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch).                                 |
+| `git review-abort`                                                               | Cancel the current review and return to where you started.                                                                    |
+| `git clean-review [branch]`                                                      | Delete the `review/*` and `review-fixes/*` branches for `<branch>`, or all of them.                                           |
+| `git review-forget (<branch> \| --all \| --stale [--dry-run])`                   | Discard the `--delta` marker for one branch, all of them, or only stale ones.                                                 |
 
 ### `git review-pr`
 
@@ -231,8 +231,16 @@ Has two independent axes — **range** (where the review starts) and **layout**
   `git review-next` to bank your edits and move to the next commit with a clean
   tree. When the commits run out, run `git finish-review` and all your banked
   edits are replayed onto the PR tip — exactly as in a whole-PR review.
-- Always updates from `origin` first and **fails** if it cannot. The review is
-  built from `origin/<branch>`, never a stale local copy.
+- `--local` — review your **local** branches directly, without fetching. The
+  review is built from your local `<branch>` and diffed against your local base,
+  so it works offline and lets you review your own work before pushing. It keeps
+  its own `--delta` marker, separate from the remote one, so local and remote
+  reviews of the same branch name never overwrite each other's progress.
+  `finish-review --push` is refused for a local review — extract your edits
+  locally and push by hand if you want to.
+- Always updates from `origin` first and **fails** if it cannot (unless
+  `--local`). The review is built from `origin/<branch>`, never a stale local
+  copy.
 - Refuses to run if you have local changes — start from a clean branch.
 - **Merges of the base branch are excluded.** If the author merged the base
   (e.g. `develop`) into the PR, that merged-in content is left out of the review
@@ -286,10 +294,12 @@ reviewed.
 Discards the recorded last-reviewed tip that `--delta` relies on. The marker is
 kept deliberately so `--delta` survives `clean-review`; this is how you clear it.
 
-- `<branch>` — forget the marker for one source branch.
+- `<branch>` — forget the marker(s) for one source branch, both the remote one
+  and the `--local` one if present.
 - `--all` — forget every recorded marker (leaves `reviewworkflow.base` alone).
-- `--stale` — fetch and prune `origin`, then forget only the markers whose
-  `origin/<branch>` no longer exists (e.g. PRs that were merged and deleted).
+- `--stale` — fetch and prune `origin`, then forget only the markers whose branch
+  no longer exists: remote markers whose `origin/<branch>` is gone (e.g. PRs that
+  were merged and deleted), and `--local` markers whose local `<branch>` is gone.
   Aborts without removing anything if the fetch fails.
 - `--dry-run` — with `--stale`, list what would be forgotten without doing it.
   Rejected with the other modes, where the target is already explicit.
@@ -316,7 +326,8 @@ point the workflow at that remote:
 git config reviewworkflow.remote upstream
 ```
 
-It affects `review-pr`, `finish-review --push`, and `review-forget --stale`.
+It affects `review-pr`, `finish-review --push`, and `review-forget --stale`. A
+`--local` review ignores the remote entirely.
 
 ## Typical workflow
 
@@ -342,6 +353,9 @@ git finish-review                            # replay all your edits onto the ti
 
 # Pick an explicit starting commit:
 git review-pr feature/login --from a1b2c3d
+
+# Review your own local branch before pushing, offline:
+git review-pr feature/login --local
 ```
 
 ## Requirements

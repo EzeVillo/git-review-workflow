@@ -27,8 +27,15 @@ end
 # Source branches that have a recorded --delta marker, for review-forget. The
 # markers outlive the review/* branches, so this is the right candidate set.
 function __grw_marked_branches
-    git config --get-regexp '^reviewworkflow\..*\.reviewed$' 2>/dev/null \
-        | string replace -r '^reviewworkflow\.(.*)\.reviewed .*$' '$1'
+    # Both marker sections, reviewworkflow.* (remote) and reviewworkflowlocal.*
+    # (--local). A branch reviewed both ways collapses to one entry via sort -u, so
+    # it shows once by its plain name (review-forget <branch> clears both).
+    begin
+        git config --get-regexp '^reviewworkflow\..*\.reviewed$' 2>/dev/null
+        git config --get-regexp '^reviewworkflowlocal\..*\.reviewed$' 2>/dev/null
+    end \
+        | string replace -r '^reviewworkflow(local)?\.(.*)\.reviewed .*$' '$2' \
+        | sort -u
 end
 
 # git review
@@ -39,6 +46,7 @@ complete -c git -n '__grw_using review' -f -s V -l version -d 'print the install
 complete -c git -n '__grw_using review-pr' -f -l delta -d 'review only commits since your last review'
 complete -c git -n '__grw_using review-pr' -f -l from -d 'review only commits after <commit>'
 complete -c git -n '__grw_using review-pr' -f -l step -d 'review one commit at a time'
+complete -c git -n '__grw_using review-pr' -f -l local -d 'review your local branches directly, without fetching'
 complete -c git -n '__grw_using review-pr' -f -l help -d 'show help'
 complete -c git -n '__grw_using review-pr' -f -a '(__grw_branches)'
 

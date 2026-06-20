@@ -67,6 +67,14 @@ if [ -z "$src" ] || [ -z "$tip" ]; then
 	exit 1
 fi
 
+# A --local review never touches the remote: pushing would couple it back to a
+# remote whose tip we never validated against, so it is refused outright. Extract
+# your edits locally (default or --onto-source), then push by hand if you want to.
+if [ "$(git config "branch.$cur.reviewlocal" || true)" = "1" ] && [ "$push" -eq 1 ]; then
+	echo "error: --push does not apply to a local review (git review-pr --local)" >&2
+	exit 1
+fi
+
 # In commit-by-commit mode, bank the current commit's edits, move to the tip and
 # replay every banked edit there, so what follows sees the same state as a normal
 # whole-PR review. With --resume we skip the replay: the working tree already

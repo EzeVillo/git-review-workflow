@@ -24,6 +24,7 @@ Stage a pull request diff on a review/<branch> branch for inline review.
   --delta           review only the commits added since your last review
   --from <commit>   review only the commits after <commit>
   --step            review one commit at a time; advance with git review-next
+  --local           review your local branches directly, without fetching
 EOF
 }
 
@@ -45,6 +46,7 @@ base_explicit=0
 from=""
 delta=0
 step=0
+local_mode=0
 while [ $# -gt 0 ]; do
 	case "$1" in
 	-h | --help)
@@ -53,6 +55,7 @@ while [ $# -gt 0 ]; do
 		;;
 	-d | --delta) delta=1 ;;
 	--step) step=1 ;;
+	--local) local_mode=1 ;;
 	--from)
 		shift
 		[ $# -gt 0 ] || die "--from requires a commit"
@@ -107,17 +110,37 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
 	die "you have local changes; commit or stash them first"
 fi
 
-git fetch --quiet "$remote" || die "could not update from $remote"
+# --local reviews your local branches directly; the default reviews the remote's.
+# The two are kept apart everywhere: which ref the tip comes from, how it is named
+# in messages, and the delta marker — local markers live in their own config
+# section (reviewworkflowlocal.*) so a local and a remote review of the same branch
+# name never overwrite each other's progress. A separate section, rather than a
+# reviewworkflow.<src>.local.reviewed key, is deliberate: the latter would be
+# ambiguous for a branch literally named "<src>.local".
+if [ "$local_mode" -eq 1 ]; then
+	srcref="refs/heads/$src"
+	srclabel="$src"
+	baseref="refs/heads/$base"
+	baselabel="$base"
+	markerkey="reviewworkflowlocal.$src.reviewed"
+else
+	git fetch --quiet "$remote" || die "could not update from $remote"
+	srcref="refs/remotes/$remote/$src"
+	srclabel="$remote/$src"
+	baseref="refs/remotes/$remote/$base"
+	baselabel="$remote/$base"
+	markerkey="reviewworkflow.$src.reviewed"
+fi
 
-git rev-parse --verify --quiet "refs/remotes/$remote/$src" >/dev/null ||
-	die "$remote/$src not found"
+git rev-parse --verify --quiet "$srcref" >/dev/null ||
+	die "$srclabel not found"
 
 rb="review/$src"
 git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null &&
 	die "$rb already exists; run git clean-review $src first"
 
-tip="$(git rev-parse "$remote/$src")"
-prev="$(git config "reviewworkflow.$src.reviewed" || true)"
+tip="$(git rev-parse "$srcref")"
+prev="$(git config "$markerkey" || true)"
 
 # Resolve the lower bound of the review range (exclusive).
 if [ "$delta" -eq 1 ]; then
@@ -130,17 +153,17 @@ if [ "$delta" -eq 1 ]; then
 elif [ -n "$from" ]; then
 	start="$(git rev-parse --verify --quiet "$from^{commit}")" || die "unknown commit: $from"
 	git merge-base --is-ancestor "$start" "$tip" ||
-		die "$from is not an ancestor of $remote/$src"
+		die "$from is not an ancestor of $srclabel"
 	[ "$start" != "$tip" ] || die "no commits to review after $from"
 	range="since $(git rev-parse --short "$start")"
 else
 	[ -n "$base" ] ||
 		die "no base branch set; pass one as an argument or run: git config reviewworkflow.base <branch>"
-	git rev-parse --verify --quiet "refs/remotes/$remote/$base" >/dev/null ||
-		die "$remote/$base not found"
-	start="$(git merge-base "$remote/$base" "$remote/$src")" ||
-		die "could not compute merge-base with $remote/$base"
-	range="vs $remote/$base"
+	git rev-parse --verify --quiet "$baseref" >/dev/null ||
+		die "$baselabel not found"
+	start="$(git merge-base "$baseref" "$srcref")" ||
+		die "could not compute merge-base with $baselabel"
+	range="vs $baselabel"
 	if [ -n "$prev" ] && [ "$prev" != "$tip" ] && git merge-base --is-ancestor "$prev" "$tip"; then
 		n="$(git rev-list --count "$prev..$tip")"
 		echo "note: previously reviewed at $(git rev-parse --short "$prev"); $n new commit(s) since (use --delta to review only those)" >&2
@@ -168,7 +191,10 @@ if [ "$step" -eq 1 ]; then
 	if [ -n "$prev" ]; then
 		git config "branch.$rb.reviewprevreviewed" "$prev"
 	fi
-	git config "reviewworkflow.$src.reviewed" "$tip"
+	if [ "$local_mode" -eq 1 ]; then
+		git config "branch.$rb.reviewlocal" "1"
+	fi
+	git config "$markerkey" "$tip"
 	if [ -n "$returnbranch" ]; then
 		git config "branch.$rb.reviewreturn" "$returnbranch"
 	fi
@@ -184,8 +210,8 @@ fi
 # of the review. This is a no-op when the base was not merged in (it never
 # invents deletions), and degrades gracefully on git without merge-tree.
 lower="$start"
-if [ -n "$base" ] && git rev-parse --verify --quiet "refs/remotes/$remote/$base" >/dev/null; then
-	mb="$(git merge-base "$remote/$base" "$tip" 2>/dev/null || true)"
+if [ -n "$base" ] && git rev-parse --verify --quiet "$baseref" >/dev/null; then
+	mb="$(git merge-base "$baseref" "$tip" 2>/dev/null || true)"
 	if [ -n "$mb" ] && ! git merge-base --is-ancestor "$mb" "$start"; then
 		if ltree="$(git merge-tree --write-tree "$start" "$mb" 2>/dev/null)"; then
 			lower="$(git commit-tree "$ltree" -p "$start" -m 'review lower bound')"
@@ -204,7 +230,10 @@ git config "branch.$rb.reviewtip" "$tip"
 if [ -n "$prev" ]; then
 	git config "branch.$rb.reviewprevreviewed" "$prev"
 fi
-git config "reviewworkflow.$src.reviewed" "$tip"
+if [ "$local_mode" -eq 1 ]; then
+	git config "branch.$rb.reviewlocal" "1"
+fi
+git config "$markerkey" "$tip"
 if [ -n "$returnbranch" ]; then
 	git config "branch.$rb.reviewreturn" "$returnbranch"
 fi

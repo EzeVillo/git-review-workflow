@@ -27,6 +27,7 @@ _git-review-pr() {
 		'(--from)--delta[review only the commits added since your last review]' \
 		'(--delta)--from[review only the commits after <commit>]:commit:__git_commits' \
 		'--step[review one commit at a time]' \
+		'--local[review your local branches directly, without fetching]' \
 		'1:branch:__git_branch_names' \
 		'2:base branch:__git_branch_names'
 }
@@ -83,7 +84,7 @@ _git-review-forget() {
 	# recorded markers, not from local heads.
 	if [ "$state" = markedbranches ]; then
 		local -a names
-		names=(${(f)"$(git config --get-regexp '^reviewworkflow\..*\.reviewed$' 2>/dev/null | sed -n 's/^reviewworkflow\.\(.*\)\.reviewed .*/\1/p')"})
+		names=(${(f)"$({ git config --get-regexp '^reviewworkflow\..*\.reviewed$' 2>/dev/null; git config --get-regexp '^reviewworkflowlocal\..*\.reviewed$' 2>/dev/null; } | sed -n -e 's/^reviewworkflowlocal\.//' -e 's/^reviewworkflow\.//' -e 's/\.reviewed .*//p' | sort -u)"})
 		_describe 'marked branch' names
 	fi
 }

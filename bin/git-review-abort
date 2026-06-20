@@ -50,6 +50,15 @@ base="$(git config "branch.$cur.reviewbase" || true)"
 ret="$(git config "branch.$cur.reviewreturn" || true)"
 prevreviewed="$(git config "branch.$cur.reviewprevreviewed" || true)"
 
+# A local review tracks its delta progress under a separate config section
+# (reviewworkflowlocal.*); roll back the matching one so a cancelled review never
+# corrupts either side's progress.
+if [ "$(git config "branch.$cur.reviewlocal" || true)" = "1" ]; then
+	markerkey="reviewworkflowlocal.$src.reviewed"
+else
+	markerkey="reviewworkflow.$src.reviewed"
+fi
+
 target=""
 if [ -n "$ret" ] && git rev-parse --verify --quiet "refs/heads/$ret" >/dev/null; then
 	target="$ret"
@@ -68,9 +77,9 @@ git branch -D "$cur" >/dev/null
 # restoring the tip of your last actual review (or clearing it if there was none)
 # so a later --delta does not skip commits you never reviewed.
 if [ -n "$prevreviewed" ]; then
-	git config "reviewworkflow.$src.reviewed" "$prevreviewed"
+	git config "$markerkey" "$prevreviewed"
 else
-	git config --unset "reviewworkflow.$src.reviewed" 2>/dev/null || true
+	git config --unset "$markerkey" 2>/dev/null || true
 fi
 
 git for-each-ref --format='%(refname)' "refs/review-edits/$src/" | while read -r ref; do

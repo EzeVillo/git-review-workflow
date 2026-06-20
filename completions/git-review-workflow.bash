@@ -44,7 +44,7 @@ _git_review_abort() {
 }
 
 _git_finish_review() {
-	__gitcomp "--onto-source --push --resume --help"
+	__gitcomp "--onto-source --resume --help"
 }
 
 _git_clean_review() {

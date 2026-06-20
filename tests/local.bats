@@ -102,14 +102,6 @@ teardown() {
 	[[ "$output" == *"+FIXB"* ]]
 }
 
-@test "finish-review --push is refused on a local review" {
-	git review-pr feature/x --local
-	printf 'b\nFIXB\n' >b.txt
-	run git finish-review --push
-	[ "$status" -ne 0 ]
-	[[ "$output" == *"--push does not apply to a local review"* ]]
-}
-
 @test "abort rolls back the local marker, leaving the remote marker intact" {
 	git review-pr feature/x
 	remote_marker="$(git config reviewworkflow.feature/x.reviewed)"

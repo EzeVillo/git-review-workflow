@@ -4,7 +4,7 @@
 #
 # By default it creates review-fixes/<branch> on top of the PR tip with your
 # edits staged. With --onto-source it adds your edits as a commit on the PR
-# branch itself. With --push it pushes the result to origin.
+# branch itself. Either way the result stays local; push it yourself when ready.
 #
 set -eu
 
@@ -12,19 +12,17 @@ prog="git finish-review"
 
 usage() {
 	cat <<EOF
-usage: $prog [--onto-source] [--push] [--resume]
+usage: $prog [--onto-source] [--resume]
 
 Extract your review edits from the current review/* branch.
 
   (default)        create review-fixes/<branch> on top of the PR tip and stage your edits
   --onto-source    instead, add your edits as a commit on the PR branch itself
-  --push           push the resulting branch to origin
   --resume         continue after resolving conflicts from a commit-by-commit replay
 EOF
 }
 
 onto=0
-push=0
 resume=0
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -33,7 +31,6 @@ while [ $# -gt 0 ]; do
 		exit 0
 		;;
 	--onto-source) onto=1 ;;
-	--push) push=1 ;;
 	--resume) resume=1 ;;
 	*)
 		echo "error: unknown option $1" >&2
@@ -43,9 +40,6 @@ while [ $# -gt 0 ]; do
 	esac
 	shift
 done
-
-# Remote to push to; defaults to origin, override with reviewworkflow.remote.
-remote="$(git config reviewworkflow.remote || echo origin)"
 
 cur="$(git symbolic-ref --quiet --short HEAD || true)"
 [ -n "$cur" ] || {
@@ -64,14 +58,6 @@ src="$(git config "branch.$cur.reviewsource" || true)"
 tip="$(git config "branch.$cur.reviewtip" || true)"
 if [ -z "$src" ] || [ -z "$tip" ]; then
 	echo "error: missing review metadata; was $cur created with git review-pr?" >&2
-	exit 1
-fi
-
-# A --local review never touches the remote: pushing would couple it back to a
-# remote whose tip we never validated against, so it is refused outright. Extract
-# your edits locally (default or --onto-source), then push by hand if you want to.
-if [ "$(git config "branch.$cur.reviewlocal" || true)" = "1" ] && [ "$push" -eq 1 ]; then
-	echo "error: --push does not apply to a local review (git review-pr --local)" >&2
 	exit 1
 fi
 
@@ -111,7 +97,6 @@ if [ "$(git config "branch.$cur.reviewmode" || true)" = "step" ] && [ "$resume" 
 		git config "branch.$cur.reviewresume" conflict
 		flags=""
 		[ "$onto" -eq 1 ] && flags="$flags --onto-source"
-		[ "$push" -eq 1 ] && flags="$flags --push"
 		echo "conflict: some banked edits overlap the PR tip." >&2
 		echo "the working tree has conflict markers — resolve them, then run:" >&2
 		echo "    git finish-review --resume$flags" >&2
@@ -138,16 +123,6 @@ if [ -z "$patch" ]; then
 fi
 
 if [ "$onto" -eq 1 ]; then
-	if [ "$push" -eq 1 ]; then
-		git fetch --quiet "$remote" || {
-			echo "error: could not update from $remote" >&2
-			exit 1
-		}
-		if [ "$(git rev-parse "$remote/$src")" != "$tip" ]; then
-			echo "error: $remote/$src advanced since your review; re-review before pushing" >&2
-			exit 1
-		fi
-	fi
 	if git rev-parse --verify --quiet "refs/heads/$src" >/dev/null; then
 		if [ "$(git rev-parse "$src")" != "$tip" ]; then
 			echo "error: local $src is not at the reviewed tip; move or delete it first" >&2
@@ -162,17 +137,7 @@ if [ "$onto" -eq 1 ]; then
 		exit 1
 	}
 	git commit -q -m "review fixes ($src)"
-	if [ "$push" -eq 1 ]; then
-		git push --quiet "$remote" "$src" || {
-			echo "error: could not push $src" >&2
-			exit 1
-		}
-		# The PR tip now includes our fixes; record it so --delta skips them.
-		git config "reviewworkflow.$src.reviewed" "$(git rev-parse HEAD)"
-		echo "pushed review fixes to $remote/$src"
-	else
-		echo "committed review fixes on $src"
-	fi
+	echo "committed review fixes on $src"
 else
 	fb="review-fixes/$src"
 	git rev-parse --verify --quiet "refs/heads/$fb" >/dev/null && {
@@ -184,14 +149,5 @@ else
 		echo "error: could not apply review changes onto $fb" >&2
 		exit 1
 	}
-	if [ "$push" -eq 1 ]; then
-		git commit -q -m "review fixes ($src)"
-		git push --quiet -u "$remote" "$fb" || {
-			echo "error: could not push $fb" >&2
-			exit 1
-		}
-		echo "pushed $fb to $remote"
-	else
-		echo "$fb ready with your edits staged — review and commit"
-	fi
+	echo "$fb ready with your edits staged — review and commit"
 fi

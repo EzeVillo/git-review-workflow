@@ -56,7 +56,6 @@ _git-finish-review() {
 	_arguments -S \
 		'(-h --help)'{-h,--help}'[show help]' \
 		'--onto-source[add your edits as a commit on the PR branch itself]' \
-		'--push[push the resulting branch to the remote]' \
 		'--resume[continue after resolving replay conflicts]'
 }
 

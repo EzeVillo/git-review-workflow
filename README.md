@@ -202,7 +202,7 @@ git config --global http.sslBackend openssl
 | `git review-next` / `git review-prev`                                            | Move a `--step` review to the next / previous commit.                                                                         |
 | `git review-status`                                                              | Show the state of the review on the current branch.                                                                           |
 | `git review-list`                                                                | List every `review/*` branch in progress (current one marked `*`).                                                            |
-| `git finish-review [--onto-source] [--push] [--resume]`                          | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch).                                 |
+| `git finish-review [--onto-source] [--resume]`                                   | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch).                                 |
 | `git review-abort`                                                               | Cancel the current review and return to where you started.                                                                    |
 | `git clean-review [branch]`                                                      | Delete the `review/*` and `review-fixes/*` branches for `<branch>`, or all of them.                                           |
 | `git review-forget (<branch> \| --all \| --stale [--dry-run])`                   | Discard the `--delta` marker for one branch, all of them, or only stale ones.                                                 |
@@ -236,8 +236,6 @@ Has two independent axes — **range** (where the review starts) and **layout**
   so it works offline and lets you review your own work before pushing. It keeps
   its own `--delta` marker, separate from the remote one, so local and remote
   reviews of the same branch name never overwrite each other's progress.
-  `finish-review --push` is refused for a local review — extract your edits
-  locally and push by hand if you want to.
 - Always updates from `origin` first and **fails** if it cannot (unless
   `--local`). The review is built from `origin/<branch>`, never a stale local
   copy.
@@ -267,8 +265,7 @@ step position). The branch you are currently on is marked with a `*`.
 - Default — create `review-fixes/<branch>` on top of the PR tip with your edits
   staged, so you can review and commit them yourself.
 - `--onto-source` — add your edits as a commit on the PR branch itself.
-- `--push` — push the resulting branch to `origin`. With `--onto-source` it
-  refuses to push if `origin/<branch>` moved since your review.
+- Either way the result stays local — review it and push it yourself when ready.
 - `--resume` — in `--step` mode, if banked edits overlap the PR tip, the replay
   leaves conflict markers and stops. Resolve them in the working tree, then run
   `git finish-review --resume` (with the same flags) to continue.
@@ -326,8 +323,8 @@ point the workflow at that remote:
 git config reviewworkflow.remote upstream
 ```
 
-It affects `review-pr`, `finish-review --push`, and `review-forget --stale`. A
-`--local` review ignores the remote entirely.
+It affects `review-pr` and `review-forget --stale`. A `--local` review ignores
+the remote entirely.
 
 ## Typical workflow
 

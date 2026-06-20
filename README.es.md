@@ -205,7 +205,7 @@ git config --global http.sslBackend openssl
 | `git review-next` / `git review-prev`                                          | Mueve una review `--step` al commit siguiente / anterior.                                                                               |
 | `git review-status`                                                            | Muestra el estado de la review en la rama actual.                                                                                       |
 | `git review-list`                                                              | Lista todas las ramas `review/*` en curso (la actual marcada con `*`).                                                                  |
-| `git finish-review [--onto-source] [--push] [--resume]`                        | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR).                                             |
+| `git finish-review [--onto-source] [--resume]`                                 | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR).                                             |
 | `git review-abort`                                                             | Cancela la review actual y vuelve a donde empezaste.                                                                                    |
 | `git clean-review [rama]`                                                      | Borra las ramas `review/*` y `review-fixes/*` de `<rama>`, o todas.                                                                     |
 | `git review-forget (<rama> \| --all \| --stale [--dry-run])`                   | Descarta el marcador de `--delta` de una rama, de todas, o solo de las obsoletas.                                                       |
@@ -239,9 +239,7 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   review se arma desde tu `<rama>` local y se compara contra tu base local, así
   que funciona offline y te deja revisar tu propio trabajo antes de pushear.
   Mantiene su propio marcador de `--delta`, separado del remoto, así una review
-  local y una remota de la misma rama nunca se pisan el progreso. `finish-review
-  --push` se rechaza en una review local — extraé tus cambios localmente y
-  pusheá a mano si querés.
+  local y una remota de la misma rama nunca se pisan el progreso.
 - Siempre actualiza desde `origin` primero y **falla** si no puede (salvo con
   `--local`). La revisión se arma desde `origin/<rama>`, nunca desde una copia
   local vieja.
@@ -272,8 +270,8 @@ y posición de paso). La rama en la que estás parado se marca con un `*`.
   staged, para que las revises y commitees vos.
 - `--onto-source` — agrega tus ediciones como un commit sobre la rama del PR
   misma.
-- `--push` — pushea la rama resultante a `origin`. Con `--onto-source` se niega a
-  pushear si `origin/<rama>` se movió desde tu review.
+- En cualquiera de los dos casos el resultado queda local — revisalo y pusheá a
+  mano cuando estés listo.
 - `--resume` — en modo `--step`, si las ediciones bancadas chocan con el tip del
   PR, el replay deja marcadores de conflicto y se detiene. Resolvélos en el árbol
   y corré `git finish-review --resume` (con los mismos flags) para seguir.
@@ -330,8 +328,8 @@ ejemplo), apuntá el flujo a ese remoto:
 git config reviewworkflow.remote upstream
 ```
 
-Afecta a `review-pr`, `finish-review --push` y `review-forget --stale`. Una review
-`--local` ignora el remoto por completo.
+Afecta a `review-pr` y `review-forget --stale`. Una review `--local` ignora el
+remoto por completo.
 
 ## Flujo típico
 

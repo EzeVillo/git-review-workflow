@@ -50,7 +50,8 @@ brew tap EzeVillo/git-review-workflow https://github.com/EzeVillo/git-review-wor
 brew install EzeVillo/git-review-workflow/git-review-workflow
 ```
 
-El autocompletado queda configurado automáticamente.
+El autocompletado queda configurado automáticamente. Para actualizar a la última
+versión: `brew upgrade git-review-workflow`.
 
 ### Windows (PowerShell)
 

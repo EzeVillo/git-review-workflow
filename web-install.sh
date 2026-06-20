@@ -59,5 +59,8 @@ echo "Installed:$installed"
 
 case ":$PATH:" in
 *":$BIN_DIR:"*) ;;
-*) echo "note: $BIN_DIR is not on your PATH; add it to use the commands" ;;
+*)
+	echo "note: $BIN_DIR is not on your PATH. Add this line to your ~/.bashrc or ~/.zshrc:"
+	echo "  export PATH=\"$BIN_DIR:\$PATH\""
+	;;
 esac

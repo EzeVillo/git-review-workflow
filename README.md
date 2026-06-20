@@ -50,7 +50,8 @@ brew tap EzeVillo/git-review-workflow https://github.com/EzeVillo/git-review-wor
 brew install EzeVillo/git-review-workflow/git-review-workflow
 ```
 
-Tab completion is configured automatically.
+Tab completion is configured automatically. To update to the latest release:
+`brew upgrade git-review-workflow`.
 
 ### Windows (PowerShell)
 

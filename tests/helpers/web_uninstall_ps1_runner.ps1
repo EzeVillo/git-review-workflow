@@ -104,6 +104,63 @@ switch ($TestName) {
         }
     }
 
+    'path_kept_when_dir_shared' {
+        # When the install dir holds files we did not install (e.g. a shared
+        # ~/.local/bin with pip/pipx tools), the uninstaller must NOT strip the
+        # dir from PATH: web-install.ps1 never added it in that case. It should
+        # still delete our own commands.
+        $sep   = [System.IO.Path]::PathSeparator
+        $keep  = Join-Path $TestTmpDir 'keep-on-path'
+        $other = Join-Path $_installDir 'someone-elses-tool'
+        $saved = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+        try {
+            [System.Environment]::SetEnvironmentVariable(
+                'PATH', "$_installDir$sep$keep", 'User')
+
+            _populate_install_dir
+            Set-Content $other 'not ours'
+
+            # Guard against false positives: the dir must really be on PATH and
+            # our commands must really be present before we uninstall, otherwise
+            # the post-conditions below would pass for the wrong reasons.
+            $pre = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+            if (($pre -split [regex]::Escape($sep)) -notcontains $_installDir) {
+                throw "setup failed: install dir was not on PATH before uninstall"
+            }
+            if (-not (Test-Path (Join-Path $_installDir 'git-review'))) {
+                throw "setup failed: commands were not installed before uninstall"
+            }
+
+            _invoke_uninstaller
+
+            # Our commands must be gone (proves the uninstaller actually ran and
+            # this is not a no-op false positive).
+            foreach ($cmd in $_commands) {
+                if (Test-Path (Join-Path $_installDir $cmd)) {
+                    throw "uninstaller left our command behind: $cmd"
+                }
+            }
+            # The unrelated file must survive untouched.
+            if (-not (Test-Path $other)) {
+                throw "uninstaller deleted a file it did not install: $other"
+            }
+            if ((Get-Content $other) -ne 'not ours') {
+                throw "uninstaller altered an unrelated file's contents"
+            }
+            # And, the point of this test: PATH must be left intact.
+            $after   = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+            $entries = $after -split [regex]::Escape($sep)
+            if ($entries -notcontains $_installDir) {
+                throw "install dir was wrongly removed from a shared PATH: $after"
+            }
+            if ($entries -notcontains $keep) {
+                throw "an unrelated PATH entry was lost: $after"
+            }
+        } finally {
+            [System.Environment]::SetEnvironmentVariable('PATH', $saved, 'User')
+        }
+    }
+
     default {
         throw "Unknown test name: $TestName"
     }

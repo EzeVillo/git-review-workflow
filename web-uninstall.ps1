@@ -37,15 +37,23 @@ if ($removed.Count -gt 0) {
     Write-Host "No git review commands found in $installDir - nothing to remove."
 }
 
-# Undo the user PATH entry web-install.ps1 added, leaving every other entry
-# untouched. Only write back if the directory was actually present.
-$userPath = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
-if ($userPath) {
-    $sep = [System.IO.Path]::PathSeparator
-    $entries = $userPath -split [regex]::Escape($sep)
-    $kept = $entries | Where-Object { $_ -ne '' -and $_ -ne $installDir }
-    if ($kept.Count -ne ($entries | Where-Object { $_ -ne '' }).Count) {
-        [System.Environment]::SetEnvironmentVariable('PATH', ($kept -join $sep), 'User')
-        Write-Host "note: removed $installDir from your user PATH - open a new terminal for the change to take effect"
+# Undo the user PATH entry web-install.ps1 added, but only if this directory is
+# now empty (or gone) - i.e. nothing else lives there. web-install.ps1 only adds
+# the entry when it was absent, and a pre-existing .local\bin commonly holds
+# other tools (pip --user, pipx, ...); stripping it from PATH then would break
+# the user's setup for software we never installed. If other files remain, the
+# user relies on this directory, so leave every PATH entry untouched.
+$dirHasOtherFiles = (Test-Path $installDir) -and `
+    ($null -ne (Get-ChildItem -Force $installDir | Select-Object -First 1))
+if (-not $dirHasOtherFiles) {
+    $userPath = [System.Environment]::GetEnvironmentVariable('PATH', 'User')
+    if ($userPath) {
+        $sep = [System.IO.Path]::PathSeparator
+        $entries = $userPath -split [regex]::Escape($sep)
+        $kept = $entries | Where-Object { $_ -ne '' -and $_ -ne $installDir }
+        if ($kept.Count -ne ($entries | Where-Object { $_ -ne '' }).Count) {
+            [System.Environment]::SetEnvironmentVariable('PATH', ($kept -join $sep), 'User')
+            Write-Host "note: removed $installDir from your user PATH - open a new terminal for the change to take effect"
+        }
     }
 }

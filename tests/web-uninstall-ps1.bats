@@ -61,3 +61,12 @@ _run_ps1_test() {
 	run _run_ps1_test "path_cleanup"
 	[ "$status" -eq 0 ]
 }
+
+@test "web-uninstall.ps1 keeps PATH when the install dir is shared" {
+	case "$(uname -s)" in
+		CYGWIN* | MINGW* | MSYS*) ;;
+		*) skip "User PATH scope is Windows-only" ;;
+	esac
+	run _run_ps1_test "path_kept_when_dir_shared"
+	[ "$status" -eq 0 ]
+}

@@ -3,8 +3,8 @@
 # git-clean-review — delete the review/<branch> and review-fixes/<branch> branches.
 #
 # With no <branch> it deletes all of them. It never deletes the branch you are
-# currently on. The recorded last-reviewed tip is kept (so --delta keeps working)
-# unless you pass --forget.
+# currently on. The recorded last-reviewed tip (used by --delta) is left alone;
+# discard it with git review-forget.
 #
 set -eu
 
@@ -12,24 +12,22 @@ prog="git clean-review"
 
 usage() {
 	cat <<EOF
-usage: $prog [branch] [--forget]
+usage: $prog [branch]
 
 Delete the review/<branch> and review-fixes/<branch> branches.
 With no <branch>, delete all of them.
 
-  --forget    also discard the recorded last-reviewed tip (disables --delta)
+The --delta marker is left untouched; use git review-forget to discard it.
 EOF
 }
 
 arg=""
-forget=0
 while [ $# -gt 0 ]; do
 	case "$1" in
 	-h | --help)
 		usage
 		exit 0
 		;;
-	--forget) forget=1 ;;
 	-*)
 		echo "error: unknown option $1" >&2
 		usage >&2
@@ -55,21 +53,22 @@ else
 	list="$(git for-each-ref --format='%(refname:short)' refs/heads/review/ refs/heads/review-fixes/)"
 fi
 
+# No branches is not a stopping point: banked edit refs can still be orphaned
+# and need dropping, so fall through to that cleanup instead of exiting.
 if [ -z "$list" ]; then
 	echo "no review branches found" >&2
-	exit 0
+else
+	# Word splitting is intentional: branch names cannot contain whitespace.
+	# shellcheck disable=SC2086
+	for b in $list; do
+		git rev-parse --verify --quiet "refs/heads/$b" >/dev/null || continue
+		if [ "$b" = "$cur" ]; then
+			echo "skipping $b (currently checked out)" >&2
+			continue
+		fi
+		git branch -D "$b"
+	done
 fi
-
-# Word splitting is intentional: branch names cannot contain whitespace.
-# shellcheck disable=SC2086
-for b in $list; do
-	git rev-parse --verify --quiet "refs/heads/$b" >/dev/null || continue
-	if [ "$b" = "$cur" ]; then
-		echo "skipping $b (currently checked out)" >&2
-		continue
-	fi
-	git branch -D "$b"
-done
 
 # Drop any banked commit-by-commit edit refs.
 if [ -n "$arg" ]; then
@@ -80,14 +79,3 @@ fi
 git for-each-ref --format='%(refname)' "$editns" | while read -r ref; do
 	git update-ref -d "$ref"
 done
-
-if [ "$forget" -eq 1 ]; then
-	if [ -n "$arg" ]; then
-		git config --unset "reviewworkflow.$arg.reviewed" 2>/dev/null || true
-	else
-		git config --get-regexp '^reviewworkflow\..*\.reviewed$' 2>/dev/null |
-			while read -r key _; do
-				git config --unset "$key" || true
-			done
-	fi
-fi

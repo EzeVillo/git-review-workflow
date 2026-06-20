@@ -62,7 +62,21 @@ _git-finish-review() {
 _git-clean-review() {
 	_arguments -S \
 		'(-h --help)'{-h,--help}'[show help]' \
-		'--forget[also discard the recorded last-reviewed tip]' \
+		'1:review branch:->reviewbranches'
+
+	if [ "$state" = reviewbranches ]; then
+		local -a names
+		names=(${(f)"$(git for-each-ref --format='%(refname:short)' refs/heads/review/ 2>/dev/null | sed 's#^review/##')"})
+		_describe 'review branch' names
+	fi
+}
+
+_git-review-forget() {
+	_arguments -S \
+		'(-h --help)'{-h,--help}'[show help]' \
+		'--all[forget every recorded marker]' \
+		'--stale[forget markers whose origin branch no longer exists]' \
+		'--dry-run[with --stale, list what would be forgotten]' \
 		'1:review branch:->reviewbranches'
 
 	if [ "$state" = reviewbranches ]; then

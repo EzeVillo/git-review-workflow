@@ -42,9 +42,15 @@ complete -c git -n '__grw_using finish-review' -f -l resume -d 'continue after r
 complete -c git -n '__grw_using finish-review' -f -l help -d 'show help'
 
 # git clean-review
-complete -c git -n '__grw_using clean-review' -f -l forget -d 'also discard the recorded last-reviewed tip'
 complete -c git -n '__grw_using clean-review' -f -l help -d 'show help'
 complete -c git -n '__grw_using clean-review' -f -a '(__grw_review_branches)'
+
+# git review-forget
+complete -c git -n '__grw_using review-forget' -f -l all -d 'forget every recorded marker'
+complete -c git -n '__grw_using review-forget' -f -l stale -d 'forget markers whose origin branch is gone'
+complete -c git -n '__grw_using review-forget' -f -l dry-run -d 'with --stale, list what would be forgotten'
+complete -c git -n '__grw_using review-forget' -f -l help -d 'show help'
+complete -c git -n '__grw_using review-forget' -f -a '(__grw_review_branches)'
 
 # Commands that take no arguments beyond --help.
 for sub in review-next review-prev review-status review-list review-abort

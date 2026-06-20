@@ -1,0 +1,138 @@
+#!/usr/bin/env sh
+#
+# git-review-forget — drop the --delta markers (reviewworkflow.<src>.reviewed)
+# that git review-pr records, independently of any review/<branch> branch.
+#
+# The marker outlives the review branch on purpose so a later --delta keeps
+# working. This command is how you discard it: one branch, all of them, or only
+# the stale ones whose origin branch no longer exists (--stale).
+#
+set -eu
+
+prog="git review-forget"
+
+usage() {
+	cat <<EOF
+usage: $prog (<branch> | --all | --stale [--dry-run])
+
+Forget the recorded last-reviewed tip used by git review-pr --delta.
+
+  <branch>     forget the marker for one source branch
+  --all        forget every recorded marker
+  --stale      forget only markers whose origin/<branch> no longer exists
+               (fetches and prunes origin first)
+  --dry-run    with --stale, list what would be forgotten without forgetting it
+EOF
+}
+
+die() {
+	echo "error: $1" >&2
+	exit 1
+}
+
+# forget <key> <src> <verb>: unset a marker (or, in dry-run, say it would be).
+forget() {
+	if [ "$dryrun" -eq 1 ]; then
+		echo "would forget delta marker for $2$3"
+	else
+		git config --unset "$1" || true
+		echo "forgot delta marker for $2$3"
+	fi
+}
+
+arg=""
+all=0
+stale=0
+dryrun=0
+while [ $# -gt 0 ]; do
+	case "$1" in
+	-h | --help)
+		usage
+		exit 0
+		;;
+	--all) all=1 ;;
+	--stale) stale=1 ;;
+	--dry-run) dryrun=1 ;;
+	-*)
+		echo "error: unknown option $1" >&2
+		usage >&2
+		exit 1
+		;;
+	*)
+		if [ -z "$arg" ]; then
+			arg="$1"
+		else
+			echo "error: unexpected argument $1" >&2
+			usage >&2
+			exit 1
+		fi
+		;;
+	esac
+	shift
+done
+
+# Exactly one target selector: a branch, --all or --stale.
+selectors=0
+[ -n "$arg" ] && selectors=$((selectors + 1))
+[ "$all" -eq 1 ] && selectors=$((selectors + 1))
+[ "$stale" -eq 1 ] && selectors=$((selectors + 1))
+if [ "$selectors" -eq 0 ]; then
+	usage >&2
+	exit 1
+fi
+[ "$selectors" -eq 1 ] || die "use only one of <branch>, --all and --stale"
+
+# --dry-run is a preview of the inferred --stale set; it means nothing for the
+# explicit targets, where you already named exactly what to forget.
+if [ "$dryrun" -eq 1 ] && [ "$stale" -ne 1 ]; then
+	die "--dry-run only applies to --stale"
+fi
+
+git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
+
+# ── one branch ────────────────────────────────────────────────────────────────
+if [ -n "$arg" ]; then
+	if [ -z "$(git config "reviewworkflow.$arg.reviewed" || true)" ]; then
+		echo "no delta marker recorded for $arg"
+		exit 0
+	fi
+	forget "reviewworkflow.$arg.reviewed" "$arg" ""
+	exit 0
+fi
+
+# Collect every marker into a temp file so the loop runs in the current shell
+# (a pipe into `while` would forget unsets in a subshell).
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
+git config --get-regexp '^reviewworkflow\..*\.reviewed$' 2>/dev/null >"$tmp" || true
+
+if [ ! -s "$tmp" ]; then
+	echo "no delta markers recorded"
+	exit 0
+fi
+
+# ── --stale ───────────────────────────────────────────────────────────────────
+if [ "$stale" -eq 1 ]; then
+	git fetch --prune --quiet origin || die "could not fetch from origin"
+
+	any=0
+	while read -r key _; do
+		[ -n "$key" ] || continue
+		mid="${key#reviewworkflow.}"
+		src="${mid%.reviewed}"
+		git rev-parse --verify --quiet "refs/remotes/origin/$src" >/dev/null && continue
+		forget "$key" "$src" " (origin/$src no longer exists)"
+		any=1
+	done <"$tmp"
+
+	[ "$any" -eq 1 ] || echo "no stale delta markers (every origin branch still exists)"
+	exit 0
+fi
+
+# ── --all ─────────────────────────────────────────────────────────────────────
+while read -r key _; do
+	[ -n "$key" ] || continue
+	mid="${key#reviewworkflow.}"
+	src="${mid%.reviewed}"
+	forget "$key" "$src" ""
+done <"$tmp"

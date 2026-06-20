@@ -2,7 +2,7 @@
 #
 # State-dependent error and side-effect tests that the per-command files did not
 # already cover: wrong-branch guards, missing metadata, branch-already-exists,
-# --push / --forget side effects, the "previously reviewed" note and the
+# --push side effects, the "previously reviewed" note and the
 # force-push / no-new-commits delta guards.
 
 setup() {
@@ -241,15 +241,15 @@ push_pr2() {
 	[[ "$output" == *"no review branches found"* ]]
 }
 
-@test "clean-review --forget discards the recorded reviewed tip" {
+@test "clean-review keeps the recorded reviewed tip (forgetting moved to review-forget)" {
 	git review-pr feature/x
 	git switch --quiet develop
 	git reset --hard --quiet
 	[ -n "$(git config reviewworkflow.feature/x.reviewed)" ]
-	run git clean-review feature/x --forget
+	run git clean-review feature/x
 	[ "$status" -eq 0 ]
-	run git config reviewworkflow.feature/x.reviewed
-	[ "$status" -ne 0 ]
+	# clean-review no longer owns the delta marker; it must survive
+	[ -n "$(git config reviewworkflow.feature/x.reviewed)" ]
 }
 
 # ── review-status: banked steps display ───────────────────────────────────────

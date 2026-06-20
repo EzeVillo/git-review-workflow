@@ -98,7 +98,7 @@ Si clonaste o descargaste el proyecto, abrí su carpeta en una terminal y corré
 ./install.sh
 ```
 
-Instala los ocho comandos en `~/.local/bin` (cambiá la ubicación con
+Instala los nueve comandos en `~/.local/bin` (cambiá la ubicación con
 `PREFIX=/usr/local/bin ./install.sh`). Lo deshacés cuando quieras con
 `./uninstall.sh`. Para actualizar, simplemente hacé `git pull` dentro del repo —
 los symlinks toman los cambios automáticamente.
@@ -175,7 +175,8 @@ git config --global http.sslBackend openssl
 | `git review-list`                                                    | Lista todas las ramas `review/*` en curso (la actual marcada con `*`).                      |
 | `git finish-review [--onto-source] [--push] [--resume]`              | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR). |
 | `git review-abort`                                                   | Cancela la review actual y vuelve a donde empezaste.                                        |
-| `git clean-review [rama] [--forget]`                                 | Borra las ramas `review/*` y `review-fixes/*` de `<rama>`, o todas.                         |
+| `git clean-review [rama]`                                            | Borra las ramas `review/*` y `review-fixes/*` de `<rama>`, o todas.                         |
+| `git review-forget (<rama> \| --all \| --stale [--dry-run])`         | Descarta el marcador de `--delta` de una rama, de todas, o solo de las obsoletas.           |
 
 ### `git review-pr`
 
@@ -190,8 +191,8 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   un error (una base que viene de config simplemente se ignora).
 - `--delta` — revisar solo los commits agregados **desde tu última review** de
   esta rama, en vez de todo el PR. Ideal para re-revisar un PR actualizado. El
-  tip registrado sobrevive a `clean-review` (salvo `--forget`), así que funciona
-  aunque hayas borrado las ramas de review.
+  tip registrado sobrevive a `clean-review`, así que funciona aunque hayas
+  borrado las ramas de review; para descartarlo usá `git review-forget`.
 - `--from <commit>` — revisar solo los commits **después de `<commit>`**. Útil
   cuando no hay review registrada para usar `--delta`, o para elegir un punto de
   inicio exacto. Mutuamente excluyente con `--delta`.
@@ -248,8 +249,22 @@ real, así un `--delta` posterior no se saltea commits que nunca revisaste.
 
 - Sin `<rama>`, borra todas las ramas `review/*` y `review-fixes/*`.
 - Nunca borra la rama en la que estás parado.
-- `--forget` además descarta el tip de la última review (lo que desactiva
-  `--delta` para esa rama).
+- También descarta los edit refs bancados commit-a-commit, incluso cuando no
+  queda ninguna rama de review.
+- Deja intacto el marcador de `--delta` — para descartarlo usá `git review-forget`.
+
+### `git review-forget`
+
+Descarta el tip de la última review que usa `--delta`. El marcador se conserva a
+propósito para que `--delta` sobreviva a `clean-review`; así es como lo borrás.
+
+- `<rama>` — olvidar el marcador de una rama de origen.
+- `--all` — olvidar todos los marcadores (no toca `reviewworkflow.base`).
+- `--stale` — hace fetch y prune de `origin`, y olvida solo los marcadores cuya
+  `origin/<rama>` ya no existe (PRs mergeados y borrados). Si el fetch falla,
+  aborta sin borrar nada.
+- `--dry-run` — con `--stale`, lista lo que olvidaría sin hacerlo. Se rechaza con
+  los otros modos, donde el objetivo ya es explícito.
 
 ## Configurar la rama base
 

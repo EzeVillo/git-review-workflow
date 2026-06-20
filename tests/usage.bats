@@ -71,6 +71,12 @@ teardown() {
 	[[ "$output" == *"usage: git clean-review"* ]]
 }
 
+@test "review-forget --help prints usage and exits 0" {
+	run git-review-forget --help
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"usage: git review-forget"* ]]
+}
+
 # ── unknown options / unexpected arguments ────────────────────────────────────
 
 @test "review-pr with no branch prints usage and exits 1" {
@@ -137,4 +143,16 @@ teardown() {
 	run git-clean-review feature/x extra
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"unexpected argument extra"* ]]
+}
+
+@test "review-forget rejects an unknown option" {
+	run git-review-forget --bogus
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"unknown option --bogus"* ]]
+}
+
+@test "review-forget with no target prints usage and exits 1" {
+	run git-review-forget
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"usage: git review-forget"* ]]
 }

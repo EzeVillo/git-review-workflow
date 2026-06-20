@@ -98,7 +98,7 @@ If you cloned or downloaded the project, open its folder in a terminal and run:
 ./install.sh
 ```
 
-This installs all eight commands into `~/.local/bin` (change the location with
+This installs all nine commands into `~/.local/bin` (change the location with
 `PREFIX=/usr/local/bin ./install.sh`). Undo it any time with `./uninstall.sh`.
 To update, just `git pull` inside the repo — the symlinks pick up changes
 automatically.
@@ -173,7 +173,8 @@ git config --global http.sslBackend openssl
 | `git review-list`                                                      | List every `review/*` branch in progress (current one marked `*`).                            |
 | `git finish-review [--onto-source] [--push] [--resume]`                | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch). |
 | `git review-abort`                                                     | Cancel the current review and return to where you started.                                    |
-| `git clean-review [branch] [--forget]`                                 | Delete the `review/*` and `review-fixes/*` branches for `<branch>`, or all of them.           |
+| `git clean-review [branch]`                                            | Delete the `review/*` and `review-fixes/*` branches for `<branch>`, or all of them.           |
+| `git review-forget (<branch> \| --all \| --stale [--dry-run])`         | Discard the `--delta` marker for one branch, all of them, or only stale ones.                 |
 
 ### `git review-pr`
 
@@ -188,8 +189,8 @@ Has two independent axes — **range** (where the review starts) and **layout**
   from config is simply ignored).
 - `--delta` — review only the commits added **since your last review** of this
   branch, instead of the whole PR. Perfect for re-reviewing an updated PR. The
-  recorded tip survives `clean-review` (unless `--forget`), so this works even
-  after you deleted the review branches.
+  recorded tip survives `clean-review`, so this works even after you deleted the
+  review branches; discard it explicitly with `git review-forget`.
 - `--from <commit>` — review only the commits **after `<commit>`**. Handy when
   there is no recorded review to delta from, or to pick an exact starting point.
   Mutually exclusive with `--delta`.
@@ -245,8 +246,22 @@ reviewed.
 
 - With no `<branch>`, deletes every `review/*` and `review-fixes/*` branch.
 - Never deletes the branch you are currently on.
-- `--forget` also discards the recorded last-reviewed tip (which disables
-  `--delta` for that branch).
+- Also drops any banked commit-by-commit edit refs, even when no review branches
+  remain.
+- Leaves the `--delta` marker untouched — discard it with `git review-forget`.
+
+### `git review-forget`
+
+Discards the recorded last-reviewed tip that `--delta` relies on. The marker is
+kept deliberately so `--delta` survives `clean-review`; this is how you clear it.
+
+- `<branch>` — forget the marker for one source branch.
+- `--all` — forget every recorded marker (leaves `reviewworkflow.base` alone).
+- `--stale` — fetch and prune `origin`, then forget only the markers whose
+  `origin/<branch>` no longer exists (e.g. PRs that were merged and deleted).
+  Aborts without removing anything if the fetch fails.
+- `--dry-run` — with `--stale`, list what would be forgotten without doing it.
+  Rejected with the other modes, where the target is already explicit.
 
 ## Configuring the base branch
 

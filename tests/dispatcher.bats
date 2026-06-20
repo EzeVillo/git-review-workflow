@@ -39,6 +39,7 @@ setup() {
 	[[ "$output" == *"git review-abort"* ]]
 	[[ "$output" == *"git finish-review"* ]]
 	[[ "$output" == *"git clean-review"* ]]
+	[[ "$output" == *"git review-forget"* ]]
 }
 
 # ── --version / -V ────────────────────────────────────────────────────────────

@@ -8,7 +8,7 @@ set -eu
 
 BIN_DIR="${PREFIX:-$HOME/.local/bin}"
 
-for f in git-review git-review-pr git-review-next git-review-prev git-review-status git-review-list git-review-abort git-finish-review git-clean-review; do
+for f in git-review git-review-pr git-review-next git-review-prev git-review-status git-review-list git-review-abort git-finish-review git-clean-review git-review-forget; do
 	rm -f "$BIN_DIR/$f"
 done
 

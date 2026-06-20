@@ -19,7 +19,7 @@ $installDir = if ($env:PREFIX) { $env:PREFIX } else { "$env:USERPROFILE\.local\b
 $cmds = @(
     'git-review', 'git-review-pr', 'git-review-next', 'git-review-prev',
     'git-review-status', 'git-review-list', 'git-review-abort',
-    'git-finish-review', 'git-clean-review'
+    'git-finish-review', 'git-clean-review', 'git-review-forget'
 )
 
 $removed = @()

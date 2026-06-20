@@ -50,7 +50,18 @@ _git_finish_review() {
 _git_clean_review() {
 	case "$cur" in
 	--*)
-		__gitcomp "--forget --help"
+		__gitcomp "--help"
+		;;
+	*)
+		__gitcomp_nl "$(__git_heads | sed -n 's#^review/##p')"
+		;;
+	esac
+}
+
+_git_review_forget() {
+	case "$cur" in
+	--*)
+		__gitcomp "--all --stale --dry-run --help"
 		;;
 	*)
 		__gitcomp_nl "$(__git_heads | sed -n 's#^review/##p')"

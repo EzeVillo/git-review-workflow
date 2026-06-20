@@ -3,7 +3,7 @@
 # Tests for web-install.sh: the one-line Unix network installer.
 # curl is stubbed so the suite runs fully offline.
 
-CMDS="git-review-pr git-review-next git-review-prev git-review-status git-review-list git-review-abort git-finish-review git-clean-review"
+CMDS="git-review-pr git-review-next git-review-prev git-review-status git-review-list git-review-abort git-finish-review git-clean-review git-review-forget"
 
 setup() {
 	TMP="$(mktemp -d)"

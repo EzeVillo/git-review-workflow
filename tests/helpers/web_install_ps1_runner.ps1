@@ -62,7 +62,7 @@ try {
             $cmds = @(
                 'git-review-pr', 'git-review-next', 'git-review-prev',
                 'git-review-status', 'git-review-list', 'git-review-abort',
-                'git-finish-review', 'git-clean-review'
+                'git-finish-review', 'git-clean-review', 'git-review-forget'
             )
             foreach ($cmd in $cmds) {
                 $p = Join-Path $_installDir $cmd

@@ -18,7 +18,8 @@ setup() {
 
 @test "homebrew: all bin files referenced in the formula exist and are executable" {
 	for f in git-review git-review-pr git-review-next git-review-prev git-review-status \
-	          git-review-list git-review-abort git-finish-review git-clean-review; do
+	          git-review-list git-review-abort git-finish-review git-clean-review \
+	          git-review-forget; do
 		[ -f "$REPO/bin/$f" ]
 		[ -x "$REPO/bin/$f" ]
 	done

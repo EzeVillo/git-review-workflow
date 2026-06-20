@@ -10,7 +10,7 @@ SRC_DIR="$(cd -- "$SRC_DIR" && pwd)"
 BIN_DIR="${PREFIX:-$HOME/.local/bin}"
 
 mkdir -p "$BIN_DIR"
-for f in git-review git-review-pr git-review-next git-review-prev git-review-status git-review-list git-review-abort git-finish-review git-clean-review; do
+for f in git-review git-review-pr git-review-next git-review-prev git-review-status git-review-list git-review-abort git-finish-review git-clean-review git-review-forget; do
 	chmod +x "$SRC_DIR/bin/$f"
 	ln -sf "$SRC_DIR/bin/$f" "$BIN_DIR/$f"
 done

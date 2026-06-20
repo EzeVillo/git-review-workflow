@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop'
 $_commands = @(
     'git-review', 'git-review-pr', 'git-review-next', 'git-review-prev',
     'git-review-status', 'git-review-list', 'git-review-abort',
-    'git-finish-review', 'git-clean-review'
+    'git-finish-review', 'git-clean-review', 'git-review-forget'
 )
 
 $_installDir = Join-Path $TestTmpDir 'install'

@@ -23,8 +23,10 @@ Commands:
   git review-abort   cancel the current review and return to where you started
   git finish-review [--onto-source] [--push] [--resume]
                      extract your edits onto review-fixes/<branch>
-  git clean-review [branch] [--forget]
+  git clean-review [branch]
                      delete review/* and review-fixes/* branches
+  git review-forget (<branch> | --all | --stale [--dry-run])
+                     discard the --delta marker for one, all or stale branches
 
 Run 'git <command> --help' for details on each command.
 EOF

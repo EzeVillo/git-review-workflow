@@ -76,6 +76,20 @@ teardown() {
 	[ -n "$output" ]
 }
 
+@test "finish-review --onto-source --push advances the source branch on the remote" {
+	before="$(git rev-parse upstream/feature/x)"
+	git review-pr feature/x
+	printf 'a\nB\nc\nd\nfix\n' >app.txt
+	run git finish-review --onto-source --push
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"upstream/feature/x"* ]]
+	# The fix landed on the remote's feature/x, which must have moved past its
+	# pre-review tip — proof the push went to upstream, not a hardcoded origin.
+	after="$(git ls-remote upstream refs/heads/feature/x | cut -f1)"
+	[ -n "$after" ]
+	[ "$after" != "$before" ]
+}
+
 @test "review-forget --stale fetches from the configured remote" {
 	git review-pr feature/x
 	# A marker now exists for feature/x; delete the remote branch so it is stale.

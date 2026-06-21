@@ -17,6 +17,27 @@ CI runs both on every push and pull request (see
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)). Please make sure both
 pass before requesting a review.
 
+### Running the tests on Windows
+
+Under Git Bash/MSYS the suite is very slow: every test spawns many `git`
+processes and emulated `fork()` is expensive, so a single file can take minutes.
+If you have Docker, run the tests on a native Linux kernel instead — the same
+suite finishes in seconds:
+
+```sh
+./tests/run-docker.sh                 # whole suite
+./tests/run-docker.sh review.bats     # a single file
+```
+
+The script builds a small image ([`tests/Dockerfile`](tests/Dockerfile): bats +
+git) on first use and mounts the repo read-only; tests create their temp repos
+inside the container, so the Windows filesystem is never on the hot path. This
+is a local convenience only — CI still runs the suite on a real Windows runner.
+
+> The PowerShell installer tests (`*-ps1.bats`) need `pwsh`, which the container
+> does not have, so they do not really run there — rely on CI (or local Windows)
+> for those.
+
 ## Releasing
 
 > Maintainers only.

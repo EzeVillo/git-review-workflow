@@ -264,7 +264,8 @@ step position). The branch you are currently on is marked with a `*`.
 
 - Default — create `review-fixes/<branch>` on top of the PR tip with your edits
   staged, so you can review and commit them yourself.
-- `--onto-source` — add your edits as a commit on the PR branch itself.
+- `--onto-source` — stage your edits on the PR branch itself instead, so you can
+  review and commit them yourself there.
 - Either way the result stays local — review it and push it yourself when ready.
 - `--resume` — in `--step` mode, if banked edits overlap the PR tip, the replay
   leaves conflict markers and stops. Resolve them in the working tree, then run

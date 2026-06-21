@@ -3,8 +3,8 @@
 # git-finish-review — extract your review edits from the current review/* branch.
 #
 # By default it creates review-fixes/<branch> on top of the PR tip with your
-# edits staged. With --onto-source it adds your edits as a commit on the PR
-# branch itself. Either way the result stays local; push it yourself when ready.
+# edits staged. With --onto-source it stages your edits on the PR branch itself
+# instead. Either way the result stays local; review and commit it yourself.
 #
 set -eu
 
@@ -17,7 +17,7 @@ usage: $prog [--onto-source] [--resume]
 Extract your review edits from the current review/* branch.
 
   (default)        create review-fixes/<branch> on top of the PR tip and stage your edits
-  --onto-source    instead, add your edits as a commit on the PR branch itself
+  --onto-source    instead, stage your edits on the PR branch itself
   --resume         continue after resolving conflicts from a commit-by-commit replay
 EOF
 }
@@ -136,8 +136,7 @@ if [ "$onto" -eq 1 ]; then
 		echo "error: could not apply review changes onto $src" >&2
 		exit 1
 	}
-	git commit -q -m "review fixes ($src)"
-	echo "committed review fixes on $src"
+	echo "$src ready with your edits staged — review and commit"
 else
 	fb="review-fixes/$src"
 	git rev-parse --verify --quiet "refs/heads/$fb" >/dev/null && {

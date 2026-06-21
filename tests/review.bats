@@ -97,14 +97,18 @@ push_pr2() {
 	[[ "$output" != *"+B"* ]]
 }
 
-@test "finish-review --onto-source commits on the PR branch" {
+@test "finish-review --onto-source stages edits on the PR branch" {
 	git review-pr feature/x
+	tip="$(git rev-parse feature/x)"
 	printf 'a\nB\nc\nd\nfix\n' >app.txt
 	run git finish-review --onto-source
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "feature/x" ]
-	run git log -1 --pretty=%s
-	[[ "$output" == *"review fixes (feature/x)"* ]]
+	[[ "$output" == *"feature/x ready with your edits staged"* ]]
+	# the edits are staged, not committed: feature/x still points at the tip
+	[ "$(git rev-parse feature/x)" = "$tip" ]
+	run git diff --cached --quiet
+	[ "$status" -ne 0 ]
 }
 
 @test "finish-review reports when there are no edits" {

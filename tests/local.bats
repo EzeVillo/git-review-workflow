@@ -246,15 +246,17 @@ teardown() {
 	[ "$status" -ne 0 ]
 }
 
-@test "finish-review --onto-source on a local review commits onto the local branch" {
+@test "finish-review --onto-source on a local review stages onto the local branch" {
 	git review-pr feature/x --local
+	tip="$(git rev-parse feature/x)"
 	printf 'b\nFIXB\n' >b.txt
 	run git finish-review --onto-source
 	[ "$status" -eq 0 ]
-	# The fix is committed onto feature/x itself, and we end up there.
+	# The fix is staged onto feature/x itself, and we end up there.
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "feature/x" ]
-	run git show HEAD
-	[[ "$output" == *"review fixes (feature/x)"* ]]
+	[[ "$output" == *"feature/x ready with your edits staged"* ]]
+	[ "$(git rev-parse feature/x)" = "$tip" ]
+	run git diff --cached
 	[[ "$output" == *"+FIXB"* ]]
 }
 

@@ -141,18 +141,17 @@ second_merge() {
 	[[ "$output" != *"DEV"* ]]
 }
 
-@test "finish-review --onto-source on a merged branch commits only reviewer edits" {
+@test "finish-review --onto-source on a merged branch stages only reviewer edits" {
 	git review-pr feature/x
 	printf 'f1\nf2\nFIX\n' >feature.txt
 	run git finish-review --onto-source
 	[ "$status" -eq 0 ]
-	# The fix lands as a new commit on the PR branch itself.
-	run git log -1 --format=%s feature/x
-	[[ "$output" == *"review fixes"* ]]
-	run git show feature/x
+	# The fix is staged on the PR branch itself.
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "feature/x" ]
+	run git diff --cached
 	[[ "$output" == *"+FIX"* ]]
 	# Anti-false-positive: the author's own change (f2, an added line in c3) and
-	# the merged base content (DEV) must not be re-introduced by this commit.
+	# the merged base content (DEV) must not be re-introduced by these edits.
 	[[ "$output" != *"+f2"* ]]
 	[[ "$output" != *"DEV"* ]]
 }

@@ -268,8 +268,8 @@ y posición de paso). La rama en la que estás parado se marca con un `*`.
 
 - Por defecto — crea `review-fixes/<rama>` sobre el tip del PR con tus ediciones
   staged, para que las revises y commitees vos.
-- `--onto-source` — agrega tus ediciones como un commit sobre la rama del PR
-  misma.
+- `--onto-source` — en su lugar deja tus ediciones staged sobre la rama del PR
+  misma, para que las revises y commitees vos ahí.
 - En cualquiera de los dos casos el resultado queda local — revisalo y pusheá a
   mano cuando estés listo.
 - `--resume` — en modo `--step`, si las ediciones bancadas chocan con el tip del

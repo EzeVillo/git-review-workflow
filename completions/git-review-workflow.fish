@@ -51,7 +51,7 @@ complete -c git -n '__grw_using review-pr' -f -l help -d 'show help'
 complete -c git -n '__grw_using review-pr' -f -a '(__grw_branches)'
 
 # git finish-review
-complete -c git -n '__grw_using finish-review' -f -l onto-source -d 'add edits as a commit on the PR branch'
+complete -c git -n '__grw_using finish-review' -f -l onto-source -d 'stage edits on the PR branch itself'
 complete -c git -n '__grw_using finish-review' -f -l resume -d 'continue after resolving replay conflicts'
 complete -c git -n '__grw_using finish-review' -f -l help -d 'show help'
 

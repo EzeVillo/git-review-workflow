@@ -172,16 +172,17 @@ push_more() {
 	[[ "$output" != *"new file"* ]]
 }
 
-@test "--from --onto-source commits only the reviewer edits on the PR branch" {
+@test "--from --onto-source stages only the reviewer edits on the PR branch" {
 	c1="$(git rev-parse feature/x~1)"
 	git review-pr feature/x --from "$c1"
+	tip="$(git rev-parse feature/x)"
 	printf 'b\nFIXB\n' >b.txt
 	run git finish-review --onto-source
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "feature/x" ]
-	run git log -1 --pretty=%s
-	[[ "$output" == *"review fixes (feature/x)"* ]]
-	run git show HEAD
+	[[ "$output" == *"feature/x ready with your edits staged"* ]]
+	[ "$(git rev-parse feature/x)" = "$tip" ]
+	run git diff --cached
 	[[ "$output" == *"+FIXB"* ]]
 	[[ "$output" != *"new file"* ]]
 }

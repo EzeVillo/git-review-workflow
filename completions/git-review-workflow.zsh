@@ -55,7 +55,7 @@ _git-review-abort() {
 _git-finish-review() {
 	_arguments -S \
 		'(-h --help)'{-h,--help}'[show help]' \
-		'--onto-source[add your edits as a commit on the PR branch itself]' \
+		'--onto-source[stage your edits on the PR branch itself]' \
 		'--resume[continue after resolving replay conflicts]'
 }
 

@@ -160,6 +160,8 @@ git rev-parse --verify --quiet "$srcref" >/dev/null ||
 rb="review/$src"
 git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null &&
 	die "$rb already exists; run git clean-review $src first"
+git rev-parse --verify --quiet "refs/heads/review-saved/$src" >/dev/null &&
+	die "you have a saved review of $src; resume it with git review-continue $src or discard it with git review-forget-saved $src"
 
 tip="$(git rev-parse "$srcref")"
 prev="$(git config "$markerkey" || true)"

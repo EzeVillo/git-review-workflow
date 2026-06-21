@@ -36,10 +36,13 @@ setup() {
 	[[ "$output" == *"git review-prev"* ]]
 	[[ "$output" == *"git review-status"* ]]
 	[[ "$output" == *"git review-list"* ]]
+	[[ "$output" == *"git review-save"* ]]
+	[[ "$output" == *"git review-continue"* ]]
 	[[ "$output" == *"git review-abort"* ]]
 	[[ "$output" == *"git finish-review"* ]]
 	[[ "$output" == *"git clean-review"* ]]
-	[[ "$output" == *"git review-forget"* ]]
+	[[ "$output" == *"git review-forget-delta"* ]]
+	[[ "$output" == *"git review-forget-saved"* ]]
 }
 
 # ── --version / -V ────────────────────────────────────────────────────────────

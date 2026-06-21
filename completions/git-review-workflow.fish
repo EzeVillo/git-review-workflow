@@ -24,18 +24,25 @@ function __grw_review_branches
         | string replace -r '^review/' ''
 end
 
-# Source branches that have a recorded --delta marker, for review-forget. The
+# Source branches that have a recorded --delta marker, for review-forget-delta. The
 # markers outlive the review/* branches, so this is the right candidate set.
 function __grw_marked_branches
     # Both marker sections, reviewworkflow.* (remote) and reviewworkflowlocal.*
     # (--local). A branch reviewed both ways collapses to one entry via sort -u, so
-    # it shows once by its plain name (review-forget <branch> clears both).
+    # it shows once by its plain name (review-forget-delta <branch> clears both).
     begin
         git config --get-regexp '^reviewworkflow\..*\.reviewed$' 2>/dev/null
         git config --get-regexp '^reviewworkflowlocal\..*\.reviewed$' 2>/dev/null
     end \
         | string replace -r '^reviewworkflow(local)?\.(.*)\.reviewed .*$' '$2' \
         | sort -u
+end
+
+# Source branches with a saved review (review-saved/*), for review-continue and
+# review-forget-saved.
+function __grw_saved_branches
+    git for-each-ref --format='%(refname:short)' refs/heads/review-saved/ 2>/dev/null \
+        | string replace -r '^review-saved/' ''
 end
 
 # git review
@@ -60,14 +67,23 @@ complete -c git -n '__grw_using finish-review' -f -l h -d 'show help'
 complete -c git -n '__grw_using clean-review' -f -l h -d 'show help'
 complete -c git -n '__grw_using clean-review' -f -a '(__grw_review_branches)'
 
-# git review-forget
-complete -c git -n '__grw_using review-forget' -f -l all -d 'forget every recorded marker'
-complete -c git -n '__grw_using review-forget' -f -l stale -d 'forget markers whose remote branch is gone'
-complete -c git -n '__grw_using review-forget' -f -l dry-run -d 'with --stale, list what would be forgotten'
-complete -c git -n '__grw_using review-forget' -f -l h -d 'show help'
-complete -c git -n '__grw_using review-forget' -f -a '(__grw_marked_branches)'
+# git review-forget-delta
+complete -c git -n '__grw_using review-forget-delta' -f -l all -d 'forget every recorded marker'
+complete -c git -n '__grw_using review-forget-delta' -f -l stale -d 'forget markers whose remote branch is gone'
+complete -c git -n '__grw_using review-forget-delta' -f -l dry-run -d 'with --stale, list what would be forgotten'
+complete -c git -n '__grw_using review-forget-delta' -f -l h -d 'show help'
+complete -c git -n '__grw_using review-forget-delta' -f -a '(__grw_marked_branches)'
+
+# git review-forget-saved
+complete -c git -n '__grw_using review-forget-saved' -f -l all -d 'discard every saved review'
+complete -c git -n '__grw_using review-forget-saved' -f -l h -d 'show help'
+complete -c git -n '__grw_using review-forget-saved' -f -a '(__grw_saved_branches)'
+
+# git review-continue
+complete -c git -n '__grw_using review-continue' -f -l h -d 'show help'
+complete -c git -n '__grw_using review-continue' -f -a '(__grw_saved_branches)'
 
 # Commands that take no arguments beyond --h.
-for sub in review-next review-prev review-status review-list review-abort
+for sub in review-next review-prev review-status review-list review-abort review-save
     complete -c git -n "__grw_using $sub" -f -l h -d 'show help'
 end

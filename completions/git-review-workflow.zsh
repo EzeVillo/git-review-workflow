@@ -49,6 +49,22 @@ _git-review-list() {
 	_arguments '(-h --h)'{-h,--h}'[show help]'
 }
 
+_git-review-save() {
+	_arguments '(-h --h)'{-h,--h}'[show help]'
+}
+
+_git-review-continue() {
+	_arguments -S \
+		'(-h --h)'{-h,--h}'[show help]' \
+		'1:saved review:->savedbranches'
+
+	if [ "$state" = savedbranches ]; then
+		local -a names
+		names=(${(f)"$(git for-each-ref --format='%(refname:short)' refs/heads/review-saved/ 2>/dev/null | sed 's#^review-saved/##')"})
+		_describe 'saved review' names
+	fi
+}
+
 _git-review-abort() {
 	_arguments '(-h --h)'{-h,--h}'[show help]'
 }
@@ -72,7 +88,7 @@ _git-clean-review() {
 	fi
 }
 
-_git-review-forget() {
+_git-review-forget-delta() {
 	_arguments -S \
 		'(-h --h)'{-h,--h}'[show help]' \
 		'--all[forget every recorded marker]' \
@@ -86,5 +102,18 @@ _git-review-forget() {
 		local -a names
 		names=(${(f)"$({ git config --get-regexp '^reviewworkflow\..*\.reviewed$' 2>/dev/null; git config --get-regexp '^reviewworkflowlocal\..*\.reviewed$' 2>/dev/null; } | sed -n -e 's/^reviewworkflowlocal\.//' -e 's/^reviewworkflow\.//' -e 's/\.reviewed .*//p' | sort -u)"})
 		_describe 'marked branch' names
+	fi
+}
+
+_git-review-forget-saved() {
+	_arguments -S \
+		'(-h --h)'{-h,--h}'[show help]' \
+		'--all[discard every saved review]' \
+		'1:saved review:->savedbranches'
+
+	if [ "$state" = savedbranches ]; then
+		local -a names
+		names=(${(f)"$(git for-each-ref --format='%(refname:short)' refs/heads/review-saved/ 2>/dev/null | sed 's#^review-saved/##')"})
+		_describe 'saved review' names
 	fi
 }

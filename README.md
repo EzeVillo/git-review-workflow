@@ -201,11 +201,14 @@ git config --global http.sslBackend openssl
 | `git review-pr (<branch> \| --this) [base \| --delta \| --from <commit>] [--step] [--local]` | Fetch `origin`, then stage the PR diff on a new `review/<branch>` branch (`--this` reviews the current branch; `--local` reviews local branches without fetching). |
 | `git review-next` / `git review-prev`                                                        | Move a `--step` review to the next / previous commit.                                                                                                              |
 | `git review-status`                                                                          | Show the state of the review on the current branch.                                                                                                                |
-| `git review-list`                                                                            | List every `review/*` branch in progress (current one marked `*`).                                                                                                 |
+| `git review-list`                                                                            | List every review in progress and every saved one (current branch marked `*`).                                                                                     |
+| `git review-save`                                                                            | Pause the current review as `review-saved/<branch>` and return to where you started.                                                                               |
+| `git review-continue [branch]`                                                               | Resume a review saved with `git review-save`.                                                                                                                      |
 | `git finish-review [--onto-source] [--resume]`                                               | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch).                                                                      |
 | `git review-abort`                                                                           | Cancel the current review and return to where you started.                                                                                                         |
 | `git clean-review [branch]`                                                                  | Delete the `review/*` and `review-fixes/*` branches for `<branch>`, or all of them.                                                                                |
-| `git review-forget (<branch> \| --all \| --stale [--dry-run])`                               | Discard the `--delta` marker for one branch, all of them, or only stale ones.                                                                                      |
+| `git review-forget-delta (<branch> \| --all \| --stale [--dry-run])`                         | Discard the `--delta` marker for one branch, all of them, or only stale ones.                                                                                      |
+| `git review-forget-saved (<branch> \| --all)`                                                | Discard a review saved with `git review-save`.                                                                                                                     |
 
 ### `git review-pr`
 
@@ -227,7 +230,7 @@ Has two independent axes — **range** (where the review starts) and **layout**
 - `--delta` — review only the commits added **since your last review** of this
   branch, instead of the whole PR. Perfect for re-reviewing an updated PR. The
   recorded tip survives `clean-review`, so this works even after you deleted the
-  review branches; discard it explicitly with `git review-forget`.
+  review branches; discard it explicitly with `git review-forget-delta`.
 - `--from <commit>` — review only the commits **after `<commit>`**. Handy when
   there is no recorded review to delta from, or to pick an exact starting point.
   Mutually exclusive with `--delta`.
@@ -266,7 +269,31 @@ you are on (`[k/N]`) and which steps have banked edits.
 ### `git review-list`
 
 Shows *every* `review/*` branch in progress at once (with its source PR, mode and
-step position). The branch you are currently on is marked with a `*`.
+step position). Reviews paused with `git review-save` are listed too, under
+`saved`. The branch you are currently on is marked with a `*`.
+
+### `git review-save` / `git review-continue`
+
+`review-save` lets you put a review aside and pick it up later. It turns the
+current `review/<branch>` into `review-saved/<branch>` and returns you to the
+branch you started from, carrying everything needed to resume exactly where you
+left off:
+
+- In whole-PR mode, the staged PR diff and your uncommitted edits.
+- In `--step` mode, the commit you are on, its edits, and every edit you have
+  banked on the other commits. The banked-edit refs are moved out of
+  `refs/review-edits/` (which `clean-review` prunes) into `refs/review-saved-edits/`,
+  so a `clean-review` never touches a saved review.
+
+`review-continue` turns `review-saved/<branch>` back into the active
+`review/<branch>` and restores that exact state — in `--step` mode it drops you
+back on the same commit, with `review-next` / `review-prev` working as before.
+With no argument it resumes the only saved review, or lists them if there is more
+than one; name a branch to pick a specific one.
+
+Starting a fresh `review-pr` on a branch that already has a saved review is
+refused, so you do not silently lose the paused one — resume it or discard it
+with `git review-forget-saved` first.
 
 ### `git finish-review`
 
@@ -293,9 +320,11 @@ reviewed.
 - Never deletes the branch you are currently on.
 - Also drops any banked commit-by-commit edit refs, even when no review branches
   remain.
-- Leaves the `--delta` marker untouched — discard it with `git review-forget`.
+- Leaves the `--delta` marker untouched — discard it with `git review-forget-delta`.
+- Leaves saved reviews (`review-saved/*`) untouched — discard one with
+  `git review-forget-saved`.
 
-### `git review-forget`
+### `git review-forget-delta`
 
 Discards the recorded last-reviewed tip that `--delta` relies on. The marker is
 kept deliberately so `--delta` survives `clean-review`; this is how you clear it.
@@ -309,6 +338,16 @@ kept deliberately so `--delta` survives `clean-review`; this is how you clear it
   Aborts without removing anything if the fetch fails.
 - `--dry-run` — with `--stale`, list what would be forgotten without doing it.
   Rejected with the other modes, where the target is already explicit.
+
+### `git review-forget-saved`
+
+Discards a review put aside with `git review-save`: deletes `review-saved/<branch>`,
+its banked edits and its metadata. Because a saved review was paused (not
+completed), it also rolls the `--delta` marker back to your last actual review,
+the same way `git review-abort` does.
+
+- `<branch>` — discard the saved review for one source branch.
+- `--all` — discard every saved review.
 
 ## Configuring the base branch
 
@@ -332,8 +371,8 @@ point the workflow at that remote:
 git config reviewworkflow.remote upstream
 ```
 
-It affects `review-pr` and `review-forget --stale`. A `--local` review ignores
-the remote entirely.
+It affects `review-pr` and `review-forget-delta --stale`. A `--local` review
+ignores the remote entirely.
 
 ### Per-repository by design
 

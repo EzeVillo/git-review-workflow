@@ -204,11 +204,14 @@ git config --global http.sslBackend openssl
 | `git review-pr (<rama> \| --this) [base \| --delta \| --from <commit>] [--step] [--local]` | Hace fetch de `origin` y deja el diff del PR staged en una nueva rama `review/<rama>` (`--this` revisa la rama actual; `--local` revisa ramas locales sin hacer fetch). |
 | `git review-next` / `git review-prev`                                                      | Mueve una review `--step` al commit siguiente / anterior.                                                                                                               |
 | `git review-status`                                                                        | Muestra el estado de la review en la rama actual.                                                                                                                       |
-| `git review-list`                                                                          | Lista todas las ramas `review/*` en curso (la actual marcada con `*`).                                                                                                  |
+| `git review-list`                                                                          | Lista todas las reviews en curso y las guardadas (la rama actual marcada con `*`).                                                                                      |
+| `git review-save`                                                                          | Pausa la review actual como `review-saved/<rama>` y vuelve a donde empezaste.                                                                                           |
+| `git review-continue [rama]`                                                               | Retoma una review guardada con `git review-save`.                                                                                                                       |
 | `git finish-review [--onto-source] [--resume]`                                             | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR).                                                                             |
 | `git review-abort`                                                                         | Cancela la review actual y vuelve a donde empezaste.                                                                                                                    |
 | `git clean-review [rama]`                                                                  | Borra las ramas `review/*` y `review-fixes/*` de `<rama>`, o todas.                                                                                                     |
-| `git review-forget (<rama> \| --all \| --stale [--dry-run])`                               | Descarta el marcador de `--delta` de una rama, de todas, o solo de las obsoletas.                                                                                       |
+| `git review-forget-delta (<rama> \| --all \| --stale [--dry-run])`                         | Descarta el marcador de `--delta` de una rama, de todas, o solo de las obsoletas.                                                                                       |
+| `git review-forget-saved (<rama> \| --all)`                                                | Descarta una review guardada con `git review-save`.                                                                                                                     |
 
 ### `git review-pr`
 
@@ -230,7 +233,7 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
 - `--delta` — revisar solo los commits agregados **desde tu última review** de
   esta rama, en vez de todo el PR. Ideal para re-revisar un PR actualizado. El
   tip registrado sobrevive a `clean-review`, así que funciona aunque hayas
-  borrado las ramas de review; para descartarlo usá `git review-forget`.
+  borrado las ramas de review; para descartarlo usá `git review-forget-delta`.
 - `--from <commit>` — revisar solo los commits **después de `<commit>`**. Útil
   cuando no hay review registrada para usar `--delta`, o para elegir un punto de
   inicio exacto. Mutuamente excluyente con `--delta`.
@@ -270,7 +273,30 @@ commit estás (`[k/N]`) y qué pasos tienen ediciones bancadas.
 ### `git review-list`
 
 Muestra *todas* las ramas `review/*` en curso a la vez (con su PR de origen, modo
-y posición de paso). La rama en la que estás parado se marca con un `*`.
+y posición de paso). Las reviews pausadas con `git review-save` también aparecen,
+bajo `saved`. La rama en la que estás parado se marca con un `*`.
+
+### `git review-save` / `git review-continue`
+
+`review-save` te deja apartar una review y retomarla después. Convierte la
+`review/<rama>` actual en `review-saved/<rama>` y te devuelve a la rama desde la
+que empezaste, llevándose todo lo necesario para retomar justo donde lo dejaste:
+
+- En modo PR completo, el diff del PR staged y tus ediciones sin commitear.
+- En modo `--step`, el commit en el que estás, sus ediciones y todas las
+  ediciones que tengas bancadas en los otros commits. Los refs de ediciones se
+  mueven de `refs/review-edits/` (que `clean-review` poda) a
+  `refs/review-saved-edits/`, así un `clean-review` nunca toca una review guardada.
+
+`review-continue` convierte `review-saved/<rama>` de nuevo en la `review/<rama>`
+activa y restaura ese estado exacto — en modo `--step` te deja de vuelta en el
+mismo commit, con `review-next` / `review-prev` funcionando como antes. Sin
+argumento retoma la única review guardada, o las lista si hay más de una; nombrá
+una rama para elegir cuál.
+
+Empezar un `review-pr` nuevo sobre una rama que ya tiene una review guardada se
+rechaza, para que no pierdas la pausada sin querer — retomala o descartala con
+`git review-forget-saved` primero.
 
 ### `git finish-review`
 
@@ -297,9 +323,11 @@ real, así un `--delta` posterior no se saltea commits que nunca revisaste.
 - Nunca borra la rama en la que estás parado.
 - También descarta los edit refs bancados commit-a-commit, incluso cuando no
   queda ninguna rama de review.
-- Deja intacto el marcador de `--delta` — para descartarlo usá `git review-forget`.
+- Deja intacto el marcador de `--delta` — para descartarlo usá `git review-forget-delta`.
+- Deja intactas las reviews guardadas (`review-saved/*`) — para descartar una usá
+  `git review-forget-saved`.
 
-### `git review-forget`
+### `git review-forget-delta`
 
 Descarta el tip de la última review que usa `--delta`. El marcador se conserva a
 propósito para que `--delta` sobreviva a `clean-review`; así es como lo borrás.
@@ -313,6 +341,16 @@ propósito para que `--delta` sobreviva a `clean-review`; así es como lo borrá
   aborta sin borrar nada.
 - `--dry-run` — con `--stale`, lista lo que olvidaría sin hacerlo. Se rechaza con
   los otros modos, donde el objetivo ya es explícito.
+
+### `git review-forget-saved`
+
+Descarta una review apartada con `git review-save`: borra `review-saved/<rama>`,
+sus ediciones bancadas y su metadata. Como una review guardada quedó pausada (no
+completada), también vuelve el marcador de `--delta` a tu última review real, igual
+que hace `git review-abort`.
+
+- `<rama>` — descartar la review guardada de una rama de origen.
+- `--all` — descartar todas las reviews guardadas.
 
 ## Configurar la rama base
 
@@ -336,7 +374,7 @@ ejemplo), apuntá el flujo a ese remoto:
 git config reviewworkflow.remote upstream
 ```
 
-Afecta a `review-pr` y `review-forget --stale`. Una review `--local` ignora el
+Afecta a `review-pr` y `review-forget-delta --stale`. Una review `--local` ignora el
 remoto por completo.
 
 ### Es por repositorio por diseño

@@ -53,6 +53,18 @@ teardown() {
 	[[ "$output" == *"usage: git review-list"* ]]
 }
 
+@test "review-save --h prints usage and exits 0" {
+	run git-review-save --h
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"usage: git review-save"* ]]
+}
+
+@test "review-continue --h prints usage and exits 0" {
+	run git-review-continue --h
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"usage: git review-continue"* ]]
+}
+
 @test "review-abort --h prints usage and exits 0" {
 	run git-review-abort --h
 	[ "$status" -eq 0 ]
@@ -71,10 +83,16 @@ teardown() {
 	[[ "$output" == *"usage: git clean-review"* ]]
 }
 
-@test "review-forget --h prints usage and exits 0" {
-	run git-review-forget --h
+@test "review-forget-delta --h prints usage and exits 0" {
+	run git-review-forget-delta --h
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"usage: git review-forget"* ]]
+	[[ "$output" == *"usage: git review-forget-delta"* ]]
+}
+
+@test "review-forget-saved --h prints usage and exits 0" {
+	run git-review-forget-saved --h
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"usage: git review-forget-saved"* ]]
 }
 
 # ── unknown options / unexpected arguments ────────────────────────────────────
@@ -127,6 +145,18 @@ teardown() {
 	[[ "$output" == *"unexpected argument bogus"* ]]
 }
 
+@test "review-save rejects an unexpected argument" {
+	run git-review-save bogus
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"unexpected argument bogus"* ]]
+}
+
+@test "review-continue rejects an unknown option" {
+	run git-review-continue --bogus
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"unknown option --bogus"* ]]
+}
+
 @test "finish-review rejects an unknown option" {
 	run git-finish-review --bogus
 	[ "$status" -eq 1 ]
@@ -145,14 +175,26 @@ teardown() {
 	[[ "$output" == *"unexpected argument extra"* ]]
 }
 
-@test "review-forget rejects an unknown option" {
-	run git-review-forget --bogus
+@test "review-forget-delta rejects an unknown option" {
+	run git-review-forget-delta --bogus
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"unknown option --bogus"* ]]
 }
 
-@test "review-forget with no target prints usage and exits 1" {
-	run git-review-forget
+@test "review-forget-delta with no target prints usage and exits 1" {
+	run git-review-forget-delta
 	[ "$status" -eq 1 ]
-	[[ "$output" == *"usage: git review-forget"* ]]
+	[[ "$output" == *"usage: git review-forget-delta"* ]]
+}
+
+@test "review-forget-saved rejects an unknown option" {
+	run git-review-forget-saved --bogus
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"unknown option --bogus"* ]]
+}
+
+@test "review-forget-saved with no target prints usage and exits 1" {
+	run git-review-forget-saved
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"usage: git review-forget-saved"* ]]
 }

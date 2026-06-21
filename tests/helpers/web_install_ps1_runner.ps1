@@ -61,8 +61,9 @@ try {
             _invoke_installer
             $cmds = @(
                 'git-review-pr', 'git-review-next', 'git-review-prev',
-                'git-review-status', 'git-review-list', 'git-review-abort',
-                'git-finish-review', 'git-clean-review', 'git-review-forget'
+                'git-review-status', 'git-review-list', 'git-review-save',
+                'git-review-continue', 'git-review-abort', 'git-finish-review',
+                'git-clean-review', 'git-review-forget-delta', 'git-review-forget-saved'
             )
             foreach ($cmd in $cmds) {
                 $p = Join-Path $_installDir $cmd

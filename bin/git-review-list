@@ -16,7 +16,8 @@ usage: $prog
 
 List every review/* branch in progress, with its source PR, mode and — in
 commit-by-commit mode — which commit you are on ([k/N]). The branch you are on
-is marked with a "*".
+is marked with a "*". Reviews paused with git review-save are listed too, under
+"saved".
 EOF
 }
 
@@ -40,20 +41,22 @@ git rev-parse --git-dir >/dev/null 2>&1 || {
 
 cur="$(git symbolic-ref --quiet --short HEAD || true)"
 branches="$(git for-each-ref --format='%(refname:short)' refs/heads/review/)"
+saved="$(git for-each-ref --format='%(refname:short)' refs/heads/review-saved/)"
 
-if [ -z "$branches" ]; then
+if [ -z "$branches" ] && [ -z "$saved" ]; then
 	echo "no reviews in progress"
 	exit 0
 fi
 
-printf '%s\n' "$branches" | while read -r b; do
+# describe <branch> <marker>: print one line for a review branch, reading its
+# mode and position from the branch config. Used for both active and saved reviews.
+describe() {
+	b="$1"
+	label="$2"
 	src="$(git config "branch.$b.reviewsource" || true)"
-	[ -n "$src" ] || continue
+	[ -n "$src" ] || return
 	tip="$(git config "branch.$b.reviewtip" || true)"
 	mode="$(git config "branch.$b.reviewmode" || echo whole)"
-
-	marker=" "
-	[ "$b" = "$cur" ] && marker="*"
 
 	shorttip="$tip"
 	[ -n "$tip" ] && shorttip="$(git rev-parse --short "$tip" 2>/dev/null || echo "$tip")"
@@ -61,8 +64,28 @@ printf '%s\n' "$branches" | while read -r b; do
 	if [ "$mode" = "step" ]; then
 		count="$(git config "branch.$b.reviewcount" || echo '?')"
 		step="$(git config "branch.$b.reviewstep" || echo '?')"
-		printf '%s %s  step [%s/%s]  tip %s\n' "$marker" "$b" "$step" "$count" "$shorttip"
+		printf '%s %s  %sstep [%s/%s]  tip %s\n' "$label" "$b" "$prefix" "$step" "$count" "$shorttip"
 	else
-		printf '%s %s  whole  tip %s\n' "$marker" "$b" "$shorttip"
+		printf '%s %s  %swhole  tip %s\n' "$label" "$b" "$prefix" "$shorttip"
 	fi
+}
+
+prefix=""
+printf '%s\n' "$branches" | while read -r b; do
+	[ -n "$b" ] || continue
+	marker=" "
+	[ "$b" = "$cur" ] && marker="*"
+	describe "$b" "$marker"
 done
+
+# Reviews put aside with git review-save, tagged so they are not mistaken for
+# active ones. The branch you are on is still marked with "*".
+if [ -n "$saved" ]; then
+	prefix="saved  "
+	printf '%s\n' "$saved" | while read -r b; do
+		[ -n "$b" ] || continue
+		marker=" "
+		[ "$b" = "$cur" ] && marker="*"
+		describe "$b" "$marker"
+	done
+fi

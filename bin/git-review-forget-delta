@@ -1,16 +1,17 @@
 #!/usr/bin/env sh
 #
-# git-review-forget — drop the --delta markers (reviewworkflow.<src>.reviewed, and
-# reviewworkflowlocal.<src>.reviewed for --local reviews) that git review-pr
+# git-review-forget-delta — drop the --delta markers (reviewworkflow.<src>.reviewed,
+# and reviewworkflowlocal.<src>.reviewed for --local reviews) that git review-pr
 # records, independently of any review/<branch> branch.
 #
 # The marker outlives the review branch on purpose so a later --delta keeps
 # working. This command is how you discard it: one branch, all of them, or only
-# the stale ones whose origin branch no longer exists (--stale).
+# the stale ones whose origin branch no longer exists (--stale). To discard a
+# paused review instead, use git review-forget-saved.
 #
 set -eu
 
-prog="git review-forget"
+prog="git review-forget-delta"
 
 usage() {
 	cat <<EOF

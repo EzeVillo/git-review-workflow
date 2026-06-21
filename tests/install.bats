@@ -9,7 +9,7 @@ setup() {
 	mkdir -p "$HOME"
 	REPO="$BATS_TEST_DIRNAME/.."
 	export PREFIX="$TMP/bin"
-	CMDS="git-review-pr git-review-next git-review-prev git-review-status git-review-list git-review-abort git-finish-review git-clean-review git-review-forget"
+	CMDS="git-review-pr git-review-next git-review-prev git-review-status git-review-list git-review-save git-review-continue git-review-abort git-finish-review git-clean-review git-review-forget-delta git-review-forget-saved"
 
 	# install.sh chmods the repo's own bin/ files, which fails when the repo is
 	# mounted read-only (e.g. the Docker test harness uses -v ...:ro). Skip there

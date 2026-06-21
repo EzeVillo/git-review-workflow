@@ -65,11 +65,11 @@ teardown() {
 	[[ "$output" != *"origin/"* ]]
 }
 
-@test "review-forget --stale fetches from the configured remote" {
+@test "review-forget-delta --stale fetches from the configured remote" {
 	git review-pr feature/x
 	# A marker now exists for feature/x; delete the remote branch so it is stale.
 	git push --quiet upstream --delete feature/x
-	run git review-forget --stale
+	run git review-forget-delta --stale
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"upstream/feature/x no longer exists"* ]]
 	run git config reviewworkflow.feature/x.reviewed

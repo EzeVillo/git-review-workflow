@@ -39,6 +39,28 @@ _git_review_list() {
 	__gitcomp "--h"
 }
 
+_git_review_save() {
+	__gitcomp "--h"
+}
+
+# Source branches with a saved review (review-saved/*), for review-continue and
+# review-forget-saved.
+__grw_saved_branches() {
+	git for-each-ref --format='%(refname:short)' refs/heads/review-saved/ 2>/dev/null |
+		sed -n 's#^review-saved/##p'
+}
+
+_git_review_continue() {
+	case "$cur" in
+	--*)
+		__gitcomp "--h"
+		;;
+	*)
+		__gitcomp_nl "$(__grw_saved_branches)"
+		;;
+	esac
+}
+
 _git_review_abort() {
 	__gitcomp "--h"
 }
@@ -59,11 +81,11 @@ _git_clean_review() {
 }
 
 # Source branches that have a recorded --delta marker. These outlive the
-# review/* branches, so they — not local heads — are what review-forget acts on.
+# review/* branches, so they — not local heads — are what review-forget-delta acts on.
 __grw_marked_branches() {
 	# Both marker sections, reviewworkflow.* (remote) and reviewworkflowlocal.*
 	# (--local). A branch reviewed both ways collapses to one entry via sort -u, so
-	# it is offered once by its plain name (review-forget <branch> clears both).
+	# it is offered once by its plain name (review-forget-delta <branch> clears both).
 	{
 		git config --get-regexp '^reviewworkflow\..*\.reviewed$' 2>/dev/null
 		git config --get-regexp '^reviewworkflowlocal\..*\.reviewed$' 2>/dev/null
@@ -71,13 +93,24 @@ __grw_marked_branches() {
 		-e 's/\.reviewed .*//p' | sort -u
 }
 
-_git_review_forget() {
+_git_review_forget_delta() {
 	case "$cur" in
 	--*)
 		__gitcomp "--all --stale --dry-run --h"
 		;;
 	*)
 		__gitcomp_nl "$(__grw_marked_branches)"
+		;;
+	esac
+}
+
+_git_review_forget_saved() {
+	case "$cur" in
+	--*)
+		__gitcomp "--all --h"
+		;;
+	*)
+		__gitcomp_nl "$(__grw_saved_branches)"
 		;;
 	esac
 }

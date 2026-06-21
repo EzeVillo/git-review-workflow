@@ -117,36 +117,36 @@ teardown() {
 	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$remote_marker" ]
 }
 
-@test "review-forget <branch> clears the local marker" {
+@test "review-forget-delta <branch> clears the local marker" {
 	git review-pr feature/x --local
 	git switch --quiet develop
 	git clean-review feature/x
-	run git review-forget feature/x
+	run git review-forget-delta feature/x
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"(local)"* ]]
 	run git config reviewworkflowlocal.feature/x.reviewed
 	[ "$status" -ne 0 ]
 }
 
-@test "review-forget --stale clears a local marker when the local branch is gone" {
+@test "review-forget-delta --stale clears a local marker when the local branch is gone" {
 	git review-pr feature/x --local
 	git switch --quiet develop
 	git clean-review feature/x
 	git branch -D feature/x
-	run git review-forget --stale
+	run git review-forget-delta --stale
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"local; feature/x no longer exists"* ]]
 	run git config reviewworkflowlocal.feature/x.reviewed
 	[ "$status" -ne 0 ]
 }
 
-@test "review-forget --stale keeps a local marker whose local branch still exists" {
+@test "review-forget-delta --stale keeps a local marker whose local branch still exists" {
 	git review-pr feature/x --local
 	git switch --quiet develop
 	git clean-review feature/x
 	# Delete the remote branch but keep the local one: the local marker must stay.
 	git push --quiet origin --delete feature/x
-	run git review-forget --stale
+	run git review-forget-delta --stale
 	[ "$status" -eq 0 ]
 	run git config reviewworkflowlocal.feature/x.reviewed
 	[ "$status" -eq 0 ]
@@ -293,7 +293,7 @@ make_dotlocal_branch() {
 	[ "$(git config reviewworkflow.feature/x.local.reviewed)" != "$(git config reviewworkflowlocal.feature/x.reviewed)" ]
 }
 
-@test "review-forget <x> leaves the remote marker of the branch named <x>.local alone" {
+@test "review-forget-delta <x> leaves the remote marker of the branch named <x>.local alone" {
 	make_dotlocal_branch
 
 	git review-pr feature/x.local
@@ -303,7 +303,7 @@ make_dotlocal_branch() {
 	git switch --quiet --discard-changes develop
 	git clean-review feature/x
 
-	run git review-forget feature/x
+	run git review-forget-delta feature/x
 	[ "$status" -eq 0 ]
 	# Only feature/x's own (local) marker is cleared...
 	run git config reviewworkflowlocal.feature/x.reviewed
@@ -312,7 +312,7 @@ make_dotlocal_branch() {
 	[ -n "$(git config reviewworkflow.feature/x.local.reviewed)" ]
 }
 
-@test "review-forget --stale keeps a <x>.local remote marker even when local <x> is gone" {
+@test "review-forget-delta --stale keeps a <x>.local remote marker even when local <x> is gone" {
 	make_dotlocal_branch
 
 	git review-pr feature/x.local       # remote marker reviewworkflow.feature/x.local.reviewed
@@ -322,7 +322,7 @@ make_dotlocal_branch() {
 	# Remove the local feature/x branch; keep the remote feature/x.local branch.
 	git branch -D feature/x
 
-	run git review-forget --stale
+	run git review-forget-delta --stale
 	[ "$status" -eq 0 ]
 	# The marker is keyed off origin/feature/x.local (still present), so it stays.
 	# The old scheme mis-routed it to local feature/x and would have forgotten it.

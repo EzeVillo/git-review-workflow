@@ -1,0 +1,169 @@
+#!/usr/bin/env sh
+#
+# git-review-continue — resume a review put aside with git review-save.
+#
+# It turns review-saved/<branch> back into the active review/<branch>, restoring
+# the exact state you left: in whole mode the staged PR diff with your edits in the
+# working tree; in step mode the commit you were on, its edits, and every other
+# banked edit — so review-next / review-prev keep working as before.
+#
+# With no argument it resumes the only saved review, or lists them if there is more
+# than one. Name a branch to pick a specific one.
+#
+set -eu
+
+prog="git review-continue"
+
+usage() {
+	cat <<EOF
+usage: $prog [<branch>]
+
+Resume a review saved with git review-save. With no argument, resume the only
+saved review (or list them if there is more than one).
+EOF
+}
+
+die() {
+	echo "error: $1" >&2
+	exit 1
+}
+
+show_commit() {
+	# show_commit <commit> <n> <total> — same layout as review-next/review-prev.
+	git --no-pager show --stat --format='' "$1"
+	printf -- '----\n[%s/%s] %s\n%s\n\n%s\n----\nreview this commit, edit files, then run git review-next\n' \
+		"$2" "$3" "$(git rev-parse --short "$1")" \
+		"$(git show -s --format='%an <%ae>' "$1")" \
+		"$(git show -s --format='%s%n%n%b' "$1")"
+}
+
+arg=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+	-h | --h)
+		usage
+		exit 0
+		;;
+	-*)
+		echo "error: unknown option $1" >&2
+		usage >&2
+		exit 1
+		;;
+	*)
+		if [ -z "$arg" ]; then
+			arg="$1"
+		else
+			die "unexpected argument $1"
+		fi
+		;;
+	esac
+	shift
+done
+
+git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
+
+# Pick the saved review to resume.
+if [ -n "$arg" ]; then
+	src="$arg"
+	saved="review-saved/$src"
+	git rev-parse --verify --quiet "refs/heads/$saved" >/dev/null ||
+		die "no saved review for $src (looked for $saved)"
+else
+	branches="$(git for-each-ref --format='%(refname:short)' refs/heads/review-saved/)"
+	[ -n "$branches" ] || die "no saved reviews; save one with git review-save"
+	n="$(printf '%s\n' "$branches" | wc -l | tr -d ' ')"
+	if [ "$n" -gt 1 ]; then
+		echo "more than one saved review — name the one to resume:" >&2
+		printf '%s\n' "$branches" | sed -n 's#^review-saved/#  git review-continue #p' >&2
+		exit 1
+	fi
+	saved="$branches"
+	src="${saved#review-saved/}"
+fi
+
+rb="review/$src"
+git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null &&
+	die "$rb is already active; finish or abort it before resuming the saved one"
+
+# Resuming materialises a working tree, so refuse to clobber local changes.
+if ! git diff --quiet || ! git diff --cached --quiet; then
+	die "you have local changes; commit or stash them first"
+fi
+
+mode="$(git config "branch.$saved.reviewmode" || echo whole)"
+tip="$(git config "branch.$saved.reviewtip")"
+
+# restore_meta <key>: copy branch.<saved>.<key> to branch.<rb>.<key> when set.
+# Explicit if so the function returns 0 for absent optional keys (set -e safety).
+restore_meta() {
+	v="$(git config "branch.$saved.$1" || true)"
+	if [ -n "$v" ]; then
+		git config "branch.$rb.$1" "$v"
+	fi
+}
+
+if [ "$mode" = "step" ]; then
+	start="$(git config "branch.$saved.reviewstart")"
+	count="$(git config "branch.$saved.reviewcount")"
+	step="$(git config "branch.$saved.reviewstep")"
+
+	# Bring the banked edits back to where review-next/review-prev expect them.
+	git for-each-ref --format='%(refname)' "refs/review-saved-edits/$src/" | while read -r ref; do
+		n="${ref##*/}"
+		git update-ref "refs/review-edits/$src/$n" "$(git rev-parse "$ref")"
+		git update-ref -d "$ref"
+	done
+
+	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
+	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
+
+	# Land on the saved step exactly like review-next's goto_step does: hard-reset
+	# to the commit, re-apply its banked edits, then soft-reset so its diff is staged.
+	git switch -q -c "$rb" "$cstep"
+	ref="refs/review-edits/$src/$step"
+	if git rev-parse --verify --quiet "$ref" >/dev/null; then
+		git diff --binary "${ref}^" "$ref" | git apply ||
+			die "could not restore your edits for step $step"
+	fi
+	git reset -q --soft "$cstep^"
+
+	git config "branch.$rb.reviewmode" step
+	restore_meta reviewstart
+	restore_meta reviewcount
+	git config "branch.$rb.reviewstep" "$step"
+	restore_meta reviewsource
+	restore_meta reviewbase
+	restore_meta reviewtip
+	restore_meta reviewprevreviewed
+	restore_meta reviewlocal
+	restore_meta reviewreturn
+
+	git branch -D "$saved" >/dev/null
+
+	echo "resumed review of $src — step $step/$count"
+	show_commit "$cstep" "$step" "$count"
+else
+	# whole mode: rebuild the pristine review state (PR diff staged at the lower
+	# bound) and replay your edits into the working tree, leaving exactly what you
+	# had when you saved.
+	lower="$(git config "branch.$saved.reviewsavedlower")"
+	editpatch="$(git diff --binary "$tip" "$saved")"
+
+	git switch -q -c "$rb" "$tip"
+	git reset -q --soft "$lower"
+	if [ -n "$editpatch" ]; then
+		printf '%s\n' "$editpatch" | git apply ||
+			die "could not restore your edits"
+	fi
+
+	restore_meta reviewsource
+	restore_meta reviewbase
+	restore_meta reviewtip
+	restore_meta reviewprevreviewed
+	restore_meta reviewlocal
+	restore_meta reviewreturn
+
+	git branch -D "$saved" >/dev/null
+
+	echo "resumed review of $src — the staged diff is the PR; edit, then run git finish-review"
+fi

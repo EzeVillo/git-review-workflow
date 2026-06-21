@@ -7,7 +7,7 @@
 # rather than pass. They also assert the uninstaller does not delete unrelated
 # files that happen to share the install directory.
 
-CMDS="git-review git-review-pr git-review-next git-review-prev git-review-status git-review-list git-review-abort git-finish-review git-clean-review git-review-forget"
+CMDS="git-review git-review-pr git-review-next git-review-prev git-review-status git-review-list git-review-save git-review-continue git-review-abort git-finish-review git-clean-review git-review-forget-delta git-review-forget-saved"
 
 setup() {
 	TMP="$(mktemp -d)"

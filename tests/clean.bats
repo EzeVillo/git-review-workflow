@@ -3,7 +3,7 @@
 # Tests for git-clean-review after the --forget split:
 #   - it deletes both review/ and review-fixes/ branches, even if only one exists
 #   - it drops banked edit refs even when no review branches remain
-#   - it no longer owns the --delta marker (--forget is gone; use review-forget)
+#   - it no longer owns the --delta marker (--forget is gone; use review-forget-delta)
 
 setup() {
 	TMP="$(mktemp -d)"
@@ -96,7 +96,7 @@ teardown() {
 	[[ "$output" == *"unknown option --forget"* ]]
 }
 
-@test "clean-review keeps the delta marker (forgetting moved to review-forget)" {
+@test "clean-review keeps the delta marker (forgetting moved to review-forget-delta)" {
 	git config reviewworkflow.feature/x.reviewed "$(git rev-parse origin/feature/x)"
 	git branch review/feature/x develop
 

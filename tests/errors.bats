@@ -306,7 +306,7 @@ force_push_feature() {
 	[[ "$output" == *"no review branches found"* ]]
 }
 
-@test "clean-review keeps the recorded reviewed tip (forgetting moved to review-forget)" {
+@test "clean-review keeps the recorded reviewed tip (forgetting moved to review-forget-delta)" {
 	git review-pr feature/x
 	git switch --quiet develop
 	git reset --hard --quiet

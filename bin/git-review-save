@@ -1,0 +1,157 @@
+#!/usr/bin/env sh
+#
+# git-review-save — pause the review on the current branch and put it aside.
+#
+# A review in progress lives on a review/<branch> branch. Saving it converts that
+# branch into review-saved/<branch> and returns you to where you started, so you
+# can pick up something else and resume later with git review-continue.
+#
+# The saved review carries everything needed to resume exactly where you left off:
+#   whole mode  the staged PR diff and your uncommitted edits, captured as a
+#               commit whose diff against the tip is just your edits.
+#   step mode   the step you are on, the edits on it, and every edit you have
+#               banked on other commits — the banked-edit refs are moved out of
+#               refs/review-edits/ (which clean-review prunes) into
+#               refs/review-saved-edits/ so a clean-review never touches them.
+#
+set -eu
+
+prog="git review-save"
+
+usage() {
+	cat <<EOF
+usage: $prog
+
+Pause the review on the current review/* branch: stash it as review-saved/<branch>
+and return to the branch you started from. Resume it later with git review-continue.
+EOF
+}
+
+die() {
+	echo "error: $1" >&2
+	exit 1
+}
+
+case "${1:-}" in
+-h | --h)
+	usage
+	exit 0
+	;;
+"") ;;
+*)
+	echo "error: unexpected argument $1" >&2
+	usage >&2
+	exit 1
+	;;
+esac
+
+cur="$(git symbolic-ref --quiet --short HEAD || true)"
+case "$cur" in
+review/*) ;;
+*)
+	echo "error: not on a review/* branch (HEAD is ${cur:-detached})" >&2
+	exit 1
+	;;
+esac
+
+src="$(git config "branch.$cur.reviewsource" || true)"
+tip="$(git config "branch.$cur.reviewtip" || true)"
+if [ -z "$src" ] || [ -z "$tip" ]; then
+	die "missing review metadata; was $cur created with git review-pr?"
+fi
+
+saved="review-saved/$src"
+git rev-parse --verify --quiet "refs/heads/$saved" >/dev/null &&
+	die "$saved already exists; resume it with git review-continue or discard it with git review-forget-saved $src"
+
+mode="$(git config "branch.$cur.reviewmode" || echo whole)"
+
+# Where to return to once the review is put aside — the branch you started from,
+# falling back to the base branch, exactly like git review-abort.
+ret="$(git config "branch.$cur.reviewreturn" || true)"
+base="$(git config "branch.$cur.reviewbase" || true)"
+target=""
+if [ -n "$ret" ] && git rev-parse --verify --quiet "refs/heads/$ret" >/dev/null; then
+	target="$ret"
+elif [ -n "$base" ] && git rev-parse --verify --quiet "refs/heads/$base" >/dev/null; then
+	target="$base"
+fi
+[ -n "$target" ] || die "could not determine a branch to return to; switch away manually first"
+
+# copy_meta <key>: copy branch.<cur>.<key> to branch.<saved>.<key> when set.
+# The explicit if (rather than a && one-liner) keeps the function's exit status 0
+# when the key is absent, so it does not trip set -e for the optional keys.
+copy_meta() {
+	v="$(git config "branch.$cur.$1" || true)"
+	if [ -n "$v" ]; then
+		git config "branch.$saved.$1" "$v"
+	fi
+}
+
+if [ "$mode" = "step" ]; then
+	start="$(git config "branch.$cur.reviewstart")"
+	count="$(git config "branch.$cur.reviewcount")"
+	step="$(git config "branch.$cur.reviewstep")"
+	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
+
+	# Bank the edits on the commit we are sitting on, the same way review-next does
+	# before it moves, so the current step's work joins the other banked steps.
+	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
+	git add -A
+	tree="$(git write-tree)"
+	if [ "$tree" != "$(git rev-parse "$cstep^{tree}")" ]; then
+		edit="$(git commit-tree "$tree" -p "$cstep" -m "review edits step $step")"
+		git update-ref "refs/review-edits/$src/$step" "$edit"
+	fi
+
+	# Move the banked edits aside so clean-review (which prunes refs/review-edits/)
+	# leaves the saved review intact, and so they travel with it.
+	git for-each-ref --format='%(refname)' "refs/review-edits/$src/" | while read -r ref; do
+		n="${ref##*/}"
+		git update-ref "refs/review-saved-edits/$src/$n" "$(git rev-parse "$ref")"
+		git update-ref -d "$ref"
+	done
+
+	# The visible branch is just an anchor + metadata holder; point it at the tip.
+	git update-ref "refs/heads/$saved" "$tip"
+	git config "branch.$saved.reviewmode" step
+	copy_meta reviewstart
+	copy_meta reviewcount
+	copy_meta reviewstep
+	note="on step $step/$count"
+else
+	# whole mode: HEAD is the review's lower bound, the index holds the staged PR
+	# diff and the working tree holds that plus your edits. Capture the working tree
+	# as a commit parented on the tip, so its diff against the tip is exactly your
+	# edits — review-continue replays that to restore the editable state.
+	lower="$(git rev-parse HEAD)"
+	git add -A
+	tree="$(git write-tree)"
+	# Parent the saved commit on both the tip and the lower bound. The tip parent
+	# makes "git diff tip..saved" exactly your edits; the lower parent keeps the
+	# lower bound reachable even when it is a synthetic merge-tree commit (the
+	# folded-base case in review-pr), so a gc between save and continue cannot
+	# prune it out from under "git reset --soft $lower".
+	commit="$(git commit-tree "$tree" -p "$tip" -p "$lower" -m "review-save: $src")"
+	git update-ref "refs/heads/$saved" "$commit"
+	git config "branch.$saved.reviewmode" whole
+	git config "branch.$saved.reviewsavedlower" "$lower"
+	note="whole-PR review"
+fi
+
+# Metadata common to both modes.
+copy_meta reviewsource
+copy_meta reviewbase
+copy_meta reviewtip
+copy_meta reviewprevreviewed
+copy_meta reviewlocal
+git config "branch.$saved.reviewreturn" "$target"
+
+# Leave the review branch: drop its working-tree changes (captured above), return
+# to the starting branch and delete review/<src>. Its config goes with it; the
+# saved copy already holds everything.
+git switch -q --discard-changes "$target"
+git branch -D "$cur" >/dev/null
+
+echo "saved review of $src ($note) as $saved; returned to $target"
+echo "resume it with git review-continue"

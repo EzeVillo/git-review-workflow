@@ -183,6 +183,142 @@ push_pr2() {
 	[[ "$output" == *"differs from your local feature/x"* ]]
 }
 
+@test "review-pr does not warn when the local branch matches the remote" {
+	# Guards against a warning that always fires: here local == origin.
+	run git review-pr feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"differs from your local"* ]]
+}
+
+@test "review-pr does not warn when there is no local branch of that name" {
+	# A branch that exists only on the remote (e.g. a fresh clone): there is no
+	# local copy to diverge from, so reviewing it must succeed without a note.
+	git switch --quiet feature/x
+	git switch --quiet -c feature/y
+	printf 'a\nB\nc\nd\ny\n' >app.txt
+	git add app.txt
+	git commit --quiet -m pr-y
+	git push --quiet -u origin feature/y
+	git switch --quiet develop
+	git branch --quiet -D feature/y
+	run git review-pr feature/y
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"differs from your local"* ]]
+	run git diff --cached
+	[[ "$output" == *"+y"* ]]
+}
+
+@test "review-pr --this reviews the remote, not unpushed local commits" {
+	# The headline remote-mode case: standing on feature/x with an unpushed
+	# commit, --this must review origin's snapshot (no +local) and warn.
+	git switch --quiet feature/x
+	printf 'a\nB\nc\nd\nlocal\n' >app.txt
+	git add app.txt
+	git commit --quiet -m local-only
+	run git review-pr --this
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"differs from your local feature/x"* ]]
+	run git diff --cached
+	[[ "$output" != *"+local"* ]]
+	[[ "$output" == *"+d"* ]]
+}
+
+@test "review-pr --this --local reviews unpushed local commits without warning" {
+	# The mirror case: --local must read the working branch, including the
+	# unpushed commit, and never emit the remote-divergence note.
+	git switch --quiet feature/x
+	printf 'a\nB\nc\nd\nlocal\n' >app.txt
+	git add app.txt
+	git commit --quiet -m local-only
+	run git review-pr --this --local
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"differs from your local"* ]]
+	run git diff --cached
+	[[ "$output" == *"+local"* ]]
+}
+
+@test "review-pr --this resolves the actual current branch, not another" {
+	# With more than one feature branch present, prove --this picks the one we
+	# are standing on rather than, say, the base or the first branch.
+	git switch --quiet feature/x
+	git switch --quiet -c feature/z
+	printf 'a\nB\nc\nd\nz\n' >app.txt
+	git add app.txt
+	git commit --quiet -m pr-z
+	run git review-pr --this --local
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/z.reviewsource)" = "feature/z" ]
+}
+
+@test "review-pr --this on the base branch reports nothing to review" {
+	# Standing on develop, --this resolves src=develop against base develop:
+	# the range is empty, so it must error and leave no review branch behind.
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "develop" ]
+	run git review-pr --this --local
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"no commits to review"* ]]
+	run git rev-parse --verify --quiet refs/heads/review/develop
+	[ "$status" -ne 0 ]
+}
+
+@test "review-pr reports nothing to review for a source already at the base" {
+	# The same guard, reached without --this, to prove it is not --this-specific.
+	run git review-pr develop develop
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"no commits to review"* ]]
+	run git rev-parse --verify --quiet refs/heads/review/develop
+	[ "$status" -ne 0 ]
+}
+
+@test "review-pr --this --delta without a prior review fails" {
+	git switch --quiet feature/x
+	run git review-pr --this --local --delta
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"no previous review"* ]]
+}
+
+@test "review-pr --this --local --delta stages only new local commits" {
+	# Record a local marker, drop the review branch, add an unpushed commit,
+	# then a --this --delta must stage only that new commit.
+	git switch --quiet feature/x
+	git review-pr --this --local
+	git switch --quiet feature/x
+	git clean-review feature/x
+	printf 'a\nB\nc\nd\ne\n' >app.txt
+	git add app.txt
+	git commit --quiet -m pr2-local
+	run git review-pr --this --local --delta
+	[ "$status" -eq 0 ]
+	run git diff --cached
+	[[ "$output" == *"+e"* ]]
+	[[ "$output" != *"+d"* ]]
+}
+
+@test "review-pr --step warns when the local branch differs from the remote" {
+	# The divergence note must fire in step mode too (it is computed before the
+	# step layout branches off).
+	git switch --quiet feature/x
+	printf 'a\nB\nc\nd\nlocal\n' >app.txt
+	git add app.txt
+	git commit --quiet -m local-only
+	git switch --quiet develop
+	run git review-pr feature/x --step
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"differs from your local feature/x"* ]]
+}
+
+@test "review-pr --this resolves HEAD from a linked worktree" {
+	# --this reads git symbolic-ref HEAD, which must reflect the worktree's own
+	# checkout, not the main one.
+	git switch --quiet develop
+	wt="$TMP/wt"
+	git worktree add --quiet -b feature/w "$wt" feature/x
+	cd "$wt"
+	run git review-pr --this --local
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/w.reviewsource)" = "feature/w" ]
+}
+
 @test "clean-review deletes the review branches" {
 	git review-pr feature/x
 	git switch --quiet develop

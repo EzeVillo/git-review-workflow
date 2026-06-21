@@ -193,6 +193,11 @@ else
 		die "$baselabel not found"
 	start="$(git merge-base "$baseref" "$srcref")" ||
 		die "could not compute merge-base with $baselabel"
+	# Nothing to review when the source is already at the base (e.g. running on the
+	# base branch itself, or a branch fully merged into it). Mirror the explicit
+	# guards on --delta/--from instead of creating an empty review/ branch.
+	[ "$start" != "$tip" ] ||
+		die "no commits to review; $srclabel is already at $baselabel"
 	range="vs $baselabel"
 	if [ -n "$prev" ] && [ "$prev" != "$tip" ] && git merge-base --is-ancestor "$prev" "$tip"; then
 		n="$(git rev-list --count "$prev..$tip")"

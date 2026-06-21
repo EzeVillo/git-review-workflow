@@ -10,6 +10,12 @@ setup() {
 	REPO="$BATS_TEST_DIRNAME/.."
 	export PREFIX="$TMP/bin"
 	CMDS="git-review-pr git-review-next git-review-prev git-review-status git-review-list git-review-abort git-finish-review git-clean-review git-review-forget"
+
+	# install.sh chmods the repo's own bin/ files, which fails when the repo is
+	# mounted read-only (e.g. the Docker test harness uses -v ...:ro). Skip there
+	# rather than report a failure; the real CI runs writable and exercises these.
+	chmod +x "$REPO"/bin/git-review-pr 2>/dev/null ||
+		skip "repo is read-only; install.sh cannot run here"
 }
 
 teardown() {

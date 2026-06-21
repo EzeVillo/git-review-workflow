@@ -57,6 +57,20 @@ teardown() {
 	[ -z "$output" ]
 }
 
+@test "--step prints the diffstat before the header so the header stays near the prompt" {
+	run git review-pr feature/x --step
+	[ "$status" -eq 0 ]
+	# The diffstat summary must come before the [n/total] header: a long stat
+	# scrolls off the top, the identifying header stays next to the prompt.
+	stat_line="$(printf '%s\n' "$output" | grep -nE '[0-9]+ files? changed' | head -1 | cut -d: -f1)"
+	hdr_line="$(printf '%s\n' "$output" | grep -nF '[1/2]' | head -1 | cut -d: -f1)"
+	[ -n "$stat_line" ]
+	[ -n "$hdr_line" ]
+	[ "$stat_line" -lt "$hdr_line" ]
+	# the subject still shows, just below the header
+	[[ "$output" == *"c1-touch-a"* ]]
+}
+
 @test "review-next advances with a clean tree and hides prior edits" {
 	git review-pr feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
@@ -73,6 +87,18 @@ teardown() {
 	[ "$output" = "b.txt" ]
 	run git diff --name-only
 	[ -z "$output" ]
+}
+
+@test "review-next prints the diffstat before the header too" {
+	git review-pr feature/x --step
+	run git review-next
+	[ "$status" -eq 0 ]
+	stat_line="$(printf '%s\n' "$output" | grep -nE '[0-9]+ files? changed' | head -1 | cut -d: -f1)"
+	hdr_line="$(printf '%s\n' "$output" | grep -nF '[2/2]' | head -1 | cut -d: -f1)"
+	[ -n "$stat_line" ]
+	[ -n "$hdr_line" ]
+	[ "$stat_line" -lt "$hdr_line" ]
+	[[ "$output" == *"c2-touch-b"* ]]
 }
 
 @test "review-next at the last commit reports the end" {

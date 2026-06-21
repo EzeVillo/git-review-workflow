@@ -36,9 +36,14 @@ die() {
 
 show_commit() {
 	# show_commit <commit> <n> <total>
-	printf '\n[%s/%s] %s\n' "$2" "$3" "$(git rev-parse --short "$1")"
-	git --no-pager show --stat --format='%an <%ae>%n%n%s%n%n%b' "$1"
-	printf -- '----\nreview this commit, edit files, then run git review-next\n'
+	# The diffstat can be long for commits that touch many files, so print it
+	# first and put the identifying header last, where it stays next to the
+	# prompt instead of scrolling off the top.
+	git --no-pager show --stat --format='' "$1"
+	printf -- '----\n[%s/%s] %s\n%s\n\n%s\n----\nreview this commit, edit files, then run git review-next\n' \
+		"$2" "$3" "$(git rev-parse --short "$1")" \
+		"$(git show -s --format='%an <%ae>' "$1")" \
+		"$(git show -s --format='%s%n%n%b' "$1")"
 }
 
 src=""

@@ -339,6 +339,29 @@ git config reviewworkflow.remote upstream
 Afecta a `review-pr` y `review-forget --stale`. Una review `--local` ignora el
 remoto por completo.
 
+### Es por repositorio por diseño
+
+Tanto `reviewworkflow.base` como `reviewworkflow.remote` son simples claves de
+`git config`, así que se guardan **por repositorio** (en el `.git/config` de cada
+uno). No hay perfiles ni un archivo de config compartido: cada repositorio en el
+que trabajás mantiene su propia base y su propio remoto de forma independiente, y
+nunca se mezclan entre sí:
+
+```sh
+# repo A: los PRs se integran en main, traídos desde origin (el default)
+cd ~/proyecto-a && git config reviewworkflow.base main
+
+# repo B: los PRs se integran en develop, revisados desde un upstream ajeno
+cd ~/proyecto-b
+git config reviewworkflow.base develop
+git config reviewworkflow.remote upstream
+```
+
+Lo mismo aplica a los marcadores de `--delta`: también viven en la config de cada
+repo. Si querés un valor de respaldo para *todos* tus repos, configuralo de forma
+global (`git config --global reviewworkflow.base main`); un valor por repo lo
+sobrescribe, y un argumento posicional `base` sobrescribe a ambos.
+
 ## Flujo típico
 
 ```sh

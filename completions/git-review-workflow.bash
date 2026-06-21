@@ -9,13 +9,13 @@
 # source this file.
 
 _git_review() {
-	__gitcomp "--help --version"
+	__gitcomp "--h --version"
 }
 
 _git_review_pr() {
 	case "$cur" in
 	--*)
-		__gitcomp "--this --delta --from --step --local --help"
+		__gitcomp "--this --delta --from --step --local --h"
 		;;
 	*)
 		__gitcomp_nl "$(__git_refs)"
@@ -24,33 +24,33 @@ _git_review_pr() {
 }
 
 _git_review_next() {
-	__gitcomp "--help"
+	__gitcomp "--h"
 }
 
 _git_review_prev() {
-	__gitcomp "--help"
+	__gitcomp "--h"
 }
 
 _git_review_status() {
-	__gitcomp "--help"
+	__gitcomp "--h"
 }
 
 _git_review_list() {
-	__gitcomp "--help"
+	__gitcomp "--h"
 }
 
 _git_review_abort() {
-	__gitcomp "--help"
+	__gitcomp "--h"
 }
 
 _git_finish_review() {
-	__gitcomp "--onto-source --resume --help"
+	__gitcomp "--onto-source --resume --h"
 }
 
 _git_clean_review() {
 	case "$cur" in
 	--*)
-		__gitcomp "--help"
+		__gitcomp "--h"
 		;;
 	*)
 		__gitcomp_nl "$(__git_heads | sed -n 's#^review/##p')"
@@ -74,7 +74,7 @@ __grw_marked_branches() {
 _git_review_forget() {
 	case "$cur" in
 	--*)
-		__gitcomp "--all --stale --dry-run --help"
+		__gitcomp "--all --stale --dry-run --h"
 		;;
 	*)
 		__gitcomp_nl "$(__grw_marked_branches)"

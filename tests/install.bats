@@ -33,7 +33,7 @@ teardown() {
 
 @test "an installed command runs from PREFIX" {
 	sh "$REPO/install.sh"
-	run "$PREFIX/git-review-pr" --help
+	run "$PREFIX/git-review-pr" --h
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"usage: git review-pr"* ]]
 }

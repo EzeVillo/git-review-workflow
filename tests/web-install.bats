@@ -101,7 +101,7 @@ CURLSTUB
 
 @test "web-install.sh: an installed command runs from PREFIX" {
 	sh "$REPO/web-install.sh"
-	run "$PREFIX/git-review-pr" --help
+	run "$PREFIX/git-review-pr" --h
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"usage: git review-pr"* ]]
 }

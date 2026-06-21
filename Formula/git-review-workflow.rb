@@ -31,9 +31,9 @@ class GitReviewWorkflow < Formula
   end
 
   test do
-    assert_match "git review workflow", shell_output("#{bin}/git-review --help")
+    assert_match "git review workflow", shell_output("#{bin}/git-review --h")
     assert_match version.to_s, shell_output("#{bin}/git-review --version")
-    assert_match "usage: git review-pr", shell_output("#{bin}/git-review-pr --help")
-    assert_match "usage: git finish-review", shell_output("#{bin}/git-finish-review --help")
+    assert_match "usage: git review-pr", shell_output("#{bin}/git-review-pr --h")
+    assert_match "usage: git finish-review", shell_output("#{bin}/git-finish-review --h")
   end
 end

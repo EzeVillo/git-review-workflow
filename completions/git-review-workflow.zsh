@@ -17,13 +17,13 @@
 
 _git-review() {
 	_arguments \
-		'(-h --help)'{-h,--help}'[list all available commands]' \
+		'(-h --h)'{-h,--h}'[list all available commands]' \
 		'(-V --version)'{-V,--version}'[print the installed version]'
 }
 
 _git-review-pr() {
 	_arguments -S \
-		'(-h --help)'{-h,--help}'[show help]' \
+		'(-h --h)'{-h,--h}'[show help]' \
 		'--this[review the branch you are currently on]' \
 		'(--from)--delta[review only the commits added since your last review]' \
 		'(--delta)--from[review only the commits after <commit>]:commit:__git_commits' \
@@ -34,35 +34,35 @@ _git-review-pr() {
 }
 
 _git-review-next() {
-	_arguments '(-h --help)'{-h,--help}'[show help]'
+	_arguments '(-h --h)'{-h,--h}'[show help]'
 }
 
 _git-review-prev() {
-	_arguments '(-h --help)'{-h,--help}'[show help]'
+	_arguments '(-h --h)'{-h,--h}'[show help]'
 }
 
 _git-review-status() {
-	_arguments '(-h --help)'{-h,--help}'[show help]'
+	_arguments '(-h --h)'{-h,--h}'[show help]'
 }
 
 _git-review-list() {
-	_arguments '(-h --help)'{-h,--help}'[show help]'
+	_arguments '(-h --h)'{-h,--h}'[show help]'
 }
 
 _git-review-abort() {
-	_arguments '(-h --help)'{-h,--help}'[show help]'
+	_arguments '(-h --h)'{-h,--h}'[show help]'
 }
 
 _git-finish-review() {
 	_arguments -S \
-		'(-h --help)'{-h,--help}'[show help]' \
+		'(-h --h)'{-h,--h}'[show help]' \
 		'--onto-source[stage your edits on the PR branch itself]' \
 		'--resume[continue after resolving replay conflicts]'
 }
 
 _git-clean-review() {
 	_arguments -S \
-		'(-h --help)'{-h,--help}'[show help]' \
+		'(-h --h)'{-h,--h}'[show help]' \
 		'1:review branch:->reviewbranches'
 
 	if [ "$state" = reviewbranches ]; then
@@ -74,7 +74,7 @@ _git-clean-review() {
 
 _git-review-forget() {
 	_arguments -S \
-		'(-h --help)'{-h,--help}'[show help]' \
+		'(-h --h)'{-h,--h}'[show help]' \
 		'--all[forget every recorded marker]' \
 		'--stale[forget markers whose remote branch no longer exists]' \
 		'--dry-run[with --stale, list what would be forgotten]' \

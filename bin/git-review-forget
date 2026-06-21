@@ -71,7 +71,7 @@ stale=0
 dryrun=0
 while [ $# -gt 0 ]; do
 	case "$1" in
-	-h | --help)
+	-h | --h)
 		usage
 		exit 0
 		;;

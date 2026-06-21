@@ -37,16 +37,16 @@ setup() {
 		cp "$f" "$TMP/"
 		chmod +x "$TMP/$(basename "$f")"
 	done
-	run "$TMP/git-review" --help
+	run "$TMP/git-review" --h
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"git review workflow"* ]]
 	run "$TMP/git-review" --version
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"$VERSION"* ]]
-	run "$TMP/git-review-pr" --help
+	run "$TMP/git-review-pr" --h
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"usage: git review-pr"* ]]
-	run "$TMP/git-finish-review" --help
+	run "$TMP/git-finish-review" --h
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"usage: git finish-review"* ]]
 	rm -rf "$TMP"

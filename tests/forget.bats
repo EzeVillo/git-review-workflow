@@ -233,8 +233,8 @@ mark() {
 	[[ "$output" == *"unknown option --bogus"* ]]
 }
 
-@test "review-forget --help prints usage and exits 0" {
-	run git-review-forget --help
+@test "review-forget --h prints usage and exits 0" {
+	run git-review-forget --h
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"usage: git review-forget"* ]]
 }

@@ -20,7 +20,7 @@ EOF
 }
 
 case "${1:-}" in
--h | --help)
+-h | --h)
 	usage
 	exit 0
 	;;

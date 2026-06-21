@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 #
-# git-review — entry point: --help lists all commands, --version prints the version.
+# git-review — entry point: --h lists all commands, --version prints the version.
 #
 set -eu
 
@@ -11,7 +11,7 @@ usage() {
 	cat <<EOF
 git review workflow — review a pull request branch locally
 
-usage: $prog (--help | --version)
+usage: $prog (--h | --version)
 
 Commands:
   git review-pr <branch> [base | --delta | --from <commit>] [--step] [--local]
@@ -34,7 +34,7 @@ EOF
 }
 
 case "${1:-}" in
--h | --help | "")
+-h | --h | "")
 	usage
 	exit 0
 	;;

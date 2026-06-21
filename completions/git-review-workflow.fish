@@ -39,7 +39,7 @@ function __grw_marked_branches
 end
 
 # git review
-complete -c git -n '__grw_using review' -f -l help    -d 'list all available commands'
+complete -c git -n '__grw_using review' -f -l h    -d 'list all available commands'
 complete -c git -n '__grw_using review' -f -s V -l version -d 'print the installed version'
 
 # git review-pr
@@ -48,26 +48,26 @@ complete -c git -n '__grw_using review-pr' -f -l delta -d 'review only commits s
 complete -c git -n '__grw_using review-pr' -f -l from -d 'review only commits after <commit>'
 complete -c git -n '__grw_using review-pr' -f -l step -d 'review one commit at a time'
 complete -c git -n '__grw_using review-pr' -f -l local -d 'review your local branches directly, without fetching'
-complete -c git -n '__grw_using review-pr' -f -l help -d 'show help'
+complete -c git -n '__grw_using review-pr' -f -l h -d 'show help'
 complete -c git -n '__grw_using review-pr' -f -a '(__grw_branches)'
 
 # git finish-review
 complete -c git -n '__grw_using finish-review' -f -l onto-source -d 'stage edits on the PR branch itself'
 complete -c git -n '__grw_using finish-review' -f -l resume -d 'continue after resolving replay conflicts'
-complete -c git -n '__grw_using finish-review' -f -l help -d 'show help'
+complete -c git -n '__grw_using finish-review' -f -l h -d 'show help'
 
 # git clean-review
-complete -c git -n '__grw_using clean-review' -f -l help -d 'show help'
+complete -c git -n '__grw_using clean-review' -f -l h -d 'show help'
 complete -c git -n '__grw_using clean-review' -f -a '(__grw_review_branches)'
 
 # git review-forget
 complete -c git -n '__grw_using review-forget' -f -l all -d 'forget every recorded marker'
 complete -c git -n '__grw_using review-forget' -f -l stale -d 'forget markers whose remote branch is gone'
 complete -c git -n '__grw_using review-forget' -f -l dry-run -d 'with --stale, list what would be forgotten'
-complete -c git -n '__grw_using review-forget' -f -l help -d 'show help'
+complete -c git -n '__grw_using review-forget' -f -l h -d 'show help'
 complete -c git -n '__grw_using review-forget' -f -a '(__grw_marked_branches)'
 
-# Commands that take no arguments beyond --help.
+# Commands that take no arguments beyond --h.
 for sub in review-next review-prev review-status review-list review-abort
-    complete -c git -n "__grw_using $sub" -f -l help -d 'show help'
+    complete -c git -n "__grw_using $sub" -f -l h -d 'show help'
 end

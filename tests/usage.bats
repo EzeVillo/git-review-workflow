@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 #
 # Usage / argument-parsing tests for every subcommand. These exercise the paths
-# that run before any git state is touched: --help / -h, unknown options and
+# that run before any git state is touched: --h / -h, unknown options and
 # unexpected positional arguments. They need only the bin/ directory on PATH.
 
 setup() {
@@ -15,10 +15,10 @@ teardown() {
 	rm -rf "$TMP"
 }
 
-# ── --help / -h prints usage and exits 0 ──────────────────────────────────────
+# ── --h / -h prints usage and exits 0 ──────────────────────────────────────
 
-@test "review-pr --help prints usage and exits 0" {
-	run git-review-pr --help
+@test "review-pr --h prints usage and exits 0" {
+	run git-review-pr --h
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"usage: git review-pr"* ]]
 }
@@ -29,50 +29,50 @@ teardown() {
 	[[ "$output" == *"usage: git review-pr"* ]]
 }
 
-@test "review-next --help prints usage and exits 0" {
-	run git-review-next --help
+@test "review-next --h prints usage and exits 0" {
+	run git-review-next --h
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"usage: git review-next"* ]]
 }
 
-@test "review-prev --help prints usage and exits 0" {
-	run git-review-prev --help
+@test "review-prev --h prints usage and exits 0" {
+	run git-review-prev --h
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"usage: git review-prev"* ]]
 }
 
-@test "review-status --help prints usage and exits 0" {
-	run git-review-status --help
+@test "review-status --h prints usage and exits 0" {
+	run git-review-status --h
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"usage: git review-status"* ]]
 }
 
-@test "review-list --help prints usage and exits 0" {
-	run git-review-list --help
+@test "review-list --h prints usage and exits 0" {
+	run git-review-list --h
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"usage: git review-list"* ]]
 }
 
-@test "review-abort --help prints usage and exits 0" {
-	run git-review-abort --help
+@test "review-abort --h prints usage and exits 0" {
+	run git-review-abort --h
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"usage: git review-abort"* ]]
 }
 
-@test "finish-review --help prints usage and exits 0" {
-	run git-finish-review --help
+@test "finish-review --h prints usage and exits 0" {
+	run git-finish-review --h
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"usage: git finish-review"* ]]
 }
 
-@test "clean-review --help prints usage and exits 0" {
-	run git-clean-review --help
+@test "clean-review --h prints usage and exits 0" {
+	run git-clean-review --h
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"usage: git clean-review"* ]]
 }
 
-@test "review-forget --help prints usage and exits 0" {
-	run git-review-forget --help
+@test "review-forget --h prints usage and exits 0" {
+	run git-review-forget --h
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"usage: git review-forget"* ]]
 }

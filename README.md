@@ -151,7 +151,7 @@ pasting one line into your shell's config file:
 | **fish**                          | *(no file — just run this once)* | `fish_add_path ~/.local/bin`           |
 
 Not sure which one you use? Run `echo $0`. After editing the file, **open a new
-terminal** (or `source` the file). Run `git review-pr --help` to confirm.
+terminal** (or `source` the file). Run `git review-pr -h` to confirm.
 </details>
 
 <details>
@@ -195,17 +195,17 @@ git config --global http.sslBackend openssl
 > **How to read the syntax:** `<x>` is **required**, `[x]` is **optional**, and
 > `a | b` means **pick one, not both**.
 
-| Command                                                                          | What it does                                                                                                                  |
-|----------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------|
-| `git review [--help \| --version]`                                               | List all commands or print the installed version.                                                                             |
+| Command                                                                                      | What it does                                                                                                                                                       |
+|----------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `git review [-h \| --version]`                                                               | List all commands or print the installed version.                                                                                                                  |
 | `git review-pr (<branch> \| --this) [base \| --delta \| --from <commit>] [--step] [--local]` | Fetch `origin`, then stage the PR diff on a new `review/<branch>` branch (`--this` reviews the current branch; `--local` reviews local branches without fetching). |
-| `git review-next` / `git review-prev`                                            | Move a `--step` review to the next / previous commit.                                                                         |
-| `git review-status`                                                              | Show the state of the review on the current branch.                                                                           |
-| `git review-list`                                                                | List every `review/*` branch in progress (current one marked `*`).                                                            |
-| `git finish-review [--onto-source] [--resume]`                                   | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch).                                 |
-| `git review-abort`                                                               | Cancel the current review and return to where you started.                                                                    |
-| `git clean-review [branch]`                                                      | Delete the `review/*` and `review-fixes/*` branches for `<branch>`, or all of them.                                           |
-| `git review-forget (<branch> \| --all \| --stale [--dry-run])`                   | Discard the `--delta` marker for one branch, all of them, or only stale ones.                                                 |
+| `git review-next` / `git review-prev`                                                        | Move a `--step` review to the next / previous commit.                                                                                                              |
+| `git review-status`                                                                          | Show the state of the review on the current branch.                                                                                                                |
+| `git review-list`                                                                            | List every `review/*` branch in progress (current one marked `*`).                                                                                                 |
+| `git finish-review [--onto-source] [--resume]`                                               | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch).                                                                      |
+| `git review-abort`                                                                           | Cancel the current review and return to where you started.                                                                                                         |
+| `git clean-review [branch]`                                                                  | Delete the `review/*` and `review-fixes/*` branches for `<branch>`, or all of them.                                                                                |
+| `git review-forget (<branch> \| --all \| --stale [--dry-run])`                               | Discard the `--delta` marker for one branch, all of them, or only stale ones.                                                                                      |
 
 ### `git review-pr`
 

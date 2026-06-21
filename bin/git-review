@@ -28,7 +28,8 @@ Commands:
   git review-forget (<branch> | --all | --stale [--dry-run])
                      discard the --delta marker for one, all or stale branches
 
-Run 'git <command> --help' for details on each command.
+Run 'git <command> -h' for details on each command (git reserves
+'git <command> --help' for man pages, which this workflow does not install).
 EOF
 }
 

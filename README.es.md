@@ -153,7 +153,7 @@ shell:
 | **fish**                            | *(sin archivo — corré esto una vez)* | `fish_add_path ~/.local/bin`           |
 
 ¿No sabés cuál usás? Corré `echo $0`. Después de editar el archivo, **abrí una
-terminal nueva** (o hacé `source` del archivo). Corré `git review-pr --help` para
+terminal nueva** (o hacé `source` del archivo). Corré `git review-pr -h` para
 confirmar.
 </details>
 
@@ -198,17 +198,17 @@ git config --global http.sslBackend openssl
 > **Cómo leer la sintaxis:** `<x>` es **obligatorio**, `[x]` es **opcional**, y
 > `a | b` significa **elegí uno, no los dos**.
 
-| Comando                                                                        | Qué hace                                                                                                                                |
-|--------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|
-| `git review [--help \| --version]`                                             | Lista todos los comandos o imprime la versión instalada.                                                                                |
+| Comando                                                                                    | Qué hace                                                                                                                                                                |
+|--------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `git review [-h \| --version]`                                                             | Lista todos los comandos o imprime la versión instalada.                                                                                                                |
 | `git review-pr (<rama> \| --this) [base \| --delta \| --from <commit>] [--step] [--local]` | Hace fetch de `origin` y deja el diff del PR staged en una nueva rama `review/<rama>` (`--this` revisa la rama actual; `--local` revisa ramas locales sin hacer fetch). |
-| `git review-next` / `git review-prev`                                          | Mueve una review `--step` al commit siguiente / anterior.                                                                               |
-| `git review-status`                                                            | Muestra el estado de la review en la rama actual.                                                                                       |
-| `git review-list`                                                              | Lista todas las ramas `review/*` en curso (la actual marcada con `*`).                                                                  |
-| `git finish-review [--onto-source] [--resume]`                                 | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR).                                             |
-| `git review-abort`                                                             | Cancela la review actual y vuelve a donde empezaste.                                                                                    |
-| `git clean-review [rama]`                                                      | Borra las ramas `review/*` y `review-fixes/*` de `<rama>`, o todas.                                                                     |
-| `git review-forget (<rama> \| --all \| --stale [--dry-run])`                   | Descarta el marcador de `--delta` de una rama, de todas, o solo de las obsoletas.                                                       |
+| `git review-next` / `git review-prev`                                                      | Mueve una review `--step` al commit siguiente / anterior.                                                                                                               |
+| `git review-status`                                                                        | Muestra el estado de la review en la rama actual.                                                                                                                       |
+| `git review-list`                                                                          | Lista todas las ramas `review/*` en curso (la actual marcada con `*`).                                                                                                  |
+| `git finish-review [--onto-source] [--resume]`                                             | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR).                                                                             |
+| `git review-abort`                                                                         | Cancela la review actual y vuelve a donde empezaste.                                                                                                                    |
+| `git clean-review [rama]`                                                                  | Borra las ramas `review/*` y `review-fixes/*` de `<rama>`, o todas.                                                                                                     |
+| `git review-forget (<rama> \| --all \| --stale [--dry-run])`                               | Descarta el marcador de `--delta` de una rama, de todas, o solo de las obsoletas.                                                                                       |
 
 ### `git review-pr`
 

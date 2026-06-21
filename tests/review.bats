@@ -136,6 +136,53 @@ push_pr2() {
 	[[ "$output" == *"no previous review"* ]]
 }
 
+@test "review-pr --this --local reviews the current branch" {
+	git switch --quiet feature/x
+	run git review-pr --this --local
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
+	[ "$(git config branch.review/feature/x.reviewsource)" = "feature/x" ]
+	run git diff --cached
+	[[ "$output" == *"+B"* ]]
+	[[ "$output" == *"+d"* ]]
+}
+
+@test "review-pr --this rejects a positional branch argument" {
+	git switch --quiet feature/x
+	run git review-pr --this feature/x
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"--this takes no branch argument"* ]]
+}
+
+@test "review-pr --this fails on a detached HEAD" {
+	git switch --quiet feature/x
+	git checkout --quiet --detach
+	run git review-pr --this --local
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"detached"* ]]
+}
+
+@test "review-pr --this refuses to review a review branch" {
+	git review-pr feature/x
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
+	run git review-pr --this
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"cannot review a review branch"* ]]
+}
+
+@test "review-pr notes when the local branch differs from the remote" {
+	# Commit on feature/x locally without pushing, so origin/feature/x (what a
+	# remote review targets) trails the local branch of the same name.
+	git switch --quiet feature/x
+	printf 'a\nB\nc\nd\nlocal\n' >app.txt
+	git add app.txt
+	git commit --quiet -m local-only
+	git switch --quiet develop
+	run git review-pr feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"differs from your local feature/x"* ]]
+}
+
 @test "clean-review deletes the review branches" {
 	git review-pr feature/x
 	git switch --quiet develop

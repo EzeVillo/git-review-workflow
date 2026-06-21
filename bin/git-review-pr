@@ -15,12 +15,13 @@ prog="git review-pr"
 
 usage() {
 	cat <<EOF
-usage: $prog <branch> [base | --delta | --from <commit>] [--step]
+usage: $prog (<branch> | --this) [base | --delta | --from <commit>] [--step]
 
 Stage a pull request diff on a review/<branch> branch for inline review.
 
   base              base branch to diff against (required for a full review;
                     set a default with: git config reviewworkflow.base <branch>)
+  --this            review the branch you are currently on (no name needed)
   --delta           review only the commits added since your last review
   --from <commit>   review only the commits after <commit>
   --step            review one commit at a time; advance with git review-next
@@ -47,6 +48,7 @@ from=""
 delta=0
 step=0
 local_mode=0
+this_mode=0
 while [ $# -gt 0 ]; do
 	case "$1" in
 	-h | --help)
@@ -56,6 +58,7 @@ while [ $# -gt 0 ]; do
 	-d | --delta) delta=1 ;;
 	--step) step=1 ;;
 	--local) local_mode=1 ;;
+	--this) this_mode=1 ;;
 	--from)
 		shift
 		[ $# -gt 0 ] || die "--from requires a commit"
@@ -81,7 +84,7 @@ while [ $# -gt 0 ]; do
 	shift
 done
 
-[ -n "$src" ] || {
+[ -n "$src" ] || [ "$this_mode" -eq 1 ] || {
 	usage >&2
 	exit 1
 }
@@ -95,6 +98,20 @@ if [ "$base_explicit" -eq 1 ] && { [ "$delta" -eq 1 ] || [ -n "$from" ]; }; then
 fi
 
 git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
+
+# --this fills in <branch> from the branch you have checked out, so you do not
+# have to name it. It only resolves the name; the mode (remote vs --local) is
+# still chosen by flags. The check against review/* avoids the nonsense of
+# reviewing a review branch.
+if [ "$this_mode" -eq 1 ]; then
+	[ -z "$src" ] || die "--this takes no branch argument (got $src)"
+	cur="$(git symbolic-ref --quiet --short HEAD || true)"
+	[ -n "$cur" ] || die "--this needs a current branch, but HEAD is detached"
+	case "$cur" in
+	review/*) die "--this cannot review a review branch (HEAD is $cur)" ;;
+	esac
+	src="$cur"
+fi
 
 # Remote to review from; defaults to origin, override with reviewworkflow.remote.
 remote="$(git config reviewworkflow.remote || echo origin)"
@@ -141,6 +158,19 @@ git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null &&
 
 tip="$(git rev-parse "$srcref")"
 prev="$(git config "$markerkey" || true)"
+
+# A remote review targets the remote's copy of the branch, never your local one,
+# which review-pr never updates. If a local branch of the same name exists and
+# points elsewhere, you are reviewing a different snapshot than the one you have
+# checked out — and a later finish-review --onto-source, which writes to the
+# local branch, will refuse unless it sits at the reviewed tip. Warn rather than
+# silently review the wrong thing; --local reviews what you have checked out.
+if [ "$local_mode" -eq 0 ]; then
+	localtip="$(git rev-parse --verify --quiet "refs/heads/$src" || true)"
+	if [ -n "$localtip" ] && [ "$localtip" != "$tip" ]; then
+		echo "note: reviewing $srclabel ($(git rev-parse --short "$tip")), which differs from your local $src ($(git rev-parse --short "$localtip")); use --local to review what you have checked out" >&2
+	fi
+fi
 
 # Resolve the lower bound of the review range (exclusive).
 if [ "$delta" -eq 1 ]; then

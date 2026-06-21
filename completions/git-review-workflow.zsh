@@ -24,6 +24,7 @@ _git-review() {
 _git-review-pr() {
 	_arguments -S \
 		'(-h --help)'{-h,--help}'[show help]' \
+		'--this[review the branch you are currently on]' \
 		'(--from)--delta[review only the commits added since your last review]' \
 		'(--delta)--from[review only the commits after <commit>]:commit:__git_commits' \
 		'--step[review one commit at a time]' \

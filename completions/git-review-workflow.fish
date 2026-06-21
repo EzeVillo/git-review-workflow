@@ -43,6 +43,7 @@ complete -c git -n '__grw_using review' -f -l help    -d 'list all available com
 complete -c git -n '__grw_using review' -f -s V -l version -d 'print the installed version'
 
 # git review-pr
+complete -c git -n '__grw_using review-pr' -f -l this -d 'review the branch you are currently on'
 complete -c git -n '__grw_using review-pr' -f -l delta -d 'review only commits since your last review'
 complete -c git -n '__grw_using review-pr' -f -l from -d 'review only commits after <commit>'
 complete -c git -n '__grw_using review-pr' -f -l step -d 'review one commit at a time'

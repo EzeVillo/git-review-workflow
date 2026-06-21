@@ -201,7 +201,7 @@ git config --global http.sslBackend openssl
 | Comando                                                                        | Qué hace                                                                                                                                |
 |--------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------|
 | `git review [--help \| --version]`                                             | Lista todos los comandos o imprime la versión instalada.                                                                                |
-| `git review-pr <rama> [base \| --delta \| --from <commit>] [--step] [--local]` | Hace fetch de `origin` y deja el diff del PR staged en una nueva rama `review/<rama>` (`--local` revisa ramas locales sin hacer fetch). |
+| `git review-pr (<rama> \| --this) [base \| --delta \| --from <commit>] [--step] [--local]` | Hace fetch de `origin` y deja el diff del PR staged en una nueva rama `review/<rama>` (`--this` revisa la rama actual; `--local` revisa ramas locales sin hacer fetch). |
 | `git review-next` / `git review-prev`                                          | Mueve una review `--step` al commit siguiente / anterior.                                                                               |
 | `git review-status`                                                            | Muestra el estado de la review en la rama actual.                                                                                       |
 | `git review-list`                                                              | Lista todas las ramas `review/*` en curso (la actual marcada con `*`).                                                                  |
@@ -221,6 +221,12 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   falla y te pide que la configures. No se usa con `--delta` ni `--from`, que ya
   traen su propio punto de inicio — pasar una base explícita junto con ellos es
   un error (una base que viene de config simplemente se ignora).
+- `--this` — revisar la rama que tenés **checkouteada**, sin tener que tipear su
+  nombre. Solo completa `<rama>`; el modo lo siguen eligiendo los flags, así que
+  combinalo con `--local` para revisar tu trabajo local. Sin `--local` revisa
+  `origin/<rama>` — si difiere de tu rama checkouteada te avisa, porque estarías
+  revisando un snapshot distinto al que tenés. Falla con HEAD detached o estando
+  sobre una rama `review/*`.
 - `--delta` — revisar solo los commits agregados **desde tu última review** de
   esta rama, en vez de todo el PR. Ideal para re-revisar un PR actualizado. El
   tip registrado sobrevive a `clean-review`, así que funciona aunque hayas
@@ -242,7 +248,9 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   local y una remota de la misma rama nunca se pisan el progreso.
 - Siempre actualiza desde `origin` primero y **falla** si no puede (salvo con
   `--local`). La revisión se arma desde `origin/<rama>`, nunca desde una copia
-  local vieja.
+  local vieja. Si una rama local con el mismo nombre apunta a otro lado, te avisa:
+  la review refleja el remoto, no tu checkout, y un `finish-review --onto-source`
+  posterior se va a negar hasta que tu rama local coincida.
 - No corre si tenés cambios locales — arrancá desde una rama limpia.
 - **Los merges de la rama base se excluyen.** Si el autor mergeó la base (ej.
   `develop`) dentro del PR, ese contenido mergeado queda afuera de la review en

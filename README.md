@@ -198,7 +198,7 @@ git config --global http.sslBackend openssl
 | Command                                                                          | What it does                                                                                                                  |
 |----------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------|
 | `git review [--help \| --version]`                                               | List all commands or print the installed version.                                                                             |
-| `git review-pr <branch> [base \| --delta \| --from <commit>] [--step] [--local]` | Fetch `origin`, then stage the PR diff on a new `review/<branch>` branch (`--local` reviews local branches without fetching). |
+| `git review-pr (<branch> \| --this) [base \| --delta \| --from <commit>] [--step] [--local]` | Fetch `origin`, then stage the PR diff on a new `review/<branch>` branch (`--this` reviews the current branch; `--local` reviews local branches without fetching). |
 | `git review-next` / `git review-prev`                                            | Move a `--step` review to the next / previous commit.                                                                         |
 | `git review-status`                                                              | Show the state of the review on the current branch.                                                                           |
 | `git review-list`                                                                | List every `review/*` branch in progress (current one marked `*`).                                                            |
@@ -218,6 +218,12 @@ Has two independent axes — **range** (where the review starts) and **layout**
   configure one. Not used with `--delta` or `--from`, which carry their own
   starting point — passing an explicit base alongside them is an error (a base
   from config is simply ignored).
+- `--this` — review the branch you currently have **checked out**, so you do not
+  have to type its name. It only fills in `<branch>`; the mode is still chosen by
+  flags, so pair it with `--local` to review your local work. Without `--local`
+  it reviews `origin/<branch>` — if that differs from your checked-out branch you
+  get a note, since you would be reviewing a different snapshot than you have.
+  Fails on a detached HEAD or while on a `review/*` branch.
 - `--delta` — review only the commits added **since your last review** of this
   branch, instead of the whole PR. Perfect for re-reviewing an updated PR. The
   recorded tip survives `clean-review`, so this works even after you deleted the
@@ -238,7 +244,9 @@ Has two independent axes — **range** (where the review starts) and **layout**
   reviews of the same branch name never overwrite each other's progress.
 - Always updates from `origin` first and **fails** if it cannot (unless
   `--local`). The review is built from `origin/<branch>`, never a stale local
-  copy.
+  copy. If a local branch of the same name points somewhere else, it prints a
+  note: the review reflects the remote, not your checkout, and a later
+  `finish-review --onto-source` would refuse until your local branch matches.
 - Refuses to run if you have local changes — start from a clean branch.
 - **Merges of the base branch are excluded.** If the author merged the base
   (e.g. `develop`) into the PR, that merged-in content is left out of the review

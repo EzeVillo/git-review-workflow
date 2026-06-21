@@ -15,7 +15,33 @@ permissions:
   contents: write
 
 jobs:
+  # Gate the release on a green test suite: a tag must not ship if the code it
+  # points at is broken. This mirrors ci.yml but runs against the tagged commit
+  # so the gate and the artifact are guaranteed to be the same code.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check bin scripts are executable
+        run: |
+          missing=$(git ls-files -s bin/ | awk '$1 != "100755" {print $4}')
+          if [ -n "$missing" ]; then
+            echo "These files in bin/ are missing the executable bit (100755):" >&2
+            echo "$missing" >&2
+            echo "Fix with: git update-index --chmod=+x <file>" >&2
+            exit 1
+          fi
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: shellcheck
+        run: shellcheck bin/* install.sh uninstall.sh web-install.sh web-uninstall.sh
+      - name: Install bats
+        run: sudo apt-get install -y bats
+      - name: Run tests
+        run: bats tests/
+
   release:
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - name: Resolve version from the tag

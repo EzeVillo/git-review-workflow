@@ -83,6 +83,10 @@ complete -c git -n '__grw_using review-forget-saved' -f -a '(__grw_saved_branche
 complete -c git -n '__grw_using review-continue' -f -l h -d 'show help'
 complete -c git -n '__grw_using review-continue' -f -a '(__grw_saved_branches)'
 
+# git review-preview
+complete -c git -n '__grw_using review-preview' -f -l stat -d 'show a diffstat summary instead of the full diff'
+complete -c git -n '__grw_using review-preview' -f -l h -d 'show help'
+
 # Commands that take no arguments beyond --h.
 for sub in review-next review-prev review-status review-list review-abort review-save
     complete -c git -n "__grw_using $sub" -f -l h -d 'show help'

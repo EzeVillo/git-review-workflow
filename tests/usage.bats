@@ -47,6 +47,12 @@ teardown() {
 	[[ "$output" == *"usage: git review-status"* ]]
 }
 
+@test "review-preview --h prints usage and exits 0" {
+	run git-review-preview --h
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"usage: git review-preview"* ]]
+}
+
 @test "review-list --h prints usage and exits 0" {
 	run git-review-list --h
 	[ "$status" -eq 0 ]
@@ -135,6 +141,12 @@ teardown() {
 
 @test "review-status rejects an unexpected argument" {
 	run git-review-status bogus
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"unexpected argument bogus"* ]]
+}
+
+@test "review-preview rejects an unexpected argument" {
+	run git-review-preview bogus
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"unexpected argument bogus"* ]]
 }

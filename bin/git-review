@@ -19,6 +19,8 @@ Commands:
   git review-next    advance a --step review to the next commit
   git review-prev    go back to the previous commit in a --step review
   git review-status  show the state of the review on the current branch
+  git review-preview [--stat]
+                     show the edits you have made so far, then keep editing
   git review-list    list every review in progress and every saved one
   git review-save    pause the current review as review-saved/<branch>
   git review-continue [branch]

@@ -1,0 +1,173 @@
+#!/usr/bin/env sh
+#
+# git-review-preview — show the edits you have made so far, without disturbing them.
+#
+# It prints the same diff that git finish-review would extract — your review edits
+# on top of the PR tip — but it never commits, never switches branch and never
+# touches your working tree or index, so you go straight back to editing where you
+# left off. Think of it as "what would finish-review give me right now?".
+#
+# Everything is computed in a throwaway index (GIT_INDEX_FILE), the same plumbing
+# style review-save/finish-review use, so running it is a no-op on your state:
+#   whole mode  capture the working tree (edits + any new files) as a tree and diff
+#               it against the tip.
+#   step mode   reproduce finish-review's replay in the throwaway index — the
+#               current step's edits plus every banked edit, applied onto the tip
+#               with the same --3way merge — and diff the result against the tip.
+#               An edit that genuinely conflicts with the tip is the one case that
+#               differs from finish-review: finish-review leaves you conflict
+#               markers to resolve, whereas a read-only preview cannot, so it omits
+#               that edit and prints a note pointing you at finish-review.
+#
+set -eu
+
+prog="git review-preview"
+
+usage() {
+	cat <<EOF
+usage: $prog [--stat]
+
+Show the review edits you have made so far on the current review/* branch — the
+same diff git finish-review would extract — without committing, switching branch
+or changing your working tree, so you can keep editing where you left off.
+
+  --stat   show a diffstat summary instead of the full diff
+EOF
+}
+
+die() {
+	echo "error: $1" >&2
+	exit 1
+}
+
+stat=0
+while [ $# -gt 0 ]; do
+	case "$1" in
+	-h | --h)
+		usage
+		exit 0
+		;;
+	--stat) stat=1 ;;
+	*)
+		echo "error: unexpected argument $1" >&2
+		usage >&2
+		exit 1
+		;;
+	esac
+	shift
+done
+
+cur="$(git symbolic-ref --quiet --short HEAD || true)"
+case "$cur" in
+review/*) ;;
+*)
+	echo "not on a review/* branch (HEAD is ${cur:-detached})" >&2
+	exit 1
+	;;
+esac
+
+src="$(git config "branch.$cur.reviewsource" || true)"
+tip="$(git config "branch.$cur.reviewtip" || true)"
+mode="$(git config "branch.$cur.reviewmode" || echo whole)"
+if [ -z "$src" ] || [ -z "$tip" ]; then
+	die "missing review metadata; was $cur created with git review-pr?"
+fi
+
+# A finish-review left mid-conflict has conflict markers in the working tree; a
+# preview built from it would show the markers as content, not your edits. Refuse
+# until they are resolved, mirroring the state finish-review --resume expects.
+if [ "$(git config "branch.$cur.reviewresume" || true)" = "conflict" ]; then
+	die "finish-review is mid-conflict; resolve the markers and run git finish-review --resume first"
+fi
+if [ -n "$(git ls-files --unmerged)" ]; then
+	die "you have unresolved merge conflicts; resolve them first"
+fi
+
+# Throwaway indexes live inside the git dir and are removed on exit, so the real
+# index is never touched and a preview leaves no residue.
+gitdir="$(git rev-parse --git-dir)"
+idx="$gitdir/review-preview-index.$$"
+idx2="$gitdir/review-preview-replay.$$"
+trap 'rm -f "$idx" "$idx2"' EXIT
+
+# worktree_tree: capture the current working tree — staged, unstaged and any new
+# files — as a tree object, the same content finish-review folds in with git add -A.
+worktree_tree() {
+	cp "$(git rev-parse --git-path index)" "$idx"
+	GIT_INDEX_FILE="$idx" git add -A
+	GIT_INDEX_FILE="$idx" git write-tree
+}
+
+if [ "$mode" = "step" ]; then
+	start="$(git config "branch.$cur.reviewstart")"
+	count="$(git config "branch.$cur.reviewcount")"
+	step="$(git config "branch.$cur.reviewstep")"
+	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
+	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
+
+	# The current step's edits are not banked yet (they live in the working tree),
+	# so derive them from the working tree against the commit being reviewed.
+	patch_cur="$(git diff --binary "$cstep" "$(worktree_tree)")"
+
+	# Replay onto the tip exactly like finish-review: walk the steps in order,
+	# applying the current step's edits in its slot and each other step's banked
+	# edits, into a fresh index seeded with the tip — with the same --3way merge
+	# finish-review uses, so an edit whose context the PR later shifted still lands.
+	GIT_INDEX_FILE="$idx2" git read-tree "$tip"
+	good="$(GIT_INDEX_FILE="$idx2" git write-tree)"
+	conflict=0
+	i=1
+	while [ "$i" -le "$count" ]; do
+		if [ "$i" -eq "$step" ]; then
+			p="$patch_cur"
+		else
+			ref="refs/review-edits/$src/$i"
+			if git rev-parse --verify --quiet "$ref" >/dev/null; then
+				p="$(git diff --binary "${ref}^" "$ref")"
+			else
+				p=""
+			fi
+		fi
+		if [ -n "$p" ]; then
+			# A --3way apply that conflicts leaves unmerged entries, which write-tree
+			# refuses; so apply, then try to capture the tree. On success keep it as
+			# the new baseline; on a genuine conflict roll the index back to the last
+			# clean tree and note the edit as omitted (finish-review would leave you
+			# conflict markers to resolve — a preview cannot, so it skips it).
+			if printf '%s\n' "$p" | GIT_INDEX_FILE="$idx2" git apply --cached --3way --binary - 2>/dev/null &&
+				t="$(GIT_INDEX_FILE="$idx2" git write-tree 2>/dev/null)"; then
+				good="$t"
+			else
+				conflict=1
+				GIT_INDEX_FILE="$idx2" git read-tree "$good"
+			fi
+		fi
+		i=$((i + 1))
+	done
+	tree="$good"
+else
+	tree="$(worktree_tree)"
+	conflict=0
+fi
+
+# A conflict note is about edits, not the diff, so it must be reported whether or
+# not anything could be applied — otherwise an all-overlapping case would wrongly
+# look like "no edits".
+if [ "$conflict" -eq 1 ]; then
+	echo "note: some edits overlap the PR tip; git finish-review will need a 3-way merge to apply them (they are omitted below)" >&2
+fi
+
+if git diff --quiet "$tip" "$tree"; then
+	if [ "$conflict" -eq 1 ]; then
+		echo "all your edits overlap the PR tip; nothing previews cleanly — run git finish-review to resolve them with a 3-way merge" >&2
+	else
+		echo "no review changes yet — edit some files, then run $prog again"
+	fi
+	exit 0
+fi
+
+if [ "$stat" -eq 1 ]; then
+	git diff --stat "$tip" "$tree"
+else
+	git diff "$tip" "$tree"
+fi

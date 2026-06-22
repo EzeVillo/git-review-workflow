@@ -45,6 +45,12 @@ _git-review-status() {
 	_arguments '(-h --h)'{-h,--h}'[show help]'
 }
 
+_git-review-preview() {
+	_arguments -S \
+		'(-h --h)'{-h,--h}'[show help]' \
+		'--stat[show a diffstat summary instead of the full diff]'
+}
+
 _git-review-list() {
 	_arguments '(-h --h)'{-h,--h}'[show help]'
 }

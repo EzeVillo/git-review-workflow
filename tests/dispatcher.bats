@@ -35,6 +35,7 @@ setup() {
 	[[ "$output" == *"git review-next"* ]]
 	[[ "$output" == *"git review-prev"* ]]
 	[[ "$output" == *"git review-status"* ]]
+	[[ "$output" == *"git review-preview"* ]]
 	[[ "$output" == *"git review-list"* ]]
 	[[ "$output" == *"git review-save"* ]]
 	[[ "$output" == *"git review-continue"* ]]

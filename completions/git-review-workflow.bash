@@ -35,6 +35,10 @@ _git_review_status() {
 	__gitcomp "--h"
 }
 
+_git_review_preview() {
+	__gitcomp "--stat --h"
+}
+
 _git_review_list() {
 	__gitcomp "--h"
 }

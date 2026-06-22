@@ -79,7 +79,8 @@ _git-finish-review() {
 	_arguments -S \
 		'(-h --h)'{-h,--h}'[show help]' \
 		'--onto-source[stage your edits on the PR branch itself]' \
-		'--resume[continue after resolving replay conflicts]'
+		'--resume[continue after resolving replay conflicts]' \
+		'--abort[undo the last finish and return to editing]'
 }
 
 _git-clean-review() {

@@ -70,12 +70,29 @@ else
 	done
 fi
 
-# Drop any banked commit-by-commit edit refs.
+# Drop any banked commit-by-commit edit refs, plus any finish-review undo points
+# (refs/review-undo/* and their branch.review/<branch>.reviewundo* config) left
+# behind by a finish that was never aborted.
 if [ -n "$arg" ]; then
 	editns="refs/review-edits/$arg/"
+	undons="refs/review-undo/$arg/"
+	undobranches="$arg"
 else
 	editns="refs/review-edits/"
+	undons="refs/review-undo/"
+	undobranches="$(git for-each-ref --format='%(refname)' refs/review-undo/ |
+		sed -n 's#^refs/review-undo/\(.*\)/[^/]*$#\1#p' | sort -u)"
 fi
-git for-each-ref --format='%(refname)' "$editns" | while read -r ref; do
-	git update-ref -d "$ref"
+for ns in "$editns" "$undons"; do
+	git for-each-ref --format='%(refname)' "$ns" | while read -r ref; do
+		git update-ref -d "$ref"
+	done
+done
+# Word splitting is intentional: branch names cannot contain whitespace.
+# shellcheck disable=SC2086
+for b in $undobranches; do
+	for k in reviewundohead reviewundokind reviewundosrccreated \
+		reviewundoeditstep reviewundoeditold; do
+		git config --unset "branch.review/$b.$k" 2>/dev/null || true
+	done
 done

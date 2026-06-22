@@ -6,24 +6,32 @@
 # edits staged. With --onto-source it stages your edits on the PR branch itself
 # instead. Either way the result stays local; review and commit it yourself.
 #
+# --abort undoes the last finish and drops you back on review/<branch> exactly
+# where you were editing, the same way git merge --abort backs out a merge. To
+# make that possible, a fresh finish first records an undo point (the review
+# branch's HEAD, index and working tree, à la ORIG_HEAD) before it mutates
+# anything, so --abort is a verbatim restore regardless of whole/step mode.
+#
 set -eu
 
 prog="git finish-review"
 
 usage() {
 	cat <<EOF
-usage: $prog [--onto-source] [--resume]
+usage: $prog [--onto-source] [--resume | --abort]
 
 Extract your review edits from the current review/* branch.
 
   (default)        create review-fixes/<branch> on top of the PR tip and stage your edits
   --onto-source    instead, stage your edits on the PR branch itself
   --resume         continue after resolving conflicts from a commit-by-commit replay
+  --abort          undo the last finish and return to editing the review
 EOF
 }
 
 onto=0
 resume=0
+abort=0
 while [ $# -gt 0 ]; do
 	case "$1" in
 	-h | --h)
@@ -32,6 +40,7 @@ while [ $# -gt 0 ]; do
 		;;
 	--onto-source) onto=1 ;;
 	--resume) resume=1 ;;
+	--abort) abort=1 ;;
 	*)
 		echo "error: unknown option $1" >&2
 		usage >&2
@@ -46,6 +55,97 @@ cur="$(git symbolic-ref --quiet --short HEAD || true)"
 	echo "error: not on a branch" >&2
 	exit 1
 }
+
+# --abort restores the undo point recorded by the finish being undone. It runs
+# before the review/* check on purpose: after a finish you are on
+# review-fixes/<branch> (or, with --onto-source, on the PR branch), never on
+# review/<branch>.
+do_abort() {
+	# Find the review branch the undo point belongs to from wherever we landed
+	# after the finish.
+	case "$cur" in
+	review-fixes/*) asrc="${cur#review-fixes/}" ;;
+	review/*) asrc="${cur#review/}" ;;
+	*) asrc="$cur" ;;
+	esac
+
+	rb="review/$asrc"
+	head="$(git config "branch.$rb.reviewundohead" || true)"
+	[ -n "$head" ] || {
+		echo "error: no finish to abort (no undo point for $rb)" >&2
+		exit 1
+	}
+	git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null || {
+		echo "error: $rb is gone; cannot restore the review" >&2
+		exit 1
+	}
+
+	kind="$(git config "branch.$rb.reviewundokind" || echo fixes)"
+	srccreated="$(git config "branch.$rb.reviewundosrccreated" || echo 0)"
+	editstep="$(git config "branch.$rb.reviewundoeditstep" || true)"
+	editold="$(git config "branch.$rb.reviewundoeditold" || true)"
+	idxtree="$(git rev-parse --verify "refs/review-undo/$asrc/index^{tree}")"
+	wttree="$(git rev-parse --verify "refs/review-undo/$asrc/worktree^{tree}")"
+
+	# Return to the review branch and restore the exact pre-finish state: HEAD,
+	# then the working tree (read-tree -m -u brings back additions, edits,
+	# deletions and the captured untracked files), then the index on top.
+	# When already on the review branch — e.g. aborting a finish that stopped
+	# mid-conflict — skip the checkout (the index may hold unmerged entries that
+	# a same-branch checkout chokes on); the reset --hard below clears them.
+	if [ "$cur" != "$rb" ]; then
+		git checkout -q -f "$rb"
+	fi
+	git reset -q --hard "$head"
+	git read-tree -m -u "$wttree"
+	git read-tree "$idxtree"
+
+	# Restore the current step's banked edit ref to what it was before finish
+	# banked it (or remove it if finish was the one that created it).
+	if [ -n "$editstep" ]; then
+		eref="refs/review-edits/$asrc/$editstep"
+		if [ "$editold" = "none" ] || [ -z "$editold" ]; then
+			git update-ref -d "$eref" 2>/dev/null || true
+		else
+			git update-ref "$eref" "$editold"
+		fi
+	fi
+
+	# Drop the branch finish created, leaving only the review/<branch> you are
+	# back on. --onto-source only deletes the PR branch when finish created it.
+	if [ "$kind" = "onto-source" ]; then
+		if [ "$srccreated" = "1" ] &&
+			git rev-parse --verify --quiet "refs/heads/$asrc" >/dev/null; then
+			git branch -D "$asrc" >/dev/null
+		fi
+	elif git rev-parse --verify --quiet "refs/heads/review-fixes/$asrc" >/dev/null; then
+		git branch -D "review-fixes/$asrc" >/dev/null
+	fi
+
+	# Clear a mid-conflict marker (finish may have been aborted part-way) and the
+	# whole undo record.
+	git config --unset "branch.$rb.reviewresume" 2>/dev/null || true
+	for k in reviewundohead reviewundokind reviewundosrccreated \
+		reviewundoeditstep reviewundoeditold; do
+		git config --unset "branch.$rb.$k" 2>/dev/null || true
+	done
+	git for-each-ref --format='%(refname)' "refs/review-undo/$asrc/" |
+		while read -r ref; do
+			git update-ref -d "$ref"
+		done
+
+	echo "aborted finish; back on $rb — keep editing, then run git finish-review"
+}
+
+if [ "$abort" -eq 1 ]; then
+	if [ "$resume" -eq 1 ] || [ "$onto" -eq 1 ]; then
+		echo "error: --abort takes no other options" >&2
+		exit 1
+	fi
+	do_abort
+	exit 0
+fi
+
 case "$cur" in
 review/*) ;;
 *)
@@ -59,6 +159,60 @@ tip="$(git config "branch.$cur.reviewtip" || true)"
 if [ -z "$src" ] || [ -z "$tip" ]; then
 	echo "error: missing review metadata; was $cur created with git review-pr?" >&2
 	exit 1
+fi
+
+# record_undo: snapshot everything finish is about to mutate so --abort can put
+# it back verbatim — the review branch's HEAD, its index, and its working tree
+# (captured via a throwaway index so brand-new untracked edits are included).
+# The trees are pinned under refs/review-undo/<src>/ so gc cannot drop them.
+record_undo() {
+	gitdir="$(git rev-parse --git-dir)"
+	tmpidx="$gitdir/finish-undo-index.$$"
+	cp "$(git rev-parse --git-path index)" "$tmpidx"
+	GIT_INDEX_FILE="$tmpidx" git add -A
+	wttree="$(GIT_INDEX_FILE="$tmpidx" git write-tree)"
+	rm -f "$tmpidx"
+	idxtree="$(git write-tree)"
+	orig="$(git rev-parse HEAD)"
+
+	git update-ref "refs/review-undo/$src/head" "$orig"
+	git update-ref "refs/review-undo/$src/index" \
+		"$(git commit-tree "$idxtree" -m 'finish-review undo (index)')"
+	git update-ref "refs/review-undo/$src/worktree" \
+		"$(git commit-tree "$wttree" -m 'finish-review undo (worktree)')"
+
+	git config "branch.$cur.reviewundohead" "$orig"
+	if [ "$onto" -eq 1 ]; then
+		git config "branch.$cur.reviewundokind" "onto-source"
+		# Remember whether the PR branch already existed, so --abort only deletes
+		# it when finish was the one that created it.
+		if git rev-parse --verify --quiet "refs/heads/$src" >/dev/null; then
+			git config "branch.$cur.reviewundosrccreated" 0
+		else
+			git config "branch.$cur.reviewundosrccreated" 1
+		fi
+	else
+		git config "branch.$cur.reviewundokind" "fixes"
+		git config "branch.$cur.reviewundosrccreated" 0
+	fi
+
+	# In step mode finish overwrites the current step's banked edit ref; record
+	# its prior value (or "none") so --abort restores exactly that.
+	if [ "$(git config "branch.$cur.reviewmode" || true)" = "step" ]; then
+		ustep="$(git config "branch.$cur.reviewstep" || echo 1)"
+		git config "branch.$cur.reviewundoeditstep" "$ustep"
+		uold="$(git rev-parse --verify --quiet "refs/review-edits/$src/$ustep" || true)"
+		git config "branch.$cur.reviewundoeditold" "${uold:-none}"
+	else
+		git config --unset "branch.$cur.reviewundoeditstep" 2>/dev/null || true
+		git config --unset "branch.$cur.reviewundoeditold" 2>/dev/null || true
+	fi
+}
+
+# Only a fresh finish records an undo point; --resume continues the same finish
+# and must keep the point its first invocation took.
+if [ "$resume" -eq 0 ]; then
+	record_undo
 fi
 
 # In commit-by-commit mode, bank the current commit's edits, move to the tip and

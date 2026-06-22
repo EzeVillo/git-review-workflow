@@ -86,4 +86,16 @@ git for-each-ref --format='%(refname)' "refs/review-edits/$src/" | while read -r
 	git update-ref -d "$ref"
 done
 
+# Cancelling the review tears down everything it spawned. If you had already run
+# git finish-review, that left a review-fixes/<branch> and a finish undo point
+# (refs/review-undo/<branch>/*) behind; drop them too so an abort leaves nothing
+# dangling. The undo *config* rode on branch.review/<branch> and was already
+# removed when the branch was deleted above.
+if git rev-parse --verify --quiet "refs/heads/review-fixes/$src" >/dev/null; then
+	git branch -D "review-fixes/$src" >/dev/null
+fi
+git for-each-ref --format='%(refname)' "refs/review-undo/$src/" | while read -r ref; do
+	git update-ref -d "$ref"
+done
+
 echo "aborted review of $src; returned to $target"

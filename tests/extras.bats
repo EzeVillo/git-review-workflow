@@ -110,6 +110,31 @@ teardown() {
 	[ -z "$output" ]
 }
 
+@test "review-abort tears down a review already passed through finish-review" {
+	# Off-book path: finish-review, then switch back to the still-present review
+	# branch and cancel. Abort must leave nothing dangling — not the review-fixes
+	# branch finish created, nor its undo point.
+	git review-pr feature/x
+	printf 'c1\nextra\nfix\n' >f.txt
+	git finish-review
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
+	[ -n "$(git for-each-ref refs/review-undo/feature/x/)" ]
+
+	git switch --quiet --discard-changes review/feature/x
+	run git review-abort
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "develop" ]
+	# review branch, review-fixes branch and the undo refs are all gone
+	run git rev-parse --verify --quiet refs/heads/review/feature/x
+	[ "$status" -ne 0 ]
+	run git rev-parse --verify --quiet refs/heads/review-fixes/feature/x
+	[ "$status" -ne 0 ]
+	run git for-each-ref refs/review-undo/feature/x/
+	[ -z "$output" ]
+	# and the undo config (it rode on the deleted review branch) is gone too
+	[ -z "$(git config branch.review/feature/x.reviewundohead || true)" ]
+}
+
 @test "review-abort falls back to the base when the return branch is gone" {
 	# Start the review from a throwaway branch, then delete it: the recorded
 	# return branch no longer resolves, so abort must fall back to the base.

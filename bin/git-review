@@ -26,8 +26,9 @@ Commands:
   git review-continue [branch]
                      resume a review saved with git review-save
   git review-abort   cancel the current review and return to where you started
-  git finish-review [--onto-source] [--resume]
+  git finish-review [--onto-source] [--resume | --abort]
                      extract your edits onto review-fixes/<branch>
+                     (--abort undoes it and returns you to editing)
   git clean-review [branch]
                      delete review/* and review-fixes/* branches
   git review-forget-delta (<branch> | --all | --stale [--dry-run])

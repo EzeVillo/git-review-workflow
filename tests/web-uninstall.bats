@@ -130,11 +130,7 @@ CURLSTUB
 	chmod +x "$MOCK_BIN/curl"
 	export PATH="$MOCK_BIN:$PATH"
 
-	# Use `run` so bats closes FD 3 for the installer; otherwise the spawned
-	# `curl | tar` pipeline can inherit it and, on slower process teardown
-	# (Windows), leave it open long enough for bats to undercount the suite.
-	run sh "$REPO/web-install.sh"
-	[ "$status" -eq 0 ]
+	sh "$REPO/web-install.sh"
 	[ -e "$PREFIX/git-review-pr" ]   # installed for real before we remove it
 
 	run sh "$REPO/web-uninstall.sh"

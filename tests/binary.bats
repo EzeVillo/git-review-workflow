@@ -107,7 +107,7 @@ write_bin() {
 	[ "$(git rev-parse ':logo.bin')" = "$new" ]
 }
 
-@test "save → continue (whole) restores a binary edit, then finish extracts it" {
+@test "save -> continue (whole) restores a binary edit, then finish extracts it" {
 	git review-pr feature/x develop
 	write_bin img.bin saved
 	orig="$(git hash-object img.bin)"

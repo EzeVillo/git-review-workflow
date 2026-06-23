@@ -60,6 +60,52 @@ teardown() {
 	[[ "$output" == *"c2-append"* ]]
 }
 
+@test "review-status rejects a step past the last commit instead of printing garbage" {
+	git review-pr feature/x --step
+	# corrupt the metadata the way a hand-edit or a future bug might
+	git config branch.review/feature/x.reviewstep 99
+	run git review-status
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"out of range (1..2)"* ]]
+}
+
+@test "review-status rejects step 0 and a non-numeric step" {
+	git review-pr feature/x --step
+	git config branch.review/feature/x.reviewstep 0
+	run git review-status
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"out of range (1..2)"* ]]
+
+	git config branch.review/feature/x.reviewstep abc
+	run git review-status
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"not a positive integer"* ]]
+}
+
+@test "review-status accepts the last valid step (no off-by-one false positive)" {
+	git review-pr feature/x --step
+	# step 2 of 2 is the boundary: it must NOT be rejected as out of range
+	git config branch.review/feature/x.reviewstep 2
+	run git review-status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[2/2]"* ]]
+	[[ "$output" != *"out of range"* ]]
+}
+
+@test "review-next and review-prev refuse a corrupt step instead of crashing" {
+	git review-pr feature/x --step
+	git config branch.review/feature/x.reviewstep 99
+	run git review-next
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"out of range (1..2)"* ]]
+	# step must be untouched — the guard fires before any banking/reset
+	[ "$(git config branch.review/feature/x.reviewstep)" = "99" ]
+
+	run git review-prev
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"out of range (1..2)"* ]]
+}
+
 @test "review-prev restores edits in both directions" {
 	git review-pr feature/x --step
 	printf 'edited1\n' >f.txt

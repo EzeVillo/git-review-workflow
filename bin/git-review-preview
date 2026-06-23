@@ -103,6 +103,16 @@ if [ "$mode" = "step" ]; then
 	count="$(git config "branch.$cur.reviewcount")"
 	step="$(git config "branch.$cur.reviewstep")"
 	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
+	# Guard against a step that maps to no commit (corrupt config, hand-edited
+	# metadata): otherwise cstep is empty and git diff '' aborts the preview with
+	# an opaque exit 128 instead of a clear message.
+	total="$(printf '%s\n' "$commits" | grep -c .)"
+	case "$step" in
+	'' | *[!0-9]*) die "corrupt review metadata: reviewstep is '$step', not a positive integer" ;;
+	esac
+	if [ "$step" -lt 1 ] || [ "$step" -gt "$total" ]; then
+		die "review step $step out of range (1..$total) — corrupt metadata?"
+	fi
 	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
 
 	# The current step's edits are not banked yet (they live in the working tree),

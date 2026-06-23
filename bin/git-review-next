@@ -72,6 +72,21 @@ step="$(git config "branch.$cur.reviewstep")"
 
 commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
 
+# Guard against a step that maps to no commit (corrupt config, hand-edited
+# metadata): otherwise goto_step's sed yields an empty commit and git rev-parse
+# '^{tree}' crashes mid-move.
+total="$(printf '%s\n' "$commits" | grep -c .)"
+case "$step" in
+'' | *[!0-9]*)
+	echo "error: corrupt review metadata: reviewstep is '$step', not a positive integer" >&2
+	exit 1
+	;;
+esac
+if [ "$step" -lt 1 ] || [ "$step" -gt "$total" ]; then
+	echo "error: review step $step out of range (1..$total) — corrupt metadata?" >&2
+	exit 1
+fi
+
 # Move to <target>: bank the current commit's edits, reset clean to the target
 # commit, then restore the target's previously banked edits (if any).
 goto_step() {

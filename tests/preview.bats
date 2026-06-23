@@ -245,6 +245,41 @@ setup_conflict_pr() {
 
 # ── guards ──────────────────────────────────────────────────────────────────────
 
+@test "preview (step) rejects a step past the last commit instead of exit 128" {
+	git review-pr feature/x --step
+	git config branch.review/feature/x.reviewstep 99
+	run git review-preview
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"out of range (1..4)"* ]]
+}
+
+@test "preview (step) rejects step 0 and a non-numeric step" {
+	git review-pr feature/x --step
+	git config branch.review/feature/x.reviewstep 0
+	run git review-preview
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"out of range (1..4)"* ]]
+
+	git config branch.review/feature/x.reviewstep abc
+	run git review-preview
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"not a positive integer"* ]]
+}
+
+@test "preview (step) accepts the last valid step (no off-by-one false positive)" {
+	git review-pr feature/x --step
+	# walk to the final step (4 of 4) the normal way; preview must still work
+	git review-next >/dev/null
+	git review-next >/dev/null
+	git review-next >/dev/null
+	[ "$(git config branch.review/feature/x.reviewstep)" = "4" ]
+	printf 'd\nFIXD\n' >d.txt
+	run git review-preview
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"+FIXD"* ]]
+	[[ "$output" != *"out of range"* ]]
+}
+
 @test "preview off a review branch fails" {
 	run git review-preview
 	[ "$status" -ne 0 ]

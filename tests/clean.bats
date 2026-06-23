@@ -88,6 +88,27 @@ teardown() {
 	[ -z "$(git for-each-ref refs/review-edits/feature/x/)" ]
 }
 
+# ── tear down the undo point fully, even on the branch we refuse to delete ──────
+
+@test "clean-review removes every reviewundo* key, even for the current branch it skips" {
+	git review-pr feature/x >/dev/null
+	# leave an unresolved finish: record_exit writes reviewundoouthead/outtree
+	printf 'edited\n' >f.txt
+	git finish-review >/dev/null
+	# stand back on the review branch so clean-review skips deleting it; the branch
+	# survives, so its config is only cleaned by the explicit unset loop, not by
+	# the branch -D that would otherwise drop the whole section.
+	git switch --quiet review/feature/x
+
+	run git clean-review feature/x
+	[ "$status" -eq 0 ]
+
+	# no reviewundo* key may linger — a missing key in the unset list orphans it
+	run git config --get-regexp '^branch\.review/feature/x\.reviewundo'
+	[ "$status" -ne 0 ]
+	[ -z "$output" ]
+}
+
 # ── --forget is gone; the marker is no longer this command's concern ───────────
 
 @test "clean-review rejects the removed --forget option" {

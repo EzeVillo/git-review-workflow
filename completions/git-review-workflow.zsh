@@ -80,7 +80,8 @@ _git-finish-review() {
 		'(-h --h)'{-h,--h}'[show help]' \
 		'--onto-source[stage your edits on the PR branch itself]' \
 		'--resume[continue after resolving replay conflicts]' \
-		'--abort[undo the last finish and return to editing]'
+		'--abort[undo the last finish and return to editing]' \
+		'--force[with --abort, discard changes made to the finish branch]'
 }
 
 _git-clean-review() {

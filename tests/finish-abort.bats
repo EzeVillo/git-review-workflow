@@ -310,6 +310,266 @@ setup_conflict_pr() {
 	[[ "$output" == *"ONTOFIX"* ]]
 }
 
+# ── guard: --abort never silently discards finish-branch work ──────────────────
+#
+# A finish leaves your edits on review-fixes/<branch> (or, with --onto-source, the
+# PR branch). If you change that branch afterwards, --abort must refuse rather than
+# throw the work away, with --force as the explicit escape. The guard is
+# mode-agnostic: review-fixes is produced the same way in whole and step.
+
+@test "abort (whole) refuses when review-fixes was edited, --force discards it" {
+	git review-pr feature/x develop
+	printf 'a1\na2\nWHOLEFIX\n' >a.txt
+	git finish-review
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
+	# refine the finish branch's working tree after the finish
+	printf 'a1\na2\nWHOLEFIX\nREFINED\n' >a.txt
+
+	# plain --abort is refused and changes NOTHING: still on review-fixes, the
+	# refinement intact, the finish branch and undo record untouched
+	run git finish-review --abort
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"has changes since the finish"* ]]
+	[[ "$output" == *"--force"* ]]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
+	run cat a.txt
+	[[ "$output" == *"REFINED"* ]]
+	run git rev-parse --verify --quiet refs/heads/review-fixes/feature/x
+	[ "$status" -eq 0 ]
+	[ -n "$(git config branch.review/feature/x.reviewundohead || true)" ]
+
+	# --force tears it down: back on the review, finish branch gone, undo cleared
+	run git finish-review --abort --force
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
+	run git rev-parse --verify --quiet refs/heads/review-fixes/feature/x
+	[ "$status" -ne 0 ]
+	[ -z "$(git config branch.review/feature/x.reviewundohead || true)" ]
+	[ -z "$(git config branch.review/feature/x.reviewundoouthead || true)" ]
+}
+
+@test "abort (whole) refuses when review-fixes has a new commit, --force discards it" {
+	git review-pr feature/x develop
+	printf 'a1\na2\nWHOLEFIX\n' >a.txt
+	git finish-review
+	# commit the staged edits on the finish branch — real work that abort would
+	# otherwise turn into a dangling commit
+	git commit -q -m "my review commit"
+
+	run git finish-review --abort
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"has changes since the finish"* ]]
+	# nothing lost: the commit is still on review-fixes
+	[ "$(git log -1 --format=%s review-fixes/feature/x)" = "my review commit" ]
+
+	run git finish-review --abort --force
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
+	run git rev-parse --verify --quiet refs/heads/review-fixes/feature/x
+	[ "$status" -ne 0 ]
+}
+
+@test "abort (whole) does not false-positive: an untouched finish aborts cleanly" {
+	# No false positive: recording the exit state must not make a clean,
+	# unmodified finish look diverged.
+	git review-pr feature/x develop
+	printf 'a1\na2\nWHOLEFIX\n' >a.txt
+	git finish-review
+	# do not touch the finish branch at all
+	run git finish-review --abort
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"has changes since the finish"* ]]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
+	run git diff
+	[[ "$output" == *"WHOLEFIX"* ]]
+}
+
+@test "abort --force on an untouched finish still works (force is harmless)" {
+	git review-pr feature/x develop
+	printf 'a1\na2\nWHOLEFIX\n' >a.txt
+	git finish-review
+	run git finish-review --abort --force
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
+	run git diff
+	[[ "$output" == *"WHOLEFIX"* ]]
+}
+
+@test "abort (step) refuses when review-fixes was edited, --force discards it" {
+	# The guard is mode-agnostic — a step-mode finish produces review-fixes too.
+	git review-pr feature/x --step
+	printf 'a1\na2\nFIXA\n' >a.txt
+	git review-next
+	printf 'b1\nb2\nFIXB\n' >b.txt
+	git finish-review
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
+	printf 'a1\na2\nFIXA\nSTEP-REFINED\n' >a.txt
+
+	run git finish-review --abort
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"has changes since the finish"* ]]
+	# refused: still on the finish branch with the refinement and the step's
+	# banked edits intact
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
+	run git rev-parse --verify --quiet refs/review-edits/feature/x/1
+	[ "$status" -eq 0 ]
+
+	run git finish-review --abort --force
+	[ "$status" -eq 0 ]
+	# back on the review at step 2 with B's edit live, exactly as a clean abort
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
+	[ "$(git config branch.review/feature/x.reviewstep)" = "2" ]
+	run git diff
+	[[ "$output" == *"FIXB"* ]]
+}
+
+@test "abort (--onto-source) refuses when the PR branch was edited, --force discards it" {
+	git review-pr feature/x develop
+	printf 'a1\na2\nONTOFIX\n' >a.txt
+	git finish-review --onto-source
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "feature/x" ]
+	printf 'a1\na2\nONTOFIX\nONTO-REFINED\n' >a.txt
+
+	run git finish-review --abort
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"has changes since the finish"* ]]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "feature/x" ]
+	run cat a.txt
+	[[ "$output" == *"ONTO-REFINED"* ]]
+
+	run git finish-review --abort --force
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
+	run git diff
+	[[ "$output" == *"ONTOFIX"* ]]
+	[[ "$output" != *"ONTO-REFINED"* ]]
+}
+
+@test "abort --force (--onto-source) discards a new commit on the PR branch, resetting it to the tip" {
+	# The PR branch feature/x already existed, so finish staged onto it without
+	# committing. A commit made on it afterwards is real work the guard protects;
+	# --force must discard it and leave feature/x back at the reviewed tip, with no
+	# dangling commit on the branch.
+	git review-pr feature/x develop
+	printf 'a1\na2\nONTOFIX\n' >a.txt
+	git finish-review --onto-source
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "feature/x" ]
+	tip="$(git rev-parse feature/x)"   # finish staged without committing: still at tip
+	git commit -q -am "my onto-source commit"
+	[ "$(git rev-parse feature/x)" != "$tip" ]
+
+	# guard refuses and the commit survives untouched
+	run git finish-review --abort
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"has changes since the finish"* ]]
+	[ "$(git log -1 --format=%s feature/x)" = "my onto-source commit" ]
+
+	# --force discards it: back on the review, feature/x reset to the reviewed tip
+	run git finish-review --abort --force
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
+	[ "$(git rev-parse feature/x)" = "$tip" ]
+	[ "$(git log -1 --format=%s feature/x)" != "my onto-source commit" ]
+}
+
+@test "abort after a --resume finish refuses when review-fixes was edited, --force discards it" {
+	# The guard applies to a finish completed through --resume just as to a direct
+	# one: record_exit runs at the end of the resume too.
+	setup_conflict_pr
+	run git finish-review
+	[ "$status" -ne 0 ]
+	printf 'X0\nX1-RESOLVED\n' >x.txt
+	git add x.txt
+	run git finish-review --resume
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/conflict" ]
+	# refine the finish branch after the resume completed
+	printf 'X0\nX1-RESOLVED\nRESUME-REFINED\n' >x.txt
+
+	run git finish-review --abort
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"has changes since the finish"* ]]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/conflict" ]
+	run cat x.txt
+	[[ "$output" == *"RESUME-REFINED"* ]]
+
+	run git finish-review --abort --force
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/conflict" ]
+}
+
+@test "abort from the review branch still catches a new commit on review-fixes" {
+	# If you switch back to review/<branch> by hand before aborting, the working
+	# tree is the review's, not the finish branch's — so the guard falls back to
+	# the committed-divergence check, which still catches a commit on review-fixes.
+	git review-pr feature/x develop
+	printf 'a1\na2\nWHOLEFIX\n' >a.txt
+	git finish-review
+	git commit -q -m "my review commit"
+	git switch -q review/feature/x
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
+
+	run git finish-review --abort
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"has changes since the finish"* ]]
+	# the commit on review-fixes is untouched
+	[ "$(git log -1 --format=%s review-fixes/feature/x)" = "my review commit" ]
+
+	run git finish-review --abort --force
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
+	run git rev-parse --verify --quiet refs/heads/review-fixes/feature/x
+	[ "$status" -ne 0 ]
+}
+
+@test "abort mid-conflict discards the resolution without --force, like rebase --abort" {
+	# Mid-conflict there is no review-fixes yet, so the divergence guard does not
+	# apply: resolving the markers and then aborting drops the resolution the way
+	# git rebase --abort does — no refusal, no --force needed.
+	setup_conflict_pr
+	run git finish-review
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"like git rebase --abort"* ]]
+	# resolve the markers in the working tree
+	printf 'X0\nX1-RESOLVED\n' >x.txt
+	git add x.txt
+
+	run git finish-review --abort
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"has changes since the finish"* ]]
+	# back on the review at step 3, the resolution gone, the clean edit live again
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/conflict" ]
+	[ "$(git config branch.review/feature/conflict.reviewstep)" = "3" ]
+	run cat x.txt
+	[[ "$output" != *"X1-RESOLVED"* ]]
+	run git diff
+	[[ "$output" == *"A1-EDITED"* ]]
+}
+
+@test "finish warns that --abort will not discard edits without --force" {
+	git review-pr feature/x develop
+	printf 'a1\na2\nWHOLEFIX\n' >a.txt
+	run git finish-review
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"--abort"* ]]
+	[[ "$output" == *"--force"* ]]
+}
+
+@test "step finish warns the same way" {
+	git review-pr feature/x --step
+	printf 'a1\na2\nFIXA\n' >a.txt
+	run git finish-review
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"--force"* ]]
+}
+
+@test "--force without --abort is rejected" {
+	git review-pr feature/x develop
+	run git finish-review --force
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"only applies to --abort"* ]]
+}
+
 # ── guards / cleanup ──────────────────────────────────────────────────────────
 
 @test "abort with no prior finish fails" {

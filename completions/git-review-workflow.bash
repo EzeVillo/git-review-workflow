@@ -70,7 +70,7 @@ _git_review_abort() {
 }
 
 _git_finish_review() {
-	__gitcomp "--onto-source --resume --abort --h"
+	__gitcomp "--onto-source --resume --abort --force --h"
 }
 
 _git_clean_review() {

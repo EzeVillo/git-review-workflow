@@ -92,7 +92,7 @@ done
 # shellcheck disable=SC2086
 for b in $undobranches; do
 	for k in reviewundohead reviewundokind reviewundosrccreated \
-		reviewundoeditstep reviewundoeditold; do
+		reviewundoeditstep reviewundoeditold reviewundoouthead reviewundoouttree; do
 		git config --unset "branch.review/$b.$k" 2>/dev/null || true
 	done
 done

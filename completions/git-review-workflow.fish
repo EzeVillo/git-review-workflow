@@ -62,6 +62,7 @@ complete -c git -n '__grw_using review-pr' -f -a '(__grw_branches)'
 complete -c git -n '__grw_using finish-review' -f -l onto-source -d 'stage edits on the PR branch itself'
 complete -c git -n '__grw_using finish-review' -f -l resume -d 'continue after resolving replay conflicts'
 complete -c git -n '__grw_using finish-review' -f -l abort -d 'undo the last finish and return to editing'
+complete -c git -n '__grw_using finish-review' -f -l force -d 'with --abort, discard changes made to the finish branch'
 complete -c git -n '__grw_using finish-review' -f -l h -d 'show help'
 
 # git clean-review

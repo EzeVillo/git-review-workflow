@@ -18,7 +18,7 @@ prog="git finish-review"
 
 usage() {
 	cat <<EOF
-usage: $prog [--onto-source] [--resume | --abort]
+usage: $prog [--onto-source] [--resume | --abort [--force]]
 
 Extract your review edits from the current review/* branch.
 
@@ -26,12 +26,14 @@ Extract your review edits from the current review/* branch.
   --onto-source    instead, stage your edits on the PR branch itself
   --resume         continue after resolving conflicts from a commit-by-commit replay
   --abort          undo the last finish and return to editing the review
+  --force          with --abort, discard changes made to the finish branch since
 EOF
 }
 
 onto=0
 resume=0
 abort=0
+force=0
 while [ $# -gt 0 ]; do
 	case "$1" in
 	-h | --h)
@@ -41,6 +43,7 @@ while [ $# -gt 0 ]; do
 	--onto-source) onto=1 ;;
 	--resume) resume=1 ;;
 	--abort) abort=1 ;;
+	--force) force=1 ;;
 	*)
 		echo "error: unknown option $1" >&2
 		usage >&2
@@ -54,6 +57,29 @@ cur="$(git symbolic-ref --quiet --short HEAD || true)"
 [ -n "$cur" ] || {
 	echo "error: not on a branch" >&2
 	exit 1
+}
+
+# worktree_tree: the tree of the current working tree captured with `git add -A`
+# (so brand-new untracked files count too), via a throwaway index that leaves the
+# real index untouched. Used to snapshot state and to detect later divergence.
+worktree_tree() {
+	_gd="$(git rev-parse --git-dir)"
+	_ti="$_gd/finish-wt-index.$$"
+	cp "$(git rev-parse --git-path index)" "$_ti"
+	GIT_INDEX_FILE="$_ti" git add -A
+	GIT_INDEX_FILE="$_ti" git write-tree
+	rm -f "$_ti"
+}
+
+# record_exit: once a finish has produced its branch ($1), snapshot that branch's
+# HEAD and working tree onto the review branch's config so a later --abort can tell
+# whether you have changed it since — and tell you up front that abort will not
+# silently throw that work away. Recorded only on a completed finish, never for one
+# stopped mid-conflict.
+record_exit() {
+	git config "branch.$cur.reviewundoouthead" "$(git rev-parse HEAD)"
+	git config "branch.$cur.reviewundoouttree" "$(worktree_tree)"
+	echo "note: edits or commits you make on $1 are kept — git finish-review --abort will refuse to discard them without --force." >&2
 }
 
 # --abort restores the undo point recorded by the finish being undone. It runs
@@ -84,6 +110,40 @@ do_abort() {
 	srccreated="$(git config "branch.$rb.reviewundosrccreated" || echo 0)"
 	editstep="$(git config "branch.$rb.reviewundoeditstep" || true)"
 	editold="$(git config "branch.$rb.reviewundoeditold" || true)"
+
+	# Guard: a finish leaves your edits on the branch it produced (review-fixes, or
+	# the PR branch with --onto-source). If you have since changed that branch — new
+	# commits, or an edited working tree — aborting would throw that work away. Like
+	# git branch -d, refuse and point at the work; --force tears it down anyway.
+	# Skipped when no exit state was recorded: a finish stopped mid-conflict never
+	# produced the branch, so --abort there discards the in-progress conflict
+	# resolution the way git rebase --abort does.
+	outhead="$(git config "branch.$rb.reviewundoouthead" || true)"
+	outtree="$(git config "branch.$rb.reviewundoouttree" || true)"
+	if [ "$force" -eq 0 ] && [ -n "$outhead" ]; then
+		if [ "$kind" = "onto-source" ]; then
+			outbranch="$asrc"
+		else
+			outbranch="review-fixes/$asrc"
+		fi
+		diverged=0
+		nowhead="$(git rev-parse --verify --quiet "refs/heads/$outbranch" || true)"
+		if [ -n "$nowhead" ] && [ "$nowhead" != "$outhead" ]; then
+			diverged=1
+		fi
+		# Only the working tree of the branch we are actually on is meaningful; if
+		# you switched away, fall back to the committed-divergence check above.
+		if [ "$diverged" -eq 0 ] && [ "$cur" = "$outbranch" ] && [ -n "$outtree" ] &&
+			[ "$(worktree_tree)" != "$outtree" ]; then
+			diverged=1
+		fi
+		if [ "$diverged" -eq 1 ]; then
+			echo "error: $outbranch has changes since the finish; aborting would discard them." >&2
+			echo "your work stays on $outbranch — switch there to keep it, or rerun with --force to discard." >&2
+			exit 1
+		fi
+	fi
+
 	idxtree="$(git rev-parse --verify "refs/review-undo/$asrc/index^{tree}")"
 	wttree="$(git rev-parse --verify "refs/review-undo/$asrc/worktree^{tree}")"
 
@@ -112,11 +172,19 @@ do_abort() {
 	fi
 
 	# Drop the branch finish created, leaving only the review/<branch> you are
-	# back on. --onto-source only deletes the PR branch when finish created it.
+	# back on. --onto-source deletes the PR branch when finish created it; when it
+	# already existed, finish staged onto it without committing and left it at the
+	# reviewed tip ($outhead), so reset it back there — this also discards any
+	# commits made on it since, which is what reaching here (untouched, or --force)
+	# means. Skipped when no exit state was recorded (mid-conflict never touched
+	# the PR branch).
 	if [ "$kind" = "onto-source" ]; then
 		if [ "$srccreated" = "1" ] &&
 			git rev-parse --verify --quiet "refs/heads/$asrc" >/dev/null; then
 			git branch -D "$asrc" >/dev/null
+		elif [ -n "$outhead" ] &&
+			git rev-parse --verify --quiet "refs/heads/$asrc" >/dev/null; then
+			git update-ref "refs/heads/$asrc" "$outhead"
 		fi
 	elif git rev-parse --verify --quiet "refs/heads/review-fixes/$asrc" >/dev/null; then
 		git branch -D "review-fixes/$asrc" >/dev/null
@@ -126,7 +194,7 @@ do_abort() {
 	# whole undo record.
 	git config --unset "branch.$rb.reviewresume" 2>/dev/null || true
 	for k in reviewundohead reviewundokind reviewundosrccreated \
-		reviewundoeditstep reviewundoeditold; do
+		reviewundoeditstep reviewundoeditold reviewundoouthead reviewundoouttree; do
 		git config --unset "branch.$rb.$k" 2>/dev/null || true
 	done
 	git for-each-ref --format='%(refname)' "refs/review-undo/$asrc/" |
@@ -144,6 +212,11 @@ if [ "$abort" -eq 1 ]; then
 	fi
 	do_abort
 	exit 0
+fi
+
+if [ "$force" -eq 1 ]; then
+	echo "error: --force only applies to --abort" >&2
+	exit 1
 fi
 
 case "$cur" in
@@ -166,12 +239,7 @@ fi
 # (captured via a throwaway index so brand-new untracked edits are included).
 # The trees are pinned under refs/review-undo/<src>/ so gc cannot drop them.
 record_undo() {
-	gitdir="$(git rev-parse --git-dir)"
-	tmpidx="$gitdir/finish-undo-index.$$"
-	cp "$(git rev-parse --git-path index)" "$tmpidx"
-	GIT_INDEX_FILE="$tmpidx" git add -A
-	wttree="$(GIT_INDEX_FILE="$tmpidx" git write-tree)"
-	rm -f "$tmpidx"
+	wttree="$(worktree_tree)"
 	idxtree="$(git write-tree)"
 	orig="$(git rev-parse HEAD)"
 
@@ -254,6 +322,7 @@ if [ "$(git config "branch.$cur.reviewmode" || true)" = "step" ] && [ "$resume" 
 		echo "conflict: some banked edits overlap the PR tip." >&2
 		echo "the working tree has conflict markers — resolve them, then run:" >&2
 		echo "    git finish-review --resume$flags" >&2
+		echo "(git finish-review --abort here discards the resolution, like git rebase --abort.)" >&2
 		exit 1
 	fi
 elif [ "$resume" -eq 1 ]; then
@@ -290,6 +359,7 @@ if [ "$onto" -eq 1 ]; then
 		echo "error: could not apply review changes onto $src" >&2
 		exit 1
 	}
+	record_exit "$src"
 	echo "$src ready with your edits staged — review and commit"
 else
 	fb="review-fixes/$src"
@@ -302,5 +372,6 @@ else
 		echo "error: could not apply review changes onto $fb" >&2
 		exit 1
 	}
+	record_exit "$fb"
 	echo "$fb ready with your edits staged — review and commit"
 fi

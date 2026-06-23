@@ -102,6 +102,10 @@ if [ "$mode" = "step" ]; then
 	if [ "$tree" != "$(git rev-parse "$cstep^{tree}")" ]; then
 		edit="$(git commit-tree "$tree" -p "$cstep" -m "review edits step $step")"
 		git update-ref "refs/review-edits/$src/$step" "$edit"
+	else
+		# Reverting the step back to a clean tree must clear any edits we banked
+		# earlier, or they resurrect when the saved review is restored.
+		git update-ref -d "refs/review-edits/$src/$step" 2>/dev/null || true
 	fi
 
 	# Move the banked edits aside so clean-review (which prunes refs/review-edits/)

@@ -317,6 +317,10 @@ if [ "$(git config "branch.$cur.reviewmode" || true)" = "step" ] && [ "$resume" 
 	if [ "$tree" != "$(git rev-parse "$cstep^{tree}")" ]; then
 		edit="$(git commit-tree "$tree" -p "$cstep" -m "review edits step $step")"
 		git update-ref "refs/review-edits/$src/$step" "$edit"
+	else
+		# Reverting the step back to a clean tree must clear any edits we banked
+		# earlier, or they resurrect in the replay below.
+		git update-ref -d "refs/review-edits/$src/$step" 2>/dev/null || true
 	fi
 	git reset -q --hard "$tip"
 	conflict=0

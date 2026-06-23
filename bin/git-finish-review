@@ -71,6 +71,28 @@ worktree_tree() {
 	rm -f "$_ti"
 }
 
+# apply_review_patch FROM TO [git-apply-args...]
+# Diff FROM..TO and apply it, routing the patch through a temp file rather than a
+# shell variable. Capturing a binary patch with command substitution drops its
+# NUL bytes and trailing newline, so git apply later rejects it ("corrupt binary
+# patch") — which broke every review edit touching a binary file. An empty diff
+# is a no-op success; the function returns git apply's exit status so callers can
+# branch on conflicts.
+apply_review_patch() {
+	_from="$1"
+	_to="$2"
+	shift 2
+	_pf="$(git rev-parse --git-dir)/finish-apply.$$"
+	git diff --binary "$_from" "$_to" >"$_pf"
+	if [ -s "$_pf" ]; then
+		if git apply "$@" <"$_pf"; then _rc=0; else _rc=$?; fi
+	else
+		_rc=0
+	fi
+	rm -f "$_pf"
+	return "$_rc"
+}
+
 # record_exit: once a finish has produced its branch ($1), snapshot that branch's
 # HEAD and working tree onto the review branch's config so a later --abort can tell
 # whether you have changed it since — and tell you up front that abort will not
@@ -376,13 +398,11 @@ if [ "$mode" = "step" ] && [ "$resume" -eq 0 ]; then
 	while [ "$i" -le "$count" ]; do
 		ref="refs/review-edits/$src/$i"
 		if git rev-parse --verify --quiet "$ref" >/dev/null; then
-			editpatch="$(git diff --binary "${ref}^" "$ref")"
-			if [ -n "$editpatch" ]; then
-				# Keep going on conflict so every edit lands; conflicts are
-				# left as markers for the user to resolve.
-				printf "%s\n" "$editpatch" | git apply --3way ||
-					conflict=1
-			fi
+			# Keep going on conflict so every edit lands; conflicts are left as
+			# markers for the user to resolve. apply_review_patch routes the diff
+			# through a file so a binary banked edit is not corrupted.
+			apply_review_patch "${ref}^" "$ref" --3way ||
+				conflict=1
 		fi
 		i=$((i + 1))
 	done
@@ -409,9 +429,8 @@ git add -A
 if ! git diff --cached --quiet; then
 	git commit -q -m "review session ($src)"
 fi
-patch="$(git diff --binary "$tip" "$cur")"
 
-if [ -z "$patch" ]; then
+if git diff --quiet "$tip" "$cur"; then
 	# No edits came out of the review. The undo point recorded above guards a
 	# finish branch that will never be produced, so roll it back — otherwise it
 	# would block a later finish on this branch (and leave nothing meaningful to
@@ -457,7 +476,7 @@ if [ "$onto" -eq 1 ]; then
 	else
 		git switch -q -c "$src" "$tip"
 	fi
-	printf "%s\n" "$patch" | git apply --index --3way || {
+	apply_review_patch "$tip" "$cur" --index --3way || {
 		echo "error: could not apply review changes onto $src" >&2
 		exit 1
 	}
@@ -470,7 +489,7 @@ else
 		exit 1
 	}
 	git switch -q -c "$fb" "$tip"
-	printf "%s\n" "$patch" | git apply --index --3way || {
+	apply_review_patch "$tip" "$cur" --index --3way || {
 		echo "error: could not apply review changes onto $fb" >&2
 		exit 1
 	}

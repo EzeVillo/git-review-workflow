@@ -88,7 +88,12 @@ fi
 gitdir="$(git rev-parse --git-dir)"
 idx="$gitdir/review-preview-index.$$"
 idx2="$gitdir/review-preview-replay.$$"
-trap 'rm -f "$idx" "$idx2"' EXIT
+# Patches go through files, never shell variables: command substitution corrupts
+# a binary hunk (dropped NUL bytes and trailing newline). curpatch holds the
+# current step's edits, ppatch each banked edit in turn.
+curpatch="$gitdir/review-preview-curpatch.$$"
+ppatch="$gitdir/review-preview-patch.$$"
+trap 'rm -f "$idx" "$idx2" "$curpatch" "$ppatch"' EXIT
 
 # worktree_tree: capture the current working tree — staged, unstaged and any new
 # files — as a tree object, the same content finish-review folds in with git add -A.
@@ -123,7 +128,7 @@ if [ "$mode" = "step" ]; then
 
 	# The current step's edits are not banked yet (they live in the working tree),
 	# so derive them from the working tree against the commit being reviewed.
-	patch_cur="$(git diff --binary "$cstep" "$(worktree_tree)")"
+	git diff --binary "$cstep" "$(worktree_tree)" >"$curpatch"
 
 	# Replay onto the tip exactly like finish-review: walk the steps in order,
 	# applying the current step's edits in its slot and each other step's banked
@@ -135,22 +140,23 @@ if [ "$mode" = "step" ]; then
 	i=1
 	while [ "$i" -le "$count" ]; do
 		if [ "$i" -eq "$step" ]; then
-			p="$patch_cur"
+			pf="$curpatch"
 		else
 			ref="refs/review-edits/$src/$i"
 			if git rev-parse --verify --quiet "$ref" >/dev/null; then
-				p="$(git diff --binary "${ref}^" "$ref")"
+				git diff --binary "${ref}^" "$ref" >"$ppatch"
+				pf="$ppatch"
 			else
-				p=""
+				pf=""
 			fi
 		fi
-		if [ -n "$p" ]; then
+		if [ -n "$pf" ] && [ -s "$pf" ]; then
 			# A --3way apply that conflicts leaves unmerged entries, which write-tree
 			# refuses; so apply, then try to capture the tree. On success keep it as
 			# the new baseline; on a genuine conflict roll the index back to the last
 			# clean tree and note the edit as omitted (finish-review would leave you
 			# conflict markers to resolve — a preview cannot, so it skips it).
-			if printf '%s\n' "$p" | GIT_INDEX_FILE="$idx2" git apply --cached --3way --binary - 2>/dev/null &&
+			if GIT_INDEX_FILE="$idx2" git apply --cached --3way --binary - <"$pf" 2>/dev/null &&
 				t="$(GIT_INDEX_FILE="$idx2" git write-tree 2>/dev/null)"; then
 				good="$t"
 			else

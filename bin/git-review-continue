@@ -166,12 +166,15 @@ else
 	# keys above.
 	lower="$(git config "branch.$saved.reviewsavedlower" || true)"
 	[ -n "$lower" ] || die "missing review metadata for $saved; was it created with git review-pr?"
-	editpatch="$(git diff --binary "$tip" "$saved")"
 
 	git switch -q -c "$rb" "$tip"
 	git reset -q --soft "$lower"
-	if [ -n "$editpatch" ]; then
-		printf '%s\n' "$editpatch" | git apply ||
+	# Pipe the saved edits straight from git diff into git apply. Capturing the
+	# patch in a shell variable drops its NUL bytes and trailing newline, which
+	# corrupts a binary hunk and silently lost a binary edit on resume. The step
+	# path above (refs/review-edits) already pipes the diff directly.
+	if ! git diff --quiet "$tip" "$saved"; then
+		git diff --binary "$tip" "$saved" | git apply ||
 			die "could not restore your edits"
 	fi
 

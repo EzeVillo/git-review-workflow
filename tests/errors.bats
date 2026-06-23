@@ -65,6 +65,34 @@ force_push_feature() {
 	git switch --quiet develop
 }
 
+# A feature branch with two independent commits: c1 adds a.txt, c2 adds b.txt.
+# Two commits give a step review a banked edit on step 1 and a live edit on
+# step 2, and leave step 1 short of the tip so a whole-mode fallback would leak
+# c2 into the reviewer's diff. Leaves you on develop.
+make_two_commit_feature() {
+	git switch --quiet -c feature/two develop
+	printf 'a2\n' >a.txt
+	git add a.txt
+	git commit --quiet -m c1-touch-a
+	printf 'b2\n' >b.txt
+	git add b.txt
+	git commit --quiet -m c2-touch-b
+	git push --quiet -u origin feature/two
+	git switch --quiet develop
+}
+
+# Start a step review of that two-commit feature, bank an edit (FIXA) on step 1
+# and leave a live edit (FIXB) on step 2 — the working state finish-review's step
+# replay must not silently discard when its metadata is corrupt. Leaves you on the
+# review branch, on step 2.
+step_review_two_with_edits() {
+	make_two_commit_feature
+	git review-pr feature/two --step
+	printf 'a2\nFIXA\n' >a.txt
+	git review-next                # bank step 1 (FIXA), now on step 2
+	printf 'b2\nFIXB\n' >b.txt     # current step edit, not yet banked
+}
+
 # ── wrong-branch guards (run on develop, not a review/* branch) ───────────────
 
 @test "review-next off a review branch errors" {
@@ -378,6 +406,111 @@ force_push_feature() {
 	run git review-next
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"missing review metadata"* ]]
+}
+
+# ── finish-review on corrupt step metadata ────────────────────────────────────
+#
+# finish-review used to read step metadata raw, without the guards the shared
+# helper (load_step_review_meta) gives the other commands. Each corrupt key below
+# either silently discarded the user's banked edits or died with an opaque shell /
+# git / sed diagnostic. It now validates through the helper and reports a clear
+# error, the way review-next / review-status do.
+
+@test "finish-review reports a deleted reviewcount instead of saying 'no changes'" {
+	# `|| echo 0` defaulted a deleted reviewcount to 0, so the replay loop never
+	# ran: every banked edit (FIXA) and the current step's edit (FIXB) were
+	# discarded and finish-review printed "no review changes to apply" — silent
+	# data loss. It must report the corrupt metadata instead.
+	step_review_two_with_edits
+	git config --unset branch.review/feature/two.reviewcount
+	run git finish-review
+	[ "$status" -ne 0 ]
+	[[ "$output" != *"no review changes to apply"* ]]
+	[[ "$output" == *"missing review metadata"* ]]
+}
+
+@test "finish-review with a deleted reviewcount preserves the undo point for --abort" {
+	# The undo point is recorded before the step block runs. The old "no changes"
+	# path cleared it, so --abort could not recover; the fix fails before clearing.
+	step_review_two_with_edits
+	git config --unset branch.review/feature/two.reviewcount
+	run git finish-review
+	[ "$status" -ne 0 ]
+	[ -n "$(git config branch.review/feature/two.reviewundohead || true)" ]
+
+	run git finish-review --abort
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/two" ]
+	# The current step's edit (FIXB) must be back in the working tree.
+	run git diff
+	[[ "$output" == *"FIXB"* ]]
+}
+
+@test "finish-review reports reviewcount=0 instead of silently losing edits" {
+	step_review_two_with_edits
+	git config branch.review/feature/two.reviewcount 0
+	run git finish-review
+	[ "$status" -ne 0 ]
+	[[ "$output" != *"no review changes to apply"* ]]
+	[[ "$output" == *"corrupt review metadata"* ]]
+}
+
+@test "finish-review reports a non-numeric reviewcount instead of a shell error" {
+	step_review_two_with_edits
+	git config branch.review/feature/two.reviewcount abc
+	run git finish-review
+	[ "$status" -ne 0 ]
+	[[ "$output" != *"no review changes to apply"* ]]
+	[[ "$output" == *"corrupt review metadata"* ]]
+}
+
+@test "finish-review reports a deleted reviewstart instead of dying silently" {
+	# reviewstart was read without || true, so set -e killed finish-review with no
+	# message; the helper reads it with || true and reports it.
+	step_review_two_with_edits
+	git config --unset branch.review/feature/two.reviewstart
+	run git finish-review
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"missing review metadata"* ]]
+}
+
+@test "finish-review reports reviewstep=0 instead of an opaque sed error" {
+	# step=0 reached `sed -n "0p"` ("invalid usage of line address 0"); now caught
+	# by the helper's range check.
+	step_review_two_with_edits
+	git config branch.review/feature/two.reviewstep 0
+	run git finish-review
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"out of range"* ]]
+}
+
+@test "finish-review reports a reviewstep past the last commit instead of a git error" {
+	# step past the commit count made `sed -n "${step}p"` empty, so rev-parse died
+	# with "ambiguous argument"; now caught by the helper's range check.
+	step_review_two_with_edits
+	git config branch.review/feature/two.reviewstep 99
+	run git finish-review
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"out of range"* ]]
+}
+
+@test "finish-review on a step review with deleted reviewmode does not leak author commits" {
+	# With reviewmode gone the step block was skipped and the whole-mode tail diffed
+	# the current step commit (c1) against the tip (c2), reversing the author's c2
+	# into the extracted fix. The step keys still present make the inconsistency
+	# detectable: report it and never build the fix branch.
+	make_two_commit_feature
+	git review-pr feature/two --step
+	# Stay on step 1 (HEAD = c1, not the tip c2).
+	printf 'a2\nFIXA\n' >a.txt
+	git config --unset branch.review/feature/two.reviewmode
+
+	run git finish-review
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"corrupt review metadata"* ]]
+	# No review-fixes branch — so the author's c2 could not have leaked into one.
+	run git rev-parse --verify --quiet refs/heads/review-fixes/feature/two
+	[ "$status" -ne 0 ]
 }
 
 # ── a finish, then a second one off the review branch ─────────────────────────

@@ -65,6 +65,16 @@ load_step_review_meta() {
 	# metadata): otherwise goto_step's sed yields an empty commit and git rev-parse
 	# '^{tree}' crashes mid-move.
 	total="$(printf '%s\n' "$commits" | grep -c .)"
+	case "$count" in
+	*[!0-9]*)
+		echo "error: corrupt review metadata: reviewcount is '$count', not a positive integer" >&2
+		exit 1
+		;;
+	esac
+	[ "$count" -ge 1 ] || {
+		echo "error: corrupt review metadata: reviewcount is '$count', not a positive integer" >&2
+		exit 1
+	}
 	case "$step" in
 	'' | *[!0-9]*)
 		echo "error: corrupt review metadata: reviewstep is '$step', not a positive integer" >&2

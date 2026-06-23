@@ -160,7 +160,12 @@ else
 	# whole mode: rebuild the pristine review state (PR diff staged at the lower
 	# bound) and replay your edits into the working tree, leaving exactly what you
 	# had when you saved.
-	lower="$(git config "branch.$saved.reviewsavedlower")"
+	# Without || true a deleted reviewsavedlower (hand-edited or half-deleted
+	# config) would let set -e kill us mid-restore with no message; report it and
+	# bail before creating the review branch, the way the step path validates its
+	# keys above.
+	lower="$(git config "branch.$saved.reviewsavedlower" || true)"
+	[ -n "$lower" ] || die "missing review metadata for $saved; was it created with git review-pr?"
 	editpatch="$(git diff --binary "$tip" "$saved")"
 
 	git switch -q -c "$rb" "$tip"

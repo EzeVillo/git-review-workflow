@@ -245,6 +245,41 @@ if [ -z "$src" ] || [ -z "$tip" ]; then
 	exit 1
 fi
 
+# Locate and load the shared helpers the installers place beside this command, so
+# the step block below validates its metadata through load_step_review_meta — the
+# same guard the other step commands use — instead of reading the keys raw. $0 may
+# be a symlink (Homebrew and install.sh symlink commands onto PATH) or a bare name
+# (PATH lookup), so resolve both before taking our directory.
+self="$0"
+case "$self" in
+*/*) ;;
+*) self="$(command -v -- "$self" 2>/dev/null || printf '%s\n' "$self")" ;;
+esac
+while [ -L "$self" ]; do
+	link="$(readlink "$self")"
+	case "$link" in
+	/*) self="$link" ;;
+	*) self="$(dirname "$self")/$link" ;;
+	esac
+done
+. "$(CDPATH= cd -- "$(dirname -- "$self")" && pwd)/git-review-lib.sh"
+
+# A step review records reviewmode=step alongside reviewstart/reviewcount/
+# reviewstep; a whole review records none of those keys. If reviewmode was lost to
+# a hand-edit but the step keys survive, we would fall through to the whole-mode
+# tail below and diff the current step commit (not the tip) against the tip —
+# silently reversing the author's later commits into the extracted fix. Report the
+# inconsistency rather than producing a corrupt patch.
+mode="$(git config "branch.$cur.reviewmode" || true)"
+if [ "$mode" != "step" ]; then
+	for k in reviewstart reviewcount reviewstep; do
+		[ -z "$(git config "branch.$cur.$k" || true)" ] || {
+			echo "error: corrupt review metadata: $cur has step-review keys but reviewmode is not 'step'" >&2
+			exit 1
+		}
+	done
+fi
+
 # record_undo: snapshot everything finish is about to mutate so --abort can put
 # it back verbatim — the review branch's HEAD, its index, and its working tree
 # (captured via a throwaway index so brand-new untracked edits are included).
@@ -277,7 +312,7 @@ record_undo() {
 
 	# In step mode finish overwrites the current step's banked edit ref; record
 	# its prior value (or "none") so --abort restores exactly that.
-	if [ "$(git config "branch.$cur.reviewmode" || true)" = "step" ]; then
+	if [ "$mode" = "step" ]; then
 		ustep="$(git config "branch.$cur.reviewstep" || echo 1)"
 		git config "branch.$cur.reviewundoeditstep" "$ustep"
 		uold="$(git rev-parse --verify --quiet "refs/review-edits/$src/$ustep" || true)"
@@ -317,11 +352,13 @@ fi
 # replay every banked edit there, so what follows sees the same state as a normal
 # whole-PR review. With --resume we skip the replay: the working tree already
 # holds the resolved edits.
-if [ "$(git config "branch.$cur.reviewmode" || true)" = "step" ] && [ "$resume" -eq 0 ]; then
-	count="$(git config "branch.$cur.reviewcount" || echo 0)"
-	step="$(git config "branch.$cur.reviewstep" || echo 1)"
-	start="$(git config "branch.$cur.reviewstart")"
-	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
+if [ "$mode" = "step" ] && [ "$resume" -eq 0 ]; then
+	# Validate and load the step metadata (count, step, start, commits) through the
+	# shared helper, so a hand-deleted or corrupt key is reported the same way the
+	# other step commands report it — instead of defaulting count to 0 (which
+	# silently discards every banked edit) or letting a missing reviewstart kill us
+	# under set -e with no message.
+	load_step_review_meta
 	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
 	git add -A
 	tree="$(git write-tree)"

@@ -225,6 +225,23 @@ teardown() {
 	[[ "$output" == *"missing review metadata"* ]]
 }
 
+@test "continue (whole) reports a deleted reviewsavedlower instead of dying silently" {
+	# The whole-mode path read reviewsavedlower (the lower bound for the soft reset)
+	# without || true, so a deleted key let set -e kill review-continue mid-restore
+	# with no message; it must report it and bail before building the review branch.
+	git review-pr feature/x develop
+	printf 'a1\na2\nWHOLEFIX\n' >a.txt
+	git review-save
+	git config --unset branch.review-saved/feature/x.reviewsavedlower
+
+	run git review-continue feature/x
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"missing review metadata"* ]]
+	# It must bail before creating the review branch — no half-built state.
+	run git rev-parse --verify --quiet refs/heads/review/feature/x
+	[ "$status" -ne 0 ]
+}
+
 @test "clean-review does not touch a saved review" {
 	git review-pr feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt

@@ -118,6 +118,31 @@ push_pr2() {
 	[[ "$output" == *"no review changes"* ]]
 }
 
+@test "finish-review --onto-source with no edits still lands on the PR branch" {
+	git review-pr feature/x
+	tip="$(git rev-parse feature/x)"
+	run git finish-review --onto-source
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"no review changes"* ]]
+	# the flag's whole point: you end up on the PR branch, not review/feature/x
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "feature/x" ]
+	[ "$(git rev-parse feature/x)" = "$tip" ]
+	# the undo point was rolled back, leaving nothing to abort
+	run git config --get-regexp '^branch\.review/feature/x\.reviewundo'
+	[ "$status" -ne 0 ]
+}
+
+@test "finish-review with no edits leaves no undo point blocking a later finish" {
+	git review-pr feature/x
+	run git finish-review
+	[ "$status" -eq 0 ]
+	# a real edit + second finish must not be refused by a dangling undo point
+	printf 'a\nB\nc\nd\nfix\n' >app.txt
+	run git finish-review
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"ready with your edits staged"* ]]
+}
+
 @test "review-pr --delta stages only new commits" {
 	git review-pr feature/x
 	git switch --quiet develop

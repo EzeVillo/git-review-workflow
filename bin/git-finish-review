@@ -360,6 +360,37 @@ fi
 patch="$(git diff --binary "$tip" "$cur")"
 
 if [ -z "$patch" ]; then
+	# No edits came out of the review. The undo point recorded above guards a
+	# finish branch that will never be produced, so roll it back — otherwise it
+	# would block a later finish on this branch (and leave nothing meaningful to
+	# --abort). Then honour --onto-source by leaving you on the PR branch, the
+	# whole point of the flag, instead of stranding you on review/<branch>.
+	git config --unset "branch.$cur.reviewresume" 2>/dev/null || true
+	for k in reviewundohead reviewundokind reviewundosrccreated \
+		reviewundoeditstep reviewundoeditold reviewundoouthead reviewundoouttree; do
+		git config --unset "branch.$cur.$k" 2>/dev/null || true
+	done
+	git for-each-ref --format='%(refname)' "refs/review-undo/$src/" |
+		while read -r ref; do
+			git update-ref -d "$ref"
+		done
+
+	if [ "$onto" -eq 1 ]; then
+		# Same guard as the edited path: never move onto a local $src that sits
+		# somewhere other than the reviewed tip.
+		if git rev-parse --verify --quiet "refs/heads/$src" >/dev/null; then
+			if [ "$(git rev-parse "$src")" != "$tip" ]; then
+				echo "error: local $src is not at the reviewed tip; move or delete it first" >&2
+				exit 1
+			fi
+			git switch -q "$src"
+		else
+			git switch -q -c "$src" "$tip"
+		fi
+		echo "no review changes to apply; on $src at the reviewed tip" >&2
+		exit 0
+	fi
+
 	echo "no review changes to apply" >&2
 	exit 0
 fi

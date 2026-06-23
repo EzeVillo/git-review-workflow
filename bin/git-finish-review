@@ -79,7 +79,7 @@ worktree_tree() {
 record_exit() {
 	git config "branch.$cur.reviewundoouthead" "$(git rev-parse HEAD)"
 	git config "branch.$cur.reviewundoouttree" "$(worktree_tree)"
-	echo "note: edits or commits you make on $1 are kept — git finish-review --abort will refuse to discard them without --force." >&2
+	echo "note: commits you make on $1 are kept, and uncommitted edits too while you stay on $1 — git finish-review --abort refuses to discard them without --force." >&2
 }
 
 # --abort restores the undo point recorded by the finish being undone. It runs

@@ -188,6 +188,33 @@ mark() {
 	[ -n "$(git config reviewworkflow.feature/x.reviewed)" ]
 }
 
+# ── --stale skips the network when only local markers are present ──────────────
+
+@test "review-forget-delta --stale forgets a stale local marker without fetching" {
+	# A local marker is stale when its local branch is gone — decided with no
+	# remote state. Removing origin proves --stale attempts no fetch in that case.
+	git config "reviewworkflowlocal.gone.reviewed" deadbeef
+	git remote remove origin
+
+	run git review-forget-delta --stale
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"gone"* ]]
+	[[ "$output" == *"local"* ]]
+	run git config "reviewworkflowlocal.gone.reviewed"
+	[ "$status" -ne 0 ]
+}
+
+@test "review-forget-delta --stale keeps a live local marker, still without fetching" {
+	# feature/x's local branch survives setup, so its local marker is live; with
+	# origin gone the command must still succeed (no fetch) and keep the marker.
+	git config "reviewworkflowlocal.feature/x.reviewed" "$(git rev-parse feature/x)"
+	git remote remove origin
+
+	run git review-forget-delta --stale
+	[ "$status" -eq 0 ]
+	[ -n "$(git config reviewworkflowlocal.feature/x.reviewed)" ]
+}
+
 # ── --dry-run only applies to --stale ──────────────────────────────────────────
 
 @test "review-forget-delta <branch> --dry-run is rejected" {

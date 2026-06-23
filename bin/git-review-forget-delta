@@ -152,7 +152,14 @@ fi
 
 # ── --stale ───────────────────────────────────────────────────────────────────
 if [ "$stale" -eq 1 ]; then
-	git fetch --prune --quiet "$remote" || die "could not fetch from $remote"
+	# A local marker's staleness is decided entirely by whether its local branch
+	# still exists — no remote state involved. Only fetch (to prune deleted
+	# remote-tracking refs) when at least one remote marker is present; a set of
+	# purely --local markers needs no network at all. The anchored pattern matches
+	# reviewworkflow.<src>.reviewed but not reviewworkflowlocal.<src>.reviewed.
+	if grep -q '^reviewworkflow\.' "$tmp"; then
+		git fetch --prune --quiet "$remote" || die "could not fetch from $remote"
+	fi
 
 	any=0
 	while read -r key _; do

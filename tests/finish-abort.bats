@@ -611,3 +611,38 @@ setup_conflict_pr() {
 	run git for-each-ref refs/review-undo/feature/x/
 	[ -z "$output" ]
 }
+
+@test "abort fails clearly when the undo snapshot refs were deleted by hand" {
+	# The undo snapshot (pre-finish index and working tree) lives only in
+	# refs/review-undo/<branch>/. If those refs are removed while the config undo
+	# record survives, abort cannot restore the review — it must say so plainly and
+	# touch nothing, not die with an opaque "Needed a single revision" or mutate the
+	# tree part-way through.
+	git review-pr feature/x develop
+	printf 'a1\na2\nWHOLEFIX\n' >a.txt
+	git finish-review
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
+	# delete the snapshot refs by hand, leaving the config undo record behind
+	for ref in $(git for-each-ref --format='%(refname)' refs/review-undo/feature/x/); do
+		git update-ref -d "$ref"
+	done
+	[ -n "$(git config branch.review/feature/x.reviewundohead || true)" ]
+	headbefore="$(git rev-parse HEAD)"
+
+	run git finish-review --abort
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"undo snapshot for review/feature/x is gone"* ]]
+	[[ "$output" == *"git clean-review feature/x"* ]]
+	# no opaque git plumbing error leaked through
+	[[ "$output" != *"Needed a single revision"* ]]
+	# nothing was mutated: still on the finish branch, HEAD and the edit untouched
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
+	[ "$(git rev-parse HEAD)" = "$headbefore" ]
+	run cat a.txt
+	[[ "$output" == *"WHOLEFIX"* ]]
+
+	# the documented recovery path actually clears the stale record
+	git switch --quiet --discard-changes develop
+	git clean-review feature/x
+	[ -z "$(git config branch.review/feature/x.reviewundohead || true)" ]
+}

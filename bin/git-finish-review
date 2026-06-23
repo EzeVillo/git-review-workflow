@@ -106,6 +106,20 @@ do_abort() {
 		exit 1
 	}
 
+	# The pre-finish index and working tree live only in refs/review-undo/<src>/.
+	# If those refs were deleted by hand while the config undo record survived,
+	# there is nothing left to restore the review from. Resolve them up front, with
+	# --quiet, and bail with a clear pointer — otherwise rev-parse --verify dies
+	# below with an opaque "Needed a single revision", possibly only after
+	# reset --hard has already mutated the tree.
+	idxtree="$(git rev-parse --verify --quiet "refs/review-undo/$asrc/index^{tree}" || true)"
+	wttree="$(git rev-parse --verify --quiet "refs/review-undo/$asrc/worktree^{tree}" || true)"
+	if [ -z "$idxtree" ] || [ -z "$wttree" ]; then
+		echo "error: the undo snapshot for $rb is gone (refs/review-undo/$asrc deleted); cannot restore the review." >&2
+		echo "the leftover undo record is stale — run git clean-review $asrc to clear it." >&2
+		exit 1
+	fi
+
 	kind="$(git config "branch.$rb.reviewundokind" || echo fixes)"
 	srccreated="$(git config "branch.$rb.reviewundosrccreated" || echo 0)"
 	editstep="$(git config "branch.$rb.reviewundoeditstep" || true)"
@@ -143,9 +157,6 @@ do_abort() {
 			exit 1
 		fi
 	fi
-
-	idxtree="$(git rev-parse --verify "refs/review-undo/$asrc/index^{tree}")"
-	wttree="$(git rev-parse --verify "refs/review-undo/$asrc/worktree^{tree}")"
 
 	# Return to the review branch and restore the exact pre-finish state: HEAD,
 	# then the working tree (read-tree -m -u brings back additions, edits,

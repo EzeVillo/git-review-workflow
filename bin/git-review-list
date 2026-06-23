@@ -54,7 +54,15 @@ describe() {
 	b="$1"
 	label="$2"
 	src="$(git config "branch.$b.reviewsource" || true)"
-	[ -n "$src" ] || return
+	# A branch with no reviewsource is an orphan: either hand-made, or left by a
+	# review-save / review-pr that died after creating the branch but before writing
+	# its metadata. Surface it instead of skipping silently — otherwise an
+	# orphan-only state prints nothing at all — so it can be cleaned up (e.g. with
+	# git review-forget-saved).
+	if [ -z "$src" ]; then
+		printf '%s %s  %s(no metadata)\n' "$label" "$b" "$prefix"
+		return
+	fi
 	tip="$(git config "branch.$b.reviewtip" || true)"
 	mode="$(git config "branch.$b.reviewmode" || echo whole)"
 

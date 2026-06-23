@@ -74,6 +74,31 @@ teardown() {
 	[[ "$output" == *"* review/feature/x"* ]]
 }
 
+@test "review-list shows saved branches that lack metadata" {
+	# An orphan saved branch (e.g. a review-save that died before writing its
+	# metadata) used to make review-list print nothing at all: the "no reviews"
+	# check sees a non-empty review-saved/* namespace, but describe() skipped the
+	# branch for having no reviewsource.
+	git branch review-saved/orphan develop
+	run git review-list
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"review-saved/orphan"* ]]
+	[[ "$output" == *"(no metadata)"* ]]
+	[[ "$output" != *"no reviews in progress"* ]]
+}
+
+@test "review-list still shows valid reviews alongside an orphan branch" {
+	git review-pr feature/x
+	git switch --quiet develop
+	git branch review/orphan develop
+	run git review-list
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"review/feature/x"* ]]
+	[[ "$output" == *"whole"* ]]
+	[[ "$output" == *"review/orphan"* ]]
+	[[ "$output" == *"(no metadata)"* ]]
+}
+
 @test "review-list rejects unexpected arguments" {
 	run git review-list bogus
 	[ "$status" -ne 0 ]

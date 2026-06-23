@@ -68,8 +68,12 @@ while [ $# -gt 0 ]; do
 		shift
 		[ $# -gt 0 ] || die "--from requires a commit"
 		from="$1"
+		[ -n "$from" ] || die "--from requires a commit"
 		;;
-	--from=*) from="${1#--from=}" ;;
+	--from=*)
+		from="${1#--from=}"
+		[ -n "$from" ] || die "--from requires a commit"
+		;;
 	-*)
 		echo "error: unknown option $1" >&2
 		usage >&2

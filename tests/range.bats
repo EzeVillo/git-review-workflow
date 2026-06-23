@@ -79,6 +79,25 @@ push_more() {
 	[[ "$output" == *"unknown commit"* ]]
 }
 
+@test "--from= with an empty value is rejected, not silently ignored" {
+	# Regression: --from= set from="" which the range logic treated as "no
+	# --from", silently running a full review vs base instead of erroring.
+	run git review-pr feature/x --from=
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"--from requires a commit"* ]]
+	# No review branch must have been created by the rejected run.
+	run git rev-parse --verify --quiet refs/heads/review/feature/x
+	[ "$status" -ne 0 ]
+}
+
+@test "--from with an empty argument is rejected, not silently ignored" {
+	run git review-pr feature/x --from ""
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"--from requires a commit"* ]]
+	run git rev-parse --verify --quiet refs/heads/review/feature/x
+	[ "$status" -ne 0 ]
+}
+
 @test "--from rejects a commit that is not an ancestor of the PR" {
 	# A commit on develop after the branch point is not an ancestor of feature/x.
 	printf 'x\n' >x.txt

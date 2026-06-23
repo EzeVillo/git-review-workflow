@@ -59,6 +59,20 @@ push_pr2() {
 	[[ "$output" == *"+d"* ]]
 }
 
+@test "review-pr accepts -- as the end-of-options separator" {
+	run git review-pr -- feature/x develop
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
+}
+
+@test "review-pr -- takes a dash-leading name as a branch, not an option" {
+	# the point of the separator: a name that looks like a flag is positional
+	run git review-pr -- -nope develop
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"-nope"* ]]
+	[[ "$output" != *"unknown option"* ]]
+}
+
 @test "review-pr refuses a dirty working tree" {
 	printf 'dirty\n' >>app.txt
 	run git review-pr feature/x

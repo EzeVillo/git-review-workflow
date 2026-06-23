@@ -74,6 +74,24 @@ while [ $# -gt 0 ]; do
 		from="${1#--from=}"
 		[ -n "$from" ] || die "--from requires a commit"
 		;;
+	--)
+		# End-of-options, the git convention: everything after is positional,
+		# so a branch whose name starts with "-" (or collides with a flag) can
+		# still be reviewed, e.g. git review-pr -- --weird develop.
+		shift
+		while [ $# -gt 0 ]; do
+			if [ -z "$src" ]; then
+				src="$1"
+			elif [ -z "$base" ]; then
+				base="$1"
+				base_explicit=1
+			else
+				die "unexpected argument $1"
+			fi
+			shift
+		done
+		break
+		;;
 	-*)
 		echo "error: unknown option $1" >&2
 		usage >&2

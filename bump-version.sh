@@ -27,13 +27,22 @@ repo="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 formula="$repo/Formula/git-review-workflow.rb"
 url="https://github.com/EzeVillo/git-review-workflow/archive/refs/tags/v${V}.tar.gz"
 
+# Portable in-place sed. GNU and BSD/macOS sed disagree on `-i` (BSD requires a
+# backup-suffix argument right after it), so route through a temp file, which
+# behaves identically on both.
+sed_i() {
+	# usage: sed_i EXPR FILE
+	_t="$(mktemp)"
+	sed -E "$1" "$2" >"$_t" && mv "$_t" "$2"
+}
+
 # Inside the tarball.
 printf '%s\n' "$V" >"$repo/VERSION"
-sed -i -E "s#^(VERSION=\")[^\"]*(\")#\1${V}\2#" "$repo/bin/git-review"
+sed_i "s#^(VERSION=\")[^\"]*(\")#\1${V}\2#" "$repo/bin/git-review"
 
 # Pointing at the tarball (sha256 left for the release workflow).
-sed -i -E "s#^(  version ).*#\1\"${V}\"#" "$formula"
-sed -i -E "s#^(  url ).*#\1\"${url}\"#" "$formula"
+sed_i "s#^(  version ).*#\1\"${V}\"#" "$formula"
+sed_i "s#^(  url ).*#\1\"${url}\"#" "$formula"
 
 cat <<EOF
 bumped to $V. Next:

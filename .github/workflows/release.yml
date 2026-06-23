@@ -98,11 +98,17 @@ jobs:
           # are bumped in the commit that gets tagged — not here (this commit
           # lands after the tag and would not reach the artifact).
 
+          # Portable in-place sed (GNU vs BSD/macOS `-i` differ): temp-file swap.
+          sed_i() {
+            _t="$(mktemp)"
+            sed -E "$1" "$2" >"$_t" && mv "$_t" "$2"
+          }
+
           # Homebrew formula (Ruby): anchored single-line replacements.
           f="Formula/git-review-workflow.rb"
-          sed -i -E "s#^(  version ).*#\1\"${VERSION}\"#" "$f"
-          sed -i -E "s#^(  url ).*#\1\"${url}\"#" "$f"
-          sed -i -E "s#^(  sha256 ).*#\1\"${SHA256}\"#" "$f"
+          sed_i "s#^(  version ).*#\1\"${VERSION}\"#" "$f"
+          sed_i "s#^(  url ).*#\1\"${url}\"#" "$f"
+          sed_i "s#^(  sha256 ).*#\1\"${SHA256}\"#" "$f"
 
           if git diff --quiet -- "$f"; then
             echo "formula already pinned to ${GITHUB_REF_NAME}; nothing to commit"

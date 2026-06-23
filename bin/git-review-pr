@@ -106,14 +106,14 @@ git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 
 # --this fills in <branch> from the branch you have checked out, so you do not
 # have to name it. It only resolves the name; the mode (remote vs --local) is
-# still chosen by flags. The check against review/* avoids the nonsense of
-# reviewing a review branch.
+# still chosen by flags. The check against the review/*, review-saved/* and
+# review-fixes/* namespaces avoids the nonsense of reviewing a review branch.
 if [ "$this_mode" -eq 1 ]; then
 	[ -z "$src" ] || die "--this takes no branch argument (got $src)"
 	cur="$(git symbolic-ref --quiet --short HEAD || true)"
 	[ -n "$cur" ] || die "--this needs a current branch, but HEAD is detached"
 	case "$cur" in
-	review/*) die "--this cannot review a review branch (HEAD is $cur)" ;;
+	review/* | review-saved/* | review-fixes/*) die "--this cannot review a review branch (HEAD is $cur)" ;;
 	esac
 	src="$cur"
 fi

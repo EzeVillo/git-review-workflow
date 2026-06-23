@@ -162,12 +162,53 @@ push_pr2() {
 	[[ "$output" == *"detached"* ]]
 }
 
-@test "review-pr --this refuses to review a review branch" {
+@test "review-pr --this refuses to review a review/* branch" {
 	git review-pr feature/x
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
 	run git review-pr --this
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"cannot review a review branch"* ]]
+	# The guard must fire before any review/ branch is created: no nested
+	# review/review/feature/x must be left behind.
+	run git rev-parse --verify --quiet refs/heads/review/review/feature/x
+	[ "$status" -ne 0 ]
+}
+
+@test "review-pr --this refuses to review a review-saved/* branch" {
+	# Standing on a paused review (review-saved/<branch>), --this must not
+	# derive src from it and create review/review-saved/<branch>.
+	git switch --quiet -c review-saved/feature/x
+	run git review-pr --this --local
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"cannot review a review branch"* ]]
+	run git rev-parse --verify --quiet refs/heads/review/review-saved/feature/x
+	[ "$status" -ne 0 ]
+}
+
+@test "review-pr --this refuses to review a review-fixes/* branch" {
+	# Standing on extracted edits (review-fixes/<branch>), --this must not
+	# derive src from it and create review/review-fixes/<branch>.
+	git switch --quiet -c review-fixes/feature/x
+	run git review-pr --this --local
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"cannot review a review branch"* ]]
+	run git rev-parse --verify --quiet refs/heads/review/review-fixes/feature/x
+	[ "$status" -ne 0 ]
+}
+
+@test "review-pr --this accepts a branch named review-* without a slash" {
+	# Guards against a too-broad pattern (review* / review-*): a legitimate
+	# user branch whose name merely starts with "review-" is not a review
+	# branch and must be reviewable.
+	git switch --quiet feature/x
+	git switch --quiet -c review-dashboard
+	printf 'a\nB\nc\nd\nrev\n' >app.txt
+	git add app.txt
+	git commit --quiet -m review-dashboard-work
+	# Base comes from reviewworkflow.base (develop); --this takes no positional.
+	run git review-pr --this --local
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/review-dashboard" ]
 }
 
 @test "review-pr notes when the local branch differs from the remote" {

@@ -25,7 +25,8 @@ class GitReviewWorkflow < Formula
                     "bin/git-review-prev", "bin/git-review-status", "bin/git-review-preview",
                     "bin/git-review-list", "bin/git-review-save", "bin/git-review-continue",
                     "bin/git-review-abort", "bin/git-finish-review", "bin/git-clean-review",
-                    "bin/git-review-forget-delta", "bin/git-review-forget-saved"]
+                    "bin/git-review-forget-delta", "bin/git-review-forget-saved",
+                    "bin/git-review-lib.sh"]
     bash_completion.install "completions/git-review-workflow.bash"
     zsh_completion.install "completions/git-review-workflow.zsh" => "_git-review-workflow"
     fish_completion.install "completions/git-review-workflow.fish"

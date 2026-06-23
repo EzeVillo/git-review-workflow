@@ -28,15 +28,6 @@ die() {
 	exit 1
 }
 
-show_commit() {
-	# show_commit <commit> <n> <total> — same layout as review-next/review-prev.
-	git --no-pager show --stat --format='' "$1"
-	printf -- '----\n[%s/%s] %s\n%s\n\n%s\n----\nreview this commit, edit files, then run git review-next\n' \
-		"$2" "$3" "$(git rev-parse --short "$1")" \
-		"$(git show -s --format='%an <%ae>' "$1")" \
-		"$(git show -s --format='%s%n%n%b' "$1")"
-}
-
 arg=""
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -61,6 +52,23 @@ while [ $# -gt 0 ]; do
 done
 
 git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
+
+# Locate and load the shared helpers the installers place beside this command.
+# $0 may be a symlink (Homebrew and install.sh symlink commands onto PATH) or a
+# bare name (PATH lookup), so resolve both before taking our directory.
+self="$0"
+case "$self" in
+*/*) ;;
+*) self="$(command -v -- "$self" 2>/dev/null || printf '%s\n' "$self")" ;;
+esac
+while [ -L "$self" ]; do
+	link="$(readlink "$self")"
+	case "$link" in
+	/*) self="$link" ;;
+	*) self="$(dirname "$self")/$link" ;;
+	esac
+done
+. "$(CDPATH= cd -- "$(dirname -- "$self")" && pwd)/git-review-lib.sh"
 
 # Pick the saved review to resume.
 if [ -n "$arg" ]; then

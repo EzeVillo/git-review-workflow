@@ -34,18 +34,6 @@ die() {
 	exit 1
 }
 
-show_commit() {
-	# show_commit <commit> <n> <total>
-	# The diffstat can be long for commits that touch many files, so print it
-	# first and put the identifying header last, where it stays next to the
-	# prompt instead of scrolling off the top.
-	git --no-pager show --stat --format='' "$1"
-	printf -- '----\n[%s/%s] %s\n%s\n\n%s\n----\nreview this commit, edit files, then run git review-next\n' \
-		"$2" "$3" "$(git rev-parse --short "$1")" \
-		"$(git show -s --format='%an <%ae>' "$1")" \
-		"$(git show -s --format='%s%n%n%b' "$1")"
-}
-
 src=""
 base=""
 base_explicit=0
@@ -125,6 +113,23 @@ if [ "$base_explicit" -eq 1 ] && { [ "$delta" -eq 1 ] || [ -n "$from" ]; }; then
 fi
 
 git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
+
+# Locate and load the shared helpers the installers place beside this command.
+# $0 may be a symlink (Homebrew and install.sh symlink commands onto PATH) or a
+# bare name (PATH lookup), so resolve both before taking our directory.
+self="$0"
+case "$self" in
+*/*) ;;
+*) self="$(command -v -- "$self" 2>/dev/null || printf '%s\n' "$self")" ;;
+esac
+while [ -L "$self" ]; do
+	link="$(readlink "$self")"
+	case "$link" in
+	/*) self="$link" ;;
+	*) self="$(dirname "$self")/$link" ;;
+	esac
+done
+. "$(CDPATH= cd -- "$(dirname -- "$self")" && pwd)/git-review-lib.sh"
 
 # --this fills in <branch> from the branch you have checked out, so you do not
 # have to name it. It only resolves the name; the mode (remote vs --local) is

@@ -1,0 +1,6 @@
+# Follow `. .../git-review-lib.sh` sources so the shared helpers' globals
+# (step, count, commits, ...) are seen by the commands that use them.
+# SCRIPTDIR resolves the `# shellcheck source=git-review-lib.sh` directives
+# relative to each script's own directory, regardless of CWD.
+external-sources=true
+source-path=SCRIPTDIR

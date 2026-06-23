@@ -284,6 +284,7 @@ while [ -L "$self" ]; do
 	*) self="$(dirname "$self")/$link" ;;
 	esac
 done
+# shellcheck source=git-review-lib.sh disable=SC1007
 . "$(CDPATH= cd -- "$(dirname -- "$self")" && pwd)/git-review-lib.sh"
 
 # A step review records reviewmode=step alongside reviewstart/reviewcount/

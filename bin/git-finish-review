@@ -277,6 +277,25 @@ record_undo() {
 	fi
 }
 
+# A finish records an undo point that lives until you --abort it (or tear the
+# review down). If one already exists when starting a fresh finish, a previous
+# finish on this branch has not been resolved — switching back to review/<branch>
+# by hand and finishing again would clobber the undo point with new HEAD/index/
+# worktree snapshots while leaving the old exit state behind, so a later --abort
+# would restore a mix of the two and could delete the earlier finish's branch.
+# Refuse the way git refuses a second merge or rebase while one is in progress,
+# and point at the way out.
+if [ "$resume" -eq 0 ] && [ -n "$(git config "branch.$cur.reviewundohead" || true)" ]; then
+	if [ "$(git config "branch.$cur.reviewresume" || true)" = "conflict" ]; then
+		echo "error: a finish on $cur stopped at a conflict and is still pending." >&2
+		echo "resolve the markers and run git finish-review --resume, or git finish-review --abort to back out." >&2
+	else
+		echo "error: a previous finish on $cur has not been resolved." >&2
+		echo "run git finish-review --abort to undo it (or git review-abort to drop the whole review) before finishing again." >&2
+	fi
+	exit 1
+fi
+
 # Only a fresh finish records an undo point; --resume continues the same finish
 # and must keep the point its first invocation took.
 if [ "$resume" -eq 0 ]; then

@@ -212,6 +212,19 @@ teardown() {
 	[[ "$output" == *"+FIXD"* ]]
 }
 
+@test "continue reports a deleted metadata key instead of dying silently" {
+	git review-pr feature/x --step
+	printf 'a1\na2\nFIXA\n' >a.txt
+	git review-save
+	# A hand-edit removes an essential key from the saved review's config; without
+	# || true the read would let set -e kill review-continue with no message.
+	git config --unset branch.review-saved/feature/x.reviewstart
+
+	run git review-continue feature/x
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"missing review metadata"* ]]
+}
+
 @test "clean-review does not touch a saved review" {
 	git review-pr feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt

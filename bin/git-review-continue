@@ -91,7 +91,10 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
 fi
 
 mode="$(git config "branch.$saved.reviewmode" || echo whole)"
-tip="$(git config "branch.$saved.reviewtip")"
+tip="$(git config "branch.$saved.reviewtip" || true)"
+# A saved review missing its tip (hand-edited or half-deleted config) would let
+# set -e kill us silently while restoring; report it instead.
+[ -n "$tip" ] || die "missing review metadata for $saved; was it created with git review-pr?"
 
 # restore_meta <key>: copy branch.<saved>.<key> to branch.<rb>.<key> when set.
 # Explicit if so the function returns 0 for absent optional keys (set -e safety).
@@ -103,9 +106,12 @@ restore_meta() {
 }
 
 if [ "$mode" = "step" ]; then
-	start="$(git config "branch.$saved.reviewstart")"
-	count="$(git config "branch.$saved.reviewcount")"
-	step="$(git config "branch.$saved.reviewstep")"
+	start="$(git config "branch.$saved.reviewstart" || true)"
+	count="$(git config "branch.$saved.reviewcount" || true)"
+	step="$(git config "branch.$saved.reviewstep" || true)"
+	if [ -z "$start" ] || [ -z "$count" ] || [ -z "$step" ]; then
+		die "missing review metadata for $saved; was it created with git review-pr?"
+	fi
 
 	# Bring the banked edits back to where review-next/review-prev expect them.
 	git for-each-ref --format='%(refname)' "refs/review-saved-edits/$src/" | while read -r ref; do

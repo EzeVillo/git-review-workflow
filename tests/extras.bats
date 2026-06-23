@@ -106,6 +106,21 @@ teardown() {
 	[[ "$output" == *"out of range (1..2)"* ]]
 }
 
+@test "review-next and review-prev report a deleted metadata key instead of dying silently" {
+	git review-pr feature/x --step
+	# A hand-edit removes an essential key but leaves reviewmode=step, so the
+	# mode guard passes and set -e would kill the read with no message.
+	git config --unset branch.review/feature/x.reviewstart
+
+	run git review-next
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"missing review metadata"* ]]
+
+	run git review-prev
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"missing review metadata"* ]]
+}
+
 @test "review-prev restores edits in both directions" {
 	git review-pr feature/x --step
 	printf 'edited1\n' >f.txt

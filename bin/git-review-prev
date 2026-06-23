@@ -63,11 +63,18 @@ mode="$(git config "branch.$cur.reviewmode" || true)"
 	exit 1
 }
 
-src="$(git config "branch.$cur.reviewsource")"
-tip="$(git config "branch.$cur.reviewtip")"
-start="$(git config "branch.$cur.reviewstart")"
-count="$(git config "branch.$cur.reviewcount")"
-step="$(git config "branch.$cur.reviewstep")"
+src="$(git config "branch.$cur.reviewsource" || true)"
+tip="$(git config "branch.$cur.reviewtip" || true)"
+start="$(git config "branch.$cur.reviewstart" || true)"
+count="$(git config "branch.$cur.reviewcount" || true)"
+step="$(git config "branch.$cur.reviewstep" || true)"
+
+# A key deleted by a hand-edit (while reviewmode stays "step") would otherwise let
+# set -e kill us silently mid-script; read with || true and report it instead.
+if [ -z "$src" ] || [ -z "$tip" ] || [ -z "$start" ] || [ -z "$count" ]; then
+	echo "error: missing review metadata; was $cur created with git review-pr?" >&2
+	exit 1
+fi
 
 commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
 

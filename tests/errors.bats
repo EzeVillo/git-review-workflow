@@ -306,6 +306,18 @@ force_push_feature() {
 	[[ "$output" == *"no review branches found"* ]]
 }
 
+@test "clean-review does not claim 'no review branches' when it drops orphaned refs" {
+	# An orphaned undo ref with no matching review branch: clean-review must
+	# still purge it, and it must not pretend it had nothing to do.
+	git update-ref refs/review-undo/feature/x/0 "$(git rev-parse HEAD)"
+
+	run git clean-review
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"no review branches found"* ]]
+	run git for-each-ref refs/review-undo/
+	[ -z "$output" ]
+}
+
 @test "clean-review keeps the recorded reviewed tip (forgetting moved to review-forget-delta)" {
 	git review-pr feature/x
 	git switch --quiet develop

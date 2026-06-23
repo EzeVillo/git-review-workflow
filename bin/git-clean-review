@@ -53,11 +53,13 @@ else
 	list="$(git for-each-ref --format='%(refname:short)' refs/heads/review/ refs/heads/review-fixes/)"
 fi
 
+# Track whether any cleanup actually happened so the closing message is honest:
+# deleting orphaned refs counts as work even when no review branches exist.
+cleaned=0
+
 # No branches is not a stopping point: banked edit refs can still be orphaned
-# and need dropping, so fall through to that cleanup instead of exiting.
-if [ -z "$list" ]; then
-	echo "no review branches found" >&2
-else
+# and need dropping, so fall through to that cleanup instead of bailing here.
+if [ -n "$list" ]; then
 	# Word splitting is intentional: branch names cannot contain whitespace.
 	# shellcheck disable=SC2086
 	for b in $list; do
@@ -67,6 +69,7 @@ else
 			continue
 		fi
 		git branch -D "$b"
+		cleaned=1
 	done
 fi
 
@@ -84,15 +87,24 @@ else
 		sed -n 's#^refs/review-undo/\(.*\)/[^/]*$#\1#p' | sort -u)"
 fi
 for ns in "$editns" "$undons"; do
-	git for-each-ref --format='%(refname)' "$ns" | while read -r ref; do
+	# Read refs into a variable first: a `... | while read` pipeline runs the
+	# loop body in a subshell, so a `cleaned=1` set there would not survive.
+	refs="$(git for-each-ref --format='%(refname)' "$ns")"
+	[ -n "$refs" ] || continue
+	echo "$refs" | while read -r ref; do
 		git update-ref -d "$ref"
 	done
+	cleaned=1
 done
 # Word splitting is intentional: branch names cannot contain whitespace.
 # shellcheck disable=SC2086
 for b in $undobranches; do
 	for k in reviewundohead reviewundokind reviewundosrccreated \
-		reviewundoeditstep reviewundoeditold reviewundoouthead reviewundoouttree; do
+		reviewundoeditstep reviewundoeditold reviewundoouttree; do
 		git config --unset "branch.review/$b.$k" 2>/dev/null || true
 	done
 done
+
+if [ "$cleaned" -eq 0 ]; then
+	echo "no review branches found" >&2
+fi

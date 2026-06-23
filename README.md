@@ -129,7 +129,7 @@ If you cloned or downloaded the project, open its folder in a terminal and run:
 ./install.sh
 ```
 
-This installs all nine commands into `~/.local/bin` (change the location with
+This installs all the commands into `~/.local/bin` (change the location with
 `PREFIX=/usr/local/bin ./install.sh`). Undo it any time with `./uninstall.sh`.
 To update, just `git pull` inside the repo — the symlinks pick up changes
 automatically.
@@ -204,7 +204,8 @@ git config --global http.sslBackend openssl
 | `git review-list`                                                                            | List every review in progress and every saved one (current branch marked `*`).                                                                                     |
 | `git review-save`                                                                            | Pause the current review as `review-saved/<branch>` and return to where you started.                                                                               |
 | `git review-continue [branch]`                                                               | Resume a review saved with `git review-save`.                                                                                                                      |
-| `git finish-review [--onto-source] [--resume]`                                               | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch).                                                                      |
+| `git finish-review [--onto-source] [--resume \| --abort [--force]]`                          | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch); `--abort` undoes the last finish.                                    |
+| `git review-preview [--stat]`                                                                | Show the edits you have made so far — the diff `finish-review` would extract — without committing or switching branch.                                             |
 | `git review-abort`                                                                           | Cancel the current review and return to where you started.                                                                                                         |
 | `git clean-review [branch]`                                                                  | Delete the `review/*` and `review-fixes/*` branches for `<branch>`, or all of them.                                                                                |
 | `git review-forget-delta (<branch> \| --all \| --stale [--dry-run])`                         | Discard the `--delta` marker for one branch, all of them, or only stale ones.                                                                                      |
@@ -254,6 +255,9 @@ Has two independent axes — **range** (where the review starts) and **layout**
 - **Merges of the base branch are excluded.** If the author merged the base
   (e.g. `develop`) into the PR, that merged-in content is left out of the review
   in every mode, so you only see the author's own changes.
+- `--` ends option parsing, the usual git convention: everything after it is
+  treated as a positional argument, so a branch whose name starts with `-` can
+  still be reviewed (e.g. `git review-pr -- --weird develop`).
 
 ### `git review-next` / `git review-prev`
 
@@ -305,6 +309,25 @@ with `git review-forget-saved` first.
 - `--resume` — in `--step` mode, if banked edits overlap the PR tip, the replay
   leaves conflict markers and stops. Resolve them in the working tree, then run
   `git finish-review --resume` (with the same flags) to continue.
+- `--abort` — undo the last finish and drop you back on `review/<branch>` exactly
+  where you were editing, the same way `git merge --abort` backs out a merge. It
+  refuses if you have changed the finish branch since, so you do not lose work;
+  add `--force` to discard those changes and abort anyway.
+
+### `git review-preview`
+
+Shows the edits you have made so far — the same diff `git finish-review` would
+extract, your review edits on top of the PR tip — but it **never commits, never
+switches branch and never touches your working tree or index**, so you go straight
+back to editing where you left off. Think of it as "what would `finish-review`
+give me right now?".
+
+- `--stat` — show a diffstat summary instead of the full diff.
+- In `--step` mode it replays the current commit's edits plus every banked edit
+  onto the tip, exactly like `finish-review`. An edit that genuinely conflicts
+  with the tip is the one case that differs: a read-only preview cannot leave you
+  conflict markers, so it omits that edit and prints a note pointing you at
+  `finish-review`.
 
 ### `git review-abort`
 

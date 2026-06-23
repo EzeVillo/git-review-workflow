@@ -130,7 +130,7 @@ Si clonaste o descargaste el proyecto, abrí su carpeta en una terminal y corré
 ./install.sh
 ```
 
-Instala los nueve comandos en `~/.local/bin` (cambiá la ubicación con
+Instala todos los comandos en `~/.local/bin` (cambiá la ubicación con
 `PREFIX=/usr/local/bin ./install.sh`). Lo deshacés cuando quieras con
 `./uninstall.sh`. Para actualizar, simplemente hacé `git pull` dentro del repo —
 los symlinks toman los cambios automáticamente.
@@ -207,7 +207,8 @@ git config --global http.sslBackend openssl
 | `git review-list`                                                                          | Lista todas las reviews en curso y las guardadas (la rama actual marcada con `*`).                                                                                      |
 | `git review-save`                                                                          | Pausa la review actual como `review-saved/<rama>` y vuelve a donde empezaste.                                                                                           |
 | `git review-continue [rama]`                                                               | Retoma una review guardada con `git review-save`.                                                                                                                       |
-| `git finish-review [--onto-source] [--resume]`                                             | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR).                                                                             |
+| `git finish-review [--onto-source] [--resume \| --abort [--force]]`                        | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR); `--abort` deshace el último finish.                                         |
+| `git review-preview [--stat]`                                                              | Muestra las ediciones que hiciste hasta ahora — el diff que `finish-review` extraería — sin commitear ni cambiar de rama.                                               |
 | `git review-abort`                                                                         | Cancela la review actual y vuelve a donde empezaste.                                                                                                                    |
 | `git clean-review [rama]`                                                                  | Borra las ramas `review/*` y `review-fixes/*` de `<rama>`, o todas.                                                                                                     |
 | `git review-forget-delta (<rama> \| --all \| --stale [--dry-run])`                         | Descarta el marcador de `--delta` de una rama, de todas, o solo de las obsoletas.                                                                                       |
@@ -258,6 +259,9 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
 - **Los merges de la rama base se excluyen.** Si el autor mergeó la base (ej.
   `develop`) dentro del PR, ese contenido mergeado queda afuera de la review en
   todos los modos, así ves solo los cambios del autor.
+- `--` termina el parseo de opciones, la convención habitual de git: todo lo que
+  va después se trata como argumento posicional, así una rama cuyo nombre empieza
+  con `-` igual se puede revisar (ej. `git review-pr -- --weird develop`).
 
 ### `git review-next` / `git review-prev`
 
@@ -309,6 +313,25 @@ rechaza, para que no pierdas la pausada sin querer — retomala o descartala con
 - `--resume` — en modo `--step`, si las ediciones bancadas chocan con el tip del
   PR, el replay deja marcadores de conflicto y se detiene. Resolvélos en el árbol
   y corré `git finish-review --resume` (con los mismos flags) para seguir.
+- `--abort` — deshace el último finish y te devuelve a `review/<rama>` justo donde
+  estabas editando, igual que `git merge --abort` revierte un merge. Se niega si
+  cambiaste la rama del finish desde entonces, para que no pierdas trabajo; agregá
+  `--force` para descartar esos cambios y abortar de todas formas.
+
+### `git review-preview`
+
+Muestra las ediciones que hiciste hasta ahora — el mismo diff que `git
+finish-review` extraería, tus ediciones sobre el tip del PR — pero **nunca
+commitea, nunca cambia de rama y nunca toca tu árbol de trabajo ni el índice**,
+así volvés directo a editar donde lo dejaste. Pensalo como "¿qué me daría
+`finish-review` ahora mismo?".
+
+- `--stat` — muestra un resumen tipo diffstat en lugar del diff completo.
+- En modo `--step` re-aplica las ediciones del commit actual más cada edición
+  bancada sobre el tip, igual que `finish-review`. Una edición que choca de verdad
+  con el tip es el único caso que difiere: un preview de solo lectura no puede
+  dejarte marcadores de conflicto, así que omite esa edición e imprime una nota
+  apuntándote a `finish-review`.
 
 ### `git review-abort`
 

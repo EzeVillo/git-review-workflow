@@ -50,9 +50,16 @@ printf 'review of %s (tip %s)\n' "$src" "$(git rev-parse --short "$tip")"
 printf '  branch  %s\n' "$cur"
 
 if [ "$mode" = "step" ]; then
-	count="$(git config "branch.$cur.reviewcount")"
-	step="$(git config "branch.$cur.reviewstep")"
-	start="$(git config "branch.$cur.reviewstart")"
+	count="$(git config "branch.$cur.reviewcount" || true)"
+	step="$(git config "branch.$cur.reviewstep" || true)"
+	start="$(git config "branch.$cur.reviewstart" || true)"
+	# A key deleted by a hand-edit (while reviewmode stays "step") would otherwise
+	# let set -e kill the bare read silently mid-script; read with || true and report
+	# it. reviewstep falls through to the numeric guard below for a precise message.
+	if [ -z "$count" ] || [ -z "$start" ]; then
+		echo "error: missing review metadata; was $cur created with git review-pr?" >&2
+		exit 1
+	fi
 	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
 	# Guard against a step that maps to no commit (corrupt config, hand-edited
 	# metadata): otherwise cnow ends up empty and git rev-parse '' crashes while

@@ -121,6 +121,42 @@ teardown() {
 	[[ "$output" == *"missing review metadata"* ]]
 }
 
+@test "review-status/preview/save report a deleted step key instead of dying silently" {
+	# These three read the step keys with bare git config; under set -e a missing
+	# key kills the bare read mid-script (after a couple of lines of output) with
+	# no message. A reviewcount deleted by hand leaves reviewmode=step, so the
+	# mode guard passes and the read is reached. The status code AND the message
+	# both matter: dying silently exits non-zero too, so assert on both.
+	git review-pr feature/x --step
+	git config --unset branch.review/feature/x.reviewcount
+
+	run git review-status
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"missing review metadata"* ]] ||
+		{ echo "review-status died silently or printed garbage: $output"; false; }
+
+	run git review-preview
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"missing review metadata"* ]] ||
+		{ echo "review-preview died silently: $output"; false; }
+
+	run git review-save
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"missing review metadata"* ]] ||
+		{ echo "review-save died silently: $output"; false; }
+}
+
+@test "review-status reports a deleted reviewstep key with a precise message" {
+	# reviewstep is special: status/preview let it fall through to the numeric
+	# guard, which names the key rather than the generic "missing metadata".
+	git review-pr feature/x --step
+	git config --unset branch.review/feature/x.reviewstep
+	run git review-status
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"corrupt review metadata"* ]] ||
+		{ echo "review-status died silently on missing reviewstep: $output"; false; }
+}
+
 @test "review-prev restores edits in both directions" {
 	git review-pr feature/x --step
 	printf 'edited1\n' >f.txt

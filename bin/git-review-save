@@ -89,9 +89,15 @@ copy_meta() {
 }
 
 if [ "$mode" = "step" ]; then
-	start="$(git config "branch.$cur.reviewstart")"
-	count="$(git config "branch.$cur.reviewcount")"
-	step="$(git config "branch.$cur.reviewstep")"
+	start="$(git config "branch.$cur.reviewstart" || true)"
+	count="$(git config "branch.$cur.reviewcount" || true)"
+	step="$(git config "branch.$cur.reviewstep" || true)"
+	# A key deleted by a hand-edit (while reviewmode stays "step") would otherwise
+	# let set -e kill the bare read silently mid-script; read with || true and report
+	# it. Unlike status/preview there is no later numeric guard, so cover step too.
+	if [ -z "$start" ] || [ -z "$count" ] || [ -z "$step" ]; then
+		die "missing review metadata; was $cur created with git review-pr?"
+	fi
 	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
 
 	# Bank the edits on the commit we are sitting on, the same way review-next does

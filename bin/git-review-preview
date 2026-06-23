@@ -99,9 +99,15 @@ worktree_tree() {
 }
 
 if [ "$mode" = "step" ]; then
-	start="$(git config "branch.$cur.reviewstart")"
-	count="$(git config "branch.$cur.reviewcount")"
-	step="$(git config "branch.$cur.reviewstep")"
+	start="$(git config "branch.$cur.reviewstart" || true)"
+	count="$(git config "branch.$cur.reviewcount" || true)"
+	step="$(git config "branch.$cur.reviewstep" || true)"
+	# A key deleted by a hand-edit (while reviewmode stays "step") would otherwise
+	# let set -e kill the bare read silently mid-script; read with || true and report
+	# it. reviewstep falls through to the numeric guard below for a precise message.
+	if [ -z "$start" ] || [ -z "$count" ]; then
+		die "missing review metadata; was $cur created with git review-pr?"
+	fi
 	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
 	# Guard against a step that maps to no commit (corrupt config, hand-edited
 	# metadata): otherwise cstep is empty and git diff '' aborts the preview with

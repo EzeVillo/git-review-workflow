@@ -64,11 +64,20 @@ teardown() {
 	rm -rf "$TMP"
 }
 
+# Portable in-place edit. GNU sed reads `sed -i 'script' file` as an in-place
+# edit, but BSD/macOS sed requires a backup-suffix argument right after -i and
+# otherwise consumes the script as that suffix, so the bare form errors there.
+# Routing through a temp file behaves identically on both.
+edit_file() {
+	tmp="$(mktemp)"
+	sed "$1" "$2" >"$tmp" && mv "$tmp" "$2"
+}
+
 @test "adjacent-line edits banked on different steps conflict at finish" {
 	git review-pr feature/x --step
-	sed -i 's/^L10$/L10-EDIT/' big.txt    # step 1
+	edit_file 's/^L10$/L10-EDIT/' big.txt    # step 1
 	git review-next
-	sed -i 's/^L11$/L11-EDIT/' big.txt    # step 2, the line right after
+	edit_file 's/^L11$/L11-EDIT/' big.txt    # step 2, the line right after
 
 	run git finish-review
 	[ "$status" -ne 0 ]
@@ -86,12 +95,12 @@ teardown() {
 	# something the workflow introduces: build the two edits as ordinary commits on
 	# the base and cherry-pick them onto the PR tip, exactly as a rebase would.
 	git switch --quiet -c tmp-e1 develop
-	sed -i 's/^L10$/L10-EDIT/' big.txt
+	edit_file 's/^L10$/L10-EDIT/' big.txt
 	git commit --quiet -am e1-line10
 	e1="$(git rev-parse HEAD)"
 
 	git switch --quiet -c tmp-e2 develop
-	sed -i 's/^L11$/L11-EDIT/' big.txt
+	edit_file 's/^L11$/L11-EDIT/' big.txt
 	git commit --quiet -am e2-line11
 	e2="$(git rev-parse HEAD)"
 
@@ -107,9 +116,9 @@ teardown() {
 
 @test "well-separated edits banked on different steps replay cleanly" {
 	git review-pr feature/x --step
-	sed -i 's/^L3$/L3-EDIT/' big.txt      # step 1, near the top
+	edit_file 's/^L3$/L3-EDIT/' big.txt      # step 1, near the top
 	git review-next
-	sed -i 's/^L17$/L17-EDIT/' big.txt    # step 2, far below — different region
+	edit_file 's/^L17$/L17-EDIT/' big.txt    # step 2, far below — different region
 
 	run git finish-review
 	[ "$status" -eq 0 ]

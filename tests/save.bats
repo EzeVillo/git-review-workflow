@@ -374,3 +374,13 @@ teardown() {
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"no saved review for feature/x"* ]]
 }
+
+@test "save (step) reports a deleted reviewcount key instead of dying silently" {
+	# review-save reads step metadata with || true; a key removed by hand must be
+	# reported, not let set -e kill the script with no message.
+	git review-pr feature/x --step
+	git config --unset branch.review/feature/x.reviewcount
+	run git review-save
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"missing review metadata"* ]]
+}

@@ -223,3 +223,27 @@ push_more() {
 	[[ "$output" == *"+FIXC"* ]]
 	[[ "$output" != *"new file"* ]]
 }
+
+# ── duplicated range flags are harmless ───────────────────────────────────────
+
+@test "--from accepts an abbreviated commit hash" {
+	c1="$(git rev-parse --short feature/x~1)"
+	run git review-pr feature/x --from "$c1"
+	[ "$status" -eq 0 ]
+	run git diff --cached --name-only
+	[[ "$output" == *"b.txt"* ]]
+	[[ "$output" != *"a.txt"* ]]
+}
+
+@test "--delta --delta is harmless (a duplicated flag)" {
+	git review-pr feature/x
+	git switch --quiet develop
+	git clean-review feature/x
+	push_more
+	run git review-pr feature/x --delta --delta
+	[ "$status" -eq 0 ]
+	# only the commits added since the prior review are staged
+	run git diff --cached --name-only
+	[[ "$output" == *"c.txt"* ]]
+	[[ "$output" != *"a.txt"* ]]
+}

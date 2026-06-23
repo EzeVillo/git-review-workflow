@@ -133,6 +133,12 @@ teardown() {
 	[[ "$output" == *"unexpected argument bogus"* ]]
 }
 
+@test "review-next rejects a dash-leading argument" {
+	run git-review-next --foo
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"unexpected argument --foo"* ]]
+}
+
 @test "review-prev rejects an unexpected argument" {
 	run git-review-prev bogus
 	[ "$status" -eq 1 ]

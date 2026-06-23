@@ -296,3 +296,14 @@ setup_conflict_pr() {
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"mid-conflict"* ]]
 }
+
+@test "preview (step) reports a deleted reviewcount key instead of dying silently" {
+	# review-preview reads step metadata with || true; a key removed by hand must be
+	# reported, not let set -e kill the script with no message.
+	git review-pr feature/x --step
+	printf 'a1\na2\nX\n' >a.txt
+	git config --unset branch.review/feature/x.reviewcount
+	run git review-preview
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"missing review metadata"* ]]
+}

@@ -350,3 +350,44 @@ force_push_feature() {
 	[[ "$output" == *"banked"* ]]
 	[[ "$output" == *" 1"* ]]
 }
+
+# ── partial step metadata: a hand-deleted key must be reported, not die silently ─
+#
+# These commands read step metadata with `|| true`; under set -e a bare read of a
+# missing key would otherwise kill the script with no message.
+
+@test "review-status reports a deleted reviewcount key instead of dying silently" {
+	git review-pr feature/x --step
+	git config --unset branch.review/feature/x.reviewcount
+	run git review-status
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"missing review metadata"* ]]
+}
+
+@test "review-status reports a deleted reviewstep key instead of dying silently" {
+	git review-pr feature/x --step
+	git config --unset branch.review/feature/x.reviewstep
+	run git review-status
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"corrupt review metadata"* ]]
+}
+
+@test "review-next reports a deleted reviewstart key instead of dying silently" {
+	git review-pr feature/x --step
+	git config --unset branch.review/feature/x.reviewstart
+	run git review-next
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"missing review metadata"* ]]
+}
+
+# ── a finish, then a second one off the review branch ─────────────────────────
+
+@test "a second finish-review is blocked once you are off the review branch" {
+	git review-pr feature/x
+	printf 'a\nB\nc\nd\nfix\n' >app.txt
+	git finish-review
+	# the first finish left us on review-fixes/*, no longer a review/* branch
+	run git finish-review
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"not on a review/* branch"* ]]
+}

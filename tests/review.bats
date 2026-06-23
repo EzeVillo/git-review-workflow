@@ -416,3 +416,36 @@ push_pr2() {
 	run git rev-parse --verify --quiet refs/heads/review/feature/x
 	[ "$status" -eq 0 ]
 }
+
+# ── --this composed with the range flags ──────────────────────────────────────
+
+@test "review-pr --this --from <commit> reviews the remote from that commit" {
+	git switch --quiet feature/x
+	from="$(git rev-parse origin/feature/x^)"
+	run git review-pr --this --from "$from"
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
+}
+
+@test "review-pr --this --local --delta --step reviews only new local commits in step mode" {
+	git switch --quiet feature/x
+	# a first local review records the local marker at the tip
+	git review-pr --this --local
+	git switch --quiet feature/x
+	git clean-review feature/x
+	# a new unpushed commit lands on top
+	printf 'a\nB\nc\nd\ne\n' >app.txt
+	git add app.txt
+	git commit --quiet -m pr2-local
+	run git review-pr --this --local --delta --step
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[1/1]"* ]]
+}
+
+@test "review-pr --this --from on the base branch reports nothing to review" {
+	git switch --quiet develop
+	base="$(git rev-parse develop)"
+	run git review-pr --this --from "$base"
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"no commits to review"* || "$output" == *"not an ancestor"* ]]
+}

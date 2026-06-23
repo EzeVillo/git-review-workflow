@@ -191,3 +191,44 @@ teardown() {
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"no more commits"* ]]
 }
+
+# A banked edit reverted back to the clean commit content must not resurrect: the
+# stale edit ref has to be cleared, not left to reappear on the next visit.
+@test "reverting a banked edit to clean does not resurrect it on prev/next" {
+	git review-pr feature/x --step
+	# edit step 1, then bank it by advancing
+	printf 'a1\na2\nEDIT\n' >a.txt
+	git review-next
+	# back on step 1: the edit is restored
+	git review-prev
+	run git diff --name-only
+	[ "$output" = "a.txt" ]
+	# revert it to the clean commit content
+	git checkout -- a.txt
+	run git diff --name-only
+	[ -z "$output" ]
+	# moving away and back must not bring the reverted edit back
+	git review-next
+	git review-prev
+	run git diff --name-only
+	[ -z "$output" ]
+}
+
+@test "reverting a banked edit to clean does not resurrect it at finish" {
+	git review-pr feature/x --step
+	printf 'a1\na2\nEDIT\n' >a.txt
+	git review-next          # bank step 1
+	git review-prev          # back to step 1
+	git checkout -- a.txt    # revert to clean
+	git review-next          # move on (should clear the banked edit)
+	git finish-review
+	run git diff --cached
+	[[ "$output" != *"EDIT"* ]]
+}
+
+@test "--step --step is harmless (a duplicated flag)" {
+	run git review-pr feature/x --step --step
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
+	[[ "$output" == *"[1/2]"* ]]
+}

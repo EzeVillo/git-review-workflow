@@ -599,6 +599,15 @@ setup_conflict_pr() {
 	[[ "$output" == *"takes no other options"* ]]
 }
 
+@test "--onto-source --resume with nothing in progress reports nothing to resume" {
+	# --resume alongside --onto-source is a valid combo, but with no conflict in
+	# progress there is nothing to pick up.
+	git review-pr feature/x --step
+	run git finish-review --onto-source --resume
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"nothing to resume"* ]]
+}
+
 @test "clean-review removes a finish undo point left unaborted" {
 	git review-pr feature/x develop
 	printf 'a1\na2\nWHOLEFIX\n' >a.txt

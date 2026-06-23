@@ -109,6 +109,31 @@ teardown() {
 	[ -z "$output" ]
 }
 
+# ── honest message when only a saved review is around ──────────────────────────
+
+@test "clean-review points at the saved review when no review/ or review-fixes/ remain" {
+	git review-pr feature/x >/dev/null
+	printf 'edited\n' >f.txt
+	git review-save >/dev/null
+	# precondition: a saved review exists, but nothing clean-review owns
+	[ -n "$(git for-each-ref refs/heads/review-saved/feature/x)" ]
+	[ -z "$(git for-each-ref refs/heads/review/ refs/heads/review-fixes/)" ]
+
+	run git clean-review feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"saved review"* ]]
+	[[ "$output" == *"review-continue"* ]]
+	# the saved review must survive — clean-review does not own that namespace
+	run git rev-parse --verify --quiet refs/heads/review-saved/feature/x
+	[ "$status" -eq 0 ]
+}
+
+@test "clean-review still says 'no review branches found' when nothing at all exists" {
+	run git clean-review feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"no review branches found"* ]]
+}
+
 # ── --forget is gone; the marker is no longer this command's concern ───────────
 
 @test "clean-review rejects the removed --forget option" {

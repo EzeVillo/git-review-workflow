@@ -106,5 +106,18 @@ for b in $undobranches; do
 done
 
 if [ "$cleaned" -eq 0 ]; then
-	echo "no review branches found" >&2
+	# Saved reviews live in review-saved/*, a namespace clean-review deliberately
+	# leaves alone (it owns review/* and review-fixes/* only). Point at them when
+	# nothing else was found, so "no review branches" does not read as wrong to
+	# someone staring at a review-saved/<branch> they expected this to clear.
+	if [ -n "$arg" ]; then
+		saved="$(git for-each-ref --format='%(refname:short)' "refs/heads/review-saved/$arg")"
+	else
+		saved="$(git for-each-ref --format='%(refname:short)' refs/heads/review-saved/)"
+	fi
+	if [ -n "$saved" ]; then
+		echo "no review/ or review-fixes/ branches to clean; you have a saved review — resume it with git review-continue or discard it with git review-forget-saved" >&2
+	else
+		echo "no review branches found" >&2
+	fi
 fi

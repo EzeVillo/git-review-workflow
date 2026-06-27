@@ -34,7 +34,9 @@ jobs:
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
       - name: shellcheck
-        run: shellcheck bin/* install.sh uninstall.sh web-install.sh web-uninstall.sh
+        # find recorre bin/ (incl. bin/git-review-verbs/, fuera del glob bin/*) y
+        # excluye .gitkeep; cubre el dispatcher y todos los verbos.
+        run: shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh
       - name: Install bats
         run: sudo apt-get install -y bats
       - name: Run tests

@@ -9,7 +9,7 @@ The commands are POSIX shell scripts under `bin/`. Run the checks locally before
 opening a pull request:
 
 ```sh
-shellcheck bin/* install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh
+shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh
 bats tests/
 ```
 

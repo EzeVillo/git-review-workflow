@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 #
 # Tests documenting how a --step review replays banked edits onto the PR tip at
-# finish-review — specifically that it conflicts in exactly the cases a normal,
+# review finish — specifically that it conflicts in exactly the cases a normal,
 # commit-by-commit git rebase would, and only those.
 #
 # This is *expected* behaviour, not a defect: each step's edits are banked as an
@@ -74,12 +74,12 @@ edit_file() {
 }
 
 @test "adjacent-line edits banked on different steps conflict at finish" {
-	git review-pr feature/x --step
+	git review start feature/x --step
 	edit_file 's/^L10$/L10-EDIT/' big.txt    # step 1
-	git review-next
+	git review next
 	edit_file 's/^L11$/L11-EDIT/' big.txt    # step 2, the line right after
 
-	run git finish-review
+	run git review finish
 	[ "$status" -ne 0 ]
 	# it stops the way a rebase does: marks the conflict and points at --resume
 	[ "$(git config branch.review/feature/x.reviewresume)" = "conflict" ]
@@ -115,12 +115,12 @@ edit_file() {
 }
 
 @test "well-separated edits banked on different steps replay cleanly" {
-	git review-pr feature/x --step
+	git review start feature/x --step
 	edit_file 's/^L3$/L3-EDIT/' big.txt      # step 1, near the top
-	git review-next
+	git review next
 	edit_file 's/^L17$/L17-EDIT/' big.txt    # step 2, far below — different region
 
-	run git finish-review
+	run git review finish
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
 	[ -z "$(git config branch.review/feature/x.reviewresume || true)" ]

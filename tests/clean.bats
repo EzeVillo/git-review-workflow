@@ -1,9 +1,9 @@
 #!/usr/bin/env bats
 #
-# Tests for git-clean-review after the --forget split:
+# Tests for git review clean after the --forget split:
 #   - it deletes both review/ and review-fixes/ branches, even if only one exists
 #   - it drops banked edit refs even when no review branches remain
-#   - it no longer owns the --delta marker (--forget is gone; use review-forget-delta)
+#   - it no longer owns the --delta marker (--forget is gone; use review forget --delta)
 
 setup() {
 	TMP="$(mktemp -d)"
@@ -47,11 +47,11 @@ teardown() {
 
 # ── delete both namespaces, even if only one is present ────────────────────────
 
-@test "clean-review <branch> deletes both review/ and review-fixes/ when both exist" {
+@test "review clean <branch> deletes both review/ and review-fixes/ when both exist" {
 	git branch review/feature/x develop
 	git branch review-fixes/feature/x develop
 
-	run git clean-review feature/x
+	run git review clean feature/x
 	[ "$status" -eq 0 ]
 	run git rev-parse --verify --quiet refs/heads/review/feature/x
 	[ "$status" -ne 0 ]
@@ -59,10 +59,10 @@ teardown() {
 	[ "$status" -ne 0 ]
 }
 
-@test "clean-review <branch> deletes review-fixes/ even when review/ is absent" {
+@test "review clean <branch> deletes review-fixes/ even when review/ is absent" {
 	git branch review-fixes/feature/x develop
 
-	run git clean-review feature/x
+	run git review clean feature/x
 	[ "$status" -eq 0 ]
 	run git rev-parse --verify --quiet refs/heads/review-fixes/feature/x
 	[ "$status" -ne 0 ]
@@ -70,10 +70,10 @@ teardown() {
 
 # ── drop banked edit refs even with no review branches left ────────────────────
 
-@test "clean-review drops orphaned edit refs when no review branches remain" {
-	git review-pr feature/x --step
+@test "review clean drops orphaned edit refs when no review branches remain" {
+	git review start feature/x --step
 	printf 'edited\n' >f.txt
-	git review-next
+	git review next
 	# leave and delete the review branch by hand, orphaning the banked edit ref
 	git switch --quiet --discard-changes develop
 	git branch -D review/feature/x >/dev/null
@@ -82,7 +82,7 @@ teardown() {
 	[ -n "$(git for-each-ref refs/review-edits/feature/x/)" ]
 	[ -z "$(git for-each-ref refs/heads/review/ refs/heads/review-fixes/)" ]
 
-	run git clean-review
+	run git review clean
 	[ "$status" -eq 0 ]
 	# the orphaned edit ref must be gone
 	[ -z "$(git for-each-ref refs/review-edits/feature/x/)" ]
@@ -90,17 +90,17 @@ teardown() {
 
 # ── tear down the undo point fully, even on the branch we refuse to delete ──────
 
-@test "clean-review removes every reviewundo* key, even for the current branch it skips" {
-	git review-pr feature/x >/dev/null
+@test "review clean removes every reviewundo* key, even for the current branch it skips" {
+	git review start feature/x >/dev/null
 	# leave an unresolved finish: record_exit writes reviewundoouthead/outtree
 	printf 'edited\n' >f.txt
-	git finish-review >/dev/null
-	# stand back on the review branch so clean-review skips deleting it; the branch
+	git review finish >/dev/null
+	# stand back on the review branch so review clean skips deleting it; the branch
 	# survives, so its config is only cleaned by the explicit unset loop, not by
 	# the branch -D that would otherwise drop the whole section.
 	git switch --quiet review/feature/x
 
-	run git clean-review feature/x
+	run git review clean feature/x
 	[ "$status" -eq 0 ]
 
 	# no reviewundo* key may linger — a missing key in the unset list orphans it
@@ -111,42 +111,42 @@ teardown() {
 
 # ── honest message when only a saved review is around ──────────────────────────
 
-@test "clean-review points at the saved review when no review/ or review-fixes/ remain" {
-	git review-pr feature/x >/dev/null
+@test "review clean points at the saved review when no review/ or review-fixes/ remain" {
+	git review start feature/x >/dev/null
 	printf 'edited\n' >f.txt
-	git review-save >/dev/null
-	# precondition: a saved review exists, but nothing clean-review owns
+	git review save >/dev/null
+	# precondition: a saved review exists, but nothing review clean owns
 	[ -n "$(git for-each-ref refs/heads/review-saved/feature/x)" ]
 	[ -z "$(git for-each-ref refs/heads/review/ refs/heads/review-fixes/)" ]
 
-	run git clean-review feature/x
+	run git review clean feature/x
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"saved review"* ]]
-	[[ "$output" == *"review-continue"* ]]
-	# the saved review must survive — clean-review does not own that namespace
+	[[ "$output" == *"git review continue"* ]]
+	# the saved review must survive — review clean does not own that namespace
 	run git rev-parse --verify --quiet refs/heads/review-saved/feature/x
 	[ "$status" -eq 0 ]
 }
 
-@test "clean-review still says 'no review branches found' when nothing at all exists" {
-	run git clean-review feature/x
+@test "review clean still says 'no review branches found' when nothing at all exists" {
+	run git review clean feature/x
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"no review branches found"* ]]
 }
 
 # ── --forget is gone; the marker is no longer this command's concern ───────────
 
-@test "clean-review rejects the removed --forget option" {
-	run git clean-review feature/x --forget
+@test "review clean rejects the removed --forget option" {
+	run git review clean feature/x --forget
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"unknown option --forget"* ]]
 }
 
-@test "clean-review keeps the delta marker (forgetting moved to review-forget-delta)" {
+@test "review clean keeps the delta marker (forgetting moved to review forget --delta)" {
 	git config reviewworkflow.feature/x.reviewed "$(git rev-parse origin/feature/x)"
 	git branch review/feature/x develop
 
-	run git clean-review feature/x
+	run git review clean feature/x
 	[ "$status" -eq 0 ]
 	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$(git rev-parse origin/feature/x)" ]
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 #
-# Tests for git-review-save / git-review-continue / git-review-forget-saved.
+# Tests for git review save / git review continue / git review forget --saved.
 #
 # The PR (feature/x) has four commits on top of develop: A touches a.txt,
 # B touches b.txt, C touches c.txt, D touches d.txt. Four commits give enough
@@ -58,9 +58,9 @@ teardown() {
 # ── whole-PR mode ─────────────────────────────────────────────────────────────
 
 @test "save (whole) returns to the start branch and swaps review/ for review-saved/" {
-	git review-pr feature/x develop
+	git review start feature/x develop
 	printf 'a1\na2\nWHOLEFIX\n' >a.txt
-	run git review-save
+	run git review save
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "develop" ]
 	# the active review branch is gone, the saved one took its place
@@ -71,10 +71,10 @@ teardown() {
 }
 
 @test "continue (whole) restores the staged PR diff and the edits, then finish extracts them" {
-	git review-pr feature/x develop
+	git review start feature/x develop
 	printf 'a1\na2\nWHOLEFIX\n' >a.txt
-	git review-save
-	run git review-continue feature/x
+	git review save
+	run git review continue feature/x
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
 	# the PR diff is staged again
@@ -83,8 +83,8 @@ teardown() {
 	# the edit is back in the working tree, unstaged
 	run git diff
 	[[ "$output" == *"WHOLEFIX"* ]]
-	# and it survives all the way to finish-review
-	git finish-review
+	# and it survives all the way to review finish
+	git review finish
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
 	run git diff --cached
 	[[ "$output" == *"+WHOLEFIX"* ]]
@@ -95,7 +95,7 @@ teardown() {
 
 @test "continue (whole) survives a gc when the base was merged into the PR" {
 	# Force the synthetic-lower path: advance develop, merge it into feature/x so
-	# review-pr folds the already-merged base content into a merge-tree lower bound,
+	# review start folds the already-merged base content into a merge-tree lower bound,
 	# then review with --from so that lower bound is a fresh, off-history commit.
 	first="$(git rev-list --reverse --first-parent feature/x ^develop | sed -n '1p')"
 	git switch --quiet develop
@@ -111,19 +111,19 @@ teardown() {
 	git push --quiet origin feature/x
 	git switch --quiet develop
 
-	git review-pr feature/x --from "$first"
+	git review start feature/x --from "$first"
 	# the base file folded into the lower bound must not appear in the staged diff
 	run git diff --cached --name-only
 	[[ "$output" != *"base2.txt"* ]]
 	printf 'a1\na2\na3\nGCFIX\n' >a.txt
-	git review-save
+	git review save
 
 	# A gc with no grace period prunes anything unreachable — the lower bound must
 	# stay reachable through the saved commit, or continue cannot rebuild the diff.
 	git reflog expire --expire-unreachable=now --all
 	git gc --prune=now --quiet
 
-	run git review-continue feature/x
+	run git review continue feature/x
 	[ "$status" -eq 0 ]
 	run git diff --cached --name-only
 	[[ "$output" == *"a.txt"* ]]
@@ -133,9 +133,9 @@ teardown() {
 }
 
 @test "continue (whole) with no edits round-trips a clean review" {
-	git review-pr feature/x develop
-	git review-save
-	run git review-continue feature/x
+	git review start feature/x develop
+	git review save
+	run git review continue feature/x
 	[ "$status" -eq 0 ]
 	# the PR diff is staged; the working tree is clean
 	run git diff --cached --name-only
@@ -147,12 +147,12 @@ teardown() {
 # ── step mode ─────────────────────────────────────────────────────────────────
 
 @test "save (step) banks the current step and moves every banked edit aside" {
-	git review-pr feature/x --step
+	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
-	git review-next
+	git review next
 	printf 'b1\nb2\nFIXB\n' >b.txt
 	# save from step 2 (B) with B's edits still in the working tree
-	run git review-save
+	run git review save
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "develop" ]
 	# nothing is left under refs/review-edits/ — it all moved to review-saved-edits
@@ -164,12 +164,12 @@ teardown() {
 }
 
 @test "continue (step) drops back on the same commit with its edits restored" {
-	git review-pr feature/x --step
+	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
-	git review-next
+	git review next
 	printf 'b1\nb2\nFIXB\n' >b.txt
-	git review-save
-	run git review-continue feature/x
+	git review save
+	run git review continue feature/x
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/feature/x.reviewstep)" = "2" ]
 	[[ "$output" == *"[2/4]"* ]]
@@ -180,32 +180,32 @@ teardown() {
 }
 
 @test "save/continue (step) keep edits banked on a commit ahead of the saved step" {
-	git review-pr feature/x --step
+	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
-	git review-next          # bank A, now on B (step 2)
+	git review next          # bank A, now on B (step 2)
 	printf 'b1\nb2\nFIXB\n' >b.txt
-	git review-next          # bank B, now on C (step 3)
-	git review-next          # now on D (step 4)
+	git review next          # bank B, now on C (step 3)
+	git review next          # now on D (step 4)
 	printf 'd\nFIXD\n' >d.txt
-	git review-prev          # bank D, now on C (step 3)
-	git review-prev          # now on B (step 2) — D already edited and banked ahead
+	git review prev          # bank D, now on C (step 3)
+	git review prev          # now on B (step 2) — D already edited and banked ahead
 
 	[ "$(git config branch.review/feature/x.reviewstep)" = "2" ]
-	git review-save
+	git review save
 	# all three banked edits (A, B, D) travelled into the saved namespace
 	run git for-each-ref refs/review-saved-edits/feature/x/
 	[ "$(printf '%s\n' "$output" | grep -c .)" -eq 3 ]
 
-	git review-continue feature/x
+	git review continue feature/x
 	[ "$(git config branch.review/feature/x.reviewstep)" = "2" ]
 	# step back forward to D; its edit must still be there
-	git review-next          # to C
-	run git review-next      # to D
+	git review next          # to C
+	run git review next      # to D
 	[[ "$output" == *"[4/4]"* ]]
 	run git diff
 	[[ "$output" == *"FIXD"* ]]
 	# finish replays A, B and D onto the tip
-	git finish-review
+	git review finish
 	run git diff --cached
 	[[ "$output" == *"+FIXA"* ]]
 	[[ "$output" == *"+FIXB"* ]]
@@ -213,28 +213,28 @@ teardown() {
 }
 
 @test "continue reports a deleted metadata key instead of dying silently" {
-	git review-pr feature/x --step
+	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
-	git review-save
+	git review save
 	# A hand-edit removes an essential key from the saved review's config; without
-	# || true the read would let set -e kill review-continue with no message.
+	# || true the read would let set -e kill review continue with no message.
 	git config --unset branch.review-saved/feature/x.reviewstart
 
-	run git review-continue feature/x
+	run git review continue feature/x
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"missing review metadata"* ]]
 }
 
 @test "continue (whole) reports a deleted reviewsavedlower instead of dying silently" {
 	# The whole-mode path read reviewsavedlower (the lower bound for the soft reset)
-	# without || true, so a deleted key let set -e kill review-continue mid-restore
+	# without || true, so a deleted key let set -e kill review continue mid-restore
 	# with no message; it must report it and bail before building the review branch.
-	git review-pr feature/x develop
+	git review start feature/x develop
 	printf 'a1\na2\nWHOLEFIX\n' >a.txt
-	git review-save
+	git review save
 	git config --unset branch.review-saved/feature/x.reviewsavedlower
 
-	run git review-continue feature/x
+	run git review continue feature/x
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"missing review metadata"* ]]
 	# It must bail before creating the review branch — no half-built state.
@@ -242,58 +242,58 @@ teardown() {
 	[ "$status" -ne 0 ]
 }
 
-@test "clean-review does not touch a saved review" {
-	git review-pr feature/x --step
+@test "review clean does not touch a saved review" {
+	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
-	git review-save
-	# a blanket clean-review prunes review/* and refs/review-edits/, never the saved ones
-	git clean-review
+	git review save
+	# a blanket review clean prunes review/* and refs/review-edits/, never the saved ones
+	git review clean
 	run git rev-parse --verify --quiet refs/heads/review-saved/feature/x
 	[ "$status" -eq 0 ]
 	run git for-each-ref refs/review-saved-edits/feature/x/
 	[ -n "$output" ]
 	# and the saved review is still resumable, on the same step with its edit intact
-	run git review-continue feature/x
+	run git review continue feature/x
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/feature/x.reviewstep)" = "1" ]
 	run git diff
 	[[ "$output" == *"FIXA"* ]]
 }
 
-# ── review-list / review-pr integration ───────────────────────────────────────
+# ── review list / review start integration ───────────────────────────────────────
 
-@test "review-list shows a saved review under \"saved\"" {
-	git review-pr feature/x --step
-	git review-save
-	run git review-list
+@test "review list shows a saved review under \"saved\"" {
+	git review start feature/x --step
+	git review save
+	run git review list
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"review-saved/feature/x"* ]]
 	[[ "$output" == *"saved"* ]]
 }
 
-@test "review-pr refuses to start when a saved review of the branch exists" {
-	git review-pr feature/x --step
-	git review-save
-	run git review-pr feature/x develop
+@test "review start refuses to start when a saved review of the branch exists" {
+	git review start feature/x --step
+	git review save
+	run git review start feature/x develop
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"saved review of feature/x"* ]]
-	[[ "$output" == *"review-continue"* ]]
+	[[ "$output" == *"git review continue"* ]]
 }
 
 # ── continue selection ────────────────────────────────────────────────────────
 
 @test "continue with no argument resumes the only saved review" {
-	git review-pr feature/x --step
-	git review-save
-	run git review-continue
+	git review start feature/x --step
+	git review save
+	run git review continue
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
 }
 
 @test "continue with no argument lists choices when several reviews are saved" {
 	# first saved review
-	git review-pr feature/x develop
-	git review-save
+	git review start feature/x develop
+	git review save
 	# a second source branch with its own saved review
 	git switch --quiet develop
 	git switch --quiet -c feature/y
@@ -302,10 +302,10 @@ teardown() {
 	git commit --quiet -m c-y
 	git push --quiet -u origin feature/y
 	git switch --quiet develop
-	git review-pr feature/y develop
-	git review-save
+	git review start feature/y develop
+	git review save
 
-	run git review-continue
+	run git review continue
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"more than one saved review"* ]]
 	[[ "$output" == *"feature/x"* ]]
@@ -313,7 +313,7 @@ teardown() {
 }
 
 @test "continue names an unknown saved review clearly" {
-	run git review-continue nope
+	run git review continue nope
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"no saved review for nope"* ]]
 }
@@ -321,15 +321,15 @@ teardown() {
 # ── forget-saved ──────────────────────────────────────────────────────────────
 
 @test "forget-saved discards the branch, its banked edits and rolls back the delta marker" {
-	git review-pr feature/x --step
+	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
-	git review-next
-	git review-save
-	# the review-pr that created this set a reviewed marker at the tip
+	git review next
+	git review save
+	# the review start that created this set a reviewed marker at the tip
 	run git config reviewworkflow.feature/x.reviewed
 	[ "$status" -eq 0 ]
 
-	run git review-forget-saved feature/x
+	run git review forget --saved feature/x
 	[ "$status" -eq 0 ]
 	run git rev-parse --verify --quiet refs/heads/review-saved/feature/x
 	[ "$status" -ne 0 ]
@@ -341,8 +341,8 @@ teardown() {
 }
 
 @test "forget-saved --all discards every saved review" {
-	git review-pr feature/x --step
-	git review-save
+	git review start feature/x --step
+	git review save
 	git switch --quiet develop
 	git switch --quiet -c feature/y
 	printf 'y\n' >y.txt
@@ -350,54 +350,146 @@ teardown() {
 	git commit --quiet -m c-y
 	git push --quiet -u origin feature/y
 	git switch --quiet develop
-	git review-pr feature/y develop
-	git review-save
+	git review start feature/y develop
+	git review save
 
-	run git review-forget-saved --all
+	run git review forget --saved --all
 	[ "$status" -eq 0 ]
 	run git for-each-ref refs/heads/review-saved/
 	[ -z "$output" ]
 }
 
+@test "forget-saved --dry-run previews without discarding" {
+	git review start feature/x --step
+	git review save
+
+	run git review forget --saved feature/x --dry-run
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"would discard saved review of feature/x"* ]]
+	# the saved review is still there
+	run git rev-parse --verify --quiet refs/heads/review-saved/feature/x
+	[ "$status" -eq 0 ]
+}
+
+@test "forget-saved rejects combining a branch with --all" {
+	git review start feature/x --step
+	git review save
+	run git review forget --saved feature/x --all
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"use either <branch> or --all, not both"* ]]
+	# rejected before discarding anything
+	run git rev-parse --verify --quiet refs/heads/review-saved/feature/x
+	[ "$status" -eq 0 ]
+}
+
+@test "forget-saved rejects --stale (it only applies to --delta)" {
+	run git review forget --saved --stale
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"--stale only applies to --delta"* ]]
+}
+
 @test "forget-saved on a branch with no saved review is a no-op note" {
-	run git review-forget-saved feature/x
+	run git review forget --saved feature/x
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"no saved review for feature/x"* ]]
+}
+
+@test "forget-saved rolls the delta marker back to the prior review, not clearing it" {
+	# The discard branch (save.bats above) clears the marker because no review
+	# preceded the saved one. This covers the other branch: when a prior review
+	# recorded a tip, review start stored it as reviewprevreviewed, and forget-saved
+	# must roll the marker *back* to it rather than unset it.
+	git review start feature/x develop
+	first_tip="$(git rev-parse origin/feature/x)"
+	git switch --quiet develop
+	git review clean feature/x
+
+	# A new commit is pushed and reviewed again: the second review records
+	# reviewprevreviewed = first_tip and advances the marker to the new tip.
+	git switch --quiet feature/x
+	printf 'e\n' >e.txt
+	git add e.txt
+	git commit --quiet -m c5-touch-e
+	git push --quiet origin feature/x
+	git switch --quiet develop
+	git review start feature/x develop
+	git review save
+	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$(git rev-parse origin/feature/x)" ]
+
+	run git review forget --saved feature/x
+	[ "$status" -eq 0 ]
+	# rolled back to the prior review, not unset
+	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$first_tip" ]
+}
+
+@test "forget-saved on a local saved review rolls back the local marker section, not the remote" {
+	# A saved review created with --local carries reviewlocal=1, so forget-saved
+	# must target reviewworkflowlocal.<src>.reviewed. With no prior local review the
+	# marker is cleared; the remote section must never be touched (or created).
+	git review start feature/x --local --step
+	[ -n "$(git config reviewworkflowlocal.feature/x.reviewed)" ]
+	git review save
+
+	run git review forget --saved feature/x
+	[ "$status" -eq 0 ]
+	# the local marker is gone, cleared via the local section
+	run git config reviewworkflowlocal.feature/x.reviewed
+	[ "$status" -ne 0 ]
+	# the remote section was never written
+	run git config reviewworkflow.feature/x.reviewed
+	[ "$status" -ne 0 ]
+}
+
+@test "forget-saved skips the saved branch when it is currently checked out" {
+	git review start feature/x --step
+	printf 'a1\na2\nFIXA\n' >a.txt
+	git review save
+	# stand on the saved branch itself
+	git switch --quiet review-saved/feature/x
+
+	run git review forget --saved feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"currently checked out"* ]]
+	# nothing was discarded: the branch and its banked edits survive
+	run git rev-parse --verify --quiet refs/heads/review-saved/feature/x
+	[ "$status" -eq 0 ]
+	run git for-each-ref refs/review-saved-edits/feature/x/
+	[ -n "$output" ]
 }
 
 # ── guards ────────────────────────────────────────────────────────────────────
 
 @test "save off a review branch fails" {
-	run git review-save
+	run git review save
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"not on a review/* branch"* ]]
 }
 
 @test "continue with a dirty working tree fails" {
-	git review-pr feature/x --step
-	git review-save
+	git review start feature/x --step
+	git review save
 	printf 'dirty\n' >>a.txt
-	run git review-continue feature/x
+	run git review continue feature/x
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"local changes"* ]]
 }
 
 @test "continue fails when the review is already active" {
-	git review-pr feature/x --step
-	git review-save
-	git review-continue feature/x
+	git review start feature/x --step
+	git review save
+	git review continue feature/x
 	# now review/feature/x is active again; a stray saved branch cannot clobber it
-	run git review-continue feature/x
+	run git review continue feature/x
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"no saved review for feature/x"* ]]
 }
 
 @test "save (step) reports a deleted reviewcount key instead of dying silently" {
-	# review-save reads step metadata with || true; a key removed by hand must be
+	# review save reads step metadata with || true; a key removed by hand must be
 	# reported, not let set -e kill the script with no message.
-	git review-pr feature/x --step
+	git review start feature/x --step
 	git config --unset branch.review/feature/x.reviewcount
-	run git review-save
+	run git review save
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"missing review metadata"* ]]
 }

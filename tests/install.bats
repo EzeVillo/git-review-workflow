@@ -9,12 +9,15 @@ setup() {
 	mkdir -p "$HOME"
 	REPO="$BATS_TEST_DIRNAME/.."
 	export PREFIX="$TMP/bin"
-	CMDS="git-review-pr git-review-next git-review-prev git-review-status git-review-list git-review-save git-review-continue git-review-abort git-finish-review git-clean-review git-review-forget-delta git-review-forget-saved"
+	# The dispatcher is the only command on PATH: every verb (start/status/list/
+	# preview/next/prev/finish/save/continue/abort/clean/forget) lives under it as
+	# libexec, not a standalone binary.
+	CMDS="git-review"
 
 	# install.sh chmods the repo's own bin/ files, which fails when the repo is
 	# mounted read-only (e.g. the Docker test harness uses -v ...:ro). Skip there
 	# rather than report a failure; the real CI runs writable and exercises these.
-	chmod +x "$REPO"/bin/git-review-pr 2>/dev/null ||
+	chmod +x "$REPO"/bin/git-review 2>/dev/null ||
 		skip "repo is read-only; install.sh cannot run here"
 }
 
@@ -33,9 +36,11 @@ teardown() {
 
 @test "an installed command runs from PREFIX" {
 	sh "$REPO/install.sh"
-	run "$PREFIX/git-review-pr" --h
+	# Exercises the dispatcher AND verb routing: the installed git-review must
+	# resolve its libexec (via the symlink back to the repo) and run the verb.
+	run "$PREFIX/git-review" start -h
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"usage: git review-pr"* ]]
+	[[ "$output" == *"usage: git review start"* ]]
 }
 
 @test "uninstall.sh removes every command" {

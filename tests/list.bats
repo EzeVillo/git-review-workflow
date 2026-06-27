@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 #
-# Tests for git review-list, which shows every review/* branch in progress.
+# Tests for git review list, which shows every review/* branch in progress.
 
 setup() {
 	TMP="$(mktemp -d)"
@@ -45,21 +45,21 @@ teardown() {
 	rm -rf "$TMP"
 }
 
-@test "review-list reports no reviews when none exist" {
-	run git review-list
+@test "review list reports no reviews when none exist" {
+	run git review list
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"no reviews in progress"* ]]
 }
 
-@test "review-list lists every review branch" {
-	git review-pr feature/x
+@test "review list lists every review branch" {
+	git review start feature/x
 	# A whole review leaves a staged diff; clear it before starting another.
 	git switch --quiet develop
 	git reset --hard --quiet
-	git review-pr feature/y --step
+	git review start feature/y --step
 	git switch --quiet develop
 
-	run git review-list
+	run git review list
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"review/feature/x"* ]]
 	[[ "$output" == *"whole"* ]]
@@ -67,31 +67,31 @@ teardown() {
 	[[ "$output" == *"step ["* ]]
 }
 
-@test "review-list marks the current branch with an asterisk" {
-	git review-pr feature/x
-	run git review-list
+@test "review list marks the current branch with an asterisk" {
+	git review start feature/x
+	run git review list
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"* review/feature/x"* ]]
 }
 
-@test "review-list shows saved branches that lack metadata" {
-	# An orphan saved branch (e.g. a review-save that died before writing its
-	# metadata) used to make review-list print nothing at all: the "no reviews"
+@test "review list shows saved branches that lack metadata" {
+	# An orphan saved branch (e.g. a review save that died before writing its
+	# metadata) used to make review list print nothing at all: the "no reviews"
 	# check sees a non-empty review-saved/* namespace, but describe() skipped the
 	# branch for having no reviewsource.
 	git branch review-saved/orphan develop
-	run git review-list
+	run git review list
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"review-saved/orphan"* ]]
 	[[ "$output" == *"(no metadata)"* ]]
 	[[ "$output" != *"no reviews in progress"* ]]
 }
 
-@test "review-list still shows valid reviews alongside an orphan branch" {
-	git review-pr feature/x
+@test "review list still shows valid reviews alongside an orphan branch" {
+	git review start feature/x
 	git switch --quiet develop
 	git branch review/orphan develop
-	run git review-list
+	run git review list
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"review/feature/x"* ]]
 	[[ "$output" == *"whole"* ]]
@@ -99,8 +99,8 @@ teardown() {
 	[[ "$output" == *"(no metadata)"* ]]
 }
 
-@test "review-list rejects unexpected arguments" {
-	run git review-list bogus
+@test "review list rejects unexpected arguments" {
+	run git review list bogus
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"unexpected argument"* ]]
 }

@@ -1,0 +1,46 @@
+#!/usr/bin/env sh
+#
+# git review next — advance a commit-by-commit review (started with review start --step).
+#
+# Moving banks the edits you made on the current commit into a ref of its own and
+# restores any edits you had previously banked on the commit you move to, so you
+# can walk back and forth without losing work. git review finish replays every
+# banked edit onto the PR tip.
+#
+set -eu
+
+prog="git review next"
+
+usage() {
+	cat <<EOF
+usage: $prog
+
+Advance a commit-by-commit review to the next commit. Your edits are remembered;
+run git review prev to go back, or git review finish when you are done.
+EOF
+}
+
+case "${1:-}" in
+-h | --h)
+	usage
+	exit 0
+	;;
+"") ;;
+*)
+	echo "error: unexpected argument $1" >&2
+	usage >&2
+	exit 1
+	;;
+esac
+
+# Shared helpers, sourced from the libexec directory the dispatcher points us at.
+# shellcheck source=../git-review-lib.sh
+. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
+
+load_step_review_meta
+
+if [ "$step" -lt "$count" ]; then
+	goto_step "$((step + 1))"
+else
+	echo "no more commits — run git review finish"
+fi

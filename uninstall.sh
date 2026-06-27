@@ -8,8 +8,11 @@ set -eu
 
 BIN_DIR="${PREFIX:-$HOME/.local/bin}"
 
-for f in git-review git-review-pr git-review-next git-review-prev git-review-status git-review-list git-review-save git-review-continue git-review-abort git-finish-review git-clean-review git-review-forget-delta git-review-forget-saved git-review-lib.sh; do
+for f in git-review git-review-lib.sh; do
 	rm -f "$BIN_DIR/$f"
 done
+# The copy installers place the libexec verbs directory here; remove it if
+# present. rm -rf on a symlink drops just the link.
+rm -rf "$BIN_DIR/git-review-verbs"
 
 echo "Removed git review commands from $BIN_DIR"

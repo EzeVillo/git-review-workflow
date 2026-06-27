@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 #
-# git-review-abort — cancel the review on the current branch in one step.
+# git review abort — cancel the review on the current branch in one step.
 #
 # Returns you to the branch you started from (or the base), deletes the
 # review/<branch> branch and its banked edits. Because the review was cancelled,
@@ -8,7 +8,7 @@
 #
 set -eu
 
-prog="git review-abort"
+prog="git review abort"
 
 usage() {
 	cat <<EOF
@@ -43,7 +43,7 @@ esac
 
 src="$(git config "branch.$cur.reviewsource" || true)"
 [ -n "$src" ] || {
-	echo "error: missing review metadata; was $cur created with git review-pr?" >&2
+	echo "error: missing review metadata; was $cur created with git review start?" >&2
 	exit 1
 }
 base="$(git config "branch.$cur.reviewbase" || true)"
@@ -66,7 +66,7 @@ elif [ -n "$base" ] && git rev-parse --verify --quiet "refs/heads/$base" >/dev/n
 	target="$base"
 fi
 [ -n "$target" ] || {
-	echo "error: could not determine a branch to return to; switch away manually, then run git clean-review $src" >&2
+	echo "error: could not determine a branch to return to; switch away manually, then run git review clean $src" >&2
 	exit 1
 }
 
@@ -87,7 +87,7 @@ git for-each-ref --format='%(refname)' "refs/review-edits/$src/" | while read -r
 done
 
 # Cancelling the review tears down everything it spawned. If you had already run
-# git finish-review, that left a review-fixes/<branch> and a finish undo point
+# git review finish, that left a review-fixes/<branch> and a finish undo point
 # (refs/review-undo/<branch>/*) behind; drop them too so an abort leaves nothing
 # dangling. The undo *config* rode on branch.review/<branch> and was already
 # removed when the branch was deleted above.

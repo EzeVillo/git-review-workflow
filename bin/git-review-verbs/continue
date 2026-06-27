@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 #
-# git-review-continue — resume a review put aside with git review-save.
+# git review continue — resume a review put aside with git review save.
 #
 # It turns review-saved/<branch> back into the active review/<branch>, restoring
 # the exact state you left: in whole mode the staged PR diff with your edits in the
@@ -12,13 +12,13 @@
 #
 set -eu
 
-prog="git review-continue"
+prog="git review continue"
 
 usage() {
 	cat <<EOF
 usage: $prog [<branch>]
 
-Resume a review saved with git review-save. With no argument, resume the only
+Resume a review saved with git review save. With no argument, resume the only
 saved review (or list them if there is more than one).
 EOF
 }
@@ -53,23 +53,9 @@ done
 
 git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 
-# Locate and load the shared helpers the installers place beside this command.
-# $0 may be a symlink (Homebrew and install.sh symlink commands onto PATH) or a
-# bare name (PATH lookup), so resolve both before taking our directory.
-self="$0"
-case "$self" in
-*/*) ;;
-*) self="$(command -v -- "$self" 2>/dev/null || printf '%s\n' "$self")" ;;
-esac
-while [ -L "$self" ]; do
-	link="$(readlink "$self")"
-	case "$link" in
-	/*) self="$link" ;;
-	*) self="$(dirname "$self")/$link" ;;
-	esac
-done
-# shellcheck source=git-review-lib.sh disable=SC1007
-. "$(CDPATH= cd -- "$(dirname -- "$self")" && pwd)/git-review-lib.sh"
+# Shared helpers, sourced from the libexec directory the dispatcher points us at.
+# shellcheck source=../git-review-lib.sh
+. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
 # Pick the saved review to resume.
 if [ -n "$arg" ]; then
@@ -79,11 +65,11 @@ if [ -n "$arg" ]; then
 		die "no saved review for $src (looked for $saved)"
 else
 	branches="$(git for-each-ref --format='%(refname:short)' refs/heads/review-saved/)"
-	[ -n "$branches" ] || die "no saved reviews; save one with git review-save"
+	[ -n "$branches" ] || die "no saved reviews; save one with git review save"
 	n="$(printf '%s\n' "$branches" | wc -l | tr -d ' ')"
 	if [ "$n" -gt 1 ]; then
 		echo "more than one saved review — name the one to resume:" >&2
-		printf '%s\n' "$branches" | sed -n 's#^review-saved/#  git review-continue #p' >&2
+		printf '%s\n' "$branches" | sed -n 's#^review-saved/#  git review continue #p' >&2
 		exit 1
 	fi
 	saved="$branches"
@@ -103,7 +89,7 @@ mode="$(git config "branch.$saved.reviewmode" || echo whole)"
 tip="$(git config "branch.$saved.reviewtip" || true)"
 # A saved review missing its tip (hand-edited or half-deleted config) would let
 # set -e kill us silently while restoring; report it instead.
-[ -n "$tip" ] || die "missing review metadata for $saved; was it created with git review-pr?"
+[ -n "$tip" ] || die "missing review metadata for $saved; was it created with git review start?"
 
 # restore_meta <key>: copy branch.<saved>.<key> to branch.<rb>.<key> when set.
 # Explicit if so the function returns 0 for absent optional keys (set -e safety).
@@ -119,10 +105,10 @@ if [ "$mode" = "step" ]; then
 	count="$(git config "branch.$saved.reviewcount" || true)"
 	step="$(git config "branch.$saved.reviewstep" || true)"
 	if [ -z "$start" ] || [ -z "$count" ] || [ -z "$step" ]; then
-		die "missing review metadata for $saved; was it created with git review-pr?"
+		die "missing review metadata for $saved; was it created with git review start?"
 	fi
 
-	# Bring the banked edits back to where review-next/review-prev expect them.
+	# Bring the banked edits back to where git review next/prev expect them.
 	git for-each-ref --format='%(refname)' "refs/review-saved-edits/$src/" | while read -r ref; do
 		n="${ref##*/}"
 		git update-ref "refs/review-edits/$src/$n" "$(git rev-parse "$ref")"
@@ -166,7 +152,7 @@ else
 	# bail before creating the review branch, the way the step path validates its
 	# keys above.
 	lower="$(git config "branch.$saved.reviewsavedlower" || true)"
-	[ -n "$lower" ] || die "missing review metadata for $saved; was it created with git review-pr?"
+	[ -n "$lower" ] || die "missing review metadata for $saved; was it created with git review start?"
 
 	git switch -q -c "$rb" "$tip"
 	git reset -q --soft "$lower"
@@ -188,5 +174,5 @@ else
 
 	git branch -D "$saved" >/dev/null
 
-	echo "resumed review of $src — the staged diff is the PR; edit, then run git finish-review"
+	echo "resumed review of $src — the staged diff is the PR; edit, then run git review finish"
 fi

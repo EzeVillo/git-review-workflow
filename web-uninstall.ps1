@@ -38,10 +38,7 @@ function _grw_SetUserPath([string]$Value) {
 $installDir = if ($env:PREFIX) { $env:PREFIX } else { "$env:USERPROFILE\.local\bin" }
 
 $cmds = @(
-    'git-review', 'git-review-pr', 'git-review-next', 'git-review-prev',
-    'git-review-status', 'git-review-list', 'git-review-save', 'git-review-continue',
-    'git-review-abort', 'git-finish-review', 'git-clean-review',
-    'git-review-forget-delta', 'git-review-forget-saved', 'git-review-lib.sh'
+    'git-review', 'git-review-lib.sh'
 )
 
 $removed = @()
@@ -51,6 +48,12 @@ foreach ($cmd in $cmds) {
         Remove-Item $p -Force
         $removed += $cmd
     }
+}
+# The copy installer places the private verbs directory here as libexec; drop it.
+$verbsDir = Join-Path $installDir 'git-review-verbs'
+if (Test-Path $verbsDir) {
+    Remove-Item $verbsDir -Recurse -Force
+    $removed += 'git-review-verbs'
 }
 
 if ($removed.Count -gt 0) {

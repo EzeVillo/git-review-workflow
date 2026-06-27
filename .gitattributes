@@ -7,8 +7,16 @@
 *.fish  text eol=lf
 *.bats  text eol=lf
 bin/*   text eol=lf
+# bin/* does not recurse; the private verb implementations live one level down
+# and are extensionless, so they need their own rule to stay LF (a CRLF shebang
+# breaks them under sh, e.g. in the Linux test container).
+bin/git-review-verbs/* text eol=lf
 install.sh   text eol=lf
 uninstall.sh text eol=lf
+
+# VERSION travels in the release tarball and is read verbatim by the version
+# tests; a CRLF here breaks the bare-semver check and every version comparison.
+VERSION text eol=lf
 
 # shellcheck reads .shellcheckrc as a script and rejects CR (SC1017), so it must
 # stay LF on Windows checkouts too.

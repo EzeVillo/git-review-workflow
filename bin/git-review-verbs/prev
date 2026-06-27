@@ -1,0 +1,45 @@
+#!/usr/bin/env sh
+#
+# git review prev — step a commit-by-commit review back to the previous commit.
+#
+# Like git review next but backwards: it banks the current commit's edits and
+# restores any edits you had banked on the previous commit, so you can revisit
+# and keep editing them.
+#
+set -eu
+
+prog="git review prev"
+
+usage() {
+	cat <<EOF
+usage: $prog
+
+Go back to the previous commit of a commit-by-commit review. Your edits are
+remembered in both directions.
+EOF
+}
+
+case "${1:-}" in
+-h | --h)
+	usage
+	exit 0
+	;;
+"") ;;
+*)
+	echo "error: unexpected argument $1" >&2
+	usage >&2
+	exit 1
+	;;
+esac
+
+# Shared helpers, sourced from the libexec directory the dispatcher points us at.
+# shellcheck source=../git-review-lib.sh
+. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
+
+load_step_review_meta
+
+if [ "$step" -gt 1 ]; then
+	goto_step "$((step - 1))"
+else
+	echo "already at the first commit"
+fi

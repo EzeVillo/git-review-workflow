@@ -17,202 +17,206 @@ teardown() {
 
 # ── --h / -h prints usage and exits 0 ──────────────────────────────────────
 
-@test "review-pr --h prints usage and exits 0" {
-	run git-review-pr --h
+@test "review start --h prints usage and exits 0" {
+	run git review start --h
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"usage: git review-pr"* ]]
+	[[ "$output" == *"usage: git review start"* ]]
 }
 
-@test "review-pr -h prints usage and exits 0" {
-	run git-review-pr -h
+@test "review start -h prints usage and exits 0" {
+	run git review start -h
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"usage: git review-pr"* ]]
+	[[ "$output" == *"usage: git review start"* ]]
 }
 
-@test "review-next --h prints usage and exits 0" {
-	run git-review-next --h
+@test "review next --h prints usage and exits 0" {
+	run git review next --h
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"usage: git review-next"* ]]
+	[[ "$output" == *"usage: git review next"* ]]
 }
 
-@test "review-prev --h prints usage and exits 0" {
-	run git-review-prev --h
+@test "review prev --h prints usage and exits 0" {
+	run git review prev --h
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"usage: git review-prev"* ]]
+	[[ "$output" == *"usage: git review prev"* ]]
 }
 
-@test "review-status --h prints usage and exits 0" {
-	run git-review-status --h
+@test "review status --h prints usage and exits 0" {
+	run git review status --h
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"usage: git review-status"* ]]
+	[[ "$output" == *"usage: git review status"* ]]
 }
 
-@test "review-preview --h prints usage and exits 0" {
-	run git-review-preview --h
+@test "review preview --h prints usage and exits 0" {
+	run git review preview --h
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"usage: git review-preview"* ]]
+	[[ "$output" == *"usage: git review preview"* ]]
 }
 
-@test "review-list --h prints usage and exits 0" {
-	run git-review-list --h
+@test "review list --h prints usage and exits 0" {
+	run git review list --h
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"usage: git review-list"* ]]
+	[[ "$output" == *"usage: git review list"* ]]
 }
 
-@test "review-save --h prints usage and exits 0" {
-	run git-review-save --h
+@test "review save --h prints usage and exits 0" {
+	run git review save --h
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"usage: git review-save"* ]]
+	[[ "$output" == *"usage: git review save"* ]]
 }
 
-@test "review-continue --h prints usage and exits 0" {
-	run git-review-continue --h
+@test "review continue --h prints usage and exits 0" {
+	run git review continue --h
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"usage: git review-continue"* ]]
+	[[ "$output" == *"usage: git review continue"* ]]
 }
 
-@test "review-abort --h prints usage and exits 0" {
-	run git-review-abort --h
+@test "review abort --h prints usage and exits 0" {
+	run git review abort --h
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"usage: git review-abort"* ]]
+	[[ "$output" == *"usage: git review abort"* ]]
 }
 
-@test "finish-review --h prints usage and exits 0" {
-	run git-finish-review --h
+@test "review finish --h prints usage and exits 0" {
+	run git review finish --h
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"usage: git finish-review"* ]]
+	[[ "$output" == *"usage: git review finish"* ]]
 }
 
-@test "clean-review --h prints usage and exits 0" {
-	run git-clean-review --h
+@test "review clean --h prints usage and exits 0" {
+	run git review clean --h
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"usage: git clean-review"* ]]
+	[[ "$output" == *"usage: git review clean"* ]]
 }
 
-@test "review-forget-delta --h prints usage and exits 0" {
-	run git-review-forget-delta --h
+@test "review forget --delta --h prints usage and exits 0" {
+	run git review forget --delta --h
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"usage: git review-forget-delta"* ]]
+	[[ "$output" == *"usage: git review forget"* ]]
 }
 
-@test "review-forget-saved --h prints usage and exits 0" {
-	run git-review-forget-saved --h
+@test "review forget --saved --h prints usage and exits 0" {
+	run git review forget --saved --h
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"usage: git review-forget-saved"* ]]
+	[[ "$output" == *"usage: git review forget"* ]]
 }
 
 # ── unknown options / unexpected arguments ────────────────────────────────────
 
-@test "review-pr with no branch prints usage and exits 1" {
-	run git-review-pr
-	[ "$status" -eq 1 ]
-	[[ "$output" == *"usage: git review-pr"* ]]
+@test "review start with no branch is accepted and proceeds to the git-repo check" {
+	# No <branch> now means the current branch, so the parser no longer rejects it
+	# up front. In this non-repo scratch dir it gets as far as the git-repo check,
+	# proving the omitted branch is a valid invocation, not a usage error.
+	run git review start
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"not a git repository"* ]]
+	[[ "$output" != *"usage: git review start"* ]]
 }
 
-@test "review-pr rejects an unknown option" {
-	run git-review-pr --bogus
+@test "review start rejects an unknown option" {
+	run git review start --bogus
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"unknown option --bogus"* ]]
 }
 
-@test "review-pr rejects a third positional argument" {
-	run git-review-pr feature/x develop extra
+@test "review start rejects a third positional argument" {
+	run git review start feature/x develop extra
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"unexpected argument extra"* ]]
 }
 
-@test "review-pr --from without a commit fails" {
-	run git-review-pr feature/x --from
+@test "review start --from without a commit fails" {
+	run git review start feature/x --from
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"--from requires a commit"* ]]
 }
 
-@test "review-next rejects an unexpected argument" {
-	run git-review-next bogus
+@test "review next rejects an unexpected argument" {
+	run git review next bogus
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"unexpected argument bogus"* ]]
 }
 
-@test "review-next rejects a dash-leading argument" {
-	run git-review-next --foo
+@test "review next rejects a dash-leading argument" {
+	run git review next --foo
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"unexpected argument --foo"* ]]
 }
 
-@test "review-prev rejects an unexpected argument" {
-	run git-review-prev bogus
+@test "review prev rejects an unexpected argument" {
+	run git review prev bogus
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"unexpected argument bogus"* ]]
 }
 
-@test "review-status rejects an unexpected argument" {
-	run git-review-status bogus
+@test "review status rejects an unexpected argument" {
+	run git review status bogus
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"unexpected argument bogus"* ]]
 }
 
-@test "review-preview rejects an unexpected argument" {
-	run git-review-preview bogus
+@test "review preview rejects an unexpected argument" {
+	run git review preview bogus
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"unexpected argument bogus"* ]]
 }
 
-@test "review-abort rejects an unexpected argument" {
-	run git-review-abort bogus
+@test "review abort rejects an unexpected argument" {
+	run git review abort bogus
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"unexpected argument bogus"* ]]
 }
 
-@test "review-save rejects an unexpected argument" {
-	run git-review-save bogus
+@test "review save rejects an unexpected argument" {
+	run git review save bogus
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"unexpected argument bogus"* ]]
 }
 
-@test "review-continue rejects an unknown option" {
-	run git-review-continue --bogus
+@test "review continue rejects an unknown option" {
+	run git review continue --bogus
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"unknown option --bogus"* ]]
 }
 
-@test "finish-review rejects an unknown option" {
-	run git-finish-review --bogus
+@test "review finish rejects an unknown option" {
+	run git review finish --bogus
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"unknown option --bogus"* ]]
 }
 
-@test "clean-review rejects an unknown option" {
-	run git-clean-review --bogus
+@test "review clean rejects an unknown option" {
+	run git review clean --bogus
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"unknown option --bogus"* ]]
 }
 
-@test "clean-review rejects a second positional argument" {
-	run git-clean-review feature/x extra
+@test "review clean rejects a second positional argument" {
+	run git review clean feature/x extra
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"unexpected argument extra"* ]]
 }
 
-@test "review-forget-delta rejects an unknown option" {
-	run git-review-forget-delta --bogus
+@test "review forget --delta rejects an unknown option" {
+	run git review forget --delta --bogus
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"unknown option --bogus"* ]]
 }
 
-@test "review-forget-delta with no target prints usage and exits 1" {
-	run git-review-forget-delta
+@test "review forget --delta with no target prints usage and exits 1" {
+	run git review forget --delta
 	[ "$status" -eq 1 ]
-	[[ "$output" == *"usage: git review-forget-delta"* ]]
+	[[ "$output" == *"usage: git review forget"* ]]
 }
 
-@test "review-forget-saved rejects an unknown option" {
-	run git-review-forget-saved --bogus
+@test "review forget --saved rejects an unknown option" {
+	run git review forget --saved --bogus
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"unknown option --bogus"* ]]
 }
 
-@test "review-forget-saved with no target prints usage and exits 1" {
-	run git-review-forget-saved
+@test "review forget --saved with no target prints usage and exits 1" {
+	run git review forget --saved
 	[ "$status" -eq 1 ]
-	[[ "$output" == *"usage: git review-forget-saved"* ]]
+	[[ "$output" == *"usage: git review forget"* ]]
 }

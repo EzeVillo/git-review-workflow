@@ -1,13 +1,14 @@
 #!/usr/bin/env sh
 #
-# git-review-lib.sh — helpers shared by the git-review-* commands.
+# git-review-lib.sh — helpers shared by the git review step commands.
 #
-# This file is *sourced*, never run: git-review-pr, git-review-next,
-# git-review-prev and git-review-continue load it for the helpers below. The
-# installers place it next to the commands (Homebrew and install.sh symlink it,
-# web-install copies it), and each command resolves its own location — following
-# symlinks — before sourcing this. It only defines functions, so sourcing it has
-# no side effects.
+# This file is *sourced, never run*. The verbs that need the helpers below
+# (start, next, prev, continue, compare) load it as
+# "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh" — GIT_REVIEW_LIBEXEC is exported by
+# the git-review dispatcher before it execs the verb, and points at the real
+# directory where the dispatcher, this lib and the git-review-verbs/ directory
+# live together (installed as libexec, not on PATH). It only defines functions,
+# so sourcing it has no side effects.
 
 # show_commit <commit> <n> <total>
 # Print a commit's diffstat first and its identifying header last, so the header
@@ -15,7 +16,7 @@
 # long for a commit that touches many files.
 show_commit() {
 	git --no-pager show --stat --format='' "$1"
-	printf -- '----\n[%s/%s] %s\n%s\n\n%s\n----\nreview this commit, edit files, then run git review-next\n' \
+	printf -- '----\n[%s/%s] %s\n%s\n\n%s\n----\nreview this commit, edit files, then run git review next\n' \
 		"$2" "$3" "$(git rev-parse --short "$1")" \
 		"$(git show -s --format='%an <%ae>' "$1")" \
 		"$(git show -s --format='%s%n%n%b' "$1")"
@@ -42,7 +43,7 @@ load_step_review_meta() {
 
 	mode="$(git config "branch.$cur.reviewmode" || true)"
 	[ "$mode" = "step" ] || {
-		echo "error: $cur was not started with git review-pr --step" >&2
+		echo "error: $cur was not started with git review start --step" >&2
 		exit 1
 	}
 
@@ -55,7 +56,7 @@ load_step_review_meta() {
 	# A key deleted by a hand-edit (while reviewmode stays "step") would otherwise
 	# let set -e kill us silently mid-script; read with || true and report it.
 	if [ -z "$src" ] || [ -z "$tip" ] || [ -z "$start" ] || [ -z "$count" ]; then
-		echo "error: missing review metadata; was $cur created with git review-pr?" >&2
+		echo "error: missing review metadata; was $cur created with git review start?" >&2
 		exit 1
 	fi
 
@@ -102,7 +103,7 @@ goto_step() {
 		git update-ref "refs/review-edits/$src/$step" "$edit"
 	else
 		# Reverting the step back to a clean tree must clear any edits we banked
-		# earlier, or they resurrect on the next visit / at finish-review.
+		# earlier, or they resurrect on the next visit / at git review finish.
 		git update-ref -d "refs/review-edits/$src/$step" 2>/dev/null || true
 	fi
 	ctarget="$(printf '%s\n' "$commits" | sed -n "${target}p")"

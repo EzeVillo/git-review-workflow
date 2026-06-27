@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 #
-# Tests for the commit-by-commit review mode (review-pr --step + review-next).
+# Tests for the commit-by-commit review mode (git review start --step + git review next).
 # The PR has two commits: C1 touches a.txt, C2 touches b.txt.
 
 setup() {
@@ -45,7 +45,7 @@ teardown() {
 }
 
 @test "--step starts on the first commit" {
-	run git review-pr feature/x --step
+	run git review start feature/x --step
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
 	[[ "$output" == *"[1/2]"* ]]
@@ -58,7 +58,7 @@ teardown() {
 }
 
 @test "--step prints the diffstat before the header so the header stays near the prompt" {
-	run git review-pr feature/x --step
+	run git review start feature/x --step
 	[ "$status" -eq 0 ]
 	# The diffstat summary must come before the [n/total] header: a long stat
 	# scrolls off the top, the identifying header stays next to the prompt.
@@ -71,10 +71,10 @@ teardown() {
 	[[ "$output" == *"c1-touch-a"* ]]
 }
 
-@test "review-next advances with a clean tree and hides prior edits" {
-	git review-pr feature/x --step
+@test "review next advances with a clean tree and hides prior edits" {
+	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
-	run git review-next
+	run git review next
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"[2/2]"* ]]
 	[[ "$output" == *"c2-touch-b"* ]]
@@ -89,9 +89,9 @@ teardown() {
 	[ -z "$output" ]
 }
 
-@test "review-next prints the diffstat before the header too" {
-	git review-pr feature/x --step
-	run git review-next
+@test "review next prints the diffstat before the header too" {
+	git review start feature/x --step
+	run git review next
 	[ "$status" -eq 0 ]
 	stat_line="$(printf '%s\n' "$output" | grep -nE '[0-9]+ files? changed' | head -1 | cut -d: -f1)"
 	hdr_line="$(printf '%s\n' "$output" | grep -nF '[2/2]' | head -1 | cut -d: -f1)"
@@ -101,21 +101,21 @@ teardown() {
 	[[ "$output" == *"c2-touch-b"* ]]
 }
 
-@test "review-next at the last commit reports the end" {
-	git review-pr feature/x --step
-	git review-next
-	run git review-next
+@test "review next at the last commit reports the end" {
+	git review start feature/x --step
+	git review next
+	run git review next
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"no more commits"* ]]
 }
 
-@test "finish-review replays every banked edit onto the tip" {
-	git review-pr feature/x --step
+@test "review finish replays every banked edit onto the tip" {
+	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
-	git review-next
+	git review next
 	printf 'b1\nb2\nFIXB\n' >b.txt
-	git review-next
-	run git finish-review
+	git review next
+	run git review finish
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
 	run git diff --cached
@@ -125,38 +125,38 @@ teardown() {
 	[[ "$output" != *"+a2"* ]]
 }
 
-@test "finish-review works even without advancing to the end" {
-	git review-pr feature/x --step
+@test "review finish works even without advancing to the end" {
+	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
-	run git finish-review
+	run git review finish
 	[ "$status" -eq 0 ]
 	run git diff --cached
 	[[ "$output" == *"+FIXA"* ]]
 }
 
-@test "review-next requires step mode" {
-	git review-pr feature/x
-	run git review-next
+@test "review next requires step mode" {
+	git review start feature/x
+	run git review next
 	[ "$status" -ne 0 ]
-	[[ "$output" == *"not started with git review-pr --step"* ]]
+	[[ "$output" == *"not started with git review start --step"* ]]
 }
 
-@test "clean-review removes banked edit refs" {
-	git review-pr feature/x --step
+@test "review clean removes banked edit refs" {
+	git review start feature/x --step
 	printf 'a1\na2\nFIXA\n' >a.txt
-	git review-next
+	git review next
 	run git for-each-ref refs/review-edits/feature/x/
 	[ -n "$output" ]
 	git switch --quiet develop
-	git clean-review feature/x
+	git review clean feature/x
 	run git for-each-ref refs/review-edits/feature/x/
 	[ -z "$output" ]
 }
 
-@test "review-next with no edits leaves no banked ref and stages the next diff" {
-	git review-pr feature/x --step
+@test "review next with no edits leaves no banked ref and stages the next diff" {
+	git review start feature/x --step
 	# advance without editing — the tree matches the commit so no ref should be created
-	git review-next
+	git review next
 	run git for-each-ref refs/review-edits/feature/x/1
 	[ -z "$output" ]
 	# step 2 diff is staged; working tree is clean
@@ -166,9 +166,9 @@ teardown() {
 	[ -z "$output" ]
 }
 
-@test "finish-review with no edits exits early" {
-	git review-pr feature/x --step
-	run git finish-review
+@test "review finish with no edits exits early" {
+	git review start feature/x --step
+	run git review finish
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"no review changes"* ]]
 }
@@ -182,12 +182,12 @@ teardown() {
 	git push --quiet -u origin feature/solo
 	git switch --quiet develop
 
-	git review-pr feature/solo --step
+	git review start feature/solo --step
 	run git diff --cached --name-only
 	[ "$output" = "solo.txt" ]
 	run git diff --name-only
 	[ -z "$output" ]
-	run git review-next
+	run git review next
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"no more commits"* ]]
 }
@@ -195,12 +195,12 @@ teardown() {
 # A banked edit reverted back to the clean commit content must not resurrect: the
 # stale edit ref has to be cleared, not left to reappear on the next visit.
 @test "reverting a banked edit to clean does not resurrect it on prev/next" {
-	git review-pr feature/x --step
+	git review start feature/x --step
 	# edit step 1, then bank it by advancing
 	printf 'a1\na2\nEDIT\n' >a.txt
-	git review-next
+	git review next
 	# back on step 1: the edit is restored
-	git review-prev
+	git review prev
 	run git diff --name-only
 	[ "$output" = "a.txt" ]
 	# revert it to the clean commit content
@@ -208,26 +208,26 @@ teardown() {
 	run git diff --name-only
 	[ -z "$output" ]
 	# moving away and back must not bring the reverted edit back
-	git review-next
-	git review-prev
+	git review next
+	git review prev
 	run git diff --name-only
 	[ -z "$output" ]
 }
 
 @test "reverting a banked edit to clean does not resurrect it at finish" {
-	git review-pr feature/x --step
+	git review start feature/x --step
 	printf 'a1\na2\nEDIT\n' >a.txt
-	git review-next          # bank step 1
-	git review-prev          # back to step 1
+	git review next          # bank step 1
+	git review prev          # back to step 1
 	git checkout -- a.txt    # revert to clean
-	git review-next          # move on (should clear the banked edit)
-	git finish-review
+	git review next          # move on (should clear the banked edit)
+	git review finish
 	run git diff --cached
 	[[ "$output" != *"EDIT"* ]]
 }
 
 @test "--step --step is harmless (a duplicated flag)" {
-	run git review-pr feature/x --step --step
+	run git review start feature/x --step --step
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
 	[[ "$output" == *"[1/2]"* ]]

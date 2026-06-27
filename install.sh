@@ -12,6 +12,12 @@ BIN_DIR="${PREFIX:-$HOME/.local/bin}"
 mkdir -p "$BIN_DIR"
 for f in "$SRC_DIR"/bin/git-*; do
 	name="$(basename "$f")"
+	# The private verbs directory and the sourced lib are libexec: they stay in
+	# the repo's bin/, where the dispatcher reaches them by resolving its own
+	# symlink back here. Never put them on PATH — git must not discover a verb as
+	# `git <verb>`.
+	[ -d "$f" ] && continue
+	[ "$name" = "git-review-lib.sh" ] && continue
 	chmod +x "$f"
 	ln -sf "$f" "$BIN_DIR/$name"
 done

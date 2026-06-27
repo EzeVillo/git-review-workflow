@@ -1,14 +1,14 @@
 #!/usr/bin/env sh
 #
-# git-clean-review — delete the review/<branch> and review-fixes/<branch> branches.
+# git review clean — delete the review/<branch> and review-fixes/<branch> branches.
 #
 # With no <branch> it deletes all of them. It never deletes the branch you are
 # currently on. The recorded last-reviewed tip (used by --delta) is left alone;
-# discard it with git review-forget.
+# discard it with git review forget --delta.
 #
 set -eu
 
-prog="git clean-review"
+prog="git review clean"
 
 usage() {
 	cat <<EOF
@@ -17,7 +17,7 @@ usage: $prog [branch]
 Delete the review/<branch> and review-fixes/<branch> branches.
 With no <branch>, delete all of them.
 
-The --delta marker is left untouched; use git review-forget to discard it.
+The --delta marker is left untouched; use git review forget --delta to discard it.
 EOF
 }
 
@@ -73,7 +73,7 @@ if [ -n "$list" ]; then
 	done
 fi
 
-# Drop any banked commit-by-commit edit refs, plus any finish-review undo points
+# Drop any banked commit-by-commit edit refs, plus any git review finish undo points
 # (refs/review-undo/* and their branch.review/<branch>.reviewundo* config) left
 # behind by a finish that was never aborted.
 if [ -n "$arg" ]; then
@@ -106,7 +106,7 @@ for b in $undobranches; do
 done
 
 if [ "$cleaned" -eq 0 ]; then
-	# Saved reviews live in review-saved/*, a namespace clean-review deliberately
+	# Saved reviews live in review-saved/*, a namespace git review clean deliberately
 	# leaves alone (it owns review/* and review-fixes/* only). Point at them when
 	# nothing else was found, so "no review branches" does not read as wrong to
 	# someone staring at a review-saved/<branch> they expected this to clear.
@@ -116,7 +116,7 @@ if [ "$cleaned" -eq 0 ]; then
 		saved="$(git for-each-ref --format='%(refname:short)' refs/heads/review-saved/)"
 	fi
 	if [ -n "$saved" ]; then
-		echo "no review/ or review-fixes/ branches to clean; you have a saved review — resume it with git review-continue or discard it with git review-forget-saved" >&2
+		echo "no review/ or review-fixes/ branches to clean; you have a saved review — resume it with git review continue or discard it with git review forget --saved" >&2
 	else
 		echo "no review branches found" >&2
 	fi

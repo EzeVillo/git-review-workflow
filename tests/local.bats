@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 #
-# Tests for git review-pr --local: review your local branches directly, without
+# Tests for git review start --local: review your local branches directly, without
 # fetching. The local tip is deliberately kept ahead of the remote one (an extra
 # unpushed commit) so a local review and a remote review of the same branch name
 # see different things — and must never overwrite each other's --delta progress.
@@ -47,7 +47,7 @@ teardown() {
 }
 
 @test "--local reviews the local tip, including unpushed commits" {
-	run git review-pr feature/x --local
+	run git review start feature/x --local
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
 	run git diff --cached --name-only
@@ -58,20 +58,20 @@ teardown() {
 
 @test "--local does not fetch; works with an unreachable remote" {
 	git remote set-url origin "$TMP/does-not-exist.git"
-	run git review-pr feature/x --local
+	run git review start feature/x --local
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
 }
 
 @test "--local names the local base, not the remote, in the range message" {
-	run git review-pr feature/x --local
+	run git review start feature/x --local
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"vs develop"* ]]
 	[[ "$output" != *"origin/"* ]]
 }
 
 @test "--local records a separate marker that does not collide with the remote one" {
-	git review-pr feature/x --local
+	git review start feature/x --local
 	# The local marker points at the local tip; the remote marker is untouched.
 	run git config reviewworkflowlocal.feature/x.reviewed
 	[ "$status" -eq 0 ]
@@ -81,21 +81,21 @@ teardown() {
 }
 
 @test "a local review does not disturb a prior remote review's marker" {
-	git review-pr feature/x
+	git review start feature/x
 	remote_marker="$(git config reviewworkflow.feature/x.reviewed)"
 	git switch --quiet --discard-changes develop
-	git clean-review feature/x
-	git review-pr feature/x --local
+	git review clean feature/x
+	git review start feature/x --local
 	# The remote marker still points where the remote review left it.
 	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$remote_marker" ]
 	[ "$(git config reviewworkflowlocal.feature/x.reviewed)" = "$(git rev-parse feature/x)" ]
 	[ "$remote_marker" != "$(git rev-parse feature/x)" ]
 }
 
-@test "finish-review on a local review extracts edits locally" {
-	git review-pr feature/x --local
+@test "review finish on a local review extracts edits locally" {
+	git review start feature/x --local
 	printf 'b\nFIXB\n' >b.txt
-	run git finish-review
+	run git review finish
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
 	run git diff --cached
@@ -103,12 +103,12 @@ teardown() {
 }
 
 @test "abort rolls back the local marker, leaving the remote marker intact" {
-	git review-pr feature/x
+	git review start feature/x
 	remote_marker="$(git config reviewworkflow.feature/x.reviewed)"
 	git switch --quiet --discard-changes develop
-	git clean-review feature/x
-	git review-pr feature/x --local
-	run git review-abort
+	git review clean feature/x
+	git review start feature/x --local
+	run git review abort
 	[ "$status" -eq 0 ]
 	# The cancelled local review left no local marker behind...
 	run git config reviewworkflowlocal.feature/x.reviewed
@@ -117,36 +117,36 @@ teardown() {
 	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$remote_marker" ]
 }
 
-@test "review-forget-delta <branch> clears the local marker" {
-	git review-pr feature/x --local
+@test "review forget --delta <branch> clears the local marker" {
+	git review start feature/x --local
 	git switch --quiet develop
-	git clean-review feature/x
-	run git review-forget-delta feature/x
+	git review clean feature/x
+	run git review forget --delta feature/x
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"(local)"* ]]
 	run git config reviewworkflowlocal.feature/x.reviewed
 	[ "$status" -ne 0 ]
 }
 
-@test "review-forget-delta --stale clears a local marker when the local branch is gone" {
-	git review-pr feature/x --local
+@test "review forget --delta --stale clears a local marker when the local branch is gone" {
+	git review start feature/x --local
 	git switch --quiet develop
-	git clean-review feature/x
+	git review clean feature/x
 	git branch -D feature/x
-	run git review-forget-delta --stale
+	run git review forget --delta --stale
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"local; feature/x no longer exists"* ]]
 	run git config reviewworkflowlocal.feature/x.reviewed
 	[ "$status" -ne 0 ]
 }
 
-@test "review-forget-delta --stale keeps a local marker whose local branch still exists" {
-	git review-pr feature/x --local
+@test "review forget --delta --stale keeps a local marker whose local branch still exists" {
+	git review start feature/x --local
 	git switch --quiet develop
-	git clean-review feature/x
+	git review clean feature/x
 	# Delete the remote branch but keep the local one: the local marker must stay.
 	git push --quiet origin --delete feature/x
-	run git review-forget-delta --stale
+	run git review forget --delta --stale
 	[ "$status" -eq 0 ]
 	run git config reviewworkflowlocal.feature/x.reviewed
 	[ "$status" -eq 0 ]
@@ -154,9 +154,9 @@ teardown() {
 
 @test "--local --delta reviews only the commits added since the last local review" {
 	# A full local review records the local marker at the local tip (C2)...
-	git review-pr feature/x --local
+	git review start feature/x --local
 	git switch --quiet --discard-changes develop
-	git clean-review feature/x
+	git review clean feature/x
 	# ...then a third, local-only commit (C3) lands on top.
 	git switch --quiet feature/x
 	printf 'c\n' >c.txt
@@ -164,7 +164,7 @@ teardown() {
 	git commit --quiet -m c3-add-c
 	git switch --quiet develop
 
-	run git review-pr feature/x --local --delta
+	run git review start feature/x --local --delta
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"since last review"* ]]
 	run git diff --cached --name-only
@@ -176,13 +176,13 @@ teardown() {
 
 @test "--local --delta is bounded by the local marker, not the remote one" {
 	# A remote review records the remote marker at the pushed tip (C1)...
-	git review-pr feature/x
+	git review start feature/x
 	git switch --quiet --discard-changes develop
-	git clean-review feature/x
+	git review clean feature/x
 	# ...and a local review records the local marker at the local tip (C2).
-	git review-pr feature/x --local
+	git review start feature/x --local
 	git switch --quiet --discard-changes develop
-	git clean-review feature/x
+	git review clean feature/x
 	# A new local-only commit (C3) lands on top of the local tip.
 	git switch --quiet feature/x
 	printf 'c\n' >c.txt
@@ -190,7 +190,7 @@ teardown() {
 	git commit --quiet -m c3-add-c
 	git switch --quiet develop
 
-	run git review-pr feature/x --local --delta
+	run git review start feature/x --local --delta
 	[ "$status" -eq 0 ]
 	run git diff --cached --name-only
 	# The range starts at the local marker (C2 = b.txt), so only c.txt is new. Had
@@ -201,7 +201,7 @@ teardown() {
 }
 
 @test "--local --step records the local marker and the local flag" {
-	run git review-pr feature/x --local --step
+	run git review start feature/x --local --step
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
 	[ "$(git config branch.review/feature/x.reviewlocal)" = "1" ]
@@ -212,8 +212,8 @@ teardown() {
 }
 
 @test "abort on a local --step review rolls back the local marker" {
-	git review-pr feature/x --local --step
-	run git review-abort
+	git review start feature/x --local --step
+	run git review abort
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "develop" ]
 	# No prior local review existed, so the marker is cleared, not left dangling.
@@ -221,12 +221,12 @@ teardown() {
 	[ "$status" -ne 0 ]
 }
 
-@test "finish-review on a local --step review replays banked edits locally" {
-	git review-pr feature/x --local --step
+@test "review finish on a local --step review replays banked edits locally" {
+	git review start feature/x --local --step
 	# Edit the first commit (C1 = a.txt), then advance to bank that edit.
 	printf 'a\nFIXA\n' >a.txt
-	git review-next
-	run git finish-review
+	git review next
+	run git review finish
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
 	run git diff --cached
@@ -238,7 +238,7 @@ teardown() {
 	# remote-tracking origin/develop must not be used as a fallback.
 	git switch --quiet feature/x
 	git branch -D develop
-	run git review-pr feature/x --local
+	run git review start feature/x --local
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"develop not found"* ]]
 	# It failed before creating the review branch.
@@ -246,11 +246,11 @@ teardown() {
 	[ "$status" -ne 0 ]
 }
 
-@test "finish-review --onto-source on a local review stages onto the local branch" {
-	git review-pr feature/x --local
+@test "review finish --onto-source on a local review stages onto the local branch" {
+	git review start feature/x --local
 	tip="$(git rev-parse feature/x)"
 	printf 'b\nFIXB\n' >b.txt
-	run git finish-review --onto-source
+	run git review finish --onto-source
 	[ "$status" -eq 0 ]
 	# The fix is staged onto feature/x itself, and we end up there.
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "feature/x" ]
@@ -280,11 +280,11 @@ make_dotlocal_branch() {
 	make_dotlocal_branch
 
 	# Remote review of feature/x.local -> reviewworkflow.feature/x.local.reviewed
-	git review-pr feature/x.local
+	git review start feature/x.local
 	git switch --quiet --discard-changes develop
-	git clean-review feature/x.local
+	git review clean feature/x.local
 	# Local review of feature/x -> reviewworkflowlocal.feature/x.reviewed
-	git review-pr feature/x --local
+	git review start feature/x --local
 
 	# Each marker holds exactly what its own review recorded...
 	[ "$(git config reviewworkflow.feature/x.local.reviewed)" = "$(git rev-parse origin/feature/x.local)" ]
@@ -293,17 +293,17 @@ make_dotlocal_branch() {
 	[ "$(git config reviewworkflow.feature/x.local.reviewed)" != "$(git config reviewworkflowlocal.feature/x.reviewed)" ]
 }
 
-@test "review-forget-delta <x> leaves the remote marker of the branch named <x>.local alone" {
+@test "review forget --delta <x> leaves the remote marker of the branch named <x>.local alone" {
 	make_dotlocal_branch
 
-	git review-pr feature/x.local
+	git review start feature/x.local
 	git switch --quiet --discard-changes develop
-	git clean-review feature/x.local
-	git review-pr feature/x --local
+	git review clean feature/x.local
+	git review start feature/x --local
 	git switch --quiet --discard-changes develop
-	git clean-review feature/x
+	git review clean feature/x
 
-	run git review-forget-delta feature/x
+	run git review forget --delta feature/x
 	[ "$status" -eq 0 ]
 	# Only feature/x's own (local) marker is cleared...
 	run git config reviewworkflowlocal.feature/x.reviewed
@@ -312,17 +312,17 @@ make_dotlocal_branch() {
 	[ -n "$(git config reviewworkflow.feature/x.local.reviewed)" ]
 }
 
-@test "review-forget-delta --stale keeps a <x>.local remote marker even when local <x> is gone" {
+@test "review forget --delta --stale keeps a <x>.local remote marker even when local <x> is gone" {
 	make_dotlocal_branch
 
-	git review-pr feature/x.local       # remote marker reviewworkflow.feature/x.local.reviewed
+	git review start feature/x.local       # remote marker reviewworkflow.feature/x.local.reviewed
 	git switch --quiet --discard-changes develop
-	git clean-review feature/x.local
+	git review clean feature/x.local
 
 	# Remove the local feature/x branch; keep the remote feature/x.local branch.
 	git branch -D feature/x
 
-	run git review-forget-delta --stale
+	run git review forget --delta --stale
 	[ "$status" -eq 0 ]
 	# The marker is keyed off origin/feature/x.local (still present), so it stays.
 	# The old scheme mis-routed it to local feature/x and would have forgotten it.

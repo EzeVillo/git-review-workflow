@@ -17,12 +17,15 @@ setup() {
 }
 
 @test "homebrew: all bin files referenced in the formula exist and are executable" {
-	for f in git-review git-review-pr git-review-next git-review-prev git-review-status \
-	          git-review-preview git-review-list git-review-save git-review-continue \
-	          git-review-abort git-finish-review git-clean-review git-review-forget-delta \
-	          git-review-forget-saved git-review-lib.sh; do
+	# Top-level files the formula installs (the dispatcher and the sourced lib).
+	for f in git-review git-review-lib.sh; do
 		[ -f "$REPO/bin/$f" ]
 		[ -x "$REPO/bin/$f" ]
+	done
+	# Private verbs the formula installs as libexec (git-review-verbs/).
+	for v in start compare status list preview next prev finish save continue abort clean forget; do
+		[ -f "$REPO/bin/git-review-verbs/$v" ]
+		[ -x "$REPO/bin/git-review-verbs/$v" ]
 	done
 }
 
@@ -34,9 +37,12 @@ setup() {
 
 @test "homebrew: formula test-block commands succeed" {
 	TMP="$(mktemp -d)"
-	for f in "$REPO"/bin/git-*; do
-		cp "$f" "$TMP/"
-		chmod +x "$TMP/$(basename "$f")"
+	# Mirror the keg layout: the dispatcher, the sourced lib and the private verbs
+	# directory live together (libexec), so copy bin/ whole rather than flat —
+	# the dispatcher resolves its verbs and sourced lib from there.
+	cp -R "$REPO"/bin/. "$TMP/"
+	for f in "$TMP"/git-*; do
+		if [ -f "$f" ]; then chmod +x "$f"; fi
 	done
 	run "$TMP/git-review" --h
 	[ "$status" -eq 0 ]
@@ -44,12 +50,13 @@ setup() {
 	run "$TMP/git-review" --version
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"$VERSION"* ]]
-	run "$TMP/git-review-pr" --h
+	# Verb routing through the dispatcher (the verbs are libexec beside it).
+	run "$TMP/git-review" start -h
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"usage: git review-pr"* ]]
-	run "$TMP/git-finish-review" --h
+	[[ "$output" == *"usage: git review start"* ]]
+	run "$TMP/git-review" finish -h
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"usage: git finish-review"* ]]
+	[[ "$output" == *"usage: git review finish"* ]]
 	rm -rf "$TMP"
 }
 
@@ -74,6 +81,9 @@ git_mode() {
 	while IFS= read -r line; do
 		mode=$(printf '%s' "$line" | awk '{print $1}')
 		path=$(printf '%s' "$line" | cut -f2)
+		# A .gitkeep marker, if present, is not a script, so it is not expected to
+		# be executable.
+		case "$path" in */.gitkeep) continue ;; esac
 		[ "$mode" = "100755" ] || bad="$bad $path($mode)"
 	done < <(git -C "$REPO" ls-files -s -- bin/)
 	[ -z "$bad" ] || { echo "non-executable bin/ files:$bad"; false; }

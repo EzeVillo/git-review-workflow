@@ -1,14 +1,14 @@
 #!/usr/bin/env sh
 #
-# git-review-list — list every review/* branch in progress.
+# git review list — list every review/* branch in progress.
 #
-# review-status reports only the review on the current branch; this shows all of
-# them at once, so you can see what you have open across branches. The current
+# git review status reports only the review on the current branch; this shows all
+# of them at once, so you can see what you have open across branches. The current
 # branch is marked with a "*".
 #
 set -eu
 
-prog="git review-list"
+prog="git review list"
 
 usage() {
 	cat <<EOF
@@ -16,7 +16,7 @@ usage: $prog
 
 List every review/* branch in progress, with its source PR, mode and — in
 commit-by-commit mode — which commit you are on ([k/N]). The branch you are on
-is marked with a "*". Reviews paused with git review-save are listed too, under
+is marked with a "*". Reviews paused with git review save are listed too, under
 "saved".
 EOF
 }
@@ -55,10 +55,10 @@ describe() {
 	label="$2"
 	src="$(git config "branch.$b.reviewsource" || true)"
 	# A branch with no reviewsource is an orphan: either hand-made, or left by a
-	# review-save / review-pr that died after creating the branch but before writing
-	# its metadata. Surface it instead of skipping silently — otherwise an
+	# git review save / git review start that died after creating the branch but before
+	# writing its metadata. Surface it instead of skipping silently — otherwise an
 	# orphan-only state prints nothing at all — so it can be cleaned up (e.g. with
-	# git review-forget-saved).
+	# git review forget --saved).
 	if [ -z "$src" ]; then
 		printf '%s %s  %s(no metadata)\n' "$label" "$b" "$prefix"
 		return
@@ -86,7 +86,7 @@ printf '%s\n' "$branches" | while read -r b; do
 	describe "$b" "$marker"
 done
 
-# Reviews put aside with git review-save, tagged so they are not mistaken for
+# Reviews put aside with git review save, tagged so they are not mistaken for
 # active ones. The branch you are on is still marked with "*".
 if [ -n "$saved" ]; then
 	prefix="saved  "

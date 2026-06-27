@@ -1,10 +1,10 @@
 #!/usr/bin/env sh
 #
-# git-review-status — show the state of the review on the current branch.
+# git review status — show the state of the review on the current branch.
 #
 set -eu
 
-prog="git review-status"
+prog="git review status"
 
 usage() {
 	cat <<EOF
@@ -42,7 +42,7 @@ src="$(git config "branch.$cur.reviewsource" || true)"
 tip="$(git config "branch.$cur.reviewtip" || true)"
 mode="$(git config "branch.$cur.reviewmode" || echo whole)"
 if [ -z "$src" ] || [ -z "$tip" ]; then
-	echo "error: missing review metadata; was $cur created with git review-pr?" >&2
+	echo "error: missing review metadata; was $cur created with git review start?" >&2
 	exit 1
 fi
 
@@ -57,7 +57,7 @@ if [ "$mode" = "step" ]; then
 	# let set -e kill the bare read silently mid-script; read with || true and report
 	# it. reviewstep falls through to the numeric guard below for a precise message.
 	if [ -z "$count" ] || [ -z "$start" ]; then
-		echo "error: missing review metadata; was $cur created with git review-pr?" >&2
+		echo "error: missing review metadata; was $cur created with git review start?" >&2
 		exit 1
 	fi
 	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
@@ -89,11 +89,11 @@ if [ "$mode" = "step" ]; then
 	done
 	printf '  banked  %s\n' "${banked:- none}"
 
-	hint="git review-next"
-	[ "$step" -gt 1 ] && hint="$hint / git review-prev"
-	printf '  next    edit, then %s  (git finish-review when done)\n' "$hint"
+	hint="git review next"
+	[ "$step" -gt 1 ] && hint="$hint / git review prev"
+	printf '  next    edit, then %s  (git review finish when done)\n' "$hint"
 else
 	base="$(git config "branch.$cur.reviewbase" || true)"
 	printf '  mode    whole%s\n' "${base:+  (base $base)}"
-	printf '  next    edit, then git finish-review\n'
+	printf '  next    edit, then git review finish\n'
 fi

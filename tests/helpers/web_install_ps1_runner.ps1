@@ -11,7 +11,7 @@ $ErrorActionPreference = 'Stop'
 $_archiveDir = Join-Path $TestTmpDir "git-review-workflow-v0.0.1"
 New-Item -ItemType Directory -Path (Join-Path $_archiveDir "bin") -Force | Out-Null
 Get-ChildItem (Join-Path $RepoPath "bin") |
-    Copy-Item -Destination (Join-Path $_archiveDir "bin") -Force
+    Copy-Item -Destination (Join-Path $_archiveDir "bin") -Recurse -Force
 $_fakeZip = Join-Path $TestTmpDir "archive.zip"
 Compress-Archive -Path $_archiveDir -DestinationPath $_fakeZip -Force
 
@@ -59,12 +59,7 @@ try {
 
         'install_all_commands' {
             _invoke_installer
-            $cmds = @(
-                'git-review-pr', 'git-review-next', 'git-review-prev',
-                'git-review-status', 'git-review-list', 'git-review-save',
-                'git-review-continue', 'git-review-abort', 'git-finish-review',
-                'git-clean-review', 'git-review-forget-delta', 'git-review-forget-saved'
-            )
+            $cmds = @('git-review')
             foreach ($cmd in $cmds) {
                 $p = Join-Path $_installDir $cmd
                 if (-not (Test-Path $p)) {

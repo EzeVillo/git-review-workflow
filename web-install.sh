@@ -50,6 +50,18 @@ mkdir -p "$BIN_DIR"
 installed=""
 for f in "$src"/bin/git-*; do
 	name="$(basename "$f")"
+	# The private verbs directory is libexec: copy it whole into a subdirectory
+	# of BIN_DIR (NOT onto PATH — git must not discover a verb as `git <verb>`).
+	# The dispatcher reaches it (and git-review-lib.sh) beside itself once
+	# installed here.
+	if [ -d "$f" ]; then
+		rm -rf "${BIN_DIR:?}/$name"
+		cp -R "$f" "$BIN_DIR/$name"
+		for v in "$BIN_DIR/$name"/*; do
+			if [ -f "$v" ]; then chmod +x "$v"; fi
+		done
+		continue
+	fi
 	cp "$f" "$BIN_DIR/$name"
 	chmod +x "$BIN_DIR/$name"
 	installed="$installed $name"

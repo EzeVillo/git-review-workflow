@@ -1,30 +1,34 @@
 #!/usr/bin/env sh
 #
-# git-review-pr — stage a pull request diff on a review/<branch> branch.
+# git review start — stage a pull request diff on a review/<branch> branch.
 #
 # Two independent axes:
 #   range  — where the review starts: the merge-base with the base branch
 #            (default), your last review (--delta), or an explicit commit
 #            (--from <commit>).
 #   layout — how you see it: the whole range as one staged diff (default), or
-#            one commit at a time (--step, advance with git review-next).
+#            one commit at a time (--step, advance with git review next).
 #
 set -eu
 
-prog="git review-pr"
+prog="git review start"
 
 usage() {
 	cat <<EOF
-usage: $prog (<branch> | --this) [base | --delta | --from <commit>] [--step]
+usage: $prog [<branch>] [<base> | --base <base> | --delta | --from <commit>] [--step] [--local]
 
 Stage a pull request diff on a review/<branch> branch for inline review.
+With no <branch>, review the branch you currently have checked out.
 
-  base              base branch to diff against (required for a full review;
-                    set a default with: git config reviewworkflow.base <branch>)
-  --this            review the branch you are currently on (no name needed)
+  <branch>          branch to review; omit it to review the current branch
+  <base>            commit-ish to diff against — a branch, tag or commit
+                    (required for a full review; set a default with:
+                    git config reviewworkflow.base <branch>)
+  --base <base>     the base to diff against; use it to pass a base while
+                    letting <branch> default to the current branch
   --delta           review only the commits added since your last review
   --from <commit>   review only the commits after <commit>
-  --step            review one commit at a time; advance with git review-next
+  --step            review one commit at a time; advance with git review next
   --local           review your local branches directly, without fetching
 EOF
 }
@@ -41,7 +45,6 @@ from=""
 delta=0
 step=0
 local_mode=0
-this_mode=0
 while [ $# -gt 0 ]; do
 	case "$1" in
 	-h | --h)
@@ -51,7 +54,20 @@ while [ $# -gt 0 ]; do
 	-d | --delta) delta=1 ;;
 	--step) step=1 ;;
 	--local) local_mode=1 ;;
-	--this) this_mode=1 ;;
+	--base)
+		shift
+		[ $# -gt 0 ] || die "--base requires a base"
+		[ -n "$1" ] || die "--base requires a base"
+		[ "$base_explicit" -eq 0 ] || die "base given more than once"
+		base="$1"
+		base_explicit=1
+		;;
+	--base=*)
+		[ "$base_explicit" -eq 0 ] || die "base given more than once"
+		base="${1#--base=}"
+		[ -n "$base" ] || die "--base requires a base"
+		base_explicit=1
+		;;
 	--from)
 		shift
 		[ $# -gt 0 ] || die "--from requires a commit"
@@ -65,7 +81,7 @@ while [ $# -gt 0 ]; do
 	--)
 		# End-of-options, the git convention: everything after is positional,
 		# so a branch whose name starts with "-" (or collides with a flag) can
-		# still be reviewed, e.g. git review-pr -- --weird develop.
+		# still be reviewed, e.g. git review start -- --weird develop.
 		shift
 		while [ $# -gt 0 ]; do
 			if [ -z "$src" ]; then
@@ -99,11 +115,6 @@ while [ $# -gt 0 ]; do
 	shift
 done
 
-[ -n "$src" ] || [ "$this_mode" -eq 1 ] || {
-	usage >&2
-	exit 1
-}
-
 if [ "$delta" -eq 1 ] && [ -n "$from" ]; then
 	die "use only one of --delta and --from"
 fi
@@ -114,34 +125,20 @@ fi
 
 git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 
-# Locate and load the shared helpers the installers place beside this command.
-# $0 may be a symlink (Homebrew and install.sh symlink commands onto PATH) or a
-# bare name (PATH lookup), so resolve both before taking our directory.
-self="$0"
-case "$self" in
-*/*) ;;
-*) self="$(command -v -- "$self" 2>/dev/null || printf '%s\n' "$self")" ;;
-esac
-while [ -L "$self" ]; do
-	link="$(readlink "$self")"
-	case "$link" in
-	/*) self="$link" ;;
-	*) self="$(dirname "$self")/$link" ;;
-	esac
-done
-# shellcheck source=git-review-lib.sh disable=SC1007
-. "$(CDPATH= cd -- "$(dirname -- "$self")" && pwd)/git-review-lib.sh"
+# Shared helpers, sourced from the libexec directory the dispatcher points us at.
+# shellcheck source=../git-review-lib.sh
+. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
-# --this fills in <branch> from the branch you have checked out, so you do not
-# have to name it. It only resolves the name; the mode (remote vs --local) is
-# still chosen by flags. The check against the review/*, review-saved/* and
+# With no <branch>, review the branch you currently have checked out. This is
+# git's own default — push, status, log and rebase all act on the current branch
+# when you name nothing. It only resolves the name; the mode (remote vs --local)
+# is still chosen by flags. The check against the review/*, review-saved/* and
 # review-fixes/* namespaces avoids the nonsense of reviewing a review branch.
-if [ "$this_mode" -eq 1 ]; then
-	[ -z "$src" ] || die "--this takes no branch argument (got $src)"
+if [ -z "$src" ]; then
 	cur="$(git symbolic-ref --quiet --short HEAD || true)"
-	[ -n "$cur" ] || die "--this needs a current branch, but HEAD is detached"
+	[ -n "$cur" ] || die "no branch given and HEAD is detached; name a branch to review"
 	case "$cur" in
-	review/* | review-saved/* | review-fixes/*) die "--this cannot review a review branch (HEAD is $cur)" ;;
+	review/* | review-saved/* | review-fixes/*) die "refusing to review a review branch (HEAD is $cur); name a branch to review" ;;
 	esac
 	src="$cur"
 fi
@@ -170,16 +167,41 @@ fi
 if [ "$local_mode" -eq 1 ]; then
 	srcref="refs/heads/$src"
 	srclabel="$src"
-	baseref="refs/heads/$base"
-	baselabel="$base"
 	markerkey="reviewworkflowlocal.$src.reviewed"
 else
 	git fetch --quiet "$remote" || die "could not update from $remote"
 	srcref="refs/remotes/$remote/$src"
 	srclabel="$remote/$src"
-	baseref="refs/remotes/$remote/$base"
-	baselabel="$remote/$base"
 	markerkey="reviewworkflow.$src.reviewed"
+fi
+
+# Resolve the base into a ref and a human label. A base is normally a branch, so
+# try the branch namespace first — the remote's copy, or the local branch with
+# --local — to keep the familiar origin/<base> labels and the merged-base folding
+# below. Anything that is not a branch there still works as a read-only lower
+# bound via any commit-ish: a tag, a SHA, or an origin/<x> spelled out in full.
+# baseref stays empty when the base does not resolve at all; the full-review path
+# treats that as fatal ("not found"), while the delta/from folding treats an
+# unresolvable base as a no-op, exactly as before.
+baseref=""
+baselabel="$base"
+if [ -n "$base" ]; then
+	if [ "$local_mode" -eq 1 ]; then
+		if git rev-parse --verify --quiet "refs/heads/$base^{commit}" >/dev/null; then
+			baseref="refs/heads/$base"
+		fi
+	else
+		if git rev-parse --verify --quiet "refs/remotes/$remote/$base^{commit}" >/dev/null; then
+			baseref="refs/remotes/$remote/$base"
+			baselabel="$remote/$base"
+		fi
+	fi
+	if [ -z "$baseref" ]; then
+		bcommit="$(git rev-parse --verify --quiet "$base^{commit}" || true)"
+		if [ -n "$bcommit" ]; then
+			baseref="$bcommit"
+		fi
+	fi
 fi
 
 git rev-parse --verify --quiet "$srcref" >/dev/null ||
@@ -187,18 +209,18 @@ git rev-parse --verify --quiet "$srcref" >/dev/null ||
 
 rb="review/$src"
 git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null &&
-	die "$rb already exists; run git clean-review $src first"
+	die "$rb already exists; run git review clean $src first"
 git rev-parse --verify --quiet "refs/heads/review-saved/$src" >/dev/null &&
-	die "you have a saved review of $src; resume it with git review-continue $src or discard it with git review-forget-saved $src"
+	die "you have a saved review of $src; resume it with git review continue $src or discard it with git review forget --saved $src"
 
 tip="$(git rev-parse "$srcref")"
 prev="$(git config "$markerkey" || true)"
 
 # A remote review targets the remote's copy of the branch, never your local one,
-# which review-pr never updates. If a local branch of the same name exists and
-# points elsewhere, you are reviewing a different snapshot than the one you have
-# checked out — and a later finish-review --onto-source, which writes to the
-# local branch, will refuse unless it sits at the reviewed tip. Warn rather than
+# which git review start never updates. If a local branch of the same name exists
+# and points elsewhere, you are reviewing a different snapshot than the one you
+# have checked out — and a later git review finish --onto-source, which writes to
+# the local branch, will refuse unless it sits at the reviewed tip. Warn rather than
 # silently review the wrong thing; --local reviews what you have checked out.
 if [ "$local_mode" -eq 0 ]; then
 	localtip="$(git rev-parse --verify --quiet "refs/heads/$src" || true)"
@@ -223,8 +245,8 @@ elif [ -n "$from" ]; then
 	range="since $(git rev-parse --short "$start")"
 else
 	[ -n "$base" ] ||
-		die "no base branch set; pass one as an argument or run: git config reviewworkflow.base <branch>"
-	git rev-parse --verify --quiet "$baseref" >/dev/null ||
+		die "no base branch set; pass one as an argument or with --base, or run: git config reviewworkflow.base <branch>"
+	[ -n "$baseref" ] ||
 		die "$baselabel not found"
 	start="$(git merge-base "$baseref" "$srcref")" ||
 		die "could not compute merge-base with $baselabel"
@@ -280,7 +302,7 @@ fi
 # of the review. This is a no-op when the base was not merged in (it never
 # invents deletions), and degrades gracefully on git without merge-tree.
 lower="$start"
-if [ -n "$base" ] && git rev-parse --verify --quiet "$baseref" >/dev/null; then
+if [ -n "$baseref" ]; then
 	mb="$(git merge-base "$baseref" "$tip" 2>/dev/null || true)"
 	if [ -n "$mb" ] && ! git merge-base --is-ancestor "$mb" "$start"; then
 		if ltree="$(git merge-tree --write-tree "$start" "$mb" 2>/dev/null)"; then
@@ -308,4 +330,4 @@ if [ -n "$returnbranch" ]; then
 	git config "branch.$rb.reviewreturn" "$returnbranch"
 fi
 
-echo "$rb ready ($range) — the staged diff is the PR; edit, then run git finish-review"
+echo "$rb ready ($range) — the staged diff is the PR; edit, then run git review finish"

@@ -1,0 +1,158 @@
+#!/usr/bin/env sh
+#
+# git review compare <a> <b> — stage the diff between two commit-ish, read-only.
+#
+# Unlike git review start, compare has no writable source branch: it materialises
+# the diff <a>..<b> (with <a> the lower bound, <b> the tip) as a staged, read-only
+# review you can annotate inline. There is nothing to extract, so git review finish
+# refuses on it. With --step it walks <a>..<b> one commit at a time, like start
+# --step, advancing with git review next.
+#
+set -eu
+
+prog="git review compare"
+
+usage() {
+	cat <<EOF
+usage: $prog <a> <b> [--step]
+
+Stage the diff between two commit-ish on a review/<b> branch for inline reading.
+This is a read-only review: there is no branch to write back to, so git review
+finish refuses on it.
+
+  <a>        the lower bound (a branch, tag or commit) — what to diff from
+  <b>        the upper bound — what to diff to; names the review branch
+  --step     read one commit at a time; advance with git review next
+EOF
+}
+
+die() {
+	echo "error: $1" >&2
+	exit 1
+}
+
+a=""
+b=""
+have_a=0
+have_b=0
+step=0
+# Collect the two positional commit-ish; mirror start's parser, including -- as the
+# end-of-options separator so a commit-ish that starts with "-" stays positional.
+add_positional() {
+	if [ "$have_a" -eq 0 ]; then
+		a="$1"
+		have_a=1
+	elif [ "$have_b" -eq 0 ]; then
+		b="$1"
+		have_b=1
+	else
+		die "unexpected argument $1"
+	fi
+}
+while [ $# -gt 0 ]; do
+	case "$1" in
+	-h | --h)
+		usage
+		exit 0
+		;;
+	--step) step=1 ;;
+	--)
+		shift
+		while [ $# -gt 0 ]; do
+			add_positional "$1"
+			shift
+		done
+		break
+		;;
+	-*)
+		echo "error: unknown option $1" >&2
+		usage >&2
+		exit 1
+		;;
+	*)
+		add_positional "$1"
+		;;
+	esac
+	shift
+done
+
+[ "$have_a" -eq 1 ] && [ "$have_b" -eq 1 ] ||
+	die "need two commit-ish to compare: $prog <a> <b>"
+
+git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
+
+# Shared helpers, sourced from the libexec directory the dispatcher points us at.
+# shellcheck source=../git-review-lib.sh
+. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
+
+acommit="$(git rev-parse --verify --quiet "$a^{commit}")" || die "unknown commit: $a"
+bcommit="$(git rev-parse --verify --quiet "$b^{commit}")" || die "unknown commit: $b"
+[ "$acommit" != "$bcommit" ] || die "$a and $b are the same commit; nothing to compare"
+
+if ! git diff --quiet || ! git diff --cached --quiet; then
+	die "you have local changes; commit or stash them first"
+fi
+
+# Remember where to return to when the compare is aborted.
+returnbranch="$(git symbolic-ref --quiet --short HEAD || true)"
+
+# Pick a refname-safe identity for the review branch from <b> (the tip). A tag or
+# branch name passes through unchanged, for a readable review/<b>; anything git
+# would reject as a ref component (HEAD~3, a^, x:y) falls back to <b>'s short hash,
+# so the branch and the per-step edit refs (refs/review-edits/<name>/*) are always
+# valid. This name is the review's identity for status/list/clean, never a writeback
+# target — compare is read-only.
+if git check-ref-format "review/$b" 2>/dev/null; then
+	name="$b"
+else
+	name="$(git rev-parse --short "$bcommit")"
+fi
+
+rb="review/$name"
+git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null &&
+	die "$rb already exists; run git review clean $name first"
+git rev-parse --verify --quiet "refs/heads/review-saved/$name" >/dev/null &&
+	die "you have a saved review of $name; resume it with git review continue $name or discard it with git review forget --saved $name"
+
+if [ "$step" -eq 1 ]; then
+	# --first-parent --no-merges: walk only the range's own commits, skipping merge
+	# commits, exactly like start --step so git review next/prev behave identically.
+	commits="$(git rev-list --reverse --first-parent --no-merges "$acommit..$bcommit")"
+	[ -n "$commits" ] || die "no commits to compare in range $a..$b"
+	count="$(printf '%s\n' "$commits" | wc -l | tr -d ' ')"
+	first="$(printf '%s\n' "$commits" | sed -n '1p')"
+
+	git switch -q -c "$rb" "$first" || die "could not create $rb"
+	git reset --soft HEAD^
+	git config "branch.$rb.reviewsource" "$name"
+	git config "branch.$rb.reviewbase" "$a"
+	git config "branch.$rb.reviewtip" "$bcommit"
+	git config "branch.$rb.reviewstart" "$acommit"
+	git config "branch.$rb.reviewmode" "step"
+	git config "branch.$rb.reviewcount" "$count"
+	git config "branch.$rb.reviewstep" "1"
+	git config "branch.$rb.reviewreadonly" "1"
+	if [ -n "$returnbranch" ]; then
+		git config "branch.$rb.reviewreturn" "$returnbranch"
+	fi
+
+	echo "$rb ready (compare $a..$b, read-only) — walking $count commit(s) one at a time"
+	show_commit "$first" 1 "$count"
+	exit 0
+fi
+
+# Whole range: create review/<name> at <b> and soft-reset to <a> so the staged diff
+# is exactly <a>..<b>, with a clean working tree — the same shape as start, minus the
+# merged-base folding (compare's bounds are explicit) and any writeback metadata.
+git switch -q -c "$rb" "$bcommit" || die "could not create $rb"
+git reset -q --soft "$acommit"
+
+git config "branch.$rb.reviewsource" "$name"
+git config "branch.$rb.reviewbase" "$a"
+git config "branch.$rb.reviewtip" "$bcommit"
+git config "branch.$rb.reviewreadonly" "1"
+if [ -n "$returnbranch" ]; then
+	git config "branch.$rb.reviewreturn" "$returnbranch"
+fi
+
+echo "$rb ready (compare $a..$b, read-only) — the staged diff is for reading; git review finish will refuse"

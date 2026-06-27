@@ -1,43 +1,52 @@
 #!/usr/bin/env sh
 #
-# git-review — entry point: --h lists all commands, --version prints the version.
+# git-review — entry-point dispatcher for the `git review <verb>` workflow.
+#
+# git discovers this as the `review` subcommand once bin/ is on PATH, so
+# `git review <verb> [args]` runs us with <verb> in $1. We route <verb> to its
+# implementation in the private git-review-verbs/ directory — files that are NOT
+# on PATH and not named git-*, so git cannot discover them as `git <verb>`; the
+# dispatcher is the only entry point. `-h`/no args lists the commands;
+# `--version` prints the version.
 #
 set -eu
 
 prog="git review"
-VERSION="0.0.8"
+VERSION="0.1.0"
 
 usage() {
 	cat <<EOF
 git review workflow — review a pull request branch locally
 
-usage: $prog (--h | --version)
+usage: $prog <command> [<args>]
+       $prog (-h | --version)
 
 Commands:
-  git review-pr <branch> [base | --delta | --from <commit>] [--step] [--local]
+  git review start [<branch>] [<base> | --base <base> | --delta | --from <commit>] [--step] [--local]
                      stage a PR diff on a new review/<branch> branch
-  git review-next    advance a --step review to the next commit
-  git review-prev    go back to the previous commit in a --step review
-  git review-status  show the state of the review on the current branch
-  git review-preview [--stat]
-                     show the edits you have made so far, then keep editing
-  git review-list    list every review in progress and every saved one
-  git review-save    pause the current review as review-saved/<branch>
-  git review-continue [branch]
-                     resume a review saved with git review-save
-  git review-abort   cancel the current review and return to where you started
-  git finish-review [--onto-source] [--resume | --abort]
+                     (omit <branch> to review the branch you are on)
+  git review compare <a> <b> [--step]
+                     stage the diff between two commit-ish, read-only (finish refuses)
+  git review next    advance a commit-by-commit review to the next commit
+  git review prev    step a commit-by-commit review back to the previous commit
+  git review status  show the state of the review on the current branch
+  git review list    list every review/* branch in progress
+  git review preview [--stat]
+                     show your edits so far without committing or switching
+  git review finish [--onto-source] [--resume | --abort]
                      extract your edits onto review-fixes/<branch>
                      (--abort undoes it and returns you to editing)
-  git clean-review [branch]
-                     delete review/* and review-fixes/* branches
-  git review-forget-delta (<branch> | --all | --stale [--dry-run])
-                     discard the --delta marker for one, all or stale branches
-  git review-forget-saved (<branch> | --all)
-                     discard a saved review
+  git review save    pause the current review and return to where you started
+  git review continue [<branch>]
+                     resume a review paused with git review save
+  git review abort   cancel the current review and return to where you started
+  git review clean [<branch>]
+                     delete review/* and review-fixes/* branches (all if no <branch>)
+  git review forget (--delta | --saved) ...
+                     discard a review's persistent state (delta markers or a saved review)
 
-Run 'git <command> -h' for details on each command (git reserves
-'git <command> --help' for man pages, which this workflow does not install).
+Run '$prog <command> -h' for details on each command (git reserves
+'$prog <command> --help' for man pages, which this workflow does not install).
 EOF
 }
 
@@ -50,9 +59,46 @@ case "${1:-}" in
 	echo "$VERSION"
 	exit 0
 	;;
-*)
-	echo "error: unknown option $1" >&2
-	usage >&2
+esac
+
+verb="$1"
+
+# Reject anything that could escape the verbs directory: a path separator, or a
+# dot-path like '..' / '.foo'. (A leading '-' was already handled above.) This
+# keeps `git review ../some-binary` from reaching a sibling binary.
+case "$verb" in
+*/* | .*)
+	echo "error: '$verb' is not a git review command. See '$prog -h'." >&2
 	exit 1
 	;;
 esac
+
+# Resolve our own real location — $0 may be a symlink (install.sh / Homebrew put
+# the dispatcher onto PATH via a symlink) or a bare name (PATH lookup) — so the
+# verbs directory and the sourced lib are found beside the real file, not beside
+# the symlink. Mirrors the resolution the verbs themselves use.
+self="$0"
+case "$self" in
+*/*) ;;
+*) self="$(command -v -- "$self" 2>/dev/null || printf '%s\n' "$self")" ;;
+esac
+while [ -L "$self" ]; do
+	link="$(readlink "$self")"
+	case "$link" in
+	/*) self="$link" ;;
+	*) self="$(dirname "$self")/$link" ;;
+	esac
+done
+# shellcheck disable=SC1007  # CDPATH= empties CDPATH for this cd, not an assignment
+libexec="$(CDPATH= cd -- "$(dirname -- "$self")" && pwd)"
+
+target="$libexec/git-review-verbs/$verb"
+if [ ! -x "$target" ]; then
+	echo "error: '$verb' is not a git review command. See '$prog -h'." >&2
+	exit 1
+fi
+
+# Verbs that use shared helpers source "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh".
+export GIT_REVIEW_LIBEXEC="$libexec"
+shift
+exec "$target" "$@"

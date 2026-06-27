@@ -3,7 +3,10 @@
 # Tests for web-install.sh: the one-line Unix network installer.
 # curl is stubbed so the suite runs fully offline.
 
-CMDS="git-review-pr git-review-next git-review-prev git-review-status git-review-list git-review-save git-review-continue git-review-abort git-finish-review git-clean-review git-review-forget-delta git-review-forget-saved"
+# The dispatcher is the only command on PATH: every verb (start/status/list/
+# preview/next/prev/finish/save/continue/abort/clean/forget) is installed as
+# libexec under it, not as a standalone binary.
+CMDS="git-review"
 
 setup() {
 	TMP="$(mktemp -d)"
@@ -17,6 +20,12 @@ setup() {
 	ARC_DIR="$TMP/arc/git-review-workflow-v0.0.1"
 	mkdir -p "$ARC_DIR/bin"
 	for f in "$REPO"/bin/git-*; do
+		# The private verbs directory ships inside the archive too; copy it whole
+		# (a real GitHub tarball mirrors the repo's bin/ layout).
+		if [ -d "$f" ]; then
+			cp -R "$f" "$ARC_DIR/bin/"
+			continue
+		fi
 		cp "$f" "$ARC_DIR/bin/"
 		chmod +x "$ARC_DIR/bin/$(basename "$f")"
 	done
@@ -96,12 +105,13 @@ CURLSTUB
 	chmod +x "$MOCK_BIN/curl"
 	run sh "$REPO/web-install.sh"
 	[ "$status" -eq 0 ]
-	[ -x "$PREFIX/git-review-pr" ]
+	[ -x "$PREFIX/git-review" ]
 }
 
 @test "web-install.sh: an installed command runs from PREFIX" {
 	sh "$REPO/web-install.sh"
-	run "$PREFIX/git-review-pr" --h
+	# The copy install lays the verbs dir beside the dispatcher; routing must work.
+	run "$PREFIX/git-review" start -h
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"usage: git review-pr"* ]]
+	[[ "$output" == *"usage: git review start"* ]]
 }

@@ -5,8 +5,8 @@
 # Regression for a class of bug where the patch was captured in a shell variable
 # (command substitution) and replayed with `printf | git apply`. Command
 # substitution strips NUL bytes and the trailing newline, so a binary hunk came
-# out corrupt — git apply then rejected it ("corrupt binary patch"). finish-review
-# failed outright; review-save → review-continue silently *lost* the binary edit.
+# out corrupt — git apply then rejected it ("corrupt binary patch"). review finish
+# failed outright; review save → review continue silently *lost* the binary edit.
 # The fix routes every patch through a pipe or a temp file, never a variable.
 #
 # Each test compares the extracted/restored blob against the original by object
@@ -67,11 +67,11 @@ write_bin() {
 # ── whole-PR mode ─────────────────────────────────────────────────────────────
 
 @test "finish (whole) extracts a newly added binary file byte-for-byte" {
-	git review-pr feature/x develop
+	git review start feature/x develop
 	write_bin img.bin add
 	orig="$(git hash-object img.bin)"
 
-	run git finish-review
+	run git review finish
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
 	# the file is staged as an addition...
@@ -82,25 +82,25 @@ write_bin() {
 }
 
 @test "finish --onto-source (whole) extracts a binary file byte-for-byte" {
-	git review-pr feature/x develop
+	git review start feature/x develop
 	write_bin img.bin add
 	orig="$(git hash-object img.bin)"
 
-	run git finish-review --onto-source
+	run git review finish --onto-source
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "feature/x" ]
 	[ "$(git rev-parse ':img.bin')" = "$orig" ]
 }
 
 @test "finish (whole) extracts a *modification* of an existing binary file" {
-	git review-pr feature/x develop
+	git review start feature/x develop
 	# logo.bin already exists in the PR tree; overwrite it with new bytes
 	write_bin logo.bin EDITED
 	new="$(git hash-object logo.bin)"
 	# guard the test itself: the edit must actually change the blob
 	[ "$new" != "$(git rev-parse 'feature/x:logo.bin')" ]
 
-	run git finish-review
+	run git review finish
 	[ "$status" -eq 0 ]
 	run git diff --cached --name-only
 	[[ "$output" == *"logo.bin"* ]]
@@ -108,12 +108,12 @@ write_bin() {
 }
 
 @test "save -> continue (whole) restores a binary edit, then finish extracts it" {
-	git review-pr feature/x develop
+	git review start feature/x develop
 	write_bin img.bin saved
 	orig="$(git hash-object img.bin)"
 
-	git review-save
-	run git review-continue feature/x
+	git review save
+	run git review continue feature/x
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
 	# the binary edit is back in the working tree, byte-identical (this is the
@@ -122,7 +122,7 @@ write_bin() {
 	[ "$(git hash-object img.bin)" = "$orig" ]
 
 	# and it survives all the way through finish
-	run git finish-review
+	run git review finish
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse ':img.bin')" = "$orig" ]
 }
@@ -130,35 +130,35 @@ write_bin() {
 # ── step mode ─────────────────────────────────────────────────────────────────
 
 @test "finish (step) replays a binary edit banked on an earlier commit" {
-	git review-pr feature/x --step
+	git review start feature/x --step
 	write_bin img.bin step1
 	orig="$(git hash-object img.bin)"
-	git review-next                 # bank step 1 (the binary), move to step 2
+	git review next                 # bank step 1 (the binary), move to step 2
 
-	run git finish-review
+	run git review finish
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
 	[ "$(git rev-parse ':img.bin')" = "$orig" ]
 }
 
 @test "step navigation banks and restores a binary edit unchanged" {
-	git review-pr feature/x --step
+	git review start feature/x --step
 	write_bin img.bin nav
 	orig="$(git hash-object img.bin)"
-	git review-next                 # bank step 1
-	run git review-prev             # back to step 1 — the binary must come back
+	git review next                 # bank step 1
+	run git review prev             # back to step 1 — the binary must come back
 	[ "$status" -eq 0 ]
 	[ -f img.bin ]
 	[ "$(git hash-object img.bin)" = "$orig" ]
 }
 
 @test "preview (step) shows a banked binary edit instead of dropping it" {
-	git review-pr feature/x --step
+	git review start feature/x --step
 	write_bin img.bin prev
 	size="$(wc -c <img.bin | tr -d ' ')"
-	git review-next                 # bank step 1, now on step 2
+	git review next                 # bank step 1, now on step 2
 
-	run git review-preview --stat
+	run git review preview --stat
 	[ "$status" -eq 0 ]
 	# the binary edit is present in the preview...
 	[[ "$output" == *"img.bin"* ]]

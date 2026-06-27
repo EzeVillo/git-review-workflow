@@ -12,8 +12,8 @@
 class GitReviewWorkflow < Formula
   desc "Git commands to review a pull request branch locally as one staged diff"
   homepage "https://github.com/EzeVillo/git-review-workflow"
-  version "0.0.8"
-  url "https://github.com/EzeVillo/git-review-workflow/archive/refs/tags/v0.0.8.tar.gz"
+  version "0.1.0"
+  url "https://github.com/EzeVillo/git-review-workflow/archive/refs/tags/v0.1.0.tar.gz"
   sha256 "39bf8b85320d64b5c2867978e0d0da41b822a492d45d4b9219b875726fc65010"
   license "MIT"
   head "https://github.com/EzeVillo/git-review-workflow.git"
@@ -21,12 +21,12 @@ class GitReviewWorkflow < Formula
   depends_on "git"
 
   def install
-    bin.install Dir["bin/git-review", "bin/git-review-pr", "bin/git-review-next",
-                    "bin/git-review-prev", "bin/git-review-status", "bin/git-review-preview",
-                    "bin/git-review-list", "bin/git-review-save", "bin/git-review-continue",
-                    "bin/git-review-abort", "bin/git-finish-review", "bin/git-clean-review",
-                    "bin/git-review-forget-delta", "bin/git-review-forget-saved",
-                    "bin/git-review-lib.sh"]
+    # The dispatcher resolves its own directory and looks for git-review-verbs/
+    # and git-review-lib.sh beside it, so keep the three together in libexec and
+    # put only the dispatcher on PATH via a symlink. The private verbs directory
+    # is never on PATH (git must not discover a verb as `git <verb>`).
+    libexec.install "bin/git-review", "bin/git-review-lib.sh", "bin/git-review-verbs"
+    bin.install_symlink libexec/"git-review"
     bash_completion.install "completions/git-review-workflow.bash"
     zsh_completion.install "completions/git-review-workflow.zsh" => "_git-review-workflow"
     fish_completion.install "completions/git-review-workflow.fish"
@@ -35,7 +35,7 @@ class GitReviewWorkflow < Formula
   test do
     assert_match "git review workflow", shell_output("#{bin}/git-review --h")
     assert_match version.to_s, shell_output("#{bin}/git-review --version")
-    assert_match "usage: git review-pr", shell_output("#{bin}/git-review-pr --h")
-    assert_match "usage: git finish-review", shell_output("#{bin}/git-finish-review --h")
+    assert_match "usage: git review start", shell_output("#{bin}/git-review start -h")
+    assert_match "usage: git review finish", shell_output("#{bin}/git-review finish -h")
   end
 end

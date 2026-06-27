@@ -43,8 +43,8 @@ teardown() {
 	rm -rf "$TMP"
 }
 
-@test "review-pr reviews from the configured remote" {
-	run git review-pr feature/x
+@test "review start reviews from the configured remote" {
+	run git review start feature/x
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
 	run git diff --cached
@@ -52,24 +52,24 @@ teardown() {
 	[[ "$output" == *"+d"* ]]
 }
 
-@test "review-pr range message names the configured remote" {
-	run git review-pr feature/x develop
+@test "review start range message names the configured remote" {
+	run git review start feature/x develop
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"vs upstream/develop"* ]]
 }
 
-@test "review-pr error names the configured remote, not origin" {
-	run git review-pr nope/nope
+@test "review start error names the configured remote, not origin" {
+	run git review start nope/nope
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"upstream/nope/nope not found"* ]]
 	[[ "$output" != *"origin/"* ]]
 }
 
-@test "review-forget-delta --stale fetches from the configured remote" {
-	git review-pr feature/x
+@test "review forget --delta --stale fetches from the configured remote" {
+	git review start feature/x
 	# A marker now exists for feature/x; delete the remote branch so it is stale.
 	git push --quiet upstream --delete feature/x
-	run git review-forget-delta --stale
+	run git review forget --delta --stale
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"upstream/feature/x no longer exists"* ]]
 	run git config reviewworkflow.feature/x.reviewed

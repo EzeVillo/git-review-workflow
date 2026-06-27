@@ -74,7 +74,17 @@ try {
 
     $installed = @()
     foreach ($f in Get-ChildItem (Join-Path $src.FullName 'bin') -Filter 'git-*') {
-        Copy-Item $f.FullName -Destination (Join-Path $installDir $f.Name) -Force
+        $dest = Join-Path $installDir $f.Name
+        if ($f.PSIsContainer) {
+            # Private verbs directory: copy it whole into a subdirectory of the
+            # install dir (libexec, NOT on PATH — git must not discover a verb as
+            # `git <verb>`). The dispatcher finds it, and git-review-lib.sh,
+            # beside itself once installed here.
+            if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
+            Copy-Item $f.FullName -Destination $dest -Recurse -Force
+            continue
+        }
+        Copy-Item $f.FullName -Destination $dest -Force
         $installed += $f.Name
     }
 

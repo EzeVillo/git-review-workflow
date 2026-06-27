@@ -23,6 +23,7 @@ case "$V" in
 		;;
 esac
 
+# shellcheck disable=SC1007  # CDPATH= empties CDPATH for this cd, not an assignment
 repo="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 formula="$repo/Formula/git-review-workflow.rb"
 url="https://github.com/EzeVillo/git-review-workflow/archive/refs/tags/v${V}.tar.gz"

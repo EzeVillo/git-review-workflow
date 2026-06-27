@@ -58,7 +58,7 @@ push_more() {
 
 @test "--from stages only the commits after the given commit" {
 	c1="$(git rev-parse feature/x~1)"
-	run git review-pr feature/x --from "$c1"
+	run git review start feature/x --from "$c1"
 	[ "$status" -eq 0 ]
 	run git diff --cached --name-only
 	[[ "$output" == *"b.txt"* ]]
@@ -67,14 +67,14 @@ push_more() {
 
 @test "--from --step walks only the commits after the given commit" {
 	c1="$(git rev-parse feature/x~1)"
-	run git review-pr feature/x --from "$c1" --step
+	run git review start feature/x --from "$c1" --step
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"[1/1]"* ]]
 	[[ "$output" == *"c2-add-b"* ]]
 }
 
 @test "--from rejects an unknown commit" {
-	run git review-pr feature/x --from deadbeef
+	run git review start feature/x --from deadbeef
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"unknown commit"* ]]
 }
@@ -82,7 +82,7 @@ push_more() {
 @test "--from= with an empty value is rejected, not silently ignored" {
 	# Regression: --from= set from="" which the range logic treated as "no
 	# --from", silently running a full review vs base instead of erroring.
-	run git review-pr feature/x --from=
+	run git review start feature/x --from=
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"--from requires a commit"* ]]
 	# No review branch must have been created by the rejected run.
@@ -91,7 +91,7 @@ push_more() {
 }
 
 @test "--from with an empty argument is rejected, not silently ignored" {
-	run git review-pr feature/x --from ""
+	run git review start feature/x --from ""
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"--from requires a commit"* ]]
 	run git rev-parse --verify --quiet refs/heads/review/feature/x
@@ -104,52 +104,52 @@ push_more() {
 	git add x.txt
 	git commit --quiet -m off-branch
 	other="$(git rev-parse HEAD)"
-	run git review-pr feature/x --from "$other"
+	run git review start feature/x --from "$other"
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"not an ancestor"* ]]
 }
 
 @test "--delta and --from cannot be combined" {
 	c1="$(git rev-parse feature/x~1)"
-	run git review-pr feature/x --delta --from "$c1"
+	run git review start feature/x --delta --from "$c1"
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"only one of --delta and --from"* ]]
 }
 
 @test "an explicit base cannot be combined with --delta" {
-	run git review-pr feature/x develop --delta
+	run git review start feature/x develop --delta
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"base is ignored with --delta/--from"* ]]
 }
 
 @test "an explicit base cannot be combined with --from" {
 	c1="$(git rev-parse feature/x~1)"
-	run git review-pr feature/x develop --from "$c1"
+	run git review start feature/x develop --from "$c1"
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"base is ignored with --delta/--from"* ]]
 }
 
 @test "--delta --step walks only the new commits after a prior review" {
-	git review-pr feature/x
+	git review start feature/x
 	git switch --quiet develop
-	git clean-review feature/x
+	git review clean feature/x
 	push_more
-	run git review-pr feature/x --delta --step
+	run git review start feature/x --delta --step
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"[1/2]"* ]]
 	[[ "$output" == *"c3-add-c"* ]]
 }
 
 @test "--delta --step then finish replays edits onto the new tip" {
-	git review-pr feature/x
+	git review start feature/x
 	git switch --quiet develop
-	git clean-review feature/x
+	git review clean feature/x
 	push_more
-	git review-pr feature/x --delta --step
+	git review start feature/x --delta --step
 	printf 'c\nFIXC\n' >c.txt
-	git review-next
-	git review-next
-	run git finish-review
+	git review next
+	git review next
+	run git review finish
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
 	# the reviewer touched only c.txt; the author's C4 (d.txt) must not leak in
@@ -163,9 +163,9 @@ push_more() {
 
 @test "--from then finish extracts only the reviewer edits" {
 	c1="$(git rev-parse feature/x~1)"
-	git review-pr feature/x --from "$c1"
+	git review start feature/x --from "$c1"
 	printf 'b\nFIXB\n' >b.txt
-	run git finish-review
+	run git review finish
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
 	run git diff --cached --name-only
@@ -179,9 +179,9 @@ push_more() {
 
 @test "--from --step then finish extracts only the reviewer edits" {
 	c1="$(git rev-parse feature/x~1)"
-	git review-pr feature/x --from "$c1" --step
+	git review start feature/x --from "$c1" --step
 	printf 'b\nFIXB\n' >b.txt
-	run git finish-review
+	run git review finish
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
 	run git diff --cached --name-only
@@ -193,10 +193,10 @@ push_more() {
 
 @test "--from --onto-source stages only the reviewer edits on the PR branch" {
 	c1="$(git rev-parse feature/x~1)"
-	git review-pr feature/x --from "$c1"
+	git review start feature/x --from "$c1"
 	tip="$(git rev-parse feature/x)"
 	printf 'b\nFIXB\n' >b.txt
-	run git finish-review --onto-source
+	run git review finish --onto-source
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "feature/x" ]
 	[[ "$output" == *"feature/x ready with your edits staged"* ]]
@@ -207,13 +207,13 @@ push_more() {
 }
 
 @test "--delta then finish extracts only the reviewer edits" {
-	git review-pr feature/x
+	git review start feature/x
 	git switch --quiet develop
-	git clean-review feature/x
+	git review clean feature/x
 	push_more
-	git review-pr feature/x --delta
+	git review start feature/x --delta
 	printf 'c\nFIXC\n' >c.txt
-	run git finish-review
+	run git review finish
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
 	# the reviewer touched only c.txt; the author's C4 (d.txt) must not leak in
@@ -228,7 +228,7 @@ push_more() {
 
 @test "--from accepts an abbreviated commit hash" {
 	c1="$(git rev-parse --short feature/x~1)"
-	run git review-pr feature/x --from "$c1"
+	run git review start feature/x --from "$c1"
 	[ "$status" -eq 0 ]
 	run git diff --cached --name-only
 	[[ "$output" == *"b.txt"* ]]
@@ -236,11 +236,11 @@ push_more() {
 }
 
 @test "--delta --delta is harmless (a duplicated flag)" {
-	git review-pr feature/x
+	git review start feature/x
 	git switch --quiet develop
-	git clean-review feature/x
+	git review clean feature/x
 	push_more
-	run git review-pr feature/x --delta --delta
+	run git review start feature/x --delta --delta
 	[ "$status" -eq 0 ]
 	# only the commits added since the prior review are staged
 	run git diff --cached --name-only

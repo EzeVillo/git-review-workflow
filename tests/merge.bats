@@ -74,7 +74,7 @@ second_merge() {
 }
 
 @test "whole review excludes base content merged into the PR" {
-	run git review-pr feature/x
+	run git review start feature/x
 	[ "$status" -eq 0 ]
 	run git diff --cached --name-only
 	[[ "$output" == *"feature.txt"* ]]
@@ -82,10 +82,10 @@ second_merge() {
 }
 
 @test "--step skips the base merge and never shows base content" {
-	git review-pr feature/x --step
+	git review start feature/x --step
 	# only the author's own two commits (c1, c3), not the merge commit
 	[ "$(git config branch.review/feature/x.reviewcount)" = "2" ]
-	out="$(git review-next 2>&1)"
+	out="$(git review next 2>&1)"
 	[[ "$out" != *"dev-only.txt"* ]]
 	[[ "$out" == *"c3"* ]]
 }
@@ -93,7 +93,7 @@ second_merge() {
 @test "--delta excludes base content merged since the last review" {
 	git config reviewworkflow.feature/x.reviewed "$(git rev-parse origin/feature/x)"
 	second_merge
-	run git review-pr feature/x --delta
+	run git review start feature/x --delta
 	[ "$status" -eq 0 ]
 	run git diff --cached --name-only
 	[[ "$output" == *"feature.txt"* ]]
@@ -103,7 +103,7 @@ second_merge() {
 @test "--from excludes base content merged after the given commit" {
 	from="$(git rev-parse origin/feature/x)"
 	second_merge
-	run git review-pr feature/x --from "$from"
+	run git review start feature/x --from "$from"
 	[ "$status" -eq 0 ]
 	run git diff --cached --name-only
 	[[ "$output" == *"feature.txt"* ]]
@@ -113,17 +113,17 @@ second_merge() {
 @test "--delta --step walks only the author's new commit, not the base merge" {
 	git config reviewworkflow.feature/x.reviewed "$(git rev-parse origin/feature/x)"
 	second_merge
-	git review-pr feature/x --delta --step
+	git review start feature/x --delta --step
 	[ "$(git config branch.review/feature/x.reviewcount)" = "1" ]
-	out="$(git review-status 2>&1)"
+	out="$(git review status 2>&1)"
 	[[ "$out" == *"c5"* ]]
 }
 
-@test "--step finish-review with a merge in the PR extracts only reviewer edits" {
-	git review-pr feature/x --step     # starts at c1 (step 1)
-	git review-next                    # advances to c3 (step 2)
+@test "--step review finish with a merge in the PR extracts only reviewer edits" {
+	git review start feature/x --step     # starts at c1 (step 1)
+	git review next                    # advances to c3 (step 2)
 	printf 'f1\nf2\nFIX\n' >feature.txt
-	run git finish-review
+	run git review finish
 	[ "$status" -eq 0 ]
 	run git diff --cached
 	[[ "$output" == *"+FIX"* ]]
@@ -131,20 +131,20 @@ second_merge() {
 	[[ "$output" != *"+f2"* ]]
 }
 
-@test "finish-review on a merged branch extracts only the reviewer edits" {
-	git review-pr feature/x
+@test "review finish on a merged branch extracts only the reviewer edits" {
+	git review start feature/x
 	printf 'f1\nf2\nFIX\n' >feature.txt
-	run git finish-review
+	run git review finish
 	[ "$status" -eq 0 ]
 	run git diff --cached
 	[[ "$output" == *"+FIX"* ]]
 	[[ "$output" != *"DEV"* ]]
 }
 
-@test "finish-review --onto-source on a merged branch stages only reviewer edits" {
-	git review-pr feature/x
+@test "review finish --onto-source on a merged branch stages only reviewer edits" {
+	git review start feature/x
 	printf 'f1\nf2\nFIX\n' >feature.txt
-	run git finish-review --onto-source
+	run git review finish --onto-source
 	[ "$status" -eq 0 ]
 	# The fix is staged on the PR branch itself.
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "feature/x" ]
@@ -161,11 +161,12 @@ second_merge() {
 	# relies on) by shadowing git with a shim that fails only on `merge-tree` and
 	# delegates everything else to the real git.
 	#
-	# The shim must be hit by git-review-pr's *internal* git calls. When invoked
-	# as `git review-pr`, the parent git prepends its own bindir to PATH for the
-	# subprocess, so the real git wins and the shim is bypassed. Invoking the
-	# script directly leaves our PATH intact — which is exactly the code path an
-	# old real git would take, so the fallback branch is exercised faithfully.
+	# The shim must be hit by the verb's *internal* git calls. Going through
+	# `git review start` (two words) would let the parent git prepend its own
+	# bindir to the subprocess PATH, so the real git wins and the shim is bypassed.
+	# Invoking the dispatcher binary directly (git-review start) leaves our PATH
+	# intact for the verb — exactly the code path an old real git without
+	# merge-tree --write-tree would take, so the fallback branch is exercised.
 	real="$(command -v git)"
 	shim="$TMP/shim"
 	mkdir -p "$shim"
@@ -182,7 +183,7 @@ EOF
 	from="$(git rev-parse origin/feature/x)"
 	second_merge
 
-	out="$(PATH="$shim:$PATH" git-review-pr feature/x --from "$from" 2>&1)"
+	out="$(PATH="$shim:$PATH" git-review start feature/x --from "$from" 2>&1)"
 	[[ "$out" == *"could not exclude merged base content"* ]]
 
 	# Anti-false-positive: with the exclusion disabled the lower bound stays at

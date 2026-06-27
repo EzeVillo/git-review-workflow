@@ -7,7 +7,7 @@
 # rather than pass. They also assert the uninstaller does not delete unrelated
 # files that happen to share the install directory.
 
-CMDS="git-review git-review-pr git-review-next git-review-prev git-review-status git-review-list git-review-save git-review-continue git-review-abort git-finish-review git-clean-review git-review-forget-delta git-review-forget-saved"
+CMDS="git-review"
 
 setup() {
 	TMP="$(mktemp -d)"
@@ -25,6 +25,12 @@ teardown() {
 # Populate PREFIX with real command files, exactly as an install would.
 _install_commands() {
 	for f in "$REPO"/bin/git-*; do
+		# Mirror a real install: the private verbs directory lands as a libexec
+		# subdir alongside the flat command files.
+		if [ -d "$f" ]; then
+			cp -R "$f" "$PREFIX/$(basename "$f")"
+			continue
+		fi
 		cp "$f" "$PREFIX/$(basename "$f")"
 		chmod +x "$PREFIX/$(basename "$f")"
 	done
@@ -107,6 +113,10 @@ _install_commands() {
 	ARC_DIR="$TMP/arc/git-review-workflow-v0.0.1"
 	mkdir -p "$ARC_DIR/bin"
 	for f in "$REPO"/bin/git-*; do
+		if [ -d "$f" ]; then
+			cp -R "$f" "$ARC_DIR/bin/"
+			continue
+		fi
 		cp "$f" "$ARC_DIR/bin/"
 	done
 	FAKE_TARBALL="$TMP/release.tar.gz"
@@ -131,7 +141,7 @@ CURLSTUB
 	export PATH="$MOCK_BIN:$PATH"
 
 	sh "$REPO/web-install.sh"
-	[ -e "$PREFIX/git-review-pr" ]   # installed for real before we remove it
+	[ -e "$PREFIX/git-review" ]   # installed for real before we remove it
 
 	run sh "$REPO/web-uninstall.sh"
 	[ "$status" -eq 0 ]

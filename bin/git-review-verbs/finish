@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 #
-# git-finish-review — extract your review edits from the current review/* branch.
+# git review finish — extract your review edits from the current review/* branch.
 #
 # By default it creates review-fixes/<branch> on top of the PR tip with your
 # edits staged. With --onto-source it stages your edits on the PR branch itself
@@ -14,7 +14,7 @@
 #
 set -eu
 
-prog="git finish-review"
+prog="git review finish"
 
 usage() {
 	cat <<EOF
@@ -101,7 +101,7 @@ apply_review_patch() {
 record_exit() {
 	git config "branch.$cur.reviewundoouthead" "$(git rev-parse HEAD)"
 	git config "branch.$cur.reviewundoouttree" "$(worktree_tree)"
-	echo "note: commits you make on $1 are kept, and uncommitted edits too while you stay on $1 — git finish-review --abort refuses to discard them without --force." >&2
+	echo "note: commits you make on $1 are kept, and uncommitted edits too while you stay on $1 — git review finish --abort refuses to discard them without --force." >&2
 }
 
 # --abort restores the undo point recorded by the finish being undone. It runs
@@ -138,7 +138,7 @@ do_abort() {
 	wttree="$(git rev-parse --verify --quiet "refs/review-undo/$asrc/worktree^{tree}" || true)"
 	if [ -z "$idxtree" ] || [ -z "$wttree" ]; then
 		echo "error: the undo snapshot for $rb is gone (refs/review-undo/$asrc deleted); cannot restore the review." >&2
-		echo "the leftover undo record is stale — run git clean-review $asrc to clear it." >&2
+		echo "the leftover undo record is stale — run git review clean $asrc to clear it." >&2
 		exit 1
 	fi
 
@@ -235,7 +235,7 @@ do_abort() {
 			git update-ref -d "$ref"
 		done
 
-	echo "aborted finish; back on $rb — keep editing, then run git finish-review"
+	echo "aborted finish; back on $rb — keep editing, then run git review finish"
 }
 
 if [ "$abort" -eq 1 ]; then
@@ -263,29 +263,24 @@ esac
 src="$(git config "branch.$cur.reviewsource" || true)"
 tip="$(git config "branch.$cur.reviewtip" || true)"
 if [ -z "$src" ] || [ -z "$tip" ]; then
-	echo "error: missing review metadata; was $cur created with git review-pr?" >&2
+	echo "error: missing review metadata; was $cur created with git review start?" >&2
 	exit 1
 fi
 
-# Locate and load the shared helpers the installers place beside this command, so
-# the step block below validates its metadata through load_step_review_meta — the
-# same guard the other step commands use — instead of reading the keys raw. $0 may
-# be a symlink (Homebrew and install.sh symlink commands onto PATH) or a bare name
-# (PATH lookup), so resolve both before taking our directory.
-self="$0"
-case "$self" in
-*/*) ;;
-*) self="$(command -v -- "$self" 2>/dev/null || printf '%s\n' "$self")" ;;
-esac
-while [ -L "$self" ]; do
-	link="$(readlink "$self")"
-	case "$link" in
-	/*) self="$link" ;;
-	*) self="$(dirname "$self")/$link" ;;
-	esac
-done
-# shellcheck source=git-review-lib.sh disable=SC1007
-. "$(CDPATH= cd -- "$(dirname -- "$self")" && pwd)/git-review-lib.sh"
+# A compare review (git review compare) has no writable source branch — it only
+# stages a diff to read — so there is nothing to extract. Refuse explicitly rather
+# than producing an empty or meaningless review-fixes branch.
+if [ "$(git config "branch.$cur.reviewreadonly" || true)" = "1" ]; then
+	echo "error: $cur is a read-only compare review; there is nothing to write back" >&2
+	echo "compare just stages a diff to read — run git review clean ${cur#review/} when done." >&2
+	exit 1
+fi
+
+# Shared helpers, sourced from the libexec directory the dispatcher points us at,
+# so the step block below validates its metadata through load_step_review_meta —
+# the same guard the other step commands use — instead of reading the keys raw.
+# shellcheck source=../git-review-lib.sh
+. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
 # A step review records reviewmode=step alongside reviewstart/reviewcount/
 # reviewstep; a whole review records none of those keys. If reviewmode was lost to
@@ -314,9 +309,9 @@ record_undo() {
 
 	git update-ref "refs/review-undo/$src/head" "$orig"
 	git update-ref "refs/review-undo/$src/index" \
-		"$(git commit-tree "$idxtree" -m 'finish-review undo (index)')"
+		"$(git commit-tree "$idxtree" -m 'git review finish undo (index)')"
 	git update-ref "refs/review-undo/$src/worktree" \
-		"$(git commit-tree "$wttree" -m 'finish-review undo (worktree)')"
+		"$(git commit-tree "$wttree" -m 'git review finish undo (worktree)')"
 
 	git config "branch.$cur.reviewundohead" "$orig"
 	if [ "$onto" -eq 1 ]; then
@@ -357,10 +352,10 @@ record_undo() {
 if [ "$resume" -eq 0 ] && [ -n "$(git config "branch.$cur.reviewundohead" || true)" ]; then
 	if [ "$(git config "branch.$cur.reviewresume" || true)" = "conflict" ]; then
 		echo "error: a finish on $cur stopped at a conflict and is still pending." >&2
-		echo "resolve the markers and run git finish-review --resume, or git finish-review --abort to back out." >&2
+		echo "resolve the markers and run git review finish --resume, or git review finish --abort to back out." >&2
 	else
 		echo "error: a previous finish on $cur has not been resolved." >&2
-		echo "run git finish-review --abort to undo it (or git review-abort to drop the whole review) before finishing again." >&2
+		echo "run git review finish --abort to undo it (or git review abort to drop the whole review) before finishing again." >&2
 	fi
 	exit 1
 fi
@@ -413,8 +408,8 @@ if [ "$mode" = "step" ] && [ "$resume" -eq 0 ]; then
 		[ "$onto" -eq 1 ] && flags="$flags --onto-source"
 		echo "conflict: some banked edits overlap the PR tip." >&2
 		echo "the working tree has conflict markers — resolve them, then run:" >&2
-		echo "    git finish-review --resume$flags" >&2
-		echo "(git finish-review --abort here discards the resolution, like git rebase --abort.)" >&2
+		echo "    git review finish --resume$flags" >&2
+		echo "(git review finish --abort here discards the resolution, like git rebase --abort.)" >&2
 		exit 1
 	fi
 elif [ "$resume" -eq 1 ]; then

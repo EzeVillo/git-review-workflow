@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check bin scripts are executable
         run: |
-          missing=$(git ls-files -s bin/ | awk '$1 != "100755" {print $4}')
+          missing=$(git ls-files -s bin/ | awk '$1 != "100755" && $4 !~ /\/\.gitkeep$/ {print $4}')
           if [ -n "$missing" ]; then
             echo "These files in bin/ are missing the executable bit (100755):" >&2
             echo "$missing" >&2
@@ -34,7 +34,9 @@ jobs:
             *) sudo apt-get update && sudo apt-get install -y shellcheck ;;
           esac
       - name: shellcheck
-        run: shellcheck bin/* install.sh uninstall.sh web-install.sh web-uninstall.sh
+        # find recorre bin/ (incl. bin/git-review-verbs/, fuera del glob bin/*) y
+        # excluye .gitkeep; cubre el dispatcher y todos los verbos.
+        run: shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh
 
   test:
     strategy:

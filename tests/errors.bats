@@ -82,121 +82,125 @@ make_two_commit_feature() {
 }
 
 # Start a step review of that two-commit feature, bank an edit (FIXA) on step 1
-# and leave a live edit (FIXB) on step 2 — the working state finish-review's step
+# and leave a live edit (FIXB) on step 2 — the working state review finish's step
 # replay must not silently discard when its metadata is corrupt. Leaves you on the
 # review branch, on step 2.
 step_review_two_with_edits() {
 	make_two_commit_feature
-	git review-pr feature/two --step
+	git review start feature/two --step
 	printf 'a2\nFIXA\n' >a.txt
-	git review-next                # bank step 1 (FIXA), now on step 2
+	git review next                # bank step 1 (FIXA), now on step 2
 	printf 'b2\nFIXB\n' >b.txt     # current step edit, not yet banked
 }
 
 # ── wrong-branch guards (run on develop, not a review/* branch) ───────────────
 
-@test "review-next off a review branch errors" {
-	run git review-next
+@test "review next off a review branch errors" {
+	run git review next
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"not on a review/* branch"* ]]
 }
 
-@test "review-prev off a review branch errors" {
-	run git review-prev
+@test "review prev off a review branch errors" {
+	run git review prev
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"not on a review/* branch"* ]]
 }
 
-@test "review-status off a review branch errors" {
-	run git review-status
+@test "review status off a review branch errors" {
+	run git review status
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"not on a review/* branch"* ]]
 }
 
-@test "review-abort off a review branch errors" {
-	run git review-abort
+@test "review abort off a review branch errors" {
+	run git review abort
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"not on a review/* branch"* ]]
 }
 
-@test "finish-review off a review branch errors" {
-	run git finish-review
+@test "review finish off a review branch errors" {
+	run git review finish
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"not on a review/* branch"* ]]
 }
 
-@test "review-prev requires step mode on a whole review" {
-	git review-pr feature/x
-	run git review-prev
+@test "review prev requires step mode on a whole review" {
+	git review start feature/x
+	run git review prev
 	[ "$status" -ne 0 ]
-	[[ "$output" == *"not started with git review-pr --step"* ]]
+	[[ "$output" == *"not started with git review start --step"* ]]
 }
 
 # ── missing review metadata on a hand-made review/* branch ────────────────────
 
-@test "review-status reports missing metadata" {
+@test "review status reports missing metadata" {
 	git switch --quiet -c review/orphan
-	run git review-status
+	run git review status
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"missing review metadata"* ]]
 }
 
-@test "review-abort reports missing metadata" {
+@test "review abort reports missing metadata" {
 	git switch --quiet -c review/orphan
-	run git review-abort
+	run git review abort
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"missing review metadata"* ]]
 }
 
-@test "finish-review reports missing metadata" {
+@test "review finish reports missing metadata" {
 	git switch --quiet -c review/orphan
-	run git finish-review
+	run git review finish
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"missing review metadata"* ]]
 }
 
-# ── review-pr guards ──────────────────────────────────────────────────────────
+# ── review start guards ──────────────────────────────────────────────────────────
 
-@test "review-pr refuses when the review branch already exists" {
-	git review-pr feature/x
+@test "review start refuses when the review branch already exists" {
+	git review start feature/x
 	git switch --quiet develop
 	git reset --hard --quiet
-	run git review-pr feature/x
+	run git review start feature/x
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"already exists"* ]]
 }
 
-@test "review-pr rejects an unknown explicit base" {
-	run git review-pr feature/x nosuchbase
+@test "review start rejects an unknown explicit base" {
+	# The base is a commit-ish (branch, tag or commit), so a failed lookup is no
+	# longer labelled origin/<base> — it was tried as a tag and a commit too. The
+	# label is the base as given.
+	run git review start feature/x nosuchbase
 	[ "$status" -ne 0 ]
-	[[ "$output" == *"origin/nosuchbase not found"* ]]
+	[[ "$output" == *"nosuchbase not found"* ]]
+	[[ "$output" != *"origin/nosuchbase"* ]]
 }
 
-@test "review-pr --from= equals form stages the same range as --from" {
+@test "review start --from= equals form stages the same range as --from" {
 	push_pr2
 	c1="$(git rev-parse origin/feature/x~1)"
-	run git review-pr feature/x --from="$c1"
+	run git review start feature/x --from="$c1"
 	[ "$status" -eq 0 ]
 	run git diff --cached
 	[[ "$output" == *"+e"* ]]
 }
 
-@test "review-pr notes new commits since the last full review" {
+@test "review start notes new commits since the last full review" {
 	git config reviewworkflow.feature/x.reviewed "$(git rev-parse origin/feature/x~1)"
-	run git review-pr feature/x
+	run git review start feature/x
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"previously reviewed"* ]]
 	[[ "$output" == *"--delta"* ]]
 }
 
-@test "review-pr --delta with no new commits fails" {
+@test "review start --delta with no new commits fails" {
 	git config reviewworkflow.feature/x.reviewed "$(git rev-parse origin/feature/x)"
-	run git review-pr feature/x --delta
+	run git review start feature/x --delta
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"no new commits"* ]]
 }
 
-@test "review-pr --delta after a force-push fails" {
+@test "review start --delta after a force-push fails" {
 	git config reviewworkflow.feature/x.reviewed "$(git rev-parse origin/feature/x)"
 	# Rewrite feature/x so the recorded tip is no longer an ancestor.
 	git switch --quiet feature/x
@@ -206,18 +210,18 @@ step_review_two_with_edits() {
 	git commit --quiet -m rewritten
 	git push --quiet --force origin feature/x
 	git switch --quiet develop
-	run git review-pr feature/x --delta
+	run git review start feature/x --delta
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"force-pushed"* ]]
 }
 
-@test "review-pr --delta --step after a force-push fails" {
+@test "review start --delta --step after a force-push fails" {
 	# The force-push guard lives in the --delta range resolution, before the
 	# --step layout runs; --step must not let a rewritten history slip through.
 	git config reviewworkflow.feature/x.reviewed "$(git rev-parse origin/feature/x)"
 	force_push_feature
 
-	run git review-pr feature/x --delta --step
+	run git review start feature/x --delta --step
 	# Fails for the force-push reason specifically, not some other guard.
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"force-pushed"* ]]
@@ -228,7 +232,7 @@ step_review_two_with_edits() {
 	[ "$status" -ne 0 ]
 }
 
-@test "review-pr --from after a force-push rejects the now-orphaned commit" {
+@test "review start --from after a force-push rejects the now-orphaned commit" {
 	# A --from commit that is a genuine ancestor of origin/feature/x today.
 	push_pr2
 	from="$(git rev-parse origin/feature/x~1)"
@@ -242,7 +246,7 @@ step_review_two_with_edits() {
 	run git rev-parse --verify --quiet "$from^{commit}"
 	[ "$status" -eq 0 ]
 
-	run git review-pr feature/x --from "$from"
+	run git review start feature/x --from "$from"
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"not an ancestor"* ]]
 	[[ "$output" != *"unknown commit"* ]]
@@ -252,7 +256,7 @@ step_review_two_with_edits() {
 	[ "$status" -ne 0 ]
 }
 
-@test "review-pr --delta after a genuine rebase fails" {
+@test "review start --delta after a genuine rebase fails" {
 	# The existing force-push guard test rewrites with reset --hard; this exercises
 	# the same guard via a real `git rebase`, the way a PR is rebased in practice.
 	git config reviewworkflow.feature/x.reviewed "$(git rev-parse origin/feature/x)"
@@ -274,7 +278,7 @@ step_review_two_with_edits() {
 	run git merge-base --is-ancestor "$old" origin/feature/x
 	[ "$status" -ne 0 ]
 
-	run git review-pr feature/x --delta
+	run git review start feature/x --delta
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"force-pushed"* ]]
 
@@ -283,31 +287,31 @@ step_review_two_with_edits() {
 	[ "$status" -ne 0 ]
 }
 
-# ── finish-review side effects and guards ─────────────────────────────────────
+# ── review finish side effects and guards ─────────────────────────────────────
 
-@test "finish-review refuses when review-fixes already exists" {
+@test "review finish refuses when review-fixes already exists" {
 	git branch review-fixes/feature/x develop
-	git review-pr feature/x
+	git review start feature/x
 	printf 'a\nB\nc\nd\nfix\n' >app.txt
-	run git finish-review
+	run git review finish
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"already exists"* ]]
 }
 
-@test "finish-review --onto-source refuses a local branch behind the tip" {
+@test "review finish --onto-source refuses a local branch behind the tip" {
 	# Advance origin, then leave the local feature/x behind the reviewed tip.
 	push_pr2
 	git branch -f feature/x origin/feature/x~1
-	git review-pr feature/x
+	git review start feature/x
 	printf 'a\nB\nc\nd\ne\nfix\n' >app.txt
-	run git finish-review --onto-source
+	run git review finish --onto-source
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"not at the reviewed tip"* ]]
 }
 
-# ── clean-review behaviours ───────────────────────────────────────────────────
+# ── review clean behaviours ───────────────────────────────────────────────────
 
-@test "clean-review with no branch deletes every review branch" {
+@test "review clean with no branch deletes every review branch" {
 	git switch --quiet -c feature/y develop
 	printf 'a\nb\nc\nY\n' >app.txt
 	git add app.txt
@@ -315,51 +319,51 @@ step_review_two_with_edits() {
 	git push --quiet -u origin feature/y
 	git switch --quiet develop
 
-	git review-pr feature/x
+	git review start feature/x
 	git switch --quiet develop
 	git reset --hard --quiet
-	git review-pr feature/y
+	git review start feature/y
 	git switch --quiet develop
 	git reset --hard --quiet
 
-	run git clean-review
+	run git review clean
 	[ "$status" -eq 0 ]
 	run git for-each-ref refs/heads/review/
 	[ -z "$output" ]
 }
 
-@test "clean-review reports when there are no review branches" {
-	run git clean-review
+@test "review clean reports when there are no review branches" {
+	run git review clean
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"no review branches found"* ]]
 }
 
-@test "clean-review does not claim 'no review branches' when it drops orphaned refs" {
-	# An orphaned undo ref with no matching review branch: clean-review must
+@test "review clean does not claim 'no review branches' when it drops orphaned refs" {
+	# An orphaned undo ref with no matching review branch: review clean must
 	# still purge it, and it must not pretend it had nothing to do.
 	git update-ref refs/review-undo/feature/x/0 "$(git rev-parse HEAD)"
 
-	run git clean-review
+	run git review clean
 	[ "$status" -eq 0 ]
 	[[ "$output" != *"no review branches found"* ]]
 	run git for-each-ref refs/review-undo/
 	[ -z "$output" ]
 }
 
-@test "clean-review keeps the recorded reviewed tip (forgetting moved to review-forget-delta)" {
-	git review-pr feature/x
+@test "review clean keeps the recorded reviewed tip (forgetting moved to review forget --delta)" {
+	git review start feature/x
 	git switch --quiet develop
 	git reset --hard --quiet
 	[ -n "$(git config reviewworkflow.feature/x.reviewed)" ]
-	run git clean-review feature/x
+	run git review clean feature/x
 	[ "$status" -eq 0 ]
-	# clean-review no longer owns the delta marker; it must survive
+	# review clean no longer owns the delta marker; it must survive
 	[ -n "$(git config reviewworkflow.feature/x.reviewed)" ]
 }
 
-# ── review-status: banked steps display ───────────────────────────────────────
+# ── review status: banked steps display ───────────────────────────────────────
 
-@test "review-status lists banked steps in step mode" {
+@test "review status lists banked steps in step mode" {
 	git switch --quiet -c feature/two develop
 	printf 'a\nb\nc\nP1\n' >app.txt
 	git add app.txt
@@ -370,10 +374,10 @@ step_review_two_with_edits() {
 	git push --quiet -u origin feature/two
 	git switch --quiet develop
 
-	git review-pr feature/two --step
+	git review start feature/two --step
 	printf 'a\nb\nc\nP1\nEDIT\n' >app.txt
-	git review-next
-	run git review-status
+	git review next
+	run git review status
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"banked"* ]]
 	[[ "$output" == *" 1"* ]]
@@ -384,61 +388,61 @@ step_review_two_with_edits() {
 # These commands read step metadata with `|| true`; under set -e a bare read of a
 # missing key would otherwise kill the script with no message.
 
-@test "review-status reports a deleted reviewcount key instead of dying silently" {
-	git review-pr feature/x --step
+@test "review status reports a deleted reviewcount key instead of dying silently" {
+	git review start feature/x --step
 	git config --unset branch.review/feature/x.reviewcount
-	run git review-status
+	run git review status
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"missing review metadata"* ]]
 }
 
-@test "review-status reports a deleted reviewstep key instead of dying silently" {
-	git review-pr feature/x --step
+@test "review status reports a deleted reviewstep key instead of dying silently" {
+	git review start feature/x --step
 	git config --unset branch.review/feature/x.reviewstep
-	run git review-status
+	run git review status
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"corrupt review metadata"* ]]
 }
 
-@test "review-next reports a deleted reviewstart key instead of dying silently" {
-	git review-pr feature/x --step
+@test "review next reports a deleted reviewstart key instead of dying silently" {
+	git review start feature/x --step
 	git config --unset branch.review/feature/x.reviewstart
-	run git review-next
+	run git review next
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"missing review metadata"* ]]
 }
 
-# ── finish-review on corrupt step metadata ────────────────────────────────────
+# ── review finish on corrupt step metadata ────────────────────────────────────
 #
-# finish-review used to read step metadata raw, without the guards the shared
+# review finish used to read step metadata raw, without the guards the shared
 # helper (load_step_review_meta) gives the other commands. Each corrupt key below
 # either silently discarded the user's banked edits or died with an opaque shell /
 # git / sed diagnostic. It now validates through the helper and reports a clear
-# error, the way review-next / review-status do.
+# error, the way review next / review status do.
 
-@test "finish-review reports a deleted reviewcount instead of saying 'no changes'" {
+@test "review finish reports a deleted reviewcount instead of saying 'no changes'" {
 	# `|| echo 0` defaulted a deleted reviewcount to 0, so the replay loop never
 	# ran: every banked edit (FIXA) and the current step's edit (FIXB) were
-	# discarded and finish-review printed "no review changes to apply" — silent
+	# discarded and review finish printed "no review changes to apply" — silent
 	# data loss. It must report the corrupt metadata instead.
 	step_review_two_with_edits
 	git config --unset branch.review/feature/two.reviewcount
-	run git finish-review
+	run git review finish
 	[ "$status" -ne 0 ]
 	[[ "$output" != *"no review changes to apply"* ]]
 	[[ "$output" == *"missing review metadata"* ]]
 }
 
-@test "finish-review with a deleted reviewcount preserves the undo point for --abort" {
+@test "review finish with a deleted reviewcount preserves the undo point for --abort" {
 	# The undo point is recorded before the step block runs. The old "no changes"
 	# path cleared it, so --abort could not recover; the fix fails before clearing.
 	step_review_two_with_edits
 	git config --unset branch.review/feature/two.reviewcount
-	run git finish-review
+	run git review finish
 	[ "$status" -ne 0 ]
 	[ -n "$(git config branch.review/feature/two.reviewundohead || true)" ]
 
-	run git finish-review --abort
+	run git review finish --abort
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/two" ]
 	# The current step's edit (FIXB) must be back in the working tree.
@@ -446,66 +450,66 @@ step_review_two_with_edits() {
 	[[ "$output" == *"FIXB"* ]]
 }
 
-@test "finish-review reports reviewcount=0 instead of silently losing edits" {
+@test "review finish reports reviewcount=0 instead of silently losing edits" {
 	step_review_two_with_edits
 	git config branch.review/feature/two.reviewcount 0
-	run git finish-review
+	run git review finish
 	[ "$status" -ne 0 ]
 	[[ "$output" != *"no review changes to apply"* ]]
 	[[ "$output" == *"corrupt review metadata"* ]]
 }
 
-@test "finish-review reports a non-numeric reviewcount instead of a shell error" {
+@test "review finish reports a non-numeric reviewcount instead of a shell error" {
 	step_review_two_with_edits
 	git config branch.review/feature/two.reviewcount abc
-	run git finish-review
+	run git review finish
 	[ "$status" -ne 0 ]
 	[[ "$output" != *"no review changes to apply"* ]]
 	[[ "$output" == *"corrupt review metadata"* ]]
 }
 
-@test "finish-review reports a deleted reviewstart instead of dying silently" {
-	# reviewstart was read without || true, so set -e killed finish-review with no
+@test "review finish reports a deleted reviewstart instead of dying silently" {
+	# reviewstart was read without || true, so set -e killed review finish with no
 	# message; the helper reads it with || true and reports it.
 	step_review_two_with_edits
 	git config --unset branch.review/feature/two.reviewstart
-	run git finish-review
+	run git review finish
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"missing review metadata"* ]]
 }
 
-@test "finish-review reports reviewstep=0 instead of an opaque sed error" {
+@test "review finish reports reviewstep=0 instead of an opaque sed error" {
 	# step=0 reached `sed -n "0p"` ("invalid usage of line address 0"); now caught
 	# by the helper's range check.
 	step_review_two_with_edits
 	git config branch.review/feature/two.reviewstep 0
-	run git finish-review
+	run git review finish
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"out of range"* ]]
 }
 
-@test "finish-review reports a reviewstep past the last commit instead of a git error" {
+@test "review finish reports a reviewstep past the last commit instead of a git error" {
 	# step past the commit count made `sed -n "${step}p"` empty, so rev-parse died
 	# with "ambiguous argument"; now caught by the helper's range check.
 	step_review_two_with_edits
 	git config branch.review/feature/two.reviewstep 99
-	run git finish-review
+	run git review finish
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"out of range"* ]]
 }
 
-@test "finish-review on a step review with deleted reviewmode does not leak author commits" {
+@test "review finish on a step review with deleted reviewmode does not leak author commits" {
 	# With reviewmode gone the step block was skipped and the whole-mode tail diffed
 	# the current step commit (c1) against the tip (c2), reversing the author's c2
 	# into the extracted fix. The step keys still present make the inconsistency
 	# detectable: report it and never build the fix branch.
 	make_two_commit_feature
-	git review-pr feature/two --step
+	git review start feature/two --step
 	# Stay on step 1 (HEAD = c1, not the tip c2).
 	printf 'a2\nFIXA\n' >a.txt
 	git config --unset branch.review/feature/two.reviewmode
 
-	run git finish-review
+	run git review finish
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"corrupt review metadata"* ]]
 	# No review-fixes branch — so the author's c2 could not have leaked into one.
@@ -515,12 +519,12 @@ step_review_two_with_edits() {
 
 # ── a finish, then a second one off the review branch ─────────────────────────
 
-@test "a second finish-review is blocked once you are off the review branch" {
-	git review-pr feature/x
+@test "a second review finish is blocked once you are off the review branch" {
+	git review start feature/x
 	printf 'a\nB\nc\nd\nfix\n' >app.txt
-	git finish-review
+	git review finish
 	# the first finish left us on review-fixes/*, no longer a review/* branch
-	run git finish-review
+	run git review finish
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"not on a review/* branch"* ]]
 }

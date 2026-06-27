@@ -58,16 +58,20 @@ teardown() {
 
 	# The dispatcher is there...
 	[ -x "$PREFIX/git-review" ]
-	# ...no verb is a standalone binary on PATH (they are libexec)...
+	# ...no verb is a standalone binary on PATH (they are libexec). This holds in
+	# both layouts: with symlinks the verbs stay in the repo; on a filesystem
+	# without symlink support (Windows/Git Bash) install.sh copies the verbs dir
+	# beside the dispatcher as libexec — a subdir, never a git-discoverable name.
 	for v in $VERBS; do
 		[ ! -e "$PREFIX/$v" ] || { echo "install.sh leaked verb $v onto PATH"; false; }
 	done
-	# ...and the symlink installer never copies the verbs dir to PATH.
-	[ ! -e "$PREFIX/git-review-verbs" ]
-	# Nothing else slipped in: every top-level entry is the dispatcher.
+	# Nothing else slipped in: every top-level entry is the dispatcher or its
+	# libexec (the sourced lib / the verbs dir laid down by the copy fallback).
 	for f in "$PREFIX"/*; do
-		[ "$(basename "$f")" = "git-review" ] ||
-			{ echo "install.sh left an unexpected entry: $(basename "$f")"; false; }
+		case "$(basename "$f")" in
+		git-review | git-review-lib.sh | git-review-verbs) ;;
+		*) echo "install.sh left an unexpected entry: $(basename "$f")"; false ;;
+		esac
 	done
 }
 

@@ -30,8 +30,13 @@ La imagen de Docker (bats + git, `tests/Dockerfile`) se construye en el primer
 uso y el repo se monta read-only; los tests crean sus repos temporales dentro
 del contenedor. Los tests del instalador de PowerShell (`*-ps1.bats`) necesitan
 `pwsh`, que no está en el contenedor, así que solo corren de verdad en CI / en
-Windows local. CI corre shellcheck + bats en un runner real de Windows en cada
-push y PR.
+Windows local. CI corre shellcheck + bats en runners reales de **ubuntu, macos
+y windows** en cada push y PR. Cada OS instala bats/shellcheck de una fuente
+distinta (`apt` / `brew` / `npm`), con versiones distintas: usá solo
+flags/comandos que funcionen en los tres. Apuntá al mínimo común denominador y
+no asumas que la versión más nueva (típicamente la de Windows/npm local)
+representa a las otras — p. ej. `bats --abort` anda en npm pero rompe el bats
+viejo de apt en Ubuntu.
 
 ## Arquitectura
 
@@ -102,6 +107,12 @@ repo, no en archivos del working tree:
   - Para los casos de error, afirmá el exit code *y* el mensaje en `stderr`, y
     confirmá que el efecto colateral NO ocurrió.
   - Nada de tests tautológicos (que pasan pase lo que pase) ni asserts comentados.
+  - **Nombres de `@test` en ASCII puro.** Nada de em dashes (`—`), acentos ni
+    otros caracteres no-ASCII en el texto del nombre. bats convierte cada nombre
+    en un nombre de función shell escapando byte por byte, y el bats de Windows
+    en CI trastabilla con los bytes UTF-8 → `unknown test name '...\342-80-94...'`
+    (pasa en Linux/macOS, rompe en Windows). El cuerpo del test puede tener lo
+    que sea; es solo el nombre el que se vuelve nombre de función.
 
 ## Release
 

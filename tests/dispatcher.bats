@@ -136,7 +136,7 @@ VERB
 	[[ "$output" == *"is not a git review command"* ]]
 }
 
-@test "dispatcher: no abbreviation — a verb prefix is not resolved" {
+@test "dispatcher: no abbreviation - a verb prefix is not resolved" {
 	# 'stat' must not resolve to a hypothetical 'status'; mirrors git bisect
 	make_verb status
 	run git-review stat

@@ -54,6 +54,4 @@ jobs:
             *) sudo apt-get update && sudo apt-get install -y bats ;;
           esac
       - name: Run tests
-        # --abort: stop the suite at the first failing test instead of running
-        # the whole thing and only surfacing the failure at the end.
-        run: bats --abort tests/
+        run: bats tests/

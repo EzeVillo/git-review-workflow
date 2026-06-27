@@ -76,8 +76,9 @@ while [ $# -gt 0 ]; do
 	shift
 done
 
-[ "$have_a" -eq 1 ] && [ "$have_b" -eq 1 ] ||
+if [ "$have_a" -ne 1 ] || [ "$have_b" -ne 1 ]; then
 	die "need two commit-ish to compare: $prog <a> <b>"
+fi
 
 git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 

@@ -11,8 +11,6 @@
 #   tests/run-docker.sh                 # run the whole suite
 #   tests/run-docker.sh review.bats     # run a single file
 #   tests/run-docker.sh tests/review.bats extras.bats   # any bats args/paths
-#
-# PowerShell-only tests skip automatically (no pwsh in the container).
 set -eu
 
 # Repo root = parent of this script's directory, regardless of where it's run.

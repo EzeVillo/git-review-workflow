@@ -60,6 +60,32 @@ setup() {
 	rm -rf "$TMP"
 }
 
+# ── npm package ───────────────────────────────────────────────────────────────
+#
+# Structural checks on package.json so the published npm package can never point
+# at a missing dispatcher or forget to ship the libexec/completions. Parsed with
+# sed/grep (no node or jq in the test container).
+
+@test "npm: package name is git-review-workflow" {
+	name="$(sed -nE 's#^  "name": "([^"]*)".*#\1#p' "$REPO/package.json")"
+	[ "$name" = "git-review-workflow" ]
+}
+
+@test "npm: bin maps git-review at the dispatcher, which exists and is executable" {
+	target="$(sed -nE 's#^    "git-review": "([^"]*)".*#\1#p' "$REPO/package.json")"
+	[ "$target" = "bin/git-review" ]
+	[ -f "$REPO/$target" ]
+	[ -x "$REPO/$target" ]
+}
+
+@test "npm: files whitelist ships bin, completions and VERSION" {
+	# Without these in the whitelist npm would publish the dispatcher but drop the
+	# private verbs (bin/), the completions and the VERSION the dispatcher embeds.
+	for entry in '"bin/"' '"completions/"' '"VERSION"'; do
+		grep -qF "$entry" "$REPO/package.json" || { echo "files is missing $entry"; false; }
+	done
+}
+
 # ── Executable bits ─────────────────────────────────────────────────────────────
 #
 # These assert the *git index* mode (100755), not the filesystem permission.

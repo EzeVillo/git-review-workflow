@@ -60,8 +60,8 @@ falta.
 ## Inicio rápido
 
 ```sh
-# 1. Instalar (Linux, macOS, WSL, y Windows vía Git Bash)
-curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.sh | sh
+# 1. Instalar (necesita Node.js; ver Instalación para Homebrew y una opción sin Node)
+npm install -g git-review-workflow
 
 # 2. Decirle dónde se integran los PRs, una vez por repo
 git config reviewworkflow.base develop
@@ -72,7 +72,7 @@ git review start feature/login
 git review finish               # extraer tus ediciones a review-fixes/feature/login
 ```
 
-¿Preferís Homebrew o un instalador nativo de Windows (PowerShell)? Mirá
+¿Preferís Homebrew, o una instalación que no necesite Node? Mirá
 [Instalación](#instalación). Para el flujo completo — re-revisar actualizaciones,
 recorrer un PR commit por commit, limpieza — mirá [Flujo típico](#flujo-típico).
 
@@ -82,6 +82,20 @@ Estos comandos se enchufan a `git` como un único subcomando — los usás como
 `git review start`, `git review finish`, etc. Elegí el método que mejor te quede.
 Las opciones por gestor de paquetes son las más fáciles y **te configuran el
 `PATH` solas**.
+
+### npm (recomendado)
+
+Si tenés [Node.js](https://nodejs.org), esta es la instalación de un solo comando.
+Te pone `git review` en el `PATH` y anda en Linux, macOS y Windows (en Windows los
+comandos igual corren bajo Git Bash):
+
+```sh
+npm install -g git-review-workflow
+```
+
+Actualizá con `npm install -g git-review-workflow@latest`; desinstalá con
+`npm uninstall -g git-review-workflow`. El autocompletado se configura igual que
+en las otras instalaciones que no son Homebrew — mirá la nota más abajo.
 
 ### Homebrew (macOS / Linux)
 
@@ -93,22 +107,13 @@ brew install EzeVillo/git-review-workflow/git-review-workflow
 El autocompletado queda configurado automáticamente. Para actualizar a la última
 versión: `brew upgrade git-review-workflow`.
 
-### Windows (PowerShell)
+### Windows
 
-Necesitás [Git for Windows](https://gitforwindows.org), que provee la shell
-donde corren estos comandos. Abrí PowerShell y ejecutá:
-
-```powershell
-irm https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.ps1 | iex
-```
-
-Instala el comando en `~\.local\bin` y agrega esa carpeta al `PATH` de tu usuario
-automáticamente. Abrí una terminal nueva cuando termine. Volvé a correrlo para
-actualizar; para desinstalar:
-
-```powershell
-irm https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-uninstall.ps1 | iex
-```
+Estos comandos son shell POSIX, así que en Windows corren bajo el Git Bash de
+[Git for Windows](https://gitforwindows.org) — no en `cmd.exe` ni PowerShell. Con
+Git Bash instalado, instalá con **npm** (arriba) si tenés Node, o con el **script
+de una línea** de abajo desde una terminal de Git Bash. Cualquiera de los dos te
+pone `git review` en el `PATH`.
 
 ### Instalación en una línea (Linux, macOS, WSL, Git Bash)
 
@@ -146,7 +151,7 @@ del repo — el symlink toma los cambios automáticamente.
 <summary>"command not found" — agregar <code>~/.local/bin</code> a tu PATH</summary>
 
 Tu `PATH` es la lista de carpetas donde tu terminal busca cuando escribís un
-comando. Homebrew y el instalador de PowerShell agregan su carpeta por vos. La
+comando. Homebrew y npm agregan su carpeta por vos. La
 instalación en una línea y la manual usan `~/.local/bin`, que en la mayoría de
 los sistemas ya está en el `PATH`. Si no lo está, el instalador te deja un aviso
 — agregalo **una sola vez** pegando una línea en el archivo de config de tu

@@ -15,7 +15,7 @@ mkdir -p "$BIN_DIR"
 # silently *copies* instead. A copied dispatcher can't resolve its own symlink
 # back to the repo, so it would never find the private verbs directory. Probe for
 # real symlink support and, when it's missing, fall back to copying the whole
-# libexec beside the dispatcher (what the PowerShell installer does).
+# libexec beside the dispatcher.
 symlinks_ok=yes
 probe="$BIN_DIR/.git-review-symlink-probe"
 rm -rf "$probe"

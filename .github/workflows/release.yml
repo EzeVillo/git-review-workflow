@@ -3,9 +3,10 @@ name: release
 # Cut a release by pushing a tag, e.g.:
 #   git tag v0.0.1 && git push origin v0.0.1
 #
-# This creates a GitHub Release with auto-generated notes and pins the Homebrew
+# This creates a GitHub Release with auto-generated notes, pins the Homebrew
 # formula (url + sha256 + version) to the tag on the default branch, so
-# `brew install` (without --HEAD) installs the tagged version.
+# `brew install` (without --HEAD) installs the tagged version, and publishes the
+# tagged version to the npm registry.
 on:
   push:
     tags:
@@ -121,3 +122,30 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -qm "Pin Homebrew formula to ${GITHUB_REF_NAME} [skip ci]" -- "$f"
           git push origin "HEAD:${DEFAULT_BRANCH}"
+
+  # Publish the tagged commit to npm. package.json ships *inside* the tarball and
+  # is bumped in the tagged commit (the version tests gate that in `verify`), so
+  # checking out the tag and running `npm publish` ships the right version.
+  # id-token: write lets npm attach a provenance attestation (publishConfig sets
+  # provenance: true). Skips cleanly until the NPM_TOKEN secret is configured, so
+  # a release before npm is set up does not fail.
+  npm:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: "https://registry.npmjs.org"
+      - name: Publish to npm
+        if: env.NODE_AUTH_TOKEN != ''
+        run: npm publish
+      - name: Note when npm publishing is not configured
+        if: env.NODE_AUTH_TOKEN == ''
+        run: echo "NPM_TOKEN secret not set; skipping npm publish." >&2

@@ -71,9 +71,10 @@ git review start feature/login
 git review finish              # extract your edits onto review-fixes/feature/login
 ```
 
-Prefer Homebrew, or an install that does not need Node? See
-[Installation](#installation). For the full flow — re-reviewing updates, walking
-a PR commit by commit, cleanup — see [Typical workflow](#typical-workflow).
+Prefer Homebrew, a native Windows (PowerShell) installer, or an install that
+does not need Node? See [Installation](#installation). For the full flow —
+re-reviewing updates, walking a PR commit by commit, cleanup — see
+[Typical workflow](#typical-workflow).
 
 ## Installation
 
@@ -106,13 +107,25 @@ brew install EzeVillo/git-review-workflow/git-review-workflow
 Tab completion is configured automatically. To update to the latest release:
 `brew upgrade git-review-workflow`.
 
-### Windows
+### Windows (PowerShell)
 
-These commands are POSIX shell, so on Windows they run under
-[Git for Windows](https://gitforwindows.org)' Git Bash — not `cmd.exe` or
-PowerShell. With Git Bash in place, install with **npm** (above) if you have
-Node, or with the **one-line script** below from a Git Bash prompt. Either puts
-`git review` on your `PATH`.
+You still need [Git for Windows](https://gitforwindows.org), which provides the
+shell these commands run in. Open PowerShell and run:
+
+```powershell
+irm https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.ps1 | iex
+```
+
+This installs the command into `~\.local\bin` and adds that folder to your user
+`PATH` automatically. Open a new terminal after it finishes. Re-run to update; to
+uninstall:
+
+```powershell
+irm https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-uninstall.ps1 | iex
+```
+
+(If you have Node, `npm install -g git-review-workflow` works on Windows too —
+the commands still run under Git Bash either way.)
 
 ### One-line install (Linux, macOS, WSL, Git Bash)
 
@@ -150,7 +163,7 @@ picks up changes automatically.
 <summary>"command not found" — adding <code>~/.local/bin</code> to your PATH</summary>
 
 Your `PATH` is the list of folders your terminal searches when you type a
-command. Homebrew and npm add their folder for you. The
+command. Homebrew, npm and the PowerShell installer add their folder for you. The
 one-line and manual installs use `~/.local/bin`, which is already on the `PATH`
 on most systems. If it isn't, the installer prints a note — add it **once** by
 pasting one line into your shell's config file:

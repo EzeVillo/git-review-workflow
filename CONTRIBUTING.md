@@ -34,6 +34,10 @@ git) on first use and mounts the repo read-only; tests create their temp repos
 inside the container, so the Windows filesystem is never on the hot path. This
 is a local convenience only — CI still runs the suite on a real Windows runner.
 
+> The PowerShell installer tests (`*-ps1.bats`) need `pwsh`, which the container
+> does not have, so they do not really run there — rely on CI (or local Windows)
+> for those.
+
 ## Releasing
 
 > Maintainers only.

@@ -28,7 +28,9 @@ shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-in
 
 La imagen de Docker (bats + git, `tests/Dockerfile`) se construye en el primer
 uso y el repo se monta read-only; los tests crean sus repos temporales dentro
-del contenedor. CI corre shellcheck + bats en runners reales de **ubuntu, macos
+del contenedor. Los tests del instalador de PowerShell (`*-ps1.bats`) necesitan
+`pwsh`, que no está en el contenedor, así que solo corren de verdad en CI / en
+Windows local. CI corre shellcheck + bats en runners reales de **ubuntu, macos
 y windows** en cada push y PR. Cada OS instala bats/shellcheck de una fuente
 distinta (`apt` / `brew` / `npm`), con versiones distintas: usá solo
 flags/comandos que funcionen en los tres. Apuntá al mínimo común denominador y
@@ -87,9 +89,9 @@ repo, no en archivos del working tree:
   para terminar el parseo de opciones, riesgo asimétrico en los verbos
   destructivos) antes que inventar comandos nuevos.
 - **Solo shell POSIX (`sh`)**, con `set -eu` arriba de cada script. Nada de
-  bashisms — los comandos deben correr bajo `dash`/Git Bash. Los instaladores
-  (`install.sh`, `web-install.sh`) también son POSIX; en Windows el comando se
-  instala vía npm o el script de una línea bajo Git Bash.
+  bashisms — los comandos deben correr bajo `dash`/Git Bash. El repo también
+  trae *instaladores* de PowerShell (`web-install.ps1`) y un paquete npm, pero
+  los comandos en sí son POSIX.
 - **`sed` multiplataforma:** GNU y BSD difieren en `-i`; hacé las ediciones
   in-place a través de un archivo temporal (ver `sed_i` en `bump-version.sh`).
 - **Tests con asserts fuertes, sin falsos positivos.** Cada `@test` de bats debe

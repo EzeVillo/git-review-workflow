@@ -9,6 +9,9 @@
     "code-review",
     "pull-request",
     "pr",
+    "merge-request",
+    "git-review",
+    "diff",
     "cli",
     "workflow"
   ],

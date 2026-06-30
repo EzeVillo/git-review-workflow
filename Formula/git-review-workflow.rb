@@ -14,7 +14,7 @@ class GitReviewWorkflow < Formula
   homepage "https://github.com/EzeVillo/git-review-workflow"
   version "0.1.1"
   url "https://github.com/EzeVillo/git-review-workflow/archive/refs/tags/v0.1.1.tar.gz"
-  sha256 "2b63bcc406511a5cf2a5bbf7865a5a4ea86666461ba5c2e8a2bed53c322fa1ca"
+  sha256 "fad3eec7e4e1925dbaa985413f0871b96ba8d21e0e2adf2ac34181ebb07a19ff"
   license "MIT"
   head "https://github.com/EzeVillo/git-review-workflow.git"
 

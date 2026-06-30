@@ -126,26 +126,26 @@ jobs:
   # Publish the tagged commit to npm. package.json ships *inside* the tarball and
   # is bumped in the tagged commit (the version tests gate that in `verify`), so
   # checking out the tag and running `npm publish` ships the right version.
-  # id-token: write lets npm attach a provenance attestation (publishConfig sets
-  # provenance: true). Skips cleanly until the NPM_TOKEN secret is configured, so
-  # a release before npm is set up does not fail.
+  #
+  # Authentication is tokenless via npm Trusted Publishing (OIDC): npm trusts
+  # this workflow directly, so there is no NPM_TOKEN secret to manage — set the
+  # repo + workflow as a trusted publisher on npmjs.com. id-token: write lets the
+  # runner mint the OIDC token npm exchanges for publish access, and provenance is
+  # attached automatically. OIDC publishing needs npm >= 11.5.1, newer than the
+  # npm bundled with Node 20, so upgrade npm first.
   npm:
     needs: verify
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
-    env:
-      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           registry-url: "https://registry.npmjs.org"
+      - name: Upgrade npm for OIDC trusted publishing
+        run: npm install -g npm@latest
       - name: Publish to npm
-        if: env.NODE_AUTH_TOKEN != ''
         run: npm publish
-      - name: Note when npm publishing is not configured
-        if: env.NODE_AUTH_TOKEN == ''
-        run: echo "NPM_TOKEN secret not set; skipping npm publish." >&2

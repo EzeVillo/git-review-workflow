@@ -122,6 +122,7 @@ La versión está duplicada a propósito: `VERSION`, `bin/git-review` y
 `./bump-version.sh X.Y.Z` estampa los tres desde un solo argumento (deja a
 propósito el `sha256` de la fórmula —desconocido hasta que existe el tarball del
 tag; el workflow de release lo fija). Los releases se cortan pusheando un tag
-`v*`: el workflow crea el GitHub Release, fija la fórmula y publica a npm (este
-último paso se saltea si no está configurado el secret `NPM_TOKEN`). Un
-`tests/version-consistency.bats` protege contra el drift.
+`v*`: el workflow crea el GitHub Release, fija la fórmula y publica a npm vía
+Trusted Publishing (OIDC, sin `NPM_TOKEN`: el repo está registrado como trusted
+publisher en npmjs.com). Un `tests/version-consistency.bats` protege contra el
+drift.

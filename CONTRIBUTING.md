@@ -71,6 +71,7 @@ Releases are cut by pushing a `v*` tag.
     - pins the Homebrew formula (`url`, `sha256`, `version`) to the tag on the
       default branch, so `brew install` (without `--HEAD`) installs that version,
       and
-    - publishes the tagged version to npm. This step is skipped until the
-      `NPM_TOKEN` repository secret is configured, so the first releases before
-      npm is set up do not fail.
+    - publishes the tagged version to npm via Trusted Publishing (OIDC). There
+      is no `NPM_TOKEN` secret — the repo and `release.yml` workflow are
+      registered as a trusted publisher on npmjs.com, and provenance is attached
+      automatically.

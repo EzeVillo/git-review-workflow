@@ -71,18 +71,25 @@ setup() {
 	[ "$name" = "git-review-workflow" ]
 }
 
-@test "npm: bin maps git-review at the dispatcher, which exists and is executable" {
+@test "npm: bin maps git-review at the dispatcher, which exists and ships 100755" {
 	target="$(sed -nE 's#^    "git-review": "([^"]*)".*#\1#p' "$REPO/package.json")"
 	[ "$target" = "bin/git-review" ]
 	[ -f "$REPO/$target" ]
-	[ -x "$REPO/$target" ]
+	# Assert the *committed* mode, not the working-tree bit: npm preserves it and
+	# the dispatcher execs the verbs, so the bin entry must ship executable. Using
+	# git_mode (defined below) is deterministic across platforms, unlike `test -x`
+	# on a core.fileMode=false checkout, which can pass on a 100644 file.
+	[ "$(git_mode "$target")" = "100755" ]
 }
 
 @test "npm: files whitelist ships bin, completions and VERSION" {
-	# Without these in the whitelist npm would publish the dispatcher but drop the
+	# Match each as its own array element — leading indent, optional trailing comma —
+	# rather than anywhere in the file, so a stray occurrence elsewhere cannot mask a
+	# dropped entry. Without these npm would publish the dispatcher but lose the
 	# private verbs (bin/), the completions and the VERSION the dispatcher embeds.
 	for entry in '"bin/"' '"completions/"' '"VERSION"'; do
-		grep -qF "$entry" "$REPO/package.json" || { echo "files is missing $entry"; false; }
+		grep -qE "^[[:space:]]+${entry},?[[:space:]]*\$" "$REPO/package.json" ||
+			{ echo "files array is missing $entry"; false; }
 	done
 }
 

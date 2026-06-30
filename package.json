@@ -1,0 +1,42 @@
+{
+  "name": "git-review-workflow",
+  "version": "0.1.0",
+  "description": "Git commands to review a pull request branch locally as one staged diff",
+  "keywords": [
+    "git",
+    "git-subcommand",
+    "review",
+    "code-review",
+    "pull-request",
+    "pr",
+    "merge-request",
+    "git-review",
+    "diff",
+    "cli",
+    "workflow"
+  ],
+  "homepage": "https://github.com/EzeVillo/git-review-workflow#readme",
+  "bugs": {
+    "url": "https://github.com/EzeVillo/git-review-workflow/issues"
+  },
+  "license": "MIT",
+  "author": "EzeVillo <ezevillodev@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/EzeVillo/git-review-workflow.git"
+  },
+  "bin": {
+    "git-review": "bin/git-review"
+  },
+  "files": [
+    "bin/",
+    "completions/",
+    "VERSION",
+    "LICENSE",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

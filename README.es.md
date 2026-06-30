@@ -60,8 +60,8 @@ falta.
 ## Inicio rápido
 
 ```sh
-# 1. Instalar (Linux, macOS, WSL, y Windows vía Git Bash)
-curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.sh | sh
+# 1. Instalar (necesita Node.js; ver Instalación para Homebrew y una opción sin Node)
+npm install -g git-review-workflow
 
 # 2. Decirle dónde se integran los PRs, una vez por repo
 git config reviewworkflow.base develop
@@ -72,7 +72,8 @@ git review start feature/login
 git review finish               # extraer tus ediciones a review-fixes/feature/login
 ```
 
-¿Preferís Homebrew o un instalador nativo de Windows (PowerShell)? Mirá
+¿Preferís Homebrew, un instalador nativo de Windows (PowerShell), o una
+instalación que no necesite Node? Mirá
 [Instalación](#instalación). Para el flujo completo — re-revisar actualizaciones,
 recorrer un PR commit por commit, limpieza — mirá [Flujo típico](#flujo-típico).
 
@@ -82,6 +83,20 @@ Estos comandos se enchufan a `git` como un único subcomando — los usás como
 `git review start`, `git review finish`, etc. Elegí el método que mejor te quede.
 Las opciones por gestor de paquetes son las más fáciles y **te configuran el
 `PATH` solas**.
+
+### npm (recomendado)
+
+Si tenés [Node.js](https://nodejs.org), esta es la instalación de un solo comando.
+Te pone `git review` en el `PATH` y anda en Linux, macOS y Windows (en Windows los
+comandos igual corren bajo Git Bash):
+
+```sh
+npm install -g git-review-workflow
+```
+
+Actualizá con `npm install -g git-review-workflow@latest`; desinstalá con
+`npm uninstall -g git-review-workflow`. El autocompletado se configura igual que
+en las otras instalaciones que no son Homebrew — mirá la nota más abajo.
 
 ### Homebrew (macOS / Linux)
 
@@ -109,6 +124,9 @@ actualizar; para desinstalar:
 ```powershell
 irm https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-uninstall.ps1 | iex
 ```
+
+(Si tenés Node, `npm install -g git-review-workflow` también anda en Windows — los
+comandos igual corren bajo Git Bash en ambos casos.)
 
 ### Instalación en una línea (Linux, macOS, WSL, Git Bash)
 
@@ -146,7 +164,7 @@ del repo — el symlink toma los cambios automáticamente.
 <summary>"command not found" — agregar <code>~/.local/bin</code> a tu PATH</summary>
 
 Tu `PATH` es la lista de carpetas donde tu terminal busca cuando escribís un
-comando. Homebrew y el instalador de PowerShell agregan su carpeta por vos. La
+comando. Homebrew, npm y el instalador de PowerShell agregan su carpeta por vos. La
 instalación en una línea y la manual usan `~/.local/bin`, que en la mayoría de
 los sistemas ya está en el `PATH`. Si no lo está, el instalador te deja un aviso
 — agregalo **una sola vez** pegando una línea en el archivo de config de tu

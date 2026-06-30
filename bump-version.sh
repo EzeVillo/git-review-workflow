@@ -2,8 +2,9 @@
 #
 # bump-version.sh — stamp a new version everywhere it must agree.
 #
-# The version lives in several files on purpose: VERSION and bin/git-review ship
-# *inside* the release tarball, so they must carry the right number in the tagged
+# The version lives in several files on purpose: VERSION, bin/git-review and
+# package.json ship *inside* the release tarball (the npm package reads its
+# version from package.json), so they must carry the right number in the tagged
 # commit; the Homebrew formula points *at* the tarball. This script bumps all of
 # them from a single argument so they can never drift out of sync.
 #
@@ -40,6 +41,7 @@ sed_i() {
 # Inside the tarball.
 printf '%s\n' "$V" >"$repo/VERSION"
 sed_i "s#^(VERSION=\")[^\"]*(\")#\1${V}\2#" "$repo/bin/git-review"
+sed_i "s#^(  \"version\": \")[^\"]*(\")#\1${V}\2#" "$repo/package.json"
 
 # Pointing at the tarball (sha256 left for the release workflow).
 sed_i "s#^(  version ).*#\1\"${V}\"#" "$formula"

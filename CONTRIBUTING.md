@@ -45,8 +45,9 @@ is a local convenience only — CI still runs the suite on a real Windows runner
 Releases are cut by pushing a `v*` tag.
 
 1. Bump the version everywhere it must agree, then tag that commit. The version
-   lives in several files on purpose — `VERSION` and `bin/git-review` ship
-   *inside* the tarball, while the Homebrew formula points *at* it — so
+   lives in several files on purpose — `VERSION`, `bin/git-review` and
+   `package.json` ship *inside* the tarball (npm publishes the version from
+   `package.json`), while the Homebrew formula points *at* it — so
    [`bump-version.sh`](bump-version.sh) stamps all of them from one argument
    and they can never drift out of sync:
 
@@ -66,6 +67,11 @@ Releases are cut by pushing a `v*` tag.
    ([`.github/workflows/release.yml`](.github/workflows/release.yml)) then
    pins that `sha256` (the one thing not known before the tag):
 
-    - creates a GitHub Release for the tag with auto-generated notes, and
+    - creates a GitHub Release for the tag with auto-generated notes,
     - pins the Homebrew formula (`url`, `sha256`, `version`) to the tag on the
-      default branch, so `brew install` (without `--HEAD`) installs that version.
+      default branch, so `brew install` (without `--HEAD`) installs that version,
+      and
+    - publishes the tagged version to npm via Trusted Publishing (OIDC). There
+      is no `NPM_TOKEN` secret — the repo and `release.yml` workflow are
+      registered as a trusted publisher on npmjs.com, and provenance is attached
+      automatically.

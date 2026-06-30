@@ -90,8 +90,8 @@ repo, no en archivos del working tree:
   destructivos) antes que inventar comandos nuevos.
 - **Solo shell POSIX (`sh`)**, con `set -eu` arriba de cada script. Nada de
   bashisms — los comandos deben correr bajo `dash`/Git Bash. El repo también
-  trae *instaladores* de PowerShell (`web-install.ps1`), pero los comandos en sí
-  son POSIX.
+  trae *instaladores* de PowerShell (`web-install.ps1`) y un paquete npm, pero
+  los comandos en sí son POSIX.
 - **`sed` multiplataforma:** GNU y BSD difieren en `-i`; hacé las ediciones
   in-place a través de un archivo temporal (ver `sed_i` en `bump-version.sh`).
 - **Tests con asserts fuertes, sin falsos positivos.** Cada `@test` de bats debe
@@ -116,9 +116,13 @@ repo, no en archivos del working tree:
 
 ## Release
 
-La versión está duplicada a propósito: `VERSION` y `bin/git-review` viajan
-dentro del tarball; `Formula/git-review-workflow.rb` apunta a él. `./bump-version.sh
-X.Y.Z` estampa los tres desde un solo argumento (deja a propósito el `sha256` de
-la fórmula —desconocido hasta que existe el tarball del tag; el workflow de
-release lo fija). Los releases se cortan pusheando un tag `v*`. Un
-`tests/version-consistency.bats` protege contra el drift.
+La versión está duplicada a propósito: `VERSION`, `bin/git-review` y
+`package.json` viajan dentro del tarball (npm publica la versión de
+`package.json`); `Formula/git-review-workflow.rb` apunta al tarball.
+`./bump-version.sh X.Y.Z` estampa los tres desde un solo argumento (deja a
+propósito el `sha256` de la fórmula —desconocido hasta que existe el tarball del
+tag; el workflow de release lo fija). Los releases se cortan pusheando un tag
+`v*`: el workflow crea el GitHub Release, fija la fórmula y publica a npm vía
+Trusted Publishing (OIDC, sin `NPM_TOKEN`: el repo está registrado como trusted
+publisher en npmjs.com). Un `tests/version-consistency.bats` protege contra el
+drift.

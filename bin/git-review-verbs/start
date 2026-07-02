@@ -15,7 +15,7 @@ prog="git review start"
 
 usage() {
 	cat <<EOF
-usage: $prog [<branch>] [<base> | --base <base> | --delta | --from <commit>] [--step] [--local]
+usage: $prog [<branch>] [<base> | --base <base> | --delta | --from <commit>] [--step] [--local | --offline]
 
 Stage a pull request diff on a review/<branch> branch for inline review.
 With no <branch>, review the branch you currently have checked out.
@@ -29,7 +29,10 @@ With no <branch>, review the branch you currently have checked out.
   --delta           review only the commits added since your last review
   --from <commit>   review only the commits after <commit>
   --step            review one commit at a time; advance with git review next
-  --local           review your local branches directly, without fetching
+  --local           review your local <branch>, not origin's copy; the base
+                    is still fetched and resolved against origin
+  --offline         like --local, but also skip fetching and resolve the base
+                    from your local branches too
 EOF
 }
 
@@ -45,6 +48,7 @@ from=""
 delta=0
 step=0
 local_mode=0
+offline_mode=0
 while [ $# -gt 0 ]; do
 	case "$1" in
 	-h | --h)
@@ -54,6 +58,10 @@ while [ $# -gt 0 ]; do
 	-d | --delta) delta=1 ;;
 	--step) step=1 ;;
 	--local) local_mode=1 ;;
+	--offline)
+		local_mode=1
+		offline_mode=1
+		;;
 	--base)
 		shift
 		[ $# -gt 0 ] || die "--base requires a base"
@@ -157,19 +165,25 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
 	die "you have local changes; commit or stash them first"
 fi
 
-# --local reviews your local branches directly; the default reviews the remote's.
-# The two are kept apart everywhere: which ref the tip comes from, how it is named
-# in messages, and the delta marker — local markers live in their own config
-# section (reviewworkflowlocal.*) so a local and a remote review of the same branch
+# --local reviews your local <branch> directly; the default reviews the remote's.
+# The base is a separate concern: it is the shared merge target, so it still
+# resolves against origin (and origin is still fetched) even under --local —
+# only --offline, which implies --local, also takes the base from your local
+# branches and skips the network entirely. The two axes are kept apart
+# everywhere: which ref the tip comes from, how it is named in messages, and
+# the delta marker — local markers live in their own config section
+# (reviewworkflowlocal.*) so a local and a remote review of the same branch
 # name never overwrite each other's progress. A separate section, rather than a
 # reviewworkflow.<src>.local.reviewed key, is deliberate: the latter would be
 # ambiguous for a branch literally named "<src>.local".
+if [ "$offline_mode" -eq 0 ]; then
+	git fetch --quiet "$remote" || die "could not update from $remote"
+fi
 if [ "$local_mode" -eq 1 ]; then
 	srcref="refs/heads/$src"
 	srclabel="$src"
 	markerkey="reviewworkflowlocal.$src.reviewed"
 else
-	git fetch --quiet "$remote" || die "could not update from $remote"
 	srcref="refs/remotes/$remote/$src"
 	srclabel="$remote/$src"
 	markerkey="reviewworkflow.$src.reviewed"
@@ -177,16 +191,16 @@ fi
 
 # Resolve the base into a ref and a human label. A base is normally a branch, so
 # try the branch namespace first — the remote's copy, or the local branch with
-# --local — to keep the familiar origin/<base> labels and the merged-base folding
-# below. Anything that is not a branch there still works as a read-only lower
-# bound via any commit-ish: a tag, a SHA, or an origin/<x> spelled out in full.
-# baseref stays empty when the base does not resolve at all; the full-review path
-# treats that as fatal ("not found"), while the delta/from folding treats an
-# unresolvable base as a no-op, exactly as before.
+# --offline — to keep the familiar origin/<base> labels and the merged-base
+# folding below. Anything that is not a branch there still works as a read-only
+# lower bound via any commit-ish: a tag, a SHA, or an origin/<x> spelled out in
+# full. baseref stays empty when the base does not resolve at all; the
+# full-review path treats that as fatal ("not found"), while the delta/from
+# folding treats an unresolvable base as a no-op, exactly as before.
 baseref=""
 baselabel="$base"
 if [ -n "$base" ]; then
-	if [ "$local_mode" -eq 1 ]; then
+	if [ "$offline_mode" -eq 1 ]; then
 		if git rev-parse --verify --quiet "refs/heads/$base^{commit}" >/dev/null; then
 			baseref="refs/heads/$base"
 		fi
@@ -301,10 +315,15 @@ fi
 # into the lower bound so changes that came from the base do not appear as part
 # of the review. This is a no-op when the base was not merged in (it never
 # invents deletions), and degrades gracefully on git without merge-tree.
+#
+# mb == tip is the degenerate case where base carries no content distinct from
+# tip (reviewing the base branch itself, or a base that already contains all of
+# tip's history) — there is nothing external to fold in, and treating tip as its
+# own "merged base" would collapse the whole diff to nothing.
 lower="$start"
 if [ -n "$baseref" ]; then
 	mb="$(git merge-base "$baseref" "$tip" 2>/dev/null || true)"
-	if [ -n "$mb" ] && ! git merge-base --is-ancestor "$mb" "$start"; then
+	if [ -n "$mb" ] && [ "$mb" != "$tip" ] && ! git merge-base --is-ancestor "$mb" "$start"; then
 		if ltree="$(git merge-tree --write-tree "$start" "$mb" 2>/dev/null)"; then
 			lower="$(git commit-tree "$ltree" -p "$start" -m 'review lower bound')"
 		else

@@ -22,7 +22,7 @@ usage: $prog <command> [<args>]
        $prog (-h | --version)
 
 Commands:
-  git review start [<branch>] [<base> | --base <base> | --delta | --from <commit>] [--step] [--local]
+  git review start [<branch>] [<base> | --base <base> | --delta | --from <commit>] [--step] [--local | --offline]
                      stage a PR diff on a new review/<branch> branch
                      (omit <branch> to review the branch you are on)
   git review compare <a> <b> [--step]

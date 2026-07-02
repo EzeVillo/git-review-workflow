@@ -235,6 +235,53 @@ push_more() {
 	[[ "$output" != *"a.txt"* ]]
 }
 
+# ── regression: the base-content-exclusion fold must never collapse the whole
+# diff to nothing. It is meant to strip content that a merge of the base
+# brought into the PR (see merge.bats); it must be a no-op whenever the base
+# has no content the PR doesn't already have — most degenerately when the
+# branch being reviewed *is* the configured base branch.
+
+@test "--from on the base branch itself does not collapse the diff to nothing" {
+	# reviewworkflow.base is "develop", and here we review develop itself: base
+	# and src resolve to the exact same ref, so merge-base(base, tip) == tip.
+	# The fold used to treat that as "base content merged after start" and
+	# excluded everything, leaving an empty staged diff.
+	git switch --quiet develop
+	c0="$(git rev-parse develop)"
+	printf 'extra\n' >extra.txt
+	git add extra.txt
+	git commit --quiet -m c0-add-extra
+	git push --quiet origin develop
+	run git review start develop --from "$c0"
+	[ "$status" -eq 0 ]
+	run git diff --cached --name-only
+	[ "$output" = "extra.txt" ]
+}
+
+@test "--from does not collapse the diff when the base already contains the whole source branch" {
+	# feature/old is fully merged into develop (develop's tip descends from
+	# feature/old's tip), so merge-base(develop, feature/old) == feature/old's
+	# tip: the same "mb == tip" degenerate case as reviewing the base itself,
+	# but with base and src being different branches.
+	git switch --quiet -c feature/old develop
+	c0="$(git rev-parse feature/old)"
+	printf 'e\n' >e.txt
+	git add e.txt
+	git commit --quiet -m old-c1-add-e
+	git push --quiet -u origin feature/old
+	git switch --quiet develop
+	# --no-ff forces a real merge commit, so develop ends up strictly ahead of
+	# feature/old's tip rather than fast-forwarding to the exact same commit —
+	# a distinct scenario from reviewing the base branch itself (previous test).
+	git merge --quiet --no-edit --no-ff feature/old
+	git push --quiet origin develop
+
+	run git review start feature/old --from "$c0"
+	[ "$status" -eq 0 ]
+	run git diff --cached --name-only
+	[ "$output" = "e.txt" ]
+}
+
 @test "--delta --delta is harmless (a duplicated flag)" {
 	git review start feature/x
 	git switch --quiet develop

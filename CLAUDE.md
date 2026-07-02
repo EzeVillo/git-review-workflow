@@ -88,6 +88,13 @@ repo, no en archivos del working tree:
   diseños consistentes con git nativo (omitir el arg para la rama actual, `--`
   para terminar el parseo de opciones, riesgo asimétrico en los verbos
   destructivos) antes que inventar comandos nuevos.
+- **Hay DOS README y siempre se actualizan los dos.** `README.md` (inglés) y
+  `README.es.md` (español) son traducciones espejo. Cualquier cambio de
+  comportamiento (flags, superficie de comandos, tabla de verbos, ejemplos)
+  tiene que reflejarse en *ambos* en el mismo cambio — nunca tocar solo uno.
+- **Ante una duda genuina, preguntá.** Si hay una decisión de diseño o una
+  ambigüedad real que no se resuelve leyendo el código, preguntarle al usuario
+  suele ser más certero y económico que explorar a ciegas o adivinar y rehacer.
 - **Solo shell POSIX (`sh`)**, con `set -eu` arriba de cada script. Nada de
   bashisms — los comandos deben correr bajo `dash`/Git Bash. El repo también
   trae *instaladores* de PowerShell (`web-install.ps1`) y un paquete npm, pero
@@ -96,23 +103,23 @@ repo, no en archivos del working tree:
   in-place a través de un archivo temporal (ver `sed_i` en `bump-version.sh`).
 - **Tests con asserts fuertes, sin falsos positivos.** Cada `@test` de bats debe
   fallar de verdad cuando el comportamiento se rompe. En concreto:
-  - Afirmá el `status` esperado *además* de la salida (`[ "$status" -eq 0 ]` /
-    el código de error que corresponda). Nunca dejes pasar un test solo porque
-    el comando no abortó.
-  - Para verificar contenido preferí igualdad o aserciones específicas
-    (`[ "$output" = "..." ]`) antes que `grep`/globs laxos que matchean de más;
-    si usás `[[ "$output" == *"x"* ]]`, que el patrón sea único y significativo.
-  - Verificá el **efecto real** sobre el estado de git (ramas/refs/config/working
-    tree), no solo el texto impreso.
-  - Para los casos de error, afirmá el exit code *y* el mensaje en `stderr`, y
-    confirmá que el efecto colateral NO ocurrió.
-  - Nada de tests tautológicos (que pasan pase lo que pase) ni asserts comentados.
-  - **Nombres de `@test` en ASCII puro.** Nada de em dashes (`—`), acentos ni
-    otros caracteres no-ASCII en el texto del nombre. bats convierte cada nombre
-    en un nombre de función shell escapando byte por byte, y el bats de Windows
-    en CI trastabilla con los bytes UTF-8 → `unknown test name '...\342-80-94...'`
-    (pasa en Linux/macOS, rompe en Windows). El cuerpo del test puede tener lo
-    que sea; es solo el nombre el que se vuelve nombre de función.
+    - Afirmá el `status` esperado *además* de la salida (`[ "$status" -eq 0 ]` /
+      el código de error que corresponda). Nunca dejes pasar un test solo porque
+      el comando no abortó.
+    - Para verificar contenido preferí igualdad o aserciones específicas
+      (`[ "$output" = "..." ]`) antes que `grep`/globs laxos que matchean de más;
+      si usás `[[ "$output" == *"x"* ]]`, que el patrón sea único y significativo.
+    - Verificá el **efecto real** sobre el estado de git (ramas/refs/config/working
+      tree), no solo el texto impreso.
+    - Para los casos de error, afirmá el exit code *y* el mensaje en `stderr`, y
+      confirmá que el efecto colateral NO ocurrió.
+    - Nada de tests tautológicos (que pasan pase lo que pase) ni asserts comentados.
+    - **Nombres de `@test` en ASCII puro.** Nada de em dashes (`—`), acentos ni
+      otros caracteres no-ASCII en el texto del nombre. bats convierte cada nombre
+      en un nombre de función shell escapando byte por byte, y el bats de Windows
+      en CI trastabilla con los bytes UTF-8 → `unknown test name '...\342-80-94...'`
+      (pasa en Linux/macOS, rompe en Windows). El cuerpo del test puede tener lo
+      que sea; es solo el nombre el que se vuelve nombre de función.
 
 ## Release
 

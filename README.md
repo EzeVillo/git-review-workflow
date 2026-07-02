@@ -222,22 +222,22 @@ git config --global http.sslBackend openssl
 Every command is a verb under `git review`. Run `git review -h` for the list, or
 `git review <verb> -h` for one verb's details.
 
-| Command                                                                                                  | What it does                                                                                                                                                                |
-|----------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `git review [-h \| --version]`                                                                           | List all verbs or print the installed version.                                                                                                                              |
-| `git review start [<branch>] [<base> \| --base <base> \| --delta \| --from <commit>] [--step] [--local]` | Fetch `origin`, then stage the PR diff on a new `review/<branch>` branch (omit `<branch>` to review the current branch; `--local` reviews local branches without fetching). |
-| `git review compare <a> <b> [--step]`                                                                    | Stage the diff between two commit-ish (tags, commits, branches) read-only, to read or walk it. `git review finish` refuses — there is nothing to write back.                |
-| `git review next` / `git review prev`                                                                    | Move a `--step` review to the next / previous commit.                                                                                                                       |
-| `git review status`                                                                                      | Show the state of the review on the current branch.                                                                                                                         |
-| `git review list`                                                                                        | List every review in progress and every saved one (current branch marked `*`).                                                                                              |
-| `git review save`                                                                                        | Pause the current review as `review-saved/<branch>` and return to where you started.                                                                                        |
-| `git review continue [branch]`                                                                           | Resume a review saved with `git review save`.                                                                                                                               |
-| `git review finish [--onto-source] [--resume \| --abort [--force]]`                                      | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch); `--abort` undoes the last finish.                                             |
-| `git review preview [--stat]`                                                                            | Show the edits you have made so far — the diff `finish` would extract — without committing or switching branch.                                                             |
-| `git review abort`                                                                                       | Cancel the current review and return to where you started.                                                                                                                  |
-| `git review clean [branch]`                                                                              | Delete the `review/*` and `review-fixes/*` branches for `<branch>`, or all of them.                                                                                         |
-| `git review forget --delta (<branch> \| --all \| --stale [--dry-run])`                                   | Discard the `--delta` marker for one branch, all of them, or only stale ones.                                                                                               |
-| `git review forget --saved (<branch> \| --all) [--dry-run]`                                              | Discard a review saved with `git review save`.                                                                                                                              |
+| Command                                                                                                               | What it does                                                                                                                                                                                                                                                  |
+|-----------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `git review [-h \| --version]`                                                                                        | List all verbs or print the installed version.                                                                                                                                                                                                                |
+| `git review start [<branch>] [<base> \| --base <base> \| --delta \| --from <commit>] [--step] [--local \| --offline]` | Fetch `origin`, then stage the PR diff on a new `review/<branch>` branch (omit `<branch>` to review the current branch; `--local` reviews your local branch but still diffs against origin's base; `--offline` also skips fetching and uses your local base). |
+| `git review compare <a> <b> [--step]`                                                                                 | Stage the diff between two commit-ish (tags, commits, branches) read-only, to read or walk it. `git review finish` refuses — there is nothing to write back.                                                                                                  |
+| `git review next` / `git review prev`                                                                                 | Move a `--step` review to the next / previous commit.                                                                                                                                                                                                         |
+| `git review status`                                                                                                   | Show the state of the review on the current branch.                                                                                                                                                                                                           |
+| `git review list`                                                                                                     | List every review in progress and every saved one (current branch marked `*`).                                                                                                                                                                                |
+| `git review save`                                                                                                     | Pause the current review as `review-saved/<branch>` and return to where you started.                                                                                                                                                                          |
+| `git review continue [branch]`                                                                                        | Resume a review saved with `git review save`.                                                                                                                                                                                                                 |
+| `git review finish [--onto-source] [--resume \| --abort [--force]]`                                                   | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch); `--abort` undoes the last finish.                                                                                                                               |
+| `git review preview [--stat]`                                                                                         | Show the edits you have made so far — the diff `finish` would extract — without committing or switching branch.                                                                                                                                               |
+| `git review abort`                                                                                                    | Cancel the current review and return to where you started.                                                                                                                                                                                                    |
+| `git review clean [branch]`                                                                                           | Delete the `review/*` and `review-fixes/*` branches for `<branch>`, or all of them.                                                                                                                                                                           |
+| `git review forget --delta (<branch> \| --all \| --stale [--dry-run])`                                                | Discard the `--delta` marker for one branch, all of them, or only stale ones.                                                                                                                                                                                 |
+| `git review forget --saved (<branch> \| --all) [--dry-run]`                                                           | Discard a review saved with `git review save`.                                                                                                                                                                                                                |
 
 ### `git review start`
 
@@ -276,16 +276,22 @@ Has two independent axes — **range** (where the review starts) and **layout**
   `git review next` to bank your edits and move to the next commit with a clean
   tree. When the commits run out, run `git review finish` and all your banked
   edits are replayed onto the PR tip — exactly as in a whole-PR review.
-- `--local` — review your **local** branches directly, without fetching. The
-  review is built from your local `<branch>` and diffed against your local base,
-  so it works offline and lets you review your own work before pushing. It keeps
-  its own `--delta` marker, separate from the remote one, so local and remote
-  reviews of the same branch name never overwrite each other's progress.
+- `--local` — review your **local** `<branch>`, including unpushed commits,
+  instead of `origin`'s copy. The base is a different concern — it's the shared
+  merge target — so it is still fetched and diffed from `origin`'s copy even
+  under `--local`; only your local branch changes. Lets you review your own
+  work before pushing. It keeps its own `--delta` marker, separate from the
+  remote one, so local and remote reviews of the same branch name never
+  overwrite each other's progress.
+- `--offline` — like `--local`, but also skips fetching entirely and resolves
+  the base from your local branches too, for the rare case where you have no
+  network access at all. Implies `--local`.
 - Always updates from `origin` first and **fails** if it cannot (unless
-  `--local`). The review is built from `origin/<branch>`, never a stale local
-  copy. If a local branch of the same name points somewhere else, it prints a
-  note: the review reflects the remote, not your checkout, and a later
-  `git review finish --onto-source` would refuse until your local branch matches.
+  `--offline`). Without `--local`/`--offline` the review is built from
+  `origin/<branch>`, never a stale local copy. If a local branch of the same
+  name points somewhere else, it prints a note: the review reflects the remote,
+  not your checkout, and a later `git review finish --onto-source` would refuse
+  until your local branch matches.
 - Refuses to run if you have local changes — start from a clean branch.
 - **Merges of the base branch are excluded.** If the author merged the base
   (e.g. `develop`) into the PR, that merged-in content is left out of the review
@@ -455,8 +461,9 @@ point the workflow at that remote:
 git config reviewworkflow.remote upstream
 ```
 
-It affects `git review start` and `git review forget --delta --stale`. A
-`--local` review ignores the remote entirely.
+It affects `git review start` and `git review forget --delta --stale`. An
+`--offline` review ignores the remote entirely; `--local` still uses it to
+resolve the base.
 
 ### Per-repository by design
 
@@ -516,8 +523,11 @@ git review start feature/login v1.0
 # Compare two releases read-only:
 git review compare v1.0 v2.0
 
-# Review your own local branch before pushing, offline:
+# Review your own local branch before pushing, still against origin's base:
 git review start feature/login --local
+
+# Same, but with no network access at all:
+git review start feature/login --offline
 ```
 
 ## Requirements

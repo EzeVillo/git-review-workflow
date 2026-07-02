@@ -1,9 +1,17 @@
 #!/usr/bin/env bats
 #
-# Tests for git review start --local: review your local branches directly, without
-# fetching. The local tip is deliberately kept ahead of the remote one (an extra
-# unpushed commit) so a local review and a remote review of the same branch name
-# see different things — and must never overwrite each other's --delta progress.
+# Tests for git review start --local and --offline.
+#
+# --local reviews your local <branch> (including unpushed commits) instead of
+# origin's copy, but still fetches and still diffs against origin's base — the
+# base is the shared merge target, so it should stay authoritative even when
+# you are reviewing your own unpushed work. --offline additionally skips the
+# fetch and resolves the base from your local branches too, for the rare fully
+# disconnected case.
+#
+# The local tip is deliberately kept ahead of the remote one (an extra unpushed
+# commit) so a local review and a remote review of the same branch name see
+# different things — and must never overwrite each other's --delta progress.
 
 setup() {
 	TMP="$(mktemp -d)"
@@ -56,18 +64,46 @@ teardown() {
 	[[ "$output" == *"b.txt"* ]]
 }
 
-@test "--local does not fetch; works with an unreachable remote" {
+@test "--local still fetches for the base; fails clearly with an unreachable remote" {
 	git remote set-url origin "$TMP/does-not-exist.git"
 	run git review start feature/x --local
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"could not update from origin"* ]]
+	run git rev-parse --verify --quiet refs/heads/review/feature/x
+	[ "$status" -ne 0 ]
+}
+
+@test "--offline does not fetch; works with an unreachable remote" {
+	git remote set-url origin "$TMP/does-not-exist.git"
+	run git review start feature/x --offline
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
 }
 
-@test "--local names the local base, not the remote, in the range message" {
+@test "--local names origin's base, not the local one, in the range message" {
+	# The base is the shared merge target, so --local alone still diffs against
+	# origin/develop, not your possibly-stale local develop.
 	run git review start feature/x --local
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"vs origin/develop"* ]]
+}
+
+@test "--offline names the local base, not the remote, in the range message" {
+	run git review start feature/x --offline
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"vs develop"* ]]
 	[[ "$output" != *"origin/"* ]]
+}
+
+@test "--local still resolves the base from origin even when the local base branch is gone" {
+	# The whole point of splitting --local from --offline: dropping your local
+	# develop must not stop a --local review, because the base never came from
+	# the local branch in the first place.
+	git switch --quiet feature/x
+	git branch -D develop
+	run git review start feature/x --local
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"vs origin/develop"* ]]
 }
 
 @test "--local records a separate marker that does not collide with the remote one" {
@@ -233,12 +269,13 @@ teardown() {
 	[[ "$output" == *"+FIXA"* ]]
 }
 
-@test "--local fails clearly when the local base branch is missing" {
-	# Drop the local base branch so --local has nothing to diff against; the
-	# remote-tracking origin/develop must not be used as a fallback.
+@test "--offline fails clearly when the local base branch is missing" {
+	# Drop the local base branch so --offline has nothing to diff against; the
+	# remote-tracking origin/develop must not be used as a fallback (that is
+	# exactly what --offline promises to avoid).
 	git switch --quiet feature/x
 	git branch -D develop
-	run git review start feature/x --local
+	run git review start feature/x --offline
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"develop not found"* ]]
 	# It failed before creating the review branch.

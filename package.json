@@ -1,7 +1,7 @@
 {
   "name": "git-review-workflow",
-  "version": "0.1.1",
-  "description": "Git commands to review a pull request branch locally as one staged diff",
+  "version": "0.1.2",
+  "description": "Git commands to review a pull request branch locally as one staged diff - great for auditing AI-generated PRs and fixing code smells",
   "keywords": [
     "git",
     "git-subcommand",
@@ -10,10 +10,23 @@
     "pull-request",
     "pr",
     "merge-request",
+    "mr",
     "git-review",
     "diff",
     "cli",
-    "workflow"
+    "workflow",
+    "commit",
+    "push",
+    "changes",
+    "staged",
+    "github",
+    "gitlab",
+    "ai",
+    "ai-code-review",
+    "generative-ai",
+    "llm",
+    "code-smells",
+    "vibe-coding"
   ],
   "homepage": "https://github.com/EzeVillo/git-review-workflow#readme",
   "bugs": {

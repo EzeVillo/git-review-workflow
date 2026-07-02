@@ -23,6 +23,11 @@ editor — leés el diff, lo editás inline, corrés los tests — y cuando term
 (o directo sobre la rama del PR), manteniéndolas limpiamente aparte del trabajo
 del autor. Re-revisá solo los commits nuevos tras una actualización con `--delta`.
 
+Esto es especialmente útil para **PRs generados por agentes de IA**: traés todo
+el cambio a tu working tree, lo corrés de verdad y corregís inline los code smells
+y los errores sutiles — y después dejás que `git review finish` te devuelva tus
+correcciones como una rama limpia y aparte.
+
 > **Todos los comandos viven bajo `git review <verbo>`** — `git review start`,
 > `git review finish`, `git review status`, etc., como `git bisect` y `git stash`
 > agrupan sus verbos.

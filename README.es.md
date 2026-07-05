@@ -382,6 +382,11 @@ git review walkthrough build    # valida, ordena por tus números y renumera 1..
   el conjunto de paths tiene que coincidir exactamente con los archivos cambiados
   del PR (excluyendo `.review/`).
 
+El walkthrough se arma sobre **historia commiteada** (`base..HEAD`), no sobre el
+working tree: commiteá los cambios del PR antes de autorearlo. `init` y `build`
+no ven lo que está sin commitear — se niegan con una pista si no hay nada
+commiteado, y avisan si hay cambios sin commitear al costado.
+
 El formato del archivo que `build` produce y `start` lee:
 
 ```markdown

@@ -110,6 +110,26 @@ git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
+# Uncommitted changes to non-sidecar paths. init and build derive their file set
+# from committed history (base..HEAD), so working-tree edits the author has not
+# committed are invisible here; annotating them would be annotating incomplete
+# work. The walkthrough itself is expected to be dirty while you author it, so
+# anything under .review/ is ignored (mirrors range_files excluding it). Purely a
+# diagnostic — the sole use is to enrich a refusal or emit a note.
+has_uncommitted() {
+	# True when porcelain has any line for a path outside .review/ (grep -qv exits 0
+	# as soon as one non-.review line exists; 1 on a clean or sidecar-only tree).
+	git status --porcelain 2>/dev/null | grep -qv '\.review/'
+}
+
+# Emit a non-fatal heads-up when the working tree carries uncommitted reviewable
+# changes, so an author (often an AI agent) does not silently build a walkthrough
+# over work that never made it into base..HEAD.
+warn_dirty() {
+	has_uncommitted || return 0
+	echo "note: you have uncommitted changes; init and build cover committed history (base..HEAD), so uncommitted edits are invisible here. Commit the PR first; never push automatically." >&2
+}
+
 # Resolve the review range exactly as a reviewer's git review start would: HEAD is
 # the PR tip (you author on the PR branch), the lower bound is the fold-adjusted
 # merge-base with the base. Sharing fold_lower guarantees init lists — and build
@@ -136,7 +156,15 @@ fi
 [ -n "$baseref" ] || die "base $base not found"
 
 mb="$(git merge-base "$baseref" "$tip")" || die "could not compute merge-base with $base"
-[ "$mb" != "$tip" ] || die "no changes vs $base; nothing to walk through"
+if [ "$mb" = "$tip" ]; then
+	# Nothing committed vs the base. If the tree is dirty, the author almost
+	# certainly has the PR changes staged/unstaged rather than committed — say so,
+	# because "no changes vs base" is baffling when your diff is sitting right there.
+	if has_uncommitted; then
+		die "no committed changes vs $base, but you have uncommitted changes; commit the PR first (do not push on the user's behalf). The walkthrough is built from committed history (base..HEAD)"
+	fi
+	die "no changes vs $base; nothing to walk through"
+fi
 lower="$(fold_lower "$mb" "$baseref" "$tip")"
 
 toplevel="$(git rev-parse --show-toplevel)"
@@ -172,6 +200,10 @@ if [ "$sub" = init ]; then
 		printf '         included) and write a plain-text note on what to look at and\n'
 		printf '         why in its place. Leaving the comment there, even with text\n'
 		printf '         inside it, counts as unfilled and build will reject it.\n\n'
+		printf '     Note: this walkthrough is built from committed history (base..HEAD).\n'
+		printf '     Commit the PR before authoring it -- with uncommitted changes you\n'
+		printf '     may be annotating incomplete work, and build will not see those\n'
+		printf '     files. Commit them first; never push automatically.\n\n'
 		printf '     Then validate and write with:  git review walkthrough build -->\n\n'
 		printf '%s\n' "$files" | while IFS= read -r f; do
 			[ -n "$f" ] || continue
@@ -183,6 +215,7 @@ if [ "$sub" = init ]; then
 
 	n="$(printf '%s\n' "$files" | grep -c .)"
 	echo "wrote $wtrel with $n file(s); fill in the order and why, then run git review walkthrough build"
+	warn_dirty
 	exit 0
 fi
 
@@ -223,6 +256,7 @@ if [ -n "$missing" ] || [ -n "$extra" ]; then
 		echo "error: changed in the PR but missing from the walkthrough: $(printf '%s' "$missing" | tr '\n' ' ')" >&2
 	[ -n "$extra" ] &&
 		echo "error: in the walkthrough but not changed in the PR: $(printf '%s' "$extra" | tr '\n' ' ')" >&2
+	warn_dirty
 	exit 1
 fi
 
@@ -230,6 +264,7 @@ count="$(printf '%s\n' "$entries" | grep -c .)"
 
 if [ "$check" -eq 1 ]; then
 	echo "walkthrough ok: $count entr$([ "$count" -eq 1 ] && echo y || echo ies), in sync with the PR"
+	warn_dirty
 	exit 0
 fi
 
@@ -261,3 +296,4 @@ tmp="$wtpath.tmp.$$"
 mv "$tmp" "$wtpath"
 
 echo "built $wtrel: $count entr$([ "$count" -eq 1 ] && echo y || echo ies), ordered and renumbered"
+warn_dirty

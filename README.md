@@ -372,6 +372,11 @@ git review walkthrough build    # validate, order by your numbers, renumber 1..N
   placeholder is left, if a path appears twice, or on **drift**: the set of paths
   must match the PR's changed files exactly (excluding `.review/`).
 
+The walkthrough is built from **committed history** (`base..HEAD`), not your
+working tree: commit the PR changes before authoring it. `init` and `build` never
+see uncommitted work — they refuse with a hint when nothing is committed, and warn
+when you have uncommitted changes on the side.
+
 The file format `build` produces and `start` reads:
 
 ```markdown

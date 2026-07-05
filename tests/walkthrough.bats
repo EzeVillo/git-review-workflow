@@ -243,3 +243,75 @@ EOF
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"only"* ]]
 }
+
+# ── uncommitted-changes diagnostics ─────────────────────────────────────────────
+
+@test "init refuses with a commit hint when the PR changes are only uncommitted" {
+	# A branch sitting on the base commit, its changes only in the working tree.
+	git switch --quiet -c p develop
+	printf 'a1\nlocal\n' >a.txt
+	run git review walkthrough init
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"uncommitted changes"* ]]
+	[[ "$output" == *"commit the PR first"* ]]
+	# It refused before writing anything.
+	[ ! -f .review/walkthrough.md ]
+}
+
+@test "init on a branch at base with a clean tree keeps the plain no-changes error" {
+	# No uncommitted work: the original message stands, no commit hint.
+	git switch --quiet -c p develop
+	run git review walkthrough init
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"nothing to walk through"* ]]
+	[[ "$output" != *"uncommitted changes"* ]]
+}
+
+@test "init warns about uncommitted changes but still writes the skeleton" {
+	# feature/x already carries committed PR changes; add an uncommitted one too.
+	printf 'a1\na2\nlocal\n' >a.txt
+	run git review walkthrough init
+	[ "$status" -eq 0 ]
+	[ -f .review/walkthrough.md ]
+	# The three committed files are listed and the note fired.
+	run grep -c '^## ?\. ' .review/walkthrough.md
+	[ "$output" = "3" ]
+}
+
+@test "init warning names uncommitted changes on stderr" {
+	printf 'a1\na2\nlocal\n' >a.txt
+	run git review walkthrough init
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"uncommitted changes"* ]]
+}
+
+@test "build refuses with a commit hint when the PR changes are only uncommitted" {
+	# The merge-base guard fires before the walkthrough is even read.
+	git switch --quiet -c p develop
+	printf 'a1\nlocal\n' >a.txt
+	mkdir -p .review
+	printf '# Walkthrough\n\n## 1. a.txt\nwhy\n' >.review/walkthrough.md
+	run git review walkthrough build
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"uncommitted changes"* ]]
+	[[ "$output" == *"commit the PR first"* ]]
+}
+
+@test "build warns about uncommitted changes but still builds the file" {
+	mkdir -p .review
+	write_unordered
+	# An uncommitted edit to an already-committed reviewable file: no drift, warn only.
+	printf 'a1\na2\nlocal\n' >a.txt
+	run git review walkthrough build
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"uncommitted changes"* ]]
+	expected="$(printf '# Walkthrough\n\n## 1. src/c.txt\nwhy c\n\n## 2. a.txt\nwhy a\n\n## 3. b.txt\nwhy b\n\n')"
+	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+}
+
+@test "editing only the sidecar does not count as an uncommitted change" {
+	# A dirty .review/walkthrough.md is normal while authoring: no warning.
+	run git review walkthrough init
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"uncommitted changes"* ]]
+}

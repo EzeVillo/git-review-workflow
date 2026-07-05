@@ -115,6 +115,12 @@ repo, no en archivos del working tree:
   los comandos en sí son POSIX.
 - **`sed` multiplataforma:** GNU y BSD difieren en `-i`; hacé las ediciones
   in-place a través de un archivo temporal (ver `sed_i` en `bump-version.sh`).
+- **Nada de `A && B || C` como if-then-else.** shellcheck lo marca con SC2015
+  (falla en Ubuntu y Windows en CI) porque `C` también corre si `B` falla, no
+  solo si `A` es falso. Para guardas de validación usá un `if` explícito con la
+  condición invertida: `if [ $# -eq 0 ] || [ -z "$1" ]; then die "..."; fi` en
+  vez de `[ $# -gt 0 ] && [ -n "$1" ] || die "..."`. El idiom `A || C` a secas
+  (sin `&&`) sí está permitido — no dispara SC2015.
 - **Tests con asserts fuertes, sin falsos positivos.** Cada `@test` de bats debe
   fallar de verdad cuando el comportamiento se rompe. En concreto:
     - Afirmá el `status` esperado *además* de la salida (`[ "$status" -eq 0 ]` /

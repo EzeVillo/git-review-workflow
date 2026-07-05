@@ -2,7 +2,9 @@
 
 > Review a pull request by **editing and running** it, not just reading it. The
 > whole PR lands in your working tree as one staged diff; your fixes are then
-> extracted onto a clean branch automatically. Re-review only what changed.
+> extracted onto a clean branch automatically. Re-review only what changed. If
+> the PR ships an author-curated **walkthrough**, you're guided through it file
+> by file, in the order — and for the reasons — the author chose.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/tag/EzeVillo/git-review-workflow?label=release&sort=semver)](https://github.com/EzeVillo/git-review-workflow/releases)
@@ -33,17 +35,29 @@ as a clean, separate branch.
 
 ## Why not just use my IDE's PR view?
 
-Most tools let you *see* a PR. The gap this fills is *acting* on one — editing
+Most tools let you *see* a PR. Two gaps this fills: *acting* on one — editing
 and running it like ordinary working-tree changes, then handing your fixes back
-without manual stashing or cherry-picking.
+without manual stashing or cherry-picking — and giving it a **guided reading
+order**, something neither git nor GitHub offers natively.
 
-|                                 |    View the PR    | Edit & run as working tree | Auto-extract your fixes | Incremental re-review (`--delta`) | Editor-agnostic |
-|---------------------------------|:-----------------:|:--------------------------:|:-----------------------:|:---------------------------------:|:---------------:|
-| **git-review-workflow**         |         ✅         |             ✅              |            ✅            |                 ✅                 |        ✅        |
-| `gh pr checkout` / `glab`       | ⚠️ plain checkout |             ✅              |            ❌            |                 ❌                 |        ✅        |
-| JetBrains *Review Pull Request* |         ✅         |       ⚠️ in-IDE only       |            ❌            |                 ❌                 |        ❌        |
-| VS Code *GitHub PR* extension   |         ✅         |       ⚠️ in-IDE only       |            ❌            |                 ❌                 |        ❌        |
-| GitHub / GitLab web UI          |         ✅         |             ❌              |            ❌            |            ⚠️ partial             |        ✅        |
+|                                 |    View the PR    | Curated order + why, per file | Edit & run as working tree | Auto-extract your fixes | Incremental re-review (`--delta`) | Editor-agnostic |
+|---------------------------------|:-----------------:|:-----------------------------:|:--------------------------:|:-----------------------:|:---------------------------------:|:---------------:|
+| **git-review-workflow**         |         ✅         |               ✅               |             ✅              |            ✅            |                 ✅                 |        ✅        |
+| `gh pr checkout` / `glab`       | ⚠️ plain checkout |               ❌               |             ✅              |            ❌            |                 ❌                 |        ✅        |
+| JetBrains *Review Pull Request* |         ✅         |               ❌               |       ⚠️ in-IDE only       |            ❌            |                 ❌                 |        ❌        |
+| VS Code *GitHub PR* extension   |         ✅         |               ❌               |       ⚠️ in-IDE only       |            ❌            |                 ❌                 |        ❌        |
+| GitHub / GitLab web UI          |         ✅         |               ❌               |             ❌              |            ❌            |            ⚠️ partial             |        ✅        |
+
+None of the alternatives above give you an **author-curated reading order** —
+which file to read first, and why — instead of an alphabetical file list or a
+bare diff. The author (often an AI coding agent) writes it once, with
+`git review walkthrough init`/`build`, and commits it alongside the PR; a
+reviewer needs to do nothing special — `git review start` picks it up on its
+own and drops them straight into that order, moving through it with
+`git review next`/`prev`. See [`git review walkthrough`](#git-review-walkthrough)
+for the full author-and-reviewer flow. You don't even need the author or your
+team on board to benefit from it — see [Typical workflow](#typical-workflow)
+for how to generate your own, just for one review.
 
 Because the PR is just staged changes, anything that reads a Git diff sees all
 of it — including AI coding agents like Claude Code or Codex that have no
@@ -77,15 +91,21 @@ git review finish              # extract your edits onto review-fixes/feature/lo
 
 Prefer Homebrew, a native Windows (PowerShell) installer, or an install that
 does not need Node? See [Installation](#installation). For the full flow —
-re-reviewing updates, walking a PR commit by commit, cleanup — see
-[Typical workflow](#typical-workflow).
+re-reviewing updates, walking a PR via a curated walkthrough or commit by
+commit, cleanup — see [Typical workflow](#typical-workflow).
 
 ## Installation
 
 These commands plug into `git` as a single subcommand — you run them as
-`git review start`, `git review finish`, and so on. Pick whichever method matches
-your setup. The package-manager options are the easiest and **set up your `PATH`
-for you**.
+`git review start`, `git review finish`, and so on. The [Quick start](#quick-start)
+above already covers the npm install; expand below for Homebrew, the native
+Windows installer, or a no-Node option.
+
+<details>
+<summary>Installation methods (npm, Homebrew, Windows, one-line, PATH, tab completion)</summary>
+
+Pick whichever method matches your setup. The package-manager options are the
+easiest and **set up your `PATH` for you**.
 
 ### npm (recommended)
 
@@ -218,6 +238,8 @@ git config --global http.sslBackend openssl
 
 </details>
 
+</details>
+
 ## Commands
 
 > **How to read the syntax:** `<x>` is **required**, `[x]` is **optional**, and
@@ -244,7 +266,8 @@ Every command is a verb under `git review`. Run `git review -h` for the list, or
 | `git review forget --delta (<branch> \| --all \| --stale [--dry-run])`                                                             | Discard the `--delta` marker for one branch, all of them, or only stale ones.                                                                                                                                                                                                                                   |
 | `git review forget --saved (<branch> \| --all) [--dry-run]`                                                                        | Discard a review saved with `git review save`.                                                                                                                                                                                                                                                                  |
 
-### `git review start`
+<details>
+<summary id="git-review-start"><code>git review start</code></summary>
 
 Has two independent axes — **range** (where the review starts) and **layout**
 (`--step` or not), which compose freely.
@@ -321,7 +344,10 @@ Has two independent axes — **range** (where the review starts) and **layout**
   treated as a positional argument, so a branch whose name starts with `-` can
   still be reviewed (e.g. `git review start -- --weird develop`).
 
-### `git review compare`
+</details>
+
+<details>
+<summary><code>git review compare</code></summary>
 
 Stage the diff between two commit-ish — two tags, two commits, two branches — as
 one read-only review, so you can read it inline or walk it commit by commit with
@@ -344,7 +370,10 @@ git review compare v1.0 v2.0 --step   # ...and walk it commit by commit
 - If `<b>`'s tree carries a walkthrough, `compare` enters walk mode too, just like
   `git review start`, and stays read-only. `--no-walk` opts out.
 
-### `git review walkthrough`
+</details>
+
+<details>
+<summary id="git-review-walkthrough"><code>git review walkthrough</code></summary>
 
 The one thing neither git nor GitHub offers: an **author-written reading order**
 over a PR. As the author (often an AI coding agent), you curate the order in which
@@ -373,6 +402,15 @@ git review walkthrough build    # validate, order by your numbers, renumber 1..N
   placeholder is left, if a path appears twice, or on **drift**: the set of paths
   must match the PR's changed files exactly (excluding `.review/`).
 
+Filling in the order and the whys is a great fit for an AI coding agent — point
+one at the diff and let it write the placeholders. That works on either side:
+the PR's author can have an agent draft the walkthrough alongside the change,
+and it may be **even more useful on the reviewer's side** — a human reviewer
+would need to already understand the PR to hand-curate a reading order for it,
+which defeats the purpose, whereas an agent that reads the whole diff can write
+that order *before* you've read a single file (see the solo-review case in
+[Typical workflow](#typical-workflow)).
+
 The walkthrough is built from **committed history** (`base..HEAD`), not your
 working tree: commit the PR changes before authoring it. `init` and `build` never
 see uncommitted work — they refuse with a hint when nothing is committed, and warn
@@ -396,7 +434,10 @@ Each entry is a `## <N>. <path>` line (the path exactly as `git diff --name-only
 prints it) followed by its free-text *why*, up to the next entry. Granularity is
 per file in v1.
 
-### `git review next` / `git review prev`
+</details>
+
+<details>
+<summary><code>git review next</code> / <code>git review prev</code></summary>
 
 Move a `--step` or walkthrough review forward or backward. In `--step` mode each
 move banks the current commit's edits and restores any edits banked on the commit
@@ -404,20 +445,29 @@ you move to, so you can walk back and forth without losing work. In walk mode th
 just move the reading cursor — your edits live in the working tree the whole time
 and are never touched.
 
-### `git review status`
+</details>
+
+<details>
+<summary><code>git review status</code></summary>
 
 Shows the current review: source PR, mode, and — in `--step` mode — which commit
 you are on (`[k/N]`) and which steps have banked edits. In walk mode it shows the
 reading cursor: `walk  [k/N] on <path>`.
 
-### `git review list`
+</details>
+
+<details>
+<summary><code>git review list</code></summary>
 
 Shows *every* `review/*` branch in progress at once (with its source PR, mode and
 `[k/N]` position for `--step` and walk reviews). Reviews paused with
 `git review save` are listed too, under `saved`. The branch you are currently on
 is marked with a `*`.
 
-### `git review save` / `git review continue`
+</details>
+
+<details>
+<summary><code>git review save</code> / <code>git review continue</code></summary>
 
 `git review save` lets you put a review aside and pick it up later. It turns the
 current `review/<branch>` into `review-saved/<branch>` and returns you to the
@@ -442,7 +492,10 @@ Starting a fresh `git review start` on a branch that already has a saved review
 is refused, so you do not silently lose the paused one — resume it or discard it
 with `git review forget --saved` first.
 
-### `git review finish`
+</details>
+
+<details>
+<summary><code>git review finish</code></summary>
 
 - Default — create `review-fixes/<branch>` on top of the PR tip with your edits
   staged, so you can review and commit them yourself.
@@ -459,7 +512,10 @@ with `git review forget --saved` first.
 - Refuses on a read-only `git review compare` — there is no writable branch to
   write your edits back to.
 
-### `git review preview`
+</details>
+
+<details>
+<summary><code>git review preview</code></summary>
 
 Shows the edits you have made so far — the same diff `git review finish` would
 extract, your review edits on top of the PR tip — but it **never commits, never
@@ -473,7 +529,10 @@ right now?".
   tip is the one case that differs: a read-only preview cannot leave you conflict
   markers, so it omits that edit and prints a note pointing you at `finish`.
 
-### `git review abort`
+</details>
+
+<details>
+<summary><code>git review abort</code></summary>
 
 Cancels the current review in one step: it returns you to the branch you started
 from, then deletes the `review/<branch>` branch and its banked edits. Because the
@@ -481,7 +540,10 @@ review was cancelled (not completed), it rolls the `--delta` marker back to your
 last actual review, so a later `--delta` does not skip commits you never
 reviewed.
 
-### `git review clean`
+</details>
+
+<details>
+<summary><code>git review clean</code></summary>
 
 - With no `<branch>`, deletes every `review/*` and `review-fixes/*` branch.
 - Never deletes the branch you are currently on.
@@ -491,7 +553,10 @@ reviewed.
 - Leaves saved reviews (`review-saved/*`) untouched — discard one with
   `git review forget --saved`.
 
-### `git review forget --delta`
+</details>
+
+<details>
+<summary><code>git review forget --delta</code></summary>
 
 Discards the recorded last-reviewed tip that `--delta` relies on. The marker is
 kept deliberately so `--delta` survives `git review clean`; this is how you clear
@@ -507,7 +572,10 @@ it.
 - `--dry-run` — with `--stale`, list what would be forgotten without doing it.
   Rejected with the other modes, where the target is already explicit.
 
-### `git review forget --saved`
+</details>
+
+<details>
+<summary><code>git review forget --saved</code></summary>
 
 Discards a review put aside with `git review save`: deletes
 `review-saved/<branch>`, its banked edits and its metadata. Because a saved review
@@ -518,21 +586,27 @@ actual review, the same way `git review abort` does.
 - `--all` — discard every saved review.
 - `--dry-run` — list what would be discarded without discarding it.
 
+</details>
+
 ## Configuring the base branch
 
 The base branch is where PRs are integrated (`develop`, `main`, `master`, …) and
-varies per team, so there is no default — set it once per repository:
+varies per team, so there is no default — set it once per repository, as shown
+in [Quick start](#quick-start):
 
 ```sh
 git config reviewworkflow.base develop
 ```
+
+<details>
+<summary>Resolution order, and configuring the remote</summary>
 
 Resolution order: positional `base` argument (or `--base <base>`) →
 `reviewworkflow.base`. If neither is set, a full review fails and asks you to
 configure one. The base is any commit-ish — a branch, a tag (`v1.0`) or a
 commit — not only a branch name.
 
-## Configure the remote
+### Configure the remote
 
 By default the commands fetch and push against `origin`. If you review a
 repository you do not own (an `upstream`, with your `origin` as a fork, say),
@@ -569,14 +643,28 @@ If you want a fallback that applies to *all* your repos, set it globally
 (`git config --global reviewworkflow.base main`); a per-repo value overrides it,
 and a positional `base` argument overrides both.
 
+</details>
+
 ## Typical workflow
 
 ```sh
 git config reviewworkflow.base develop      # once per repo
 
-git review start feature/login              # stage the whole PR
-# ...open the repo in your IDE, read the staged diff, edit inline, run tests...
-git review finish                            # extract fixes to review-fixes/feature/login
+# Author side: ship a reading walkthrough with the PR (typically written by
+# an AI agent as the author), curating the order the files should be read in
+# and a why for each:
+git review walkthrough init                  # skeleton of every changed file
+# ...fill in the order and a why for each...
+git review walkthrough build                 # order, renumber and validate
+git add .review/walkthrough.md && git commit # ships with the PR
+
+# Reviewer side: nothing special to run — a PR that carries a walkthrough is
+# picked up automatically:
+git review start feature/login              # stage the PR; walk mode kicks in
+# ...read the first entry and its why, edit inline if you want, run tests...
+git review next                              # move to the next entry
+git review next                              # ...through the rest of the order...
+git review finish                            # extract your edits to review-fixes/feature/login
 git diff --cached && git commit -m "address review comments"
 git review clean feature/login              # tidy up
 
@@ -590,14 +678,6 @@ git review start feature/login --step        # start on the first commit
 git review next                              # bank edits, move to the next commit
 git review next                              # ...until "no more commits"
 git review finish                            # replay all your edits onto the tip
-
-# Author side: ship a reading walkthrough with the PR (typically an AI agent):
-git review walkthrough init                  # skeleton of every changed file
-# ...fill in the order and a why for each...
-git review walkthrough build                 # order, renumber and validate
-git add .review/walkthrough.md && git commit # ships with the PR
-# A reviewer then just runs "git review start feature/login" and is walked
-# through the files in the author's order (git review next / prev).
 
 # Pick an explicit starting commit:
 git review start feature/login --from a1b2c3d
@@ -618,6 +698,29 @@ git review start feature/login --local
 # Same, but with no network access at all:
 git review start feature/login --offline
 ```
+
+<details>
+<summary>No walkthrough on the PR? Generate your own, just for this review</summary>
+
+This is a good place to hand the "fill in the order and the whys" step to an AI
+coding agent rather than doing it by hand: you have not read the PR yet, so
+manually curating a reading order for it is circular — an agent that reads the
+whole diff can write that order for you before you look at a single file.
+
+```sh
+# No team buy-in needed: generate your own walkthrough on any PR you're
+# reviewing, use it, then throw it away:
+git fetch origin feature/login:pr-scratch    # grab the PR under a scratch name
+git switch pr-scratch
+git review walkthrough init && git review walkthrough build
+# ...fill in the order and a why for each (or point an agent at the diff)...
+git add .review/walkthrough.md && git commit  # local only — never push it
+git review start pr-scratch --local           # walks it, same as above
+# ...read, edit, finish or abort as usual...
+git branch -D pr-scratch                      # drop it, walkthrough included
+```
+
+</details>
 
 ## Requirements
 

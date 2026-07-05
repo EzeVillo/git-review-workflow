@@ -11,7 +11,7 @@
 
 **English** · [Español](README.es.md)
 
-[![Watch the demo](https://img.youtube.com/vi/LsSQtNFnjRQ/maxresdefault.jpg)](https://youtu.be/LsSQtNFnjRQ)
+[![Watch the demo](trailer-poster.png)](https://youtu.be/LsSQtNFnjRQ)
 
 ---
 

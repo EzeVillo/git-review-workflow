@@ -12,7 +12,7 @@
 
 [English](README.md) · **Español**
 
-[![Mirá la demo](https://img.youtube.com/vi/LsSQtNFnjRQ/maxresdefault.jpg)](https://youtu.be/LsSQtNFnjRQ)
+[![Mirá la demo](trailer-poster.png)](https://youtu.be/LsSQtNFnjRQ)
 
 ---
 

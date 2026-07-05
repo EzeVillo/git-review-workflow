@@ -291,8 +291,8 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   (`.review/walkthrough.md`, escrito por el autor con
   [`git review walkthrough`](#git-review-walkthrough)), `git review start` entra
   en **modo walk**: la misma review completa staged y editable, más un cursor de
-  lectura curado por encima. Imprime la primera entrada — un archivo, la línea a
-  mirar y la nota del autor sobre por qué importa — y te movés por el orden de
+  lectura curado por encima. Imprime la primera entrada — un archivo y la nota del
+  autor sobre por qué importa — y te movés por el orden de
   lectura con `git review next` / `git review prev`. El cursor es *solo* una
   posición de lectura: nunca stagea, resetea ni esconde nada, así que editás y
   hacés `git review finish` exactamente como en una review completa. Las entradas

@@ -285,8 +285,8 @@ Has two independent axes — **range** (where the review starts) and **layout**
   (`.review/walkthrough.md`, written by the author with
   [`git review walkthrough`](#git-review-walkthrough)), `git review start` enters
   **walk mode**: the very same staged, editable whole-PR review, plus a curated
-  reading cursor over it. It prints the first entry — a file, the line to look at
-  and the author's note on why it matters — and you move through the reading order
+  reading cursor over it. It prints the first entry — a file and the author's note
+  on why it matters — and you move through the reading order
   with `git review next` / `git review prev`. The cursor is *only* a reading
   position: it never stages, resets or hides anything, so you edit and
   `git review finish` exactly as in a whole review. The entries are filtered to

@@ -94,6 +94,9 @@ teardown() {
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"[1/3] src/c.txt"* ]]
 	[[ "$output" == *"read the new helper first"* ]]
+	# The header carries the bare path, no line suffix — clicking it just opens the
+	# file. src/c.txt is added by the PR, which used to render as src/c.txt:1.
+	[[ "$output" != *"src/c.txt:"* ]]
 }
 
 @test "--no-walk ignores the walkthrough and does a plain whole review" {

@@ -331,22 +331,15 @@ load_walk_review_meta() {
 }
 
 # show_walk_entry <k>
-# Print the k-th walkthrough entry: a rule, the "[k/N] <path>:<line>" header, the
-# author's "why" prose, another rule and the prompt. The line is the first hunk of
-# the live diff HEAD..tip for that path (recomputed each call, so it tracks the
-# frozen tip's content); a file the PR deletes shows just the path. Relies on the
-# globals set by load_walk_review_meta (tip, walkcount, walkpaths).
+# Print the k-th walkthrough entry: a rule, the "[k/N] <path>" header, the author's
+# "why" prose, another rule and the prompt. The path carries no line number on
+# purpose — clicking it in an IDE terminal just opens the file at the top; a hunk
+# line only ever pointed at the first change and went stale the moment you edited.
+# Relies on the globals set by load_walk_review_meta (tip, walkcount, walkpaths).
 show_walk_entry() {
 	_swe_path="$(printf '%s\n' "$walkpaths" | sed -n "${1}p")"
-	_swe_line="$(git diff -U0 HEAD "$tip" -- "$_swe_path" 2>/dev/null |
-		sed -n 's/^@@ [^+]*+\([0-9][0-9]*\).*/\1/p' | sed -n '1p')"
-	if [ -n "$_swe_line" ] && [ "$_swe_line" != 0 ]; then
-		_swe_loc="$_swe_path:$_swe_line"
-	else
-		_swe_loc="$_swe_path"
-	fi
 	printf -- '----\n[%s/%s] %s\n%s\n----\nread this file, edit if needed, then run git review next\n' \
-		"$1" "$walkcount" "$_swe_loc" "$(walk_why "$tip" "$_swe_path")"
+		"$1" "$walkcount" "$_swe_path" "$(walk_why "$tip" "$_swe_path")"
 }
 
 # goto_walk_entry <k>

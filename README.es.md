@@ -12,6 +12,8 @@
 
 [English](README.md) · **Español**
 
+[![Mirá la demo](https://img.youtube.com/vi/LsSQtNFnjRQ/maxresdefault.jpg)](https://youtu.be/LsSQtNFnjRQ)
+
 ---
 
 Revisar en una web está bien para dejar comentarios, pero es malo para realmente

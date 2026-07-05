@@ -11,6 +11,8 @@
 
 **English** · [Español](README.es.md)
 
+[![Watch the demo](https://img.youtube.com/vi/LsSQtNFnjRQ/maxresdefault.jpg)](https://youtu.be/LsSQtNFnjRQ)
+
 ---
 
 Reviewing in a web UI is fine for leaving comments, but poor for actually
@@ -424,9 +426,11 @@ The file format `build` produces and `start` reads:
 <free-form intro prose — the parser ignores everything before the first entry>
 
 ## 1. src/auth/session.c
+
 Read this first: it defines the token shape everything else depends on.
 
 ## 2. src/auth/login.c
+
 Then the login flow that consumes it — note the new error path.
 ```
 

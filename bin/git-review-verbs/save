@@ -130,10 +130,11 @@ if [ "$mode" = "step" ]; then
 	copy_meta reviewstep
 	note="on step $step/$count"
 else
-	# whole mode: HEAD is the review's lower bound, the index holds the staged PR
-	# diff and the working tree holds that plus your edits. Capture the working tree
-	# as a commit parented on the tip, so its diff against the tip is exactly your
-	# edits — review-continue replays that to restore the editable state.
+	# whole and walk mode share their captured state: HEAD is the review's lower
+	# bound, the index holds the staged PR diff and the working tree holds that plus
+	# your edits. Capture the working tree as a commit parented on the tip, so its
+	# diff against the tip is exactly your edits — review-continue replays that to
+	# restore the editable state. Walk adds only its reading cursor keys on top.
 	lower="$(git rev-parse HEAD)"
 	git add -A
 	tree="$(git write-tree)"
@@ -144,9 +145,18 @@ else
 	# prune it out from under "git reset --soft $lower".
 	commit="$(git commit-tree "$tree" -p "$tip" -p "$lower" -m "git review save: $src")"
 	git update-ref "refs/heads/$saved" "$commit"
-	git config "branch.$saved.reviewmode" whole
 	git config "branch.$saved.reviewsavedlower" "$lower"
-	note="whole-PR review"
+	if [ "$mode" = "walk" ]; then
+		git config "branch.$saved.reviewmode" walk
+		copy_meta reviewwalkstep
+		copy_meta reviewwalkcount
+		wstep="$(git config "branch.$cur.reviewwalkstep" || echo '?')"
+		wcount="$(git config "branch.$cur.reviewwalkcount" || echo '?')"
+		note="walkthrough review on entry $wstep/$wcount"
+	else
+		git config "branch.$saved.reviewmode" whole
+		note="whole-PR review"
+	fi
 fi
 
 # Metadata common to both modes.

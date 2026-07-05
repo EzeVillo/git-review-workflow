@@ -37,10 +37,28 @@ esac
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
-load_step_review_meta
-
-if [ "$step" -lt "$count" ]; then
-	goto_step "$((step + 1))"
-else
-	echo "no more commits — run git review finish"
-fi
+# Dispatch on the review's layout: a --step review walks commits, a walkthrough
+# review walks a curated file cursor. Anything else (whole, or not a review) falls
+# through to load_step_review_meta, whose diagnostics cover every wrong-state case.
+cur="$(git symbolic-ref --quiet --short HEAD || true)"
+case "$(git config "branch.$cur.reviewmode" || true)" in
+walk)
+	load_walk_review_meta
+	if [ "$walkstep" -lt "$walkcount" ]; then
+		goto_walk_entry "$((walkstep + 1))"
+	else
+		echo "no more entries — run git review finish"
+	fi
+	;;
+step)
+	load_step_review_meta
+	if [ "$step" -lt "$count" ]; then
+		goto_step "$((step + 1))"
+	else
+		echo "no more commits — run git review finish"
+	fi
+	;;
+*)
+	load_step_review_meta
+	;;
+esac

@@ -15,7 +15,7 @@ prog="git review start"
 
 usage() {
 	cat <<EOF
-usage: $prog [<branch>] [<base> | --base <base> | --delta | --from <commit>] [--step] [--local | --offline]
+usage: $prog [<branch>] [<base> | --base <base> | --delta | --from <commit>] [--step | --no-walk] [--local | --offline]
 
 Stage a pull request diff on a review/<branch> branch for inline review.
 With no <branch>, review the branch you currently have checked out.
@@ -29,6 +29,7 @@ With no <branch>, review the branch you currently have checked out.
   --delta           review only the commits added since your last review
   --from <commit>   review only the commits after <commit>
   --step            review one commit at a time; advance with git review next
+  --no-walk         ignore any walkthrough on the PR; review the whole diff
   --local           review your local <branch>, not origin's copy; the base
                     is still fetched and resolved against origin
   --offline         like --local, but also skip fetching and resolve the base
@@ -47,6 +48,7 @@ base_explicit=0
 from=""
 delta=0
 step=0
+no_walk=0
 local_mode=0
 offline_mode=0
 while [ $# -gt 0 ]; do
@@ -57,6 +59,7 @@ while [ $# -gt 0 ]; do
 		;;
 	-d | --delta) delta=1 ;;
 	--step) step=1 ;;
+	--no-walk) no_walk=1 ;;
 	--local) local_mode=1 ;;
 	--offline)
 		local_mode=1
@@ -313,22 +316,26 @@ fi
 # Lower bound for the staged diff. Normally it is the range start, but if the
 # base branch has been merged into the PR, fold that already-merged base content
 # into the lower bound so changes that came from the base do not appear as part
-# of the review. This is a no-op when the base was not merged in (it never
-# invents deletions), and degrades gracefully on git without merge-tree.
-#
-# mb == tip is the degenerate case where base carries no content distinct from
-# tip (reviewing the base branch itself, or a base that already contains all of
-# tip's history) — there is nothing external to fold in, and treating tip as its
-# own "merged base" would collapse the whole diff to nothing.
-lower="$start"
-if [ -n "$baseref" ]; then
-	mb="$(git merge-base "$baseref" "$tip" 2>/dev/null || true)"
-	if [ -n "$mb" ] && [ "$mb" != "$tip" ] && ! git merge-base --is-ancestor "$mb" "$start"; then
-		if ltree="$(git merge-tree --write-tree "$start" "$mb" 2>/dev/null)"; then
-			lower="$(git commit-tree "$ltree" -p "$start" -m 'review lower bound')"
-		else
-			echo "note: could not exclude merged base content from the review diff" >&2
-		fi
+# of the review. fold_lower (shared with git review walkthrough) is a no-op when
+# the base was not merged in, and degrades gracefully on git without merge-tree.
+lower="$(fold_lower "$start" "$baseref" "$tip")"
+
+# Walkthrough auto-detection. When the frozen tip carries a .review/walkthrough.md
+# and the reviewer did not opt out (--no-walk) or into --step, enter walk mode:
+# the same staged, editable whole-PR review, plus a curated reading cursor over
+# it. The sequence is filtered to this review's range, so a stale walkthrough
+# (e.g. under --delta) that no longer intersects the range degrades to a plain
+# whole review with a note — a broken or stale walkthrough never aborts a review.
+walk=0
+walkcount=0
+if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$tip")" && [ -n "$wtcontent" ]; then
+	walkpaths="$(walk_sequence "$tip" "$lower")"
+	# grep -c returns 1 (aborting under set -e in POSIX sh) on an empty sequence.
+	walkcount="$(printf '%s\n' "$walkpaths" | grep -c . || true)"
+	if [ "$walkcount" -ge 1 ]; then
+		walk=1
+	else
+		echo "note: $src has a walkthrough, but none of its entries apply to this review range; reviewing the whole diff"
 	fi
 fi
 
@@ -349,4 +356,27 @@ if [ -n "$returnbranch" ]; then
 	git config "branch.$rb.reviewreturn" "$returnbranch"
 fi
 
-echo "$rb ready ($range) — the staged diff is the PR; edit, then run git review finish"
+if [ "$walk" -eq 1 ]; then
+	git config "branch.$rb.reviewmode" "walk"
+	git config "branch.$rb.reviewwalkstep" "1"
+	git config "branch.$rb.reviewwalkcount" "$walkcount"
+
+	# Files in the review range with no walkthrough entry: the walkthrough may be
+	# stale (typical when re-reviewing with --delta). The review still covers them;
+	# they are just not on the curated reading path, so note them rather than hide it.
+	uncovered="$(git diff --name-only "$lower" "$tip" | grep -v '^\.review/' | while read -r p; do
+		printf '%s\n' "$walkpaths" | grep -Fxq "$p" || printf '%s\n' "$p"
+	done)"
+	if [ -n "$uncovered" ]; then
+		echo "note: file(s) in range not in the walkthrough: $(printf '%s\n' "$uncovered" | tr '\n' ' ')"
+	fi
+
+	echo "$rb ready ($range) — walkthrough: $walkcount entr$([ "$walkcount" -eq 1 ] && echo y || echo ies); read, edit, then run git review next"
+
+	# show_walk_entry needs the walk globals; cur is the branch we just landed on and
+	# HEAD is the lower bound (== the range's HEAD side used for the live diff).
+	cur="$rb"
+	show_walk_entry 1
+else
+	echo "$rb ready ($range) — the staged diff is the PR; edit, then run git review finish"
+fi

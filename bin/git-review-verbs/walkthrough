@@ -1,0 +1,254 @@
+#!/usr/bin/env sh
+#
+# git review walkthrough — author a curated reading order for the current PR.
+#
+# A walkthrough is the one thing neither git nor GitHub offers: an author-written
+# reading order over a PR, each file annotated with why it matters. It lives as a
+# committed sidecar, .review/walkthrough.md, so it merges with the PR and is
+# readable on GitHub. A reviewer who runs "git review start" on a PR that carries
+# one is dropped into walk mode: the same staged, editable review, plus a cursor
+# that walks the files in this order (git review next / prev).
+#
+# Two subcommands, in the git stash push/pop spirit:
+#   init   write a deterministic skeleton listing every changed file, for you (the
+#          author, typically an AI agent) to fill in with an order number and a why.
+#   build  validate what you filled in, order the entries by your numbers, renumber
+#          them 1..N and rewrite the file. --check validates without writing, for CI.
+#
+set -eu
+
+prog="git review walkthrough"
+
+usage() {
+	cat <<EOF
+usage: $prog init [--base <base>] [--force]
+       $prog build [--check]
+
+Author a reading walkthrough for the current branch's PR, committed as
+.review/walkthrough.md.
+
+  init             write a skeleton listing every file changed vs the base
+    --base <base>  diff against <base> instead of reviewworkflow.base
+    --force        overwrite an existing walkthrough
+  build            validate, order by the numbers you set and renumber 1..N
+    --check        validate only; write nothing, exit non-zero on any problem
+EOF
+}
+
+die() {
+	echo "error: $1" >&2
+	exit 1
+}
+
+sub=""
+base=""
+base_explicit=0
+force=0
+check=0
+while [ $# -gt 0 ]; do
+	case "$1" in
+	-h | --h)
+		usage
+		exit 0
+		;;
+	--base)
+		shift
+		[ $# -gt 0 ] && [ -n "$1" ] || die "--base requires a base"
+		base="$1"
+		base_explicit=1
+		;;
+	--base=*)
+		base="${1#--base=}"
+		[ -n "$base" ] || die "--base requires a base"
+		base_explicit=1
+		;;
+	--force) force=1 ;;
+	--check) check=1 ;;
+	--)
+		shift
+		while [ $# -gt 0 ]; do
+			[ -z "$sub" ] || die "unexpected argument $1"
+			sub="$1"
+			shift
+		done
+		break
+		;;
+	-*)
+		echo "error: unknown option $1" >&2
+		usage >&2
+		exit 1
+		;;
+	*)
+		[ -z "$sub" ] || die "unexpected argument $1"
+		sub="$1"
+		;;
+	esac
+	shift
+done
+
+[ -n "$sub" ] || {
+	usage >&2
+	exit 1
+}
+case "$sub" in
+init | build) ;;
+*) die "unknown subcommand '$sub'; use init or build" ;;
+esac
+
+# Flag/subcommand compatibility, checked up front so a misused flag never silently
+# no-ops.
+if [ "$sub" = build ] && { [ "$base_explicit" -eq 1 ] || [ "$force" -eq 1 ]; }; then
+	die "--base and --force apply only to git review walkthrough init"
+fi
+if [ "$sub" = init ] && [ "$check" -eq 1 ]; then
+	die "--check applies only to git review walkthrough build"
+fi
+
+git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
+
+# Shared helpers, sourced from the libexec directory the dispatcher points us at.
+# shellcheck source=../git-review-lib.sh
+. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
+
+# Resolve the review range exactly as a reviewer's git review start would: HEAD is
+# the PR tip (you author on the PR branch), the lower bound is the fold-adjusted
+# merge-base with the base. Sharing fold_lower guarantees init lists — and build
+# validates against — precisely the file set a reviewer will see.
+tip="$(git rev-parse --verify --quiet HEAD)" || die "no HEAD to walk through"
+
+if [ -z "$base" ]; then
+	base="$(git config reviewworkflow.base || true)"
+fi
+[ -n "$base" ] ||
+	die "no base set; pass --base <base> or run: git config reviewworkflow.base <branch>"
+
+# Resolve the base to a commit-ish for the merge-base: prefer the remote's copy,
+# then a local branch, then any commit-ish (tag/SHA), loosely mirroring start.
+remote="$(git config reviewworkflow.remote || echo origin)"
+baseref=""
+if git rev-parse --verify --quiet "refs/remotes/$remote/$base^{commit}" >/dev/null; then
+	baseref="refs/remotes/$remote/$base"
+elif git rev-parse --verify --quiet "refs/heads/$base^{commit}" >/dev/null; then
+	baseref="refs/heads/$base"
+else
+	baseref="$(git rev-parse --verify --quiet "$base^{commit}" || true)"
+fi
+[ -n "$baseref" ] || die "base $base not found"
+
+mb="$(git merge-base "$baseref" "$tip")" || die "could not compute merge-base with $base"
+[ "$mb" != "$tip" ] || die "no changes vs $base; nothing to walk through"
+lower="$(fold_lower "$mb" "$baseref" "$tip")"
+
+toplevel="$(git rev-parse --show-toplevel)"
+wtrel=".review/walkthrough.md"
+wtpath="$toplevel/$wtrel"
+
+# The reviewable file set: everything the PR changes, minus the sidecar directory
+# itself (a walkthrough never annotates .review/).
+range_files() {
+	git diff --name-only "$lower" "$tip" | grep -v '^\.review/' || true
+}
+
+if [ "$sub" = init ]; then
+	if [ -e "$wtpath" ] && [ "$force" -eq 0 ]; then
+		die "$wtrel already exists; pass --force to overwrite"
+	fi
+	files="$(range_files)"
+	[ -n "$files" ] || die "no changed files vs $base to list"
+
+	mkdir -p "$toplevel/.review"
+	tmp="$wtpath.tmp.$$"
+	{
+		printf '# Walkthrough\n\n'
+		printf '<!-- Author the reading order for this PR. For each file below, replace\n'
+		printf '     "?." with its position (1, 2, 3, ...) and the why-comment with a\n'
+		printf '     short note on what to look at and why. Then run:\n'
+		printf '         git review walkthrough build -->\n\n'
+		printf '%s\n' "$files" | while IFS= read -r f; do
+			[ -n "$f" ] || continue
+			printf '## ?. %s\n' "$f"
+			printf '<!-- why: -->\n\n'
+		done
+	} >"$tmp"
+	mv "$tmp" "$wtpath"
+
+	n="$(printf '%s\n' "$files" | grep -c .)"
+	echo "wrote $wtrel with $n file(s); fill in the order and why, then run git review walkthrough build"
+	exit 0
+fi
+
+# ── build ─────────────────────────────────────────────────────────────────────
+[ -e "$wtpath" ] || die "$wtrel not found; run git review walkthrough init first"
+
+content="$(cat "$wtpath")"
+
+# Skeleton placeholders must all be filled: an unnumbered "## ?." entry or a
+# leftover "<!-- why" comment means the author did not finish.
+if printf '%s\n' "$content" | grep -q '^## ?\. '; then
+	die "unfilled entries remain (## ?. ...); give each a number, then rebuild"
+fi
+if printf '%s\n' "$content" | grep -q '<!-- why'; then
+	die "unfilled why-comments remain (<!-- why ...); replace each with prose, then rebuild"
+fi
+
+# Numbered entries, as order<TAB>path in file order.
+entries="$(printf '%s\n' "$content" | walk_parse)"
+[ -n "$entries" ] || die "no entries found; run git review walkthrough init and fill it in"
+
+# No path may appear twice.
+dups="$(printf '%s\n' "$entries" | cut -f2- | LC_ALL=C sort | uniq -d)"
+[ -z "$dups" ] || die "duplicate paths in walkthrough: $(printf '%s' "$dups" | tr '\n' ' ')"
+
+# Drift: the walkthrough's path set must match the PR's changed set exactly. Both
+# sides are sorted into temp files for comm (process substitution is a bashism).
+gd="$(git rev-parse --git-dir)"
+rf="$gd/walkthrough-range.$$"
+ef="$gd/walkthrough-entries.$$"
+trap 'rm -f "$rf" "$ef"' EXIT
+range_files | LC_ALL=C sort >"$rf"
+printf '%s\n' "$entries" | cut -f2- | LC_ALL=C sort >"$ef"
+missing="$(comm -23 "$rf" "$ef")"
+extra="$(comm -13 "$rf" "$ef")"
+if [ -n "$missing" ] || [ -n "$extra" ]; then
+	[ -n "$missing" ] &&
+		echo "error: changed in the PR but missing from the walkthrough: $(printf '%s' "$missing" | tr '\n' ' ')" >&2
+	[ -n "$extra" ] &&
+		echo "error: in the walkthrough but not changed in the PR: $(printf '%s' "$extra" | tr '\n' ' ')" >&2
+	exit 1
+fi
+
+count="$(printf '%s\n' "$entries" | grep -c .)"
+
+if [ "$check" -eq 1 ]; then
+	echo "walkthrough ok: $count entr$([ "$count" -eq 1 ] && echo y || echo ies), in sync with the PR"
+	exit 0
+fi
+
+# Rewrite canonically: a fixed intro, then the entries ordered by the author's
+# number and renumbered 1..N. Each entry's why body is preserved (with its blank
+# lines trimmed so the output is deterministic — byte-for-byte stable across the
+# author's spacing habits). Written via a temp file (the sed_i pattern) so a
+# failure never leaves a half-written walkthrough.
+sorted_paths="$(printf '%s\n' "$entries" | LC_ALL=C sort -k1,1n | cut -f2-)"
+tmp="$wtpath.tmp.$$"
+{
+	printf '# Walkthrough\n\n'
+	i=1
+	printf '%s\n' "$sorted_paths" | while IFS= read -r p; do
+		[ -n "$p" ] || continue
+		printf '## %s. %s\n' "$i" "$p"
+		printf '%s\n' "$content" | walk_body "$p" | awk '
+			{ buf[NR] = $0 }
+			END {
+				s = 1; while (s <= NR && buf[s] ~ /^[ \t]*$/) s++
+				e = NR; while (e >= s && buf[e] ~ /^[ \t]*$/) e--
+				for (k = s; k <= e; k++) print buf[k]
+			}
+		'
+		printf '\n'
+		i=$((i + 1))
+	done
+} >"$tmp"
+mv "$tmp" "$wtpath"
+
+echo "built $wtrel: $count entr$([ "$count" -eq 1 ] && echo y || echo ies), ordered and renumbered"

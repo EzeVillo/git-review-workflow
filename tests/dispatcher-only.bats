@@ -9,7 +9,7 @@
 # installer runs.
 
 # The verbs that live as private libexec, never on PATH as standalone names.
-VERBS="start compare status list preview next prev finish save continue abort clean forget"
+VERBS="start compare walkthrough status list preview next prev finish save continue abort clean forget"
 
 setup() {
 	TMP="$(mktemp -d)"
@@ -44,7 +44,7 @@ teardown() {
 	for v in "$REPO"/bin/git-review-verbs/*; do
 		[ -f "$v" ] && count=$((count + 1))
 	done
-	[ "$count" -ge 13 ]
+	[ "$count" -ge 14 ]
 }
 
 # ── install.sh: only the dispatcher reaches PATH ──────────────────────────────

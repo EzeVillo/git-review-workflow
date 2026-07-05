@@ -14,7 +14,7 @@ prog="git review compare"
 
 usage() {
 	cat <<EOF
-usage: $prog <a> <b> [--step]
+usage: $prog <a> <b> [--step | --no-walk]
 
 Stage the diff between two commit-ish on a review/<b> branch for inline reading.
 This is a read-only review: there is no branch to write back to, so git review
@@ -23,6 +23,7 @@ finish refuses on it.
   <a>        the lower bound (a branch, tag or commit) — what to diff from
   <b>        the upper bound — what to diff to; names the review branch
   --step     read one commit at a time; advance with git review next
+  --no-walk  ignore any walkthrough on <b>; read the whole diff
 EOF
 }
 
@@ -36,6 +37,7 @@ b=""
 have_a=0
 have_b=0
 step=0
+no_walk=0
 # Collect the two positional commit-ish; mirror start's parser, including -- as the
 # end-of-options separator so a commit-ish that starts with "-" stays positional.
 add_positional() {
@@ -56,6 +58,7 @@ while [ $# -gt 0 ]; do
 		exit 0
 		;;
 	--step) step=1 ;;
+	--no-walk) no_walk=1 ;;
 	--)
 		shift
 		while [ $# -gt 0 ]; do
@@ -142,6 +145,23 @@ if [ "$step" -eq 1 ]; then
 	exit 0
 fi
 
+# Walkthrough auto-detection, exactly like git review start: if <b>'s tree carries
+# a .review/walkthrough.md whose entries intersect the compared range, enter walk
+# mode. It stays read-only — reviewreadonly is still set below, so git review finish
+# refuses regardless of mode — walk only adds a reading cursor.
+walk=0
+walkcount=0
+if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$bcommit")" && [ -n "$wtcontent" ]; then
+	walkpaths="$(walk_sequence "$bcommit" "$acommit")"
+	# grep -c returns 1 (aborting under set -e in POSIX sh) on an empty sequence.
+	walkcount="$(printf '%s\n' "$walkpaths" | grep -c . || true)"
+	if [ "$walkcount" -ge 1 ]; then
+		walk=1
+	else
+		echo "note: $b has a walkthrough, but none of its entries apply to $a..$b; reading the whole diff"
+	fi
+fi
+
 # Whole range: create review/<name> at <b> and soft-reset to <a> so the staged diff
 # is exactly <a>..<b>, with a clean working tree — the same shape as start, minus the
 # merged-base folding (compare's bounds are explicit) and any writeback metadata.
@@ -156,4 +176,14 @@ if [ -n "$returnbranch" ]; then
 	git config "branch.$rb.reviewreturn" "$returnbranch"
 fi
 
-echo "$rb ready (compare $a..$b, read-only) — the staged diff is for reading; git review finish will refuse"
+if [ "$walk" -eq 1 ]; then
+	git config "branch.$rb.reviewmode" "walk"
+	git config "branch.$rb.reviewwalkstep" "1"
+	git config "branch.$rb.reviewwalkcount" "$walkcount"
+	echo "$rb ready (compare $a..$b, read-only walkthrough) — read, then git review next (git review finish will refuse)"
+	cur="$rb"
+	tip="$bcommit"
+	show_walk_entry 1
+else
+	echo "$rb ready (compare $a..$b, read-only) — the staged diff is for reading; git review finish will refuse"
+fi

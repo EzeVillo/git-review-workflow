@@ -29,6 +29,36 @@ teardown() {
 	[[ "$output" == *"usage: git review start"* ]]
 }
 
+@test "review walkthrough --h prints usage and exits 0" {
+	run git review walkthrough --h
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"usage: git review walkthrough"* ]]
+}
+
+@test "review walkthrough -h prints usage and exits 0" {
+	run git review walkthrough -h
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"usage: git review walkthrough"* ]]
+}
+
+@test "review walkthrough with no subcommand prints usage and exits 1" {
+	run git review walkthrough
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"usage: git review walkthrough"* ]]
+}
+
+@test "review walkthrough rejects an unknown subcommand" {
+	run git review walkthrough bogus
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"unknown subcommand"* ]]
+}
+
+@test "review walkthrough rejects an unknown option" {
+	run git review walkthrough --bogus
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"unknown option --bogus"* ]]
+}
+
 @test "review next --h prints usage and exits 0" {
 	run git review next --h
 	[ "$status" -eq 0 ]

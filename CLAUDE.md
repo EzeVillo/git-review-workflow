@@ -71,6 +71,20 @@ repo, no en archivos del working tree:
   `reviewsource`, `reviewtip`, `reviewstart`, `reviewcount`, `reviewstep` —
   llevan el modo y la posición en `--step`. Se leen defensivamente (`|| true`)
   porque con `set -eu` una clave borrada a mano abortaría el script en silencio.
+- **Modo walk** (`reviewmode = walk`): un walkthrough (sidecar
+  `.review/walkthrough.md`, committeado al PR por el autor con `git review
+  walkthrough init/build`) convierte el `start` en un cursor de lectura sobre la
+  review completa. El cursor vive en claves **propias** — `reviewwalkstep`
+  (1-based) y `reviewwalkcount` (guard) — nunca en `reviewstart/reviewcount/
+  reviewstep`: el guard de metadata de `finish` aborta si esas claves de step
+  existen sin `reviewmode=step` (y hay un guard espejo para claves walk sin
+  `reviewmode=walk`). La secuencia de entradas NO se persiste: se re-deriva en
+  cada verbo parseando el walkthrough del tip y filtrando por intersección de
+  paths con el rango real, igual que step re-deriva `commits` con `rev-list`. En
+  walk `HEAD` queda clavado en el lower bound, así que la derivación es estable
+  aunque el usuario edite. Walk no banca refs (las ediciones viven en el working
+  tree, como whole); el cursor muere con la rama. Un walkthrough roto/stale nunca
+  falla una review: degrada a whole con nota.
 - **Refs de ediciones:** `refs/review-edits/<src>/<step>` bancan las ediciones
   de cada commit en `--step` como objetos commit-tree; `git review save` los mueve
   a `refs/review-saved-edits/` para que `git review clean` (que poda

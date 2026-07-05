@@ -297,6 +297,18 @@ if [ "$mode" != "step" ]; then
 		}
 	done
 fi
+# The mirror guard for walk mode. A walk review records reviewmode=walk alongside
+# reviewwalkstep/reviewwalkcount; those keys with any other mode mean hand-edited
+# or corrupt metadata. Walk itself needs no special extraction — its edits live in
+# the working tree, so it falls through to the whole-mode tail below, correctly.
+if [ "$mode" != "walk" ]; then
+	for k in reviewwalkstep reviewwalkcount; do
+		[ -z "$(git config "branch.$cur.$k" || true)" ] || {
+			echo "error: corrupt review metadata: $cur has walkthrough keys but reviewmode is not 'walk'" >&2
+			exit 1
+		}
+	done
+fi
 
 # record_undo: snapshot everything finish is about to mutate so --abort can put
 # it back verbatim — the review branch's HEAD, its index, and its working tree

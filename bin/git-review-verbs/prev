@@ -36,10 +36,26 @@ esac
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
-load_step_review_meta
-
-if [ "$step" -gt 1 ]; then
-	goto_step "$((step - 1))"
-else
-	echo "already at the first commit"
-fi
+# Dispatch on the review's layout, mirroring git review next.
+cur="$(git symbolic-ref --quiet --short HEAD || true)"
+case "$(git config "branch.$cur.reviewmode" || true)" in
+walk)
+	load_walk_review_meta
+	if [ "$walkstep" -gt 1 ]; then
+		goto_walk_entry "$((walkstep - 1))"
+	else
+		echo "already at the first entry"
+	fi
+	;;
+step)
+	load_step_review_meta
+	if [ "$step" -gt 1 ]; then
+		goto_step "$((step - 1))"
+	else
+		echo "already at the first commit"
+	fi
+	;;
+*)
+	load_step_review_meta
+	;;
+esac

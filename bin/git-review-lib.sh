@@ -43,7 +43,7 @@ load_step_review_meta() {
 
 	mode="$(git config "branch.$cur.reviewmode" || true)"
 	[ "$mode" = "step" ] || {
-		echo "error: $cur was not started with git review start --step" >&2
+		echo "error: $cur was not started with git review start --step or a walkthrough" >&2
 		exit 1
 	}
 
@@ -118,4 +118,219 @@ goto_step() {
 	git reset -q --soft "$ctarget^"
 	git config "branch.$cur.reviewstep" "$target"
 	show_commit "$ctarget" "$target" "$count"
+}
+
+# ── Walkthrough (walk) mode helpers ───────────────────────────────────────────
+#
+# A walkthrough is a curated reading order over a PR, authored as a committed
+# sidecar (.review/walkthrough.md) and consumed by the reviewer. Walk mode is the
+# same whole-PR review (the diff is staged and editable), plus a reading cursor
+# over it. Nothing here stages, resets or banks anything — the working tree is the
+# whole PR throughout, exactly as in whole mode; only a cursor config key moves.
+
+# fold_lower <start> <baseref> <tip>
+# Compute a review's lower bound (exclusive). Normally it is <start>, but if the
+# base branch was merged into the PR, fold that already-merged base content into
+# the lower bound so base-derived changes are not shown as part of the review.
+# Prints the resulting commit-ish. A no-op (prints <start>) when there is nothing
+# to fold, when <baseref> is empty, or on a git without merge-tree. This is the
+# logic git review start applies to its staged diff, shared so walkthrough
+# init/build compute the exact same bound a reviewer will see.
+fold_lower() {
+	_fl_start="$1"
+	_fl_baseref="$2"
+	_fl_tip="$3"
+	_fl_lower="$_fl_start"
+	if [ -n "$_fl_baseref" ]; then
+		_fl_mb="$(git merge-base "$_fl_baseref" "$_fl_tip" 2>/dev/null || true)"
+		if [ -n "$_fl_mb" ] && [ "$_fl_mb" != "$_fl_tip" ] &&
+			! git merge-base --is-ancestor "$_fl_mb" "$_fl_start"; then
+			if _fl_tree="$(git merge-tree --write-tree "$_fl_start" "$_fl_mb" 2>/dev/null)"; then
+				_fl_lower="$(git commit-tree "$_fl_tree" -p "$_fl_start" -m 'review lower bound')"
+			else
+				echo "note: could not exclude merged base content from the review diff" >&2
+			fi
+		fi
+	fi
+	printf '%s\n' "$_fl_lower"
+}
+
+# walk_read <tip>
+# Print the walkthrough committed at <tip>, or nothing (non-zero rc) if there is
+# none. Never aborts the caller: used in conditions and command substitutions.
+walk_read() {
+	git show "$1:.review/walkthrough.md" 2>/dev/null
+}
+
+# walk_parse  (stdin: walkthrough content)
+# Emit one "order<TAB>path" line per numbered entry ("## N. path"), in file order.
+# The intro heading ("# Walkthrough"), skeleton entries ("## ?. path") and any
+# other line are ignored. Leniency is deliberate: at runtime the file was already
+# validated by "git review walkthrough build", and a stray line must degrade the
+# review, never crash it.
+walk_parse() {
+	awk '
+		/^## / {
+			line = $0
+			sub(/^## /, "", line)
+			if (match(line, /^[0-9]+\. /)) {
+				ord = substr(line, 1, RLENGTH - 2)
+				path = substr(line, RLENGTH + 1)
+				printf "%s\t%s\n", ord, path
+			}
+		}
+	'
+}
+
+# walk_body <path>  (stdin: walkthrough content)
+# Print the body of the entry whose path is <path> verbatim — every line after
+# its "## N. <path>" (or "## ?. <path>") header, up to the next "## " header or
+# EOF. Empty when the path has no entry.
+walk_body() {
+	awk -v want="$1" '
+		/^## / {
+			line = $0
+			sub(/^## /, "", line)
+			if (sub(/^[0-9]+\. /, "", line) || sub(/^\?\. /, "", line)) {
+				cur = (line == want)
+			} else {
+				cur = 0
+			}
+			next
+		}
+		cur { print }
+	'
+}
+
+# walk_why <tip> <path>
+# The "why" prose a reviewer sees for <path>: the entry body from the walkthrough
+# at <tip>, with the reserved "> at:" anchor line (v2) dropped and leading/
+# trailing blank lines trimmed.
+walk_why() {
+	walk_read "$1" | walk_body "$2" | grep -v '^> at: ' | awk '
+		{ buf[NR] = $0 }
+		END {
+			s = 1; while (s <= NR && buf[s] ~ /^[ \t]*$/) s++
+			e = NR; while (e >= s && buf[e] ~ /^[ \t]*$/) e--
+			for (i = s; i <= e; i++) print buf[i]
+		}
+	'
+}
+
+# walk_sequence <tip> <lower>
+# Derive the ordered, range-filtered reading sequence for a review whose tip is
+# <tip> and lower bound is <lower>: parse the walkthrough at <tip>, keep only
+# entries whose path is actually in the review range (git diff --name-only
+# <lower> <tip>), order them by the author's number and print the paths, one per
+# line, in reading order. Empty output means no walkthrough, or none of its
+# entries intersect the range — callers degrade to a plain whole review.
+walk_sequence() {
+	_ws_content="$(walk_read "$1")" || return 0
+	[ -n "$_ws_content" ] || return 0
+	_ws_gd="$(git rev-parse --git-dir)"
+	_ws_rf="$_ws_gd/review-walk-range.$$"
+	git diff --name-only "$2" "$1" 2>/dev/null >"$_ws_rf"
+	printf '%s\n' "$_ws_content" | walk_parse | awk '
+		NR == FNR { inrange[$0] = 1; next }
+		{
+			tab = index($0, "\t")
+			ord = substr($0, 1, tab - 1) + 0
+			path = substr($0, tab + 1)
+			if (path in inrange) printf "%s\t%s\n", ord, path
+		}
+	' "$_ws_rf" - | LC_ALL=C sort -k1,1n | cut -f2-
+	rm -f "$_ws_rf"
+}
+
+# load_walk_review_meta
+# Confirm HEAD is on a review/* branch in walk mode and load its metadata into the
+# globals the caller and goto_walk_entry rely on: cur, src, tip, walkstep,
+# walkcount, walkpaths and total. The sequence is re-derived (not persisted), the
+# way the step commands re-derive commits with rev-list; HEAD is pinned at the
+# lower bound for a walk review's life, so the derivation is stable across edits.
+# Exits with a diagnostic on any inconsistency.
+load_walk_review_meta() {
+	cur="$(git symbolic-ref --quiet --short HEAD || true)"
+	[ -n "$cur" ] || {
+		echo "error: not on a branch" >&2
+		exit 1
+	}
+	case "$cur" in
+	review/*) ;;
+	*)
+		echo "error: not on a review/* branch (HEAD is $cur)" >&2
+		exit 1
+		;;
+	esac
+
+	mode="$(git config "branch.$cur.reviewmode" || true)"
+	[ "$mode" = "walk" ] || {
+		echo "error: $cur was not started with a walkthrough" >&2
+		exit 1
+	}
+
+	src="$(git config "branch.$cur.reviewsource" || true)"
+	tip="$(git config "branch.$cur.reviewtip" || true)"
+	walkstep="$(git config "branch.$cur.reviewwalkstep" || true)"
+	walkcount="$(git config "branch.$cur.reviewwalkcount" || true)"
+
+	if [ -z "$src" ] || [ -z "$tip" ]; then
+		echo "error: missing review metadata; was $cur created with git review start?" >&2
+		exit 1
+	fi
+
+	walkpaths="$(walk_sequence "$tip" "$(git rev-parse HEAD)")"
+	# grep -c returns 1 (aborting under set -e in POSIX sh) when walkpaths is empty;
+	# guard it so a lost sequence reaches the range check below as total=0.
+	total="$(printf '%s\n' "$walkpaths" | grep -c . || true)"
+
+	case "$walkcount" in
+	'' | *[!0-9]*)
+		echo "error: corrupt review metadata: reviewwalkcount is '$walkcount', not a positive integer" >&2
+		exit 1
+		;;
+	esac
+	[ "$walkcount" -ge 1 ] || {
+		echo "error: corrupt review metadata: reviewwalkcount is '$walkcount', not a positive integer" >&2
+		exit 1
+	}
+	case "$walkstep" in
+	'' | *[!0-9]*)
+		echo "error: corrupt review metadata: reviewwalkstep is '$walkstep', not a positive integer" >&2
+		exit 1
+		;;
+	esac
+	if [ "$walkstep" -lt 1 ] || [ "$walkstep" -gt "$total" ]; then
+		echo "error: review entry $walkstep out of range (1..$total) — corrupt metadata?" >&2
+		exit 1
+	fi
+}
+
+# show_walk_entry <k>
+# Print the k-th walkthrough entry: a rule, the "[k/N] <path>:<line>" header, the
+# author's "why" prose, another rule and the prompt. The line is the first hunk of
+# the live diff HEAD..tip for that path (recomputed each call, so it tracks the
+# frozen tip's content); a file the PR deletes shows just the path. Relies on the
+# globals set by load_walk_review_meta (tip, walkcount, walkpaths).
+show_walk_entry() {
+	_swe_path="$(printf '%s\n' "$walkpaths" | sed -n "${1}p")"
+	_swe_line="$(git diff -U0 HEAD "$tip" -- "$_swe_path" 2>/dev/null |
+		sed -n 's/^@@ [^+]*+\([0-9][0-9]*\).*/\1/p' | sed -n '1p')"
+	if [ -n "$_swe_line" ] && [ "$_swe_line" != 0 ]; then
+		_swe_loc="$_swe_path:$_swe_line"
+	else
+		_swe_loc="$_swe_path"
+	fi
+	printf -- '----\n[%s/%s] %s\n%s\n----\nread this file, edit if needed, then run git review next\n' \
+		"$1" "$walkcount" "$_swe_loc" "$(walk_why "$tip" "$_swe_path")"
+}
+
+# goto_walk_entry <k>
+# Move the walk cursor to entry <k> and show it. Unlike goto_step this touches
+# nothing but the cursor key: walk never stages or resets, so working tree and
+# index are left exactly as they were.
+goto_walk_entry() {
+	git config "branch.$cur.reviewwalkstep" "$1"
+	walkstep="$1"
+	show_walk_entry "$1"
 }

@@ -144,9 +144,9 @@ if [ "$mode" = "step" ]; then
 	echo "resumed review of $src — step $step/$count"
 	show_commit "$cstep" "$step" "$count"
 else
-	# whole mode: rebuild the pristine review state (PR diff staged at the lower
-	# bound) and replay your edits into the working tree, leaving exactly what you
-	# had when you saved.
+	# whole and walk mode: rebuild the pristine review state (PR diff staged at the
+	# lower bound) and replay your edits into the working tree, leaving exactly what
+	# you had when you saved. Walk restores its reading cursor on top.
 	# Without || true a deleted reviewsavedlower (hand-edited or half-deleted
 	# config) would let set -e kill us mid-restore with no message; report it and
 	# bail before creating the review branch, the way the step path validates its
@@ -172,7 +172,22 @@ else
 	restore_meta reviewlocal
 	restore_meta reviewreturn
 
-	git branch -D "$saved" >/dev/null
+	if [ "$mode" = "walk" ]; then
+		git config "branch.$rb.reviewmode" walk
+		restore_meta reviewwalkstep
+		restore_meta reviewwalkcount
+		git branch -D "$saved" >/dev/null
 
-	echo "resumed review of $src — the staged diff is the PR; edit, then run git review finish"
+		# Re-derive the sequence and reprint the entry you were on, so continue lands
+		# you back on the same reading cursor the way the step path reprints its commit.
+		cur="$rb"
+		walkstep="$(git config "branch.$rb.reviewwalkstep" || echo 1)"
+		walkcount="$(git config "branch.$rb.reviewwalkcount" || echo '?')"
+		walkpaths="$(walk_sequence "$tip" "$(git rev-parse HEAD)")"
+		echo "resumed review of $src — walkthrough entry $walkstep/$walkcount"
+		show_walk_entry "$walkstep"
+	else
+		git branch -D "$saved" >/dev/null
+		echo "resumed review of $src — the staged diff is the PR; edit, then run git review finish"
+	fi
 fi

@@ -23,7 +23,7 @@ setup() {
 		[ -x "$REPO/bin/$f" ]
 	done
 	# Private verbs the formula installs as libexec (git-review-verbs/).
-	for v in start compare status list preview next prev finish save continue abort clean forget; do
+	for v in start compare walkthrough status list preview next prev finish save continue abort clean forget; do
 		[ -f "$REPO/bin/git-review-verbs/$v" ]
 		[ -x "$REPO/bin/git-review-verbs/$v" ]
 	done

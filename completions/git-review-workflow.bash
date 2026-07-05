@@ -41,7 +41,7 @@ __grw_marked_branches() {
 _git_review_start() {
 	case "$cur" in
 	--*)
-		__gitcomp "--base --delta --from --step --local --h"
+		__gitcomp "--base --delta --from --step --no-walk --local --h"
 		;;
 	*)
 		__gitcomp_nl "$(__git_refs)"
@@ -52,10 +52,31 @@ _git_review_start() {
 _git_review_compare() {
 	case "$cur" in
 	--*)
-		__gitcomp "--step --h"
+		__gitcomp "--step --no-walk --h"
 		;;
 	*)
 		__gitcomp_nl "$(__git_refs)"
+		;;
+	esac
+}
+
+# walkthrough has two subcommands: init (writes the skeleton) and build (validates
+# and renumbers). Offer the subcommands first, then the flags for the one on the line.
+_git_review_walkthrough() {
+	local wtsub
+	wtsub="$(__git_find_on_cmdline "init build")"
+	case "$wtsub" in
+	init)
+		__gitcomp "--base --force --h"
+		;;
+	build)
+		__gitcomp "--check --h"
+		;;
+	*)
+		case "$cur" in
+		--*) __gitcomp "--h" ;;
+		*) __gitcomp "init build" ;;
+		esac
 		;;
 	esac
 }
@@ -118,7 +139,7 @@ _git_review_forget() {
 # dispatcher's own -h/--version). Otherwise dispatch to the verb's helper —
 # verbs with no options beyond --h fall through to the default.
 _git_review() {
-	local subcommands="start compare next prev status list preview finish save continue abort clean forget"
+	local subcommands="start compare walkthrough next prev status list preview finish save continue abort clean forget"
 	local subcommand
 	subcommand="$(__git_find_on_cmdline "$subcommands")"
 
@@ -133,6 +154,7 @@ _git_review() {
 	case "$subcommand" in
 	start) _git_review_start ;;
 	compare) _git_review_compare ;;
+	walkthrough) _git_review_walkthrough ;;
 	finish) _git_review_finish ;;
 	preview) _git_review_preview ;;
 	continue) _git_review_continue ;;

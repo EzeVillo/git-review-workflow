@@ -73,6 +73,10 @@ describe() {
 		count="$(git config "branch.$b.reviewcount" || echo '?')"
 		step="$(git config "branch.$b.reviewstep" || echo '?')"
 		printf '%s %s  %sstep [%s/%s]  tip %s\n' "$label" "$b" "$prefix" "$step" "$count" "$shorttip"
+	elif [ "$mode" = "walk" ]; then
+		count="$(git config "branch.$b.reviewwalkcount" || echo '?')"
+		step="$(git config "branch.$b.reviewwalkstep" || echo '?')"
+		printf '%s %s  %swalk [%s/%s]  tip %s\n' "$label" "$b" "$prefix" "$step" "$count" "$shorttip"
 	else
 		printf '%s %s  %swhole  tip %s\n' "$label" "$b" "$prefix" "$shorttip"
 	fi

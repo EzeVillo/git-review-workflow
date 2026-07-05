@@ -230,22 +230,23 @@ git config --global http.sslBackend openssl
 Cada comando es un verbo bajo `git review`. Corré `git review -h` para ver la
 lista, o `git review <verbo> -h` para el detalle de un verbo.
 
-| Comando                                                                                                             | Qué hace                                                                                                                                                                                                                                                                  |
-|---------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `git review [-h \| --version]`                                                                                      | Lista todos los verbos o imprime la versión instalada.                                                                                                                                                                                                                    |
-| `git review start [<rama>] [<base> \| --base <base> \| --delta \| --from <commit>] [--step] [--local \| --offline]` | Hace fetch de `origin` y deja el diff del PR staged en una nueva rama `review/<rama>` (omití `<rama>` para revisar la rama actual; `--local` revisa tu rama local pero sigue comparando contra la base de origin; `--offline` además salta el fetch y usa tu base local). |
-| `git review compare <a> <b> [--step]`                                                                               | Deja staged el diff entre dos commit-ish (tags, commits, ramas) en modo lectura, para leerlo o recorrerlo. `git review finish` se niega — no hay a dónde escribir.                                                                                                        |
-| `git review next` / `git review prev`                                                                               | Mueve una review `--step` al commit siguiente / anterior.                                                                                                                                                                                                                 |
-| `git review status`                                                                                                 | Muestra el estado de la review en la rama actual.                                                                                                                                                                                                                         |
-| `git review list`                                                                                                   | Lista todas las reviews en curso y las guardadas (la rama actual marcada con `*`).                                                                                                                                                                                        |
-| `git review save`                                                                                                   | Pausa la review actual como `review-saved/<rama>` y vuelve a donde empezaste.                                                                                                                                                                                             |
-| `git review continue [rama]`                                                                                        | Retoma una review guardada con `git review save`.                                                                                                                                                                                                                         |
-| `git review finish [--onto-source] [--resume \| --abort [--force]]`                                                 | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR); `--abort` deshace el último finish.                                                                                                                                           |
-| `git review preview [--stat]`                                                                                       | Muestra las ediciones que hiciste hasta ahora — el diff que `finish` extraería — sin commitear ni cambiar de rama.                                                                                                                                                        |
-| `git review abort`                                                                                                  | Cancela la review actual y vuelve a donde empezaste.                                                                                                                                                                                                                      |
-| `git review clean [rama]`                                                                                           | Borra las ramas `review/*` y `review-fixes/*` de `<rama>`, o todas.                                                                                                                                                                                                       |
-| `git review forget --delta (<rama> \| --all \| --stale [--dry-run])`                                                | Descarta el marcador de `--delta` de una rama, de todas, o solo de las obsoletas.                                                                                                                                                                                         |
-| `git review forget --saved (<rama> \| --all) [--dry-run]`                                                           | Descarta una review guardada con `git review save`.                                                                                                                                                                                                                       |
+| Comando                                                                                                                          | Qué hace                                                                                                                                                                                                                                                                                                                   |
+|----------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `git review [-h \| --version]`                                                                                                   | Lista todos los verbos o imprime la versión instalada.                                                                                                                                                                                                                                                                     |
+| `git review start [<rama>] [<base> \| --base <base> \| --delta \| --from <commit>] [--step \| --no-walk] [--local \| --offline]` | Hace fetch de `origin` y deja el diff del PR staged en una nueva rama `review/<rama>` (omití `<rama>` para revisar la rama actual; entra en modo walk si el PR trae un walkthrough; `--local` revisa tu rama local pero sigue comparando contra la base de origin; `--offline` además salta el fetch y usa tu base local). |
+| `git review compare <a> <b> [--step \| --no-walk]`                                                                               | Deja staged el diff entre dos commit-ish (tags, commits, ramas) en modo lectura, para leerlo o recorrerlo. `git review finish` se niega — no hay a dónde escribir.                                                                                                                                                         |
+| `git review walkthrough (init [--base <base>] [--force] \| build [--check])`                                                     | Escribe un walkthrough de lectura para el PR de la rama actual — un orden curado de los archivos cambiados con una nota en cada uno, committeado como `.review/walkthrough.md`.                                                                                                                                            |
+| `git review next` / `git review prev`                                                                                            | Mueve una review `--step` o walkthrough a la entrada siguiente / anterior.                                                                                                                                                                                                                                                 |
+| `git review status`                                                                                                              | Muestra el estado de la review en la rama actual.                                                                                                                                                                                                                                                                          |
+| `git review list`                                                                                                                | Lista todas las reviews en curso y las guardadas (la rama actual marcada con `*`).                                                                                                                                                                                                                                         |
+| `git review save`                                                                                                                | Pausa la review actual como `review-saved/<rama>` y vuelve a donde empezaste.                                                                                                                                                                                                                                              |
+| `git review continue [rama]`                                                                                                     | Retoma una review guardada con `git review save`.                                                                                                                                                                                                                                                                          |
+| `git review finish [--onto-source] [--resume \| --abort [--force]]`                                                              | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR); `--abort` deshace el último finish.                                                                                                                                                                                            |
+| `git review preview [--stat]`                                                                                                    | Muestra las ediciones que hiciste hasta ahora — el diff que `finish` extraería — sin commitear ni cambiar de rama.                                                                                                                                                                                                         |
+| `git review abort`                                                                                                               | Cancela la review actual y vuelve a donde empezaste.                                                                                                                                                                                                                                                                       |
+| `git review clean [rama]`                                                                                                        | Borra las ramas `review/*` y `review-fixes/*` de `<rama>`, o todas.                                                                                                                                                                                                                                                        |
+| `git review forget --delta (<rama> \| --all \| --stale [--dry-run])`                                                             | Descarta el marcador de `--delta` de una rama, de todas, o solo de las obsoletas.                                                                                                                                                                                                                                          |
+| `git review forget --saved (<rama> \| --all) [--dry-run]`                                                                        | Descarta una review guardada con `git review save`.                                                                                                                                                                                                                                                                        |
 
 ### `git review start`
 
@@ -286,6 +287,22 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   con el árbol limpio. Cuando se acaban los commits, corrés `git review finish` y
   todas tus ediciones bancadas se re-aplican sobre el tip del PR — igual que en
   una review completa.
+- **Modo walk (automático).** Si el PR trae un walkthrough
+  (`.review/walkthrough.md`, escrito por el autor con
+  [`git review walkthrough`](#git-review-walkthrough)), `git review start` entra
+  en **modo walk**: la misma review completa staged y editable, más un cursor de
+  lectura curado por encima. Imprime la primera entrada — un archivo, la línea a
+  mirar y la nota del autor sobre por qué importa — y te movés por el orden de
+  lectura con `git review next` / `git review prev`. El cursor es *solo* una
+  posición de lectura: nunca stagea, resetea ni esconde nada, así que editás y
+  hacés `git review finish` exactamente como en una review completa. Las entradas
+  se filtran al rango real de la review, así un walkthrough que ya no coincide
+  (ej. uno viejo con `--delta`) simplemente degrada — un walkthrough roto o
+  desactualizado **nunca** falla una review; a lo sumo cae a una review completa
+  normal con una nota.
+- `--no-walk` — ignorar cualquier walkthrough y revisar el diff completo a secas.
+  `--step` también tiene prioridad sobre walk (son dos formas del mismo eje de
+  layout), así que `--step` gana sin error.
 - `--local` — revisar tu `<rama>` **local**, incluidos los commits sin pushear,
   en vez de la copia de `origin`. La base es otra cosa —es el punto de merge
   compartido—, así que se sigue haciendo fetch y se sigue comparando contra la
@@ -331,23 +348,80 @@ git review compare v1.0 v2.0 --step   # ...y recorrerlo commit por commit
   para terminarlo.
 - `--step` lo recorre de a un commit, igual que `git review start --step`, con
   `git review next` / `git review prev`.
+- Si el árbol de `<b>` trae un walkthrough, `compare` también entra en modo walk,
+  igual que `git review start`, y sigue siendo de solo lectura. `--no-walk` opta
+  por salir.
+
+### `git review walkthrough`
+
+Lo único que ni git ni GitHub ofrecen: un **orden de lectura escrito por el
+autor** sobre un PR. Como autor (a menudo un agente de IA), curás el orden en que
+conviene leer los archivos cambiados y anotás cada uno con *por qué* importa; un
+reviewer que corre `git review start` sobre el PR entra entonces en
+[modo walk](#git-review-start) y lo lee en ese orden.
+
+El walkthrough es un sidecar committeado, `.review/walkthrough.md` — Markdown
+plano, legible en GitHub, que se mergea con el PR. Hay dos subcomandos:
+
+```sh
+git review walkthrough init     # escribe un esqueleto con cada archivo cambiado
+# ...completás el orden y los porqués...
+git review walkthrough build    # valida, ordena por tus números y renumera 1..N
+```
+
+- `init` escribe un esqueleto determinístico con **todos los archivos** cambiados
+  vs la base (el mismo rango que verá un reviewer), cada uno como `## ?. <path>`
+  más un placeholder `<!-- why: -->`. Se niega a pisar un walkthrough existente
+  sin `--force`. `--base <base>` sobreescribe `reviewworkflow.base`.
+- Vos (el autor) hacés solo la parte no mecánica: reemplazás cada `?` por un
+  número de orden y cada placeholder por una nota corta.
+- `build` valida el archivo, ordena las entradas por tus números, las renumera
+  `1..N` y lo reescribe. `--check` valida **sin escribir** y sale con código
+  distinto de cero ante cualquier problema — pensado para CI. Falla si queda algún
+  placeholder `?.` o `<!-- why`, si un path aparece dos veces, o ante **drift**:
+  el conjunto de paths tiene que coincidir exactamente con los archivos cambiados
+  del PR (excluyendo `.review/`).
+
+El formato del archivo que `build` produce y `start` lee:
+
+```markdown
+# Walkthrough
+
+<prosa libre de introducción — el parser ignora todo lo previo a la primera entrada>
+
+## 1. src/auth/session.c
+
+Leé esto primero: define la forma del token de la que depende todo lo demás.
+
+## 2. src/auth/login.c
+
+Después el flujo de login que lo consume — fijate el nuevo camino de error.
+```
+
+Cada entrada es una línea `## <N>. <path>` (el path tal cual lo imprime
+`git diff --name-only`) seguida de su *porqué* en texto libre, hasta la próxima
+entrada. La granularidad es por archivo en v1.
 
 ### `git review next` / `git review prev`
 
-Mueven una review `--step` para adelante o para atrás. Cada movimiento banca las
-ediciones del commit actual y restaura las que tenías bancadas en el commit al
-que vas, así podés ir y venir sin perder trabajo.
+Mueven una review `--step` o walkthrough para adelante o para atrás. En modo
+`--step` cada movimiento banca las ediciones del commit actual y restaura las que
+tenías bancadas en el commit al que vas, así podés ir y venir sin perder trabajo.
+En modo walk solo mueven el cursor de lectura — tus ediciones viven en el working
+tree todo el tiempo y nunca se tocan.
 
 ### `git review status`
 
 Muestra la review actual: PR de origen, modo, y — en modo `--step` — en qué
-commit estás (`[k/N]`) y qué pasos tienen ediciones bancadas.
+commit estás (`[k/N]`) y qué pasos tienen ediciones bancadas. En modo walk muestra
+el cursor de lectura: `walk  [k/N] on <path>`.
 
 ### `git review list`
 
 Muestra *todas* las ramas `review/*` en curso a la vez (con su PR de origen, modo
-y posición de paso). Las reviews pausadas con `git review save` también aparecen,
-bajo `saved`. La rama en la que estás parado se marca con un `*`.
+y posición `[k/N]` para reviews `--step` y walk). Las reviews pausadas con
+`git review save` también aparecen, bajo `saved`. La rama en la que estás parado
+se marca con un `*`.
 
 ### `git review save` / `git review continue`
 
@@ -356,6 +430,8 @@ bajo `saved`. La rama en la que estás parado se marca con un `*`.
 que empezaste, llevándose todo lo necesario para retomar justo donde lo dejaste:
 
 - En modo PR completo, el diff del PR staged y tus ediciones sin commitear.
+- En modo walk, lo mismo, más el cursor de lectura — `git review continue` te deja
+  de vuelta en la entrada exacta en la que estabas.
 - En modo `--step`, el commit en el que estás, sus ediciones y todas las
   ediciones que tengas bancadas en los otros commits. Los refs de ediciones se
   mueven de `refs/review-edits/` (que `git review clean` poda) a
@@ -520,6 +596,14 @@ git review start feature/login --step        # arrancar en el primer commit
 git review next                              # bancar cambios, pasar al siguiente
 git review next                              # ...hasta "no more commits"
 git review finish                            # re-aplicar todos tus cambios sobre el tip
+
+# Lado autor: shippear un walkthrough de lectura con el PR (a menudo un agente IA):
+git review walkthrough init                  # esqueleto de cada archivo cambiado
+# ...completar el orden y un porqué en cada uno...
+git review walkthrough build                 # ordenar, renumerar y validar
+git add .review/walkthrough.md && git commit # viaja con el PR
+# Un reviewer después solo corre "git review start feature/login" y lo recorre
+# por los archivos en el orden del autor (git review next / prev).
 
 # Elegir un commit de inicio explícito:
 git review start feature/login --from a1b2c3d

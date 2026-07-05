@@ -78,8 +78,9 @@ complete -c git -n '__grw_review_bare' -f -l h -d 'list all available commands'
 complete -c git -n '__grw_review_bare' -f -s V -l version -d 'print the installed version'
 complete -c git -n '__grw_review_bare' -f -a start -d 'stage a PR diff on a new review/<branch> branch'
 complete -c git -n '__grw_review_bare' -f -a compare -d 'stage the diff between two commit-ish, read-only'
-complete -c git -n '__grw_review_bare' -f -a next -d 'advance a commit-by-commit review to the next commit'
-complete -c git -n '__grw_review_bare' -f -a prev -d 'step a commit-by-commit review back to the previous commit'
+complete -c git -n '__grw_review_bare' -f -a walkthrough -d 'author a reading walkthrough for the current PR'
+complete -c git -n '__grw_review_bare' -f -a next -d 'advance a commit-by-commit or walkthrough review one entry'
+complete -c git -n '__grw_review_bare' -f -a prev -d 'step a commit-by-commit or walkthrough review back one entry'
 complete -c git -n '__grw_review_bare' -f -a status -d 'show the state of the review on the current branch'
 complete -c git -n '__grw_review_bare' -f -a list -d 'list every review/* branch in progress'
 complete -c git -n '__grw_review_bare' -f -a preview -d 'show your edits so far without committing or switching'
@@ -95,14 +96,36 @@ complete -c git -n '__grw_review_using start' -f -r -l base -d 'base to diff aga
 complete -c git -n '__grw_review_using start' -f -l delta -d 'review only commits since your last review'
 complete -c git -n '__grw_review_using start' -f -l from -d 'review only commits after <commit>'
 complete -c git -n '__grw_review_using start' -f -l step -d 'review one commit at a time'
+complete -c git -n '__grw_review_using start' -f -l no-walk -d 'ignore any walkthrough on the PR'
 complete -c git -n '__grw_review_using start' -f -l local -d 'review your local branches directly, without fetching'
 complete -c git -n '__grw_review_using start' -f -l h -d 'show help'
 complete -c git -n '__grw_review_using start' -f -a '(__grw_branches)'
 
 # ── git review compare ────────────────────────────────────────────────────────
 complete -c git -n '__grw_review_using compare' -f -l step -d 'review one commit at a time'
+complete -c git -n '__grw_review_using compare' -f -l no-walk -d 'ignore any walkthrough on <b>'
 complete -c git -n '__grw_review_using compare' -f -l h -d 'show help'
 complete -c git -n '__grw_review_using compare' -f -a '(__grw_branches)'
+
+# ── git review walkthrough (init writes a skeleton, build validates/renumbers) ─
+# Offer the two subcommands until one is on the line, then that subcommand's flags.
+function __grw_walkthrough_sub
+    set -l tokens (commandline -opc)
+    for t in $tokens
+        switch $t
+            case init build
+                echo $t
+                return 0
+        end
+    end
+    return 1
+end
+complete -c git -n '__grw_review_using walkthrough; and not __grw_walkthrough_sub' -f -a init -d 'write a skeleton listing every changed file'
+complete -c git -n '__grw_review_using walkthrough; and not __grw_walkthrough_sub' -f -a build -d 'validate, order and renumber the entries'
+complete -c git -n '__grw_review_using walkthrough; and test (__grw_walkthrough_sub) = init' -f -r -l base -d 'diff against this base instead of reviewworkflow.base'
+complete -c git -n '__grw_review_using walkthrough; and test (__grw_walkthrough_sub) = init' -f -l force -d 'overwrite an existing walkthrough'
+complete -c git -n '__grw_review_using walkthrough; and test (__grw_walkthrough_sub) = build' -f -l check -d 'validate only; write nothing'
+complete -c git -n '__grw_review_using walkthrough' -f -l h -d 'show help'
 
 # ── git review finish ─────────────────────────────────────────────────────────
 complete -c git -n '__grw_review_using finish' -f -l onto-source -d 'stage edits on the PR branch itself'

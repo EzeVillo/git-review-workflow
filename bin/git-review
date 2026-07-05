@@ -22,13 +22,16 @@ usage: $prog <command> [<args>]
        $prog (-h | --version)
 
 Commands:
-  git review start [<branch>] [<base> | --base <base> | --delta | --from <commit>] [--step] [--local | --offline]
+  git review start [<branch>] [<base> | --base <base> | --delta | --from <commit>] [--step | --no-walk] [--local | --offline]
                      stage a PR diff on a new review/<branch> branch
-                     (omit <branch> to review the branch you are on)
-  git review compare <a> <b> [--step]
+                     (omit <branch> to review the branch you are on;
+                     enters walk mode if the PR carries a walkthrough)
+  git review compare <a> <b> [--step | --no-walk]
                      stage the diff between two commit-ish, read-only (finish refuses)
-  git review next    advance a commit-by-commit review to the next commit
-  git review prev    step a commit-by-commit review back to the previous commit
+  git review walkthrough (init [--base <base>] [--force] | build [--check])
+                     author a reading walkthrough for the current branch's PR
+  git review next    advance a commit-by-commit or walkthrough review one entry
+  git review prev    step a commit-by-commit or walkthrough review back one entry
   git review status  show the state of the review on the current branch
   git review list    list every review/* branch in progress
   git review preview [--stat]

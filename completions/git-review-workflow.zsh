@@ -26,7 +26,8 @@ _git_review_start() {
 		'--base[base to diff against when the branch is omitted]:base:__git_revisions' \
 		'(--from)--delta[review only the commits added since your last review]' \
 		'(--delta)--from[review only the commits after <commit>]:commit:__git_commits' \
-		'--step[review one commit at a time]' \
+		'(--no-walk)--step[review one commit at a time]' \
+		'(--step)--no-walk[ignore any walkthrough on the PR]' \
 		'--local[review your local branches directly, without fetching]' \
 		'*: :__git_revisions'
 }
@@ -34,8 +35,43 @@ _git_review_start() {
 _git_review_compare() {
 	_arguments -S \
 		'(-h --h)'{-h,--h}'[show help]' \
-		'--step[review one commit at a time]' \
+		'(--no-walk)--step[review one commit at a time]' \
+		'(--step)--no-walk[ignore any walkthrough on <b>]' \
 		'*:commit-ish:__git_revisions'
+}
+
+_git_review_walkthrough() {
+	local state line
+	_arguments -S \
+		'(-h --h)'{-h,--h}'[show help]' \
+		': :->wtsub' \
+		'*:: :->wtargs'
+
+	case "$state" in
+	wtsub)
+		local -a wtsubs
+		wtsubs=(
+			'init:write a skeleton listing every changed file'
+			'build:validate, order and renumber the entries'
+		)
+		_describe -t wtsubs 'walkthrough subcommand' wtsubs
+		;;
+	wtargs)
+		case "$line[1]" in
+		init)
+			_arguments -S \
+				'(-h --h)'{-h,--h}'[show help]' \
+				'--base[diff against this base instead of reviewworkflow.base]:base:__git_revisions' \
+				'--force[overwrite an existing walkthrough]'
+			;;
+		build)
+			_arguments -S \
+				'(-h --h)'{-h,--h}'[show help]' \
+				'--check[validate only; write nothing]'
+			;;
+		esac
+		;;
+	esac
 }
 
 _git_review_finish() {
@@ -120,8 +156,9 @@ _git-review() {
 		verbs=(
 			'start:stage a PR diff on a new review/<branch> branch'
 			'compare:stage the diff between two commit-ish, read-only'
-			'next:advance a commit-by-commit review to the next commit'
-			'prev:step a commit-by-commit review back to the previous commit'
+			'walkthrough:author a reading walkthrough for the current PR'
+			'next:advance a commit-by-commit or walkthrough review one entry'
+			'prev:step a commit-by-commit or walkthrough review back one entry'
 			'status:show the state of the review on the current branch'
 			'list:list every review/* branch in progress'
 			'preview:show your edits so far without committing or switching'
@@ -139,6 +176,7 @@ _git-review() {
 		case "$line[1]" in
 		start) _git_review_start ;;
 		compare) _git_review_compare ;;
+		walkthrough) _git_review_walkthrough ;;
 		finish) _git_review_finish ;;
 		preview) _git_review_preview ;;
 		continue) _git_review_continue ;;

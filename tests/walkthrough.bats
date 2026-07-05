@@ -136,6 +136,30 @@ EOF
 	[ "$(cat .review/walkthrough.md)" = "$expected" ]
 }
 
+@test "build succeeds on a real init skeleton filled in place (intro does not trip validation)" {
+	# The end-to-end author loop: the intro comment init writes must never be
+	# mistaken for an unfilled entry or why-placeholder by build's greps.
+	run git review walkthrough init
+	[ "$status" -eq 0 ]
+	# The intro is present and carries the guidance text.
+	grep -q 'PLACEHOLDERS' .review/walkthrough.md
+	# Edit in place exactly as the instructions say: number each "?" (out of
+	# order, to also prove reordering), and delete each why-comment, replacing
+	# the whole line with prose.
+	sed -e 's/^## ?\. a\.txt$/## 2. a.txt/' \
+		-e 's/^## ?\. b\.txt$/## 3. b.txt/' \
+		-e 's|^## ?\. src/c\.txt$|## 1. src/c.txt|' \
+		-e 's/^<!-- why: -->$/looks fine/' \
+		.review/walkthrough.md >.review/wt.tmp
+	mv .review/wt.tmp .review/walkthrough.md
+	run git review walkthrough build
+	[ "$status" -eq 0 ]
+	# build strips the intro and produces the canonical ordered file.
+	expected="$(printf '# Walkthrough\n\n## 1. src/c.txt\nlooks fine\n\n## 2. a.txt\nlooks fine\n\n## 3. b.txt\nlooks fine\n\n')"
+	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+	! grep -q 'PLACEHOLDERS' .review/walkthrough.md
+}
+
 @test "build --check on a valid walkthrough passes and writes nothing" {
 	mkdir -p .review
 	write_unordered

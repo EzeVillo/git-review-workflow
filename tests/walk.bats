@@ -114,6 +114,19 @@ teardown() {
 	[ "$status" -ne 0 ]
 }
 
+@test "--step notes that it is ignoring a present walkthrough" {
+	run git review start feature/x --step
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"has a walkthrough; --step ignores it"* ]]
+}
+
+@test "--step --no-walk does not note the walkthrough" {
+	run git review start feature/x --step --no-walk
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/x.reviewmode)" = "step" ]
+	[[ "$output" != *"walkthrough"* ]]
+}
+
 # ── next / prev move only the cursor ──────────────────────────────────────────
 
 @test "next advances the reading cursor without touching tree or index" {
@@ -167,6 +180,44 @@ teardown() {
 	# The edit made on a.txt is still there — walk never stashes or reverts it.
 	run cat a.txt
 	[[ "$output" == *"FIX"* ]]
+}
+
+@test "next after committing the staged diff reports HEAD moved off the base, not corrupt metadata" {
+	git review start feature/x >/dev/null
+	# Committing folds the whole-PR staged diff into HEAD, moving it off the base and
+	# collapsing the HEAD..tip range the reading cursor is derived over.
+	git commit --quiet -m "reviewer commits the staged diff"
+	run git review next
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"HEAD has moved off this review's base"* ]]
+	[[ "$output" == *"git reset --soft"* ]]
+	# Not the misleading diagnostic that blames the (intact) metadata.
+	[[ "$output" != *"corrupt metadata"* ]]
+	# status is the natural "what happened?" command and must diagnose it the same way.
+	run git review status
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"HEAD has moved off this review's base"* ]]
+	# Recovery: a soft reset back to the base restages the whole diff and the cursor
+	# works again, from where it was.
+	git reset --soft HEAD^
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[1/3] on src/c.txt"* ]]
+	run git review next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[2/3] a.txt"* ]]
+}
+
+@test "a walkstep past the end with HEAD at the base still reports corrupt metadata" {
+	git review start feature/x >/dev/null
+	# HEAD unmoved: the range is intact (live total == walkcount), so a cursor past
+	# the end is a hand-edited key — genuine corruption, not the HEAD-moved case.
+	git config branch.review/feature/x.reviewwalkstep 99
+	run git review next
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"out of range (1..3)"* ]]
+	[[ "$output" == *"corrupt metadata"* ]]
+	[[ "$output" != *"HEAD has moved"* ]]
 }
 
 # ── range filtering ───────────────────────────────────────────────────────────

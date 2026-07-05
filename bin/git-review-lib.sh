@@ -242,6 +242,31 @@ walk_sequence() {
 	rm -f "$_ws_rf"
 }
 
+# walk_range_error <walkstep> <total> <walkcount>
+# Emit the right diagnostic for a walk cursor that fell outside the live reading
+# range, then exit 1. A walk review's tip and its committed walkthrough are frozen,
+# so the derived sequence only shrinks when HEAD moves off the review's base —
+# almost always a stray `git commit` that folded the staged whole-PR diff into HEAD.
+# When the live <total> dropped below the <walkcount> recorded at start, name that
+# recoverable cause and its fix, instead of blaming "corrupt metadata" for a
+# self-inflicted, undoable state. A cursor out of range while the range is intact
+# (total still == walkcount, or a non-numeric/absent walkcount) is genuine
+# corruption — a hand-edited key — and keeps the original diagnostic.
+walk_range_error() {
+	_wre_step="$1"
+	_wre_total="$2"
+	_wre_count="$3"
+	case "$_wre_count" in
+	'' | *[!0-9]*) _wre_count=0 ;;
+	esac
+	if [ "$_wre_step" -ge 1 ] && [ "$_wre_count" -ge 1 ] && [ "$_wre_total" -lt "$_wre_count" ]; then
+		echo "error: HEAD has moved off this review's base — the walkthrough cursor is at entry $_wre_step but only $_wre_total of $_wre_count entr$([ "$_wre_count" -eq 1 ] && echo y || echo ies) remain in range. Walk mode keeps the whole-PR diff staged with HEAD at the base; you now have commit(s) on top (did you run git commit?). Undo them with 'git reset --soft' to restage the diff, or 'git review abort' to discard the review, then retry." >&2
+		exit 1
+	fi
+	echo "error: review entry $_wre_step out of range (1..$_wre_total) — corrupt metadata?" >&2
+	exit 1
+}
+
 # load_walk_review_meta
 # Confirm HEAD is on a review/* branch in walk mode and load its metadata into the
 # globals the caller and goto_walk_entry rely on: cur, src, tip, walkstep,
@@ -301,8 +326,7 @@ load_walk_review_meta() {
 		;;
 	esac
 	if [ "$walkstep" -lt 1 ] || [ "$walkstep" -gt "$total" ]; then
-		echo "error: review entry $walkstep out of range (1..$total) — corrupt metadata?" >&2
-		exit 1
+		walk_range_error "$walkstep" "$total" "$walkcount"
 	fi
 }
 

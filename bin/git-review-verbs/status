@@ -108,8 +108,7 @@ elif [ "$mode" = "walk" ]; then
 		;;
 	esac
 	if [ "$walkstep" -lt 1 ] || [ "$walkstep" -gt "$total" ]; then
-		echo "error: review entry $walkstep out of range (1..$total) — corrupt metadata?" >&2
-		exit 1
+		walk_range_error "$walkstep" "$total" "$walkcount"
 	fi
 	pnow="$(printf '%s\n' "$walkpaths" | sed -n "${walkstep}p")"
 	printf '  mode    walk  [%s/%s] on %s\n' "$walkstep" "${walkcount:-$total}" "$pnow"

@@ -295,7 +295,8 @@ Has two independent axes — **range** (where the review starts) and **layout**
   fails a review; at worst it falls back to a plain whole review with a note.
 - `--no-walk` — ignore any walkthrough and review the whole diff plainly. `--step`
   also takes precedence over walk (they are two spellings of the same layout
-  axis), so `--step` wins with no error.
+  axis), so `--step` wins with no error — it just prints a note that the PR's
+  walkthrough is being ignored (silenced by also passing `--no-walk`).
 - `--local` — review your **local** `<branch>`, including unpushed commits,
   instead of `origin`'s copy. The base is a different concern — it's the shared
   merge target — so it is still fetched and diffed from `origin`'s copy even

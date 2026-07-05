@@ -302,7 +302,8 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   normal con una nota.
 - `--no-walk` — ignorar cualquier walkthrough y revisar el diff completo a secas.
   `--step` también tiene prioridad sobre walk (son dos formas del mismo eje de
-  layout), así que `--step` gana sin error.
+  layout), así que `--step` gana sin error — solo imprime una nota avisando que
+  ignora el walkthrough del PR (se silencia pasando además `--no-walk`).
 - `--local` — revisar tu `<rama>` **local**, incluidos los commits sin pushear,
   en vez de la copia de `origin`. La base es otra cosa —es el punto de merge
   compartido—, así que se sigue haciendo fetch y se sigue comparando contra la

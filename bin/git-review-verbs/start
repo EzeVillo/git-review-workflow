@@ -288,6 +288,14 @@ if [ "$step" -eq 1 ]; then
 	count="$(printf '%s\n' "$commits" | wc -l | tr -d ' ')"
 	first="$(printf '%s\n' "$commits" | sed -n '1p')"
 
+	# A walkthrough is a whole-review reading aid; --step reviews commit by commit
+	# and bypasses it wholesale. Note it (unless the reviewer already opted out with
+	# --no-walk) so someone expecting the curated reading order is not left wondering
+	# where it went.
+	if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$tip")" && [ -n "$wtcontent" ]; then
+		echo "note: $src has a walkthrough; --step ignores it and reviews commit by commit"
+	fi
+
 	git switch -q -c "$rb" "$first" || die "could not create $rb"
 	git reset --soft HEAD^
 	git config "branch.$rb.reviewsource" "$src"

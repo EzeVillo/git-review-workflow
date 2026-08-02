@@ -311,8 +311,8 @@ lista, o `git review <verbo> -h` para el detalle de un verbo.
 | `git review compare <a> <b> [--step \| --no-walk]`                                                                               | Deja staged el diff entre dos commit-ish (tags, commits, ramas) en modo lectura, para leerlo o recorrerlo. `git review finish` se niega — no hay a dónde escribir.                                                                                                                                                         |
 | `git review walkthrough (init [--base <base>] [--force] \| build [--check])`                                                     | Escribe un walkthrough de lectura para el PR de la rama actual — un orden curado de los archivos cambiados con una nota en cada uno, committeado como `.review/walkthrough.md`.                                                                                                                                            |
 | `git review next` / `git review prev`                                                                                            | Mueve una review `--step` o walkthrough a la entrada siguiente / anterior.                                                                                                                                                                                                                                                 |
-| `git review status`                                                                                                              | Muestra el estado de la review en la rama actual.                                                                                                                                                                                                                                                                          |
-| `git review list`                                                                                                                | Lista todas las reviews en curso y las guardadas (la rama actual marcada con `*`).                                                                                                                                                                                                                                         |
+| `git review status [--porcelain \| --why <path>]`                                                                                | Muestra el estado de la review en la rama actual (`--porcelain` para salida legible por programas; `--why <path>` para el porqué de una entrada del walkthrough).                                                                                                                                                          |
+| `git review list [--porcelain]`                                                                                                  | Lista todas las reviews en curso y las guardadas (la rama actual marcada con `*`; `--porcelain` para salida legible por programas).                                                                                                                                                                                        |
 | `git review save`                                                                                                                | Pausa la review actual como `review-saved/<rama>` y vuelve a donde empezaste.                                                                                                                                                                                                                                              |
 | `git review continue [rama]`                                                                                                     | Retoma una review guardada con `git review save`.                                                                                                                                                                                                                                                                          |
 | `git review finish [--onto-source] [--resume \| --abort [--force]]`                                                              | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR); `--abort` deshace el último finish.                                                                                                                                                                                            |
@@ -506,10 +506,12 @@ El formato del archivo que `build` produce y `start` lee:
 Las sesiones ahora expiran; todo lo que cacheaba un token queda bajo sospecha.
 
 ## 1. src/auth/session.c
+
 > key
 Leé esto primero: define la forma del token de la que depende todo lo demás.
 
 ## 2. src/auth/login.c
+
 Después el flujo de login que lo consume — fijate el nuevo camino de error.
 ```
 
@@ -535,11 +537,66 @@ tree todo el tiempo y nunca se tocan.
 </details>
 
 <details>
-<summary><code>git review status</code></summary>
+<summary id="git-review-status"><code>git review status</code></summary>
 
 Muestra la review actual: PR de origen, modo, y — en modo `--step` — en qué
 commit estás (`[k/N]`) y qué pasos tienen ediciones bancadas. En modo walk muestra
 el cursor de lectura: `walk  [k/N] on <path>`.
+
+- `--porcelain` — salida legible por programas para scripts e integraciones de
+  editor: líneas estables separadas por tab (ver abajo). De sólo lectura, igual
+  que la salida humana — nunca muta config, refs ni el working tree.
+- `--why <path>` — imprime *sólo* el texto explicativo del walkthrough para
+  `<path>`, nada más en el stream: sin etiqueta, sin ningún otro dato. Sólo en
+  modo walk.
+
+**Códigos de salida** — no sólo bajo `--porcelain`: los mismos códigos salen de
+todo verbo que detecte la situación (`status`, `list`, `abort`, `finish`,
+`preview`, `save`, y `next`/`prev` para el `3`), así que un script nunca tiene
+que distinguir según qué comando corrió:
+
+| Código | Significado                                                                                                                      |
+|--------|----------------------------------------------------------------------------------------------------------------------------------|
+| `0`    | éxito                                                                                                                            |
+| `1`    | error — metadata de review ausente o corrupta, uso inválido, no es un repositorio git                                            |
+| `2`    | HEAD no está en una rama de review (el caso común, sin nada raro)                                                                |
+| `3`    | el cursor del walkthrough quedó fuera de rango porque HEAD se movió de la base de la review — se recupera con `git reset --soft` |
+
+**Formato de `--porcelain`** — una línea por registro, campos separados por
+tab, primero el tipo de registro y, si tiene, un path o id **inmediatamente
+después** — nunca al final, así los campos nuevos siempre se agregan al final
+de la línea. Un consumidor debe ignorar cualquier campo final que no reconozca
+en una línea de un tipo que sí conoce, y cualquier línea cuya etiqueta no
+reconozca: el formato sólo crece.
+
+```
+state	<branch>	<source>	<tip>	<mode>	<walkthrough>[	<position>	<total>	<recorded>	<current>[	<essential>]]
+entry	<position>	<id>[	<essential>|<banked>]
+uncovered	<id>
+```
+
+- `state` — exactamente una línea, siempre la primera. `mode` es
+  `whole` \| `step` \| `walk`. `walkthrough` es `none` \| `applied` \| `degraded`
+  (siempre `none` en modo step, porque ahí el campo es posicional).
+  `position`/`total`/`recorded`/`current` aparecen sólo con cursor (modo
+  `step`/`walk`); `current` es un SHA corto en step, un path en walk. `total` es
+  el total vigente, derivado en el momento; `recorded` es el registrado al
+  iniciar la review — difieren cuando la base se movió, aunque el cursor siga en
+  rango. `essential` (`1`/`0`) aparece sólo en modo walk.
+- `entry` — cero o más, uno por posición en el orden de lectura (paths de walk o
+  commits de step, el mismo orden que recorren `next`/`prev`). El campo final es
+  `essential` (`1`/`0`) en modo walk, `banked` (`1`/`0`, existe una edición
+  bancada bajo `refs/review-edits/`) en modo step; se omite del todo en modo
+  whole, porque ahí no hay secuencia que reportar.
+- `uncovered` — cero o más: un path que cambia en el rango revisado y no tiene
+  entrada en el walkthrough (modo walk, o una review whole con walkthrough
+  degradado).
+
+Un path siempre sale exactamente como lo devuelve `git diff --name-only` (con
+`core.quotePath=false`): bytes literales, sin escapar, para espacios y
+caracteres no-ASCII; la cita propia de git, intacta, para el caso raro de un
+path con `"` o `\`. El límite de campo siempre es el tab, nunca el espacio — un
+path de git nunca contiene un tab literal.
 
 </details>
 
@@ -550,6 +607,24 @@ Muestra *todas* las ramas `review/*` en curso a la vez (con su PR de origen, mod
 y posición `[k/N]` para reviews `--step` y walk). Las reviews pausadas con
 `git review save` también aparecen, bajo `saved`. La rama en la que estás parado
 se marca con un `*`.
+
+- `--porcelain` — inventario legible por programas, el mismo formato separado
+  por tab que [`status --porcelain`](#git-review-status):
+
+  ```
+  branch	<name>	<saved>	<current>	<orphan>[	<mode>[	<position>	<total>]]
+  ```
+
+  `saved`, `current` y `orphan` son `1`/`0` (`orphan` significa que la rama no
+  tiene metadata de review — hecha a mano, o dejada por un comando que murió
+  antes de escribirla). Cuando `orphan` es `1` no hay `mode`/`position`/`total`
+  que reportar. `position` y `total` son los valores registrados al iniciar la
+  review, no re-derivados — para los números vigentes y derivados de una review
+  puntual, corré `status --porcelain` parado en ella. Cualquiera de los dos
+  campos se omite, nunca se rellena con el `?` que usa la salida humana, si la
+  clave de config correspondiente falta. Sale con `0` incluso con el inventario
+  vacío (que no haya reviews no es un error); `1` sólo si corre fuera de un
+  repositorio git.
 
 </details>
 

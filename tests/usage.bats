@@ -143,6 +143,12 @@ teardown() {
 	[[ "$output" != *"usage: git review start"* ]]
 }
 
+@test "review status outside a git repository fails with a repo error, not a review error" {
+	run git review status
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"not a git repository"* ]]
+}
+
 @test "review start rejects an unknown option" {
 	run git review start --bogus
 	[ "$status" -eq 1 ]

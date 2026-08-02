@@ -10,6 +10,29 @@
 # live together (installed as libexec, not on PATH). It only defines functions,
 # so sourcing it has no side effects.
 
+# ── Porcelain (machine-readable) output ───────────────────────────────────────
+#
+# porcelain_row <field> [field...]
+# Print one porcelain-format line: the given fields joined by a tab, terminated
+# by a newline. This is the single point that writes a porcelain line — every
+# emitter (state, entry, uncovered, branch) builds its record by passing its
+# fields through here instead of printf-ing tabs itself, so the separator lives
+# in one place. A field the record's mode does not apply to is omitted from the
+# call entirely, never passed as an empty string: omit, never blank, never a
+# sentinel (contracts/status-porcelain.md, data-model.md).
+porcelain_row() {
+	_pr_first=1
+	for _pr_field in "$@"; do
+		if [ "$_pr_first" -eq 1 ]; then
+			printf '%s' "$_pr_field"
+			_pr_first=0
+		else
+			printf '\t%s' "$_pr_field"
+		fi
+	done
+	printf '\n'
+}
+
 # show_commit <commit> <n> <total>
 # Print a commit's diffstat first and its identifying header last, so the header
 # stays next to the prompt instead of scrolling off the top when the diffstat is
@@ -37,7 +60,7 @@ load_step_review_meta() {
 	review/*) ;;
 	*)
 		echo "error: not on a review/* branch (HEAD is $cur)" >&2
-		exit 1
+		exit 2
 		;;
 	esac
 
@@ -319,6 +342,28 @@ walk_count_keys() {
 	printf '%s\n' "$_wck_n"
 }
 
+# walk_entries_with_essential <tip>  (stdin: paths, one per line, in order)
+# Emit "position<TAB>path<TAB>essential" for each path on stdin, 1-based
+# position in the order given, essential 1/0 for the "> key" marker. Reads the
+# walkthrough at <tip> once (extends the walk_count_keys one-read pattern) so a
+# long reading order costs one git show per --porcelain invocation, not one per
+# entry — the O(1) performance goal of the porcelain contract. Fields only, not
+# a porcelain line: the caller passes each field through porcelain_row.
+walk_entries_with_essential() {
+	_we_content="$(walk_read "$1" || true)"
+	_we_n=0
+	while IFS= read -r _we_p; do
+		[ -n "$_we_p" ] || continue
+		_we_n=$((_we_n + 1))
+		_we_ess=0
+		if printf '%s\n' "$_we_content" | walk_body "$_we_p" |
+			grep -q '^> key[[:space:]]*$'; then
+			_we_ess=1
+		fi
+		printf '%s\t%s\t%s\n' "$_we_n" "$_we_p" "$_we_ess"
+	done
+}
+
 # walk_why <tip> <path>
 # The "why" prose a reviewer sees for <path>: the entry body from the walkthrough
 # at <tip>, with the reserved marker lines ("> key", and the "> at:" anchor of v2)
@@ -386,7 +431,7 @@ walk_range_error() {
 	esac
 	if [ "$_wre_step" -ge 1 ] && [ "$_wre_count" -ge 1 ] && [ "$_wre_total" -lt "$_wre_count" ]; then
 		echo "error: HEAD has moved off this review's base — the walkthrough cursor is at entry $_wre_step but only $_wre_total of $_wre_count entr$([ "$_wre_count" -eq 1 ] && echo y || echo ies) remain in range. Walk mode keeps the whole-PR diff staged with HEAD at the base; you now have commit(s) on top (did you run git commit?). Undo them with 'git reset --soft' to restage the diff, or 'git review abort' to discard the review, then retry." >&2
-		exit 1
+		exit 3
 	fi
 	echo "error: review entry $_wre_step out of range (1..$_wre_total) — corrupt metadata?" >&2
 	exit 1
@@ -409,7 +454,7 @@ load_walk_review_meta() {
 	review/*) ;;
 	*)
 		echo "error: not on a review/* branch (HEAD is $cur)" >&2
-		exit 1
+		exit 2
 		;;
 	esac
 

@@ -144,6 +144,16 @@ repo, no en archivos del working tree:
 - **Ante una duda genuina, preguntá.** Si hay una decisión de diseño o una
   ambigüedad real que no se resuelve leyendo el código, preguntarle al usuario
   suele ser más certero y económico que explorar a ciegas o adivinar y rehacer.
+- **Los documentos de trabajo se escriben en español.** Todo lo que se redacte
+  para este repo —specs, planes, checklists, análisis, notas de diseño— va en
+  español, con la ortografía completa (acentos, `ñ`, `¿`/`¡`). Cuando se parte de
+  una plantilla en inglés (p. ej. las de `.specify/templates/`), la plantilla
+  **se deja como está** y sólo se escribe en español lo que uno completa: los
+  encabezados y comentarios en inglés se conservan verbatim, porque los comandos
+  de Spec Kit localizan las secciones por su nombre y traducirlos los rompe. Esto
+  no aplica al *producto*: el código, los mensajes de los comandos, `README.md` y
+  los nombres de los `@test` siguen sus propias reglas (ver los dos README y la
+  regla de nombres ASCII más abajo).
 - **Solo shell POSIX (`sh`)**, con `set -eu` arriba de cada script. Nada de
   bashisms — los comandos deben correr bajo `dash`/Git Bash. El repo también
   trae *instaladores* de PowerShell (`web-install.ps1`) y un paquete npm, pero

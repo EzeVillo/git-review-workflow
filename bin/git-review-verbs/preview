@@ -62,7 +62,7 @@ case "$cur" in
 review/*) ;;
 *)
 	echo "not on a review/* branch (HEAD is ${cur:-detached})" >&2
-	exit 1
+	exit 2
 	;;
 esac
 

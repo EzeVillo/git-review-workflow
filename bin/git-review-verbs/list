@@ -12,19 +12,25 @@ prog="git review list"
 
 usage() {
 	cat <<EOF
-usage: $prog
+usage: $prog [--porcelain]
 
 List every review/* branch in progress, with its source PR, mode and — in
 commit-by-commit mode — which commit you are on ([k/N]). The branch you are on
 is marked with a "*". Reviews paused with git review save are listed too, under
 "saved".
+
+  --porcelain     machine-readable output (see the README for the format)
 EOF
 }
 
+porcelain=0
 case "${1:-}" in
 -h | --h)
 	usage
 	exit 0
+	;;
+--porcelain)
+	porcelain=1
 	;;
 "") ;;
 *)
@@ -39,12 +45,18 @@ git rev-parse --git-dir >/dev/null 2>&1 || {
 	exit 1
 }
 
+# Shared helpers, sourced from the libexec directory the dispatcher points us at.
+# shellcheck source=../git-review-lib.sh
+. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
+
 cur="$(git symbolic-ref --quiet --short HEAD || true)"
 branches="$(git for-each-ref --format='%(refname:short)' refs/heads/review/)"
 saved="$(git for-each-ref --format='%(refname:short)' refs/heads/review-saved/)"
 
 if [ -z "$branches" ] && [ -z "$saved" ]; then
-	echo "no reviews in progress"
+	if [ "$porcelain" -eq 0 ]; then
+		echo "no reviews in progress"
+	fi
 	exit 0
 fi
 
@@ -81,6 +93,55 @@ describe() {
 		printf '%s %s  %swhole  tip %s\n' "$label" "$b" "$prefix" "$shorttip"
 	fi
 }
+
+# describe_porcelain <branch> <is_saved>: print one porcelain "branch" record,
+# reading its mode and position from the branch config — same data describe()
+# shows a human, never re-derived (research.md, Decision 7). Position/total are
+# omitted, not "?", when either config key is missing (contracts/list-porcelain.md).
+describe_porcelain() {
+	pb="$1"
+	pcurrent=0
+	[ "$pb" = "$cur" ] && pcurrent=1
+	psrc="$(git config "branch.$pb.reviewsource" || true)"
+	if [ -z "$psrc" ]; then
+		porcelain_row branch "$pb" "$2" "$pcurrent" 1
+		return
+	fi
+	pmode="$(git config "branch.$pb.reviewmode" || echo whole)"
+	case "$pmode" in
+	step)
+		pposition="$(git config "branch.$pb.reviewstep" || true)"
+		ptotal="$(git config "branch.$pb.reviewcount" || true)"
+		;;
+	walk)
+		pposition="$(git config "branch.$pb.reviewwalkstep" || true)"
+		ptotal="$(git config "branch.$pb.reviewwalkcount" || true)"
+		;;
+	*)
+		pposition=""
+		ptotal=""
+		;;
+	esac
+	if [ -n "$pposition" ] && [ -n "$ptotal" ]; then
+		porcelain_row branch "$pb" "$2" "$pcurrent" 0 "$pmode" "$pposition" "$ptotal"
+	else
+		porcelain_row branch "$pb" "$2" "$pcurrent" 0 "$pmode"
+	fi
+}
+
+if [ "$porcelain" -eq 1 ]; then
+	printf '%s\n' "$branches" | while read -r b; do
+		[ -n "$b" ] || continue
+		describe_porcelain "$b" 0
+	done
+	if [ -n "$saved" ]; then
+		printf '%s\n' "$saved" | while read -r b; do
+			[ -n "$b" ] || continue
+			describe_porcelain "$b" 1
+		done
+	fi
+	exit 0
+fi
 
 prefix=""
 printf '%s\n' "$branches" | while read -r b; do

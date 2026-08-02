@@ -191,14 +191,16 @@ teardown() {
 	# collapsing the HEAD..tip range the reading cursor is derived over.
 	git commit --quiet -m "reviewer commits the staged diff"
 	run git review next
-	[ "$status" -eq 1 ]
+	# FR-023: recoverable drift (HEAD moved off the review's base) is exit 3,
+	# distinct from genuine corruption (exit 1) — see the next test.
+	[ "$status" -eq 3 ]
 	[[ "$output" == *"HEAD has moved off this review's base"* ]]
 	[[ "$output" == *"git reset --soft"* ]]
 	# Not the misleading diagnostic that blames the (intact) metadata.
 	[[ "$output" != *"corrupt metadata"* ]]
 	# status is the natural "what happened?" command and must diagnose it the same way.
 	run git review status
-	[ "$status" -eq 1 ]
+	[ "$status" -eq 3 ]
 	[[ "$output" == *"HEAD has moved off this review's base"* ]]
 	# Recovery: a soft reset back to the base restages the whole diff and the cursor
 	# works again, from where it was.

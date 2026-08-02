@@ -306,8 +306,8 @@ Every command is a verb under `git review`. Run `git review -h` for the list, or
 | `git review compare <a> <b> [--step \| --no-walk]`                                                                                 | Stage the diff between two commit-ish (tags, commits, branches) read-only, to read or walk it. `git review finish` refuses — there is nothing to write back.                                                                                                                                                    |
 | `git review walkthrough (init [--base <base>] [--force] \| build [--check])`                                                       | Author a reading walkthrough for the current branch's PR — a curated order of the changed files with a note on each, committed as `.review/walkthrough.md`.                                                                                                                                                     |
 | `git review next` / `git review prev`                                                                                              | Move a `--step` or walkthrough review to the next / previous entry.                                                                                                                                                                                                                                             |
-| `git review status`                                                                                                                | Show the state of the review on the current branch.                                                                                                                                                                                                                                                             |
-| `git review list`                                                                                                                  | List every review in progress and every saved one (current branch marked `*`).                                                                                                                                                                                                                                  |
+| `git review status [--porcelain \| --why <path>]`                                                                                  | Show the state of the review on the current branch (`--porcelain` for machine-readable output; `--why <path>` for a walkthrough entry's explanation).                                                                                                                                                           |
+| `git review list [--porcelain]`                                                                                                    | List every review in progress and every saved one (current branch marked `*`; `--porcelain` for machine-readable output).                                                                                                                                                                                       |
 | `git review save`                                                                                                                  | Pause the current review as `review-saved/<branch>` and return to where you started.                                                                                                                                                                                                                            |
 | `git review continue [branch]`                                                                                                     | Resume a review saved with `git review save`.                                                                                                                                                                                                                                                                   |
 | `git review finish [--onto-source] [--resume \| --abort [--force]]`                                                                | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch); `--abort` undoes the last finish.                                                                                                                                                                                 |
@@ -493,10 +493,12 @@ The file format `build` produces and `start` reads:
 Sessions now expire; anything that cached a token is suspect.
 
 ## 1. src/auth/session.c
+
 > key
 Read this first: it defines the token shape everything else depends on.
 
 ## 2. src/auth/login.c
+
 Then the login flow that consumes it — note the new error path.
 ```
 
@@ -521,11 +523,63 @@ and are never touched.
 </details>
 
 <details>
-<summary><code>git review status</code></summary>
+<summary id="git-review-status"><code>git review status</code></summary>
 
 Shows the current review: source PR, mode, and — in `--step` mode — which commit
 you are on (`[k/N]`) and which steps have banked edits. In walk mode it shows the
 reading cursor: `walk  [k/N] on <path>`.
+
+- `--porcelain` — machine-readable output for scripts and editor integrations:
+  stable, tab-separated lines (see below). Read-only, exactly like the human
+  output — it never mutates config, refs or the working tree.
+- `--why <path>` — print *only* the walkthrough's explanatory text for `<path>`,
+  nothing else on the stream: no label, no other data. Walk mode only.
+
+**Exit codes** — not just under `--porcelain`: the same codes come from every
+verb that detects the situation (`status`, `list`, `abort`, `finish`, `preview`,
+`save`, and `next`/`prev` for `3`), so a script never has to special-case which
+command it ran:
+
+| Code | Meaning                                                                                                           |
+|------|-------------------------------------------------------------------------------------------------------------------|
+| `0`  | success                                                                                                           |
+| `1`  | error — missing or corrupt review metadata, invalid usage, not a git repository                                   |
+| `2`  | HEAD is not on a review branch (the common, unremarkable case)                                                    |
+| `3`  | the walkthrough cursor is out of range because HEAD moved off the review's base — recover with `git reset --soft` |
+
+**`--porcelain` format** — one line per record, fields separated by a tab, the
+record's type first and a path or id (when it has one) immediately after that —
+never last, so new fields are always appended at the end of the line. A consumer
+should ignore any trailing field it does not recognize on a line type it knows,
+and any line whose type it does not recognize: the format only ever grows.
+
+```
+state	<branch>	<source>	<tip>	<mode>	<walkthrough>[	<position>	<total>	<recorded>	<current>[	<essential>]]
+entry	<position>	<id>[	<essential>|<banked>]
+uncovered	<id>
+```
+
+- `state` — exactly one line, always first. `mode` is `whole` \| `step` \| `walk`.
+  `walkthrough` is `none` \| `applied` \| `degraded` (always `none` in step mode,
+  since the field is positional there). `position`/`total`/`recorded`/`current`
+  appear only with a cursor (`step`/`walk` mode); `current` is a short commit SHA
+  in step mode, a path in walk mode. `total` is the live count, derived right now;
+  `recorded` is what was recorded when the review started — they differ once the
+  base has drifted, even while the cursor is still in range. `essential` (`1`/`0`)
+  appears only in walk mode.
+- `entry` — zero or more, one per position in the reading order (walk paths or
+  step commits, the same order `next`/`prev` move through). The trailing field is
+  `essential` (`1`/`0`) in walk mode, `banked` (`1`/`0`, has a banked edit under
+  `refs/review-edits/`) in step mode; omitted entirely in whole mode, since there
+  is no sequence to report.
+- `uncovered` — zero or more: a path that changes in the reviewed range but has no
+  walkthrough entry (walk mode, or a whole review with a degraded walkthrough).
+
+A path is always emitted exactly as `git diff --name-only` (with
+`core.quotePath=false`) renders it: literal, unescaped bytes for spaces and
+non-ASCII characters; git's own quoting, left untouched, for the rare path
+holding a `"` or a `\`. Field boundaries are always the tab, never whitespace —
+a git path never contains a literal tab.
 
 </details>
 
@@ -536,6 +590,23 @@ Shows *every* `review/*` branch in progress at once (with its source PR, mode an
 `[k/N]` position for `--step` and walk reviews). Reviews paused with
 `git review save` are listed too, under `saved`. The branch you are currently on
 is marked with a `*`.
+
+- `--porcelain` — machine-readable inventory, the same tab-separated format as
+  [`status --porcelain`](#git-review-status):
+
+  ```
+  branch	<name>	<saved>	<current>	<orphan>[	<mode>[	<position>	<total>]]
+  ```
+
+  `saved`, `current` and `orphan` are `1`/`0` (`orphan` means the branch has no
+  review metadata — hand-made, or left by a command that died early). When
+  `orphan` is `1` there is no `mode`/`position`/`total` to report. `position` and
+  `total` are the values recorded when the review started, not re-derived — for
+  the live, derived numbers of one particular review, run `status --porcelain`
+  from it. Either field is omitted, never filled with the `?` the human output
+  uses, if its config key happens to be missing. Exit `0` even on an empty
+  inventory (no reviews is not an error); `1` only if run outside a git
+  repository.
 
 </details>
 

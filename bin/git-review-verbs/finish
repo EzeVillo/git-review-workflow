@@ -256,7 +256,7 @@ case "$cur" in
 review/*) ;;
 *)
 	echo "error: not on a review/* branch (HEAD is $cur)" >&2
-	exit 1
+	exit 2
 	;;
 esac
 

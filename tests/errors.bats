@@ -125,6 +125,55 @@ step_review_two_with_edits() {
 	[[ "$output" == *"not on a review/* branch"* ]]
 }
 
+# ── exact exit codes (FR-017/FR-023, Decision 5) ───────────────────────────────
+#
+# The wrong-branch guards above only assert status -ne 0; these fix the exact
+# codes the contract promises across the whole CLI, not just status
+# --porcelain: 2 for "no review active", 1 for "something is broken" (missing
+# metadata, not a git repository). The walk-drift exit 3 case is covered in
+# tests/walk.bats, next to the fixture that already sets up a walkthrough.
+
+@test "status off a review branch exits exactly 2" {
+	run git review status
+	[ "$status" -eq 2 ]
+}
+
+@test "abort off a review branch exits exactly 2" {
+	run git review abort
+	[ "$status" -eq 2 ]
+}
+
+@test "finish off a review branch exits exactly 2" {
+	run git review finish
+	[ "$status" -eq 2 ]
+}
+
+@test "preview off a review branch exits exactly 2" {
+	run git review preview
+	[ "$status" -eq 2 ]
+}
+
+@test "save off a review branch exits exactly 2" {
+	run git review save
+	[ "$status" -eq 2 ]
+}
+
+@test "status on a hand-made review branch without metadata exits exactly 1" {
+	git switch --quiet -c review/orphan
+	run git review status
+	[ "$status" -eq 1 ]
+}
+
+@test "status outside a git repository exits exactly 1" {
+	norepo="$(mktemp -d)"
+	cd "$norepo"
+	run git review status
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"not a git repository"* ]]
+	cd "$WORK"
+	rm -rf "$norepo"
+}
+
 @test "review prev requires step mode on a whole review" {
 	git review start feature/x
 	run git review prev

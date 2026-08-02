@@ -104,3 +104,48 @@ teardown() {
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"unexpected argument"* ]]
 }
+
+# ── list --porcelain (US6) ─────────────────────────────────────────────────────
+
+@test "list --porcelain reports every branch with exact fields, including orphans and missing position" {
+	git review start feature/x --step >/dev/null
+	git switch --quiet develop
+	git reset --hard --quiet
+	git review start feature/y >/dev/null
+	git switch --quiet develop
+	git reset --hard --quiet
+
+	git branch review/orphan develop
+	git branch review-saved/gone develop
+
+	# A branch with reviewsource but no persisted position/total: list --porcelain
+	# must omit both fields, never emit "?" (contracts/list-porcelain.md).
+	git branch review/partial develop
+	git config branch.review/partial.reviewsource feature/x
+	git config branch.review/partial.reviewmode step
+
+	run git review list --porcelain
+	[ "$status" -eq 0 ]
+
+	x_line="$(printf '%s\n' "$output" | awk -F'\t' '$1 == "branch" && $2 == "review/feature/x"')"
+	[ "$x_line" = "$(printf 'branch\treview/feature/x\t0\t0\t0\tstep\t1\t1')" ]
+
+	y_line="$(printf '%s\n' "$output" | awk -F'\t' '$1 == "branch" && $2 == "review/feature/y"')"
+	[ "$y_line" = "$(printf 'branch\treview/feature/y\t0\t0\t0\twhole')" ]
+
+	orphan_line="$(printf '%s\n' "$output" | awk -F'\t' '$1 == "branch" && $2 == "review/orphan"')"
+	[ "$orphan_line" = "$(printf 'branch\treview/orphan\t0\t0\t1')" ]
+
+	saved_line="$(printf '%s\n' "$output" | awk -F'\t' '$1 == "branch" && $2 == "review-saved/gone"')"
+	[ "$saved_line" = "$(printf 'branch\treview-saved/gone\t1\t0\t1')" ]
+
+	partial_line="$(printf '%s\n' "$output" | awk -F'\t' '$1 == "branch" && $2 == "review/partial"')"
+	[ "$partial_line" = "$(printf 'branch\treview/partial\t0\t0\t0\tstep')" ]
+	[[ "$partial_line" != *"?"* ]]
+}
+
+@test "list --porcelain reports zero lines and exit 0 with no reviews in the repository" {
+	run git review list --porcelain
+	[ "$status" -eq 0 ]
+	[ -z "$output" ]
+}

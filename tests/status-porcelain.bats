@@ -279,6 +279,14 @@ EOF
 }
 
 @test "a path with spaces stays literal and a path with a quote comes out git-quoted, unmodified" {
+	# A literal double quote in a filename cannot be passed reliably as a
+	# command-line argument to a native Windows executable (git.exe): the CRT
+	# argv parser treats '"' as a quoting delimiter, not a literal character,
+	# so `git add` ends up looking for a different pathspec than the file that
+	# was actually created and fails with "did not match any files".
+	case "$(uname -s)" in
+		CYGWIN* | MINGW* | MSYS*) skip "a literal double quote in a filename is not representable as a Windows command-line argument" ;;
+	esac
 	git switch --quiet feature/x
 	printf 'v\n' >'has space.txt'
 	printf 'v\n' >'has"quote.txt'

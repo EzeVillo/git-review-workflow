@@ -1,0 +1,8 @@
+{
+  "require": "ts-node/register/transpile-only",
+  "spec": "test/unit/**/*.spec.ts",
+  "extension": [
+    "ts"
+  ],
+  "timeout": 5000
+}

@@ -1,0 +1,11 @@
+src/**
+test/**
+out/**
+.vscode-test/**
+.gitignore
+esbuild.js
+tsconfig.json
+test/unit/.mocharc.json
+**/*.map
+**/.eslintrc*
+node_modules/**

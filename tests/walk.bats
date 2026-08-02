@@ -370,6 +370,20 @@ EOF
 
 # ── CRLF line endings ─────────────────────────────────────────────────────────
 
+# Print the walkthrough blob committed on feature/x, byte for byte.
+#
+# The branch is resolved to a SHA first, on purpose. Under Git Bash on Windows,
+# MSYS rewrites any argument that looks like a POSIX path list before git.exe
+# sees it, and "feature/x:.review/walkthrough.md" looks exactly like one: two
+# slash-bearing components around a colon. git.exe gets
+# "feature\x;.review\walkthrough.md" and dies with "ambiguous argument". A SHA
+# has no slash before the colon, so the heuristic leaves the argument alone.
+# The commands themselves are safe: they resolve the rev with rev-parse before
+# building the "<rev>:<path>" argument, so a SHA is all git ever gets there.
+wt_blob() {
+	git show "$(git rev-parse feature/x):.review/walkthrough.md"
+}
+
 # Commit the walkthrough on stdin to feature/x with CRLF endings — what a Windows
 # author with core.autocrlf on pushes — and prove the committed blob really carries
 # the CRs. The proof deliberately avoids awk: the gawk that ships with Git for
@@ -389,7 +403,7 @@ recommit_walkthrough_crlf() {
 
 	lf_bytes=$(($(wc -c <"$TMP/wt.lf")))
 	lf_lines=$(($(wc -l <"$TMP/wt.lf")))
-	blob_bytes=$(($(git show "feature/x:.review/walkthrough.md" | wc -c)))
+	blob_bytes=$(($(wt_blob | wc -c)))
 	[ "$lf_lines" -gt 0 ]
 	[ "$blob_bytes" -eq "$((lf_bytes + lf_lines))" ]
 }
@@ -765,10 +779,10 @@ recommit_walkthrough_bom() {
 	recommit_walkthrough <"$TMP/wt.bom"
 
 	lf_bytes=$(($(wc -c <"$TMP/wt.lf")))
-	blob_bytes=$(($(git show "feature/x:.review/walkthrough.md" | wc -c)))
+	blob_bytes=$(($(wt_blob | wc -c)))
 	[ "$lf_bytes" -gt 0 ]
 	[ "$blob_bytes" -eq "$((lf_bytes + 3))" ]
-	[ "$(git show "feature/x:.review/walkthrough.md" | head -c 3)" = "$(printf '\357\273\277')" ]
+	[ "$(wt_blob | head -c 3)" = "$(printf '\357\273\277')" ]
 }
 
 @test "a walkthrough committed with a UTF-8 BOM still drives walk mode" {

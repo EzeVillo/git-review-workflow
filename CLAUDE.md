@@ -106,6 +106,25 @@ repo, no en archivos del working tree:
   `README.es.md` (español) son traducciones espejo. Cualquier cambio de
   comportamiento (flags, superficie de comandos, tabla de verbos, ejemplos)
   tiene que reflejarse en *ambos* en el mismo cambio — nunca tocar solo uno.
+- **La landing (`docs/index.html`) es pitch, no documentación.** Es la página de
+  GitHub Pages. A propósito **no** documenta flags ni la tabla de verbos: para eso
+  linkea a los README, así no hay una tercera superficie de docs que mantener
+  sincronizada. Pero sí duplica cuatro cosas puntuales, y solo esas hay que
+  revisarlas cuando el cambio las toca:
+    1. la **tabla comparativa** (la de la landing es un recorte de 4 filas de la
+       de los README);
+    2. los **métodos de instalación** (npm / Homebrew / PowerShell / one-liner);
+    3. los **comandos que aparecen en los ejemplos** — `start`, `next`, `finish`,
+       `walkthrough init|build`, `reviewworkflow.base`;
+    4. el **formato del walkthrough** que muestra el demo interactivo (`## N.
+       <path>` + el *why*).
+  Si tu cambio no toca nada de eso, la landing no se toca.
+- **La landing es bilingüe en un solo archivo.** El inglés vive en el HTML (para
+  que lo indexen los crawlers) y el español en el diccionario `ES` del `<script>`,
+  emparejados por `data-i18n`. Si editás un texto con `data-i18n`, editá las dos
+  puntas — igual que con los README. La vista mobile del cuadro comparativo se
+  **genera desde la propia `<table>`** en JS, así que agregar una fila o una
+  columna a la tabla ya se propaga sola: no la dupliques a mano.
 - **Ante una duda genuina, preguntá.** Si hay una decisión de diseño o una
   ambigüedad real que no se resuelve leyendo el código, preguntarle al usuario
   suele ser más certero y económico que explorar a ciegas o adivinar y rehacer.
@@ -140,6 +159,22 @@ repo, no en archivos del working tree:
       en CI trastabilla con los bytes UTF-8 → `unknown test name '...\342-80-94...'`
       (pasa en Linux/macOS, rompe en Windows). El cuerpo del test puede tener lo
       que sea; es solo el nombre el que se vuelve nombre de función.
+
+## Landing (GitHub Pages)
+
+`docs/index.html` se publica en GitHub Pages desde la rama `main`, carpeta
+`/docs` (Settings → Pages → *Deploy from a branch*). **No hay build ni
+workflow**: es un HTML estático autocontenido, así que cada push a `main` que
+toque `docs/` lo republica solo en un par de minutos. Para previsualizarlo,
+abrilo directo en el navegador — no necesita servidor.
+
+- `docs/.nojekyll` evita que Pages lo pase por Jekyll.
+- `docs/og.png` es la preview de los links (copia de `trailer-poster.png`);
+  las URLs de `og:image` y `canonical` están hardcodeadas a
+  `ezevillo.github.io/git-review-workflow/` — si algún día se le pone dominio
+  propio, hay que tocar esas líneas del `<head>` (y agregar un `docs/CNAME`).
+- `docs/` **no** está en `files` de `package.json`, así que no viaja en el
+  tarball de npm ni infla el paquete.
 
 ## Release
 

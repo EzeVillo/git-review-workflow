@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>git review — review a pull request by editing and running it</title>
+<meta name="description" content="Drop a whole pull request into your working tree as one staged diff you can edit and run. If an agent wrote the change, it can write the reading order too.">
+<link rel="canonical" href="https://ezevillo.github.io/git-review-workflow/">
+
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://ezevillo.github.io/git-review-workflow/">
+<meta property="og:title" content="git review — review a pull request by editing and running it">
+<meta property="og:description" content="An agent wrote the change. Let it write the reading order too. The whole PR lands in your working tree as one staged diff; your fixes come back out on a clean branch.">
+<meta property="og:image" content="https://ezevillo.github.io/git-review-workflow/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="git review — review a pull request by editing and running it">
+<meta name="twitter:description" content="An agent wrote the change. Let it write the reading order too.">
+<meta name="twitter:image" content="https://ezevillo.github.io/git-review-workflow/og.png">
+
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230B0E14'/><path d='M16 8v16M8 16h16' stroke='%234CC46B' stroke-width='4' stroke-linecap='round'/></svg>">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --ink:      #0B0E14;
+    --panel:    #10151F;
+    --panel-2:  #141A26;
+    --rule:     #1D2534;
+    --text:     #DCE2ED;
+    --muted:    #7A8699;
+    --add:      #4CC46B;
+    --add-dim:  rgba(76, 196, 107, .10);
+    --why:      #E6B455;
+    --del:      #E0666B;
+
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+    --gutter: 2.15rem;
+    --measure: 62ch;
+  }
+
+  * { box-sizing: border-box; }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+  }
+
+  body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Ambient: a faint vertical rule where the diff gutter would be. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(900px 500px at 18% -10%, rgba(76,196,107,.055), transparent 70%),
+      radial-gradient(700px 420px at 92% 8%, rgba(230,180,85,.035), transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrap {
+    position: relative;
+    z-index: 1;
+    width: min(100% - 2.5rem, 68rem);
+    margin-inline: auto;
+  }
+
+  a { color: inherit; }
+
+  :focus-visible {
+    outline: 2px solid var(--add);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  code, kbd { font-family: var(--mono); }
+
+  /* ---------------------------------------------------------------- nav */
+
+  .nav {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 1.4rem 0;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .mark {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: .98rem;
+    letter-spacing: -.02em;
+    text-decoration: none;
+    margin-right: auto;
+  }
+  .mark span { color: var(--add); }
+
+  .nav-link {
+    font-family: var(--mono);
+    font-size: .82rem;
+    color: var(--muted);
+    text-decoration: none;
+    transition: color .15s;
+  }
+  .nav-link:hover { color: var(--text); }
+
+  .langs {
+    display: flex;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .langs button {
+    font-family: var(--mono);
+    font-size: .74rem;
+    letter-spacing: .06em;
+    padding: .3rem .6rem;
+    background: none;
+    border: 0;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background .15s, color .15s;
+  }
+  .langs button:hover { color: var(--text); }
+  .langs button[aria-pressed="true"] {
+    background: var(--add-dim);
+    color: var(--add);
+  }
+
+  /* --------------------------------------------------------------- hero */
+
+  .hero { padding: 5.5rem 0 4.5rem; }
+
+  /* The headline is set as an added hunk: green gutter, tinted row. */
+  .h1 {
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: clamp(1.65rem, 4.6vw, 3.05rem);
+    line-height: 1.28;
+    letter-spacing: -.035em;
+    margin: 0 0 1.9rem;
+  }
+  .h1 .row {
+    display: block;
+    position: relative;
+    padding-left: var(--gutter);
+    background: var(--add-dim);
+    box-shadow: inset 2px 0 0 var(--add);
+  }
+  .h1 .row + .row { margin-top: .18rem; }
+  .h1 .row::before {
+    content: "+";
+    position: absolute;
+    left: .72rem;
+    color: var(--add);
+    opacity: .85;
+  }
+
+  .lede {
+    max-width: var(--measure);
+    font-size: 1.08rem;
+    color: #B6C0D0;
+    margin: 0 0 2.4rem;
+  }
+  .lede code {
+    font-size: .92em;
+    color: var(--text);
+  }
+
+  .cta-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem 1.5rem;
+  }
+
+  .cmd {
+    display: flex;
+    align-items: center;
+    gap: .9rem;
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: .6rem .6rem .6rem .95rem;
+    font-family: var(--mono);
+    font-size: .9rem;
+  }
+  .cmd .prompt { color: var(--muted); user-select: none; }
+  .cmd .copy {
+    font-family: var(--mono);
+    font-size: .74rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    padding: .34rem .6rem;
+    background: none;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color .15s, border-color .15s;
+  }
+  .cmd .copy:hover { color: var(--add); border-color: var(--add); }
+  .cmd .copy[data-copied="true"] { color: var(--add); border-color: var(--add); }
+
+  .ghost {
+    font-family: var(--mono);
+    font-size: .87rem;
+    color: var(--muted);
+    text-decoration: none;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: .15rem;
+    transition: color .15s, border-color .15s;
+  }
+  .ghost:hover { color: var(--text); border-color: var(--muted); }
+
+  /* ------------------------------------------------------------ section */
+
+  .section {
+    padding: 4.5rem 0;
+    border-top: 1px solid var(--rule);
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: .76rem;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 1rem;
+  }
+
+  .h2 {
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: clamp(1.35rem, 2.9vw, 1.85rem);
+    line-height: 1.32;
+    letter-spacing: -.03em;
+    margin: 0 0 1.15rem;
+    max-width: 30ch;
+  }
+
+  .prose {
+    max-width: var(--measure);
+    color: #AEB8C8;
+    margin: 0 0 2.5rem;
+  }
+  .prose code {
+    font-size: .9em;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: .08em .34em;
+  }
+  .prose strong { color: var(--text); font-weight: 500; }
+
+  /* --------------------------------------------------- walkthrough demo */
+
+  .walk {
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    background: var(--panel);
+    overflow: hidden;
+  }
+
+  .walk-bar {
+    display: flex;
+    align-items: center;
+    gap: .8rem;
+    padding: .7rem 1rem;
+    border-bottom: 1px solid var(--rule);
+    background: var(--panel-2);
+    font-family: var(--mono);
+    font-size: .8rem;
+    color: var(--muted);
+  }
+  .walk-bar .mode { color: var(--add); }
+  .walk-bar .pos { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+  .walk-body {
+    display: grid;
+    grid-template-columns: 15rem 1fr;
+    min-height: 16.5rem;
+  }
+
+  .rail {
+    border-right: 1px solid var(--rule);
+    padding: .8rem 0;
+    margin: 0;
+    list-style: none;
+  }
+  .rail li { margin: 0; }
+  .rail button {
+    display: flex;
+    gap: .65rem;
+    width: 100%;
+    text-align: left;
+    padding: .42rem 1rem;
+    background: none;
+    border: 0;
+    border-left: 2px solid transparent;
+    font-family: var(--mono);
+    font-size: .78rem;
+    line-height: 1.5;
+    color: var(--muted);
+    cursor: pointer;
+    transition: color .15s, background .15s;
+  }
+  .rail button:hover { color: var(--text); background: rgba(255,255,255,.02); }
+  .rail button[aria-current="true"] {
+    color: var(--text);
+    border-left-color: var(--add);
+    background: var(--add-dim);
+  }
+  .rail .n { color: var(--add); opacity: .8; font-variant-numeric: tabular-nums; }
+  .rail .f {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .entry {
+    padding: 1.6rem 1.7rem;
+    display: flex;
+    flex-direction: column;
+  }
+  .entry-head {
+    font-family: var(--mono);
+    font-size: .95rem;
+    color: var(--text);
+    margin: 0 0 1rem;
+    word-break: break-all;
+  }
+  .entry-head .n { color: var(--add); }
+
+  /* The author's "why" has its own voice: mono italic, amber, quoted. */
+  .why {
+    position: relative;
+    font-family: var(--mono);
+    font-style: italic;
+    font-size: .95rem;
+    line-height: 1.72;
+    color: var(--why);
+    padding-left: 1.05rem;
+    border-left: 1px solid rgba(230,180,85,.32);
+    margin: 0 0 auto;
+    max-width: 52ch;
+  }
+
+  .walk-foot {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    margin-top: 1.8rem;
+  }
+  .step-btn {
+    font-family: var(--mono);
+    font-size: .8rem;
+    padding: .4rem .8rem;
+    background: var(--panel-2);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color .15s, color .15s;
+  }
+  .step-btn:hover:not(:disabled) { border-color: var(--add); color: var(--add); }
+  .step-btn:disabled { opacity: .35; cursor: default; }
+  .hint {
+    font-family: var(--mono);
+    font-size: .74rem;
+    color: var(--muted);
+    margin-left: .5rem;
+  }
+  kbd {
+    border: 1px solid var(--rule);
+    border-bottom-width: 2px;
+    border-radius: 3px;
+    padding: .05em .35em;
+    font-size: .95em;
+  }
+
+  .fade { animation: fade .28s ease-out; }
+  @keyframes fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+  /* --------------------------------------------------------- steps 1-3 */
+
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(17rem, 100%), 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    overflow: hidden;
+  }
+  .step {
+    background: var(--panel);
+    padding: 1.5rem 1.4rem;
+  }
+  .step .n {
+    font-family: var(--mono);
+    font-size: .76rem;
+    letter-spacing: .1em;
+    color: var(--add);
+    display: block;
+    margin-bottom: .9rem;
+  }
+  .step .line {
+    font-family: var(--mono);
+    font-size: .87rem;
+    color: var(--text);
+    margin: 0 0 .8rem;
+    word-break: break-word;
+  }
+  .step p {
+    margin: 0;
+    font-size: .93rem;
+    color: #A5AFC0;
+  }
+  .step p code {
+    font-size: .88em;
+    color: var(--text);
+    white-space: nowrap;
+  }
+
+  /* --------------------------------------------------------------- table */
+
+  .table-scroll { overflow-x: auto; }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 40rem;
+    font-size: .9rem;
+  }
+  th, td {
+    border-bottom: 1px solid var(--rule);
+    padding: .78rem .8rem;
+    text-align: center;
+  }
+  thead th {
+    font-family: var(--mono);
+    font-weight: 400;
+    font-size: .76rem;
+    line-height: 1.4;
+    color: var(--muted);
+    vertical-align: bottom;
+  }
+  tbody th {
+    font-family: var(--mono);
+    font-weight: 400;
+    font-size: .84rem;
+    text-align: left;
+    color: #AEB8C8;
+    white-space: nowrap;
+  }
+  tbody tr.self th { color: var(--text); }
+  tbody tr.self { background: var(--add-dim); }
+  .yes { color: var(--add); }
+  .no  { color: #3D465A; }
+  .part { color: var(--why); font-size: .8rem; font-family: var(--mono); }
+
+  /* Narrow screens flip the axis: group by capability, list who has it.
+     Built from the table itself, so there is one source of data. */
+  .compare-compact { display: none; }
+
+  .cap {
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    background: var(--panel);
+    padding: .95rem 1rem 1.05rem;
+  }
+  .cap-name {
+    font-family: var(--mono);
+    font-size: .82rem;
+    line-height: 1.45;
+    color: var(--text);
+    margin: 0 0 .75rem;
+    padding-bottom: .7rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  .cap ul { list-style: none; margin: 0; padding: 0; }
+  .cap li {
+    display: flex;
+    align-items: baseline;
+    gap: .6rem;
+    font-family: var(--mono);
+    font-size: .82rem;
+    line-height: 1.9;
+  }
+  .cap li .who { color: #6B7688; }
+  .cap li.win .who { color: var(--text); }
+  .cap li .flag { flex: none; width: 1em; }
+
+  /* -------------------------------------------------------------- install */
+
+  .install-grid {
+    display: grid;
+    /* min() so a narrow phone collapses to one column instead of
+       forcing a 21rem track wider than the viewport. */
+    grid-template-columns: repeat(auto-fit, minmax(min(21rem, 100%), 1fr));
+    gap: 1rem;
+  }
+  .box {
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    background: var(--panel);
+    padding: 1.15rem 1.2rem;
+  }
+  .box h3 {
+    font-family: var(--mono);
+    font-weight: 500;
+    font-size: .88rem;
+    margin: 0 0 .7rem;
+    color: var(--muted);
+  }
+  .box pre {
+    margin: 0;
+    font-family: var(--mono);
+    font-size: .82rem;
+    line-height: 1.6;
+    color: var(--text);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  /* --------------------------------------------------------------- footer */
+
+  .footer {
+    padding: 3rem 0 4rem;
+    border-top: 1px solid var(--rule);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem 1.6rem;
+    align-items: center;
+    font-family: var(--mono);
+    font-size: .82rem;
+    color: var(--muted);
+  }
+  .footer a { color: var(--muted); text-decoration: none; transition: color .15s; }
+  .footer a:hover { color: var(--text); }
+  .footer .sp { margin-left: auto; }
+
+  /* -------------------------------------------------------------- mobile */
+
+  @media (max-width: 46rem) {
+    .hero { padding: 3.5rem 0 3rem; }
+    .section { padding: 3.25rem 0; }
+    .walk-body { grid-template-columns: 1fr; }
+    .rail {
+      display: flex;
+      overflow-x: auto;
+      border-right: 0;
+      border-bottom: 1px solid var(--rule);
+      padding: .5rem;
+      gap: .3rem;
+    }
+    .rail button {
+      border-left: 0;
+      border-bottom: 2px solid transparent;
+      padding: .3rem .55rem;
+      white-space: nowrap;
+    }
+    .rail button[aria-current="true"] { border-left-color: transparent; border-bottom-color: var(--add); }
+    .rail .f { max-width: 9rem; }
+    .entry { padding: 1.25rem 1.1rem; }
+    .hint { display: none; }   /* no keyboard to hint at */
+
+    .table-scroll { display: none; }
+    .compare-compact { display: grid; gap: .8rem; }
+    .footer .sp { margin-left: 0; flex-basis: 100%; height: 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap" id="top">
+
+  <nav class="nav">
+    <a class="mark" href="#top">git <span>review</span></a>
+    <div class="langs" role="group" aria-label="Language">
+      <button type="button" data-lang="en" aria-pressed="true">EN</button>
+      <button type="button" data-lang="es" aria-pressed="false">ES</button>
+    </div>
+    <a class="nav-link" href="https://github.com/EzeVillo/git-review-workflow">GitHub</a>
+  </nav>
+
+  <header class="hero">
+    <h1 class="h1">
+      <span class="row" data-i18n="h1a">An agent wrote the change.</span>
+      <span class="row" data-i18n="h1b">Let it write the reading order too.</span>
+    </h1>
+    <p class="lede" data-i18n="lede">
+      <code>git review</code> puts the whole pull request in your working tree as one staged diff
+      you can edit and run. If the branch ships a walkthrough, it takes you file by file — in the
+      order the author chose, with the reason for each. Your fixes come back out on a separate branch.
+    </p>
+    <div class="cta-row">
+      <div class="cmd">
+        <span class="prompt">$</span>
+        <code id="install-cmd">npm install -g git-review-workflow</code>
+        <button type="button" class="copy" data-copy="#install-cmd" data-i18n="copy">Copy</button>
+      </div>
+      <a class="ghost" href="https://youtu.be/LsSQtNFnjRQ" data-i18n="watch">Watch the 90-second demo →</a>
+    </div>
+  </header>
+
+  <section class="section">
+    <p class="eyebrow" data-i18n="eyebrow1">The reading order</p>
+    <h2 class="h2" data-i18n="h2a">Whoever wrote the code writes the order you read it in.</h2>
+    <p class="prose" data-i18n="prose1">
+      You asked an agent for a feature. It touched fourteen files and handed you a diff sorted
+      alphabetically — the one order guaranteed to carry no information. With
+      <code>git review walkthrough</code>, the <strong>same agent that made the change also commits
+      the order to read it in</strong>, plus a note on why each file matters. The reviewer runs
+      <code>git review start</code> and lands in that order. Nothing to install on their side,
+      nothing to configure.
+    </p>
+
+    <div class="walk" id="walk" tabindex="0" aria-label="Walkthrough demo">
+      <div class="walk-bar">
+        <span class="mode">walk</span>
+        <span data-i18n="walkbranch">on review/feature/rate-limit</span>
+        <span class="pos" id="walk-pos">[1/4]</span>
+      </div>
+      <div class="walk-body">
+        <ul class="rail" id="walk-rail"></ul>
+        <div class="entry">
+          <p class="entry-head" id="walk-head"></p>
+          <blockquote class="why" id="walk-why"></blockquote>
+          <div class="walk-foot">
+            <button type="button" class="step-btn" id="walk-prev" data-i18n="prev">git review prev</button>
+            <button type="button" class="step-btn" id="walk-next" data-i18n="next">git review next</button>
+            <span class="hint"><kbd>←</kbd> <kbd>→</kbd></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <p class="eyebrow" data-i18n="eyebrow2">The loop</p>
+    <h2 class="h2" data-i18n="h2b">Three commands, and the PR is just your working tree.</h2>
+    <div class="steps">
+      <div class="step">
+        <span class="n">01</span>
+        <p class="line">git review start feature/rate-limit</p>
+        <p data-i18n="step1">
+          The whole PR lands staged in your working tree, with HEAD at the merge-base — so
+          <code>git diff --cached</code> is the entire change. Walk mode starts on its own if the
+          branch ships a walkthrough.
+        </p>
+      </div>
+      <div class="step">
+        <span class="n">02</span>
+        <p class="line" data-i18n="step2line">edit it. run it. break it.</p>
+        <p data-i18n="step2">
+          It is your working tree, so any editor works. Fix the typo inline instead of writing a
+          comment about it, run the tests, or point an agent at the staged diff and let it review
+          the whole thing in place.
+        </p>
+      </div>
+      <div class="step">
+        <span class="n">03</span>
+        <p class="line">git review finish</p>
+        <p data-i18n="step3">
+          Your edits — and only yours — are extracted onto <code>review-fixes/feature/rate-limit</code>,
+          staged for you to read and commit. The author's work stays untouched.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <p class="eyebrow" data-i18n="eyebrow3">Against the alternatives</p>
+    <h2 class="h2" data-i18n="h2c">Every tool lets you see a PR. Almost none let you act on one.</h2>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col"></th>
+            <th scope="col" data-i18n="col1">Curated order<br>+ why, per file</th>
+            <th scope="col" data-i18n="col2">Edit &amp; run as<br>working tree</th>
+            <th scope="col" data-i18n="col3">Auto-extract<br>your fixes</th>
+            <th scope="col" data-i18n="col4">Editor-agnostic</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="self">
+            <th scope="row">git review</th>
+            <td class="yes">●</td><td class="yes">●</td><td class="yes">●</td><td class="yes">●</td>
+          </tr>
+          <tr>
+            <th scope="row">gh pr checkout</th>
+            <td class="no">○</td><td class="yes">●</td><td class="no">○</td><td class="yes">●</td>
+          </tr>
+          <tr>
+            <th scope="row" data-i18n="rowide">IDE PR panels</th>
+            <td class="no">○</td><td class="part" data-i18n="inide">in-IDE only</td><td class="no">○</td><td class="no">○</td>
+          </tr>
+          <tr>
+            <th scope="row" data-i18n="rowweb">GitHub / GitLab web</th>
+            <td class="no">○</td><td class="no">○</td><td class="no">○</td><td class="yes">●</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="compare-compact" id="compare-compact"></div>
+  </section>
+
+  <section class="section">
+    <p class="eyebrow" data-i18n="eyebrow4">Install</p>
+    <h2 class="h2" data-i18n="h2d">One command, then one line of config per repo.</h2>
+    <p class="prose" data-i18n="prose4">
+      Everything plugs into git as a single subcommand. Needs git 2.23+ and a POSIX shell — on
+      Windows that is Git Bash, which the installers set up for you.
+    </p>
+    <div class="install-grid">
+      <div class="box">
+        <h3>npm</h3>
+        <pre>npm install -g git-review-workflow</pre>
+      </div>
+      <div class="box">
+        <h3>Homebrew</h3>
+        <pre>brew tap EzeVillo/git-review-workflow \
+  https://github.com/EzeVillo/git-review-workflow
+brew install git-review-workflow</pre>
+      </div>
+      <div class="box">
+        <h3>Windows (PowerShell)</h3>
+        <pre>irm https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.ps1 | iex</pre>
+      </div>
+      <div class="box">
+        <h3 data-i18n="nonode">No Node? One line</h3>
+        <pre>curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.sh | sh</pre>
+      </div>
+      <div class="box" style="grid-column: 1 / -1;">
+        <h3 data-i18n="thenonce">Then, once per repository</h3>
+        <pre data-i18n="baseline">git config reviewworkflow.base develop   # where your PRs get integrated</pre>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <a href="https://github.com/EzeVillo/git-review-workflow">GitHub</a>
+    <a href="https://www.npmjs.com/package/git-review-workflow">npm</a>
+    <a href="https://github.com/EzeVillo/git-review-workflow#readme" data-i18n="docs">Documentation</a>
+    <span class="sp"></span>
+    <span>MIT © EzeVillo</span>
+  </footer>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------------------------------------------------------- content */
+
+  var ENTRIES = {
+    en: [
+      { f: "src/ratelimit/bucket.ts",
+        w: "Start here. The token bucket is the only piece with real logic in it — everything else is wiring. If this is wrong, nothing downstream matters." },
+      { f: "src/middleware/rate-limit.ts",
+        w: "The middleware that spends the tokens. Note it runs before auth, so an unauthenticated flood is cheap to reject, and that the 429 carries Retry-After." },
+      { f: "src/config/limits.ts",
+        w: "Just the numbers, but they are the numbers you will get paged about. I matched the existing quota tier at 100/min per IP — worth a second opinion." },
+      { f: "tests/ratelimit.test.ts",
+        w: "Read last. Covers the burst and the refill edges with a faked clock, so there are no sleeps and the suite stays fast." }
+    ],
+    es: [
+      { f: "src/ratelimit/bucket.ts",
+        w: "Empezá acá. El token bucket es lo único con lógica de verdad — el resto es cableado. Si esto está mal, nada de lo que sigue importa." },
+      { f: "src/middleware/rate-limit.ts",
+        w: "El middleware que gasta los tokens. Ojo que corre antes de auth, así que rechazar un flood sin autenticar sale barato, y que el 429 lleva Retry-After." },
+      { f: "src/config/limits.ts",
+        w: "Son solo números, pero son los números por los que te van a despertar. Los igualé al tier de quota actual, 100/min por IP — conviene una segunda opinión." },
+      { f: "tests/ratelimit.test.ts",
+        w: "Dejalo para el final. Cubre los bordes de burst y de refill con un reloj falso, así no hay sleeps y la suite sigue rápida." }
+    ]
+  };
+
+  var ES = {
+    h1a: "Un agente escribió el cambio.",
+    h1b: "Que escriba también el orden de lectura.",
+    lede: '<code>git review</code> pone el pull request entero en tu working tree como un único diff staged que podés editar y correr. Si la rama trae un walkthrough, te lleva archivo por archivo — en el orden que eligió el autor y con el motivo de cada uno. Tus correcciones salen después a una rama aparte.',
+    copy: "Copiar",
+    watch: "Mirá la demo de 90 segundos →",
+
+    eyebrow1: "El orden de lectura",
+    h2a: "Quien escribió el código escribe el orden en que lo leés.",
+    prose1: 'Le pediste una feature a un agente. Tocó catorce archivos y te devolvió un diff ordenado alfabéticamente — el único orden que garantiza no decir nada. Con <code>git review walkthrough</code>, <strong>el mismo agente que hizo el cambio commitea también el orden para leerlo</strong>, con una nota de por qué importa cada archivo. El reviewer corre <code>git review start</code> y cae en ese orden. No tiene que instalar nada ni configurar nada.',
+    walkbranch: "en review/feature/rate-limit",
+    prev: "git review prev",
+    next: "git review next",
+
+    eyebrow2: "El ciclo",
+    h2b: "Tres comandos, y el PR es simplemente tu working tree.",
+    step1: "El PR entero queda staged en tu working tree, con HEAD en el merge-base — así <code>git diff --cached</code> es el cambio completo. Si la rama trae un walkthrough, el modo walk arranca solo.",
+    step2line: "editalo. correlo. rompelo.",
+    step2: "Es tu working tree, así que sirve cualquier editor. Arreglá el typo inline en vez de escribir un comentario sobre el typo, corré los tests, o apuntá un agente al diff staged y que revise todo ahí mismo.",
+    step3: "Tus ediciones — y solo las tuyas — se extraen a <code>review-fixes/feature/rate-limit</code>, staged para que las leas y las commitees vos. El trabajo del autor queda intacto.",
+
+    eyebrow3: "Contra las alternativas",
+    h2c: "Toda herramienta te deja ver un PR. Casi ninguna te deja actuar sobre uno.",
+    col1: "Orden curado<br>+ por qué, por archivo",
+    col2: "Editar y correr como<br>working tree",
+    col3: "Extraer tus fixes<br>automáticamente",
+    col4: "Independiente<br>del editor",
+    rowide: "Paneles de PR del IDE",
+    rowweb: "Web de GitHub / GitLab",
+    inide: "solo en el IDE",
+
+    eyebrow4: "Instalación",
+    h2d: "Un comando, y después una línea de config por repo.",
+    prose4: "Todo se enchufa a git como un único subcomando. Necesita git 2.23+ y una shell POSIX — en Windows eso es Git Bash, que los instaladores te dejan listo.",
+    nonode: "¿Sin Node? Una línea",
+    thenonce: "Después, una vez por repositorio",
+    baseline: "git config reviewworkflow.base develop   # donde se integran tus PRs",
+    docs: "Documentación"
+  };
+
+  /* Snapshot the English copy straight from the DOM, so it never drifts. */
+  var EN = {};
+  var nodes = document.querySelectorAll("[data-i18n]");
+  Array.prototype.forEach.call(nodes, function (el) {
+    EN[el.getAttribute("data-i18n")] = el.innerHTML;
+  });
+
+  /* ------------------------------------------------------ walkthrough */
+
+  var lang = "en";
+  var step = 0;
+
+  var rail = document.getElementById("walk-rail");
+  var head = document.getElementById("walk-head");
+  var why  = document.getElementById("walk-why");
+  var pos  = document.getElementById("walk-pos");
+  var prevBtn = document.getElementById("walk-prev");
+  var nextBtn = document.getElementById("walk-next");
+
+  function buildRail() {
+    rail.innerHTML = "";
+    ENTRIES[lang].forEach(function (entry, i) {
+      var li = document.createElement("li");
+      var b = document.createElement("button");
+      b.type = "button";
+      b.innerHTML = '<span class="n">' + (i + 1) + '.</span><span class="f"></span>';
+      b.querySelector(".f").textContent = entry.f;
+      b.addEventListener("click", function () { go(i); });
+      li.appendChild(b);
+      rail.appendChild(li);
+    });
+  }
+
+  function render(animate) {
+    var list = ENTRIES[lang];
+    var entry = list[step];
+
+    head.innerHTML = '<span class="n">## ' + (step + 1) + '.</span> ';
+    head.appendChild(document.createTextNode(entry.f));
+    why.textContent = entry.w;
+    pos.textContent = "[" + (step + 1) + "/" + list.length + "]";
+
+    var buttons = rail.querySelectorAll("button");
+    Array.prototype.forEach.call(buttons, function (b, i) {
+      b.setAttribute("aria-current", i === step ? "true" : "false");
+    });
+
+    /* When the rail scrolls (it is horizontal on narrow screens), bring the
+       active entry into view — otherwise the selection moves off-screen and
+       the cursor looks stuck. Scrolls the rail only, never the page. */
+    keepRailInView(buttons[step]);
+
+    prevBtn.disabled = step === 0;
+    nextBtn.disabled = step === list.length - 1;
+
+    if (animate) {
+      why.classList.remove("fade");
+      void why.offsetWidth;
+      why.classList.add("fade");
+    }
+  }
+
+  function keepRailInView(btn) {
+    if (!btn || rail.scrollWidth <= rail.clientWidth) return;
+    var railBox = rail.getBoundingClientRect();
+    var box = btn.getBoundingClientRect();
+    if (box.left >= railBox.left && box.right <= railBox.right) return;
+
+    var target = rail.scrollLeft
+      + (box.left - railBox.left)
+      - (railBox.width - box.width) / 2;
+    var smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (smooth && rail.scrollTo) {
+      rail.scrollTo({ left: target, behavior: "smooth" });
+    } else {
+      rail.scrollLeft = target;
+    }
+  }
+
+  function go(i) {
+    var list = ENTRIES[lang];
+    if (i < 0 || i >= list.length) return;
+    step = i;
+    render(true);
+  }
+
+  prevBtn.addEventListener("click", function () { go(step - 1); });
+  nextBtn.addEventListener("click", function () { go(step + 1); });
+
+  document.getElementById("walk").addEventListener("keydown", function (e) {
+    if (e.key === "ArrowRight") { go(step + 1); e.preventDefault(); }
+    if (e.key === "ArrowLeft")  { go(step - 1); e.preventDefault(); }
+  });
+
+  /* --------------------------------------------- comparison, narrow */
+
+  /* Same data, other axis: one block per capability, listing who has it.
+     Read out of the table so the copy and its translations live in one place. */
+  function buildCompact() {
+    var table = document.querySelector("table");
+    var host = document.getElementById("compare-compact");
+    if (!table || !host) return;
+
+    /* The headers carry <br> for the two-line desktop layout. Clone and swap
+       each one for a space: textContent alone would run the words together,
+       and going through innerHTML would leave entities undecoded. */
+    var caps = Array.prototype.slice.call(table.querySelectorAll("thead th"), 1)
+      .map(function (th) {
+        var clone = th.cloneNode(true);
+        Array.prototype.forEach.call(clone.querySelectorAll("br"), function (br) {
+          br.parentNode.replaceChild(document.createTextNode(" "), br);
+        });
+        return clone.textContent.replace(/\s+/g, " ").trim();
+      });
+
+    var tools = Array.prototype.map.call(table.querySelectorAll("tbody tr"), function (tr) {
+      return {
+        name: tr.querySelector("th").textContent.trim(),
+        win: tr.classList.contains("self"),
+        cells: Array.prototype.slice.call(tr.querySelectorAll("td"))
+      };
+    });
+
+    host.innerHTML = "";
+    caps.forEach(function (cap, i) {
+      var block = document.createElement("div");
+      block.className = "cap";
+
+      var name = document.createElement("p");
+      name.className = "cap-name";
+      name.textContent = cap;
+      block.appendChild(name);
+
+      var list = document.createElement("ul");
+      tools.forEach(function (tool) {
+        var cell = tool.cells[i];
+        if (!cell) return;
+
+        var li = document.createElement("li");
+        if (tool.win && cell.classList.contains("yes")) li.className = "win";
+
+        var flag = document.createElement("span");
+        flag.className = "flag " + cell.className;
+        flag.textContent = cell.classList.contains("part") ? "◐" : cell.textContent.trim();
+
+        var who = document.createElement("span");
+        who.className = "who";
+        who.textContent = cell.classList.contains("part")
+          ? tool.name + " — " + cell.textContent.trim()
+          : tool.name;
+
+        li.appendChild(flag);
+        li.appendChild(who);
+        list.appendChild(li);
+      });
+
+      block.appendChild(list);
+      host.appendChild(block);
+    });
+  }
+
+  /* ------------------------------------------------------------- i18n */
+
+  function setLang(next) {
+    lang = next === "es" ? "es" : "en";
+    var dict = lang === "es" ? ES : EN;
+
+    Array.prototype.forEach.call(nodes, function (el) {
+      var key = el.getAttribute("data-i18n");
+      if (dict[key] !== undefined) el.innerHTML = dict[key];
+    });
+
+    document.documentElement.lang = lang;
+    Array.prototype.forEach.call(document.querySelectorAll(".langs button"), function (b) {
+      b.setAttribute("aria-pressed", String(b.getAttribute("data-lang") === lang));
+    });
+
+    try { localStorage.setItem("grw-lang", lang); } catch (err) { /* private mode */ }
+
+    buildRail();
+    render(false);
+    buildCompact();
+  }
+
+  Array.prototype.forEach.call(document.querySelectorAll(".langs button"), function (b) {
+    b.addEventListener("click", function () { setLang(b.getAttribute("data-lang")); });
+  });
+
+  var saved = null;
+  try { saved = localStorage.getItem("grw-lang"); } catch (err) { /* private mode */ }
+  if (!saved && /^es\b/i.test(navigator.language || "")) saved = "es";
+  setLang(saved || "en");
+
+  /* ------------------------------------------------------------- copy */
+
+  Array.prototype.forEach.call(document.querySelectorAll("[data-copy]"), function (btn) {
+    btn.addEventListener("click", function () {
+      var target = document.querySelector(btn.getAttribute("data-copy"));
+      if (!target || !navigator.clipboard) return;
+      navigator.clipboard.writeText(target.textContent.trim()).then(function () {
+        var original = btn.textContent;
+        btn.textContent = lang === "es" ? "Copiado" : "Copied";
+        btn.setAttribute("data-copied", "true");
+        setTimeout(function () {
+          btn.textContent = original;
+          btn.removeAttribute("data-copied");
+        }, 1600);
+      });
+    });
+  });
+})();
+</script>
+</body>
+</html>

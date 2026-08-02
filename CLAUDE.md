@@ -90,7 +90,15 @@ repo, no en archivos del working tree:
   paths con el rango real, igual que step re-deriva `commits` con `rev-list`. En
   walk `HEAD` queda clavado en el lower bound, así que la derivación es estable
   aunque el usuario edite. Walk no banca refs (las ediciones viven en el working
-  tree, como whole); el cursor muere con la rama. Un walkthrough roto/stale nunca
+  tree, como whole); el cursor muere con la rama. **Toda comparación de paths
+  entre el walkthrough y git pasa por dos puntos únicos de normalización, y solo
+  por ahí:** `walk_normalize` (bytes del sidecar — CR final y BOM UTF-8) y
+  `changed_paths` (lado git — `core.quotePath=false`, más el trim de whitespace en
+  `walk_parse`/`walk_body`). Si agregás una superficie nueva donde un path de git
+  se compara contra uno escrito a mano, hacela pasar por esas dos: cada byte
+  invisible que se cuela produce el mismo síntoma — el mismo archivo listado a los
+  dos lados del error de drift, o la entrada desapareciendo del orden de lectura
+  en silencio. Un walkthrough roto/stale nunca
   falla una review: degrada a whole con nota.
 - **Refs de ediciones:** `refs/review-edits/<src>/<step>` bancan las ediciones
   de cada commit en `--step` como objetos commit-tree; `git review save` los mueve

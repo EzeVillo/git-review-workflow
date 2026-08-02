@@ -155,17 +155,49 @@ fold_lower() {
 	printf '%s\n' "$_fl_lower"
 }
 
-# walk_strip_cr  (stdin: text)
-# Drop a trailing carriage return from every line. Every reader below matches on
-# whole lines — the path in "## N. <path>", the "> key" marker, the entry body
-# looked up by path — so a walkthrough committed with CRLF endings (an author on
-# Windows with core.autocrlf on) yields paths that differ from git's by a stray
-# \r: no entry intersects the range, and the reviewer silently loses walk mode.
-# It only bites on Linux/macOS, because the MSYS awk swallows the CR — which is
-# exactly the case a Windows author cannot see. Only the line-final CR goes; a CR
-# in the middle of a line is content and stays.
-walk_strip_cr() {
-	awk '{ sub(/\r$/, ""); print }'
+# changed_paths <lower> <tip>
+# The paths a review range changes, one per line, verbatim — the git side of every
+# path comparison in this project (a walkthrough's entries, the drift check, the
+# uncovered-files note). core.quotePath=false is the whole point of the helper:
+# with git's default, any path holding a non-ASCII byte comes out escaped and
+# quoted ("src/caf\303\251.js") while the same path written in a walkthrough is
+# literal, so the two never compare equal. The walkthrough entry then drops out of
+# the reading order in silence, and build reports the same file as both missing
+# and extra. Same shape as a CRLF sidecar (see walk_normalize), except it hides
+# from anyone whose repo is ASCII-only rather than from anyone on Windows.
+# A path holding a '"' or a '\' is still quoted, with quotePath off or on; both
+# are illegal on Windows and vanishingly rare elsewhere, and unquoting them here
+# would mean re-implementing git's C escaping in awk.
+changed_paths() {
+	git -c core.quotePath=false diff --name-only "$1" "$2"
+}
+
+# walk_normalize  (stdin: text)
+# Make an authored walkthrough's bytes comparable, whatever wrote it. Every reader
+# below matches on whole lines — the path in "## N. <path>", the "> key" marker,
+# the entry body looked up by path — so an invisible byte at either end of a line
+# makes a path differ from git's, no entry intersects the range, and the reviewer
+# silently loses walk mode. Two such bytes exist, both of them things a Windows
+# editor adds on its own:
+#
+#   * a line-final carriage return (CRLF endings, an author with core.autocrlf on).
+#     Only the line-final CR goes; a CR mid-line is content and stays. It bites
+#     only on Linux/macOS, because the MSYS awk swallows the CR — exactly the case
+#     a Windows author cannot see.
+#   * a UTF-8 BOM on the first line (Notepad, PowerShell Out-File and > all write
+#     one by default). It hides the "# Walkthrough" heading from walk_preamble,
+#     which then prints it as if it were the author's heads-up and build bakes the
+#     duplicate into the file; on a walkthrough that opens straight with an entry
+#     it hides that entry from walk_parse outright.
+#
+# The BOM is matched as a string rather than a regex escape because \357\273\277 is
+# not portable across the three awks in CI; index/substr/length agree with each
+# other whether the awk counts bytes or characters, so this works in either.
+walk_normalize() {
+	awk -v bom="$(printf '\357\273\277')" '
+		NR == 1 && index($0, bom) == 1 { $0 = substr($0, length(bom) + 1) }
+		{ sub(/\r$/, ""); print }
+	'
 }
 
 # walk_read <tip>
@@ -175,7 +207,7 @@ walk_strip_cr() {
 # also where line endings are normalised.
 walk_read() {
 	_wr_content="$(git show "$1:.review/walkthrough.md" 2>/dev/null)" || return 1
-	printf '%s' "$_wr_content" | walk_strip_cr
+	printf '%s' "$_wr_content" | walk_normalize
 }
 
 # walk_parse  (stdin: walkthrough content)
@@ -184,6 +216,14 @@ walk_read() {
 # other line are ignored. Leniency is deliberate: at runtime the file was already
 # validated by "git review walkthrough build", and a stray line must degrade the
 # review, never crash it.
+#
+# Trailing whitespace is trimmed off the path for the same reason walk_normalize
+# drops the CR: one space typed after the filename is invisible in every editor
+# and makes the entry compare unequal to git's path — the entry vanishes from the
+# reading order, or build names the identical file on both sides of a drift error.
+# It costs the ability to annotate a file whose name really ends in a space (legal
+# on Linux, unwritable on Windows); the same trade walk_normalize already makes
+# for a name ending in a CR.
 walk_parse() {
 	awk '
 		/^## / {
@@ -192,7 +232,10 @@ walk_parse() {
 			if (match(line, /^[0-9]+\. /)) {
 				ord = substr(line, 1, RLENGTH - 2)
 				path = substr(line, RLENGTH + 1)
-				printf "%s\t%s\n", ord, path
+				sub(/[ \t]+$/, "", path)
+				# A heading with a number but no path ("## 1. ") is not an entry;
+				# emitting it would put an empty path into the drift comparison.
+				if (path != "") printf "%s\t%s\n", ord, path
 			}
 		}
 	'
@@ -201,13 +244,15 @@ walk_parse() {
 # walk_body <path>  (stdin: walkthrough content)
 # Print the body of the entry whose path is <path> verbatim — every line after
 # its "## N. <path>" (or "## ?. <path>") header, up to the next "## " header or
-# EOF. Empty when the path has no entry.
+# EOF. Empty when the path has no entry. The header's path is trimmed exactly as
+# walk_parse trims it, so a <path> that came from walk_parse still finds its body.
 walk_body() {
 	awk -v want="$1" '
 		/^## / {
 			line = $0
 			sub(/^## /, "", line)
 			if (sub(/^[0-9]+\. /, "", line) || sub(/^\?\. /, "", line)) {
+				sub(/[ \t]+$/, "", line)
 				cur = (line == want)
 			} else {
 				cur = 0
@@ -293,26 +338,33 @@ walk_why() {
 # walk_sequence <tip> <lower>
 # Derive the ordered, range-filtered reading sequence for a review whose tip is
 # <tip> and lower bound is <lower>: parse the walkthrough at <tip>, keep only
-# entries whose path is actually in the review range (git diff --name-only
-# <lower> <tip>), order them by the author's number and print the paths, one per
-# line, in reading order. Empty output means no walkthrough, or none of its
-# entries intersect the range — callers degrade to a plain whole review.
+# entries whose path is actually in the review range (changed_paths <lower>
+# <tip>), order them by the author's number and print the paths, one per line, in
+# reading order. Empty output means no walkthrough, or none of its entries
+# intersect the range — callers degrade to a plain whole review.
+#
+# The two sides are fed to one awk as a single stream, range first, and told apart
+# by the tab that walk_parse puts in front of every entry path: git quotes control
+# characters in a path unconditionally, so a line from changed_paths can never
+# hold a literal tab. That is what lets this run without the scratch file it used
+# to need — one less thing to leave behind in .git when a step fails under set -e.
 walk_sequence() {
 	_ws_content="$(walk_read "$1")" || return 0
 	[ -n "$_ws_content" ] || return 0
-	_ws_gd="$(git rev-parse --git-dir)"
-	_ws_rf="$_ws_gd/review-walk-range.$$"
-	git diff --name-only "$2" "$1" 2>/dev/null >"$_ws_rf"
-	printf '%s\n' "$_ws_content" | walk_parse | awk '
-		NR == FNR { inrange[$0] = 1; next }
+	{
+		# A range that will not diff (an unresolvable bound) yields no paths, so no
+		# entry intersects and the caller degrades — it never aborts the review.
+		changed_paths "$2" "$1" 2>/dev/null || true
+		printf '%s\n' "$_ws_content" | walk_parse
+	} | awk '
 		{
 			tab = index($0, "\t")
+			if (tab == 0) { inrange[$0] = 1; next }
 			ord = substr($0, 1, tab - 1) + 0
 			path = substr($0, tab + 1)
 			if (path in inrange) printf "%s\t%s\n", ord, path
 		}
-	' "$_ws_rf" - | LC_ALL=C sort -k1,1n | cut -f2-
-	rm -f "$_ws_rf"
+	' | LC_ALL=C sort -k1,1n | cut -f2-
 }
 
 # walk_range_error <walkstep> <total> <walkcount>

@@ -476,7 +476,8 @@ git review walkthrough build    # valida, ordena por tus números y renumera 1..
   `1..N` y lo reescribe, preservando el heads-up. `--check` valida **sin escribir**
   y sale con código distinto de cero ante cualquier problema — pensado para CI.
   Falla si queda algún placeholder `?.`, `<!-- why` o `<!-- heads-up`, si `> key`
-  lleva un valor, si un path aparece dos veces, o ante **drift**: el conjunto de
+  lleva un valor, si un path aparece dos veces, si el encabezado de una entrada no
+  tiene exactamente la forma `## <N>. <path>`, o ante **drift**: el conjunto de
   paths tiene que coincidir exactamente con los archivos cambiados del PR
   (excluyendo `.review/`).
 
@@ -512,9 +513,10 @@ Leé esto primero: define la forma del token de la que depende todo lo demás.
 Después el flujo de login que lo consume — fijate el nuevo camino de error.
 ```
 
-Cada entrada es una línea `## <N>. <path>` (el path tal cual lo imprime
-`git diff --name-only`) seguida de su *porqué* en texto libre, hasta la próxima
-entrada, opcionalmente encabezada por el marcador reservado `> key`. Todo lo que
+Cada entrada es una línea `## <N>. <path>` (el path tal cual lo reporta git,
+escrito en limpio — un nombre con caracteres no-ASCII va tal cual, nunca
+C-escapado) seguida de su *porqué* en texto libre, hasta la próxima entrada,
+opcionalmente encabezada por el marcador reservado `> key`. Todo lo que
 está arriba de la primera entrada es el preámbulo (la sección `## Heads-up`); el
 parser lo ignora y `build` lo preserva tal cual, menos los comentarios HTML. La
 granularidad es por archivo en v1.

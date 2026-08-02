@@ -656,3 +656,215 @@ EOF
 	[ "$status" -ne 0 ]
 	[ "$(git config branch.review/feature/x.reviewreadonly)" = "1" ]
 }
+
+# ── non-ASCII paths, BOM and stray whitespace ─────────────────────────────────
+#
+# Three ways a path written in the walkthrough can stop being byte-equal to the
+# path git reports for the same file. Each one used to drop the entry out of the
+# derived sequence in silence: the reviewer got a shorter walk, or no walk at all,
+# and the only hint was a note listing the file as "not in the walkthrough".
+
+# Commit the walkthrough on stdin to feature/x verbatim, push it, and leave the
+# checkout back on develop the way setup left it.
+recommit_walkthrough() {
+	git switch --quiet feature/x
+	cat >.review/walkthrough.md
+	git add .review/walkthrough.md
+	git commit --quiet -m rewt
+	git push --quiet origin feature/x
+	git switch --quiet develop
+}
+
+# Add a non-ASCII path to the PR, then prove the hazard is live on this platform:
+# under git's default core.quotePath that path is reported escaped and quoted, so
+# it could never equal the literal one an author writes. A platform that did not
+# round-trip the name has nothing to exercise and skips. The name is built from
+# octal escapes so this file stays pure ASCII, and its character has no canonical
+# decomposition, so macOS filesystem normalisation cannot make the test flaky; an
+# accented name behaves identically.
+add_nonascii_to_pr() {
+	git switch --quiet feature/x
+	NONASCII="src/$(printf '\346\226\207\346\233\270').txt"
+	printf 'u\n' >"$NONASCII"
+	git add "$NONASCII"
+	git commit --quiet -m c3-add-nonascii
+	git push --quiet origin feature/x
+	git switch --quiet develop
+	quoted="$(git -c core.quotePath=true diff --name-only develop feature/x | grep -c '^"' || true)"
+	[ "$quoted" -eq 1 ] || skip "this platform does not round-trip a non-ASCII path"
+}
+
+@test "a walkthrough entry for a non-ASCII path stays on the reading path" {
+	add_nonascii_to_pr
+	recommit_walkthrough <<EOF
+# Walkthrough
+
+## 1. $NONASCII
+> key
+read the unicode helper first
+
+## 2. src/c.txt
+read the new helper first
+
+## 3. a.txt
+then the a change
+
+## 4. b.txt
+finally b
+EOF
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	# The escaped path never matched the literal one, so this entry was filtered
+	# out of the sequence: a 3-entry walk with the key file silently off the path.
+	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "4" ]
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "1" ]
+	[[ "$output" == *"4 entries (1 key)"* ]]
+	[[ "$output" == *"[1/4] $NONASCII  (key)"* ]]
+	[[ "$output" == *"read the unicode helper first"* ]]
+	# It is on the path, so it is not reported as uncovered — and nothing printed
+	# carries git's C-escaping.
+	[[ "$output" != *"not in the walkthrough"* ]]
+	[[ "$output" != *'\'* ]]
+
+	run git review next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[2/4] src/c.txt"* ]]
+	[[ "$output" != *"(key)"* ]]
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "2" ]
+
+	run git review prev
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[1/4] $NONASCII  (key)"* ]]
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "1" ]
+
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[1/4] on $NONASCII"* ]]
+}
+
+@test "a non-ASCII file left out of the walkthrough is named readably as uncovered" {
+	# The complement of the test above: the note must still fire, and must name the
+	# file the way the author would have to type it into the walkthrough.
+	add_nonascii_to_pr
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "3" ]
+	[[ "$output" == *"not in the walkthrough: $NONASCII"* ]]
+	[[ "$output" != *'\'* ]]
+}
+
+# Commit the walkthrough on stdin behind a UTF-8 BOM — what a Windows author's
+# editor writes on its own — and prove the committed blob really carries it: three
+# bytes more than the source, and those three are the BOM. The proof avoids awk on
+# purpose, the same way the CRLF one does.
+recommit_walkthrough_bom() {
+	cat >"$TMP/wt.lf"
+	{ printf '\357\273\277'; cat "$TMP/wt.lf"; } >"$TMP/wt.bom"
+	recommit_walkthrough <"$TMP/wt.bom"
+
+	lf_bytes=$(($(wc -c <"$TMP/wt.lf")))
+	blob_bytes=$(($(git show "feature/x:.review/walkthrough.md" | wc -c)))
+	[ "$lf_bytes" -gt 0 ]
+	[ "$blob_bytes" -eq "$((lf_bytes + 3))" ]
+	[ "$(git show "feature/x:.review/walkthrough.md" | head -c 3)" = "$(printf '\357\273\277')" ]
+}
+
+@test "a walkthrough committed with a UTF-8 BOM still drives walk mode" {
+	recommit_walkthrough_bom <<'EOF'
+# Walkthrough
+
+## Heads-up
+
+session tokens now expire; anything caching them is suspect
+
+## 1. src/c.txt
+> key
+read the new helper first
+
+## 2. a.txt
+then the a change
+
+## 3. b.txt
+finally b
+EOF
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "3" ]
+	[[ "$output" == *"3 entries (1 key)"* ]]
+	[[ "$output" == *"[1/3] src/c.txt  (key)"* ]]
+	# The BOM used to hide the "# Walkthrough" heading from the preamble reader,
+	# which then printed the heading back at the reviewer as the heads-up.
+	[[ "$output" == *"anything caching them is suspect"* ]]
+	[[ "$output" != *"# Walkthrough"* ]]
+	# The BOM itself must not reach the terminal on the first line of anything.
+	[[ "$output" != *"$(printf '\357\273\277')"* ]]
+}
+
+@test "a BOM on a walkthrough that opens with an entry does not hide that entry" {
+	recommit_walkthrough_bom <<'EOF'
+## 1. src/c.txt
+read the new helper first
+
+## 2. a.txt
+then the a change
+
+## 3. b.txt
+finally b
+EOF
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	# Without the strip the first entry was unparseable, so the walk was one short
+	# and src/c.txt came back as an uncovered file instead.
+	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "3" ]
+	[[ "$output" == *"[1/3] src/c.txt"* ]]
+	[[ "$output" != *"not in the walkthrough"* ]]
+}
+
+@test "trailing whitespace on an entry heading does not drop it from the walk" {
+	# One space after src/c.txt and one tab after a.txt, written with printf so no
+	# editor or formatter can quietly clean them up. Both are invisible on screen
+	# and both used to make the entry compare unequal to git's path.
+	{
+		printf '# Walkthrough\n\n'
+		printf '## 1. src/c.txt \n> key\nread the new helper first\n\n'
+		printf '## 2. a.txt\t\nthen the a change\n\n'
+		printf '## 3. b.txt\nfinally b\n'
+	} | recommit_walkthrough
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "3" ]
+	[[ "$output" == *"3 entries (1 key)"* ]]
+	# The path is shown trimmed, so it stays clickable in an IDE terminal, and the
+	# body still resolves (it is looked up by the very path that was untrimmed).
+	[[ "$output" == *"[1/3] src/c.txt  (key)"* ]]
+	[[ "$output" == *"read the new helper first"* ]]
+	[[ "$output" != *"not in the walkthrough"* ]]
+
+	run git review next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[2/3] a.txt"* ]]
+	[[ "$output" == *"then the a change"* ]]
+	[[ "$output" != *"(key)"* ]]
+}
+
+@test "a walkthrough whose only entries carry stray whitespace still degrades on real drift" {
+	# The trim must not invent entries: paths that are not in the range stay out of
+	# the walk, trailing whitespace or not.
+	{
+		printf '# Walkthrough\n\n'
+		printf '## 1. nope/one.txt \nnot in this PR\n\n'
+		printf '## 2. nope/two.txt\t\nneither is this\n'
+	} | recommit_walkthrough
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"none of its entries apply to this review range"* ]]
+	run git config branch.review/feature/x.reviewmode
+	[ "$status" -ne 0 ]
+	run git config branch.review/feature/x.reviewwalkstep
+	[ "$status" -ne 0 ]
+}

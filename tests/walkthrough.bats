@@ -625,3 +625,258 @@ EOF
 	[ "$status" -eq 0 ]
 	[[ "$output" != *"uncommitted changes"* ]]
 }
+
+# ── non-ASCII paths ───────────────────────────────────────────────────────────
+
+# Add a non-ASCII path to the PR and prove the hazard is live on this platform
+# before anything is asserted about it: under git's default core.quotePath such a
+# path comes out escaped and quoted ("src/caf\303\251.js"), so it can never equal
+# the literal path an author writes in a walkthrough. Where git does not quote it
+# the name never round-tripped through the filesystem and there is nothing to
+# exercise, so the test skips instead of passing vacuously.
+#
+# The name is built from octal escapes rather than written literally so this file
+# stays pure ASCII (the bats that runs on Windows CI is byte-fragile), and the
+# character is one with no canonical decomposition, so macOS filesystem unicode
+# normalisation cannot turn this into a flaky test. An accented name like
+# src/cafe\303\251.js breaks, and is fixed, identically.
+add_nonascii_file() {
+	NONASCII="src/$(printf '\346\226\207\346\233\270').txt"
+	mkdir -p src .review
+	printf 'u\n' >"$NONASCII"
+	git add "$NONASCII"
+	git commit --quiet -m c2-add-nonascii
+	quoted="$(git -c core.quotePath=true diff --name-only develop HEAD | grep -c '^"' || true)"
+	[ "$quoted" -eq 1 ] || skip "this platform does not round-trip a non-ASCII path"
+}
+
+@test "init lists a non-ASCII path literally, not C-escaped" {
+	add_nonascii_file
+	run git review walkthrough init
+	[ "$status" -eq 0 ]
+	# The skeleton is the file the author edits: an escaped, quoted path there is
+	# unreadable, and stops matching the moment they write the real one.
+	grep -qxF "## ?. $NONASCII" .review/walkthrough.md
+	# No entry may carry git's C-style quoting.
+	run grep -c '^## ?\. "' .review/walkthrough.md
+	[ "$output" = "0" ]
+	# All four changed files are listed, exactly once each.
+	run grep -c '^## ?\. ' .review/walkthrough.md
+	[ "$output" = "4" ]
+}
+
+@test "build accepts a walkthrough naming a non-ASCII path" {
+	add_nonascii_file
+	cat >.review/walkthrough.md <<EOF
+# Walkthrough
+
+## 1. a.txt
+why a
+
+## 2. b.txt
+why b
+
+## 3. src/c.txt
+why c
+
+## 4. $NONASCII
+> key
+why u
+EOF
+	run git review walkthrough build
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"4 entries (1 key), ordered and renumbered"* ]]
+	# The escaped path used to sit on one side of the drift comparison and the
+	# literal one on the other, so build named the same file as missing AND extra.
+	[[ "$output" != *"missing from the walkthrough"* ]]
+	[[ "$output" != *"not changed in the PR"* ]]
+	# The rewrite keeps the path literal and its marker attached.
+	expected="$(printf '# Walkthrough\n\n## 1. a.txt\nwhy a\n\n## 2. b.txt\nwhy b\n\n## 3. src/c.txt\nwhy c\n\n## 4. %s\n> key\nwhy u\n\n' "$NONASCII")"
+	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+}
+
+@test "build still reports real drift on a PR holding a non-ASCII path" {
+	# The unescaping must not paper over drift: the non-ASCII file is changed by
+	# the PR and absent from the walkthrough, and d.txt is listed but unchanged.
+	add_nonascii_file
+	cat >.review/walkthrough.md <<'EOF'
+# Walkthrough
+
+## 1. a.txt
+why a
+
+## 2. b.txt
+why b
+
+## 3. src/c.txt
+why c
+
+## 4. d.txt
+why d
+EOF
+	run git review walkthrough build
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"changed in the PR but missing from the walkthrough: $NONASCII"* ]]
+	[[ "$output" == *"in the walkthrough but not changed in the PR: d.txt"* ]]
+	# Named readably: no C-escaping survives into the diagnostic.
+	[[ "$output" != *'\'* ]]
+	# Neither side may name a file that belongs to the other.
+	missing_line="$(printf '%s\n' "$output" | grep 'missing from the walkthrough')"
+	extra_line="$(printf '%s\n' "$output" | grep 'not changed in the PR')"
+	[[ "$missing_line" != *"d.txt"* ]]
+	[[ "$extra_line" != *"$NONASCII"* ]]
+}
+
+# ── UTF-8 BOM ─────────────────────────────────────────────────────────────────
+
+# Write the walkthrough on stdin to the sidecar behind a UTF-8 BOM — what Notepad,
+# PowerShell's Out-File and PowerShell's > all put in front of a file by default —
+# and prove the bytes really are there. The proof deliberately avoids awk: the
+# whole point is that a reader must not depend on which awk sees the file first.
+write_bom() {
+	mkdir -p .review
+	cat >"$TMP/wt.lf"
+	{ printf '\357\273\277'; cat "$TMP/wt.lf"; } >.review/walkthrough.md
+	lf_bytes=$(($(wc -c <"$TMP/wt.lf")))
+	bom_bytes=$(($(wc -c <.review/walkthrough.md)))
+	[ "$lf_bytes" -gt 0 ]
+	[ "$bom_bytes" -eq "$((lf_bytes + 3))" ]
+	[ "$(head -c 3 .review/walkthrough.md)" = "$(printf '\357\273\277')" ]
+}
+
+@test "build strips a UTF-8 BOM instead of baking it into the preamble" {
+	write_bom <<'EOF'
+# Walkthrough
+
+## Heads-up
+
+the token lifetime changed
+
+## 1. a.txt
+why a
+
+## 2. b.txt
+why b
+
+## 3. src/c.txt
+why c
+EOF
+	run git review walkthrough build
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"3 entries, ordered and renumbered"* ]]
+	# The BOM used to hide "# Walkthrough" from the preamble reader, which copied
+	# it into the heads-up — a second heading that survived every later rebuild.
+	# A surviving BOM would break this comparison too ($(cat) strips trailing
+	# newlines, never a leading BOM), so equality proves both.
+	expected="$(printf '# Walkthrough\n\n## Heads-up\n\nthe token lifetime changed\n\n## 1. a.txt\nwhy a\n\n## 2. b.txt\nwhy b\n\n## 3. src/c.txt\nwhy c\n\n')"
+	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+	run grep -c '^# Walkthrough$' .review/walkthrough.md
+	[ "$output" = "1" ]
+	# Building again is a no-op, so nothing was baked in to resurface later.
+	run git review walkthrough build
+	[ "$status" -eq 0 ]
+	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+}
+
+@test "build strips a BOM from a walkthrough that opens with an entry" {
+	write_bom <<'EOF'
+## 1. a.txt
+why a
+
+## 2. b.txt
+why b
+
+## 3. src/c.txt
+why c
+EOF
+	run git review walkthrough build
+	[ "$status" -eq 0 ]
+	# The BOM used to hide the first entry from the parser outright, so build
+	# blamed the PR for a.txt being missing from a walkthrough that lists it.
+	[[ "$output" == *"3 entries, ordered and renumbered"* ]]
+	[[ "$output" != *"missing from the walkthrough"* ]]
+	expected="$(printf '# Walkthrough\n\n## 1. a.txt\nwhy a\n\n## 2. b.txt\nwhy b\n\n## 3. src/c.txt\nwhy c\n\n')"
+	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+}
+
+# ── stray whitespace on an entry heading ──────────────────────────────────────
+
+@test "build accepts trailing whitespace after an entry path" {
+	mkdir -p .review
+	# One space after a.txt and one tab after b.txt: invisible in every editor, and
+	# they used to make the entry compare unequal to git's path, so build named the
+	# identical file on both sides of a drift error.
+	{
+		printf '# Walkthrough\n\n'
+		printf '## 1. a.txt \nwhy a\n\n'
+		printf '## 2. b.txt\t\nwhy b\n\n'
+		printf '## 3. src/c.txt\nwhy c\n'
+	} >.review/walkthrough.md
+	run git review walkthrough build
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"3 entries, ordered and renumbered"* ]]
+	[[ "$output" != *"missing from the walkthrough"* ]]
+	[[ "$output" != *"not changed in the PR"* ]]
+	# The rewrite drops the stray whitespace, so the author's build heals the
+	# sidecar for every reviewer.
+	expected="$(printf '# Walkthrough\n\n## 1. a.txt\nwhy a\n\n## 2. b.txt\nwhy b\n\n## 3. src/c.txt\nwhy c\n\n')"
+	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+}
+
+@test "build keeps the key marker on an entry whose heading has trailing space" {
+	mkdir -p .review
+	{
+		printf '# Walkthrough\n\n'
+		printf '## 1. a.txt \n> key\nwhy a\n\n'
+		printf '## 2. b.txt\nwhy b\n\n'
+		printf '## 3. src/c.txt\nwhy c\n'
+	} >.review/walkthrough.md
+	run git review walkthrough build
+	[ "$status" -eq 0 ]
+	# The body is looked up by path, so an untrimmed heading lost the body with it.
+	[[ "$output" == *"3 entries (1 key), ordered and renumbered"* ]]
+	expected="$(printf '# Walkthrough\n\n## 1. a.txt\n> key\nwhy a\n\n## 2. b.txt\nwhy b\n\n## 3. src/c.txt\nwhy c\n\n')"
+	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+}
+
+@test "build refuses an entry heading that is not in the canonical form" {
+	mkdir -p .review
+	{
+		printf '# Walkthrough\n\n'
+		printf '##  1. a.txt\nwhy a\n\n'
+		printf '## 2) b.txt\nwhy b\n\n'
+		printf '## 3. src/c.txt\nwhy c\n'
+	} >.review/walkthrough.md
+	cp .review/walkthrough.md "$TMP/before.md"
+	run git review walkthrough build
+	[ "$status" -ne 0 ]
+	# The parser ignores both headings by design, so without this check build
+	# reported the two files as changed-but-missing: blaming the PR for a typo.
+	[[ "$output" == *"not in the '## N. <path>' form"* ]]
+	[[ "$output" == *"##  1. a.txt"* ]]
+	[[ "$output" == *"## 2) b.txt"* ]]
+	[[ "$output" != *"missing from the walkthrough"* ]]
+	# A refusal writes nothing.
+	cmp -s "$TMP/before.md" .review/walkthrough.md
+}
+
+@test "build leaves a numbered sub-heading inside a why body alone" {
+	mkdir -p .review
+	# "### 2. ..." is prose inside a body, not a malformed entry heading: the
+	# canonical-form check must not reach for it.
+	{
+		printf '# Walkthrough\n\n'
+		printf '## 1. a.txt\nwhy a\n\n'
+		printf '### 2. a sub-heading, not an entry\nstill why a\n\n'
+		printf '## 2. b.txt\nwhy b\n\n'
+		printf '## 3. src/c.txt\nwhy c\n'
+	} >.review/walkthrough.md
+	run git review walkthrough build
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"3 entries, ordered and renumbered"* ]]
+	[[ "$output" != *"not in the '## N. <path>' form"* ]]
+	# It stays in the body it belongs to.
+	grep -qxF '### 2. a sub-heading, not an entry' .review/walkthrough.md
+	run grep -c '^## ' .review/walkthrough.md
+	[ "$output" = "3" ]
+}

@@ -372,7 +372,7 @@ if [ "$walk" -eq 1 ]; then
 	# Files in the review range with no walkthrough entry: the walkthrough may be
 	# stale (typical when re-reviewing with --delta). The review still covers them;
 	# they are just not on the curated reading path, so note them rather than hide it.
-	uncovered="$(git diff --name-only "$lower" "$tip" | grep -v '^\.review/' | while read -r p; do
+	uncovered="$(changed_paths "$lower" "$tip" | grep -v '^\.review/' | while IFS= read -r p; do
 		printf '%s\n' "$walkpaths" | grep -Fxq "$p" || printf '%s\n' "$p"
 	done)"
 	if [ -n "$uncovered" ]; then

@@ -465,8 +465,9 @@ git review walkthrough build    # validate, order by your numbers, renumber 1..N
   `1..N` and rewrites it, preserving the heads-up. `--check` validates **without
   writing** and exits non-zero on any problem — meant for CI. It fails if any
   `?.`, `<!-- why` or `<!-- heads-up` placeholder is left, if `> key` was given a
-  value, if a path appears twice, or on **drift**: the set of paths must match the
-  PR's changed files exactly (excluding `.review/`).
+  value, if a path appears twice, if an entry heading is not in the exact
+  `## <N>. <path>` form, or on **drift**: the set of paths must match the PR's
+  changed files exactly (excluding `.review/`).
 
 Filling in the order and the whys is a great fit for an AI coding agent — point
 one at the diff and let it write the placeholders. That works on either side:
@@ -499,9 +500,10 @@ Read this first: it defines the token shape everything else depends on.
 Then the login flow that consumes it — note the new error path.
 ```
 
-Each entry is a `## <N>. <path>` line (the path exactly as `git diff --name-only`
-prints it) followed by its free-text *why*, up to the next entry, optionally led
-by the reserved `> key` marker. Everything above the first entry is the preamble
+Each entry is a `## <N>. <path>` line (the path exactly as git reports it, written
+plainly — a name with non-ASCII characters goes in as-is, never C-escaped)
+followed by its free-text *why*, up to the next entry, optionally led by the
+reserved `> key` marker. Everything above the first entry is the preamble
 (the `## Heads-up` section); the parser ignores it and `build` preserves it
 verbatim, minus HTML comments. Granularity is per file in v1.
 

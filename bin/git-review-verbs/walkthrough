@@ -174,7 +174,7 @@ wtpath="$toplevel/$wtrel"
 # The reviewable file set: everything the PR changes, minus the sidecar directory
 # itself (a walkthrough never annotates .review/).
 range_files() {
-	git diff --name-only "$lower" "$tip" | grep -v '^\.review/' || true
+	changed_paths "$lower" "$tip" | grep -v '^\.review/' || true
 }
 
 if [ "$sub" = init ]; then
@@ -240,12 +240,13 @@ fi
 # ── build ─────────────────────────────────────────────────────────────────────
 [ -e "$wtpath" ] || die "$wtrel not found; run git review walkthrough init first"
 
-# Read through walk_strip_cr for the same reason the runtime readers do: an
+# Read through walk_normalize for the same reason the runtime readers do: an
 # editor that saved CRLF would otherwise leave a \r on every path (drift errors
 # naming the same file on both sides) and on every "> key" marker (silently
-# unmarked). Since build rewrites the file from this content, a CRLF walkthrough
-# also comes out normalised to LF — the author's rebuild heals it for reviewers.
-content="$(walk_strip_cr <"$wtpath")"
+# unmarked), and one that prepended a BOM would hide the "# Walkthrough" heading.
+# Since build rewrites the file from this content, such a walkthrough also comes
+# out normalised — the author's rebuild heals it for every reviewer.
+content="$(walk_normalize <"$wtpath")"
 
 # Skeleton placeholders must all be filled: an unnumbered "## ?." entry or a
 # leftover "<!-- why" comment means the author did not finish. Both comment
@@ -278,6 +279,21 @@ key_re='^>[ \t]*[Kk][Ee][Yy][ \t]*$'
 # as lenient about spelling as key_re, so no variant slips through unmarked.
 if printf '%s\n' "$content" | grep -qE '^>[[:space:]]*[Kk][Ee][Yy][[:space:]]*:|^>[[:space:]]*[Kk][Ee][Yy][[:space:]]+[^[:space:]]'; then
 	die "the > key marker takes no value; write it on a line of its own and put the reason in the why"
+fi
+
+# A heading that was plainly meant to be an entry but is not in the exact
+# "## N. <path>" shape the readers parse — a stray second space, ")" for ".", a
+# number with nothing after it. walk_parse ignores it by design (leniency at
+# review time), so without this check it is simply not an entry and the drift
+# comparison below blames the PR for a file that is sitting right there in the
+# walkthrough. Deliberately narrow: it needs whitespace directly after exactly two
+# hashes and then a number or "?", so "## Heads-up" and any deeper heading inside
+# a why body ("### 2. ...") are left alone.
+malformed="$(printf '%s\n' "$content" | awk '
+	/^##[ \t]+([0-9]+|\?)[ \t]*[.)]/ && $0 !~ /^## ([0-9]+|\?)\. ./ { printf "%s: %s\n", NR, $0 }
+')"
+if [ -n "$malformed" ]; then
+	die "entry heading(s) not in the '## N. <path>' form: $(printf '%s' "$malformed" | tr '\n' ';' | sed 's/;$//'); fix the heading(s), then rebuild"
 fi
 
 # Numbered entries, as order<TAB>path in file order.

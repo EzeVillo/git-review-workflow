@@ -21,3 +21,10 @@ VERSION text eol=lf
 # shellcheck reads .shellcheckrc as a script and rejects CR (SC1017), so it must
 # stay LF on Windows checkouts too.
 .shellcheckrc text eol=lf
+
+# A walkthrough is authored on one machine and read on every reviewer's, so its
+# line endings must not depend on who committed it. The readers tolerate CRLF
+# (walk_strip_cr), but keeping the committed bytes LF keeps the sidecar diffable
+# across platforms. This rule only governs *this* repo dogfooding git review on
+# itself; a consumer repo's walkthrough is covered by the reader-side strip.
+.review/*.md text eol=lf

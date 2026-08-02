@@ -451,6 +451,109 @@ EOF
 	[[ "$output" == *"only"* ]]
 }
 
+# ── CRLF line endings ─────────────────────────────────────────────────────────
+
+# Write the walkthrough on stdin to the sidecar with CRLF endings, the way an
+# editor (or a checkout) on Windows leaves it, and assert the file on disk really
+# carries the CRs. The proof deliberately avoids awk: the gawk that ships with Git
+# for Windows reads in text mode and eats the CR, which is exactly why this class
+# of bug is invisible there. wc -c counts bytes and is honest on every platform.
+# On Windows the assertions below therefore hold even without the strip; the teeth
+# of these tests are on Linux and macOS, where the CR reaches the parsers.
+write_crlf() {
+	mkdir -p .review
+	cat >"$TMP/wt.lf"
+	while IFS= read -r line; do printf '%s\r\n' "$line"; done \
+		<"$TMP/wt.lf" >.review/walkthrough.md
+	lf_bytes=$(($(wc -c <"$TMP/wt.lf")))
+	lf_lines=$(($(wc -l <"$TMP/wt.lf")))
+	crlf_bytes=$(($(wc -c <.review/walkthrough.md)))
+	[ "$lf_lines" -gt 0 ]
+	[ "$crlf_bytes" -eq "$((lf_bytes + lf_lines))" ]
+}
+
+@test "build accepts a CRLF walkthrough, sees its key marker and rewrites it as LF" {
+	write_crlf <<'EOF'
+# Walkthrough
+
+## Heads-up
+
+the token lifetime changed
+
+## 2. a.txt
+> key
+why a
+
+## 3. b.txt
+why b
+
+## 1. src/c.txt
+why c
+EOF
+	run git review walkthrough build
+	[ "$status" -eq 0 ]
+	# A CR on the paths used to make both sides of the drift comparison disjoint,
+	# so build reported the same three files as missing AND as extra.
+	[[ "$output" != *"missing from the walkthrough"* ]]
+	[[ "$output" != *"not changed in the PR"* ]]
+	# The marker survives: a CR made "> key" fail the anchored key regex.
+	[[ "$output" == *"3 entries (1 key), ordered and renumbered"* ]]
+	# The rewrite is byte-for-byte the canonical LF file — no CR anywhere, so the
+	# author's build heals the sidecar for every reviewer.
+	# A surviving CR would show up inside this string comparison ($(cat) strips
+	# trailing newlines, never carriage returns), so equality proves LF endings.
+	expected="$(printf '# Walkthrough\n\n## Heads-up\n\nthe token lifetime changed\n\n## 1. src/c.txt\nwhy c\n\n## 2. a.txt\n> key\nwhy a\n\n## 3. b.txt\nwhy b\n\n')"
+	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+}
+
+@test "build --check passes on a CRLF walkthrough and leaves it untouched" {
+	write_crlf <<'EOF'
+# Walkthrough
+
+## 1. a.txt
+why a
+
+## 2. b.txt
+why b
+
+## 3. src/c.txt
+why c
+EOF
+	cp .review/walkthrough.md "$TMP/before.md"
+	run git review walkthrough build --check
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"walkthrough ok: 3 entries, in sync with the PR"* ]]
+	# --check never writes: the file is still byte-for-byte the CRLF one.
+	cmp -s "$TMP/before.md" .review/walkthrough.md
+}
+
+@test "build still reports real drift on a CRLF walkthrough" {
+	# The strip must not paper over genuine drift: b.txt is changed by the PR and
+	# absent here, and d.txt is listed but unchanged. Each side names its own files.
+	write_crlf <<'EOF'
+# Walkthrough
+
+## 1. a.txt
+why a
+
+## 2. src/c.txt
+why c
+
+## 3. d.txt
+why d
+EOF
+	run git review walkthrough build
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"changed in the PR but missing from the walkthrough: b.txt"* ]]
+	[[ "$output" == *"in the walkthrough but not changed in the PR: d.txt"* ]]
+	# Neither side may name a file that belongs to the other.
+	missing_line="$(printf '%s\n' "$output" | grep 'missing from the walkthrough')"
+	extra_line="$(printf '%s\n' "$output" | grep 'not changed in the PR')"
+	[[ "$missing_line" != *"d.txt"* ]]
+	[[ "$extra_line" != *"b.txt"* ]]
+	[[ "$extra_line" != *"a.txt"* ]]
+}
+
 # ── uncommitted-changes diagnostics ─────────────────────────────────────────────
 
 @test "init refuses with a commit hint when the PR changes are only uncommitted" {

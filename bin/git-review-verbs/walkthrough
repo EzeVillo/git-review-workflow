@@ -240,7 +240,12 @@ fi
 # ── build ─────────────────────────────────────────────────────────────────────
 [ -e "$wtpath" ] || die "$wtrel not found; run git review walkthrough init first"
 
-content="$(cat "$wtpath")"
+# Read through walk_strip_cr for the same reason the runtime readers do: an
+# editor that saved CRLF would otherwise leave a \r on every path (drift errors
+# naming the same file on both sides) and on every "> key" marker (silently
+# unmarked). Since build rewrites the file from this content, a CRLF walkthrough
+# also comes out normalised to LF — the author's rebuild heals it for reviewers.
+content="$(walk_strip_cr <"$wtpath")"
 
 # Skeleton placeholders must all be filled: an unnumbered "## ?." entry or a
 # leftover "<!-- why" comment means the author did not finish. Both comment

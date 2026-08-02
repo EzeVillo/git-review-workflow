@@ -155,11 +155,27 @@ fold_lower() {
 	printf '%s\n' "$_fl_lower"
 }
 
+# walk_strip_cr  (stdin: text)
+# Drop a trailing carriage return from every line. Every reader below matches on
+# whole lines — the path in "## N. <path>", the "> key" marker, the entry body
+# looked up by path — so a walkthrough committed with CRLF endings (an author on
+# Windows with core.autocrlf on) yields paths that differ from git's by a stray
+# \r: no entry intersects the range, and the reviewer silently loses walk mode.
+# It only bites on Linux/macOS, because the MSYS awk swallows the CR — which is
+# exactly the case a Windows author cannot see. Only the line-final CR goes; a CR
+# in the middle of a line is content and stays.
+walk_strip_cr() {
+	awk '{ sub(/\r$/, ""); print }'
+}
+
 # walk_read <tip>
 # Print the walkthrough committed at <tip>, or nothing (non-zero rc) if there is
 # none. Never aborts the caller: used in conditions and command substitutions.
+# This is the single point where committed content enters the readers, so it is
+# also where line endings are normalised.
 walk_read() {
-	git show "$1:.review/walkthrough.md" 2>/dev/null
+	_wr_content="$(git show "$1:.review/walkthrough.md" 2>/dev/null)" || return 1
+	printf '%s' "$_wr_content" | walk_strip_cr
 }
 
 # walk_parse  (stdin: walkthrough content)

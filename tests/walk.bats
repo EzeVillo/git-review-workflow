@@ -368,6 +368,104 @@ EOF
 	[[ "$output" != *"(key)"* ]]
 }
 
+# ── CRLF line endings ─────────────────────────────────────────────────────────
+
+# Commit the walkthrough on stdin to feature/x with CRLF endings — what a Windows
+# author with core.autocrlf on pushes — and prove the committed blob really carries
+# the CRs. The proof deliberately avoids awk: the gawk that ships with Git for
+# Windows reads in text mode and eats the CR, which is exactly why this bug is
+# invisible there. wc -c counts bytes and is honest on every platform. So on
+# Windows these assertions hold even without the strip; their teeth are on Linux
+# and macOS, where the CR reaches the parsers and used to kill walk mode outright.
+recommit_walkthrough_crlf() {
+	git switch --quiet feature/x
+	cat >"$TMP/wt.lf"
+	while IFS= read -r line; do printf '%s\r\n' "$line"; done \
+		<"$TMP/wt.lf" >.review/walkthrough.md
+	git add .review/walkthrough.md
+	git commit --quiet -m rewt-crlf
+	git push --quiet origin feature/x
+	git switch --quiet develop
+
+	lf_bytes=$(($(wc -c <"$TMP/wt.lf")))
+	lf_lines=$(($(wc -l <"$TMP/wt.lf")))
+	blob_bytes=$(($(git show "feature/x:.review/walkthrough.md" | wc -c)))
+	[ "$lf_lines" -gt 0 ]
+	[ "$blob_bytes" -eq "$((lf_bytes + lf_lines))" ]
+}
+
+@test "a walkthrough committed with CRLF still drives walk mode" {
+	recommit_walkthrough_crlf <<'EOF'
+# Walkthrough
+
+## Heads-up
+
+session tokens now expire; anything caching them is suspect
+
+## 1. src/c.txt
+> key
+read the new helper first
+
+## 2. a.txt
+then the a change
+
+## 3. b.txt
+finally b
+EOF
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	# The CR used to make every path differ from git's, so no entry intersected the
+	# range: start degraded to a plain whole review with a note.
+	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "3" ]
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "1" ]
+	[[ "$output" != *"none of its entries apply"* ]]
+	# Author order, key marker and heads-up all survive the round trip.
+	[[ "$output" == *"3 entries (1 key)"* ]]
+	[[ "$output" == *"[1/3] src/c.txt  (key)"* ]]
+	[[ "$output" == *"read the new helper first"* ]]
+	[[ "$output" == *"anything caching them is suspect"* ]]
+	[[ "$output" != *"> key"* ]]
+	# Nothing printed may carry a stray CR: stripping only the parsed paths would
+	# still leak one into the why prose and the heads-up.
+	[[ "$output" != *$'\r'* ]]
+
+	run git review next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[2/3] a.txt"* ]]
+	[[ "$output" == *"then the a change"* ]]
+	[[ "$output" != *"(key)"* ]]
+	[[ "$output" != *$'\r'* ]]
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "2" ]
+
+	# status reads the same cursor and the same walkthrough.
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[2/3] on a.txt"* ]]
+	[[ "$output" != *$'\r'* ]]
+}
+
+@test "a CRLF walkthrough that really drifts still degrades to a whole review" {
+	# The strip must not invent entries: a walkthrough whose paths do not exist in
+	# the range degrades with a note, CRLF or not.
+	recommit_walkthrough_crlf <<'EOF'
+# Walkthrough
+
+## 1. nope/one.txt
+not in this PR
+
+## 2. nope/two.txt
+neither is this
+EOF
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"walkthrough"* ]]
+	run git config branch.review/feature/x.reviewmode
+	[ "$status" -ne 0 ]
+	run git config branch.review/feature/x.reviewwalkstep
+	[ "$status" -ne 0 ]
+}
+
 # ── graceful degradation ──────────────────────────────────────────────────────
 
 @test "a walkthrough whose entries do not intersect the range falls back to whole with a note" {

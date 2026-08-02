@@ -206,6 +206,34 @@ EOF
 	[ "$(cat .review/walkthrough.md)" = "$before" ]
 }
 
+@test "build takes a why quoting the placeholder literals as prose, not as unfilled" {
+	# Writing about the walkthrough format is ordinary PR prose: a why that quotes
+	# "<!-- heads-up" or "<!-- why" mid-line must build, and must survive verbatim.
+	mkdir -p .review
+	printf '# Walkthrough\n\n## Heads-up\n\nthe guards are greps; watch the anchoring\n\n## 1. a.txt\nthe build guard for the `<!-- heads-up: ... -->` placeholder\n\n## 2. b.txt\nand the one for `<!-- why: -->`, same shape\n\n## 3. src/c.txt\nz\n' >.review/walkthrough.md
+	run git review walkthrough build
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"3 entries, ordered and renumbered"* ]]
+	expected="$(printf '# Walkthrough\n\n## Heads-up\n\nthe guards are greps; watch the anchoring\n\n## 1. a.txt\nthe build guard for the `<!-- heads-up: ... -->` placeholder\n\n## 2. b.txt\nand the one for `<!-- why: -->`, same shape\n\n## 3. src/c.txt\nz\n\n')"
+	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+	# The quoted literals are now committed prose: rebuilding must not trip either.
+	run git review walkthrough build
+	[ "$status" -eq 0 ]
+	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+}
+
+@test "build still fails when a placeholder literal opens a line inside a why" {
+	# The anchored guard keeps its teeth where it matters: an unreplaced why
+	# comment is a line of its own, wherever the author left it.
+	mkdir -p .review
+	printf '# Walkthrough\n\n## 1. a.txt\nx\n\n## 2. b.txt\n<!-- why: -->\n\n## 3. src/c.txt\nz\n' >.review/walkthrough.md
+	before="$(cat .review/walkthrough.md)"
+	run git review walkthrough build
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"unfilled why-comments remain"* ]]
+	[ "$(cat .review/walkthrough.md)" = "$before" ]
+}
+
 @test "build drops a Heads-up heading left empty" {
 	# Deleting the placeholder without writing anything must not leave a bare
 	# heading behind: an empty section is worse than none.
@@ -263,6 +291,46 @@ EOF
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"takes no value"* ]]
 	[ "$(cat .review/walkthrough.md)" = "$before" ]
+}
+
+@test "build normalizes a key marker written with odd spacing or case" {
+	# Near-misses are recognised and rewritten canonically, never left to leak
+	# into the why as literal prose the reviewer would see.
+	mkdir -p .review
+	printf '# Walkthrough\n\n## 1. a.txt\n>key\nthe core change\n\n## 2. b.txt\nmechanical rename\n\n## 3. src/c.txt\n>  Key\nnew helper\n' >.review/walkthrough.md
+	run git review walkthrough build
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"3 entries (2 key)"* ]]
+	expected="$(printf '# Walkthrough\n\n## 1. a.txt\n> key\nthe core change\n\n## 2. b.txt\nmechanical rename\n\n## 3. src/c.txt\n> key\nnew helper\n\n')"
+	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+	# The marker reaches the reviewer only in its canonical spelling: no variant
+	# survives anywhere in the built file.
+	run grep -c '^> key$' .review/walkthrough.md
+	[ "$output" = "2" ]
+	! grep -q 'Key' .review/walkthrough.md
+	! grep -q '^>key' .review/walkthrough.md
+}
+
+@test "build rejects a key marker given a value in any spelling" {
+	mkdir -p .review
+	printf '# Walkthrough\n\n## 1. a.txt\n>Key: it touches the token\n\n## 2. b.txt\ny\n\n## 3. src/c.txt\nz\n' >.review/walkthrough.md
+	before="$(cat .review/walkthrough.md)"
+	run git review walkthrough build
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"takes no value"* ]]
+	[ "$(cat .review/walkthrough.md)" = "$before" ]
+}
+
+@test "build leaves a quoted line that merely starts with key-like prose alone" {
+	# The value guard must not fire on a blockquote whose first word only looks
+	# like the marker: that is prose, and it builds and survives untouched.
+	mkdir -p .review
+	printf '# Walkthrough\n\n## 1. a.txt\n> keyword lookups are cached now\n\n## 2. b.txt\ny\n\n## 3. src/c.txt\nz\n' >.review/walkthrough.md
+	run git review walkthrough build
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"key)"* ]]
+	expected="$(printf '# Walkthrough\n\n## 1. a.txt\n> keyword lookups are cached now\n\n## 2. b.txt\ny\n\n## 3. src/c.txt\nz\n\n')"
+	[ "$(cat .review/walkthrough.md)" = "$expected" ]
 }
 
 @test "build notes that marking every entry defeats the marker but still builds" {

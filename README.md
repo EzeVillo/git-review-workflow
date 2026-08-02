@@ -492,12 +492,10 @@ The file format `build` produces and `start` reads:
 Sessions now expire; anything that cached a token is suspect.
 
 ## 1. src/auth/session.c
-
 > key
 Read this first: it defines the token shape everything else depends on.
 
 ## 2. src/auth/login.c
-
 Then the login flow that consumes it — note the new error path.
 ```
 

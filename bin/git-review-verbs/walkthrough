@@ -243,21 +243,35 @@ fi
 content="$(cat "$wtpath")"
 
 # Skeleton placeholders must all be filled: an unnumbered "## ?." entry or a
-# leftover "<!-- why" comment means the author did not finish.
+# leftover "<!-- why" comment means the author did not finish. Both comment
+# checks are anchored, and the heads-up one is confined to the preamble region
+# where its placeholder lives: quoting a placeholder literal inside a why is
+# ordinary prose (documenting the walkthrough format is a normal thing for a PR
+# to do), not an unfilled entry, and must not be mistaken for one.
 if printf '%s\n' "$content" | grep -q '^## ?\. '; then
 	die "unfilled entries remain (## ?. ...); give each a number, then rebuild"
 fi
-if printf '%s\n' "$content" | grep -q '<!-- why'; then
+if printf '%s\n' "$content" | grep -q '^<!-- why'; then
 	die "unfilled why-comments remain (<!-- why ...); replace each with prose, then rebuild"
 fi
-if printf '%s\n' "$content" | grep -q '<!-- heads-up'; then
+preamble_raw="$(printf '%s\n' "$content" | awk '
+	/^## / { line = $0; sub(/^## /, "", line); if (line ~ /^([0-9]+|\?)\. /) exit }
+	{ print }
+')"
+if printf '%s\n' "$preamble_raw" | grep -q '^<!-- heads-up'; then
 	die "the heads-up placeholder is still there; replace it with prose, or delete the whole ## Heads-up section if nothing in this PR is delicate, then rebuild"
 fi
 
-# The key marker is a bare "> key" — a flag, not a field. Catch the natural
-# mistake ("> key: reason") instead of silently reading it as why-prose, which
-# would leave the entry unmarked and the reason duplicated.
-if printf '%s\n' "$content" | grep -qE '^> key[[:space:]]*:|^> key[[:space:]]+[^[:space:]]'; then
+# The key marker is a bare "> key" — a flag, not a field. Spelling variants
+# (">key", "> Key") are not errors: build recognises them and rewrites the marker
+# canonically below, so a runtime reader only ever meets "> key" in a built
+# walkthrough. What is an error is giving the flag a value.
+key_re='^>[ \t]*[Kk][Ee][Yy][ \t]*$'
+
+# Catch the natural mistake ("> key: reason") instead of silently reading it as
+# why-prose, which would leave the entry unmarked and the reason duplicated. Kept
+# as lenient about spelling as key_re, so no variant slips through unmarked.
+if printf '%s\n' "$content" | grep -qE '^>[[:space:]]*[Kk][Ee][Yy][[:space:]]*:|^>[[:space:]]*[Kk][Ee][Yy][[:space:]]+[^[:space:]]'; then
 	die "the > key marker takes no value; write it on a line of its own and put the reason in the why"
 fi
 
@@ -291,9 +305,9 @@ fi
 count="$(printf '%s\n' "$entries" | grep -c .)"
 
 # Entries carrying the "> key" marker, counted over the whole file in one pass.
-keys="$(printf '%s\n' "$content" | awk '
+keys="$(printf '%s\n' "$content" | awk -v key_re="$key_re" '
 	/^## / { entry = ($0 ~ /^## ([0-9]+|\?)\. /); counted = 0; next }
-	entry && !counted && /^> key[ \t]*$/ { n++; counted = 1 }
+	entry && !counted && $0 ~ key_re { n++; counted = 1 }
 	END { print n + 0 }
 ')"
 keysuffix=""
@@ -320,9 +334,9 @@ fi
 # Rewrite canonically: the heading, the author's preamble (the ## Heads-up
 # section — anything before the first entry, minus the skeleton's instruction
 # comments), then the entries ordered by the author's number and renumbered 1..N.
-# Each entry's why body is preserved, with its "> key" marker hoisted to the top
-# and its blank lines trimmed so the output is deterministic — byte-for-byte
-# stable across the author's spacing habits. Written via a temp file (the sed_i
+# Each entry's why body is preserved, with its "> key" marker normalised, hoisted
+# to the top and its blank lines trimmed so the output is deterministic —
+# byte-for-byte stable across the author's spacing habits. Written via a temp file (the sed_i
 # pattern) so a failure never leaves a half-written walkthrough.
 preamble="$(printf '%s\n' "$content" | walk_preamble)"
 sorted_paths="$(printf '%s\n' "$entries" | LC_ALL=C sort -k1,1n | cut -f2-)"
@@ -336,8 +350,8 @@ tmp="$wtpath.tmp.$$"
 	printf '%s\n' "$sorted_paths" | while IFS= read -r p; do
 		[ -n "$p" ] || continue
 		printf '## %s. %s\n' "$i" "$p"
-		printf '%s\n' "$content" | walk_body "$p" | awk '
-			/^> key[ \t]*$/ { key = 1; next }
+		printf '%s\n' "$content" | walk_body "$p" | awk -v key_re="$key_re" '
+			$0 ~ key_re { key = 1; next }
 			{ buf[++n] = $0 }
 			END {
 				s = 1; while (s <= n && buf[s] ~ /^[ \t]*$/) s++

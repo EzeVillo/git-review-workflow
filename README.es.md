@@ -505,12 +505,10 @@ El formato del archivo que `build` produce y `start` lee:
 Las sesiones ahora expiran; todo lo que cacheaba un token queda bajo sospecha.
 
 ## 1. src/auth/session.c
-
 > key
 Leé esto primero: define la forma del token de la que depende todo lo demás.
 
 ## 2. src/auth/login.c
-
 Después el flujo de login que lo consume — fijate el nuevo camino de error.
 ```
 

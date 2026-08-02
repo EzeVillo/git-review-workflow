@@ -3,14 +3,17 @@
 > Revisá un pull request **editándolo y corriéndolo**, no solo leyéndolo. Todo el
 > PR aparece en tu working tree como un único diff staged; después tus
 > correcciones se extraen a una rama limpia automáticamente. Re-revisá solo lo
-> que cambió. Si el PR trae un **walkthrough** curado por el autor, te guía por
-> los archivos uno por uno, en el orden — y por los motivos — que el autor
-> eligió.
+> que cambió.
+>
+> Y cuando el cambio lo escribió un **agente de IA**, el agente puede escribir
+> también el **orden de lectura** — un walkthrough committeado junto al código
+> que dice qué archivo leer primero y por qué. `git review start` lo detecta solo
+> y te lleva por el diff en ese orden, en vez de alfabéticamente.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/tag/EzeVillo/git-review-workflow?label=release&sort=semver)](https://github.com/EzeVillo/git-review-workflow/releases)
 
-[English](README.md) · **Español**
+[English](README.md) · **Español** · [Sitio web](https://ezevillo.github.io/git-review-workflow/)
 
 [![Mirá la demo](trailer-poster.png)](https://youtu.be/LsSQtNFnjRQ)
 
@@ -26,14 +29,55 @@ editor — leés el diff, lo editás inline, corrés los tests — y cuando term
 (o directo sobre la rama del PR), manteniéndolas limpiamente aparte del trabajo
 del autor. Re-revisá solo los commits nuevos tras una actualización con `--delta`.
 
-Esto es especialmente útil para **PRs generados por agentes de IA**: traés todo
-el cambio a tu working tree, lo corrés de verdad y corregís inline los code smells
-y los errores sutiles — y después dejás que `git review finish` te devuelva tus
-correcciones como una rama limpia y aparte.
-
 > **Todos los comandos viven bajo `git review <verbo>`** — `git review start`,
 > `git review finish`, `git review status`, etc., como `git bisect` y `git stash`
 > agrupan sus verbos.
+
+## Revisar lo que escribió un agente
+
+Le pediste una feature a un agente. Volvió con catorce archivos cambiados y un
+diff ordenado alfabéticamente — el único orden que garantiza no decir nada sobre
+el cambio. Revisar eso es reconstruir, archivo por archivo, un razonamiento que
+nunca viste.
+
+El agente que hizo el cambio es el único que *sí* conoce ese razonamiento, y
+[`git review walkthrough`](#git-review-walkthrough) le da dónde ponerlo. Como
+parte de la misma tarea, justo después de escribir el código, el agente corre:
+
+```sh
+git review walkthrough init                   # esqueleto con cada archivo cambiado
+# ...completa el orden de lectura y un por qué en cada entrada...
+git review walkthrough build                  # valida, ordena y renumera
+git add .review/walkthrough.md && git commit  # viaja con el PR
+```
+
+Después lo revisás vos — sin habilitar nada ni configurar nada de tu lado:
+
+```sh
+git review start feature/rate-limit
+```
+
+`git review start` encuentra el walkthrough solo y te deja en el primer archivo
+con la nota del agente sobre *por qué* importa; `git review next` te lleva por el
+resto del orden. Todo el PR sigue staged y editable durante todo el recorrido,
+así que corregís inline lo que encontrás y `git review finish` te devuelve tus
+correcciones en una rama aparte.
+
+Para que salga automático, poné la instrucción donde tu agente la vaya a leer —
+su `CLAUDE.md`, su `AGENTS.md`, o tu template de prompt:
+
+> Después de hacer el cambio y commitearlo, corré `git review walkthrough init`,
+> completá el orden de lectura y un *por qué* de una línea en cada entrada, y
+> después corré `git review walkthrough build` y committeá `.review/walkthrough.md`.
+
+Lo que queda es un archivo Markdown committeado, así que también se lee tal cual
+en GitHub para cualquiera que nunca instale esto. Y conseguís lo mismo **sin que
+el autor se suba**: en un PR que no trae walkthrough, apuntá tu propio agente al
+diff y que genere uno solo para tu review — mirá [Flujo típico](#flujo-típico).
+
+Revisar PRs escritos por agentes es también donde rinde el resto del flujo: traés
+todo el cambio a tu working tree, lo corrés de verdad y corregís inline los code
+smells y los errores sutiles en vez de escribir comentarios sobre ellos.
 
 ## ¿Por qué no usar la vista de PR de tu IDE?
 

@@ -202,12 +202,69 @@ walk_body() {
 	'
 }
 
+# walk_preamble  (stdin: walkthrough content)
+# Print the author's preamble: everything between the "# Walkthrough" heading and
+# the first entry, with HTML comments stripped and leading/trailing blank lines
+# trimmed. This is where the "## Heads-up" note lives — what is delicate in this
+# PR, read before the first file. Comments are dropped because the init skeleton
+# writes its instructions as one, and those are scaffolding, not content. Prints
+# nothing when what remains is empty or headings only (an author who deleted the
+# placeholder without writing anything leaves a bare "## Heads-up" behind).
+walk_preamble() {
+	awk '
+		/^## / {
+			line = $0
+			sub(/^## /, "", line)
+			if (line ~ /^([0-9]+|\?)\. /) exit
+		}
+		{
+			if (skip) { if (index($0, "-->")) skip = 0; next }
+			if (index($0, "<!--")) { if (index($0, "-->") == 0) skip = 1; next }
+			if ($0 ~ /^# /) next
+			buf[++n] = $0
+			if ($0 !~ /^#/ && $0 !~ /^[ \t]*$/) prose = 1
+		}
+		END {
+			if (!prose) exit
+			s = 1; while (s <= n && buf[s] ~ /^[ \t]*$/) s++
+			e = n; while (e >= s && buf[e] ~ /^[ \t]*$/) e--
+			for (k = s; k <= e; k++) print buf[k]
+		}
+	'
+}
+
+# walk_is_key <tip> <path>
+# True when the entry for <path> carries the reserved "> key" marker: the author
+# flagging it as one of the few files that carry the change, the ones a reviewer
+# must not skim. Absence is the default — the marker only means something while
+# it stays selective, so it is never written on every entry.
+walk_is_key() {
+	walk_read "$1" | walk_body "$2" | grep -q '^> key[[:space:]]*$'
+}
+
+# walk_count_keys <tip>  (stdin: paths, one per line)
+# How many of the given entries carry the "> key" marker. Reads the walkthrough
+# once rather than per path, so a long reading order costs one git show.
+walk_count_keys() {
+	_wck_content="$(walk_read "$1" || true)"
+	_wck_n=0
+	while IFS= read -r _wck_p; do
+		[ -n "$_wck_p" ] || continue
+		if printf '%s\n' "$_wck_content" | walk_body "$_wck_p" |
+			grep -q '^> key[[:space:]]*$'; then
+			_wck_n=$((_wck_n + 1))
+		fi
+	done
+	printf '%s\n' "$_wck_n"
+}
+
 # walk_why <tip> <path>
 # The "why" prose a reviewer sees for <path>: the entry body from the walkthrough
-# at <tip>, with the reserved "> at:" anchor line (v2) dropped and leading/
-# trailing blank lines trimmed.
+# at <tip>, with the reserved marker lines ("> key", and the "> at:" anchor of v2)
+# dropped and leading/trailing blank lines trimmed.
 walk_why() {
-	walk_read "$1" | walk_body "$2" | grep -v '^> at: ' | awk '
+	walk_read "$1" | walk_body "$2" |
+		grep -v -e '^> at: ' -e '^> key[[:space:]]*$' | awk '
 		{ buf[NR] = $0 }
 		END {
 			s = 1; while (s <= NR && buf[s] ~ /^[ \t]*$/) s++
@@ -332,14 +389,20 @@ load_walk_review_meta() {
 
 # show_walk_entry <k>
 # Print the k-th walkthrough entry: a rule, the "[k/N] <path>" header, the author's
-# "why" prose, another rule and the prompt. The path carries no line number on
-# purpose — clicking it in an IDE terminal just opens the file at the top; a hunk
-# line only ever pointed at the first change and went stale the moment you edited.
+# "why" prose, another rule and the prompt. An entry the author marked "> key" is
+# labelled as such in the header — the reading order says what to read when, the
+# marker says which ones not to skim. The path carries no line number on purpose —
+# clicking it in an IDE terminal just opens the file at the top; a hunk line only
+# ever pointed at the first change and went stale the moment you edited.
 # Relies on the globals set by load_walk_review_meta (tip, walkcount, walkpaths).
 show_walk_entry() {
 	_swe_path="$(printf '%s\n' "$walkpaths" | sed -n "${1}p")"
-	printf -- '----\n[%s/%s] %s\n%s\n----\nread this file, edit if needed, then run git review next\n' \
-		"$1" "$walkcount" "$_swe_path" "$(walk_why "$tip" "$_swe_path")"
+	_swe_mark=""
+	if walk_is_key "$tip" "$_swe_path"; then
+		_swe_mark="  (key)"
+	fi
+	printf -- '----\n[%s/%s] %s%s\n%s\n----\nread this file, edit if needed, then run git review next\n' \
+		"$1" "$walkcount" "$_swe_path" "$_swe_mark" "$(walk_why "$tip" "$_swe_path")"
 }
 
 # goto_walk_entry <k>

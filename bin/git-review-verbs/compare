@@ -180,7 +180,17 @@ if [ "$walk" -eq 1 ]; then
 	git config "branch.$rb.reviewmode" "walk"
 	git config "branch.$rb.reviewwalkstep" "1"
 	git config "branch.$rb.reviewwalkcount" "$walkcount"
-	echo "$rb ready (compare $a..$b, read-only walkthrough) — read, then git review next (git review finish will refuse)"
+	keycount="$(printf '%s\n' "$walkpaths" | walk_count_keys "$bcommit")"
+	keysuffix=""
+	if [ "$keycount" -ge 1 ]; then
+		keysuffix=" ($keycount key)"
+	fi
+	echo "$rb ready (compare $a..$b, read-only walkthrough$keysuffix) — read, then git review next (git review finish will refuse)"
+	# The author's heads-up, once, before the first entry — same as in start.
+	headsup="$(printf '%s\n' "$wtcontent" | walk_preamble)"
+	if [ -n "$headsup" ]; then
+		printf -- '----\n%s\n' "$headsup"
+	fi
 	cur="$rb"
 	tip="$bcommit"
 	show_walk_entry 1

@@ -57,8 +57,10 @@ Después lo revisás vos — sin habilitar nada ni configurar nada de tu lado:
 git review start feature/rate-limit
 ```
 
-`git review start` encuentra el walkthrough solo y te deja en el primer archivo
-con la nota del agente sobre *por qué* importa; `git review next` te lleva por el
+`git review start` encuentra el walkthrough solo: imprime el heads-up del agente
+sobre qué es delicado en este PR y después te deja en el primer archivo con la
+nota sobre *por qué* importa — las entradas que el agente marcó como esenciales
+salen etiquetadas `(key)`; `git review next` te lleva por el
 resto del orden. Todo el PR sigue staged y editable durante todo el recorrido,
 así que corregís inline lo que encontrás y `git review finish` te devuelve tus
 correcciones en una rama aparte.
@@ -67,8 +69,10 @@ Para que salga automático, poné la instrucción donde tu agente la vaya a leer
 su `CLAUDE.md`, su `AGENTS.md`, o tu template de prompt:
 
 > Después de hacer el cambio y commitearlo, corré `git review walkthrough init`,
-> completá el orden de lectura y un *por qué* de una línea en cada entrada, y
-> después corré `git review walkthrough build` y committeá `.review/walkthrough.md`.
+> completá el orden de lectura y un *por qué* de una línea en cada entrada, la
+> sección `## Heads-up` con lo delicado de este PR, y un marcador `> key` en las
+> pocas entradas que un reviewer no puede leer por arriba; después corré
+> `git review walkthrough build` y committeá `.review/walkthrough.md`.
 
 Lo que queda es un archivo Markdown committeado, así que también se lee tal cual
 en GitHub para cualquiera que nunca instale esto. Y conseguís lo mismo **sin que
@@ -362,8 +366,10 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   (`.review/walkthrough.md`, escrito por el autor con
   [`git review walkthrough`](#git-review-walkthrough)), `git review start` entra
   en **modo walk**: la misma review completa staged y editable, más un cursor de
-  lectura curado por encima. Imprime la primera entrada — un archivo y la nota del
-  autor sobre por qué importa — y te movés por el orden de
+  lectura curado por encima. Imprime el heads-up del autor — qué es delicado en
+  este PR, se lee una vez antes del primer archivo — y después la primera entrada:
+  un archivo y la nota del autor sobre por qué importa, etiquetada `(key)` cuando
+  es una de las pocas que el autor marcó como esenciales. Te movés por el orden de
   lectura con `git review next` / `git review prev`. El cursor es *solo* una
   posición de lectura: nunca stagea, resetea ni esconde nada, así que editás y
   hacés `git review finish` exactamente como en una review completa. Las entradas
@@ -449,16 +455,30 @@ git review walkthrough build    # valida, ordena por tus números y renumera 1..
 
 - `init` escribe un esqueleto determinístico con **todos los archivos** cambiados
   vs la base (el mismo rango que verá un reviewer), cada uno como `## ?. <path>`
-  más un placeholder `<!-- why: -->`. Se niega a pisar un walkthrough existente
-  sin `--force`. `--base <base>` sobreescribe `reviewworkflow.base`.
+  más un placeholder `<!-- why: -->`, encabezado por una sección `## Heads-up` con
+  su propio placeholder. Se niega a pisar un walkthrough existente sin `--force`.
+  `--base <base>` sobreescribe `reviewworkflow.base`.
 - Vos (el autor) hacés solo la parte no mecánica: reemplazás cada `?` por un
   número de orden y cada placeholder por una nota corta.
+- **`## Heads-up`** es lo único que un reviewer lee antes de abrir un archivo: los
+  invariantes que este PR puede romper, las partes sutiles o riesgosas, de qué
+  desconfiar. `git review start` lo imprime al entrar. Borrá la sección entera si
+  el PR no tiene nada delicado — una sección vacía es peor que ninguna.
+- **`> key`** marca las entradas esenciales. Escribilo en una línea propia, como
+  primera línea del porqué, en los pocos archivos que llevan el cambio — los que
+  un reviewer no puede leer por arriba — y dejá el resto sin marcar; los archivos
+  generados, los lockfiles y los renames mecánicos son justamente lo que queda sin
+  marca. No lleva valor: el porqué dice el resto. El modo walk etiqueta esas
+  entradas con `(key)` y las cuenta al entrar. El marcador solo sirve mientras
+  sea selectivo, así que `build` avisa si están todas marcadas (o si un
+  walkthrough largo no marca ninguna).
 - `build` valida el archivo, ordena las entradas por tus números, las renumera
-  `1..N` y lo reescribe. `--check` valida **sin escribir** y sale con código
-  distinto de cero ante cualquier problema — pensado para CI. Falla si queda algún
-  placeholder `?.` o `<!-- why`, si un path aparece dos veces, o ante **drift**:
-  el conjunto de paths tiene que coincidir exactamente con los archivos cambiados
-  del PR (excluyendo `.review/`).
+  `1..N` y lo reescribe, preservando el heads-up. `--check` valida **sin escribir**
+  y sale con código distinto de cero ante cualquier problema — pensado para CI.
+  Falla si queda algún placeholder `?.`, `<!-- why` o `<!-- heads-up`, si `> key`
+  lleva un valor, si un path aparece dos veces, o ante **drift**: el conjunto de
+  paths tiene que coincidir exactamente con los archivos cambiados del PR
+  (excluyendo `.review/`).
 
 Completar el orden y los porqués es una tarea perfecta para delegarle a un
 agente de IA — apuntalo al diff y dejá que escriba los placeholders. Funciona
@@ -480,10 +500,13 @@ El formato del archivo que `build` produce y `start` lee:
 ```markdown
 # Walkthrough
 
-<prosa libre de introducción — el parser ignora todo lo previo a la primera entrada>
+## Heads-up
+
+Las sesiones ahora expiran; todo lo que cacheaba un token queda bajo sospecha.
 
 ## 1. src/auth/session.c
 
+> key
 Leé esto primero: define la forma del token de la que depende todo lo demás.
 
 ## 2. src/auth/login.c
@@ -493,7 +516,10 @@ Después el flujo de login que lo consume — fijate el nuevo camino de error.
 
 Cada entrada es una línea `## <N>. <path>` (el path tal cual lo imprime
 `git diff --name-only`) seguida de su *porqué* en texto libre, hasta la próxima
-entrada. La granularidad es por archivo en v1.
+entrada, opcionalmente encabezada por el marcador reservado `> key`. Todo lo que
+está arriba de la primera entrada es el preámbulo (la sección `## Heads-up`); el
+parser lo ignora y `build` lo preserva tal cual, menos los comentarios HTML. La
+granularidad es por archivo en v1.
 
 </details>
 
@@ -715,13 +741,13 @@ git config reviewworkflow.base develop      # una vez por repo
 # por un agente de IA como autor), curando el orden en que conviene leer los
 # archivos y un porqué en cada uno:
 git review walkthrough init                  # esqueleto de cada archivo cambiado
-# ...completar el orden y un porqué en cada uno...
+# ...completar el orden, un porqué en cada uno, el heads-up y los marcadores > key...
 git review walkthrough build                 # ordenar, renumerar y validar
 git add .review/walkthrough.md && git commit # viaja con el PR
 
 # Lado reviewer: no hay nada especial que correr — un PR que trae un
 # walkthrough se detecta solo:
-git review start feature/login              # dejar el PR staged; entra en modo walk
+git review start feature/login              # heads-up + entrada 1; entra en modo walk
 # ...leer la primera entrada y su porqué, editar inline si querés, correr tests...
 git review next                              # pasar a la siguiente entrada
 git review next                              # ...hasta recorrer todo el orden...

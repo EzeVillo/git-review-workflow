@@ -379,7 +379,22 @@ if [ "$walk" -eq 1 ]; then
 		echo "note: file(s) in range not in the walkthrough: $(printf '%s\n' "$uncovered" | tr '\n' ' ')"
 	fi
 
-	echo "$rb ready ($range) — walkthrough: $walkcount entr$([ "$walkcount" -eq 1 ] && echo y || echo ies); read, edit, then run git review next"
+	# Entries the author flagged "> key": the few files a reviewer must not skim.
+	keycount="$(printf '%s\n' "$walkpaths" | walk_count_keys "$tip")"
+	keysuffix=""
+	if [ "$keycount" -ge 1 ]; then
+		keysuffix=" ($keycount key)"
+	fi
+
+	echo "$rb ready ($range) — walkthrough: $walkcount entr$([ "$walkcount" -eq 1 ] && echo y || echo ies)$keysuffix; read, edit, then run git review next"
+
+	# The author's heads-up, printed once before the first entry: what is delicate
+	# in this PR, read before opening a file. Absent on a walkthrough that carries
+	# none (nothing is printed then, not an empty block).
+	headsup="$(printf '%s\n' "$wtcontent" | walk_preamble)"
+	if [ -n "$headsup" ]; then
+		printf -- '----\n%s\n' "$headsup"
+	fi
 
 	# show_walk_entry needs the walk globals; cur is the branch we just landed on and
 	# HEAD is the lower bound (== the range's HEAD side used for the live diff).

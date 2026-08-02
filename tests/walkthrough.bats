@@ -107,12 +107,14 @@ teardown() {
 # ── build ─────────────────────────────────────────────────────────────────────
 
 # Write a filled-in, deliberately out-of-order walkthrough covering exactly the
-# three PR files.
+# three PR files, with a heads-up preamble.
 write_unordered() {
 	cat >.review/walkthrough.md <<'EOF'
 # Walkthrough
 
-Intro prose the parser ignores.
+## Heads-up
+
+the token lifetime changed
 
 ## 2. a.txt
 why a
@@ -130,9 +132,10 @@ EOF
 	write_unordered
 	run git review walkthrough build
 	[ "$status" -eq 0 ]
-	# Byte-for-byte expected output: fixed intro, entries in author-number order,
-	# renumbered 1..N, each why body trimmed with a single trailing blank line.
-	expected="$(printf '# Walkthrough\n\n## 1. src/c.txt\nwhy c\n\n## 2. a.txt\nwhy a\n\n## 3. b.txt\nwhy b\n\n')"
+	# Byte-for-byte expected output: the heading, the author's preamble, then the
+	# entries in author-number order, renumbered 1..N, each why body trimmed with a
+	# single trailing blank line.
+	expected="$(printf '# Walkthrough\n\n## Heads-up\n\nthe token lifetime changed\n\n## 1. src/c.txt\nwhy c\n\n## 2. a.txt\nwhy a\n\n## 3. b.txt\nwhy b\n\n')"
 	[ "$(cat .review/walkthrough.md)" = "$expected" ]
 }
 
@@ -144,12 +147,13 @@ EOF
 	# The intro is present and carries the guidance text.
 	grep -q 'PLACEHOLDERS' .review/walkthrough.md
 	# Edit in place exactly as the instructions say: number each "?" (out of
-	# order, to also prove reordering), and delete each why-comment, replacing
-	# the whole line with prose.
+	# order, to also prove reordering), delete each why-comment replacing the whole
+	# line with prose, and drop the heads-up section (this PR has nothing delicate).
 	sed -e 's/^## ?\. a\.txt$/## 2. a.txt/' \
 		-e 's/^## ?\. b\.txt$/## 3. b.txt/' \
 		-e 's|^## ?\. src/c\.txt$|## 1. src/c.txt|' \
 		-e 's/^<!-- why: -->$/looks fine/' \
+		-e '/^## Heads-up$/,/-->/d' \
 		.review/walkthrough.md >.review/wt.tmp
 	mv .review/wt.tmp .review/walkthrough.md
 	run git review walkthrough build
@@ -158,6 +162,141 @@ EOF
 	expected="$(printf '# Walkthrough\n\n## 1. src/c.txt\nlooks fine\n\n## 2. a.txt\nlooks fine\n\n## 3. b.txt\nlooks fine\n\n')"
 	[ "$(cat .review/walkthrough.md)" = "$expected" ]
 	! grep -q 'PLACEHOLDERS' .review/walkthrough.md
+}
+
+# ── heads-up preamble ─────────────────────────────────────────────────────────
+
+@test "init writes a Heads-up section with its placeholder" {
+	run git review walkthrough init
+	[ "$status" -eq 0 ]
+	grep -q '^## Heads-up$' .review/walkthrough.md
+	grep -q '<!-- heads-up:' .review/walkthrough.md
+	# The heads-up sits above the entries, where it is read first.
+	head="$(grep -n '^## Heads-up$' .review/walkthrough.md | cut -d: -f1)"
+	first="$(grep -n '^## ?\. ' .review/walkthrough.md | head -n 1 | cut -d: -f1)"
+	[ "$head" -lt "$first" ]
+}
+
+@test "build keeps the authored heads-up and drops the skeleton instructions" {
+	# The realistic loop: fill in the heads-up rather than deleting it.
+	git review walkthrough init
+	awk '/^<!-- heads-up/ { skip = 1; print "session tokens now expire; anything caching them is suspect"; next }
+	     skip { if (/-->/) skip = 0; next }
+	     { print }' .review/walkthrough.md >.review/wt.tmp
+	mv .review/wt.tmp .review/walkthrough.md
+	sed -e 's/^## ?\. a\.txt$/## 1. a.txt/' \
+		-e 's/^## ?\. b\.txt$/## 2. b.txt/' \
+		-e 's|^## ?\. src/c\.txt$|## 3. src/c.txt|' \
+		-e 's/^<!-- why: -->$/looks fine/' \
+		.review/walkthrough.md >.review/wt.tmp
+	mv .review/wt.tmp .review/walkthrough.md
+	run git review walkthrough build
+	[ "$status" -eq 0 ]
+	expected="$(printf '# Walkthrough\n\n## Heads-up\n\nsession tokens now expire; anything caching them is suspect\n\n## 1. a.txt\nlooks fine\n\n## 2. b.txt\nlooks fine\n\n## 3. src/c.txt\nlooks fine\n\n')"
+	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+}
+
+@test "build fails on a leftover heads-up placeholder without modifying the file" {
+	mkdir -p .review
+	printf '# Walkthrough\n\n## Heads-up\n\n<!-- heads-up: the delicate parts -->\n\n## 1. a.txt\nx\n\n## 2. b.txt\ny\n\n## 3. src/c.txt\nz\n' >.review/walkthrough.md
+	before="$(cat .review/walkthrough.md)"
+	run git review walkthrough build
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"heads-up placeholder is still there"* ]]
+	[ "$(cat .review/walkthrough.md)" = "$before" ]
+}
+
+@test "build drops a Heads-up heading left empty" {
+	# Deleting the placeholder without writing anything must not leave a bare
+	# heading behind: an empty section is worse than none.
+	mkdir -p .review
+	printf '# Walkthrough\n\n## Heads-up\n\n## 1. a.txt\nx\n\n## 2. b.txt\ny\n\n## 3. src/c.txt\nz\n' >.review/walkthrough.md
+	run git review walkthrough build
+	[ "$status" -eq 0 ]
+	expected="$(printf '# Walkthrough\n\n## 1. a.txt\nx\n\n## 2. b.txt\ny\n\n## 3. src/c.txt\nz\n\n')"
+	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+}
+
+# ── the "> key" marker ────────────────────────────────────────────────────────
+
+@test "init explains the key marker in its instructions" {
+	run git review walkthrough init
+	[ "$status" -eq 0 ]
+	grep -q '"> key"' .review/walkthrough.md
+}
+
+@test "build keeps the key marker, hoists it to the top of the why and counts it" {
+	mkdir -p .review
+	printf '# Walkthrough\n\n## 1. a.txt\nthe core change\n> key\n\n## 2. b.txt\nmechanical rename\n\n## 3. src/c.txt\n> key\nnew helper\n' >.review/walkthrough.md
+	run git review walkthrough build
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"3 entries (2 key)"* ]]
+	# Canonical output: the marker always leads the body, wherever it was written.
+	expected="$(printf '# Walkthrough\n\n## 1. a.txt\n> key\nthe core change\n\n## 2. b.txt\nmechanical rename\n\n## 3. src/c.txt\n> key\nnew helper\n\n')"
+	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+}
+
+@test "build --check reports the key count and writes nothing" {
+	mkdir -p .review
+	printf '# Walkthrough\n\n## 1. a.txt\n> key\nthe core change\n\n## 2. b.txt\ny\n\n## 3. src/c.txt\nz\n' >.review/walkthrough.md
+	before="$(cat .review/walkthrough.md)"
+	run git review walkthrough build --check
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"3 entries (1 key)"* ]]
+	[ "$(cat .review/walkthrough.md)" = "$before" ]
+}
+
+@test "build reports no key count when nothing is marked" {
+	mkdir -p .review
+	write_unordered
+	run git review walkthrough build
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"3 entries, ordered and renumbered"* ]]
+	[[ "$output" != *"key)"* ]]
+}
+
+@test "build rejects a key marker written with a value" {
+	mkdir -p .review
+	printf '# Walkthrough\n\n## 1. a.txt\n> key: it touches the token\n\n## 2. b.txt\ny\n\n## 3. src/c.txt\nz\n' >.review/walkthrough.md
+	before="$(cat .review/walkthrough.md)"
+	run git review walkthrough build
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"takes no value"* ]]
+	[ "$(cat .review/walkthrough.md)" = "$before" ]
+}
+
+@test "build notes that marking every entry defeats the marker but still builds" {
+	mkdir -p .review
+	printf '# Walkthrough\n\n## 1. a.txt\n> key\nx\n\n## 2. b.txt\n> key\ny\n\n## 3. src/c.txt\n> key\nz\n' >.review/walkthrough.md
+	run git review walkthrough build
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"every entry is marked"* ]]
+	expected="$(printf '# Walkthrough\n\n## 1. a.txt\n> key\nx\n\n## 2. b.txt\n> key\ny\n\n## 3. src/c.txt\n> key\nz\n\n')"
+	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+}
+
+@test "build suggests marking something on a large walkthrough with no key entry" {
+	# Six changed files, none marked: past the point where reading order alone is
+	# enough guidance.
+	for f in d e f; do
+		printf '%s\n' "$f" >"$f.txt"
+	done
+	git add d.txt e.txt f.txt
+	git commit --quiet -m more
+	mkdir -p .review
+	printf '# Walkthrough\n\n## 1. a.txt\nx\n\n## 2. b.txt\ny\n\n## 3. src/c.txt\nz\n\n## 4. d.txt\nd\n\n## 5. e.txt\ne\n\n## 6. f.txt\nf\n' >.review/walkthrough.md
+	run git review walkthrough build
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"no entry is marked"* ]]
+	grep -q '^## 6\. f.txt$' .review/walkthrough.md
+}
+
+@test "build stays quiet about the marker on a small unmarked walkthrough" {
+	mkdir -p .review
+	write_unordered
+	run git review walkthrough build
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"> key"* ]]
 }
 
 @test "build --check on a valid walkthrough passes and writes nothing" {
@@ -305,7 +444,7 @@ EOF
 	run git review walkthrough build
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"uncommitted changes"* ]]
-	expected="$(printf '# Walkthrough\n\n## 1. src/c.txt\nwhy c\n\n## 2. a.txt\nwhy a\n\n## 3. b.txt\nwhy b\n\n')"
+	expected="$(printf '# Walkthrough\n\n## Heads-up\n\nthe token lifetime changed\n\n## 1. src/c.txt\nwhy c\n\n## 2. a.txt\nwhy a\n\n## 3. b.txt\nwhy b\n\n')"
 	[ "$(cat .review/walkthrough.md)" = "$expected" ]
 }
 

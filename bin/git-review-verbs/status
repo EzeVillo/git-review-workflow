@@ -111,7 +111,11 @@ elif [ "$mode" = "walk" ]; then
 		walk_range_error "$walkstep" "$total" "$walkcount"
 	fi
 	pnow="$(printf '%s\n' "$walkpaths" | sed -n "${walkstep}p")"
-	printf '  mode    walk  [%s/%s] on %s\n' "$walkstep" "${walkcount:-$total}" "$pnow"
+	mark=""
+	if walk_is_key "$tip" "$pnow"; then
+		mark="  (key)"
+	fi
+	printf '  mode    walk  [%s/%s] on %s%s\n' "$walkstep" "${walkcount:-$total}" "$pnow" "$mark"
 	hint="git review next"
 	[ "$walkstep" -gt 1 ] && hint="$hint / git review prev"
 	printf '  next    read, then %s  (git review finish when done)\n' "$hint"

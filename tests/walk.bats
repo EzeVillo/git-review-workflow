@@ -240,6 +240,134 @@ teardown() {
 	[[ "$output" == *"[2/2] on b.txt"* ]]
 }
 
+# ── heads-up and the key marker ───────────────────────────────────────────────
+
+# Replace the committed walkthrough on feature/x with the content on stdin and
+# push it, leaving the caller back on develop where setup left them.
+recommit_walkthrough() {
+	git switch --quiet feature/x
+	cat >.review/walkthrough.md
+	git add .review/walkthrough.md
+	git commit --quiet -m rewt
+	git push --quiet origin feature/x
+	git switch --quiet develop
+}
+
+@test "start prints the author heads-up before the first entry" {
+	recommit_walkthrough <<'EOF'
+# Walkthrough
+
+## Heads-up
+
+session tokens now expire; anything caching them is suspect
+
+## 1. src/c.txt
+read the new helper first
+
+## 2. a.txt
+then the a change
+
+## 3. b.txt
+finally b
+EOF
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"anything caching them is suspect"* ]]
+	# It is read before the first file, so it must print above entry 1.
+	hu="$(printf '%s\n' "$output" | grep -n 'anything caching them is suspect' | cut -d: -f1)"
+	e1="$(printf '%s\n' "$output" | grep -n '^\[1/3\]' | cut -d: -f1)"
+	[ -n "$hu" ]
+	[ -n "$e1" ]
+	[ "$hu" -lt "$e1" ]
+}
+
+@test "start prints no preamble block when the walkthrough has no heads-up" {
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"Heads-up"* ]]
+	[[ "$output" == *"[1/3] src/c.txt"* ]]
+}
+
+@test "start labels the key entries and counts them in the summary" {
+	recommit_walkthrough <<'EOF'
+# Walkthrough
+
+## 1. src/c.txt
+> key
+read the new helper first
+
+## 2. a.txt
+then the a change
+
+## 3. b.txt
+> key
+finally b
+EOF
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"3 entries (2 key)"* ]]
+	[[ "$output" == *"[1/3] src/c.txt  (key)"* ]]
+	# The marker is a label, never prose: it must not leak into the why.
+	[[ "$output" != *"> key"* ]]
+	[[ "$output" == *"read the new helper first"* ]]
+}
+
+@test "status labels the current entry when it is marked key" {
+	recommit_walkthrough <<'EOF'
+# Walkthrough
+
+## 1. src/c.txt
+> key
+read the new helper first
+
+## 2. a.txt
+then the a change
+
+## 3. b.txt
+finally b
+EOF
+	git review start feature/x >/dev/null
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[1/3] on src/c.txt  (key)"* ]]
+	git review next >/dev/null
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[2/3] on a.txt"* ]]
+	[[ "$output" != *"(key)"* ]]
+}
+
+@test "next labels a key entry and leaves an unmarked one plain" {
+	recommit_walkthrough <<'EOF'
+# Walkthrough
+
+## 1. src/c.txt
+read the new helper first
+
+## 2. a.txt
+> key
+then the a change
+
+## 3. b.txt
+finally b
+EOF
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	# Entry 1 is unmarked: no label at all.
+	[[ "$output" == *"[1/3] src/c.txt"* ]]
+	[[ "$output" != *"(key)"* ]]
+	run git review next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[2/3] a.txt  (key)"* ]]
+	[[ "$output" == *"then the a change"* ]]
+	[[ "$output" != *"> key"* ]]
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "2" ]
+	run git review next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[3/3] b.txt"* ]]
+	[[ "$output" != *"(key)"* ]]
+}
+
 # ── graceful degradation ──────────────────────────────────────────────────────
 
 @test "a walkthrough whose entries do not intersect the range falls back to whole with a note" {

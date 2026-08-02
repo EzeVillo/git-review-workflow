@@ -74,7 +74,14 @@ repo, no en archivos del working tree:
 - **Modo walk** (`reviewmode = walk`): un walkthrough (sidecar
   `.review/walkthrough.md`, committeado al PR por el autor con `git review
   walkthrough init/build`) convierte el `start` en un cursor de lectura sobre la
-  review completa. El cursor vive en claves **propias** — `reviewwalkstep`
+  review completa. El formato tiene tres piezas: el **preámbulo** (`## Heads-up`,
+  todo lo previo a la primera entrada — `build` lo preserva verbatim menos los
+  comentarios HTML, y `start`/`compare` lo imprimen una vez al entrar), las
+  **entradas** (`## N. <path>` + el why) y el marcador reservado **`> key`** (línea
+  suelta al tope del body: presencia = entrada esencial, ausencia = default; se
+  filtra del why y se muestra como `(key)`). Los marcadores reservados van todos
+  como líneas `> ...` al inicio del body — ver también el `> at: ` de v2. El cursor vive en claves *
+  *propias** — `reviewwalkstep`
   (1-based) y `reviewwalkcount` (guard) — nunca en `reviewstart/reviewcount/
   reviewstep`: el guard de metadata de `finish` aborta si esas claves de step
   existen sin `reviewmode=step` (y hay un guard espejo para claves walk sin
@@ -116,9 +123,9 @@ repo, no en archivos del working tree:
     2. los **métodos de instalación** (npm / Homebrew / PowerShell / one-liner);
     3. los **comandos que aparecen en los ejemplos** — `start`, `next`, `finish`,
        `walkthrough init|build`, `reviewworkflow.base`;
-    4. el **formato del walkthrough** que muestra el demo interactivo (`## N.
-       <path>` + el *why*).
-  Si tu cambio no toca nada de eso, la landing no se toca.
+    4. el **formato del walkthrough** que muestra el demo interactivo (el
+       `## Heads-up`, `## N. <path>` + el *why*, y el badge `key`).
+       Si tu cambio no toca nada de eso, la landing no se toca.
 - **La landing es bilingüe en un solo archivo.** El inglés vive en el HTML (para
   que lo indexen los crawlers) y el español en el diccionario `ES` del `<script>`,
   emparejados por `data-i18n`. Si editás un texto con `data-i18n`, editá las dos

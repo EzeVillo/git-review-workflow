@@ -57,6 +57,23 @@ describe("panelHtml", () => {
         assert.ok(html.includes("button[disabled]"), "y el estado tiene que verse, no sólo existir");
     });
 
+    it("pide el modelo recién después de registrar el listener que lo recibe", () => {
+        // Ocultar la vista destruye el contexto del webview, así que esto corre
+        // de nuevo en cada reapertura. Si el `ready` sale antes del listener, el
+        // modelo que el host postea en respuesta llega al vacío y el panel queda
+        // en blanco — y sin sus botones no hay forma de pedir otro.
+        const listener = html.indexOf('window.addEventListener("message"');
+        const ready = html.indexOf('postMessage({type: "ready"})');
+        assert.ok(listener !== -1, "el webview tiene que escuchar el modelo");
+        assert.ok(ready !== -1, "el webview tiene que anunciar que ya escucha");
+        assert.ok(ready > listener, "el handshake no puede adelantarse a su propio listener");
+    });
+
+    it("guarda el modelo recibido y redibuja el guardado al recargarse", () => {
+        assert.ok(html.includes("vscode.setState(event.data.model)"));
+        assert.ok(/const saved = vscode\.getState\(\);\s*if \(saved\) \{ render\(saved\); \}/.test(html));
+    });
+
     it("dibuja los cuatro estados del why y los cinco estados vacíos", () => {
         for (const state of ["present", "absent", "failed"]) {
             assert.ok(html.includes(`"${state}"`), `falta el estado ${state} del why`);

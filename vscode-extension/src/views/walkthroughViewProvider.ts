@@ -21,6 +21,13 @@ export const PANEL_MESSAGES = [
 
 export type PanelMessage = (typeof PANEL_MESSAGES)[number];
 
+/**
+ * El handshake, deliberadamente **fuera** de `PANEL_MESSAGES`: no es una acción
+ * del revisor y no rutea a ningún comando, sólo avisa que el script del webview
+ * ya está escuchando.
+ */
+const READY = "ready";
+
 function isPanelMessage(value: unknown): value is PanelMessage {
     return typeof value === "string" && (PANEL_MESSAGES as readonly string[]).includes(value);
 }
@@ -52,17 +59,35 @@ export class WalkthroughViewProvider implements vscode.WebviewViewProvider {
     constructor(private readonly onMessage: (message: PanelMessage) => void) {
     }
 
+    /**
+     * Se llama cada vez que la vista pasa a ser visible, no una sola vez: si el
+     * revisor la oculta, el host destruye el contexto del webview y al volver lo
+     * reconstruye de cero. Por eso nada de lo de acá puede asumir que corre una
+     * única vez, y por eso el modelo se repostea contra el webview nuevo.
+     */
     resolveWebviewView(view: vscode.WebviewView): void {
         this.view = view;
         view.webview.options = {enableScripts: true};
-        view.webview.html = this.html();
-        view.webview.onDidReceiveMessage((raw: unknown) => {
+        // El listener va ANTES del html, no después: es el html el que arranca
+        // el script que postea `ready`, y un mensaje que llegue antes de que el
+        // host esté escuchando se pierde igual que se perdía el modelo.
+        const listener = view.webview.onDidReceiveMessage((raw: unknown) => {
             const type = (raw as { type?: unknown } | undefined)?.type;
+            if (type === READY) {
+                this.post();
+                return;
+            }
             if (isPanelMessage(type)) {
                 this.onMessage(type);
             }
         });
-        this.post();
+        view.onDidDispose(() => {
+            listener.dispose();
+            if (this.view === view) {
+                this.view = undefined;
+            }
+        });
+        view.webview.html = this.html();
     }
 
     update(model: PanelModel): void {
@@ -70,6 +95,12 @@ export class WalkthroughViewProvider implements vscode.WebviewViewProvider {
         this.post();
     }
 
+    /**
+     * Un `post` que salga mientras el webview todavía carga se pierde, pero no
+     * queda nada colgado: el `ready` de ese webview vuelve a pedir el modelo, y
+     * el modelo es siempre el completo (no hay actualización parcial que
+     * reconstruir).
+     */
     private post(): void {
         if (this.view && this.model) {
             void this.view.webview.postMessage({type: "model", model: this.model});

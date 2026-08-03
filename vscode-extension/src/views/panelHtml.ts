@@ -309,8 +309,26 @@ export function panelHtml(nonce: string): string {
   }
 
   window.addEventListener("message", function (event) {
-    if (event.data && event.data.type === "model") { render(event.data.model); }
+    if (event.data && event.data.type === "model") {
+      // El modelo se guarda en el estado del webview: no es estado propio del
+      // panel (FR-019), es la última copia de lo que mandó el host, para poder
+      // redibujarla al recargarse sin una ida y vuelta.
+      vscode.setState(event.data.model);
+      render(event.data.model);
+    }
   });
+
+  // Ocultar la vista destruye este contexto y volver a mostrarla lo reconstruye
+  // de cero. Sin esto el panel arranca vacío hasta que llegue el primer modelo;
+  // con el estado guardado se dibuja ya, y el modelo que sigue lo pisa.
+  const saved = vscode.getState();
+  if (saved) { render(saved); }
+
+  // El host no puede postear el modelo hasta acá: un mensaje que llegue antes
+  // de que exista el listener de arriba se pierde, y el panel se queda en
+  // blanco sin ningún control para salir de ahí — sus botones son justamente
+  // los que no se dibujaron. El handshake lo vuelve independiente del timing.
+  vscode.postMessage({type: "ready"});
 }());
 </script>
 </body>

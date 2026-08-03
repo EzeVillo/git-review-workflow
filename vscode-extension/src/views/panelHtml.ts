@@ -85,6 +85,12 @@ export function panelHtml(nonce: string): string {
     background: var(--vscode-badge-background);
     color: var(--vscode-badge-foreground);
   }
+  /* "uncovered" no es un estado del revisor ni del autor del walkthrough: es
+     un aviso, del mismo color que usan las notas del panel. */
+  .badge.uncovered {
+    border-color: transparent;
+    color: var(--vscode-descriptionForeground);
+  }
   .id {
     margin: 0 0 .9em;
     font-family: var(--vscode-editor-font-family);
@@ -185,13 +191,6 @@ export function panelHtml(nonce: string): string {
     outline-offset: 2px;
   }
   button[disabled] { opacity: .5; cursor: default; }
-  .foot {
-    display: flex;
-    gap: .8em;
-    padding: .5em .8em;
-    border-top: 1px solid var(--vscode-panel-border);
-    font-size: .9em;
-  }
   .empty { padding: 1.2em .9em; line-height: 1.6; }
   .empty p { margin: 0 0 1em; }
   /* El inventario del estado vacío: una fila por review del repositorio. Va
@@ -448,9 +447,18 @@ export function panelHtml(nonce: string): string {
     return box;
   }
 
-  function renderWhy(why) {
+  // Una entrada no anotada nunca tiene un why que pedir (la CLI ya cae en
+  // "entrada sin cuerpo"), pero el texto no es el mismo que el de una entrada
+  // curada sin explicación: una es una ausencia del walkthrough, la otra un
+  // archivo que el walkthrough directamente no cubre.
+  function renderWhy(why, annotated) {
     if (why.state === "present") { return el("div", "why", why.text); }
-    if (why.state === "absent") { return el("div", "why quiet", "This entry has no explanation."); }
+    if (why.state === "absent") {
+      const text = annotated === false
+        ? "This file changes in the review and the walkthrough does not annotate it."
+        : "This entry has no explanation.";
+      return el("div", "why quiet", text);
+    }
     if (why.state === "failed") { return el("div", "why quiet", "Could not read the why for this entry."); }
     return whyLoading();
   }
@@ -463,9 +471,12 @@ export function panelHtml(nonce: string): string {
     head.appendChild(el("span", "n", pad(model.current.position)));
     // "key" es el marcador del propio walkthrough (la línea "> key"), no una
     // etiqueta inventada acá; "edits" sí necesita el título, porque abreviado
-    // no dice cuáles son esas ediciones.
+    // no dice cuáles son esas ediciones; "uncovered" sólo aplica en walk — en
+    // step "annotated" no significa nada y siempre vale true.
     if (model.current.essential) {
       head.appendChild(el("span", "badge key", "key"));
+    } else if (model.mode === "walk" && !model.current.annotated) {
+      head.appendChild(el("span", "badge uncovered", "uncovered"));
     } else if (model.current.banked) {
       const banked = el("span", "badge", "edits");
       banked.title = "This entry has banked edits";
@@ -477,7 +488,7 @@ export function panelHtml(nonce: string): string {
     body.appendChild(id);
 
     if (model.why) {
-      body.appendChild(renderWhy(model.why));
+      body.appendChild(renderWhy(model.why, model.mode === "walk" ? model.current.annotated : undefined));
       // El texto de acá arriba ya es el *why* entero: lo que abre el editor es
       // el mismo contenido renderizado como Markdown y a ancho de editor, así
       // que sólo se ofrece si hay algo que renderizar. Es un link y no un
@@ -555,22 +566,11 @@ export function panelHtml(nonce: string): string {
     return nav;
   }
 
-  // El pie tiene una sola entrada: los archivos que el walkthrough no anota.
-  // La secuencia completa se alcanza por la paleta (gitReview.goToEntry); el
-  // panel muestra la entrada actual y nada más. Sin nada que mostrar no se
-  // dibuja, para no dejar un borde suelto abajo de todo.
-  function renderFoot(model) {
-    if (model.uncoveredCount <= 0) { return null; }
-    const foot = el("div", "foot");
-    foot.appendChild(button(model.uncoveredCount + " uncovered", "showUncovered", "link"));
-    return foot;
-  }
-
   // Las notas van tanto en el dibujo normal como en el de carga: describen el
   // review, no la entrada, así que no cambian al navegar. Sacarlas mientras
   // carga haría saltar el panel dos veces por cada paso.
   function renderNotes(model) {
-    if (model.baseMoved) { root.appendChild(note("The base moved: the total changed since the review started.")); }
+    if (model.baseMoved) { root.appendChild(note("The base moved: fewer entries remain in range than when the review started.")); }
     if (model.degraded) {
       root.appendChild(note("The walkthrough does not cover the review's current range; showing the full range diff."));
     }
@@ -593,9 +593,6 @@ export function panelHtml(nonce: string): string {
     } else {
       root.appendChild(empty("The cursor does not point at any entry in the sequence."));
     }
-
-    const foot = renderFoot(model);
-    if (foot) { root.appendChild(foot); }
   }
 
   /*
@@ -644,10 +641,6 @@ export function panelHtml(nonce: string): string {
     root.appendChild(renderBar(model, true));
     renderNotes(model);
     root.appendChild(renderPending(model));
-    // El pie cuenta archivos del review, no de la entrada: sacarlo mientras
-    // carga sería un borde que aparece y desaparece en cada paso.
-    const foot = renderFoot(model);
-    if (foot) { root.appendChild(freeze(foot)); }
   }
 
   function receive(next) {

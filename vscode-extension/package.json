@@ -71,12 +71,6 @@
         "icon": "$(list-ordered)"
       },
       {
-        "command": "gitReview.showUncovered",
-        "title": "Show Uncovered Files",
-        "category": "git review",
-        "icon": "$(files)"
-      },
-      {
         "command": "gitReview.refresh",
         "title": "Refresh",
         "category": "git review",
@@ -124,10 +118,6 @@
         },
         {
           "command": "gitReview.goToEntry",
-          "when": "gitReview.situation == review"
-        },
-        {
-          "command": "gitReview.showUncovered",
           "when": "gitReview.situation == review"
         },
         {

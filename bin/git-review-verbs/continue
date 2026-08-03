@@ -182,9 +182,9 @@ else
 		# you back on the same reading cursor the way the step path reprints its commit.
 		cur="$rb"
 		walkstep="$(git config "branch.$rb.reviewwalkstep" || echo 1)"
-		walkcount="$(git config "branch.$rb.reviewwalkcount" || echo '?')"
-		walkpaths="$(walk_sequence "$tip" "$(git rev-parse HEAD)")"
-		echo "resumed review of $src — walkthrough entry $walkstep/$walkcount"
+		walkpaths="$(walk_reading_order "$tip" "$(git rev-parse HEAD)")"
+		total="$(printf '%s\n' "$walkpaths" | grep -c . || true)"
+		echo "resumed review of $src — walkthrough entry $walkstep/$total"
 		show_walk_entry "$walkstep"
 	else
 		git branch -D "$saved" >/dev/null

@@ -46,16 +46,17 @@ subcomando.
 **Cuándo**: en cada refresco — activación, evento de cambio del repositorio,
 después de cada invocación mutante propia, y a pedido del usuario.
 
-**Se consume**: registros `state` (uno), `entry` (cero o más), `uncovered`
-(cero o más). Etiquetas desconocidas y campos extra al final: **se ignoran**
-(FR-003).
+**Se consume**: registros `state` (uno), `entry` (cero o más). Etiquetas
+desconocidas y campos extra al final: **se ignoran** (FR-003).
 
 **Se produce**: el árbol entero salvo los `Why`. Exit `0` → `review`; `2` →
 `no-review`; `3` → `out-of-range`; `1` u otro → `error`, con el stderr
 preservado.
 
 **Es la única fuente de**: modo, posición, total, total registrado, entrada
-actual, esencialidad, secuencia completa, cobertura y situación del walkthrough.
+actual, esencialidad, si una entrada está anotada en el walkthrough (`entry.
+annotated` — un archivo del rango sin entrada propia se agrega al final de la
+secuencia, no se reporta aparte), y situación del walkthrough.
 
 ### `git review status --why <raw>`
 

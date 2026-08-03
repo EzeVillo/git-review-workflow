@@ -44,7 +44,7 @@ cur="$(git symbolic-ref --quiet --short HEAD || true)"
 case "$(git config "branch.$cur.reviewmode" || true)" in
 walk)
 	load_walk_review_meta
-	if [ "$walkstep" -lt "$walkcount" ]; then
+	if [ "$walkstep" -lt "$total" ]; then
 		goto_walk_entry "$((walkstep + 1))"
 	else
 		echo "no more entries — run git review finish"

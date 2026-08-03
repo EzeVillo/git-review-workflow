@@ -152,13 +152,16 @@ fi
 walk=0
 walkcount=0
 if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$bcommit")" && [ -n "$wtcontent" ]; then
-	walkpaths="$(walk_sequence "$bcommit" "$acommit")"
+	curated="$(walk_sequence "$bcommit" "$acommit")"
 	# grep -c returns 1 (aborting under set -e in POSIX sh) on an empty sequence.
-	walkcount="$(printf '%s\n' "$walkpaths" | grep -c . || true)"
-	if [ "$walkcount" -ge 1 ]; then
+	curatedcount="$(printf '%s\n' "$curated" | grep -c . || true)"
+	if [ "$curatedcount" -ge 1 ]; then
 		walk=1
+		walkpaths="$(walk_reading_order "$bcommit" "$acommit")"
+		walkcount="$(printf '%s\n' "$walkpaths" | grep -c . || true)"
 	else
-		echo "note: $b has a walkthrough, but none of its entries apply to $a..$b; reading the whole diff"
+		degradedfiles="$(changed_paths "$acommit" "$bcommit" | grep -v '^\.review/' | tr '\n' ' ')"
+		echo "note: $b has a walkthrough, but none of its entries apply to $a..$b; reading the whole diff: $degradedfiles"
 	fi
 fi
 
@@ -180,6 +183,15 @@ if [ "$walk" -eq 1 ]; then
 	git config "branch.$rb.reviewmode" "walk"
 	git config "branch.$rb.reviewwalkstep" "1"
 	git config "branch.$rb.reviewwalkcount" "$walkcount"
+
+	# Files in range with no walkthrough entry: appended to the end of the reading
+	# order (walk_reading_order), so name them rather than leave them to be
+	# discovered silently — same as start.
+	uncovered="$(printf '%s\n' "$walkpaths" | tail -n +"$((curatedcount + 1))")"
+	if [ -n "$uncovered" ]; then
+		echo "note: file(s) in range not in the walkthrough are added to the end of the reading order: $(printf '%s\n' "$uncovered" | tr '\n' ' ')"
+	fi
+
 	keycount="$(printf '%s\n' "$walkpaths" | walk_count_keys "$bcommit")"
 	keysuffix=""
 	if [ "$keycount" -ge 1 ]; then
@@ -193,6 +205,7 @@ if [ "$walk" -eq 1 ]; then
 	fi
 	cur="$rb"
 	tip="$bcommit"
+	total="$walkcount"
 	show_walk_entry 1
 else
 	echo "$rb ready (compare $a..$b, read-only) — the staged diff is for reading; git review finish will refuse"

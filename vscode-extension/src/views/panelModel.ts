@@ -21,6 +21,11 @@ export interface PanelEntry {
     /** `PathRef.display` en walk, SHA corto en step. El `raw` NO cruza al webview. */
     display: string;
     essential: boolean;
+    /**
+     * Sólo tiene sentido en walk (`PanelModel.mode === "walk"`); en step vale
+     * siempre `true` por ausencia de campo en el registro, y se ignora.
+     */
+    annotated: boolean;
     banked: boolean;
 }
 
@@ -73,7 +78,13 @@ export interface PanelModel {
     /** Sólo en step/walk. */
     position?: number;
     total?: number;
-    /** `total ≠ recorded`: la base se movió pero el cursor sigue en rango (FR-011). */
+    /**
+     * `total < recorded`: la base se movió pero el cursor sigue en rango
+     * (FR-011). No `total !== recorded`: en walk, `recorded` de un review
+     * abierto antes de que los archivos no anotados entraran a la secuencia
+     * queda por debajo del `total` recién derivado, y eso no es la base
+     * moviéndose — es la secuencia creciendo, algo que no hay que avisar.
+     */
     baseMoved: boolean;
     /**
      * Extremos de la secuencia, para que el panel no ofrezca un control que ya
@@ -89,7 +100,6 @@ export interface PanelModel {
     /** La entrada actual, elegida por `position` y nunca por `id`. */
     current?: PanelEntry;
     entryCount: number;
-    uncoveredCount: number;
     /** Sólo en walk: el modo step no tiene explicaciones. */
     why?: PanelWhy;
     /** stderr de la CLI, preservado tal cual (FR-024). */
@@ -112,6 +122,9 @@ function toPanelEntry(entry: EntryRecord): PanelEntry {
         position: entry.position,
         display: displayOf(entry.id),
         essential: entry.essential === true,
+        // Ausente (step) o `true` (walk) es "sí anotada"; sólo `false` explícito
+        // (walk) marca un archivo que el walkthrough no anota.
+        annotated: entry.annotated !== false,
         banked: entry.banked === true,
     };
 }
@@ -139,6 +152,10 @@ export function entryPickLabel(entry: EntryRecord, position: number | undefined)
     // `key` es el marcador del walkthrough (`> key`), igual que en el panel.
     if (entry.essential) {
         marks.push("key");
+    }
+    // `annotated` sólo viene en walk; ausente (step) nunca dispara esta marca.
+    if (entry.annotated === false) {
+        marks.push("uncovered");
     }
     if (entry.banked) {
         marks.push("banked edits");
@@ -214,7 +231,6 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
         atLast: false,
         degraded: false,
         entryCount: 0,
-        uncoveredCount: 0,
     };
     if (inputs.repoLabel !== undefined) {
         base.repoLabel = inputs.repoLabel;
@@ -232,7 +248,6 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
     base.branch = review.branch;
     base.degraded = review.walkthrough === "degraded";
     base.entryCount = state.entries.length;
-    base.uncoveredCount = state.uncovered.length;
 
     if (review.mode === "whole") {
         return base;
@@ -240,7 +255,7 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
 
     base.position = review.position;
     base.total = review.total;
-    base.baseMoved = review.recorded !== undefined && review.total !== review.recorded;
+    base.baseMoved = review.recorded !== undefined && review.total !== undefined && review.total < review.recorded;
     // `>=` / `<=` y no `===`: con la base movida el cursor puede quedar afuera
     // del rango re-derivado, y ahí tampoco hay a dónde seguir.
     base.atFirst = review.position !== undefined && review.position <= 1;

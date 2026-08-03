@@ -34,17 +34,24 @@ describe("parsePorcelain", () => {
         assert.strictEqual(current.display, "src/core.ts");
     });
 
-    it("entry en modo walk trae essential, no banked", () => {
+    it("entry en modo walk trae essential y annotated, no banked", () => {
         const out = [
-            "state\treview/feat-x\torigin/feat-x\tabc123\twalk\tapplied\t1\t2\t2\tsrc/a.ts\t0",
-            "entry\t1\tsrc/a.ts\t0",
-            "entry\t2\tsrc/b.ts\t1",
+            "state\treview/feat-x\torigin/feat-x\tabc123\twalk\tapplied\t1\t3\t3\tsrc/a.ts\t0",
+            "entry\t1\tsrc/a.ts\t0\t1",
+            "entry\t2\tsrc/b.ts\t1\t1",
+            "entry\t3\tsrc/c.ts\t0\t0",
         ].join("\n");
         const result = parsePorcelain(out);
-        assert.strictEqual(result.entries.length, 2);
+        assert.strictEqual(result.entries.length, 3);
         assert.strictEqual(result.entries[0].essential, false);
+        assert.strictEqual(result.entries[0].annotated, true);
         assert.strictEqual(result.entries[0].banked, undefined);
         assert.strictEqual(result.entries[1].essential, true);
+        assert.strictEqual(result.entries[1].annotated, true);
+        // Un archivo que la review cubre pero el walkthrough no anota: al final
+        // del orden de lectura, con annotated en false.
+        assert.strictEqual(result.entries[2].essential, false);
+        assert.strictEqual(result.entries[2].annotated, false);
     });
 
     it("entry en modo step trae banked, no essential", () => {
@@ -76,16 +83,18 @@ describe("parsePorcelain", () => {
         assert.strictEqual(result.state.mode, "whole");
     });
 
-    it("uncovered produce PathRef con raw/display correctos", () => {
+    it("un registro uncovered sobrante se ignora como etiqueta desconocida", () => {
+        // El tipo de registro ya no existe en el contrato (los archivos sin
+        // anotar son entradas, con annotated=0), pero una salida vieja o de un
+        // fork que todavía lo emita no debe romper el parseo del resto.
         const out = [
             "state\treview/feat-x\torigin/feat-x\tabc123\twalk\tapplied\t1\t1\t1\tsrc/a.ts\t0",
-            "entry\t1\tsrc/a.ts\t0",
+            "entry\t1\tsrc/a.ts\t0\t1",
             'uncovered\t"caf\\303\\251.ts"',
         ].join("\n");
         const result = parsePorcelain(out);
-        assert.strictEqual(result.uncovered.length, 1);
-        assert.strictEqual(result.uncovered[0].id.raw, '"caf\\303\\251.ts"');
-        assert.strictEqual(result.uncovered[0].id.display, "café.ts");
+        assert.strictEqual(result.entries.length, 1);
+        assert.strictEqual((result as unknown as {uncovered?: unknown}).uncovered, undefined);
     });
 
     it("lanza si no hay registro state", () => {

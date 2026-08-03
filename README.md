@@ -368,7 +368,11 @@ Has two independent axes — **range** (where the review starts) and **layout**
   `git review finish` exactly as in a whole review. The entries are filtered to
   the review's actual range, so a walkthrough that no longer matches (e.g. an old
   one under `--delta`) simply degrades — a broken or stale walkthrough **never**
-  fails a review; at worst it falls back to a plain whole review with a note.
+  fails a review; at worst it falls back to a plain whole review with a note. A
+  file that changes in the range but has no entry of its own — a stale
+  walkthrough is the common case — is not left out either: it is appended to the
+  end of the reading order, marked `(uncovered)` instead of `(key)`, so a review
+  never reaches `git review finish` with PR files you never saw.
 - `--no-walk` — ignore any walkthrough and review the whole diff plainly. `--step`
   also takes precedence over walk (they are two spellings of the same layout
   axis), so `--step` wins with no error — it just prints a note that the PR's
@@ -555,8 +559,7 @@ and any line whose type it does not recognize: the format only ever grows.
 
 ```
 state	<branch>	<source>	<tip>	<mode>	<walkthrough>[	<position>	<total>	<recorded>	<current>[	<essential>]]
-entry	<position>	<id>[	<essential>|<banked>]
-uncovered	<id>
+entry	<position>	<id>[	<essential>	<annotated>|<banked>]
 ```
 
 - `state` — exactly one line, always first. `mode` is `whole` \| `step` \| `walk`.
@@ -568,12 +571,13 @@ uncovered	<id>
   base has drifted, even while the cursor is still in range. `essential` (`1`/`0`)
   appears only in walk mode.
 - `entry` — zero or more, one per position in the reading order (walk paths or
-  step commits, the same order `next`/`prev` move through). The trailing field is
-  `essential` (`1`/`0`) in walk mode, `banked` (`1`/`0`, has a banked edit under
-  `refs/review-edits/`) in step mode; omitted entirely in whole mode, since there
-  is no sequence to report.
-- `uncovered` — zero or more: a path that changes in the reviewed range but has no
-  walkthrough entry (walk mode, or a whole review with a degraded walkthrough).
+  step commits, the same order `next`/`prev` move through), including a walk
+  entry the walkthrough does not annotate — appended to the end of the order
+  rather than omitted. In walk mode the trailing fields are `essential` (`1`/`0`)
+  and `annotated` (`1`/`0`, `0` for a file the walkthrough has no entry for); in
+  step mode it is just `banked` (`1`/`0`, has a banked edit under
+  `refs/review-edits/`); omitted entirely in whole mode, since there is no
+  sequence to report.
 
 A path is always emitted exactly as `git diff --name-only` (with
 `core.quotePath=false`) renders it: literal, unescaped bytes for spaces and

@@ -17,17 +17,18 @@ function reviewState(stdout: string): ReviewState {
         situation: "review",
         state: parsed.state,
         entries: parsed.entries,
-        uncovered: parsed.uncovered,
         branches: [],
     };
 }
 
 const WALK = [
-    "state\treview/feat\torigin/feat\tabc123\twalk\tapplied\t2\t3\t3\tsrc/b.ts\t0",
-    "entry\t1\tsrc/a.ts\t0",
-    "entry\t2\tsrc/b.ts\t0",
-    "entry\t3\tsrc/c.ts\t1",
-    "uncovered\tsrc/d.ts",
+    "state\treview/feat\torigin/feat\tabc123\twalk\tapplied\t2\t4\t4\tsrc/b.ts\t0",
+    "entry\t1\tsrc/a.ts\t0\t1",
+    "entry\t2\tsrc/b.ts\t0\t1",
+    "entry\t3\tsrc/c.ts\t1\t1",
+    // src/d.ts cambia en el rango pero no tiene entrada propia: al final del
+    // orden de lectura, essential siempre 0, annotated en 0.
+    "entry\t4\tsrc/d.ts\t0\t0",
     "",
 ].join("\n");
 
@@ -39,19 +40,30 @@ describe("buildPanelModel", () => {
         assert.strictEqual(model.mode, "walk");
         assert.strictEqual(model.branch, "review/feat");
         assert.strictEqual(model.position, 2);
-        assert.strictEqual(model.total, 3);
+        assert.strictEqual(model.total, 4);
         assert.strictEqual(model.baseMoved, false);
         assert.strictEqual(model.degraded, false);
-        assert.strictEqual(model.entryCount, 3);
-        assert.strictEqual(model.uncoveredCount, 1);
+        assert.strictEqual(model.entryCount, 4);
         assert.deepStrictEqual(model.current, {
             position: 2,
             display: "src/b.ts",
             essential: false,
+            annotated: true,
             banked: false,
         });
         // Sin `why` en los inputs, el modelo dice "en vuelo" — no "sin explicación".
         assert.deepStrictEqual(model.why, {state: "loading"});
+    });
+
+    it("una entrada no anotada llega al modelo con annotated en false", () => {
+        const stdout = [
+            "state\treview/feat\torigin/feat\tabc123\twalk\tapplied\t4\t4\t4\tsrc/d.ts\t0",
+            ...WALK.split("\n").filter((l) => l.startsWith("entry")),
+            "",
+        ].join("\n");
+        const model = buildPanelModel(reviewState(stdout), {busy: false});
+        assert.strictEqual(model.current?.annotated, false);
+        assert.strictEqual(model.current?.essential, false);
     });
 
     it("la entrada actual sale de position, no del primer entry ni del id", () => {
@@ -59,9 +71,9 @@ describe("buildPanelModel", () => {
             // Cursor en 3, y el path del cursor se repite en la entrada 1: elegir
             // por `id` daría la 1.
             "state\treview/feat\torigin/feat\tabc123\twalk\tapplied\t3\t3\t3\tsrc/dup.ts\t0",
-            "entry\t1\tsrc/dup.ts\t0",
-            "entry\t2\tsrc/b.ts\t0",
-            "entry\t3\tsrc/dup.ts\t0",
+            "entry\t1\tsrc/dup.ts\t0\t1",
+            "entry\t2\tsrc/b.ts\t0\t1",
+            "entry\t3\tsrc/dup.ts\t0\t1",
             "",
         ].join("\n");
 
@@ -72,8 +84,8 @@ describe("buildPanelModel", () => {
     it("sin entrada que coincida con position no hay current, y no cae en la primera", () => {
         const stdout = [
             "state\treview/feat\torigin/feat\tabc123\twalk\tapplied\t9\t2\t2\tsrc/x.ts\t0",
-            "entry\t1\tsrc/a.ts\t0",
-            "entry\t2\tsrc/b.ts\t0",
+            "entry\t1\tsrc/a.ts\t0\t1",
+            "entry\t2\tsrc/b.ts\t0\t1",
             "",
         ].join("\n");
 
@@ -86,7 +98,7 @@ describe("buildPanelModel", () => {
     it("el raw de un path citado no cruza al modelo; sí el display", () => {
         const stdout = [
             'state\treview/feat\torigin/feat\tabc123\twalk\tapplied\t1\t1\t1\t"src/a\\303\\261o.ts"\t1',
-            'entry\t1\t"src/a\\303\\261o.ts"\t1',
+            'entry\t1\t"src/a\\303\\261o.ts"\t1\t1',
             "",
         ].join("\n");
 
@@ -99,9 +111,17 @@ describe("buildPanelModel", () => {
         );
     });
 
-    it("baseMoved cuando total != recorded", () => {
-        const moved = "state\treview/feat\torigin/feat\tabc123\twalk\tapplied\t1\t4\t7\tsrc/a.ts\t0\nentry\t1\tsrc/a.ts\t0\n";
+    it("baseMoved cuando total < recorded (la secuencia se achico)", () => {
+        const moved = "state\treview/feat\torigin/feat\tabc123\twalk\tapplied\t1\t4\t7\tsrc/a.ts\t0\nentry\t1\tsrc/a.ts\t0\t1\n";
         assert.strictEqual(buildPanelModel(reviewState(moved), {busy: false}).baseMoved, true);
+    });
+
+    it("total > recorded no es baseMoved: es la secuencia creciendo (el upgrade de los no anotados)", () => {
+        // Un review walk abierto antes de que los archivos no anotados entraran
+        // al orden de lectura: su reviewwalkcount grabado queda por debajo del
+        // total recien derivado. Eso no es la base moviendose.
+        const grown = "state\treview/feat\torigin/feat\tabc123\twalk\tapplied\t1\t4\t3\tsrc/a.ts\t0\nentry\t1\tsrc/a.ts\t0\t1\n";
+        assert.strictEqual(buildPanelModel(reviewState(grown), {busy: false}).baseMoved, false);
     });
 
     it("en el medio de la secuencia no hay ningun extremo", () => {
@@ -111,8 +131,8 @@ describe("buildPanelModel", () => {
     });
 
     it("atFirst en la primera y atLast en la ultima, cada uno por su lado", () => {
-        const first = "state\tr\ts\tt\twalk\tapplied\t1\t3\t3\tsrc/a.ts\t0\nentry\t1\tsrc/a.ts\t0\n";
-        const last = "state\tr\ts\tt\twalk\tapplied\t3\t3\t3\tsrc/c.ts\t0\nentry\t3\tsrc/c.ts\t0\n";
+        const first = "state\tr\ts\tt\twalk\tapplied\t1\t3\t3\tsrc/a.ts\t0\nentry\t1\tsrc/a.ts\t0\t1\n";
+        const last = "state\tr\ts\tt\twalk\tapplied\t3\t3\t3\tsrc/c.ts\t0\nentry\t3\tsrc/c.ts\t0\t1\n";
         const firstModel = buildPanelModel(reviewState(first), {busy: false});
         const lastModel = buildPanelModel(reviewState(last), {busy: false});
 
@@ -123,7 +143,7 @@ describe("buildPanelModel", () => {
     });
 
     it("una secuencia de una sola entrada es a la vez el principio y el final", () => {
-        const only = "state\tr\ts\tt\twalk\tapplied\t1\t1\t1\tsrc/only.ts\t0\nentry\t1\tsrc/only.ts\t0\n";
+        const only = "state\tr\ts\tt\twalk\tapplied\t1\t1\t1\tsrc/only.ts\t0\nentry\t1\tsrc/only.ts\t0\t1\n";
         const model = buildPanelModel(reviewState(only), {busy: false});
         assert.strictEqual(model.atFirst, true);
         assert.strictEqual(model.atLast, true);
@@ -132,7 +152,7 @@ describe("buildPanelModel", () => {
     it("un cursor pasado del total re-derivado tambien es un extremo", () => {
         // La base se movio y el total bajo: seguir avanzando no lleva a ningun
         // lado, aunque `position === total` sea falso.
-        const past = "state\tr\ts\tt\twalk\tapplied\t5\t2\t7\tsrc/x.ts\t0\nentry\t1\tsrc/a.ts\t0\nentry\t2\tsrc/b.ts\t0\n";
+        const past = "state\tr\ts\tt\twalk\tapplied\t5\t2\t7\tsrc/x.ts\t0\nentry\t1\tsrc/a.ts\t0\t1\nentry\t2\tsrc/b.ts\t0\t1\n";
         const model = buildPanelModel(reviewState(past), {busy: false});
         assert.strictEqual(model.atLast, true);
         assert.strictEqual(model.atFirst, false);
@@ -151,13 +171,13 @@ describe("buildPanelModel", () => {
     });
 
     it("sin cursor no hay extremo que marcar", () => {
-        const whole = "state\treview/feat\torigin/feat\tabc123\twhole\tnone\nuncovered\tsrc/a.ts\n";
+        const whole = "state\treview/feat\torigin/feat\tabc123\twhole\tnone\n";
         const model = buildPanelModel(reviewState(whole), {busy: false});
         assert.strictEqual(model.atFirst, false);
         assert.strictEqual(model.atLast, false);
 
         const noReview = buildPanelModel(
-            {situation: "no-review", entries: [], uncovered: [], branches: []},
+            {situation: "no-review", entries: [], branches: []},
             {busy: false}
         );
         assert.strictEqual(noReview.atFirst, false);
@@ -177,22 +197,20 @@ describe("buildPanelModel", () => {
         assert.strictEqual(model.busy, true);
         assert.strictEqual(model.current?.display, "9fe1c0d");
         assert.strictEqual(model.current?.banked, false);
+        // En step "annotated" no significa nada: siempre true por ausencia de campo.
+        assert.strictEqual(model.current?.annotated, true);
         assert.strictEqual(model.why, undefined, "el modo step no tiene explicaciones");
-        assert.strictEqual(model.uncoveredCount, 0);
     });
 
-    it("modo whole degradado: sin secuencia, con los archivos del rango alcanzables", () => {
-        const stdout = [
-            "state\treview/feat\torigin/feat\tabc123\twhole\tdegraded",
-            "uncovered\tsrc/a.ts",
-            "uncovered\tsrc/b.ts",
-            "",
-        ].join("\n");
+    it("modo whole degradado: sin secuencia — no hay como enumerar el rango por porcelain", () => {
+        // Antes esto emitia registros `uncovered`, uno por archivo del rango; se
+        // elimino porque el degradado ya equivale a "todo el diff" (redundante
+        // con lo que el working tree ya muestra), y whole nunca tuvo `entry`.
+        const stdout = "state\treview/feat\torigin/feat\tabc123\twhole\tdegraded\n";
 
         const model = buildPanelModel(reviewState(stdout), {busy: false});
         assert.strictEqual(model.degraded, true);
         assert.strictEqual(model.entryCount, 0);
-        assert.strictEqual(model.uncoveredCount, 2);
         assert.strictEqual(model.current, undefined);
         assert.strictEqual(model.position, undefined);
         assert.strictEqual(model.why, undefined);
@@ -202,7 +220,6 @@ describe("buildPanelModel", () => {
         const state: ReviewState = {
             situation: "out-of-range",
             entries: [],
-            uncovered: [],
             branches: [],
             stderr: "error: the cursor is out of range\n",
         };
@@ -219,7 +236,6 @@ describe("buildPanelModel", () => {
         const state: ReviewState = {
             situation: "error",
             entries: [],
-            uncovered: [],
             branches: [],
             stderr: "  \n",
         };
@@ -263,6 +279,10 @@ describe("entryPickLabel", () => {
         assert.strictEqual(entryPickLabel(entries[0], 2).description, "");
     });
 
+    it("una entrada no anotada lleva la marca uncovered", () => {
+        assert.strictEqual(entryPickLabel(entries[3], 2).description, "uncovered");
+    });
+
     it("en step la marca es la de ediciones guardadas", () => {
         const step = parsePorcelain("state\tr\ts\tt\tstep\tnone\t1\t1\t1\tabc1234\nentry\t1\tabc1234\t1\n");
         assert.strictEqual(entryPickLabel(step.entries[0], 2).description, "banked edits");
@@ -284,7 +304,6 @@ function inventoryState(rows: string[]): ReviewState {
     return {
         situation: "no-review",
         entries: [],
-        uncovered: [],
         branches: parseListPorcelain(rows.join("\n") + "\n"),
     };
 }

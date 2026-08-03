@@ -185,3 +185,33 @@ teardown() {
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/v2.0" ]
 }
+
+@test "compare enters walk mode and its total includes files the walkthrough does not annotate" {
+	# Its own fixture, on a throwaway branch off v2.0, so the shared setup() and
+	# its other (exact-equality) assertions stay untouched: the walkthrough
+	# covers app.txt but not more.txt, so more.txt is appended, unannotated, to
+	# the end of the reading order instead of being reported separately.
+	git switch --quiet -c wt-fixture v2.0
+	mkdir -p .review
+	cat >.review/walkthrough.md <<'EOF'
+# Walkthrough
+
+## 1. app.txt
+covered
+EOF
+	git add .review/walkthrough.md
+	git commit --quiet -m walkthrough
+
+	run git review compare v1.0 wt-fixture
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/wt-fixture.reviewmode)" = "walk" ]
+	# app.txt (curated) + more.txt (unannotated, appended); the walkthrough
+	# sidecar itself is excluded from the reading order.
+	[ "$(git config branch.review/wt-fixture.reviewwalkcount)" = "2" ]
+	[[ "$output" == *"[1/2] app.txt"* ]]
+	[[ "$output" == *"not in the walkthrough are added to the end of the reading order: more.txt"* ]]
+
+	run git review next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[2/2] more.txt  (uncovered)"* ]]
+}

@@ -89,32 +89,30 @@ state	review/feat-x	origin/feat-x	a1b2c3d4e5f6...	step	none	2	9	9	9fe1c0d
 ## Registros `entry` (cero o más, uno por posición de la secuencia)
 
 ```
-entry<TAB>position<TAB>id[<TAB>essential|banked]
+entry<TAB>position<TAB>id[<TAB>essential<TAB>annotated|<TAB>banked]
 ```
 
 - `position`: 1-based, mismo orden que recorren `next`/`prev`.
 - `id`: path (modo walk) o SHA corto de commit (modo step).
-- Último campo: `essential` (`1`/`0`) en modo walk; `banked` (`1`/`0`, existe
-  `refs/review-edits/<src>/<position>`) en modo step. El campo que no aplica al
-  modo se **omite**, no se emite vacío (Acceptance Scenario 2 de US1). En
+- En modo walk, dos campos finales: `essential` (`1`/`0`) y `annotated`
+  (`1`/`0`). En modo step, uno solo: `banked` (`1`/`0`, existe
+  `refs/review-edits/<src>/<position>`). El grupo que no aplica al modo se
+  **omite** entero, no se emite vacío (Acceptance Scenario 2 de US1). En
   `whole` no hay registros `entry` en absoluto.
+- `annotated`: `0` cuando el path cambia en el rango de la review pero no
+  tiene entrada propia en el walkthrough — la secuencia lo agrega al final del
+  orden de lectura en vez de omitirlo, para que un review no llegue al final
+  con archivos del PR que el reviewer nunca vio (el precedente es `git
+  status`, que no esconde los untracked). `total` cuenta estas posiciones
+  igual que las curadas.
 
-Ejemplo (walk, 2 entradas, la segunda esencial):
+Ejemplo (walk, 3 entradas, la segunda esencial, la tercera sin anotar):
 
 ```
-entry	1	src/a.ts	0
-entry	2	src/b.ts	1
+entry	1	src/a.ts	0	1
+entry	2	src/b.ts	1	1
+entry	3	src/c.ts	0	0
 ```
-
-## Registros `uncovered` (cero o más)
-
-```
-uncovered<TAB>id
-```
-
-`id` = path que cambia en el rango de la review y no tiene entrada en el
-walkthrough (FR-013). Vacío cuando el walkthrough cubre todo el rango, o en
-modo `step` (sin concepto de cobertura).
 
 ## Paths (FR-015, FR-016)
 
@@ -134,8 +132,8 @@ Todo path se emite **byte a byte tal como lo devuelve `changed_paths`**, que es
   git (la señal es la comilla inicial). Es un caso extremo: esos dos bytes son
   ilegales en un path de Windows.
 
-Vale igual para `state.current` en modo walk, para el `id` de `entry` y para el
-`id` de `uncovered`: los tres son el mismo dato de la misma fuente.
+Vale igual para `state.current` en modo walk que para el `id` de `entry`: los
+dos son el mismo dato de la misma fuente.
 
 ## `--why <path>`
 

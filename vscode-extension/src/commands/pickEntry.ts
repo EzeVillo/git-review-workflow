@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import {EntryRecord, ReviewMode, UncoveredRecord} from "../cli/porcelain";
+import {EntryRecord, ReviewMode} from "../cli/porcelain";
 import {entryPickLabel} from "../views/panelModel";
 
 /**
@@ -60,23 +60,4 @@ export async function pickEntry(
         "In reading order; picking one does not move the cursor"
     );
     return picked?.entry;
-}
-
-interface UncoveredItem extends vscode.QuickPickItem {
-    file: UncoveredRecord;
-}
-
-/**
- * `gitReview.showUncovered` — los archivos del rango sin entrada en el
- * walkthrough, en una superficie **separada** de la secuencia (FR-008).
- */
-export async function pickUncovered(files: UncoveredRecord[]): Promise<UncoveredRecord | undefined> {
-    const items: UncoveredItem[] = files.map((file) => ({label: file.id.display, file}));
-    const picked = await show(
-        items,
-        undefined,
-        "Uncovered files",
-        "They change in the review and the walkthrough does not annotate them"
-    );
-    return picked?.file;
 }

@@ -27,7 +27,7 @@ describe("US1: ver donde estoy en el walkthrough", function () {
         abortReview(repo);
     });
 
-    it("lista las entradas en el orden del walkthrough, marca la actual y las esenciales, agrupa lo no cubierto (quickstart §1)", async () => {
+    it("lista las entradas en el orden del walkthrough, marca la actual y las esenciales, agrega lo no cubierto al final (quickstart §1)", async () => {
         const branch = "us1-walk";
         createBranchWithChanges(repo, branch, {
             "src/a.ts": "a\n",
@@ -50,7 +50,8 @@ describe("US1: ver donde estoy en el walkthrough", function () {
         // Archivos que llegan DESPUÉS de construir el walkthrough: el PR los trae
         // pero nadie los anotó todavía — es el caso real de "sin cobertura"
         // (walkthrough build exige cobertura completa del diff al momento de
-        // construirlo, así que no puede haber un archivo sin entrada ahí).
+        // construirlo, así que no puede haber un archivo sin entrada ahí). Van al
+        // final del orden de lectura, no a una lista aparte.
         git(["checkout", branch], repo.dir);
         writeFile(repo, "src/uncovered1.ts", "u1\n");
         writeFile(repo, "src/uncovered2.ts", "u2\n");
@@ -67,37 +68,42 @@ describe("US1: ver donde estoy en el walkthrough", function () {
         assert.strictEqual(state.situation, "review");
         assert.strictEqual(state.state?.mode, "walk");
         assert.strictEqual(state.state?.position, 2);
-        assert.strictEqual(state.state?.total, 7);
-        assert.strictEqual(state.entries.length, 7);
-        assert.strictEqual(state.uncovered.length, 2);
+        assert.strictEqual(state.state?.total, 9);
+        assert.strictEqual(state.entries.length, 9);
 
         const order = state.entries.map((e) => displayOf(e.id));
-        assert.deepStrictEqual(order, ["src/a.ts", "src/b.ts", "src/c.ts", "src/d.ts", "src/e.ts", "src/f.ts", "src/g.ts"]);
+        assert.deepStrictEqual(order, [
+            "src/a.ts", "src/b.ts", "src/c.ts", "src/d.ts", "src/e.ts", "src/f.ts", "src/g.ts",
+            "src/uncovered1.ts", "src/uncovered2.ts",
+        ]);
 
         const essentialFlags = state.entries.map((e) => e.essential);
-        assert.deepStrictEqual(essentialFlags, [false, false, true, false, false, false, false]);
+        assert.deepStrictEqual(essentialFlags, [false, false, true, false, false, false, false, false, false]);
 
-        // El panel: la entrada actual es el contenido, la secuencia y lo no
-        // cubierto son accesos separados con su cuenta (FR-005, FR-005a, FR-008).
+        const annotatedFlags = state.entries.map((e) => e.annotated);
+        assert.deepStrictEqual(annotatedFlags, [true, true, true, true, true, true, true, false, false]);
+
+        // El panel: la entrada actual es el contenido; la secuencia completa
+        // (incluida la cola no cubierta) es un acceso separado (FR-005, FR-005a).
         const model = await api.getPanelModel();
         assert.strictEqual(model.situation, "review");
         assert.strictEqual(model.mode, "walk");
         assert.strictEqual(model.position, 2);
-        assert.strictEqual(model.total, 7);
+        assert.strictEqual(model.total, 9);
         assert.strictEqual(model.baseMoved, false);
         assert.strictEqual(model.degraded, false);
         assert.deepStrictEqual(model.current, {
             position: 2,
             display: "src/b.ts",
             essential: false,
+            annotated: true,
             banked: false,
         });
-        assert.strictEqual(model.entryCount, 7);
-        assert.strictEqual(model.uncoveredCount, 2);
+        assert.strictEqual(model.entryCount, 9);
         assert.deepStrictEqual(model.why, {state: "present", text: "explica b\n"});
 
         // Lo que alimenta el QuickPick de la secuencia: orden de la CLI, la
-        // actual y la esencial marcadas con texto.
+        // actual, la esencial y las no cubiertas, marcadas con texto.
         const picks = state.entries.map((entry) => entryPickLabel(entry, state.state?.position));
         assert.deepStrictEqual(picks.map((p) => p.label), [
             "01  src/a.ts",
@@ -107,12 +113,13 @@ describe("US1: ver donde estoy en el walkthrough", function () {
             "05  src/e.ts",
             "06  src/f.ts",
             "07  src/g.ts",
+            "08  src/uncovered1.ts",
+            "09  src/uncovered2.ts",
         ]);
         assert.strictEqual(picks[1].description, "current");
         assert.strictEqual(picks[2].description, "key");
-
-        const uncoveredNames = state.uncovered.map((u) => u.id.display).sort();
-        assert.deepStrictEqual(uncoveredNames, ["src/uncovered1.ts", "src/uncovered2.ts"]);
+        assert.strictEqual(picks[7].description, "uncovered");
+        assert.strictEqual(picks[8].description, "uncovered");
     });
 
     it("mode = whole sin walkthrough: sin secuencia ni entrada actual, y sin error (US1 escenario 3)", async () => {
@@ -163,16 +170,16 @@ describe("US1: ver donde estoy en el walkthrough", function () {
         assert.strictEqual(state.situation, "review");
         assert.strictEqual(state.state?.mode, "whole");
         assert.strictEqual(state.state?.walkthrough, "degraded");
+        // whole nunca tiene registros entry, degradado o no — el detalle por
+        // archivo ya no se reporta acá (era redundante con el diff completo, que
+        // el working tree ya muestra); sólo queda la advertencia agregada.
         assert.strictEqual(state.entries.length, 0);
-        assert.strictEqual(state.uncovered.length, 1);
-        assert.strictEqual(state.uncovered[0].id.display, "src/other.ts");
 
-        // Degradado se informa (FR-010) y la review sigue usable: los archivos
-        // del rango siguen alcanzables desde el panel.
+        // Degradado se informa (FR-010) y la review sigue usable como una whole
+        // cualquiera: sin secuencia que ofrecer desde el panel.
         const model = await api.getPanelModel();
         assert.strictEqual(model.situation, "review");
         assert.strictEqual(model.degraded, true);
-        assert.strictEqual(model.uncoveredCount, 1);
         assert.strictEqual(model.entryCount, 0);
     });
 });

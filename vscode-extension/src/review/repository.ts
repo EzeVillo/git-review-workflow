@@ -4,8 +4,8 @@ import * as vscode from "vscode";
 /**
  * A qué repositorio corresponde el panel (data-model.md § RepositoryTarget).
  * Único dato que la extensión toma de la API de `vscode.git`, junto con la
- * señal de cambio (research.md Decisión 7) — ningún campo de ReviewState,
- * SequenceEntry o UncoveredFile se alimenta de acá (SC-005).
+ * señal de cambio (research.md Decisión 7) — ningún campo de ReviewState o
+ * SequenceEntry se alimenta de acá (SC-005).
  */
 export interface RepositoryTarget {
 	rootUri: vscode.Uri;

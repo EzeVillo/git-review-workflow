@@ -346,15 +346,29 @@ walk_count_keys() {
 	printf '%s\n' "$_wck_n"
 }
 
-# walk_entries_with_essential <tip>  (stdin: paths, one per line, in order)
-# Emit "position<TAB>path<TAB>essential" for each path on stdin, 1-based
-# position in the order given, essential 1/0 for the "> key" marker. Reads the
-# walkthrough at <tip> once (extends the walk_count_keys one-read pattern) so a
-# long reading order costs one git show per --porcelain invocation, not one per
+# walk_is_annotated <tip> <path>
+# True when <path> has an entry in the walkthrough at <tip> — regardless of
+# whether that entry's path is in range. Used to tell a curated entry apart
+# from a file the reading order only carries because it changed in the review
+# range (see walk_reading_order). Goes through the same two normalization
+# points as every other path comparison here: walk_normalize via walk_read,
+# the trim in walk_parse.
+walk_is_annotated() {
+	walk_read "$1" | walk_parse | cut -f2- | grep -Fxq "$2"
+}
+
+# walk_entry_fields <tip>  (stdin: paths, one per line, in order)
+# Emit "position<TAB>path<TAB>essential<TAB>annotated" for each path on stdin,
+# 1-based position in the order given, essential 1/0 for the "> key" marker,
+# annotated 1/0 for whether the path has a walkthrough entry at all (0 for a
+# file walk_reading_order appended because it has none). Reads the walkthrough
+# at <tip> once (extends the walk_count_keys one-read pattern) so a long
+# reading order costs one git show per --porcelain invocation, not one per
 # entry — the O(1) performance goal of the porcelain contract. Fields only, not
 # a porcelain line: the caller passes each field through porcelain_row.
-walk_entries_with_essential() {
+walk_entry_fields() {
 	_we_content="$(walk_read "$1" || true)"
+	_we_annotated="$(printf '%s\n' "$_we_content" | walk_parse | cut -f2-)"
 	_we_n=0
 	while IFS= read -r _we_p; do
 		[ -n "$_we_p" ] || continue
@@ -364,7 +378,11 @@ walk_entries_with_essential() {
 			grep -q '^> key[[:space:]]*$'; then
 			_we_ess=1
 		fi
-		printf '%s\t%s\t%s\n' "$_we_n" "$_we_p" "$_we_ess"
+		_we_ann=0
+		if printf '%s\n' "$_we_annotated" | grep -Fxq "$_we_p"; then
+			_we_ann=1
+		fi
+		printf '%s\t%s\t%s\t%s\n' "$_we_n" "$_we_p" "$_we_ess" "$_we_ann"
 	done
 }
 
@@ -414,6 +432,28 @@ walk_sequence() {
 			if (path in inrange) printf "%s\t%s\n", ord, path
 		}
 	' | LC_ALL=C sort -k1,1n | cut -f2-
+}
+
+# walk_reading_order <tip> <lower>
+# The full reading order for a walk review: the curated sequence from
+# walk_sequence, followed by any file changed_paths reports in range but that
+# has no walkthrough entry (excluding the sidecar itself), in the order git
+# reports them. Empty output means walk_sequence is empty — no curated entry
+# intersects the range — and the caller degrades to whole, exactly as before:
+# this function only ever adds a tail to a non-empty curated sequence, never
+# turns an empty one into something walk mode would run on.
+#
+# Built on top of walk_sequence rather than duplicating its awk: one git show
+# and one git diff live there, and this adds one more diff to find the paths
+# the curated sequence left out. Still O(1) per --porcelain invocation — no
+# call scales with the number of entries.
+walk_reading_order() {
+	_wro_seq="$(walk_sequence "$1" "$2")"
+	[ -n "$_wro_seq" ] || return 0
+	printf '%s\n' "$_wro_seq"
+	{ changed_paths "$2" "$1" 2>/dev/null || true; } | grep -v '^\.review/' | while IFS= read -r _wro_p; do
+		printf '%s\n' "$_wro_seq" | grep -Fxq "$_wro_p" || printf '%s\n' "$_wro_p"
+	done
 }
 
 # walk_range_error <walkstep> <total> <walkcount>
@@ -478,7 +518,7 @@ load_walk_review_meta() {
 		exit 1
 	fi
 
-	walkpaths="$(walk_sequence "$tip" "$(git rev-parse HEAD)")"
+	walkpaths="$(walk_reading_order "$tip" "$(git rev-parse HEAD)")"
 	# grep -c returns 1 (aborting under set -e in POSIX sh) when walkpaths is empty;
 	# guard it so a lost sequence reaches the range check below as total=0.
 	total="$(printf '%s\n' "$walkpaths" | grep -c . || true)"
@@ -505,21 +545,30 @@ load_walk_review_meta() {
 }
 
 # show_walk_entry <k>
-# Print the k-th walkthrough entry: a rule, the "[k/N] <path>" header, the author's
-# "why" prose, another rule and the prompt. An entry the author marked "> key" is
-# labelled as such in the header — the reading order says what to read when, the
-# marker says which ones not to skim. The path carries no line number on purpose —
-# clicking it in an IDE terminal just opens the file at the top; a hunk line only
-# ever pointed at the first change and went stale the moment you edited.
-# Relies on the globals set by load_walk_review_meta (tip, walkcount, walkpaths).
+# Print the k-th entry of the reading order: a rule, the "[k/N] <path>" header,
+# either the author's "why" prose or, for a file the walkthrough does not
+# annotate, a fixed line saying so, another rule and the prompt. An entry the
+# author marked "> key" is labelled as such in the header — the reading order
+# says what to read when, the marker says which ones not to skim; an
+# unannotated entry is labelled "(uncovered)" instead, since it has no marker
+# to carry. The path carries no line number on purpose — clicking it in an IDE
+# terminal just opens the file at the top; a hunk line only ever pointed at the
+# first change and went stale the moment you edited.
+# Relies on the globals set by load_walk_review_meta (tip, total, walkpaths).
 show_walk_entry() {
 	_swe_path="$(printf '%s\n' "$walkpaths" | sed -n "${1}p")"
-	_swe_mark=""
-	if walk_is_key "$tip" "$_swe_path"; then
-		_swe_mark="  (key)"
+	if walk_is_annotated "$tip" "$_swe_path"; then
+		_swe_mark=""
+		if walk_is_key "$tip" "$_swe_path"; then
+			_swe_mark="  (key)"
+		fi
+		_swe_body="$(walk_why "$tip" "$_swe_path")"
+	else
+		_swe_mark="  (uncovered)"
+		_swe_body="this file changes in the review and the walkthrough does not annotate it"
 	fi
 	printf -- '----\n[%s/%s] %s%s\n%s\n----\nread this file, edit if needed, then run git review next\n' \
-		"$1" "$walkcount" "$_swe_path" "$_swe_mark" "$(walk_why "$tip" "$_swe_path")"
+		"$1" "$total" "$_swe_path" "$_swe_mark" "$_swe_body"
 }
 
 # goto_walk_entry <k>

@@ -71,7 +71,6 @@ describe("US6: revisar commit por commit", function () {
         assert.strictEqual(model.position, 2);
         assert.strictEqual(model.total, 9);
         assert.strictEqual(model.entryCount, 9);
-        assert.strictEqual(model.uncoveredCount, 0);
         assert.strictEqual(model.current?.display, state.entries[1].id as string);
         assert.strictEqual(model.current?.banked, false);
         assert.strictEqual(model.why, undefined);

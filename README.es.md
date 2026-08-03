@@ -376,7 +376,11 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   se filtran al rango real de la review, así un walkthrough que ya no coincide
   (ej. uno viejo con `--delta`) simplemente degrada — un walkthrough roto o
   desactualizado **nunca** falla una review; a lo sumo cae a una review completa
-  normal con una nota.
+  normal con una nota. Un archivo que cambia en el rango pero no tiene entrada
+  propia — el caso típico es un walkthrough desactualizado — tampoco queda
+  afuera: se agrega al final del orden de lectura, marcado `(uncovered)` en vez
+  de `(key)`, así una review nunca llega a `git review finish` con archivos del
+  PR que nunca viste.
 - `--no-walk` — ignorar cualquier walkthrough y revisar el diff completo a secas.
   `--step` también tiene prioridad sobre walk (son dos formas del mismo eje de
   layout), así que `--step` gana sin error — solo imprime una nota avisando que
@@ -571,8 +575,7 @@ reconozca: el formato sólo crece.
 
 ```
 state	<branch>	<source>	<tip>	<mode>	<walkthrough>[	<position>	<total>	<recorded>	<current>[	<essential>]]
-entry	<position>	<id>[	<essential>|<banked>]
-uncovered	<id>
+entry	<position>	<id>[	<essential>	<annotated>|<banked>]
 ```
 
 - `state` — exactamente una línea, siempre la primera. `mode` es
@@ -584,13 +587,13 @@ uncovered	<id>
   iniciar la review — difieren cuando la base se movió, aunque el cursor siga en
   rango. `essential` (`1`/`0`) aparece sólo en modo walk.
 - `entry` — cero o más, uno por posición en el orden de lectura (paths de walk o
-  commits de step, el mismo orden que recorren `next`/`prev`). El campo final es
-  `essential` (`1`/`0`) en modo walk, `banked` (`1`/`0`, existe una edición
-  bancada bajo `refs/review-edits/`) en modo step; se omite del todo en modo
-  whole, porque ahí no hay secuencia que reportar.
-- `uncovered` — cero o más: un path que cambia en el rango revisado y no tiene
-  entrada en el walkthrough (modo walk, o una review whole con walkthrough
-  degradado).
+  commits de step, el mismo orden que recorren `next`/`prev`), incluida una
+  entrada de walk que el walkthrough no anota — se agrega al final del orden en
+  vez de omitirse. En modo walk los campos finales son `essential` (`1`/`0`) y
+  `annotated` (`1`/`0`, `0` en un archivo sin entrada propia en el walkthrough);
+  en modo step es sólo `banked` (`1`/`0`, existe una edición bancada bajo
+  `refs/review-edits/`); se omite del todo en modo whole, porque ahí no hay
+  secuencia que reportar.
 
 Un path siempre sale exactamente como lo devuelve `git diff --name-only` (con
 `core.quotePath=false`): bytes literales, sin escapar, para espacios y

@@ -81,20 +81,28 @@ uno por invocación, siempre la primera línea.
 
 ## `SequenceEntry` — una posición del orden de lectura
 
-Cero o más, uno por registro `entry`. En `mode = whole` no hay ninguno.
+Cero o más, uno por registro `entry`. En `mode = whole` no hay ninguno. En
+`mode = walk` el orden de lectura incluye, al final, los archivos que cambian
+en el rango de la review y no tienen entrada propia en el walkthrough — no
+son una lista aparte, son posiciones de esta misma secuencia (FR-008,
+`annotated = false`).
 
 | Campo       | Tipo                                        | Presencia   | Origen     |
 |-------------|---------------------------------------------|-------------|------------|
 | `position`  | entero ≥ 1 (1-based)                        | siempre     | `entry[1]` |
 | `id`        | `PathRef` (walk) \| string SHA corto (step) | siempre     | `entry[2]` |
 | `essential` | booleano                                    | sólo `walk` | `entry[3]` |
+| `annotated` | booleano                                    | sólo `walk` | `entry[4]` |
 | `banked`    | booleano                                    | sólo `step` | `entry[3]` |
 
 **Reglas de validación**:
 
-- `essential` y `banked` ocupan **la misma posición** y son mutuamente
-  excluyentes; cuál de los dos es lo determina `ReviewState.mode`, no el
-  registro. El campo que no aplica se omite, no viene vacío.
+- `essential`+`annotated` y `banked` ocupan **el mismo grupo posicional** y son
+  mutuamente excluyentes; cuál de los dos es lo determina `ReviewState.mode`,
+  no el registro. El grupo que no aplica se omite, no viene vacío.
+- `annotated = false` marca una posición que la review cubre pero que el
+  walkthrough no anota; nunca lleva `essential = true` (no hay entrada de la
+  que leer el marcador `> key`).
 - Las entradas llegan en orden de lectura y ese orden es la única fuente de
   ordenamiento: la extensión **no** las reordena ni las ordena por `position`
   (si divergieran, reordenar ocultaría un bug del contrato).
@@ -104,22 +112,6 @@ Cero o más, uno por registro `entry`. En `mode = whole` no hay ninguno.
   cursor mueve.
 - La cantidad de `entry` es siempre igual a `ReviewState.total` — el contrato lo
   garantiza. Si no coincide, es `error`, no una secuencia a medias.
-
----
-
-## `UncoveredFile` — un archivo cambiado sin entrada en el walkthrough
-
-Cero o más, uno por registro `uncovered`. Un solo campo: `id: PathRef`
-(`uncovered[1]`).
-
-**Reglas de validación**:
-
-- Se muestran **agrupados y separados** de las entradas del walkthrough
-  (FR-008): son parte del PR, no del recorrido curado, y mezclarlos le mentiría
-  al revisor sobre qué revisó el autor.
-- Vienen en `mode = walk` y también en `mode = whole` cuando
-  `walkthrough = degraded` (ahí son *todos* los archivos del rango). En
-  `mode = step` no hay ninguno: el modo no tiene concepto de cobertura.
 
 ---
 
@@ -176,8 +168,8 @@ y existe por la tensión entre FR-012 (mostrar legible) y FR-015 de la feature
 - La operación es **unidireccional**: nunca se re-cita un `display` para
   mandárselo a la CLI. Si hace falta el path para una invocación, se usa `raw`,
   que se conservó justamente para eso.
-- Aplica por igual a `ReviewState.current` (walk), `SequenceEntry.id` (walk) y
-  `UncoveredFile.id`: los tres son el mismo dato de la misma fuente.
+- Aplica por igual a `ReviewState.current` (walk) y a `SequenceEntry.id`
+  (walk): son el mismo dato de la misma fuente.
 
 ---
 
@@ -234,9 +226,8 @@ es la verificabilidad: es el punto donde los tests de integración afirman (ver
 | `atFirst`       | booleano (`position ≤ 1`)                  | sólo `step` / `walk`    |
 | `atLast`        | booleano (`position ≥ total`)              | sólo `step` / `walk`    |
 | `degraded`      | booleano (`walkthrough = degraded`)        | sólo `review`           |
-| `current`       | `{position, display, essential, banked}`   | sólo con secuencia      |
+| `current`       | `{position, display, essential, annotated, banked}` | sólo con secuencia |
 | `entryCount`    | entero                                     | sólo `review`           |
-| `uncoveredCount`| entero                                     | sólo `review`           |
 | `why`           | `{state: "loading"\|"absent"\|"failed"\|"present", text?}` | sólo `walk` |
 | `stderr`        | string                                     | sólo estados con fallo  |
 
@@ -284,9 +275,9 @@ es la verificabilidad: es el punto donde los tests de integración afirman (ver
 - `rootUri` es el `cwd` de **toda** invocación. Nunca se invoca la CLI con el
   cwd del proceso del editor.
 - Este es el único dato que la extensión toma de la API de git, junto con la
-  señal de cambio. Ningún campo de `ReviewState`, `SequenceEntry`,
-  `UncoveredFile` o `InventoryEntry` se alimenta de ahí (SC-005) — la lista de
-  ramas del inventario incluida: sale de `list --porcelain`, no de la API.
+  señal de cambio. Ningún campo de `ReviewState`, `SequenceEntry` o
+  `InventoryEntry` se alimenta de ahí (SC-005) — la lista de ramas del
+  inventario incluida: sale de `list --porcelain`, no de la API.
 
 ---
 
@@ -295,9 +286,8 @@ es la verificabilidad: es el punto donde los tests de integración afirman (ver
 ```text
 Situation
 ├── (= review) ReviewState            ← registro `state`, 1 por invocación
-│               ├── SequenceEntry[]   ← registros `entry`, en orden de lectura
-│               │     └── Why         ← sólo la actual, 1 invocación aparte
-│               └── UncoveredFile[]   ← registros `uncovered`
+│               └── SequenceEntry[]   ← registros `entry`, en orden de lectura
+│                     └── Why         ← sólo la actual, 1 invocación aparte
 │                           ↓
 └── (= no-review) InventoryEntry[]    ← registros `branch` de `list --porcelain`
                             ↓

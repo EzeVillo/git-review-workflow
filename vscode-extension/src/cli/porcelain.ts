@@ -27,18 +27,19 @@ export interface EntryRecord {
     id: string | PathRef;
     /** Sólo en modo walk. */
     essential?: boolean;
+    /**
+     * Sólo en modo walk. `false` cuando el path cambia en el rango de la
+     * review pero no tiene entrada propia en el walkthrough — el orden de
+     * lectura lo agrega al final en vez de omitirlo.
+     */
+    annotated?: boolean;
     /** Sólo en modo step. */
     banked?: boolean;
-}
-
-export interface UncoveredRecord {
-    id: PathRef;
 }
 
 export interface PorcelainResult {
     state: StateRecord;
     entries: EntryRecord[];
-    uncovered: UncoveredRecord[];
 }
 
 /**
@@ -80,10 +81,10 @@ function toOptionalInt(field: string | undefined): number | undefined {
 
 /**
  * Tokeniza la salida de `git review status --porcelain` (registros
- * `state`/`entry`/`uncovered`). El campo `mode` del registro `state` se lee
- * **primero** y decide la aridad esperada de las líneas siguientes — nunca al
- * revés (research.md Decisión 2, data-model.md). Etiquetas desconocidas y
- * campos extra al final: se ignoran (FR-003).
+ * `state`/`entry`). El campo `mode` del registro `state` se lee **primero** y
+ * decide la aridad esperada de las líneas siguientes — nunca al revés
+ * (research.md Decisión 2, data-model.md). Etiquetas desconocidas y campos
+ * extra al final: se ignoran (FR-003).
  */
 export function parsePorcelain(stdout: string): PorcelainResult {
     const lines = stdout.split("\n").filter((line) => line.length > 0);
@@ -93,7 +94,6 @@ export function parsePorcelain(stdout: string): PorcelainResult {
 
     let state: StateRecord | undefined;
     const entries: EntryRecord[] = [];
-    const uncovered: UncoveredRecord[] = [];
 
     for (const line of lines) {
         const fields = line.split("\t");
@@ -134,14 +134,11 @@ export function parsePorcelain(stdout: string): PorcelainResult {
                 };
                 if (state.mode === "walk") {
                     entry.essential = toBool(fields[3]);
+                    entry.annotated = toBool(fields[4]);
                 } else if (state.mode === "step") {
                     entry.banked = toBool(fields[3]);
                 }
                 entries.push(entry);
-                break;
-            }
-            case "uncovered": {
-                uncovered.push({id: toPathRef(fields[1])});
                 break;
             }
             default:
@@ -154,7 +151,7 @@ export function parsePorcelain(stdout: string): PorcelainResult {
         throw new Error("porcelain output has no state record");
     }
 
-    return {state, entries, uncovered};
+    return {state, entries};
 }
 
 /**

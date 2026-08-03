@@ -6,7 +6,6 @@ import {
     parseListPorcelain,
     parsePorcelain,
     StateRecord,
-    UncoveredRecord,
 } from "../cli/porcelain";
 import {isOutdated} from "../cli/version";
 import {Situation, situationForExitCode} from "./situation";
@@ -18,7 +17,6 @@ export interface ReviewState {
     /** Sólo presente cuando situation === "review". */
     state?: StateRecord;
     entries: EntryRecord[];
-    uncovered: UncoveredRecord[];
     /**
      * Inventario de reviews del repositorio. Se puebla **sólo** con
      * `no-review`: es el único estado que lo muestra, y estando dentro de una
@@ -34,7 +32,6 @@ export type ReviewStateOptions = InvokeOptions;
 
 const EMPTY_ARRAYS = {
     entries: [] as EntryRecord[],
-    uncovered: [] as UncoveredRecord[],
     branches: [] as BranchRecord[],
 };
 
@@ -187,7 +184,6 @@ export class ReviewStateManager {
             situation: "review",
             state: parsed.state,
             entries: parsed.entries,
-            uncovered: parsed.uncovered,
             branches: [],
         });
     }

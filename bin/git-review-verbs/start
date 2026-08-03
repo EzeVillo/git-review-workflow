@@ -337,13 +337,16 @@ lower="$(fold_lower "$start" "$baseref" "$tip")"
 walk=0
 walkcount=0
 if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$tip")" && [ -n "$wtcontent" ]; then
-	walkpaths="$(walk_sequence "$tip" "$lower")"
+	curated="$(walk_sequence "$tip" "$lower")"
 	# grep -c returns 1 (aborting under set -e in POSIX sh) on an empty sequence.
-	walkcount="$(printf '%s\n' "$walkpaths" | grep -c . || true)"
-	if [ "$walkcount" -ge 1 ]; then
+	curatedcount="$(printf '%s\n' "$curated" | grep -c . || true)"
+	if [ "$curatedcount" -ge 1 ]; then
 		walk=1
+		walkpaths="$(walk_reading_order "$tip" "$lower")"
+		walkcount="$(printf '%s\n' "$walkpaths" | grep -c . || true)"
 	else
-		echo "note: $src has a walkthrough, but none of its entries apply to this review range; reviewing the whole diff"
+		degradedfiles="$(changed_paths "$lower" "$tip" | grep -v '^\.review/' | tr '\n' ' ')"
+		echo "note: $src has a walkthrough, but none of its entries apply to this review range; reviewing the whole diff: $degradedfiles"
 	fi
 fi
 
@@ -370,13 +373,12 @@ if [ "$walk" -eq 1 ]; then
 	git config "branch.$rb.reviewwalkcount" "$walkcount"
 
 	# Files in the review range with no walkthrough entry: the walkthrough may be
-	# stale (typical when re-reviewing with --delta). The review still covers them;
-	# they are just not on the curated reading path, so note them rather than hide it.
-	uncovered="$(changed_paths "$lower" "$tip" | grep -v '^\.review/' | while IFS= read -r p; do
-		printf '%s\n' "$walkpaths" | grep -Fxq "$p" || printf '%s\n' "$p"
-	done)"
+	# stale (typical when re-reviewing with --delta). The review still covers them
+	# — they are appended to the end of the reading order (walk_reading_order) — so
+	# note them rather than leave them to be discovered silently.
+	uncovered="$(printf '%s\n' "$walkpaths" | tail -n +"$((curatedcount + 1))")"
 	if [ -n "$uncovered" ]; then
-		echo "note: file(s) in range not in the walkthrough: $(printf '%s\n' "$uncovered" | tr '\n' ' ')"
+		echo "note: file(s) in range not in the walkthrough are added to the end of the reading order: $(printf '%s\n' "$uncovered" | tr '\n' ' ')"
 	fi
 
 	# Entries the author flagged "> key": the few files a reviewer must not skim.
@@ -396,9 +398,11 @@ if [ "$walk" -eq 1 ]; then
 		printf -- '----\n%s\n' "$headsup"
 	fi
 
-	# show_walk_entry needs the walk globals; cur is the branch we just landed on and
-	# HEAD is the lower bound (== the range's HEAD side used for the live diff).
+	# show_walk_entry needs the walk globals; cur is the branch we just landed on,
+	# total is the reading order's own length, and HEAD is the lower bound (== the
+	# range's HEAD side used for the live diff).
 	cur="$rb"
+	total="$walkcount"
 	show_walk_entry 1
 else
 	echo "$rb ready ($range) — the staged diff is the PR; edit, then run git review finish"

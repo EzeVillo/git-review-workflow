@@ -126,16 +126,12 @@ if [ "$porcelain" -eq 1 ]; then
 			essential=1
 		fi
 		porcelain_row state "$cur" "$src" "$tip" walk applied "$walkstep" "$total" "$walkcount" "$pcurrent" "$essential"
-		printf '%s\n' "$walkpaths" | walk_entries_with_essential "$tip" | while IFS="$tab" read -r epos epath eess; do
-			porcelain_row entry "$epos" "$epath" "$eess"
-		done
-		changed_paths "$(git rev-parse HEAD)" "$tip" | grep -v '^\.review/' | while IFS= read -r p; do
-			printf '%s\n' "$walkpaths" | grep -Fxq "$p" || porcelain_row uncovered "$p"
+		printf '%s\n' "$walkpaths" | walk_entry_fields "$tip" | while IFS="$tab" read -r epos epath eess eann; do
+			porcelain_row entry "$epos" "$epath" "$eess" "$eann"
 		done
 		;;
 	*)
 		pwalkthrough=none
-		pwalkpaths=""
 		if walk_read "$tip" >/dev/null; then
 			pwalkpaths="$(walk_sequence "$tip" "$(git rev-parse HEAD)")"
 			if [ -n "$pwalkpaths" ]; then
@@ -145,11 +141,6 @@ if [ "$porcelain" -eq 1 ]; then
 			fi
 		fi
 		porcelain_row state "$cur" "$src" "$tip" "$mode" "$pwalkthrough"
-		if [ "$pwalkthrough" = degraded ]; then
-			changed_paths "$(git rev-parse HEAD)" "$tip" | grep -v '^\.review/' | while IFS= read -r p; do
-				printf '%s\n' "$pwalkpaths" | grep -Fxq "$p" || porcelain_row uncovered "$p"
-			done
-		fi
 		;;
 	esac
 	exit 0
@@ -206,7 +197,7 @@ elif [ "$mode" = "walk" ]; then
 	# same way the walk commands do.
 	walkstep="$(git config "branch.$cur.reviewwalkstep" || true)"
 	walkcount="$(git config "branch.$cur.reviewwalkcount" || true)"
-	walkpaths="$(walk_sequence "$tip" "$(git rev-parse HEAD)")"
+	walkpaths="$(walk_reading_order "$tip" "$(git rev-parse HEAD)")"
 	total="$(printf '%s\n' "$walkpaths" | grep -c . || true)"
 	case "$walkstep" in
 	'' | *[!0-9]*)
@@ -219,10 +210,14 @@ elif [ "$mode" = "walk" ]; then
 	fi
 	pnow="$(printf '%s\n' "$walkpaths" | sed -n "${walkstep}p")"
 	mark=""
-	if walk_is_key "$tip" "$pnow"; then
-		mark="  (key)"
+	if walk_is_annotated "$tip" "$pnow"; then
+		if walk_is_key "$tip" "$pnow"; then
+			mark="  (key)"
+		fi
+	else
+		mark="  (uncovered)"
 	fi
-	printf '  mode    walk  [%s/%s] on %s%s\n' "$walkstep" "${walkcount:-$total}" "$pnow" "$mark"
+	printf '  mode    walk  [%s/%s] on %s%s\n' "$walkstep" "$total" "$pnow" "$mark"
 	hint="git review next"
 	[ "$walkstep" -gt 1 ] && hint="$hint / git review prev"
 	printf '  next    read, then %s  (git review finish when done)\n' "$hint"

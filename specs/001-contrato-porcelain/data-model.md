@@ -38,31 +38,31 @@ walkthrough aplicado) y admite refinarse después de forma aditiva.
 
 ## Entrada de secuencia (`entry`)
 
-Cero o más registros por invocación, uno por posición de la secuencia
-derivada (FR-010, FR-011; Q2 = C). Deriva de `walk_sequence` (walk) o de
-`rev-list --reverse --first-parent --no-merges <start>..<tip>` (step) — los
-mismos mecanismos que ya recorren `next`/`prev`.
+Cero o más registros por invocación, uno por posición del **orden de lectura
+completo** (FR-010, FR-011; Q2 = C). En walk deriva de `walk_reading_order`:
+la secuencia curada de `walk_sequence`, seguida de todo path que
+`changed_paths` reporta en rango y que no tiene entrada propia en el
+walkthrough — agregado al final en vez de omitido, para que un review no
+llegue a `finish` con archivos del PR que el reviewer nunca vio (el
+precedente es `git status`, que no esconde los untracked). En step deriva de
+`rev-list --reverse --first-parent --no-merges <start>..<tip>` — el mismo
+mecanismo que ya recorre `next`/`prev`.
 
-| Campo       | Modo  | Descripción                                                   |
-|-------------|-------|---------------------------------------------------------------|
-| `position`  | ambos | 1-based, coincide con el orden de lectura real                |
-| `id`        | ambos | path (walk) o SHA corto del commit (step)                     |
-| `essential` | walk  | `1`/`0`, marca `> key` (FR-008)                               |
-| `banked`    | step  | `1`/`0`, existe `refs/review-edits/<src>/<position>` (Q2 = C) |
+| Campo       | Modo  | Descripción                                                     |
+|-------------|-------|-------------------------------------------------------------------|
+| `position`  | ambos | 1-based, coincide con el orden de lectura real                  |
+| `id`        | ambos | path (walk) o SHA corto del commit (step)                       |
+| `essential` | walk  | `1`/`0`, marca `> key` (FR-008); `0` en una posición no anotada  |
+| `annotated` | walk  | `1`/`0`, si el path tiene entrada propia en el walkthrough       |
+| `banked`    | step  | `1`/`0`, existe `refs/review-edits/<src>/<position>` (Q2 = C)    |
 
-El campo no aplicable al modo (`essential` en step, `banked` en walk) se omite
-de la línea, no se envía vacío — mismo criterio que en `state`.
+El grupo no aplicable al modo (`essential`+`annotated` en step, `banked` en
+walk) se omite entero de la línea, no se envía vacío — mismo criterio que en
+`state`. `total` (en `state`) cuenta las posiciones no anotadas igual que las
+curadas: son parte del mismo orden de lectura, no una lista aparte.
 
 Vacío por completo (cero registros `entry`) en modo `whole` sin walkthrough
 aplicable, sin que eso se reporte como error (Acceptance Scenario 4 de US2).
-
-## Cobertura (`uncovered`)
-
-Cero o más registros, uno por path que cambia en el rango de la review y no
-tiene entrada en el walkthrough (FR-013). Sólo tiene sentido en modo `walk`
-(o `whole` con walkthrough degradado — mismo dato, mismo mecanismo:
-`changed_paths "$lower" "$tip"` menos las entradas parseadas). En modo `step`
-no se emite (no hay concepto de cobertura por walkthrough).
 
 | Campo | Descripción      |
 |-------|------------------|

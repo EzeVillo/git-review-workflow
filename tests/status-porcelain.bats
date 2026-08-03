@@ -155,7 +155,7 @@ EOF
 	firstline="$(printf '%s\n' "$output" | sed -n '1p')"
 	[ "$firstline" = "$expected" ]
 	entries="$(printf '%s\n' "$output" | grep '^entry')"
-	[ "$entries" = "$(printf 'entry\t1\tsrc/c.txt\t0')" ]
+	[ "$entries" = "$(printf 'entry\t1\tsrc/c.txt\t0\t1')" ]
 }
 
 @test "status --porcelain output does not change when status's human-facing text is rewritten" {
@@ -225,7 +225,7 @@ EOF
 	run git review status --porcelain
 	[ "$status" -eq 0 ]
 	entries="$(printf '%s\n' "$output" | grep '^entry')"
-	expected="$(printf 'entry\t1\tb.txt\t0\nentry\t2\tsrc/c.txt\t1\nentry\t3\t%s\t0' "$NONASCII")"
+	expected="$(printf 'entry\t1\tb.txt\t0\t1\nentry\t2\tsrc/c.txt\t1\t1\nentry\t3\t%s\t0\t1' "$NONASCII")"
 	[ "$entries" = "$expected" ]
 }
 
@@ -316,9 +316,16 @@ EOF
 	[ "$status" -eq 0 ]
 	run git review status --porcelain
 	[ "$status" -eq 0 ]
-	uncov="$(printf '%s\n' "$output" | grep '^uncovered' | LC_ALL=C sort)"
-	expected="$(printf 'uncovered\thas space.txt\nuncovered\t%s' "$quotedname" | LC_ALL=C sort)"
-	[ "$uncov" = "$expected" ]
+	# Not a separate uncovered record: two more entries, appended to the end of
+	# the reading order, unannotated — same literal-vs-quoted rules as any path.
+	# Positions 4/5 are whichever order changed_paths reports the two in, so
+	# compare id/essential/annotated only, not the exact position-to-file pairing.
+	entries="$(printf '%s\n' "$output" | grep '^entry')"
+	n="$(printf '%s\n' "$entries" | grep -c . || true)"
+	[ "$n" -eq 5 ]
+	tail="$(printf '%s\n' "$entries" | tail -n 2 | cut -f3- | LC_ALL=C sort)"
+	expected="$(printf 'has space.txt\t0\t0\n%s\t0\t0' "$quotedname" | LC_ALL=C sort)"
+	[ "$tail" = "$expected" ]
 }
 
 # ── --why (US4) ─────────────────────────────────────────────────────────────────
@@ -373,9 +380,9 @@ EOF
 	[[ "$output" == *"mutually exclusive"* ]]
 }
 
-# ── uncovered records (US5) ──────────────────────────────────────────────────────
+# ── annotated field (US5) ─────────────────────────────────────────────────────
 
-@test "status --porcelain reports exactly the files missing from the walkthrough as uncovered" {
+@test "status --porcelain appends a file missing from the walkthrough as an unannotated entry, never as its own record type" {
 	recommit_walkthrough <<'EOF'
 # Walkthrough
 
@@ -390,11 +397,16 @@ EOF
 	[ "$status" -eq 0 ]
 	run git review status --porcelain
 	[ "$status" -eq 0 ]
-	uncov="$(printf '%s\n' "$output" | grep '^uncovered')"
-	[ "$uncov" = "$(printf 'uncovered\tb.txt')" ]
+	n="$(printf '%s\n' "$output" | grep -c '^uncovered' || true)"
+	[ "$n" -eq 0 ]
+	entries="$(printf '%s\n' "$output" | grep '^entry')"
+	expected="$(printf 'entry\t1\tsrc/c.txt\t0\t1\nentry\t2\ta.txt\t0\t1\nentry\t3\tb.txt\t0\t0')"
+	[ "$entries" = "$expected" ]
+	total="$(printf '%s\n' "$output" | sed -n '1p' | cut -f8)"
+	[ "$total" -eq 3 ]
 }
 
-@test "status --porcelain reports zero uncovered lines when the walkthrough covers the whole range" {
+@test "status --porcelain marks every entry annotated when the walkthrough covers the whole range" {
 	recommit_walkthrough <<'EOF'
 # Walkthrough
 
@@ -413,6 +425,8 @@ EOF
 	[ "$status" -eq 0 ]
 	n="$(printf '%s\n' "$output" | grep -c '^uncovered' || true)"
 	[ "$n" -eq 0 ]
+	unannotated="$(printf '%s\n' "$output" | grep '^entry' | awk -F'\t' '$5 == 0' | grep -c . || true)"
+	[ "$unannotated" -eq 0 ]
 }
 
 # ── cross-cutting: zero mutation, separate channels, additivity ─────────────────

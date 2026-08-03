@@ -529,10 +529,11 @@ EOF
 	[ "$status" -ne 0 ]
 }
 
-@test "start notes range files not covered by the walkthrough but still walks" {
-	# Push a commit adding e.txt without updating the walkthrough, then do a full
-	# review: e.txt is in range but has no entry, so walk mode still starts (the
-	# other files are covered) and prints a coverage note.
+@test "start notes range files not covered by the walkthrough, appends them to the reading order" {
+	# Push a commit adding e.txt without updating the walkthrough: e.txt is in
+	# range but has no entry, so walk mode still starts (the other files are
+	# covered) and the note says where it went — the end of the reading order,
+	# not a separate list.
 	git switch --quiet feature/x
 	printf 'extra\n' >e.txt
 	git add e.txt
@@ -543,8 +544,109 @@ EOF
 	run git review start feature/x
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
-	[[ "$output" == *"not in the walkthrough"* ]]
-	[[ "$output" == *"e.txt"* ]]
+	# 3 curated entries plus e.txt, appended at the end.
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "4" ]
+	[[ "$output" == *"not in the walkthrough are added to the end of the reading order: e.txt"* ]]
+	[[ "$output" == *"walkthrough: 4 entries"* ]]
+}
+
+@test "an unannotated entry sits at the end of the reading order, marked uncovered, with no why" {
+	git switch --quiet feature/x
+	printf 'extra\n' >e.txt
+	git add e.txt
+	git commit --quiet -m c3-add-e-no-wt
+	git push --quiet origin feature/x
+	git switch --quiet develop
+
+	git review start feature/x >/dev/null
+	git review next >/dev/null
+	git review next >/dev/null
+	run git review next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[4/4] e.txt  (uncovered)"* ]]
+	[[ "$output" == *"this file changes in the review and the walkthrough does not annotate it"* ]]
+	[[ "$output" != *"(key)"* ]]
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "4" ]
+
+	# Only past the appended entry does the sequence actually end.
+	run git review next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"no more entries"* ]]
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "4" ]
+}
+
+@test "status marks an unannotated entry as uncovered and counts it in the total" {
+	git switch --quiet feature/x
+	printf 'extra\n' >e.txt
+	git add e.txt
+	git commit --quiet -m c3-add-e-no-wt
+	git push --quiet origin feature/x
+	git switch --quiet develop
+
+	git review start feature/x >/dev/null
+	git review next >/dev/null
+	git review next >/dev/null
+	git review next >/dev/null
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"walk  [4/4] on e.txt  (uncovered)"* ]]
+}
+
+@test "a key entry stays marked key even when the review also has unannotated entries" {
+	recommit_walkthrough <<'EOF'
+# Walkthrough
+
+## 1. src/c.txt
+> key
+read the new helper first
+
+## 2. a.txt
+then the a change
+
+## 3. b.txt
+finally b
+EOF
+	git switch --quiet feature/x
+	printf 'extra\n' >e.txt
+	git add e.txt
+	git commit --quiet -m c3-add-e-no-wt
+	git push --quiet origin feature/x
+	git switch --quiet develop
+
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"4 entries (1 key)"* ]]
+	[[ "$output" == *"[1/4] src/c.txt  (key)"* ]]
+}
+
+@test "a walk review whose recorded walkcount predates unannotated entries still reaches all of them" {
+	# Simulates a review opened before unannotated files joined the reading
+	# order: reviewwalkcount is stale (lower than what the sequence now
+	# derives), but next/status must still walk the whole thing without a
+	# config migration — the denominator is always the derived total.
+	git switch --quiet feature/x
+	printf 'extra\n' >e.txt
+	git add e.txt
+	git commit --quiet -m c3-add-e-no-wt
+	git push --quiet origin feature/x
+	git switch --quiet develop
+
+	git review start feature/x >/dev/null
+	git config branch.review/feature/x.reviewwalkcount 3
+
+	git review next >/dev/null
+	git review next >/dev/null
+	run git review next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[4/4] e.txt  (uncovered)"* ]]
+
+	run git review next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"no more entries"* ]]
+
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"walk  [4/4] on e.txt  (uncovered)"* ]]
 }
 
 # ── status / list ─────────────────────────────────────────────────────────────
@@ -594,6 +696,27 @@ EOF
 	# The saved branch is gone.
 	run git rev-parse --verify --quiet refs/heads/review-saved/feature/x
 	[ "$status" -ne 0 ]
+}
+
+@test "continue reprints [k/N] against the derived total, including an unannotated entry" {
+	git switch --quiet feature/x
+	printf 'extra\n' >e.txt
+	git add e.txt
+	git commit --quiet -m c3-add-e-no-wt
+	git push --quiet origin feature/x
+	git switch --quiet develop
+
+	git review start feature/x >/dev/null
+	git review next >/dev/null
+	git review next >/dev/null
+	git review next >/dev/null
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "4" ]
+	run git review save
+	[ "$status" -eq 0 ]
+
+	run git review continue
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[4/4] e.txt"* ]]
 }
 
 # ── abort ─────────────────────────────────────────────────────────────────────
@@ -759,15 +882,24 @@ EOF
 	[[ "$output" == *"[1/4] on $NONASCII"* ]]
 }
 
-@test "a non-ASCII file left out of the walkthrough is named readably as uncovered" {
-	# The complement of the test above: the note must still fire, and must name the
-	# file the way the author would have to type it into the walkthrough.
+@test "a non-ASCII file left out of the walkthrough is named readably and walked as uncovered" {
+	# The complement of the test above: the note must still fire, must name the
+	# file the way the author would have to type it into the walkthrough, and the
+	# file itself must still be reachable — at the end of the reading order.
 	add_nonascii_to_pr
 	run git review start feature/x
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
-	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "3" ]
-	[[ "$output" == *"not in the walkthrough: $NONASCII"* ]]
+	# 3 curated entries plus the non-ASCII file, appended at the end.
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "4" ]
+	[[ "$output" == *"not in the walkthrough are added to the end of the reading order: $NONASCII"* ]]
+	[[ "$output" != *'\'* ]]
+
+	git review next >/dev/null
+	git review next >/dev/null
+	run git review next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[4/4] $NONASCII  (uncovered)"* ]]
 	[[ "$output" != *'\'* ]]
 }
 

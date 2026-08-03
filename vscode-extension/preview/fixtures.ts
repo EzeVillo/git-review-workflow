@@ -33,14 +33,13 @@ function review(rows: string[][], inputs: PanelInputs = {busy: false}): PanelMod
         situation: "review",
         state: parsed.state,
         entries: parsed.entries,
-        uncovered: parsed.uncovered,
         branches: [],
     };
     return buildPanelModel(state, inputs);
 }
 
 function empty(situation: Situation, stderr?: string): PanelModel {
-    const state: ReviewState = {situation, entries: [], uncovered: [], branches: []};
+    const state: ReviewState = {situation, entries: [], branches: []};
     if (stderr !== undefined) {
         state.stderr = stderr;
     }
@@ -52,19 +51,24 @@ function inventory(rows: string[][]): PanelModel {
     const state: ReviewState = {
         situation: "no-review",
         entries: [],
-        uncovered: [],
         branches: parseListPorcelain(porcelain(rows)),
     };
     return buildPanelModel(state, {busy: false});
 }
 
-/** `entry` en walk: posición, path, essential. */
-function walkEntries(paths: string[], essential: number[]): string[][] {
-    return paths.map((path, index) => [
+/**
+ * `entry` en walk: posición, path, essential, annotated. Los paths de
+ * `unannotated` van al final del orden de lectura con `essential=0`,
+ * `annotated=0` — el mismo lugar que les da `walk_reading_order`.
+ */
+function walkEntries(paths: string[], essential: number[], unannotated: string[] = []): string[][] {
+    const all = [...paths, ...unannotated];
+    return all.map((path, index) => [
         "entry",
         String(index + 1),
         path,
         essential.includes(index + 1) ? "1" : "0",
+        unannotated.includes(path) ? "0" : "1",
     ]);
 }
 
@@ -90,16 +94,24 @@ y verificar el render, que ninguna de las dos suites puede afirmar.`;
 export const PREVIEW_PANES: PreviewPane[] = [
     {
         name: "walk",
-        caption: "walk — entrada key, why presente, uncovered en el pie",
+        caption: "walk — entrada key, why presente, tres no anotadas al final del orden",
         model: review(
             [
-                ["state", "review/feat/panel", "feat/panel", "a1b2c3d", "walk", "applied", "7", "12", "12", WALK_PATHS[6], "1"],
-                ...walkEntries(WALK_PATHS, [1, 7, 12]),
-                ["uncovered", "package.json"],
-                ["uncovered", "esbuild.js"],
-                ["uncovered", "tsconfig.json"],
+                ["state", "review/feat/panel", "feat/panel", "a1b2c3d", "walk", "applied", "7", "15", "15", WALK_PATHS[6], "1"],
+                ...walkEntries(WALK_PATHS, [1, 7, 12], ["package.json", "esbuild.js", "tsconfig.json"]),
             ],
             {busy: false, why: {state: "present", text: WHY}}
+        ),
+    },
+    {
+        name: "walk-uncovered",
+        caption: "walk — entrada actual sin anotar, al final del orden de lectura",
+        model: review(
+            [
+                ["state", "review/feat/panel", "feat/panel", "a1b2c3d", "walk", "applied", "13", "15", "15", "package.json", "0"],
+                ...walkEntries(WALK_PATHS, [1, 7, 12], ["package.json", "esbuild.js", "tsconfig.json"]),
+            ],
+            {busy: false, why: {state: "absent"}}
         ),
     },
     {
@@ -141,9 +153,8 @@ export const PREVIEW_PANES: PreviewPane[] = [
         caption: "walk — navegando: barra y controles fijos, cuerpo en carga",
         model: review(
             [
-                ["state", "review/feat/panel", "feat/panel", "a1b2c3d", "walk", "applied", "7", "12", "12", WALK_PATHS[6], "1"],
-                ...walkEntries(WALK_PATHS, [1, 7, 12]),
-                ["uncovered", "package.json"],
+                ["state", "review/feat/panel", "feat/panel", "a1b2c3d", "walk", "applied", "7", "13", "13", WALK_PATHS[6], "1"],
+                ...walkEntries(WALK_PATHS, [1, 7, 12], ["package.json"]),
             ],
             {busy: true}
         ),

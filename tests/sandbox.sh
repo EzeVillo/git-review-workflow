@@ -21,8 +21,9 @@
 # breaking path comparison in silence.
 #
 # Around it, one branch per state that a single well-formed pull request cannot
-# show: a partial walkthrough (uncovered files), no walkthrough (whole), a stale
-# one (degraded), and three saved reviews — resumable, blocked, and orphaned —
+# show: a partial walkthrough (unannotated files at the end of the reading
+# order), no walkthrough (whole), a stale one (degraded), and three saved
+# reviews — resumable, blocked, and orphaned —
 # for the inventory that `git review list` and the extension's empty state read.
 # That last group is the only part built by running the commands rather than by
 # writing the repository directly; it fails soft, see the phase itself.
@@ -256,8 +257,9 @@ publish() {
 	git push --quiet -u origin "$1"
 }
 
-# A pull request whose walkthrough covers two of its four files: the rest is what
-# `git review status` counts as uncovered, and what the panel offers at the foot.
+# A pull request whose walkthrough covers two of its four files: the rest are
+# appended to the end of the reading order, unannotated — `git review next`
+# still reaches them, marked `(uncovered)` instead of `(key)`.
 pr feature/notifications
 
 cat >src/notify.js <<'EOF'
@@ -525,7 +527,7 @@ shows [n/5], over the same range.
 
 The other branches, one per state that feature/checkout cannot show:
 
-  feature/notifications   walk over 2 entries, 4 files changed -> 2 uncovered
+  feature/notifications   walk over 4 entries, the last 2 unannotated
   feature/telemetry       no walkthrough at all -> whole, without --whole
   feature/legacy          walkthrough naming paths the rename removed -> degrades
                           to whole with a note, never fails

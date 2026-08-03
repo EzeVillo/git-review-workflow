@@ -2,15 +2,19 @@ import * as assert from "node:assert";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import {commitChangeResources, readCommitChanges} from "../../src/commands/openEntry";
+import {ensureGitApi} from "../../src/review/repository";
 import {entryPickLabel} from "../../src/views/panelModel";
 import {closeAllEditors, waitForActiveTab} from "./helpers/editors";
 import {getTestApi} from "./helpers/extensionApi";
 import {
     abortReview,
     createBranchWithCommits,
+    git,
     gitReview,
     sharedFixtureRepo,
-    startReview
+    startReview,
+    writeFile
 } from "./helpers/fixture";
 
 describe("US6: revisar commit por commit", function () {
@@ -109,5 +113,97 @@ describe("US6: revisar commit por commit", function () {
         // modo step nunca abre el archivo del working tree directamente.
         const active = vscode.window.activeTextEditor?.document.uri.fsPath;
         assert.notStrictEqual(active, path.join(repo.dir, "src", "two.ts"));
+    });
+
+    it("los cambios de un commit sólo piden los lados del diff que existen", async function () {
+        // El síntoma era mudo —el diff abría igual y el host escupía `Unable to
+        // read file 'git:...?ref=<sha>^'` al log—, así que lo que se afirma es
+        // el Uri de cada lado y que la extensión de git puede leerlo de verdad.
+        const branch = "us6-step-sides";
+        git(["checkout", "main"], repo.dir);
+        writeFile(repo, "src/base.ts", "base\n");
+        git(["add", "."], repo.dir);
+        git(["commit", "-m", "add base.ts on main"], repo.dir);
+
+        git(["checkout", "-b", branch], repo.dir);
+        writeFile(repo, "src/added.ts", "added\n");
+        git(["add", "."], repo.dir);
+        git(["commit", "-m", "add added.ts"], repo.dir);
+        writeFile(repo, "src/base.ts", "base modificado\n");
+        git(["add", "."], repo.dir);
+        git(["commit", "-m", "modify base.ts"], repo.dir);
+        fs.rmSync(path.join(repo.dir, "src", "base.ts"));
+        git(["add", "-A"], repo.dir);
+        git(["commit", "-m", "delete base.ts"], repo.dir);
+        git(["checkout", "main"], repo.dir);
+
+        startReview(repo, branch, ["--step"]);
+        const api = await getTestApi();
+        const state = await api.refresh();
+        assert.strictEqual(state.state?.mode, "step");
+        assert.strictEqual(state.entries.length, 3);
+
+        const rootUri = vscode.workspace.workspaceFolders![0].uri;
+        const gitApi = await ensureGitApi();
+        assert.ok(gitApi, "la extensión de git no expuso su API");
+
+        const commits = state.entries.map((entry) => {
+            const sha = entry.id as string;
+            const changes = readCommitChanges(rootUri, sha);
+            assert.ok(changes, `no se pudieron leer los archivos del commit ${sha}`);
+            return {sha, resources: commitChangeResources(gitApi!, rootUri, sha, changes!)};
+        });
+
+        // 1. agrega un archivo: no hay lado izquierdo que pedir.
+        assert.strictEqual(commits[0].resources.length, 1);
+        const [addedUri, addedLeft, addedRight] = commits[0].resources[0];
+        assert.strictEqual(path.basename(addedUri.fsPath), "added.ts");
+        assert.strictEqual(addedLeft, undefined, "un archivo agregado no existe en el commit padre");
+        assert.ok(addedRight, "falta el lado derecho del archivo agregado");
+
+        // 2. lo modifica: los dos lados.
+        assert.strictEqual(commits[1].resources.length, 1);
+        const [modifiedUri, modifiedLeft, modifiedRight] = commits[1].resources[0];
+        assert.strictEqual(path.basename(modifiedUri.fsPath), "base.ts");
+        assert.ok(modifiedLeft, "falta el lado izquierdo del archivo modificado");
+        assert.ok(modifiedRight, "falta el lado derecho del archivo modificado");
+
+        // 3. lo elimina: no hay lado derecho que pedir.
+        assert.strictEqual(commits[2].resources.length, 1);
+        const [deletedUri, deletedLeft, deletedRight] = commits[2].resources[0];
+        assert.strictEqual(path.basename(deletedUri.fsPath), "base.ts");
+        assert.ok(deletedLeft, "falta el lado izquierdo del archivo eliminado");
+        assert.strictEqual(deletedRight, undefined, "un archivo eliminado no existe en el commit");
+
+        // Todo Uri que se pasa tiene que ser legible: ésa es la lectura que
+        // fallaba. Y el contenido es el del ref pedido, no el del working tree.
+        const read = async (uri: vscode.Uri) =>
+            Buffer.from(await vscode.workspace.fs.readFile(uri)).toString("utf8");
+        for (const commit of commits) {
+            for (const [, left, right] of commit.resources) {
+                for (const side of [left, right]) {
+                    if (!side) {
+                        continue;
+                    }
+                    await assert.doesNotReject(
+                        async () => read(side),
+                        `la extensión de git no pudo leer ${side.toString()} (commit ${commit.sha})`
+                    );
+                }
+            }
+        }
+        assert.strictEqual(await read(addedRight!), "added\n");
+        assert.strictEqual(await read(modifiedLeft!), "base\n");
+        assert.strictEqual(await read(modifiedRight!), "base modificado\n");
+        assert.strictEqual(await read(deletedLeft!), "base modificado\n");
+
+        // Y el comando sigue abriendo la vista de cambios del commit pedido.
+        await vscode.commands.executeCommand("gitReview.openEntry", state.entries[0]);
+        const tab = await waitForActiveTab();
+        assert.ok(tab, "el commit que agrega un archivo no abrió ninguna vista de cambios");
+        assert.ok(
+            tab!.label.startsWith(`Commit ${commits[0].sha.slice(0, 7)}`),
+            `el tab abierto no es el del commit pedido: ${tab!.label}`
+        );
     });
 });

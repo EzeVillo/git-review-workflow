@@ -1,8 +1,9 @@
 import * as cp from "node:child_process";
 import * as vscode from "vscode";
+import {CommitChange, parseNameStatus} from "../cli/nameStatus";
 import {EntryRecord, ReviewMode} from "../cli/porcelain";
 import {PathRef} from "../cli/unquote";
-import {ensureGitApi, gitApiUnavailableReason} from "../review/repository";
+import {ensureGitApi, GitApi, gitApiUnavailableReason} from "../review/repository";
 
 function isPathRef(id: string | PathRef): id is PathRef {
     return typeof id !== "string";
@@ -90,6 +91,45 @@ async function reportMissingGitApi(): Promise<void> {
     }
 }
 
+/**
+ * Los tres Uri que `vscode.changes` pide por archivo: con qué se lo identifica,
+ * el lado izquierdo y el derecho. Un lado `undefined` es cómo se dice "de este
+ * lado el archivo no existe" —el commit lo agrega, o lo elimina—; poner ahí el
+ * Uri `git:` de un blob inexistente es justo lo que hace fallar la lectura.
+ */
+export function commitChangeResources(
+    gitApi: GitApi,
+    rootUri: vscode.Uri,
+    sha: string,
+    changes: CommitChange[]
+): [vscode.Uri, vscode.Uri | undefined, vscode.Uri | undefined][] {
+    const gitUri = (path: string, ref: string) => gitApi.toGitUri(vscode.Uri.joinPath(rootUri, path), ref);
+    return changes.map((change) => [
+        vscode.Uri.joinPath(rootUri, change.path),
+        change.before === undefined ? undefined : gitUri(change.before, `${sha}^`),
+        change.after === undefined ? undefined : gitUri(change.after, sha),
+    ]);
+}
+
+/**
+ * Los archivos que toca un commit, o `undefined` si git no pudo decirlo.
+ * Plumbing y no `git show`: la salida no depende de la config del usuario
+ * (formato, `diff.renames`, `core.quotePath`). `--root` es lo que hace que el
+ * primer commit del repo liste sus archivos en vez de nada.
+ */
+export function readCommitChanges(rootUri: vscode.Uri, sha: string): CommitChange[] | undefined {
+    try {
+        const output = cp.execFileSync(
+            "git",
+            ["diff-tree", "-r", "-z", "--no-commit-id", "--name-status", "--root", sha],
+            {cwd: rootUri.fsPath, encoding: "utf8"}
+        );
+        return parseNameStatus(output);
+    } catch {
+        return undefined;
+    }
+}
+
 async function openCommitChanges(rootUri: vscode.Uri, sha: string): Promise<void> {
     // Se resuelve acá y no al activar: ver `ensureGitApi`.
     const gitApi = await ensureGitApi();
@@ -97,27 +137,18 @@ async function openCommitChanges(rootUri: vscode.Uri, sha: string): Promise<void
         await reportMissingGitApi();
         return;
     }
-    let output: string;
-    try {
-        output = cp.execFileSync("git", ["show", "--name-only", "--pretty=format:", sha], {
-            cwd: rootUri.fsPath,
-            encoding: "utf8",
-        });
-    } catch {
+    const changes = readCommitChanges(rootUri, sha);
+    if (!changes) {
         void vscode.window.showErrorMessage(`No se pudo leer los archivos del commit ${sha}.`);
         return;
     }
-    const files = output
-        .split("\n")
-        .map((f) => f.trim())
-        .filter((f) => f.length > 0);
-    if (files.length === 0) {
+    if (changes.length === 0) {
         void vscode.window.showInformationMessage(`El commit ${sha} no cambia archivos.`);
         return;
     }
-    const resources: [vscode.Uri, vscode.Uri, vscode.Uri][] = files.map((f) => {
-        const fileUri = vscode.Uri.joinPath(rootUri, f);
-        return [fileUri, gitApi.toGitUri(fileUri, `${sha}^`), gitApi.toGitUri(fileUri, sha)];
-    });
-    await vscode.commands.executeCommand("vscode.changes", `Commit ${sha.slice(0, 7)}`, resources);
+    await vscode.commands.executeCommand(
+        "vscode.changes",
+        `Commit ${sha.slice(0, 7)}`,
+        commitChangeResources(gitApi, rootUri, sha, changes)
+    );
 }

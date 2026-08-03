@@ -145,6 +145,8 @@
   "scripts": {
     "compile": "node esbuild.js",
     "watch": "node esbuild.js --watch",
+    "preview": "node preview/run.js",
+    "preview:watch": "node preview/run.js --watch",
     "package": "node esbuild.js --production && vsce package",
     "pretest": "npm run compile && tsc --noEmit -p .",
     "test": "npm run test:unit && npm run test:integration",

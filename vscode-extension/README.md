@@ -30,6 +30,25 @@ Open this folder in VS Code and press F5 to launch an Extension Development
 Host with the extension loaded; open a `git-review-workflow` repository there
 to try it against a real review.
 
+### Previewing the panel
+
+```sh
+npm run preview        # writes out/preview/index.html and prints its file:// URL
+npm run preview:watch  # regenerates on save; reload the browser
+```
+
+Renders the panel's states side by side in a browser — walk, step, whole and
+the empty states — at sidebar width, with a switch for the dark, light and
+high-contrast themes. It's the real `panelHtml()` fed by `parsePorcelain()` +
+`buildPanelModel()` over sample porcelain output, so it follows the source with
+nothing to keep in sync by hand; edit `preview/fixtures.ts` to add a state.
+
+Two things it can't show: the buttons have no extension behind them, and the
+theme variables in `preview/build.ts` are an approximation of VS Code's, not
+the ones your editor resolves. A `--vscode-*` variable the panel starts using
+has to be added there too, or it will look wrong in the preview and fine in the
+editor. For anything beyond the render, use F5.
+
 ## Testing
 
 ```sh

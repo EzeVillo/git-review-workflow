@@ -1,5 +1,6 @@
 src/**
 test/**
+preview/**
 out/**
 .vscode-test/**
 .gitignore

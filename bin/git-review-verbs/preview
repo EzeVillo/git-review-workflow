@@ -188,8 +188,11 @@ if git diff --quiet "$tip" "$tree"; then
 	exit 0
 fi
 
+# core.quotePath=false: this is display, not a patch anyone feeds back to git, so
+# a non-ASCII path reads as itself instead of "src/caf\303\251.js" (same reason as
+# show_commit and changed_paths in git-review-lib.sh).
 if [ "$stat" -eq 1 ]; then
-	git diff --stat "$tip" "$tree"
+	git -c core.quotePath=false diff --stat "$tip" "$tree"
 else
-	git diff "$tip" "$tree"
+	git -c core.quotePath=false diff "$tip" "$tree"
 fi

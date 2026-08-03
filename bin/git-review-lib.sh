@@ -36,9 +36,13 @@ porcelain_row() {
 # show_commit <commit> <n> <total>
 # Print a commit's diffstat first and its identifying header last, so the header
 # stays next to the prompt instead of scrolling off the top when the diffstat is
-# long for a commit that touches many files.
+# long for a commit that touches many files. core.quotePath=false for the same
+# reason as changed_paths, one layer up: this is what the reviewer reads to know
+# which files the step touches, and git's default would show it "src/caf\303\251.js"
+# — an escape nobody can paste into an editor. Cosmetic here (nothing compares
+# these bytes), but it keeps every path this project prints in one shape.
 show_commit() {
-	git --no-pager show --stat --format='' "$1"
+	git --no-pager -c core.quotePath=false show --stat --format='' "$1"
 	printf -- '----\n[%s/%s] %s\n%s\n\n%s\n----\nreview this commit, edit files, then run git review next\n' \
 		"$2" "$3" "$(git rev-parse --short "$1")" \
 		"$(git show -s --format='%an <%ae>' "$1")" \

@@ -232,3 +232,42 @@ teardown() {
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
 	[[ "$output" == *"[1/2]"* ]]
 }
+
+# ── non-ASCII paths ───────────────────────────────────────────────────────────
+
+# Put a non-ASCII path in the PR as a third commit, and prove the hazard is live
+# on this platform before asserting anything about it: under git's default
+# core.quotePath such a path prints escaped and quoted ("src/caf\303\251.js").
+# Where git does not quote it the name never round-tripped through the
+# filesystem and there is nothing to exercise, so the test skips rather than
+# passing vacuously. Same idiom (and the same octal-escaped, non-decomposable
+# name, so this file stays ASCII for the byte-fragile bats on Windows CI) as the
+# non-ASCII block in walkthrough.bats.
+add_nonascii_commit() {
+	git switch --quiet feature/x
+	NONASCII="src/$(printf '\346\226\207\346\233\270').txt"
+	mkdir -p src
+	printf 'u\n' >"$NONASCII"
+	git add "$NONASCII"
+	git commit --quiet -m c3-touch-nonascii
+	git push --quiet origin feature/x
+	quoted="$(git -c core.quotePath=true show --stat --format='' HEAD | grep -c '"' || true)"
+	[ "$quoted" -ge 1 ] || skip "this platform does not round-trip a non-ASCII path"
+	git switch --quiet develop
+}
+
+@test "--step prints a non-ASCII path literally in the diffstat" {
+	add_nonascii_commit
+	git review start feature/x --step
+	git review next
+	run git review next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[3/3]"* ]]
+	# The diffstat is what tells the reviewer which files this step touches: an
+	# octal-escaped, quoted path there is unreadable and unpasteable.
+	[[ "$output" == *"$NONASCII"* ]]
+	[[ "$output" != *'\346'* ]]
+	# and the step really is the non-ASCII commit
+	run git -c core.quotePath=false diff --cached --name-only
+	[ "$output" = "$NONASCII" ]
+}

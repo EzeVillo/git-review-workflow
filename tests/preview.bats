@@ -307,3 +307,45 @@ setup_conflict_pr() {
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"missing review metadata"* ]]
 }
+
+# ── non-ASCII paths ───────────────────────────────────────────────────────────
+
+# Same guard-then-assert idiom as the non-ASCII blocks in walkthrough.bats and
+# step.bats: add a non-ASCII path to the PR, and skip where the platform does
+# not round-trip such a name through the filesystem (nothing to exercise) rather
+# than passing vacuously. The name is octal-escaped so this file stays ASCII.
+add_nonascii_commit() {
+	git switch --quiet feature/x
+	NONASCII="src/$(printf '\346\226\207\346\233\270').txt"
+	mkdir -p src
+	printf 'u\n' >"$NONASCII"
+	git add "$NONASCII"
+	git commit --quiet -m c5-touch-nonascii
+	git push --quiet origin feature/x
+	quoted="$(git -c core.quotePath=true diff --name-only develop HEAD | grep -c '^"' || true)"
+	[ "$quoted" -ge 1 ] || skip "this platform does not round-trip a non-ASCII path"
+	git switch --quiet develop
+}
+
+@test "preview --stat prints a non-ASCII path literally" {
+	add_nonascii_commit
+	git review start feature/x develop
+	printf 'u\nEDIT\n' >"$NONASCII"
+	run git review preview --stat
+	[ "$status" -eq 0 ]
+	# preview is display, not a patch fed back to git: the path must read as itself.
+	[[ "$output" == *"$NONASCII"* ]]
+	[[ "$output" != *'\346'* ]]
+}
+
+@test "preview prints a non-ASCII path literally in the diff header" {
+	add_nonascii_commit
+	git review start feature/x develop
+	printf 'u\nEDIT\n' >"$NONASCII"
+	run git review preview
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"a/$NONASCII"* ]]
+	[[ "$output" == *"b/$NONASCII"* ]]
+	[[ "$output" != *'\346'* ]]
+	[[ "$output" == *"+EDIT"* ]]
+}

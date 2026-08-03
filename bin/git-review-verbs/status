@@ -106,18 +106,43 @@ if [ "$porcelain" -eq 1 ]; then
 	step)
 		load_step_review_meta
 		load_step_texts
-		pcurrent="$(git rev-parse --short "$(printf '%s\n' "$commits" | sed -n "${step}p")")"
+		nl="$(printf '\nx')"
+		nl="${nl%x}"
+		# The two lists the entry records need, each in ONE process instead of one
+		# per position — the same "constant number of processes" rule the subject
+		# and author records already follow (research.md Decisión 2). The naive
+		# loop cost four processes per commit (a printf subshell, a sed to index,
+		# a git rev-parse --short and a git rev-parse --verify), and under Git
+		# Bash on Windows, where fork() is emulated, that was ~9s of a ~9s
+		# 50-commit status.
+		#
+		# Same traversal flags as `commits` in load_step_review_meta, so the n-th
+		# line is the n-th commit; and the trailing newline is kept with the
+		# `printf x` / ${var%x} idiom for the same reason load_step_texts keeps
+		# it — command substitution would strip it and the streamed list has to
+		# hold exactly $total lines.
+		#
+		# --abbrev-commit is left WITHOUT an explicit --abbrev=<n>: both it and
+		# git rev-parse --short abbreviate through the same default (core.abbrev
+		# and git's uniqueness rule), so the bytes are identical to what the
+		# per-commit rev-parse produced. Pinning a length here would silently
+		# diverge from --short in any repo that sets core.abbrev.
+		shorts="$(git rev-list --abbrev-commit --reverse --first-parent --no-merges "$start..$tip"; printf x)"
+		shorts="${shorts%x}"
+		# Every banked ref at once, wrapped in newlines so a membership test can
+		# match a whole line: without the trailing newline in the pattern, step 1
+		# would match refs/review-edits/<src>/10 and report edits it does not have.
+		banked_refs="$nl$(git for-each-ref --format='%(refname)' "refs/review-edits/$src/")$nl"
+		pcurrent="$(printf '%s' "$shorts" | sed -n "${step}p")"
 		porcelain_row state "$cur" "$src" "$tip" step none "$step" "$total" "$count" "$pcurrent"
-		i=1
-		while [ "$i" -le "$total" ]; do
-			ish="$(git rev-parse --short "$(printf '%s\n' "$commits" | sed -n "${i}p")")"
+		printf '%s' "$shorts" | { i=1; while IFS= read -r ish; do
 			banked=0
-			if git rev-parse --verify --quiet "refs/review-edits/$src/$i" >/dev/null; then
-				banked=1
-			fi
+			case "$banked_refs" in
+			*"${nl}refs/review-edits/$src/$i$nl"*) banked=1 ;;
+			esac
 			porcelain_row entry "$i" "$ish" "$banked"
 			i=$((i + 1))
-		done
+		done; }
 		# Free text goes in its own record, last field, one per record: a subject
 		# and an author name can both contain a literal tab (contracts/
 		# status-porcelain-v2.md), and only the last field of a line survives that

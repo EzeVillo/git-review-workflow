@@ -433,6 +433,69 @@ EOF
 	[ "$unannotated" -eq 0 ]
 }
 
+# ── step entry records ────────────────────────────────────────────────────────
+
+@test "status --porcelain marks banked steps by whole position, not by numeric prefix" {
+	# Eleven commits so position 1 is a prefix of position 11: the banked field
+	# is derived from one bulk listing of refs/review-edits/<src>/ plus a shell
+	# membership test, and a test that matched the ref name as a substring would
+	# report step 1 as banked because step 11 is.
+	git switch --quiet -c feature/many develop
+	n=1
+	while [ "$n" -le 11 ]; do
+		printf 'm%s\n' "$n" >>m.txt
+		git add m.txt
+		git commit --quiet -m "m$n"
+		n=$((n + 1))
+	done
+	git switch --quiet develop
+
+	run git review start feature/many --offline --step
+	[ "$status" -eq 0 ]
+	n=1
+	while [ "$n" -le 10 ]; do
+		run git review next
+		[ "$status" -eq 0 ]
+		n=$((n + 1))
+	done
+	# Edit step 11 and step back, which banks it and leaves the cursor on 10.
+	printf 'edit\n' >>m.txt
+	run git review prev
+	[ "$status" -eq 0 ]
+
+	# The precondition this test rests on: exactly one banked ref, and it is 11.
+	[ "$(git for-each-ref --format='%(refname)' refs/review-edits/feature/many/)" = "refs/review-edits/feature/many/11" ]
+
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	banked="$(printf '%s\n' "$output" | awk -F'\t' '$1 == "entry" && $4 == 1 { print $2 }')"
+	[ "$banked" = "11" ]
+	# And the sequence itself is intact: eleven entries, every other one at 0.
+	unbanked="$(printf '%s\n' "$output" | awk -F'\t' '$1 == "entry" && $4 == 0 { print $2 }')"
+	[ "$unbanked" = "$(seq 1 10)" ]
+}
+
+@test "status --porcelain abbreviates entry SHAs exactly like git rev-parse --short" {
+	# The bulk list is git rev-list --abbrev-commit with no explicit --abbrev=<n>,
+	# so it must follow core.abbrev the same way the per-commit rev-parse --short
+	# it replaced did. A pinned length would pass at the default and diverge here.
+	git config core.abbrev 12
+	run git review start feature/x --step
+	[ "$status" -eq 0 ]
+
+	c1short="$(git rev-parse --short "$(git rev-list --reverse develop..origin/feature/x | sed -n 1p)")"
+	c2short="$(git rev-parse --short "$(git rev-list --reverse develop..origin/feature/x | sed -n 2p)")"
+	[ "${#c1short}" -eq 12 ]
+
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	entries="$(printf '%s\n' "$output" | grep '^entry')"
+	expected="$(printf 'entry\t1\t%s\t0\nentry\t2\t%s\t0' "$c1short" "$c2short")"
+	[ "$entries" = "$expected" ]
+	# The state record's current field is abbreviated from the same list.
+	[ "$(printf '%s\n' "$output" | sed -n '1p' | cut -f10)" = "$c1short" ]
+}
+
 # ── subject/author records (003 US1) ──────────────────────────────────────────
 
 @test "status --porcelain emits one subject and one author line per step position" {

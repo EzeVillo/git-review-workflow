@@ -233,9 +233,9 @@ que nunca abre un archivo de texto plano sino los cambios del commit.
 
 ## 31. vscode-extension/src/commands/navigate.ts
 `next`/`prev` a través del `MutationLock`: invoca el verbo, refresca con
-`status --porcelain` inmediatamente después, y recién ahí abre el archivo de
-la entrada resultante — nunca lee la salida humana del verbo para saber dónde
-quedó el cursor (FR-015). Los límites de la secuencia se propagan tal cual
+`status --porcelain` inmediatamente después, y recién ahí abre los cambios de
+la entrada resultante (lo mismo que "Ver cambios", no el archivo pelado) —
+nunca lee la salida humana del verbo para saber dónde quedó el cursor (FR-015). Los límites de la secuencia se propagan tal cual
 desde la CLI, sin lógica propia.
 
 ## 32. vscode-extension/src/commands/installOrUpdateCli.ts

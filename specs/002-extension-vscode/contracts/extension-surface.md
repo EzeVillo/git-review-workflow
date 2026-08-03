@@ -45,8 +45,8 @@ contribuciones del manifiesto el host renderiza (ver *Estados vacíos*).
 │ [ ver cambios ]                       │
 │ [ ‹ prev ]  [ next › ]                │
 ├───────────────────────────────────────┤
-│ ir a entrada…      3 sin cobertura    │ ← pie: abren sendos QuickPick
-└───────────────────────────────────────┘
+│ 3 sin cobertura                       │ ← pie: abre su QuickPick; sin
+└───────────────────────────────────────┘    archivos sin cobertura no se dibuja
 ```
 
 Reglas normativas:
@@ -69,8 +69,13 @@ Reglas normativas:
 - El *why* de la entrada actual es el cuerpo, con sus saltos de línea (FR-017).
   Sus cuatro estados —en vuelo, presente, ausente, fallido— se muestran
   distinguibles (FR-018, `data-model.md` § `PanelModel`).
-- Los dos accesos del pie son **separados**: la secuencia por un lado y los
-  archivos sin cobertura por el otro, nunca mezclados (FR-008).
+- El panel muestra la entrada actual y **no** ofrece acceso a la secuencia
+  completa: ésa vive en `gitReview.goToEntry`, desde la paleta. Los archivos sin
+  cobertura siguen siendo una superficie **separada** de la secuencia, nunca
+  mezclada con ella (FR-008).
+- El *why* del panel es el texto entero, no un recorte: el link a `showWhy` abre
+  el mismo contenido renderizado como Markdown en un editor, y por eso se
+  anuncia como "abrir en el editor" y no como una lectura más completa.
 
 ### Estados vacíos
 
@@ -95,7 +100,7 @@ se muestra íntegro y tal cual (FR-024).
 El webview **no ejecuta comandos**. Postea mensajes `{type}` de un conjunto
 cerrado y el host decide qué hacer con cada uno; un `type` desconocido se
 ignora. La lista es exactamente: `openEntry`, `openChange`, `showWhy`, `next`,
-`prev`, `refresh`, `goToEntry`, `showUncovered`, `installCli`, `outOfRangeHelp`.
+`prev`, `refresh`, `showUncovered`, `installCli`, `outOfRangeHelp`.
 
 En el sentido inverso, el host postea el `PanelModel` entero
 (`{type: "model", model}`) y el webview lo dibuja de cero. Todo el contenido
@@ -111,18 +116,24 @@ Los ids son interfaz pública.
 | `gitReview.openEntry`     | Abrir entrada           | panel (identificador), paleta     |
 | `gitReview.openChange`    | Ver cambios             | panel (botón), paleta             |
 | `gitReview.showWhy`       | Ver el porqué           | panel (botón), paleta             |
-| `gitReview.next`          | Entrada siguiente       | panel, título de la vista, paleta |
-| `gitReview.prev`          | Entrada anterior        | panel, título de la vista, paleta |
-| `gitReview.goToEntry`     | Ir a una entrada        | panel (pie), paleta               |
+| `gitReview.next`          | Entrada siguiente       | panel (botón), paleta             |
+| `gitReview.prev`          | Entrada anterior        | panel (botón), paleta             |
+| `gitReview.goToEntry`     | Ir a una entrada        | paleta                            |
 | `gitReview.showUncovered` | Archivos sin cobertura  | panel (pie), paleta               |
 | `gitReview.refresh`       | Refrescar               | título de la vista, paleta        |
 | `gitReview.installCli`    | Instalar la CLI         | panel (estados sin CLI), paleta   |
 
+El título de la vista lleva **sólo** `refresh`: navegar y saltar de entrada
+tienen su lugar en el cuerpo del panel o en la paleta, y repetirlos como íconos
+arriba no agregaba una superficie, agregaba una copia.
+
 Reglas normativas:
 
-- `next` y `prev` están deshabilitados por `when: !gitReview.busy` mientras hay
-  una mutación en curso (FR-020). **No** se deshabilitan al llegar a un extremo
-  de la secuencia: eso lo decide la CLI (FR-016).
+- Los botones `next`/`prev` del panel se deshabilitan con `busy` del
+  `PanelModel` mientras hay una mutación en curso, pero quien garantiza FR-020
+  es el `MutationLock`: una segunda invocación en vuelo se descarta, venga de
+  donde venga. **No** se deshabilitan al llegar a un extremo de la secuencia:
+  eso lo decide la CLI (FR-016).
 - Los comandos de la paleta se ocultan con `when: gitReview.situation == review`
   — no tiene sentido ofrecer "entrada siguiente" donde no hay review.
 - `gitReview.openEntry` abre el documento del working tree; con el archivo
@@ -139,7 +150,9 @@ Reglas normativas:
 ## Context keys
 
 Publicadas con `setContext`. Son la única forma en que el estado influye en el
-manifiesto.
+manifiesto. `gitReview.busy` ya no condiciona ninguna contribución —el título de
+la vista quedó con `refresh` solo—, pero se sigue publicando: es el estado que
+un keybinding propio necesita para no disparar una mutación sobre otra.
 
 | Key                   | Valores                                                                                 |
 |-----------------------|-----------------------------------------------------------------------------------------|

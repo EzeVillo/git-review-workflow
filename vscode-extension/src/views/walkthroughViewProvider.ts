@@ -14,7 +14,6 @@ export const PANEL_MESSAGES = [
     "next",
     "prev",
     "refresh",
-    "goToEntry",
     "showUncovered",
     "installCli",
     "outOfRangeHelp",

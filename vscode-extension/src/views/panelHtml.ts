@@ -122,7 +122,6 @@ export function panelHtml(nonce: string): string {
     border-top: 1px solid var(--vscode-panel-border);
     font-size: .9em;
   }
-  .foot .spacer { margin-left: auto; }
   .empty { padding: 1.2em .9em; line-height: 1.6; }
   .empty p { margin: 0 0 1em; }
   .stderr {
@@ -237,11 +236,13 @@ export function panelHtml(nonce: string): string {
 
     if (model.why) {
       body.appendChild(renderWhy(model.why));
-      // La lectura completa sólo tiene sentido si hay algo que leer, y es un
-      // link y no un botón porque abre otra superficie, no actúa sobre ésta.
+      // El texto de acá arriba ya es el *why* entero: lo que abre el editor es
+      // el mismo contenido renderizado como Markdown y a ancho de editor, así
+      // que sólo se ofrece si hay algo que renderizar. Es un link y no un
+      // botón porque abre otra superficie, no actúa sobre ésta.
       if (model.why.state === "present") {
         const more = el("div", "more");
-        more.appendChild(button("ver el porqué completo", "showWhy", "link"));
+        more.appendChild(button("abrir en el editor", "showWhy", "link"));
         body.appendChild(more);
       }
     }
@@ -266,16 +267,14 @@ export function panelHtml(nonce: string): string {
     return body;
   }
 
+  // El pie tiene una sola entrada: los archivos que el walkthrough no anota.
+  // La secuencia completa se alcanza por la paleta (gitReview.goToEntry); el
+  // panel muestra la entrada actual y nada más. Sin nada que mostrar no se
+  // dibuja, para no dejar un borde suelto abajo de todo.
   function renderFoot(model) {
+    if (model.uncoveredCount <= 0) { return null; }
     const foot = el("div", "foot");
-    if (model.entryCount > 0) {
-      foot.appendChild(button("Ir a una entrada… (" + model.entryCount + ")", "goToEntry", "link"));
-    }
-    if (model.uncoveredCount > 0) {
-      const uncovered = button(model.uncoveredCount + " sin cobertura", "showUncovered", "link");
-      uncovered.classList.add("spacer");
-      foot.appendChild(uncovered);
-    }
+    foot.appendChild(button(model.uncoveredCount + " sin cobertura", "showUncovered", "link"));
     return foot;
   }
 
@@ -301,7 +300,8 @@ export function panelHtml(nonce: string): string {
       root.appendChild(empty("El cursor no apunta a ninguna entrada de la secuencia."));
     }
 
-    root.appendChild(renderFoot(model));
+    const foot = renderFoot(model);
+    if (foot) { root.appendChild(foot); }
   }
 
   window.addEventListener("message", function (event) {

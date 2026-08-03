@@ -91,24 +91,9 @@
     "menus": {
       "view/title": [
         {
-          "command": "gitReview.next",
-          "when": "view == gitReview.walkthrough && gitReview.situation == review && !gitReview.busy",
-          "group": "navigation@1"
-        },
-        {
-          "command": "gitReview.prev",
-          "when": "view == gitReview.walkthrough && gitReview.situation == review && !gitReview.busy",
-          "group": "navigation@2"
-        },
-        {
-          "command": "gitReview.goToEntry",
-          "when": "view == gitReview.walkthrough && gitReview.situation == review",
-          "group": "navigation@3"
-        },
-        {
           "command": "gitReview.refresh",
           "when": "view == gitReview.walkthrough",
-          "group": "navigation@4"
+          "group": "navigation@1"
         }
       ],
       "commandPalette": [

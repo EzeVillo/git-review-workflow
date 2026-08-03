@@ -9,7 +9,7 @@ The commands are POSIX shell scripts under `bin/`. Run the checks locally before
 opening a pull request:
 
 ```sh
-shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh
+shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh tests/sandbox.sh
 bats tests/
 ```
 
@@ -33,6 +33,26 @@ The script builds a small image ([`tests/Dockerfile`](tests/Dockerfile): bats +
 git) on first use and mounts the repo read-only; tests create their temp repos
 inside the container, so the Windows filesystem is never on the hot path. This
 is a local convenience only — CI still runs the suite on a real Windows runner.
+
+### Trying the commands by hand
+
+The fixtures for `--step` and walk mode live inside the bats `setup()` functions
+and are deleted by `teardown()`, so there is nothing left to experiment with.
+[`tests/sandbox.sh`](tests/sandbox.sh) builds the same kind of pull request in a
+directory that survives the run:
+
+```sh
+./tests/sandbox.sh                    # (re)build, then print how to enter it
+./tests/sandbox.sh -d /tmp/box        # somewhere other than the default
+```
+
+It rebuilds from scratch on every call — break the sandbox however you like and
+run it again to get the identical starting state back. The toy pull request is
+four commits over five files (one file touched twice, so `--step` and walk
+disagree), with a committed walkthrough whose reading order is not the diff
+order and two paths carrying a space and a non-ASCII byte. Nothing in the test
+suite depends on it; it exists purely to run the real commands against something
+realistic.
 
 > The PowerShell installer tests (`*-ps1.bats`) need `pwsh`, which the container
 > does not have, so they do not really run there — rely on CI (or local Windows)

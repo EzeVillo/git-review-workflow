@@ -17,13 +17,20 @@ comandos.
 # Lint — todo script de shell debe pasar shellcheck. `find` recorre bin/
 # (incluido el subdirectorio privado bin/git-review-verbs/, que el glob `bin/*`
 # ya no alcanza) y excluye el .gitkeep; cubre el dispatcher y todos los verbos.
-shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh
+shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh tests/sandbox.sh
 
 # Tests — bats. En Windows NO corras bats bajo Git Bash (minutos por archivo,
 # fork emulado lento). Corré en el contenedor Linux:
 ./tests/run-docker.sh                 # toda la suite
 ./tests/run-docker.sh review.bats     # un solo archivo
 ./tests/run-docker.sh tests/range.bats extras.bats   # cualquier arg/path de bats
+
+# Pruebas manuales — arma un PR de juguete descartable (4 commits, 5 archivos,
+# walkthrough committeado, paths con espacio y acento) para probar --step y walk
+# a mano. Reconstruye desde cero en cada corrida; el estado inicial es siempre
+# el mismo. Los tests no lo usan: es solo para manotear los comandos.
+./tests/sandbox.sh                    # (re)construye y dice cómo entrar
+./tests/sandbox.sh -d /tmp/box        # en otro lado
 ```
 
 La imagen de Docker (bats + git, `tests/Dockerfile`) se construye en el primer

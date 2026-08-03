@@ -30,7 +30,7 @@
         {
           "id": "gitReview.walkthrough",
           "name": "Walkthrough",
-          "type": "tree"
+          "type": "webview"
         }
       ]
     },
@@ -65,6 +65,18 @@
         "icon": "$(arrow-up)"
       },
       {
+        "command": "gitReview.goToEntry",
+        "title": "Ir a una entrada",
+        "category": "git review",
+        "icon": "$(list-ordered)"
+      },
+      {
+        "command": "gitReview.showUncovered",
+        "title": "Archivos sin cobertura",
+        "category": "git review",
+        "icon": "$(files)"
+      },
+      {
         "command": "gitReview.refresh",
         "title": "Refrescar",
         "category": "git review",
@@ -89,27 +101,20 @@
           "group": "navigation@2"
         },
         {
-          "command": "gitReview.refresh",
-          "when": "view == gitReview.walkthrough",
+          "command": "gitReview.goToEntry",
+          "when": "view == gitReview.walkthrough && gitReview.situation == review",
           "group": "navigation@3"
-        }
-      ],
-      "view/item/context": [
-        {
-          "command": "gitReview.openChange",
-          "when": "view == gitReview.walkthrough && (viewItem == entry-walk || viewItem == entry-step)",
-          "group": "inline@1"
         },
         {
-          "command": "gitReview.showWhy",
-          "when": "view == gitReview.walkthrough && viewItem == entry-walk",
-          "group": "inline@2"
+          "command": "gitReview.refresh",
+          "when": "view == gitReview.walkthrough",
+          "group": "navigation@4"
         }
       ],
       "commandPalette": [
         {
           "command": "gitReview.openEntry",
-          "when": "false"
+          "when": "gitReview.situation == review"
         },
         {
           "command": "gitReview.openChange",
@@ -128,43 +133,19 @@
           "when": "gitReview.situation == review"
         },
         {
+          "command": "gitReview.goToEntry",
+          "when": "gitReview.situation == review"
+        },
+        {
+          "command": "gitReview.showUncovered",
+          "when": "gitReview.situation == review"
+        },
+        {
           "command": "gitReview.installCli",
           "when": "gitReview.situation == cli-missing || gitReview.situation == cli-outdated"
         }
       ]
     },
-    "viewsWelcome": [
-      {
-        "view": "gitReview.walkthrough",
-        "when": "gitReview.situation == no-review",
-        "contents": "No hay una review activa en este repositorio.\n[Cómo iniciar una review](https://github.com/EzeVillo/git-review-workflow#readme)"
-      },
-      {
-        "view": "gitReview.walkthrough",
-        "when": "gitReview.situation == out-of-range",
-        "contents": "El cursor quedó fuera de rango: la base se movió.\n[Cómo arreglarlo](command:gitReview.showOutOfRangeHelp)"
-      },
-      {
-        "view": "gitReview.walkthrough",
-        "when": "gitReview.situation == cli-missing",
-        "contents": "No se encontró la CLI git-review (≥ 0.3.0).\n[Instalar la CLI](command:gitReview.installCli)"
-      },
-      {
-        "view": "gitReview.walkthrough",
-        "when": "gitReview.situation == cli-outdated",
-        "contents": "La CLI git-review instalada es anterior a 0.3.0.\n[Actualizar la CLI](command:gitReview.installCli)"
-      },
-      {
-        "view": "gitReview.walkthrough",
-        "when": "gitReview.situation == error",
-        "contents": "Ocurrió un error al leer el estado de la review."
-      },
-      {
-        "view": "gitReview.walkthrough",
-        "when": "gitReview.situation == review && gitReview.mode == whole",
-        "contents": "Esta review no tiene walkthrough: no hay un recorrido de lectura curado para este PR."
-      }
-    ],
     "configuration": {
       "title": "git review",
       "properties": {

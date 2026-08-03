@@ -11,13 +11,15 @@ execution workflow.
 
 Una extensión de VS Code que muestra la review en curso (leída íntegramente vía
 `git review status --porcelain` / `list --porcelain` / `status --why`, el
-contrato de la feature 001) como un panel de árbol nativo: la secuencia de
-lectura del walkthrough en orden, la entrada actual, las esenciales, los
-archivos sin cobertura, y comandos para saltar al archivo, avanzar/retroceder y
-leer el *why*. La extensión no deriva estado por su cuenta ni muta refs/config
-directamente — todo pasa por invocar `git review <verbo>` y releer su salida
-estructurada. Vive en su propio subdirectorio (`vscode-extension/`), con
-cadena de construcción y tests independientes del paquete npm de la CLI.
+contrato de la feature 001) como un panel dedicado a **la entrada actual**: en
+qué posición de la secuencia está, sus marcas, y el *why* que el autor escribió
+como cuerpo de la vista. La secuencia completa y los archivos sin cobertura se
+alcanzan por `QuickPick`, y hay comandos para saltar al archivo,
+avanzar/retroceder y leer el *why* completo. La extensión no deriva estado por su
+cuenta ni muta refs/config directamente — todo pasa por invocar
+`git review <verbo>` y releer su salida estructurada. Vive en su propio
+subdirectorio (`vscode-extension/`), con cadena de construcción y tests
+independientes del paquete npm de la CLI.
 
 ## Technical Context
 
@@ -38,11 +40,13 @@ re-invoca la CLI.
 **Testing**:
 
 - Unit (sin host de VS Code): `mocha` + `node:assert` sobre el parser
-  porcelain, el des-citado de paths y la comparación de versiones — funciones
-  puras, corren igual en los tres SO.
+  porcelain, el des-citado de paths, la comparación de versiones y la
+  derivación del view-model del panel — funciones puras, corren igual en los
+  tres SO.
 - Integration: `@vscode/test-electron` levantando un VS Code real contra
-  repos fixture (creados con la CLI del propio proyecto) para probar
-  TreeView, comandos y el ciclo de refresco end-to-end.
+  repos fixture (creados con la CLI del propio proyecto) para probar el
+  view-model que recibe el panel, los comandos y el ciclo de refresco
+  end-to-end.
 
 **Target Platform**: VS Code Desktop (motor mínimo a fijar en Phase 0) en
 Windows, macOS y Linux (FR-028).
@@ -60,8 +64,9 @@ verificable por revisión de código, no en runtime); cero mutación directa de
 refs/config/índice (FR-002); invocaciones que cambian estado no se solapan
 (FR-020); funciona offline salvo por abrir la URL de instalación (FR-021).
 
-**Scale/Scope**: 6 historias de usuario (2×P1, 3×P2, 1×P3); un árbol, un
-puñado de comandos, y los 5 estados vacíos/de error de la Historia 5.
+**Scale/Scope**: 6 historias de usuario (2×P1, 3×P2, 1×P3); un panel, dos
+`QuickPick`, un puñado de comandos, y los 5 estados vacíos/de error de la
+Historia 5.
 
 ## Constitution Check
 
@@ -77,6 +82,14 @@ VS Code (ver `research.md`, Decisiones 4 y 5). Sin violaciones que registrar.
 
 **Re-check post Phase 1**: sin cambios — el diseño no introdujo nada que
 requiera una excepción.
+
+**Re-check tras el rediseño del panel** (Decisión 4 revisada: webview en lugar
+de `TreeView`): la regla de espejar los idioms del host sigue cumplida, pero de
+forma más exigente. Un webview *puede* ignorar el host, así que el cumplimiento
+pasa de gratuito a explícito y verificable — variables `--vscode-*` en lugar de
+colores propios, `QuickPick` nativo para elegir de una lista, `<button>` reales
+para el foco por teclado. Es la excepción que la decisión documenta y el motivo
+de FR-031/SC-010.
 
 ## Project Structure
 
@@ -108,11 +121,14 @@ vscode-extension/
 │   │   ├── state.ts                  # ReviewState/Situation, refresco + watcher de .git
 │   │   └── mutationLock.ts           # serializa next/prev (FR-020)
 │   ├── views/
-│   │   ├── walkthroughTreeProvider.ts    # TreeDataProvider: entradas + sin cobertura
+│   │   ├── panelModel.ts                 # view-model plano, sin dependencia de vscode
+│   │   ├── panelHtml.ts                  # el HTML/CSS/JS del panel, también sin vscode
+│   │   ├── walkthroughViewProvider.ts    # WebviewViewProvider: lo monta y postea el modelo
 │   │   └── whyContentProvider.ts         # TextDocumentContentProvider virtual (US3)
 │   └── commands/
 │       ├── navigate.ts               # next / prev
 │       ├── openEntry.ts              # abrir archivo de una entrada
+│       ├── pickEntry.ts              # QuickPick de la secuencia y de lo no cubierto
 │       └── installOrUpdateCli.ts     # US5: sin CLI / CLI vieja
 ├── test/
 │   ├── unit/                         # porcelain.ts, unquote.ts, version.ts — sin host

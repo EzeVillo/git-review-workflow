@@ -29,8 +29,8 @@ lectura ocurre en la otra.
 El walkthrough es la pieza que convierte un diff en una review guiada, y es
 también la más difícil de vender: hay que instalar la CLI, aprender los verbos y
 recién ahí se ve el valor. Un panel dentro del editor muestra ese valor sin
-intermediarios — la primera vez que alguien ve la lista de entradas con su *why*
-al lado del código, entiende el producto.
+intermediarios — la primera vez que alguien ve, al lado del código, en qué
+archivo está y por qué el autor le pidió leerlo, entiende el producto.
 
 Hay además una razón de distribución: el Marketplace es un canal con audiencia
 propia, y una extensión es la forma natural de que alguien descubra la CLI en
@@ -45,9 +45,9 @@ estable.
 
 ### Qué habilita
 
-Que revisar un PR con walkthrough ocurra íntegramente dentro del editor: la
-lista de entradas en el orden que el autor eligió, el *why* de cada una, un clic
-para saltar al archivo, y avanzar sin cambiar de ventana.
+Que revisar un PR con walkthrough ocurra íntegramente dentro del editor: en qué
+entrada estás dentro del orden que el autor eligió, el *why* de esa entrada a la
+vista, un clic para saltar al archivo, y avanzar sin cambiar de ventana.
 
 ### Qué NO es esto
 
@@ -57,7 +57,9 @@ para saltar al archivo, y avanzar sin cambiar de ventana.
   requiera lógica nueva del lado de la extensión está fuera de esta feature por
   definición — si algo falta, se agrega a la CLI.
 - **No es una interfaz de diff propia.** El editor ya sabe mostrar y editar los
-  cambios de una review; la extensión no reimplementa eso.
+  cambios de una review; la extensión no reimplementa eso. Que el panel tenga
+  superficie propia de dibujo no cambia esto: mostrar cambios se sigue
+  delegando en el editor.
 - **No incluye los verbos consecuentes.** `finish`, `abort` y `save` cambian
   ramas y refs. El proyecto trata el riesgo de forma asimétrica, y ponerlos a un
   clic en una primera versión —donde el usuario todavía no tiene modelo mental
@@ -75,12 +77,13 @@ El actor de todas las historias es **el revisor**: alguien que recibió un PR y
 quiere leerlo. Se asume que ya sabe iniciar una review, o que la inició desde la
 terminal.
 
-### User Story 1 - Ver el walkthrough como panel de lectura (Priority: P1)
+### User Story 1 - Ver dónde estoy en el walkthrough (Priority: P1)
 
 El revisor abre en el editor un repositorio donde hay una review activa con
-walkthrough. Sin escribir ningún comando, ve un panel con las entradas del
-walkthrough en el orden en que el autor las escribió, cuál es la entrada actual,
-y cuáles marcó como esenciales.
+walkthrough. Sin escribir ningún comando, ve un panel que le dice en qué entrada
+está: qué archivo, en qué posición del orden que el autor eligió, si el autor la
+marcó como esencial, y —cuando la hay— la explicación que escribió para ella. La
+secuencia completa está a un gesto de distancia, no ocupando el panel.
 
 **Why this priority**: Es la feature. Todo lo demás son grados de comodidad
 sobre esto. Si sólo existiera esta historia, la extensión ya resolvería el
@@ -88,75 +91,87 @@ problema de sostener dos contextos: el orden de lectura pasa a estar en la misma
 ventana donde se lee.
 
 **Independent Test**: Se abre un repositorio con una review en modo walk y se
-verifica que el panel lista exactamente las entradas de la secuencia, en orden,
-con la posición actual y las esenciales distinguibles. No depende de ninguna
-otra historia.
+verifica que el panel identifica la entrada actual con su posición y sus marcas,
+y que desde ahí se alcanza cualquier otra entrada de la secuencia, en el orden
+de la secuencia. No depende de ninguna otra historia.
 
 **Acceptance Scenarios**:
 
 1. **Given** una review activa en modo walk con 7 entradas, la 3ª marcada como
    esencial y el cursor en la 2ª, **When** el revisor abre el repositorio,
-   **Then** el panel muestra las 7 entradas en orden, señala la 2ª como actual y
-   distingue la 3ª como esencial.
+   **Then** el panel muestra la 2ª entrada como actual, indica que es la 2 de 7,
+   y al abrir el selector de entradas aparecen las 7 en orden con la 3ª
+   distinguida como esencial.
 2. **Given** un walkthrough que no cubre todos los archivos del rango, **When**
-   el revisor mira el panel, **Then** los archivos sin entrada aparecen
-   agrupados aparte, distinguidos de las entradas del walkthrough.
+   el revisor mira el panel, **Then** ve cuántos archivos del rango quedaron sin
+   entrada y puede alcanzarlos por separado, sin que se mezclen con la secuencia
+   del walkthrough.
 3. **Given** una review activa en modo whole (sin walkthrough), **When** el
    revisor abre el repositorio, **Then** el panel indica que la review no tiene
-   walkthrough, sin listar entradas y sin presentarlo como un error.
+   walkthrough, sin ofrecer una secuencia de lectura y sin presentarlo como un
+   error.
 4. **Given** un walkthrough que degradó a whole por estar roto o desactualizado,
    **When** el revisor mira el panel, **Then** ve que degradó y por qué, y la
    review sigue siendo usable.
+5. **Given** cualquiera de los estados anteriores, **When** el revisor usa un
+   tema de alto contraste o navega sólo con el teclado, **Then** el panel sigue
+   siendo legible y operable, y ninguna distinción se transmite únicamente por
+   color.
 
 ---
 
 ### User Story 2 - Saltar al archivo de una entrada (Priority: P1)
 
-Desde el panel, el revisor hace clic en una entrada y el editor abre ese archivo
-mostrando los cambios de la review, listo para leer y editar.
+Desde el panel, el revisor abre el archivo de la entrada actual —o el de
+cualquier otra que elija de la secuencia— y el editor lo muestra con los cambios
+de la review, listo para leer y editar.
 
-**Why this priority**: Sin esto el panel es una lista que hay que trasladar a
+**Why this priority**: Sin esto el panel es un cartel que hay que trasladar a
 mano al explorador de archivos, y el revisor sigue haciendo trabajo de
 traducción. Junto con la Historia 1 forma el mínimo que justifica instalar la
 extensión.
 
-**Independent Test**: Con una review activa, hacer clic en cada entrada del
-panel y verificar que abre el archivo correcto y que los cambios de la review
-son visibles y editables.
+**Independent Test**: Con una review activa, abrir cada entrada desde el panel y
+verificar que abre el archivo correcto y que los cambios de la review son
+visibles y editables.
 
 **Acceptance Scenarios**:
 
-1. **Given** el panel con las entradas listadas, **When** el revisor hace clic
-   en una, **Then** el editor abre ese archivo con los cambios de la review
-   visibles, y las ediciones que haga se aplican al working tree.
+1. **Given** el panel mostrando una entrada, **When** el revisor la abre,
+   **Then** el editor abre ese archivo con los cambios de la review visibles, y
+   las ediciones que haga se aplican al working tree.
 2. **Given** una entrada cuyo path contiene espacios o caracteres no ASCII,
-   **When** el revisor hace clic, **Then** abre el archivo correcto.
+   **When** el revisor la abre, **Then** abre el archivo correcto.
 3. **Given** una entrada correspondiente a un archivo eliminado en el rango,
-   **When** el revisor hace clic, **Then** el editor muestra el estado del
-   archivo sin error.
+   **When** el revisor la abre, **Then** el editor muestra el estado del archivo
+   sin error.
 
 ---
 
-### User Story 3 - Leer el porqué de cada entrada (Priority: P2)
+### User Story 3 - Leer el porqué de la entrada (Priority: P2)
 
-El revisor selecciona una entrada y lee la explicación que el autor escribió
-para ella, sin salir del editor.
+El revisor lee, sin salir del editor y sin ninguna acción adicional, la
+explicación que el autor escribió para la entrada en la que está.
 
 **Why this priority**: Es el contenido que distingue a un walkthrough de una
 lista de archivos — es lo que el autor quiso decir. Va después de P1 porque el
 orden de lectura entrega valor aun sin los textos, pero no al revés.
 
 **Independent Test**: Con un walkthrough cuyas entradas tienen textos conocidos,
-seleccionar cada una y verificar que se muestra su texto, con el formato
-preservado.
+recorrer la secuencia y verificar que en cada posición se muestra el texto de
+esa entrada, con el formato preservado.
 
 **Acceptance Scenarios**:
 
 1. **Given** una entrada con texto explicativo de varias líneas, **When** el
-   revisor la selecciona, **Then** ve ese texto con sus saltos de línea y su
-   formato preservados, sin los marcadores reservados del formato.
-2. **Given** una entrada sin texto, **When** el revisor la selecciona, **Then**
+   revisor está en ella, **Then** ve ese texto con sus saltos de línea y su
+   formato preservados, sin los marcadores reservados del formato, sin tener que
+   pedirlo.
+2. **Given** una entrada sin texto, **When** el revisor está en ella, **Then**
    se le indica que no tiene explicación, sin error.
+3. **Given** una explicación más larga que el espacio del panel, **When** el
+   revisor quiere leerla entera, **Then** puede abrirla como documento aparte,
+   con el mismo texto.
 
 ---
 
@@ -226,25 +241,26 @@ ofrece la salida correspondiente.
 ### User Story 6 - Revisar commit por commit (Priority: P3)
 
 El revisor abre un repositorio con una review iniciada en modo step y usa el
-mismo panel: la lista de commits en orden, cuál es el actual, cuáles tienen
-ediciones guardadas, y la misma navegación.
+mismo panel: cuál es el commit actual, la secuencia completa en orden a un gesto
+de distancia, cuáles tienen ediciones guardadas, y la misma navegación.
 
 **Why this priority**: El contrato ya expone este modo, así que el costo
 incremental es bajo; pero el walkthrough es lo que justifica la extensión y el
 modo step ya es usable desde la terminal. Es la primera historia que se recorta
 si hay que recortar.
 
-**Independent Test**: Con una review en modo step, verificar que el panel lista
-los commits en orden, marca el actual y distingue los que tienen ediciones
-guardadas.
+**Independent Test**: Con una review en modo step, verificar que el panel
+identifica el commit actual y que la secuencia completa se alcanza en orden, con
+los que tienen ediciones guardadas distinguidos.
 
 **Acceptance Scenarios**:
 
 1. **Given** una review en modo step de 9 commits con el cursor en el 2º y
    ediciones guardadas en el 1º, **When** el revisor abre el panel, **Then** ve
-   los 9 en orden, el 2º como actual y el 1º distinguido por tener ediciones.
-2. **Given** una review en modo step, **When** el revisor hace clic en un commit
-   de la lista, **Then** ve los cambios de ese commit.
+   el 2º como actual dentro de 9, y en el selector aparecen los 9 en orden con
+   el 1º distinguido por tener ediciones.
+2. **Given** una review en modo step, **When** el revisor abre un commit de la
+   secuencia, **Then** ve los cambios de ese commit.
 
 ---
 
@@ -294,13 +310,18 @@ guardadas.
 
 #### Panel
 
-- **FR-005**: La extensión MUST mostrar un panel dedicado que liste las entradas
-  de la secuencia de lectura en el orden de la secuencia.
-- **FR-006**: El panel MUST señalar cuál es la entrada actual.
-- **FR-007**: El panel MUST distinguir visualmente las entradas que el autor
-  marcó como esenciales.
-- **FR-008**: El panel MUST mostrar, separados de las entradas del walkthrough,
-  los archivos que cambian en la review y no tienen entrada.
+- **FR-005**: La extensión MUST mostrar un panel dedicado cuyo contenido
+  principal sea la entrada actual de la secuencia de lectura: su identificador,
+  sus marcas y, cuando la tenga, su explicación.
+- **FR-005a**: El panel MUST dar acceso a la secuencia completa, en el orden de
+  la secuencia, sin que esa lista ocupe el panel de forma permanente.
+- **FR-006**: El panel MUST señalar cuál es la entrada actual, tanto en su
+  contenido principal como en la lista de la secuencia.
+- **FR-007**: El panel MUST distinguir las entradas que el autor marcó como
+  esenciales, por un canal que no sea únicamente el color.
+- **FR-008**: El panel MUST dar acceso, separados de las entradas del
+  walkthrough, a los archivos que cambian en la review y no tienen entrada, e
+  indicar cuántos son.
 - **FR-009**: El panel MUST indicar la posición actual y el total de la
   secuencia.
 - **FR-010**: El panel MUST informar cuando el walkthrough degradó, junto con el
@@ -324,10 +345,16 @@ guardadas.
 
 #### Explicaciones
 
-- **FR-017**: Los revisores MUST poder leer el texto explicativo de una entrada
-  desde el editor, con su formato y sus saltos de línea preservados.
+- **FR-017**: El panel MUST mostrar el texto explicativo de la entrada actual sin
+  que el revisor tenga que pedirlo, con su formato y sus saltos de línea
+  preservados.
+- **FR-017a**: Los revisores MUST poder abrir ese mismo texto como documento
+  aparte, para leerlo completo sin la restricción de espacio del panel.
 - **FR-018**: La extensión MUST distinguir una entrada sin texto de un fallo al
   obtenerlo.
+- **FR-018a**: La extensión MUST pedir la explicación de a una entrada por vez y
+  sólo cuando corresponde mostrarla; nunca las de toda la secuencia por
+  adelantado.
 
 #### Sincronización
 
@@ -351,7 +378,7 @@ guardadas.
 
 - **FR-025**: La extensión MUST soportar reviews con walkthrough.
 - **FR-026**: La extensión MUST informar de forma inteligible el caso de una
-  review sin walkthrough, sin listar entradas.
+  review sin walkthrough, sin ofrecer una secuencia de lectura.
 - **FR-027**: La extensión SHOULD soportar reviews commit por commit,
   distinguiendo los pasos que tienen ediciones guardadas.
 
@@ -362,6 +389,9 @@ guardadas.
   corresponde lo que muestra cuando la ventana tiene más de una carpeta abierta.
 - **FR-030**: La extensión MUST permanecer utilizable mientras una invocación
   está en curso, indicando que está trabajando.
+- **FR-031**: El panel MUST adoptar el tema activo del editor —incluidos los de
+  alto contraste— y ser operable con el teclado, sin depender de que el revisor
+  use el mouse ni de que su tema sea uno en particular.
 
 ### Key Entities
 
@@ -379,8 +409,9 @@ guardadas.
 
 ### Measurable Outcomes
 
-- **SC-001**: Un revisor con una review activa ve las entradas del walkthrough
-  al abrir el repositorio, sin escribir ningún comando.
+- **SC-001**: Un revisor con una review activa ve, al abrir el repositorio y sin
+  escribir ningún comando, en qué entrada del walkthrough está y por qué el
+  autor la incluyó.
 - **SC-002**: Leer una review con walkthrough de principio a fin no requiere
   cambiar de ventana en ningún momento.
 - **SC-003**: Todos los estados en los que el panel no puede mostrar una review
@@ -396,6 +427,11 @@ guardadas.
   automáticamente en cada cambio.
 - **SC-008**: Un revisor que nunca usó el producto llega desde el panel a tener
   la CLI instalada sin salir del editor.
+- **SC-009**: Mostrar la entrada actual con su explicación cuesta a lo sumo una
+  invocación más que mostrarla sin ella, cualquiera sea el largo de la
+  secuencia.
+- **SC-010**: El panel se ve y se opera correctamente en los temas claro, oscuro
+  y de alto contraste, sin ajustes del revisor.
 
 ## Assumptions
 

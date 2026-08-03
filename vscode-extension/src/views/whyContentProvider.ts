@@ -25,9 +25,9 @@ function rawFromUri(uri: vscode.Uri): string {
 }
 
 /**
- * `status --why <raw>`, bajo demanda — nunca al construir el árbol
- * (contracts/cli-invocation.md). `present = false` (exit 0, cuerpo vacío) y un
- * fallo (exit != 0, `undefined`) son estados distintos (FR-018).
+ * `status --why <raw>` para **una** entrada — nunca para la secuencia entera
+ * (contracts/cli-invocation.md, FR-018a). `present = false` (exit 0, cuerpo
+ * vacío) y un fallo (exit != 0, `undefined`) son estados distintos (FR-018).
  */
 export async function fetchWhy(raw: string, options: InvokeOptions): Promise<Why | undefined> {
     const result = await invokeGitReview("status", ["--why", raw], options);

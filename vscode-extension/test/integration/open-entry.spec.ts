@@ -22,8 +22,13 @@ async function closeAllEditors(): Promise<void> {
     await vscode.commands.executeCommand("workbench.action.closeAllEditors");
 }
 
-/** `git.openChange` abre el editor de forma asíncrona; sondea hasta que haya un tab activo. */
-async function waitForActiveTab(timeoutMs = 5000): Promise<vscode.Tab | undefined> {
+/**
+ * `git.openChange` abre el editor de forma asíncrona; sondea hasta que haya un
+ * tab activo. El margen es generoso a propósito: el extension host se pone
+ * lento bajo carga (el runner lo reporta como "unresponsive") y con 5 s el
+ * sondeo se rendía antes de que el tab existiera, con el comando en curso.
+ */
+async function waitForActiveTab(timeoutMs = 20000): Promise<vscode.Tab | undefined> {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
         const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
@@ -80,7 +85,7 @@ describe("US2: saltar al archivo de una entrada", function () {
         assert.ok(onDisk.startsWith("// edited by test\n"), "la edición no llegó al working tree");
     });
 
-    it("el icono inline de diff recibe el nodo del arbol y abre el diff igual", async () => {
+    it("el boton del panel abre los cambios, sin argumento y cayendo en la entrada actual", async () => {
         const branch = "us2-inline-diff";
         createBranchWithChanges(repo, branch, {"src/inline.ts": "export const inline = 1;\n"});
         addWalkthrough(repo, branch, [{path: "src/inline.ts", why: "inline"}]);
@@ -89,17 +94,28 @@ describe("US2: saltar al archivo de una entrada", function () {
         startReview(repo, branch);
         const state = await api.refresh();
         assert.strictEqual(state.situation, "review");
-        const entry = state.entries[0];
+        assert.strictEqual(state.state?.position, 1);
 
-        // Forma EXACTA con la que VS Code invoca un `view/item/context`.
-        await vscode.commands.executeCommand("gitReview.openChange", {kind: "entry", entry});
+        // Forma EXACTA con la que el panel lo dispara: sin argumento
+        // (`resolveEntryArg` cae en la entrada de `state.position`).
+        await vscode.commands.executeCommand("gitReview.openChange");
         const tab = await waitForActiveTab();
-        assert.ok(tab, "el icono de diff no abrio ningun tab");
-        assert.ok(tab!.input instanceof vscode.TabInputTextDiff, `se esperaba un diff, no ${JSON.stringify(tab!.input)}`);
-        assert.strictEqual(
-            path.basename((tab!.input as vscode.TabInputTextDiff).modified.fsPath),
-            "inline.ts"
-        );
+        assert.ok(tab, "el boton de cambios no abrio ningun tab");
+
+        // Qué superficie exacta usa el host para mostrar los cambios lo decide
+        // la extensión de git, no nosotros (Decisión 10: se delega en
+        // `git.openChange`): para un archivo añadido puede ser el diff de dos
+        // lados o el blob del índice. Lo que la extensión sí garantiza es que
+        // esto NO es el archivo del working tree abierto como texto plano —
+        // ésa es la otra acción, `openEntry`.
+        const input = tab!.input;
+        const isPlainFileEditor = input instanceof vscode.TabInputText && input.uri.scheme === "file";
+        assert.ok(!isPlainFileEditor, `openChange no puede abrir el working tree como texto plano: ${JSON.stringify(input)}`);
+
+        const shownPath = input instanceof vscode.TabInputTextDiff
+            ? input.modified.fsPath
+            : (input as vscode.TabInputText).uri.fsPath;
+        assert.strictEqual(path.basename(shownPath), "inline.ts");
     });
 
     it("cae al diff cuando el archivo de la entrada no existe en el working tree (eliminado en el rango, AC3)", async () => {

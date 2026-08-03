@@ -24,7 +24,16 @@ export async function openEntry(rootUri: vscode.Uri, mode: ReviewMode, entry: En
     if (!isPathRef(entry.id)) {
         return;
     }
-    const fileUri = vscode.Uri.joinPath(rootUri, entry.id.display);
+    await openWorkingTreeFile(rootUri, entry.id.display);
+}
+
+/**
+ * Abre el archivo del working tree —que en una review *es* el PR aplicado— y
+ * cae al diff si no existe (eliminado en el rango). Lo usan por igual las
+ * entradas de la secuencia y los archivos sin cobertura.
+ */
+export async function openWorkingTreeFile(rootUri: vscode.Uri, display: string): Promise<void> {
+    const fileUri = vscode.Uri.joinPath(rootUri, display);
     try {
         await vscode.workspace.fs.stat(fileUri);
     } catch {

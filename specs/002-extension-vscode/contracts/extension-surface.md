@@ -22,61 +22,101 @@ un repositorio cualquiera no debe costar un proceso.
 
 Un view container propio en la Activity Bar, con una sola vista.
 
-| Campo        | Valor                       |
-|--------------|-----------------------------|
-| Container id | `gitReview`                 |
-| View id      | `gitReview.walkthrough`     |
-| Tipo         | `tree` (`TreeDataProvider`) |
+| Campo        | Valor                            |
+|--------------|----------------------------------|
+| Container id | `gitReview`                      |
+| View id      | `gitReview.walkthrough`          |
+| Tipo         | `webview` (`WebviewViewProvider`) |
 
-**`TreeView.description`**: `N/M` — posición actual y total derivado (FR-009).
-Cuando `total ≠ recorded`, se agrega la advertencia de que la base se movió
-(FR-011). En multi-root, incluye de qué repositorio se trata (FR-029).
+El tipo es interfaz pública igual que los ids: cambiarlo cambia qué
+contribuciones del manifiesto el host renderiza (ver *Estados vacíos*).
 
-**`TreeView.message`**: se usa para "trabajando…" mientras hay una invocación en
-vuelo (FR-030) y para la nota de walkthrough degradado con su motivo (FR-010).
-
-### Estructura del árbol
+### Estructura del panel
 
 ```text
-├── <entrada 1>            ← SequenceEntry, en orden de lectura
-├── <entrada 2>  ●         ← la actual: ThemeIcon distintivo
-├── <entrada 3>  ★         ← esencial: ThemeIcon distintivo (walk)
-│   …
-└── Sin cobertura          ← nodo colapsable, sólo si hay UncoveredFile
-    ├── <archivo a>
-    └── <archivo b>
+┌───────────────────────────────────────┐
+│ walk · review/feature/x        [2/7]  │ ← barra: modo, rama, posición/total
+├───────────────────────────────────────┤
+│ 02                             (key)  │ ← posición y marca de la entrada
+│ src/limiter/bucket.ts                 │ ← PathRef.display (o SHA en step)
+│                                       │
+│ <el why del autor, tal cual>          │ ← cuerpo (walk)
+│                                       │
+│ [ ver cambios ]                       │
+│ [ ‹ prev ]  [ next › ]                │
+├───────────────────────────────────────┤
+│ ir a entrada…      3 sin cobertura    │ ← pie: abren sendos QuickPick
+└───────────────────────────────────────┘
 ```
 
 Reglas normativas:
 
-- El orden es el de los registros `entry`; no se reordena (FR-005).
-- La entrada actual se marca por `position`, no por `id` (FR-006).
-- Esencial (walk) y con ediciones guardadas (step) se distinguen por ícono
-  **más** texto en `description`, nunca sólo por color (FR-007, FR-027).
-- Los archivos sin cobertura van agrupados y separados (FR-008).
-- El `label` de todo ítem es `PathRef.display` (FR-012).
-- En `mode = whole` sin walkthrough el árbol está vacío y lo explica un
-  `viewsWelcome` (FR-026); no es un error.
+- El contenido principal es la **entrada actual**, elegida por coincidencia de
+  `position`, nunca por `id` (FR-005, FR-006).
+- La barra lleva `N/M` — posición y total derivado (FR-009) —, la advertencia de
+  que la base se movió cuando `total ≠ recorded` (FR-011), y en multi-root de qué
+  repositorio se trata (FR-029).
+- La nota de walkthrough degradado con su motivo va en la barra (FR-010), y no
+  impide usar la review.
+- "trabajando…" mientras hay una invocación en vuelo (FR-030) va en la barra; no
+  reemplaza el contenido.
+- Esencial (walk) y con ediciones guardadas (step) se distinguen por **texto**
+  además del color (FR-007, FR-027, FR-031).
+- El identificador que se muestra es `PathRef.display` en walk y el SHA corto en
+  step (FR-012).
+- En `mode = whole` sin walkthrough el panel lo explica y no ofrece secuencia ni
+  navegación (FR-026); no es un error.
+- El *why* de la entrada actual es el cuerpo, con sus saltos de línea (FR-017).
+  Sus cuatro estados —en vuelo, presente, ausente, fallido— se muestran
+  distinguibles (FR-018, `data-model.md` § `PanelModel`).
+- Los dos accesos del pie son **separados**: la secuencia por un lado y los
+  archivos sin cobertura por el otro, nunca mezclados (FR-008).
 
-### Estados vacíos (`viewsWelcome`)
+### Estados vacíos
 
-Uno por valor de `Situation` distinto de `review`, seleccionado por
-`when: gitReview.situation == <valor>`. Cada uno con su texto y su botón, salvo
-`error` (Decisión 5).
+Uno por valor de `Situation` distinto de `review`, renderizado por el propio
+panel: párrafo explicativo y un botón, salvo `error` (Decisión 5). **No** son
+contribuciones `viewsWelcome` del manifiesto — el host sólo las renderiza en
+vistas de tipo `tree`, así que con esta vista no se mostrarían.
+
+| `situation`    | Botón                | Comando                       |
+|----------------|----------------------|-------------------------------|
+| `no-review`    | Cómo iniciar una review | (link a los README)        |
+| `out-of-range` | Cómo arreglarlo      | `gitReview.showOutOfRangeHelp` |
+| `cli-missing`  | Instalar la CLI      | `gitReview.installCli`        |
+| `cli-outdated` | Actualizar la CLI    | `gitReview.installCli`        |
+| `error`        | (ninguno)            | —                             |
+
+En `error`, `out-of-range`, `cli-missing` y `cli-outdated` el `stderr` de la CLI
+se muestra íntegro y tal cual (FR-024).
+
+### Protocolo con el webview
+
+El webview **no ejecuta comandos**. Postea mensajes `{type}` de un conjunto
+cerrado y el host decide qué hacer con cada uno; un `type` desconocido se
+ignora. La lista es exactamente: `openEntry`, `openChange`, `showWhy`, `next`,
+`prev`, `refresh`, `goToEntry`, `showUncovered`, `installCli`, `outOfRangeHelp`.
+
+En el sentido inverso, el host postea el `PanelModel` entero
+(`{type: "model", model}`) y el webview lo dibuja de cero. Todo el contenido
+variable —paths, *why*, `stderr`— se inserta con `textContent`; el HTML se sirve
+con CSP restrictiva y `nonce` para el único script inline (Decisión 4).
 
 ## Comandos
 
 Los ids son interfaz pública.
 
-| Command id             | Título            | Dónde aparece                       |
-|------------------------|-------------------|-------------------------------------|
-| `gitReview.openEntry`  | Abrir entrada     | clic en un ítem del árbol (default) |
-| `gitReview.openChange` | Ver cambios       | acción inline del ítem              |
-| `gitReview.showWhy`    | Ver el porqué     | acción inline del ítem, paleta      |
-| `gitReview.next`       | Entrada siguiente | título de la vista, paleta          |
-| `gitReview.prev`       | Entrada anterior  | título de la vista, paleta          |
-| `gitReview.refresh`    | Refrescar         | título de la vista, paleta          |
-| `gitReview.installCli` | Instalar la CLI   | botón del `viewsWelcome`            |
+| Command id                | Título                  | Dónde aparece                     |
+|---------------------------|-------------------------|-----------------------------------|
+| `gitReview.openEntry`     | Abrir entrada           | panel (identificador), paleta     |
+| `gitReview.openChange`    | Ver cambios             | panel (botón), paleta             |
+| `gitReview.showWhy`       | Ver el porqué           | panel (botón), paleta             |
+| `gitReview.next`          | Entrada siguiente       | panel, título de la vista, paleta |
+| `gitReview.prev`          | Entrada anterior        | panel, título de la vista, paleta |
+| `gitReview.goToEntry`     | Ir a una entrada        | panel (pie), paleta               |
+| `gitReview.showUncovered` | Archivos sin cobertura  | panel (pie), paleta               |
+| `gitReview.refresh`       | Refrescar               | título de la vista, paleta        |
+| `gitReview.installCli`    | Instalar la CLI         | panel (estados sin CLI), paleta   |
 
 Reglas normativas:
 
@@ -87,6 +127,14 @@ Reglas normativas:
   — no tiene sentido ofrecer "entrada siguiente" donde no hay review.
 - `gitReview.openEntry` abre el documento del working tree; con el archivo
   ausente (eliminado en el rango) cae en el diff (Decisión 10).
+- `gitReview.goToEntry` y `gitReview.showUncovered` abren un `QuickPick` con la
+  colección que les corresponde, en el orden de la CLI, y **abren** lo elegido
+  (FR-005a, FR-008). No mueven el cursor: la CLI no tiene un verbo para saltar a
+  una posición arbitraria, y sintetizarlo con `next`/`prev` sería inventar
+  comportamiento propio (FR-002, FR-016). Mover el cursor sigue siendo
+  `next`/`prev`.
+- `gitReview.goToEntry` marca la entrada actual dentro del `QuickPick` y arranca
+  posicionado en ella (FR-006).
 
 ## Context keys
 
@@ -118,7 +166,8 @@ del lado de la extensión que puede divergir de ella.
 | Modo      | Markdown, sólo lectura                 |
 
 El URI incorpora el path de la entrada; el contenido se resuelve en el momento,
-sin caché (ver `data-model.md`, `Why`).
+sin caché (ver `data-model.md`, `Why`). Es la superficie de FR-017a: el mismo
+texto que el panel muestra en crudo, acá renderizado y sin límite de espacio.
 
 ## Motor
 

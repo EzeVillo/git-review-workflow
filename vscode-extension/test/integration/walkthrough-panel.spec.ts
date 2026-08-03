@@ -2,6 +2,7 @@ import * as assert from "node:assert";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {PathRef} from "../../src/cli/unquote";
+import {entryPickLabel} from "../../src/views/panelModel";
 import {getTestApi} from "./helpers/extensionApi";
 import {
     abortReview,
@@ -18,7 +19,7 @@ function displayOf(id: string | PathRef): string {
     return typeof id === "string" ? id : id.display;
 }
 
-describe("US1: panel de lectura del walkthrough", function () {
+describe("US1: ver donde estoy en el walkthrough", function () {
     this.timeout(60000);
     const repo = sharedFixtureRepo();
 
@@ -76,30 +77,45 @@ describe("US1: panel de lectura del walkthrough", function () {
         const essentialFlags = state.entries.map((e) => e.essential);
         assert.deepStrictEqual(essentialFlags, [false, false, true, false, false, false, false]);
 
-        const treeProvider = api.getTreeProvider();
-        const nodes = treeProvider.getChildren();
-        assert.strictEqual(nodes.length, 8, "7 entradas + el grupo 'Sin cobertura'");
+        // El panel: la entrada actual es el contenido, la secuencia y lo no
+        // cubierto son accesos separados con su cuenta (FR-005, FR-005a, FR-008).
+        const model = await api.getPanelModel();
+        assert.strictEqual(model.situation, "review");
+        assert.strictEqual(model.mode, "walk");
+        assert.strictEqual(model.position, 2);
+        assert.strictEqual(model.total, 7);
+        assert.strictEqual(model.baseMoved, false);
+        assert.strictEqual(model.degraded, false);
+        assert.deepStrictEqual(model.current, {
+            position: 2,
+            display: "src/b.ts",
+            essential: false,
+            banked: false,
+        });
+        assert.strictEqual(model.entryCount, 7);
+        assert.strictEqual(model.uncoveredCount, 2);
+        assert.deepStrictEqual(model.why, {state: "present", text: "explica b\n"});
 
-        const currentItem = treeProvider.getTreeItem({kind: "entry", entry: state.entries[1]});
-        assert.strictEqual(currentItem.label, "src/b.ts");
+        // Lo que alimenta el QuickPick de la secuencia: orden de la CLI, la
+        // actual y la esencial marcadas con texto.
+        const picks = state.entries.map((entry) => entryPickLabel(entry, state.state?.position));
+        assert.deepStrictEqual(picks.map((p) => p.label), [
+            "01  src/a.ts",
+            "02  src/b.ts",
+            "03  src/c.ts",
+            "04  src/d.ts",
+            "05  src/e.ts",
+            "06  src/f.ts",
+            "07  src/g.ts",
+        ]);
+        assert.strictEqual(picks[1].description, "actual");
+        assert.strictEqual(picks[2].description, "esencial");
 
-        const essentialItem = treeProvider.getTreeItem({kind: "entry", entry: state.entries[2]});
-        assert.strictEqual(essentialItem.description, "esencial");
-
-        const uncoveredGroup = nodes[nodes.length - 1];
-        assert.strictEqual(uncoveredGroup.kind, "uncoveredGroup");
-        const uncoveredChildren = treeProvider.getChildren(uncoveredGroup);
-        assert.strictEqual(uncoveredChildren.length, 2);
-        const uncoveredNames = uncoveredChildren
-            .filter((n): n is Extract<typeof n, {
-                kind: "uncoveredFile"
-            }> => n.kind === "uncoveredFile")
-            .map((n) => n.file.id.display)
-            .sort();
+        const uncoveredNames = state.uncovered.map((u) => u.id.display).sort();
         assert.deepStrictEqual(uncoveredNames, ["src/uncovered1.ts", "src/uncovered2.ts"]);
     });
 
-    it("mode = whole sin walkthrough: árbol vacío, sin listar entradas y sin error (US1 escenario 3)", async () => {
+    it("mode = whole sin walkthrough: sin secuencia ni entrada actual, y sin error (US1 escenario 3)", async () => {
         const branch = "us1-whole";
         createBranchWithChanges(repo, branch, {"src/x.ts": "x\n"});
         startReview(repo, branch, ["--no-walk"]);
@@ -112,8 +128,16 @@ describe("US1: panel de lectura del walkthrough", function () {
         assert.strictEqual(state.state?.walkthrough, "none");
         assert.strictEqual(state.entries.length, 0);
 
-        const nodes = api.getTreeProvider().getChildren();
-        assert.strictEqual(nodes.length, 0);
+        // Sin walkthrough el panel no ofrece secuencia ni navegación (FR-026),
+        // y no es un error.
+        const model = await api.getPanelModel();
+        assert.strictEqual(model.situation, "review");
+        assert.strictEqual(model.mode, "whole");
+        assert.strictEqual(model.entryCount, 0);
+        assert.strictEqual(model.current, undefined);
+        assert.strictEqual(model.why, undefined);
+        assert.strictEqual(model.degraded, false);
+        assert.strictEqual(model.stderr, undefined);
     });
 
     it("walkthrough degradado: la review sigue usable y se informa el motivo (US1 escenario 4)", async () => {
@@ -142,5 +166,13 @@ describe("US1: panel de lectura del walkthrough", function () {
         assert.strictEqual(state.entries.length, 0);
         assert.strictEqual(state.uncovered.length, 1);
         assert.strictEqual(state.uncovered[0].id.display, "src/other.ts");
+
+        // Degradado se informa (FR-010) y la review sigue usable: los archivos
+        // del rango siguen alcanzables desde el panel.
+        const model = await api.getPanelModel();
+        assert.strictEqual(model.situation, "review");
+        assert.strictEqual(model.degraded, true);
+        assert.strictEqual(model.uncoveredCount, 1);
+        assert.strictEqual(model.entryCount, 0);
     });
 });

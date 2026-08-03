@@ -62,11 +62,16 @@ git review start <rama-del-pr>
 
 **Verificar en el panel**:
 
-- Lista las entradas en el orden del walkthrough, no alfabético.
-- La primera aparece como actual; la marcada con `> key` se distingue.
-- El subtítulo de la vista muestra `1/N`.
-- Los archivos sin entrada aparecen agrupados aparte.
-- Un clic en una entrada abre el archivo con los cambios del PR, y editarlo
+- Muestra la primera entrada como actual, con su path legible y su *why* debajo,
+  sin haber hecho nada más.
+- La barra superior dice `walk`, la rama, y `1/N`.
+- Si esa entrada está marcada con `> key`, el panel lo dice con texto, no sólo
+  con color.
+- *Ir a entrada…* abre un selector con las N entradas **en el orden del
+  walkthrough**, no alfabético, con la actual marcada y preseleccionada.
+- *Sin cobertura* es un acceso aparte, con la cuenta correcta, y no aparece
+  mezclado con la secuencia.
+- Abrir una entrada muestra el archivo con los cambios del PR, y editarlo
   modifica el working tree.
 
 **Contrastar con la CLI** — el panel no puede decir otra cosa que esto:
@@ -77,9 +82,13 @@ git review status --porcelain
 
 ### 2. El porqué (US3 — P2)
 
-Con el panel poblado: apuntar (hover) a una entrada muestra su explicación;
-la acción *Ver el porqué* la abre completa, con sus saltos de línea. Una entrada
-sin cuerpo lo dice, y eso no es un error.
+Con el panel poblado: el *why* de la entrada actual ya está a la vista, con sus
+saltos de línea, sin pedirlo. *Ver el porqué* lo abre como documento aparte, con
+el mismo texto. Una entrada sin cuerpo lo dice, y eso no es un error; si la
+invocación falla, se ve distinto de "no tiene explicación".
+
+Al avanzar, el *why* tiene que ser el de la entrada nueva — no el anterior
+quedado, ni uno en blanco permanente.
 
 **Contrastar**:
 
@@ -120,7 +129,7 @@ acción que corresponde. "Sin review" **no** puede presentarse como falla.
 ### 5. Sin walkthrough y walkthrough degradado (US1 — escenarios 3 y 4)
 
 - `git review start --whole <rama>` → el panel dice que no hay walkthrough, sin
-  listar entradas y sin error.
+  ofrecer secuencia ni navegación, y sin error.
 - Una review cuyo walkthrough no intersecta el rango → el panel informa que
   degradó y por qué, y la review sigue usable.
 
@@ -130,15 +139,26 @@ acción que corresponde. "Sin review" **no** puede presentarse como falla.
 git review start --step <rama>
 ```
 
-El panel lista los commits en orden, marca el actual y distingue los que tienen
-ediciones guardadas.
+El panel muestra el commit actual con su posición; *Ir a una entrada* lista los
+commits en orden y distingue los que tienen ediciones guardadas. No hay *why* en
+este modo, y el panel no deja un hueco donde iría.
 
 ### 7. Paths raros (US2 — escenario 2)
 
 Un walkthrough con entradas cuyos paths tengan espacios y caracteres no ASCII.
-Los ítems tienen que mostrarse legibles —sin comillas ni escapes crudos— y el
-clic tiene que abrir el archivo correcto. Es la prueba end-to-end de
-`PathRef` (`data-model.md`).
+El panel y el selector tienen que mostrarlos legibles —sin comillas ni escapes
+crudos— y abrirlos tiene que llevar al archivo correcto. Es la prueba end-to-end
+de `PathRef` (`data-model.md`).
+
+### 8. Tema y teclado (US1 — escenario 5, FR-031/SC-010)
+
+Con el panel poblado, cambiar de tema (*Preferences: Color Theme*) a uno claro,
+uno oscuro y **uno de alto contraste**: el panel tiene que seguir legible en los
+tres, sin colores que se pierdan contra el fondo.
+
+Después, sin tocar el mouse: `Tab` tiene que recorrer los botones del panel en
+orden y `Enter`/`Espacio` activarlos. Y toda marca (`key`, ediciones guardadas)
+tiene que ser legible como texto, no sólo como color.
 
 ## Suites automatizadas
 

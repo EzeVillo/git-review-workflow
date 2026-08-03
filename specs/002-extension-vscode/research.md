@@ -108,50 +108,83 @@ Windows.
 
 ---
 
-## Decisión 4 — La vista es un `TreeView` nativo, no un webview
+## Decisión 4 — La vista es un `WebviewView`, con la secuencia en un `QuickPick`
 
-**Decisión**: un `TreeDataProvider` en un view container propio de la Activity
-Bar. Nada de HTML propio.
+**Decisión**: un `WebviewViewProvider` en un view container propio de la Activity
+Bar, que muestra **una entrada por vez** —la actual— con su *why* como cuerpo. La
+secuencia completa y los archivos sin cobertura no se dibujan en el panel: se
+alcanzan por `QuickPick`, la superficie nativa del editor para elegir de una
+lista.
 
-**Rationale**: es el mismo razonamiento que la regla "espejar los idioms de
-git" del proyecto. Un `TreeView` hereda gratis, y de forma correcta, todo lo que
-un webview obligaría a reimplementar mal: el tema del usuario (incluidos los de
-alto contraste), la navegación por teclado y sus keybindings, los lectores de
-pantalla, el filtrado con `type-to-search`, los `inline actions` en hover, el
-menú contextual y la integración con la paleta de comandos. Un panel de review
-es una lista ordenada de ítems con un ícono y un estado — la forma canónica de
-un árbol.
+**Rationale**: la forma canónica de un árbol es una lista de ítems donde el ítem
+*es* la información. Acá no lo es: el ítem es un path, y lo que el walkthrough
+aporta —el *why*— no entra en un `TreeItem`. Un árbol lo empuja a un hover o a un
+documento aparte, y deja el panel gastando su ancho en repetir paths que el
+revisor ya puede ver en el explorador. Dedicar el panel a la entrada actual
+invierte esa proporción: el contenido del autor pasa a ser el cuerpo (FR-017), y
+la lista —que se consulta de a ratos, no continuamente— pasa a un `QuickPick`,
+que además da búsqueda incremental sobre cientos de entradas (el edge case de la
+review grande) sin ocupar nada mientras no se usa.
 
 Consecuencias directas sobre requisitos concretos:
 
-- FR-006 (entrada actual) y FR-007 (esenciales) se resuelven con `ThemeIcon` +
-  `iconPath`/`description`, no con CSS: se ven bien en cualquier tema y no
-  dependen del color como único canal.
-- FR-009 (posición y total) va en `TreeView.description` — el subtítulo del
-  panel, exactamente donde el usuario espera un contador.
-- FR-008 (archivos sin cobertura) es un nodo colapsable hermano, no una segunda
-  vista.
+- FR-005 (entrada actual como contenido principal) y FR-017 (*why* sin pedirlo)
+  sólo son satisfacibles con layout propio: son la razón del cambio.
+- FR-005a/FR-008 (secuencia y sin cobertura accesibles pero no permanentes) son
+  dos `QuickPick`, uno por colección — separados, que es lo que FR-008 pide.
+- FR-009 (posición y total) va en la barra superior del propio panel.
 
-**Alternativa considerada**: un webview con control visual total. Se descartó:
-el costo es re-implementar accesibilidad y theming, y el beneficio (layout
-libre) no compra nada que esta feature necesite. Se deja anotado que un webview
-sí sería el camino si en el futuro se quisiera mostrar el diff dentro del panel
-— algo que el spec excluye explícitamente ("No es una interfaz de diff propia").
+**Esta decisión revierte la original**, que era un `TreeDataProvider` sin HTML
+propio, y se registra el motivo porque el costo que aquella evitaba es real y
+ahora hay que pagarlo a mano: un webview no hereda el tema, la navegación por
+teclado ni el foco. Se paga así, y por eso el spec suma FR-031/SC-010 en vez de
+dejarlo implícito:
+
+- **Tema**: nada de colores literales. Todo sale de las variables CSS que el host
+  inyecta (`--vscode-foreground`, `--vscode-panel-border`,
+  `--vscode-descriptionForeground`, `--vscode-textLink-foreground`,
+  `--vscode-button-*`, `--vscode-editor-font-family`), que ya contemplan los
+  temas de alto contraste. Un color hardcodeado es un bug de tema.
+- **Teclado y foco**: los controles son `<button>` reales en orden de tab, no
+  `<div>` con `onclick`; los marcadores (`key`, ediciones guardadas) van con
+  texto además de color (FR-007).
+- **Seguridad**: `Content-Security-Policy` restrictiva con `nonce` para el único
+  script inline, sin origen remoto de ningún tipo. Todo el contenido variable
+  —paths, *why*, `stderr`— se inserta con `textContent`, nunca con `innerHTML`.
+
+**Alternativa considerada**: mantener el árbol y sumarle un webview aparte. Se
+descartó: son dos superficies que muestran lo mismo y hay que mantener
+sincronizadas, y el árbol seguiría ocupando el ancho que el rediseño quiere
+liberar.
+
+**Anotado para más adelante**: el mismo view-model puede montarse en un
+`WebviewPanel` del área del editor, donde hay ancho para el *why* largo. No entra
+acá; lo que esta decisión garantiza es que el modelo (`panelModel.ts`) no sepa
+nada del host que lo dibuja, así que agregarlo después no reabre el diseño.
 
 ---
 
-## Decisión 5 — Los estados vacíos son `viewsWelcome`, no ítems del árbol
+## Decisión 5 — Los estados vacíos los dibuja el propio panel, con la forma de un `viewsWelcome`
 
 **Decisión**: los cinco estados de la Historia 5 (sin review, sin CLI, CLI
-vieja, cursor fuera de rango, error/no-repo) se muestran con contribuciones
-`viewsWelcome` del manifiesto, seleccionadas por `when` sobre una context key
-`gitReview.situation`.
+vieja, cursor fuera de rango, error/no-repo) se renderizan dentro del webview,
+manteniendo exactamente la forma que tenían como `viewsWelcome`: un párrafo
+explicativo y, salvo `error`, un botón que ejecuta la acción.
 
-**Rationale**: es el mecanismo que VS Code inventó para esto y el que usan sus
-propias vistas ("no hay carpeta abierta → *Open Folder*"). Da lo que FR-021 y
-FR-023 piden —texto explicativo *más un botón que ejecuta la acción*— sin
-inventar un widget, y el usuario ya lo reconoce como "acá no hay nada, y esto es
-normal", que es literalmente lo que FR-004 exige para el caso "no hay review".
+**Rationale**: no es una preferencia, es una restricción del host —
+**`viewsWelcome` sólo se renderiza en vistas de tipo `tree`**. Al cambiar la
+vista a `webview` (Decisión 4) esas contribuciones dejarían de mostrarse: no
+fallan ruidosamente, simplemente no aparecen, y el revisor sin CLI se queda
+mirando un panel vacío. Por eso se sacan del manifiesto en lugar de dejarlas
+como código muerto que aparenta cubrir el caso.
+
+Lo que se conserva es lo que importaba de la decisión original: que el mapeo
+`situation` → texto + acción sea uno a uno, que "no hay review" se vea como
+estado normal y no como falla (FR-004), y que el botón sea el mismo comando que
+ejecutaba la bienvenida (`gitReview.installCli`,
+`gitReview.showOutOfRangeHelp`). Lo que se pierde es la familiaridad del widget
+nativo; se compensa reproduciendo su forma —texto centrado, botón de ancho
+completo con `--vscode-button-*`— en vez de inventar una propia.
 
 El mapeo queda uno a uno:
 
@@ -170,24 +203,33 @@ escenario 5 ("un diagnóstico que no promete una solución que no existe").
 
 ---
 
-## Decisión 6 — El *why* se sirve por `TextDocumentContentProvider`, y en hover por
-`resolveTreeItem`
+## Decisión 6 — El *why* se muestra en el panel, y se lee completo por `TextDocumentContentProvider`
 
-**Decisión**: dos superficies para el mismo dato, ambas perezosas:
+**Decisión**: dos superficies para el mismo dato, las dos alimentadas por una
+invocación de a una entrada por vez:
 
-1. **Hover**: `TreeDataProvider.resolveTreeItem` devuelve un `MarkdownString`
-   con el *why*. VS Code sólo lo llama cuando el usuario apunta a la entrada.
+1. **En el panel**: el *why* de la **entrada actual** es el cuerpo de la vista
+   (FR-017). Se pide una sola vez por refresco, para una sola entrada, y se
+   muestra como texto con `white-space: pre-wrap` — no se pasa por un renderer
+   de Markdown, porque meter un parser en el webview sería superficie nueva para
+   un panel angosto donde el texto plano ya preserva lo que FR-017 exige (los
+   saltos de línea y el formato del autor, tal cual los escribió).
 2. **Lectura completa**: un `TextDocumentContentProvider` con esquema propio
    (`git-review-why:`) que expone el texto como documento Markdown de sólo
-   lectura, abierto con la vista previa nativa.
+   lectura, abierto con la vista previa nativa (FR-017a). Es la superficie donde
+   el Markdown sí se renderiza, y la que sirve cuando el *why* no entra en el
+   panel.
 
-**Rationale**: preserva el formato y los saltos de línea (FR-017) sin tocarlos,
-porque el payload de `status --why` es Markdown y el host ya sabe renderizarlo.
-Que sea perezoso no es un detalle de performance sino una obligación del
-contrato: la feature 001 separó el *why* de la secuencia (su FR-014) justamente
-para que listar el recorrido no transfiera prosa, y SC-002 acota la vista
-completa a 3 invocaciones. Pedir el *why* de las N entradas al construir el
-árbol rompería las dos cosas.
+**Rationale**: que sea de a una no es un detalle de performance sino una
+obligación del contrato: la feature 001 separó el *why* de la secuencia (su
+FR-014) justamente para que listar el recorrido no transfiera prosa, y su SC-002
+acota la vista completa a 3 invocaciones. Mostrar el *why* de la actual cuesta
+**una** invocación por refresco, independiente del largo de la secuencia — que
+es exactamente lo que mide SC-009, y lo que FR-018a prohíbe convertir en N.
+
+**Reemplaza al hover** de `resolveTreeItem` de la decisión original, que
+desaparece con el árbol. No es una pérdida: el hover mostraba bajo demanda lo
+que ahora está a la vista sin pedirlo.
 
 FR-018 (distinguir "sin texto" de "falló") sale del contrato tal cual: cuerpo
 vacío con exit `0` es "no tiene explicación"; exit `1` es fallo. Se muestran
@@ -310,16 +352,33 @@ comodidad sino la única superficie que tiene contenido para mostrar.
 - **Unitarios** (`mocha` + `node:assert`), sin host de VS Code, sobre las
   funciones puras: parser porcelain (incluida la aridad variable y el descarte
   de etiquetas/campos desconocidos, que es la prueba de FR-003/SC-006),
-  des-citado de paths, comparación de versiones, mapeo de exit code a situación.
+  des-citado de paths, comparación de versiones, mapeo de exit code a situación,
+  y la derivación del view-model del panel (`panelModel.ts`).
 - **Integración** (`@vscode/test-electron`), levantando un VS Code real sobre
   repos fixture construidos con la CLI del propio repositorio.
 
 **Rationale**: la lógica que puede romperse en silencio es toda pura y no
 necesita un editor para probarse — que es lo que la hace barata de correr en la
 matriz de tres SO que SC-007 exige. La integración cubre lo que los unitarios no
-pueden afirmar (que el árbol lista lo que debe, que el comando mueve el cursor
+pueden afirmar (que el panel muestra lo que debe, que el comando mueve el cursor
 de verdad) y por eso construye sus fixtures **con la CLI real**: un fixture de
 salida porcelain escrita a mano probaría el parser contra sí mismo.
+
+**Dónde se corta la integración**: en el view-model, no en el DOM del webview.
+Un webview corre en su propio contexto y no hay API pública para inspeccionarlo
+desde el host, así que la integración afirma sobre el `PanelModel` que se le
+postea (expuesto por la API de test) y sobre los efectos reales en git. Esto es
+lo mismo que ya pasaba con el `TreeView` —tampoco tenía API de lectura—, por eso
+la API de test existía desde antes.
+
+Lo que queda del otro lado de ese corte —el HTML— no se deja sin red por eso.
+Vive en `panelHtml.ts`, una función pura sin `vscode`, y eso habilita dos cosas
+baratas: unitarios sobre sus propiedades **estructurales** (la CSP con su
+`nonce`, cero colores literales, cero `innerHTML`, controles que son `<button>`)
+y montarlo en un navegador con un `PanelModel` de ejemplo para mirar el layout.
+Cómo se ve exactamente sigue siendo validación a ojo (`quickstart.md` §8); lo
+que puede romperse en silencio —un color hardcodeado que desaparece en alto
+contraste, un script que la CSP bloquea— no.
 
 El proyecto ya tiene la matriz ubuntu/macOS/windows en `.github/workflows/ci.yml`
 para shellcheck y bats; se agrega un job análogo. En Ubuntu la integración
@@ -336,11 +395,11 @@ checkout, que además ejercita ese ajuste en CI en vez de dejarlo sin cobertura.
 **Decisión**: `engines.vscode: ^1.75.0` (enero 2023).
 
 **Rationale**: es el piso que hace estables a todas las APIs que las decisiones
-anteriores necesitan —`resolveTreeItem` (1.68), `viewsWelcome` con `when`
-(1.44+), `TreeView.message`/`description` (1.42+), la API v1 de `vscode.git`—
-con margen de varias versiones sobre la más nueva de ellas. Bajar de ahí
-obligaría a rutas alternativas para el hover perezoso (Decisión 6); subir no
-compra ninguna API que se use, y sólo dejaría afuera instalaciones ancladas.
+anteriores necesitan —`WebviewViewProvider` y `Webview.cspSource` (1.50),
+`QuickPick` (estable desde siempre), `TabInputWebview` para los tests (1.67), la
+API v1 de `vscode.git`— con margen de varias versiones sobre la más nueva de
+ellas. Subir no compra ninguna API que se use, y sólo dejaría afuera
+instalaciones ancladas.
 
 ---
 

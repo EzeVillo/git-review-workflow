@@ -1,10 +1,11 @@
 # git review — VS Code extension
 
-Review a [git-review-workflow](../README.md) pull request as a native
-walkthrough panel: the reading order from `git review start`'s walkthrough,
-the current entry, the essential ones, the files the walkthrough doesn't
-cover, and commands to jump to a file, advance/go back, and read the *why* —
-all without leaving the editor.
+Review a [git-review-workflow](../README.md) pull request from a panel that
+shows where you are: the current entry of the walkthrough, its position in the
+reading order the author chose, whether they marked it essential, and the *why*
+they wrote for it. The full sequence and the files the walkthrough doesn't cover
+are one keystroke away in a quick pick, and commands jump to the file, advance
+and go back — all without leaving the editor.
 
 The extension never derives review state on its own: everything it shows
 comes from re-invoking `git review status --porcelain` / `--why` and reading

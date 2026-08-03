@@ -292,10 +292,70 @@ orden, marca el actual y distingue los que tienen ediciones guardadas.
 - [X] T053 Verificar que `gitReview.path` resuelve el shim de npm en Windows cuando `git` no
   descubre el dispatcher desde el extension host (research.md Decisión 3, riesgo a validar en el
   primer entregable ejecutable, no al final)
-- [X] T054 Correr manualmente los 7 escenarios de `quickstart.md` de punta a punta
+- [X] T054 Correr manualmente los escenarios de `quickstart.md` de punta a punta
 - [X] T055 Revisión manual del código contra la tabla de prohibiciones de
   `contracts/cli-invocation.md` para confirmar SC-005 (sin lecturas de config/refs/ramas, sin
   invocar verbos fuera de la lista cerrada, sin re-citar `PathRef.display`)
+
+---
+
+## Phase 10: Rediseño del panel — la entrada actual como contenido
+
+**Purpose**: reemplazar el árbol por un panel dedicado a la entrada actual, con el *why* como cuerpo
+y la secuencia en un `QuickPick` (spec FR-005/FR-005a/FR-017/FR-031, `research.md` Decisión 4
+revisada). No cambia el origen del estado ni la superficie de invocación: sólo cómo se muestra.
+
+**⚠️ Nota sobre las fases anteriores**: T019-T023, T026, T030, T045, T046 y T048 quedan
+**superseded** por esta fase — describen el `TreeDataProvider` y las contribuciones `viewsWelcome`
+que este rediseño elimina. Se dejan marcadas como estaban porque describen lo que efectivamente se
+construyó; lo que las reemplaza es T056-T069.
+
+- [X] T056 `vscode-extension/src/views/panelModel.ts` — `PanelModel` plano y serializable derivado de
+  `ReviewState` + `busy` + `repoLabel` + `Why` (data-model.md § `PanelModel`): entrada actual por
+  `position`, `baseMoved` = `total ≠ recorded`, `degraded`, contadores de secuencia y de no
+  cubiertos, `why` con sus cuatro estados. Sin `import` de `vscode` — es la unidad testeable
+- [X] T057 [P] `vscode-extension/test/unit/panelModel.spec.ts` — unitarios de T056: los tres modos,
+  `current` ausente cuando ninguna entrada coincide con `position`, `baseMoved`, los cuatro estados
+  de `why`, y que `PathRef.raw` no cruza al modelo
+- [X] T058 `vscode-extension/src/views/walkthroughViewProvider.ts` — `WebviewViewProvider`: HTML con
+  CSP + `nonce`, todo el color desde variables `--vscode-*`, controles `<button>` reales en orden de
+  tab, contenido variable por `textContent` (research.md Decisión 4)
+- [X] T059 `walkthroughViewProvider.ts` — barra superior: modo, rama, `N/M` (FR-009), advertencia de
+  base movida (FR-011), nota de walkthrough degradado (FR-010), "trabajando…" (FR-030) y el
+  repositorio en multi-root (FR-029)
+- [X] T060 `walkthroughViewProvider.ts` — cuerpo de la entrada actual: posición, identificador
+  (`PathRef.display` en walk, SHA en step), marca esencial/con-ediciones **con texto** (FR-007,
+  FR-027, FR-031) y el *why* con saltos de línea preservados (FR-017)
+- [X] T061 `walkthroughViewProvider.ts` — los cinco estados vacíos de la Historia 5 renderizados en
+  el panel, con su botón salvo `error` y el `stderr` preservado (FR-024, research.md Decisión 5); y
+  el caso `mode = whole` sin walkthrough (FR-026)
+- [X] T062 `walkthroughViewProvider.ts` — protocolo de mensajes: conjunto cerrado de `type` del
+  webview al host, `type` desconocido ignorado; el host postea el `PanelModel` entero
+  (contracts/extension-surface.md § Protocolo)
+- [X] T063 `vscode-extension/src/commands/pickEntry.ts` — `gitReview.goToEntry`: `QuickPick` de la
+  secuencia en el orden de la CLI, con la actual marcada y preseleccionada, que **abre** lo elegido
+  sin mover el cursor (FR-005a; la CLI no tiene verbo de salto — FR-002/FR-016)
+- [X] T064 `pickEntry.ts` — `gitReview.showUncovered`: `QuickPick` separado con los archivos sin
+  entrada, que abre el elegido (FR-008)
+- [X] T065 `vscode-extension/src/extension.ts` — registra el `WebviewViewProvider` en lugar del
+  `TreeView`, arma el `PanelModel` en cada cambio de estado/busy, y resuelve el *why* de **la
+  entrada actual** por separado descartando respuestas de una entrada que ya no lo es (FR-018a,
+  SC-009)
+- [X] T066 `vscode-extension/package.json` — `views` con `"type": "webview"`, comandos
+  `gitReview.goToEntry`/`gitReview.showUncovered`, `viewsWelcome` y `view/item/context` eliminados
+  (no se renderizan en una vista webview — research.md Decisión 5)
+- [X] T067 Eliminar `vscode-extension/src/views/walkthroughTreeProvider.ts` y migrar las suites de
+  integración de `getTreeProvider()` a `getPanelModel()` (`walkthrough-panel.spec.ts`,
+  `step-mode.spec.ts`, `why.spec.ts`)
+- [X] T068 [P] `vscode-extension/test/unit/panelHtml.spec.ts` — el HTML sale de `panelHtml.ts`
+  (función pura, sin `vscode`) y se afirman sus propiedades estructurales: CSP con `nonce` y sin
+  `unsafe-inline`, un solo script y un solo style, **cero** colores literales (todo `--vscode-*`),
+  nada de `innerHTML`, controles `<button>` sin handlers en atributos
+- [ ] T069 Validar a ojo en el Extension Development Host `quickstart.md` §8 (tema claro/oscuro/alto
+  contraste y recorrido por teclado). Parcialmente cubierto: el layout de los tres estados (walk,
+  step, sin CLI) se verificó renderizando `panelHtml` en un navegador con las variables del tema
+  oscuro, y T068 cubre por test que ningún color esté hardcodeado. Falta lo que sólo se ve en el
+  host real: alto contraste de verdad y el recorrido con `Tab`
 
 ---
 
@@ -309,6 +369,9 @@ orden, marca el actual y distingue los que tienen ediciones guardadas.
   paralelo o en orden de prioridad (US1/US2 → US3/US4/US5 → US6).
 - **Polish (Phase 9)**: depende de las historias que se quieran dar por terminadas antes de
   publicar (T054/T055 recorren todo lo implementado).
+- **Rediseño (Phase 10)**: depende de las seis historias ya construidas — reemplaza su capa de
+  presentación, no su lógica. Dentro de la fase: T056 antes que T058-T062 y T065 (todos consumen el
+  `PanelModel`); T066 con T058; T067 al final, cuando ya no queda nada apuntando al árbol.
 
 ### User Story Dependencies
 

@@ -84,6 +84,15 @@ describe("US5: entender por qué no hay nada que mostrar", function () {
         assert.strictEqual(state.situation, "error");
         assert.ok(state.stderr && state.stderr.length > 0, "el error tendría que traer el stderr de la CLI");
 
+        // El diagnóstico de la CLI llega al panel tal cual (FR-024), y el panel
+        // no muestra nada de una review que no existe.
+        const model = await api.getPanelModel();
+        assert.strictEqual(model.situation, "error");
+        assert.strictEqual(model.stderr, state.stderr);
+        assert.strictEqual(model.mode, undefined);
+        assert.strictEqual(model.current, undefined);
+        assert.strictEqual(model.entryCount, 0);
+
         git(["checkout", "main"], repo.dir);
         git(["branch", "-D", "review/hand-made"], repo.dir);
     });

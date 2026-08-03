@@ -2,6 +2,7 @@ import * as assert from "node:assert";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import {entryPickLabel} from "../../src/views/panelModel";
 import {getTestApi} from "./helpers/extensionApi";
 import {
     abortReview,
@@ -57,11 +58,23 @@ describe("US6: revisar commit por commit", function () {
         const treeOrder = state.entries.map((e) => e.id as string);
         assert.deepStrictEqual(treeOrder, cliOrder);
 
-        const treeProvider = api.getTreeProvider();
-        const bankedItem = treeProvider.getTreeItem({kind: "entry", entry: state.entries[0]});
-        assert.strictEqual(bankedItem.description, "con ediciones guardadas");
-        const currentItem = treeProvider.getTreeItem({kind: "entry", entry: state.entries[1]});
-        assert.notStrictEqual(currentItem.description, "con ediciones guardadas");
+        // El panel muestra el commit actual dentro de la secuencia, y no pide
+        // explicaciones: el modo step no las tiene.
+        const model = await api.getPanelModel();
+        assert.strictEqual(model.mode, "step");
+        assert.strictEqual(model.position, 2);
+        assert.strictEqual(model.total, 9);
+        assert.strictEqual(model.entryCount, 9);
+        assert.strictEqual(model.uncoveredCount, 0);
+        assert.strictEqual(model.current?.display, state.entries[1].id as string);
+        assert.strictEqual(model.current?.banked, false);
+        assert.strictEqual(model.why, undefined);
+
+        // Y en el selector, el commit con ediciones guardadas se distingue con texto.
+        const picks = state.entries.map((entry) => entryPickLabel(entry, state.state?.position));
+        assert.strictEqual(picks[0].description, "con ediciones guardadas");
+        assert.strictEqual(picks[1].description, "actual");
+        assert.strictEqual(picks[0].label, `01  ${state.entries[0].id as string}`);
     });
 
     it("el clic en un commit muestra sus cambios, no un archivo del working tree (AC2)", async () => {

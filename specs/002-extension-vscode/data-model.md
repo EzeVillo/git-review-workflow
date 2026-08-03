@@ -103,7 +103,7 @@ Cero o más, uno por registro `entry`. En `mode = whole` no hay ninguno.
   compartir path en un walkthrough mal escrito, y la posición es lo que el
   cursor mueve.
 - La cantidad de `entry` es siempre igual a `ReviewState.total` — el contrato lo
-  garantiza. Si no coincide, es `error`, no un árbol a medias.
+  garantiza. Si no coincide, es `error`, no una secuencia a medias.
 
 ---
 
@@ -149,8 +149,8 @@ y existe por la tensión entre FR-012 (mostrar legible) y FR-015 de la feature
 
 ## `Why` — la explicación de una entrada
 
-Se obtiene por separado y bajo demanda (nunca al construir el árbol), con
-`status --why <raw>`.
+Se obtiene por separado, para **una** entrada por vez —la actual— con
+`status --why <raw>`. Nunca para la secuencia entera (FR-018a, SC-009).
 
 | Campo     | Tipo    | Significado                               |
 |-----------|---------|-------------------------------------------|
@@ -166,7 +166,57 @@ Se obtiene por separado y bajo demanda (nunca al construir el árbol), con
   los marcadores reservados.
 - No se cachea entre refrescos. El walkthrough del tip no cambia durante una
   review, pero cachear obligaría a invalidar por rama/tip y el costo que evita
-  es una invocación en hover.
+  es una invocación por refresco.
+- Se resuelve *después* del `status --porcelain` y llega al panel por separado:
+  el panel se dibuja con el estado apenas está, y el *why* aparece cuando
+  responde. Una respuesta que llega tarde, correspondiente a una entrada que ya
+  no es la actual, se descarta — la carrera existe porque el revisor puede
+  avanzar dos veces antes de que la primera explicación vuelva.
+
+---
+
+## `PanelModel` — lo que el panel dibuja
+
+Proyección de todo lo anterior a una estructura **plana y serializable**, que es
+lo único que cruza hacia el webview. No agrega información: sólo decide qué de
+lo que ya hay es visible y con qué forma.
+
+Existe como entidad propia por dos razones. Una es la frontera del webview: lo
+que se postea tiene que ser JSON, sin `Uri`, sin clases y sin funciones. La otra
+es la verificabilidad: es el punto donde los tests de integración afirman (ver
+`research.md`, Decisión 11), así que tiene que poder construirse sin un editor.
+
+| Campo           | Tipo                                       | Presencia               |
+|-----------------|--------------------------------------------|-------------------------|
+| `situation`     | `Situation`                                | siempre                 |
+| `busy`          | booleano                                   | siempre                 |
+| `repoLabel`     | string                                     | sólo multi-root         |
+| `mode`          | `whole` \| `step` \| `walk`                | sólo `review`           |
+| `branch`        | string                                     | sólo `review`           |
+| `position`      | entero                                     | sólo `step` / `walk`    |
+| `total`         | entero                                     | sólo `step` / `walk`    |
+| `baseMoved`     | booleano (`total ≠ recorded`)              | sólo `step` / `walk`    |
+| `degraded`      | booleano (`walkthrough = degraded`)        | sólo `review`           |
+| `current`       | `{position, display, essential, banked}`   | sólo con secuencia      |
+| `entryCount`    | entero                                     | sólo `review`           |
+| `uncoveredCount`| entero                                     | sólo `review`           |
+| `why`           | `{state: "loading"\|"absent"\|"failed"\|"present", text?}` | sólo `walk` |
+| `stderr`        | string                                     | sólo estados con fallo  |
+
+**Reglas de validación**:
+
+- `current` se elige por `position`, nunca por `id` (misma regla que
+  `SequenceEntry`). Si ninguna entrada coincide, `current` es ausente y el panel
+  lo dice — no se cae a la primera.
+- `display` es el único path que viaja al webview. El `raw` se queda del lado del
+  host, que es quien invoca la CLI (`PathRef`, regla de unidireccionalidad).
+- `why` distingue **cuatro** estados, no dos: `loading` (la invocación está en
+  vuelo) es distinto de `absent` (exit `0`, cuerpo vacío) y de `failed` (exit
+  `1`) — FR-018 pide los dos últimos separados, y el primero existe porque el
+  panel se dibuja antes de que la explicación vuelva.
+- El modelo se reconstruye entero en cada cambio y se postea entero. No hay
+  actualizaciones parciales del DOM dirigidas desde el host: es la misma razón
+  por la que no hay estado incremental del lado de la extensión (FR-019).
 
 ---
 
@@ -181,7 +231,7 @@ Se obtiene por separado y bajo demanda (nunca al construir el árbol), con
 
 - Con más de una carpeta en la ventana, el panel indica sin ambigüedad de cuál
   está hablando (FR-029). No se agregan reviews de varios repos en un mismo
-  árbol.
+  panel.
 - `rootUri` es el `cwd` de **toda** invocación. Nunca se invoca la CLI con el
   cwd del proceso del editor.
 - Este es el único dato que la extensión toma de la API de git, junto con la
@@ -196,11 +246,13 @@ Se obtiene por separado y bajo demanda (nunca al construir el árbol), con
 Situation
 └── (= review) ReviewState            ← registro `state`, 1 por invocación
                 ├── SequenceEntry[]   ← registros `entry`, en orden de lectura
-                │     └── Why         ← bajo demanda, 1 invocación aparte
+                │     └── Why         ← sólo la actual, 1 invocación aparte
                 └── UncoveredFile[]   ← registros `uncovered`
+                            ↓
+                        PanelModel     ← proyección plana, lo único que ve el webview
 ```
 
-Una sola invocación de `status --porcelain` produce el árbol entero salvo los
-`Why`. Eso es lo que hace que refrescar sea barato y que el panel pueda
-reconstruirse de cero ante cualquier evento, en lugar de mantener un estado
-incremental que pueda desincronizarse (FR-019).
+Una sola invocación de `status --porcelain` produce todo salvo el `Why`. Eso es
+lo que hace que refrescar sea barato y que el panel pueda reconstruirse de cero
+ante cualquier evento, en lugar de mantener un estado incremental que pueda
+desincronizarse (FR-019).

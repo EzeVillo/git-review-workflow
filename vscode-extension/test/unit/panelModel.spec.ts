@@ -13,12 +13,22 @@ import {buildPanelModel, entryPickLabel, resumableSourceAt} from "../../src/view
  */
 function reviewState(stdout: string): ReviewState {
     const parsed = parsePorcelain(stdout);
-    return {
+    const state: ReviewState = {
         situation: "review",
         state: parsed.state,
         entries: parsed.entries,
         branches: [],
     };
+    if (parsed.subjects) {
+        state.subjects = parsed.subjects;
+    }
+    if (parsed.authors) {
+        state.authors = parsed.authors;
+    }
+    if (parsed.base !== undefined) {
+        state.base = parsed.base;
+    }
+    return state;
 }
 
 const WALK = [
@@ -202,6 +212,50 @@ describe("buildPanelModel", () => {
         assert.strictEqual(model.why, undefined, "el modo step no tiene explicaciones");
     });
 
+    it("modo step: el asunto y el autor del commit actual llegan al modelo", () => {
+        const stdout = [
+            "state\treview/feat\torigin/feat\tabc123\tstep\tnone\t2\t2\t2\t9fe1c0d",
+            "entry\t1\tabc1234\t0",
+            "entry\t2\t9fe1c0d\t0",
+            "subject\t1\tfeat: la primera",
+            "subject\t2\tfix: la segunda",
+            "author\t1\tEze <eze@example.com>",
+            "author\t2\tAna <ana@example.com>",
+            "",
+        ].join("\n");
+        const model = buildPanelModel(reviewState(stdout), {busy: false});
+        // Los del commit en el cursor (position 2), no los del primer entry.
+        assert.strictEqual(model.current?.subject, "fix: la segunda");
+        assert.strictEqual(model.current?.author, "Ana <ana@example.com>");
+        // Y el SHA sigue estando: el asunto lo acompaña, no lo reemplaza.
+        assert.strictEqual(model.current?.display, "9fe1c0d");
+    });
+
+    it("modo step con CLI vieja: sin asunto ni autor, y sin inventar vacios", () => {
+        const stdout = [
+            "state\treview/feat\torigin/feat\tabc123\tstep\tnone\t1\t1\t1\tabc1234",
+            "entry\t1\tabc1234\t0",
+            "",
+        ].join("\n");
+        const model = buildPanelModel(reviewState(stdout), {busy: false});
+        assert.strictEqual(model.current?.subject, undefined);
+        assert.strictEqual(model.current?.author, undefined);
+        assert.strictEqual(model.current?.display, "abc1234", "el panel sigue mostrando lo de siempre");
+    });
+
+    it("un asunto vacio llega como cadena vacia, distinto de ausente", () => {
+        const stdout = [
+            "state\treview/feat\torigin/feat\tabc123\tstep\tnone\t1\t1\t1\tabc1234",
+            "entry\t1\tabc1234\t0",
+            "subject\t1\t",
+            "author\t1\tEze <eze@example.com>",
+            "",
+        ].join("\n");
+        const model = buildPanelModel(reviewState(stdout), {busy: false});
+        assert.strictEqual(model.current?.subject, "");
+        assert.strictEqual(model.current?.author, "Eze <eze@example.com>");
+    });
+
     it("modo whole degradado: sin secuencia — no hay como enumerar el rango por porcelain", () => {
         // Antes esto emitia registros `uncovered`, uno por archivo del rango; se
         // elimino porque el degradado ya equivale a "todo el diff" (redundante
@@ -214,6 +268,51 @@ describe("buildPanelModel", () => {
         assert.strictEqual(model.current, undefined);
         assert.strictEqual(model.position, undefined);
         assert.strictEqual(model.why, undefined);
+    });
+
+    it("el origen y el tip llegan al modelo en los tres modos (003 US2)", () => {
+        const walk = buildPanelModel(reviewState(WALK), {busy: false});
+        assert.strictEqual(walk.source, "origin/feat");
+        assert.strictEqual(walk.tip, "abc123");
+
+        const step = buildPanelModel(
+            reviewState("state\treview/feat\torigin/feat\tabc123\tstep\tnone\t1\t1\t1\tabc1234\nentry\t1\tabc1234\t0\n"),
+            {busy: false}
+        );
+        assert.strictEqual(step.source, "origin/feat");
+        assert.strictEqual(step.tip, "abc123");
+
+        const whole = buildPanelModel(
+            reviewState("state\treview/feat\torigin/feat\tabc123\twhole\tnone\n"),
+            {busy: false}
+        );
+        assert.strictEqual(whole.source, "origin/feat");
+        assert.strictEqual(whole.tip, "abc123");
+        // El tip viaja completo: abreviarlo es cosa del dibujo, no del modelo.
+        assert.strictEqual(whole.tip, "abc123");
+    });
+
+    it("la base sólo se proyecta en whole, y sólo si la CLI la reportó", () => {
+        const withBase = buildPanelModel(
+            reviewState("state\treview/feat\torigin/feat\tabc123\twhole\tnone\nbase\tmain\n"),
+            {busy: false}
+        );
+        assert.strictEqual(withBase.base, "main");
+
+        // Sin registro: ausente, nunca una cadena vacía que el panel dibujaría
+        // como un hueco (FR-009).
+        const withoutBase = buildPanelModel(
+            reviewState("state\treview/feat\torigin/feat\tabc123\twhole\tnone\n"),
+            {busy: false}
+        );
+        assert.strictEqual(withoutBase.base, undefined);
+
+        // Y en un modo con cursor no se proyecta aunque llegara el registro.
+        const step = buildPanelModel(
+            reviewState("state\treview/feat\torigin/feat\tabc123\tstep\tnone\t1\t1\t1\tabc1234\nentry\t1\tabc1234\t0\nbase\tmain\n"),
+            {busy: false}
+        );
+        assert.strictEqual(step.base, undefined);
     });
 
     it("una situación que no es review no lleva nada de la review, y sí el stderr", () => {
@@ -292,6 +391,22 @@ describe("entryPickLabel", () => {
     it("posiciones de dos dígitos no se rellenan", () => {
         const wide = parsePorcelain("state\tr\ts\tt\tstep\tnone\t10\t10\t10\tabc\nentry\t10\tabc1234\t0\n");
         assert.strictEqual(entryPickLabel(wide.entries[0], 10).label, "10  abc1234");
+    });
+
+    it("en step el asunto acompana al SHA en la etiqueta del selector", () => {
+        const step = parsePorcelain("state\tr\ts\tt\tstep\tnone\t1\t1\t1\tabc1234\nentry\t1\tabc1234\t0\n");
+        assert.strictEqual(
+            entryPickLabel(step.entries[0], 1, "feat: exponer el asunto").label,
+            "01  abc1234  feat: exponer el asunto"
+        );
+        // Las marcas no cambian por llevar asunto.
+        assert.strictEqual(entryPickLabel(step.entries[0], 1, "feat: x").description, "current");
+    });
+
+    it("sin asunto, o con uno vacio, la etiqueta es la de siempre", () => {
+        const step = parsePorcelain("state\tr\ts\tt\tstep\tnone\t1\t1\t1\tabc1234\nentry\t1\tabc1234\t0\n");
+        assert.strictEqual(entryPickLabel(step.entries[0], 2).label, "01  abc1234");
+        assert.strictEqual(entryPickLabel(step.entries[0], 2, "").label, "01  abc1234");
     });
 });
 

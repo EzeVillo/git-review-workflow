@@ -82,6 +82,81 @@ describe("US6: revisar commit por commit", function () {
         assert.strictEqual(picks[0].label, `01  ${state.entries[0].id as string}`);
     });
 
+    it("el panel identifica el commit por su asunto y su autor, y los actualiza al navegar (003 US1)", async () => {
+        const branch = "us1-003-subject";
+        const commits = Array.from({length: 3}, (_, i) => ({
+            file: `src/paridad${i + 1}.ts`,
+            content: `export const n = ${i + 1};\n`,
+            // Asuntos distintos entre sí a propósito: es lo único que distingue
+            // "el asunto del commit correcto" de "un asunto cualquiera" si las
+            // listas que la CLI deriva quedaran desalineadas.
+            message: `feat: paso numero ${i + 1}`,
+        }));
+        createBranchWithCommits(repo, branch, commits);
+        startReview(repo, branch, ["--step"]);
+
+        const api = await getTestApi();
+        let state = await api.refresh();
+        assert.strictEqual(state.state?.mode, "step");
+        assert.strictEqual(state.entries.length, 3);
+
+        // La CLI reporta un asunto y un autor por posición (no un mapa vacío).
+        assert.ok(state.subjects, "la CLI instalada no reporto los registros subject");
+        assert.ok(state.authors, "la CLI instalada no reporto los registros author");
+        assert.strictEqual(state.subjects!.get(1), "feat: paso numero 1");
+        assert.strictEqual(state.subjects!.get(3), "feat: paso numero 3");
+        assert.strictEqual(state.authors!.get(1), "Test <test@example.com>");
+
+        // Escenario 1: el panel muestra los del commit donde está el cursor.
+        let model = await api.getPanelModel();
+        assert.strictEqual(model.position, 1);
+        assert.strictEqual(model.current?.subject, "feat: paso numero 1");
+        assert.strictEqual(model.current?.author, "Test <test@example.com>");
+        // El identificador no desaparece: acompaña al asunto.
+        assert.strictEqual(model.current?.display, state.entries[0].id as string);
+
+        // Escenario 2: al avanzar muestra los del commit nuevo, sin quedar
+        // mostrando los del anterior.
+        assert.strictEqual(gitReview(["next"], repo.dir).status, 0);
+        state = await api.refresh();
+        model = await api.getPanelModel();
+        assert.strictEqual(model.position, 2);
+        assert.strictEqual(model.current?.subject, "feat: paso numero 2");
+        assert.notStrictEqual(model.current?.subject, "feat: paso numero 1");
+
+        // Escenario 3: el selector identifica cada commit por su asunto.
+        const picks = state.entries.map((entry) =>
+            entryPickLabel(entry, state.state?.position, state.subjects?.get(entry.position)));
+        assert.deepStrictEqual(
+            picks.map((p) => p.label),
+            state.entries.map((entry, i) =>
+                `0${i + 1}  ${entry.id as string}  feat: paso numero ${i + 1}`)
+        );
+    });
+
+    it("un asunto y un autor no ASCII llegan al panel tal cual los escribio su autor (003 US1 escenario 4)", async () => {
+        const branch = "us1-003-nonascii";
+        const subject = "feat: añadir el café ☕";
+        const author = "Ana Muñoz";
+
+        git(["checkout", "-b", branch], repo.dir);
+        writeFile(repo, "src/cafe.ts", "export const cafe = true;\n");
+        git(["add", "."], repo.dir);
+        git(["-c", `user.name=${author}`, "commit", "-m", subject], repo.dir);
+        git(["checkout", "main"], repo.dir);
+
+        startReview(repo, branch, ["--step"]);
+        const api = await getTestApi();
+        const state = await api.refresh();
+        assert.strictEqual(state.state?.mode, "step");
+
+        // Byte a byte, sin escapes ni sustituciones (FR-010, SC-006): lo mismo
+        // que imprime la terminal.
+        const model = await api.getPanelModel();
+        assert.strictEqual(model.current?.subject, subject);
+        assert.strictEqual(model.current?.author, `${author} <test@example.com>`);
+    });
+
     it("el clic en un commit muestra sus cambios, no un archivo del working tree (AC2)", async () => {
         const branch = "us6-step-click";
         createBranchWithCommits(repo, branch, [

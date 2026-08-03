@@ -24,6 +24,18 @@ export interface ReviewState {
      * (contracts/cli-invocation.md § `list --porcelain`).
      */
     branches: BranchRecord[];
+    /**
+     * Asunto y autor de cada commit de la secuencia, por `position`. Sólo en
+     * modo step, y sólo con una CLI que los reporte: ausentes significa "esta
+     * CLI no los provee", no "esta review no los tiene" (FR-003/FR-004).
+     */
+    subjects?: Map<number, string>;
+    authors?: Map<number, string>;
+    /**
+     * Base contra la que se armó el rango. Sólo en modo whole, y sólo si hay
+     * una registrada: sin base el registro no llega, y eso no es un error.
+     */
+    base?: string;
     /** stderr crudo de la CLI; presente en error/out-of-range/cli-missing/cli-outdated. */
     stderr?: string;
 }
@@ -180,11 +192,23 @@ export class ReviewStateManager {
         }
 
         const parsed = parsePorcelain(result.stdout);
-        return this.setState({
+        const next: ReviewState = {
             situation: "review",
             state: parsed.state,
             entries: parsed.entries,
             branches: [],
-        });
+        };
+        // Se copian sólo si llegaron: asignar `undefined` explícito daría lo
+        // mismo hoy, pero la ausencia es un dato y conviene que se lea como tal.
+        if (parsed.subjects) {
+            next.subjects = parsed.subjects;
+        }
+        if (parsed.authors) {
+            next.authors = parsed.authors;
+        }
+        if (parsed.base !== undefined) {
+            next.base = parsed.base;
+        }
+        return this.setState(next);
     }
 }

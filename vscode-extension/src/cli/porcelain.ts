@@ -40,6 +40,25 @@ export interface EntryRecord {
 export interface PorcelainResult {
     state: StateRecord;
     entries: EntryRecord[];
+    /**
+     * Asunto de cada commit de la secuencia, por `position` — sólo en modo step
+     * (contracts/status-porcelain-v2.md).
+     *
+     * Mapas y no campos de `EntryRecord` por dos razones: emparejar por
+     * `position` es lo que el contrato exige (nunca por orden de aparición), y
+     * dejarlos afuera conserva intacta la forma de `EntryRecord` que los tests
+     * existentes ya afirman.
+     *
+     * Opcionales porque **la ausencia del mapa entero significa "la CLI no
+     * provee este dato"**, y eso es distinto de un mapa con una entrada vacía,
+     * que significa "el dato existe y está vacío" (FR-004). Misma disciplina que
+     * `toOptionalInt`: un campo ausente no se convierte en un valor inventado.
+     */
+    subjects?: Map<number, string>;
+    /** Autor de cada commit, por `position`. Sólo en step; ver `subjects`. */
+    authors?: Map<number, string>;
+    /** Base del rango. Sólo en modo whole, y sólo si hay una registrada. */
+    base?: string;
 }
 
 /**
@@ -70,6 +89,34 @@ function toInt(field: string | undefined): number {
     return field === undefined ? 0 : parseInt(field, 10);
 }
 
+/**
+ * El campo de **texto libre** de un registro: todo lo que sigue al `skip`-ésimo
+ * tab de `line`, hasta el fin de línea.
+ *
+ * No es `line.split("\t")[skip]`, y la diferencia es la razón por la que estos
+ * registros existen. El asunto de un commit y el nombre de un autor los escribe
+ * una persona, no git, así que **pueden contener un tab literal** — a diferencia
+ * de un path, que git cita incondicionalmente (research.md Decisión 1, medido).
+ * Con `split` un asunto con un tab adentro se partiría en varios elementos y el
+ * consumidor mostraría sólo el primero, en silencio. Por eso el contrato manda
+ * el texto libre como último campo del registro: acá no hay nada después que
+ * desplazar, y leer "el resto de la línea" es exacto.
+ *
+ * `undefined` cuando la línea no llega a tener `skip` tabs: es un registro que
+ * no entendemos, no un campo vacío. Un campo legítimamente vacío (un commit sin
+ * asunto) sí devuelve `""` — la distinción que pide FR-004.
+ */
+function restAfterTab(line: string, skip: number): string | undefined {
+    let index = -1;
+    for (let i = 0; i < skip; i++) {
+        index = line.indexOf("\t", index + 1);
+        if (index === -1) {
+            return undefined;
+        }
+    }
+    return line.slice(index + 1);
+}
+
 /** Como `toInt`, pero un campo ausente o no numérico es ausencia, no un `0`. */
 function toOptionalInt(field: string | undefined): number | undefined {
     if (field === undefined || field.length === 0) {
@@ -94,6 +141,11 @@ export function parsePorcelain(stdout: string): PorcelainResult {
 
     let state: StateRecord | undefined;
     const entries: EntryRecord[] = [];
+    // Se crean sólo si el registro llegó: un mapa vacío diría "la CLI reporta
+    // asuntos y esta review no tiene ninguno", que es otra cosa (FR-004).
+    let subjects: Map<number, string> | undefined;
+    let authors: Map<number, string> | undefined;
+    let base: string | undefined;
 
     for (const line of lines) {
         const fields = line.split("\t");
@@ -141,6 +193,35 @@ export function parsePorcelain(stdout: string): PorcelainResult {
                 entries.push(entry);
                 break;
             }
+            // El texto libre se lee como "el resto de la línea desde el segundo
+            // tab", nunca como `fields[2]`: un asunto o un nombre de autor
+            // pueden contener un tab literal y `split` los partiría en varios
+            // elementos, dejando ver sólo el primero (research.md Decisión 1).
+            case "subject":
+            case "author": {
+                const position = toOptionalInt(fields[1]);
+                const text = restAfterTab(line, 2);
+                if (position === undefined || text === undefined) {
+                    // Registro que no entendemos: se descarta entero, sin
+                    // inventarle una posición ni un texto.
+                    break;
+                }
+                if (tag === "subject") {
+                    (subjects ??= new Map()).set(position, text);
+                } else {
+                    (authors ??= new Map()).set(position, text);
+                }
+                break;
+            }
+            // Registro único y sin posición: la base es de la review, no de una
+            // entrada. Un solo tab que saltar, y el texto libre es el resto.
+            case "base": {
+                const text = restAfterTab(line, 1);
+                if (text !== undefined) {
+                    base = text;
+                }
+                break;
+            }
             default:
                 // Etiqueta desconocida: se ignora (FR-003).
                 break;
@@ -151,7 +232,17 @@ export function parsePorcelain(stdout: string): PorcelainResult {
         throw new Error("porcelain output has no state record");
     }
 
-    return {state, entries};
+    const result: PorcelainResult = {state, entries};
+    if (subjects) {
+        result.subjects = subjects;
+    }
+    if (authors) {
+        result.authors = authors;
+    }
+    if (base !== undefined) {
+        result.base = base;
+    }
+    return result;
 }
 
 /**

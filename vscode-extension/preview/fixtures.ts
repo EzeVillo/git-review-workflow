@@ -35,6 +35,18 @@ function review(rows: string[][], inputs: PanelInputs = {busy: false}): PanelMod
         entries: parsed.entries,
         branches: [],
     };
+    // Sólo si el parser los produjo: es lo que hace que un pane sin registros
+    // subject/author sea de verdad el panel con una CLI vieja, y no uno con los
+    // mapas vacíos.
+    if (parsed.subjects) {
+        state.subjects = parsed.subjects;
+    }
+    if (parsed.authors) {
+        state.authors = parsed.authors;
+    }
+    if (parsed.base !== undefined) {
+        state.base = parsed.base;
+    }
     return buildPanelModel(state, inputs);
 }
 
@@ -87,6 +99,35 @@ const WALK_PATHS = [
     "README.md",
 ];
 
+/**
+ * Un review step de cuatro commits, sin los registros de texto libre: es la
+ * salida de una CLI anterior a 003, y el pane `step-legacy-cli` la usa tal cual
+ * para mostrar cómo degrada el panel.
+ */
+const STEP_ROWS: string[][] = [
+    ["state", "review/feat/panel", "feat/panel", "a1b2c3d", "step", "none", "1", "4", "4", "a1b2c3d"],
+    ["entry", "1", "a1b2c3d", "1"],
+    ["entry", "2", "b2c3d4e", "0"],
+    ["entry", "3", "c3d4e5f", "0"],
+    ["entry", "4", "d4e5f6a", "0"],
+];
+
+/**
+ * Los registros que 003 agrega. El asunto de la posición 3 es deliberadamente
+ * largo: es el que muestra qué hace el panel cuando no entra en el ancho del
+ * sidebar (Edge Case del spec).
+ */
+const STEP_TEXT_ROWS: string[][] = [
+    ["subject", "1", "feat: exponer el asunto y el autor en porcelain"],
+    ["subject", "2", "test: cubrir los bytes hostiles del asunto y del autor"],
+    ["subject", "3", "refactor: mover la derivación de los textos al helper compartido para que el verbo no pague dos procesos por commit"],
+    ["subject", "4", "docs: documentar los tres registros nuevos en los dos README"],
+    ["author", "1", "Eze Villo <ezevillodev@gmail.com>"],
+    ["author", "2", "Eze Villo <ezevillodev@gmail.com>"],
+    ["author", "3", "Ana Muñoz <ana@example.com>"],
+    ["author", "4", "Eze Villo <ezevillodev@gmail.com>"],
+];
+
 const WHY = `El HTML del panel vive aparte del provider y sin dependencia de
 \`vscode\`: es lo que permite abrirlo en un navegador con un modelo de ejemplo
 y verificar el render, que ninguna de las dos suites puede afirmar.`;
@@ -133,14 +174,28 @@ export const PREVIEW_PANES: PreviewPane[] = [
     },
     {
         name: "step",
-        caption: "step — primer commit, con ediciones bancadas",
+        caption: "step — primer commit, con ediciones bancadas, asunto y autor",
+        model: review([...STEP_ROWS, ...STEP_TEXT_ROWS], {busy: false}),
+    },
+    {
+        // El mismo review contra una CLI anterior a los registros subject/author.
+        // Al lado del pane de arriba es la prueba de que degradar no deja huecos:
+        // el SHA vuelve a ser el cuerpo y la línea de autor no existe (FR-003).
+        name: "step-legacy-cli",
+        caption: "step — misma review con una CLI que no reporta asunto ni autor",
+        model: review(STEP_ROWS, {busy: false}),
+    },
+    {
+        // Un asunto vacío es un valor legítimo, y se ve distinto de la ausencia
+        // de arriba: ahí el panel no sabe el asunto, acá sabe que no hay.
+        name: "step-empty-subject",
+        caption: "step — commit sin asunto: la ausencia dicha, no un bloque en blanco",
         model: review(
             [
-                ["state", "review/feat/panel", "feat/panel", "a1b2c3d", "step", "none", "1", "4", "4", "a1b2c3d"],
-                ["entry", "1", "a1b2c3d", "1"],
-                ["entry", "2", "b2c3d4e", "0"],
-                ["entry", "3", "c3d4e5f", "0"],
-                ["entry", "4", "d4e5f6a", "0"],
+                // Cursor en 2, que es el commit sin asunto.
+                ["state", "review/feat/panel", "feat/panel", "a1b2c3d", "step", "none", "2", "4", "4", "b2c3d4e"],
+                ...STEP_ROWS.slice(1),
+                ...STEP_TEXT_ROWS.map((row) => (row[0] === "subject" && row[1] === "2" ? ["subject", "2", ""] : row)),
             ],
             {busy: false}
         ),
@@ -160,11 +215,25 @@ export const PREVIEW_PANES: PreviewPane[] = [
         ),
     },
     {
+        // Sin registro `base`: el estado de una review cuyo repositorio no tiene
+        // base registrada, y el que dibuja una CLI anterior a 003. En los dos
+        // casos el panel no pone nada en su lugar (FR-009).
         name: "whole",
-        caption: "whole — review sin walkthrough, con dos repos en la ventana",
+        caption: "whole — review sin walkthrough ni base registrada, con dos repos en la ventana",
         model: review(
             [["state", "review/fix/quoting", "fix/quoting", "1a2b3c4", "whole", "none"]],
             {busy: false, repoLabel: "git-review-workflow"}
+        ),
+    },
+    {
+        name: "whole-with-base",
+        caption: "whole — la misma review informando contra qué base se armó el rango",
+        model: review(
+            [
+                ["state", "review/fix/quoting", "fix/quoting", "1a2b3c4", "whole", "none"],
+                ["base", "main"],
+            ],
+            {busy: false}
         ),
     },
     {

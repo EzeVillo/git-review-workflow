@@ -145,6 +145,36 @@ describe("US1: ver donde estoy en el walkthrough", function () {
         assert.strictEqual(model.why, undefined);
         assert.strictEqual(model.degraded, false);
         assert.strictEqual(model.stderr, undefined);
+
+        // 003 US2: el panel identifica de qué review se trata y, sin
+        // walkthrough, contra qué base se armó el rango.
+        assert.strictEqual(model.source, branch, "el panel no identifica el origen de la review");
+        assert.strictEqual(model.tip, state.state?.tip);
+        assert.ok(model.tip && model.tip.length > 7, "el tip viaja completo al modelo; se abrevia al dibujar");
+        // createTempRepo() fija reviewworkflow.base=main, así que start la hereda.
+        assert.strictEqual(model.base, "main");
+    });
+
+    it("una review sin base registrada no muestra nada en su lugar (003 US2 escenario 3)", async () => {
+        const branch = "us2-003-nobase";
+        createBranchWithChanges(repo, branch, {"src/sinbase.ts": "x\n"});
+        startReview(repo, branch, ["--no-walk"]);
+
+        // Borrar la clave deja exactamente el estado "no hay base registrada":
+        // la CLI omite el registro entero, y el panel no lo reemplaza por nada.
+        git(["config", "--unset", `branch.review/${branch}.reviewbase`], repo.dir);
+
+        const api = await getTestApi();
+        const state = await api.refresh();
+        assert.strictEqual(state.situation, "review", "quitar la base no puede romper la review");
+        assert.strictEqual(state.state?.mode, "whole");
+        assert.strictEqual(state.base, undefined);
+
+        const model = await api.getPanelModel();
+        assert.strictEqual(model.base, undefined, "ausente, nunca una cadena vacia");
+        assert.strictEqual(model.stderr, undefined, "la ausencia de base no es un error");
+        // Y lo que sí hay se sigue mostrando.
+        assert.strictEqual(model.source, branch);
     });
 
     it("walkthrough degradado: la review sigue usable y se informa el motivo (US1 escenario 4)", async () => {

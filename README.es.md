@@ -576,6 +576,9 @@ reconozca: el formato sólo crece.
 ```
 state	<branch>	<source>	<tip>	<mode>	<walkthrough>[	<position>	<total>	<recorded>	<current>[	<essential>]]
 entry	<position>	<id>[	<essential>	<annotated>|<banked>]
+subject	<position>	<asunto>
+author	<position>	<autor>
+base	<base>
 ```
 
 - `state` — exactamente una línea, siempre la primera. `mode` es
@@ -594,6 +597,27 @@ entry	<position>	<id>[	<essential>	<annotated>|<banked>]
   en modo step es sólo `banked` (`1`/`0`, existe una edición bancada bajo
   `refs/review-edits/`); se omite del todo en modo whole, porque ahí no hay
   secuencia que reportar.
+- `subject` y `author` — sólo en modo step, uno de cada uno por posición, con el
+  asunto del commit y su autor en la forma `Nombre <correo>`. Se emparejan con
+  `entry` por `position`, nunca por orden de aparición. Un asunto puede estar
+  vacío (un commit cuyo mensaje no tiene primera línea): el registro se emite
+  igual, con el campo vacío, para que "sin asunto" se distinga de "este
+  git-review no reporta asuntos".
+- `base` — sólo en modo whole, y sólo si la review tiene una base registrada: el
+  ref contra el que se armó su rango. Registro único y sin posición — la base es
+  de la review, no de una entrada. Sin base registrada la línea se omite entera,
+  nunca se emite en blanco.
+
+**Campos de texto libre.** `subject`, `author` y `base` llevan texto escrito por
+una *persona*, no producido por git, y a diferencia de un path **puede contener
+un tab literal**. De ahí la regla para estos registros —y para cualquier registro
+futuro con texto libre—: el texto libre es siempre el **último campo** de su
+registro, y hay a lo sumo uno por registro. Se emite byte a byte, sin escapar y
+sin citar. Se lee como *"todo lo que sigue al N-ésimo tab, hasta el fin de
+línea"*, no como *"el campo N-ésimo"* — un `split` por tab truncaría en silencio
+un asunto que contenga uno. Por ese mismo motivo estos registros no admiten
+campos nuevos al final: lo que haya que agregar va en un registro propio. Un
+newline nunca puede aparecer en ellos.
 
 Un path siempre sale exactamente como lo devuelve `git diff --name-only` (con
 `core.quotePath=false`): bytes literales, sin escapar, para espacios y

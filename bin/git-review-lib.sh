@@ -115,6 +115,45 @@ load_step_review_meta() {
 	fi
 }
 
+# load_step_texts
+# Load the subject and the author of every commit in the step sequence into the
+# globals `subjects` and `authors` — one line per commit, aligned with `commits`
+# by line number, so the n-th line of each list belongs to the n-th commit.
+#
+# Two git processes for the whole sequence, not one per commit: a --step review
+# of dozens of commits has to stay instant to navigate (FR-014/SC-008), and on
+# Windows, where fork() is emulated, 2N processes is the difference between
+# instant and perceptible (research.md Decisión 2). The traversal flags are the
+# same ones load_step_review_meta uses for `commits`, which is what makes the
+# three lists line up.
+#
+# Lining up by line number is safe because neither format can emit an inner
+# newline: %s is the first line of the message by definition, and git strips the
+# newline out of the ident when it builds the commit (research.md Decisión 1,
+# measured). If that ever stopped holding, the symptom would be a subject paired
+# with the wrong commit, silently.
+#
+# Relies on the globals set by load_step_review_meta (start, tip); call it after,
+# never instead of it. The step verbs that only move the cursor do not call it:
+# they have no use for the text and should not pay the two extra processes.
+#
+# Both lists keep their trailing newline, so each holds exactly one line per
+# commit and the caller can stream them with `while read` instead of indexing
+# line by line. That matters: command substitution strips trailing newlines, and
+# a last commit with an EMPTY subject would otherwise shorten the list and drop
+# its record — which a consumer reads as "this CLI has no subjects" rather than
+# "this commit has none" (FR-004). Appending an x and stripping it back off with
+# ${var%x} is the usual idiom for holding on to those newlines.
+load_step_texts() {
+	# shellcheck disable=SC2034  # both are globals for the caller (status), like
+	# the ones load_step_review_meta sets; nothing in this file consumes them.
+	subjects="$(git log --reverse --first-parent --no-merges --format=%s "$start..$tip"; printf x)"
+	subjects="${subjects%x}"
+	# shellcheck disable=SC2034  # idem.
+	authors="$(git log --reverse --first-parent --no-merges --format='%an <%ae>' "$start..$tip"; printf x)"
+	authors="${authors%x}"
+}
+
 # goto_step <target>
 # Move a --step review to step <target>: bank the current commit's edits, reset
 # clean to the target commit, restore the target's previously banked edits (if

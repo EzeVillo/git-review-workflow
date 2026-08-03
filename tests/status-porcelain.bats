@@ -90,7 +90,11 @@ assert_zero_mutation() {
 	expected="$(printf 'state\treview/feature/x\tfeature/x\t%s\twhole\tnone' "$tip")"
 	run git review status --porcelain
 	[ "$status" -eq 0 ]
-	[ "$output" = "$expected" ]
+	# The first line, like the step and walk versions of this test: whole mode
+	# stopped being a single-line output when the `base` record joined it, and
+	# what this test is about is the arity and content of `state` itself.
+	firstline="$(printf '%s\n' "$output" | sed -n '1p')"
+	[ "$firstline" = "$expected" ]
 }
 
 @test "status --porcelain emits the exact state line for step mode" {
@@ -427,6 +431,121 @@ EOF
 	[ "$n" -eq 0 ]
 	unannotated="$(printf '%s\n' "$output" | grep '^entry' | awk -F'\t' '$5 == 0' | grep -c . || true)"
 	[ "$unannotated" -eq 0 ]
+}
+
+# ── subject/author records (003 US1) ──────────────────────────────────────────
+
+@test "status --porcelain emits one subject and one author line per step position" {
+	run git review start feature/x --step
+	[ "$status" -eq 0 ]
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+
+	# Distinct subjects on purpose: the whole point of aligning the two git log
+	# runs with `commits` by line number is that position N carries commit N's
+	# text. Identical subjects would pass even fully misaligned.
+	subjects="$(printf '%s\n' "$output" | grep '^subject')"
+	expected="$(printf 'subject\t1\tc1-touch-a\nsubject\t2\tc2-touch-b-add-c')"
+	[ "$subjects" = "$expected" ]
+
+	authors="$(printf '%s\n' "$output" | grep '^author')"
+	expected="$(printf 'author\t1\ttester <t@example.com>\nauthor\t2\ttester <t@example.com>')"
+	[ "$authors" = "$expected" ]
+
+	# One per position, matching the entry records exactly: a consumer pairs by
+	# position, so a missing line is a hole and an extra one is a lie.
+	[ "$(printf '%s\n' "$output" | grep -c '^entry')" -eq 2 ]
+}
+
+@test "status --porcelain emits no subject or author record in whole mode" {
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	found="$(printf '%s\n' "$output" | grep -cE '^(subject|author)' || true)"
+	[ "$found" -eq 0 ]
+	# And the mode really is the one under test, not a review that failed to start.
+	[ "$(printf '%s\n' "$output" | sed -n '1p' | cut -f5)" = "whole" ]
+}
+
+@test "status --porcelain emits no subject or author record in walk mode" {
+	recommit_walkthrough <<'EOF'
+# Walkthrough
+
+## 1. src/c.txt
+new helper
+
+## 2. a.txt
+main change
+
+## 3. b.txt
+side change
+EOF
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	found="$(printf '%s\n' "$output" | grep -cE '^(subject|author)' || true)"
+	[ "$found" -eq 0 ]
+	[ "$(printf '%s\n' "$output" | sed -n '1p' | cut -f5)" = "walk" ]
+}
+
+# ── base record (003 US2) ─────────────────────────────────────────────────────
+
+@test "status --porcelain emits the base record in whole mode" {
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	# Single record, no position: the base belongs to the review, not to an entry.
+	[ "$(printf '%s\n' "$output" | grep '^base')" = "$(printf 'base\tdevelop')" ]
+	# And `state` is still the first line, ahead of it.
+	[ "$(printf '%s\n' "$output" | sed -n '1p' | cut -f1)" = "state" ]
+}
+
+@test "status --porcelain omits the base record when no base is recorded" {
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	git config --unset branch.review/feature/x.reviewbase
+
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	# Omitted whole, never emitted blank: `base` with an empty field would read
+	# as "the base is the empty string" instead of "there is none".
+	n="$(printf '%s\n' "$output" | grep -c '^base' || true)"
+	[ "$n" -eq 0 ]
+	# The review is still perfectly readable without it.
+	[ "$(printf '%s\n' "$output" | sed -n '1p' | cut -f5)" = "whole" ]
+}
+
+@test "status --porcelain emits no base record in step or walk mode" {
+	run git review start feature/x --step
+	[ "$status" -eq 0 ]
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	[ "$(printf '%s\n' "$output" | grep -c '^base' || true)" -eq 0 ]
+	[ "$(printf '%s\n' "$output" | sed -n '1p' | cut -f5)" = "step" ]
+
+	run git review abort
+	[ "$status" -eq 0 ]
+	recommit_walkthrough <<'EOF'
+# Walkthrough
+
+## 1. a.txt
+main change
+
+## 2. b.txt
+side change
+
+## 3. src/c.txt
+new helper
+EOF
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	[ "$(printf '%s\n' "$output" | grep -c '^base' || true)" -eq 0 ]
+	[ "$(printf '%s\n' "$output" | sed -n '1p' | cut -f5)" = "walk" ]
 }
 
 # ── cross-cutting: zero mutation, separate channels, additivity ─────────────────

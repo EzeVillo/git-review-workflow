@@ -27,6 +27,14 @@ export interface PanelEntry {
      */
     annotated: boolean;
     banked: boolean;
+    /**
+     * Sólo en step, y sólo si la CLI los reportó. Ausentes = "esta CLI no los
+     * provee", y el panel dibuja exactamente lo que dibujaba antes de que
+     * existieran (FR-003). `subject` vacío es otra cosa: un commit sin asunto,
+     * que sí se muestra como tal (FR-004).
+     */
+    subject?: string;
+    author?: string;
 }
 
 /**
@@ -75,6 +83,20 @@ export interface PanelModel {
     /** De acá para abajo, sólo con `situation === "review"`. */
     mode?: ReviewMode;
     branch?: string;
+    /**
+     * Origen de la review (el PR) y punto sobre el que quedó fijada. Los dos ya
+     * venían en `state` desde `001` y el panel no los dibujaba: son la mitad de
+     * la Historia 2 que no necesitó contrato nuevo (research.md Decisión 0).
+     * El `tip` viaja completo, como lo emite la CLI; abreviarlo es presentación
+     * y ocurre al dibujar, no acá.
+     */
+    source?: string;
+    tip?: string;
+    /**
+     * Base contra la que se armó el rango. Sólo en whole y sólo si la CLI la
+     * reportó: sin ella el panel no muestra nada en su lugar (FR-009).
+     */
+    base?: string;
     /** Sólo en step/walk. */
     position?: number;
     total?: number;
@@ -117,8 +139,12 @@ function displayOf(id: string | PathRef): string {
     return typeof id === "string" ? id : id.display;
 }
 
-function toPanelEntry(entry: EntryRecord): PanelEntry {
-    return {
+function toPanelEntry(
+    entry: EntryRecord,
+    subjects?: Map<number, string>,
+    authors?: Map<number, string>
+): PanelEntry {
+    const panelEntry: PanelEntry = {
         position: entry.position,
         display: displayOf(entry.id),
         essential: entry.essential === true,
@@ -127,6 +153,17 @@ function toPanelEntry(entry: EntryRecord): PanelEntry {
         annotated: entry.annotated !== false,
         banked: entry.banked === true,
     };
+    // Por `position` y nunca por orden: es lo que el contrato exige, y lo que
+    // hace que un registro faltante quede ausente en vez de correr los demás.
+    const subject = subjects?.get(entry.position);
+    if (subject !== undefined) {
+        panelEntry.subject = subject;
+    }
+    const author = authors?.get(entry.position);
+    if (author !== undefined) {
+        panelEntry.author = author;
+    }
+    return panelEntry;
 }
 
 export interface PickLabel {
@@ -144,7 +181,11 @@ function pad(position: number): string {
  * `vscode`, porque es lo que hace visible la posición actual y las marcas
  * (FR-006, FR-007, FR-027) — o sea, lo que puede romperse en silencio.
  */
-export function entryPickLabel(entry: EntryRecord, position: number | undefined): PickLabel {
+export function entryPickLabel(
+    entry: EntryRecord,
+    position: number | undefined,
+    subject?: string
+): PickLabel {
     const marks: string[] = [];
     if (entry.position === position) {
         marks.push("current");
@@ -160,8 +201,14 @@ export function entryPickLabel(entry: EntryRecord, position: number | undefined)
     if (entry.banked) {
         marks.push("banked edits");
     }
+    // El asunto acompaña al identificador, no lo reemplaza: nadie reconoce un
+    // commit por siete caracteres hexadecimales, pero el SHA es lo que se pega
+    // en una terminal (FR-007). Un asunto vacío no agrega nada que mostrar.
+    const id = displayOf(entry.id);
     return {
-        label: `${pad(entry.position)}  ${displayOf(entry.id)}`,
+        label: subject !== undefined && subject.length > 0
+            ? `${pad(entry.position)}  ${id}  ${subject}`
+            : `${pad(entry.position)}  ${id}`,
         description: marks.join(" · "),
     };
 }
@@ -246,10 +293,17 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
 
     base.mode = review.mode;
     base.branch = review.branch;
+    base.source = review.source;
+    base.tip = review.tip;
     base.degraded = review.walkthrough === "degraded";
     base.entryCount = state.entries.length;
 
     if (review.mode === "whole") {
+        // La CLI sólo emite el registro en whole, pero el modelo no se apoya en
+        // eso: lo proyecta donde tiene sentido mostrarlo y en ningún otro lado.
+        if (state.base !== undefined) {
+            base.base = state.base;
+        }
         return base;
     }
 
@@ -263,7 +317,7 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
 
     const current = currentEntry(state.entries, review.position);
     if (current) {
-        base.current = toPanelEntry(current);
+        base.current = toPanelEntry(current, state.subjects, state.authors);
     }
 
     if (review.mode === "walk" && current) {

@@ -48,9 +48,13 @@ interface EntryItem extends vscode.QuickPickItem {
 export async function pickEntry(
     entries: EntryRecord[],
     mode: ReviewMode,
-    position: number | undefined
+    position: number | undefined,
+    subjects?: Map<number, string>
 ): Promise<EntryRecord | undefined> {
-    const items: EntryItem[] = entries.map((entry) => ({...entryPickLabel(entry, position), entry}));
+    const items: EntryItem[] = entries.map((entry) => ({
+        ...entryPickLabel(entry, position, subjects?.get(entry.position)),
+        entry,
+    }));
 
     const active = items.find((item) => item.entry.position === position);
     const picked = await show(

@@ -105,6 +105,7 @@ if [ "$porcelain" -eq 1 ]; then
 	case "$mode" in
 	step)
 		load_step_review_meta
+		load_step_texts
 		pcurrent="$(git rev-parse --short "$(printf '%s\n' "$commits" | sed -n "${step}p")")"
 		porcelain_row state "$cur" "$src" "$tip" step none "$step" "$total" "$count" "$pcurrent"
 		i=1
@@ -117,6 +118,27 @@ if [ "$porcelain" -eq 1 ]; then
 			porcelain_row entry "$i" "$ish" "$banked"
 			i=$((i + 1))
 		done
+		# Free text goes in its own record, last field, one per record: a subject
+		# and an author name can both contain a literal tab (contracts/
+		# status-porcelain-v2.md), and only the last field of a line survives that
+		# without shifting anything.
+		#
+		# Each list is streamed in ONE pass rather than indexed with sed line by
+		# line. porcelain_row is a shell function, so a pass costs one subshell
+		# instead of two processes per position; indexing cost 2N processes, and
+		# under Git Bash on Windows — where fork() is emulated — that alone
+		# added ~75% to a 50-commit status (FR-014/SC-008, measured). The line
+		# count is exactly $total because load_step_texts keeps the trailing
+		# newline, so an empty subject still gets its own record with an empty
+		# field instead of vanishing.
+		printf '%s' "$subjects" | { i=1; while IFS= read -r text; do
+			porcelain_row subject "$i" "$text"
+			i=$((i + 1))
+		done; }
+		printf '%s' "$authors" | { i=1; while IFS= read -r text; do
+			porcelain_row author "$i" "$text"
+			i=$((i + 1))
+		done; }
 		;;
 	walk)
 		load_walk_review_meta
@@ -141,6 +163,16 @@ if [ "$porcelain" -eq 1 ]; then
 			fi
 		fi
 		porcelain_row state "$cur" "$src" "$tip" "$mode" "$pwalkthrough"
+		# The base is what a review without a walkthrough has instead of a
+		# reading order: the ref its range was built against. Read with || true
+		# like the human path does — a key deleted by hand must not abort the
+		# script under set -eu. Omitted entirely when there is none: omit, never
+		# blank, never a sentinel. It goes after `state`, which the contract
+		# keeps as the first line.
+		pbase="$(git config "branch.$cur.reviewbase" || true)"
+		if [ -n "$pbase" ]; then
+			porcelain_row base "$pbase"
+		fi
 		;;
 	esac
 	exit 0

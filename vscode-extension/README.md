@@ -13,11 +13,30 @@ you put aside doesn't have to be remembered by name. Saved ones offer
 *Continue*; an active one is listed without an action, because going back to it
 is a branch checkout and the editor's branch picker already does that.
 
-The extension never derives review state on its own: everything it shows
-comes from re-invoking `git review status --porcelain` / `--why` / `list
---porcelain` and reading the result. See `../specs/002-extension-vscode/` for
-the full design (`contracts/cli-invocation.md` is the closed list of what the
-extension is allowed to invoke).
+## The CLI is the only source of truth
+
+The extension never derives review state on its own. Everything it shows comes
+from re-invoking `git review status --porcelain` / `--why` / `list --porcelain`
+and reading the result — it does not read git config, refs or branches to work
+out the mode, the position or the sequence, and it does not write config, move
+refs or touch the index to change them.
+
+The rule that follows from that, and the one to remember when adding anything
+here: **if the panel needs something the CLI does not report, it gets added to
+the CLI.** Never to the extension. A value this side could compute from the
+repository is still a second source of truth, and the moment the two disagree
+the panel is lying about a review the reviewer is trusting it with.
+
+`../specs/002-extension-vscode/` has the full design;
+`contracts/cli-invocation.md` is the closed list of what the extension may
+invoke, and the explicit list of what it may never do.
+
+One thing that list does not yet settle: the panel shells out to git plumbing
+directly to build the file list for a commit's diff (`readCommitChanges` in
+`src/commands/openEntry.ts`). It derives nothing about the review — the commit
+id comes from the CLI, and git is only asked which files that commit touches —
+but it is a direct git call in a codebase whose whole point is not making them,
+and no spec covers it either way. Left as is on purpose, to be decided.
 
 ## Requirements
 

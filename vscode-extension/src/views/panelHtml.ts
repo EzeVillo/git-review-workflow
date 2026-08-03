@@ -47,6 +47,9 @@ export function panelHtml(nonce: string): string {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* El tip no se recorta: ya viene abreviado a siete caracteres, y es lo que se
+     pega en una terminal. Quien cede el ancho es el nombre del origen. */
+  .bar .tip { flex: none; }
   .bar .pos { margin-left: auto; font-variant-numeric: tabular-nums; }
   .note {
     padding: .5em .8em;
@@ -66,6 +69,17 @@ export function panelHtml(nonce: string): string {
     color: var(--vscode-descriptionForeground);
   }
   .head .n { font-variant-numeric: tabular-nums; }
+  /* En step el head lleva además el SHA y el autor. El SHA no se recorta nunca
+     —es el identificador que se pega en una terminal— y el autor cede primero:
+     es el más largo y el menos exacto de los dos. */
+  .head .sha { flex: none; }
+  .head .who {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   /* Dos marcas con peso distinto: "edits" es un estado propio del revisor y va
      en outline, del color del texto normal para separarse del gris del head;
      "key" es lo que el autor del walkthrough marcó como esencial y va sólido,
@@ -97,6 +111,8 @@ export function panelHtml(nonce: string): string {
     overflow-wrap: anywhere;
     line-height: 1.4;
   }
+  /* Un asunto vacío: la ausencia dicha, no un bloque en blanco. */
+  .id.quiet { color: var(--vscode-descriptionForeground); font-style: italic; }
   .why {
     margin: 0 0 1em;
     padding-left: .7em;
@@ -425,8 +441,16 @@ export function panelHtml(nonce: string): string {
   function renderBar(model, loading) {
     const bar = el("div", "bar");
     bar.appendChild(el("span", "mode", model.mode));
-    const branch = model.repoLabel ? model.branch + " · " + model.repoLabel : model.branch;
-    bar.appendChild(el("span", "branch", branch));
+    // El ORIGEN en lugar de la rama, no además de ella (research.md Decisión 5):
+    // la rama es siempre "review/<origen>", así que mostrar las dos es gastar dos
+    // veces el recurso más escaso del panel en el mismo dato. El origen es
+    // además el nombre que el revisor reconoce —es el PR— y el que la CLI pone
+    // primero en su salida humana. Con una CLI que no lo reporte, la rama.
+    const name = model.source !== undefined ? model.source : model.branch;
+    bar.appendChild(el("span", "branch", model.repoLabel ? name + " · " + model.repoLabel : name));
+    // Abreviado, como lo imprime la terminal: el contrato lo emite completo y
+    // recortar para mostrar es presentación, no derivar estado.
+    if (model.tip !== undefined) { bar.appendChild(el("span", "tip", model.tip.slice(0, 7))); }
     if (loading) {
       bar.appendChild(el("span", "pos sk sk-pos"));
     } else if (model.position !== undefined && model.total !== undefined) {
@@ -469,6 +493,20 @@ export function panelHtml(nonce: string): string {
     const body = el("div", "body");
     const head = el("div", "head");
     head.appendChild(el("span", "n", pad(model.current.position)));
+    // En step el elemento grande pasa a ser el ASUNTO, y el SHA baja al head
+    // junto al autor (research.md Decisión 4): el equivalente humano de un
+    // commit es su asunto, igual que en walk lo es el path. El SHA no
+    // desaparece — es lo que se pega en una terminal.
+    // Sin asunto (una CLI anterior a esta feature) nada de esto ocurre y el
+    // head queda exactamente como estaba: degradar es dibujar el panel de ayer,
+    // no dejar un hueco (FR-003).
+    const named = model.mode === "step" && model.current.subject !== undefined;
+    if (named) {
+      head.appendChild(el("span", "sha", model.current.display));
+      if (model.current.author !== undefined) {
+        head.appendChild(el("span", "who", model.current.author));
+      }
+    }
     // "key" es el marcador del propio walkthrough (la línea "> key"), no una
     // etiqueta inventada acá; "edits" sí necesita el título, porque abreviado
     // no dice cuáles son esas ediciones; "uncovered" sólo aplica en walk — en
@@ -484,8 +522,14 @@ export function panelHtml(nonce: string): string {
     }
     body.appendChild(head);
 
-    const id = el("p", "id", model.current.display);
-    body.appendChild(id);
+    // Un asunto vacío es un valor legítimo (un commit cuyo mensaje no tiene
+    // primera línea), y se muestra como la ausencia que es — distinto de una
+    // CLI que no reporta asuntos, que cae en la rama de arriba.
+    if (named && model.current.subject.length === 0) {
+      body.appendChild(el("p", "id quiet", "This commit has no subject."));
+    } else {
+      body.appendChild(el("p", "id", named ? model.current.subject : model.current.display));
+    }
 
     if (model.why) {
       body.appendChild(renderWhy(model.why, model.mode === "walk" ? model.current.annotated : undefined));
@@ -574,6 +618,10 @@ export function panelHtml(nonce: string): string {
     if (model.degraded) {
       root.appendChild(note("The walkthrough does not cover the review's current range; showing the full range diff."));
     }
+    // Sólo llega en whole, que es donde reemplaza a la secuencia como respuesta
+    // a "¿contra qué estoy comparando?". Sin base registrada no se dibuja nada
+    // en su lugar: ni un hueco, ni un vacío, ni un error (FR-009).
+    if (model.base !== undefined) { root.appendChild(note("Range built against " + model.base + ".")); }
   }
 
   function render(model) {

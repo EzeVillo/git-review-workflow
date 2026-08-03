@@ -560,6 +560,9 @@ and any line whose type it does not recognize: the format only ever grows.
 ```
 state	<branch>	<source>	<tip>	<mode>	<walkthrough>[	<position>	<total>	<recorded>	<current>[	<essential>]]
 entry	<position>	<id>[	<essential>	<annotated>|<banked>]
+subject	<position>	<subject>
+author	<position>	<author>
+base	<base>
 ```
 
 - `state` — exactly one line, always first. `mode` is `whole` \| `step` \| `walk`.
@@ -578,6 +581,26 @@ entry	<position>	<id>[	<essential>	<annotated>|<banked>]
   step mode it is just `banked` (`1`/`0`, has a banked edit under
   `refs/review-edits/`); omitted entirely in whole mode, since there is no
   sequence to report.
+- `subject` and `author` — step mode only, one of each per position, carrying
+  the commit's subject line and its author as `Name <email>`. Pair them with
+  `entry` by `position`, never by order of appearance. A subject can be empty (a
+  commit whose message has no first line); the record is still emitted, with an
+  empty field, so "no subject" stays distinguishable from "this git-review does
+  not report subjects".
+- `base` — whole mode only, and only when the review has a base recorded: the
+  ref its range was built against. A single record with no position — the base
+  belongs to the review, not to an entry. With no base recorded the line is
+  omitted entirely, never emitted blank.
+
+**Free-text fields.** `subject`, `author` and `base` carry text a *person* wrote,
+not text git produced, and unlike a path it **can contain a literal tab**. So the
+rule for these records — and for any future record with free text — is: the free
+text is always the **last field** of its record, and there is at most one per
+record. It is emitted byte for byte, unescaped and unquoted. Read it as
+*"everything after the Nth tab, to end of line"*, not as *"the Nth field"* — a
+`split` on tab would silently truncate a subject that contains one. These records
+accept no new trailing fields for that same reason; anything new goes in a record
+of its own. A newline can never appear in them.
 
 A path is always emitted exactly as `git diff --name-only` (with
 `core.quotePath=false`) renders it: literal, unescaped bytes for spaces and

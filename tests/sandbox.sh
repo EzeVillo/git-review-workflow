@@ -22,8 +22,9 @@
 #
 # Around it, one branch per state that a single well-formed pull request cannot
 # show: a partial walkthrough (unannotated files at the end of the reading
-# order), no walkthrough (whole), a stale one (degraded), and three saved
-# reviews — resumable, blocked, and orphaned —
+# order), no walkthrough (whole), a stale one (degraded), commit subjects and
+# author names carrying hostile bytes (a literal tab, non-ASCII, an emoji, an
+# empty subject), and three saved reviews — resumable, blocked, and orphaned —
 # for the inventory that `git review list` and the extension's empty state read.
 # That last group is the only part built by running the commands rather than by
 # writing the repository directly; it fails soft, see the phase itself.
@@ -335,6 +336,40 @@ EOF
 git add src/metrics.js src/sampler.js
 git commit --quiet -m "feat: sample checkout timings"
 publish feature/telemetry
+
+# A pull request whose commit messages and author names carry the bytes that the
+# subject/author porcelain records have to survive: a literal tab (the field
+# separator itself), non-ASCII, an emoji, and an empty subject. Review it with
+# --step and compare `git review status` against `git review status --porcelain`:
+# the tab must come out literal on both sides and, in the porcelain, the record
+# AFTER it must still start with its own label and position. No walkthrough, so
+# --step is the natural way in.
+pr feature/pagos
+
+cat >src/pagos.js <<'EOF'
+export function cobrar(total) {
+	return { total, moneda: "ARS" };
+}
+EOF
+git add src/pagos.js
+git -c "user.name=$(printf 'Eze\tVillo')" commit --quiet -m "$(printf 'feat: cobrar\tcon tab en el asunto')"
+
+cat >src/reembolsos.js <<'EOF'
+export function reembolsar(pago) {
+	return { ...pago, total: -pago.total };
+}
+EOF
+git add src/reembolsos.js
+git -c "user.name=$(printf 'Ana Mu\303\261oz')" commit --quiet -m "$(printf 'feat: reembolsos con acentos y emoji \360\237\232\200')"
+
+cat >src/conciliacion.js <<'EOF'
+export function conciliar(pagos) {
+	return pagos.reduce((sum, p) => sum + p.total, 0);
+}
+EOF
+git add src/conciliacion.js
+git commit --quiet --allow-empty-message -m ""
+publish feature/pagos
 
 # A pull request whose walkthrough went stale: every path it names was renamed
 # away, so it covers nothing in the range and the review degrades to whole with a

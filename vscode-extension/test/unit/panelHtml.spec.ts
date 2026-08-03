@@ -150,4 +150,42 @@ describe("panelHtml", () => {
             assert.ok(html.includes(`"${situation}"`), `falta el estado vacío ${situation}`);
         }
     });
+
+    it("el inventario solo ofrece Continue sobre una fila guardada y resumible", () => {
+        // Las dos guardas son lo que evita ofrecer una accion que el verbo
+        // rechazaria; sin ellas el boton queda para cualquier fila.
+        assert.ok(/if \(review\.saved\) \{/.test(html), "solo las guardadas llevan accion");
+        assert.ok(
+            /go\.disabled = model\.busy \|\| !review\.resumable/.test(html),
+            "una fila no resumible, o una mutacion en curso, deshabilitan el boton"
+        );
+        assert.ok(/button\("Continue", "continueReview", null, null, index\)/.test(html));
+    });
+
+    it("un Continue deshabilitado dice por que lo esta", () => {
+        assert.ok(/go\.title = review\.orphan/.test(html), "el motivo depende de la fila");
+        assert.ok(html.includes("This branch has no review metadata"));
+        assert.ok(html.includes("A review of this branch is already active"));
+    });
+
+    it("el mensaje del inventario lleva un indice, nunca el nombre de la rama", () => {
+        // El nombre viaja al panel para mostrarlo; lo que vuelve es la posicion,
+        // que el host resuelve contra su propio inventario.
+        assert.ok(
+            /\{type: message, index: index\}/.test(html),
+            "el unico dato de un mensaje es el indice"
+        );
+        assert.ok(
+            !/postMessage\([^)]*\bname\b/.test(html),
+            "el nombre de la rama no vuelve del webview"
+        );
+    });
+
+    it("sin reviews en el repositorio el estado vacio queda como estaba", () => {
+        assert.ok(
+            /if \(reviews\.length === 0\) \{ return box; \}/.test(html),
+            "sin inventario no se dibuja ni el encabezado ni el separador"
+        );
+        assert.ok(html.includes("Reviews in this repository"));
+    });
 });

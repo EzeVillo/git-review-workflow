@@ -73,16 +73,36 @@ que es un estado distinto (FR-018).
 
 ### `git review list --porcelain`
 
-**Cuándo**: no se invoca en el alcance de esta feature. Se documenta para dejar
-constancia de que el inventario de reviews (cambiar entre reviews) es la
-superficie natural para una iteración posterior, y de que no requerirá cambios
-en la CLI.
+**Cuándo**: sólo con `Situation.no-review` — el estado vacío del panel es el
+único lugar que muestra el inventario. Estando dentro de una review no se
+invoca: `status --porcelain` ya reporta la que importa, y agregar un proceso a
+cada refresco por información que no se dibuja iría contra SC-002.
+
+**Se consume**: registros `branch` (cero o más), según
+[`001-contrato-porcelain`](../../001-contrato-porcelain/contracts/list-porcelain.md).
+Etiquetas desconocidas y campos extra al final: **se ignoran**, igual que en
+`status` (FR-003).
+
+**Se produce**: el inventario de reviews del repositorio, activas y guardadas.
+Exit `0` siempre que sea un repositorio git — un inventario vacío es un
+resultado válido, no un error, así que **no** hay `Situation` propia: un fallo
+acá deja el estado vacío como estaba antes de esta iteración, sin inventario.
+
+**Es la única fuente de**: qué reviews existen fuera de la rama actual, su modo
+y su posición registrada.
+
+**El `name` viaja de vuelta a la CLI**, y es el único valor del que eso vale:
+`porcelain_row` (`bin/git-review-lib.sh:23`) no escapa nada y git prohíbe tabs,
+espacios y caracteres de control en un nombre de rama, así que el campo es el
+nombre byte por byte. Quitarle el prefijo `review/` o `review-saved/` reconstruye
+el argumento de `continue`. No aplica la Decisión 8: ésa es sobre paths citados,
+que sí pasan por `unquote`.
 
 ---
 
 ## Invocaciones mutantes
 
-Las únicas dos. Serializadas y con `gitReview.busy` activo mientras corren
+Las únicas tres. Serializadas y con `gitReview.busy` activo mientras corren
 (FR-020, Decisión 9).
 
 ### `git review next` / `git review prev`
@@ -104,6 +124,38 @@ extensión detecta ese caso comparando la `position` de antes con la del
 `status --porcelain` de después —nunca leyendo el texto del verbo (FR-015)— y
 muestra ese mismo aviso, el de la CLI y no uno redactado acá. Sin eso el
 comando sería mudo, que es lo contrario de propagar.
+
+### `git review continue <src>`
+
+**Cuándo**: por acción explícita del usuario desde el inventario del estado
+vacío, y sólo sobre una fila `saved`. Nunca sin argumento: sin él el verbo
+resume la única guardada o falla listando las demás
+(`bin/git-review-verbs/continue:66`), y cuál resumir ya lo eligió el usuario.
+
+**Argumento**: el `name` del registro `branch` sin su prefijo `review-saved/`.
+El verbo espera el nombre *source* (`feature/checkout`), no el de la rama.
+
+**Se consume**: el exit code y el stderr. **No se parsea la salida humana**
+("resumed review of …"), igual que con `next`/`prev`: el estado nuevo lo da el
+`status --porcelain` que corre inmediatamente después.
+
+**Se produce**: un refresco. La invocación cambia `HEAD` —crea `review/<src>`,
+restaura las ediciones en el working tree y borra `review-saved/<src>`—, así que
+va detrás de una confirmación explícita, a diferencia de `next`/`prev`.
+
+**Por qué está permitida** cuando `start` no lo está: no toca la red (no hay
+`fetch`), y es la inversa exacta de `save`, que la deshace. El riesgo es
+simétrico; el de `start` no.
+
+**Fallos que no se anticipan**: de los tres modos de fallo del verbo, dos se
+leen del propio inventario y deshabilitan el botón — que `review/<src>` ya esté
+activa (fila activa y fila guardada para el mismo source) y que la rama sea
+huérfana (`orphan = 1`). El tercero, el working tree sucio
+(`bin/git-review-verbs/continue:84`), **sólo lo sabe git**: anticiparlo sería
+derivar por afuera de la CLI. Se deja fallar y se muestra su stderr tal cual
+(FR-024).
+
+---
 
 La extensión **no** decide si el cursor se mueve: eso sigue siendo del verbo.
 Lo que sí hace el panel es deshabilitar el botón cuyo destino no existe, leyendo
@@ -129,6 +181,11 @@ un ítem verificable de la revisión de SC-005.
 | Parsear la salida humana de cualquier verbo                                  | El contrato existe para no hacer esto                                                |
 | Invocar `finish`, `abort`, `save`, `start`, `clean`, `forget`, `walkthrough` | Fuera de alcance por decisión del spec (riesgo asimétrico)                           |
 | Re-citar un `PathRef.display` para pasárselo a la CLI                        | Decisión 8 — el des-citado es unidireccional                                         |
+
+`continue` queda deliberadamente fuera de esa fila: es la única mutante que la
+lista **no** prohíbe, por el riesgo simétrico explicado más arriba. Que falte no
+es una omisión que se pueda leer como permiso tácito para las otras — cualquier
+verbo que no esté en la sección de mutantes sigue prohibido.
 
 **Único uso permitido de la API de `vscode.git`**: descubrir la raíz del
 repositorio y recibir la señal de que algo cambió. Ningún campo del view-model

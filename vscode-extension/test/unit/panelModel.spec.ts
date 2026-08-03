@@ -1,9 +1,9 @@
 import * as assert from "node:assert";
-import {parsePorcelain} from "../../src/cli/porcelain";
+import {parseListPorcelain, parsePorcelain} from "../../src/cli/porcelain";
 // `import type`: `review/state.ts` importa `vscode`, que no existe fuera del
 // host — el tipo se borra en compilación y el módulo no llega a cargarse.
 import type {ReviewState} from "../../src/review/state";
-import {buildPanelModel, entryPickLabel} from "../../src/views/panelModel";
+import {buildPanelModel, entryPickLabel, resumableSourceAt} from "../../src/views/panelModel";
 
 /**
  * Arma el `ReviewState` desde salida porcelain real en vez de a mano: el modelo
@@ -18,6 +18,7 @@ function reviewState(stdout: string): ReviewState {
         state: parsed.state,
         entries: parsed.entries,
         uncovered: parsed.uncovered,
+        branches: [],
     };
 }
 
@@ -156,7 +157,7 @@ describe("buildPanelModel", () => {
         assert.strictEqual(model.atLast, false);
 
         const noReview = buildPanelModel(
-            {situation: "no-review", entries: [], uncovered: []},
+            {situation: "no-review", entries: [], uncovered: [], branches: []},
             {busy: false}
         );
         assert.strictEqual(noReview.atFirst, false);
@@ -202,6 +203,7 @@ describe("buildPanelModel", () => {
             situation: "out-of-range",
             entries: [],
             uncovered: [],
+            branches: [],
             stderr: "error: the cursor is out of range\n",
         };
         const model = buildPanelModel(state, {busy: false});
@@ -214,7 +216,13 @@ describe("buildPanelModel", () => {
     });
 
     it("un stderr en blanco no se propaga como diagnóstico", () => {
-        const state: ReviewState = {situation: "error", entries: [], uncovered: [], stderr: "  \n"};
+        const state: ReviewState = {
+            situation: "error",
+            entries: [],
+            uncovered: [],
+            branches: [],
+            stderr: "  \n",
+        };
         assert.strictEqual(buildPanelModel(state, {busy: false}).stderr, undefined);
     });
 
@@ -264,5 +272,123 @@ describe("entryPickLabel", () => {
     it("posiciones de dos dígitos no se rellenan", () => {
         const wide = parsePorcelain("state\tr\ts\tt\tstep\tnone\t10\t10\t10\tabc\nentry\t10\tabc1234\t0\n");
         assert.strictEqual(entryPickLabel(wide.entries[0], 10).label, "10  abc1234");
+    });
+});
+
+/**
+ * El inventario del estado vacio. Igual que arriba, las filas salen de salida
+ * `list --porcelain` real pasada por el parser: escribir los records a mano
+ * probaria la proyeccion contra una copia del contrato.
+ */
+function inventoryState(rows: string[]): ReviewState {
+    return {
+        situation: "no-review",
+        entries: [],
+        uncovered: [],
+        branches: parseListPorcelain(rows.join("\n") + "\n"),
+    };
+}
+
+const INVENTORY = [
+    "branch\treview/feature/checkout\t0\t0\t0\twalk\t3\t9",
+    "branch\treview/fix/quoting\t0\t0\t0\twhole",
+    "branch\treview/orphan\t0\t1\t1",
+    "branch\treview-saved/perf/index\t1\t0\t0\tstep\t2\t4",
+    "branch\treview-saved/fix/quoting\t1\t0\t0\twalk\t1\t6",
+];
+
+describe("buildPanelModel — inventario", () => {
+    it("proyecta cada fila con su modo y su posicion registrada, en el orden de la CLI", () => {
+        const model = buildPanelModel(inventoryState(INVENTORY), {busy: false});
+        assert.deepStrictEqual(
+            model.reviews.map((r) => r.name),
+            [
+                "review/feature/checkout",
+                "review/fix/quoting",
+                "review/orphan",
+                "review-saved/perf/index",
+                "review-saved/fix/quoting",
+            ]
+        );
+        assert.deepStrictEqual(model.reviews[0], {
+            name: "review/feature/checkout",
+            saved: false,
+            current: false,
+            orphan: false,
+            mode: "walk",
+            position: 3,
+            total: 9,
+            resumable: false,
+        });
+        assert.strictEqual(model.reviews[1].mode, "whole");
+        assert.strictEqual(model.reviews[1].position, undefined);
+    });
+
+    it("solo una guardada es resumible; una activa nunca lo es", () => {
+        const model = buildPanelModel(inventoryState(INVENTORY), {busy: false});
+        assert.strictEqual(model.reviews[0].resumable, false, "activa: no hay verbo para saltar");
+        assert.strictEqual(model.reviews[3].resumable, true, "guardada sin activa gemela");
+    });
+
+    it("una guardada con su activa gemela no se ofrece: el verbo la rechazaria", () => {
+        // review/fix/quoting esta activa, asi que continue fallaria con
+        // "is already active" sobre review-saved/fix/quoting.
+        const model = buildPanelModel(inventoryState(INVENTORY), {busy: false});
+        const twin = model.reviews[4];
+        assert.strictEqual(twin.name, "review-saved/fix/quoting");
+        assert.strictEqual(twin.saved, true);
+        assert.strictEqual(twin.resumable, false);
+    });
+
+    it("una huerfana se lista marcada y sin accion", () => {
+        const model = buildPanelModel(inventoryState(INVENTORY), {busy: false});
+        const orphan = model.reviews[2];
+        assert.strictEqual(orphan.orphan, true);
+        assert.strictEqual(orphan.current, true);
+        assert.strictEqual(orphan.mode, undefined);
+        assert.strictEqual(orphan.resumable, false);
+    });
+
+    it("una guardada huerfana tampoco se ofrece", () => {
+        const model = buildPanelModel(
+            inventoryState(["branch\treview-saved/rota\t1\t0\t1"]),
+            {busy: false}
+        );
+        assert.strictEqual(model.reviews[0].saved, true);
+        assert.strictEqual(model.reviews[0].orphan, true);
+        assert.strictEqual(model.reviews[0].resumable, false);
+    });
+
+    it("una situacion que no es no-review no lleva inventario", () => {
+        const model = buildPanelModel(reviewState(WALK), {busy: false});
+        assert.deepStrictEqual(model.reviews, []);
+    });
+});
+
+describe("resumableSourceAt", () => {
+    const branches = parseListPorcelain(INVENTORY.join("\n") + "\n");
+
+    it("devuelve el source sin prefijo de la fila resumible", () => {
+        assert.strictEqual(resumableSourceAt(branches, 3), "perf/index");
+    });
+
+    it("no resuelve una activa, una huerfana ni una guardada bloqueada", () => {
+        assert.strictEqual(resumableSourceAt(branches, 0), undefined, "activa");
+        assert.strictEqual(resumableSourceAt(branches, 2), undefined, "huerfana");
+        assert.strictEqual(resumableSourceAt(branches, 4), undefined, "con activa gemela");
+    });
+
+    it("un indice fuera de rango o que no es entero no resuelve nada", () => {
+        for (const index of [-1, 5, 99, 1.5, NaN, "3", "perf/index", null, undefined, {}]) {
+            assert.strictEqual(
+                resumableSourceAt(branches, index),
+                undefined,
+                `el indice ${String(index)} no deberia resolver`
+            );
+        }
+    });
+
+    it("sobre un inventario vacio no resuelve nada", () => {
+        assert.strictEqual(resumableSourceAt([], 0), undefined);
     });
 });

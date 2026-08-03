@@ -7,11 +7,17 @@ they wrote for it. The full sequence and the files the walkthrough doesn't cover
 are one keystroke away in a quick pick, and commands jump to the file, advance
 and go back — all without leaving the editor.
 
+With no review on the current branch the panel lists the ones open elsewhere in
+the repository — active and saved, with their mode and position — so a review
+you put aside doesn't have to be remembered by name. Saved ones offer
+*Continue*; an active one is listed without an action, because going back to it
+is a branch checkout and the editor's branch picker already does that.
+
 The extension never derives review state on its own: everything it shows
-comes from re-invoking `git review status --porcelain` / `--why` and reading
-the result. See `../specs/002-extension-vscode/` for the full design
-(`contracts/cli-invocation.md` is the closed list of what the extension is
-allowed to invoke).
+comes from re-invoking `git review status --porcelain` / `--why` / `list
+--porcelain` and reading the result. See `../specs/002-extension-vscode/` for
+the full design (`contracts/cli-invocation.md` is the closed list of what the
+extension is allowed to invoke).
 
 ## Requirements
 
@@ -40,6 +46,13 @@ The sandbox builds a throwaway pull request to open there:
 ../tests/sandbox.sh                 # prints where it built the repo
 git -C <sandbox>/work review start feature/checkout
 ```
+
+It also builds one branch per state the panel can reach but a single well-formed
+pull request never shows — start `feature/notifications` for uncovered files,
+`feature/telemetry` for whole mode, `feature/legacy` for the degraded note — and
+leaves three saved reviews on `develop`, which is the empty state's inventory:
+one row offering `Continue`, and two that explain why they cannot. The script
+prints the whole map when it finishes.
 
 Then open `<sandbox>/work` in the development host. Note that the host inherits
 the `PATH` of the VS Code that launched it, not the one `env.sh` sets up inside

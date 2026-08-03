@@ -235,6 +235,12 @@ ofrece la salida correspondiente.
 5. **Given** un repositorio que no es un repositorio git, o una rama de review
    con metadata corrupta, **When** abre el panel, **Then** ve un diagnóstico que
    no promete una solución que no existe.
+6. **Given** un repositorio con reviews abiertas en otras ramas, **When** el
+   revisor abre el panel parado en una rama sin review, **Then** las ve listadas
+   con su modo y su posición, sin tener que recordar sus nombres.
+7. **Given** una review que el revisor pausó, **When** la ve listada, **Then**
+   puede retomarla desde ahí, con una confirmación previa porque la acción
+   cambia de rama y reordena el editor.
 
 ---
 
@@ -392,6 +398,14 @@ los que tienen ediciones guardadas distinguidos.
 - **FR-031**: El panel MUST adoptar el tema activo del editor —incluidos los de
   alto contraste— y ser operable con el teclado, sin depender de que el revisor
   use el mouse ni de que su tema sea uno en particular.
+- **FR-032**: Sin review en la rama actual, el panel MUST listar las reviews
+  abiertas en el resto del repositorio —activas y pausadas— con su modo y su
+  posición, tomándolas de la CLI y no de las ramas del repositorio.
+- **FR-033**: La extensión MUST permitir retomar una review pausada desde ese
+  listado, previa confirmación, y MUST NOT ofrecer la acción donde la CLI la
+  rechazaría por una condición que el propio listado ya deja ver. Una review
+  activa en otra rama se lista **sin** acción: volver a ella es cambiar de rama,
+  y el editor ya tiene esa superficie.
 
 ### Key Entities
 
@@ -404,6 +418,9 @@ los que tienen ediciones guardadas distinguidos.
 - **Archivo sin cobertura**: un archivo que cambia en la review y no tiene
   entrada en el walkthrough.
 - **Explicación**: el texto que el autor escribió para una entrada.
+- **Review del inventario**: una review que existe en otra rama del repositorio
+  —activa o pausada—, con su modo y la posición que quedó registrada. Es lo
+  único que el panel muestra de reviews que no son la de la rama actual.
 
 ## Success Criteria *(mandatory)*
 

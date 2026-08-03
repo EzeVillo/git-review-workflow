@@ -11,6 +11,8 @@ import {
     addWalkthrough,
     createBranchWithChanges,
     git,
+    gitReview,
+    gitReviewOrThrow,
     sharedFixtureRepo,
     startReview
 } from "./helpers/fixture";
@@ -48,6 +50,92 @@ describe("US5: entender por qué no hay nada que mostrar", function () {
         const api = await getTestApi();
         const state = await api.refresh();
         assert.strictEqual(state.situation, "no-review");
+    });
+
+    it("sin reviews en el repositorio el inventario esta vacio", async () => {
+        const api = await getTestApi();
+        const state = await api.refresh();
+        assert.strictEqual(state.situation, "no-review");
+        assert.deepStrictEqual(state.branches, [], "el repo compartido arranca sin reviews");
+        assert.deepStrictEqual((await api.getPanelModel()).reviews, []);
+    });
+
+    it("una review guardada llega al inventario y se ofrece resumirla", async () => {
+        const branch = "us5-inventory";
+        createBranchWithChanges(repo, branch, {"src/inv.ts": "inv\n"});
+        startReview(repo, branch);
+        // Pausarla la manda a review-saved/<branch> y devuelve HEAD a main: el
+        // estado exacto donde el panel tiene algo que inventariar.
+        gitReviewOrThrow(["save"], repo.dir);
+
+        try {
+            const api = await getTestApi();
+            const state = await api.refresh();
+            assert.strictEqual(state.situation, "no-review");
+            assert.deepStrictEqual(
+                state.branches.map((b) => b.name),
+                [`review-saved/${branch}`],
+                "la guardada es la unica review del repositorio"
+            );
+            assert.strictEqual(state.branches[0].saved, true);
+            assert.strictEqual(state.branches[0].orphan, false);
+
+            const model = await api.getPanelModel();
+            assert.strictEqual(model.reviews.length, 1);
+            assert.strictEqual(model.reviews[0].name, `review-saved/${branch}`);
+            assert.strictEqual(model.reviews[0].resumable, true);
+        } finally {
+            gitReviewOrThrow(["forget", "--saved", branch], repo.dir);
+        }
+    });
+
+    it("una review activa en otra rama se lista, pero no se ofrece resumirla", async () => {
+        const branch = "us5-active-elsewhere";
+        createBranchWithChanges(repo, branch, {"src/act.ts": "act\n"});
+        startReview(repo, branch);
+        // El review queda activo en review/<branch>; parado en main no hay
+        // review, y es justo ahi donde el inventario tiene que mostrarlo.
+        git(["checkout", "main"], repo.dir);
+
+        try {
+            const api = await getTestApi();
+            const state = await api.refresh();
+            assert.strictEqual(state.situation, "no-review");
+            assert.deepStrictEqual(state.branches.map((b) => b.name), [`review/${branch}`]);
+
+            const model = await api.getPanelModel();
+            assert.strictEqual(model.reviews[0].saved, false);
+            assert.strictEqual(
+                model.reviews[0].resumable,
+                false,
+                "para volver a una activa no hay verbo: es un checkout"
+            );
+        } finally {
+            git(["checkout", `review/${branch}`], repo.dir);
+            gitReview(["abort"], repo.dir);
+        }
+    });
+
+    it("continueReview con un indice que no resuelve no hace nada", async () => {
+        // El camino feliz del comando no se puede afirmar acá: abre un modal de
+        // confirmación y en el host de test nadie lo cierra. Lo que sí se puede
+        // —y es lo que protege de invocar la CLI con basura— es que un índice
+        // que no resuelve retorne ANTES del modal, sin tocar el repositorio.
+        const api = await getTestApi();
+        const before = await api.refresh();
+        assert.strictEqual(before.situation, "no-review");
+
+        for (const index of [0, -1, 7, "review-saved/whatever", undefined]) {
+            await vscode.commands.executeCommand("gitReview.continueReview", index);
+        }
+
+        const after = await api.refresh();
+        assert.strictEqual(after.situation, "no-review");
+        assert.strictEqual(
+            git(["symbolic-ref", "--quiet", "--short", "HEAD"], repo.dir).trim(),
+            "main",
+            "ningun indice invalido puede haber cambiado de rama"
+        );
     });
 
     it("cursor fuera de rango: HEAD se movió de la base", async () => {

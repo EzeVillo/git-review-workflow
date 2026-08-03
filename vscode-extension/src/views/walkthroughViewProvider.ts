@@ -17,6 +17,7 @@ export const PANEL_MESSAGES = [
     "showUncovered",
     "installCli",
     "outOfRangeHelp",
+    "continueReview",
 ] as const;
 
 export type PanelMessage = (typeof PANEL_MESSAGES)[number];
@@ -56,7 +57,13 @@ export class WalkthroughViewProvider implements vscode.WebviewViewProvider {
     private view: vscode.WebviewView | undefined;
     private model: PanelModel | undefined;
 
-    constructor(private readonly onMessage: (message: PanelMessage) => void) {
+    /**
+     * `index` es el único dato que un mensaje puede traer además del `type`
+     * (`continueReview`, contracts/extension-surface.md § Protocolo). Viaja
+     * como `unknown` a propósito: acá no se valida nada, lo resuelve el host
+     * contra su propio estado.
+     */
+    constructor(private readonly onMessage: (message: PanelMessage, index?: unknown) => void) {
     }
 
     /**
@@ -78,7 +85,7 @@ export class WalkthroughViewProvider implements vscode.WebviewViewProvider {
                 return;
             }
             if (isPanelMessage(type)) {
-                this.onMessage(type);
+                this.onMessage(type, (raw as { index?: unknown } | undefined)?.index);
             }
         });
         view.onDidDispose(() => {

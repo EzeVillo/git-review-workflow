@@ -19,6 +19,13 @@
 # walkthrough whose reading order is deliberately not the diff order, and a
 # couple of paths carrying a space and a non-ASCII byte — the shape that keeps
 # breaking path comparison in silence.
+#
+# Around it, one branch per state that a single well-formed pull request cannot
+# show: a partial walkthrough (uncovered files), no walkthrough (whole), a stale
+# one (degraded), and three saved reviews — resumable, blocked, and orphaned —
+# for the inventory that `git review list` and the extension's empty state read.
+# That last group is the only part built by running the commands rather than by
+# writing the repository directly; it fails soft, see the phase itself.
 set -eu
 
 prog="tests/sandbox.sh"
@@ -234,8 +241,233 @@ git commit --quiet -m "docs: walkthrough"
 
 git push --quiet -u origin feature/checkout
 
+# ── the other pull requests ───────────────────────────────────────────────────
+#
+# feature/checkout above is the fixture for --step and walk, and it stays exactly
+# as it was. Everything from here down is additive: one branch per state that the
+# panel (and the commands) can reach but that a single well-formed pull request
+# never shows — a partial walkthrough, no walkthrough at all, a stale one.
+
+pr() {
+	git switch --quiet -c "$1" develop
+}
+
+publish() {
+	git push --quiet -u origin "$1"
+}
+
+# A pull request whose walkthrough covers two of its four files: the rest is what
+# `git review status` counts as uncovered, and what the panel offers at the foot.
+pr feature/notifications
+
+cat >src/notify.js <<'EOF'
+import { render } from "./templates/email.js";
+
+export function notify(order, customer) {
+	return { to: customer.email, body: render(order) };
+}
+EOF
+mkdir -p src/templates
+cat >src/templates/email.js <<'EOF'
+export function render(order) {
+	return `Order ${order.id}: ${order.total} cents.`;
+}
+EOF
+git add src/notify.js src/templates/email.js
+git commit --quiet -m "feat: notify the customer on checkout"
+
+cat >src/queue.js <<'EOF'
+// Retries are capped: a notification is worth less the later it arrives.
+export function enqueue(job, attempts = 3) {
+	return { job, attempts };
+}
+EOF
+cat >docs/notificaciones.md <<'EOF'
+# Notificaciones
+
+Los mensajes salen por la cola, nunca en el request del checkout.
+EOF
+git add src/queue.js docs/notificaciones.md
+git commit --quiet -m "feat: queue the notifications"
+
+mkdir -p .review
+cat >.review/walkthrough.md <<'EOF'
+# Walkthrough
+
+## Heads-up
+
+Only the two files that carry the decision are written up here. The template and
+the note are follow-the-nose changes: read them if you want, in any order.
+
+## 1. src/notify.js
+> key
+
+The whole feature in one function. Note that it returns the message instead of
+sending it — the sending lives in the queue, one entry down.
+
+## 2. src/queue.js
+The retry cap is the only number worth arguing about. Three is what the ops
+runbook already assumes for every other job.
+EOF
+git add .review/walkthrough.md
+git commit --quiet -m "docs: walkthrough"
+publish feature/notifications
+
+# A pull request with no walkthrough at all: `git review start` enters whole mode
+# on its own, without --whole.
+pr feature/telemetry
+
+cat >src/metrics.js <<'EOF'
+export function timing(name, ms) {
+	return `${name}:${ms}|ms`;
+}
+EOF
+cat >src/sampler.js <<'EOF'
+import { timing } from "./metrics.js";
+
+// One in ten: enough signal for the checkout funnel, cheap enough to leave on.
+export function sample(name, ms, rate = 0.1) {
+	return Math.random() < rate ? timing(name, ms) : null;
+}
+EOF
+git add src/metrics.js src/sampler.js
+git commit --quiet -m "feat: sample checkout timings"
+publish feature/telemetry
+
+# A pull request whose walkthrough went stale: every path it names was renamed
+# away, so it covers nothing in the range and the review degrades to whole with a
+# note. This is the failure mode that must never fail a review, only degrade it.
+pr feature/legacy
+
+git mv src/cart.js src/basket.js
+cat >>src/basket.js <<'EOF'
+
+// Renamed from cart.js: "basket" is the word the rest of the shop uses.
+EOF
+git add src/basket.js
+git commit --quiet -m "refactor: rename cart to basket"
+
+mkdir -p .review
+cat >.review/walkthrough.md <<'EOF'
+# Walkthrough
+
+## Heads-up
+
+This walkthrough was written before the rename and never updated: the paths
+below no longer exist in the range.
+
+## 1. src/cart.js
+The old name. Nothing in the range matches this path any more.
+
+## 2. src/carrito.js
+Neither does this one.
+EOF
+git add .review/walkthrough.md
+git commit --quiet -m "docs: walkthrough (stale on purpose)"
+publish feature/legacy
+
+# Two more, small on purpose: they exist to be reviewed and put aside below.
+pr feature/search
+
+cat >src/search.js <<'EOF'
+export function find(catalogue, term) {
+	return catalogue.filter((item) => item.sku.includes(term));
+}
+EOF
+cat >src/index-catalogue.js <<'EOF'
+export function index(catalogue) {
+	return new Map(catalogue.map((item) => [item.sku, item]));
+}
+EOF
+git add src/search.js src/index-catalogue.js
+git commit --quiet -m "feat: search the catalogue"
+
+mkdir -p .review
+cat >.review/walkthrough.md <<'EOF'
+# Walkthrough
+
+## 1. src/index-catalogue.js
+The index first: everything else assumes lookups are free.
+
+## 2. src/search.js
+> key
+
+The search itself. Substring for now — the ranking discussion is a separate PR.
+EOF
+git add .review/walkthrough.md
+git commit --quiet -m "docs: walkthrough"
+publish feature/search
+
+pr feature/i18n
+
+cat >src/messages.js <<'EOF'
+export const es = { total: "Total", checkout: "Finalizar compra" };
+EOF
+git add src/messages.js
+git commit --quiet -m "feat: spanish strings"
+publish feature/i18n
+
+pr feature/refunds
+
+cat >src/refunds.js <<'EOF'
+export function refund(order) {
+	return { order: order.id, cents: order.total };
+}
+EOF
+git add src/refunds.js
+git commit --quiet -m "feat: refund an order"
+publish feature/refunds
+
 # Leave the reviewer where a reviewer starts: on the base branch.
 git switch --quiet develop
+
+# ── saved reviews ─────────────────────────────────────────────────────────────
+#
+# The one part of the sandbox that runs the commands instead of building the repo
+# behind their back: review-saved/* carries branch config that only `git review
+# start` + `git review save` know how to write, and fabricating it here would be
+# a second copy of the state model — the kind that goes stale in silence.
+#
+# That makes this the only phase that can fail because a verb is broken, so it
+# does not abort the build: everything above is a plain git repository and stays
+# usable either way.
+
+review() {
+	PATH="$repo_root/bin:$PATH" git review "$@"
+}
+
+# A saved review that can be resumed, left on entry 2 so the inventory shows a
+# position that is not the first one.
+bank_search() {
+	review start feature/search >/dev/null || return 1
+	review next >/dev/null || return 1
+	review save >/dev/null || return 1
+}
+
+# A second one, blocked: `review/<src>` exists alongside it, which is what the
+# continue verb refuses with "is already active". The branch is made by hand
+# because the commands deliberately cannot produce both at once.
+bank_i18n() {
+	review start feature/i18n >/dev/null || return 1
+	review save >/dev/null || return 1
+	git branch --quiet review/feature/i18n develop || return 1
+}
+
+if bank_search && bank_i18n; then
+	# A saved branch with no metadata behind it: hand-made, or left by an older
+	# version. The inventory shows it as an orphan and offers nothing.
+	git branch --quiet review-saved/feature/refunds develop
+	saved_reviews=1
+else
+	printf 'warning: could not build the saved reviews (is %s working?)\n' "$repo_root/bin/git-review" >&2
+	saved_reviews=0
+fi
+
+# Whatever happened above, the reviewer starts on the base branch with a clean
+# working tree: `git review continue` refuses to run against local changes.
+git switch --quiet develop
+git reset --quiet --hard
+git clean --quiet -fd
 
 # ── entry points ──────────────────────────────────────────────────────────────
 #
@@ -267,6 +499,12 @@ EOF
 
 date >"$dir/$marker_name"
 
+if [ "$saved_reviews" -eq 1 ]; then
+	saved_note="  git review continue feature/search         # resumes it on entry 2/2"
+else
+	saved_note="  (the saved reviews could not be built — see the warning above)"
+fi
+
 cat <<EOF
 Sandbox ready: $dir
 
@@ -285,13 +523,32 @@ shows [n/5], over the same range.
   src/café.js             added, non-ASCII name
   docs/guía de estilo.md  changed, space + accent in the name
 
+The other branches, one per state that feature/checkout cannot show:
+
+  feature/notifications   walk over 2 entries, 4 files changed -> 2 uncovered
+  feature/telemetry       no walkthrough at all -> whole, without --whole
+  feature/legacy          walkthrough naming paths the rename removed -> degrades
+                          to whole with a note, never fails
+  feature/search          reviewed and put aside (see below)
+  feature/i18n            the same, but blocked
+  feature/refunds         only its leftover branch, no review
+
+And, on develop, the inventory that \`git review list\` (and the extension's empty
+state) reads — three saved reviews, one resumable and two not:
+
+  review-saved/feature/search   walk 2/2, resumable
+  review-saved/feature/i18n     blocked: review/feature/i18n is already active
+  review-saved/feature/refunds  no metadata behind it (hand-made branch)
+
 Try it:
 
   . "$dir/env.sh"
   git review start feature/checkout          # walk: the committed walkthrough
   git review start feature/checkout --step   # commit by commit
   git review start feature/checkout --whole  # the plain full diff
+  git review start feature/notifications     # then: git review status --porcelain
   git review status / list / next / prev
+$saved_note
   git review finish        # extracts your edits to review-fixes/feature/checkout
   git review abort         # throws the review away
 

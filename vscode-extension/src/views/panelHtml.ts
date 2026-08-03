@@ -194,6 +194,39 @@ export function panelHtml(nonce: string): string {
   }
   .empty { padding: 1.2em .9em; line-height: 1.6; }
   .empty p { margin: 0 0 1em; }
+  /* El inventario del estado vacío: una fila por review del repositorio. Va
+     arriba del párrafo, porque "tenés esto abierto" contesta antes que "así se
+     empieza una". El separador lo lleva el párrafo, no la lista, para que sin
+     reviews el estado vacío quede exactamente como estaba. */
+  .inv { padding: 1.2em .9em .2em; }
+  .inv h2 {
+    margin: 0 0 .9em;
+    font-size: .9em;
+    font-weight: 600;
+    color: var(--vscode-descriptionForeground);
+  }
+  .rev { margin-bottom: 1em; }
+  .rev-head {
+    display: flex;
+    align-items: baseline;
+    gap: .5em;
+    margin-bottom: .25em;
+  }
+  .rev-name {
+    font-family: var(--vscode-editor-font-family);
+    overflow-wrap: anywhere;
+  }
+  .rev-meta {
+    display: flex;
+    align-items: center;
+    gap: .5em;
+    min-height: 1.9em;
+    font-family: var(--vscode-editor-font-family);
+    font-size: .9em;
+    color: var(--vscode-descriptionForeground);
+  }
+  .rev-meta button { margin-left: auto; }
+  .empty.after-inv { border-top: 1px solid var(--vscode-panel-border); }
   .stderr {
     margin: 1em 0 0;
     padding: .6em;
@@ -249,7 +282,7 @@ export function panelHtml(nonce: string): string {
     return svg;
   }
 
-  function button(label, message, className, iconName) {
+  function button(label, message, className, iconName, index) {
     const node = el("button", className);
     if (iconName) { node.appendChild(icon(iconName)); }
     if (label) { node.appendChild(el("span", null, label)); }
@@ -258,8 +291,10 @@ export function panelHtml(nonce: string): string {
       // gracia sigue en pantalla la entrada anterior, y "File"/"Diff" abrirían
       // el archivo equivocado. Deshabilitarlos no alcanza — el esqueleto entra
       // después que el clic ya es posible.
+      // El índice es el único dato que un mensaje lleva además del type, y lo
+      // valida el host contra su inventario (extension-surface.md § Protocolo).
       if (stale()) { return; }
-      vscode.postMessage({type: message});
+      vscode.postMessage(index === undefined ? {type: message} : {type: message, index: index});
     });
     return node;
   }
@@ -292,10 +327,73 @@ export function panelHtml(nonce: string): string {
     return a;
   }
 
+  /** El modo y, en step/walk, la posición REGISTRADA — el inventario no la
+   *  re-deriva (contracts/list-porcelain.md), a diferencia de la barra. */
+  function reviewMeta(review) {
+    if (review.orphan) { return "no metadata"; }
+    if (review.position !== undefined && review.total !== undefined) {
+      return review.mode + " · " + review.position + "/" + review.total;
+    }
+    return review.mode;
+  }
+
+  /**
+   * Una review del repositorio. Sólo las guardadas llevan acción: para volver a
+   * una activa no hay verbo —sería un checkout— y el selector de rama del
+   * editor ya lo resuelve. Listarla igual es lo que contesta la pregunta real,
+   * que es acordarse de que está abierta.
+   */
+  function renderReview(model, review, index) {
+    const box = el("div", "rev");
+
+    const head = el("div", "rev-head");
+    head.appendChild(el("span", "rev-name", review.name));
+    if (review.current) { head.appendChild(el("span", "badge", "current")); }
+    box.appendChild(head);
+
+    const meta = el("div", "rev-meta");
+    meta.appendChild(el("span", null, reviewMeta(review)));
+    if (review.saved) {
+      const go = button("Continue", "continueReview", null, null, index);
+      go.disabled = model.busy || !review.resumable;
+      // Un control deshabilitado sin motivo es una pared: los dos casos son
+      // los que el verbo rechazaría, y el inventario ya los deja ver.
+      if (!review.resumable) {
+        go.title = review.orphan
+          ? "This branch has no review metadata"
+          : "A review of this branch is already active";
+      }
+      meta.appendChild(go);
+    }
+    box.appendChild(meta);
+    return box;
+  }
+
+  function renderInventory(model, reviews) {
+    const box = el("div", "inv");
+    box.appendChild(el("h2", null, "Reviews in this repository"));
+    reviews.forEach(function (review, index) {
+      box.appendChild(renderReview(model, review, index));
+    });
+    return box;
+  }
+
   function renderEmptyState(model) {
     switch (model.situation) {
-      case "no-review":
-        return empty("No active review in this repository.", docsLink("How to start a review"));
+      case "no-review": {
+        // El fallback a lista vacía no sobra: el webview redibuja el modelo que
+        // guardó con setState, que puede venir de una versión sin este campo.
+        const reviews = model.reviews || [];
+        const box = empty("No active review on this branch.", docsLink("How to start a review"));
+        if (reviews.length === 0) { return box; }
+        // Con reviews abiertas el párrafo pasa a ser el pie del inventario, no
+        // el contenido: lleva el separador y va debajo.
+        box.className = "empty after-inv";
+        const wrap = el("div");
+        wrap.appendChild(renderInventory(model, reviews));
+        wrap.appendChild(box);
+        return wrap;
+      }
       case "out-of-range":
         return empty(
           "The cursor is out of range: the base moved.",

@@ -123,6 +123,40 @@ Cero o más, uno por registro `uncovered`. Un solo campo: `id: PathRef`
 
 ---
 
+## `InventoryEntry` — una review del repositorio, vista desde afuera
+
+Cero o más, uno por registro `branch` de `list --porcelain`. Es la **única**
+entidad que no viene de `status`: describe reviews de *otras* ramas, que por
+definición no son la que `status` reporta.
+
+| Campo      | Tipo                        | Presencia            | Origen       |
+|------------|-----------------------------|----------------------|--------------|
+| `name`     | string (`review[-saved]/x`) | siempre              | `branch[1]`  |
+| `saved`    | booleano                    | siempre              | `branch[2]`  |
+| `current`  | booleano                    | siempre              | `branch[3]`  |
+| `orphan`   | booleano (sin metadata)     | siempre              | `branch[4]`  |
+| `mode`     | `whole` \| `step` \| `walk` | salvo `orphan`       | `branch[5]`  |
+| `position` | entero ≥ 1                  | sólo `step` / `walk` | `branch[6]`  |
+| `total`    | entero ≥ 0 (**registrado**) | sólo `step` / `walk` | `branch[7]`  |
+
+**Reglas de validación**:
+
+- Sólo se pobla con `Situation = no-review`. Es el contenido de ese estado vacío
+  y de ningún otro, así que dentro de una review la colección está vacía y no se
+  invoca nada (`contracts/cli-invocation.md`).
+- `total` es el **registrado**, no el derivado ahora: un inventario no re-deriva
+  la secuencia de cada rama del repositorio. Es la diferencia con
+  `ReviewState.total`, y por eso no hay acá un `recorded` que contrastar.
+- `position` y `total` se emiten de a pares o no se emiten. Un solo campo
+  presente se descarta entero: rellenar el otro con `0` sería inventar un cursor.
+- Con `orphan` no hay `mode` — sin `reviewsource` no hay metadata de la que
+  derivarlo. La fila igual se muestra: son las que hay que limpiar.
+- `name` es el **único** valor de esta entidad que vuelve a la CLI, sin su
+  prefijo, como argumento de `continue`. No pasa por `PathRef`: no es un path y
+  git prohíbe en un nombre de rama los bytes que obligarían a citarlo.
+
+---
+
 ## `PathRef` — un path, en sus dos formas
 
 No es un registro del contrato: es la representación interna de **todo** path,
@@ -191,6 +225,7 @@ es la verificabilidad: es el punto donde los tests de integración afirman (ver
 | `situation`     | `Situation`                                | siempre                 |
 | `busy`          | booleano                                   | siempre                 |
 | `repoLabel`     | string                                     | sólo multi-root         |
+| `reviews`       | `{name, saved, current, orphan, mode?, position?, total?, resumable}[]` | sólo `no-review` |
 | `mode`          | `whole` \| `step` \| `walk`                | sólo `review`           |
 | `branch`        | string                                     | sólo `review`           |
 | `position`      | entero                                     | sólo `step` / `walk`    |
@@ -222,6 +257,12 @@ es la verificabilidad: es el punto donde los tests de integración afirman (ver
   vuelo) es distinto de `absent` (exit `0`, cuerpo vacío) y de `failed` (exit
   `1`) — FR-018 pide los dos últimos separados, y el primero existe porque el
   panel se dibuja antes de que la explicación vuelva.
+- `reviews` proyecta `InventoryEntry` y le agrega **un solo** campo derivado,
+  `resumable`, que es la misma clase de lectura que `atFirst`/`atLast`: la de
+  los dos modos de fallo de `continue` que el inventario deja ver (la fila es
+  huérfana, o existe una review activa para el mismo source). Quien decide si se
+  puede resumir sigue siendo el verbo. El `source` **no** cruza al webview: lo
+  re-deriva el host del índice cuando le toca invocar.
 - El modelo se reconstruye entero en cada cambio y se postea entero. No hay
   actualizaciones parciales del DOM dirigidas desde el host: es la misma razón
   por la que no hay estado incremental del lado de la extensión (FR-019).
@@ -243,8 +284,9 @@ es la verificabilidad: es el punto donde los tests de integración afirman (ver
 - `rootUri` es el `cwd` de **toda** invocación. Nunca se invoca la CLI con el
   cwd del proceso del editor.
 - Este es el único dato que la extensión toma de la API de git, junto con la
-  señal de cambio. Ningún campo de `ReviewState`, `SequenceEntry` o
-  `UncoveredFile` se alimenta de ahí (SC-005).
+  señal de cambio. Ningún campo de `ReviewState`, `SequenceEntry`,
+  `UncoveredFile` o `InventoryEntry` se alimenta de ahí (SC-005) — la lista de
+  ramas del inventario incluida: sale de `list --porcelain`, no de la API.
 
 ---
 
@@ -252,15 +294,18 @@ es la verificabilidad: es el punto donde los tests de integración afirman (ver
 
 ```text
 Situation
-└── (= review) ReviewState            ← registro `state`, 1 por invocación
-                ├── SequenceEntry[]   ← registros `entry`, en orden de lectura
-                │     └── Why         ← sólo la actual, 1 invocación aparte
-                └── UncoveredFile[]   ← registros `uncovered`
+├── (= review) ReviewState            ← registro `state`, 1 por invocación
+│               ├── SequenceEntry[]   ← registros `entry`, en orden de lectura
+│               │     └── Why         ← sólo la actual, 1 invocación aparte
+│               └── UncoveredFile[]   ← registros `uncovered`
+│                           ↓
+└── (= no-review) InventoryEntry[]    ← registros `branch` de `list --porcelain`
                             ↓
                         PanelModel     ← proyección plana, lo único que ve el webview
 ```
 
-Una sola invocación de `status --porcelain` produce todo salvo el `Why`. Eso es
-lo que hace que refrescar sea barato y que el panel pueda reconstruirse de cero
-ante cualquier evento, en lugar de mantener un estado incremental que pueda
-desincronizarse (FR-019).
+Las dos ramas son excluyentes, y es lo que mantiene barato el refresco: dentro
+de una review, una sola invocación de `status --porcelain` produce todo salvo el
+`Why`; fuera de ella, el inventario cuesta una segunda invocación que sólo
+ocurre donde se dibuja. En ningún caso hay estado incremental que pueda
+desincronizarse: el panel se reconstruye de cero ante cualquier evento (FR-019).

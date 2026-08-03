@@ -25,10 +25,13 @@ shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-in
 ./tests/run-docker.sh review.bats     # un solo archivo
 ./tests/run-docker.sh tests/range.bats extras.bats   # cualquier arg/path de bats
 
-# Pruebas manuales — arma un PR de juguete descartable (4 commits, 5 archivos,
-# walkthrough committeado, paths con espacio y acento) para probar --step y walk
-# a mano. Reconstruye desde cero en cada corrida; el estado inicial es siempre
-# el mismo. Los tests no lo usan: es solo para manotear los comandos.
+# Pruebas manuales — arma un PR de juguete descartable (feature/checkout: 4
+# commits, 5 archivos, walkthrough committeado, paths con espacio y acento) para
+# probar --step y walk a mano, más una rama por cada estado que ese PR no puede
+# mostrar (uncovered, whole sin walkthrough, walkthrough stale que degrada) y
+# tres reviews guardadas que arman el inventario del estado vacío. Reconstruye
+# desde cero en cada corrida; el estado inicial es siempre el mismo. Los tests no
+# lo usan: es solo para manotear los comandos.
 ./tests/sandbox.sh                    # (re)construye y dice cómo entrar
 ./tests/sandbox.sh -d /tmp/box        # en otro lado
 ```
@@ -235,7 +238,7 @@ npm run preview:watch
   test, no por la extensión. Ante un `no se abrió ningún tab`, medí el baseline
   en un checkout sin tocar antes de buscar la causa en tu cambio.
 - **`npm run preview`** genera `out/preview/index.html` (y lo imprime como URL
-  `file://`): los ocho estados del panel lado a lado, a ancho de sidebar, con
+  `file://`): los nueve estados del panel lado a lado, a ancho de sidebar, con
   selector de tema dark/light/alto contraste. El pane es el `panelHtml()` real y
   los estados de `preview/fixtures.ts` son salida `--porcelain` de ejemplo pasada
   por el parser y el modelo reales, así que **sigue al código y no se mantiene

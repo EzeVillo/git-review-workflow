@@ -47,12 +47,25 @@ directory that survives the run:
 ```
 
 It rebuilds from scratch on every call — break the sandbox however you like and
-run it again to get the identical starting state back. The toy pull request is
-four commits over five files (one file touched twice, so `--step` and walk
-disagree), with a committed walkthrough whose reading order is not the diff
-order and two paths carrying a space and a non-ASCII byte. Nothing in the test
-suite depends on it; it exists purely to run the real commands against something
-realistic.
+run it again to get the identical starting state back. The toy pull request
+(`feature/checkout`) is four commits over five files (one file touched twice, so
+`--step` and walk disagree), with a committed walkthrough whose reading order is
+not the diff order and two paths carrying a space and a non-ASCII byte. Nothing
+in the test suite depends on it; it exists purely to run the real commands
+against something realistic.
+
+Around it are the states one well-formed pull request cannot show, one branch
+each: `feature/notifications` (walkthrough covering two of four files, so the
+rest is uncovered), `feature/telemetry` (no walkthrough — `start` enters whole
+mode on its own), and `feature/legacy` (a walkthrough naming paths a rename
+removed, so the review degrades to whole with a note). On `develop`, three saved
+reviews make up the inventory `git review list` prints: one resumable, one
+blocked by an active `review/*` for the same branch, and one with no metadata
+behind it. Those three are the only part built by *running* the commands rather
+than by writing the repository directly — the branch config under
+`review-saved/*` is theirs to write, and a second copy of it here would go stale
+in silence. That phase fails soft: if a verb is broken the script warns and the
+rest of the sandbox still comes out usable.
 
 > The PowerShell installer tests (`*-ps1.bats`) need `pwsh`, which the container
 > does not have, so they do not really run there — rely on CI (or local Windows)

@@ -1,5 +1,5 @@
 import * as assert from "node:assert";
-import {parsePorcelain} from "../../src/cli/porcelain";
+import {parseListPorcelain, parsePorcelain, sourceOf} from "../../src/cli/porcelain";
 import {PathRef} from "../../src/cli/unquote";
 
 describe("parsePorcelain", () => {
@@ -90,5 +90,112 @@ describe("parsePorcelain", () => {
 
     it("lanza si no hay registro state", () => {
         assert.throws(() => parsePorcelain(""));
+    });
+});
+
+describe("parseListPorcelain", () => {
+    it("parsea una activa en walk con posicion y total", () => {
+        const out = "branch\treview/feat-x\t0\t1\t0\twalk\t3\t9\n";
+        const branches = parseListPorcelain(out);
+        assert.strictEqual(branches.length, 1);
+        assert.deepStrictEqual(branches[0], {
+            name: "review/feat-x",
+            saved: false,
+            current: true,
+            orphan: false,
+            mode: "walk",
+            position: 3,
+            total: 9,
+        });
+    });
+
+    it("una guardada en step lleva saved y su posicion registrada", () => {
+        const out = "branch\treview-saved/fix/quoting\t1\t0\t0\tstep\t2\t4\n";
+        const branches = parseListPorcelain(out);
+        assert.strictEqual(branches[0].saved, true);
+        assert.strictEqual(branches[0].current, false);
+        assert.strictEqual(branches[0].mode, "step");
+        assert.strictEqual(branches[0].position, 2);
+        assert.strictEqual(branches[0].total, 4);
+    });
+
+    it("whole no trae cursor: position y total quedan ausentes", () => {
+        const out = "branch\treview/feat-x\t0\t0\t0\twhole\n";
+        const branches = parseListPorcelain(out);
+        assert.strictEqual(branches[0].mode, "whole");
+        assert.strictEqual(branches[0].position, undefined);
+        assert.strictEqual(branches[0].total, undefined);
+    });
+
+    it("una huerfana no trae mode ni cursor", () => {
+        const out = "branch\treview/orphan\t0\t0\t1\n";
+        const branches = parseListPorcelain(out);
+        assert.strictEqual(branches[0].orphan, true);
+        assert.strictEqual(branches[0].mode, undefined);
+        assert.strictEqual(branches[0].position, undefined);
+        assert.strictEqual(branches[0].total, undefined);
+    });
+
+    it("con un solo campo del par, ninguno de los dos se inventa", () => {
+        // El contrato los emite de a pares; media salida es salida que no
+        // entendemos, y un 0 seria un cursor inventado.
+        const out = "branch\treview/feat-x\t0\t0\t0\tstep\t2\n";
+        const branches = parseListPorcelain(out);
+        assert.strictEqual(branches[0].mode, "step");
+        assert.strictEqual(branches[0].position, undefined);
+        assert.strictEqual(branches[0].total, undefined);
+    });
+
+    it("conserva el orden de la CLI: activas primero, guardadas despues", () => {
+        const out = [
+            "branch\treview/a\t0\t0\t0\twhole",
+            "branch\treview/b\t0\t0\t0\twhole",
+            "branch\treview-saved/c\t1\t0\t0\twhole",
+            "",
+        ].join("\n");
+        assert.deepStrictEqual(
+            parseListPorcelain(out).map((b) => b.name),
+            ["review/a", "review/b", "review-saved/c"]
+        );
+    });
+
+    it("un inventario vacio es una lista vacia, no un error", () => {
+        assert.deepStrictEqual(parseListPorcelain(""), []);
+        assert.deepStrictEqual(parseListPorcelain("\n"), []);
+    });
+
+    it("ignora etiquetas desconocidas y campos extra al final", () => {
+        const out = [
+            "future\tlo que sea\t1\t2",
+            "branch\treview/feat-x\t0\t0\t0\twalk\t1\t2\textra",
+            "",
+        ].join("\n");
+        const branches = parseListPorcelain(out);
+        assert.strictEqual(branches.length, 1);
+        assert.strictEqual(branches[0].name, "review/feat-x");
+        assert.strictEqual(branches[0].total, 2);
+    });
+});
+
+describe("sourceOf", () => {
+    it("saca el prefijo review/", () => {
+        assert.strictEqual(
+            sourceOf({name: "review/feature/checkout", saved: false, current: false, orphan: false}),
+            "feature/checkout"
+        );
+    });
+
+    it("saca el prefijo review-saved/ y no confunde el review/ que contiene", () => {
+        assert.strictEqual(
+            sourceOf({name: "review-saved/feature/checkout", saved: true, current: false, orphan: false}),
+            "feature/checkout"
+        );
+    });
+
+    it("un nombre sin prefijo conocido vuelve tal cual", () => {
+        assert.strictEqual(
+            sourceOf({name: "main", saved: false, current: false, orphan: false}),
+            "main"
+        );
     });
 });

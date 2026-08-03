@@ -10,7 +10,7 @@
  *
  * Lo único que se mantiene a mano es *qué* estados vale la pena mirar.
  */
-import {parsePorcelain} from "../src/cli/porcelain";
+import {parseListPorcelain, parsePorcelain} from "../src/cli/porcelain";
 import {buildPanelModel, PanelInputs, PanelModel} from "../src/views/panelModel";
 import type {Situation} from "../src/review/situation";
 import type {ReviewState} from "../src/review/state";
@@ -34,15 +34,27 @@ function review(rows: string[][], inputs: PanelInputs = {busy: false}): PanelMod
         state: parsed.state,
         entries: parsed.entries,
         uncovered: parsed.uncovered,
+        branches: [],
     };
     return buildPanelModel(state, inputs);
 }
 
 function empty(situation: Situation, stderr?: string): PanelModel {
-    const state: ReviewState = {situation, entries: [], uncovered: []};
+    const state: ReviewState = {situation, entries: [], uncovered: [], branches: []};
     if (stderr !== undefined) {
         state.stderr = stderr;
     }
+    return buildPanelModel(state, {busy: false});
+}
+
+/** `no-review` con inventario: las filas van por `list --porcelain` real. */
+function inventory(rows: string[][]): PanelModel {
+    const state: ReviewState = {
+        situation: "no-review",
+        entries: [],
+        uncovered: [],
+        branches: parseListPorcelain(porcelain(rows)),
+    };
     return buildPanelModel(state, {busy: false});
 }
 
@@ -146,8 +158,23 @@ export const PREVIEW_PANES: PreviewPane[] = [
     },
     {
         name: "no-review",
-        caption: "no-review — el repo no tiene un review activo",
+        caption: "no-review — el repo no tiene ningún review, activo ni guardado",
         model: empty("no-review"),
+    },
+    {
+        // Las cuatro variantes de fila en un solo pane: activa (sin acción),
+        // guardada resumible, guardada bloqueada por su activa gemela, y
+        // huérfana. Es el pane donde se ve si el botón se deshabilita por el
+        // motivo correcto.
+        name: "no-review-inventory",
+        caption: "no-review — con reviews abiertas en otras ramas",
+        model: inventory([
+            ["branch", "review/feature/checkout", "0", "0", "0", "walk", "3", "9"],
+            ["branch", "review/fix/quoting", "0", "0", "0", "whole"],
+            ["branch", "review/orphan", "0", "1", "1"],
+            ["branch", "review-saved/perf/index", "1", "0", "0", "step", "2", "4"],
+            ["branch", "review-saved/fix/quoting", "1", "0", "0", "walk", "1", "6"],
+        ]),
     },
     {
         name: "out-of-range",

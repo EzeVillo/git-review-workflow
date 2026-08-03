@@ -1,6 +1,13 @@
 import * as vscode from "vscode";
 import {invokeGitReview, InvokeOptions} from "../cli/invoke";
-import {EntryRecord, parsePorcelain, StateRecord, UncoveredRecord} from "../cli/porcelain";
+import {
+    BranchRecord,
+    EntryRecord,
+    parseListPorcelain,
+    parsePorcelain,
+    StateRecord,
+    UncoveredRecord,
+} from "../cli/porcelain";
 import {isOutdated} from "../cli/version";
 import {Situation, situationForExitCode} from "./situation";
 
@@ -12,13 +19,24 @@ export interface ReviewState {
     state?: StateRecord;
     entries: EntryRecord[];
     uncovered: UncoveredRecord[];
+    /**
+     * Inventario de reviews del repositorio. Se puebla **sólo** con
+     * `no-review`: es el único estado que lo muestra, y estando dentro de una
+     * review agregar un proceso por refresco iría contra SC-002
+     * (contracts/cli-invocation.md § `list --porcelain`).
+     */
+    branches: BranchRecord[];
     /** stderr crudo de la CLI; presente en error/out-of-range/cli-missing/cli-outdated. */
     stderr?: string;
 }
 
 export type ReviewStateOptions = InvokeOptions;
 
-const EMPTY_ARRAYS = {entries: [] as EntryRecord[], uncovered: [] as UncoveredRecord[]};
+const EMPTY_ARRAYS = {
+    entries: [] as EntryRecord[],
+    uncovered: [] as UncoveredRecord[],
+    branches: [] as BranchRecord[],
+};
 
 /**
  * Corre `--version` y traduce el resultado a `cli-missing`/`cli-outdated`, o
@@ -35,6 +53,20 @@ async function checkCliVersion(options: ReviewStateOptions): Promise<Situation |
         return "cli-outdated";
     }
     return undefined;
+}
+
+/**
+ * Corre `list --porcelain` para el inventario del estado vacío. Su fallo **no**
+ * es una situación: un inventario que no se pudo leer deja el estado vacío como
+ * era antes de existir esta superficie, no lo convierte en un error — la
+ * situación ya la fijó `status --porcelain`, que es quien la reporta.
+ */
+async function listBranches(options: ReviewStateOptions): Promise<BranchRecord[]> {
+    const result = await invokeGitReview("list", ["--porcelain"], options);
+    if (result.errorCode || result.exitCode !== 0) {
+        return [];
+    }
+    return parseListPorcelain(result.stdout);
 }
 
 /**
@@ -143,7 +175,11 @@ export class ReviewStateManager {
 
         const situation = situationForExitCode(result.exitCode);
         if (situation !== "review") {
-            return this.setState({situation, ...EMPTY_ARRAYS, stderr: result.stderr});
+            // El inventario es contenido del estado vacío de `no-review` y de
+            // ningún otro: en out-of-range o error lo que hay para mostrar es
+            // el stderr, y en cli-missing no hay CLI a la que preguntarle.
+            const branches = situation === "no-review" ? await listBranches(options) : [];
+            return this.setState({situation, ...EMPTY_ARRAYS, branches, stderr: result.stderr});
         }
 
         const parsed = parsePorcelain(result.stdout);
@@ -152,6 +188,7 @@ export class ReviewStateManager {
             state: parsed.state,
             entries: parsed.entries,
             uncovered: parsed.uncovered,
+            branches: [],
         });
     }
 }

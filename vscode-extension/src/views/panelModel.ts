@@ -1,4 +1,4 @@
-import type {EntryRecord, ReviewMode} from "../cli/porcelain";
+import {BranchRecord, EntryRecord, ReviewMode, sourceOf} from "../cli/porcelain";
 import type {PathRef} from "../cli/unquote";
 import type {Situation} from "../review/situation";
 import type {ReviewState} from "../review/state";
@@ -25,6 +25,31 @@ export interface PanelEntry {
 }
 
 /**
+ * Una fila del inventario del estado vacío (`no-review`). El `source` no cruza
+ * al webview: el host lo re-deriva del índice cuando le toca invocar
+ * `continue`, así que nada de lo que vuelve del panel llega a un proceso
+ * (contracts/extension-surface.md § Protocolo).
+ */
+export interface PanelReview {
+    /** Nombre de la rama tal cual lo emitió la CLI (`review/x`, `review-saved/x`). */
+    name: string;
+    saved: boolean;
+    current: boolean;
+    orphan: boolean;
+    mode?: ReviewMode;
+    position?: number;
+    total?: number;
+    /**
+     * Si corresponde ofrecer `Continue`. Es la lectura de los dos modos de
+     * fallo del verbo que el propio inventario deja ver —huérfana, o con una
+     * review activa para el mismo source—, no una regla nueva: quien decide si
+     * se puede resumir sigue siendo `git review continue`. El working tree
+     * sucio, su tercer modo de fallo, no se ve desde acá y se deja fallar.
+     */
+    resumable: boolean;
+}
+
+/**
  * `PanelModel` (data-model.md) — la proyección plana y serializable que es lo
  * único que cruza hacia el webview, y el punto donde afirman los tests.
  *
@@ -37,6 +62,11 @@ export interface PanelModel {
     busy: boolean;
     /** Sólo con más de un repositorio en la ventana (FR-029). */
     repoLabel?: string;
+    /**
+     * Inventario del repositorio, en el orden de la CLI. Sólo se puebla con
+     * `situation === "no-review"`; en cualquier otra es un array vacío.
+     */
+    reviews: PanelReview[];
     /** De acá para abajo, sólo con `situation === "review"`. */
     mode?: ReviewMode;
     branch?: string;
@@ -127,10 +157,58 @@ export function currentEntry(entries: EntryRecord[], position: number | undefine
     return entries.find((entry) => entry.position === position);
 }
 
+/**
+ * Proyecta el inventario de `list --porcelain`. `resumable` necesita ver la
+ * lista entera y no sólo la fila: una guardada deja de poder resumirse cuando
+ * existe además una activa para el mismo source, que es lo que el verbo
+ * rechaza con "is already active" (`bin/git-review-verbs/continue:80`).
+ */
+function toPanelReviews(branches: BranchRecord[]): PanelReview[] {
+    const active = new Set(branches.filter((b) => !b.saved).map(sourceOf));
+    return branches.map((branch) => {
+        const review: PanelReview = {
+            name: branch.name,
+            saved: branch.saved,
+            current: branch.current,
+            orphan: branch.orphan,
+            resumable: branch.saved && !branch.orphan && !active.has(sourceOf(branch)),
+        };
+        if (branch.mode !== undefined) {
+            review.mode = branch.mode;
+        }
+        if (branch.position !== undefined && branch.total !== undefined) {
+            review.position = branch.position;
+            review.total = branch.total;
+        }
+        return review;
+    });
+}
+
+/**
+ * El *source* de la fila `index` del inventario, sólo si esa fila puede
+ * resumirse. Es el punto donde el índice que llega del webview se convierte en
+ * el argumento de `continue`: valida que sea un entero en rango contra el
+ * inventario que tiene el host, así que lo que termina en la CLI sale del
+ * estado del host y no del panel. Cualquier índice que no resuelva es
+ * `undefined`, y el comando no hace nada.
+ */
+export function resumableSourceAt(branches: BranchRecord[], index: unknown): string | undefined {
+    if (typeof index !== "number" || !Number.isInteger(index)) {
+        return undefined;
+    }
+    const branch = branches[index];
+    const review = toPanelReviews(branches)[index];
+    if (!branch || !review || !review.resumable) {
+        return undefined;
+    }
+    return sourceOf(branch);
+}
+
 export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelModel {
     const base: PanelModel = {
         situation: state.situation,
         busy: inputs.busy,
+        reviews: toPanelReviews(state.branches),
         baseMoved: false,
         atFirst: false,
         atLast: false,

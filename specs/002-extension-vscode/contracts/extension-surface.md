@@ -118,12 +118,65 @@ vistas de tipo `tree`, así que con esta vista no se mostrarían.
 En `error`, `out-of-range`, `cli-missing` y `cli-outdated` el `stderr` de la CLI
 se muestra íntegro y tal cual (FR-024).
 
+#### El inventario de `no-review`
+
+`no-review` es el único estado vacío con contenido propio: si el repositorio
+tiene reviews en otras ramas, el panel las lista antes del párrafo y del link.
+Salen de `list --porcelain`, la única fuente (ver `contracts/cli-invocation.md`).
+
+```text
+┌───────────────────────────────────────┐
+│ Reviews in this repository            │
+│                                       │
+│ review/feature/checkout               │ ← activa: se lista, sin acción
+│ walk · 3/9                            │
+│                                       │
+│ review/orphan               (current) │ ← sin metadata, y HEAD está ahí
+│ no metadata                           │
+│                                       │
+│ review-saved/fix/quoting              │ ← guardada: el prefijo del nombre
+│ step · 2/4              [ Continue ]  │   ya dice que lo está
+├───────────────────────────────────────┤
+│ No active review on this branch.      │ ← el estado vacío de siempre, que
+│ How to start a review                 │   pasa a ser el pie del inventario
+└───────────────────────────────────────┘
+```
+
+Reglas normativas:
+
+- Una review **activa** en otra rama se muestra **sin acción**. No hay verbo para
+  saltar a ella: sería `git checkout review/<x>`, git crudo, y el selector de
+  rama del editor ya lo resuelve. Listarla es lo que resuelve el problema real,
+  que es acordarse de que existe.
+- Una review **guardada** lleva `Continue` → `gitReview.continueReview`, la
+  única acción del inventario. Se deshabilita cuando la fila es huérfana
+  (`orphan = 1`) o cuando existe además una activa para el mismo source: los dos
+  casos en que el verbo fallaría, leídos del inventario y no re-derivados.
+- El orden es el de la CLI, sin reordenar: activas primero, guardadas después,
+  igual que `list` humano.
+- Una fila huérfana se muestra igualmente, con `no metadata` donde iría el modo,
+  porque son justo las que hay que limpiar (Acceptance Scenario 2 de US6 en la
+  feature 001). `current` es la única marca del inventario: que una rama sea
+  guardada ya lo dice su prefijo, y repetirlo en un badge sería una copia.
+- Sin reviews en el repositorio, el estado vacío es el de siempre: el párrafo y
+  el link, sin encabezado ni lista.
+- El inventario **no** aparece en los otros estados vacíos. En `out-of-range` o
+  `cli-missing` no hay inventario que mostrar: no se invocó.
+
 ### Protocolo con el webview
 
 El webview **no ejecuta comandos**. Postea mensajes `{type}` de un conjunto
 cerrado y el host decide qué hacer con cada uno; un `type` desconocido se
 ignora. La lista es exactamente: `openEntry`, `openChange`, `showWhy`, `next`,
-`prev`, `refresh`, `showUncovered`, `installCli`, `outOfRangeHelp`.
+`prev`, `refresh`, `showUncovered`, `installCli`, `outOfRangeHelp`,
+`continueReview`.
+
+`continueReview` es el único que lleva un dato además del `type`, y es un
+**índice** en `PanelModel.reviews` (`{type, index}`), nunca el nombre de la rama.
+El host lo resuelve contra su propia copia del modelo y descarta lo que no caiga
+en rango: así el argumento que termina en la CLI sale siempre del estado del
+host, y nada que venga del webview se le pasa a un proceso. Un `index` ausente,
+no entero o fuera de rango se ignora igual que un `type` desconocido.
 
 En el sentido inverso, el host postea el `PanelModel` entero
 (`{type: "model", model}`) y el webview lo dibuja de cero. Todo el contenido
@@ -145,6 +198,7 @@ Los ids son interfaz pública.
 | `gitReview.showUncovered` | Show Uncovered Files    | panel (pie), paleta               |
 | `gitReview.refresh`       | Refresh                 | título de la vista, paleta        |
 | `gitReview.installCli`    | Install the CLI         | panel (estados sin CLI), paleta   |
+| `gitReview.continueReview`| Continue Saved Review   | panel (inventario de `no-review`) |
 
 El título de la vista lleva **sólo** `refresh`: navegar y saltar de entrada
 tienen su lugar en el cuerpo del panel o en la paleta, y repetirlos como íconos
@@ -175,6 +229,12 @@ Reglas normativas:
   `next`/`prev`.
 - `gitReview.goToEntry` marca la entrada actual dentro del `QuickPick` y arranca
   posicionado en ella (FR-006).
+- `gitReview.continueReview` es mutante y va por el `MutationLock`, igual que
+  `next`/`prev`. A diferencia de ellos **pide confirmación**: cambia `HEAD` y
+  reordena el editor entero, que no es el costo de un clic de navegación. No se
+  ofrece en la paleta — sin el inventario delante no hay forma de elegir cuál
+  resumir, y `git review continue` sin argumento ya hace eso mejor desde la
+  terminal.
 
 ## Context keys
 

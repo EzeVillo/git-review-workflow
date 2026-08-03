@@ -86,6 +86,11 @@
         "command": "gitReview.installCli",
         "title": "Install the CLI",
         "category": "git review"
+      },
+      {
+        "command": "gitReview.continueReview",
+        "title": "Continue Saved Review",
+        "category": "git review"
       }
     ],
     "menus": {
@@ -128,6 +133,10 @@
         {
           "command": "gitReview.installCli",
           "when": "gitReview.situation == cli-missing || gitReview.situation == cli-outdated"
+        },
+        {
+          "command": "gitReview.continueReview",
+          "when": "false"
         }
       ]
     },

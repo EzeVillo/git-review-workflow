@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import {PathRef} from "../../src/cli/unquote";
+import {closeAllEditors, waitForActiveTab} from "./helpers/editors";
 import {getTestApi} from "./helpers/extensionApi";
 import {
     abortReview,
@@ -16,28 +17,6 @@ import {
 
 function displayOf(id: string | PathRef): string {
     return typeof id === "string" ? id : id.display;
-}
-
-async function closeAllEditors(): Promise<void> {
-    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
-}
-
-/**
- * `git.openChange` abre el editor de forma asíncrona; sondea hasta que haya un
- * tab activo. El margen es generoso a propósito: el extension host se pone
- * lento bajo carga (el runner lo reporta como "unresponsive") y con 5 s el
- * sondeo se rendía antes de que el tab existiera, con el comando en curso.
- */
-async function waitForActiveTab(timeoutMs = 20000): Promise<vscode.Tab | undefined> {
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-        const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
-        if (tab) {
-            return tab;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    return vscode.window.tabGroups.activeTabGroup.activeTab;
 }
 
 describe("US2: saltar al archivo de una entrada", function () {
@@ -179,9 +158,23 @@ describe("US2: saltar al archivo de una entrada", function () {
         assert.strictEqual(state.entries.length, 1);
         assert.strictEqual(typeof state.entries[0].id, "string");
 
+        const sha = state.entries[0].id as string;
         await vscode.commands.executeCommand("gitReview.openEntry", state.entries[0]);
-        // No debe haberse abierto un editor de texto plano para el archivo:
-        // modo step delega en la vista de cambios del commit.
+
+        // No basta con que no se haya abierto el archivo del working tree: eso
+        // también se cumple cuando no se abre nada, que es justo como fallaba
+        // esto cuando la API de git se resolvía una sola vez al activar y la
+        // extensión de git todavía no había cargado. El tab tiene que existir y
+        // ser el del commit.
+        // El label lo compone el host (`Commit <sha> (N files)`); lo que se
+        // afirma es el título que pasa la extensión, con el SHA adentro.
+        const tab = await waitForActiveTab();
+        assert.ok(tab, "el clic en un commit no abrió ninguna vista de cambios");
+        assert.ok(
+            tab!.label.startsWith(`Commit ${sha.slice(0, 7)}`),
+            `el tab abierto no es el de los cambios del commit: ${tab!.label}`
+        );
+
         const active = vscode.window.activeTextEditor?.document.uri.fsPath;
         assert.notStrictEqual(active, path.join(repo.dir, "src", "step.ts"));
     });

@@ -38,17 +38,58 @@ function labelFor(rootUri: vscode.Uri): string {
 }
 
 /**
- * Enumera los repositorios del workspace vía la extensión git incorporada.
- * Si esa extensión está deshabilitada o no cargó todavía, devuelve `[]` — el
- * llamador cae al fallback de FileSystemWatcher (research.md Decisión 7).
+ * La API de `vscode.git` **si ya está activa**, sin esperar nada. Es el arranque
+ * en frío: sirve para no diferir el primer render cuando la extensión git ya
+ * cargó, y devuelve `undefined` cuando todavía no — ver `ensureGitApi`.
  */
-export function getGitApi(): GitApi | undefined {
+export function peekGitApi(): GitApi | undefined {
+	const ext = vscode.extensions.getExtension<GitExtensionExports>("vscode.git");
+	if (!ext || !ext.isActive) {
+		return undefined;
+	}
+	return ext.exports.getAPI(1);
+}
+
+/**
+ * La API de `vscode.git`, activando la extensión si hace falta.
+ *
+ * `vscode.git` se activa con `"*"`, que es **asíncrono**: si esta extensión
+ * arranca por `onView` (la vista quedó abierta al reabrir la ventana), git
+ * puede no haber terminado de activarse todavía. Sin este `activate()` la API
+ * se leía como ausente en ese instante — y como el resultado se capturaba una
+ * sola vez, quedaba ausente para toda la sesión aunque git cargara un segundo
+ * después. Por eso se resuelve *en el momento de usarla* y nunca se cachea un
+ * `undefined`.
+ */
+export async function ensureGitApi(): Promise<GitApi | undefined> {
 	const ext = vscode.extensions.getExtension<GitExtensionExports>("vscode.git");
 	if (!ext) {
 		return undefined;
 	}
-	const exports = ext.isActive ? ext.exports : undefined;
-	return exports?.getAPI(1);
+	try {
+		const exports = ext.isActive ? ext.exports : await ext.activate();
+		return exports.getAPI(1);
+	} catch {
+		return undefined;
+	}
+}
+
+/**
+ * Por qué no hay API de git, para poder decir algo accionable en vez de "no
+ * está disponible". `untrusted` primero: en modo restringido VS Code deshabilita
+ * `vscode.git` entera (declara `untrustedWorkspaces.supported: false`), así que
+ * cualquier otra explicación sería un síntoma de esa causa.
+ */
+export type GitApiUnavailable = "untrusted" | "missing" | "inactive";
+
+export function gitApiUnavailableReason(): GitApiUnavailable {
+	if (!vscode.workspace.isTrusted) {
+		return "untrusted";
+	}
+	if (!vscode.extensions.getExtension("vscode.git")) {
+		return "missing";
+	}
+	return "inactive";
 }
 
 export function listRepositoryTargets(gitApi: GitApi | undefined): RepositoryTarget[] {

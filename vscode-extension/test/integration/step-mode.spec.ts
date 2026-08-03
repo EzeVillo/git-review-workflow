@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import {entryPickLabel} from "../../src/views/panelModel";
+import {closeAllEditors, waitForActiveTab} from "./helpers/editors";
 import {getTestApi} from "./helpers/extensionApi";
 import {
     abortReview,
@@ -16,8 +17,9 @@ describe("US6: revisar commit por commit", function () {
     this.timeout(60000);
     const repo = sharedFixtureRepo();
 
-    afterEach(() => {
+    afterEach(async () => {
         abortReview(repo);
+        await closeAllEditors();
     });
 
     it("lista los commits en orden, marca el actual, distingue el que tiene ediciones guardadas (AC1)", async () => {
@@ -89,7 +91,21 @@ describe("US6: revisar commit por commit", function () {
         const state = await api.refresh();
         assert.strictEqual(state.state?.mode, "step");
 
+        const sha = state.entries[1].id as string;
         await vscode.commands.executeCommand("gitReview.openEntry", state.entries[1]);
+
+        // Los cambios del commit, y los del commit *que se pidió*: el tab lleva
+        // su SHA. Afirmar sólo que no se abrió el working tree dejaba pasar el
+        // caso en que no se abre nada.
+        // El label lo compone el host (`Commit <sha> (N files)`); lo que se
+        // afirma es el título que pasa la extensión, con el SHA adentro.
+        const tab = await waitForActiveTab();
+        assert.ok(tab, "el clic en un commit no abrió ninguna vista de cambios");
+        assert.ok(
+            tab!.label.startsWith(`Commit ${sha.slice(0, 7)}`),
+            `el tab abierto no es el del commit pedido: ${tab!.label}`
+        );
+
         // modo step nunca abre el archivo del working tree directamente.
         const active = vscode.window.activeTextEditor?.document.uri.fsPath;
         assert.notStrictEqual(active, path.join(repo.dir, "src", "two.ts"));

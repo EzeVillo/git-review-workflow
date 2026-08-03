@@ -1,6 +1,5 @@
 import * as vscode from "vscode";
 import {invokeGitReview, InvokeOptions} from "../cli/invoke";
-import {GitApi} from "../review/repository";
 import {MutationLock} from "../review/mutationLock";
 import {ReviewStateManager} from "../review/state";
 import {openEntry} from "./openEntry";
@@ -23,8 +22,7 @@ export async function navigate(
     direction: NavigateDirection,
     lock: MutationLock,
     stateManager: ReviewStateManager,
-    getInvokeOptions: () => InvokeOptions,
-    gitApi: GitApi | undefined
+    getInvokeOptions: () => InvokeOptions
 ): Promise<void> {
     await lock.run(async () => {
         const options = getInvokeOptions();
@@ -58,7 +56,7 @@ export async function navigate(
 
         const current = state.entries.find((e) => e.position === state.state?.position);
         if (current) {
-            await openEntry(vscode.Uri.file(options.cwd), state.state.mode, current, gitApi);
+            await openEntry(vscode.Uri.file(options.cwd), state.state.mode, current);
         }
     });
 }

@@ -2,7 +2,7 @@ import * as cp from "node:child_process";
 import * as vscode from "vscode";
 import {EntryRecord, ReviewMode} from "../cli/porcelain";
 import {PathRef} from "../cli/unquote";
-import {GitApi} from "../review/repository";
+import {ensureGitApi, gitApiUnavailableReason} from "../review/repository";
 
 function isPathRef(id: string | PathRef): id is PathRef {
     return typeof id !== "string";
@@ -13,10 +13,10 @@ function isPathRef(id: string | PathRef): id is PathRef {
  * tree de la entrada; si el archivo no existe (eliminado en el rango), cae al
  * diff. En modo step, muestra los cambios del commit (research.md Decisión 10).
  */
-export async function openEntry(rootUri: vscode.Uri, mode: ReviewMode, entry: EntryRecord, gitApi: GitApi | undefined): Promise<void> {
+export async function openEntry(rootUri: vscode.Uri, mode: ReviewMode, entry: EntryRecord): Promise<void> {
     if (mode === "step") {
         if (typeof entry.id === "string") {
-            await openCommitChanges(gitApi, rootUri, entry.id);
+            await openCommitChanges(rootUri, entry.id);
         }
         return;
     }
@@ -46,10 +46,10 @@ export async function openWorkingTreeFile(rootUri: vscode.Uri, display: string):
 }
 
 /** Comando `gitReview.openChange` — siempre el diff, nunca el archivo del working tree. */
-export async function openChange(rootUri: vscode.Uri, mode: ReviewMode, entry: EntryRecord, gitApi: GitApi | undefined): Promise<void> {
+export async function openChange(rootUri: vscode.Uri, mode: ReviewMode, entry: EntryRecord): Promise<void> {
     if (mode === "step") {
         if (typeof entry.id === "string") {
-            await openCommitChanges(gitApi, rootUri, entry.id);
+            await openCommitChanges(rootUri, entry.id);
         }
         return;
     }
@@ -59,9 +59,42 @@ export async function openChange(rootUri: vscode.Uri, mode: ReviewMode, entry: E
     await vscode.commands.executeCommand("git.openChange", vscode.Uri.joinPath(rootUri, entry.id.display));
 }
 
-async function openCommitChanges(gitApi: GitApi | undefined, rootUri: vscode.Uri, sha: string): Promise<void> {
+/**
+ * Sin API de git no hay diff de commit que mostrar, pero *por qué* no la hay
+ * cambia lo que el revisor tiene que hacer: confiar en la carpeta, habilitar la
+ * extensión, o simplemente esperar. Un solo mensaje para las tres cosas era un
+ * callejón sin salida.
+ */
+async function reportMissingGitApi(): Promise<void> {
+    switch (gitApiUnavailableReason()) {
+        case "untrusted": {
+            const manage = "Gestionar la confianza";
+            const choice = await vscode.window.showWarningMessage(
+                "Ver los cambios del commit necesita la extensión de git, y VS Code la deshabilita mientras esta carpeta esté en modo restringido. Confiá en la carpeta para habilitarla.",
+                manage
+            );
+            if (choice === manage) {
+                await vscode.commands.executeCommand("workbench.trust.manage");
+            }
+            return;
+        }
+        case "missing":
+            void vscode.window.showWarningMessage(
+                "La extensión de git incorporada está deshabilitada: habilitala para ver los cambios de un commit."
+            );
+            return;
+        default:
+            void vscode.window.showWarningMessage(
+                "La extensión de git todavía no terminó de cargar. Probá de nuevo en unos segundos."
+            );
+    }
+}
+
+async function openCommitChanges(rootUri: vscode.Uri, sha: string): Promise<void> {
+    // Se resuelve acá y no al activar: ver `ensureGitApi`.
+    const gitApi = await ensureGitApi();
     if (!gitApi) {
-        void vscode.window.showWarningMessage("La extensión de git no está disponible para mostrar el diff del commit.");
+        await reportMissingGitApi();
         return;
     }
     let output: string;

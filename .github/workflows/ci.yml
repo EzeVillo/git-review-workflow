@@ -46,13 +46,16 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # One source and one pinned version on all three runners. Installing from
+      # apt/brew/npm gave three different versions of bats, so a flag that
+      # worked on the newest could abort the suite on the oldest (Ubuntu's apt
+      # bats is several majors behind) and the failure only showed up in CI.
+      # Keep in sync with tests/Dockerfile, which runs the same suite locally.
       - name: Install bats
-        run: |
-          case "$RUNNER_OS" in
-            macOS) brew install bats-core ;;
-            Windows) npm install -g bats ;;
-            *) sudo apt-get update && sudo apt-get install -y bats ;;
-          esac
+        run: npm install -g bats@1.13.0
       - name: Run tests
         run: bats tests/
 

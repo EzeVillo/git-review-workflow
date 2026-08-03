@@ -178,7 +178,10 @@ function escapeRegExp(s: string): string {
 }
 
 export function cleanupRepo(repo: FixtureRepo): void {
-    fs.rmSync(repo.dir, {recursive: true, force: true});
+    // En Windows el borrado tira EPERM si git o el propio host de pruebas
+    // todavía tienen un handle abierto sobre el repo temporal; no es un fallo
+    // del test, pero corta la corrida al final. Reintentar cubre esa ventana.
+    fs.rmSync(repo.dir, {recursive: true, force: true, maxRetries: 5, retryDelay: 100});
 }
 
 /**

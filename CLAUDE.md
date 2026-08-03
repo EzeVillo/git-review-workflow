@@ -42,12 +42,14 @@ uso y el repo se monta read-only; los tests crean sus repos temporales dentro
 del contenedor. Los tests del instalador de PowerShell (`*-ps1.bats`) necesitan
 `pwsh`, que no está en el contenedor, así que solo corren de verdad en CI / en
 Windows local. CI corre shellcheck + bats en runners reales de **ubuntu, macos
-y windows** en cada push y PR. Cada OS instala bats/shellcheck de una fuente
-distinta (`apt` / `brew` / `npm`), con versiones distintas: usá solo
-flags/comandos que funcionen en los tres. Apuntá al mínimo común denominador y
-no asumas que la versión más nueva (típicamente la de Windows/npm local)
-representa a las otras — p. ej. `bats --abort` anda en npm pero rompe el bats
-viejo de apt en Ubuntu.
+y windows** en cada push y PR. **bats está pinneado a una única versión**
+(`npm install -g bats@1.13.0`) en los tres runners, en `release.yml` y en
+`tests/Dockerfile`: antes cada OS lo instalaba de una fuente distinta (`apt` /
+`brew` / `npm`) con versiones distintas, y un flag que andaba en la más nueva
+abortaba la suite en la vieja de apt — un fallo que sólo aparecía en CI. Si
+subís la versión, subila en los cuatro lugares a la vez. **shellcheck** sigue
+viniendo de tres fuentes distintas (`apt` / `brew` / `choco`), así que ahí sí
+vale apuntar al mínimo común denominador.
 
 ## Arquitectura
 
@@ -196,6 +198,8 @@ repo, no en archivos del working tree:
       en CI trastabilla con los bytes UTF-8 → `unknown test name '...\342-80-94...'`
       (pasa en Linux/macOS, rompe en Windows). El cuerpo del test puede tener lo
       que sea; es solo el nombre el que se vuelve nombre de función.
+      `tests/test-names.bats` lo verifica sobre toda la suite, así que la regla
+      se rompe en cualquier OS en un segundo y no recién en el runner de Windows.
 
 ## Extensión de VS Code
 
@@ -231,10 +235,9 @@ npm run preview:watch
   el host. Ojo: el host hereda el `PATH` del VS Code que lo lanzó, no el que
   arma el `env.sh` del sandbox — o instalás el checkout, o apuntás la setting
   `gitReview.path` a `bin/git-review`.
-- **`test:integration` corre contra `dist/`**, y sólo `npm test` compila antes
-  (vía `pretest`). Correrlo suelto después de editar prueba el build anterior:
-  `npm run compile` primero, o dejá `npm run watch` corriendo. En Linux sin
-  display, `xvfb-run -a`.
+- **`test:integration` corre contra `dist/`** y lo recompila solo
+  (`pretest:integration`), tanto suelto como vía `npm test`, así que lo verde
+  siempre es el código actual. En Linux sin display, `xvfb-run -a`.
 - **Dos specs de integración abren tabs y son flaky en Windows** por el host de
   test, no por la extensión. Ante un `no se abrió ningún tab`, medí el baseline
   en un checkout sin tocar antes de buscar la causa en tu cambio.

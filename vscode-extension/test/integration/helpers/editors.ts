@@ -6,8 +6,10 @@ export async function closeAllEditors(): Promise<void> {
 
 /**
  * Los comandos que abren superficies del host (`git.openChange`,
- * `vscode.changes`) lo hacen de forma asíncrona; sondea hasta que haya un tab
- * activo. El margen es generoso a propósito: el extension host se pone lento
+ * `vscode.changes`, la preview de markdown del why) lo hacen de forma
+ * asíncrona; sondea hasta que haya un tab activo. Es el único sondeo de tabs de
+ * la suite: el margen es generoso a propósito y una copia aparte se quedaría
+ * atrás al ajustarlo. El extension host se pone lento
  * bajo carga (el runner lo reporta como "unresponsive") y con 5 s el sondeo se
  * rendía antes de que el tab existiera, con el comando en curso.
  */

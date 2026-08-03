@@ -145,11 +145,10 @@ npm run test:unit         # pure functions, no editor, milliseconds
 npm run test:integration  # downloads a VS Code build on first run and drives it
 ```
 
-The integration suite loads the extension from `dist/`, and only `npm test`
-compiles first (through `pretest`). Running `npm run test:integration` on its own
-tests whatever was built last — run `npm run compile` first, or keep
-`npm run watch` going, otherwise a green run can be about code you already
-changed. On Linux without a display, wrap it in `xvfb-run -a`.
+The integration suite loads the extension from `dist/`, so it rebuilds it first
+(`pretest:integration`) whether you run the whole `npm test` or just
+`npm run test:integration` — a green run is always about the code you have now.
+On Linux without a display, wrap it in `xvfb-run -a`.
 
 Two of the integration specs open editor tabs and are flaky on Windows for
 reasons that have nothing to do with the extension. Before chasing a failure

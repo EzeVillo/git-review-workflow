@@ -38,8 +38,11 @@ jobs:
         # find recorre bin/ (incl. bin/git-review-verbs/, fuera del glob bin/*) y
         # excluye .gitkeep; cubre el dispatcher y todos los verbos.
         run: shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh tests/sandbox.sh
+      # Misma versión pinneada que el job `test` de ci.yml y que
+      # tests/Dockerfile: un release no puede verificarse contra un bats
+      # distinto del que corrió en los PRs. Bump los tres juntos.
       - name: Install bats
-        run: sudo apt-get install -y bats
+        run: npm install -g bats@1.13.0
       - name: Run tests
         run: bats tests/
 

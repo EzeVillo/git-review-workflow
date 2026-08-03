@@ -1,6 +1,7 @@
 import * as assert from "node:assert";
 import * as vscode from "vscode";
 import {whyUri} from "../../src/views/whyContentProvider";
+import {waitForActiveTab} from "./helpers/editors";
 import {getTestApi} from "./helpers/extensionApi";
 import {
     abortReview,
@@ -9,23 +10,6 @@ import {
     sharedFixtureRepo,
     startReview
 } from "./helpers/fixture";
-
-/**
- * La preview de markdown se abre de forma asíncrona; sondea hasta que haya un
- * tab activo. Margen generoso por la misma razón que en `open-entry.spec.ts`:
- * bajo carga el extension host tarda más que el sondeo original de 5 s.
- */
-async function waitForActiveTab(timeoutMs = 20000): Promise<vscode.Tab | undefined> {
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-        const tab = vscode.window.tabGroups.activeTabGroup.activeTab;
-        if (tab) {
-            return tab;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    return vscode.window.tabGroups.activeTabGroup.activeTab;
-}
 
 describe("US3: leer el porqué de cada entrada", function () {
     this.timeout(60000);

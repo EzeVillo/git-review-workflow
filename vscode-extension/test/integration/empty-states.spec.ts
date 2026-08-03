@@ -196,10 +196,22 @@ describe("US5: entender por qué no hay nada que mostrar", function () {
     });
 
     it("CLI vieja: --version reporta menos de 0.3.0", async () => {
-        const fakeCliPath = path.join(fs.realpathSync(os.tmpdir()), `fake-git-review-${Date.now()}`);
+        // El stub tiene que ser ejecutable por la misma vía que usaría la CLI
+        // real. En Windows, un script POSIX sin extensión sólo corre si `sh`
+        // está en el PATH (invoke.ts se lo delega), así que desde una shell sin
+        // Git Bash el test fallaba con `cli-missing` — entorno, no regresión, y
+        // el síntoma apuntaba justo a la lógica de detección. Un `.cmd` cae por
+        // la rama nativa de invoke.ts, que es la forma real en Windows.
+        const isWindows = process.platform === "win32";
+        const fakeCliPath = path.join(
+            fs.realpathSync(os.tmpdir()),
+            `fake-git-review-${Date.now()}${isWindows ? ".cmd" : ""}`
+        );
         fs.writeFileSync(
             fakeCliPath,
-            "#!/usr/bin/env sh\ncase \"$1\" in\n--version) echo 0.1.0 ;;\n*) echo 'error: fake old cli' >&2; exit 1 ;;\nesac\n",
+            isWindows
+                ? "@echo off\r\nif \"%~1\"==\"--version\" (\r\n  echo 0.1.0\r\n  exit /b 0\r\n)\r\necho error: fake old cli 1>&2\r\nexit /b 1\r\n"
+                : "#!/usr/bin/env sh\ncase \"$1\" in\n--version) echo 0.1.0 ;;\n*) echo 'error: fake old cli' >&2; exit 1 ;;\nesac\n",
             {mode: 0o755}
         );
         const api = await getTestApi();

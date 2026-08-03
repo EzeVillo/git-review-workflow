@@ -150,6 +150,7 @@
     "pretest": "npm run compile && tsc --noEmit -p .",
     "test": "npm run test:unit && npm run test:integration",
     "test:unit": "mocha --config test/unit/.mocharc.json",
+    "pretest:integration": "npm run compile",
     "test:integration": "tsc -p . --outDir out && node ./out/test/integration/runTests.js"
   },
   "dependencies": {

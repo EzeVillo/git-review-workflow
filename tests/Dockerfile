@@ -6,5 +6,9 @@
 # The repo is bind-mounted read-only; tests create their temp repos under /tmp
 # inside the container (native ext4), so the Windows bind mount is never on the
 # hot path.
-FROM bats/bats:latest
+#
+# The bats version is pinned to the one CI installs (see the `test` job in
+# .github/workflows/ci.yml) so a local run and a CI run cannot disagree about
+# which flags exist. Bump both together.
+FROM bats/bats:1.13.0
 RUN apk add --no-cache git

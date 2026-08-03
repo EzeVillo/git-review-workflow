@@ -113,10 +113,9 @@ Integration tests shell out to the `git review` on `PATH`, so install this
 checkout first (`../install.sh`) if you haven't already. On Linux without a
 display, run the integration suite under `xvfb-run -a`.
 
-They also load the extension from `dist/`, and only `npm test` compiles first
-(through `pretest`). Running `npm run test:integration` on its own tests
-whatever was built last — run `npm run compile` first, or keep `npm run watch`
-going, or a green run may be about code you already changed.
+They also load the extension from `dist/`, which they rebuild first
+(`pretest:integration`) whether you run them on their own or through `npm test`,
+so a green run is always about the code you have now.
 
 ## Packaging locally
 

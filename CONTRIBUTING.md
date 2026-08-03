@@ -17,6 +17,39 @@ CI runs both on every push and pull request (see
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)). Please make sure both
 pass before requesting a review.
 
+### Pointing `git review` at this checkout
+
+On Linux/macOS, `./install.sh` symlinks `bin/git-review` onto your `PATH`, so
+edits to this checkout take effect immediately with no reinstall. On
+Windows/Git Bash, `ln -s` silently *copies* instead of linking (see the
+comment in `install.sh`), so `./install.sh` there leaves a frozen snapshot:
+every edit needs a re-run of `./install.sh` to take effect, and it's easy to
+forget and debug against a stale binary.
+
+`npm link` avoids that: it makes npm point its global `git-review` package at
+this directory via a real directory symlink (something Git Bash's `ln -s`
+can't do, but npm's own linking can), so it always runs the checkout as it
+sits on disk. From the repo root:
+
+```sh
+npm link
+```
+
+If you'd already run `./install.sh` on Windows, remove its frozen copy so it
+can't shadow the link (whichever one is first on `PATH` wins):
+
+```sh
+./uninstall.sh
+```
+
+To check which one you're actually running, compare the version to
+[`VERSION`](VERSION):
+
+```sh
+where git-review        # or: command -v -a git-review
+git review --version
+```
+
 ### Running the tests on Windows
 
 Under Git Bash/MSYS the suite is very slow: every test spawns many `git`

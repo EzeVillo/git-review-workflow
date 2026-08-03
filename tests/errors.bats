@@ -428,8 +428,45 @@ step_review_two_with_edits() {
 	git review next
 	run git review status
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"banked"* ]]
-	[[ "$output" == *" 1"* ]]
+	# The exact line, not a loose grep: it has to name step 1 and only step 1,
+	# and the ref really has to exist for it to be reported.
+	[ "$(printf '%s\n' "$output" | grep '^  banked')" = "  banked   1" ]
+	git rev-parse --verify --quiet refs/review-edits/feature/two/1 >/dev/null
+	run git rev-parse --verify --quiet refs/review-edits/feature/two/2
+	[ "$status" -ne 0 ]
+}
+
+@test "review status banked list tells step 1 apart from step 12" {
+	git switch --quiet -c feature/many develop
+	i=1
+	while [ "$i" -le 12 ]; do
+		printf 'line %s\n' "$i" >>app.txt
+		git add app.txt
+		git commit --quiet -m "c$i"
+		i=$((i + 1))
+	done
+	git push --quiet -u origin feature/many
+	git switch --quiet develop
+
+	git review start feature/many --step
+	[ "$(git config branch.review/feature/many.reviewcount)" -eq 12 ]
+	# Bank steps 2 and 12 directly: what status reports is which refs exist, and
+	# this is the only way to get a two-digit step banked without walking the
+	# whole review. A membership test over the ref list that forgets the trailing
+	# newline reports step 1 as banked too, because the name of the ref for step
+	# 12 starts with the name of the ref for step 1.
+	git update-ref refs/review-edits/feature/many/2 "$(git rev-parse feature/many~10)"
+	git update-ref refs/review-edits/feature/many/12 "$(git rev-parse feature/many)"
+	run git review status
+	[ "$status" -eq 0 ]
+	[ "$(printf '%s\n' "$output" | grep '^  banked')" = "  banked   2 12" ]
+}
+
+@test "review status reports no banked steps as none" {
+	git review start feature/x --step
+	run git review status
+	[ "$status" -eq 0 ]
+	[ "$(printf '%s\n' "$output" | grep '^  banked')" = "  banked   none" ]
 }
 
 # ── partial step metadata: a hand-deleted key must be reported, not die silently ─

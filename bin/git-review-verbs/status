@@ -236,12 +236,22 @@ if [ "$mode" = "step" ]; then
 	printf '  mode    step  [%s/%s] on %s %s\n' "$step" "$count" \
 		"$(git rev-parse --short "$cnow")" "$(git log -1 --format='%s' "$cnow")"
 
+	# Every banked ref in ONE process instead of a git rev-parse --verify per
+	# position — the same technique the --porcelain branch above uses, for the
+	# same reason: under Git Bash on Windows, where fork() is emulated, the N
+	# rev-parse calls were almost all of a ~3.5s 50-commit status. The refs come
+	# back one per line and the membership test is a plain shell `case` over the
+	# list wrapped in newlines; the trailing newline in the pattern is what keeps
+	# step 1 from matching refs/review-edits/<src>/10.
+	nl="$(printf '\nx')"
+	nl="${nl%x}"
+	banked_refs="$nl$(git for-each-ref --format='%(refname)' "refs/review-edits/$src/")$nl"
 	banked=""
 	i=1
 	while [ "$i" -le "$count" ]; do
-		if git rev-parse --verify --quiet "refs/review-edits/$src/$i" >/dev/null; then
-			banked="$banked $i"
-		fi
+		case "$banked_refs" in
+		*"${nl}refs/review-edits/$src/$i$nl"*) banked="$banked $i" ;;
+		esac
 		i=$((i + 1))
 	done
 	printf '  banked  %s\n' "${banked:- none}"

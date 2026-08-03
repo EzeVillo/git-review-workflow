@@ -58,6 +58,78 @@ realistic.
 > does not have, so they do not really run there — rely on CI (or local Windows)
 > for those.
 
+## The VS Code extension
+
+[`vscode-extension/`](vscode-extension/) is a separate npm project with its own
+checks, which CI runs as a second job. It shells out to the `git review` on
+`PATH`, so install this checkout (`./install.sh`) before running or testing it.
+
+```sh
+cd vscode-extension
+npm install
+npm run watch      # esbuild, rebuilds dist/ on save
+```
+
+### Running it in a real editor
+
+Open `vscode-extension/` in VS Code and press F5 (the *Run Extension* launch
+configuration). That opens a second window — the Extension Development Host —
+with the extension loaded from this checkout; changes need a reload of that
+window (Developer: Reload Window), not a restart.
+
+The panel only has something to show inside a repository with an active review,
+so build one with the [sandbox](#trying-the-commands-by-hand) and open
+`<sandbox>/work` in the development host:
+
+```sh
+./tests/sandbox.sh                    # from the repo root
+git -C <sandbox>/work review start feature/checkout
+```
+
+The development host inherits the `PATH` of the VS Code that launched it, not
+the one the sandbox's `env.sh` sets up: either install this checkout
+(`./install.sh`) or point the `gitReview.path` setting at `bin/git-review`.
+
+### Testing it
+
+```sh
+npm test                  # unit + integration, compiling first
+npm run test:unit         # pure functions, no editor, milliseconds
+npm run test:integration  # downloads a VS Code build on first run and drives it
+```
+
+The integration suite loads the extension from `dist/`, and only `npm test`
+compiles first (through `pretest`). Running `npm run test:integration` on its own
+tests whatever was built last — run `npm run compile` first, or keep
+`npm run watch` going, otherwise a green run can be about code you already
+changed. On Linux without a display, wrap it in `xvfb-run -a`.
+
+Two of the integration specs open editor tabs and are flaky on Windows for
+reasons that have nothing to do with the extension. Before chasing a failure
+like *"no se abrió ningún tab"*, re-run the suite on an unmodified checkout to
+see whether it was already failing.
+
+### Previewing the panel
+
+The webview's HTML is a pure function with no `vscode` import, so the panel's
+states can be rendered in an ordinary browser without launching an editor:
+
+```sh
+npm run preview        # writes out/preview/index.html and prints its file:// URL
+npm run preview:watch  # regenerates on save; reload the browser
+```
+
+It shows every state side by side at sidebar width — walk, step, whole and the
+empty ones — with a switch for the dark, light and high-contrast themes. The
+sample states in [`preview/fixtures.ts`](vscode-extension/preview/fixtures.ts)
+are sample `status --porcelain` output run through the real parser and model, so
+the preview follows the source instead of being maintained alongside it.
+
+It is only good for the render: the buttons have no extension behind them, and
+the theme variables in `preview/build.ts` approximate VS Code's. A `--vscode-*`
+variable the panel starts using must be added there too, or it will look wrong
+in the preview and fine in the editor. For behaviour, use F5.
+
 ## Releasing
 
 > Maintainers only.

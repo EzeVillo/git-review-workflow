@@ -193,6 +193,57 @@ repo, no en archivos del working tree:
       (pasa en Linux/macOS, rompe en Windows). El cuerpo del test puede tener lo
       que sea; es solo el nombre el que se vuelve nombre de función.
 
+## Extensión de VS Code
+
+`vscode-extension/` es un proyecto npm aparte (TypeScript + esbuild), con su
+propio job en CI. Nunca deriva estado por su cuenta: todo lo que muestra sale de
+reinvocar `git review status --porcelain` / `--why` sobre la CLI del `PATH`, así
+que hay que tener este checkout instalado (`./install.sh`) para correrla o
+testearla. El diseño completo está en `specs/002-extension-vscode/`
+(`contracts/cli-invocation.md` es la lista cerrada de lo que puede invocar). Su
+`README.md` es único y va en **inglés** (es producto, no documento de trabajo):
+la regla de los dos README es de los README de la raíz, no de éste.
+
+```sh
+cd vscode-extension
+npm install
+npm run watch             # esbuild, recompila dist/ al guardar
+
+npm test                  # unit + integration, compilando antes
+npm run test:unit         # funciones puras, sin editor, milisegundos
+npm run test:integration  # @vscode/test-electron; baja un VS Code la 1ra vez
+
+npm run preview           # render del panel en el navegador (ver abajo)
+npm run preview:watch
+```
+
+- **Editor de pruebas:** abrir `vscode-extension/` en VS Code y F5 (config *Run
+  Extension* de `.vscode/launch.json`) levanta un **Extension Development Host**
+  con la extensión cargada desde el checkout; los cambios entran con *Developer:
+  Reload Window* en esa ventana, no reiniciándola. El panel sólo tiene algo que
+  mostrar dentro de un repo con review activo: armá uno con `./tests/sandbox.sh`,
+  arrancá el review (`git -C <sandbox>/work review start feature/checkout` entra
+  en walk, porque el sandbox commitea un walkthrough) y abrí `<sandbox>/work` en
+  el host. Ojo: el host hereda el `PATH` del VS Code que lo lanzó, no el que
+  arma el `env.sh` del sandbox — o instalás el checkout, o apuntás la setting
+  `gitReview.path` a `bin/git-review`.
+- **`test:integration` corre contra `dist/`**, y sólo `npm test` compila antes
+  (vía `pretest`). Correrlo suelto después de editar prueba el build anterior:
+  `npm run compile` primero, o dejá `npm run watch` corriendo. En Linux sin
+  display, `xvfb-run -a`.
+- **Dos specs de integración abren tabs y son flaky en Windows** por el host de
+  test, no por la extensión. Ante un `no se abrió ningún tab`, medí el baseline
+  en un checkout sin tocar antes de buscar la causa en tu cambio.
+- **`npm run preview`** genera `out/preview/index.html` (y lo imprime como URL
+  `file://`): los siete estados del panel lado a lado, a ancho de sidebar, con
+  selector de tema dark/light/alto contraste. El pane es el `panelHtml()` real y
+  los estados de `preview/fixtures.ts` son salida `--porcelain` de ejemplo pasada
+  por el parser y el modelo reales, así que **sigue al código y no se mantiene
+  aparte**. Lo que no puede afirmar: los botones no tienen extensión del otro
+  lado, y las variables de tema de `preview/build.ts` son una aproximación — si
+  el panel empieza a usar una `--vscode-*` que no está en esa lista, agregarla es
+  parte del cambio. Para comportamiento, F5.
+
 ## Landing (GitHub Pages)
 
 `docs/index.html` se publica en GitHub Pages desde la rama `main`, carpeta

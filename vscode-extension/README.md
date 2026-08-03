@@ -26,9 +26,25 @@ npm install
 npm run watch      # esbuild in watch mode
 ```
 
-Open this folder in VS Code and press F5 to launch an Extension Development
-Host with the extension loaded; open a `git-review-workflow` repository there
-to try it against a real review.
+### Running it in a real editor
+
+Open this folder in VS Code and press F5 (the *Run Extension* launch
+configuration) to launch an Extension Development Host — a second window with
+the extension loaded from this checkout. Changes need a reload of that window
+(*Developer: Reload Window*), not a restart.
+
+The panel only has something to show inside a repository with an active review.
+The sandbox builds a throwaway pull request to open there:
+
+```sh
+../tests/sandbox.sh                 # prints where it built the repo
+git -C <sandbox>/work review start feature/checkout
+```
+
+Then open `<sandbox>/work` in the development host. Note that the host inherits
+the `PATH` of the VS Code that launched it, not the one `env.sh` sets up inside
+the sandbox: either install this checkout (`../install.sh`) or point the
+`gitReview.path` setting at `bin/git-review`.
 
 ### Previewing the panel
 
@@ -52,14 +68,19 @@ editor. For anything beyond the render, use F5.
 ## Testing
 
 ```sh
-npm test            # unit + integration
-npm run test:unit    # pure functions, no VS Code host
+npm test                  # unit + integration, compiling first
+npm run test:unit         # pure functions, no VS Code host
 npm run test:integration  # @vscode/test-electron, builds fixtures with the real CLI
 ```
 
 Integration tests shell out to the `git review` on `PATH`, so install this
 checkout first (`../install.sh`) if you haven't already. On Linux without a
-display, run the integration suite under `xvfb-run`.
+display, run the integration suite under `xvfb-run -a`.
+
+They also load the extension from `dist/`, and only `npm test` compiles first
+(through `pretest`). Running `npm run test:integration` on its own tests
+whatever was built last — run `npm run compile` first, or keep `npm run watch`
+going, or a green run may be about code you already changed.
 
 ## Packaging locally
 

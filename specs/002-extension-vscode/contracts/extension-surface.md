@@ -132,8 +132,14 @@ Reglas normativas:
 - Los botones `next`/`prev` del panel se deshabilitan con `busy` del
   `PanelModel` mientras hay una mutación en curso, pero quien garantiza FR-020
   es el `MutationLock`: una segunda invocación en vuelo se descarta, venga de
-  donde venga. **No** se deshabilitan al llegar a un extremo de la secuencia:
-  eso lo decide la CLI (FR-016).
+  donde venga.
+- También se deshabilitan en los extremos de la secuencia, con `atFirst`/
+  `atLast` del `PanelModel`: un control que no puede mover nada no se ofrece.
+  Eso **no** decide si el cursor se mueve —sigue decidiéndolo el verbo
+  (FR-016)—, es la lectura de la `position`/`total` que la CLI ya reportó, la
+  misma que dibuja `2/3` en la barra. Invocar `next`/`prev` desde la paleta en
+  un extremo sigue siendo posible, y ahí la respuesta es el aviso de la CLI
+  propagado tal cual (ver contracts/cli-invocation.md).
 - Los comandos de la paleta se ocultan con `when: gitReview.situation == review`
   — no tiene sentido ofrecer "entrada siguiente" donde no hay review.
 - `gitReview.openEntry` abre el documento del working tree; con el archivo

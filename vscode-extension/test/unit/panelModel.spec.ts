@@ -103,6 +103,66 @@ describe("buildPanelModel", () => {
         assert.strictEqual(buildPanelModel(reviewState(moved), {busy: false}).baseMoved, true);
     });
 
+    it("en el medio de la secuencia no hay ningun extremo", () => {
+        const model = buildPanelModel(reviewState(WALK), {busy: false});
+        assert.strictEqual(model.atFirst, false);
+        assert.strictEqual(model.atLast, false);
+    });
+
+    it("atFirst en la primera y atLast en la ultima, cada uno por su lado", () => {
+        const first = "state\tr\ts\tt\twalk\tapplied\t1\t3\t3\tsrc/a.ts\t0\nentry\t1\tsrc/a.ts\t0\n";
+        const last = "state\tr\ts\tt\twalk\tapplied\t3\t3\t3\tsrc/c.ts\t0\nentry\t3\tsrc/c.ts\t0\n";
+        const firstModel = buildPanelModel(reviewState(first), {busy: false});
+        const lastModel = buildPanelModel(reviewState(last), {busy: false});
+
+        assert.strictEqual(firstModel.atFirst, true);
+        assert.strictEqual(firstModel.atLast, false);
+        assert.strictEqual(lastModel.atFirst, false);
+        assert.strictEqual(lastModel.atLast, true);
+    });
+
+    it("una secuencia de una sola entrada es a la vez el principio y el final", () => {
+        const only = "state\tr\ts\tt\twalk\tapplied\t1\t1\t1\tsrc/only.ts\t0\nentry\t1\tsrc/only.ts\t0\n";
+        const model = buildPanelModel(reviewState(only), {busy: false});
+        assert.strictEqual(model.atFirst, true);
+        assert.strictEqual(model.atLast, true);
+    });
+
+    it("un cursor pasado del total re-derivado tambien es un extremo", () => {
+        // La base se movio y el total bajo: seguir avanzando no lleva a ningun
+        // lado, aunque `position === total` sea falso.
+        const past = "state\tr\ts\tt\twalk\tapplied\t5\t2\t7\tsrc/x.ts\t0\nentry\t1\tsrc/a.ts\t0\nentry\t2\tsrc/b.ts\t0\n";
+        const model = buildPanelModel(reviewState(past), {busy: false});
+        assert.strictEqual(model.atLast, true);
+        assert.strictEqual(model.atFirst, false);
+    });
+
+    it("modo step tambien reporta los extremos", () => {
+        const stdout = [
+            "state\treview/feat\torigin/feat\tabc123\tstep\tnone\t2\t2\t2\t9fe1c0d",
+            "entry\t1\tabc1234\t1",
+            "entry\t2\t9fe1c0d\t0",
+            "",
+        ].join("\n");
+        const model = buildPanelModel(reviewState(stdout), {busy: false});
+        assert.strictEqual(model.atLast, true);
+        assert.strictEqual(model.atFirst, false);
+    });
+
+    it("sin cursor no hay extremo que marcar", () => {
+        const whole = "state\treview/feat\torigin/feat\tabc123\twhole\tnone\nuncovered\tsrc/a.ts\n";
+        const model = buildPanelModel(reviewState(whole), {busy: false});
+        assert.strictEqual(model.atFirst, false);
+        assert.strictEqual(model.atLast, false);
+
+        const noReview = buildPanelModel(
+            {situation: "no-review", entries: [], uncovered: []},
+            {busy: false}
+        );
+        assert.strictEqual(noReview.atFirst, false);
+        assert.strictEqual(noReview.atLast, false);
+    });
+
     it("modo step: banked se refleja y no se pide why", () => {
         const stdout = [
             "state\treview/feat\torigin/feat\tabc123\tstep\tnone\t2\t2\t2\t9fe1c0d",

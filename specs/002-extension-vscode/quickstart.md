@@ -108,8 +108,11 @@ git review status --porcelain | head -1
 Después, al revés: correr `git review next` **en la terminal** con el panel
 abierto y verificar que el panel se actualiza solo, sin reabrirlo (FR-019).
 
-Intentar avanzar más allá de la última entrada: la respuesta tiene que ser la
-misma que da la CLI, y el panel no puede quedar inconsistente.
+En la última entrada, el botón *Siguiente* tiene que verse deshabilitado (y el
+de *Anterior* en la primera): un control sin destino no se ofrece. Invocar
+igual el comando desde la paleta ahí tiene que mostrar el aviso de la CLI (`no
+more entries — run git review finish`), nunca no hacer nada, y el panel no
+puede quedar inconsistente.
 
 ### 4. Los estados sin review (US5 — P2)
 

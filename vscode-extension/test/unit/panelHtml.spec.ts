@@ -48,6 +48,15 @@ describe("panelHtml", () => {
         assert.ok(!/onclick=/.test(html), "nada de handlers en atributos: la CSP los bloquearía");
     });
 
+    it("los controles de navegación se deshabilitan también en los extremos", () => {
+        // No hay DOM acá (el webview corre en su propio contexto), así que se
+        // afirma sobre el origen del `disabled`: si alguien vuelve a atarlo sólo
+        // a `busy`, el clic en el último paso queda mudo otra vez.
+        assert.ok(/prev\.disabled\s*=\s*model\.busy\s*\|\|\s*model\.atFirst/.test(html));
+        assert.ok(/next\.disabled\s*=\s*model\.busy\s*\|\|\s*model\.atLast/.test(html));
+        assert.ok(html.includes("button[disabled]"), "y el estado tiene que verse, no sólo existir");
+    });
+
     it("dibuja los cuatro estados del why y los cinco estados vacíos", () => {
         for (const state of ["present", "absent", "failed"]) {
             assert.ok(html.includes(`"${state}"`), `falta el estado ${state} del why`);

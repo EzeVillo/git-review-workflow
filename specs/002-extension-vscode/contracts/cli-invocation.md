@@ -98,8 +98,19 @@ del `status --porcelain` que corre inmediatamente después.
 
 **Límites de la secuencia**: lo que la CLI responda al intentar pasarse del
 final o del principio se propaga tal cual, sin comportamiento propio (FR-016).
-La extensión no chequea `position === total` para deshabilitar el comando por
-las suyas: eso sería una segunda implementación de la regla.
+En un extremo la CLI **no falla**: imprime su aviso (`no more entries — run git
+review finish`) en **stdout** y sale con 0, dejando el cursor donde estaba. La
+extensión detecta ese caso comparando la `position` de antes con la del
+`status --porcelain` de después —nunca leyendo el texto del verbo (FR-015)— y
+muestra ese mismo aviso, el de la CLI y no uno redactado acá. Sin eso el
+comando sería mudo, que es lo contrario de propagar.
+
+La extensión **no** decide si el cursor se mueve: eso sigue siendo del verbo.
+Lo que sí hace el panel es deshabilitar el botón cuyo destino no existe, leyendo
+la `position`/`total` que la CLI ya reportó (`atFirst`/`atLast` del
+`PanelModel`) — la misma lectura que ya dibuja `2/3` en la barra, no una segunda
+implementación de la regla. La paleta y cualquier otra superficie siguen
+pudiendo invocar el verbo en un extremo, y ahí el aviso es la respuesta.
 
 ---
 

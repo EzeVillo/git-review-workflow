@@ -55,22 +55,34 @@ describe("US4: avanzar y retroceder en la secuencia", function () {
         const api = await getTestApi();
         let state = await api.refresh();
         assert.strictEqual(state.state?.position, 1);
+        let model = await api.getPanelModel();
+        assert.strictEqual(model.atFirst, true, "en la primera no hay a donde retroceder");
+        assert.strictEqual(model.atLast, false);
 
         await vscode.commands.executeCommand("gitReview.next");
         state = api.getState();
         assert.strictEqual(state.state?.position, 2);
         let porcelain = gitReview(["status", "--porcelain"], repo.dir);
         assert.match(porcelain.stdout.split("\n")[0], /\t2\t3\t3\t/);
+        model = await api.getPanelModel();
+        assert.strictEqual(model.atFirst, false, "en el medio los dos controles sirven");
+        assert.strictEqual(model.atLast, false);
 
         await vscode.commands.executeCommand("gitReview.next");
         state = api.getState();
         assert.strictEqual(state.state?.position, 3);
+        model = await api.getPanelModel();
+        assert.strictEqual(model.atLast, true, "en la ultima no hay a donde avanzar");
+        assert.strictEqual(model.atFirst, false);
 
         await vscode.commands.executeCommand("gitReview.prev");
         state = api.getState();
         assert.strictEqual(state.state?.position, 2);
         porcelain = gitReview(["status", "--porcelain"], repo.dir);
         assert.match(porcelain.stdout.split("\n")[0], /\t2\t3\t3\t/);
+        model = await api.getPanelModel();
+        assert.strictEqual(model.atFirst, false);
+        assert.strictEqual(model.atLast, false);
     });
 
     it("un intento en el limite propaga la respuesta de la CLI sin dejar el panel inconsistente (AC2/AC3)", async () => {
@@ -84,10 +96,22 @@ describe("US4: avanzar y retroceder en la secuencia", function () {
         assert.strictEqual(state.state?.position, 1);
         assert.strictEqual(state.state?.total, 1);
 
-        // Ya en la última (y única) entrada: la CLI no falla, no-opea ("no
-        // more entries" queda en stdout, que la extensión nunca lee — FR-015).
-        // El panel tiene que seguir reflejando una review válida en
-        // posición 1, nunca un estado a medias.
+        // Una sola entrada: es a la vez el principio y el final, y el panel
+        // deshabilita los dos controles en vez de dejar dos clics mudos.
+        let model = await api.getPanelModel();
+        assert.strictEqual(model.atFirst, true);
+        assert.strictEqual(model.atLast, true);
+
+        // El contrato del que depende el aviso: en un extremo la CLI no falla
+        // (exit 0) y deja el mensaje en stdout, no en stderr. Si esto cambiara,
+        // navigate.ts dejaria de tener nada que mostrar.
+        const atEnd = gitReview(["next"], repo.dir);
+        assert.strictEqual(atEnd.status, 0);
+        assert.match(atEnd.stdout, /no more entries/);
+        assert.strictEqual(atEnd.stderr.trim(), "");
+
+        // Y la review tiene que seguir siendo valida en posicion 1 despues de
+        // intentarlo por el comando, nunca un estado a medias.
         await vscode.commands.executeCommand("gitReview.next");
         state = api.getState();
         assert.strictEqual(state.situation, "review");
@@ -97,6 +121,10 @@ describe("US4: avanzar y retroceder en la secuencia", function () {
         state = api.getState();
         assert.strictEqual(state.situation, "review");
         assert.strictEqual(state.state?.position, 1);
+
+        model = await api.getPanelModel();
+        assert.strictEqual(model.atFirst, true);
+        assert.strictEqual(model.atLast, true);
     });
 
     it("correr el verbo en la terminal actualiza el panel sin reabrirlo (AC4, FR-019)", async () => {

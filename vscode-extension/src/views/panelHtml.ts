@@ -256,11 +256,15 @@ export function panelHtml(nonce: string): string {
     }
     body.appendChild(open);
 
+    // En un extremo de la secuencia el control no puede mover nada: se
+    // deshabilita en vez de dejar un clic mudo. Quien decide si el cursor se
+    // mueve sigue siendo la CLI — esto sólo refleja la position/total que ella
+    // ya reportó, la misma que dibuja la barra de arriba.
     const nav = el("div", "row");
     const prev = button("‹ Anterior", "prev");
     const next = button("Siguiente ›", "next");
-    prev.disabled = model.busy;
-    next.disabled = model.busy;
+    prev.disabled = model.busy || model.atFirst;
+    next.disabled = model.busy || model.atLast;
     nav.appendChild(prev);
     nav.appendChild(next);
     body.appendChild(nav);

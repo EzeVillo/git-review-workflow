@@ -7,6 +7,11 @@ import {openEntry} from "./openEntry";
 
 export type NavigateDirection = "next" | "prev";
 
+/** Primera línea con contenido, que es donde la CLI deja el mensaje operativo. */
+function firstLine(text: string): string {
+    return text.split("\n").map((line) => line.trim()).find((line) => line.length > 0) ?? "";
+}
+
 /**
  * `gitReview.next` / `gitReview.prev`: invoca el verbo de la CLI a través del
  * `MutationLock`, refresca con `status --porcelain` inmediatamente después
@@ -23,6 +28,7 @@ export async function navigate(
 ): Promise<void> {
     await lock.run(async () => {
         const options = getInvokeOptions();
+        const before = stateManager.state.state?.position;
         const result = await invokeGitReview(direction, [], options);
         const state = await stateManager.refresh();
 
@@ -36,6 +42,20 @@ export async function navigate(
         if (state.situation !== "review" || !state.state) {
             return;
         }
+
+        // En un extremo de la secuencia la CLI no falla: informa por stdout y
+        // deja el cursor donde estaba (bin/git-review-verbs/next). Sin esto el
+        // clic sería mudo, así que se muestra ese mismo mensaje — el de la CLI,
+        // no uno propio (FR-016) — y no se reabre lo que ya está abierto. La
+        // señal es que el cursor no se movió, no el texto del verbo (FR-015).
+        if (state.state.position === before) {
+            const message = firstLine(result.stdout);
+            if (message.length > 0) {
+                void vscode.window.showInformationMessage(message);
+            }
+            return;
+        }
+
         const current = state.entries.find((e) => e.position === state.state?.position);
         if (current) {
             await openEntry(vscode.Uri.file(options.cwd), state.state.mode, current, gitApi);

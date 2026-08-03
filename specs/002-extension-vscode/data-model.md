@@ -196,6 +196,8 @@ es la verificabilidad: es el punto donde los tests de integración afirman (ver
 | `position`      | entero                                     | sólo `step` / `walk`    |
 | `total`         | entero                                     | sólo `step` / `walk`    |
 | `baseMoved`     | booleano (`total ≠ recorded`)              | sólo `step` / `walk`    |
+| `atFirst`       | booleano (`position ≤ 1`)                  | sólo `step` / `walk`    |
+| `atLast`        | booleano (`position ≥ total`)              | sólo `step` / `walk`    |
 | `degraded`      | booleano (`walkthrough = degraded`)        | sólo `review`           |
 | `current`       | `{position, display, essential, banked}`   | sólo con secuencia      |
 | `entryCount`    | entero                                     | sólo `review`           |
@@ -210,6 +212,12 @@ es la verificabilidad: es el punto donde los tests de integración afirman (ver
   lo dice — no se cae a la primera.
 - `display` es el único path que viaja al webview. El `raw` se queda del lado del
   host, que es quien invoca la CLI (`PathRef`, regla de unidireccionalidad).
+- `atFirst`/`atLast` son **lectura**, no regla: proyectan la `position`/`total`
+  que la CLI ya reportó para que el panel no ofrezca un control sin destino.
+  Quien decide si el cursor se mueve sigue siendo el verbo (FR-016). Usan `≤`/`≥`
+  y no `=` porque con la base movida el cursor puede quedar pasado del total
+  re-derivado, y ahí tampoco hay a dónde seguir. Sin cursor (`whole`, o fuera de
+  `review`) son `false`.
 - `why` distingue **cuatro** estados, no dos: `loading` (la invocación está en
   vuelo) es distinto de `absent` (exit `0`, cuerpo vacío) y de `failed` (exit
   `1`) — FR-018 pide los dos últimos separados, y el primero existe porque el

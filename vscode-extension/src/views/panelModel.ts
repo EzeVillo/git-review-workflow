@@ -45,6 +45,15 @@ export interface PanelModel {
     total?: number;
     /** `total ≠ recorded`: la base se movió pero el cursor sigue en rango (FR-011). */
     baseMoved: boolean;
+    /**
+     * Extremos de la secuencia, para que el panel no ofrezca un control que ya
+     * no puede mover nada. No duplican la regla de la CLI —quien decide si el
+     * cursor se mueve sigue siendo el verbo (FR-016)—: son la lectura de la
+     * `position`/`total` que la CLI *ya* reportó, la misma que el panel dibuja
+     * en la barra. Fuera de step/walk son `false`: sin cursor no hay extremo.
+     */
+    atFirst: boolean;
+    atLast: boolean;
     /** `walkthrough === "degraded"` (FR-010). */
     degraded: boolean;
     /** La entrada actual, elegida por `position` y nunca por `id`. */
@@ -122,6 +131,8 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
         situation: state.situation,
         busy: inputs.busy,
         baseMoved: false,
+        atFirst: false,
+        atLast: false,
         degraded: false,
         entryCount: 0,
         uncoveredCount: 0,
@@ -151,6 +162,10 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
     base.position = review.position;
     base.total = review.total;
     base.baseMoved = review.recorded !== undefined && review.total !== review.recorded;
+    // `>=` / `<=` y no `===`: con la base movida el cursor puede quedar afuera
+    // del rango re-derivado, y ahí tampoco hay a dónde seguir.
+    base.atFirst = review.position !== undefined && review.position <= 1;
+    base.atLast = review.position !== undefined && review.total !== undefined && review.position >= review.total;
 
     const current = currentEntry(state.entries, review.position);
     if (current) {

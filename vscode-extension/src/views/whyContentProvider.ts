@@ -53,10 +53,10 @@ export class WhyContentProvider implements vscode.TextDocumentContentProvider {
         const raw = rawFromUri(uri);
         const why = await fetchWhy(raw, this.getOptions());
         if (why === undefined) {
-            return "No se pudo obtener el porqué de esta entrada.";
+            return "Could not read the why for this entry.";
         }
         if (!why.present) {
-            return "*Esta entrada no tiene explicación.*";
+            return "*This entry has no explanation.*";
         }
         return why.text;
     }

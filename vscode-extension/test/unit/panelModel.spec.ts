@@ -243,12 +243,12 @@ describe("entryPickLabel", () => {
     });
 
     it("marca la actual y la esencial con texto, no sólo con color", () => {
-        assert.strictEqual(entryPickLabel(entries[1], 2).description, "actual");
-        assert.strictEqual(entryPickLabel(entries[2], 2).description, "esencial");
+        assert.strictEqual(entryPickLabel(entries[1], 2).description, "current");
+        assert.strictEqual(entryPickLabel(entries[2], 2).description, "key");
     });
 
     it("una entrada actual Y esencial lleva las dos marcas", () => {
-        assert.strictEqual(entryPickLabel(entries[2], 3).description, "actual · esencial");
+        assert.strictEqual(entryPickLabel(entries[2], 3).description, "current · key");
     });
 
     it("una entrada sin marcas no lleva descripción", () => {
@@ -257,7 +257,7 @@ describe("entryPickLabel", () => {
 
     it("en step la marca es la de ediciones guardadas", () => {
         const step = parsePorcelain("state\tr\ts\tt\tstep\tnone\t1\t1\t1\tabc1234\nentry\t1\tabc1234\t1\n");
-        assert.strictEqual(entryPickLabel(step.entries[0], 2).description, "con ediciones guardadas");
+        assert.strictEqual(entryPickLabel(step.entries[0], 2).description, "banked edits");
         assert.strictEqual(entryPickLabel(step.entries[0], 2).label, "01  abc1234");
     });
 

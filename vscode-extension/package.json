@@ -37,54 +37,54 @@
     "commands": [
       {
         "command": "gitReview.openEntry",
-        "title": "Abrir entrada",
+        "title": "Open Entry",
         "category": "git review"
       },
       {
         "command": "gitReview.openChange",
-        "title": "Ver cambios",
+        "title": "Open Changes",
         "category": "git review",
         "icon": "$(diff)"
       },
       {
         "command": "gitReview.showWhy",
-        "title": "Ver el porqué",
+        "title": "Show Why",
         "category": "git review",
         "icon": "$(comment)"
       },
       {
         "command": "gitReview.next",
-        "title": "Entrada siguiente",
+        "title": "Next Entry",
         "category": "git review",
         "icon": "$(arrow-down)"
       },
       {
         "command": "gitReview.prev",
-        "title": "Entrada anterior",
+        "title": "Previous Entry",
         "category": "git review",
         "icon": "$(arrow-up)"
       },
       {
         "command": "gitReview.goToEntry",
-        "title": "Ir a una entrada",
+        "title": "Go to Entry",
         "category": "git review",
         "icon": "$(list-ordered)"
       },
       {
         "command": "gitReview.showUncovered",
-        "title": "Archivos sin cobertura",
+        "title": "Show Uncovered Files",
         "category": "git review",
         "icon": "$(files)"
       },
       {
         "command": "gitReview.refresh",
-        "title": "Refrescar",
+        "title": "Refresh",
         "category": "git review",
         "icon": "$(refresh)"
       },
       {
         "command": "gitReview.installCli",
-        "title": "Instalar la CLI",
+        "title": "Install the CLI",
         "category": "git review"
       }
     ],
@@ -137,7 +137,7 @@
         "gitReview.path": {
           "type": "string",
           "default": "",
-          "description": "Ruta al dispatcher git-review cuando `git` no lo descubre. Vacío = invocar `git review`."
+          "description": "Path to the git-review dispatcher when `git` does not discover it. Empty = invoke `git review`."
         }
       }
     }

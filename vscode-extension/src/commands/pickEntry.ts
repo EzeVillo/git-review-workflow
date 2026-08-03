@@ -56,8 +56,8 @@ export async function pickEntry(
     const picked = await show(
         items,
         active,
-        mode === "step" ? "Commits de la review" : "Entradas del walkthrough",
-        "El orden es el de la secuencia de lectura; elegir no mueve el cursor"
+        mode === "step" ? "Review commits" : "Walkthrough entries",
+        "In reading order; picking one does not move the cursor"
     );
     return picked?.entry;
 }
@@ -75,8 +75,8 @@ export async function pickUncovered(files: UncoveredRecord[]): Promise<Uncovered
     const picked = await show(
         items,
         undefined,
-        "Archivos sin cobertura",
-        "Cambian en la review y el walkthrough no los anota"
+        "Uncovered files",
+        "They change in the review and the walkthrough does not annotate them"
     );
     return picked?.file;
 }

@@ -9,10 +9,16 @@
  * tab y el foco sean los del host. El único script es inline y va con `nonce`;
  * el contenido variable se inserta con `textContent`, nunca con `innerHTML`
  * (research.md Decisión 4).
+ *
+ * **El texto visible va en inglés**, igual que el de la CLI: el panel muestra
+ * su stderr al lado del propio, y el `--porcelain` del que sale todo esto habla
+ * en inglés. Donde el ícono alcanza (navegar) no hay palabra; donde desambigua
+ * (archivo vs diff) acompaña a una. Un botón sin texto lleva `aria-label`: el
+ * ícono saca la palabra de la vista, no del árbol de accesibilidad.
  */
 export function panelHtml(nonce: string): string {
     return `<!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
@@ -60,13 +66,24 @@ export function panelHtml(nonce: string): string {
     color: var(--vscode-descriptionForeground);
   }
   .head .n { font-variant-numeric: tabular-nums; }
+  /* Dos marcas con peso distinto: "edits" es un estado propio del revisor y va
+     en outline, del color del texto normal para separarse del gris del head;
+     "key" es lo que el autor del walkthrough marcó como esencial y va sólido,
+     con las variables badge-* — el mismo token que VS Code usa para sus
+     contadores, así que el contraste ya está resuelto en todos los temas
+     (incluidos los de alto contraste, FR-031). */
   .badge {
     margin-left: auto;
     padding: 0 .4em;
     border: 1px solid var(--vscode-panel-border);
     border-radius: 3px;
     font-size: .85em;
-    color: var(--vscode-textPreformat-foreground);
+    color: var(--vscode-foreground);
+  }
+  .badge.key {
+    border-color: transparent;
+    background: var(--vscode-badge-background);
+    color: var(--vscode-badge-foreground);
   }
   .id {
     margin: 0 0 .9em;
@@ -88,6 +105,10 @@ export function panelHtml(nonce: string): string {
   .row { display: flex; gap: .4em; margin-bottom: .4em; }
   .row button { flex: 1; }
   button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .4em;
     font-family: inherit;
     font-size: inherit;
     padding: .35em .6em;
@@ -96,6 +117,19 @@ export function panelHtml(nonce: string): string {
     cursor: pointer;
     background: var(--vscode-button-secondaryBackground);
     color: var(--vscode-button-secondaryForeground);
+  }
+  /* Trazo currentColor: el ícono toma el color del botón que lo contiene, así
+     que sirve igual sobre el fondo primario, el secundario y el de un tema de
+     alto contraste, sin una regla por variante. */
+  .icon {
+    width: 1.05em;
+    height: 1.05em;
+    flex: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
   }
   button:hover { background: var(--vscode-button-secondaryHoverBackground); }
   button.primary {
@@ -150,9 +184,51 @@ export function panelHtml(nonce: string): string {
     return node;
   }
 
-  function button(label, message, className) {
-    const node = el("button", className, label);
+  // Los íconos son SVG inline y no codicons: la fuente de codicons es un
+  // recurso que habría que servir desde la extensión y abrirle font-src a la
+  // CSP, y este html se abre tal cual en un navegador para mirarlo. Cuatro
+  // trazos alcanzan, y siguen el vocabulario que el revisor ya conoce de la
+  // vista Source Control: archivo, diff, y los chevrones de navegar.
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const ICONS = {
+    file: ["M4 1.6h5l3 3v9.8H4z", "M9 1.6v3h3"],
+    diff: ["M2.5 5.6h8.4", "M8.1 2.8 10.9 5.6 8.1 8.4", "M13.5 10.4H5.1", "M7.9 7.6 5.1 10.4 7.9 13.2"],
+    left: ["M10 3.4 5.4 8 10 12.6"],
+    right: ["M6 3.4 10.6 8 6 12.6"]
+  };
+
+  function icon(name) {
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("class", "icon");
+    svg.setAttribute("viewBox", "0 0 16 16");
+    // El nombre del control lo da su texto o su aria-label; el ícono repetido
+    // ahí sería ruido para un lector de pantalla.
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    ICONS[name].forEach(function (d) {
+      const path = document.createElementNS(SVG_NS, "path");
+      path.setAttribute("d", d);
+      svg.appendChild(path);
+    });
+    return svg;
+  }
+
+  function button(label, message, className, iconName) {
+    const node = el("button", className);
+    if (iconName) { node.appendChild(icon(iconName)); }
+    if (label) { node.appendChild(el("span", null, label)); }
     node.addEventListener("click", function () { vscode.postMessage({type: message}); });
+    return node;
+  }
+
+  /**
+   * Un control sin texto visible sigue necesitando nombre: el aria-label es
+   * el que lee un lector de pantalla y el title el que aparece en hover.
+   */
+  function iconButton(iconName, message, label) {
+    const node = button(null, message, null, iconName);
+    node.setAttribute("aria-label", label);
+    node.title = label;
     return node;
   }
 
@@ -176,27 +252,27 @@ export function panelHtml(nonce: string): string {
   function renderEmptyState(model) {
     switch (model.situation) {
       case "no-review":
-        return empty("No hay una review activa en este repositorio.", docsLink("Cómo iniciar una review"));
+        return empty("No active review in this repository.", docsLink("How to start a review"));
       case "out-of-range":
         return empty(
-          "El cursor quedó fuera de rango: la base se movió.",
-          button("Cómo arreglarlo", "outOfRangeHelp", "primary"),
+          "The cursor is out of range: the base moved.",
+          button("How to fix it", "outOfRangeHelp", "primary"),
           model.stderr
         );
       case "cli-missing":
         return empty(
-          "No se encontró la CLI git-review (≥ 0.3.0).",
-          button("Instalar la CLI", "installCli", "primary"),
+          "The git-review CLI (0.3.0 or newer) was not found.",
+          button("Install the CLI", "installCli", "primary"),
           model.stderr
         );
       case "cli-outdated":
         return empty(
-          "La CLI git-review instalada es anterior a 0.3.0.",
-          button("Actualizar la CLI", "installCli", "primary"),
+          "The installed git-review CLI is older than 0.3.0.",
+          button("Update the CLI", "installCli", "primary"),
           model.stderr
         );
       default:
-        return empty("Ocurrió un error al leer el estado de la review.", null, model.stderr);
+        return empty("Something went wrong reading the review state.", null, model.stderr);
     }
   }
 
@@ -213,9 +289,9 @@ export function panelHtml(nonce: string): string {
 
   function renderWhy(why) {
     if (why.state === "present") { return el("div", "why", why.text); }
-    if (why.state === "absent") { return el("div", "why quiet", "Esta entrada no tiene explicación."); }
-    if (why.state === "failed") { return el("div", "why quiet", "No se pudo obtener el porqué de esta entrada."); }
-    return el("div", "why quiet", "Cargando el porqué…");
+    if (why.state === "absent") { return el("div", "why quiet", "This entry has no explanation."); }
+    if (why.state === "failed") { return el("div", "why quiet", "Could not read the why for this entry."); }
+    return el("div", "why quiet", "Loading the why…");
   }
 
   function pad(n) { return n < 10 ? "0" + n : String(n); }
@@ -224,10 +300,15 @@ export function panelHtml(nonce: string): string {
     const body = el("div", "body");
     const head = el("div", "head");
     head.appendChild(el("span", "n", pad(model.current.position)));
+    // "key" es el marcador del propio walkthrough (la línea "> key"), no una
+    // etiqueta inventada acá; "edits" sí necesita el título, porque abreviado
+    // no dice cuáles son esas ediciones.
     if (model.current.essential) {
-      head.appendChild(el("span", "badge", "esencial"));
+      head.appendChild(el("span", "badge key", "key"));
     } else if (model.current.banked) {
-      head.appendChild(el("span", "badge", "ediciones guardadas"));
+      const banked = el("span", "badge", "edits");
+      banked.title = "This entry has banked edits";
+      head.appendChild(banked);
     }
     body.appendChild(head);
 
@@ -242,17 +323,21 @@ export function panelHtml(nonce: string): string {
       // botón porque abre otra superficie, no actúa sobre ésta.
       if (model.why.state === "present") {
         const more = el("div", "more");
-        more.appendChild(button("abrir en el editor", "showWhy", "link"));
+        more.appendChild(button("open in editor", "showWhy", "link"));
         body.appendChild(more);
       }
     }
 
+    // En step la entrada es un commit: no hay "el archivo" que abrir, sólo sus
+    // cambios. En walk son dos destinos distintos y el ícono es lo que los
+    // separa de un vistazo — la palabra sola ("File"/"Diff") se lee igual pero
+    // se distingue más lento en una columna angosta.
     const open = el("div", "row");
     if (model.mode === "step") {
-      open.appendChild(button("Ver los cambios", "openChange"));
+      open.appendChild(button("Diff", "openChange", null, "diff"));
     } else {
-      open.appendChild(button("Abrir archivo", "openEntry"));
-      open.appendChild(button("Ver cambios", "openChange"));
+      open.appendChild(button("File", "openEntry", null, "file"));
+      open.appendChild(button("Diff", "openChange", null, "diff"));
     }
     body.appendChild(open);
 
@@ -261,8 +346,8 @@ export function panelHtml(nonce: string): string {
     // mueve sigue siendo la CLI — esto sólo refleja la position/total que ella
     // ya reportó, la misma que dibuja la barra de arriba.
     const nav = el("div", "row");
-    const prev = button("‹ Anterior", "prev");
-    const next = button("Siguiente ›", "next");
+    const prev = iconButton("left", "prev", "Previous entry");
+    const next = iconButton("right", "next", "Next entry");
     prev.disabled = model.busy || model.atFirst;
     next.disabled = model.busy || model.atLast;
     nav.appendChild(prev);
@@ -278,7 +363,7 @@ export function panelHtml(nonce: string): string {
   function renderFoot(model) {
     if (model.uncoveredCount <= 0) { return null; }
     const foot = el("div", "foot");
-    foot.appendChild(button(model.uncoveredCount + " sin cobertura", "showUncovered", "link"));
+    foot.appendChild(button(model.uncoveredCount + " uncovered", "showUncovered", "link"));
     return foot;
   }
 
@@ -290,18 +375,18 @@ export function panelHtml(nonce: string): string {
     }
 
     root.appendChild(renderBar(model));
-    if (model.busy) { root.appendChild(note("trabajando…")); }
-    if (model.baseMoved) { root.appendChild(note("La base se movió: el total cambió desde que empezó la review.")); }
+    if (model.busy) { root.appendChild(note("working…")); }
+    if (model.baseMoved) { root.appendChild(note("The base moved: the total changed since the review started.")); }
     if (model.degraded) {
-      root.appendChild(note("El walkthrough no cubre el rango actual de la review; se muestra el diff completo del rango."));
+      root.appendChild(note("The walkthrough does not cover the review's current range; showing the full range diff."));
     }
 
     if (model.mode === "whole") {
-      root.appendChild(empty("Esta review no tiene walkthrough: no hay un recorrido de lectura curado para este PR."));
+      root.appendChild(empty("This review has no walkthrough: there is no curated reading order for this PR."));
     } else if (model.current) {
       root.appendChild(renderEntry(model));
     } else {
-      root.appendChild(empty("El cursor no apunta a ninguna entrada de la secuencia."));
+      root.appendChild(empty("The cursor does not point at any entry in the sequence."));
     }
 
     const foot = renderFoot(model);

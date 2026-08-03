@@ -2,7 +2,7 @@
 
 Review a [git-review-workflow](../README.md) pull request from a panel that
 shows where you are: the current entry of the walkthrough, its position in the
-reading order the author chose, whether they marked it essential, and the *why*
+reading order the author chose, whether they marked it `key`, and the *why*
 they wrote for it. The full sequence and the files the walkthrough doesn't cover
 are one keystroke away in a quick pick, and commands jump to the file, advance
 and go back — all without leaving the editor.

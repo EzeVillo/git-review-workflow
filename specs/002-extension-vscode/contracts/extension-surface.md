@@ -42,10 +42,10 @@ contribuciones del manifiesto el host renderiza (ver *Estados vacíos*).
 │                                       │
 │ <el why del autor, tal cual>          │ ← cuerpo (walk)
 │                                       │
-│ [ ver cambios ]                       │
-│ [ ‹ prev ]  [ next › ]                │
+│ [ ⧉ File ]  [ ⇄ Diff ]                │ ← en step, sólo Diff
+│ [    ‹    ]  [    ›    ]              │ ← sólo ícono, con aria-label
 ├───────────────────────────────────────┤
-│ 3 sin cobertura                       │ ← pie: abre su QuickPick; sin
+│ 3 uncovered                           │ ← pie: abre su QuickPick; sin
 └───────────────────────────────────────┘    archivos sin cobertura no se dibuja
 ```
 
@@ -58,10 +58,20 @@ Reglas normativas:
   repositorio se trata (FR-029).
 - La nota de walkthrough degradado con su motivo va en la barra (FR-010), y no
   impide usar la review.
-- "trabajando…" mientras hay una invocación en vuelo (FR-030) va en la barra; no
+- "working…" mientras hay una invocación en vuelo (FR-030) va en la barra; no
   reemplaza el contenido.
 - Esencial (walk) y con ediciones guardadas (step) se distinguen por **texto**
-  además del color (FR-007, FR-027, FR-031).
+  (`key` / `edits`) además del color (FR-007, FR-027, FR-031).
+- **El texto visible de toda la extensión va en inglés**, igual que el de la CLI
+  cuyo `stderr` el panel muestra al lado del propio. Los términos son los del
+  `--porcelain` (`key`, `uncovered`) y no sinónimos: la marca `key` del panel es
+  el marcador `> key` del walkthrough.
+- Un ícono reemplaza a la palabra sólo donde no desambigua nada (navegar) y la
+  acompaña donde sí (archivo vs diff). Los íconos son **SVG inline**, no la
+  fuente de codicons: cargarla obligaría a servir el `.ttf` como recurso del
+  webview y a abrirle `font-src` a la CSP. Un control sin texto visible lleva
+  `aria-label` y `title`: el ícono saca la palabra de la vista, no del árbol de
+  accesibilidad.
 - El identificador que se muestra es `PathRef.display` en walk y el SHA corto en
   step (FR-012).
 - En `mode = whole` sin walkthrough el panel lo explica y no ofrece secuencia ni
@@ -75,7 +85,7 @@ Reglas normativas:
   mezclada con ella (FR-008).
 - El *why* del panel es el texto entero, no un recorte: el link a `showWhy` abre
   el mismo contenido renderizado como Markdown en un editor, y por eso se
-  anuncia como "abrir en el editor" y no como una lectura más completa.
+  anuncia como "open in editor" y no como una lectura más completa.
 
 ### Estados vacíos
 
@@ -84,13 +94,13 @@ panel: párrafo explicativo y un botón, salvo `error` (Decisión 5). **No** son
 contribuciones `viewsWelcome` del manifiesto — el host sólo las renderiza en
 vistas de tipo `tree`, así que con esta vista no se mostrarían.
 
-| `situation`    | Botón                | Comando                       |
-|----------------|----------------------|-------------------------------|
-| `no-review`    | Cómo iniciar una review | (link a los README)        |
-| `out-of-range` | Cómo arreglarlo      | `gitReview.showOutOfRangeHelp` |
-| `cli-missing`  | Instalar la CLI      | `gitReview.installCli`        |
-| `cli-outdated` | Actualizar la CLI    | `gitReview.installCli`        |
-| `error`        | (ninguno)            | —                             |
+| `situation`    | Botón                  | Comando                        |
+|----------------|------------------------|--------------------------------|
+| `no-review`    | How to start a review  | (link a los README)            |
+| `out-of-range` | How to fix it          | `gitReview.showOutOfRangeHelp` |
+| `cli-missing`  | Install the CLI        | `gitReview.installCli`         |
+| `cli-outdated` | Update the CLI         | `gitReview.installCli`         |
+| `error`        | (ninguno)              | —                              |
 
 En `error`, `out-of-range`, `cli-missing` y `cli-outdated` el `stderr` de la CLI
 se muestra íntegro y tal cual (FR-024).
@@ -113,15 +123,15 @@ Los ids son interfaz pública.
 
 | Command id                | Título                  | Dónde aparece                     |
 |---------------------------|-------------------------|-----------------------------------|
-| `gitReview.openEntry`     | Abrir entrada           | panel (identificador), paleta     |
-| `gitReview.openChange`    | Ver cambios             | panel (botón), paleta             |
-| `gitReview.showWhy`       | Ver el porqué           | panel (botón), paleta             |
-| `gitReview.next`          | Entrada siguiente       | panel (botón), paleta             |
-| `gitReview.prev`          | Entrada anterior        | panel (botón), paleta             |
-| `gitReview.goToEntry`     | Ir a una entrada        | paleta                            |
-| `gitReview.showUncovered` | Archivos sin cobertura  | panel (pie), paleta               |
-| `gitReview.refresh`       | Refrescar               | título de la vista, paleta        |
-| `gitReview.installCli`    | Instalar la CLI         | panel (estados sin CLI), paleta   |
+| `gitReview.openEntry`     | Open Entry              | panel (botón `File`), paleta      |
+| `gitReview.openChange`    | Open Changes            | panel (botón `Diff`), paleta      |
+| `gitReview.showWhy`       | Show Why                | panel (link), paleta              |
+| `gitReview.next`          | Next Entry              | panel (ícono), paleta             |
+| `gitReview.prev`          | Previous Entry          | panel (ícono), paleta             |
+| `gitReview.goToEntry`     | Go to Entry             | paleta                            |
+| `gitReview.showUncovered` | Show Uncovered Files    | panel (pie), paleta               |
+| `gitReview.refresh`       | Refresh                 | título de la vista, paleta        |
+| `gitReview.installCli`    | Install the CLI         | panel (estados sin CLI), paleta   |
 
 El título de la vista lleva **sólo** `refresh`: navegar y saltar de entrada
 tienen su lugar en el cuerpo del panel o en la paleta, y repetirlos como íconos

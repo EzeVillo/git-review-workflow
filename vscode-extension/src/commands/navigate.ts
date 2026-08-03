@@ -15,9 +15,9 @@ function firstLine(text: string): string {
  * `gitReview.next` / `gitReview.prev`: invoca el verbo de la CLI a través del
  * `MutationLock`, refresca con `status --porcelain` inmediatamente después
  * (nunca parsea la salida humana del verbo, FR-015), y muestra los cambios de
- * la entrada resultante — lo mismo que el botón "Ver cambios", no el archivo
- * pelado: avanzar es pasar a leer *el diff* de esa entrada, y el archivo entero
- * sigue a un clic de distancia desde el panel. Los límites de la secuencia se
+ * la entrada resultante — lo mismo que el botón "Diff", no el archivo pelado:
+ * avanzar es pasar a leer *el diff* de esa entrada, y el archivo entero sigue a
+ * un clic de distancia desde el panel. Los límites de la secuencia se
  * propagan tal cual desde la CLI, sin comportamiento propio (FR-016).
  */
 export async function navigate(

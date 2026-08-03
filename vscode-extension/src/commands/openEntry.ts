@@ -69,9 +69,9 @@ export async function openChange(rootUri: vscode.Uri, mode: ReviewMode, entry: E
 async function reportMissingGitApi(): Promise<void> {
     switch (gitApiUnavailableReason()) {
         case "untrusted": {
-            const manage = "Gestionar la confianza";
+            const manage = "Manage Trust";
             const choice = await vscode.window.showWarningMessage(
-                "Ver los cambios del commit necesita la extensión de git, y VS Code la deshabilita mientras esta carpeta esté en modo restringido. Confiá en la carpeta para habilitarla.",
+                "Showing a commit's changes needs the git extension, and VS Code disables it while this folder is in restricted mode. Trust the folder to enable it.",
                 manage
             );
             if (choice === manage) {
@@ -81,12 +81,12 @@ async function reportMissingGitApi(): Promise<void> {
         }
         case "missing":
             void vscode.window.showWarningMessage(
-                "La extensión de git incorporada está deshabilitada: habilitala para ver los cambios de un commit."
+                "The built-in git extension is disabled: enable it to see a commit's changes."
             );
             return;
         default:
             void vscode.window.showWarningMessage(
-                "La extensión de git todavía no terminó de cargar. Probá de nuevo en unos segundos."
+                "The git extension has not finished loading yet. Try again in a few seconds."
             );
     }
 }
@@ -139,11 +139,11 @@ async function openCommitChanges(rootUri: vscode.Uri, sha: string): Promise<void
     }
     const changes = readCommitChanges(rootUri, sha);
     if (!changes) {
-        void vscode.window.showErrorMessage(`No se pudo leer los archivos del commit ${sha}.`);
+        void vscode.window.showErrorMessage(`Could not read the files of commit ${sha}.`);
         return;
     }
     if (changes.length === 0) {
-        void vscode.window.showInformationMessage(`El commit ${sha} no cambia archivos.`);
+        void vscode.window.showInformationMessage(`Commit ${sha} changes no files.`);
         return;
     }
     await vscode.commands.executeCommand(

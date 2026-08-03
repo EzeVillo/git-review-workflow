@@ -48,6 +48,30 @@ describe("panelHtml", () => {
         assert.ok(!/onclick=/.test(html), "nada de handlers en atributos: la CSP los bloquearía");
     });
 
+    it("un boton sin texto visible igual tiene nombre accesible", () => {
+        // Los controles de navegar son sólo un ícono: sin esto un lector de
+        // pantalla anuncia un botón mudo, y el hover no dice a dónde va.
+        assert.ok(/node\.setAttribute\("aria-label", label\)/.test(html));
+        assert.ok(/node\.title = label/.test(html));
+        assert.ok(
+            /iconButton\("left", "prev", "[^"]+"\)/.test(html) && /iconButton\("right", "next", "[^"]+"\)/.test(html),
+            "prev/next se dibujan con el helper que exige la etiqueta"
+        );
+        assert.ok(html.includes('svg.setAttribute("aria-hidden", "true")'), "el ícono no se anuncia dos veces");
+    });
+
+    it("los iconos son svg inline: nada que cargar desde afuera", () => {
+        // Los codicons son una fuente: usarlos obligaría a servir el .ttf como
+        // recurso del webview y a abrirle `font-src` a la CSP de arriba.
+        assert.ok(html.includes("createElementNS"), "los paths se crean en el namespace de SVG");
+        assert.ok(!html.includes("@font-face"));
+        const csp = /content="([^"]*)"/.exec(html)?.[1] ?? "";
+        assert.ok(csp.includes("default-src"), "no se encontró la CSP para afirmar sobre ella");
+        assert.ok(!csp.includes("font-src"), "una fuente de íconos obligaría a ampliar la CSP");
+        assert.ok(!html.includes("codicon.ttf"));
+        assert.ok(html.includes("stroke: currentColor"), "el ícono toma el color del botón, no uno propio");
+    });
+
     it("los controles de navegación se deshabilitan también en los extremos", () => {
         // No hay DOM acá (el webview corre en su propio contexto), así que se
         // afirma sobre el origen del `disabled`: si alguien vuelve a atarlo sólo

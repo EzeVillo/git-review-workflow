@@ -108,8 +108,8 @@ describe("US1: ver donde estoy en el walkthrough", function () {
             "06  src/f.ts",
             "07  src/g.ts",
         ]);
-        assert.strictEqual(picks[1].description, "actual");
-        assert.strictEqual(picks[2].description, "esencial");
+        assert.strictEqual(picks[1].description, "current");
+        assert.strictEqual(picks[2].description, "key");
 
         const uncoveredNames = state.uncovered.map((u) => u.id.display).sort();
         assert.deepStrictEqual(uncoveredNames, ["src/uncovered1.ts", "src/uncovered2.ts"]);

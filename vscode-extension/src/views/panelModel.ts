@@ -104,13 +104,14 @@ function pad(position: number): string {
 export function entryPickLabel(entry: EntryRecord, position: number | undefined): PickLabel {
     const marks: string[] = [];
     if (entry.position === position) {
-        marks.push("actual");
+        marks.push("current");
     }
+    // `key` es el marcador del walkthrough (`> key`), igual que en el panel.
     if (entry.essential) {
-        marks.push("esencial");
+        marks.push("key");
     }
     if (entry.banked) {
-        marks.push("con ediciones guardadas");
+        marks.push("banked edits");
     }
     return {
         label: `${pad(entry.position)}  ${displayOf(entry.id)}`,

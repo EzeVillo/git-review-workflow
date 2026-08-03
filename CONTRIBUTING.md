@@ -88,10 +88,11 @@ in the test suite depends on it; it exists purely to run the real commands
 against something realistic.
 
 Around it are the states one well-formed pull request cannot show, one branch
-each: `feature/notifications` (walkthrough covering two of four files, so the
-rest is uncovered), `feature/telemetry` (no walkthrough — `start` enters whole
-mode on its own), and `feature/legacy` (a walkthrough naming paths a rename
-removed, so the review degrades to whole with a note). On `develop`, three saved
+each: `feature/notifications` (a walkthrough annotating two of its four files, so
+the other two land unannotated at the end of the reading order),
+`feature/telemetry` (no walkthrough — `start` enters whole mode on its own), and
+`feature/legacy` (a walkthrough naming paths a rename removed, so the review
+degrades to whole with a note). On `develop`, three saved
 reviews make up the inventory `git review list` prints: one resumable, one
 blocked by an active `review/*` for the same branch, and one with no metadata
 behind it. Those three are the only part built by *running* the commands rather

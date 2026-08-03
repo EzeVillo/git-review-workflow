@@ -28,7 +28,8 @@ shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-in
 # Pruebas manuales — arma un PR de juguete descartable (feature/checkout: 4
 # commits, 5 archivos, walkthrough committeado, paths con espacio y acento) para
 # probar --step y walk a mano, más una rama por cada estado que ese PR no puede
-# mostrar (uncovered, whole sin walkthrough, walkthrough stale que degrada) y
+# mostrar (entradas sin anotar al final del orden, whole sin walkthrough,
+# walkthrough stale que degrada) y
 # tres reviews guardadas que arman el inventario del estado vacío. Reconstruye
 # desde cero en cada corrida; el estado inicial es siempre el mismo. Los tests no
 # lo usan: es solo para manotear los comandos.

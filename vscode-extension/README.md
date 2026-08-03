@@ -48,8 +48,9 @@ git -C <sandbox>/work review start feature/checkout
 ```
 
 It also builds one branch per state the panel can reach but a single well-formed
-pull request never shows — start `feature/notifications` for uncovered files,
-`feature/telemetry` for whole mode, `feature/legacy` for the degraded note — and
+pull request never shows — start `feature/notifications` for the unannotated
+entries that close a reading order, `feature/telemetry` for whole mode,
+`feature/legacy` for the degraded note — and
 leaves three saved reviews on `develop`, which is the empty state's inventory:
 one row offering `Continue`, and two that explain why they cannot. The script
 prints the whole map when it finishes.

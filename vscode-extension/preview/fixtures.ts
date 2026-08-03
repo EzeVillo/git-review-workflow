@@ -109,7 +109,7 @@ export const PREVIEW_PANES: PreviewPane[] = [
     },
     {
         name: "step",
-        caption: "step — primer commit, con ediciones bancadas y trabajo en curso",
+        caption: "step — primer commit, con ediciones bancadas",
         model: review(
             [
                 ["state", "review/feat/panel", "feat/panel", "a1b2c3d", "step", "none", "1", "4", "4", "a1b2c3d"],
@@ -117,6 +117,21 @@ export const PREVIEW_PANES: PreviewPane[] = [
                 ["entry", "2", "b2c3d4e", "0"],
                 ["entry", "3", "c3d4e5f", "0"],
                 ["entry", "4", "d4e5f6a", "0"],
+            ],
+            {busy: false}
+        ),
+    },
+    {
+        // El pane arranca sin nada dibujado, así que el esqueleto entra de una:
+        // el delay de ~120 ms sólo corre cuando hay contenido al que ahorrarle
+        // el parpadeo. Dentro del editor eso es lo que se ve al navegar.
+        name: "loading",
+        caption: "walk — navegando: barra y controles fijos, cuerpo en carga",
+        model: review(
+            [
+                ["state", "review/feat/panel", "feat/panel", "a1b2c3d", "walk", "applied", "7", "12", "12", WALK_PATHS[6], "1"],
+                ...walkEntries(WALK_PATHS, [1, 7, 12]),
+                ["uncovered", "package.json"],
             ],
             {busy: true}
         ),

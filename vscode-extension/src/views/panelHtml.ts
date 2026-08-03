@@ -101,6 +101,42 @@ export function panelHtml(nonce: string): string {
   }
   .why { margin-bottom: .5em; }
   .why.quiet { color: var(--vscode-descriptionForeground); font-style: italic; }
+  /* Los bloques del esqueleto de carga. El color sale de --vscode-foreground
+     bajado de opacidad y no de un token de fondo: los de fondo (panel-border,
+     textCodeBlock) desaparecen contra el sidebar en alguno de los temas, y éste
+     contrasta por construcción en los tres (FR-031). */
+  .sk {
+    display: block;
+    background: var(--vscode-foreground);
+    border-radius: 3px;
+    opacity: .16;
+    animation: sk-pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes sk-pulse {
+    0%, 100% { opacity: .13; }
+    50% { opacity: .3; }
+  }
+  /* El pulso es decoración: quien pidió menos movimiento igual tiene que ver
+     que hay algo cargando, así que se apaga la animación, no el bloque. */
+  @media (prefers-reduced-motion: reduce) {
+    .sk { animation: none; opacity: .22; }
+  }
+  .sk-pos { width: 2.4em; height: .8em; }
+  .sk-num { width: 1.5em; height: .8em; }
+  .id.sk { width: 68%; height: 1.05em; }
+  .why .sk { height: .8em; margin: .35em 0; }
+  .why .sk:nth-of-type(1) { width: 100%; }
+  .why .sk:nth-of-type(2) { width: 94%; }
+  .why .sk:nth-of-type(3) { width: 62%; }
+  /* Un esqueleto es invisible para un lector de pantalla: el texto va acá. */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
   .more { margin: 0 0 1em; font-size: .9em; }
   .row { display: flex; gap: .4em; margin-bottom: .4em; }
   .row button { flex: 1; }
@@ -217,7 +253,14 @@ export function panelHtml(nonce: string): string {
     const node = el("button", className);
     if (iconName) { node.appendChild(icon(iconName)); }
     if (label) { node.appendChild(el("span", null, label)); }
-    node.addEventListener("click", function () { vscode.postMessage({type: message}); });
+    node.addEventListener("click", function () {
+      // Lo dibujado puede no ser el modelo vigente: durante la ventana de
+      // gracia sigue en pantalla la entrada anterior, y "File"/"Diff" abrirían
+      // el archivo equivocado. Deshabilitarlos no alcanza — el esqueleto entra
+      // después que el clic ya es posible.
+      if (stale()) { return; }
+      vscode.postMessage({type: message});
+    });
     return node;
   }
 
@@ -276,22 +319,42 @@ export function panelHtml(nonce: string): string {
     }
   }
 
-  function renderBar(model) {
+  /**
+   * El modo y la rama no cambian al navegar, así que la barra es el único
+   * chrome que sobrevive a la carga entera y le da al panel un punto fijo. La
+   * posición sí cambia: cargando se dibuja como bloque, porque mostrar la
+   * anterior sería afirmar un número que ya no vale.
+   */
+  function renderBar(model, loading) {
     const bar = el("div", "bar");
     bar.appendChild(el("span", "mode", model.mode));
     const branch = model.repoLabel ? model.branch + " · " + model.repoLabel : model.branch;
     bar.appendChild(el("span", "branch", branch));
-    if (model.position !== undefined && model.total !== undefined) {
+    if (loading) {
+      bar.appendChild(el("span", "pos sk sk-pos"));
+    } else if (model.position !== undefined && model.total !== undefined) {
       bar.appendChild(el("span", "pos", model.position + "/" + model.total));
     }
     return bar;
+  }
+
+  /** El bloque del *why* mientras se lo espera: la misma gramática visual que
+   *  el esqueleto de la entrada, para que la carga sea una sola cosa y no dos. */
+  function whyLoading() {
+    const box = el("div", "why");
+    box.setAttribute("aria-busy", "true");
+    box.appendChild(el("span", "sr-only", "Loading the why…"));
+    box.appendChild(el("div", "sk"));
+    box.appendChild(el("div", "sk"));
+    box.appendChild(el("div", "sk"));
+    return box;
   }
 
   function renderWhy(why) {
     if (why.state === "present") { return el("div", "why", why.text); }
     if (why.state === "absent") { return el("div", "why quiet", "This entry has no explanation."); }
     if (why.state === "failed") { return el("div", "why quiet", "Could not read the why for this entry."); }
-    return el("div", "why quiet", "Loading the why…");
+    return whyLoading();
   }
 
   function pad(n) { return n < 10 ? "0" + n : String(n); }
@@ -328,10 +391,47 @@ export function panelHtml(nonce: string): string {
       }
     }
 
-    // En step la entrada es un commit: no hay "el archivo" que abrir, sólo sus
-    // cambios. En walk son dos destinos distintos y el ícono es lo que los
-    // separa de un vistazo — la palabra sola ("File"/"Diff") se lee igual pero
-    // se distingue más lento en una columna angosta.
+    body.appendChild(renderOpenRow(model));
+    body.appendChild(renderNavRow(model));
+    return body;
+  }
+
+  /**
+   * El cuerpo mientras se carga: la misma silueta que renderEntry —número,
+   * path, why y las dos filas de controles— con el contenido en bloques. Los
+   * botones son los reales y se dibujan deshabilitados: dejarlos afuera haría
+   * saltar el alto del panel justo cuando termina la espera.
+   */
+  function renderPending(model) {
+    const body = el("div", "body");
+    body.setAttribute("role", "status");
+    body.setAttribute("aria-busy", "true");
+    body.appendChild(el("span", "sr-only", "Loading the entry…"));
+
+    const head = el("div", "head");
+    head.appendChild(el("span", "sk sk-num"));
+    body.appendChild(head);
+    body.appendChild(el("p", "id sk"));
+
+    // El modo step no tiene explicaciones: su esqueleto tampoco.
+    if (model.mode === "walk") { body.appendChild(whyLoading()); }
+
+    body.appendChild(renderOpenRow(model));
+    body.appendChild(renderNavRow(model));
+    return freeze(body);
+  }
+
+  /** Nada de lo dibujado durante la carga puede accionarse; ver stale(). */
+  function freeze(node) {
+    node.querySelectorAll("button").forEach(function (b) { b.disabled = true; });
+    return node;
+  }
+
+  // En step la entrada es un commit: no hay "el archivo" que abrir, sólo sus
+  // cambios. En walk son dos destinos distintos y el ícono es lo que los separa
+  // de un vistazo — la palabra sola ("File"/"Diff") se lee igual pero se
+  // distingue más lento en una columna angosta.
+  function renderOpenRow(model) {
     const open = el("div", "row");
     if (model.mode === "step") {
       open.appendChild(button("Diff", "openChange", null, "diff"));
@@ -339,12 +439,14 @@ export function panelHtml(nonce: string): string {
       open.appendChild(button("File", "openEntry", null, "file"));
       open.appendChild(button("Diff", "openChange", null, "diff"));
     }
-    body.appendChild(open);
+    return open;
+  }
 
-    // En un extremo de la secuencia el control no puede mover nada: se
-    // deshabilita en vez de dejar un clic mudo. Quien decide si el cursor se
-    // mueve sigue siendo la CLI — esto sólo refleja la position/total que ella
-    // ya reportó, la misma que dibuja la barra de arriba.
+  // En un extremo de la secuencia el control no puede mover nada: se deshabilita
+  // en vez de dejar un clic mudo. Quien decide si el cursor se mueve sigue
+  // siendo la CLI — esto sólo refleja la position/total que ella ya reportó, la
+  // misma que dibuja la barra de arriba.
+  function renderNavRow(model) {
     const nav = el("div", "row");
     const prev = iconButton("left", "prev", "Previous entry");
     const next = iconButton("right", "next", "Next entry");
@@ -352,8 +454,7 @@ export function panelHtml(nonce: string): string {
     next.disabled = model.busy || model.atLast;
     nav.appendChild(prev);
     nav.appendChild(next);
-    body.appendChild(nav);
-    return body;
+    return nav;
   }
 
   // El pie tiene una sola entrada: los archivos que el walkthrough no anota.
@@ -367,6 +468,16 @@ export function panelHtml(nonce: string): string {
     return foot;
   }
 
+  // Las notas van tanto en el dibujo normal como en el de carga: describen el
+  // review, no la entrada, así que no cambian al navegar. Sacarlas mientras
+  // carga haría saltar el panel dos veces por cada paso.
+  function renderNotes(model) {
+    if (model.baseMoved) { root.appendChild(note("The base moved: the total changed since the review started.")); }
+    if (model.degraded) {
+      root.appendChild(note("The walkthrough does not cover the review's current range; showing the full range diff."));
+    }
+  }
+
   function render(model) {
     root.textContent = "";
     if (model.situation !== "review") {
@@ -374,12 +485,8 @@ export function panelHtml(nonce: string): string {
       return;
     }
 
-    root.appendChild(renderBar(model));
-    if (model.busy) { root.appendChild(note("working…")); }
-    if (model.baseMoved) { root.appendChild(note("The base moved: the total changed since the review started.")); }
-    if (model.degraded) {
-      root.appendChild(note("The walkthrough does not cover the review's current range; showing the full range diff."));
-    }
+    root.appendChild(renderBar(model, false));
+    renderNotes(model);
 
     if (model.mode === "whole") {
       root.appendChild(empty("This review has no walkthrough: there is no curated reading order for this PR."));
@@ -393,13 +500,92 @@ export function panelHtml(nonce: string): string {
     if (foot) { root.appendChild(foot); }
   }
 
+  /*
+   * Navegar es UNA espera para el revisor, pero llega en dos tiempos: primero
+   * el verbo más el status --porcelain (busy), y después el --why de la
+   * entrada nueva. Dibujar los modelos intermedios dejaba la entrada anterior
+   * en pantalla con sus botones apuntando a ella, y encima un segundo estado de
+   * carga adentro del why. Mientras dure cualquiera de las dos fases se dibuja
+   * el mismo esqueleto, y recién al final aparece la entrada entera.
+   *
+   * Los tiempos de acá abajo no son estado del review (FR-019): el modelo sigue
+   * siendo lo único que decide QUÉ se muestra. Sólo deciden CUÁNDO se cambia de
+   * dibujo, que es presentación pura y no se puede resolver del lado del host —
+   * es este contexto el que sabe qué hay en pantalla.
+   */
+  const SKELETON_DELAY_MS = 120;  // por debajo de esto la espera no se percibe:
+                                  // mostrar el esqueleto sería un parpadeo peor
+  const WHY_WAIT_MS = 800;        // techo: un why lento no retiene la entrada
+  const SKELETON = {};            // marca de "lo dibujado es el esqueleto"
+
+  let model;            // el último modelo recibido
+  let painted;          // lo que está en pantalla: un modelo, SKELETON, o nada
+  let pendingSince = 0;
+  let showTimer = 0;
+  let capTimer = 0;
+
+  /** Lo dibujado ya no corresponde al modelo vigente: los controles no valen. */
+  function stale() { return painted !== model; }
+
+  function pending(m) {
+    if (m.situation !== "review" || (m.mode !== "walk" && m.mode !== "step")) { return false; }
+    return m.busy === true || (m.why !== undefined && m.why.state === "loading");
+  }
+
+  function paint() {
+    if (showTimer) { clearTimeout(showTimer); showTimer = 0; }
+    if (capTimer) { clearTimeout(capTimer); capTimer = 0; }
+    painted = model;
+    render(model);
+  }
+
+  function paintSkeleton() {
+    showTimer = 0;
+    painted = SKELETON;
+    root.textContent = "";
+    root.appendChild(renderBar(model, true));
+    renderNotes(model);
+    root.appendChild(renderPending(model));
+    // El pie cuenta archivos del review, no de la entrada: sacarlo mientras
+    // carga sería un borde que aparece y desaparece en cada paso.
+    const foot = renderFoot(model);
+    if (foot) { root.appendChild(freeze(foot)); }
+  }
+
+  function receive(next) {
+    model = next;
+    if (!pending(next)) { paint(); return; }
+
+    if (painted === SKELETON) {
+      // Ya en carga: lo único que puede cambiar es que el verbo haya vuelto y
+      // sólo falte el why. Pasado el techo se muestra la entrada —que ya es la
+      // correcta— con el why todavía cargando adentro.
+      if (!next.busy && Date.now() - pendingSince >= WHY_WAIT_MS) { paint(); }
+      return;
+    }
+    if (showTimer) { return; }  // la fase ya arrancó; el esqueleto va en camino
+
+    pendingSince = Date.now();
+    if (painted === undefined) {
+      // Nada dibujado todavía (el webview se acaba de reconstruir): no hay
+      // parpadeo que evitar, y esperar dejaría el panel en blanco.
+      paintSkeleton();
+    } else {
+      showTimer = setTimeout(paintSkeleton, SKELETON_DELAY_MS);
+    }
+    capTimer = setTimeout(function () {
+      capTimer = 0;
+      if (painted === SKELETON && !model.busy && pending(model)) { paint(); }
+    }, WHY_WAIT_MS);
+  }
+
   window.addEventListener("message", function (event) {
     if (event.data && event.data.type === "model") {
       // El modelo se guarda en el estado del webview: no es estado propio del
       // panel (FR-019), es la última copia de lo que mandó el host, para poder
       // redibujarla al recargarse sin una ida y vuelta.
       vscode.setState(event.data.model);
-      render(event.data.model);
+      receive(event.data.model);
     }
   });
 
@@ -407,7 +593,7 @@ export function panelHtml(nonce: string): string {
   // de cero. Sin esto el panel arranca vacío hasta que llegue el primer modelo;
   // con el estado guardado se dibuja ya, y el modelo que sigue lo pisa.
   const saved = vscode.getState();
-  if (saved) { render(saved); }
+  if (saved) { receive(saved); }
 
   // El host no puede postear el modelo hasta acá: un mensaje que llegue antes
   // de que exista el listener de arriba se pierde, y el panel se queda en

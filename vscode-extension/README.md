@@ -53,17 +53,20 @@ npm run preview        # writes out/preview/index.html and prints its file:// UR
 npm run preview:watch  # regenerates on save; reload the browser
 ```
 
-Renders the panel's states side by side in a browser — walk, step, whole and
-the empty states — at sidebar width, with a switch for the dark, light and
-high-contrast themes. It's the real `panelHtml()` fed by `parsePorcelain()` +
-`buildPanelModel()` over sample porcelain output, so it follows the source with
-nothing to keep in sync by hand; edit `preview/fixtures.ts` to add a state.
+Renders the panel's states side by side in a browser — walk, step, whole,
+loading and the empty states — at sidebar width, with a switch for the dark,
+light and high-contrast themes. It's the real `panelHtml()` fed by
+`parsePorcelain()` + `buildPanelModel()` over sample porcelain output, so it
+follows the source with nothing to keep in sync by hand; edit
+`preview/fixtures.ts` to add a state.
 
-Two things it can't show: the buttons have no extension behind them, and the
+Three things it can't show: the buttons have no extension behind them; the
 theme variables in `preview/build.ts` are an approximation of VS Code's, not
-the ones your editor resolves. A `--vscode-*` variable the panel starts using
+the ones your editor resolves (a `--vscode-*` variable the panel starts using
 has to be added there too, or it will look wrong in the preview and fine in the
-editor. For anything beyond the render, use F5.
+editor); and the `loading` pane is that state held still — the timing around it
+(the delay before the skeleton appears, the cap on a slow `--why`) only happens
+while navigating. For anything beyond the render, use F5.
 
 ## Testing
 

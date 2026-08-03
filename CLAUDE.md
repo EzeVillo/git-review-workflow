@@ -235,14 +235,16 @@ npm run preview:watch
   test, no por la extensión. Ante un `no se abrió ningún tab`, medí el baseline
   en un checkout sin tocar antes de buscar la causa en tu cambio.
 - **`npm run preview`** genera `out/preview/index.html` (y lo imprime como URL
-  `file://`): los siete estados del panel lado a lado, a ancho de sidebar, con
+  `file://`): los ocho estados del panel lado a lado, a ancho de sidebar, con
   selector de tema dark/light/alto contraste. El pane es el `panelHtml()` real y
   los estados de `preview/fixtures.ts` son salida `--porcelain` de ejemplo pasada
   por el parser y el modelo reales, así que **sigue al código y no se mantiene
   aparte**. Lo que no puede afirmar: los botones no tienen extensión del otro
-  lado, y las variables de tema de `preview/build.ts` son una aproximación — si
+  lado; las variables de tema de `preview/build.ts` son una aproximación — si
   el panel empieza a usar una `--vscode-*` que no está en esa lista, agregarla es
-  parte del cambio. Para comportamiento, F5.
+  parte del cambio; y el pane `loading` es ese estado congelado — su
+  temporización (el umbral antes del esqueleto, el techo de un `--why` lento)
+  sólo ocurre navegando. Para comportamiento, F5.
 
 ## Landing (GitHub Pages)
 

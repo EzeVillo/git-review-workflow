@@ -95,7 +95,51 @@ describe("panelHtml", () => {
 
     it("guarda el modelo recibido y redibuja el guardado al recargarse", () => {
         assert.ok(html.includes("vscode.setState(event.data.model)"));
-        assert.ok(/const saved = vscode\.getState\(\);\s*if \(saved\) \{ render\(saved\); \}/.test(html));
+        assert.ok(/const saved = vscode\.getState\(\);\s*if \(saved\) \{ receive\(saved\); \}/.test(html));
+    });
+
+    it("la carga es una sola fase: el why en vuelo tambien cuenta como pendiente", () => {
+        // Sin el segundo término, el panel vuelve a las dos fases: primero
+        // `working…` sobre la entrada vieja y después "Loading the why…" sobre
+        // la nueva, que es exactamente lo que se sentía como tildado.
+        assert.ok(
+            /m\.busy === true \|\| \(m\.why !== undefined && m\.why\.state === "loading"\)/.test(html),
+            "el estado pendiente tiene que cubrir busy y el why en vuelo"
+        );
+        assert.ok(!html.includes('note("working…")'), "la nota de working la reemplaza el esqueleto");
+    });
+
+    it("el esqueleto no se dibuja antes del delay que evita el parpadeo", () => {
+        // Sin el delay, una navegación rápida muestra el esqueleto un frame y
+        // desaparece: peor que no mostrar nada.
+        assert.ok(/const SKELETON_DELAY_MS = \d+;/.test(html));
+        assert.ok(/showTimer = setTimeout\(paintSkeleton, SKELETON_DELAY_MS\)/.test(html));
+        // Y con el panel todavía en blanco no hay parpadeo que evitar: ahí el
+        // esqueleto entra ya, o la vista recién reabierta se queda vacía.
+        assert.ok(/if \(painted === undefined\) \{\s*\/\/[^]*?paintSkeleton\(\);/.test(html));
+    });
+
+    it("un why lento no retiene la entrada indefinidamente", () => {
+        assert.ok(/const WHY_WAIT_MS = \d+;/.test(html));
+        assert.ok(/Date\.now\(\) - pendingSince >= WHY_WAIT_MS/.test(html), "falta el techo de espera del why");
+    });
+
+    it("los controles no actuan sobre una entrada que ya no es la dibujada", () => {
+        // El `disabled` no alcanza: entre el clic y el esqueleto hay una ventana
+        // en la que sigue en pantalla la entrada anterior, y "File" abriría el
+        // archivo equivocado.
+        assert.ok(/function stale\(\) \{ return painted !== model; \}/.test(html));
+        assert.ok(/if \(stale\(\)\) \{ return; \}\s*vscode\.postMessage/.test(html));
+    });
+
+    it("el esqueleto se anuncia a un lector de pantalla y respeta reduced-motion", () => {
+        // Bloques grises son invisibles para quien no los ve: sin el texto, el
+        // panel queda mudo justo mientras carga.
+        assert.ok(/body\.setAttribute\("role", "status"\)/.test(html));
+        assert.ok(/body\.setAttribute\("aria-busy", "true"\)/.test(html));
+        assert.ok(/el\("span", "sr-only", "Loading the entry…"\)/.test(html));
+        assert.ok(/el\("span", "sr-only", "Loading the why…"\)/.test(html));
+        assert.ok(html.includes("prefers-reduced-motion: reduce"), "el pulso es decoración, no información");
     });
 
     it("dibuja los cuatro estados del why y los cinco estados vacíos", () => {

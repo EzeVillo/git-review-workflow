@@ -58,8 +58,21 @@ Reglas normativas:
   repositorio se trata (FR-029).
 - La nota de walkthrough degradado con su motivo va en la barra (FR-010), y no
   impide usar la review.
-- "working…" mientras hay una invocación en vuelo (FR-030) va en la barra; no
-  reemplaza el contenido.
+- Mientras hay una invocación en vuelo (FR-030) el panel **reemplaza el cuerpo
+  por un esqueleto** y deja fijos la barra, las notas y el pie: son del review,
+  no de la entrada, y no cambian al navegar. La carga es **una sola fase**, no
+  dos — cubre el verbo y el `--why` de la entrada nueva, para que el revisor no
+  vea primero la entrada anterior con sus controles apuntando a ella y después un
+  segundo estado de carga adentro del *why*. Tres reglas la acotan:
+    - el esqueleto entra recién pasado un umbral (~120 ms), así que una
+      navegación rápida pasa de una entrada a la otra sin parpadeo — salvo con el
+      panel todavía en blanco, donde entra de una;
+    - un *why* lento tiene techo (~800 ms): pasada esa espera se muestra la
+      entrada, que ya es la correcta, con el *why* cargando adentro;
+    - ningún control acciona sobre una entrada que no es la dibujada, ni siquiera
+      en la ventana previa al esqueleto.
+  El esqueleto lleva `role="status"` y su texto para lectores de pantalla, y su
+  pulso se apaga con `prefers-reduced-motion` (FR-031).
 - Esencial (walk) y con ediciones guardadas (step) se distinguen por **texto**
   (`key` / `edits`) además del color (FR-007, FR-027, FR-031).
 - **El texto visible de toda la extensión va en inglés**, igual que el de la CLI

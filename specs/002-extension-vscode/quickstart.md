@@ -131,7 +131,7 @@ acción que corresponde. "Sin review" **no** puede presentarse como falla.
 
 ### 5. Sin walkthrough y walkthrough degradado (US1 — escenarios 3 y 4)
 
-- `git review start --whole <rama>` → el panel dice que no hay walkthrough, sin
+- `git review start --no-walk <rama>` → el panel dice que no hay walkthrough, sin
   ofrecer secuencia ni navegación, y sin error.
 - Una review cuyo walkthrough no intersecta el rango → el panel informa que
   degradó y por qué, y la review sigue usable.

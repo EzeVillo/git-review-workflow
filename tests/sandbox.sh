@@ -317,7 +317,7 @@ git commit --quiet -m "docs: walkthrough"
 publish feature/notifications
 
 # A pull request with no walkthrough at all: `git review start` enters whole mode
-# on its own, without --whole.
+# on its own, with no flag needed.
 pr feature/telemetry
 
 cat >src/metrics.js <<'EOF'
@@ -565,7 +565,7 @@ The other branches, one per state that feature/checkout cannot show:
 
   feature/notifications   walk over 5 entries, the last 3 unannotated
                           (including the walkthrough itself)
-  feature/telemetry       no walkthrough at all -> whole, without --whole
+  feature/telemetry       no walkthrough at all -> whole, no flag needed
   feature/legacy          walkthrough naming paths the rename removed -> degrades
                           to whole with a note, never fails
   feature/search          reviewed and put aside (see below)
@@ -584,7 +584,7 @@ Try it:
   . "$dir/env.sh"
   git review start feature/checkout          # walk: the committed walkthrough
   git review start feature/checkout --step   # commit by commit
-  git review start feature/checkout --whole  # the plain full diff
+  git review start feature/checkout --no-walk  # the plain full diff, walkthrough ignored
   git review start feature/notifications     # then: git review status --porcelain
   git review status / list / next / prev
 $saved_note

@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import spawn from "cross-spawn";
 
 export interface InvokeOptions {
@@ -6,6 +7,15 @@ export interface InvokeOptions {
     gitReviewPath?: string;
     timeoutMs?: number;
     signal?: AbortSignal;
+    /**
+     * `true` sólo para la invocación que toca la red (`start`): agrega al
+     * entorno del proceso hijo `GIT_TERMINAL_PROMPT=0` y apunta
+     * `GIT_ASKPASS`/`SSH_ASKPASS` al no-op de `scripts/askpass-noop.js`, para
+     * que un `fetch` que necesita credenciales falle rápido con el
+     * diagnóstico de git en vez de colgarse esperando un TTY que no existe
+     * (research.md Decisión 5 de `005`).
+     */
+    network?: boolean;
 }
 
 export interface InvokeResult {
@@ -17,13 +27,72 @@ export interface InvokeResult {
     errorCode?: string;
 }
 
-const DEFAULT_TIMEOUT_MS = 15000;
-// Extensiones que Windows sabe ejecutar como proceso nativo, incluidos los
-// shims `.cmd`/`.bat` de una instalación por npm — cross-spawn ya resuelve
-// esos de forma segura (delega en cmd.exe con el escaping correcto, el mismo
-// problema detrás de CVE-2024-27980). Lo que cross-spawn NO resuelve es un
-// script POSIX sin extensión (`#!/usr/bin/env sh`): ahí sólo `git.exe` sabe
-// correrlo, vía su propia capa MSYS (research.md Decisión 3).
+const READ_TIMEOUT_MS = 15000;
+const LOCAL_MUTATION_TIMEOUT_MS = 120000;
+const NETWORK_MUTATION_TIMEOUT_MS = 300000;
+
+// Mutación local: replica ediciones o mueve refs sin tocar la red, pero puede
+// recorrer un PR grande commit por commit — un timeout de lectura la mataría
+// a mitad (research.md Decisión 6 de `005`).
+const LOCAL_MUTATION_VERBS = new Set(["finish", "save", "abort", "continue", "next", "prev"]);
+// Sólo `start` hace `fetch`; es la única invocación que puede esperar a un
+// remoto lento además de replicar el diff completo del PR.
+const NETWORK_MUTATION_VERBS = new Set(["start"]);
+
+/**
+ * Timeout según la clase de la invocación (research.md Decisión 6 de `005`).
+ * La clasificación depende sólo de `verb`; `args` está por forma — ningún
+ * verbo de la tabla tiene una variante de argumentos que cambie de clase. Un
+ * verbo desconocido se trata como lectura, el default más conservador: nada
+ * hoy amerita un timeout largo sin estar en la tabla.
+ */
+export function timeoutForClass(verb: string, _args: string[]): number {
+    if (NETWORK_MUTATION_VERBS.has(verb)) {
+        return NETWORK_MUTATION_TIMEOUT_MS;
+    }
+    if (LOCAL_MUTATION_VERBS.has(verb)) {
+        return LOCAL_MUTATION_TIMEOUT_MS;
+    }
+    return READ_TIMEOUT_MS;
+}
+
+/**
+ * Comando que git/ssh invocan como `GIT_ASKPASS`/`SSH_ASKPASS`. Nunca el
+ * script solo: Windows no sabe ejecutar un `.js`, y git invoca askpass a
+ * través de una shell (`use_shell`), así que la cadena con espacio se parte
+ * ahí, no acá — mismo motivo por el que el nombre de rama de `resolveCommand`
+ * no puede llevar este atajo. `__dirname` resuelve a `dist/` una vez
+ * empaquetado (esbuild bundlea todo a un único archivo ahí; T008 copia el
+ * script al lado).
+ */
+function askpassCommand(): string {
+    const scriptPath = path.join(__dirname, "askpass-noop.js");
+    return `"${process.execPath}" "${scriptPath}"`;
+}
+
+/**
+ * Entorno para la invocación con `options.network`: parte de `process.env`
+ * (perder el resto — `PATH` incluido — rompería la resolución del propio
+ * `git`) y sólo agrega las tres variables de la Decisión 5.
+ */
+function networkEnv(): NodeJS.ProcessEnv {
+    const askpass = askpassCommand();
+    return {
+        ...process.env,
+        GIT_TERMINAL_PROMPT: "0",
+        GIT_ASKPASS: askpass,
+        SSH_ASKPASS: askpass,
+    };
+}
+
+/**
+ * Extensiones que Windows sabe ejecutar como proceso nativo, incluidos los
+ * shims `.cmd`/`.bat` de una instalación por npm — cross-spawn ya resuelve
+ * esos de forma segura (delega en cmd.exe con el escaping correcto, el mismo
+ * problema detrás de CVE-2024-27980). Lo que cross-spawn NO resuelve es un
+ * script POSIX sin extensión (`#!/usr/bin/env sh`): ahí sólo `git.exe` sabe
+ * correrlo, vía su propia capa MSYS (research.md Decisión 3).
+ */
 const WINDOWS_NATIVE_EXECUTABLE = /\.(exe|cmd|bat)$/i;
 
 interface ResolvedCommand {
@@ -66,8 +135,9 @@ export function invokeGitReview(
     return new Promise((resolve) => {
         const child = spawn(command, commandArgs, {
             cwd: options.cwd,
-            timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+            timeout: options.timeoutMs ?? timeoutForClass(verb, args),
             signal: options.signal,
+            ...(options.network ? {env: networkEnv()} : {}),
         });
 
         let stdout = "";

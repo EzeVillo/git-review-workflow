@@ -105,27 +105,44 @@ describe_porcelain() {
 	psrc="$(git config "branch.$pb.reviewsource" || true)"
 	if [ -z "$psrc" ]; then
 		porcelain_row branch "$pb" "$2" "$pcurrent" 1
-		return
-	fi
-	pmode="$(git config "branch.$pb.reviewmode" || echo whole)"
-	case "$pmode" in
-	step)
-		pposition="$(git config "branch.$pb.reviewstep" || true)"
-		ptotal="$(git config "branch.$pb.reviewcount" || true)"
-		;;
-	walk)
-		pposition="$(git config "branch.$pb.reviewwalkstep" || true)"
-		ptotal="$(git config "branch.$pb.reviewwalkcount" || true)"
-		;;
-	*)
-		pposition=""
-		ptotal=""
-		;;
-	esac
-	if [ -n "$pposition" ] && [ -n "$ptotal" ]; then
-		porcelain_row branch "$pb" "$2" "$pcurrent" 0 "$pmode" "$pposition" "$ptotal"
 	else
-		porcelain_row branch "$pb" "$2" "$pcurrent" 0 "$pmode"
+		pmode="$(git config "branch.$pb.reviewmode" || echo whole)"
+		case "$pmode" in
+		step)
+			pposition="$(git config "branch.$pb.reviewstep" || true)"
+			ptotal="$(git config "branch.$pb.reviewcount" || true)"
+			;;
+		walk)
+			pposition="$(git config "branch.$pb.reviewwalkstep" || true)"
+			ptotal="$(git config "branch.$pb.reviewwalkcount" || true)"
+			;;
+		*)
+			pposition=""
+			ptotal=""
+			;;
+		esac
+		if [ -n "$pposition" ] && [ -n "$ptotal" ]; then
+			porcelain_row branch "$pb" "$2" "$pcurrent" 0 "$pmode" "$pposition" "$ptotal"
+		else
+			porcelain_row branch "$pb" "$2" "$pcurrent" 0 "$pmode"
+		fi
+	fi
+
+	# finish (contracts/finish-state.md): a finish's undo point lives on the
+	# config of the review/* branch it left behind, never on review-saved/*
+	# (finish never touches a saved review) — checked right after that branch's
+	# own record, regardless of whether it came out orphan above.
+	if [ "$2" -eq 0 ]; then
+		pundohead="$(git config "branch.$pb.reviewundohead" || true)"
+		if [ -n "$pundohead" ]; then
+			presume="$(git config "branch.$pb.reviewresume" || true)"
+			pstate=pending
+			[ "$presume" = "conflict" ] && pstate=conflict
+			pkind="$(git config "branch.$pb.reviewundokind" || true)"
+			ponto=0
+			[ "$pkind" = "onto-source" ] && ponto=1
+			porcelain_row finish "$pb" "$pstate" "$ponto"
+		fi
 	fi
 }
 

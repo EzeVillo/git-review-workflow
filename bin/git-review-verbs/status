@@ -210,6 +210,21 @@ if [ "$porcelain" -eq 1 ]; then
 		fi
 		;;
 	esac
+	# finish (contracts/finish-state.md): the ONLY closure state status can see
+	# is a stopped-mid-conflict one — a completed finish already moved HEAD off
+	# review/* (list --porcelain reports that one instead). Position relative
+	# to the records above is not significant, so this runs once after the mode
+	# case rather than duplicated inside each branch.
+	pundohead="$(git config "branch.$cur.reviewundohead" || true)"
+	if [ -n "$pundohead" ]; then
+		presume="$(git config "branch.$cur.reviewresume" || true)"
+		if [ "$presume" = "conflict" ]; then
+			pkind="$(git config "branch.$cur.reviewundokind" || true)"
+			ponto=0
+			[ "$pkind" = "onto-source" ] && ponto=1
+			porcelain_row finish conflict "$ponto"
+		fi
+	fi
 	exit 0
 fi
 

@@ -511,6 +511,75 @@ EOF
 	[ "$unannotated" = "$(printf 'entry\t4\t.review/walkthrough.md\t0\t0')" ]
 }
 
+# ── finish record (US3, contracts/finish-state.md) ─────────────────────────────
+
+# feature/conflict: cf1 touches x.txt and a later cf3 changes the same region,
+# so the edit banked at step 2 cannot replay onto the tip once finish folds
+# every banked step back at the end (bin/git-review-verbs/finish:406-426) —
+# the same fixture shape tests/finish-abort.bats and tests/finish-state.bats
+# build for the same reason. Leaves the review on review/feature/conflict at
+# step 3, ready for a `git review finish [--onto-source]` that stops
+# mid-conflict on x.txt.
+setup_finish_conflict() {
+	git switch --quiet -c feature/conflict
+	printf 'X0\n' >x.txt
+	printf 'A0\n' >cfa.txt
+	git add x.txt cfa.txt
+	git commit --quiet -m cf-base
+	printf 'X0\nX1\n' >x.txt
+	git add x.txt
+	git commit --quiet -m cf1-touch-x
+	printf 'A0\nA1\n' >cfa.txt
+	git add cfa.txt
+	git commit --quiet -m cf2-touch-a
+	printf 'X0\nX1-CHANGED\n' >x.txt
+	git add x.txt
+	git commit --quiet -m cf3-change-x
+	git push --quiet -u origin feature/conflict
+	git switch --quiet develop
+
+	git review start feature/conflict --step
+	git review next
+	printf 'X0\nX1-EDITED\n' >x.txt
+	git review next
+	printf 'A0\nA1-EDITED\n' >cfa.txt
+}
+
+@test "status --porcelain emits a finish conflict record, onto 0, while a stopped finish blocks the review branch" {
+	setup_finish_conflict
+	run git review finish
+	[ "$status" -ne 0 ]
+	[ "$(git config branch.review/feature/conflict.reviewresume || true)" = "conflict" ]
+
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	finish_line="$(printf '%s\n' "$output" | grep '^finish' || true)"
+	[ "$finish_line" = "$(printf 'finish\tconflict\t0')" ]
+	# and the usual state record is still there, untouched
+	[ "$(printf '%s\n' "$output" | sed -n '1p' | cut -f1)" = "state" ]
+}
+
+@test "status --porcelain emits a finish conflict record with onto 1 for a stopped --onto-source finish" {
+	setup_finish_conflict
+	run git review finish --onto-source
+	[ "$status" -ne 0 ]
+	[ "$(git config branch.review/feature/conflict.reviewresume || true)" = "conflict" ]
+
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	finish_line="$(printf '%s\n' "$output" | grep '^finish' || true)"
+	[ "$finish_line" = "$(printf 'finish\tconflict\t1')" ]
+}
+
+@test "status --porcelain emits no finish record without a closure in progress" {
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	n="$(printf '%s\n' "$output" | grep -c '^finish' || true)"
+	[ "$n" -eq 0 ]
+}
+
 # ── step entry records ────────────────────────────────────────────────────────
 
 @test "status --porcelain marks banked steps by whole position, not by numeric prefix" {

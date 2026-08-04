@@ -10,6 +10,55 @@
 # live together (installed as libexec, not on PATH). It only defines functions,
 # so sourcing it has no side effects.
 
+# ── Branch candidates (git review config --porcelain) ─────────────────────────
+
+# candidate_branches <remote>
+# Emit a "candidate<TAB>name<TAB>origin<TAB>current" row for every branch
+# eligible to start a review on: every ref in refs/heads/ and
+# refs/remotes/<remote>/, minus the three product namespaces (review/,
+# review-saved/, review-fixes/) and <remote>/HEAD — exactly what git review
+# start refuses to review
+# (bin/git-review-verbs/start:151-153), so offering them would be offering a
+# guaranteed failure. name has no namespace prefix (it is what a caller passes
+# back to start or to config <key>); origin is remote|local; current is 1 only
+# for the local branch HEAD sits on, 0 everywhere else (including every remote
+# row — a remote copy is never "current", only the local checkout can be).
+#
+# One for-each-ref call regardless of how many branches exist, not one process
+# per branch (contracts/config-porcelain.md "Costo", same rule as status and
+# list): the loop below is shell built-ins (case, parameter expansion,
+# porcelain_row) over its output, so the process count stays constant.
+candidate_branches() {
+	_cb_remote="$1"
+	_cb_cur="$(git symbolic-ref --quiet --short HEAD || true)"
+	git for-each-ref --format='%(refname)' refs/heads/ "refs/remotes/$_cb_remote/" |
+		while IFS= read -r _cb_ref; do
+			case "$_cb_ref" in
+			refs/heads/*)
+				_cb_name="${_cb_ref#refs/heads/}"
+				_cb_origin=local
+				;;
+			"refs/remotes/$_cb_remote/"*)
+				_cb_name="${_cb_ref#refs/remotes/"$_cb_remote"/}"
+				_cb_origin=remote
+				;;
+			*)
+				continue
+				;;
+			esac
+			case "$_cb_name" in
+			review/* | review-saved/* | review-fixes/* | HEAD)
+				continue
+				;;
+			esac
+			_cb_current=0
+			if [ "$_cb_origin" = local ] && [ "$_cb_name" = "$_cb_cur" ]; then
+				_cb_current=1
+			fi
+			porcelain_row candidate "$_cb_name" "$_cb_origin" "$_cb_current"
+		done
+}
+
 # ── Porcelain (machine-readable) output ───────────────────────────────────────
 #
 # porcelain_row <field> [field...]

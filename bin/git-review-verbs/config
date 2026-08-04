@@ -1,0 +1,220 @@
+#!/usr/bin/env sh
+#
+# git review config — read or write the product's own configuration keys.
+#
+# Mirrors git config's own grammar on purpose (a key alone reads, a key plus a
+# value writes): it is the vocabulary every user already knows, and the one
+# --porcelain gives a caller that has no review to ask yet (contracts/
+# config-porcelain.md). Valid with or without an active review, in any git
+# repository — there is no exit 2 here, because "no review" is not a condition
+# this verb can observe.
+#
+set -eu
+
+prog="git review config"
+
+usage() {
+	cat <<EOF
+usage: $prog [<key> [<value>]] [--unset <key>] [--porcelain [<branch>]]
+
+Read or write git-review-workflow's own configuration: the base branch a full
+review compares against, and the remote a review is fetched from.
+
+  <key>                 base | remote
+  <key> <value>         set <key> to <value>
+  --unset <key>         remove <key>
+  --porcelain [<branch>]
+                        machine-readable output: the effective config plus
+                        every candidate branch to review (see the README for
+                        the format); with <branch>, also report whether it
+                        has a prior review to diff against (--delta)
+
+With no arguments, print the effective config for a person to read (two
+columns, one row per key; a key with no value is omitted, never blank).
+EOF
+}
+
+die() {
+	echo "error: $1" >&2
+	exit 1
+}
+
+# config_key <key>
+# Translate a product key to its git config key, or fail on stdout for an
+# unknown one (die's caller). The translation is internal on purpose (FR-008):
+# nothing outside this function knows reviewworkflow.* exists.
+config_key() {
+	case "$1" in
+	base) echo reviewworkflow.base ;;
+	remote) echo reviewworkflow.remote ;;
+	*) return 1 ;;
+	esac
+}
+
+porcelain=0
+unset_key=""
+pos_count=0
+pos1=""
+pos2=""
+
+# add_pos <arg>
+# Collect a positional argument into the first free slot. What each slot means
+# (a key/value pair, or a single branch for --porcelain) is decided once every
+# argument is in, after the loop — the same reason start resolves src/base
+# after its own loop: an option and a positional can arrive in either order.
+add_pos() {
+	if [ "$pos_count" -eq 0 ]; then
+		pos1="$1"
+	elif [ "$pos_count" -eq 1 ]; then
+		pos2="$1"
+	else
+		die "unexpected argument $1"
+	fi
+	pos_count=$((pos_count + 1))
+}
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+	-h | --h)
+		usage
+		exit 0
+		;;
+	--porcelain)
+		porcelain=1
+		;;
+	--unset)
+		shift
+		if [ $# -eq 0 ] || [ -z "$1" ]; then
+			die "--unset requires a key"
+		fi
+		if [ -n "$unset_key" ]; then
+			die "--unset given more than once"
+		fi
+		unset_key="$1"
+		;;
+	--)
+		# End-of-options, the git convention (same idiom as start,
+		# bin/git-review-verbs/start:92-109): a value that starts with "-" — a
+		# legal branch name — is read as a positional from here on, never as an
+		# option. Valid both for a value ("config base -- -foo") and for the
+		# --porcelain branch argument ("config --porcelain -- -foo").
+		shift
+		while [ $# -gt 0 ]; do
+			add_pos "$1"
+			shift
+		done
+		break
+		;;
+	-*)
+		echo "error: unknown option $1" >&2
+		usage >&2
+		exit 1
+		;;
+	*)
+		add_pos "$1"
+		;;
+	esac
+	shift
+done
+
+if [ "$porcelain" -eq 1 ] && [ -n "$unset_key" ]; then
+	die "--porcelain and --unset are mutually exclusive"
+fi
+
+mode=""
+key=""
+value=""
+branch=""
+if [ -n "$unset_key" ]; then
+	[ "$pos_count" -eq 0 ] || die "unexpected argument $pos1"
+	key="$unset_key"
+	mode="unset"
+elif [ "$porcelain" -eq 1 ]; then
+	[ "$pos_count" -le 1 ] || die "unexpected argument $pos2"
+	branch="$pos1"
+	mode="porcelain"
+else
+	case "$pos_count" in
+	0) mode="read-all" ;;
+	1)
+		key="$pos1"
+		mode="read-one"
+		;;
+	2)
+		key="$pos1"
+		value="$pos2"
+		mode="write"
+		;;
+	*) die "unexpected argument" ;;
+	esac
+fi
+
+git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
+
+case "$mode" in
+read-one | write | unset)
+	gkey="$(config_key "$key")" || die "unknown key $key"
+	;;
+esac
+
+case "$mode" in
+read-all)
+	base_val="$(git config reviewworkflow.base || true)"
+	remote_val="$(git config reviewworkflow.remote || echo origin)"
+	if [ -n "$base_val" ]; then
+		printf '%-6s  %s\n' base "$base_val"
+	fi
+	printf '%-6s  %s\n' remote "$remote_val"
+	;;
+read-one)
+	if [ "$key" = remote ]; then
+		val="$(git config "$gkey" || echo origin)"
+	else
+		val="$(git config "$gkey" || true)"
+	fi
+	if [ -n "$val" ]; then
+		printf '%s\n' "$val"
+	fi
+	;;
+write)
+	git config "$gkey" "$value" || die "could not set $key"
+	;;
+unset)
+	# Idempotent: unsetting a key that was never set is not an error — nothing
+	# about "clean up this config" implies "and fail if there was nothing to
+	# clean". git config --unset itself exits 5 for a missing key; that exit
+	# code is not part of this verb's contract.
+	git config --unset "$gkey" 2>/dev/null || true
+	;;
+porcelain)
+	# Shared helpers (porcelain_row, candidate_branches), sourced from the
+	# libexec directory the dispatcher points us at.
+	# shellcheck source=../git-review-lib.sh
+	. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
+
+	remote_val="$(git config reviewworkflow.remote || echo origin)"
+	base_val="$(git config reviewworkflow.base || true)"
+
+	if [ -n "$base_val" ]; then
+		porcelain_row config base "$base_val"
+	fi
+	porcelain_row config remote "$remote_val"
+
+	candidate_branches "$remote_val"
+
+	if [ -n "$branch" ]; then
+		# Same pair of keys start reads to warn about new commits since the last
+		# review (bin/git-review-verbs/start:157-193): a remote review markers a
+		# plain reviewworkflow.<branch>.reviewed, a --local/--offline one its own
+		# reviewworkflowlocal.<branch>.reviewed, kept apart so the two never
+		# overwrite each other's progress for a branch of the same name.
+		tip="$(git config "reviewworkflow.$branch.reviewed" || true)"
+		if [ -z "$tip" ]; then
+			tip="$(git config "reviewworkflowlocal.$branch.reviewed" || true)"
+		fi
+		if [ -n "$tip" ]; then
+			porcelain_row delta "$branch" "$tip"
+		fi
+	fi
+	;;
+esac

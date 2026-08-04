@@ -59,6 +59,18 @@ teardown() {
 	[[ "$output" == *"unknown option --bogus"* ]]
 }
 
+@test "review config --h prints usage and exits 0" {
+	run git review config --h
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"usage: git review config"* ]]
+}
+
+@test "review config -h prints usage and exits 0" {
+	run git review config -h
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"usage: git review config"* ]]
+}
+
 @test "review next --h prints usage and exits 0" {
 	run git review next --h
 	[ "$status" -eq 0 ]
@@ -147,6 +159,18 @@ teardown() {
 	run git review status
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"not a git repository"* ]]
+}
+
+@test "review config rejects an unknown option" {
+	run git review config --bogus
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"unknown option --bogus"* ]]
+}
+
+@test "review config rejects a third positional argument" {
+	run git review config base main extra
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"unexpected argument"* ]]
 }
 
 @test "review start rejects an unknown option" {

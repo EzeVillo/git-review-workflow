@@ -32,6 +32,9 @@ Commands:
                      author a reading walkthrough for the current branch's PR
   git review next    advance a commit-by-commit or walkthrough review one entry
   git review prev    step a commit-by-commit or walkthrough review back one entry
+  git review config [<key> [<value>]] [--unset <key>] [--porcelain [<branch>]]
+                     read or write the base branch and remote (with or
+                     without an active review)
   git review status  show the state of the review on the current branch
   git review list    list every review/* branch in progress
   git review preview [--stat]

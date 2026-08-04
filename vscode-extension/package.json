@@ -101,6 +101,12 @@
         "command": "gitReview.setBase",
         "title": "Set the Base Branch",
         "category": "git review"
+      },
+      {
+        "command": "gitReview.abortReview",
+        "title": "Cancel Review",
+        "category": "git review",
+        "icon": "$(discard)"
       }
     ],
     "menus": {
@@ -109,6 +115,11 @@
           "command": "gitReview.refresh",
           "when": "view == gitReview.walkthrough",
           "group": "navigation@1"
+        },
+        {
+          "command": "gitReview.abortReview",
+          "when": "view == gitReview.walkthrough && gitReview.situation == review",
+          "group": "navigation@2"
         }
       ],
       "commandPalette": [
@@ -154,6 +165,10 @@
         },
         {
           "command": "gitReview.setBase"
+        },
+        {
+          "command": "gitReview.abortReview",
+          "when": "gitReview.situation == review"
         }
       ]
     },

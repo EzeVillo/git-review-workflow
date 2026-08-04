@@ -51,6 +51,10 @@ export function panelHtml(nonce: string): string {
      pega en una terminal. Quien cede el ancho es el nombre del origen. */
   .bar .tip { flex: none; }
   .bar .pos { margin-left: auto; font-variant-numeric: tabular-nums; }
+  /* margin-left:auto propio en vez de depender del de .pos: whole no dibuja
+     .pos (no tiene posicion/total), y el boton igual tiene que quedar contra
+     el borde derecho ahi. */
+  .bar .cancel { margin-left: auto; flex: none; padding: .15em .55em; font-size: .85em; }
   .note {
     padding: .5em .8em;
     border-bottom: 1px solid var(--vscode-panel-border);
@@ -500,6 +504,15 @@ export function panelHtml(nonce: string): string {
     } else if (model.position !== undefined && model.total !== undefined) {
       bar.appendChild(el("span", "pos", model.position + "/" + model.total));
     }
+    // Vive en la barra y no en las filas de la entrada porque, a diferencia de
+    // "Diff"/"File"/prev/next, no es una accion sobre la entrada actual: es
+    // sobre la review entera, y la barra es lo unico que sobrevive igual en
+    // whole (sin entrada) que en step/walk. Deshabilitado por model.busy con
+    // el mismo criterio que prev/next (renderNavRow): no hay nada que cancelar
+    // mientras otra mutacion ya esta en vuelo.
+    const cancel = button("Cancel review", "abortReview", "cancel", null);
+    cancel.disabled = model.busy === true;
+    bar.appendChild(cancel);
     return bar;
   }
 

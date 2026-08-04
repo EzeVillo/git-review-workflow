@@ -18,6 +18,8 @@ export const PANEL_MESSAGES = [
     "installCli",
     "outOfRangeHelp",
     "continueReview",
+    "startReview",
+    "setBase",
 ] as const;
 
 export type PanelMessage = (typeof PANEL_MESSAGES)[number];

@@ -80,6 +80,16 @@ export interface PanelModel {
      * `situation === "no-review"`; en cualquier otra es un array vacío.
      */
     reviews: PanelReview[];
+    /**
+     * `true` cuando `situation === "no-review"` y el reporte de `git review
+     * config --porcelain` llegó sin `base` — la señal para el párrafo de
+     * "Set the base branch" del estado vacío (T026). No bloquea el asistente
+     * de inicio, que ya resuelve la base inline; esto es sólo lo que se ofrece
+     * *además*, para quien no lo abre. `false` en cualquier otra situación, y
+     * también si el reporte de config nunca llegó (sin dato no hay nada que
+     * avisar, no se asume lo peor).
+     */
+    noBaseConfigured: boolean;
     /** De acá para abajo, sólo con `situation === "review"`. */
     mode?: ReviewMode;
     branch?: string;
@@ -296,6 +306,10 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
         situation: state.situation,
         busy: inputs.busy,
         reviews: toPanelReviews(state.branches),
+        // Ausencia de dato (config nunca llegó) y "config llegó sin base" son
+        // distintos, pero ambos se dibujan igual acá: nada que avisar. Sólo
+        // "config llegó, y base está ausente" prende el aviso.
+        noBaseConfigured: state.situation === "no-review" && state.config !== undefined && state.config.base === undefined,
         baseMoved: false,
         atFirst: false,
         atLast: false,

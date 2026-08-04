@@ -432,7 +432,16 @@ export function panelHtml(nonce: string): string {
         // El fallback a lista vacía no sobra: el webview redibuja el modelo que
         // guardó con setState, que puede venir de una versión sin este campo.
         const reviews = model.reviews || [];
-        const box = empty("No active review on this branch.", docsLink("How to start a review"));
+        const box = el("div", "empty");
+        box.appendChild(el("p", null, "No active review on this branch."));
+        box.appendChild(button("Start a review", "startReview", "primary"));
+        // No bloquea el asistente —que ya resuelve la base inline, un paso
+        // antes de confirmar—: esto es lo que se ofrece ADEMAS, para quien no
+        // lo abre y prefiere fijarla de una desde el estado vacío.
+        if (model.noBaseConfigured) {
+          box.appendChild(el("p", null, "No base branch is configured for a full review."));
+          box.appendChild(button("Set the base branch", "setBase", null));
+        }
         if (reviews.length === 0) { return box; }
         // Con reviews abiertas el párrafo pasa a ser el pie del inventario, no
         // el contenido: lleva el separador y va debajo.

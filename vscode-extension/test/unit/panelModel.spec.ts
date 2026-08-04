@@ -427,6 +427,41 @@ describe("buildPanelModel", () => {
         assert.deepStrictEqual(buildPanelModel(state, {busy: false, why: {state: "absent"}}).why, {state: "absent"});
         assert.deepStrictEqual(buildPanelModel(state, {busy: false, why: {state: "failed"}}).why, {state: "failed"});
     });
+
+    it("noBaseConfigured cuando no-review trae config sin base", () => {
+        const state: ReviewState = {
+            situation: "no-review",
+            entries: [],
+            branches: [],
+            config: {remote: "origin"},
+        };
+        assert.strictEqual(buildPanelModel(state, {busy: false}).noBaseConfigured, true);
+    });
+
+    it("noBaseConfigured en false cuando config trae base", () => {
+        const state: ReviewState = {
+            situation: "no-review",
+            entries: [],
+            branches: [],
+            config: {base: "main", remote: "origin"},
+        };
+        assert.strictEqual(buildPanelModel(state, {busy: false}).noBaseConfigured, false);
+    });
+
+    it("noBaseConfigured en false cuando el reporte de config nunca llego (sin dato no se avisa)", () => {
+        const state: ReviewState = {situation: "no-review", entries: [], branches: []};
+        assert.strictEqual(buildPanelModel(state, {busy: false}).noBaseConfigured, false);
+    });
+
+    it("noBaseConfigured en false fuera de no-review, aunque config faltara base", () => {
+        const state: ReviewState = {
+            situation: "review",
+            entries: [],
+            branches: [],
+            config: {remote: "origin"},
+        };
+        assert.strictEqual(buildPanelModel(state, {busy: false}).noBaseConfigured, false);
+    });
 });
 
 describe("entryPickLabel", () => {

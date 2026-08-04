@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import {CandidateBranch, EffectiveConfig, parseConfigPorcelain} from "../cli/configPorcelain";
 import {invokeGitReview, InvokeOptions} from "../cli/invoke";
 import {
     BranchRecord,
@@ -24,6 +25,17 @@ export interface ReviewState {
      * (contracts/cli-invocation.md § `list --porcelain`).
      */
     branches: BranchRecord[];
+    /**
+     * La config efectiva y las ramas candidatas de `git review config
+     * --porcelain` — lo que el asistente de inicio necesita antes de que
+     * exista una review (contracts/config-porcelain.md). Se puebla **sólo**
+     * con `no-review`, con el mismo criterio que `branches`: con una review
+     * activa esto no se invoca (T022a), así que en cualquier otra situación
+     * quedan ausentes, nunca un reporte viejo.
+     */
+    config?: EffectiveConfig;
+    /** Ver `config`; ausente (no `[]`) cuando el reporte no llegó, para no confundirlo con "cero candidatas". */
+    candidates?: CandidateBranch[];
     /**
      * Asunto y autor de cada commit de la secuencia, por `position`. Sólo en
      * modo step, y sólo con una CLI que los reporte: ausentes significa "esta
@@ -76,6 +88,24 @@ async function listBranches(options: ReviewStateOptions): Promise<BranchRecord[]
         return [];
     }
     return parseListPorcelain(result.stdout);
+}
+
+/**
+ * Corre `config --porcelain` para el asistente de inicio y el estado vacío
+ * (contracts/cli-invocation.md § `config --porcelain`). Mismo criterio que
+ * `listBranches`: su fallo **no** es una situación — deja el estado vacío
+ * como estaba, sin `config` ni `candidates`, en vez de convertirlo en un error
+ * que ya decidió `status --porcelain`.
+ */
+async function loadConfigReport(
+    options: ReviewStateOptions
+): Promise<{ config?: EffectiveConfig; candidates: CandidateBranch[] }> {
+    const result = await invokeGitReview("config", ["--porcelain"], options);
+    if (result.errorCode || result.exitCode !== 0) {
+        return {candidates: []};
+    }
+    const parsed = parseConfigPorcelain(result.stdout);
+    return {config: parsed.config, candidates: parsed.candidates};
 }
 
 /**
@@ -184,11 +214,22 @@ export class ReviewStateManager {
 
         const situation = situationForExitCode(result.exitCode);
         if (situation !== "review") {
-            // El inventario es contenido del estado vacío de `no-review` y de
-            // ningún otro: en out-of-range o error lo que hay para mostrar es
-            // el stderr, y en cli-missing no hay CLI a la que preguntarle.
+            // El inventario y la config son contenido del estado vacío de
+            // `no-review` y de ningún otro: en out-of-range o error lo que hay
+            // para mostrar es el stderr, y en cli-missing no hay CLI a la que
+            // preguntarle.
             const branches = situation === "no-review" ? await listBranches(options) : [];
-            return this.setState({situation, ...EMPTY_ARRAYS, branches, stderr: result.stderr});
+            const next: ReviewState = {situation, ...EMPTY_ARRAYS, branches, stderr: result.stderr};
+            if (situation === "no-review") {
+                const report = await loadConfigReport(options);
+                if (report.config !== undefined) {
+                    next.config = report.config;
+                }
+                if (report.candidates.length > 0) {
+                    next.candidates = report.candidates;
+                }
+            }
+            return this.setState(next);
         }
 
         const parsed = parsePorcelain(result.stdout);

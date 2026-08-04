@@ -177,6 +177,41 @@ function escapeRegExp(s: string): string {
     return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/**
+ * Los dos modos de fixture "sin review" que el asistente de inicio necesita
+ * (T029, prerequisito de start-review.spec.ts): `createTempRepo` ya deja
+ * `reviewworkflow.base` fijada en `main`, así que "con base" es el estado por
+ * default y "sin base" es quitarla — nunca al revés, para que un test que se
+ * olvida de restaurarla no deje a los que corren después sin base por
+ * accidente (el estado por default sigue siendo el mismo que ya usaban).
+ */
+export function withoutBaseConfigured(repo: FixtureRepo): void {
+    git(["config", "--unset", "reviewworkflow.base"], repo.dir);
+}
+
+export function withBaseConfigured(repo: FixtureRepo, branch = "main"): void {
+    git(["config", "reviewworkflow.base", branch], repo.dir);
+}
+
+/**
+ * `git review start` sin `--local`/`--offline` hace un `fetch` real del
+ * remoto (contracts/cli-invocation.md § start): el fixture compartido no
+ * tiene ninguno, así que el asistente de inicio —que en esta fase no ofrece
+ * todavía la UI de origen y siempre revisa `remote`— necesita uno para
+ * arrancar. Un remoto que apunta al propio directorio alcanza: git soporta el
+ * transporte local, y fetch trae los mismos objetos que ya existen ahí mismo.
+ * Deliberadamente NO agregado por default en `createTempRepo` — nada más lo
+ * usa hoy, y agregar un remoto real cambia el "no hay origin" que otros
+ * fixtures asumen sin decirlo.
+ */
+export function addSelfOrigin(repo: FixtureRepo): void {
+    git(["remote", "add", "origin", repo.dir], repo.dir);
+}
+
+export function removeOrigin(repo: FixtureRepo): void {
+    git(["remote", "remove", "origin"], repo.dir);
+}
+
 export function cleanupRepo(repo: FixtureRepo): void {
     // En Windows el borrado tira EPERM si git o el propio host de pruebas
     // todavía tienen un handle abierto sobre el repo temporal; no es un fallo

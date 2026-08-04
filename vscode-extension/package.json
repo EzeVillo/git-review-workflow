@@ -91,6 +91,16 @@
         "command": "gitReview.continueReview",
         "title": "Continue Saved Review",
         "category": "git review"
+      },
+      {
+        "command": "gitReview.startReview",
+        "title": "Start a Review",
+        "category": "git review"
+      },
+      {
+        "command": "gitReview.setBase",
+        "title": "Set the Base Branch",
+        "category": "git review"
       }
     ],
     "menus": {
@@ -137,6 +147,13 @@
         {
           "command": "gitReview.continueReview",
           "when": "false"
+        },
+        {
+          "command": "gitReview.startReview",
+          "when": "gitReview.situation == no-review"
+        },
+        {
+          "command": "gitReview.setBase"
         }
       ]
     },

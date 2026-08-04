@@ -90,6 +90,16 @@ export interface PanelModel {
      * avisar, no se asume lo peor).
      */
     noBaseConfigured: boolean;
+    /**
+     * La base configurada para arrancar una review nueva — distinta de
+     * `base` de acá abajo, que es la de una review YA activa (whole). Sólo
+     * presente con `situation === "no-review"` y el reporte de config con
+     * `base` (FR-010/US1 escenario 6: el revisor tiene que ver contra qué se
+     * va a comparar sin buscarlo en un archivo de configuración, y poder
+     * cambiarla desde el mismo lugar). Ausente si el reporte nunca llegó o si
+     * llegó sin base — ahí es `noBaseConfigured` quien lo dice.
+     */
+    configuredBase?: string;
     /** De acá para abajo, sólo con `situation === "review"`. */
     mode?: ReviewMode;
     branch?: string;
@@ -319,6 +329,9 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
     };
     if (inputs.repoLabel !== undefined) {
         base.repoLabel = inputs.repoLabel;
+    }
+    if (state.situation === "no-review" && state.config?.base !== undefined) {
+        base.configuredBase = state.config.base;
     }
     if (state.stderr !== undefined && state.stderr.trim().length > 0) {
         base.stderr = state.stderr;

@@ -462,6 +462,47 @@ describe("buildPanelModel", () => {
         };
         assert.strictEqual(buildPanelModel(state, {busy: false}).noBaseConfigured, false);
     });
+
+    // configuredBase: la contraparte de noBaseConfigured (S2, revisión Fase 3)
+    // — FR-010/US1 escenario 6 exige mostrar contra qué se compararía incluso
+    // cuando SÍ está configurada, no sólo avisar cuando falta.
+
+    it("configuredBase trae el valor cuando no-review trae config con base", () => {
+        const state: ReviewState = {
+            situation: "no-review",
+            entries: [],
+            branches: [],
+            config: {base: "main", remote: "origin"},
+        };
+        const model = buildPanelModel(state, {busy: false});
+        assert.strictEqual(model.configuredBase, "main");
+        assert.strictEqual(model.noBaseConfigured, false, "los dos son mutuamente excluyentes");
+    });
+
+    it("configuredBase ausente cuando config no trae base", () => {
+        const state: ReviewState = {
+            situation: "no-review",
+            entries: [],
+            branches: [],
+            config: {remote: "origin"},
+        };
+        assert.strictEqual(buildPanelModel(state, {busy: false}).configuredBase, undefined);
+    });
+
+    it("configuredBase ausente cuando el reporte de config nunca llego", () => {
+        const state: ReviewState = {situation: "no-review", entries: [], branches: []};
+        assert.strictEqual(buildPanelModel(state, {busy: false}).configuredBase, undefined);
+    });
+
+    it("configuredBase ausente fuera de no-review, aunque config trajera una", () => {
+        const state: ReviewState = {
+            situation: "review",
+            entries: [],
+            branches: [],
+            config: {base: "main", remote: "origin"},
+        };
+        assert.strictEqual(buildPanelModel(state, {busy: false}).configuredBase, undefined);
+    });
 });
 
 describe("entryPickLabel", () => {

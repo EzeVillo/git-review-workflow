@@ -8,18 +8,18 @@
 export type StartFailureCategory = "network" | "repository";
 
 /**
- * Los fragmentos de **stderr de git** (no del verbo) que delatan que `start`
- * falló tratando de tocar la red: un fetch sin credenciales válidas, un
- * remoto que no responde, o el entorno no interactivo (research.md Decisión
- * 5) rechazando un pedido de contraseña. "could not update from" es la frase
- * fija que el propio `start` antepone a CUALQUIER fallo de fetch
- * (`git fetch --quiet "$remote" || die "could not update from $remote"`,
- * bin/git-review-verbs/start), así que por sí sola ya cubre variantes de
- * git/ssh/http que cambian de una versión o un transporte a otro, sin tener
- * que enumerarlas todas.
+ * Los fragmentos de **stderr de git** que delatan que `start` falló tratando
+ * de tocar la red: un fetch sin credenciales válidas, un remoto que no
+ * responde, o el entorno no interactivo (research.md Decisión 5) rechazando
+ * un pedido de contraseña. Deliberadamente NO incluye "could not update
+ * from" — esa frase es el `die()` del propio verbo
+ * (`bin/git-review-verbs/start`: `git fetch --quiet "$remote" || die "could
+ * not update from $remote"`), no stderr de git, y el contrato ("Clasificar no
+ * es parsear") sólo autoriza mirar el de git. Es además redundante: `git
+ * fetch` sigue escribiendo su propio stderr antes de que el `die` lo haga, así
+ * que las marcas de abajo ya cubren el mismo fallo sin cruzar esa frontera.
  */
 const NETWORK_MARKERS = [
-    "could not update from",
     "could not resolve host",
     "could not read from remote repository",
     "connection timed out",

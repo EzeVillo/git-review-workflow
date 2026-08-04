@@ -2,10 +2,6 @@ import * as assert from "node:assert";
 import {classifyStartFailure, quoteForTerminal} from "../../src/review/startFailure";
 
 describe("classifyStartFailure", () => {
-    it("could not update from (el propio start ante cualquier fallo de fetch) clasifica como network", () => {
-        assert.strictEqual(classifyStartFailure("error: could not update from origin\n"), "network");
-    });
-
     it("could not resolve host clasifica como network", () => {
         assert.strictEqual(
             classifyStartFailure("fatal: unable to access 'https://example.com/x': Could not resolve host: example.com\n"),
@@ -58,6 +54,17 @@ describe("classifyStartFailure", () => {
 
     it("stderr vacio clasifica como repository (nunca ofrece un escape sin motivo)", () => {
         assert.strictEqual(classifyStartFailure(""), "repository");
+    });
+
+    it("el die() propio de start ('could not update from') SOLO, sin el stderr de git delante, clasifica como repository", () => {
+        // Regresion (revision de la Fase 3): ese texto es la salida del VERBO,
+        // no el stderr de git que el contrato autoriza mirar (contracts/
+        // cli-invocation.md § "Clasificar no es parsear"). git fetch --quiet
+        // sigue escribiendo su propio stderr antes de este die(), asi que en
+        // la practica siempre llega acompanado de una de las marcas de arriba
+        // — pero la funcion no debe clasificar "network" a partir de esta
+        // frase sola.
+        assert.strictEqual(classifyStartFailure("error: could not update from origin\n"), "repository");
     });
 });
 

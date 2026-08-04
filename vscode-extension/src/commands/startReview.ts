@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import {CandidateBranch, parseConfigPorcelain} from "../cli/configPorcelain";
-import {invokeGitReview, InvokeOptions} from "../cli/invoke";
+import {invokeGitReview, InvokeOptions, resolveCommand} from "../cli/invoke";
 import {MutationLock} from "../review/mutationLock";
 import {intentToArgs, ReviewIntent, ReviewLayout} from "../review/reviewIntent";
 import {captureToken, tokenStillValid} from "../review/staleGuard";
@@ -72,12 +72,22 @@ function layoutSummary(layout: ReviewLayout): string {
  * `continueReview.ts` usa para retomar una review pausada (research.md § "el
  * molde que 002 fijó"): `start` cambia de rama y mueve HEAD, así que cae bajo
  * FR-029 igual que esa acción.
+ *
+ * El `detail` nombra la base cuando hay una (US1 escenario 6 / FR-010: el
+ * revisor tiene que ver contra qué se va a comparar antes de confirmar, sin
+ * ir a buscarlo a un archivo de configuración). Sin base no hay línea que
+ * agregar — un review completo fallaría pidiéndola, y eso ya lo resolvió el
+ * paso anterior de este mismo asistente.
  */
-async function confirmIntent(intent: ReviewIntent, args: string[]): Promise<boolean> {
+async function confirmIntent(intent: ReviewIntent, args: string[], base: string | undefined): Promise<boolean> {
     const branch = intent.branch ?? "the current branch";
+    const detailLines = [`git review start ${args.join(" ")}`];
+    if (base !== undefined) {
+        detailLines.push(`Comparing against ${base}.`);
+    }
     const answer = await vscode.window.showWarningMessage(
         `Start reviewing ${branch}, ${layoutSummary(intent.layout)}?`,
-        {modal: true, detail: `git review start ${args.join(" ")}`},
+        {modal: true, detail: detailLines.join("\n")},
         "Start the review"
     );
     return answer === "Start the review";
@@ -87,12 +97,17 @@ async function confirmIntent(intent: ReviewIntent, args: string[]): Promise<bool
  * Escape a terminal (research.md Decisión 5): manda el comando **exacto** que
  * se intentó a una terminal integrada, donde sí hay quién conteste un pedido
  * de credenciales interactivo — algo que la invocación capturada, sin TTY,
- * nunca puede ofrecer.
+ * nunca puede ofrecer. "Exacto" incluye respetar `gitReview.path`: reusa
+ * `resolveCommand`, el mismo punto que `invokeGitReview` usa para decidir qué
+ * ejecutable corre, en vez de hardcodear `git review start` — con ese ajuste
+ * seteado (el caso que la Decisión 5 existe para cubrir) `git review` no
+ * necesariamente existe como subcomando de git (I1, revisión Fase 3).
  */
-function runInTerminal(args: string[], cwd: string): void {
-    const terminal = vscode.window.createTerminal({name: "git review start", cwd});
+function runInTerminal(args: string[], options: InvokeOptions): void {
+    const {command, args: commandArgs} = resolveCommand("start", args, options.gitReviewPath);
+    const terminal = vscode.window.createTerminal({name: "git review start", cwd: options.cwd});
     terminal.show();
-    terminal.sendText(["git", "review", "start", ...args].map(quoteForTerminal).join(" "));
+    terminal.sendText([command, ...commandArgs].map(quoteForTerminal).join(" "));
 }
 
 /**
@@ -126,7 +141,7 @@ export async function startReview(
     const parsed = parseConfigPorcelain(report.stdout);
 
     if (parsed.config.base === undefined) {
-        await setBase(lock, stateManager, getInvokeOptions);
+        await setBase(lock, stateManager, getInvokeOptions, parsed.candidates);
         if (stateManager.state.config?.base === undefined) {
             // Cancelado, o el propio config falló (ya mostró su error): sin
             // base no hay como seguir, y el asistente no insiste dos veces —
@@ -148,11 +163,16 @@ export async function startReview(
     const intent: ReviewIntent = {branch: branch.name, layout, range: "full", source: "remote"};
     const args = intentToArgs(intent, branch.name);
 
+    // La base del reporte leído arriba, o — si hacía falta y setBase() la
+    // fijó recién — la que quedó tras su refresh: parsed.config.base sigue
+    // siendo el valor de ANTES de ese paso, así que no alcanza por sí solo.
+    const base = parsed.config.base ?? stateManager.state.config?.base;
+
     // Capturado justo antes de la confirmación, revalidado justo después
     // (FR-038): si el repositorio cambió mientras el revisor elegía, la
     // premisa con la que arrancó el asistente ya no vale.
     const token = captureToken(stateManager.state);
-    if (!(await confirmIntent(intent, args))) {
+    if (!(await confirmIntent(intent, args, base))) {
         return;
     }
     if (!tokenStillValid(token, stateManager.state)) {
@@ -183,7 +203,7 @@ export async function startReview(
                     "Run in Terminal"
                 );
                 if (action === "Run in Terminal") {
-                    runInTerminal(args, options.cwd);
+                    runInTerminal(args, options);
                 }
             } else if (text.length > 0) {
                 void vscode.window.showErrorMessage(text);

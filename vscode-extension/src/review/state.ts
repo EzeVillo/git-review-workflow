@@ -222,10 +222,12 @@ export class ReviewStateManager {
             const next: ReviewState = {situation, ...EMPTY_ARRAYS, branches, stderr: result.stderr};
             if (situation === "no-review") {
                 const report = await loadConfigReport(options);
+                // La señal de "el reporte llegó" es config, no el largo de
+                // candidates: con esa condición, un reporte exitoso con cero
+                // candidatas (un repositorio sin ramas elegibles) era
+                // indistinguible de un reporte que falló (M1, revisión Fase 3).
                 if (report.config !== undefined) {
                     next.config = report.config;
-                }
-                if (report.candidates.length > 0) {
                     next.candidates = report.candidates;
                 }
             }

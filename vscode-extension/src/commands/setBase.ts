@@ -10,11 +10,15 @@ function label(candidate: CandidateBranch): string {
 }
 
 /**
- * `gitReview.setBase`: fija `reviewworkflow.base` desde las `candidate` del
- * último reporte de `config --porcelain` (contracts/cli-invocation.md §
- * `config <key> <value>`). Invocable standalone desde el estado vacío, y
+ * `gitReview.setBase`: fija `reviewworkflow.base` desde una lista de
+ * `candidate` (contracts/cli-invocation.md § `config <key> <value>`).
+ * Invocable standalone desde el estado vacío (sin `candidates`: usa el
+ * último reporte de `config --porcelain` que trae `stateManager.state`), y
  * también como el paso que T024 antepone cuando el asistente de inicio
- * arranca sin base configurada.
+ * arranca sin base configurada — ahí el asistente le pasa las candidatas
+ * que **ya leyó fresco** un momento antes, para no depender del reporte
+ * cacheado del panel (que puede estar ausente por un fallo transitorio del
+ * refresco anterior aunque el asistente tenga la lista en la mano).
  *
  * El valor que llega a la CLI es siempre el `name` de una `candidate` tal
  * cual, precedido por `--` (mismo motivo que en `start`, U1): nunca algo
@@ -23,10 +27,11 @@ function label(candidate: CandidateBranch): string {
 export async function setBase(
     lock: MutationLock,
     stateManager: ReviewStateManager,
-    getInvokeOptions: () => InvokeOptions
+    getInvokeOptions: () => InvokeOptions,
+    candidates?: CandidateBranch[]
 ): Promise<void> {
-    const candidates = stateManager.state.candidates ?? [];
-    if (candidates.length === 0) {
+    const list = candidates ?? stateManager.state.candidates ?? [];
+    if (list.length === 0) {
         void vscode.window.showErrorMessage("No branches to pick a base from were found.");
         return;
     }
@@ -34,7 +39,7 @@ export async function setBase(
     // La actual primero (research.md Decisión 9, FR-011), igual que el primer
     // paso del asistente de inicio: es casi siempre la que se quiere comparar
     // contra, y la búsqueda incremental del QuickPick cubre el resto.
-    const items = [...candidates]
+    const items = [...list]
         .sort((a, b) => (a.current === b.current ? 0 : a.current ? -1 : 1))
         .map((candidate) => ({label: label(candidate), candidate}));
 

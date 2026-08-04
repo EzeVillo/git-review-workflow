@@ -52,6 +52,17 @@ function __grw_review_branches
         | string replace -r '^review/' ''
 end
 
+# Candidate branches for config — local + remote, minus the three review
+# namespaces and <remote>/HEAD. Same set `config --porcelain` reports
+# (contracts/config-porcelain.md), for the value of `config base` and the
+# <branch> argument of `config --porcelain`.
+function __grw_candidate_branches
+    set -l remote (git config --get reviewworkflow.remote 2>/dev/null; or echo origin)
+    git for-each-ref --format='%(refname:short)' refs/heads/ "refs/remotes/$remote/" 2>/dev/null \
+        | string replace -r "^$remote/" '' \
+        | string match -rv '^review/|^review-saved/|^review-fixes/|^HEAD$'
+end
+
 # Source branches that have a recorded --delta marker, for forget --delta. The
 # markers outlive the review/* branches, so this is the right candidate set.
 function __grw_marked_branches
@@ -79,6 +90,7 @@ complete -c git -n '__grw_review_bare' -f -s V -l version -d 'print the installe
 complete -c git -n '__grw_review_bare' -f -a start -d 'stage a PR diff on a new review/<branch> branch'
 complete -c git -n '__grw_review_bare' -f -a compare -d 'stage the diff between two commit-ish, read-only'
 complete -c git -n '__grw_review_bare' -f -a walkthrough -d 'author a reading walkthrough for the current PR'
+complete -c git -n '__grw_review_bare' -f -a config -d 'read or write the base branch and remote'
 complete -c git -n '__grw_review_bare' -f -a next -d 'advance a commit-by-commit or walkthrough review one entry'
 complete -c git -n '__grw_review_bare' -f -a prev -d 'step a commit-by-commit or walkthrough review back one entry'
 complete -c git -n '__grw_review_bare' -f -a status -d 'show the state of the review on the current branch'
@@ -126,6 +138,13 @@ complete -c git -n '__grw_review_using walkthrough; and test (__grw_walkthrough_
 complete -c git -n '__grw_review_using walkthrough; and test (__grw_walkthrough_sub) = init' -f -l force -d 'overwrite an existing walkthrough'
 complete -c git -n '__grw_review_using walkthrough; and test (__grw_walkthrough_sub) = build' -f -l check -d 'validate only; write nothing'
 complete -c git -n '__grw_review_using walkthrough' -f -l h -d 'show help'
+
+# ── git review config ─────────────────────────────────────────────────────────
+complete -c git -n '__grw_review_using config' -f -l unset -d 'remove a key' -a 'base remote'
+complete -c git -n '__grw_review_using config' -f -l porcelain -d 'machine-readable config, candidates and delta marker'
+complete -c git -n '__grw_review_using config' -f -l h -d 'show help'
+complete -c git -n '__grw_review_using config' -f -a 'base remote'
+complete -c git -n '__grw_review_using config' -f -a '(__grw_candidate_branches)'
 
 # ── git review finish ─────────────────────────────────────────────────────────
 complete -c git -n '__grw_review_using finish' -f -l onto-source -d 'stage edits on the PR branch itself'

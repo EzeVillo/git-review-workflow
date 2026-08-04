@@ -74,6 +74,37 @@ _git_review_walkthrough() {
 	esac
 }
 
+# config [<key> [<value>]] [--unset <key>] [--porcelain [<branch>]]: same flat
+# positional style _git_review_start already uses (no distinction between the
+# key slot and the value/branch slot — keeps this in line with the rest of the
+# file rather than fighting _arguments over which positional means what).
+_git_review_config() {
+	local state
+	_arguments -S \
+		'(-h --h)'{-h,--h}'[show help]' \
+		'--unset[remove a key]:key:(base remote)' \
+		'--porcelain[machine-readable config, candidates and delta marker]' \
+		'*: :->configargs'
+
+	if [ "$state" = configargs ]; then
+		local -a names
+		names=('base' 'remote' ${(f)"$(__grw_candidate_branches)"})
+		_describe 'config key or branch' names
+	fi
+}
+
+# Candidate branches for `config` — local heads and the configured remote's
+# tracking branches, minus the three review namespaces and <remote>/HEAD. Same
+# set `config --porcelain` reports (contracts/config-porcelain.md).
+__grw_candidate_branches() {
+	local remote
+	remote="$(git config --get reviewworkflow.remote 2>/dev/null || echo origin)"
+	git for-each-ref --format='%(refname:short)' refs/heads/ "refs/remotes/$remote/" 2>/dev/null |
+		sed -e "s#^$remote/##" |
+		grep -v -e '^review/' -e '^review-saved/' -e '^review-fixes/' -e '^HEAD$' |
+		sort -u
+}
+
 _git_review_finish() {
 	_arguments -S \
 		'(-h --h)'{-h,--h}'[show help]' \
@@ -157,6 +188,7 @@ _git-review() {
 			'start:stage a PR diff on a new review/<branch> branch'
 			'compare:stage the diff between two commit-ish, read-only'
 			'walkthrough:author a reading walkthrough for the current PR'
+			'config:read or write the base branch and remote'
 			'next:advance a commit-by-commit or walkthrough review one entry'
 			'prev:step a commit-by-commit or walkthrough review back one entry'
 			'status:show the state of the review on the current branch'
@@ -177,6 +209,7 @@ _git-review() {
 		start) _git_review_start ;;
 		compare) _git_review_compare ;;
 		walkthrough) _git_review_walkthrough ;;
+		config) _git_review_config ;;
 		finish) _git_review_finish ;;
 		preview) _git_review_preview ;;
 		continue) _git_review_continue ;;

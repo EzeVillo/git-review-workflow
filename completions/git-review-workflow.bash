@@ -25,6 +25,19 @@ __grw_review_branches() {
 		sed -n 's#^review/##p'
 }
 
+# Candidate branches for `config` — local heads and the configured remote's
+# tracking branches, minus the three review namespaces and <remote>/HEAD. Same
+# set `config --porcelain` reports (contracts/config-porcelain.md); used for
+# the value of `config base` and the <branch> argument of `config --porcelain`.
+__grw_candidate_branches() {
+	local remote
+	remote="$(git config --get reviewworkflow.remote 2>/dev/null || echo origin)"
+	git for-each-ref --format='%(refname:short)' refs/heads/ "refs/remotes/$remote/" 2>/dev/null |
+		sed -e "s#^$remote/##" |
+		grep -v -e '^review/' -e '^review-saved/' -e '^review-fixes/' -e '^HEAD$' |
+		sort -u
+}
+
 # Source branches that have a recorded --delta marker. These outlive the
 # review/* branches, so they — not local heads — are what `forget --delta` acts on.
 __grw_marked_branches() {
@@ -85,6 +98,33 @@ _git_review_finish() {
 	__gitcomp "--onto-source --resume --abort --force --h"
 }
 
+# config [<key> [<value>]] [--unset <key>] [--porcelain [<branch>]]: keys after
+# a bare word or --unset, candidate branches for base's value and for
+# --porcelain's optional <branch> (contracts/config-porcelain.md).
+_git_review_config() {
+	local key
+	key="$(__git_find_on_cmdline "base remote")"
+	case "$cur" in
+	--*)
+		__gitcomp "--unset --porcelain --h"
+		;;
+	*)
+		case " ${COMP_WORDS[*]} " in
+		*" --porcelain "*)
+			__gitcomp_nl "$(__grw_candidate_branches)"
+			;;
+		*)
+			if [ "$key" = base ]; then
+				__gitcomp_nl "$(__grw_candidate_branches)"
+			else
+				__gitcomp "base remote"
+			fi
+			;;
+		esac
+		;;
+	esac
+}
+
 _git_review_preview() {
 	__gitcomp "--stat --h"
 }
@@ -139,7 +179,7 @@ _git_review_forget() {
 # dispatcher's own -h/--version). Otherwise dispatch to the verb's helper —
 # verbs with no options beyond --h fall through to the default.
 _git_review() {
-	local subcommands="start compare walkthrough next prev status list preview finish save continue abort clean forget"
+	local subcommands="start compare walkthrough config next prev status list preview finish save continue abort clean forget"
 	local subcommand
 	subcommand="$(__git_find_on_cmdline "$subcommands")"
 
@@ -155,6 +195,7 @@ _git_review() {
 	start) _git_review_start ;;
 	compare) _git_review_compare ;;
 	walkthrough) _git_review_walkthrough ;;
+	config) _git_review_config ;;
 	finish) _git_review_finish ;;
 	preview) _git_review_preview ;;
 	continue) _git_review_continue ;;

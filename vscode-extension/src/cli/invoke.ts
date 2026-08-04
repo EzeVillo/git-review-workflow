@@ -95,7 +95,7 @@ function networkEnv(): NodeJS.ProcessEnv {
  */
 const WINDOWS_NATIVE_EXECUTABLE = /\.(exe|cmd|bat)$/i;
 
-interface ResolvedCommand {
+export interface ResolvedCommand {
     command: string;
     args: string[];
 }
@@ -107,8 +107,14 @@ interface ResolvedCommand {
  * pero invocar el dispatcher directamente (gitReview.path) salta ese paso de
  * git, así que el verbo va primero: bin/git-review espera $1=<verbo>, nunca
  * "review" (bin/git-review:67).
+ *
+ * Exportada (no sólo de uso interno) para que un consumidor que necesite
+ * mostrar o reproducir la invocación exacta —el escape *Run in Terminal* de
+ * `startReview.ts`, research.md Decisión 5— resuelva el mismo comando que de
+ * verdad correría `invokeGitReview`, en vez de hardcodear `git review <verbo>`
+ * e ignorar `gitReview.path`.
  */
-function resolveCommand(verb: string, args: string[], gitReviewPath: string | undefined): ResolvedCommand {
+export function resolveCommand(verb: string, args: string[], gitReviewPath: string | undefined): ResolvedCommand {
     if (gitReviewPath === undefined || gitReviewPath.trim() === "") {
         return {command: "git", args: ["review", verb, ...args]};
     }

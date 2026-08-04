@@ -432,13 +432,15 @@ export function panelHtml(nonce: string): string {
         // El fallback a lista vacía no sobra: el webview redibuja el modelo que
         // guardó con setState, que puede venir de una versión sin este campo.
         const reviews = model.reviews || [];
-        const box = el("div", "empty");
-        box.appendChild(el("p", null, "No active review on this branch."));
-        box.appendChild(button("Start a review", "startReview", "primary"));
-        // No bloquea el asistente —que ya resuelve la base inline, un paso
-        // antes de confirmar—: esto es lo que se ofrece ADEMAS, para quien no
-        // lo abre y prefiere fijarla de una desde el estado vacío.
-        if (model.noBaseConfigured) {
+        const box = empty("No active review on this branch.", button("Start a review", "startReview", "primary"));
+        // Contra qué se compararía una review completa (FR-010, US1 escenario
+        // 6): siempre visible con base configurada, no sólo cuando falta — el
+        // botón de cambiarla acompaña en los dos casos, nunca bloquea el
+        // asistente, que ya la resuelve inline un paso antes de confirmar.
+        if (model.configuredBase !== undefined) {
+          box.appendChild(el("p", null, "Compares against " + model.configuredBase + "."));
+          box.appendChild(button("Change the base branch", "setBase", null));
+        } else if (model.noBaseConfigured) {
           box.appendChild(el("p", null, "No base branch is configured for a full review."));
           box.appendChild(button("Set the base branch", "setBase", null));
         }

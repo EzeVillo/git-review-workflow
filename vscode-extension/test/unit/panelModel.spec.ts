@@ -505,6 +505,96 @@ describe("buildPanelModel", () => {
     });
 });
 
+// T043 (005 US3): los dos estados que introduce el registro `finish`
+// (contracts/finish-state.md) — un cierre trabado, visto desde dentro de la
+// review (finish-conflict), y un cierre completo pendiente, visto desde el
+// inventario del estado vacío (finish-pending).
+describe("buildPanelModel — finish (005 US3)", () => {
+    function conflictState(stdout: string): ReviewState {
+        const parsed = parsePorcelain(stdout);
+        const state: ReviewState = {
+            situation: "finish-conflict",
+            state: parsed.state,
+            entries: parsed.entries,
+            branches: [],
+        };
+        if (parsed.finish) {
+            state.finish = parsed.finish;
+        }
+        return state;
+    }
+
+    const STEP_CONFLICT = [
+        "state\treview/feat\torigin/feat\tabc123\tstep\tnone\t2\t2\t2\t9fe1c0d",
+        "entry\t1\tabc1234\t1",
+        "entry\t2\t9fe1c0d\t0",
+        "finish\tconflict\t0",
+        "",
+    ].join("\n");
+
+    it("finish-conflict trae navigationLocked en true", () => {
+        const model = buildPanelModel(conflictState(STEP_CONFLICT), {busy: false});
+        assert.strictEqual(model.navigationLocked, true);
+    });
+
+    it("finish-conflict deja atFirst/atLast en false aunque el cursor este en un extremo (FR-027)", () => {
+        // El cursor esta en el ultimo step (2/2): sin el lock, atLast seria true.
+        const model = buildPanelModel(conflictState(STEP_CONFLICT), {busy: false});
+        assert.strictEqual(model.atFirst, false);
+        assert.strictEqual(model.atLast, false);
+    });
+
+    it("finish-conflict sigue mostrando la review (mode, branch, current), no un estado vacio", () => {
+        const model = buildPanelModel(conflictState(STEP_CONFLICT), {busy: false});
+        assert.strictEqual(model.mode, "step");
+        assert.strictEqual(model.branch, "review/feat");
+        assert.strictEqual(model.current?.display, "9fe1c0d");
+    });
+
+    it("navigationLocked en false fuera de finish-conflict", () => {
+        const model = buildPanelModel(reviewState(WALK), {busy: false});
+        assert.strictEqual(model.navigationLocked, false);
+    });
+
+    it("finish-pending: reviews se sigue poblando desde branches, y pendingFinish trae branch y onto", () => {
+        const state: ReviewState = {
+            situation: "finish-pending",
+            entries: [],
+            branches: parseListPorcelain([
+                "branch\treview/feature/checkout\t0\t0\t0\twhole",
+                "finish\treview/feature/checkout\tpending\t1",
+                "",
+            ].join("\n")),
+        };
+        const model = buildPanelModel(state, {busy: false});
+        assert.strictEqual(model.reviews.length, 1);
+        assert.strictEqual(model.reviews[0].name, "review/feature/checkout");
+        assert.deepStrictEqual(model.pendingFinish, {branch: "review/feature/checkout", onto: true});
+    });
+
+    it("pendingFinish ausente sin ninguna fila finish pending en el inventario", () => {
+        const state: ReviewState = {
+            situation: "finish-pending",
+            entries: [],
+            branches: parseListPorcelain("branch\treview/feature/checkout\t0\t0\t0\twhole\n"),
+        };
+        assert.strictEqual(buildPanelModel(state, {busy: false}).pendingFinish, undefined);
+    });
+
+    it("pendingFinish ausente fuera de finish-pending, aunque branches trajera un finish pending", () => {
+        const state: ReviewState = {
+            situation: "no-review",
+            entries: [],
+            branches: parseListPorcelain([
+                "branch\treview/feature/checkout\t0\t0\t0\twhole",
+                "finish\treview/feature/checkout\tpending\t0",
+                "",
+            ].join("\n")),
+        };
+        assert.strictEqual(buildPanelModel(state, {busy: false}).pendingFinish, undefined);
+    });
+});
+
 describe("entryPickLabel", () => {
     const {entries} = parsePorcelain(WALK);
 

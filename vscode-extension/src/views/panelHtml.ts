@@ -62,6 +62,16 @@ export function panelHtml(nonce: string): string {
     font-size: .9em;
     line-height: 1.5;
   }
+  /* Un cierre trabado no es una nota de paso (baseMoved/degraded): es lo único
+     que puede hacer ahora mismo, así que lleva el color de advertencia del
+     tema — nunca uno propio — y sus botones a ancho completo como el resto de
+     los diálogos de riesgo del panel. */
+  .note.finish-banner {
+    color: var(--vscode-foreground);
+    border-left: 3px solid var(--vscode-editorWarning-foreground);
+    background: var(--vscode-inputValidation-warningBackground);
+  }
+  .note.finish-banner p { margin: 0 0 .6em; }
   .body { padding: .9em .8em .6em; }
   .head {
     display: flex;
@@ -457,6 +467,28 @@ export function panelHtml(nonce: string): string {
         wrap.appendChild(box);
         return wrap;
       }
+      // Un cierre completo dejó review/<src> con un punto de undo sin
+      // resolver (contracts/finish-state.md): el panel deja de decir "no hay
+      // ninguna review" y encabeza el inventario con ese cierre en vez de la
+      // invitación a empezar una — "Start a review" seguiría sin invocar
+      // nada, así que no corresponde ofrecerla acá. undoFinish es la única
+      // salida (US4 la cablea a un comando real; hasta entonces el click no
+      // hace nada porque el mensaje no está en PANEL_MESSAGES todavía, que es
+      // lo que lo vuelve seguro dejarlo wireado ya).
+      case "finish-pending": {
+        const reviews = model.reviews || [];
+        const pending = model.pendingFinish;
+        const headline = pending
+          ? "A finish completed and is waiting to be confirmed on " + pending.branch + "."
+          : "A finish completed and is waiting to be confirmed.";
+        const box = empty(headline, button("Undo", "undoFinish", "primary"));
+        if (reviews.length === 0) { return box; }
+        box.className = "empty after-inv";
+        const wrap = el("div");
+        wrap.appendChild(renderInventory(model, reviews));
+        wrap.appendChild(box);
+        return wrap;
+      }
       case "out-of-range":
         return empty(
           "The cursor is out of range: the base moved.",
@@ -602,7 +634,11 @@ export function panelHtml(nonce: string): string {
     }
 
     body.appendChild(renderOpenRow(model));
-    body.appendChild(renderNavRow(model));
+    // FR-027: un cierre trabado retira los controles de navegación del todo —
+    // no basta con deshabilitarlos, porque eso deja ver una secuencia que ya
+    // no corresponde recorrer. El banner de más arriba es la salida ofrecida
+    // en su lugar (renderFinishConflictBanner).
+    if (!model.navigationLocked) { body.appendChild(renderNavRow(model)); }
     return body;
   }
 
@@ -627,8 +663,29 @@ export function panelHtml(nonce: string): string {
     if (model.mode === "walk") { body.appendChild(whyLoading()); }
 
     body.appendChild(renderOpenRow(model));
-    body.appendChild(renderNavRow(model));
+    if (!model.navigationLocked) { body.appendChild(renderNavRow(model)); }
     return freeze(body);
+  }
+
+  /**
+   * El banner de finish-conflict (contracts/finish-state.md): explica el
+   * cierre trabado y ofrece deshacerlo o continuarlo — en vez de los
+   * controles de navegación que renderEntry/renderPending retiran arriba. Los
+   * mensajes undoFinish/resumeFinish no están todavía en PANEL_MESSAGES (US4
+   * los agrega junto con los comandos reales): hasta entonces el click no
+   * llega a ningún lado — el host los descarta como cualquier mensaje que no
+   * reconoce —, que es lo que vuelve seguro wirearlos ya en vez de dejarlos
+   * sin onclick.
+   */
+  function renderFinishConflictBanner() {
+    const box = el("div", "note finish-banner");
+    box.appendChild(el("p", null,
+      "This finish stopped at a conflict. Resolve the markers, then continue — or undo it to go back to editing."));
+    const row = el("div", "row");
+    row.appendChild(button("Undo", "undoFinish", null));
+    row.appendChild(button("Continue", "resumeFinish", null));
+    box.appendChild(row);
+    return box;
   }
 
   /** Nada de lo dibujado durante la carga puede accionarse; ver stale(). */
@@ -728,12 +785,15 @@ export function panelHtml(nonce: string): string {
 
   function render(model) {
     root.textContent = "";
-    if (model.situation !== "review") {
+    // finish-conflict sigue siendo una review legible (FR-027) — el estado
+    // vacío es sólo para no-review/out-of-range/error/cli-*.
+    if (model.situation !== "review" && model.situation !== "finish-conflict") {
       root.appendChild(renderEmptyState(model));
       return;
     }
 
     root.appendChild(renderBar(model, false));
+    if (model.situation === "finish-conflict") { root.appendChild(renderFinishConflictBanner()); }
     renderNotes(model);
 
     if (model.mode === "whole") {

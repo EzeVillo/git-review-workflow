@@ -253,4 +253,46 @@ describe("panelHtml", () => {
         );
         assert.ok(html.includes("Reviews in this repository"));
     });
+
+    // ── finish (005 US3, contracts/finish-state.md) ─────────────────────────
+
+    it("finish-conflict entra por la rama de review, no por el estado vacio (FR-027)", () => {
+        assert.ok(
+            /if \(model\.situation !== "review" && model\.situation !== "finish-conflict"\) \{/.test(html),
+            "finish-conflict tiene que seguir mostrando mode/branch/current, no un estado vacio"
+        );
+        assert.ok(
+            /if \(model\.situation === "finish-conflict"\) \{ root\.appendChild\(renderFinishConflictBanner\(\)\); \}/.test(html),
+            "falta insertar el banner cuando el situation es finish-conflict"
+        );
+    });
+
+    it("el banner de finish-conflict ofrece deshacer y continuar, sin controles de navegacion", () => {
+        const bannerBody = /function renderFinishConflictBanner\(\) \{([^]*?)\n {2}\}/.exec(html)?.[1] ?? "";
+        assert.ok(bannerBody.length > 0, "no se encontro renderFinishConflictBanner para afirmar sobre el");
+        assert.ok(bannerBody.includes('"Undo", "undoFinish"'));
+        assert.ok(bannerBody.includes('"Continue", "resumeFinish"'));
+        // Los controles de navegacion se retiran, no solo se deshabilitan
+        // (FR-027): un boton disabled sigue dejando ver una secuencia que ya
+        // no corresponde recorrer.
+        assert.ok(
+            /if \(!model\.navigationLocked\) \{ body\.appendChild\(renderNavRow\(model\)\); \}/.test(html),
+            "renderEntry/renderPending tienen que retirar renderNavRow bajo navigationLocked"
+        );
+    });
+
+    it("finish-pending encabeza el inventario con el cierre pendiente, no 'No active review'", () => {
+        const pendingBranch = /case "finish-pending": \{([^]*?)\n {6}case "out-of-range"/.exec(html)?.[1] ?? "";
+        assert.ok(pendingBranch.length > 0, "no se encontro el caso finish-pending en renderEmptyState");
+        assert.ok(
+            pendingBranch.includes("waiting to be confirmed"),
+            "el encabezado tiene que describir el cierre pendiente, no la ausencia de review"
+        );
+        assert.ok(pendingBranch.includes('"Undo", "undoFinish"'));
+        assert.ok(
+            pendingBranch.includes("renderInventory(model, reviews)"),
+            "el inventario tiene que seguir dibujandose, igual que en no-review"
+        );
+        assert.ok(!pendingBranch.includes("No active review"));
+    });
 });

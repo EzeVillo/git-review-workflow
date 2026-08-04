@@ -76,10 +76,23 @@ export interface PanelModel {
     /** Sólo con más de un repositorio en la ventana (FR-029). */
     repoLabel?: string;
     /**
-     * Inventario del repositorio, en el orden de la CLI. Sólo se puebla con
-     * `situation === "no-review"`; en cualquier otra es un array vacío.
+     * Inventario del repositorio, en el orden de la CLI. Se puebla con
+     * `situation === "no-review"` y con `"finish-pending"` (`state.branches`
+     * trae lo mismo en las dos — ver `ReviewState.branches`); en cualquier
+     * otra es un array vacío.
      */
     reviews: PanelReview[];
+    /**
+     * El cierre completo pendiente que encabeza el inventario del estado
+     * vacío, sólo con `situation === "finish-pending"` (contracts/finish-
+     * state.md): la fila `finish … pending` que hizo que el estado dejara de
+     * ser `"no-review"`, proyectada a lo que `finishReview.ts` necesita para
+     * ofrecer deshacerlo o continuarlo en una fase posterior (US4). Ausente
+     * en cualquier otra situación, y también si por algún motivo el
+     * inventario no trae ninguna fila `pending` (no debería ocurrir: es la
+     * misma fila que decidió la situación).
+     */
+    pendingFinish?: { branch: string; onto: boolean };
     /**
      * `true` cuando `situation === "no-review"` y el reporte de `git review
      * config --porcelain` llegó sin `base` — la señal para el párrafo de
@@ -137,6 +150,15 @@ export interface PanelModel {
      */
     atFirst: boolean;
     atLast: boolean;
+    /**
+     * `true` sólo con `situation === "finish-conflict"` (FR-027,
+     * contracts/finish-state.md): la review sigue siendo legible —`mode`,
+     * `branch`, `current`, etc. se proyectan igual que en una review normal—,
+     * pero moverse por la secuencia con un cierre a medio aplicar no
+     * corresponde. Se refleja forzando `atFirst`/`atLast` en `false` sin
+     * importar dónde esté el cursor, no ocultando el resto de la review.
+     */
+    navigationLocked: boolean;
     /** `walkthrough === "degraded"` (FR-010). */
     degraded: boolean;
     /** La entrada actual, elegida por `position` y nunca por `id`. */
@@ -323,6 +345,7 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
         baseMoved: false,
         atFirst: false,
         atLast: false,
+        navigationLocked: state.situation === "finish-conflict",
         degraded: false,
         entryCount: 0,
         files: [],
@@ -336,9 +359,15 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
     if (state.stderr !== undefined && state.stderr.trim().length > 0) {
         base.stderr = state.stderr;
     }
+    if (state.situation === "finish-pending") {
+        const pending = state.branches.find((branch) => branch.finish?.state === "pending");
+        if (pending?.finish) {
+            base.pendingFinish = {branch: pending.name, onto: pending.finish.onto};
+        }
+    }
 
     const review = state.state;
-    if (state.situation !== "review" || !review) {
+    if ((state.situation !== "review" && state.situation !== "finish-conflict") || !review) {
         return base;
     }
 
@@ -371,6 +400,13 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
     // del rango re-derivado, y ahí tampoco hay a dónde seguir.
     base.atFirst = review.position !== undefined && review.position <= 1;
     base.atLast = review.position !== undefined && review.total !== undefined && review.position >= review.total;
+    if (base.navigationLocked) {
+        // FR-027: un cierre trabado bloquea la navegación entera, sin importar
+        // dónde haya quedado el cursor — nunca sólo el extremo en el que
+        // casualmente estaba.
+        base.atFirst = false;
+        base.atLast = false;
+    }
 
     const current = currentEntry(state.entries, review.position);
     if (current) {

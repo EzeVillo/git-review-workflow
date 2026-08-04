@@ -7,9 +7,10 @@ import {
     parseListPorcelain,
     parsePorcelain,
     StateRecord,
+    StatusFinishRecord,
 } from "../cli/porcelain";
 import {isOutdated} from "../cli/version";
-import {Situation, situationForExitCode} from "./situation";
+import {Situation, situationFor, situationForExitCode} from "./situation";
 
 export type {Situation} from "./situation";
 
@@ -19,19 +20,20 @@ export interface ReviewState {
     state?: StateRecord;
     entries: EntryRecord[];
     /**
-     * Inventario de reviews del repositorio. Se puebla **sólo** con
-     * `no-review`: es el único estado que lo muestra, y estando dentro de una
-     * review agregar un proceso por refresco iría contra SC-002
+     * Inventario de reviews del repositorio. Se puebla con `no-review` y con
+     * `finish-pending` (que se deriva de este mismo inventario — ver
+     * `doRefresh`): son los únicos estados que lo muestran, y estando dentro
+     * de una review agregar un proceso por refresco iría contra SC-002
      * (contracts/cli-invocation.md § `list --porcelain`).
      */
     branches: BranchRecord[];
     /**
      * La config efectiva y las ramas candidatas de `git review config
      * --porcelain` — lo que el asistente de inicio necesita antes de que
-     * exista una review (contracts/config-porcelain.md). Se puebla **sólo**
-     * con `no-review`, con el mismo criterio que `branches`: con una review
-     * activa esto no se invoca (T022a), así que en cualquier otra situación
-     * quedan ausentes, nunca un reporte viejo.
+     * exista una review (contracts/config-porcelain.md). Se puebla con
+     * `no-review` y con `finish-pending`, con el mismo criterio que
+     * `branches`: con una review activa esto no se invoca (T022a), así que en
+     * cualquier otra situación quedan ausentes, nunca un reporte viejo.
      */
     config?: EffectiveConfig;
     /** Ver `config`; ausente (no `[]`) cuando el reporte no llegó, para no confundirlo con "cero candidatas". */
@@ -48,6 +50,14 @@ export interface ReviewState {
      * una registrada: sin base el registro no llega, y eso no es un error.
      */
     base?: string;
+    /**
+     * El cierre trabado que llevó a `situation === "finish-conflict"`
+     * (contracts/finish-state.md). Ausente en cualquier otra situación — el
+     * cierre `pending` que lleva a `finish-pending` no vive acá, sino en la
+     * fila `finish` del `BranchRecord` correspondiente dentro de `branches`,
+     * que es donde `list --porcelain` lo reporta.
+     */
+    finish?: StatusFinishRecord;
     /** stderr crudo de la CLI; presente en error/out-of-range/cli-missing/cli-outdated. */
     stderr?: string;
 }
@@ -212,15 +222,20 @@ export class ReviewStateManager {
             });
         }
 
-        const situation = situationForExitCode(result.exitCode);
-        if (situation !== "review") {
+        const baseSituation = situationForExitCode(result.exitCode);
+        if (baseSituation !== "review") {
             // El inventario y la config son contenido del estado vacío de
             // `no-review` y de ningún otro: en out-of-range o error lo que hay
             // para mostrar es el stderr, y en cli-missing no hay CLI a la que
-            // preguntarle.
-            const branches = situation === "no-review" ? await listBranches(options) : [];
+            // preguntarle. `finish-pending` se apoya en ESTE mismo inventario
+            // (contracts/finish-state.md) — no agrega una invocación nueva:
+            // ya se llama a `listBranches` con exit 2, sólo falta mirar si
+            // trae una fila `finish … pending`.
+            const branches = baseSituation === "no-review" ? await listBranches(options) : [];
+            const hasFinishPending = branches.some((branch) => branch.finish?.state === "pending");
+            const situation = situationFor(result.exitCode, false, hasFinishPending);
             const next: ReviewState = {situation, ...EMPTY_ARRAYS, branches, stderr: result.stderr};
-            if (situation === "no-review") {
+            if (situation === "no-review" || situation === "finish-pending") {
                 const report = await loadConfigReport(options);
                 // La señal de "el reporte llegó" es config, no el largo de
                 // candidates: con esa condición, un reporte exitoso con cero
@@ -235,8 +250,9 @@ export class ReviewStateManager {
         }
 
         const parsed = parsePorcelain(result.stdout);
+        const situation = situationFor(result.exitCode, parsed.finish !== undefined, false);
         const next: ReviewState = {
-            situation: "review",
+            situation,
             state: parsed.state,
             entries: parsed.entries,
             branches: [],
@@ -251,6 +267,9 @@ export class ReviewStateManager {
         }
         if (parsed.base !== undefined) {
             next.base = parsed.base;
+        }
+        if (parsed.finish !== undefined) {
+            next.finish = parsed.finish;
         }
         return this.setState(next);
     }

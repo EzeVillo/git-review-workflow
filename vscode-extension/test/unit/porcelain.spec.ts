@@ -226,6 +226,40 @@ describe("parsePorcelain", () => {
         // no se les inventa posicion ni texto, y el mapa ni siquiera se crea.
         assert.strictEqual(result.subjects, undefined);
     });
+
+    // ── finish (005 US3, contracts/finish-state.md) ─────────────────────────
+
+    it("finish conflict se puebla con state y onto", () => {
+        const out = [
+            "state\treview/feat-x\torigin/feat-x\tabc123\twhole\tnone",
+            "finish\tconflict\t1",
+            "",
+        ].join("\n");
+        assert.deepStrictEqual(parsePorcelain(out).finish, {state: "conflict", onto: true});
+    });
+
+    it("onto 0 en finish se lee como false, no como ausente", () => {
+        const out = [
+            "state\treview/feat-x\torigin/feat-x\tabc123\twhole\tnone",
+            "finish\tconflict\t0",
+            "",
+        ].join("\n");
+        assert.deepStrictEqual(parsePorcelain(out).finish, {state: "conflict", onto: false});
+    });
+
+    it("sin registro finish el campo queda ausente", () => {
+        const out = "state\treview/feat-x\torigin/feat-x\tabc123\twhole\tnone\n";
+        assert.strictEqual(parsePorcelain(out).finish, undefined);
+    });
+
+    it("un finish con un state que no es conflict se descarta entero (status solo conoce ese estado)", () => {
+        const out = [
+            "state\treview/feat-x\torigin/feat-x\tabc123\twhole\tnone",
+            "finish\tpending\t0",
+            "",
+        ].join("\n");
+        assert.strictEqual(parsePorcelain(out).finish, undefined);
+    });
 });
 
 describe("parseListPorcelain", () => {
@@ -309,6 +343,45 @@ describe("parseListPorcelain", () => {
         assert.strictEqual(branches.length, 1);
         assert.strictEqual(branches[0].name, "review/feat-x");
         assert.strictEqual(branches[0].total, 2);
+    });
+
+    // ── finish (005 US3, contracts/finish-state.md) ─────────────────────────
+
+    it("un finish pending se anexa al branch record que coincide por nombre", () => {
+        const out = [
+            "branch\treview/a\t0\t0\t0\twhole",
+            "branch\treview/b\t0\t0\t0\twhole",
+            "finish\treview/a\tpending\t0",
+            "",
+        ].join("\n");
+        const branches = parseListPorcelain(out);
+        assert.deepStrictEqual(branches[0].finish, {state: "pending", onto: false});
+        assert.strictEqual(branches[1].finish, undefined);
+    });
+
+    it("un finish conflict trae onto en 1 cuando el cierre llevaba --onto-source", () => {
+        const out = [
+            "branch\treview/a\t0\t1\t0\twhole",
+            "finish\treview/a\tconflict\t1",
+            "",
+        ].join("\n");
+        assert.deepStrictEqual(parseListPorcelain(out)[0].finish, {state: "conflict", onto: true});
+    });
+
+    it("sin registro finish el campo queda ausente, no un valor inventado", () => {
+        const out = "branch\treview/a\t0\t0\t0\twhole\n";
+        assert.strictEqual(parseListPorcelain(out)[0].finish, undefined);
+    });
+
+    it("un finish que no matchea ningun branch record por nombre se descarta sin romper el parseo", () => {
+        const out = [
+            "branch\treview/a\t0\t0\t0\twhole",
+            "finish\treview/gone\tpending\t0",
+            "",
+        ].join("\n");
+        const branches = parseListPorcelain(out);
+        assert.strictEqual(branches.length, 1);
+        assert.strictEqual(branches[0].finish, undefined);
     });
 });
 

@@ -107,6 +107,12 @@
         "title": "Cancel Review",
         "category": "git review",
         "icon": "$(discard)"
+      },
+      {
+        "command": "gitReview.finishReview",
+        "title": "Finish Review",
+        "category": "git review",
+        "icon": "$(check)"
       }
     ],
     "menus": {
@@ -117,9 +123,14 @@
           "group": "navigation@1"
         },
         {
-          "command": "gitReview.abortReview",
+          "command": "gitReview.finishReview",
           "when": "view == gitReview.walkthrough && gitReview.situation == review",
           "group": "navigation@2"
+        },
+        {
+          "command": "gitReview.abortReview",
+          "when": "view == gitReview.walkthrough && gitReview.situation == review",
+          "group": "navigation@3"
         }
       ],
       "commandPalette": [
@@ -168,6 +179,10 @@
         },
         {
           "command": "gitReview.abortReview",
+          "when": "gitReview.situation == review"
+        },
+        {
+          "command": "gitReview.finishReview",
           "when": "gitReview.situation == review"
         }
       ]

@@ -37,9 +37,24 @@ export interface EntryRecord {
     banked?: boolean;
 }
 
+/**
+ * El registro `finish` de `status --porcelain`
+ * (contracts/finish-state.md). `state` es siempre `"conflict"`: es el único
+ * estado de cierre observable desde dentro de una review activa — un cierre
+ * completo ya sacó a `HEAD` de `review/*`, así que ese lo reporta `list`, no
+ * `status`.
+ */
+export interface StatusFinishRecord {
+    state: "conflict";
+    /** `true` si el cierre en curso llevaba `--onto-source`. */
+    onto: boolean;
+}
+
 export interface PorcelainResult {
     state: StateRecord;
     entries: EntryRecord[];
+    /** Sólo si hay un cierre trabado en curso sobre esta review (FR-027). */
+    finish?: StatusFinishRecord;
     /**
      * Asunto de cada commit de la secuencia, por `position` — sólo en modo step
      * (contracts/status-porcelain.md).
@@ -79,6 +94,18 @@ export interface BranchRecord {
     /** Presentes sólo en step/walk y sólo si la CLI emitió las dos. */
     position?: number;
     total?: number;
+    /**
+     * El cierre sin resolver de esta review, si tiene uno
+     * (contracts/finish-state.md). A diferencia de `StatusFinishRecord`, acá
+     * `state` puede ser `"pending"`: `list` ve el repositorio entero, no sólo
+     * la rama en la que está parado el usuario, así que también reporta un
+     * cierre completo cuyo `HEAD` ya se movió a `review-fixes/<x>` (o a la
+     * rama del PR con `--onto-source`).
+     */
+    finish?: {
+        state: "pending" | "conflict";
+        onto: boolean;
+    };
 }
 
 function toBool(field: string | undefined): boolean {
@@ -146,6 +173,7 @@ export function parsePorcelain(stdout: string): PorcelainResult {
     let subjects: Map<number, string> | undefined;
     let authors: Map<number, string> | undefined;
     let base: string | undefined;
+    let finish: StatusFinishRecord | undefined;
 
     for (const line of lines) {
         const fields = line.split("\t");
@@ -225,6 +253,15 @@ export function parsePorcelain(stdout: string): PorcelainResult {
                 }
                 break;
             }
+            // `state` es siempre `"conflict"` en este verbo (contracts/finish-
+            // state.md): un cierre completo ya movió `HEAD` fuera de `review/*`,
+            // así que `status` nunca llega a verlo.
+            case "finish": {
+                if (fields[1] === "conflict") {
+                    finish = {state: "conflict", onto: toBool(fields[2])};
+                }
+                break;
+            }
             default:
                 // Etiqueta desconocida: se ignora (FR-003).
                 break;
@@ -244,6 +281,9 @@ export function parsePorcelain(stdout: string): PorcelainResult {
     }
     if (base !== undefined) {
         result.base = base;
+    }
+    if (finish !== undefined) {
+        result.finish = finish;
     }
     return result;
 }
@@ -274,12 +314,24 @@ export function sourceOf(branch: BranchRecord): string {
  */
 export function parseListPorcelain(stdout: string): BranchRecord[] {
     const branches: BranchRecord[] = [];
+    // Por nombre de rama, no por posición de línea: el contrato pone `finish`
+    // justo después de su `branch`, pero `parsePorcelain` ya establece que un
+    // consumidor empareja por etiqueta, nunca por orden de aparición (001).
+    const finishByBranch = new Map<string, { state: "pending" | "conflict"; onto: boolean }>();
 
     for (const line of stdout.split("\n")) {
         if (line.length === 0) {
             continue;
         }
         const fields = line.split("\t");
+        if (fields[0] === "finish") {
+            const branchName = fields[1];
+            const state = fields[2];
+            if (branchName !== undefined && (state === "pending" || state === "conflict")) {
+                finishByBranch.set(branchName, {state, onto: toBool(fields[3])});
+            }
+            continue;
+        }
         if (fields[0] !== "branch") {
             continue;
         }
@@ -303,6 +355,13 @@ export function parseListPorcelain(stdout: string): BranchRecord[] {
             }
         }
         branches.push(record);
+    }
+
+    for (const branch of branches) {
+        const finish = finishByBranch.get(branch.name);
+        if (finish) {
+            branch.finish = finish;
+        }
     }
 
     return branches;

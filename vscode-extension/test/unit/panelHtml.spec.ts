@@ -192,8 +192,8 @@ describe("panelHtml", () => {
         );
         assert.ok(/model\.files\.forEach/.test(html), "falta el recorrido de la lista de archivos");
         assert.ok(
-            /button\(file\.display, "openEntry", [^,]+, "file", file\.position\)/.test(html),
-            "cada fila tiene que abrir su propia entrada por posición, no la actual"
+            /button\(file\.display, "openChange", [^,]+, "diff", file\.position\)/.test(html),
+            "cada fila tiene que abrir el diff de su propia entrada por posición, no la actual"
         );
     });
 

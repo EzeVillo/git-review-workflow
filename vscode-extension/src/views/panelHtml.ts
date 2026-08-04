@@ -633,11 +633,13 @@ export function panelHtml(nonce: string): string {
 
   /**
    * El listado de whole (FR-010): un inventario, no una secuencia — sin
-   * cursor, sin controles de navegación. Cada fila abre su propia entrada por
-   * su posición (no la "actual": whole no tiene una), reusando el mismo
-   * helper button() que ya postea type+index para el inventario del estado
-   * vacío. Un rango sin archivos MUST decirlo explícitamente (FR-007) — nunca
-   * una lista en blanco sin explicación.
+   * cursor, sin controles de navegación. Cada fila abre el diff de su propia
+   * entrada por su posición (no la "actual": whole no tiene una), reusando
+   * el mismo helper button() que ya postea type+index para el inventario del
+   * estado vacío. El diff y no el archivo del working tree: acá el objetivo
+   * es revisar el cambio, no editar el resultado aplicado. Un rango sin
+   * archivos MUST decirlo explícitamente (FR-007) — nunca una lista en
+   * blanco sin explicación.
    */
   function renderFiles(model) {
     if (model.files.length === 0) {
@@ -647,7 +649,7 @@ export function panelHtml(nonce: string): string {
     const n = model.files.length;
     box.appendChild(el("h2", null, n + (n === 1 ? " file" : " files") + " in this review"));
     model.files.forEach(function (file) {
-      box.appendChild(button(file.display, "openEntry", "file-row", "file", file.position));
+      box.appendChild(button(file.display, "openChange", "file-row", "diff", file.position));
     });
     return box;
   }

@@ -56,4 +56,33 @@ describe("MutationLock", () => {
 		const result = await lock.run(async () => 2);
 		assert.strictEqual(result, 2);
 	});
+
+	it("una segunda llamada concurrente notifica onDidDiscard con el motivo (FR-036)", async () => {
+		const lock = new MutationLock();
+		const first = deferred<number>();
+		const reasons: string[] = [];
+		lock.onDidDiscard((reason) => reasons.push(reason));
+
+		const p1 = lock.run(async () => first.promise);
+		const p2 = lock.run(async () => 99);
+
+		const r2 = await p2;
+		assert.strictEqual(r2, undefined);
+		assert.strictEqual(reasons.length, 1);
+		assert.ok(reasons[0].length > 0);
+
+		first.resolve(1);
+		await p1;
+	});
+
+	it("una llamada que no se descarta no notifica onDidDiscard", async () => {
+		const lock = new MutationLock();
+		const reasons: string[] = [];
+		lock.onDidDiscard((reason) => reasons.push(reason));
+
+		await lock.run(async () => 1);
+		await lock.run(async () => 2);
+
+		assert.deepStrictEqual(reasons, []);
+	});
 });

@@ -1,5 +1,9 @@
 # Contrato: invocaciones permitidas a la CLI
 
+**Enmendado por
+[`005-ciclo-review-panel/contracts/cli-invocation.md`](../../005-ciclo-review-panel/contracts/cli-invocation.md),
+que es el que rige a partir de esa feature.**
+
 Este documento es **la lista cerrada** de todo lo que la extensión tiene
 permitido ejecutar. Es el artefacto contra el cual se verifica SC-005 ("ninguna
 funcionalidad del panel deriva estado de review por fuera de la CLI; una

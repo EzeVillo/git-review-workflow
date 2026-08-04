@@ -256,18 +256,49 @@ describe("buildPanelModel", () => {
         assert.strictEqual(model.current?.author, "Eze <eze@example.com>");
     });
 
-    it("modo whole degradado: sin secuencia — no hay como enumerar el rango por porcelain", () => {
-        // Antes esto emitia registros `uncovered`, uno por archivo del rango; se
-        // elimino porque el degradado ya equivale a "todo el diff" (redundante
-        // con lo que el working tree ya muestra), y whole nunca tuvo `entry`.
+    it("modo whole degradado sin archivos en el rango: entryCount y files en cero", () => {
+        // Rango vacío (FR-007): cero registros entry, sin que eso sea un error.
         const stdout = "state\treview/feat\torigin/feat\tabc123\twhole\tdegraded\n";
 
         const model = buildPanelModel(reviewState(stdout), {busy: false});
         assert.strictEqual(model.degraded, true);
         assert.strictEqual(model.entryCount, 0);
+        assert.deepStrictEqual(model.files, []);
         assert.strictEqual(model.current, undefined);
         assert.strictEqual(model.position, undefined);
         assert.strictEqual(model.why, undefined);
+    });
+
+    it("modo whole con archivos: files trae cada entry, sin cursor (FR-010, FR-013)", () => {
+        const stdout = [
+            "state\treview/feat\torigin/feat\tabc123\twhole\tnone",
+            "entry\t1\ta.txt",
+            "entry\t2\tsrc/b.txt",
+            "",
+        ].join("\n");
+        const model = buildPanelModel(reviewState(stdout), {busy: false});
+        assert.strictEqual(model.entryCount, 2);
+        assert.deepStrictEqual(model.files, [
+            {position: 1, display: "a.txt", essential: false, annotated: true, banked: false},
+            {position: 2, display: "src/b.txt", essential: false, annotated: true, banked: false},
+        ]);
+        // whole no tiene cursor: la lista es un inventario, no una secuencia.
+        assert.strictEqual(model.position, undefined);
+        assert.strictEqual(model.total, undefined);
+        assert.strictEqual(model.current, undefined);
+        assert.strictEqual(model.atFirst, false);
+        assert.strictEqual(model.atLast, false);
+    });
+
+    it("files queda vacío (no ausente) fuera de whole", () => {
+        const walk = buildPanelModel(reviewState(WALK), {busy: false});
+        assert.deepStrictEqual(walk.files, []);
+
+        const step = buildPanelModel(
+            reviewState("state\treview/feat\torigin/feat\tabc123\tstep\tnone\t1\t1\t1\tabc1234\nentry\t1\tabc1234\t0\n"),
+            {busy: false}
+        );
+        assert.deepStrictEqual(step.files, []);
     });
 
     it("el origen y el tip llegan al modelo en los tres modos (003 US2)", () => {

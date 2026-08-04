@@ -56,11 +56,19 @@ export async function pickEntry(
         entry,
     }));
 
+    // whole no tiene entrada actual (su `state.position` nunca está definido),
+    // así que acá `active` sale siempre `undefined` — correcto, no un bug: sin
+    // cursor no hay nada que preseleccionar.
     const active = items.find((item) => item.entry.position === position);
+    const titles: Record<ReviewMode, string> = {
+        step: "Review commits",
+        walk: "Walkthrough entries",
+        whole: "Files in this review",
+    };
     const picked = await show(
         items,
         active,
-        mode === "step" ? "Review commits" : "Walkthrough entries",
+        titles[mode],
         "In reading order; picking one does not move the cursor"
     );
     return picked?.entry;

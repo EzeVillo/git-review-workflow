@@ -77,11 +77,13 @@ teardown() {
 	# The metadata records walk mode and the cursor, not step keys.
 	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
 	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "1" ]
-	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "3" ]
+	# 3 curated entries plus the committed walkthrough itself, uncovered: the
+	# sidecar is content the PR adds like any other file (FR-020).
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "4" ]
 	run git config branch.review/feature/x.reviewstep
 	[ "$status" -ne 0 ]
 	# Entry 1 is the first in the author's order: src/c.txt, not the diff order.
-	[[ "$(git review status)" == *"[1/3] on src/c.txt"* ]]
+	[[ "$(git review status)" == *"[1/4] on src/c.txt"* ]]
 	# The full PR diff is staged and editable, exactly like a whole review.
 	run git diff --cached --name-only
 	[[ "$output" == *"a.txt"* ]]
@@ -89,10 +91,85 @@ teardown() {
 	[[ "$output" == *"src/c.txt"* ]]
 }
 
+# ── the walkthrough itself joins the reading order (FR-020, US4) ──────────────
+
+@test "the committed walkthrough itself is the last entry, uncovered, in --porcelain" {
+	git review start feature/x >/dev/null
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	entries="$(printf '%s\n' "$output" | grep '^entry')"
+	expected="$(printf 'entry\t1\tsrc/c.txt\t0\t1\nentry\t2\ta.txt\t0\t1\nentry\t3\tb.txt\t0\t1\nentry\t4\t.review/walkthrough.md\t0\t0')"
+	[ "$entries" = "$expected" ]
+}
+
+@test "next walks all the way through the sidecar before reporting the end" {
+	git review start feature/x >/dev/null
+	git review next >/dev/null
+	git review next >/dev/null
+	run git review next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[4/4] .review/walkthrough.md  (uncovered)"* ]]
+	[[ "$output" == *"this file changes in the review and the walkthrough does not annotate it"* ]]
+	run git review next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"no more entries"* ]]
+}
+
+@test "a walk review opened before this feature (walkcount predates the sidecar entry) reaches it without error" {
+	# FR-023: a review whose recorded walkcount does not count the sidecar (as
+	# every walk review's did before this feature) must not report the extra
+	# entry as a base-moved drift or any other error — the sequence simply grew.
+	git review start feature/x >/dev/null
+	git config branch.review/feature/x.reviewwalkcount 3
+
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[1/4]"* ]]
+	[[ "$output" != *"moved"* ]]
+	[[ "$output" != *"corrupt"* ]]
+
+	git review next >/dev/null
+	git review next >/dev/null
+	run git review next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[4/4] .review/walkthrough.md  (uncovered)"* ]]
+	[[ "$output" != *"moved"* ]]
+	[[ "$output" != *"corrupt"* ]]
+}
+
+@test "a PR that only touches the sidecar degrades to whole but is never invisible there (FR-024)" {
+	# No curated entry can ever intersect a range whose only file IS the
+	# sidecar — a walkthrough never annotates itself — so this takes the same
+	# "none of its entries apply" path as any other range a walkthrough does not
+	# cover, exactly like the existing --delta degrade case. What changed is
+	# what happens next: before US1, a degraded whole review showed nothing, so
+	# this PR was entirely invisible. Now whole lists its one file, so the
+	# degrade note and the whole listing agree, and nothing is hidden.
+	git switch --quiet develop
+	git switch --quiet -c feature/only-wt
+	mkdir -p .review
+	printf '# Walkthrough\n\nnothing to annotate yet\n' >.review/walkthrough.md
+	git add .review/walkthrough.md
+	git commit --quiet -m "add walkthrough only"
+	git push --quiet -u origin feature/only-wt
+	git switch --quiet develop
+
+	run git review start feature/only-wt
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"none of its entries apply to this review range; reviewing the whole diff: .review/walkthrough.md"* ]]
+	run git config branch.review/feature/only-wt.reviewmode
+	[ "$status" -ne 0 ]
+
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"mode    whole"* ]]
+	[[ "$output" == *"1  .review/walkthrough.md"* ]]
+}
+
 @test "start prints the first entry with its path and why" {
 	run git review start feature/x
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"[1/3] src/c.txt"* ]]
+	[[ "$output" == *"[1/4] src/c.txt"* ]]
 	[[ "$output" == *"read the new helper first"* ]]
 	# The header carries the bare path, no line suffix — clicking it just opens the
 	# file. src/c.txt is added by the PR, which used to render as src/c.txt:1.
@@ -139,7 +216,7 @@ teardown() {
 	run git review next
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "2" ]
-	[[ "$output" == *"[2/3] a.txt"* ]]
+	[[ "$output" == *"[2/4] a.txt"* ]]
 	[[ "$output" == *"then the a change"* ]]
 	# The staged diff and working tree are byte-identical before and after — the
 	# cursor is a reading position, nothing more.
@@ -153,18 +230,19 @@ teardown() {
 	run git review prev
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "1" ]
-	[[ "$output" == *"[1/3] src/c.txt"* ]]
+	[[ "$output" == *"[1/4] src/c.txt"* ]]
 }
 
 @test "next at the last entry reports the end and does not move" {
 	git review start feature/x >/dev/null
 	git review next >/dev/null
 	git review next >/dev/null
-	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "3" ]
+	git review next >/dev/null
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "4" ]
 	run git review next
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"no more entries"* ]]
-	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "3" ]
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "4" ]
 }
 
 @test "prev at the first entry reports it and does not move" {
@@ -207,10 +285,10 @@ teardown() {
 	git reset --soft HEAD^
 	run git review status
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"[1/3] on src/c.txt"* ]]
+	[[ "$output" == *"[1/4] on src/c.txt"* ]]
 	run git review next
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"[2/3] a.txt"* ]]
+	[[ "$output" == *"[2/4] a.txt"* ]]
 }
 
 @test "a walkstep past the end with HEAD at the base still reports corrupt metadata" {
@@ -220,7 +298,7 @@ teardown() {
 	git config branch.review/feature/x.reviewwalkstep 99
 	run git review next
 	[ "$status" -eq 1 ]
-	[[ "$output" == *"out of range (1..3)"* ]]
+	[[ "$output" == *"out of range (1..4)"* ]]
 	[[ "$output" == *"corrupt metadata"* ]]
 	[[ "$output" != *"HEAD has moved"* ]]
 }
@@ -228,18 +306,23 @@ teardown() {
 # ── range filtering ───────────────────────────────────────────────────────────
 
 @test "--from filters the walkthrough to the reviewed subrange" {
-	# Review only commits after c1: that range changes b.txt and src/c.txt (and the
-	# walkthrough file), but not a.txt. So a.txt drops out and the sequence becomes
-	# src/c.txt (1), b.txt (2).
+	# Review only commits after c1: that range changes b.txt and src/c.txt, but
+	# not a.txt. So a.txt drops out and the curated sequence becomes src/c.txt
+	# (1), b.txt (2) — plus the walkthrough file itself, which this subrange also
+	# touches (the "rewt"-equivalent commit that adds .review/walkthrough.md is
+	# c1's immediate successor here, so it is in range too), uncovered at (3).
 	c1="$(git rev-parse feature/x~2)"
 	run git review start feature/x --from "$c1"
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
-	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "2" ]
-	[[ "$output" == *"[1/2] src/c.txt"* ]]
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "3" ]
+	[[ "$output" == *"[1/3] src/c.txt"* ]]
 	git review next >/dev/null
 	run git review status
-	[[ "$output" == *"[2/2] on b.txt"* ]]
+	[[ "$output" == *"[2/3] on b.txt"* ]]
+	git review next >/dev/null
+	run git review status
+	[[ "$output" == *"[3/3] on .review/walkthrough.md  (uncovered)"* ]]
 }
 
 # ── heads-up and the key marker ───────────────────────────────────────────────
@@ -277,7 +360,7 @@ EOF
 	[[ "$output" == *"anything caching them is suspect"* ]]
 	# It is read before the first file, so it must print above entry 1.
 	hu="$(printf '%s\n' "$output" | grep -n 'anything caching them is suspect' | cut -d: -f1)"
-	e1="$(printf '%s\n' "$output" | grep -n '^\[1/3\]' | cut -d: -f1)"
+	e1="$(printf '%s\n' "$output" | grep -n '^\[1/4\]' | cut -d: -f1)"
 	[ -n "$hu" ]
 	[ -n "$e1" ]
 	[ "$hu" -lt "$e1" ]
@@ -287,7 +370,7 @@ EOF
 	run git review start feature/x
 	[ "$status" -eq 0 ]
 	[[ "$output" != *"Heads-up"* ]]
-	[[ "$output" == *"[1/3] src/c.txt"* ]]
+	[[ "$output" == *"[1/4] src/c.txt"* ]]
 }
 
 @test "start labels the key entries and counts them in the summary" {
@@ -307,8 +390,8 @@ finally b
 EOF
 	run git review start feature/x
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"3 entries (2 key)"* ]]
-	[[ "$output" == *"[1/3] src/c.txt  (key)"* ]]
+	[[ "$output" == *"4 entries (2 key)"* ]]
+	[[ "$output" == *"[1/4] src/c.txt  (key)"* ]]
 	# The marker is a label, never prose: it must not leak into the why.
 	[[ "$output" != *"> key"* ]]
 	[[ "$output" == *"read the new helper first"* ]]
@@ -331,11 +414,11 @@ EOF
 	git review start feature/x >/dev/null
 	run git review status
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"[1/3] on src/c.txt  (key)"* ]]
+	[[ "$output" == *"[1/4] on src/c.txt  (key)"* ]]
 	git review next >/dev/null
 	run git review status
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"[2/3] on a.txt"* ]]
+	[[ "$output" == *"[2/4] on a.txt"* ]]
 	[[ "$output" != *"(key)"* ]]
 }
 
@@ -356,17 +439,17 @@ EOF
 	run git review start feature/x
 	[ "$status" -eq 0 ]
 	# Entry 1 is unmarked: no label at all.
-	[[ "$output" == *"[1/3] src/c.txt"* ]]
+	[[ "$output" == *"[1/4] src/c.txt"* ]]
 	[[ "$output" != *"(key)"* ]]
 	run git review next
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"[2/3] a.txt  (key)"* ]]
+	[[ "$output" == *"[2/4] a.txt  (key)"* ]]
 	[[ "$output" == *"then the a change"* ]]
 	[[ "$output" != *"> key"* ]]
 	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "2" ]
 	run git review next
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"[3/3] b.txt"* ]]
+	[[ "$output" == *"[3/4] b.txt"* ]]
 	[[ "$output" != *"(key)"* ]]
 }
 
@@ -433,12 +516,12 @@ EOF
 	# The CR used to make every path differ from git's, so no entry intersected the
 	# range: start degraded to a plain whole review with a note.
 	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
-	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "3" ]
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "4" ]
 	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "1" ]
 	[[ "$output" != *"none of its entries apply"* ]]
 	# Author order, key marker and heads-up all survive the round trip.
-	[[ "$output" == *"3 entries (1 key)"* ]]
-	[[ "$output" == *"[1/3] src/c.txt  (key)"* ]]
+	[[ "$output" == *"4 entries (1 key)"* ]]
+	[[ "$output" == *"[1/4] src/c.txt  (key)"* ]]
 	[[ "$output" == *"read the new helper first"* ]]
 	[[ "$output" == *"anything caching them is suspect"* ]]
 	[[ "$output" != *"> key"* ]]
@@ -448,7 +531,7 @@ EOF
 
 	run git review next
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"[2/3] a.txt"* ]]
+	[[ "$output" == *"[2/4] a.txt"* ]]
 	[[ "$output" == *"then the a change"* ]]
 	[[ "$output" != *"(key)"* ]]
 	[[ "$output" != *$'\r'* ]]
@@ -457,7 +540,7 @@ EOF
 	# status reads the same cursor and the same walkthrough.
 	run git review status
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"[2/3] on a.txt"* ]]
+	[[ "$output" == *"[2/4] on a.txt"* ]]
 	[[ "$output" != *$'\r'* ]]
 }
 
@@ -544,10 +627,12 @@ EOF
 	run git review start feature/x
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
-	# 3 curated entries plus e.txt, appended at the end.
-	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "4" ]
-	[[ "$output" == *"not in the walkthrough are added to the end of the reading order: e.txt"* ]]
-	[[ "$output" == *"walkthrough: 4 entries"* ]]
+	# 3 curated entries plus two uncovered ones, appended at the end in git's own
+	# order: the committed walkthrough itself (".review/" sorts before "e") and
+	# e.txt.
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "5" ]
+	[[ "$output" == *"not in the walkthrough are added to the end of the reading order: .review/walkthrough.md e.txt"* ]]
+	[[ "$output" == *"walkthrough: 5 entries"* ]]
 }
 
 @test "an unannotated entry sits at the end of the reading order, marked uncovered, with no why" {
@@ -561,18 +646,26 @@ EOF
 	git review start feature/x >/dev/null
 	git review next >/dev/null
 	git review next >/dev/null
+	# Position 4 is the committed walkthrough itself, uncovered — it sorts before
+	# e.txt in git's own order.
 	run git review next
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"[4/4] e.txt  (uncovered)"* ]]
+	[[ "$output" == *"[4/5] .review/walkthrough.md  (uncovered)"* ]]
 	[[ "$output" == *"this file changes in the review and the walkthrough does not annotate it"* ]]
-	[[ "$output" != *"(key)"* ]]
 	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "4" ]
 
-	# Only past the appended entry does the sequence actually end.
+	run git review next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[5/5] e.txt  (uncovered)"* ]]
+	[[ "$output" == *"this file changes in the review and the walkthrough does not annotate it"* ]]
+	[[ "$output" != *"(key)"* ]]
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "5" ]
+
+	# Only past the last appended entry does the sequence actually end.
 	run git review next
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"no more entries"* ]]
-	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "4" ]
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "5" ]
 }
 
 @test "status marks an unannotated entry as uncovered and counts it in the total" {
@@ -587,9 +680,10 @@ EOF
 	git review next >/dev/null
 	git review next >/dev/null
 	git review next >/dev/null
+	git review next >/dev/null
 	run git review status
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"walk  [4/4] on e.txt  (uncovered)"* ]]
+	[[ "$output" == *"walk  [5/5] on e.txt  (uncovered)"* ]]
 }
 
 @test "a key entry stays marked key even when the review also has unannotated entries" {
@@ -615,8 +709,8 @@ EOF
 
 	run git review start feature/x
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"4 entries (1 key)"* ]]
-	[[ "$output" == *"[1/4] src/c.txt  (key)"* ]]
+	[[ "$output" == *"5 entries (1 key)"* ]]
+	[[ "$output" == *"[1/5] src/c.txt  (key)"* ]]
 }
 
 @test "a walk review whose recorded walkcount predates unannotated entries still reaches all of them" {
@@ -638,7 +732,11 @@ EOF
 	git review next >/dev/null
 	run git review next
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"[4/4] e.txt  (uncovered)"* ]]
+	[[ "$output" == *"[4/5] .review/walkthrough.md  (uncovered)"* ]]
+
+	run git review next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[5/5] e.txt  (uncovered)"* ]]
 
 	run git review next
 	[ "$status" -eq 0 ]
@@ -646,7 +744,7 @@ EOF
 
 	run git review status
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"walk  [4/4] on e.txt  (uncovered)"* ]]
+	[[ "$output" == *"walk  [5/5] on e.txt  (uncovered)"* ]]
 }
 
 # ── status / list ─────────────────────────────────────────────────────────────
@@ -656,7 +754,7 @@ EOF
 	git review next >/dev/null
 	run git review status
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"walk  [2/3] on a.txt"* ]]
+	[[ "$output" == *"walk  [2/4] on a.txt"* ]]
 }
 
 @test "list shows the walk review with its [k/N] position" {
@@ -664,7 +762,7 @@ EOF
 	git review next >/dev/null
 	run git review list
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"walk [2/3]"* ]]
+	[[ "$output" == *"walk [2/4]"* ]]
 	[[ "$output" == *"review/feature/x"* ]]
 }
 
@@ -689,7 +787,7 @@ EOF
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
 	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "2" ]
-	[[ "$output" == *"[2/3] a.txt"* ]]
+	[[ "$output" == *"[2/4] a.txt"* ]]
 	# The edit came back.
 	run cat a.txt
 	[[ "$output" == *"WALKFIX"* ]]
@@ -710,13 +808,14 @@ EOF
 	git review next >/dev/null
 	git review next >/dev/null
 	git review next >/dev/null
-	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "4" ]
+	git review next >/dev/null
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "5" ]
 	run git review save
 	[ "$status" -eq 0 ]
 
 	run git review continue
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"[4/4] e.txt"* ]]
+	[[ "$output" == *"[5/5] e.txt"* ]]
 }
 
 # ── abort ─────────────────────────────────────────────────────────────────────
@@ -772,7 +871,7 @@ EOF
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
 	[ "$(git config branch.review/feature/x.reviewreadonly)" = "1" ]
-	[[ "$output" == *"[1/3] src/c.txt"* ]]
+	[[ "$output" == *"[1/4] src/c.txt"* ]]
 	# finish refuses on a read-only compare regardless of walk mode.
 	run git review finish
 	[ "$status" -ne 0 ]
@@ -780,12 +879,29 @@ EOF
 	# next still works (read-only), moving the cursor.
 	run git review next
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"[2/3] a.txt"* ]]
+	[[ "$output" == *"[2/4] a.txt"* ]]
 	# abort cleans it up.
 	run git review abort
 	[ "$status" -eq 0 ]
 	run git rev-parse --verify --quiet refs/heads/review/feature/x
 	[ "$status" -ne 0 ]
+}
+
+@test "compare degrades with a note naming the sidecar when only it changed in range (T015)" {
+	# The commit right before "walkthrough" only added the sidecar; comparing up
+	# to it leaves none of the walkthrough's own entries (src/c.txt, a.txt,
+	# b.txt) in range, so this takes the degrade path — and the note must name
+	# the sidecar, exactly like start's equivalent case.
+	c2="$(git rev-parse feature/x~1)"
+	run git review compare "$c2" feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"none of its entries apply to $c2..feature/x; reading the whole diff: .review/walkthrough.md"* ]]
+	run git config branch.review/feature/x.reviewmode
+	[ "$status" -ne 0 ]
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"1  .review/walkthrough.md"* ]]
+	git review abort >/dev/null
 }
 
 @test "compare --no-walk reads the whole diff without a cursor" {
@@ -854,32 +970,34 @@ EOF
 	run git review start feature/x
 	[ "$status" -eq 0 ]
 	# The escaped path never matched the literal one, so this entry was filtered
-	# out of the sequence: a 3-entry walk with the key file silently off the path.
+	# out of the sequence: a 4-entry walk with the key file silently off the path
+	# (plus the committed walkthrough itself, uncovered, at the very end).
 	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
-	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "4" ]
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "5" ]
 	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "1" ]
-	[[ "$output" == *"4 entries (1 key)"* ]]
-	[[ "$output" == *"[1/4] $NONASCII  (key)"* ]]
+	[[ "$output" == *"5 entries (1 key)"* ]]
+	[[ "$output" == *"[1/5] $NONASCII  (key)"* ]]
 	[[ "$output" == *"read the unicode helper first"* ]]
-	# It is on the path, so it is not reported as uncovered — and nothing printed
-	# carries git's C-escaping.
-	[[ "$output" != *"not in the walkthrough"* ]]
+	# It is on the path, so it is not reported as uncovered — only the sidecar
+	# is (it always is, having no entry of its own), and nothing printed carries
+	# git's C-escaping.
+	[[ "$output" == *"not in the walkthrough are added to the end of the reading order: .review/walkthrough.md"* ]]
 	[[ "$output" != *'\'* ]]
 
 	run git review next
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"[2/4] src/c.txt"* ]]
+	[[ "$output" == *"[2/5] src/c.txt"* ]]
 	[[ "$output" != *"(key)"* ]]
 	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "2" ]
 
 	run git review prev
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"[1/4] $NONASCII  (key)"* ]]
+	[[ "$output" == *"[1/5] $NONASCII  (key)"* ]]
 	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "1" ]
 
 	run git review status
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"[1/4] on $NONASCII"* ]]
+	[[ "$output" == *"[1/5] on $NONASCII"* ]]
 }
 
 @test "a non-ASCII file left out of the walkthrough is named readably and walked as uncovered" {
@@ -890,16 +1008,21 @@ EOF
 	run git review start feature/x
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
-	# 3 curated entries plus the non-ASCII file, appended at the end.
-	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "4" ]
-	[[ "$output" == *"not in the walkthrough are added to the end of the reading order: $NONASCII"* ]]
+	# 3 curated entries plus two uncovered ones, in git's own order: the
+	# committed walkthrough itself (".review/" sorts before "src/") and the
+	# non-ASCII file.
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "5" ]
+	[[ "$output" == *"not in the walkthrough are added to the end of the reading order: .review/walkthrough.md $NONASCII"* ]]
 	[[ "$output" != *'\'* ]]
 
 	git review next >/dev/null
 	git review next >/dev/null
 	run git review next
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"[4/4] $NONASCII  (uncovered)"* ]]
+	[[ "$output" == *"[4/5] .review/walkthrough.md  (uncovered)"* ]]
+	run git review next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[5/5] $NONASCII  (uncovered)"* ]]
 	[[ "$output" != *'\'* ]]
 }
 
@@ -940,9 +1063,9 @@ EOF
 	run git review start feature/x
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
-	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "3" ]
-	[[ "$output" == *"3 entries (1 key)"* ]]
-	[[ "$output" == *"[1/3] src/c.txt  (key)"* ]]
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "4" ]
+	[[ "$output" == *"4 entries (1 key)"* ]]
+	[[ "$output" == *"[1/4] src/c.txt  (key)"* ]]
 	# The BOM used to hide the "# Walkthrough" heading from the preamble reader,
 	# which then printed the heading back at the reviewer as the heads-up.
 	[[ "$output" == *"anything caching them is suspect"* ]]
@@ -967,9 +1090,10 @@ EOF
 	# Without the strip the first entry was unparseable, so the walk was one short
 	# and src/c.txt came back as an uncovered file instead.
 	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
-	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "3" ]
-	[[ "$output" == *"[1/3] src/c.txt"* ]]
-	[[ "$output" != *"not in the walkthrough"* ]]
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "4" ]
+	[[ "$output" == *"[1/4] src/c.txt"* ]]
+	# Only the sidecar is uncovered — src/c.txt is not named in that note.
+	[[ "$output" == *"not in the walkthrough are added to the end of the reading order: .review/walkthrough.md"* ]]
 }
 
 @test "trailing whitespace on an entry heading does not drop it from the walk" {
@@ -985,17 +1109,18 @@ EOF
 	run git review start feature/x
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
-	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "3" ]
-	[[ "$output" == *"3 entries (1 key)"* ]]
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "4" ]
+	[[ "$output" == *"4 entries (1 key)"* ]]
 	# The path is shown trimmed, so it stays clickable in an IDE terminal, and the
 	# body still resolves (it is looked up by the very path that was untrimmed).
-	[[ "$output" == *"[1/3] src/c.txt  (key)"* ]]
+	[[ "$output" == *"[1/4] src/c.txt  (key)"* ]]
 	[[ "$output" == *"read the new helper first"* ]]
-	[[ "$output" != *"not in the walkthrough"* ]]
+	# Only the sidecar is uncovered — src/c.txt is not named in that note.
+	[[ "$output" == *"not in the walkthrough are added to the end of the reading order: .review/walkthrough.md"* ]]
 
 	run git review next
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"[2/3] a.txt"* ]]
+	[[ "$output" == *"[2/4] a.txt"* ]]
 	[[ "$output" == *"then the a change"* ]]
 	[[ "$output" != *"(key)"* ]]
 }

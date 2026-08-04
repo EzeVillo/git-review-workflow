@@ -126,7 +126,9 @@ EOF
 	tip="$(git rev-parse origin/feature/x)"
 	run git review start feature/x
 	[ "$status" -eq 0 ]
-	expected="$(printf 'state\treview/feature/x\tfeature/x\t%s\twalk\tapplied\t1\t3\t3\tsrc/c.txt\t1' "$tip")"
+	# total/recorded are 4, not 3: the committed walkthrough (added by
+	# recommit_walkthrough) is itself in range now, uncovered, at position 4.
+	expected="$(printf 'state\treview/feature/x\tfeature/x\t%s\twalk\tapplied\t1\t4\t4\tsrc/c.txt\t1' "$tip")"
 	run git review status --porcelain
 	[ "$status" -eq 0 ]
 	firstline="$(printf '%s\n' "$output" | sed -n '1p')"
@@ -148,18 +150,22 @@ finally b
 EOF
 	tip="$(git rev-parse origin/feature/x)"
 	git review start feature/x >/dev/null
-	# Fold a.txt and b.txt into HEAD (a partial commit), leaving only src/c.txt in
-	# the reviewed range; the cursor (still at entry 1, src/c.txt) stays in range,
-	# so this is 0/success, not the exit-3 drift case (that lives in walk.bats).
+	# Fold a.txt and b.txt into HEAD (a partial commit), leaving src/c.txt and the
+	# committed walkthrough itself (uncovered) in range; the cursor (still at
+	# entry 1, src/c.txt) stays in range, so this is 0/success, not the exit-3
+	# drift case (that lives in walk.bats).
 	git commit --quiet -m "advance a and b" -- a.txt b.txt
 
 	run git review status --porcelain
 	[ "$status" -eq 0 ]
-	expected="$(printf 'state\treview/feature/x\tfeature/x\t%s\twalk\tapplied\t1\t1\t3\tsrc/c.txt\t0' "$tip")"
+	# recorded is 4 (3 curated + the sidecar, uncovered, at start time); total
+	# drops to 2 (src/c.txt + the sidecar) once a.txt/b.txt fold out of range.
+	expected="$(printf 'state\treview/feature/x\tfeature/x\t%s\twalk\tapplied\t1\t2\t4\tsrc/c.txt\t0' "$tip")"
 	firstline="$(printf '%s\n' "$output" | sed -n '1p')"
 	[ "$firstline" = "$expected" ]
 	entries="$(printf '%s\n' "$output" | grep '^entry')"
-	[ "$entries" = "$(printf 'entry\t1\tsrc/c.txt\t0\t1')" ]
+	expected_entries="$(printf 'entry\t1\tsrc/c.txt\t0\t1\nentry\t2\t.review/walkthrough.md\t0\t0')"
+	[ "$entries" = "$expected_entries" ]
 }
 
 @test "status --porcelain output does not change when status's human-facing text is rewritten" {
@@ -223,23 +229,89 @@ unicode helper
 EOF
 
 	# --from c1 excludes c1 (a.txt) from the reviewed range: entry 1 must drop out
-	# of the derived sequence entirely, and the survivors renumber 1..3.
+	# of the derived sequence entirely, and the survivors renumber 1..3. The
+	# recommit_walkthrough commit that adds .review/walkthrough.md lands after
+	# c1 too, so the sidecar joins as a 4th, uncovered entry.
 	run git review start feature/x --from "$c1"
 	[ "$status" -eq 0 ]
 	run git review status --porcelain
 	[ "$status" -eq 0 ]
 	entries="$(printf '%s\n' "$output" | grep '^entry')"
-	expected="$(printf 'entry\t1\tb.txt\t0\t1\nentry\t2\tsrc/c.txt\t1\t1\nentry\t3\t%s\t0\t1' "$NONASCII")"
+	expected="$(printf 'entry\t1\tb.txt\t0\t1\nentry\t2\tsrc/c.txt\t1\t1\nentry\t3\t%s\t0\t1\nentry\t4\t.review/walkthrough.md\t0\t0' "$NONASCII")"
 	[ "$entries" = "$expected" ]
 }
 
-@test "status --porcelain emits zero entry lines for whole mode without an applicable walkthrough" {
+@test "status --porcelain emits an entry record per file touched in whole mode, in git's order" {
+	tip="$(git rev-parse origin/feature/x)"
 	run git review start feature/x
+	[ "$status" -eq 0 ]
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	# The state record stays exactly six fields: whole mode gains an inventory,
+	# not a cursor (FR-004) — no position/total/recorded/current.
+	firstline="$(printf '%s\n' "$output" | sed -n '1p')"
+	expected_state="$(printf 'state\treview/feature/x\tfeature/x\t%s\twhole\tnone' "$tip")"
+	[ "$firstline" = "$expected_state" ]
+	entries="$(printf '%s\n' "$output" | grep '^entry')"
+	expected_entries="$(printf 'entry\t1\ta.txt\nentry\t2\tb.txt\nentry\t3\tsrc/c.txt')"
+	[ "$entries" = "$expected_entries" ]
+}
+
+@test "status --porcelain emits zero entry lines for whole mode when the range touches no files" {
+	# A range with commits but a net-empty diff (add then remove the same file):
+	# start's guard is on commit count, not file count, so this must succeed and
+	# report an empty listing rather than degrade or error (FR-007).
+	git switch --quiet -c feature/empty
+	printf 'temp\n' >temp.txt
+	git add temp.txt
+	git commit --quiet -m add-temp
+	git rm --quiet temp.txt
+	git commit --quiet -m remove-temp
+	git push --quiet -u origin feature/empty
+	git switch --quiet develop
+
+	run git review start feature/empty
 	[ "$status" -eq 0 ]
 	run git review status --porcelain
 	[ "$status" -eq 0 ]
 	n="$(printf '%s\n' "$output" | grep -c '^entry' || true)"
 	[ "$n" -eq 0 ]
+}
+
+@test "status --porcelain whole-mode entries carry paths byte for byte, spaces/accents/quotes included" {
+	case "$(uname -s)" in
+		CYGWIN* | MINGW* | MSYS*) skip "a literal double quote in a filename is not representable as a Windows command-line argument" ;;
+	esac
+	NONASCII="src/$(printf '\346\226\207\346\233\270').txt"
+	git switch --quiet feature/x
+	printf 'v\n' >'has space.txt'
+	printf 'v\n' >'has"quote.txt'
+	printf 'u\n' >"$NONASCII"
+	git add 'has space.txt' 'has"quote.txt' "$NONASCII"
+	git commit --quiet -m "add odd paths"
+	git push --quiet origin feature/x
+	git switch --quiet develop
+
+	# Isolated to just the non-ASCII path: the quote-char file always quotes
+	# (illegal byte, independent of core.quotePath), so counting quoted lines
+	# across the whole diff would conflate the two and never equal 1.
+	nonascii_quoted="$(git -c core.quotePath=true diff --name-only develop feature/x -- "$NONASCII" | grep -c '^"' || true)"
+	[ "$nonascii_quoted" -eq 1 ] || skip "this platform does not round-trip a non-ASCII path"
+
+	lower="$(git merge-base develop origin/feature/x)"
+	tip="$(git rev-parse origin/feature/x)"
+	want="$(git -c core.quotePath=false diff --name-only "$lower" "$tip" | LC_ALL=C sort)"
+
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	# Field 3 onward (never just field 3): a path never contains a literal tab,
+	# but cut -f3- is the same "everything after the Nth tab" discipline the
+	# contract uses for free text, applied here for symmetry rather than out of
+	# necessity.
+	got="$(printf '%s\n' "$output" | grep '^entry' | cut -f3- | LC_ALL=C sort)"
+	[ "$got" = "$want" ]
 }
 
 @test "a BOM or CRLF walkthrough yields the same porcelain entry sequence as a clean one" {
@@ -320,15 +392,16 @@ EOF
 	[ "$status" -eq 0 ]
 	run git review status --porcelain
 	[ "$status" -eq 0 ]
-	# Not a separate uncovered record: two more entries, appended to the end of
-	# the reading order, unannotated — same literal-vs-quoted rules as any path.
-	# Positions 4/5 are whichever order changed_paths reports the two in, so
-	# compare id/essential/annotated only, not the exact position-to-file pairing.
+	# Not a separate uncovered record: three more entries (the two odd paths and
+	# the committed walkthrough itself), appended to the end of the reading
+	# order, unannotated — same literal-vs-quoted rules as any path. Positions
+	# 4-6 are whichever order changed_paths reports them in, so compare
+	# id/essential/annotated only, not the exact position-to-file pairing.
 	entries="$(printf '%s\n' "$output" | grep '^entry')"
 	n="$(printf '%s\n' "$entries" | grep -c . || true)"
-	[ "$n" -eq 5 ]
-	tail="$(printf '%s\n' "$entries" | tail -n 2 | cut -f3- | LC_ALL=C sort)"
-	expected="$(printf 'has space.txt\t0\t0\n%s\t0\t0' "$quotedname" | LC_ALL=C sort)"
+	[ "$n" -eq 6 ]
+	tail="$(printf '%s\n' "$entries" | tail -n 3 | cut -f3- | LC_ALL=C sort)"
+	expected="$(printf 'has space.txt\t0\t0\n.review/walkthrough.md\t0\t0\n%s\t0\t0' "$quotedname" | LC_ALL=C sort)"
 	[ "$tail" = "$expected" ]
 }
 
@@ -396,7 +469,9 @@ covered
 ## 2. a.txt
 covered
 EOF
-	# b.txt stays out of the walkthrough on purpose.
+	# b.txt stays out of the walkthrough on purpose. The committed walkthrough
+	# itself is also unannotated, and ".review/" sorts before "b" in git's own
+	# order, so it lands ahead of b.txt in the uncovered tail.
 	run git review start feature/x
 	[ "$status" -eq 0 ]
 	run git review status --porcelain
@@ -404,13 +479,16 @@ EOF
 	n="$(printf '%s\n' "$output" | grep -c '^uncovered' || true)"
 	[ "$n" -eq 0 ]
 	entries="$(printf '%s\n' "$output" | grep '^entry')"
-	expected="$(printf 'entry\t1\tsrc/c.txt\t0\t1\nentry\t2\ta.txt\t0\t1\nentry\t3\tb.txt\t0\t0')"
+	expected="$(printf 'entry\t1\tsrc/c.txt\t0\t1\nentry\t2\ta.txt\t0\t1\nentry\t3\t.review/walkthrough.md\t0\t0\nentry\t4\tb.txt\t0\t0')"
 	[ "$entries" = "$expected" ]
 	total="$(printf '%s\n' "$output" | sed -n '1p' | cut -f8)"
-	[ "$total" -eq 3 ]
+	[ "$total" -eq 4 ]
 }
 
-@test "status --porcelain marks every entry annotated when the walkthrough covers the whole range" {
+@test "status --porcelain leaves exactly the sidecar unannotated when the walkthrough covers every other file" {
+	# A walkthrough can never annotate itself, so "covers the whole range" now
+	# means every REAL file is annotated — the sidecar is structurally always
+	# the one exception, not zero.
 	recommit_walkthrough <<'EOF'
 # Walkthrough
 
@@ -429,8 +507,8 @@ EOF
 	[ "$status" -eq 0 ]
 	n="$(printf '%s\n' "$output" | grep -c '^uncovered' || true)"
 	[ "$n" -eq 0 ]
-	unannotated="$(printf '%s\n' "$output" | grep '^entry' | awk -F'\t' '$5 == 0' | grep -c . || true)"
-	[ "$unannotated" -eq 0 ]
+	unannotated="$(printf '%s\n' "$output" | grep '^entry' | awk -F'\t' '$5 == 0')"
+	[ "$unannotated" = "$(printf 'entry\t4\t.review/walkthrough.md\t0\t0')" ]
 }
 
 # ── step entry records ────────────────────────────────────────────────────────

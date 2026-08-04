@@ -160,7 +160,7 @@ if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$bcommit")" && [ -n "$wtconte
 		walkpaths="$(walk_reading_order "$bcommit" "$acommit")"
 		walkcount="$(printf '%s\n' "$walkpaths" | grep -c . || true)"
 	else
-		degradedfiles="$(changed_paths "$acommit" "$bcommit" | grep -v '^\.review/' | tr '\n' ' ')"
+		degradedfiles="$(range_files "$bcommit" "$acommit" | tr '\n' ' ')"
 		echo "note: $b has a walkthrough, but none of its entries apply to $a..$b; reading the whole diff: $degradedfiles"
 	fi
 fi

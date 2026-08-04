@@ -114,8 +114,8 @@ git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 # from committed history (base..HEAD), so working-tree edits the author has not
 # committed are invisible here; annotating them would be annotating incomplete
 # work. The walkthrough itself is expected to be dirty while you author it, so
-# anything under .review/ is ignored (mirrors range_files excluding it). Purely a
-# diagnostic — the sole use is to enrich a refusal or emit a note.
+# anything under .review/ is ignored (mirrors annotatable_files excluding it).
+# Purely a diagnostic — the sole use is to enrich a refusal or emit a note.
 has_uncommitted() {
 	# True when porcelain has any line for a path outside .review/ (grep -qv exits 0
 	# as soon as one non-.review line exists; 1 on a clean or sidecar-only tree).
@@ -171,9 +171,15 @@ toplevel="$(git rev-parse --show-toplevel)"
 wtrel=".review/walkthrough.md"
 wtpath="$toplevel/$wtrel"
 
-# The reviewable file set: everything the PR changes, minus the sidecar directory
-# itself (a walkthrough never annotates .review/).
-range_files() {
+# The annotatable file set: everything the PR changes, minus the sidecar
+# directory itself (a walkthrough never annotates .review/ — the only place in
+# the project this filter still applies; every reader of "what does this
+# review touch" now includes it, since it is content like any other file the
+# PR changes). Named distinctly from git-review-lib.sh's range_files, which
+# this script also has in scope via the source above and which does NOT
+# filter: same shape, opposite policy, so a shared name here would silently
+# shadow one or the other depending on source order.
+annotatable_files() {
 	changed_paths "$lower" "$tip" | grep -v '^\.review/' || true
 }
 
@@ -181,7 +187,7 @@ if [ "$sub" = init ]; then
 	if [ -e "$wtpath" ] && [ "$force" -eq 0 ]; then
 		die "$wtrel already exists; pass --force to overwrite"
 	fi
-	files="$(range_files)"
+	files="$(annotatable_files)"
 	[ -n "$files" ] || die "no changed files vs $base to list"
 
 	mkdir -p "$toplevel/.review"
@@ -310,7 +316,7 @@ gd="$(git rev-parse --git-dir)"
 rf="$gd/walkthrough-range.$$"
 ef="$gd/walkthrough-entries.$$"
 trap 'rm -f "$rf" "$ef"' EXIT
-range_files | LC_ALL=C sort >"$rf"
+annotatable_files | LC_ALL=C sort >"$rf"
 printf '%s\n' "$entries" | cut -f2- | LC_ALL=C sort >"$ef"
 missing="$(comm -23 "$rf" "$ef")"
 extra="$(comm -13 "$rf" "$ef")"

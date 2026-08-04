@@ -171,12 +171,17 @@ ignora. La lista es exactamente: `openEntry`, `openChange`, `showWhy`, `next`,
 `prev`, `refresh`, `showUncovered`, `installCli`, `outOfRangeHelp`,
 `continueReview`.
 
-`continueReview` es el único que lleva un dato además del `type`, y es un
-**índice** en `PanelModel.reviews` (`{type, index}`), nunca el nombre de la rama.
-El host lo resuelve contra su propia copia del modelo y descarta lo que no caiga
-en rango: así el argumento que termina en la CLI sale siempre del estado del
-host, y nada que venga del webview se le pasa a un proceso. Un `index` ausente,
-no entero o fuera de rango se ignora igual que un `type` desconocido.
+`continueReview`, `openEntry` y `openChange` son los que llevan un dato además
+del `type`, y es un **índice** (`{type, index}`), nunca el nombre de la rama ni
+un path: en `continueReview` es la posición en `PanelModel.reviews`; en
+`openEntry`/`openChange` es `PanelEntry.position` dentro de `PanelModel.files`
+— sólo aplica en modo `whole` (004), que no tiene una entrada "actual" a la que
+caer por default como sí tienen `step`/`walk`. El host lo resuelve contra su
+propia copia del modelo y descarta lo que no caiga en rango: así el argumento
+que termina en la CLI sale siempre del estado del host, y nada que venga del
+webview se le pasa a un proceso. Un `index` ausente, no entero o fuera de rango
+se ignora igual que un `type` desconocido — en `openEntry`/`openChange` eso
+significa caer al comportamiento de siempre (la entrada actual, si la hay).
 
 En el sentido inverso, el host postea el `PanelModel` entero
 (`{type: "model", model}`) y el webview lo dibuja de cero. Todo el contenido

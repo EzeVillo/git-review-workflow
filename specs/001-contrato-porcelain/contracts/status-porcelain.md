@@ -86,25 +86,36 @@ Ejemplo, modo step, commit 2 de 9:
 state	review/feat-x	origin/feat-x	a1b2c3d4e5f6...	step	none	2	9	9	9fe1c0d
 ```
 
-## Registros `entry` (cero o más, uno por posición de la secuencia)
+## Registros `entry` (cero o más, uno por posición de la secuencia o del listado)
 
 ```
 entry<TAB>position<TAB>id[<TAB>essential<TAB>annotated|<TAB>banked]
 ```
 
-- `position`: 1-based, mismo orden que recorren `next`/`prev`.
-- `id`: path (modo walk) o SHA corto de commit (modo step).
+- `position`: 1-based. En `step`/`walk`, el mismo orden que recorren
+  `next`/`prev`. En `whole` no hay cursor: es sólo la posición dentro del
+  listado, un inventario y no una secuencia — el registro `state` de `whole`
+  sigue sin `position`/`total`/`recorded`/`current`.
+- `id`: un SHA corto de commit sólo en modo `step`. En los otros dos modos
+  —`walk` y `whole`— es un path, con las mismas reglas de bytes que cualquier
+  otro path de este contrato (ver más abajo).
 - En modo walk, dos campos finales: `essential` (`1`/`0`) y `annotated`
   (`1`/`0`). En modo step, uno solo: `banked` (`1`/`0`, existe
-  `refs/review-edits/<src>/<position>`). El grupo que no aplica al modo se
-  **omite** entero, no se emite vacío (Acceptance Scenario 2 de US1). En
-  `whole` no hay registros `entry` en absoluto.
+  `refs/review-edits/<src>/<position>`). En modo **whole ninguno de los dos
+  grupos**: el registro termina en el `id`. El grupo que no aplica al modo se
+  **omite** entero, no se emite vacío (Acceptance Scenario 2 de US1).
 - `annotated`: `0` cuando el path cambia en el rango de la review pero no
   tiene entrada propia en el walkthrough — la secuencia lo agrega al final del
   orden de lectura en vez de omitirlo, para que un review no llegue al final
   con archivos del PR que el reviewer nunca vio (el precedente es `git
   status`, que no esconde los untracked). `total` cuenta estas posiciones
-  igual que las curadas.
+  igual que las curadas. El archivo del propio sidecar (`.review/`) entra en
+  esta categoría igual que cualquier otro: un walkthrough nunca se anota a sí
+  mismo, así que un review con walkthrough committeado siempre tiene al menos
+  una posición sin anotar.
+- En `whole`, `entry` lista los archivos que el rango toca — el mismo dato que
+  `walk` deriva para su orden de lectura, sin curaduría ni cursor. Un rango
+  vacío produce cero registros `entry` y exit `0`, nunca un error.
 
 Ejemplo (walk, 3 entradas, la segunda esencial, la tercera sin anotar):
 
@@ -112,6 +123,13 @@ Ejemplo (walk, 3 entradas, la segunda esencial, la tercera sin anotar):
 entry	1	src/a.ts	0	1
 entry	2	src/b.ts	1	1
 entry	3	src/c.ts	0	0
+```
+
+Ejemplo (whole, 2 archivos):
+
+```
+entry	1	README.md
+entry	2	src/quoting.ts
 ```
 
 ## Paths (FR-015, FR-016)
@@ -132,8 +150,78 @@ Todo path se emite **byte a byte tal como lo devuelve `changed_paths`**, que es
   git (la señal es la comilla inicial). Es un caso extremo: esos dos bytes son
   ilegales en un path de Windows.
 
-Vale igual para `state.current` en modo walk que para el `id` de `entry`: los
-dos son el mismo dato de la misma fuente.
+Vale igual para `state.current` en modo walk que para el `id` de `entry` en
+walk o en whole: son el mismo dato de la misma fuente, sin importar el modo.
+
+## Registros `subject`, `author` y `base`: texto escrito por una persona
+
+```
+subject<TAB>position<TAB>asunto
+author<TAB>position<TAB>autor
+base<TAB>base
+```
+
+A diferencia de un path, el contenido de estos tres registros lo escribe una
+persona, no git, y **puede contener el separador de campos** (un tab):
+
+| Byte    | ¿Puede aparecer en el asunto? | ¿En el nombre del autor? |
+|---------|-------------------------------|---------------------------|
+| tab     | **sí**                        | **sí**                    |
+| newline | no (`%s` es la primera línea) | no (git lo elimina del ident al commitear) |
+
+De ahí la regla, que aplica a los tres y a cualquier registro futuro con texto
+libre:
+
+> **El texto libre es siempre el último campo de su registro, y hay a lo sumo
+> uno por registro.** Se emite byte a byte, sin escapar, sin citar y sin
+> sustituir nada.
+
+Un consumidor lee ese campo como *"todo lo que sigue al N-ésimo tab, hasta el
+fin de línea"* — no como *"el campo N-ésimo"*. Es la misma disciplina que este
+contrato ya aplica a los paths, por el motivo opuesto: allá el separador no
+puede aparecer en el dato, acá sí, y por eso el dato va donde no hay nada que
+desplazar. Corolario de diseño: estos registros **no admiten campos nuevos al
+final**. Lo que haya que agregar en el futuro va en un registro propio.
+
+**`subject`** — emitido sólo en modo `step`, una vez por posición de la
+secuencia, en el mismo orden que los registros `entry`. `asunto` es la primera
+línea del mensaje del commit, tal cual: puede contener tabs, puede estar vacío
+(un commit cuyo mensaje no tiene primera línea), nunca contiene un newline.
+
+**`author`** — emitido sólo en modo `step`, una vez por posición, en el mismo
+orden. `autor` es el nombre y correo en la forma `Nombre <correo>`, tal como
+los muestra la salida humana; puede contener tabs, nunca un newline. Es el
+autor, no quien commiteó.
+
+**`base`** — emitido sólo en modo `whole`, y sólo si hay una base registrada
+(`branch.<rama>.reviewbase`). Sin base, el registro se omite entero — omitir,
+nunca en blanco, la misma regla que el resto del contrato. Registro único, sin
+posición: la base es de la review, no de una entrada.
+
+Ejemplo completo (modo step, 2 commits, el primero con ediciones):
+
+```
+state	review/feat-x	feat-x	a1b2c3d4e5f6…	step	none	1	2	2	6bce6d1
+entry	1	6bce6d1	1
+entry	2	f307e69	0
+subject	1	feat: exponer el asunto en porcelain
+subject	2	test: cubrir los bytes hostiles
+author	1	Eze Villo <ezevillodev@gmail.com>
+author	2	Eze Villo <ezevillodev@gmail.com>
+```
+
+El orden entre grupos de registros no es significativo; el orden **dentro** de
+un grupo sí lo es, y coincide con el de `entry`. Un consumidor debe emparejar
+por `position`, nunca por orden de aparición.
+
+Ejemplo (modo whole, con base y archivos):
+
+```
+state	review/fix-quoting	fix-quoting	1a2b3c4d5e6f…	whole	none
+entry	1	README.md
+entry	2	src/quoting.ts
+base	main
+```
 
 ## `--why <path>`
 
@@ -155,3 +243,15 @@ payload, igual que `git show`/`git cat-file -p`.
 
 Mismos exit codes 1/2/3 que `--porcelain` para "error" / "no hay review activa"
 / "cursor fuera de rango", evaluados antes de llegar a la validación de modo.
+
+## Exclusiones registradas
+
+Datos que la salida humana muestra y que este contrato **deliberadamente** no
+expone, con su motivo:
+
+| Dato                                  | Motivo                                                                                                                       |
+|----------------------------------------|-------------------------------------------------------------------------------------------------------------------------------|
+| Cuerpo del mensaje de un commit       | Prosa multi-línea: no puede viajar en un registro de una línea, y exponerla requeriría una superficie de stream propia. |
+| Diffstat de un commit                 | El consumidor ya alcanza esos mismos archivos por la superficie de diff de su host; duplicarlo chocaría con la exclusión de interfaz de diff propia (`002-extension-vscode`). |
+| Textos de ayuda (`next`, `banked …`)  | Son la guía al usuario humano sobre qué comando correr, no estado de la review.                                       |
+| Tipo de cambio de un archivo del listado de `whole` (agregado/modificado/eliminado) | `walk` tampoco lo emite para sus entradas; agregarlo es una decisión separable que ninguna feature tomó todavía. |

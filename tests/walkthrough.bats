@@ -70,6 +70,32 @@ teardown() {
 	[ "$output" = "0" ]
 }
 
+@test "build's drift check never flags the committed sidecar itself as missing (FR-022)" {
+	# Every other reader of "what does this review touch" now includes the
+	# sidecar once it is committed (FR-020) — build's drift check is the one
+	# place that must keep excluding it, or every author's first build after
+	# committing their own walkthrough would fail on itself.
+	mkdir -p .review
+	cat >.review/walkthrough.md <<'EOF'
+# Walkthrough
+
+## 1. a.txt
+why a
+
+## 2. b.txt
+why b
+
+## 3. src/c.txt
+why c
+EOF
+	git add .review/walkthrough.md
+	git commit --quiet -m "commit walkthrough"
+	run git review walkthrough build --check
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"walkthrough ok"* ]]
+	[[ "$output" != *"missing from the walkthrough"* ]]
+}
+
 @test "init refuses to overwrite an existing walkthrough without --force" {
 	git review walkthrough init
 	before="$(cat .review/walkthrough.md)"

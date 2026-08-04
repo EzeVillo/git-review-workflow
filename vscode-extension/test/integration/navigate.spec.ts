@@ -33,7 +33,11 @@ async function waitUntil(predicate: (state: ReviewState) => boolean, api: GitRev
 }
 
 describe("US4: avanzar y retroceder en la secuencia", function () {
-    this.timeout(60000);
+    // 60s alcanzaba antes de 004: el primer test ahora hace un salto más (el
+    // propio walkthrough se suma como entrada, FR-020) y en una corrida cargada
+    // se quedaba corto, no colgado — cada paso es un invoke real de la CLI más
+    // un openChange real contra la extensión de git.
+    this.timeout(120000);
     const repo = sharedFixtureRepo();
 
     afterEach(async () => {
@@ -65,8 +69,10 @@ describe("US4: avanzar y retroceder en la secuencia", function () {
         await vscode.commands.executeCommand("gitReview.next");
         state = api.getState();
         assert.strictEqual(state.state?.position, 2);
+        // total es 4, no 3: el propio walkthrough se suma como una cuarta
+        // entrada, sin anotar, al final (004 FR-020).
         let porcelain = gitReview(["status", "--porcelain"], repo.dir);
-        assert.match(porcelain.stdout.split("\n")[0], /\t2\t3\t3\t/);
+        assert.match(porcelain.stdout.split("\n")[0], /\t2\t4\t4\t/);
         model = await api.getPanelModel();
         assert.strictEqual(model.atFirst, false, "en el medio los dos controles sirven");
         assert.strictEqual(model.atLast, false);
@@ -75,14 +81,29 @@ describe("US4: avanzar y retroceder en la secuencia", function () {
         state = api.getState();
         assert.strictEqual(state.state?.position, 3);
         model = await api.getPanelModel();
+        // c.ts sigue siendo intermedia con el total en 4: el último puesto pasó
+        // a ser el propio walkthrough.
+        assert.strictEqual(model.atLast, false);
+        assert.strictEqual(model.atFirst, false);
+
+        // Por la CLI directo, no por el comando: la entrada 4 es el propio
+        // walkthrough (.md), y el comando encadena un openChange automático
+        // (navigate.ts) — abrir su diff no es lo que este test ejercita, y no
+        // vale arriesgar la corrida a como lo resuelva el editor para un
+        // Markdown. El estado sigue viniendo de status --porcelain (FR-015),
+        // así que api.refresh() ve el mismo movimiento que vería el comando.
+        gitReview(["next"], repo.dir);
+        state = await api.refresh();
+        assert.strictEqual(state.state?.position, 4);
+        model = await api.getPanelModel();
         assert.strictEqual(model.atLast, true, "en la ultima no hay a donde avanzar");
         assert.strictEqual(model.atFirst, false);
 
         await vscode.commands.executeCommand("gitReview.prev");
         state = api.getState();
-        assert.strictEqual(state.state?.position, 2);
+        assert.strictEqual(state.state?.position, 3);
         porcelain = gitReview(["status", "--porcelain"], repo.dir);
-        assert.match(porcelain.stdout.split("\n")[0], /\t2\t3\t3\t/);
+        assert.match(porcelain.stdout.split("\n")[0], /\t3\t4\t4\t/);
         model = await api.getPanelModel();
         assert.strictEqual(model.atFirst, false);
         assert.strictEqual(model.atLast, false);
@@ -132,13 +153,25 @@ describe("US4: avanzar y retroceder en la secuencia", function () {
         const api = await getTestApi();
         let state = await api.refresh();
         assert.strictEqual(state.state?.position, 1);
-        assert.strictEqual(state.state?.total, 1);
+        // El total es 2, no 1: el archivo cubierto más el propio walkthrough,
+        // sin anotar, al final (004 FR-020) — ya no son la misma posición.
+        assert.strictEqual(state.state?.total, 2);
 
-        // Una sola entrada: es a la vez el principio y el final, y el panel
-        // deshabilita los dos controles en vez de dejar dos clics mudos.
         let model = await api.getPanelModel();
         assert.strictEqual(model.atFirst, true);
-        assert.strictEqual(model.atLast, true);
+        assert.strictEqual(model.atLast, false);
+
+        // Avanzar a la entrada del propio walkthrough: ahí es donde vive ahora
+        // el límite que el resto del test ejercita. Por la CLI directo, no por
+        // el comando: la entrada 2 es el propio walkthrough (.md) y el comando
+        // encadenaría un openChange automático sobre ella (navigate.ts), que no
+        // es lo que este test ejercita.
+        gitReview(["next"], repo.dir);
+        state = await api.refresh();
+        assert.strictEqual(state.state?.position, 2);
+        model = await api.getPanelModel();
+        assert.strictEqual(model.atFirst, false);
+        assert.strictEqual(model.atLast, true, "el panel deshabilita avanzar en la última entrada");
 
         // El contrato del que depende el aviso: en un extremo la CLI no falla
         // (exit 0) y deja el mensaje en stdout, no en stderr. Si esto cambiara,
@@ -148,12 +181,12 @@ describe("US4: avanzar y retroceder en la secuencia", function () {
         assert.match(atEnd.stdout, /no more entries/);
         assert.strictEqual(atEnd.stderr.trim(), "");
 
-        // Y la review tiene que seguir siendo valida en posicion 1 despues de
+        // Y la review tiene que seguir siendo valida en posicion 2 despues de
         // intentarlo por el comando, nunca un estado a medias.
         await vscode.commands.executeCommand("gitReview.next");
         state = api.getState();
         assert.strictEqual(state.situation, "review");
-        assert.strictEqual(state.state?.position, 1);
+        assert.strictEqual(state.state?.position, 2);
 
         await vscode.commands.executeCommand("gitReview.prev");
         state = api.getState();
@@ -162,7 +195,7 @@ describe("US4: avanzar y retroceder en la secuencia", function () {
 
         model = await api.getPanelModel();
         assert.strictEqual(model.atFirst, true);
-        assert.strictEqual(model.atLast, true);
+        assert.strictEqual(model.atLast, false);
     });
 
     it("correr el verbo en la terminal actualiza el panel sin reabrirlo (AC4, FR-019)", async () => {

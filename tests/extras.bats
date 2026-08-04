@@ -49,6 +49,30 @@ teardown() {
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"review of feature/x"* ]]
 	[[ "$output" == *"mode    whole"* ]]
+	# FR-001: the file the PR touches is listed, numbered, not just implied by
+	# "mode whole".
+	[[ "$output" == *"1  f.txt"* ]]
+}
+
+@test "review status on a whole review with an empty range says so explicitly" {
+	# A range with commits but a net-empty diff (add then remove the same file):
+	# start's guard is on commit count, not file count, so this must succeed and
+	# say explicitly that there is nothing to list, never a blank section
+	# (FR-007).
+	git switch --quiet -c feature/empty
+	printf 'temp\n' >temp.txt
+	git add temp.txt
+	git commit --quiet -m add-temp
+	git rm --quiet temp.txt
+	git commit --quiet -m remove-temp
+	git push --quiet -u origin feature/empty
+	git switch --quiet develop
+
+	git review start feature/empty
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"mode    whole"* ]]
+	[[ "$output" == *"no files"* ]]
 }
 
 @test "review status reports step progress" {

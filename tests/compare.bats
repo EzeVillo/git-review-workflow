@@ -205,13 +205,16 @@ EOF
 	run git review compare v1.0 wt-fixture
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/wt-fixture.reviewmode)" = "walk" ]
-	# app.txt (curated) + more.txt (unannotated, appended); the walkthrough
-	# sidecar itself is excluded from the reading order.
-	[ "$(git config branch.review/wt-fixture.reviewwalkcount)" = "2" ]
-	[[ "$output" == *"[1/2] app.txt"* ]]
-	[[ "$output" == *"not in the walkthrough are added to the end of the reading order: more.txt"* ]]
+	# app.txt (curated) + the walkthrough sidecar itself and more.txt (both
+	# unannotated, appended in git's own order — ".review/" sorts before "m").
+	[ "$(git config branch.review/wt-fixture.reviewwalkcount)" = "3" ]
+	[[ "$output" == *"[1/3] app.txt"* ]]
+	[[ "$output" == *"not in the walkthrough are added to the end of the reading order: .review/walkthrough.md more.txt"* ]]
 
 	run git review next
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"[2/2] more.txt  (uncovered)"* ]]
+	[[ "$output" == *"[2/3] .review/walkthrough.md  (uncovered)"* ]]
+	run git review next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[3/3] more.txt  (uncovered)"* ]]
 }

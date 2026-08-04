@@ -68,20 +68,23 @@ describe("US1: ver donde estoy en el walkthrough", function () {
         assert.strictEqual(state.situation, "review");
         assert.strictEqual(state.state?.mode, "walk");
         assert.strictEqual(state.state?.position, 2);
-        assert.strictEqual(state.state?.total, 9);
-        assert.strictEqual(state.entries.length, 9);
+        // 7 curados + 3 no cubiertos: el propio walkthrough (que ".review/"
+        // ordena antes que "src/", así que va primero de los tres) más los dos
+        // archivos sin entrada (004 FR-020).
+        assert.strictEqual(state.state?.total, 10);
+        assert.strictEqual(state.entries.length, 10);
 
         const order = state.entries.map((e) => displayOf(e.id));
         assert.deepStrictEqual(order, [
             "src/a.ts", "src/b.ts", "src/c.ts", "src/d.ts", "src/e.ts", "src/f.ts", "src/g.ts",
-            "src/uncovered1.ts", "src/uncovered2.ts",
+            ".review/walkthrough.md", "src/uncovered1.ts", "src/uncovered2.ts",
         ]);
 
         const essentialFlags = state.entries.map((e) => e.essential);
-        assert.deepStrictEqual(essentialFlags, [false, false, true, false, false, false, false, false, false]);
+        assert.deepStrictEqual(essentialFlags, [false, false, true, false, false, false, false, false, false, false]);
 
         const annotatedFlags = state.entries.map((e) => e.annotated);
-        assert.deepStrictEqual(annotatedFlags, [true, true, true, true, true, true, true, false, false]);
+        assert.deepStrictEqual(annotatedFlags, [true, true, true, true, true, true, true, false, false, false]);
 
         // El panel: la entrada actual es el contenido; la secuencia completa
         // (incluida la cola no cubierta) es un acceso separado (FR-005, FR-005a).
@@ -89,7 +92,7 @@ describe("US1: ver donde estoy en el walkthrough", function () {
         assert.strictEqual(model.situation, "review");
         assert.strictEqual(model.mode, "walk");
         assert.strictEqual(model.position, 2);
-        assert.strictEqual(model.total, 9);
+        assert.strictEqual(model.total, 10);
         assert.strictEqual(model.baseMoved, false);
         assert.strictEqual(model.degraded, false);
         assert.deepStrictEqual(model.current, {
@@ -99,7 +102,7 @@ describe("US1: ver donde estoy en el walkthrough", function () {
             annotated: true,
             banked: false,
         });
-        assert.strictEqual(model.entryCount, 9);
+        assert.strictEqual(model.entryCount, 10);
         assert.deepStrictEqual(model.why, {state: "present", text: "explica b\n"});
 
         // Lo que alimenta el QuickPick de la secuencia: orden de la CLI, la
@@ -113,16 +116,18 @@ describe("US1: ver donde estoy en el walkthrough", function () {
             "05  src/e.ts",
             "06  src/f.ts",
             "07  src/g.ts",
-            "08  src/uncovered1.ts",
-            "09  src/uncovered2.ts",
+            "08  .review/walkthrough.md",
+            "09  src/uncovered1.ts",
+            "10  src/uncovered2.ts",
         ]);
         assert.strictEqual(picks[1].description, "current");
         assert.strictEqual(picks[2].description, "key");
         assert.strictEqual(picks[7].description, "uncovered");
         assert.strictEqual(picks[8].description, "uncovered");
+        assert.strictEqual(picks[9].description, "uncovered");
     });
 
-    it("mode = whole sin walkthrough: sin secuencia ni entrada actual, y sin error (US1 escenario 3)", async () => {
+    it("mode = whole sin walkthrough: sin cursor ni entrada actual, pero con el listado de archivos (US1 escenario 3 / 004 US1)", async () => {
         const branch = "us1-whole";
         createBranchWithChanges(repo, branch, {"src/x.ts": "x\n"});
         startReview(repo, branch, ["--no-walk"]);
@@ -133,15 +138,22 @@ describe("US1: ver donde estoy en el walkthrough", function () {
         assert.strictEqual(state.situation, "review");
         assert.strictEqual(state.state?.mode, "whole");
         assert.strictEqual(state.state?.walkthrough, "none");
-        assert.strictEqual(state.entries.length, 0);
+        // whole lista los archivos del rango (004 FR-002): un registro entry por
+        // archivo, sin que eso sea una secuencia con cursor.
+        assert.strictEqual(state.entries.length, 1);
+        assert.strictEqual(displayOf(state.entries[0].id), "src/x.ts");
 
-        // Sin walkthrough el panel no ofrece secuencia ni navegación (FR-026),
-        // y no es un error.
+        // Sin walkthrough el panel no ofrece cursor ni navegación (FR-026), y no
+        // es un error — pero sí lista el archivo (004 FR-010).
         const model = await api.getPanelModel();
         assert.strictEqual(model.situation, "review");
         assert.strictEqual(model.mode, "whole");
-        assert.strictEqual(model.entryCount, 0);
+        assert.strictEqual(model.entryCount, 1);
+        assert.deepStrictEqual(model.files, [
+            {position: 1, display: "src/x.ts", essential: false, annotated: true, banked: false},
+        ]);
         assert.strictEqual(model.current, undefined);
+        assert.strictEqual(model.position, undefined, "whole no tiene cursor");
         assert.strictEqual(model.why, undefined);
         assert.strictEqual(model.degraded, false);
         assert.strictEqual(model.stderr, undefined);
@@ -200,16 +212,23 @@ describe("US1: ver donde estoy en el walkthrough", function () {
         assert.strictEqual(state.situation, "review");
         assert.strictEqual(state.state?.mode, "whole");
         assert.strictEqual(state.state?.walkthrough, "degraded");
-        // whole nunca tiene registros entry, degradado o no — el detalle por
-        // archivo ya no se reporta acá (era redundante con el diff completo, que
-        // el working tree ya muestra); sólo queda la advertencia agregada.
-        assert.strictEqual(state.entries.length, 0);
+        // Degradado o no, whole lista los archivos del rango (004 FR-001): acá
+        // son dos — el propio walkthrough committeado y other.ts —, ya no cero.
+        assert.strictEqual(state.entries.length, 2);
+        assert.deepStrictEqual(
+            state.entries.map((e) => displayOf(e.id)),
+            [".review/walkthrough.md", "src/other.ts"]
+        );
 
         // Degradado se informa (FR-010) y la review sigue usable como una whole
-        // cualquiera: sin secuencia que ofrecer desde el panel.
+        // cualquiera, con su listado (004 FR-010).
         const model = await api.getPanelModel();
         assert.strictEqual(model.situation, "review");
         assert.strictEqual(model.degraded, true);
-        assert.strictEqual(model.entryCount, 0);
+        assert.strictEqual(model.entryCount, 2);
+        assert.deepStrictEqual(
+            model.files.map((f) => f.display),
+            [".review/walkthrough.md", "src/other.ts"]
+        );
     });
 });

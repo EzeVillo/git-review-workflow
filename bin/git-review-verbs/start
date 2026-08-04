@@ -345,7 +345,7 @@ if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$tip")" && [ -n "$wtcontent" 
 		walkpaths="$(walk_reading_order "$tip" "$lower")"
 		walkcount="$(printf '%s\n' "$walkpaths" | grep -c . || true)"
 	else
-		degradedfiles="$(changed_paths "$lower" "$tip" | grep -v '^\.review/' | tr '\n' ' ')"
+		degradedfiles="$(range_files "$tip" "$lower" | tr '\n' ' ')"
 		echo "note: $src has a walkthrough, but none of its entries apply to this review range; reviewing the whole diff: $degradedfiles"
 	fi
 fi

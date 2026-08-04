@@ -372,7 +372,10 @@ Has two independent axes — **range** (where the review starts) and **layout**
   file that changes in the range but has no entry of its own — a stale
   walkthrough is the common case — is not left out either: it is appended to the
   end of the reading order, marked `(uncovered)` instead of `(key)`, so a review
-  never reaches `git review finish` with PR files you never saw.
+  never reaches `git review finish` with PR files you never saw — including the
+  committed walkthrough itself, which joins that same uncovered tail: a
+  walkthrough can never annotate itself, but it is content the PR adds like any
+  other file, so it is never the one file no review shows you.
 - `--no-walk` — ignore any walkthrough and review the whole diff plainly. `--step`
   also takes precedence over walk (they are two spellings of the same layout
   axis), so `--step` wins with no error — it just prints a note that the PR's
@@ -531,7 +534,9 @@ and are never touched.
 
 Shows the current review: source PR, mode, and — in `--step` mode — which commit
 you are on (`[k/N]`) and which steps have banked edits. In walk mode it shows the
-reading cursor: `walk  [k/N] on <path>`.
+reading cursor: `walk  [k/N] on <path>`. In whole mode (no walkthrough — the
+default) it lists the files the range touches, numbered, with no cursor; an
+empty range says so explicitly instead of printing nothing.
 
 - `--porcelain` — machine-readable output for scripts and editor integrations:
   stable, tab-separated lines (see below). Read-only, exactly like the human
@@ -573,14 +578,18 @@ base	<base>
   `recorded` is what was recorded when the review started — they differ once the
   base has drifted, even while the cursor is still in range. `essential` (`1`/`0`)
   appears only in walk mode.
-- `entry` — zero or more, one per position in the reading order (walk paths or
-  step commits, the same order `next`/`prev` move through), including a walk
-  entry the walkthrough does not annotate — appended to the end of the order
-  rather than omitted. In walk mode the trailing fields are `essential` (`1`/`0`)
-  and `annotated` (`1`/`0`, `0` for a file the walkthrough has no entry for); in
-  step mode it is just `banked` (`1`/`0`, has a banked edit under
-  `refs/review-edits/`); omitted entirely in whole mode, since there is no
-  sequence to report.
+- `entry` — zero or more. In `step`/`walk`, one per position in the reading
+  order (walk paths or step commits, the same order `next`/`prev` move
+  through), including a walk entry the walkthrough does not annotate —
+  appended to the end of the order rather than omitted. In whole mode, one per
+  file the range touches — a listing, not a sequence: `state` still carries no
+  `position`/`total`/`recorded`/`current` in whole. In walk mode the trailing
+  fields are `essential` (`1`/`0`) and `annotated` (`1`/`0`, `0` for a file the
+  walkthrough has no entry for — the committed walkthrough itself is always in
+  this group, since it can never annotate itself); in step mode it is just
+  `banked` (`1`/`0`, has a banked edit under `refs/review-edits/`); in whole
+  mode neither group is present, so the record ends at the path. An empty
+  range produces zero `entry` records and still exits `0`.
 - `subject` and `author` — step mode only, one of each per position, carrying
   the commit's subject line and its author as `Name <email>`. Pair them with
   `entry` by `position`, never by order of appearance. A subject can be empty (a

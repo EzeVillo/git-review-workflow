@@ -42,7 +42,7 @@ export interface PorcelainResult {
     entries: EntryRecord[];
     /**
      * Asunto de cada commit de la secuencia, por `position` — sólo en modo step
-     * (contracts/status-porcelain-v2.md).
+     * (contracts/status-porcelain.md).
      *
      * Mapas y no campos de `EntryRecord` por dos razones: emparejar por
      * `position` es lo que el contrato exige (nunca por orden de aparición), y
@@ -180,9 +180,12 @@ export function parsePorcelain(stdout: string): PorcelainResult {
                 }
                 const position = toInt(fields[1]);
                 const rawId = fields[2];
+                // El id es un SHA sólo en step; en los otros dos modos es un
+                // path — incluido whole, que no tenía registros entry antes de
+                // esta feature (research.md Decisión 4).
                 const entry: EntryRecord = {
                     position,
-                    id: state.mode === "walk" ? toPathRef(rawId) : rawId,
+                    id: state.mode === "step" ? rawId : toPathRef(rawId),
                 };
                 if (state.mode === "walk") {
                     entry.essential = toBool(fields[3]);

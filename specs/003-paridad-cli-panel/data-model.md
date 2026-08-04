@@ -123,4 +123,4 @@ explicaciones:
 |--------------------------|-----------------------------------------------------------------------------|
 | Commit de la secuencia   | `EntryRecord` + su entrada en `subjects`/`authors`, emparejadas por `position` |
 | Encabezado de la review  | `StateRecord.source` / `.tip` (ya existían) + el registro `base`             |
-| Exclusión deliberada     | la tabla de exclusiones de `contracts/status-porcelain-v2.md`                |
+| Exclusión deliberada     | la tabla de exclusiones de `001-contrato-porcelain/contracts/status-porcelain.md` (absorbido ahí por `004`) |

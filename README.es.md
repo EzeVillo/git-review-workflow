@@ -380,7 +380,10 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   propia — el caso típico es un walkthrough desactualizado — tampoco queda
   afuera: se agrega al final del orden de lectura, marcado `(uncovered)` en vez
   de `(key)`, así una review nunca llega a `git review finish` con archivos del
-  PR que nunca viste.
+  PR que nunca viste — incluido el propio walkthrough committeado, que entra en
+  esa misma cola sin anotar: un walkthrough nunca puede anotarse a sí mismo,
+  pero es contenido que el PR agrega como cualquier otro archivo, así que nunca
+  es el único archivo que ninguna review muestra.
 - `--no-walk` — ignorar cualquier walkthrough y revisar el diff completo a secas.
   `--step` también tiene prioridad sobre walk (son dos formas del mismo eje de
   layout), así que `--step` gana sin error — solo imprime una nota avisando que
@@ -545,7 +548,9 @@ tree todo el tiempo y nunca se tocan.
 
 Muestra la review actual: PR de origen, modo, y — en modo `--step` — en qué
 commit estás (`[k/N]`) y qué pasos tienen ediciones bancadas. En modo walk muestra
-el cursor de lectura: `walk  [k/N] on <path>`.
+el cursor de lectura: `walk  [k/N] on <path>`. En modo whole (sin walkthrough —
+el default) lista los archivos que toca el rango, numerados, sin cursor; un
+rango vacío lo dice explícitamente en vez de no imprimir nada.
 
 - `--porcelain` — salida legible por programas para scripts e integraciones de
   editor: líneas estables separadas por tab (ver abajo). De sólo lectura, igual
@@ -589,14 +594,19 @@ base	<base>
   el total vigente, derivado en el momento; `recorded` es el registrado al
   iniciar la review — difieren cuando la base se movió, aunque el cursor siga en
   rango. `essential` (`1`/`0`) aparece sólo en modo walk.
-- `entry` — cero o más, uno por posición en el orden de lectura (paths de walk o
-  commits de step, el mismo orden que recorren `next`/`prev`), incluida una
-  entrada de walk que el walkthrough no anota — se agrega al final del orden en
-  vez de omitirse. En modo walk los campos finales son `essential` (`1`/`0`) y
-  `annotated` (`1`/`0`, `0` en un archivo sin entrada propia en el walkthrough);
-  en modo step es sólo `banked` (`1`/`0`, existe una edición bancada bajo
-  `refs/review-edits/`); se omite del todo en modo whole, porque ahí no hay
-  secuencia que reportar.
+- `entry` — cero o más. En step/walk, uno por posición en el orden de lectura
+  (paths de walk o commits de step, el mismo orden que recorren `next`/`prev`),
+  incluida una entrada de walk que el walkthrough no anota — se agrega al final
+  del orden en vez de omitirse. En modo whole, uno por archivo que el rango
+  toca — un listado, no una secuencia: `state` sigue sin
+  `position`/`total`/`recorded`/`current` en whole. En modo walk los campos
+  finales son `essential` (`1`/`0`) y `annotated` (`1`/`0`, `0` en un archivo
+  sin entrada propia en el walkthrough — el walkthrough committeado mismo
+  siempre cae en este grupo, porque nunca puede anotarse a sí mismo); en modo
+  step es sólo `banked` (`1`/`0`, existe una edición bancada bajo
+  `refs/review-edits/`); en modo whole ninguno de los dos grupos está presente,
+  así que el registro termina en el path. Un rango vacío produce cero registros
+  `entry` y sigue terminando en éxito.
 - `subject` y `author` — sólo en modo step, uno de cada uno por posición, con el
   asunto del commit y su autor en la forma `Nombre <correo>`. Se emparejan con
   `entry` por `position`, nunca por orden de aparición. Un asunto puede estar

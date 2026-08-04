@@ -537,7 +537,7 @@ EOF
 date >"$dir/$marker_name"
 
 if [ "$saved_reviews" -eq 1 ]; then
-	saved_note="  git review continue feature/search         # resumes it on entry 2/2"
+	saved_note="  git review continue feature/search         # resumes it on entry 2/3"
 else
 	saved_note="  (the saved reviews could not be built — see the warning above)"
 fi
@@ -550,9 +550,10 @@ Sandbox ready: $dir
   env.sh       . env.sh    -> bin/ on PATH + cd work   (bash / Git Bash)
   env.ps1      . env.ps1   -> the same, in PowerShell
 
-The pull request (feature/checkout): 5 walkthrough entries over 4 commits,
-the last of which is the walkthrough itself — so --step shows [n/4] and walk
-shows [n/5], over the same range.
+The pull request (feature/checkout): 5 curated walkthrough entries over 4
+commits, plus the committed walkthrough itself as a 6th, unannotated entry at
+the end of the reading order (it can never annotate itself) — so --step shows
+[n/4] and walk shows [n/6], over the same range.
 
   src/discounts.js        added
   src/pricing.js          changed by two commits
@@ -562,7 +563,8 @@ shows [n/5], over the same range.
 
 The other branches, one per state that feature/checkout cannot show:
 
-  feature/notifications   walk over 4 entries, the last 2 unannotated
+  feature/notifications   walk over 5 entries, the last 3 unannotated
+                          (including the walkthrough itself)
   feature/telemetry       no walkthrough at all -> whole, without --whole
   feature/legacy          walkthrough naming paths the rename removed -> degrades
                           to whole with a note, never fails
@@ -573,7 +575,7 @@ The other branches, one per state that feature/checkout cannot show:
 And, on develop, the inventory that \`git review list\` (and the extension's empty
 state) reads — three saved reviews, one resumable and two not:
 
-  review-saved/feature/search   walk 2/2, resumable
+  review-saved/feature/search   walk 2/3, resumable
   review-saved/feature/i18n     blocked: review/feature/i18n is already active
   review-saved/feature/refunds  no metadata behind it (hand-made branch)
 

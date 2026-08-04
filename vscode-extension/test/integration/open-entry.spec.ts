@@ -146,6 +146,65 @@ describe("US2: saltar al archivo de una entrada", function () {
         assert.ok(!isPlainFileEditor, `no debería haber abierto el archivo eliminado como editor de texto plano: ${JSON.stringify(input)}`);
     });
 
+    it("modo whole: una entrada de la lista abre el archivo correcto (US2/004)", async () => {
+        // Sin walkthrough: entra en whole, con la lista de FR-001 en vez de la
+        // secuencia curada. El mismo comando que usa walk abre la entrada,
+        // resuelta desde state.entries igual que allá — sin cursor.
+        const branch = "us2-whole-open";
+        const oddPath = "src/raro café con espacios.ts";
+        createBranchWithChanges(repo, branch, {
+            "src/plain.ts": "export const plain = 1;\n",
+            [oddPath]: "export const raro = 1;\n",
+        });
+
+        const api = await getTestApi();
+        startReview(repo, branch);
+        const state = await api.refresh();
+        assert.strictEqual(state.situation, "review");
+        assert.strictEqual(state.state?.mode, "whole");
+        assert.strictEqual(state.state?.position, undefined, "whole no tiene cursor");
+
+        const entry = state.entries.find((e) => displayOf(e.id) === oddPath);
+        assert.ok(entry, `no se encontró la entrada para ${oddPath} en el listado de whole`);
+
+        await vscode.commands.executeCommand("gitReview.openEntry", entry);
+        const editor = vscode.window.activeTextEditor;
+        assert.ok(editor, "no se abrió ningún editor");
+        assert.strictEqual(path.basename(editor!.document.uri.fsPath), path.basename(oddPath));
+        assert.strictEqual(editor!.document.getText(), "export const raro = 1;\n");
+    });
+
+    it("modo whole: un archivo eliminado en el rango cae al diff, igual que en walk", async () => {
+        git(["checkout", "main"], repo.dir);
+        writeFile(repo, "src/doomed-whole.ts", "will be deleted\n");
+        git(["add", "."], repo.dir);
+        git(["commit", "-m", "add doomed-whole.ts on main"], repo.dir);
+
+        const branch = "us2-whole-deleted";
+        git(["checkout", "-b", branch], repo.dir);
+        fs.rmSync(path.join(repo.dir, "src", "doomed-whole.ts"));
+        writeFile(repo, "src/keep-whole.ts", "kept\n");
+        git(["add", "-A"], repo.dir);
+        git(["commit", "-m", "delete doomed-whole.ts, add keep-whole.ts"], repo.dir);
+        git(["checkout", "main"], repo.dir);
+
+        const api = await getTestApi();
+        startReview(repo, branch);
+        const state = await api.refresh();
+        assert.strictEqual(state.situation, "review");
+        assert.strictEqual(state.state?.mode, "whole");
+
+        const entry = state.entries.find((e) => displayOf(e.id) === "src/doomed-whole.ts");
+        assert.ok(entry, "no se encontró la entrada para src/doomed-whole.ts en whole");
+
+        await vscode.commands.executeCommand("gitReview.openEntry", entry);
+        const activeTab = await waitForActiveTab();
+        assert.ok(activeTab, "no se abrió ningún tab");
+        const input = activeTab!.input;
+        const isPlainFileEditor = input instanceof vscode.TabInputText && input.uri.scheme === "file";
+        assert.ok(!isPlainFileEditor, `no debería haber abierto el archivo eliminado como editor de texto plano: ${JSON.stringify(input)}`);
+    });
+
     it("modo step: el clic muestra los cambios del commit, no abre un archivo del working tree", async () => {
         const branch = "us2-step";
         createBranchWithChanges(repo, branch, {"src/step.ts": "step\n"});

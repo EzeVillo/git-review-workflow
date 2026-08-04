@@ -122,6 +122,14 @@ export interface PanelModel {
     /** La entrada actual, elegida por `position` y nunca por `id`. */
     current?: PanelEntry;
     entryCount: number;
+    /**
+     * Los archivos del rango en modo whole (FR-010): un inventario, no una
+     * secuencia — sin cursor, sin `essential`/`annotated`/`banked` con
+     * significado (siempre `false`/`true`/`false` por ausencia de campo, como
+     * en cualquier `PanelEntry` de un modo que no los reporta). Vacío (nunca
+     * ausente) fuera de whole, donde la colección se recorre con el cursor.
+     */
+    files: PanelEntry[];
     /** Sólo en walk: el modo step no tiene explicaciones. */
     why?: PanelWhy;
     /** stderr de la CLI, preservado tal cual (FR-024). */
@@ -278,6 +286,7 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
         atLast: false,
         degraded: false,
         entryCount: 0,
+        files: [],
     };
     if (inputs.repoLabel !== undefined) {
         base.repoLabel = inputs.repoLabel;
@@ -304,6 +313,7 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
         if (state.base !== undefined) {
             base.base = state.base;
         }
+        base.files = state.entries.map((entry) => toPanelEntry(entry, state.subjects, state.authors));
         return base;
     }
 

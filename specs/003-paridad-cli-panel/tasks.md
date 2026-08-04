@@ -8,7 +8,10 @@ description: "Task list template for feature implementation"
 **Input**: Design documents from `/specs/003-paridad-cli-panel/`
 
 **Prerequisites**: [plan.md](./plan.md), [spec.md](./spec.md), [research.md](./research.md),
-[data-model.md](./data-model.md), [contracts/status-porcelain-v2.md](./contracts/status-porcelain-v2.md),
+[data-model.md](./data-model.md),
+[001-contrato-porcelain/contracts/status-porcelain.md](../001-contrato-porcelain/contracts/status-porcelain.md)
+(el delta de esta feature, antes en `contracts/status-porcelain-v2.md`, fue
+absorbido ahí por `004`),
 [quickstart.md](./quickstart.md)
 
 **Tests**: incluidos. `plan.md` (sección Testing) fija explícitamente las cuatro suites — bats sobre la
@@ -210,8 +213,8 @@ al panel sin cambiar la CLI (research.md Decisión 0); sólo la base necesita co
   config "branch.$cur.reviewbase" || true)"` (el mismo `|| true` defensivo que ya usa la salida humana
   en la línea 225, por si la clave se borró a mano) y, sólo si `$base` no está vacío, emitir
   `base<TAB>$base` con `porcelain_row` **antes** de la línea `state` — el orden entre grupos de
-  registros no es significativo (contracts/status-porcelain-v2.md). Omitir el registro entero cuando no
-  hay base, nunca emitirlo vacío
+  registros no es significativo (001-contrato-porcelain/contracts/status-porcelain.md). Omitir el
+  registro entero cuando no hay base, nunca emitirlo vacío
 - [X] T018 [P] [US2] bats: nueva sección "base record (003 US2)" en
   [tests/status-porcelain.bats](../../tests/status-porcelain.bats) — tras `git review start feature/x`
   (whole, con `reviewworkflow.base develop` ya fijado por `setup()`), afirmar `base\tdevelop` en

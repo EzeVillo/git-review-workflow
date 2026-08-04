@@ -181,6 +181,37 @@ describe("panelHtml", () => {
         );
     });
 
+    it("modo whole dibuja la lista de archivos, no un mensaje fijo de 'sin walkthrough' (FR-010)", () => {
+        // El mensaje incondicional que reemplazó esta feature: si sigue estando
+        // sin condicionarlo a model.files, la lista nunca se dibuja.
+        assert.ok(
+            !/appendChild\(empty\("This review has no walkthrough[^)]*\)\);\s*\}\s*else if \(model\.current\)/.test(
+                html
+            ),
+            "el mensaje de 'sin walkthrough' ya no puede ser incondicional en whole"
+        );
+        assert.ok(/model\.files\.forEach/.test(html), "falta el recorrido de la lista de archivos");
+        assert.ok(
+            /button\(file\.display, "openEntry", [^,]+, "file", file\.position\)/.test(html),
+            "cada fila tiene que abrir su propia entrada por posición, no la actual"
+        );
+    });
+
+    it("un rango sin archivos en whole dice explícitamente que no hay nada, sin lista rota (FR-007)", () => {
+        assert.ok(
+            html.includes("This review's range does not touch any files."),
+            "falta el mensaje explícito del rango vacío"
+        );
+        assert.ok(/model\.files\.length === 0/.test(html), "el vacío tiene que decidirse por files, no por el modo");
+    });
+
+    it("whole no dibuja controles de navegación ni posición de cursor", () => {
+        // La lista es un inventario: renderNavRow (prev/next) sólo puede llamarse
+        // fuera de la rama de whole.
+        const wholeBranch = /if \(model\.mode === "whole"\) \{([^]*?)\} else if \(model\.current\)/.exec(html)?.[1] ?? "";
+        assert.ok(!wholeBranch.includes("renderNavRow"), "whole no tiene extremos que deshabilitar");
+    });
+
     it("sin reviews en el repositorio el estado vacio queda como estaba", () => {
         assert.ok(
             /if \(reviews\.length === 0\) \{ return box; \}/.test(html),

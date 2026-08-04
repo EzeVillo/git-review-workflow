@@ -113,8 +113,10 @@ specs/003-paridad-cli-panel/
 ├── research.md          # Phase 0 output (/speckit-plan command)
 ├── data-model.md        # Phase 1 output (/speckit-plan command)
 ├── quickstart.md        # Phase 1 output (/speckit-plan command)
-├── contracts/           # Phase 1 output (/speckit-plan command)
-│   └── status-porcelain-v2.md    # delta sobre el contrato de 001
+├── contracts/           # Phase 1 output (/speckit-plan command); su
+│                        # status-porcelain-v2.md (delta sobre el contrato de
+│                        # 001) fue absorbido por 001-contrato-porcelain/
+│                        # contracts/status-porcelain.md en la feature 004
 └── tasks.md             # Phase 2 output (/speckit-tasks command - NOT created by /speckit-plan)
 ```
 

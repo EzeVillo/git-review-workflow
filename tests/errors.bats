@@ -181,6 +181,18 @@ step_review_two_with_edits() {
 	[[ "$output" == *"not started with git review start --step"* ]]
 }
 
+@test "review next requires step mode on a whole review, even after listing its files" {
+	# A whole review now lists the files it touches (FR-001), but that listing is
+	# an inventory, not a cursor: next must keep rejecting it exactly as before
+	# (FR-008), and the listing must not have created any config next could latch
+	# onto.
+	git review start feature/x
+	git review status --porcelain >/dev/null
+	run git review next
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"not started with git review start --step"* ]]
+}
+
 # ── missing review metadata on a hand-made review/* branch ────────────────────
 
 @test "review status reports missing metadata" {

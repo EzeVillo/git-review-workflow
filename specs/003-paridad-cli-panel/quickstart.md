@@ -2,9 +2,9 @@
 
 Cómo comprobar, a mano y de punta a punta, que la feature hace lo que el spec
 pide. Los detalles del formato están en
-[`contracts/status-porcelain-v2.md`](./contracts/status-porcelain-v2.md) y la
-forma de los datos en [`data-model.md`](./data-model.md); acá sólo está qué
-correr y qué esperar.
+[`001-contrato-porcelain/contracts/status-porcelain.md`](../001-contrato-porcelain/contracts/status-porcelain.md)
+(el delta de esta feature fue absorbido ahí por `004`) y la forma de los datos
+en [`data-model.md`](./data-model.md); acá sólo está qué correr y qué esperar.
 
 ## Prerrequisitos
 

@@ -164,6 +164,32 @@ describe("US5: entender por qué no hay nada que mostrar", function () {
         assert.strictEqual(state.situation, "out-of-range");
     });
 
+    it("whole con rango vacío: el panel no muestra ni un archivo ni una lista rota (004 FR-007)", async () => {
+        // Dos commits que se cancelan (agrega y borra el mismo archivo): el
+        // rango entre main y el tip no toca ningún archivo, pero start igual
+        // tiene que arrancar la review — su guarda es de commits, no de files.
+        const branch = "us5-whole-empty";
+        git(["checkout", "-b", branch], repo.dir);
+        fs.writeFileSync(path.join(repo.dir, "temp.txt"), "temp\n");
+        git(["add", "temp.txt"], repo.dir);
+        git(["commit", "-m", "add temp"], repo.dir);
+        fs.rmSync(path.join(repo.dir, "temp.txt"));
+        git(["add", "-A"], repo.dir);
+        git(["commit", "-m", "remove temp"], repo.dir);
+        git(["checkout", "main"], repo.dir);
+
+        startReview(repo, branch);
+        const api = await getTestApi();
+        const state = await api.refresh();
+        assert.strictEqual(state.situation, "review");
+        assert.strictEqual(state.state?.mode, "whole");
+        assert.deepStrictEqual(state.entries, []);
+
+        const model = await api.getPanelModel();
+        assert.deepStrictEqual(model.files, []);
+        assert.strictEqual(model.entryCount, 0);
+    });
+
     it("error: metadata ausente en una rama review/* creada a mano", async () => {
         git(["checkout", "-b", "review/hand-made"], repo.dir);
 

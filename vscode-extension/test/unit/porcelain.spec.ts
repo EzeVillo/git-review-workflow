@@ -66,6 +66,28 @@ describe("parsePorcelain", () => {
         assert.strictEqual(result.entries[1].banked, false);
     });
 
+    it("entry en modo whole trae sólo posición y path, id como PathRef", () => {
+        const out = [
+            "state\treview/feat-x\torigin/feat-x\tabc123\twhole\tnone",
+            "entry\t1\ta.txt",
+            "entry\t2\tsrc/b.txt",
+        ].join("\n");
+        const result = parsePorcelain(out);
+        assert.strictEqual(result.entries.length, 2);
+        assert.strictEqual(result.entries[0].position, 1);
+        // El id de whole es un path, igual que en walk: mismo tratamiento que
+        // permite abrirlo (research.md Decisión 4), no un string suelto como en
+        // step.
+        const id0 = result.entries[0].id as PathRef;
+        assert.strictEqual(id0.display, "a.txt");
+        assert.strictEqual(id0.raw, "a.txt");
+        assert.strictEqual(result.entries[0].essential, undefined);
+        assert.strictEqual(result.entries[0].annotated, undefined);
+        assert.strictEqual(result.entries[0].banked, undefined);
+        const id1 = result.entries[1].id as PathRef;
+        assert.strictEqual(id1.display, "src/b.txt");
+    });
+
     it("ignora etiquetas desconocidas", () => {
         const out = [
             "state\treview/feat-x\torigin/feat-x\tabc123\twhole\tnone",

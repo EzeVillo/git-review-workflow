@@ -217,11 +217,17 @@ export const PREVIEW_PANES: PreviewPane[] = [
     {
         // Sin registro `base`: el estado de una review cuyo repositorio no tiene
         // base registrada, y el que dibuja una CLI anterior a 003. En los dos
-        // casos el panel no pone nada en su lugar (FR-009).
+        // casos el panel no pone nada en su lugar (FR-009). El listado de
+        // archivos (004) es el registro `entry`, sin campos extra en whole.
         name: "whole",
         caption: "whole — review sin walkthrough ni base registrada, con dos repos en la ventana",
         model: review(
-            [["state", "review/fix/quoting", "fix/quoting", "1a2b3c4", "whole", "none"]],
+            [
+                ["state", "review/fix/quoting", "fix/quoting", "1a2b3c4", "whole", "none"],
+                ["entry", "1", "README.md"],
+                ["entry", "2", "src/quoting.ts"],
+                ["entry", "3", "tests/quoting.spec.ts"],
+            ],
             {busy: false, repoLabel: "git-review-workflow"}
         ),
     },
@@ -231,8 +237,21 @@ export const PREVIEW_PANES: PreviewPane[] = [
         model: review(
             [
                 ["state", "review/fix/quoting", "fix/quoting", "1a2b3c4", "whole", "none"],
+                ["entry", "1", "README.md"],
+                ["entry", "2", "src/quoting.ts"],
+                ["entry", "3", "tests/quoting.spec.ts"],
                 ["base", "main"],
             ],
+            {busy: false}
+        ),
+    },
+    {
+        // Rango vacío (FR-007): cero registros entry, con el mensaje explícito en
+        // vez de una lista en blanco.
+        name: "whole-empty",
+        caption: "whole — un rango que no toca ningún archivo",
+        model: review(
+            [["state", "review/no-op-merge", "no-op-merge", "9f8e7d6", "whole", "none"]],
             {busy: false}
         ),
     },

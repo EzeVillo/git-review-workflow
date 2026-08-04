@@ -144,9 +144,9 @@ if [ "$porcelain" -eq 1 ]; then
 			i=$((i + 1))
 		done; }
 		# Free text goes in its own record, last field, one per record: a subject
-		# and an author name can both contain a literal tab (contracts/
-		# status-porcelain-v2.md), and only the last field of a line survives that
-		# without shifting anything.
+		# and an author name can both contain a literal tab (see the free-text
+		# rule in contracts/status-porcelain.md), and only the last field of a
+		# line survives that without shifting anything.
 		#
 		# Each list is streamed in ONE pass rather than indexed with sed line by
 		# line. porcelain_row is a shell function, so a pass costs one subshell
@@ -188,6 +188,16 @@ if [ "$porcelain" -eq 1 ]; then
 			fi
 		fi
 		porcelain_row state "$cur" "$src" "$tip" "$mode" "$pwalkthrough"
+		# Whole mode's inventory: one entry per file the range touches, in git's
+		# own order. No essential/annotated/banked fields — whole has no
+		# walkthrough and no bank — and no cursor on `state` above: this is a
+		# listing, not a sequence (FR-002, FR-004).
+		i=1
+		range_files "$tip" "$(git rev-parse HEAD)" | while IFS= read -r pfile; do
+			[ -n "$pfile" ] || continue
+			porcelain_row entry "$i" "$pfile"
+			i=$((i + 1))
+		done
 		# The base is what a review without a walkthrough has instead of a
 		# reading order: the ref its range was built against. Read with || true
 		# like the human path does — a key deleted by hand must not abort the
@@ -291,5 +301,20 @@ elif [ "$mode" = "walk" ]; then
 else
 	base="$(git config "branch.$cur.reviewbase" || true)"
 	printf '  mode    whole%s\n' "${base:+  (base $base)}"
+	# The files the range touches (FR-001): a whole review has no cursor, so this
+	# is a plain listing, not a "[k/N]" line — never omitted, and never a blank
+	# section standing in for zero files (FR-007, the git-status precedent).
+	files="$(range_files "$tip" "$(git rev-parse HEAD)")"
+	filecount="$(printf '%s\n' "$files" | grep -c . || true)"
+	if [ "$filecount" -eq 0 ]; then
+		printf '  files   no files in this range\n'
+	else
+		printf '  files   %s\n' "$filecount"
+		i=1
+		printf '%s\n' "$files" | while IFS= read -r f; do
+			printf '    %s  %s\n' "$i" "$f"
+			i=$((i + 1))
+		done
+	fi
 	printf '  next    edit, then git review finish\n'
 fi

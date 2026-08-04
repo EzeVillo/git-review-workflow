@@ -242,6 +242,27 @@ export function panelHtml(nonce: string): string {
   }
   .rev-meta button { margin-left: auto; }
   .empty.after-inv { border-top: 1px solid var(--vscode-panel-border); }
+  /* El listado de whole (FR-010): mismo encabezado que el inventario, filas
+     clickeables en vez de tarjetas — no hay estado por fila que mostrar. */
+  .files { padding: 1.2em .9em; }
+  .files h2 {
+    margin: 0 0 .6em;
+    font-size: .9em;
+    font-weight: 600;
+    color: var(--vscode-descriptionForeground);
+  }
+  .file-row {
+    display: flex;
+    justify-content: flex-start;
+    width: 100%;
+    text-align: left;
+    padding: .35em 0;
+    background: none;
+    color: var(--vscode-foreground);
+    font-family: var(--vscode-editor-font-family);
+    overflow-wrap: anywhere;
+  }
+  .file-row:hover { background: var(--vscode-list-hoverBackground); }
   .stderr {
     margin: 1em 0 0;
     padding: .6em;
@@ -610,6 +631,27 @@ export function panelHtml(nonce: string): string {
     return nav;
   }
 
+  /**
+   * El listado de whole (FR-010): un inventario, no una secuencia — sin
+   * cursor, sin controles de navegación. Cada fila abre su propia entrada por
+   * su posición (no la "actual": whole no tiene una), reusando el mismo
+   * helper button() que ya postea type+index para el inventario del estado
+   * vacío. Un rango sin archivos MUST decirlo explícitamente (FR-007) — nunca
+   * una lista en blanco sin explicación.
+   */
+  function renderFiles(model) {
+    if (model.files.length === 0) {
+      return empty("This review's range does not touch any files.");
+    }
+    const box = el("div", "files");
+    const n = model.files.length;
+    box.appendChild(el("h2", null, n + (n === 1 ? " file" : " files") + " in this review"));
+    model.files.forEach(function (file) {
+      box.appendChild(button(file.display, "openEntry", "file-row", "file", file.position));
+    });
+    return box;
+  }
+
   // Las notas van tanto en el dibujo normal como en el de carga: describen el
   // review, no la entrada, así que no cambian al navegar. Sacarlas mientras
   // carga haría saltar el panel dos veces por cada paso.
@@ -635,7 +677,7 @@ export function panelHtml(nonce: string): string {
     renderNotes(model);
 
     if (model.mode === "whole") {
-      root.appendChild(empty("This review has no walkthrough: there is no curated reading order for this PR."));
+      root.appendChild(renderFiles(model));
     } else if (model.current) {
       root.appendChild(renderEntry(model));
     } else {

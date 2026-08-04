@@ -238,6 +238,23 @@ changed_paths() {
 	git -c core.quotePath=false diff --name-only "$1" "$2"
 }
 
+# range_files <tip> <lower>
+# The files a review's range touches, in git's own order — the same
+# changed_paths(lower, tip) call every other reader of "what does this review
+# touch" already makes (walk_reading_order below, and the degraded-walkthrough
+# notes in start and compare), wrapped so the argument order is not repeated
+# and inverted at each call site. whole mode's file listing is this and nothing
+# more: HEAD sits at the lower bound in every mode (git reset --soft in start),
+# so this is the same pair of endpoints walk already reads.
+#
+# 2>/dev/null || true, folded in here rather than left to each caller: a range
+# that will not diff (an unresolvable bound, reachable from start/compare
+# before the review's tip is fixed) yields no paths, so no entry intersects and
+# the caller degrades — it must never abort the review under set -eu.
+range_files() {
+	changed_paths "$2" "$1" 2>/dev/null || true
+}
+
 # walk_normalize  (stdin: text)
 # Make an authored walkthrough's bytes comparable, whatever wrote it. Every reader
 # below matches on whole lines — the path in "## N. <path>", the "> key" marker,
@@ -475,12 +492,17 @@ walk_sequence() {
 
 # walk_reading_order <tip> <lower>
 # The full reading order for a walk review: the curated sequence from
-# walk_sequence, followed by any file changed_paths reports in range but that
-# has no walkthrough entry (excluding the sidecar itself), in the order git
-# reports them. Empty output means walk_sequence is empty — no curated entry
-# intersects the range — and the caller degrades to whole, exactly as before:
-# this function only ever adds a tail to a non-empty curated sequence, never
-# turns an empty one into something walk mode would run on.
+# walk_sequence, followed by any file range_files reports in range but that has
+# no walkthrough entry — including the sidecar itself, if the PR touches it: a
+# committed walkthrough is content the PR adds like any other file, and it used
+# to be the one file no review ever showed a reviewer (the sole exception left
+# is the walkthrough's own entry proposal in git-review-verbs/walkthrough,
+# which still filters it — annotating the file where you write your annotations
+# would be circular). In the order git reports them. Empty output means
+# walk_sequence is empty — no curated entry intersects the range — and the
+# caller degrades to whole, exactly as before: this function only ever adds a
+# tail to a non-empty curated sequence, never turns an empty one into something
+# walk mode would run on.
 #
 # Built on top of walk_sequence rather than duplicating its awk: one git show
 # and one git diff live there, and this adds one more diff to find the paths
@@ -490,7 +512,7 @@ walk_reading_order() {
 	_wro_seq="$(walk_sequence "$1" "$2")"
 	[ -n "$_wro_seq" ] || return 0
 	printf '%s\n' "$_wro_seq"
-	{ changed_paths "$2" "$1" 2>/dev/null || true; } | grep -v '^\.review/' | while IFS= read -r _wro_p; do
+	range_files "$1" "$2" | while IFS= read -r _wro_p; do
 		printf '%s\n' "$_wro_seq" | grep -Fxq "$_wro_p" || printf '%s\n' "$_wro_p"
 	done
 }

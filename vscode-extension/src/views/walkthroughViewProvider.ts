@@ -10,6 +10,7 @@ import {PanelModel} from "./panelModel";
 export const PANEL_MESSAGES = [
     "openEntry",
     "openChange",
+    "openAllChanges",
     "showWhy",
     "next",
     "prev",

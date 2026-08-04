@@ -290,6 +290,46 @@ describe("buildPanelModel", () => {
         assert.strictEqual(model.atLast, false);
     });
 
+    it("lastOpened llega al modelo cuando el archivo sigue en el rango", () => {
+        const stdout = [
+            "state\treview/feat\torigin/feat\tabc123\twhole\tnone",
+            "entry\t1\ta.txt",
+            "entry\t2\tsrc/b.txt",
+            "",
+        ].join("\n");
+        const model = buildPanelModel(reviewState(stdout), {busy: false, lastOpened: "src/b.txt"});
+        assert.strictEqual(model.lastOpened, "src/b.txt");
+    });
+
+    it("lastOpened se descarta si ese archivo ya no esta en el rango", () => {
+        // El PR cambió y el archivo recordado salió: marcarlo igual pondría la
+        // marca en la nada, o —peor— el webview no encontraría fila y el revisor
+        // vería la lista sin ninguna.
+        const stdout = [
+            "state\treview/feat\torigin/feat\tabc123\twhole\tnone",
+            "entry\t1\ta.txt",
+            "",
+        ].join("\n");
+        const model = buildPanelModel(reviewState(stdout), {busy: false, lastOpened: "src/b.txt"});
+        assert.strictEqual(model.lastOpened, undefined);
+        assert.deepStrictEqual(model.files, [
+            {position: 1, display: "a.txt", essential: false, annotated: true, banked: false},
+        ]);
+    });
+
+    it("lastOpened no se proyecta fuera de whole", () => {
+        // En step/walk la entrada abierta es siempre la del cursor, que ya está
+        // dibujada: una marca ahí sería una copia.
+        const walk = buildPanelModel(reviewState(WALK), {busy: false, lastOpened: "src/a.ts"});
+        assert.strictEqual(walk.lastOpened, undefined);
+
+        const step = buildPanelModel(
+            reviewState("state\treview/feat\torigin/feat\tabc123\tstep\tnone\t1\t1\t1\tabc1234\nentry\t1\tabc1234\t0\n"),
+            {busy: false, lastOpened: "abc1234"}
+        );
+        assert.strictEqual(step.lastOpened, undefined);
+    });
+
     it("files queda vacío (no ausente) fuera de whole", () => {
         const walk = buildPanelModel(reviewState(WALK), {busy: false});
         assert.deepStrictEqual(walk.files, []);

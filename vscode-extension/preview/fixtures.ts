@@ -232,6 +232,22 @@ export const PREVIEW_PANES: PreviewPane[] = [
         ),
     },
     {
+        // La marca de la última fila abierta, que es lo que el pane de arriba no
+        // muestra: en alto contraste el fondo de selección se pierde contra el
+        // del panel, y ahí la barra del margen es lo único que queda.
+        name: "whole-last-opened",
+        caption: "whole — la misma review con la última fila abierta marcada",
+        model: review(
+            [
+                ["state", "review/fix/quoting", "fix/quoting", "1a2b3c4", "whole", "none"],
+                ["entry", "1", "README.md"],
+                ["entry", "2", "src/quoting.ts"],
+                ["entry", "3", "tests/quoting.spec.ts"],
+            ],
+            {busy: false, lastOpened: "src/quoting.ts"}
+        ),
+    },
+    {
         name: "whole-with-base",
         caption: "whole — la misma review informando contra qué base se armó el rango",
         model: review(

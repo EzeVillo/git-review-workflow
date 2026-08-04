@@ -197,6 +197,40 @@ describe("panelHtml", () => {
         );
     });
 
+    it("whole marca la ultima fila abierta, y solo desde el modelo", () => {
+        // La marca sale de `lastOpened` del modelo: si alguien la ata a una
+        // variable del propio webview, muere cada vez que la vista se reconstruye
+        // y deja de sobrevivir al cierre del editor.
+        assert.ok(
+            /if \(file\.display === model\.lastOpened\) \{/.test(html),
+            "la marca tiene que decidirse comparando contra el modelo"
+        );
+        assert.ok(/row\.className = "file-row opened"/.test(html));
+        assert.ok(/row\.setAttribute\("aria-current", "true"\)/.test(html), "la marca no puede ser sólo visual");
+        assert.ok(html.includes(".file-row.opened"), "y necesita su regla de estilo");
+        assert.ok(
+            /\.file-row\.opened \{[^}]*border-left-color: var\(--vscode-textLink-foreground\)/.test(html),
+            "en alto contraste el fondo solo no alcanza: hace falta la barra del margen"
+        );
+    });
+
+    it("whole ofrece abrir todos los cambios juntos, sin indice de fila", () => {
+        // El equivalente del diff que step abre por commit. Sin índice: la
+        // unidad acá es el rango entero, no una de las filas.
+        assert.ok(
+            /button\("Diff", "openAllChanges", null, "diff"\)/.test(html),
+            "falta el control que abre el rango completo"
+        );
+        assert.ok(/allButton\.title = "[^"]+"/.test(html), "en esta pantalla 'Diff' a secas se confunde con el de la fila");
+        const filesBody = /function renderFiles\(model\) \{([^]*?)\n  \}/.exec(html)?.[1] ?? "";
+        assert.ok(filesBody.length > 0, "no se encontró renderFiles para afirmar sobre él");
+        assert.ok(filesBody.includes('"openAllChanges"'), "el control vive en la lista de whole");
+        assert.ok(
+            !/openAllChanges", null, "diff", /.test(html),
+            "abrir todo el rango no lleva índice de entrada"
+        );
+    });
+
     it("un rango sin archivos en whole dice explícitamente que no hay nada, sin lista rota (FR-007)", () => {
         assert.ok(
             html.includes("This review's range does not touch any files."),

@@ -7,6 +7,12 @@ they wrote for it. The full sequence and the files the walkthrough doesn't cover
 are one keystroke away in a quick pick, and commands jump to the file, advance
 and go back — all without leaving the editor.
 
+A review without a walkthrough runs in whole mode, and there the panel is the
+list of files the range touches: a row opens that file's diff, and one control
+above them opens every change at once — the same thing step's *Diff* does for a
+commit, applied to the range. The last row you opened stays marked, so a list
+you are halfway through still says where you were after closing the editor.
+
 With no review on the current branch the panel lists the ones open elsewhere in
 the repository — active and saved, with their mode and position — so a review
 you put aside doesn't have to be remembered by name. Saved ones offer
@@ -31,12 +37,23 @@ the panel is lying about a review the reviewer is trusting it with.
 `contracts/cli-invocation.md` is the closed list of what the extension may
 invoke, and the explicit list of what it may never do.
 
-One thing that list does not yet settle: the panel shells out to git plumbing
-directly to build the file list for a commit's diff (`readCommitChanges` in
-`src/commands/openEntry.ts`). It derives nothing about the review — the commit
-id comes from the CLI, and git is only asked which files that commit touches —
-but it is a direct git call in a codebase whose whole point is not making them,
-and no spec covers it either way. Left as is on purpose, to be decided.
+One thing that list does not yet settle: the panel shells out to git directly to
+build the file list behind a multi-file diff — `readCommitChanges` for a commit
+in step, `readRangeChanges` for the range in whole, both in
+`src/commands/openEntry.ts`. Neither derives anything about the review: the
+commit id comes from the CLI, `HEAD` on a review branch is the merge-base by
+construction, and git is only asked which files are on each side so the diff
+knows what to open. But they are direct git calls in a codebase whose whole
+point is not making them, and no spec covers them either way. Left as is on
+purpose, to be decided.
+
+The one thing the extension does keep between sessions is which file you last
+opened from whole's list, per review branch, in the host's `workspaceState`
+(`LAST_OPENED_KEY` in `src/extension.ts`). That is not review state and does not
+compete with the CLI for it: whole has no cursor and there is no verb to ask,
+so where you had got to is only ever known by the editor that opened the diff.
+It is stored by path, and the model drops it when that path is no longer in the
+range — the mark can only ever point at a row the CLI just reported.
 
 ## Requirements
 

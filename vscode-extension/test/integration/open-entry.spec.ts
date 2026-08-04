@@ -205,6 +205,87 @@ describe("US2: saltar al archivo de una entrada", function () {
         assert.ok(!isPlainFileEditor, `no debería haber abierto el archivo eliminado como editor de texto plano: ${JSON.stringify(input)}`);
     });
 
+    it("modo whole: abrir una fila la deja marcada en el modelo del panel", async () => {
+        // La marca no la deriva la CLI —whole no tiene cursor—: la registra el
+        // host cuando el panel abre una fila, y viaja al webview en el modelo.
+        const branch = "us2-whole-mark";
+        createBranchWithChanges(repo, branch, {
+            "src/first.ts": "export const first = 1;\n",
+            "src/second.ts": "export const second = 2;\n",
+        });
+
+        const api = await getTestApi();
+        startReview(repo, branch);
+        const state = await api.refresh();
+        assert.strictEqual(state.situation, "review");
+        assert.strictEqual(state.state?.mode, "whole");
+
+        const before = await api.getPanelModel();
+        assert.strictEqual(before.lastOpened, undefined, "una review recién abierta no tiene fila marcada");
+
+        const entry = state.entries.find((e) => displayOf(e.id) === "src/second.ts");
+        assert.ok(entry, "no se encontró la entrada para src/second.ts");
+
+        await vscode.commands.executeCommand("gitReview.openChange", entry);
+        const after = await api.getPanelModel();
+        assert.strictEqual(after.lastOpened, "src/second.ts");
+        // Y es UNA fila: abrir otra mueve la marca, no agrega una segunda.
+        const other = state.entries.find((e) => displayOf(e.id) === "src/first.ts");
+        assert.ok(other, "no se encontró la entrada para src/first.ts");
+        await vscode.commands.executeCommand("gitReview.openChange", other);
+        assert.strictEqual((await api.getPanelModel()).lastOpened, "src/first.ts");
+    });
+
+    it("modo walk: abrir una entrada no deja marca, porque el cursor ya la muestra", async () => {
+        const branch = "us2-walk-mark";
+        createBranchWithChanges(repo, branch, {"src/walkmark.ts": "export const m = 1;\n"});
+        addWalkthrough(repo, branch, [{path: "src/walkmark.ts", why: "marcado"}]);
+
+        const api = await getTestApi();
+        startReview(repo, branch);
+        const state = await api.refresh();
+        assert.strictEqual(state.state?.mode, "walk");
+
+        await vscode.commands.executeCommand("gitReview.openEntry", state.entries[0]);
+        const model = await api.getPanelModel();
+        assert.strictEqual(model.lastOpened, undefined);
+    });
+
+    it("modo whole: el boton de diff abre todos los cambios del rango en una sola vista", async () => {
+        const branch = "us2-whole-all";
+        createBranchWithChanges(repo, branch, {
+            "src/all-a.ts": "export const a = 1;\n",
+            "src/all-b.ts": "export const b = 2;\n",
+        });
+
+        const api = await getTestApi();
+        startReview(repo, branch);
+        const state = await api.refresh();
+        assert.strictEqual(state.state?.mode, "whole");
+        assert.strictEqual(state.state?.source, branch);
+
+        // Forma EXACTA con la que el panel lo dispara: sin argumento, porque la
+        // unidad es el rango entero y no una fila.
+        await vscode.commands.executeCommand("gitReview.openAllChanges");
+        const tab = await waitForActiveTab();
+        assert.ok(tab, "el boton de diff no abrio ninguna vista de cambios");
+        // El label lo compone el host a partir del título que pasa la extensión
+        // (`Review <source>`), igual que `Commit <sha>` en step.
+        assert.ok(
+            tab!.label.startsWith(`Review ${branch}`),
+            `el tab abierto no es el de los cambios del rango: ${tab!.label}`
+        );
+        // Y no es el archivo del working tree abierto como texto plano: eso
+        // sería haber caído en la acción de una fila.
+        const input = tab!.input;
+        assert.ok(
+            !(input instanceof vscode.TabInputText && input.uri.scheme === "file"),
+            `openAllChanges no puede abrir un archivo suelto: ${JSON.stringify(input)}`
+        );
+        // Abrir el rango completo no es haber llegado a ninguna fila.
+        assert.strictEqual((await api.getPanelModel()).lastOpened, undefined);
+    });
+
     it("modo step: el clic muestra los cambios del commit, no abre un archivo del working tree", async () => {
         const branch = "us2-step";
         createBranchWithChanges(repo, branch, {"src/step.ts": "step\n"});

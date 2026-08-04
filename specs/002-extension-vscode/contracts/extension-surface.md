@@ -87,8 +87,16 @@ Reglas normativas:
   accesibilidad.
 - El identificador que se muestra es `PathRef.display` en walk y el SHA corto en
   step (FR-012).
-- En `mode = whole` sin walkthrough el panel lo explica y no ofrece secuencia ni
-  navegación (FR-026); no es un error.
+- En `mode = whole` no hay secuencia ni navegación (FR-026), y eso no es un
+  error: el cuerpo es el **listado de archivos del rango** (004), un inventario
+  sin cursor. Sobre la lista va un solo control, que abre todos esos archivos
+  juntos en un multi-diff — el equivalente del `Diff` que `step` ofrece por
+  commit. Cada fila abre el diff del suyo, y la **última fila abierta queda
+  marcada**: sin cursor, es lo único que dice por dónde iba la lectura. Esa
+  marca la registra el host (no la CLI, que no la conoce) y persiste entre
+  sesiones; se lleva por path y desaparece sola cuando ese archivo deja de estar
+  en el rango. Es la **única** excepción a "la extensión no guarda estado", y lo
+  es porque no hay ningún estado del review con el que pueda contradecirse.
 - El *why* de la entrada actual es el cuerpo, con sus saltos de línea (FR-017).
   Sus cuatro estados —en vuelo, presente, ausente, fallido— se muestran
   distinguibles (FR-018, `data-model.md` § `PanelModel`).
@@ -167,9 +175,9 @@ Reglas normativas:
 
 El webview **no ejecuta comandos**. Postea mensajes `{type}` de un conjunto
 cerrado y el host decide qué hacer con cada uno; un `type` desconocido se
-ignora. La lista es exactamente: `openEntry`, `openChange`, `showWhy`, `next`,
-`prev`, `refresh`, `showUncovered`, `installCli`, `outOfRangeHelp`,
-`continueReview`.
+ignora. La lista es exactamente: `openEntry`, `openChange`, `openAllChanges`,
+`showWhy`, `next`, `prev`, `refresh`, `showUncovered`, `installCli`,
+`outOfRangeHelp`, `continueReview`.
 
 `continueReview`, `openEntry` y `openChange` son los que llevan un dato además
 del `type`, y es un **índice** (`{type, index}`), nunca el nombre de la rama ni
@@ -182,6 +190,9 @@ que termina en la CLI sale siempre del estado del host, y nada que venga del
 webview se le pasa a un proceso. Un `index` ausente, no entero o fuera de rango
 se ignora igual que un `type` desconocido — en `openEntry`/`openChange` eso
 significa caer al comportamiento de siempre (la entrada actual, si la hay).
+
+`openAllChanges` no lleva índice ni ningún otro dato: su unidad es el rango
+entero de una review `whole`, no una de sus filas.
 
 En el sentido inverso, el host postea el `PanelModel` entero
 (`{type: "model", model}`) y el webview lo dibuja de cero. Todo el contenido
@@ -196,6 +207,7 @@ Los ids son interfaz pública.
 |---------------------------|-------------------------|-----------------------------------|
 | `gitReview.openEntry`     | Open Entry              | panel (botón `File`), paleta      |
 | `gitReview.openChange`    | Open Changes            | panel (botón `Diff`), paleta      |
+| `gitReview.openAllChanges`| Open All Changes        | panel (botón `Diff` de whole), paleta |
 | `gitReview.showWhy`       | Show Why                | panel (link), paleta              |
 | `gitReview.next`          | Next Entry              | panel (ícono), paleta             |
 | `gitReview.prev`          | Previous Entry          | panel (ícono), paleta             |
@@ -226,6 +238,12 @@ Reglas normativas:
   — no tiene sentido ofrecer "entrada siguiente" donde no hay review.
 - `gitReview.openEntry` abre el documento del working tree; con el archivo
   ausente (eliminado en el rango) cae en el diff (Decisión 10).
+- `gitReview.openAllChanges` abre **todos** los archivos del rango en un solo
+  multi-diff, y sólo existe en `whole`: es el equivalente del diff que `step`
+  abre por commit, con el rango como unidad. Del lado derecho va el archivo del
+  working tree y no un blob, así que el diff queda editable — en una review el
+  working tree *es* el PR aplicado. Se oculta de la paleta fuera de whole
+  (`gitReview.mode == whole`).
 - `gitReview.goToEntry` y `gitReview.showUncovered` abren un `QuickPick` con la
   colección que les corresponde, en el orden de la CLI, y **abren** lo elegido
   (FR-005a, FR-008). No mueven el cursor: la CLI no tiene un verbo para saltar a

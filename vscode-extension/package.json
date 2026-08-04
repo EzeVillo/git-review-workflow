@@ -47,6 +47,12 @@
         "icon": "$(diff)"
       },
       {
+        "command": "gitReview.openAllChanges",
+        "title": "Open All Changes",
+        "category": "git review",
+        "icon": "$(diff-multiple)"
+      },
+      {
         "command": "gitReview.showWhy",
         "title": "Show Why",
         "category": "git review",
@@ -103,6 +109,10 @@
         {
           "command": "gitReview.openChange",
           "when": "gitReview.situation == review"
+        },
+        {
+          "command": "gitReview.openAllChanges",
+          "when": "gitReview.situation == review && gitReview.mode == whole"
         },
         {
           "command": "gitReview.showWhy",

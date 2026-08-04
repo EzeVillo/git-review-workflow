@@ -251,18 +251,30 @@ export function panelHtml(nonce: string): string {
     font-weight: 600;
     color: var(--vscode-descriptionForeground);
   }
+  .files .row { margin-bottom: .8em; }
   .file-row {
     display: flex;
     justify-content: flex-start;
     width: 100%;
     text-align: left;
-    padding: .35em 0;
+    padding: .35em .4em;
+    border-left: 2px solid transparent;
     background: none;
     color: var(--vscode-foreground);
     font-family: var(--vscode-editor-font-family);
     overflow-wrap: anywhere;
   }
   .file-row:hover { background: var(--vscode-list-hoverBackground); }
+  /* La última fila abierta. Whole no tiene cursor, así que esto no es "dónde
+     está el review" sino "por dónde iba yo": se marca con los tokens de
+     selección inactiva —el mismo peso que VS Code le da a una fila elegida en
+     una lista sin foco— más una barra al margen, porque en un tema de alto
+     contraste el fondo solo puede no distinguirse (FR-031). */
+  .file-row.opened {
+    border-left-color: var(--vscode-textLink-foreground);
+    background: var(--vscode-list-inactiveSelectionBackground);
+  }
+  .file-row.opened:hover { background: var(--vscode-list-hoverBackground); }
   .stderr {
     margin: 1em 0 0;
     padding: .6em;
@@ -640,6 +652,12 @@ export function panelHtml(nonce: string): string {
    * es revisar el cambio, no editar el resultado aplicado. Un rango sin
    * archivos MUST decirlo explícitamente (FR-007) — nunca una lista en
    * blanco sin explicación.
+   *
+   * Arriba de la lista va el mismo control que step tiene por commit, y por la
+   * misma razón: la unidad de revisión del modo, entera y de un vistazo. Acá esa
+   * unidad es el rango completo, así que abre todos los archivos juntos en un
+   * multi-diff. Lleva title porque en esta pantalla "Diff" sin más se confunde
+   * con el de cada fila.
    */
   function renderFiles(model) {
     if (model.files.length === 0) {
@@ -648,8 +666,24 @@ export function panelHtml(nonce: string): string {
     const box = el("div", "files");
     const n = model.files.length;
     box.appendChild(el("h2", null, n + (n === 1 ? " file" : " files") + " in this review"));
+
+    const all = el("div", "row");
+    const allButton = button("Diff", "openAllChanges", null, "diff");
+    allButton.title = "Open every change in this review at once";
+    all.appendChild(allButton);
+    box.appendChild(all);
+
     model.files.forEach(function (file) {
-      box.appendChild(button(file.display, "openChange", "file-row", "diff", file.position));
+      const row = button(file.display, "openChange", "file-row", "diff", file.position);
+      // Por dónde iba el revisor. El dato lo guarda el host —sobrevive a cerrar
+      // el editor—, pero acá es una marca más: sale del modelo como todo lo
+      // demás, y el panel no la recuerda por su cuenta (FR-019).
+      if (file.display === model.lastOpened) {
+        row.className = "file-row opened";
+        row.setAttribute("aria-current", "true");
+        row.title = "Last opened";
+      }
+      box.appendChild(row);
     });
     return box;
   }

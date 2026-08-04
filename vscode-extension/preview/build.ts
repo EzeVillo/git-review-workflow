@@ -41,6 +41,8 @@ const THEMES: Record<string, Record<string, string>> = {
         "--vscode-button-secondaryBackground": "#313131",
         "--vscode-button-secondaryForeground": "#cccccc",
         "--vscode-button-secondaryHoverBackground": "#3c3c3c",
+        "--vscode-list-hoverBackground": "#2a2d2e",
+        "--vscode-list-inactiveSelectionBackground": "#37373d",
         "--vscode-sideBar-background": "#181818",
     },
     light: {
@@ -59,6 +61,8 @@ const THEMES: Record<string, Record<string, string>> = {
         "--vscode-button-secondaryBackground": "#e5e5e5",
         "--vscode-button-secondaryForeground": "#3b3b3b",
         "--vscode-button-secondaryHoverBackground": "#cccccc",
+        "--vscode-list-hoverBackground": "#e8e8e9",
+        "--vscode-list-inactiveSelectionBackground": "#e4e6f1",
         "--vscode-sideBar-background": "#f8f8f8",
     },
     "high-contrast": {
@@ -77,6 +81,8 @@ const THEMES: Record<string, Record<string, string>> = {
         "--vscode-button-secondaryBackground": "#000000",
         "--vscode-button-secondaryForeground": "#ffffff",
         "--vscode-button-secondaryHoverBackground": "#0f4a85",
+        "--vscode-list-hoverBackground": "#000000",
+        "--vscode-list-inactiveSelectionBackground": "#000000",
         "--vscode-sideBar-background": "#000000",
     },
 };

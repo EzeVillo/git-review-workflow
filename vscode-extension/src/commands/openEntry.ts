@@ -61,17 +61,19 @@ export async function openChange(rootUri: vscode.Uri, mode: ReviewMode, entry: E
 }
 
 /**
- * Sin API de git no hay diff de commit que mostrar, pero *por qué* no la hay
- * cambia lo que el revisor tiene que hacer: confiar en la carpeta, habilitar la
- * extensión, o simplemente esperar. Un solo mensaje para las tres cosas era un
- * callejón sin salida.
+ * Sin API de git no hay diff que mostrar, pero *por qué* no la hay cambia lo que
+ * el revisor tiene que hacer: confiar en la carpeta, habilitar la extensión, o
+ * simplemente esperar. Un solo mensaje para las tres cosas era un callejón sin
+ * salida. `subject` nombra lo que no se pudo abrir —los cambios de un commit o
+ * los de la review entera—: el motivo es el mismo, pero el aviso tiene que decir
+ * de qué acción está hablando.
  */
-async function reportMissingGitApi(): Promise<void> {
+async function reportMissingGitApi(subject: string): Promise<void> {
     switch (gitApiUnavailableReason()) {
         case "untrusted": {
             const manage = "Manage Trust";
             const choice = await vscode.window.showWarningMessage(
-                "Showing a commit's changes needs the git extension, and VS Code disables it while this folder is in restricted mode. Trust the folder to enable it.",
+                `Showing ${subject} needs the git extension, and VS Code disables it while this folder is in restricted mode. Trust the folder to enable it.`,
                 manage
             );
             if (choice === manage) {
@@ -81,7 +83,7 @@ async function reportMissingGitApi(): Promise<void> {
         }
         case "missing":
             void vscode.window.showWarningMessage(
-                "The built-in git extension is disabled: enable it to see a commit's changes."
+                `The built-in git extension is disabled: enable it to see ${subject}.`
             );
             return;
         default:
@@ -130,11 +132,88 @@ export function readCommitChanges(rootUri: vscode.Uri, sha: string): CommitChang
     }
 }
 
+/**
+ * Los archivos del rango de una review `whole`, o `undefined` si git no pudo
+ * decirlo. `HEAD` de una rama de review está clavado en el merge-base y el PR
+ * vive como cambios staged encima, así que el rango entero es exactamente
+ * `diff HEAD` — más las ediciones del revisor, que es lo mismo que ya muestra
+ * `git.openChange` archivo por archivo.
+ *
+ * `git diff` y no `diff-index` como en el commit: la porcelana refresca el
+ * índice antes de comparar, y sin eso un índice desincronizado (típico en
+ * Windows, o después de tocar los archivos desde afuera) listaría archivos que
+ * no cambiaron. `--no-renames` fija el comportamiento en vez de heredar el
+ * `diff.renames` del usuario: un rename partido en `D` + `A` son dos entradas
+ * correctas del multi-diff, mientras que depender de la config haría que la
+ * misma review se viera distinta en dos máquinas.
+ */
+export function readRangeChanges(rootUri: vscode.Uri): CommitChange[] | undefined {
+    try {
+        const output = cp.execFileSync(
+            "git",
+            ["diff", "--name-status", "-z", "--no-renames", "HEAD"],
+            {cwd: rootUri.fsPath, encoding: "utf8"}
+        );
+        return parseNameStatus(output);
+    } catch {
+        return undefined;
+    }
+}
+
+/**
+ * Los tres Uri por archivo del multi-diff del rango. El lado derecho es el
+ * archivo del **working tree**, no un blob `git:` como en el commit: en una
+ * review el working tree *es* el PR aplicado, así que el diff queda editable —
+ * que es el flujo entero de `git review`. El izquierdo sale de `HEAD`, o sea del
+ * merge-base.
+ */
+export function rangeChangeResources(
+    gitApi: GitApi,
+    rootUri: vscode.Uri,
+    changes: CommitChange[]
+): [vscode.Uri, vscode.Uri | undefined, vscode.Uri | undefined][] {
+    return changes.map((change) => [
+        vscode.Uri.joinPath(rootUri, change.path),
+        change.before === undefined
+            ? undefined
+            : gitApi.toGitUri(vscode.Uri.joinPath(rootUri, change.before), "HEAD"),
+        change.after === undefined ? undefined : vscode.Uri.joinPath(rootUri, change.after),
+    ]);
+}
+
+/**
+ * Comando `gitReview.openAllChanges` — el equivalente en `whole` del diff que
+ * `step` abre por commit: todos los archivos del rango juntos, en un solo
+ * multi-diff. `label` nombra la pestaña; es el origen de la review (el PR), lo
+ * mismo que el panel muestra en su barra.
+ */
+export async function openRangeChanges(rootUri: vscode.Uri, label: string): Promise<void> {
+    const gitApi = await ensureGitApi();
+    if (!gitApi) {
+        await reportMissingGitApi("the changes of a review");
+        return;
+    }
+    const changes = readRangeChanges(rootUri);
+    if (!changes) {
+        void vscode.window.showErrorMessage("Could not read the files of this review's range.");
+        return;
+    }
+    if (changes.length === 0) {
+        void vscode.window.showInformationMessage("This review's range does not touch any files.");
+        return;
+    }
+    await vscode.commands.executeCommand(
+        "vscode.changes",
+        `Review ${label}`,
+        rangeChangeResources(gitApi, rootUri, changes)
+    );
+}
+
 async function openCommitChanges(rootUri: vscode.Uri, sha: string): Promise<void> {
     // Se resuelve acá y no al activar: ver `ensureGitApi`.
     const gitApi = await ensureGitApi();
     if (!gitApi) {
-        await reportMissingGitApi();
+        await reportMissingGitApi("a commit's changes");
         return;
     }
     const changes = readCommitChanges(rootUri, sha);

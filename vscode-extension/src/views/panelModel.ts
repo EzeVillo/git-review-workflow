@@ -130,6 +130,19 @@ export interface PanelModel {
      * ausente) fuera de whole, donde la colección se recorre con el cursor.
      */
     files: PanelEntry[];
+    /**
+     * `PanelEntry.display` de la última entrada que el revisor abrió en whole,
+     * para marcarla en la lista. Sólo en whole y sólo si sigue estando en el
+     * rango: una marca que no corresponde a ninguna fila no se emite, así que un
+     * archivo que salió del PR no deja un recuerdo apuntando a la nada.
+     *
+     * No es estado del review y la CLI no lo conoce (la lista de whole no tiene
+     * cursor): es del lado del editor, que es el único que sabe qué se abrió
+     * desde el panel. Se lleva por `display` y no por posición porque las
+     * posiciones se corren cuando el rango cambia, y ahí la marca señalaría otro
+     * archivo en silencio.
+     */
+    lastOpened?: string;
     /** Sólo en walk: el modo step no tiene explicaciones. */
     why?: PanelWhy;
     /** stderr de la CLI, preservado tal cual (FR-024). */
@@ -141,6 +154,8 @@ export interface PanelInputs {
     repoLabel?: string;
     /** Ausente = todavía en vuelo; el modelo lo refleja como `loading`. */
     why?: PanelWhy;
+    /** Lo que el host recuerda de esta review; ver `PanelModel.lastOpened`. */
+    lastOpened?: string;
 }
 
 function displayOf(id: string | PathRef): string {
@@ -314,6 +329,11 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
             base.base = state.base;
         }
         base.files = state.entries.map((entry) => toPanelEntry(entry, state.subjects, state.authors));
+        // Se valida contra la lista, no se copia: lo que el host recuerda puede
+        // ser un archivo que el PR ya no toca, y ahí no hay fila que marcar.
+        if (inputs.lastOpened !== undefined && base.files.some((file) => file.display === inputs.lastOpened)) {
+            base.lastOpened = inputs.lastOpened;
+        }
         return base;
     }
 

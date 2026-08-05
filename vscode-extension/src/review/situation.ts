@@ -56,3 +56,23 @@ export function situationFor(
     }
     return base;
 }
+
+/**
+ * `true` para las dos situaciones donde `ReviewState.state` queda poblado y
+ * es seguro leer la review en curso o salir de ella del todo: `review` y
+ * `finish-conflict` (data-model.md § `Situation` — un cierre trabado sigue
+ * dejando la review legible; lo único que no corresponde es *navegarla*).
+ * Usada por los comandos de sólo lectura (`openEntry`/`openChange`/
+ * `openAllChanges`/`showWhy`/`goToEntry`) y por `abortReview` — tirar la
+ * review entera es uno de los tres caminos que contracts/finish-state.md
+ * documenta para resolver un cierre trabado, y `bin/git-review-verbs/abort`
+ * no tiene ningún guard sobre `reviewundohead` que lo bloquee.
+ *
+ * La navegación (`next`/`prev`) NO pasa por acá: sigue bloqueada en sus tres
+ * capas propias (el panel retira `renderNavRow`, `navigate.ts` exige
+ * `situation === "review"`, y la paleta filtra por lo mismo) — ninguna de
+ * las tres cambia con este helper.
+ */
+export function isReviewReadable(situation: Situation): boolean {
+    return situation === "review" || situation === "finish-conflict";
+}

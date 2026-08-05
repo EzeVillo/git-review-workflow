@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import {invokeGitReview, InvokeOptions} from "../cli/invoke";
 import {MutationLock} from "../review/mutationLock";
+import {isReviewReadable} from "../review/situation";
 import {ReviewStateManager} from "../review/state";
 import {captureToken, tokenStillValid} from "../review/staleGuard";
 
@@ -28,6 +29,13 @@ function message(stderr: string): string {
  * diálogo y se revalida contra el estado vigente recién antes de invocar: si
  * no coincide, no se invoca nada y se avisa que el estado cambió, en vez de
  * arriesgar el abort.
+ *
+ * Acepta `finish-conflict` además de `review` (`isReviewReadable`): tirar la
+ * review entera es uno de los tres caminos que contracts/finish-state.md
+ * documenta para un cierre trabado, y `git review abort`
+ * (`bin/git-review-verbs/abort`) no tiene ningún guard sobre
+ * `reviewundohead` que lo bloquee — hace `switch --discard-changes` y borra
+ * `review/<src>` igual que en cualquier otro estado.
  */
 export async function abortReview(
     lock: MutationLock,
@@ -35,7 +43,7 @@ export async function abortReview(
     getInvokeOptions: () => InvokeOptions
 ): Promise<void> {
     const state = stateManager.state;
-    if (state.situation !== "review" || !state.state) {
+    if (!isReviewReadable(state.situation) || !state.state) {
         return;
     }
     const source = state.state.source;

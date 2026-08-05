@@ -295,4 +295,19 @@ describe("panelHtml", () => {
         );
         assert.ok(!pendingBranch.includes("No active review"));
     });
+
+    it("finish-pending nombra el destino real de las ediciones, no la rama de la review (M2)", () => {
+        const pendingBranch = /case "finish-pending": \{([^]*?)\n {6}case "out-of-range"/.exec(html)?.[1] ?? "";
+        assert.ok(pendingBranch.length > 0, "no se encontro el caso finish-pending en renderEmptyState");
+        // El mismo computo que finishReview.ts: onto -> la rama del PR,
+        // sin onto -> review-fixes/<x>, nunca "review/<x>" a secas.
+        assert.ok(
+            pendingBranch.includes('"review-fixes/" + source'),
+            "sin --onto-source el destino tiene que ser review-fixes/<x>"
+        );
+        assert.ok(
+            /pending\.onto \? source/.test(pendingBranch),
+            "con --onto-source el destino tiene que ser la propia rama del PR, no review/<x>"
+        );
+    });
 });

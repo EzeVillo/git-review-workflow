@@ -478,9 +478,18 @@ export function panelHtml(nonce: string): string {
       case "finish-pending": {
         const reviews = model.reviews || [];
         const pending = model.pendingFinish;
-        const headline = pending
-          ? "A finish completed and is waiting to be confirmed on " + pending.branch + "."
-          : "A finish completed and is waiting to be confirmed.";
+        // El destino real de las ediciones, no la rama de la review: la
+        // review siempre se llama "review/<x>" y onto dice si terminaron en
+        // "<x>" (la rama del PR) o en "review-fixes/<x>" — el mismo cómputo
+        // que el toast de finishReview.ts hace al terminar (contracts/
+        // finish-state.md: el destino se deriva de branch+onto, nunca se
+        // adivina ni se guarda aparte).
+        let headline = "A finish completed and is waiting to be confirmed.";
+        if (pending) {
+          const source = pending.branch.indexOf("review/") === 0 ? pending.branch.slice(7) : pending.branch;
+          const destination = pending.onto ? source : "review-fixes/" + source;
+          headline = "A finish completed and is waiting to be confirmed on " + destination + ".";
+        }
         const box = empty(headline, button("Undo", "undoFinish", "primary"));
         if (reviews.length === 0) { return box; }
         box.className = "empty after-inv";

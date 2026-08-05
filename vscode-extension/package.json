@@ -129,26 +129,26 @@
         },
         {
           "command": "gitReview.abortReview",
-          "when": "view == gitReview.walkthrough && gitReview.situation == review",
+          "when": "view == gitReview.walkthrough && (gitReview.situation == review || gitReview.situation == finish-conflict)",
           "group": "navigation@3"
         }
       ],
       "commandPalette": [
         {
           "command": "gitReview.openEntry",
-          "when": "gitReview.situation == review"
+          "when": "gitReview.situation == review || gitReview.situation == finish-conflict"
         },
         {
           "command": "gitReview.openChange",
-          "when": "gitReview.situation == review"
+          "when": "gitReview.situation == review || gitReview.situation == finish-conflict"
         },
         {
           "command": "gitReview.openAllChanges",
-          "when": "gitReview.situation == review && gitReview.mode == whole"
+          "when": "(gitReview.situation == review || gitReview.situation == finish-conflict) && gitReview.mode == whole"
         },
         {
           "command": "gitReview.showWhy",
-          "when": "gitReview.situation == review"
+          "when": "gitReview.situation == review || gitReview.situation == finish-conflict"
         },
         {
           "command": "gitReview.next",
@@ -160,7 +160,7 @@
         },
         {
           "command": "gitReview.goToEntry",
-          "when": "gitReview.situation == review"
+          "when": "gitReview.situation == review || gitReview.situation == finish-conflict"
         },
         {
           "command": "gitReview.installCli",
@@ -179,7 +179,7 @@
         },
         {
           "command": "gitReview.abortReview",
-          "when": "gitReview.situation == review"
+          "when": "gitReview.situation == review || gitReview.situation == finish-conflict"
         },
         {
           "command": "gitReview.finishReview",

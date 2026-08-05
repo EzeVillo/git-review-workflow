@@ -1,5 +1,5 @@
 import * as assert from "node:assert";
-import { situationFor, situationForExitCode } from "../../src/review/situation";
+import { isReviewReadable, situationFor, situationForExitCode } from "../../src/review/situation";
 
 describe("situationForExitCode", () => {
 	it("0 -> review", () => {
@@ -57,5 +57,25 @@ describe("situationFor", () => {
 		assert.strictEqual(situationFor(3, false, true), "out-of-range");
 		assert.strictEqual(situationFor(1, false, true), "error");
 		assert.strictEqual(situationFor(2, true, false), "no-review");
+	});
+});
+
+// I1 (fix round 1, revisión de la Fase 5): el guard que decide si una accion
+// de solo lectura o de salida (abortReview) puede actuar sobre el
+// ReviewState.state poblado. finish-conflict tiene que contar igual que
+// review; ninguna otra situacion.
+describe("isReviewReadable", () => {
+	it("review y finish-conflict son legibles", () => {
+		assert.strictEqual(isReviewReadable("review"), true);
+		assert.strictEqual(isReviewReadable("finish-conflict"), true);
+	});
+
+	it("ninguna otra situacion lo es, incluida finish-pending", () => {
+		assert.strictEqual(isReviewReadable("no-review"), false);
+		assert.strictEqual(isReviewReadable("finish-pending"), false);
+		assert.strictEqual(isReviewReadable("out-of-range"), false);
+		assert.strictEqual(isReviewReadable("error"), false);
+		assert.strictEqual(isReviewReadable("cli-missing"), false);
+		assert.strictEqual(isReviewReadable("cli-outdated"), false);
 	});
 });

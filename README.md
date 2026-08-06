@@ -306,8 +306,8 @@ Every command is a verb under `git review`. Run `git review -h` for the list, or
 | `git review compare <a> <b> [--step \| --no-walk]`                                                                                 | Stage the diff between two commit-ish (tags, commits, branches) read-only, to read or walk it. `git review finish` refuses — there is nothing to write back.                                                                                                                                                    |
 | `git review walkthrough (init [--base <base>] [--force] \| build [--check])`                                                       | Author a reading walkthrough for the current branch's PR — a curated order of the changed files with a note on each, committed as `.review/walkthrough.md`.                                                                                                                                                     |
 | `git review next` / `git review prev`                                                                                              | Move a `--step` or walkthrough review to the next / previous entry.                                                                                                                                                                                                                                             |
-| `git review status [--porcelain \| --why <path>]`                                                                                  | Show the state of the review on the current branch (`--porcelain` for machine-readable output; `--why <path>` for a walkthrough entry's explanation).                                                                                                                                                           |
-| `git review list [--porcelain]`                                                                                                    | List every review in progress and every saved one (current branch marked `*`; `--porcelain` for machine-readable output).                                                                                                                                                                                       |
+| `git review status [--porcelain \| --why <path>]`                                                                                  | Show the state of the review on the current branch (`--porcelain` for machine-readable output, including a `finish` record when a closure is mid-conflict; `--why <path>` for a walkthrough entry's explanation).                                                                                                 |
+| `git review list [--porcelain]`                                                                                                    | List every review in progress and every saved one (current branch marked `*`; `--porcelain` also reports unresolved finishes as `pending` or `conflict`).                                                                                                                                                       |
 | `git review save`                                                                                                                  | Pause the current review as `review-saved/<branch>` and return to where you started.                                                                                                                                                                                                                            |
 | `git review continue [branch]`                                                                                                     | Resume a review saved with `git review save`.                                                                                                                                                                                                                                                                   |
 | `git review finish [--onto-source] [--resume \| --abort [--force]]`                                                                | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch); `--abort` undoes the last finish.                                                                                                                                                                                 |
@@ -316,6 +316,7 @@ Every command is a verb under `git review`. Run `git review -h` for the list, or
 | `git review clean [branch]`                                                                                                        | Delete the `review/*` and `review-fixes/*` branches for `<branch>`, or all of them.                                                                                                                                                                                                                             |
 | `git review forget --delta (<branch> \| --all \| --stale [--dry-run])`                                                             | Discard the `--delta` marker for one branch, all of them, or only stale ones.                                                                                                                                                                                                                                   |
 | `git review forget --saved (<branch> \| --all) [--dry-run]`                                                                        | Discard a review saved with `git review save`.                                                                                                                                                                                                                                                                  |
+| `git review config [<key> [<value>]] [--unset <key>] [--porcelain [<branch>]]`                                                      | Read or write the product's config (`base`, `remote`); `--porcelain` also lists candidate branches to review.                                                                                                                                                                                                   |
 
 <details>
 <summary id="git-review-start"><code>git review start</code></summary>
@@ -564,6 +565,7 @@ and any line whose type it does not recognize: the format only ever grows.
 
 ```
 state	<branch>	<source>	<tip>	<mode>	<walkthrough>[	<position>	<total>	<recorded>	<current>[	<essential>]]
+finish	conflict	<onto>
 entry	<position>	<id>[	<essential>	<annotated>|<banked>]
 subject	<position>	<subject>
 author	<position>	<author>
@@ -578,6 +580,12 @@ base	<base>
   `recorded` is what was recorded when the review started — they differ once the
   base has drifted, even while the cursor is still in range. `essential` (`1`/`0`)
   appears only in walk mode.
+- `finish` — only while a `git review finish` is **stopped mid-conflict** on this
+  review branch (`state` is always `conflict` here; a completed finish already
+  moved `HEAD` off `review/*`, so `status` never sees it — use `list` for that).
+  `onto` is `1` if the finish used `--onto-source`, `0` otherwise. The whole
+  record is omitted when no closure is in progress. Consumers must not offer
+  sequence navigation while this record is present.
 - `entry` — zero or more. In `step`/`walk`, one per position in the reading
   order (walk paths or step commits, the same order `next`/`prev` move
   through), including a walk entry the walkthrough does not annotate —
@@ -632,6 +640,7 @@ is marked with a `*`.
 
   ```
   branch	<name>	<saved>	<current>	<orphan>[	<mode>[	<position>	<total>]]
+  finish	<branch>	pending|conflict	<onto>
   ```
 
   `saved`, `current` and `orphan` are `1`/`0` (`orphan` means the branch has no
@@ -643,6 +652,13 @@ is marked with a `*`.
   uses, if its config key happens to be missing. Exit `0` even on an empty
   inventory (no reviews is not an error); `1` only if run outside a git
   repository.
+
+  A `finish` line is emitted for each `review/<x>` with an unresolved closure:
+  `pending` after a completed finish still waiting for confirm/abort (edits on
+  `review-fixes/<x>` or the PR branch; `HEAD` may already have left `review/*`),
+  and `conflict` when a finish stopped mid-replay. `onto` is `1` if that finish
+  used `--onto-source`, `0` otherwise. Pair it with the matching `branch` row by
+  name. Reviews with no open closure emit no `finish` record.
 
 </details>
 
@@ -671,6 +687,43 @@ is more than one; name a branch to pick a specific one.
 Starting a fresh `git review start` on a branch that already has a saved review
 is refused, so you do not silently lose the paused one — resume it or discard it
 with `git review forget --saved` first.
+
+</details>
+
+<details>
+<summary id="git-review-config"><code>git review config</code></summary>
+
+Read or write git-review-workflow's own configuration — the base a full review
+compares against, and the remote a review is fetched from. Mirrors `git config`
+on purpose: a key alone reads, a key plus a value writes. Valid in any git
+repository, with or without an active review (there is no exit `2`).
+
+```
+git review config                         # effective config, human-readable
+git review config <key>                   # one key (base | remote)
+git review config <key> <value>           # set <key>
+git review config --unset <key>           # remove <key>
+git review config --porcelain [<branch>]  # machine-readable + candidate branches
+```
+
+- `base` — the commit-ish a full review diffs against. No product default: a full
+  review without it fails and asks you to set one. Same value as
+  `git config reviewworkflow.base` (the raw key stays an implementation detail).
+- `remote` — where reviews are fetched from (default `origin`).
+- `--porcelain` — tab-separated records for scripts and the editor panel:
+
+  ```
+  config	<key>	<value>
+  candidate	<name>	remote|local	<current>
+  delta	<branch>	<tip>
+  ```
+
+  A key with no effective value omits its `config` line entirely (so `base` is
+  absent until set; `remote` always appears). `candidate` lists every branch
+  eligible to start a review; `current` is `1`/`0`. Pass an optional `<branch>`
+  to also emit a `delta` row when that branch has a prior `--delta` marker.
+- `--` ends option parsing, so a value that starts with `-` (a legal branch name)
+  is not taken as a flag: `git review config base -- -foo`.
 
 </details>
 

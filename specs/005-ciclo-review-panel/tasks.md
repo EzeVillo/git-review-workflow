@@ -686,7 +686,7 @@ de una puerta y con su default recordado.
 **Purpose**: validación de punta a punta, documentación y las dos rutas que
 ningún test automático cubre.
 
-- [ ] T076 [P] En `tests/sandbox.sh`, agregar dos ramas nuevas al PR de juguete:
+- [X] T076 [P] En `tests/sandbox.sh`, agregar dos ramas nuevas al PR de juguete:
   una con un cierre completo pendiente (`review-fixes/<src>` sin resolver) y
   otra con un cierre trabado por conflicto (el fixture de T038, reusado). El
   texto que `sandbox.sh` imprime al terminar las describe con su estado real —
@@ -707,7 +707,7 @@ ningún test automático cubre.
   aparte, confirmar en el panel, y verificar que **no se invocó nada** (afirmar
   con un spy o revisando que no aparece un segundo `finish` en el historial de
   invocaciones si el test lo instrumenta).
-- [ ] T080 Actualizar el mínimo de CLI a `0.4.0` en
+- [X] T080 Actualizar el mínimo de CLI a `0.4.0` en
   `vscode-extension/src/cli/version.ts` y en los textos del panel que lo
   nombran (`panelHtml.ts`, casos `cli-missing`/`cli-outdated`, que hoy dicen
   `0.3.0`), más `vscode-extension/test/unit/version.spec.ts`. Ejecutar
@@ -718,14 +718,14 @@ ningún test automático cubre.
   ofrece nada cuyo resultado no sepa leer); lo que **no** hay es degradación
   parcial por capacidad, y research.md Decisión 12 quedó corregida en ese
   sentido.
-- [ ] T081 [P] `README.md`: agregar la fila de `git review config` a la tabla de
+- [X] T081 [P] `README.md`: agregar la fila de `git review config` a la tabla de
   verbos, con su gramática completa; extender la descripción de `status` y
   `list` para mencionar el registro de cierre pendiente/trabado donde
   corresponda; una sección `<summary>` para `git review config` si el resto de
   los verbos complejos la tiene.
-- [ ] T082 [P] `README.es.md`: los mismos cambios que T081, traducidos, en el
+- [X] T082 [P] `README.es.md`: los mismos cambios que T081, traducidos, en el
   mismo commit (regla de los dos README).
-- [ ] T083 [P] `vscode-extension/README.md`: documentar las acciones nuevas
+- [X] T083 [P] `vscode-extension/README.md`: documentar las acciones nuevas
   (Start a review, Cancel review, Finish review, Save for later, y deshacer/
   continuar un cierre) en inglés, siguiendo la sección existente que describe
   los comandos actuales.
@@ -737,12 +737,12 @@ ningún test automático cubre.
   sólo confirmar que no queda desactualizado); el formato del walkthrough del
   demo no cambia. Si ninguno requiere edición, dejar constancia de qué se
   revisó (siguiendo el precedente de `004` T045).
-- [ ] T085 `shellcheck` sobre la lista completa de CI (incluido
+- [X] T085 `shellcheck` sobre la lista completa de CI (incluido
   `tests/sandbox.sh` después de T076).
-- [ ] T086 `./tests/run-docker.sh` completo. `npm test --prefix
+- [X] T086 `./tests/run-docker.sh` completo. `npm test --prefix
   vscode-extension` completo (unit + integración). Cero regresiones fuera de
   las inversiones deliberadas de esta feature.
-- [ ] T087 [P] `npm run preview --prefix vscode-extension`: agregar a
+- [X] T087 [P] `npm run preview --prefix vscode-extension`: agregar a
   `preview/fixtures.ts` los estados `finish-pending` y `finish-conflict`
   (`--porcelain` de ejemplo pasada por el parser real, siguiendo la disciplina
   ya documentada del preview). Verificar visualmente en los tres temas

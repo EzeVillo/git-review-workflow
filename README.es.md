@@ -311,8 +311,8 @@ lista, o `git review <verbo> -h` para el detalle de un verbo.
 | `git review compare <a> <b> [--step \| --no-walk]`                                                                               | Deja staged el diff entre dos commit-ish (tags, commits, ramas) en modo lectura, para leerlo o recorrerlo. `git review finish` se niega — no hay a dónde escribir.                                                                                                                                                         |
 | `git review walkthrough (init [--base <base>] [--force] \| build [--check])`                                                     | Escribe un walkthrough de lectura para el PR de la rama actual — un orden curado de los archivos cambiados con una nota en cada uno, committeado como `.review/walkthrough.md`.                                                                                                                                            |
 | `git review next` / `git review prev`                                                                                            | Mueve una review `--step` o walkthrough a la entrada siguiente / anterior.                                                                                                                                                                                                                                                 |
-| `git review status [--porcelain \| --why <path>]`                                                                                | Muestra el estado de la review en la rama actual (`--porcelain` para salida legible por programas; `--why <path>` para el porqué de una entrada del walkthrough).                                                                                                                                                          |
-| `git review list [--porcelain]`                                                                                                  | Lista todas las reviews en curso y las guardadas (la rama actual marcada con `*`; `--porcelain` para salida legible por programas).                                                                                                                                                                                        |
+| `git review status [--porcelain \| --why <path>]`                                                                                | Muestra el estado de la review en la rama actual (`--porcelain` para salida legible por programas, incluido un registro `finish` cuando un cierre quedó trabado por conflicto; `--why <path>` para el porqué de una entrada del walkthrough).                                                                            |
+| `git review list [--porcelain]`                                                                                                  | Lista todas las reviews en curso y las guardadas (la rama actual marcada con `*`; `--porcelain` también reporta cierres sin resolver como `pending` o `conflict`).                                                                                                                                                          |
 | `git review save`                                                                                                                | Pausa la review actual como `review-saved/<rama>` y vuelve a donde empezaste.                                                                                                                                                                                                                                              |
 | `git review continue [rama]`                                                                                                     | Retoma una review guardada con `git review save`.                                                                                                                                                                                                                                                                          |
 | `git review finish [--onto-source] [--resume \| --abort [--force]]`                                                              | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR); `--abort` deshace el último finish.                                                                                                                                                                                            |
@@ -321,6 +321,7 @@ lista, o `git review <verbo> -h` para el detalle de un verbo.
 | `git review clean [rama]`                                                                                                        | Borra las ramas `review/*` y `review-fixes/*` de `<rama>`, o todas.                                                                                                                                                                                                                                                        |
 | `git review forget --delta (<rama> \| --all \| --stale [--dry-run])`                                                             | Descarta el marcador de `--delta` de una rama, de todas, o solo de las obsoletas.                                                                                                                                                                                                                                          |
 | `git review forget --saved (<rama> \| --all) [--dry-run]`                                                                        | Descarta una review guardada con `git review save`.                                                                                                                                                                                                                                                                        |
+| `git review config [<clave> [<valor>]] [--unset <clave>] [--porcelain [<rama>]]`                                                  | Lee o escribe la config del producto (`base`, `remote`); `--porcelain` también lista las ramas candidatas a revisar.                                                                                                                                                                                                       |
 
 <details>
 <summary id="git-review-start"><code>git review start</code></summary>
@@ -580,6 +581,7 @@ reconozca: el formato sólo crece.
 
 ```
 state	<branch>	<source>	<tip>	<mode>	<walkthrough>[	<position>	<total>	<recorded>	<current>[	<essential>]]
+finish	conflict	<onto>
 entry	<position>	<id>[	<essential>	<annotated>|<banked>]
 subject	<position>	<asunto>
 author	<position>	<autor>
@@ -594,6 +596,12 @@ base	<base>
   el total vigente, derivado en el momento; `recorded` es el registrado al
   iniciar la review — difieren cuando la base se movió, aunque el cursor siga en
   rango. `essential` (`1`/`0`) aparece sólo en modo walk.
+- `finish` — sólo mientras un `git review finish` está **trabado por conflicto**
+  en esta rama de review (`state` es siempre `conflict` acá; un cierre completo
+  ya sacó a `HEAD` de `review/*`, así que `status` nunca lo ve — usá `list` para
+  eso). `onto` es `1` si el finish usó `--onto-source`, `0` si no. Se omite el
+  registro entero cuando no hay ningún cierre en curso. Con este registro
+  presente, el consumidor no debe ofrecer navegación por la secuencia.
 - `entry` — cero o más. En step/walk, uno por posición en el orden de lectura
   (paths de walk o commits de step, el mismo orden que recorren `next`/`prev`),
   incluida una entrada de walk que el walkthrough no anota — se agrega al final
@@ -650,6 +658,7 @@ se marca con un `*`.
 
   ```
   branch	<name>	<saved>	<current>	<orphan>[	<mode>[	<position>	<total>]]
+  finish	<branch>	pending|conflict	<onto>
   ```
 
   `saved`, `current` y `orphan` son `1`/`0` (`orphan` significa que la rama no
@@ -662,6 +671,14 @@ se marca con un `*`.
   clave de config correspondiente falta. Sale con `0` incluso con el inventario
   vacío (que no haya reviews no es un error); `1` sólo si corre fuera de un
   repositorio git.
+
+  Se emite una línea `finish` por cada `review/<x>` con un cierre sin resolver:
+  `pending` tras un finish completo que aún espera confirmación/aborto (las
+  ediciones están en `review-fixes/<x>` o en la rama del PR; `HEAD` puede haber
+  salido ya de `review/*`), y `conflict` cuando un finish se detuvo a mitad del
+  replay. `onto` es `1` si ese finish usó `--onto-source`, `0` si no. Se
+  empareja con la fila `branch` del mismo nombre. Las reviews sin cierre en
+  curso no emiten registro `finish`.
 
 </details>
 
@@ -690,6 +707,47 @@ de una; nombrá una rama para elegir cuál.
 Empezar un `git review start` nuevo sobre una rama que ya tiene una review
 guardada se rechaza, para que no pierdas la pausada sin querer — retomala o
 descartala con `git review forget --saved` primero.
+
+</details>
+
+<details>
+<summary id="git-review-config"><code>git review config</code></summary>
+
+Lee o escribe la configuración propia de git-review-workflow — la base contra la
+que se arma el rango de una review completa, y el remoto del que se trae la
+copia a revisar. Espeja `git config` a propósito: clave sola lee, clave más valor
+escribe. Válido en cualquier repositorio git, con o sin review activa (no hay
+exit `2`).
+
+```
+git review config                         # config efectiva, para leer
+git review config <clave>                 # una clave (base | remote)
+git review config <clave> <valor>         # fija <clave>
+git review config --unset <clave>         # borra <clave>
+git review config --porcelain [<rama>]    # legible por máquina + candidatas
+```
+
+- `base` — el commit-ish contra el que se arma el rango. Sin default de producto:
+  una review completa sin ella falla y pide configurarla. Es el mismo valor que
+  `git config reviewworkflow.base` (la clave cruda queda como detalle de
+  implementación).
+- `remote` — de dónde se traen las reviews (default `origin`).
+- `--porcelain` — registros separados por tab para scripts y el panel del
+  editor:
+
+  ```
+  config	<clave>	<valor>
+  candidate	<name>	remote|local	<current>
+  delta	<rama>	<tip>
+  ```
+
+  Una clave sin valor efectivo omite su línea `config` entera (así `base` no
+  aparece hasta configurarla; `remote` siempre está). `candidate` lista cada
+  rama elegible para empezar una review; `current` es `1`/`0`. Con una
+  `<rama>` opcional también emite una fila `delta` si esa rama tiene un
+  marcador `--delta` previo.
+- `--` termina el parseo de opciones, así un valor que empieza con `-` (un
+  nombre de rama legal) no se toma como flag: `git review config base -- -foo`.
 
 </details>
 

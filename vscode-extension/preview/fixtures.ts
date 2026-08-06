@@ -69,6 +69,47 @@ function inventory(rows: string[][]): PanelModel {
 }
 
 /**
+ * `finish-pending`: HEAD ya no está en `review/*`, el inventario de
+ * `list --porcelain` trae una fila `finish … pending` — el mismo camino que
+ * `doRefresh` usa para pasar de `no-review` a `finish-pending`.
+ */
+function finishPending(rows: string[][]): PanelModel {
+    const state: ReviewState = {
+        situation: "finish-pending",
+        entries: [],
+        branches: parseListPorcelain(porcelain(rows)),
+    };
+    return buildPanelModel(state, {busy: false});
+}
+
+/**
+ * `finish-conflict`: `status --porcelain` de una review activa más el
+ * registro `finish conflict` — parser real + `buildPanelModel`, como `review()`.
+ */
+function finishConflict(rows: string[][]): PanelModel {
+    const parsed = parsePorcelain(porcelain(rows));
+    const state: ReviewState = {
+        situation: "finish-conflict",
+        state: parsed.state,
+        entries: parsed.entries,
+        branches: [],
+    };
+    if (parsed.subjects) {
+        state.subjects = parsed.subjects;
+    }
+    if (parsed.authors) {
+        state.authors = parsed.authors;
+    }
+    if (parsed.base !== undefined) {
+        state.base = parsed.base;
+    }
+    if (parsed.finish !== undefined) {
+        state.finish = parsed.finish;
+    }
+    return buildPanelModel(state, {busy: false});
+}
+
+/**
  * `entry` en walk: posición, path, essential, annotated. Los paths de
  * `unannotated` van al final del orden de lectura con `essential=0`,
  * `annotated=0` — el mismo lugar que les da `walk_reading_order`.
@@ -289,6 +330,40 @@ export const PREVIEW_PANES: PreviewPane[] = [
             ["branch", "review/orphan", "0", "1", "1"],
             ["branch", "review-saved/perf/index", "1", "0", "0", "step", "2", "4"],
             ["branch", "review-saved/fix/quoting", "1", "0", "0", "walk", "1", "6"],
+        ]),
+    },
+    {
+        // list --porcelain con finish … pending: HEAD no está en review/*,
+        // el inventario sigue ahí y el encabezado ofrece deshacer el cierre.
+        name: "finish-pending",
+        caption: "finish-pending — cierre completo en review-fixes, undo vivo",
+        model: finishPending([
+            ["branch", "review/feature/shipping", "0", "0", "0", "whole"],
+            ["finish", "review/feature/shipping", "pending", "0"],
+            ["branch", "review-saved/perf/index", "1", "0", "0", "step", "2", "4"],
+        ]),
+    },
+    {
+        // status --porcelain con finish conflict: la review sigue legible
+        // (FR-027) pero navigationLocked retira next/prev y el banner ofrece
+        // Undo / Continue.
+        name: "finish-conflict",
+        caption: "finish-conflict — replay detenido, banner sin navegación",
+        model: finishConflict([
+            ["state", "review/feature/conflict", "feature/conflict", "a1b2c3d", "step", "none", "3", "4", "4", "c3d4e5f"],
+            ["finish", "conflict", "0"],
+            ["entry", "1", "a1b2c3d", "1"],
+            ["entry", "2", "b2c3d4e", "1"],
+            ["entry", "3", "c3d4e5f", "0"],
+            ["entry", "4", "d4e5f6a", "0"],
+            ["subject", "1", "cf-base"],
+            ["subject", "2", "cf1-touch-x"],
+            ["subject", "3", "cf2-touch-a"],
+            ["subject", "4", "cf3-change-x"],
+            ["author", "1", "review sandbox <sandbox@example.com>"],
+            ["author", "2", "review sandbox <sandbox@example.com>"],
+            ["author", "3", "review sandbox <sandbox@example.com>"],
+            ["author", "4", "review sandbox <sandbox@example.com>"],
         ]),
     },
     {

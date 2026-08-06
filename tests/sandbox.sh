@@ -24,10 +24,12 @@
 # show: a partial walkthrough (unannotated files at the end of the reading
 # order), no walkthrough (whole), a stale one (degraded), commit subjects and
 # author names carrying hostile bytes (a literal tab, non-ASCII, an emoji, an
-# empty subject), and three saved reviews — resumable, blocked, and orphaned —
-# for the inventory that `git review list` and the extension's empty state read.
-# That last group is the only part built by running the commands rather than by
-# writing the repository directly; it fails soft, see the phase itself.
+# empty subject), three saved reviews — resumable, blocked, and orphaned — for
+# the inventory that `git review list` and the extension's empty state read, and
+# two finish-unresolved states: a completed closure still waiting
+# (review-fixes/<src> with a live undo point) and a finish stopped mid-conflict.
+# Those last groups are the only parts built by running the commands rather than
+# by writing the repository directly; they fail soft, see the phase itself.
 set -eu
 
 prog="tests/sandbox.sh"
@@ -455,6 +457,41 @@ git add src/refunds.js
 git commit --quiet -m "feat: refund an order"
 publish feature/refunds
 
+# A small PR that will be left after a completed finish: review-fixes/<src>
+# holds the extracted edits and review/<src> keeps the undo point — the
+# finish-pending state list --porcelain and the panel's empty inventory show.
+pr feature/shipping
+
+cat >src/shipping.js <<'EOF'
+export function ship(order) {
+	return { order: order.id, status: "queued" };
+}
+EOF
+git add src/shipping.js
+git commit --quiet -m "feat: queue a shipment"
+publish feature/shipping
+
+# feature/conflict: same mechanism as tests/finish-state.bats setup_conflict_pr
+# — cf1 touches x.txt and a later cf3 changes the same region, so an edit
+# banked on cf1 cannot replay onto the tip. Built here so the sandbox can leave
+# a finish stopped mid-conflict without inventing a different fixture.
+pr feature/conflict
+
+printf 'X0\n' >x.txt
+printf 'A0\n' >cfa.txt
+git add x.txt cfa.txt
+git commit --quiet -m cf-base
+printf 'X0\nX1\n' >x.txt
+git add x.txt
+git commit --quiet -m cf1-touch-x
+printf 'A0\nA1\n' >cfa.txt
+git add cfa.txt
+git commit --quiet -m cf2-touch-a
+printf 'X0\nX1-CHANGED\n' >x.txt
+git add x.txt
+git commit --quiet -m cf3-change-x
+publish feature/conflict
+
 # Leave the reviewer where a reviewer starts: on the base branch.
 git switch --quiet develop
 
@@ -500,9 +537,68 @@ else
 	saved_reviews=0
 fi
 
+# ── finish-unresolved states ──────────────────────────────────────────────────
+#
+# Same soft-fail rule as the saved reviews: these only exist if the verbs work.
+# A completed finish leaves review-fixes/<src> and a live undo on review/<src>
+# (finish-pending). A stop mid-conflict leaves reviewresume=conflict on the
+# review branch (finish-conflict). Both are what list/status --porcelain report
+# and what the panel's finish banners describe.
+
+# Whole-mode review of feature/shipping, one edit, finish — leaves the pending
+# undo point that list --porcelain reports as finish … pending.
+bank_finish_pending() {
+	review start feature/shipping >/dev/null || return 1
+	printf '%s\n' '// reviewed: ship only after payment clears' >>src/shipping.js || return 1
+	review finish >/dev/null || return 1
+	# HEAD is on review-fixes/feature/shipping; the undo lives on review/*.
+	[ -n "$(git rev-parse --verify --quiet refs/heads/review-fixes/feature/shipping)" ] || return 1
+	[ -n "$(git config branch.review/feature/shipping.reviewundohead || true)" ] || return 1
+}
+
+# Exact command sequence from tests/finish-state.bats setup_conflict_pr, then
+# finish (expected to stop with markers). Do not invent a different conflict.
+bank_finish_conflict() {
+	review start feature/conflict --step >/dev/null || return 1
+	review next >/dev/null || return 1
+	printf 'X0\nX1-EDITED\n' >x.txt || return 1
+	review next >/dev/null || return 1
+	printf 'A0\nA1-EDITED\n' >cfa.txt || return 1
+	# finish is expected to fail and leave reviewresume=conflict
+	if review finish >/dev/null 2>&1; then
+		return 1
+	fi
+	[ "$(git config branch.review/feature/conflict.reviewresume || true)" = "conflict" ] || return 1
+}
+
+# After a finish the working tree sits on review-fixes/* with the extracted
+# edits staged: clean back onto develop before the next banked state, or
+# `start` refuses with "you have local changes".
+reset_to_develop() {
+	git switch --quiet --discard-changes develop 2>/dev/null || git switch --quiet develop
+	git reset --quiet --hard
+	git clean --quiet -fd
+}
+
+finish_pending=0
+finish_conflict=0
+if bank_finish_pending; then
+	finish_pending=1
+else
+	printf 'warning: could not build the finish-pending state (is %s working?)\n' "$repo_root/bin/git-review" >&2
+fi
+reset_to_develop
+if bank_finish_conflict; then
+	finish_conflict=1
+else
+	printf 'warning: could not build the finish-conflict state (is %s working?)\n' "$repo_root/bin/git-review" >&2
+fi
+
 # Whatever happened above, the reviewer starts on the base branch with a clean
 # working tree: `git review continue` refuses to run against local changes.
-git switch --quiet develop
+# Finish-conflict leaves markers in the tree — discard them when leaving the
+# review branch; the conflict record lives in branch config and survives.
+git switch --quiet --discard-changes develop 2>/dev/null || git switch --quiet develop
 git reset --quiet --hard
 git clean --quiet -fd
 
@@ -542,6 +638,19 @@ else
 	saved_note="  (the saved reviews could not be built — see the warning above)"
 fi
 
+# Describe finish states from the real repository, not from assumed names: the
+# same discipline as the 004 sandbox note — print what is actually there.
+if [ "$finish_pending" -eq 1 ]; then
+	finish_pending_note="$(printf '  review/feature/shipping      finish pending (onto=0) -> review-fixes/feature/shipping\n                          undohead=%s' "$(git config branch.review/feature/shipping.reviewundohead || true)")"
+else
+	finish_pending_note="  (finish-pending state could not be built — see the warning above)"
+fi
+if [ "$finish_conflict" -eq 1 ]; then
+	finish_conflict_note="$(printf '  review/feature/conflict      finish conflict (onto=0), reviewresume=%s\n                          step=%s (stand on the branch and run status --porcelain)' "$(git config branch.review/feature/conflict.reviewresume || true)" "$(git config branch.review/feature/conflict.reviewstep || true)")"
+else
+	finish_conflict_note="  (finish-conflict state could not be built — see the warning above)"
+fi
+
 cat <<EOF
 Sandbox ready: $dir
 
@@ -571,6 +680,9 @@ The other branches, one per state that feature/checkout cannot show:
   feature/search          reviewed and put aside (see below)
   feature/i18n            the same, but blocked
   feature/refunds         only its leftover branch, no review
+  feature/shipping        finished with edits left unresolved (see below)
+  feature/conflict        finish stopped mid-conflict (see below)
+  feature/pagos           hostile subject/author bytes; review with --step
 
 And, on develop, the inventory that \`git review list\` (and the extension's empty
 state) reads — three saved reviews, one resumable and two not:
@@ -578,6 +690,11 @@ state) reads — three saved reviews, one resumable and two not:
   review-saved/feature/search   walk 2/3, resumable
   review-saved/feature/i18n     blocked: review/feature/i18n is already active
   review-saved/feature/refunds  no metadata behind it (hand-made branch)
+
+Finish-unresolved states left for the panel (list --porcelain / status):
+
+$finish_pending_note
+$finish_conflict_note
 
 Try it:
 
@@ -588,6 +705,8 @@ Try it:
   git review start feature/notifications     # then: git review status --porcelain
   git review status / list / next / prev
 $saved_note
+  git review list --porcelain                # finish pending/conflict rows above
+  git switch review/feature/conflict         # then: status --porcelain -> finish conflict
   git review finish        # extracts your edits to review-fixes/feature/checkout
   git review abort         # throws the review away
 

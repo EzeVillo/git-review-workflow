@@ -3,10 +3,9 @@
  * existe, armada por el asistente entre que el revisor empieza a elegir y
  * confirma. No se persiste — si el asistente se cancela, no queda nada.
  *
- * `range`/`source` llevan ya los cuatro valores de la tabla, aunque esta fase
- * sólo alcanza `full`/`remote`: la UI de "Más opciones" (Fase 8, US6) sólo
- * agrega superficie para llegar a `delta`/`local`/`offline`, no un contrato
- * nuevo — así que el tipo y `intentToArgs` lo soportan desde ahora.
+ * `range`/`source` cubren full|delta y remote|local|offline: el asistente de
+ * `start` los elige en pasos lineales (origen siempre; rango sólo con registro
+ * delta). El tipo y `intentToArgs` son el contrato de esa UI con la CLI.
  */
 export type ReviewLayout = "auto" | "step" | "no-walk";
 export type ReviewRange = "full" | "delta";

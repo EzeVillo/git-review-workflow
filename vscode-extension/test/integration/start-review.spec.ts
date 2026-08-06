@@ -14,39 +14,65 @@ import {
 } from "./helpers/fixture";
 
 /**
- * `gitReview.startReview` es un asistente multi-paso (dos `showQuickPick` más
- * una confirmación modal). El host de test no tiene quién le haga click, así
- * que se sustituyen esas tres funciones de `vscode.window` por respuestas
- * fijas mientras corre el comando — la misma técnica que cualquier extensión
- * usa para probar un flujo interactivo sin un usuario real del otro lado; se
+ * Ítem de QuickPick del asistente, con los discriminadores que `startReview.ts`
+ * cuelga en cada paso (layout / source / range / candidate).
+ */
+interface WizardItem {
+    label: string;
+    candidate?: {name?: string; current?: boolean};
+    layout?: string;
+    source?: string;
+    range?: string;
+}
+
+/**
+ * `gitReview.startReview` es un asistente multi-paso (rama → forma de lectura →
+ * origen → rango si hay delta, más confirmación modal). El host de test no tiene
+ * quién le haga click, así que se sustituyen `showQuickPick` /
+ * `showWarningMessage` por respuestas fijas mientras corre el comando; se
  * restauran siempre, incluso si el comando lanza.
+ *
+ * Cada paso se reconoce por la forma del ítem (no por el orden de llamadas): el
+ * origen se elige **siempre**, y el rango sólo aparece cuando la CLI reporta
+ * delta — un contador de llamadas se rompería en cuanto haya o no haya ese paso.
  */
 async function withScriptedWizard<T>(
-    pickBranch: (items: readonly { label: string; candidate?: { current: boolean } }[]) => unknown,
+    pickBranch: (items: readonly WizardItem[]) => unknown,
     layoutLabel: string,
-    fn: () => Thenable<T>
+    fn: () => Thenable<T>,
+    opts: {sourceLabel?: string; rangeLabel?: string} = {}
 ): Promise<T> {
+    const sourceLabel = opts.sourceLabel ?? "Remote";
+    const rangeLabel = opts.rangeLabel ?? "Full range";
     const originalQuickPick = vscode.window.showQuickPick;
     const originalWarning = vscode.window.showWarningMessage;
-    let call = 0;
-    (vscode.window as unknown as { showQuickPick: unknown }).showQuickPick = async (items: readonly { label: string }[]) => {
-        call++;
-        if (call === 1) {
-            return pickBranch(items as readonly { label: string; candidate?: { current: boolean } }[]);
+    (vscode.window as unknown as {showQuickPick: unknown}).showQuickPick = async (
+        items: readonly WizardItem[]
+    ) => {
+        const sample = items[0];
+        if (sample?.layout !== undefined) {
+            return items.find((item) => item.label === layoutLabel);
         }
-        return items.find((item) => item.label === layoutLabel);
+        if (sample?.source !== undefined) {
+            return items.find((item) => item.label === sourceLabel);
+        }
+        if (sample?.range !== undefined) {
+            return items.find((item) => item.label === rangeLabel);
+        }
+        return pickBranch(items);
     };
-    (vscode.window as unknown as { showWarningMessage: unknown }).showWarningMessage =
-        async () => "Start the review";
+    (vscode.window as unknown as {showWarningMessage: unknown}).showWarningMessage = async () =>
+        "Start the review";
     try {
         return await fn();
     } finally {
-        (vscode.window as unknown as { showQuickPick: unknown }).showQuickPick = originalQuickPick;
-        (vscode.window as unknown as { showWarningMessage: unknown }).showWarningMessage = originalWarning;
+        (vscode.window as unknown as {showQuickPick: unknown}).showQuickPick = originalQuickPick;
+        (vscode.window as unknown as {showWarningMessage: unknown}).showWarningMessage =
+            originalWarning;
     }
 }
 
-const pickCurrent = (items: readonly { candidate?: { current: boolean } }[]) =>
+const pickCurrent = (items: readonly WizardItem[]) =>
     items.find((item) => item.candidate?.current);
 
 describe("US1: empezar a revisar sin escribir el comando", function () {
@@ -139,6 +165,65 @@ describe("US1: empezar a revisar sin escribir el comando", function () {
         assert.strictEqual(state.state?.mode, "walk");
     });
 
+    it("el asistente pide origen despues del layout (no hay More options ni re-pregunta de layout)", async () => {
+        const branch = "us1-source-step";
+        createBranchWithChanges(repo, branch, {"src/a.ts": "a\n"});
+        git(["checkout", branch], repo.dir);
+
+        const api = await getTestApi();
+        assert.strictEqual((await api.refresh()).situation, "no-review");
+
+        const originalQuickPick = vscode.window.showQuickPick;
+        const originalWarning = vscode.window.showWarningMessage;
+        const stepKinds: string[] = [];
+        (vscode.window as unknown as {showQuickPick: unknown}).showQuickPick = async (
+            items: readonly WizardItem[]
+        ) => {
+            const sample = items[0];
+            if (sample?.layout !== undefined) {
+                stepKinds.push("layout");
+                assert.ok(
+                    !items.some((item) => item.label.startsWith("More options")),
+                    "More options no debe aparecer en el paso de layout"
+                );
+                return items.find((item) => item.label === "Automatic");
+            }
+            if (sample?.source !== undefined) {
+                stepKinds.push("source");
+                return items.find((item) => item.label === "Local");
+            }
+            if (sample?.range !== undefined) {
+                stepKinds.push("range");
+                return items.find((item) => item.label === "Full range");
+            }
+            stepKinds.push("branch");
+            return pickCurrent(items);
+        };
+        (vscode.window as unknown as {showWarningMessage: unknown}).showWarningMessage = async () =>
+            "Start the review";
+
+        try {
+            await vscode.commands.executeCommand("gitReview.startReview");
+        } finally {
+            (vscode.window as unknown as {showQuickPick: unknown}).showQuickPick = originalQuickPick;
+            (vscode.window as unknown as {showWarningMessage: unknown}).showWarningMessage =
+                originalWarning;
+        }
+
+        assert.deepStrictEqual(
+            stepKinds.filter((k) => k === "layout"),
+            ["layout"],
+            "layout se elige una sola vez"
+        );
+        assert.ok(stepKinds.includes("source"), "origen se pide siempre, no detras de More options");
+        // Sin review previa de esta rama no hay registro delta: el rango no se ofrece.
+        assert.ok(!stepKinds.includes("range"), "sin delta no se ofrece el paso de rango");
+
+        const state = await api.refresh();
+        assert.strictEqual(state.situation, "review");
+        assert.strictEqual(state.state?.source, branch);
+    });
+
     it("sin base configurada, el asistente no se abre sin resolverla primero", async () => {
         const branch = "us1-no-base";
         createBranchWithChanges(repo, branch, {"src/a.ts": "a\n"});
@@ -150,32 +235,20 @@ describe("US1: empezar a revisar sin escribir el comando", function () {
         assert.strictEqual((await api.getPanelModel()).noBaseConfigured, true);
 
         // setBase (T025) usa un showQuickPick propio, sin confirmación modal:
-        // un solo pick alcanza para toda la secuencia (la base, y despues rama +
-        // layout siguen su curso normal).
-        const originalQuickPick = vscode.window.showQuickPick;
-        const originalWarning = vscode.window.showWarningMessage;
-        let call = 0;
-        (vscode.window as unknown as { showQuickPick: unknown }).showQuickPick =
-            async (items: readonly { label: string; candidate?: { name: string; current: boolean } }[]) => {
-                call++;
-                if (call === 1) {
-                    // el paso de setBase: elegir "main" como base.
+        // se reconoce por candidate sin layout/source/range; el primer pick de
+        // ese tipo es la base, el segundo la rama a revisar.
+        let basePicked = false;
+        await withScriptedWizard(
+            (items) => {
+                if (!basePicked) {
+                    basePicked = true;
                     return items.find((item) => item.candidate?.name === "main");
                 }
-                if (call === 2) {
-                    return items.find((item) => item.candidate?.current);
-                }
-                return items.find((item) => item.label === "Automatic");
-            };
-        (vscode.window as unknown as { showWarningMessage: unknown }).showWarningMessage =
-            async () => "Start the review";
-
-        try {
-            await vscode.commands.executeCommand("gitReview.startReview");
-        } finally {
-            (vscode.window as unknown as { showQuickPick: unknown }).showQuickPick = originalQuickPick;
-            (vscode.window as unknown as { showWarningMessage: unknown }).showWarningMessage = originalWarning;
-        }
+                return items.find((item) => item.candidate?.current);
+            },
+            "Automatic",
+            () => vscode.commands.executeCommand("gitReview.startReview")
+        );
 
         const state = await api.refresh();
         assert.strictEqual(state.situation, "review");

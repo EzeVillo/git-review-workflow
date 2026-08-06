@@ -27,7 +27,7 @@ never invents a second way to change review state.
 
 | Action | When it appears | CLI |
 |--------|-----------------|-----|
-| **Start a review** | Empty state (`no-review`): pick a branch (and optionally range/source) from the assistant | `git review start …` |
+| **Start a review** | Empty state (`no-review`): pick branch, how to read it, origin, and range (if a prior tip exists) from the assistant | `git review start …` |
 | **Cancel review** | Active review, and also mid-conflict finish | `git review abort` |
 | **Finish review** | Active review with your edits ready to extract | `git review finish` / `finish --onto-source` |
 | **Save for later** | Active review only (not while a finish is mid-conflict) | `git review save` |

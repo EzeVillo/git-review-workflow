@@ -290,8 +290,11 @@ propio VS Code documenta como *multi-step input*—, con este recorrido:
 1. **Rama a revisar** — lista filtrable de candidatas, la actual primera.
 2. **Cómo leerla** — tres ítems con descripción: *Automático* (nada), *Commit por
    commit* (`--step`), *Ignorar el walkthrough* (`--no-walk`).
-3. **Opciones** (opcional, detrás de un ítem *Más opciones…*) — origen y rango.
-4. **Confirmación** — una frase con la review resultante (FR-017).
+3. **Origen** — remoto / local / local sin red. Siempre visible (FR-016); la
+   preferencia `gitReview.defaultSource` sólo preselecciona el ítem.
+4. **Rango** — sólo si `config --porcelain <rama>` reporta registro `delta`
+   (FR-015): full o sólo lo nuevo (`--delta`).
+5. **Confirmación** — una frase con la review resultante (FR-017).
 
 **Rationale**: el `QuickPick` es la superficie nativa para elegir de una lista y
 la que `002` ya eligió para la secuencia de entradas (su Decisión 4): trae
@@ -300,9 +303,12 @@ cientos de ramas, y no ocupa nada mientras no se usa. Un formulario en el webvie
 sería superficie propia que hay que dibujar, tematizar y hacer navegable por
 teclado a mano, para replicar algo que el host ya hace mejor.
 
-La jerarquía de pasos —lo que casi siempre se acepta primero, lo raro detrás de
-una puerta— es lo que impide que la interfaz se convierta en la traducción campo
-por campo de la línea de comandos que la spec prohíbe.
+Los pasos van en línea —una decisión por pantalla— en vez de esconder origen y
+rango detrás de un *Más opciones…* que reabría el layout: eso hacía invisible el
+origen en el happy path (en tensión con FR-016) y repetía una elección ya hecha.
+El rango condicional sí es progressive disclosure útil: no se pregunta lo que la
+CLI dice que no aplica. Sigue sin ser la traducción campo a campo de la CLI: no
+hay formulario ni flags crudos, sólo elecciones del host.
 
 **Sobre el paso 2 y lo que NO se ofrece**: no hay ítem "walkthrough". La CLI no
 tiene `--walk`: entra en walk sola si el tip trae el sidecar

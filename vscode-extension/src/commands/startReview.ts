@@ -27,14 +27,7 @@ interface BranchItem extends vscode.QuickPickItem {
 
 interface LayoutItem extends vscode.QuickPickItem {
     layout: ReviewLayout;
-    moreOptions?: false;
 }
-
-interface MoreOptionsItem extends vscode.QuickPickItem {
-    moreOptions: true;
-}
-
-type LayoutStepItem = LayoutItem | MoreOptionsItem;
 
 interface SourceItem extends vscode.QuickPickItem {
     source: ReviewSource;
@@ -49,12 +42,6 @@ const LAYOUT_ITEMS: LayoutItem[] = [
     {label: "Commit by commit", description: "review one commit at a time (--step)", layout: "step"},
     {label: "Ignore the walkthrough", description: "review the whole diff at once (--no-walk)", layout: "no-walk"},
 ];
-
-const MORE_OPTIONS_ITEM: MoreOptionsItem = {
-    label: "More options…",
-    description: "choose origin and range",
-    moreOptions: true,
-};
 
 /**
  * Origen (FR-014): remoto / local / local sin red. Las dos últimas se explican
@@ -118,27 +105,18 @@ async function pickBranch(candidates: CandidateBranch[]): Promise<CandidateBranc
         .sort((a, b) => (a.current === b.current ? 0 : a.current ? -1 : 1))
         .map((candidate) => ({label: branchLabel(candidate), candidate}));
     const picked = await vscode.window.showQuickPick(items, {
-        title: "Start a review — branch (step 1 of 3)",
+        title: "Start a review — branch",
         placeHolder: "Branch to review",
     });
     return picked?.candidate;
 }
 
 /**
- * Paso 2 — cómo leerla. Incluye el ítem *More options…* que abre el paso
- * opcional de origen/rango (research.md Decisión 9, T072). Elegir un layout
- * a secas usa rango full y el default de origen sin abrir ese paso.
+ * Paso 2 — cómo leerla (FR-012 / FR-013). Tres alternativas de la CLI; no hay
+ * ítem "walkthrough" ni puerta de "More options…" — origen y rango vienen
+ * después, en pasos propios.
  */
-async function pickLayoutStep(): Promise<LayoutStepItem | undefined> {
-    const items: LayoutStepItem[] = [...LAYOUT_ITEMS, MORE_OPTIONS_ITEM];
-    return vscode.window.showQuickPick(items, {
-        title: "Start a review — how to read it (step 2 of 3)",
-        placeHolder: "Automatic, commit by commit, whole diff, or more options",
-    });
-}
-
-/** Layout sin el ítem de más opciones — el subpaso del camino avanzado. */
-async function pickLayoutOnly(): Promise<ReviewLayout | undefined> {
+async function pickLayout(): Promise<ReviewLayout | undefined> {
     const picked = await vscode.window.showQuickPick(LAYOUT_ITEMS, {
         title: "Start a review — how to read it",
         placeHolder: "Automatic, commit by commit, or the whole diff at once",
@@ -149,7 +127,8 @@ async function pickLayoutOnly(): Promise<ReviewLayout | undefined> {
 /**
  * Origen: el ítem de `defaultSource` va primero para preseleccionarlo (el
  * QuickPick activa el primer ítem al abrir). El valor que llega a la CLI es
- * el que el usuario confirma acá o en el modal final, no el ajuste solo.
+ * el que el usuario confirma acá o en el modal final, no el ajuste solo
+ * (FR-016 / FR-016a).
  */
 async function pickSource(defaultSource: ReviewSource): Promise<ReviewSource | undefined> {
     const preferred = SOURCE_ITEMS.find((item) => item.source === defaultSource) ?? SOURCE_ITEMS[0];
@@ -175,55 +154,24 @@ async function pickRange(): Promise<ReviewRange | undefined> {
 }
 
 /**
- * Camino "More options…": layout + origen (+ rango si hay delta). El delta
- * sale de una segunda invocación `config --porcelain <rama>` — la del inicio
- * no nombra rama y por contrato no emite el registro (config-porcelain.md).
+ * Disponibilidad de --delta: SIEMPRE del registro CLI
+ * (`config --porcelain <rama>`), nunca heurística local. La invocación inicial
+ * de config no nombra rama y por contrato no emite el registro
+ * (config-porcelain.md).
  */
-async function pickMoreOptions(
+async function loadDeltaForBranch(
     branch: CandidateBranch,
-    defaultSource: ReviewSource,
     options: InvokeOptions
-): Promise<{ layout: ReviewLayout; range: ReviewRange; source: ReviewSource } | undefined> {
-    const layout = await pickLayoutOnly();
-    if (!layout) {
-        return undefined;
-    }
-
-    const source = await pickSource(defaultSource);
-    if (!source) {
-        return undefined;
-    }
-
-    // Disponibilidad de --delta: SIEMPRE del registro CLI, nunca heurística local.
+): Promise<{name: string; tip: string} | undefined> {
     const deltaReport = await invokeGitReview(
         "config",
         ["--porcelain", "--", branch.name],
         {...options, network: false}
     );
-    let delta: { name: string; tip: string } | undefined;
     if (!deltaReport.errorCode && deltaReport.exitCode === 0) {
-        delta = parseConfigPorcelain(deltaReport.stdout).delta;
+        return parseConfigPorcelain(deltaReport.stdout).delta;
     }
-
-    let range: ReviewRange = "full";
-    if (delta !== undefined) {
-        const pickedRange = await pickRange();
-        if (!pickedRange) {
-            return undefined;
-        }
-        range = pickedRange;
-    }
-
-    const partial: ReviewIntent = {branch: branch.name, layout, range, source};
-    const check = validateIntent(partial, {delta});
-    if (!check.ok) {
-        // Defensa en profundidad: la UI no ofrece delta sin registro, pero si
-        // algo se desfasó no mandamos un intent ilegal a la CLI.
-        void vscode.window.showErrorMessage(check.reason);
-        return undefined;
-    }
-
-    return {layout, range, source};
+    return undefined;
 }
 
 function layoutSummary(layout: ReviewLayout): string {
@@ -238,7 +186,7 @@ function layoutSummary(layout: ReviewLayout): string {
 }
 
 /**
- * Paso 3 — confirmación con la frase resumen (FR-017), en el mismo molde que
+ * Confirmación con la frase resumen (FR-017), en el mismo molde que
  * `continueReview.ts` usa para retomar una review pausada (research.md § "el
  * molde que 002 fijó"): `start` cambia de rama y mueve HEAD, así que cae bajo
  * FR-029 igual que esa acción.
@@ -285,10 +233,10 @@ function runInTerminal(args: string[], options: InvokeOptions): void {
  * Decisión 9). Lee `config --porcelain` con `network: false` (research.md
  * Decisión 5 — la única invocación que toca la red es `start`), antepone T025
  * si falta la base, recorre los pasos del `QuickPick` (rama → forma de lectura
- * → opciones opcionales) y, confirmado, invoca `start` con `network: true` bajo
- * el `MutationLock` compartido — mismo molde que `continueReview.ts`: progreso
- * no cancelable, refresco pase lo que pase, stderr de advertencias mostrado
- * aunque el exit sea 0 (FR-031).
+ * → origen → rango si hay delta) y, confirmado, invoca `start` con
+ * `network: true` bajo el `MutationLock` compartido — mismo molde que
+ * `continueReview.ts`: progreso no cancelable, refresco pase lo que pase,
+ * stderr de advertencias mostrado aunque el exit sea 0 (FR-031).
  */
 export async function startReview(
     lock: MutationLock,
@@ -326,29 +274,37 @@ export async function startReview(
         return;
     }
 
-    const defaultSource = readDefaultSource();
-    const layoutChoice = await pickLayoutStep();
-    if (!layoutChoice) {
+    const layout = await pickLayout();
+    if (!layout) {
         return;
     }
 
-    let layout: ReviewLayout;
-    let range: ReviewRange = "full";
-    let source: ReviewSource = defaultSource;
+    // Origen siempre visible (FR-016): defaultSource sólo preselecciona.
+    const defaultSource = readDefaultSource();
+    const source = await pickSource(defaultSource);
+    if (!source) {
+        return;
+    }
 
-    if (layoutChoice.moreOptions) {
-        const advanced = await pickMoreOptions(branch, defaultSource, options);
-        if (!advanced) {
+    const delta = await loadDeltaForBranch(branch, options);
+    let range: ReviewRange = "full";
+    if (delta !== undefined) {
+        const pickedRange = await pickRange();
+        if (!pickedRange) {
             return;
         }
-        layout = advanced.layout;
-        range = advanced.range;
-        source = advanced.source;
-    } else {
-        layout = layoutChoice.layout;
+        range = pickedRange;
     }
 
     const intent: ReviewIntent = {branch: branch.name, layout, range, source};
+    const check = validateIntent(intent, {delta});
+    if (!check.ok) {
+        // Defensa en profundidad: la UI no ofrece delta sin registro, pero si
+        // algo se desfasó no mandamos un intent ilegal a la CLI.
+        void vscode.window.showErrorMessage(check.reason);
+        return;
+    }
+
     const args = intentToArgs(intent, branch.name);
 
     // La base del reporte leído arriba, o — si hacía falta y setBase() la

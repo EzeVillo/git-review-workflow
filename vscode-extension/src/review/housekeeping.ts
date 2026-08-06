@@ -9,6 +9,7 @@ import type {ReviewState} from "./state";
 
 export type HousekeepingKind =
     | "clean-one"
+    | "clean-keep-fixes"
     | "clean-all"
     | "forget-saved-one"
     | "forget-saved-all"
@@ -18,7 +19,7 @@ export type HousekeepingKind =
 
 export interface HousekeepingAction {
     kind: HousekeepingKind;
-    /** Source name (`feature/x`), nunca `review-saved/x`. Requerido en `*-one`. */
+    /** Source name (`feature/x`), nunca `review-saved/x`. Requerido en `*-one` y `clean-keep-fixes`. */
     source?: string;
 }
 
@@ -33,9 +34,10 @@ export function sourceFromReviewName(name: string): string {
 }
 
 /**
- * Source del cierre `pending` a limpiar desde el panel (`git review clean <src>`).
- * No depende de HEAD: el pending es del repo (`list --porcelain`), igual que
- * `finish --abort` resuelve el undo sin inventar la rama actual.
+ * Source del cierre `pending` a limpiar desde el panel
+ * (`git review clean --keep-fixes <src>`). No depende de HEAD: el pending es
+ * del repo (`list --porcelain`), igual que `finish --abort` resuelve el undo
+ * sin inventar la rama actual.
  *
  * Ausente fuera de `finish-pending`, o si el inventario no trae fila pending
  * (no debería ocurrir cuando la situación es esa).
@@ -56,7 +58,8 @@ export function verbForHousekeeping(action: HousekeepingAction): "clean" | "forg
 }
 
 /**
- * Args del verbo (sin el verbo). Lanza si falta `source` en un kind `*-one`.
+ * Args del verbo (sin el verbo). Lanza si falta `source` en un kind que lo
+ * exige (`*-one`, `clean-keep-fixes`).
  */
 export function argsForHousekeeping(action: HousekeepingAction): string[] {
     switch (action.kind) {
@@ -65,6 +68,12 @@ export function argsForHousekeeping(action: HousekeepingAction): string[] {
                 throw new Error("clean-one requires source");
             }
             return [action.source];
+        case "clean-keep-fixes":
+            if (!action.source) {
+                throw new Error("clean-keep-fixes requires source");
+            }
+            // Flag before the branch name — same shape as the CLI usage line.
+            return ["--keep-fixes", action.source];
         case "clean-all":
             return [];
         case "forget-saved-one":
@@ -108,6 +117,12 @@ export function confirmCopyFor(action: HousekeepingAction): ConfirmCopy {
             return {
                 title: `Clean leftover review branches for ${src}?`,
                 detail: `Deletes review/${src} and review-fixes/${src} (and banked edit refs) if they exist and are not checked out. Does not touch delta markers.`,
+                button: "Clean",
+            };
+        case "clean-keep-fixes":
+            return {
+                title: `Drop the finish undo for ${src}?`,
+                detail: `Runs git review clean --keep-fixes ${src}: deletes review/${src} and the finish undo point so the pending finish goes away. Leaves review-fixes/${src} (your staged edits) and delta markers alone.`,
                 button: "Clean",
             };
         case "clean-all":

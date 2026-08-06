@@ -150,3 +150,93 @@ teardown() {
 	[ "$status" -eq 0 ]
 	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$(git rev-parse origin/feature/x)" ]
 }
+
+# ── --keep-fixes: drop the finish undo, keep the deliverable ───────────────────
+
+@test "review clean --keep-fixes deletes review/ and keeps review-fixes/" {
+	git branch review/feature/x develop
+	git branch review-fixes/feature/x develop
+
+	run git review clean --keep-fixes feature/x
+	[ "$status" -eq 0 ]
+	run git rev-parse --verify --quiet refs/heads/review/feature/x
+	[ "$status" -ne 0 ]
+	run git rev-parse --verify --quiet refs/heads/review-fixes/feature/x
+	[ "$status" -eq 0 ]
+}
+
+@test "review clean --keep-fixes after finish clears pending and keeps staged fixes" {
+	# Happy path post-finish: drop the undo window, keep the deliverable even
+	# when HEAD is not on review-fixes (e.g. develop after a switch).
+	git review start feature/x >/dev/null
+	printf 'edited\n' >f.txt
+	git review finish >/dev/null
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
+	# Walk away like the sandbox / everyday case.
+	git switch --quiet --discard-changes develop 2>/dev/null || {
+		git reset --quiet --hard
+		git clean --quiet -fd
+		git switch --quiet develop
+	}
+	git reset --quiet --hard
+	git clean --quiet -fd
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "develop" ]
+	[ -n "$(git for-each-ref refs/heads/review/feature/x)" ]
+	[ -n "$(git for-each-ref refs/heads/review-fixes/feature/x)" ]
+
+	run git review clean --keep-fixes feature/x
+	[ "$status" -eq 0 ]
+
+	run git rev-parse --verify --quiet refs/heads/review/feature/x
+	[ "$status" -ne 0 ]
+	run git rev-parse --verify --quiet refs/heads/review-fixes/feature/x
+	[ "$status" -eq 0 ]
+	# Finish undo keys must go so list no longer reports finish pending.
+	run git config --get-regexp '^branch\.review/feature/x\.reviewundo'
+	[ "$status" -ne 0 ]
+	[ -z "$output" ]
+	run git review list --porcelain
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"finish	review/feature/x	pending"* ]]
+	# Default clean still owns review-fixes when --keep-fixes is omitted.
+	run git review clean feature/x
+	[ "$status" -eq 0 ]
+	run git rev-parse --verify --quiet refs/heads/review-fixes/feature/x
+	[ "$status" -ne 0 ]
+}
+
+@test "review clean --keep-fixes without branch leaves every review-fixes/" {
+	git branch review/feature/x develop
+	git branch review-fixes/feature/x develop
+	git branch review/feature/y develop
+	git branch review-fixes/feature/y develop
+
+	run git review clean --keep-fixes
+	[ "$status" -eq 0 ]
+	run git rev-parse --verify --quiet refs/heads/review/feature/x
+	[ "$status" -ne 0 ]
+	run git rev-parse --verify --quiet refs/heads/review/feature/y
+	[ "$status" -ne 0 ]
+	run git rev-parse --verify --quiet refs/heads/review-fixes/feature/x
+	[ "$status" -eq 0 ]
+	run git rev-parse --verify --quiet refs/heads/review-fixes/feature/y
+	[ "$status" -eq 0 ]
+}
+
+@test "review clean --keep-fixes keeps the delta marker" {
+	git config reviewworkflow.feature/x.reviewed "$(git rev-parse origin/feature/x)"
+	git branch review/feature/x develop
+	git branch review-fixes/feature/x develop
+
+	run git review clean --keep-fixes feature/x
+	[ "$status" -eq 0 ]
+	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$(git rev-parse origin/feature/x)" ]
+	run git rev-parse --verify --quiet refs/heads/review-fixes/feature/x
+	[ "$status" -eq 0 ]
+}
+
+@test "review clean rejects unknown flags but accepts --keep-fixes" {
+	run git review clean --keep-fix feature/x
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"unknown option --keep-fix"* ]]
+}

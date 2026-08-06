@@ -7,7 +7,7 @@ import {ReviewStateManager} from "../review/state";
 import {captureToken} from "../review/staleGuard";
 import {runHousekeeping} from "./runHousekeeping";
 
-type CleanPick = vscode.QuickPickItem & {action: "one" | "all"};
+type CleanPick = vscode.QuickPickItem & { action: "one" | "all" };
 
 /**
  * `gitReview.cleanReview`: limpia leftovers de una fuente o de todas
@@ -54,14 +54,13 @@ export async function cleanReview(
         return;
     }
 
-    // Panel finish-pending: el finish ya entregó las edits; Clean tira el
-    // leftover review/* (+ review-fixes/* si no es la rama actual) y el undo.
-    // HEAD puede ser review-fixes/*, main, o cualquier otra: el source sale
-    // del inventario, no de la rama actual.
+    // Panel finish-pending: el finish ya entregó las edits. Clean con
+    // --keep-fixes tira solo review/* + undo (cierra el pending) y deja el
+    // entregable review-fixes/*. HEAD no importa: el source sale del inventario.
     const pendingSource = pendingFinishSource(stateManager.state);
     if (pendingSource !== undefined) {
         await runHousekeeping(
-            {kind: "clean-one", source: pendingSource},
+            {kind: "clean-keep-fixes", source: pendingSource},
             lock,
             stateManager,
             getInvokeOptions,

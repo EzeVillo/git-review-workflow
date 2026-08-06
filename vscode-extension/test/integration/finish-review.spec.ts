@@ -38,7 +38,9 @@ async function withScriptedPick<T>(
             infos.push(msg);
             return undefined;
         };
-    (vscode.window as unknown as { showErrorMessage: unknown }).showErrorMessage = async (msg: string) => {
+    (vscode.window as unknown as {
+        showErrorMessage: unknown
+    }).showErrorMessage = async (msg: string) => {
         errors.push(msg);
         return undefined;
     };
@@ -47,8 +49,12 @@ async function withScriptedPick<T>(
         return {result, infos, errors};
     } finally {
         (vscode.window as unknown as { showQuickPick: unknown }).showQuickPick = originalPick;
-        (vscode.window as unknown as { showInformationMessage: unknown }).showInformationMessage = originalInfo;
-        (vscode.window as unknown as { showErrorMessage: unknown }).showErrorMessage = originalError;
+        (vscode.window as unknown as {
+            showInformationMessage: unknown
+        }).showInformationMessage = originalInfo;
+        (vscode.window as unknown as {
+            showErrorMessage: unknown
+        }).showErrorMessage = originalError;
     }
 }
 
@@ -77,7 +83,9 @@ async function withScriptedConfirms<T>(
             infos.push(msg);
             return undefined;
         };
-    (vscode.window as unknown as { showErrorMessage: unknown }).showErrorMessage = async (msg: string) => {
+    (vscode.window as unknown as {
+        showErrorMessage: unknown
+    }).showErrorMessage = async (msg: string) => {
         errors.push(msg);
         return undefined;
     };
@@ -85,9 +93,15 @@ async function withScriptedConfirms<T>(
         const result = await fn();
         return {result, infos, errors, warnings};
     } finally {
-        (vscode.window as unknown as { showWarningMessage: unknown }).showWarningMessage = originalWarn;
-        (vscode.window as unknown as { showInformationMessage: unknown }).showInformationMessage = originalInfo;
-        (vscode.window as unknown as { showErrorMessage: unknown }).showErrorMessage = originalError;
+        (vscode.window as unknown as {
+            showWarningMessage: unknown
+        }).showWarningMessage = originalWarn;
+        (vscode.window as unknown as {
+            showInformationMessage: unknown
+        }).showInformationMessage = originalInfo;
+        (vscode.window as unknown as {
+            showErrorMessage: unknown
+        }).showErrorMessage = originalError;
     }
 }
 
@@ -152,7 +166,7 @@ function finishLineFor(repo: FixtureRepo, branch: string): string | undefined {
         .find((l) => l.startsWith(`finish\treview/${branch}\t`));
 }
 
-function branchExists(repo: {dir: string}, name: string): boolean {
+function branchExists(repo: { dir: string }, name: string): boolean {
     return git(["branch", "--list", name], repo.dir).trim().length > 0;
 }
 
@@ -527,9 +541,8 @@ describe("US4 (005): deshacer un cierre o destrabar uno a mitad", function () {
         assert.strictEqual(state.situation, "review");
     });
 
-    it("clean desde finish-pending en review-fixes elimina undo y deja no-review (T055)", async () => {
-        // Estando en review-fixes, clean skipea esa rama: se va review/ + undo,
-        // quedan las edits staged en review-fixes (entregable).
+    it("clean desde finish-pending en review-fixes usa --keep-fixes y deja no-review (T055)", async () => {
+        // clean --keep-fixes: se va review/ + undo; quedan staged en review-fixes.
         const branch = "us4-clean-on-fixes";
         createBranchWithChanges(repo, branch, {"src/a.ts": "a\n"});
         git(["checkout", branch], repo.dir);
@@ -557,7 +570,7 @@ describe("US4 (005): deshacer un cierre o destrabar uno a mitad", function () {
         assert.strictEqual(
             branchExists(repo, `review-fixes/${branch}`),
             true,
-            "review-fixes se skipea al estar checked out"
+            "--keep-fixes deja review-fixes"
         );
         const staged = git(["diff", "--cached"], repo.dir);
         assert.ok(staged.includes("clean-keeps-staged"), "edits staged tienen que sobrevivir");
@@ -575,20 +588,18 @@ describe("US4 (005): deshacer un cierre o destrabar uno a mitad", function () {
         assert.strictEqual(model.situation, "no-review");
     });
 
-    it("clean desde finish-pending en main elimina review y review-fixes (T055)", async () => {
-        // Desde otra rama, clean borra las dos familias de leftovers del source.
+    it("clean desde finish-pending en main usa --keep-fixes: borra review, conserva review-fixes (T055)", async () => {
+        // Independiente de HEAD: el panel siempre invoca clean --keep-fixes.
         const branch = "us4-clean-from-main";
         createBranchWithChanges(repo, branch, {"src/a.ts": "a\n"});
         git(["checkout", branch], repo.dir);
 
         const api = await getTestApi();
         startReview(repo, branch);
-        writeFile(repo, "src/a.ts", "a\nwill-go-with-clean\n");
+        writeFile(repo, "src/a.ts", "a\nmust-survive-clean\n");
         gitReviewOrThrow(["finish"], repo.dir);
         assert.strictEqual((await api.refresh()).situation, "finish-pending");
 
-        // Commitear en review-fixes para que al ir a main no se pierda el
-        // contenido solo por un switch: el test afirma el -D de la rama.
         git(["add", "-A"], repo.dir);
         git(["commit", "-m", "fixes commit before clean"], repo.dir);
         const fixesSha = git(["rev-parse", "HEAD"], repo.dir).trim();
@@ -607,17 +618,18 @@ describe("US4 (005): deshacer un cierre o destrabar uno a mitad", function () {
         assert.strictEqual(reviewBranchExists(repo, branch), false, "review/ borrada");
         assert.strictEqual(
             branchExists(repo, `review-fixes/${branch}`),
-            false,
-            "review-fixes/ borrada al no estar checked out"
+            true,
+            "review-fixes/ se conserva con --keep-fixes aunque no sea HEAD"
         );
-        // El commit local ya no es alcanzable por esa rama (branch -D).
-        try {
-            git(["rev-parse", "--verify", `refs/heads/review-fixes/${branch}`], repo.dir);
-            assert.fail("review-fixes no deberia resolverse");
-        } catch {
-            // esperado
-        }
-        void fixesSha;
+        assert.strictEqual(
+            git(["rev-parse", `refs/heads/review-fixes/${branch}`], repo.dir).trim(),
+            fixesSha,
+            "el commit de fixes tiene que seguir en review-fixes"
+        );
+        assert.strictEqual(
+            git(["log", "-1", "--format=%s", `review-fixes/${branch}`], repo.dir).trim(),
+            "fixes commit before clean"
+        );
 
         assert.strictEqual(finishLineFor(repo, branch), undefined);
         const state = await api.refresh();

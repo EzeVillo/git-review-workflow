@@ -87,11 +87,32 @@ describe("pendingFinishSource", () => {
             "tiene que afirmar que el delta queda"
         );
     });
+
+    it("confirm clean-keep-fixes borra review/ y deja review-fixes/", () => {
+        const c = confirmCopyFor({kind: "clean-keep-fixes", source: "feature/shipping"});
+        assert.strictEqual(c.button, "Clean");
+        assert.ok(c.detail.includes("--keep-fixes"));
+        assert.ok(c.detail.includes("review/feature/shipping"));
+        assert.ok(
+            /leaves review-fixes\/feature\/shipping|Leaves review-fixes\/feature\/shipping/i.test(
+                c.detail
+            ),
+            "tiene que decir que review-fixes se conserva"
+        );
+        assert.ok(
+            !/Deletes review\/feature\/shipping and review-fixes/i.test(c.detail),
+            "no debe prometer borrar review-fixes"
+        );
+    });
 });
 
 describe("argsForHousekeeping", () => {
     it("maps each kind to the closed arg list", () => {
         assert.deepStrictEqual(argsForHousekeeping({kind: "clean-one", source: "f/x"}), ["f/x"]);
+        assert.deepStrictEqual(argsForHousekeeping({kind: "clean-keep-fixes", source: "f/x"}), [
+            "--keep-fixes",
+            "f/x",
+        ]);
         assert.deepStrictEqual(argsForHousekeeping({kind: "clean-all"}), []);
         assert.deepStrictEqual(argsForHousekeeping({kind: "forget-saved-one", source: "f/x"}), [
             "--saved",
@@ -111,6 +132,7 @@ describe("argsForHousekeeping", () => {
 
     it("verbs are clean or forget only", () => {
         assert.strictEqual(verbForHousekeeping({kind: "clean-all"}), "clean");
+        assert.strictEqual(verbForHousekeeping({kind: "clean-keep-fixes", source: "f/x"}), "clean");
         assert.strictEqual(verbForHousekeeping({kind: "forget-saved-all"}), "forget");
     });
 

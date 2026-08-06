@@ -27,20 +27,20 @@ buttons inside the webview or the Command Palette. Each one shells out to the
 matching `git review` verb — the extension never invents a second way to change
 review state.
 
-| Action | When it appears | CLI |
-|--------|-----------------|-----|
-| **Start a review** | Empty state (`no-review`): pick branch, how to read it, origin, and range (if a prior tip exists) from the assistant. Also Command Palette while `finish-pending` (another source is fine if the tree is clean) | `git review start …` |
-| **Cancel review** | View title icon while an active review (or a mid-conflict finish) is open | `git review abort` |
-| **Finish review** | View title icon while an active review is open (hidden on a read-only **compare**) | `git review finish` / `finish --onto-source` |
-| **Save for later** | View title icon while an active review is open (not during a mid-conflict finish) | `git review save` |
-| **Undo finish** | After a completed finish with undo still available (`finish-pending`), or a finish stopped mid-conflict (`finish-conflict`) | `git review finish --abort` |
-| **Clean** | `finish-pending` panel (the finished source); also Command Palette for any leftover | `git review clean <branch>` / `clean` |
-| **Continue** (finish) | Finish stopped mid-conflict, after you resolve the markers in the tree | `git review finish --resume` |
-| **Discard** (saved / orphan) | Inventory row: saved review or orphan leftover | `git review forget --saved …` / `git review clean …` |
-| **Forget** saved / delta | Command Palette | `git review forget --saved` / `--delta` (`--all`, `--stale`) |
-| **Preview edits** | View title (active review) or palette; optional stat | `git review preview` / `--stat` |
-| **Compare revisions** | Empty state (`no-review`): secondary actions under Start; also Command Palette. The resulting review is **read-only**: the panel shows a note and hides Finish (CLI refuses writeback) | `git review compare <a> <b>` |
-| **Walkthrough Init / Build** | Empty state (`no-review`): secondary actions under Start (author flow); also Command Palette | `git review walkthrough init` / `build` |
+| Action                       | When it appears                                                                                                                                                                                                 | CLI                                                                                                         |
+|------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------|
+| **Start a review**           | Empty state (`no-review`): pick branch, how to read it, origin, and range (if a prior tip exists) from the assistant. Also Command Palette while `finish-pending` (another source is fine if the tree is clean) | `git review start …`                                                                                        |
+| **Cancel review**            | View title icon while an active review (or a mid-conflict finish) is open                                                                                                                                       | `git review abort`                                                                                          |
+| **Finish review**            | View title icon while an active review is open (hidden on a read-only **compare**)                                                                                                                              | `git review finish` / `finish --onto-source`                                                                |
+| **Save for later**           | View title icon while an active review is open (not during a mid-conflict finish)                                                                                                                               | `git review save`                                                                                           |
+| **Undo finish**              | After a completed finish with undo still available (`finish-pending`), or a finish stopped mid-conflict (`finish-conflict`)                                                                                     | `git review finish --abort`                                                                                 |
+| **Clean**                    | `finish-pending` panel (the finished source); also Command Palette for any leftover                                                                                                                             | `git review clean --keep-fixes <branch>` from the panel; palette default is full `clean` / `clean <branch>` |
+| **Continue** (finish)        | Finish stopped mid-conflict, after you resolve the markers in the tree                                                                                                                                          | `git review finish --resume`                                                                                |
+| **Discard** (saved / orphan) | Inventory row: saved review or orphan leftover                                                                                                                                                                  | `git review forget --saved …` / `git review clean …`                                                        |
+| **Forget** saved / delta     | Command Palette                                                                                                                                                                                                 | `git review forget --saved` / `--delta` (`--all`, `--stale`)                                                |
+| **Preview edits**            | View title (active review) or palette; optional stat                                                                                                                                                            | `git review preview` / `--stat`                                                                             |
+| **Compare revisions**        | Empty state (`no-review`): secondary actions under Start; also Command Palette. The resulting review is **read-only**: the panel shows a note and hides Finish (CLI refuses writeback)                          | `git review compare <a> <b>`                                                                                |
+| **Walkthrough Init / Build** | Empty state (`no-review`): secondary actions under Start (author flow); also Command Palette                                                                                                                    | `git review walkthrough init` / `build`                                                                     |
 
 Mutations (clean, forget, compare, walkthrough write, and the lifecycle
 actions above) ask for a confirmation that names what will happen. Preview is
@@ -49,11 +49,11 @@ read-only and does not.
 A completed finish that left edits on `review-fixes/<branch>` (or on the PR
 branch with `--onto-source`) is **not** the empty state: the review already
 finished. The panel names the destination of the staged edits and offers
-*Clean* (`git review clean <src>` — drops the leftover `review/*` undo point;
-does not touch `--delta` markers) or *Undo finish* (`finish --abort`). Commit
-the edits from Source Control as usual. A finish stopped mid-conflict keeps
-the review readable (mode, branch, current entry) but locks navigation until
-you *Continue* or *Undo finish*.
+*Clean* (`git review clean --keep-fixes <src>` — drops the leftover `review/*`
+undo point and leaves `review-fixes/*` and `--delta` alone) or *Undo finish*
+(`finish --abort`). Commit the edits from Source Control as usual. A finish
+stopped mid-conflict keeps the review readable (mode, branch, current entry)
+but locks navigation until you *Continue* or *Undo finish*.
 
 ## The CLI is the only source of truth
 

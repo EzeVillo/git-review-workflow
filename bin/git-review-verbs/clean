@@ -1,10 +1,15 @@
 #!/usr/bin/env sh
 #
-# git review clean — delete the review/<branch> and review-fixes/<branch> branches.
+# git review clean — delete leftover review/<branch> branches (and, by default,
+# review-fixes/<branch> too).
 #
-# With no <branch> it deletes all of them. It never deletes the branch you are
-# currently on. The recorded last-reviewed tip (used by --delta) is left alone;
-# discard it with git review forget --delta.
+# With no <branch> it cleans every matching leftover. It never deletes the
+# branch you are currently on. The recorded last-reviewed tip (used by --delta)
+# is left alone; discard it with git review forget --delta.
+#
+# --keep-fixes drops the review session / finish undo (review/* + undo refs)
+# but leaves review-fixes/* alone — the usual "I'm done with this finish" step
+# after committing or before opening a PR of your edits.
 #
 set -eu
 
@@ -12,22 +17,28 @@ prog="git review clean"
 
 usage() {
 	cat <<EOF
-usage: $prog [branch]
+usage: $prog [--keep-fixes] [branch]
 
-Delete the review/<branch> and review-fixes/<branch> branches.
-With no <branch>, delete all of them.
+Delete leftover review branches.
+With no <branch>, clean every matching leftover.
 
+  (default)        delete review/<branch> and review-fixes/<branch>
+  --keep-fixes     delete review/<branch> only; leave review-fixes/<branch>
+
+Never deletes the branch you are currently on.
 The --delta marker is left untouched; use git review forget --delta to discard it.
 EOF
 }
 
 arg=""
+keep_fixes=0
 while [ $# -gt 0 ]; do
 	case "$1" in
 	-h | --h)
 		usage
 		exit 0
 		;;
+	--keep-fixes) keep_fixes=1 ;;
 	-*)
 		echo "error: unknown option $1" >&2
 		usage >&2
@@ -48,7 +59,13 @@ done
 cur="$(git symbolic-ref --quiet --short HEAD || true)"
 
 if [ -n "$arg" ]; then
-	list="review/$arg review-fixes/$arg"
+	if [ "$keep_fixes" -eq 1 ]; then
+		list="review/$arg"
+	else
+		list="review/$arg review-fixes/$arg"
+	fi
+elif [ "$keep_fixes" -eq 1 ]; then
+	list="$(git for-each-ref --format='%(refname:short)' refs/heads/review/)"
 else
 	list="$(git for-each-ref --format='%(refname:short)' refs/heads/review/ refs/heads/review-fixes/)"
 fi
@@ -107,9 +124,10 @@ done
 
 if [ "$cleaned" -eq 0 ]; then
 	# Saved reviews live in review-saved/*, a namespace git review clean deliberately
-	# leaves alone (it owns review/* and review-fixes/* only). Point at them when
-	# nothing else was found, so "no review branches" does not read as wrong to
-	# someone staring at a review-saved/<branch> they expected this to clear.
+	# leaves alone (it owns review/* and, unless --keep-fixes, review-fixes/*).
+	# Point at them when nothing else was found, so "no review branches" does not
+	# read as wrong to someone staring at a review-saved/<branch> they expected
+	# this to clear.
 	if [ -n "$arg" ]; then
 		saved="$(git for-each-ref --format='%(refname:short)' "refs/heads/review-saved/$arg")"
 	else
@@ -117,6 +135,8 @@ if [ "$cleaned" -eq 0 ]; then
 	fi
 	if [ -n "$saved" ]; then
 		echo "no review/ or review-fixes/ branches to clean; you have a saved review — resume it with git review continue or discard it with git review forget --saved" >&2
+	elif [ "$keep_fixes" -eq 1 ]; then
+		echo "no review/ branches to clean" >&2
 	else
 		echo "no review branches found" >&2
 	fi

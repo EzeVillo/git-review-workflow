@@ -372,7 +372,11 @@ describe("panelHtml", () => {
         assert.ok(pendingBranch.includes('"Undo finish", "undoFinish"') || pendingBranch.includes("undoFinish"));
         assert.ok(
             pendingBranch.includes('"Clean", "cleanReview"') || pendingBranch.includes("cleanReview"),
-            "Clean (git review clean) cierra el limbo del undo"
+            "Clean (git review clean --keep-fixes) cierra el limbo del undo"
+        );
+        assert.ok(
+            pendingBranch.includes("clean --keep-fixes") || pendingBranch.includes("--keep-fixes"),
+            "el copy/tooltip tiene que nombrar --keep-fixes"
         );
         assert.ok(
             !pendingBranch.includes("renderEmptyStartBlock") && !pendingBranch.includes("startReview"),

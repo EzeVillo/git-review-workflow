@@ -1,4 +1,5 @@
 import * as assert from "node:assert";
+import {MIN_CLI_VERSION} from "../../src/cli/version";
 import {panelHtml} from "../../src/views/panelHtml";
 
 const html = panelHtml("TESTNONCE");
@@ -151,6 +152,19 @@ describe("panelHtml", () => {
         }
     });
 
+    it("nombra el minimo de CLI desde MIN_CLI_VERSION (cli-missing y cli-outdated)", () => {
+        assert.ok(
+            html.includes(`The git-review CLI (${MIN_CLI_VERSION} or newer) was not found.`),
+            "cli-missing debe citar el minimo actual"
+        );
+        assert.ok(
+            html.includes(`The installed git-review CLI is older than ${MIN_CLI_VERSION}.`),
+            "cli-outdated debe citar el minimo actual"
+        );
+        assert.ok(html.includes('button("Install the CLI", "installCli"'));
+        assert.ok(html.includes('button("Update the CLI", "installCli"'));
+    });
+
     it("el inventario solo ofrece Continue sobre una fila guardada y resumible", () => {
         // Las dos guardas son lo que evita ofrecer una accion que el verbo
         // rechazaria; sin ellas el boton queda para cualquier fila.
@@ -211,32 +225,58 @@ describe("panelHtml", () => {
     });
 
     it("no-review ofrece compare y walkthrough bajo Other actions; finish-pending no", () => {
-        // Empty state sin review activa: compare/walkthrough viven en
-        // renderEmptyStartBlock (solo no-review). finish-pending es una
-        // pantalla propia de post-cierre, sin empty state ni Other actions.
-        // Other actions es un <details> plegado por defecto para no pelear
-        // por alto con Start / base / inventario.
+        // Empty state sin review activa: compare/walkthrough viven en el
+        // footer del split (solo no-review). finish-pending es una pantalla
+        // propia de post-cierre, sin empty state ni Other actions.
+        // Other actions es un <details> plegado por defecto.
         assert.ok(html.includes('function renderOtherActions(model)'));
         assert.ok(html.includes('function renderEmptyStartBlock(model)'));
+        assert.ok(html.includes('function renderPaneFooter(model)'));
         assert.ok(html.includes('el("details", "tools")'));
-        assert.ok(html.includes('el("summary", null, "Other actions")'));
+        assert.ok(html.includes('"Other actions"'));
         assert.ok(html.includes("otherActionsOpen"), "el toggle sobrevive al redibujado del modelo");
-        // Colapsado: al fondo del panel (no solo del contenido). Abierto: flujo
-        // bajo Start. El empty crece con #root.fills / .pane-main.
+        // Split Outline/Timeline: body scrollea, footer anclado abajo; al abrir
+        // crece hacia arriba (max-height del footer) sin saltar al flujo de Start.
         assert.ok(html.includes('#root.fills') || html.includes('root.className = model.situation === "no-review" ? "fills"'));
-        assert.ok(html.includes("margin-top: auto"), "colapsado se clava al borde inferior del panel");
-        assert.ok(html.includes('el("div", "pane-main")'), "con inventario el alto se reparte Start+tools");
+        assert.ok(html.includes(".pane-footer"), "footer anclado al pie");
+        assert.ok(html.includes(".pane-body"), "cuerpo scrolleable encima del footer");
+        assert.ok(html.includes("max-height: 55%"), "el footer no borra el body al abrir");
+        assert.ok(html.includes("grid-template-rows"), "apertura animada 0fr→1fr");
+        assert.ok(html.includes('el("div", "pane-main")'), "split body+footer siempre en no-review");
         assert.ok(html.includes('button("Compare revisions", "compareReview")'));
         assert.ok(html.includes('button("Walkthrough: Init", "walkthroughInit")'));
         assert.ok(html.includes('button("Walkthrough: Build", "walkthroughBuild")'));
-        const startBlock = /function renderEmptyStartBlock\(model\) \{([^]*?)\n {2}\}/.exec(html)?.[1] ?? "";
-        assert.ok(startBlock.includes("renderOtherActions"), "Other actions salen del bloque compartido");
+        assert.ok(html.includes("renderOtherActions"), "Other actions en el pie compartido");
         assert.ok(html.includes('case "no-review"') && html.includes("renderEmptyStartBlock"));
         const pendingBranch = /case "finish-pending": \{([^]*?)\n {6}case "out-of-range"/.exec(html)?.[1] ?? "";
         assert.ok(pendingBranch.length > 0, "no se encontro el caso finish-pending");
         assert.ok(
-            !pendingBranch.includes("renderEmptyStartBlock") && !pendingBranch.includes("renderOtherActions"),
+            !pendingBranch.includes("renderEmptyStartBlock")
+                && !pendingBranch.includes("renderOtherActions")
+                && !pendingBranch.includes("renderPaneFooter"),
             "finish-pending no reutiliza el empty state de no-review"
+        );
+    });
+
+    it("no-review ofrece Support con Star on GitHub; finish-pending no", () => {
+        // Mismo pie que Other actions: <details> plegado, toggle que
+        // sobrevive al redibujado. Un solo link (star = repo); openSupport + id.
+        assert.ok(html.includes("function renderSupport("));
+        assert.ok(html.includes('"Support"'));
+        assert.ok(html.includes("supportOpen"), "el toggle sobrevive al redibujado del modelo");
+        assert.ok(html.includes('type: "openSupport"') || html.includes("type: \"openSupport\""));
+        assert.ok(html.includes('"star"') || html.includes("'star'"));
+        assert.ok(html.includes("Star on GitHub"));
+        assert.ok(!html.includes("GitHub repository"), "repo y star eran la misma URL: solo star");
+        assert.ok(html.includes("renderPaneFooter") && html.includes("renderSupport"));
+        const footer = /function renderPaneFooter\(model\) \{([^]*?)\n {2}\}/.exec(html)?.[1] ?? "";
+        const otherIdx = footer.indexOf("renderOtherActions");
+        const supportIdx = footer.indexOf("renderSupport");
+        assert.ok(otherIdx >= 0 && supportIdx > otherIdx, "Support va debajo de Other actions");
+        const pendingBranch = /case "finish-pending": \{([^]*?)\n {6}case "out-of-range"/.exec(html)?.[1] ?? "";
+        assert.ok(
+            !pendingBranch.includes("renderSupport") && !pendingBranch.includes("openSupport"),
+            "finish-pending no dibuja Support"
         );
     });
 
@@ -335,11 +375,14 @@ describe("panelHtml", () => {
     });
 
     it("sin reviews en el repositorio el estado vacio queda como estaba", () => {
+        // Sin filas no se monta el inventario ni el separador after-inv: solo
+        // Start en el body + footer (Other actions / Support).
         assert.ok(
-            /if \(reviews\.length === 0\) \{ return box; \}/.test(html),
-            "sin inventario no se dibuja ni el encabezado ni el separador"
+            /if \(reviews\.length > 0\) \{/.test(html),
+            "el inventario solo se dibuja cuando hay filas"
         );
         assert.ok(html.includes("Reviews in this repository"));
+        assert.ok(html.includes("after-inv"), "con filas el Start lleva separador bajo el inventario");
     });
 
     // ── finish (005 US3, contracts/finish-state.md) ─────────────────────────

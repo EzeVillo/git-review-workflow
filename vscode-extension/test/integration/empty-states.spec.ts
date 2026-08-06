@@ -221,7 +221,7 @@ describe("US5: entender por qué no hay nada que mostrar", function () {
         assert.strictEqual(state.situation, "cli-missing");
     });
 
-    it("CLI vieja: --version reporta menos de 0.3.0", async () => {
+    it("CLI vieja: --version reporta menos de 0.4.0", async () => {
         // El stub tiene que ser ejecutable por la misma vía que usaría la CLI
         // real. En Windows, un script POSIX sin extensión sólo corre si `sh`
         // está en el PATH (invoke.ts se lo delega), así que desde una shell sin

@@ -1,3 +1,5 @@
+import { MIN_CLI_VERSION } from "../cli/version";
+
 /**
  * El HTML del panel, aparte del provider y sin dependencia de `vscode`: es lo
  * que permite abrirlo en un navegador con un `PanelModel` de ejemplo y
@@ -24,9 +26,10 @@ export function panelHtml(nonce: string): string {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style nonce="${nonce}">
-  /* 100% del webview: el empty state de no-review usa flex para clavar
-     Other actions al borde inferior cuando está colapsado (no solo debajo
-     del contenido, que en un sidebar alto deja un hueco vacío abajo). */
+  /* 100% del webview: no-review es un split vertical al estilo del Explorer
+     (archivos arriba, Outline/Timeline abajo). El body scrollea; el footer
+     (Other actions + Support) queda anclado al borde inferior y al abrir
+     crece hacia arriba robándole alto al body — no salta al flujo de Start. */
   html, body { height: 100%; }
   body {
     margin: 0;
@@ -36,23 +39,38 @@ export function panelHtml(nonce: string): string {
     font-size: var(--vscode-font-size);
   }
   #root { min-height: 100%; box-sizing: border-box; }
+  /* Solo no-review fija el alto y recorta: el split body/footer maneja el scroll.
+     En review el root sigue creciendo y el body del documento scrollea. */
   #root.fills {
     display: flex;
     flex-direction: column;
+    height: 100%;
     min-height: 100%;
+    overflow: hidden;
   }
-  /* Inventario + Start: el bloque Start crece y empuja Other actions al fondo. */
   .pane-main {
     flex: 1 1 auto;
     display: flex;
     flex-direction: column;
-    min-height: 100%;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
   }
-  #root.fills > .empty,
-  .pane-main > .empty {
+  /* Contenido principal (inventario + Start/base): cede alto al footer. */
+  .pane-body {
     flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+  }
+  /* Secciones secundarias al pie: headers siempre visibles; abiertas, el
+     contenido crece dentro de un tope para no borrar el body. */
+  .pane-footer {
+    flex: 0 1 auto;
     display: flex;
     flex-direction: column;
+    min-height: 0;
+    max-height: 55%;
+    overflow: hidden;
   }
   .bar {
     display: flex;
@@ -304,32 +322,34 @@ export function panelHtml(nonce: string): string {
     height: .85em;
   }
   .empty.after-inv { border-top: 1px solid var(--vscode-panel-border); }
-  /* Acciones del empty state que no son "empezar un PR": compare (review
-     de solo lectura) y autoría del walkthrough. No aparecen con review
-     activa — ambos verbos necesitan un working tree sin review montada.
-     Colapsadas: margin-top:auto las clava al borde inferior del panel
-     (el empty crece con #root.fills / .pane-main), sin divider.
-     Abiertas: vuelven al flujo bajo Start/base, con el separador de sección. */
+  /* Secciones del pie (Other actions / Support): mismo patrón que Outline y
+     Timeline del Explorer — header fijo abajo, al abrir el body crece hacia
+     arriba (el .pane-body de arriba se achica y scrollea) y el contenido de
+     la sección scrollea si no entra. Nunca se "despegan" del fondo al abrir. */
   .tools {
-    flex-shrink: 0;
-    margin-top: auto;
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    border-top: 1px solid var(--vscode-sideBarSectionHeader-border, var(--vscode-panel-border));
   }
   .tools[open] {
-    margin-top: 1.2em;
-    padding-top: 1.2em;
-    border-top: 1px solid var(--vscode-panel-border);
+    flex: 1 1 auto;
+    min-height: 0;
   }
   .tools summary {
+    flex: 0 0 auto;
     cursor: pointer;
     font-size: .9em;
     font-weight: 600;
-    color: var(--vscode-descriptionForeground);
     list-style: none;
+    padding: .45em .9em;
+    color: var(--vscode-sideBarSectionHeader-foreground, var(--vscode-descriptionForeground));
+    background: var(--vscode-sideBarSectionHeader-background, transparent);
   }
   .tools summary::-webkit-details-marker { display: none; }
-  /* Chevron al estilo de las secciones del sidebar: el triángulo nativo
-     varía por motor y en webviews a veces se ve tosco; éste usa el color
-     del summary y gira al abrir. */
+  /* Twistie del sidebar de VS Code: chevron que gira al abrir (~120ms). */
   .tools summary::before {
     content: "";
     display: inline-block;
@@ -341,9 +361,6 @@ export function panelHtml(nonce: string): string {
     transform: rotate(-45deg);
     vertical-align: .15em;
   }
-  .tools[open] summary {
-    margin-bottom: .6em;
-  }
   .tools[open] summary::before {
     transform: rotate(45deg);
     vertical-align: .25em;
@@ -351,13 +368,37 @@ export function panelHtml(nonce: string): string {
   @media (prefers-reduced-motion: no-preference) {
     .tools summary::before { transition: transform .12s ease; }
   }
-  .tools > button {
+  /* Cuerpo de la sección: grid 0fr→1fr anima la apertura como el twistie;
+     el inner scrollea cuando el footer toca su max-height. */
+  .tools-body {
+    display: grid;
+    grid-template-rows: 0fr;
+    min-height: 0;
+  }
+  .tools[open] .tools-body {
+    grid-template-rows: 1fr;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .tools-body { transition: grid-template-rows .12s ease; }
+  }
+  .tools-inner {
+    overflow: hidden;
+    min-height: 0;
+  }
+  .tools[open] .tools-inner {
+    overflow: auto;
+    padding: .15em .9em .55em;
+  }
+  .tools-inner > button {
     display: flex;
     width: 100%;
     margin-bottom: .45em;
   }
-  .tools .row { margin-bottom: 0; }
-  .tools .row button { margin-bottom: 0; }
+  .tools-inner > button:last-child { margin-bottom: 0; }
+  .tools-inner .row { margin-bottom: 0; }
+  .tools-inner .row button { margin-bottom: 0; }
   /* El listado de whole (FR-010): mismo encabezado que el inventario, filas
      clickeables en vez de tarjetas — no hay estado por fila que mostrar. */
   .files { padding: 1.2em .9em; }
@@ -587,8 +628,28 @@ export function panelHtml(nonce: string): string {
   }
 
   // El panel redibuja el root en cada modelo; sin esto, expandir Other
-  // actions se pliega al primer refresh (busy, inventario, etc.).
+  // actions / Support se pliega al primer refresh (busy, inventario, etc.).
   let otherActionsOpen = false;
+  let supportOpen = false;
+
+  /**
+   * Envuelve el cuerpo de un <details> del pie para poder animar 0fr→1fr y
+   * scrollear cuando el footer toca max-height (Outline/Timeline).
+   */
+  function toolsSection(summaryLabel, openFlag, setOpen, bodyChildren) {
+    const box = el("details", "tools");
+    if (openFlag) { box.open = true; }
+    box.addEventListener("toggle", function () {
+      setOpen(box.open);
+    });
+    box.appendChild(el("summary", null, summaryLabel));
+    const body = el("div", "tools-body");
+    const inner = el("div", "tools-inner");
+    bodyChildren.forEach(function (child) { inner.appendChild(child); });
+    body.appendChild(inner);
+    box.appendChild(body);
+    return box;
+  }
 
   /**
    * Compare y walkthrough init/build en el empty state (no-review): montan
@@ -596,15 +657,8 @@ export function panelHtml(nonce: string): string {
    * Van plegadas por defecto: son secundarias respecto de Start / base.
    */
   function renderOtherActions(model) {
-    const box = el("details", "tools");
-    if (otherActionsOpen) { box.open = true; }
-    box.addEventListener("toggle", function () {
-      otherActionsOpen = box.open;
-    });
-    box.appendChild(el("summary", null, "Other actions"));
     const compare = button("Compare revisions", "compareReview");
     compare.disabled = model.busy;
-    box.appendChild(compare);
     const walk = el("div", "row");
     const init = button("Walkthrough: Init", "walkthroughInit");
     const build = button("Walkthrough: Build", "walkthroughBuild");
@@ -612,12 +666,35 @@ export function panelHtml(nonce: string): string {
     build.disabled = model.busy;
     walk.appendChild(init);
     walk.appendChild(build);
-    box.appendChild(walk);
-    return box;
+    return toolsSection("Other actions", otherActionsOpen, function (open) {
+      otherActionsOpen = open;
+    }, [compare, walk]);
   }
 
   /**
-   * Empty state de no-review: Start, base, Other actions.
+   * Links externos de apoyo al proyecto. El webview manda un id del conjunto
+   * cerrado y el host abre la URL allowlisteada con openExternal. Solo
+   * "Star on GitHub" por ahora (el repo y el star son la misma URL); sumar
+   * linkedin / donate / rate es un par de filas acá + el allowlist del host.
+   */
+  function supportButton(label, id) {
+    const node = el("button", null);
+    node.appendChild(el("span", null, label));
+    node.addEventListener("click", function () {
+      if (stale()) { return; }
+      vscode.postMessage({type: "openSupport", id: id});
+    });
+    return node;
+  }
+
+  function renderSupport() {
+    return toolsSection("Support", supportOpen, function (open) {
+      supportOpen = open;
+    }, [supportButton("Star on GitHub", "star")]);
+  }
+
+  /**
+   * Start + base del empty no-review (sin las secciones del pie).
    */
   function renderEmptyStartBlock(model) {
     const box = empty("No active review on this branch.", button("Start a review", "startReview", "primary"));
@@ -628,8 +705,15 @@ export function panelHtml(nonce: string): string {
       box.appendChild(el("p", null, "No base branch is configured for a full review."));
       box.appendChild(button("Set the base branch", "setBase", null));
     }
-    box.appendChild(renderOtherActions(model));
     return box;
+  }
+
+  /** Pie fijo: Other actions + Support (split estilo Outline/Timeline). */
+  function renderPaneFooter(model) {
+    const footer = el("div", "pane-footer");
+    footer.appendChild(renderOtherActions(model));
+    footer.appendChild(renderSupport());
+    return footer;
   }
 
   function renderEmptyState(model) {
@@ -637,18 +721,20 @@ export function panelHtml(nonce: string): string {
       case "no-review": {
         // El fallback a lista vacía no sobra: el webview redibuja el modelo que
         // guardó con setState, que puede venir de una versión sin este campo.
-        // #root.fills (lo pone render) hace que el empty crezca a la altura del
-        // panel y Other actions colapsado se clave al fondo con margin-top:auto.
+        // pane-main = body scrolleable + footer anclado (fills lo pone render).
         const reviews = model.reviews || [];
-        const box = renderEmptyStartBlock(model);
-        if (reviews.length === 0) { return box; }
-        // Con reviews abiertas el párrafo pasa a ser el pie del inventario, no
-        // el contenido: lleva el separador y va debajo. .pane-main reparte el
-        // alto: inventario arriba, Start+Other actions crecen al resto.
-        box.className = "empty after-inv";
+        const body = el("div", "pane-body");
+        if (reviews.length > 0) {
+          body.appendChild(renderInventory(model, reviews));
+          const start = renderEmptyStartBlock(model);
+          start.className = "empty after-inv";
+          body.appendChild(start);
+        } else {
+          body.appendChild(renderEmptyStartBlock(model));
+        }
         const wrap = el("div", "pane-main");
-        wrap.appendChild(renderInventory(model, reviews));
-        wrap.appendChild(box);
+        wrap.appendChild(body);
+        wrap.appendChild(renderPaneFooter(model));
         return wrap;
       }
       // Cierre completo con undo vivo (contracts/finish-state.md): el finish
@@ -689,13 +775,13 @@ export function panelHtml(nonce: string): string {
         );
       case "cli-missing":
         return empty(
-          "The git-review CLI (0.4.0 or newer) was not found.",
+          "The git-review CLI (${MIN_CLI_VERSION} or newer) was not found.",
           button("Install the CLI", "installCli", "primary"),
           model.stderr
         );
       case "cli-outdated":
         return empty(
-          "The installed git-review CLI is older than 0.4.0.",
+          "The installed git-review CLI is older than ${MIN_CLI_VERSION}.",
           button("Update the CLI", "installCli", "primary"),
           model.stderr
         );
@@ -983,8 +1069,9 @@ export function panelHtml(nonce: string): string {
 
   function render(model) {
     root.textContent = "";
-    // fills solo en no-review: Other actions colapsado se clava al fondo del
-    // panel. En el resto de situaciones el root no debe estirar en flex.
+    // fills solo en no-review: body scrollea y el footer (Other actions /
+    // Support) queda anclado abajo, estilo Outline/Timeline. En el resto
+    // de situaciones el root no debe estirar en flex.
     root.className = model.situation === "no-review" ? "fills" : "";
     // finish-conflict sigue siendo una review legible (FR-027) — el estado
     // vacío es sólo para no-review/out-of-range/error/cli-*.

@@ -34,7 +34,12 @@ import {isReviewReadable} from "./review/situation";
 import {ReviewState, ReviewStateManager} from "./review/state";
 import {buildPanelModel, currentEntry, PanelModel, PanelWhy} from "./views/panelModel";
 import {fetchWhy, WHY_SCHEME, WhyContentProvider, whyUri} from "./views/whyContentProvider";
-import {PanelMessage, WalkthroughViewProvider} from "./views/walkthroughViewProvider";
+import {
+    PanelMessage,
+    SUPPORT_URLS,
+    SupportLinkId,
+    WalkthroughViewProvider,
+} from "./views/walkthroughViewProvider";
 
 function isPathRef(id: string | PathRef): id is PathRef {
     return typeof id !== "string";
@@ -216,8 +221,18 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
      * El webview no ejecuta comandos: postea uno de un conjunto cerrado y acá se
      * decide (contracts/extension-surface.md § Protocolo).
      */
-    function handlePanelMessage(message: PanelMessage, index?: unknown): void {
-        const commands: Record<PanelMessage, string> = {
+    function handlePanelMessage(message: PanelMessage, extra?: unknown): void {
+        // Support: no hay comando de paleta; el host resuelve el id contra el
+        // allowlist y abre el browser. Un id desconocido se ignora.
+        if (message === "openSupport") {
+            if (typeof extra === "string" && extra in SUPPORT_URLS) {
+                void vscode.env.openExternal(
+                    vscode.Uri.parse(SUPPORT_URLS[extra as SupportLinkId]),
+                );
+            }
+            return;
+        }
+        const commands: Record<Exclude<PanelMessage, "openSupport">, string> = {
             openEntry: "gitReview.openEntry",
             openChange: "gitReview.openChange",
             openAllChanges: "gitReview.openAllChanges",
@@ -245,12 +260,12 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
         // cleanReview desde finish-pending no lleva índice: el comando resuelve
         // el source del pending desde state.
         if (message === "continueReview" || message === "discardInventory") {
-            void vscode.commands.executeCommand(commands[message], index);
+            void vscode.commands.executeCommand(commands[message], extra);
             return;
         }
         if (message === "openEntry" || message === "openChange") {
             const state = stateManager.state;
-            const entry = typeof index === "number" ? currentEntry(state.entries, index) : undefined;
+            const entry = typeof extra === "number" ? currentEntry(state.entries, extra) : undefined;
             if (entry) {
                 void vscode.commands.executeCommand(commands[message], entry);
                 return;

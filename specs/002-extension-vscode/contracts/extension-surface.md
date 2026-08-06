@@ -178,14 +178,17 @@ cerrado y el host decide qué hacer con cada uno; un `type` desconocido se
 ignora. La lista es exactamente: `openEntry`, `openChange`, `openAllChanges`,
 `showWhy`, `next`, `prev`, `refresh`, `installCli`, `outOfRangeHelp`,
 `continueReview`, `startReview`, `setBase`, `undoFinish`, `resumeFinish`,
-`discardInventory`, `compareReview`, `walkthroughInit`, `walkthroughBuild`.
+`discardInventory`, `cleanReview`, `compareReview`, `walkthroughInit`,
+`walkthroughBuild`, `openSupport`.
 
 Finish / Save / Cancel **no** están en ese conjunto: se invocan como comandos
 desde el título de la vista (`view/title`) o la paleta, no como mensajes del
 webview. `undoFinish` / `resumeFinish` sí, porque viven en el banner del panel
 (no en el chrome). `compareReview` / `walkthroughInit` / `walkthroughBuild` se
 dibujan sólo en el empty state `no-review` (sección *Other actions*); la paleta
-sigue ofreciéndolos.
+sigue ofreciéndolos. `openSupport` también es sólo del empty `no-review`
+(sección *Support*, debajo de *Other actions*): no es un comando de la paleta
+ni de la CLI; el host abre una URL del allowlist con `env.openExternal`.
 
 `continueReview`, `openEntry` y `openChange` son los que llevan un dato además
 del `type`, y es un **índice** (`{type, index}`), nunca el nombre de la rama ni
@@ -198,6 +201,17 @@ que termina en la CLI sale siempre del estado del host, y nada que venga del
 webview se le pasa a un proceso. Un `index` ausente, no entero o fuera de rango
 se ignora igual que un `type` desconocido — en `openEntry`/`openChange` eso
 significa caer al comportamiento de siempre (la entrada actual, si la hay).
+
+`openSupport` lleva un **`id`** (`{type: "openSupport", id}`), no un índice ni
+una URL libre: el id es de un conjunto cerrado (`star`, …) y el host resuelve
+la URL contra su allowlist. Un id desconocido se ignora. Sumar un destino nuevo
+(LinkedIn, donaciones, rating de la extensión) es agregar el id al allowlist
+del host y el botón en `renderSupport` del webview.
+
+En `no-review` el layout del panel es un split vertical al estilo del Explorer
+(Outline / Timeline): el cuerpo (inventario + Start) scrollea y las secciones
+*Other actions* / *Support* viven en un footer anclado al borde inferior; al
+abrir crecen hacia arriba sin abandonar el pie.
 
 `openAllChanges` no lleva índice ni ningún otro dato: su unidad es el rango
 entero de una review `whole`, no una de sus filas.

@@ -34,9 +34,28 @@ export const PANEL_MESSAGES = [
     "compareReview",
     "walkthroughInit",
     "walkthroughBuild",
+    // Support (links externos): el webview manda un id; el host resuelve la
+    // URL contra un allowlist y abre con openExternal. No es un comando de
+    // la paleta ni de la CLI.
+    "openSupport",
 ] as const;
 
 export type PanelMessage = (typeof PANEL_MESSAGES)[number];
+
+/**
+ * Ids de link de Support que el webview puede pedir. El host es el único que
+ * conoce las URLs: un id desconocido se ignora (nada del webview se abre a
+ * ciegas). Sumar LinkedIn / donate / rate = una entrada acá + en el mapa del
+ * host + un botón en `renderSupport`.
+ */
+export const SUPPORT_LINK_IDS = ["star"] as const;
+export type SupportLinkId = (typeof SUPPORT_LINK_IDS)[number];
+
+export const SUPPORT_URLS: Record<SupportLinkId, string> = {
+    // GitHub no tiene deep-link público de "star": abre el repo, donde está el
+    // botón. Si algún día hay marketplace rating u otro destino, se desdobla.
+    star: "https://github.com/EzeVillo/git-review-workflow",
+};
 
 /**
  * El handshake, deliberadamente **fuera** de `PANEL_MESSAGES`: no es una acción
@@ -74,12 +93,15 @@ export class WalkthroughViewProvider implements vscode.WebviewViewProvider {
     private model: PanelModel | undefined;
 
     /**
-     * `index` es el único dato que un mensaje puede traer además del `type`
-     * (`continueReview`, contracts/extension-surface.md § Protocolo). Viaja
-     * como `unknown` a propósito: acá no se valida nada, lo resuelve el host
-     * contra su propio estado.
+     * `index` / `id` son los únicos datos que un mensaje puede traer además
+     * del `type` (contracts/extension-surface.md § Protocolo). Viajan como
+     * `unknown` a propósito: acá no se valida nada, lo resuelve el host
+     * contra su propio estado / allowlist.
+     *
+     * El segundo argumento es `index` para los mensajes de inventario/whole
+     * y el `id` de Support para `openSupport` — el host discrimina por `type`.
      */
-    constructor(private readonly onMessage: (message: PanelMessage, index?: unknown) => void) {
+    constructor(private readonly onMessage: (message: PanelMessage, extra?: unknown) => void) {
     }
 
     /**
@@ -95,13 +117,16 @@ export class WalkthroughViewProvider implements vscode.WebviewViewProvider {
         // el script que postea `ready`, y un mensaje que llegue antes de que el
         // host esté escuchando se pierde igual que se perdía el modelo.
         const listener = view.webview.onDidReceiveMessage((raw: unknown) => {
-            const type = (raw as { type?: unknown } | undefined)?.type;
+            const msg = raw as { type?: unknown; index?: unknown; id?: unknown } | undefined;
+            const type = msg?.type;
             if (type === READY) {
                 this.post();
                 return;
             }
             if (isPanelMessage(type)) {
-                this.onMessage(type, (raw as { index?: unknown } | undefined)?.index);
+                // openSupport lleva `id` (string allowlisteado); el resto de
+                // mensajes con payload llevan `index` (número de fila/entrada).
+                this.onMessage(type, type === "openSupport" ? msg?.id : msg?.index);
             }
         });
         view.onDidDispose(() => {

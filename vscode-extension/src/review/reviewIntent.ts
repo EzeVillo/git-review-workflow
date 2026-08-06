@@ -3,15 +3,13 @@
  * existe, armada por el asistente entre que el revisor empieza a elegir y
  * confirma. No se persiste — si el asistente se cancela, no queda nada.
  *
- * `range`/`source` cubren full|delta y remote|local|offline: el asistente de
- * `start` los elige en pasos lineales (origen siempre; rango sólo con registro
- * delta del source elegido). El tipo y `intentToArgs` son el contrato de esa
- * UI con la CLI.
+ * 008: `layout` es walk|keys|step|whole (sin `auto`). Cada valor mapea 1:1 a
+ * argv de start; la viabilidad la reporta config --porcelain (offer).
  */
 
 import {DeltaRecord} from "../cli/configPorcelain";
 
-export type ReviewLayout = "auto" | "step" | "no-walk" | "keys";
+export type ReviewLayout = "walk" | "keys" | "step" | "whole";
 export type ReviewRange = "full" | "delta";
 export type ReviewSource = "remote" | "local" | "offline";
 
@@ -66,27 +64,23 @@ export function validateIntent(
  * `--from` ni el `<base>` posicional (la base sale de `git review config`, no
  * de esta invocación, FR-010a).
  *
- * El `--` precede siempre al nombre de rama, incluso cuando `branch` no
- * "parece" una opción: pasarlo siempre —y no sólo cuando hace falta— es lo que
- * evita una rama de código condicional que se ejercita una vez cada mil (U1).
- * Sin él, una rama llamada `-foo` la leería el parseo de opciones de `start` en
- * vez de tratarla como el nombre que el revisor eligió.
- *
- * `currentBranch` es el fallback de `branch` ausente, no un segundo lugar
- * donde mirar "por si": el asistente siempre pasa un `branch` explícito
- * (cli-invocation.md § start, columna "Cuándo se pasa": "Siempre, explícito"),
- * así que esta rama sólo se ejercita desde un intent armado a mano (los tests).
+ * Layout (008):
+ * - walk → sin flag (la CLI detecta walkthrough)
+ * - keys → `--keys`
+ * - step → `--step`
+ * - whole → `--no-walk` (idempotente sin sidecar; 1:1 con la opción de UI)
  */
 export function intentToArgs(intent: ReviewIntent, currentBranch: string): string[] {
     const args: string[] = [];
 
     if (intent.layout === "step") {
         args.push("--step");
-    } else if (intent.layout === "no-walk") {
+    } else if (intent.layout === "whole") {
         args.push("--no-walk");
     } else if (intent.layout === "keys") {
         args.push("--keys");
     }
+    // walk: no layout flags
 
     if (intent.range === "delta") {
         args.push("--delta");

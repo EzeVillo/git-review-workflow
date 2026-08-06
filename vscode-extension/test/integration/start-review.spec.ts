@@ -28,16 +28,29 @@ interface WizardItem {
 }
 
 /**
- * `gitReview.startReview` es un asistente multi-paso (rama → forma de lectura →
- * origen → rango si hay delta, más confirmación modal). El host de test no tiene
- * quién le haga click, así que se sustituyen `showQuickPick` /
- * `showWarningMessage` por respuestas fijas mientras corre el comando; se
- * restauran siempre, incluso si el comando lanza.
+ * `gitReview.startReview` es un asistente multi-paso (008: rama → origen →
+ * rango si hay delta → forma de lectura desde offers, más confirmación modal).
+ * El host de test no tiene quién le haga click, así que se sustituyen
+ * `showQuickPick` / `showWarningMessage` por respuestas fijas mientras corre
+ * el comando; se restauran siempre, incluso si el comando lanza.
  *
- * Cada paso se reconoce por la forma del ítem (no por el orden de llamadas): el
- * origen se elige **siempre**, y el rango sólo aparece cuando la CLI reporta
- * delta — un contador de llamadas se rompería en cuanto haya o no haya ese paso.
+ * Cada paso se reconoce por la forma del ítem (no por el orden de llamadas):
+ * layout labels pueden incluir " (recommended)".
  */
+function matchLayoutLabel(items: readonly WizardItem[], layoutLabel: string): WizardItem | undefined {
+    const exact = items.find((item) => item.label === layoutLabel);
+    if (exact) {
+        return exact;
+    }
+    // "Walkthrough" debe matchear "Walkthrough (recommended)".
+    return items.find(
+        (item) =>
+            item.label === layoutLabel ||
+            item.label.startsWith(`${layoutLabel} (`) ||
+            item.label.startsWith(layoutLabel)
+    );
+}
+
 async function withScriptedWizard<T>(
     pickBranch: (items: readonly WizardItem[]) => unknown,
     layoutLabel: string,
@@ -53,7 +66,7 @@ async function withScriptedWizard<T>(
     ) => {
         const sample = items[0];
         if (sample?.layout !== undefined) {
-            return items.find((item) => item.label === layoutLabel);
+            return matchLayoutLabel(items, layoutLabel);
         }
         if (sample?.source !== undefined) {
             return items.find((item) => item.label === sourceLabel);
@@ -89,8 +102,8 @@ describe("US1: empezar a revisar sin escribir el comando", function () {
         withBaseConfigured(repo, "main");
     });
 
-    it("automatico: deja la misma review que start a mano dejaria (whole, sin walkthrough)", async () => {
-        const branch = "us1-auto";
+    it("whole diff: deja whole cuando no hay walkthrough", async () => {
+        const branch = "us1-whole";
         createBranchWithChanges(repo, branch, {"src/a.ts": "a\n"});
         git(["checkout", branch], repo.dir);
 
@@ -98,14 +111,14 @@ describe("US1: empezar a revisar sin escribir el comando", function () {
         const before_ = await api.refresh();
         assert.strictEqual(before_.situation, "no-review", "precondicion: sin review activa");
 
-        await withScriptedWizard(pickCurrent, "Automatic", () =>
+        await withScriptedWizard(pickCurrent, "Whole diff", () =>
             vscode.commands.executeCommand("gitReview.startReview")
         );
 
         const state = await api.refresh();
         assert.strictEqual(state.situation, "review");
         assert.strictEqual(state.state?.source, branch);
-        assert.strictEqual(state.state?.mode, "whole", "sin walkthrough, automatico degrada a whole");
+        assert.strictEqual(state.state?.mode, "whole", "sin walkthrough, whole es el layout");
         assert.strictEqual(state.state?.branch, `review/${branch}`);
         assert.strictEqual(
             git(["symbolic-ref", "--quiet", "--short", "HEAD"], repo.dir).trim(),
@@ -140,16 +153,16 @@ describe("US1: empezar a revisar sin escribir el comando", function () {
         const api = await getTestApi();
         assert.strictEqual((await api.refresh()).situation, "no-review");
 
-        await withScriptedWizard(pickCurrent, "Ignore the walkthrough", () =>
+        await withScriptedWizard(pickCurrent, "Whole diff", () =>
             vscode.commands.executeCommand("gitReview.startReview")
         );
 
         const state = await api.refresh();
         assert.strictEqual(state.situation, "review");
-        assert.strictEqual(state.state?.mode, "whole", "--no-walk fuerza whole aunque haya walkthrough");
+        assert.strictEqual(state.state?.mode, "whole", "whole fuerza --no-walk aunque haya walkthrough");
     });
 
-    it("el mismo PR sin --no-walk entra en walk (control: prueba que el test anterior de verdad distingue algo)", async () => {
+    it("Walkthrough (recommended) entra en walk cuando el PR trae walkthrough", async () => {
         const branch = "us1-walk-control";
         createBranchWithChanges(repo, branch, {"src/a.ts": "a\n"});
         addWalkthrough(repo, branch, [{path: "src/a.ts", why: "explica a"}]);
@@ -158,7 +171,7 @@ describe("US1: empezar a revisar sin escribir el comando", function () {
         const api = await getTestApi();
         assert.strictEqual((await api.refresh()).situation, "no-review");
 
-        await withScriptedWizard(pickCurrent, "Automatic", () =>
+        await withScriptedWizard(pickCurrent, "Walkthrough", () =>
             vscode.commands.executeCommand("gitReview.startReview")
         );
 
@@ -167,7 +180,7 @@ describe("US1: empezar a revisar sin escribir el comando", function () {
         assert.strictEqual(state.state?.mode, "walk");
     });
 
-    it("el asistente pide origen despues del layout (no hay More options ni re-pregunta de layout)", async () => {
+    it("el asistente pide origen antes del layout (008: branch source layout)", async () => {
         const branch = "us1-source-step";
         createBranchWithChanges(repo, branch, {"src/a.ts": "a\n"});
         git(["checkout", branch], repo.dir);
@@ -188,7 +201,11 @@ describe("US1: empezar a revisar sin escribir el comando", function () {
                     !items.some((item) => item.label.startsWith("More options")),
                     "More options no debe aparecer en el paso de layout"
                 );
-                return items.find((item) => item.label === "Automatic");
+                assert.ok(
+                    !items.some((item) => item.label.toLowerCase().includes("automatic")),
+                    "Automatic no debe aparecer"
+                );
+                return matchLayoutLabel(items, "Whole diff");
             }
             if (sample?.source !== undefined) {
                 stepKinds.push("source");
@@ -217,7 +234,12 @@ describe("US1: empezar a revisar sin escribir el comando", function () {
             ["layout"],
             "layout se elige una sola vez"
         );
-        assert.ok(stepKinds.includes("source"), "origen se pide siempre, no detras de More options");
+        assert.ok(stepKinds.includes("source"), "origen se pide siempre");
+        // 008: source antes de layout
+        assert.ok(
+            stepKinds.indexOf("source") < stepKinds.indexOf("layout"),
+            "origen antes de forma de lectura"
+        );
         // Sin review previa de esta rama no hay registro delta: el rango no se ofrece.
         assert.ok(!stepKinds.includes("range"), "sin delta no se ofrece el paso de rango");
 
@@ -267,7 +289,7 @@ describe("US1: empezar a revisar sin escribir el comando", function () {
                 const sample = items[0];
                 if (sample?.layout !== undefined) {
                     stepKinds.push("layout");
-                    return items.find((item) => item.label === "Automatic");
+                    return matchLayoutLabel(items, "Whole diff");
                 }
                 if (sample?.source !== undefined) {
                     stepKinds.push("source");
@@ -361,7 +383,7 @@ describe("US1: empezar a revisar sin escribir el comando", function () {
                 }
                 return items.find((item) => item.candidate?.current);
             },
-            "Automatic",
+            "Whole diff",
             () => vscode.commands.executeCommand("gitReview.startReview")
         );
 

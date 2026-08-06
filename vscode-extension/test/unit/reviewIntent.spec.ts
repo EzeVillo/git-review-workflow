@@ -4,7 +4,7 @@ import {intentToArgs, ReviewIntent, validateIntent} from "../../src/review/revie
 
 const BASE: ReviewIntent = {
     branch: "feature/checkout",
-    layout: "auto",
+    layout: "walk",
     range: "full",
     source: "remote"
 };
@@ -25,7 +25,7 @@ function intentFromPorcelain(
 } {
     const deltas = parseConfigPorcelain(stdout).deltas;
     const delta = deltaForSource(deltas, source);
-    const intent: ReviewIntent = {branch: "feature/checkout", layout: "auto", range, source};
+    const intent: ReviewIntent = {branch: "feature/checkout", layout: "walk", range, source};
     return {intent, check: validateIntent(intent, {delta}), delta};
 }
 
@@ -145,7 +145,7 @@ describe("delta x source composition (FR-015)", () => {
 });
 
 describe("intentToArgs", () => {
-    it("layout auto no agrega ningun flag de layout", () => {
+    it("layout walk no agrega ningun flag de layout", () => {
         const args = intentToArgs(BASE, "develop");
         assert.deepStrictEqual(args, ["--", "feature/checkout"]);
     });
@@ -155,8 +155,8 @@ describe("intentToArgs", () => {
         assert.deepStrictEqual(args, ["--step", "--", "feature/checkout"]);
     });
 
-    it("layout no-walk agrega --no-walk", () => {
-        const args = intentToArgs({...BASE, layout: "no-walk"}, "develop");
+    it("layout whole agrega --no-walk", () => {
+        const args = intentToArgs({...BASE, layout: "whole"}, "develop");
         assert.deepStrictEqual(args, ["--no-walk", "--", "feature/checkout"]);
     });
 
@@ -191,7 +191,7 @@ describe("intentToArgs", () => {
     });
 
     it("sin branch cae al currentBranch dado", () => {
-        const args = intentToArgs({layout: "auto", range: "full", source: "remote"}, "develop");
+        const args = intentToArgs({layout: "walk", range: "full", source: "remote"}, "develop");
         assert.deepStrictEqual(args, ["--", "develop"]);
     });
 
@@ -209,7 +209,7 @@ describe("intentToArgs", () => {
     it("todos los flags posibles van antes del --, en el mismo orden en cualquier combinacion", () => {
         const args = intentToArgs({
             branch: "-weird",
-            layout: "no-walk",
+            layout: "whole",
             range: "delta",
             source: "offline"
         }, "develop");

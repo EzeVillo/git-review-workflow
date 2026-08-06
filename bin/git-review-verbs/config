@@ -9,13 +9,16 @@
 # repository — there is no exit 2 here, because "no review" is not a condition
 # this verb can observe.
 #
+# --porcelain with a branch also emits reading offers (008) for the tip/range
+# context: default remote full, or --local/--offline/--delta. Never fetches.
+#
 set -eu
 
 prog="git review config"
 
 usage() {
 	cat <<EOF
-usage: $prog [<key> [<value>]] [--unset <key>] [--porcelain [<branch>]]
+usage: $prog [<key> [<value>]] [--unset <key>] [--porcelain [--local | --offline] [--delta] [<branch>]]
 
 Read or write git-review-workflow's own configuration: the base branch a full
 review compares against, and the remote a review is fetched from.
@@ -27,7 +30,12 @@ review compares against, and the remote a review is fetched from.
                         machine-readable output: the effective config plus
                         every candidate branch to review (see the README for
                         the format); with <branch>, also report whether it
-                        has a prior review to diff against (--delta)
+                        has a prior review to diff against (--delta) and the
+                        reading layouts viable for that tip/range (offer rows)
+  --local               with --porcelain <branch>: offers for the local tip
+  --offline             with --porcelain <branch>: offers for local tip + base
+  --delta               with --porcelain <branch>: offers for the incremental
+                        range since the last review tip of that origin
 
 With no arguments, print the effective config for a person to read (two
 columns, one row per key; a key with no value is omitted, never blank).
@@ -53,6 +61,9 @@ config_key() {
 
 porcelain=0
 unset_key=""
+local_mode=0
+offline_mode=0
+delta_mode=0
 pos_count=0
 pos1=""
 pos2=""
@@ -81,6 +92,15 @@ while [ $# -gt 0 ]; do
 		;;
 	--porcelain)
 		porcelain=1
+		;;
+	--local)
+		local_mode=1
+		;;
+	--offline)
+		offline_mode=1
+		;;
+	--delta)
+		delta_mode=1
 		;;
 	--unset)
 		shift
@@ -121,6 +141,21 @@ if [ "$porcelain" -eq 1 ] && [ -n "$unset_key" ]; then
 	die "--porcelain and --unset are mutually exclusive"
 fi
 
+if [ "$local_mode" -eq 1 ] || [ "$offline_mode" -eq 1 ] || [ "$delta_mode" -eq 1 ]; then
+	if [ "$porcelain" -eq 0 ]; then
+		die "--local, --offline and --delta require --porcelain"
+	fi
+fi
+
+if [ "$local_mode" -eq 1 ] && [ "$offline_mode" -eq 1 ]; then
+	die "--local and --offline are mutually exclusive"
+fi
+
+# --offline implies local tip (same as start).
+if [ "$offline_mode" -eq 1 ]; then
+	local_mode=1
+fi
+
 mode=""
 key=""
 value=""
@@ -147,6 +182,13 @@ else
 		;;
 	*) die "unexpected argument" ;;
 	esac
+fi
+
+if [ "$delta_mode" -eq 1 ] && [ -z "$branch" ]; then
+	die "--delta requires a branch with --porcelain"
+fi
+if { [ "$local_mode" -eq 1 ] || [ "$offline_mode" -eq 1 ]; } && [ -z "$branch" ]; then
+	die "--local and --offline require a branch with --porcelain"
 fi
 
 git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
@@ -187,8 +229,8 @@ unset)
 	git config --unset "$gkey" 2>/dev/null || true
 	;;
 porcelain)
-	# Shared helpers (porcelain_row, candidate_branches), sourced from the
-	# libexec directory the dispatcher points us at.
+	# Shared helpers (porcelain_row, candidate_branches, emit_reading_offers),
+	# sourced from the libexec directory the dispatcher points us at.
 	# shellcheck source=../git-review-lib.sh
 	. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
@@ -217,6 +259,16 @@ porcelain)
 		if [ -n "$local_tip" ]; then
 			porcelain_row delta "$branch" "$local_tip" local
 		fi
+
+		# Reading offers for this tip/range (008). Default context = remote full.
+		# --local/--offline/--delta select the same axes as start, without fetch.
+		_offer_source=remote
+		if [ "$offline_mode" -eq 1 ]; then
+			_offer_source=offline
+		elif [ "$local_mode" -eq 1 ]; then
+			_offer_source=local
+		fi
+		emit_reading_offers "$branch" "$remote_val" "$_offer_source" "$delta_mode" || exit 1
 	fi
 	;;
 esac

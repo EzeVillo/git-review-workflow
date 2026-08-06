@@ -2,13 +2,45 @@ import * as vscode from "vscode";
 import {parseConfigPorcelain, CandidateBranch} from "../cli/configPorcelain";
 import {invokeGitReview, InvokeOptions} from "../cli/invoke";
 import {MutationLock} from "../review/mutationLock";
+import {layoutSummary} from "../review/layoutOffers";
+import {ReviewLayout} from "../review/reviewIntent";
 import {ReviewStateManager} from "../review/state";
 
-type Layout = "auto" | "step" | "no-walk";
+interface LayoutItem extends vscode.QuickPickItem {
+    layout: ReviewLayout;
+}
 
 /**
- * `gitReview.compareReview`: monta `git review compare <a> <b> [--step|--no-walk]`
- * con confirmación (006 US3).
+ * Layouts de compare: mismos nombres honestos que start (sin Automatic).
+ * Compare no tiene informe `offer` por tip de rama; se listan las cuatro
+ * formas de la CLI y el rechazo de --keys / degradación de walk queda en la CLI.
+ */
+const LAYOUT_ITEMS: LayoutItem[] = [
+    {
+        label: "Walkthrough",
+        description: "curated reading order if the upper tip has a walkthrough",
+        layout: "walk",
+    },
+    {
+        label: "Walkthrough — keys only",
+        description: "only entries marked key (--keys)",
+        layout: "keys",
+    },
+    {
+        label: "Commit by commit",
+        description: "one commit at a time (--step)",
+        layout: "step",
+    },
+    {
+        label: "Whole diff",
+        description: "entire diff at once (--no-walk)",
+        layout: "whole",
+    },
+];
+
+/**
+ * `gitReview.compareReview`: monta `git review compare <a> <b> [--step|--no-walk|--keys]`
+ * con confirmación (006 US3). Sin layout "auto" / "Automatic".
  */
 export async function compareReview(
     lock: MutationLock,
@@ -25,25 +57,15 @@ export async function compareReview(
         return;
     }
 
-    const layoutPick = await vscode.window.showQuickPick(
-        [
-            {label: "Automatic", description: "walkthrough on the tip if present", layout: "auto" as Layout},
-            {label: "Commit by commit", description: "--step", layout: "step" as Layout},
-            {label: "Ignore the walkthrough", description: "--no-walk", layout: "no-walk" as Layout},
-        ],
-        {title: "How to read the comparison", placeHolder: "Reading layout"}
-    );
+    const layoutPick = await vscode.window.showQuickPick(LAYOUT_ITEMS, {
+        title: "How to read the comparison",
+        placeHolder: "Walkthrough, keys only, commit by commit, or whole diff",
+    });
     if (!layoutPick) {
         return;
     }
 
-    const layoutNote =
-        layoutPick.layout === "step"
-            ? "commit by commit"
-            : layoutPick.layout === "no-walk"
-              ? "as the whole diff (no walkthrough)"
-              : "automatically";
-    const summary = `Compare ${lower}..${upper} ${layoutNote}? This creates a read-only review (finish will refuse).`;
+    const summary = `Compare ${lower}..${upper} ${layoutSummary(layoutPick.layout)}? This creates a read-only review (finish will refuse).`;
     const answer = await vscode.window.showWarningMessage(
         summary,
         {modal: true, detail: "Same effect as git review compare. Local changes must be clean."},
@@ -56,9 +78,12 @@ export async function compareReview(
     const args: string[] = [];
     if (layoutPick.layout === "step") {
         args.push("--step");
-    } else if (layoutPick.layout === "no-walk") {
+    } else if (layoutPick.layout === "whole") {
         args.push("--no-walk");
+    } else if (layoutPick.layout === "keys") {
+        args.push("--keys");
     }
+    // walk: sin flag de layout (la CLI detecta walkthrough en el tip)
     // Separador -- antes de posicionales: commit-ish que empiezan con - no se
     // confunden con flags (misma disciplina que start).
     args.push("--", lower, upper);

@@ -589,6 +589,122 @@ walk_keys_order() {
 	done
 }
 
+# emit_reading_offers <branch> <remote> <source_mode> <delta>
+# Print offer rows for config --porcelain (008-start-layout-offers). source_mode
+# is remote|local|offline; delta is 0|1. Never fetches. Dies on unresolvable tip
+# or on --delta without a marker for that origin. Lower bound mirrors start
+# (merge-base / previous tip + fold_lower) without creating a review branch.
+emit_reading_offers() {
+	_ero_branch="$1"
+	_ero_remote="$2"
+	_ero_source="$3"
+	_ero_delta="$4"
+
+	_ero_base="$(git config reviewworkflow.base || true)"
+	_ero_offline=0
+	_ero_local=0
+	case "$_ero_source" in
+	offline) _ero_offline=1; _ero_local=1 ;;
+	local) _ero_local=1 ;;
+	remote) ;;
+	*)
+		echo "error: internal: unknown offer source $_ero_source" >&2
+		return 1
+		;;
+	esac
+
+	if [ "$_ero_local" -eq 1 ]; then
+		_ero_srcref="refs/heads/$_ero_branch"
+		_ero_srclabel="$_ero_branch"
+		_ero_markerkey="reviewworkflowlocal.$_ero_branch.reviewed"
+	else
+		_ero_srcref="refs/remotes/$_ero_remote/$_ero_branch"
+		_ero_srclabel="$_ero_remote/$_ero_branch"
+		_ero_markerkey="reviewworkflow.$_ero_branch.reviewed"
+	fi
+
+	# Tip missing: hard error when the caller asked for this origin explicitly
+	# (local/offline/delta). Soft-skip (no offer rows) for the default remote
+	# probe so config --porcelain <branch> still works for delta-only clients
+	# when the remote tracking ref is absent (local-only branch).
+	if ! git rev-parse --verify --quiet "$_ero_srcref^{commit}" >/dev/null; then
+		if [ "$_ero_delta" -eq 1 ] || [ "$_ero_local" -eq 1 ]; then
+			echo "error: $_ero_srclabel not found" >&2
+			return 1
+		fi
+		return 0
+	fi
+	_ero_tip="$(git rev-parse "$_ero_srcref")"
+
+	_ero_baseref=""
+	if [ -n "$_ero_base" ]; then
+		if [ "$_ero_offline" -eq 1 ]; then
+			if git rev-parse --verify --quiet "refs/heads/$_ero_base^{commit}" >/dev/null; then
+				_ero_baseref="refs/heads/$_ero_base"
+			fi
+		else
+			if git rev-parse --verify --quiet "refs/remotes/$_ero_remote/$_ero_base^{commit}" >/dev/null; then
+				_ero_baseref="refs/remotes/$_ero_remote/$_ero_base"
+			fi
+		fi
+		if [ -z "$_ero_baseref" ]; then
+			_ero_bcommit="$(git rev-parse --verify --quiet "$_ero_base^{commit}" || true)"
+			if [ -n "$_ero_bcommit" ]; then
+				_ero_baseref="$_ero_bcommit"
+			fi
+		fi
+	fi
+
+	_ero_prev="$(git config "$_ero_markerkey" || true)"
+	if [ "$_ero_delta" -eq 1 ]; then
+		[ -n "$_ero_prev" ] || {
+			echo "error: no previous review of $_ero_branch recorded for this origin; run a full review first" >&2
+			return 1
+		}
+		[ "$_ero_prev" != "$_ero_tip" ] || {
+			echo "error: no new commits since your last review of $_ero_branch" >&2
+			return 1
+		}
+		git merge-base --is-ancestor "$_ero_prev" "$_ero_tip" || {
+			echo "error: $_ero_branch was force-pushed since your last review; run a full review instead" >&2
+			return 1
+		}
+		_ero_start="$_ero_prev"
+	else
+		# Full range needs a base; without it, skip offers (delta rows may still
+		# have been emitted above by the caller). Not a hard error: config
+		# porcelain is also used only for candidates/deltas before base is set.
+		if [ -z "$_ero_base" ] || [ -z "$_ero_baseref" ]; then
+			return 0
+		fi
+		_ero_start="$(git merge-base "$_ero_baseref" "$_ero_srcref")" || return 0
+		[ "$_ero_start" != "$_ero_tip" ] || return 0
+	fi
+
+	_ero_lower="$(fold_lower "$_ero_start" "$_ero_baseref" "$_ero_tip")"
+
+	_ero_walk=0
+	if wtcontent="$(walk_read "$_ero_tip")" && [ -n "$wtcontent" ]; then
+		_ero_curated="$(walk_sequence "$_ero_tip" "$_ero_lower")"
+		_ero_n="$(printf '%s\n' "$_ero_curated" | grep -c . || true)"
+		if [ "$_ero_n" -ge 1 ]; then
+			_ero_walk=1
+		fi
+	fi
+
+	if [ "$_ero_walk" -eq 1 ]; then
+		porcelain_row offer walk recommended
+		_ero_keys="$(walk_keys_order "$_ero_tip" "$_ero_lower")"
+		_ero_kn="$(printf '%s\n' "$_ero_keys" | grep -c . || true)"
+		if [ "$_ero_kn" -ge 1 ]; then
+			porcelain_row offer keys available
+		fi
+	fi
+	porcelain_row offer step available
+	porcelain_row offer whole available
+	return 0
+}
+
 # walk_range_error <walkstep> <total> <walkcount>
 # Emit the right diagnostic for a walk cursor that fell outside the live reading
 # range, then exit 1. A walk review's tip and its committed walkthrough are frozen,

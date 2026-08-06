@@ -120,6 +120,43 @@ describe("parseConfigPorcelain", () => {
         const result = parseConfigPorcelain(out);
         assert.deepStrictEqual(result.candidates, []);
     });
+
+    // ── offer (008 reading layouts) ──────────────────────────────────────────
+
+    it("parsea offer walk recommended y keys available", () => {
+        const out = [
+            "config\tremote\torigin",
+            "offer\twalk\trecommended",
+            "offer\tkeys\tavailable",
+            "offer\tstep\tavailable",
+            "offer\twhole\tavailable",
+            "",
+        ].join("\n");
+        const result = parseConfigPorcelain(out);
+        assert.deepStrictEqual(result.offers, [
+            {id: "walk", rank: "recommended"},
+            {id: "keys", rank: "available"},
+            {id: "step", rank: "available"},
+            {id: "whole", rank: "available"},
+        ]);
+    });
+
+    it("sin registro offer el campo queda ausente", () => {
+        const result = parseConfigPorcelain("config\tremote\torigin\n");
+        assert.strictEqual("offers" in result, false);
+    });
+
+    it("descarta offer con id o rank desconocido", () => {
+        const out = [
+            "config\tremote\torigin",
+            "offer\tauto\tavailable",
+            "offer\twalk\tbest",
+            "offer\tstep\tavailable",
+            "",
+        ].join("\n");
+        const result = parseConfigPorcelain(out);
+        assert.deepStrictEqual(result.offers, [{id: "step", rank: "available"}]);
+    });
 });
 
 describe("deltaForSource", () => {

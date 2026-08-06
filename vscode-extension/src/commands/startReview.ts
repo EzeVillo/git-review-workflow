@@ -4,9 +4,15 @@ import {
     deltaForSource,
     DeltaRecord,
     parseConfigPorcelain,
+    ReadingOffer,
 } from "../cli/configPorcelain";
 import {invokeGitReview, InvokeOptions, resolveCommand} from "../cli/invoke";
 import {MutationLock} from "../review/mutationLock";
+import {
+    buildLayoutItems,
+    layoutSummary,
+    offerConfigFlags,
+} from "../review/layoutOffers";
 import {
     intentToArgs,
     ReviewIntent,
@@ -41,25 +47,6 @@ interface SourceItem extends vscode.QuickPickItem {
 interface RangeItem extends vscode.QuickPickItem {
     range: ReviewRange;
 }
-
-const LAYOUT_ITEMS: LayoutItem[] = [
-    {label: "Automatic", description: "follow the PR's walkthrough, if it has one", layout: "auto"},
-    {
-        label: "Commit by commit",
-        description: "review one commit at a time (--step)",
-        layout: "step"
-    },
-    {
-        label: "Walkthrough — keys only",
-        description: "only entries marked > key (--keys)",
-        layout: "keys",
-    },
-    {
-        label: "Ignore the walkthrough",
-        description: "review the whole diff at once (--no-walk)",
-        layout: "no-walk"
-    },
-];
 
 /**
  * Origen (FR-014): remoto / local / offline. Las dos últimas se explican
@@ -130,14 +117,18 @@ async function pickBranch(candidates: CandidateBranch[]): Promise<CandidateBranc
 }
 
 /**
- * Paso 2 — cómo leerla (FR-012 / FR-013). Tres alternativas de la CLI; no hay
- * ítem "walkthrough" ni puerta de "More options…" — origen y rango vienen
- * después, en pasos propios.
+ * Paso 4 — cómo leerla (008): ítems dinámicos desde `offer` de la CLI.
+ * Sin Automatic; solo lo viable para tip+rango (o fallback whole+step).
  */
-async function pickLayout(): Promise<ReviewLayout | undefined> {
-    const picked = await vscode.window.showQuickPick(LAYOUT_ITEMS, {
+async function pickLayout(offers: readonly ReadingOffer[] | undefined): Promise<ReviewLayout | undefined> {
+    const items: LayoutItem[] = buildLayoutItems(offers).map((item) => ({
+        label: item.label,
+        description: item.description,
+        layout: item.layout,
+    }));
+    const picked = await vscode.window.showQuickPick(items, {
         title: "Start a review — how to read it",
-        placeHolder: "Automatic, commit by commit, or the whole diff at once",
+        placeHolder: "Walkthrough, commit by commit, keys only, or whole diff",
     });
     return picked?.layout;
 }
@@ -173,48 +164,38 @@ async function pickRange(): Promise<ReviewRange | undefined> {
 }
 
 /**
- * Markers --delta de la rama: SIEMPRE del registro CLI
- * (`config --porcelain <rama>`), nunca heurística local. La invocación inicial
- * de config no nombra rama y por contrato no emite filas delta
- * (config-porcelain.md). Puede traer remote, local, ambos o ninguno.
+ * Deltas + ofertas para la rama en el contexto source/range (008).
+ * Misma invocación: `config --porcelain [--local|--offline] [--delta] -- <branch>`.
+ * Siempre `network: false` (el tip remoto es el tracking ref local).
  */
-async function loadDeltasForBranch(
+async function loadBranchContext(
     branch: CandidateBranch,
+    source: ReviewSource,
+    range: ReviewRange,
     options: InvokeOptions
-): Promise<DeltaRecord[] | undefined> {
-    const deltaReport = await invokeGitReview(
+): Promise<{deltas: DeltaRecord[] | undefined; offers: ReadingOffer[] | undefined; error?: string}> {
+    const flags = offerConfigFlags(source, range);
+    const report = await invokeGitReview(
         "config",
-        ["--porcelain", "--", branch.name],
+        ["--porcelain", ...flags, "--", branch.name],
         {...options, network: false}
     );
-    if (!deltaReport.errorCode && deltaReport.exitCode === 0) {
-        return parseConfigPorcelain(deltaReport.stdout).deltas;
+    if (report.errorCode || report.exitCode !== 0) {
+        const text = flatten(report.stderr);
+        return {
+            deltas: undefined,
+            offers: undefined,
+            error: text.length > 0 ? text : "Could not read reading options for this branch.",
+        };
     }
-    return undefined;
-}
-
-function layoutSummary(layout: ReviewLayout): string {
-    switch (layout) {
-        case "step":
-            return "commit by commit";
-        case "no-walk":
-            return "as the whole diff, ignoring any walkthrough";
-        default:
-            return "automatically (following a walkthrough if the PR has one)";
-    }
+    const parsed = parseConfigPorcelain(report.stdout);
+    return {deltas: parsed.deltas, offers: parsed.offers};
 }
 
 /**
- * Confirmación con la frase resumen (FR-017), en el mismo molde que
- * `continueReview.ts` usa para retomar una review pausada (research.md § "el
- * molde que 002 fijó"): `start` cambia de rama y mueve HEAD, así que cae bajo
- * FR-029 igual que esa acción.
- *
- * El `detail` nombra la base cuando hay una (US1 escenario 6 / FR-010: el
- * revisor tiene que ver contra qué se va a comparar antes de confirmar, sin
- * ir a buscarlo a un archivo de configuración). Sin base no hay línea que
- * agregar — un review completo fallaría pidiéndola, y eso ya lo resolvió el
- * paso anterior de este mismo asistente.
+ * Confirmación con la frase resumen (FR-017 / FR-011), en el mismo molde que
+ * `continueReview.ts`. Nombra la forma real (walk / keys / step / whole), no
+ * “automatically…”.
  */
 async function confirmIntent(intent: ReviewIntent, args: string[], base: string | undefined): Promise<boolean> {
     const branch = intent.branch ?? "the current branch";
@@ -248,14 +229,9 @@ function runInTerminal(args: string[], options: InvokeOptions): void {
 }
 
 /**
- * `gitReview.startReview`: el asistente de inicio (T024 + T072/T074, research.md
- * Decisión 9). Lee `config --porcelain` con `network: false` (research.md
- * Decisión 5 — la única invocación que toca la red es `start`), antepone T025
- * si falta la base, recorre los pasos del `QuickPick` (rama → forma de lectura
- * → origen → rango si hay delta) y, confirmado, invoca `start` con
- * `network: true` bajo el `MutationLock` compartido — mismo molde que
- * `continueReview.ts`: progreso no cancelable, refresco pase lo que pase,
- * stderr de advertencias mostrado aunque el exit sea 0 (FR-031).
+ * `gitReview.startReview`: asistente de inicio (005 + 008).
+ * Orden (008): rama → origen → rango (si hay delta) → forma de lectura
+ * (desde `offer`) → confirmación → start con network: true.
  */
 export async function startReview(
     lock: MutationLock,
@@ -297,21 +273,27 @@ export async function startReview(
         return;
     }
 
-    const layout = await pickLayout();
-    if (!layout) {
-        return;
-    }
-
     // Origen siempre visible (FR-016): defaultSource sólo preselecciona.
+    // 008: origen y rango ANTES de la forma de lectura (ofertas dependen del tip).
     const defaultSource = readDefaultSource();
     const source = await pickSource(defaultSource);
     if (!source) {
         return;
     }
 
-    // Source primero: el marker remoto no habilita --delta en --local/--offline
-    // ni al revés (config-porcelain.md § delta / FR-015).
-    const deltas = await loadDeltasForBranch(branch, options);
+    // Primera lectura por rama: deltas de ambos orígenes (sin flags de
+    // origen) para decidir si hay paso de rango. Las ofertas se piden después
+    // con el contexto completo (source + range).
+    const deltaProbe = await invokeGitReview(
+        "config",
+        ["--porcelain", "--", branch.name],
+        {...options, network: false}
+    );
+    let deltas: DeltaRecord[] | undefined;
+    if (!deltaProbe.errorCode && deltaProbe.exitCode === 0) {
+        deltas = parseConfigPorcelain(deltaProbe.stdout).deltas;
+    }
+
     const delta = deltaForSource(deltas, source);
     let range: ReviewRange = "full";
     if (delta !== undefined) {
@@ -322,8 +304,23 @@ export async function startReview(
         range = pickedRange;
     }
 
+    const ctx = await loadBranchContext(branch, source, range, options);
+    if (ctx.error !== undefined) {
+        void vscode.window.showErrorMessage(ctx.error);
+        return;
+    }
+    // Prefer deltas from the contextual call when present (same markers).
+    if (ctx.deltas !== undefined) {
+        deltas = ctx.deltas;
+    }
+
+    const layout = await pickLayout(ctx.offers);
+    if (!layout) {
+        return;
+    }
+
     const intent: ReviewIntent = {branch: branch.name, layout, range, source};
-    const check = validateIntent(intent, {delta});
+    const check = validateIntent(intent, {delta: deltaForSource(deltas, source)});
     if (!check.ok) {
         // Defensa en profundidad: la UI no ofrece delta sin registro del
         // origin del source, pero si algo se desfasó no mandamos un intent

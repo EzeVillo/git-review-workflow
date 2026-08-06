@@ -28,6 +28,7 @@ import {
     watchGitDirFallback,
     workspaceFolderTargets,
 } from "./review/repository";
+import {CLI_PROBE_INTERVAL_MS, shouldProbeCli} from "./review/cliProbe";
 import {MutationLock} from "./review/mutationLock";
 import {resolveEntryArg} from "./review/entryArg";
 import {isReviewReadable} from "./review/situation";
@@ -290,9 +291,48 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
     }
 
     lock.onDidChangeBusy(() => updateView(stateManager.state));
-    stateManager.onDidChange((state) => updateView(state));
+    stateManager.onDidChange((state) => {
+        updateView(state);
+        syncCliProbe();
+    });
+
+    /**
+     * Mientras el panel está abierto y la CLI falta o es vieja, reintenta
+     * `--version` cada 10s: instalar/actualizar fuera de VS Code no emite
+     * evento al host. Fuera de esos dos estados (o con el panel oculto) el
+     * timer no corre — no es el polling general de estado que se descartó.
+     */
+    let cliProbeTimer: ReturnType<typeof setInterval> | undefined;
+
+    function stopCliProbe(): void {
+        if (cliProbeTimer !== undefined) {
+            clearInterval(cliProbeTimer);
+            cliProbeTimer = undefined;
+        }
+    }
+
+    function syncCliProbe(): void {
+        const want = shouldProbeCli(stateManager.state.situation, panelProvider.isVisible);
+        if (!want) {
+            stopCliProbe();
+            return;
+        }
+        if (cliProbeTimer !== undefined) {
+            return;
+        }
+        cliProbeTimer = setInterval(() => {
+            if (!shouldProbeCli(stateManager.state.situation, panelProvider.isVisible)) {
+                stopCliProbe();
+                return;
+            }
+            stateManager.invalidateVersionCheck();
+            void refresh();
+        }, CLI_PROBE_INTERVAL_MS);
+    }
 
     context.subscriptions.push(
+        panelProvider.onDidChangeVisibility(() => syncCliProbe()),
+        {dispose: () => stopCliProbe()},
         vscode.workspace.onDidChangeConfiguration((e) => {
             if (e.affectsConfiguration("gitReview.path")) {
                 stateManager.invalidateVersionCheck();
@@ -475,7 +515,7 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
 }
 
 export function deactivate(): void {
-    // Nada que liberar más allá de context.subscriptions: sin timers, y sin más
-    // estado persistente que la marca de `LAST_OPENED_KEY`, que vive en el
-    // `workspaceState` del host y no necesita cierre.
+    // El timer de sondeo de CLI se limpia vía context.subscriptions al
+    // desactivar. No hay más estado en memoria que merezca cierre: la marca
+    // de `LAST_OPENED_KEY` vive en el `workspaceState` del host.
 }

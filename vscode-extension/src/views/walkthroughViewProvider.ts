@@ -91,6 +91,18 @@ export class WalkthroughViewProvider implements vscode.WebviewViewProvider {
 
     private view: vscode.WebviewView | undefined;
     private model: PanelModel | undefined;
+    private readonly visibilityEmitter = new vscode.EventEmitter<boolean>();
+
+    /**
+     * Visibilidad del webview: el sondeo de CLI ausente/vieja solo corre
+     * mientras el panel está a la vista (no con la vista resuelta pero oculta
+     * por `retainContextWhenHidden`).
+     */
+    readonly onDidChangeVisibility = this.visibilityEmitter.event;
+
+    get isVisible(): boolean {
+        return this.view?.visible === true;
+    }
 
     /**
      * `index` / `id` son los únicos datos que un mensaje puede traer además
@@ -109,6 +121,10 @@ export class WalkthroughViewProvider implements vscode.WebviewViewProvider {
      * revisor la oculta, el host destruye el contexto del webview y al volver lo
      * reconstruye de cero. Por eso nada de lo de acá puede asumir que corre una
      * única vez, y por eso el modelo se repostea contra el webview nuevo.
+     *
+     * Con `retainContextWhenHidden` el host puede mantener el webview vivo al
+     * esconderlo: en ese caso no se re-resuelve, y la visibilidad se sigue por
+     * `onDidChangeVisibility`.
      */
     resolveWebviewView(view: vscode.WebviewView): void {
         this.view = view;
@@ -129,13 +145,21 @@ export class WalkthroughViewProvider implements vscode.WebviewViewProvider {
                 this.onMessage(type, type === "openSupport" ? msg?.id : msg?.index);
             }
         });
+        const visibility = view.onDidChangeVisibility(() => {
+            this.visibilityEmitter.fire(view.visible);
+        });
         view.onDidDispose(() => {
             listener.dispose();
+            visibility.dispose();
             if (this.view === view) {
                 this.view = undefined;
             }
+            this.visibilityEmitter.fire(false);
         });
         view.webview.html = this.html();
+        // resolveWebviewView corre al mostrarse: el primer tick de visibilidad
+        // no siempre dispara onDidChangeVisibility, así que se anuncia acá.
+        this.visibilityEmitter.fire(view.visible);
     }
 
     update(model: PanelModel): void {

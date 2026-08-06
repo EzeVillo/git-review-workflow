@@ -2,7 +2,15 @@ import * as vscode from "vscode";
 import {CandidateBranch, parseConfigPorcelain} from "../cli/configPorcelain";
 import {invokeGitReview, InvokeOptions, resolveCommand} from "../cli/invoke";
 import {MutationLock} from "../review/mutationLock";
-import {intentToArgs, ReviewIntent, ReviewLayout} from "../review/reviewIntent";
+import {
+    intentToArgs,
+    ReviewIntent,
+    ReviewLayout,
+    ReviewRange,
+    ReviewSource,
+    validateIntent,
+} from "../review/reviewIntent";
+import {resolveDefaultSource} from "../review/sourcePreference";
 import {captureToken, tokenStillValid} from "../review/staleGuard";
 import {classifyStartFailure, quoteForTerminal} from "../review/startFailure";
 import {ReviewStateManager} from "../review/state";
@@ -19,6 +27,21 @@ interface BranchItem extends vscode.QuickPickItem {
 
 interface LayoutItem extends vscode.QuickPickItem {
     layout: ReviewLayout;
+    moreOptions?: false;
+}
+
+interface MoreOptionsItem extends vscode.QuickPickItem {
+    moreOptions: true;
+}
+
+type LayoutStepItem = LayoutItem | MoreOptionsItem;
+
+interface SourceItem extends vscode.QuickPickItem {
+    source: ReviewSource;
+}
+
+interface RangeItem extends vscode.QuickPickItem {
+    range: ReviewRange;
 }
 
 const LAYOUT_ITEMS: LayoutItem[] = [
@@ -27,8 +50,62 @@ const LAYOUT_ITEMS: LayoutItem[] = [
     {label: "Ignore the walkthrough", description: "review the whole diff at once (--no-walk)", layout: "no-walk"},
 ];
 
+const MORE_OPTIONS_ITEM: MoreOptionsItem = {
+    label: "More options…",
+    description: "choose origin and range",
+    moreOptions: true,
+};
+
+/**
+ * Origen (FR-014): remoto / local / local sin red. Las dos últimas se explican
+ * en la descripción porque deciden red y resolución de la base.
+ */
+const SOURCE_ITEMS: SourceItem[] = [
+    {
+        label: "Remote",
+        description: "fetch and review the remote tip of the branch",
+        source: "remote",
+    },
+    {
+        label: "Local",
+        description: "review the local branch without fetching; base may still use the remote",
+        source: "local",
+    },
+    {
+        label: "Local, offline",
+        description: "review the local branch with no network; base is resolved locally",
+        source: "offline",
+    },
+];
+
+const RANGE_ITEMS: RangeItem[] = [
+    {
+        label: "Full range",
+        description: "everything since the base branch",
+        range: "full",
+    },
+    {
+        label: "Only what is new",
+        description: "commits since your last review of this branch (--delta)",
+        range: "delta",
+    },
+];
+
 function branchLabel(candidate: CandidateBranch): string {
     return candidate.current ? `${candidate.name}  (current)` : candidate.name;
+}
+
+/**
+ * Lee `gitReview.defaultSource` con la precedencia user/workspace que ya
+ * resuelve el host (research.md Decisión 11). Sólo preselección — nunca
+ * decide sola el argv (FR-016a / T074).
+ */
+function readDefaultSource(): ReviewSource {
+    const inspected = vscode.workspace.getConfiguration("gitReview").inspect<string>("defaultSource");
+    return resolveDefaultSource({
+        workspaceValue: inspected?.workspaceValue,
+        globalValue: inspected?.globalValue,
+    });
 }
 
 /**
@@ -47,13 +124,106 @@ async function pickBranch(candidates: CandidateBranch[]): Promise<CandidateBranc
     return picked?.candidate;
 }
 
-/** Paso 2 — cómo leerla: automático, commit por commit, o ignorar el walkthrough. */
-async function pickLayout(): Promise<ReviewLayout | undefined> {
-    const picked = await vscode.window.showQuickPick(LAYOUT_ITEMS, {
+/**
+ * Paso 2 — cómo leerla. Incluye el ítem *More options…* que abre el paso
+ * opcional de origen/rango (research.md Decisión 9, T072). Elegir un layout
+ * a secas usa rango full y el default de origen sin abrir ese paso.
+ */
+async function pickLayoutStep(): Promise<LayoutStepItem | undefined> {
+    const items: LayoutStepItem[] = [...LAYOUT_ITEMS, MORE_OPTIONS_ITEM];
+    return vscode.window.showQuickPick(items, {
         title: "Start a review — how to read it (step 2 of 3)",
+        placeHolder: "Automatic, commit by commit, whole diff, or more options",
+    });
+}
+
+/** Layout sin el ítem de más opciones — el subpaso del camino avanzado. */
+async function pickLayoutOnly(): Promise<ReviewLayout | undefined> {
+    const picked = await vscode.window.showQuickPick(LAYOUT_ITEMS, {
+        title: "Start a review — how to read it",
         placeHolder: "Automatic, commit by commit, or the whole diff at once",
     });
     return picked?.layout;
+}
+
+/**
+ * Origen: el ítem de `defaultSource` va primero para preseleccionarlo (el
+ * QuickPick activa el primer ítem al abrir). El valor que llega a la CLI es
+ * el que el usuario confirma acá o en el modal final, no el ajuste solo.
+ */
+async function pickSource(defaultSource: ReviewSource): Promise<ReviewSource | undefined> {
+    const preferred = SOURCE_ITEMS.find((item) => item.source === defaultSource) ?? SOURCE_ITEMS[0];
+    const rest = SOURCE_ITEMS.filter((item) => item.source !== preferred.source);
+    const items = [preferred, ...rest];
+    const picked = await vscode.window.showQuickPick(items, {
+        title: "Start a review — origin",
+        placeHolder: "Remote, local, or local without network",
+    });
+    return picked?.source;
+}
+
+/**
+ * Rango incremental: sólo se llama cuando el reporte `delta` existe para la
+ * rama (FR-015). Sin ese registro este paso no se ofrece.
+ */
+async function pickRange(): Promise<ReviewRange | undefined> {
+    const picked = await vscode.window.showQuickPick(RANGE_ITEMS, {
+        title: "Start a review — range",
+        placeHolder: "Full range, or only what is new since the last review",
+    });
+    return picked?.range;
+}
+
+/**
+ * Camino "More options…": layout + origen (+ rango si hay delta). El delta
+ * sale de una segunda invocación `config --porcelain <rama>` — la del inicio
+ * no nombra rama y por contrato no emite el registro (config-porcelain.md).
+ */
+async function pickMoreOptions(
+    branch: CandidateBranch,
+    defaultSource: ReviewSource,
+    options: InvokeOptions
+): Promise<{ layout: ReviewLayout; range: ReviewRange; source: ReviewSource } | undefined> {
+    const layout = await pickLayoutOnly();
+    if (!layout) {
+        return undefined;
+    }
+
+    const source = await pickSource(defaultSource);
+    if (!source) {
+        return undefined;
+    }
+
+    // Disponibilidad de --delta: SIEMPRE del registro CLI, nunca heurística local.
+    const deltaReport = await invokeGitReview(
+        "config",
+        ["--porcelain", "--", branch.name],
+        {...options, network: false}
+    );
+    let delta: { name: string; tip: string } | undefined;
+    if (!deltaReport.errorCode && deltaReport.exitCode === 0) {
+        delta = parseConfigPorcelain(deltaReport.stdout).delta;
+    }
+
+    let range: ReviewRange = "full";
+    if (delta !== undefined) {
+        const pickedRange = await pickRange();
+        if (!pickedRange) {
+            return undefined;
+        }
+        range = pickedRange;
+    }
+
+    const partial: ReviewIntent = {branch: branch.name, layout, range, source};
+    const check = validateIntent(partial, {delta});
+    if (!check.ok) {
+        // Defensa en profundidad: la UI no ofrece delta sin registro, pero si
+        // algo se desfasó no mandamos un intent ilegal a la CLI.
+        void vscode.window.showErrorMessage(check.reason);
+        return undefined;
+    }
+
+    return {layout, range, source};
 }
 
 function layoutSummary(layout: ReviewLayout): string {
@@ -111,13 +281,14 @@ function runInTerminal(args: string[], options: InvokeOptions): void {
 }
 
 /**
- * `gitReview.startReview`: el asistente de inicio (T024, research.md Decisión
- * 9). Lee `config --porcelain` con `network: false` (research.md Decisión 5 —
- * la única invocación que toca la red es `start`), antepone T025 si falta la
- * base, recorre los tres pasos del `QuickPick` y, confirmado, invoca `start`
- * con `network: true` bajo el `MutationLock` compartido — mismo molde que
- * `continueReview.ts`: progreso no cancelable, refresco pase lo que pase,
- * stderr de advertencias mostrado aunque el exit sea 0 (FR-031).
+ * `gitReview.startReview`: el asistente de inicio (T024 + T072/T074, research.md
+ * Decisión 9). Lee `config --porcelain` con `network: false` (research.md
+ * Decisión 5 — la única invocación que toca la red es `start`), antepone T025
+ * si falta la base, recorre los pasos del `QuickPick` (rama → forma de lectura
+ * → opciones opcionales) y, confirmado, invoca `start` con `network: true` bajo
+ * el `MutationLock` compartido — mismo molde que `continueReview.ts`: progreso
+ * no cancelable, refresco pase lo que pase, stderr de advertencias mostrado
+ * aunque el exit sea 0 (FR-031).
  */
 export async function startReview(
     lock: MutationLock,
@@ -155,12 +326,29 @@ export async function startReview(
         return;
     }
 
-    const layout = await pickLayout();
-    if (!layout) {
+    const defaultSource = readDefaultSource();
+    const layoutChoice = await pickLayoutStep();
+    if (!layoutChoice) {
         return;
     }
 
-    const intent: ReviewIntent = {branch: branch.name, layout, range: "full", source: "remote"};
+    let layout: ReviewLayout;
+    let range: ReviewRange = "full";
+    let source: ReviewSource = defaultSource;
+
+    if (layoutChoice.moreOptions) {
+        const advanced = await pickMoreOptions(branch, defaultSource, options);
+        if (!advanced) {
+            return;
+        }
+        layout = advanced.layout;
+        range = advanced.range;
+        source = advanced.source;
+    } else {
+        layout = layoutChoice.layout;
+    }
+
+    const intent: ReviewIntent = {branch: branch.name, layout, range, source};
     const args = intentToArgs(intent, branch.name);
 
     // La base del reporte leído arriba, o — si hacía falta y setBase() la

@@ -638,19 +638,19 @@ del comando equivalente (quickstart.md § 2, variantes).
 
 ### Tests para US6 ⚠️
 
-- [ ] T068 [P] [US6] En `tests/config-porcelain.bats`, agregar: `git review
+- [X] T068 [P] [US6] En `tests/config-porcelain.bats`, agregar: `git review
   config --porcelain <rama-nunca-revisada>` no emite registro `delta`; sobre una
   rama con un `reviewworkflow.<rama>.reviewed` seteado (simulado a mano en el
   fixture, o generado corriendo un `start`+`finish` de esa rama primero),
   `--porcelain <rama>` emite `delta	<rama>	<tip>` con el SHA completo. Verificar
   también el caso `reviewworkflowlocal.<rama>.reviewed` (marcador de `--local`).
-- [ ] T069 [P] [US6] Extender `vscode-extension/test/unit/configPorcelain.spec.ts`
+- [X] T069 [P] [US6] Extender `vscode-extension/test/unit/configPorcelain.spec.ts`
   (T015): parsea el registro `delta` opcional.
-- [ ] T070 [P] [US6] Extender `vscode-extension/test/unit/reviewIntent.spec.ts`
+- [X] T070 [P] [US6] Extender `vscode-extension/test/unit/reviewIntent.spec.ts`
   (T016): `range: "delta"` sólo es una combinación válida cuando el `ReviewIntent`
   se construyó con un `delta` presente — la función de validación (no la de
   traducción a args) lo rechaza si no.
-- [ ] T071 [P] [US6] Crear `vscode-extension/test/unit/sourcePreference.spec.ts`:
+- [X] T071 [P] [US6] Crear `vscode-extension/test/unit/sourcePreference.spec.ts`:
   con el ajuste `gitReview.defaultSource` en `"local"` a nivel *workspace* y
   `"remote"` a nivel *user*, el valor efectivo que lee el asistente es
   `"local"` (el workspace gana — FR-016a). Sin ningún ajuste, el efectivo es
@@ -658,22 +658,22 @@ del comando equivalente (quickstart.md § 2, variantes).
 
 ### Implementación para US6
 
-- [ ] T072 [US6] Extender `vscode-extension/src/commands/startReview.ts`
+- [X] T072 [US6] Extender `vscode-extension/src/commands/startReview.ts`
   (T024) con el paso "Más opciones…" detrás de un ítem del paso de forma de
   lectura: origen (Remoto / Local / Local sin red, con descripción de la
   diferencia — FR-014) y, sólo si el `delta` del reporte de `config` está
   presente para la rama elegida, la opción de rango incremental (FR-015 — no se
   ofrece si no está). Depende de T068-T070.
-- [ ] T073 [US6] En `vscode-extension/package.json`, agregar
+- [X] T073 [US6] En `vscode-extension/package.json`, agregar
   `contributes.configuration.properties["gitReview.defaultSource"]`: enum
   `["remote", "local", "offline"]`, default `"remote"`, con la descripción de
   cada valor (research.md Decisión 11).
-- [ ] T074 [US6] En `vscode-extension/src/commands/startReview.ts`, leer
+- [X] T074 [US6] En `vscode-extension/src/commands/startReview.ts`, leer
   `gitReview.defaultSource` (con `vscode.workspace.getConfiguration`, que ya
   resuelve user/workspace) para preseleccionar el ítem de origen del paso de
   T072 — nunca para decidir por sí solo; el argumento que llega a la CLI sigue
   siendo el que el usuario confirmó (FR-016a). Depende de T071, T073.
-- [ ] T075 [US6] `npm run compile`, `test:unit`, `test:integration` en verde.
+- [X] T075 [US6] `npm run compile`, `test:unit`, `test:integration` en verde.
 
 **Checkpoint**: el asistente cubre los dos ejes que motivaron la pregunta
 original del usuario, sin convertirse en un formulario de flags — quedan detrás

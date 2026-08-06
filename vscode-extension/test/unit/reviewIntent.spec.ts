@@ -1,7 +1,35 @@
 import * as assert from "node:assert";
-import {intentToArgs, ReviewIntent} from "../../src/review/reviewIntent";
+import {intentToArgs, ReviewIntent, validateIntent} from "../../src/review/reviewIntent";
 
 const BASE: ReviewIntent = {branch: "feature/checkout", layout: "auto", range: "full", source: "remote"};
+
+describe("validateIntent", () => {
+    it("range delta without a delta present is rejected", () => {
+        const result = validateIntent({...BASE, range: "delta"}, {});
+        assert.strictEqual(result.ok, false);
+        if (!result.ok) {
+            assert.ok(result.reason.length > 0);
+        }
+    });
+
+    it("range delta with a delta present is accepted", () => {
+        const result = validateIntent(
+            {...BASE, range: "delta"},
+            {delta: {name: "feature/checkout", tip: "abc123def456"}}
+        );
+        assert.strictEqual(result.ok, true);
+    });
+
+    it("range full is accepted without a delta", () => {
+        const result = validateIntent(BASE, {});
+        assert.strictEqual(result.ok, true);
+    });
+
+    it("range full is accepted even when a delta is present", () => {
+        const result = validateIntent(BASE, {delta: {name: "feature/checkout", tip: "abc123def456"}});
+        assert.strictEqual(result.ok, true);
+    });
+});
 
 describe("intentToArgs", () => {
     it("layout auto no agrega ningun flag de layout", () => {

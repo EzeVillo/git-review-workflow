@@ -229,6 +229,21 @@
           "type": "string",
           "default": "",
           "description": "Path to the git-review dispatcher when `git` does not discover it. Empty = invoke `git review`."
+        },
+        "gitReview.defaultSource": {
+          "type": "string",
+          "enum": [
+            "remote",
+            "local",
+            "offline"
+          ],
+          "enumDescriptions": [
+            "Fetch from the remote and review the remote tip of the branch.",
+            "Review the local branch without fetching first; the base still resolves against the remote when needed.",
+            "Review the local branch with no network access; the base is resolved locally."
+          ],
+          "default": "remote",
+          "description": "Default origin for a new review. Only preselects the source step in the start wizard; the CLI still receives whatever the user confirms."
         }
       }
     }

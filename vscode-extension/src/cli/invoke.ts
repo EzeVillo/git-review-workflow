@@ -1,5 +1,6 @@
 import * as path from "node:path";
 import spawn from "cross-spawn";
+import {logCliEnd, logCliStart} from "./cliLog";
 
 export interface InvokeOptions {
     cwd: string;
@@ -150,6 +151,8 @@ export function invokeGitReview(
     options: InvokeOptions
 ): Promise<InvokeResult> {
     const {command, args: commandArgs} = resolveCommand(verb, args, options.gitReviewPath);
+    const started = Date.now();
+    logCliStart(command, commandArgs, options.cwd);
 
     return new Promise((resolve) => {
         const child = spawn(command, commandArgs, {
@@ -165,6 +168,12 @@ export function invokeGitReview(
         child.stderr?.setEncoding("utf8").on("data", (chunk: string) => (stderr += chunk));
 
         child.on("error", (error: NodeJS.ErrnoException) => {
+            logCliEnd({
+                exitCode: null,
+                errorCode: error.code,
+                durationMs: Date.now() - started,
+                stderr,
+            });
             resolve({
                 stdout,
                 stderr,
@@ -174,6 +183,11 @@ export function invokeGitReview(
         });
 
         child.on("close", (code) => {
+            logCliEnd({
+                exitCode: code,
+                durationMs: Date.now() - started,
+                stderr,
+            });
             resolve({stdout, stderr, exitCode: code});
         });
     });

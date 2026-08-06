@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import {initCliLog, showCliLog} from "./cli/cliLog";
 import {InvokeOptions} from "./cli/invoke";
 import {EntryRecord} from "./cli/porcelain";
 import {PathRef} from "./cli/unquote";
@@ -87,6 +88,9 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
     let target: RepositoryTarget | undefined;
     let allTargets: RepositoryTarget[] = [];
     let gitApi: GitApi | undefined;
+
+    // Log de cada `git review …` (invokeGitReview). Siempre on; no se auto-abre.
+    initCliLog(context.subscriptions);
 
     function getInvokeOptions(): InvokeOptions {
         return {cwd: target?.rootUri.fsPath ?? "", gitReviewPath: configuredGitReviewPath()};
@@ -436,7 +440,9 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
         vscode.commands.registerCommand("gitReview.walkthroughBuild", () =>
             walkthroughBuild(lock, stateManager, getInvokeOptions)),
         vscode.commands.registerCommand("gitReview.installCli", () => installOrUpdateCli()),
-        vscode.commands.registerCommand("gitReview.showOutOfRangeHelp", () => showOutOfRangeHelp(stateManager.state.stderr))
+        vscode.commands.registerCommand("gitReview.showOutOfRangeHelp", () => showOutOfRangeHelp(stateManager.state.stderr)),
+        // Diagnóstico: abre el canal Output "Git Review CLI" (nunca se abre solo).
+        vscode.commands.registerCommand("gitReview.showCliLog", () => showCliLog())
     );
 
     updateContextKeys(stateManager.state);

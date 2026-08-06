@@ -229,6 +229,7 @@ Los ids son interfaz pública.
 | `gitReview.continueReview`| Continue Saved Review   | panel (inventario de `no-review`) |
 | `gitReview.undoFinish`    | Undo Finish             | panel (banner / finish-pending), paleta |
 | `gitReview.resumeFinish`  | Resume Finish           | panel (banner finish-conflict), paleta |
+| `gitReview.showCliLog`    | Show CLI Log            | paleta (diagnóstico; no se auto-abre) |
 
 El título de la vista lleva el **ciclo de vida** de la review — `refresh`,
 `finishReview`, `saveReview`, `abortReview` — como íconos. Navegar y saltar de

@@ -172,6 +172,11 @@
         "command": "gitReview.walkthroughBuild",
         "title": "Walkthrough: Build",
         "category": "git review"
+      },
+      {
+        "command": "gitReview.showCliLog",
+        "title": "Show CLI Log",
+        "category": "git review"
       }
     ],
     "menus": {
@@ -292,6 +297,9 @@
         },
         {
           "command": "gitReview.walkthroughBuild"
+        },
+        {
+          "command": "gitReview.showCliLog"
         }
       ]
     },

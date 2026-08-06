@@ -214,9 +214,18 @@ describe("panelHtml", () => {
         // Empty state sin review activa: compare/walkthrough viven en
         // renderEmptyStartBlock (solo no-review). finish-pending es una
         // pantalla propia de post-cierre, sin empty state ni Other actions.
+        // Other actions es un <details> plegado por defecto para no pelear
+        // por alto con Start / base / inventario.
         assert.ok(html.includes('function renderOtherActions(model)'));
         assert.ok(html.includes('function renderEmptyStartBlock(model)'));
-        assert.ok(html.includes('el("h2", null, "Other actions")'));
+        assert.ok(html.includes('el("details", "tools")'));
+        assert.ok(html.includes('el("summary", null, "Other actions")'));
+        assert.ok(html.includes("otherActionsOpen"), "el toggle sobrevive al redibujado del modelo");
+        // Colapsado: al fondo del panel (no solo del contenido). Abierto: flujo
+        // bajo Start. El empty crece con #root.fills / .pane-main.
+        assert.ok(html.includes('#root.fills') || html.includes('root.className = model.situation === "no-review" ? "fills"'));
+        assert.ok(html.includes("margin-top: auto"), "colapsado se clava al borde inferior del panel");
+        assert.ok(html.includes('el("div", "pane-main")'), "con inventario el alto se reparte Start+tools");
         assert.ok(html.includes('button("Compare revisions", "compareReview")'));
         assert.ok(html.includes('button("Walkthrough: Init", "walkthroughInit")'));
         assert.ok(html.includes('button("Walkthrough: Build", "walkthroughBuild")'));

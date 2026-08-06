@@ -24,12 +24,35 @@ export function panelHtml(nonce: string): string {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style nonce="${nonce}">
+  /* 100% del webview: el empty state de no-review usa flex para clavar
+     Other actions al borde inferior cuando está colapsado (no solo debajo
+     del contenido, que en un sidebar alto deja un hueco vacío abajo). */
+  html, body { height: 100%; }
   body {
     margin: 0;
     padding: 0;
     color: var(--vscode-foreground);
     font-family: var(--vscode-font-family);
     font-size: var(--vscode-font-size);
+  }
+  #root { min-height: 100%; box-sizing: border-box; }
+  #root.fills {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+  }
+  /* Inventario + Start: el bloque Start crece y empuja Other actions al fondo. */
+  .pane-main {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+  }
+  #root.fills > .empty,
+  .pane-main > .empty {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
   }
   .bar {
     display: flex;
@@ -282,19 +305,51 @@ export function panelHtml(nonce: string): string {
   }
   .empty.after-inv { border-top: 1px solid var(--vscode-panel-border); }
   /* Acciones del empty state que no son "empezar un PR": compare (review
-     de solo lectura) y autoría del walkthrough. Van debajo de Start con el
-     mismo separador que el pie del inventario, y no aparecen con review
-     activa — ambos verbos necesitan un working tree sin review montada. */
+     de solo lectura) y autoría del walkthrough. No aparecen con review
+     activa — ambos verbos necesitan un working tree sin review montada.
+     Colapsadas: margin-top:auto las clava al borde inferior del panel
+     (el empty crece con #root.fills / .pane-main), sin divider.
+     Abiertas: vuelven al flujo bajo Start/base, con el separador de sección. */
   .tools {
+    flex-shrink: 0;
+    margin-top: auto;
+  }
+  .tools[open] {
     margin-top: 1.2em;
     padding-top: 1.2em;
     border-top: 1px solid var(--vscode-panel-border);
   }
-  .tools h2 {
-    margin: 0 0 .6em;
+  .tools summary {
+    cursor: pointer;
     font-size: .9em;
     font-weight: 600;
     color: var(--vscode-descriptionForeground);
+    list-style: none;
+  }
+  .tools summary::-webkit-details-marker { display: none; }
+  /* Chevron al estilo de las secciones del sidebar: el triángulo nativo
+     varía por motor y en webviews a veces se ve tosco; éste usa el color
+     del summary y gira al abrir. */
+  .tools summary::before {
+    content: "";
+    display: inline-block;
+    width: .45em;
+    height: .45em;
+    margin-right: .45em;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(-45deg);
+    vertical-align: .15em;
+  }
+  .tools[open] summary {
+    margin-bottom: .6em;
+  }
+  .tools[open] summary::before {
+    transform: rotate(45deg);
+    vertical-align: .25em;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .tools summary::before { transition: transform .12s ease; }
   }
   .tools > button {
     display: flex;
@@ -531,13 +586,22 @@ export function panelHtml(nonce: string): string {
     return box;
   }
 
+  // El panel redibuja el root en cada modelo; sin esto, expandir Other
+  // actions se pliega al primer refresh (busy, inventario, etc.).
+  let otherActionsOpen = false;
+
   /**
    * Compare y walkthrough init/build en el empty state (no-review): montan
    * o escriben fuera de una sesion de lectura. No en finish-pending.
+   * Van plegadas por defecto: son secundarias respecto de Start / base.
    */
   function renderOtherActions(model) {
-    const box = el("div", "tools");
-    box.appendChild(el("h2", null, "Other actions"));
+    const box = el("details", "tools");
+    if (otherActionsOpen) { box.open = true; }
+    box.addEventListener("toggle", function () {
+      otherActionsOpen = box.open;
+    });
+    box.appendChild(el("summary", null, "Other actions"));
     const compare = button("Compare revisions", "compareReview");
     compare.disabled = model.busy;
     box.appendChild(compare);
@@ -573,13 +637,16 @@ export function panelHtml(nonce: string): string {
       case "no-review": {
         // El fallback a lista vacía no sobra: el webview redibuja el modelo que
         // guardó con setState, que puede venir de una versión sin este campo.
+        // #root.fills (lo pone render) hace que el empty crezca a la altura del
+        // panel y Other actions colapsado se clave al fondo con margin-top:auto.
         const reviews = model.reviews || [];
         const box = renderEmptyStartBlock(model);
         if (reviews.length === 0) { return box; }
         // Con reviews abiertas el párrafo pasa a ser el pie del inventario, no
-        // el contenido: lleva el separador y va debajo.
+        // el contenido: lleva el separador y va debajo. .pane-main reparte el
+        // alto: inventario arriba, Start+Other actions crecen al resto.
         box.className = "empty after-inv";
-        const wrap = el("div");
+        const wrap = el("div", "pane-main");
         wrap.appendChild(renderInventory(model, reviews));
         wrap.appendChild(box);
         return wrap;
@@ -913,6 +980,9 @@ export function panelHtml(nonce: string): string {
 
   function render(model) {
     root.textContent = "";
+    // fills solo en no-review: Other actions colapsado se clava al fondo del
+    // panel. En el resto de situaciones el root no debe estirar en flex.
+    root.className = model.situation === "no-review" ? "fills" : "";
     // finish-conflict sigue siendo una review legible (FR-027) — el estado
     // vacío es sólo para no-review/out-of-range/error/cli-*.
     if (model.situation !== "review" && model.situation !== "finish-conflict") {
@@ -976,6 +1046,7 @@ export function panelHtml(nonce: string): string {
     showTimer = 0;
     painted = SKELETON;
     root.textContent = "";
+    root.className = "";
     root.appendChild(renderBar(model, true));
     renderNotes(model);
     root.appendChild(renderPending(model));

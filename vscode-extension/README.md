@@ -19,6 +19,27 @@ you put aside doesn't have to be remembered by name. Saved ones offer
 *Continue*; an active one is listed without an action, because going back to it
 is a branch checkout and the editor's branch picker already does that.
 
+## Panel actions
+
+Everything below is a command the panel exposes (Command Palette or a button on
+the pane). Each one shells out to the matching `git review` verb — the extension
+never invents a second way to change review state.
+
+| Action | When it appears | CLI |
+|--------|-----------------|-----|
+| **Start a review** | Empty state (`no-review`): pick a branch (and optionally range/source) from the assistant | `git review start …` |
+| **Cancel review** | Active review, and also mid-conflict finish | `git review abort` |
+| **Finish review** | Active review with your edits ready to extract | `git review finish` / `finish --onto-source` |
+| **Save for later** | Active review only (not while a finish is mid-conflict) | `git review save` |
+| **Undo** (finish) | After a completed finish still waiting (`finish-pending`), or a finish stopped mid-conflict (`finish-conflict`) | `git review finish --abort` |
+| **Continue** (finish) | Finish stopped mid-conflict, after you resolve the markers in the tree | `git review finish --resume` |
+
+A completed finish that left edits on `review-fixes/<branch>` (or on the PR
+branch with `--onto-source`) is **not** treated as "no review": the panel shows
+the pending closure, names the real destination of the edits, and offers *Undo*.
+A finish stopped mid-conflict keeps the review readable (mode, branch, current
+entry) but locks navigation until you *Continue* or *Undo*.
+
 ## The CLI is the only source of truth
 
 The extension never derives review state on its own. Everything it shows comes
@@ -58,7 +79,7 @@ range — the mark can only ever point at a row the CLI just reported.
 ## Requirements
 
 - VS Code ^1.75.0.
-- `git review` ≥ 0.3.0 discoverable as a git subcommand (or point the
+- `git review` ≥ 0.4.0 discoverable as a git subcommand (or point the
   `gitReview.path` setting at the dispatcher directly).
 
 ## Developing
@@ -86,10 +107,12 @@ git -C <sandbox>/work review start feature/checkout
 It also builds one branch per state the panel can reach but a single well-formed
 pull request never shows — start `feature/notifications` for the unannotated
 entries that close a reading order, `feature/telemetry` for whole mode,
-`feature/legacy` for the degraded note — and
-leaves three saved reviews on `develop`, which is the empty state's inventory:
-one row offering `Continue`, and two that explain why they cannot. The script
-prints the whole map when it finishes.
+`feature/legacy` for the degraded note — plus a completed finish still waiting
+(`feature/shipping` → `review-fixes/…`, panel `finish-pending`) and a finish
+stopped mid-conflict (`feature/conflict`, panel `finish-conflict`), and leaves
+three saved reviews on `develop`, which is the empty state's inventory: one row
+offering `Continue`, and two that explain why they cannot. The script prints the
+whole map when it finishes.
 
 Then open `<sandbox>/work` in the development host. Note that the host inherits
 the `PATH` of the VS Code that launched it, not the one `env.sh` sets up inside

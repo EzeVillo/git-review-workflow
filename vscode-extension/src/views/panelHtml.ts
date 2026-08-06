@@ -508,13 +508,13 @@ export function panelHtml(nonce: string): string {
         );
       case "cli-missing":
         return empty(
-          "The git-review CLI (0.3.0 or newer) was not found.",
+          "The git-review CLI (0.4.0 or newer) was not found.",
           button("Install the CLI", "installCli", "primary"),
           model.stderr
         );
       case "cli-outdated":
         return empty(
-          "The installed git-review CLI is older than 0.3.0.",
+          "The installed git-review CLI is older than 0.4.0.",
           button("Update the CLI", "installCli", "primary"),
           model.stderr
         );

@@ -3,42 +3,45 @@ import { compareVersions, isOutdated, MIN_CLI_VERSION } from "../../src/cli/vers
 
 describe("compareVersions", () => {
 	it("igual", () => {
-		assert.strictEqual(compareVersions("0.3.0", "0.3.0"), 0);
+		assert.strictEqual(compareVersions("0.4.0", "0.4.0"), 0);
 	});
 
 	it("menor en major", () => {
-		assert.ok((compareVersions("0.3.0", "1.0.0") as number) < 0);
+		assert.ok((compareVersions("0.4.0", "1.0.0") as number) < 0);
 	});
 
 	it("menor en minor", () => {
-		assert.ok((compareVersions("0.2.9", "0.3.0") as number) < 0);
+		assert.ok((compareVersions("0.3.9", "0.4.0") as number) < 0);
 	});
 
 	it("menor en patch", () => {
-		assert.ok((compareVersions("0.3.0", "0.3.1") as number) < 0);
+		assert.ok((compareVersions("0.4.0", "0.4.1") as number) < 0);
 	});
 
 	it("mayor", () => {
-		assert.ok((compareVersions("0.4.0", "0.3.0") as number) > 0);
+		assert.ok((compareVersions("0.5.0", "0.4.0") as number) > 0);
 	});
 
 	it("formato inválido devuelve undefined", () => {
-		assert.strictEqual(compareVersions("not-a-version", "0.3.0"), undefined);
-		assert.strictEqual(compareVersions("0.3", "0.3.0"), undefined);
+		assert.strictEqual(compareVersions("not-a-version", "0.4.0"), undefined);
+		assert.strictEqual(compareVersions("0.4", "0.4.0"), undefined);
 	});
 });
 
 describe("isOutdated", () => {
 	it("false para la versión mínima exacta", () => {
 		assert.strictEqual(isOutdated(MIN_CLI_VERSION), false);
+		assert.strictEqual(MIN_CLI_VERSION, "0.4.0");
 	});
 
-	it("true para una versión menor", () => {
+	it("true para una versión menor (incluye 0.3.x)", () => {
 		assert.strictEqual(isOutdated("0.2.1"), true);
+		assert.strictEqual(isOutdated("0.3.0"), true);
+		assert.strictEqual(isOutdated("0.3.9"), true);
 	});
 
 	it("false para una versión mayor", () => {
-		assert.strictEqual(isOutdated("0.3.1"), false);
+		assert.strictEqual(isOutdated("0.4.1"), false);
 	});
 
 	it("true para formato inválido", () => {

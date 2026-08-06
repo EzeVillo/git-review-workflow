@@ -264,6 +264,12 @@ describe("panelHtml", () => {
         assert.ok(html.includes("renderOtherActions"), "Other actions en el pie compartido");
         assert.ok(html.includes('case "no-review"') && html.includes("renderEmptyStartBlock"));
         assert.ok(html.includes("noBaseConfigured") && html.includes("renderSetup"));
+        // Setup sin base: el copy tiene que decir PARA QUÉ se usa, no solo
+        // que es obligatoria — si no, el revisor no sabe qué elegir.
+        assert.ok(
+            html.includes("where PRs land") && html.includes("compare"),
+            "renderSetup explica el uso de la base (donde aterrizan los PRs / contra que se compara)"
+        );
         assert.ok(html.includes('"setRemote"') || html.includes("'setRemote'") || html.includes("setRemote"));
         const pendingBranch = /case "finish-pending": \{([^]*?)\n {6}case "out-of-range"/.exec(html)?.[1] ?? "";
         assert.ok(pendingBranch.length > 0, "no se encontro el caso finish-pending");

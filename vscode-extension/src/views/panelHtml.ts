@@ -779,13 +779,16 @@ export function panelHtml(nonce: string): string {
   /**
    * Modo setup: config llegó sin base. Solo base (obligatoria) y remote
    * (opcional con valor efectivo). Sin Start, inventario ni footer.
+   * El párrafo de la base no es un "is required" vacío: dice para qué
+   * sirve (dónde aterrizan los PRs y contra qué se arma el rango).
    */
   function renderSetup(model) {
     const box = empty(
       "Configure git review for this repository.",
       button("Set the base branch", "setBase", "primary")
     );
-    box.appendChild(el("p", null, "A base branch is required before starting a full review."));
+    box.appendChild(el("p", null,
+      "The base is where PRs land in this repo (main, develop, …). Full reviews compare the branch under review against it."));
     const remote = model.configuredRemote !== undefined ? model.configuredRemote : "origin";
     box.appendChild(el("p", null, "Remote: " + remote + " (optional)."));
     const changeRemote = button("Change remote", "setRemote", null);

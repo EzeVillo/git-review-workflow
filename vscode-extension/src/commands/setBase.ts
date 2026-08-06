@@ -45,7 +45,9 @@ export async function setBase(
 
     const picked = await vscode.window.showQuickPick(items, {
         title: "Set the base branch",
-        placeHolder: "Branch a full review compares against",
+        // Explica el uso, no solo el nombre: es la rama donde aterrizan los
+        // PRs y el lower bound del rango de una full review (README § base).
+        placeHolder: "Where PRs land (main, develop, …) — full reviews compare against it",
     });
     if (!picked) {
         return;

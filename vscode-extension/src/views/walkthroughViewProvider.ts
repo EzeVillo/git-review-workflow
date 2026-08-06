@@ -22,6 +22,8 @@ export const PANEL_MESSAGES = [
     "setBase",
     "abortReview",
     "finishReview",
+    "undoFinish",
+    "resumeFinish",
 ] as const;
 
 export type PanelMessage = (typeof PANEL_MESSAGES)[number];

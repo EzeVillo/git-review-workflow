@@ -511,7 +511,7 @@ hay estado sobre el que actuar.
 
 ### Tests para US4 ⚠️
 
-- [ ] T055 [P] [US4] En `vscode-extension/test/integration/finish-review.spec.ts`
+- [X] T055 [P] [US4] En `vscode-extension/test/integration/finish-review.spec.ts`
   (extiende el de T053): sobre un cierre `pending` sin tocar, invocar el
   deshacer y afirmar contra `git branch --list` que `review/<src>` volvió a
   existir con `HEAD` ahí y las ediciones intactas (comparado por el diff contra
@@ -521,7 +521,7 @@ hay estado sobre el que actuar.
   `--force` lo completa. **Y FR-030 en su forma más importante**: descartar esa
   *segunda* confirmación deja el commit nuevo intacto — es el único punto del
   ciclo donde una confirmación mal manejada destruye trabajo.
-- [ ] T056 [P] [US4] En el mismo archivo: sobre el fixture de conflicto (T038),
+- [X] T056 [P] [US4] En el mismo archivo: sobre el fixture de conflicto (T038),
   afirmar que `PanelModel.navigationLocked` es `true` y que invocar `next`/`prev`
   vía el comando de la extensión no cambia `git review status --porcelain`
   (FR-027 — verificado por el efecto, no por una excepción lanzada); resolver
@@ -534,7 +534,7 @@ hay estado sobre el que actuar.
 
 ### Implementación para US4
 
-- [ ] T057 [US4] Extender `vscode-extension/src/commands/finishReview.ts` (o
+- [X] T057 [US4] Extender `vscode-extension/src/commands/finishReview.ts` (o
   crear `vscode-extension/src/commands/undoFinish.ts` si el archivo de T050 ya
   es grande) con la acción de deshacer: captura el `StateToken` (T006) al abrir
   el diálogo y lo revalida antes de invocar (FR-038 — la acción tiene
@@ -547,7 +547,7 @@ hay estado sobre el que actuar.
   confirmación). El testigo se revalida **otra vez** antes del `--force`: entre
   el rechazo y la segunda confirmación pasa tiempo, y es la invocación más
   destructiva de todo el ciclo.
-- [ ] T058 [US4] En el mismo módulo, la acción de continuar un cierre trabado:
+- [X] T058 [US4] En el mismo módulo, la acción de continuar un cierre trabado:
   sin confirmación previa (no descarta nada — FR-020 la trata distinto de
   deshacer), invoca `git review finish --resume [--onto-source]`, tomando el
   `--onto-source` del campo `onto` del registro `finish` que el contrato reporta
@@ -556,17 +556,17 @@ hay estado sobre el que actuar.
   silencio. Y la acción de dar marcha atrás desde el conflicto: mismo camino de
   `finish --abort` que T057, sin necesidad de resolver los marcadores primero.
   Depende de T047 (el campo tiene que estar parseado).
-- [ ] T059 [US4] En `vscode-extension/src/extension.ts`, registrar
+- [X] T059 [US4] En `vscode-extension/src/extension.ts`, registrar
   `gitReview.undoFinish` y `gitReview.resumeFinish` (o los nombres que T057/T058
   hayan fijado), con `"when"` acotado a `gitReview.situation ==
   finish-pending` y `finish-conflict` respectivamente. En `package.json`:
   comandos + entradas de paleta.
-- [ ] T060 [US4] En `vscode-extension/src/views/panelHtml.ts`: los botones de
+- [X] T060 [US4] En `vscode-extension/src/views/panelHtml.ts`: los botones de
   T051 (banner de `finish-conflict` y encabezado de `finish-pending`) pasan a
   invocar los comandos reales de T057-T058 en vez de quedar sin acción.
   Confirmar visualmente (en `npm run preview`, T087) que ninguna acción de
   navegación queda clickeable mientras `navigationLocked`.
-- [ ] T061 [US4] `npm run compile`, `test:unit`, `test:integration` en verde
+- [X] T061 [US4] `npm run compile`, `test:unit`, `test:integration` en verde
   (incluidas T055, T056).
 
 **Checkpoint**: los dos estados que introdujo US3 dejan de ser un callejón —

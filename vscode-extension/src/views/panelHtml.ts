@@ -472,9 +472,7 @@ export function panelHtml(nonce: string): string {
       // ninguna review" y encabeza el inventario con ese cierre en vez de la
       // invitación a empezar una — "Start a review" seguiría sin invocar
       // nada, así que no corresponde ofrecerla acá. undoFinish es la única
-      // salida (US4 la cablea a un comando real; hasta entonces el click no
-      // hace nada porque el mensaje no está en PANEL_MESSAGES todavía, que es
-      // lo que lo vuelve seguro dejarlo wireado ya).
+      // salida (cableado a gitReview.undoFinish via PANEL_MESSAGES).
       case "finish-pending": {
         const reviews = model.reviews || [];
         const pending = model.pendingFinish;
@@ -679,12 +677,9 @@ export function panelHtml(nonce: string): string {
   /**
    * El banner de finish-conflict (contracts/finish-state.md): explica el
    * cierre trabado y ofrece deshacerlo o continuarlo — en vez de los
-   * controles de navegación que renderEntry/renderPending retiran arriba. Los
-   * mensajes undoFinish/resumeFinish no están todavía en PANEL_MESSAGES (US4
-   * los agrega junto con los comandos reales): hasta entonces el click no
-   * llega a ningún lado — el host los descarta como cualquier mensaje que no
-   * reconoce —, que es lo que vuelve seguro wirearlos ya en vez de dejarlos
-   * sin onclick.
+   * controles de navegación que renderEntry/renderPending retiran arriba.
+   * undoFinish / resumeFinish viven en PANEL_MESSAGES y rutean a
+   * gitReview.undoFinish / gitReview.resumeFinish.
    */
   function renderFinishConflictBanner() {
     const box = el("div", "note finish-banner");

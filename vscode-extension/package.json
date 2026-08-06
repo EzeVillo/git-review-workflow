@@ -113,6 +113,18 @@
         "title": "Finish Review",
         "category": "git review",
         "icon": "$(check)"
+      },
+      {
+        "command": "gitReview.undoFinish",
+        "title": "Undo Finish",
+        "category": "git review",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "gitReview.resumeFinish",
+        "title": "Resume Finish",
+        "category": "git review",
+        "icon": "$(debug-continue)"
       }
     ],
     "menus": {
@@ -184,6 +196,14 @@
         {
           "command": "gitReview.finishReview",
           "when": "gitReview.situation == review"
+        },
+        {
+          "command": "gitReview.undoFinish",
+          "when": "gitReview.situation == finish-pending || gitReview.situation == finish-conflict"
+        },
+        {
+          "command": "gitReview.resumeFinish",
+          "when": "gitReview.situation == finish-conflict"
         }
       ]
     },

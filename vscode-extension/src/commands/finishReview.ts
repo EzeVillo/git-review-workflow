@@ -47,9 +47,10 @@ const LOCATION_ITEMS: LocationItem[] = [
  * reporta un cierre `pending` para esta review; su ausencia es la señal — la
  * CLI misma deshace su propio punto de undo cuando no hubo ediciones que
  * extraer (`bin/git-review-verbs/finish:446-451`) — y se informa como
- * resultado normal, no como error (FR-019). El comando en sí no puede ofrecer
- * deshacer/continuar un cierre trabado todavía: ese es el contrato que
- * consume US4, en una fase posterior; acá sólo se reporta lo que quedó.
+ * resultado normal, no como error (FR-019).
+ *
+ * Deshacer/continuar un cierre (`undoFinish` / `resumeFinish` abajo) es US4:
+ * este comando sólo arranca un cierre nuevo.
  */
 export async function finishReview(
     lock: MutationLock,
@@ -106,6 +107,181 @@ export async function finishReview(
             void vscode.window.showInformationMessage(`${destination} is ready with your edits staged.`);
         } else {
             void vscode.window.showInformationMessage(`No review changes to apply for ${source}.`);
+        }
+    });
+}
+
+/**
+ * `gitReview.undoFinish`: deshace un cierre `pending` o `conflict`
+ * (contracts/cli-invocation.md § `finish --abort` / `--force`, FR-021/FR-029).
+ *
+ * Mismo molde que `abortReview.ts`: la confirmación va **fuera** del
+ * `MutationLock`, el `StateToken` se captura al abrir el diálogo y se revalida
+ * justo antes de invocar. Si `finish --abort` falla porque hay trabajo nuevo
+ * en la rama del cierre, el `stderr` de la CLI se muestra en una **segunda**
+ * confirmación (visualmente distinta — el texto nombra el trabajo que se
+ * perdería) y sólo entonces se invoca `finish --abort --force`. El testigo se
+ * revalida **otra vez** antes del `--force`: es la invocación más destructiva
+ * del ciclo, y entre el rechazo y la segunda confirmación pasa tiempo.
+ *
+ * `--force` **nunca** es opción de primera clase: no hay casilla, no hay
+ * reintento automático, no aparece en el primer diálogo.
+ */
+export async function undoFinish(
+    lock: MutationLock,
+    stateManager: ReviewStateManager,
+    getInvokeOptions: () => InvokeOptions
+): Promise<void> {
+    const state = stateManager.state;
+    if (state.situation !== "finish-pending" && state.situation !== "finish-conflict") {
+        return;
+    }
+    const token = captureToken(state);
+    const detail =
+        state.situation === "finish-conflict"
+            ? "This discards any in-progress resolution and returns you to editing the review."
+            : "This returns you to the review branch with your edits restored.";
+
+    const answer = await vscode.window.showWarningMessage(
+        "Undo this finish?",
+        {modal: true, detail},
+        "Undo Finish"
+    );
+    if (answer !== "Undo Finish") {
+        return;
+    }
+
+    const abortResult = await lock.run(async () => {
+        let stale = false;
+        const invocation = await vscode.window.withProgress(
+            {location: vscode.ProgressLocation.Notification, title: "Undoing the finish…"},
+            async () => {
+                if (!tokenStillValid(token, stateManager.state)) {
+                    stale = true;
+                    return undefined;
+                }
+                const result = await invokeGitReview("finish", ["--abort"], getInvokeOptions());
+                await stateManager.refresh();
+                return result;
+            }
+        );
+        if (stale) {
+            void vscode.window.showInformationMessage(
+                "The review state changed before the undo ran; nothing was undone."
+            );
+            return {stale: true as const};
+        }
+        return {stale: false as const, invocation};
+    });
+
+    if (!abortResult || abortResult.stale) {
+        return;
+    }
+    const {invocation} = abortResult;
+    if (!invocation || invocation.exitCode === 0) {
+        return;
+    }
+
+    // Fallo esperado: hay trabajo nuevo en la rama del cierre. El stderr es lo
+    // que habilita la segunda confirmación (contracts/cli-invocation.md §
+    // finish --abort --force) — se muestra tal cual, sin redactar (FR-024).
+    const text = message(invocation.stderr);
+    if (text.length === 0) {
+        return;
+    }
+
+    // Sólo cuando la CLI nombra --force como escape: otros fallos (sin punto
+    // de undo, etc.) se muestran y se detienen acá, sin ofrecer force.
+    if (!text.includes("--force")) {
+        void vscode.window.showErrorMessage(text);
+        return;
+    }
+
+    const forceAnswer = await vscode.window.showWarningMessage(
+        text,
+        {
+            modal: true,
+            detail: "Aborting with --force permanently discards the work made since the finish. This cannot be undone.",
+        },
+        "Discard Work and Undo"
+    );
+    if (forceAnswer !== "Discard Work and Undo") {
+        return;
+    }
+
+    await lock.run(async () => {
+        let stale = false;
+        const forceInvocation = await vscode.window.withProgress(
+            {location: vscode.ProgressLocation.Notification, title: "Force-undoing the finish…"},
+            async () => {
+                // Mismo token capturado al abrir el *primer* diálogo — no se
+                // recaptura entre el rechazo y la segunda confirmación.
+                if (!tokenStillValid(token, stateManager.state)) {
+                    stale = true;
+                    return undefined;
+                }
+                const result = await invokeGitReview(
+                    "finish",
+                    ["--abort", "--force"],
+                    getInvokeOptions()
+                );
+                await stateManager.refresh();
+                return result;
+            }
+        );
+        if (stale) {
+            void vscode.window.showInformationMessage(
+                "The review state changed before the force-undo ran; nothing was undone."
+            );
+            return;
+        }
+        if (forceInvocation && forceInvocation.exitCode !== 0) {
+            const forceText = message(forceInvocation.stderr);
+            if (forceText.length > 0) {
+                void vscode.window.showErrorMessage(forceText);
+            }
+        }
+    });
+}
+
+/**
+ * `gitReview.resumeFinish`: continúa un cierre trabado por conflicto
+ * (contracts/cli-invocation.md § `finish --resume`, FR-020).
+ *
+ * Sin confirmación previa: no descarta nada — es el reverso de deshacer. El
+ * flag `--onto-source` sale **únicamente** del campo `onto` del registro
+ * `finish` que reporta `status --porcelain` (`state.finish.onto`), nunca de
+ * una variable en memoria del comando de finish: el editor puede reiniciarse
+ * entre el rechazo y el resume, y ahí una memoria en proceso mandaría las
+ * ediciones a un lugar distinto del que el revisor eligió, en silencio.
+ */
+export async function resumeFinish(
+    lock: MutationLock,
+    stateManager: ReviewStateManager,
+    getInvokeOptions: () => InvokeOptions
+): Promise<void> {
+    const state = stateManager.state;
+    if (state.situation !== "finish-conflict" || !state.finish) {
+        return;
+    }
+    // onto del contrato, no de memoria: es el motivo de que el registro lo
+    // exponga (contracts/finish-state.md).
+    const args = state.finish.onto ? ["--resume", "--onto-source"] : ["--resume"];
+
+    await lock.run(async () => {
+        const result = await vscode.window.withProgress(
+            {location: vscode.ProgressLocation.Notification, title: "Resuming the finish…"},
+            async () => {
+                const invocation = await invokeGitReview("finish", args, getInvokeOptions());
+                await stateManager.refresh();
+                return invocation;
+            }
+        );
+        if (result.exitCode !== 0) {
+            const text = message(result.stderr);
+            if (text.length > 0) {
+                void vscode.window.showErrorMessage(text);
+            }
         }
     });
 }

@@ -26,6 +26,14 @@ export async function navigate(
     stateManager: ReviewStateManager,
     getInvokeOptions: () => InvokeOptions
 ): Promise<void> {
+    // FR-027: con un cierre trabado la review sigue legible pero moverse por
+    // la secuencia no corresponde — el panel retira next/prev
+    // (`navigationLocked`) y el comando se niega acá también, para que un
+    // atajo o `executeCommand` no mute el porcelain a espaldas del banner.
+    if (stateManager.state.situation !== "review") {
+        return;
+    }
+
     await lock.run(async () => {
         const options = getInvokeOptions();
         const before = stateManager.state.state?.position;

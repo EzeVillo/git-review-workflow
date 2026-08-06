@@ -20,6 +20,7 @@ import {openChange, openEntry, openRangeChanges} from "./commands/openEntry";
 import {pickEntry} from "./commands/pickEntry";
 import {previewEdits} from "./commands/previewEdits";
 import {setBase} from "./commands/setBase";
+import {setRemote} from "./commands/setRemote";
 import {startReview} from "./commands/startReview";
 import {walkthroughBuild, walkthroughInit} from "./commands/walkthrough";
 import {
@@ -256,6 +257,7 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
             continueReview: "gitReview.continueReview",
             startReview: "gitReview.startReview",
             setBase: "gitReview.setBase",
+            setRemote: "gitReview.setRemote",
             undoFinish: "gitReview.undoFinish",
             resumeFinish: "gitReview.resumeFinish",
             discardInventory: "gitReview.discardInventory",
@@ -478,6 +480,8 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
             startReview(lock, stateManager, getInvokeOptions)),
         vscode.commands.registerCommand("gitReview.setBase", () =>
             setBase(lock, stateManager, getInvokeOptions)),
+        vscode.commands.registerCommand("gitReview.setRemote", () =>
+            setRemote(lock, stateManager, getInvokeOptions)),
         vscode.commands.registerCommand("gitReview.abortReview", () =>
             abortReview(lock, stateManager, getInvokeOptions)),
         vscode.commands.registerCommand("gitReview.finishReview", () =>

@@ -10,7 +10,27 @@
 # live together (installed as libexec, not on PATH). It only defines functions,
 # so sourcing it has no side effects.
 
-# ── Branch candidates (git review config --porcelain) ─────────────────────────
+# ── Branch / remote candidates (git review config --porcelain) ────────────────
+
+# candidate_remotes <effective-remote>
+# Emit a "remote-candidate<TAB>name<TAB>current" row for every remote name
+# `git remote` lists. current is 1 only for the name that matches the effective
+# reviewworkflow.remote (origin when unset) — the pick list can put that first
+# without re-deriving which remote is configured. One `git remote` call; the
+# loop is shell built-ins over its output (contracts/config-porcelain.md
+# "Costo"). Name is what a caller passes back to `config remote`.
+candidate_remotes() {
+	_cr_effective="$1"
+	git remote |
+		while IFS= read -r _cr_name; do
+			[ -n "$_cr_name" ] || continue
+			_cr_current=0
+			if [ "$_cr_name" = "$_cr_effective" ]; then
+				_cr_current=1
+			fi
+			porcelain_row remote-candidate "$_cr_name" "$_cr_current"
+		done
+}
 
 # candidate_branches <remote>
 # Emit a "candidate<TAB>name<TAB>origin<TAB>current" row for every branch

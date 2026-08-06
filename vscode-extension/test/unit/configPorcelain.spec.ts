@@ -7,6 +7,7 @@ describe("parseConfigPorcelain", () => {
         const result = parseConfigPorcelain(out);
         assert.deepStrictEqual(result.config, {remote: "origin"});
         assert.deepStrictEqual(result.candidates, []);
+        assert.deepStrictEqual(result.remotes, []);
         assert.strictEqual(result.deltas, undefined);
     });
 
@@ -14,6 +15,20 @@ describe("parseConfigPorcelain", () => {
         const out = ["config\tbase\tmain", "config\tremote\torigin", ""].join("\n");
         const result = parseConfigPorcelain(out);
         assert.deepStrictEqual(result.config, {base: "main", remote: "origin"});
+    });
+
+    it("parsea remote-candidate a CandidateRemote[]", () => {
+        const out = [
+            "config\tremote\torigin",
+            "remote-candidate\torigin\t1",
+            "remote-candidate\tupstream\t0",
+            "",
+        ].join("\n");
+        const result = parseConfigPorcelain(out);
+        assert.deepStrictEqual(result.remotes, [
+            {name: "origin", current: true},
+            {name: "upstream", current: false},
+        ]);
     });
 
     it("parsea candidate a CandidateBranch[]", () => {
@@ -101,7 +116,11 @@ describe("parseConfigPorcelain", () => {
         ].join("\n");
         const result = parseConfigPorcelain(out);
         assert.deepStrictEqual(result.config, {remote: "origin"});
-        assert.deepStrictEqual(result.candidates, [{name: "feature/x", origin: "local", current: true}]);
+        assert.deepStrictEqual(result.candidates, [{
+            name: "feature/x",
+            origin: "local",
+            current: true
+        }]);
         assert.deepStrictEqual(result.deltas, [{name: "feature/x", tip: "abc", origin: "remote"}]);
     });
 
@@ -109,6 +128,7 @@ describe("parseConfigPorcelain", () => {
         const result = parseConfigPorcelain("");
         assert.deepStrictEqual(result.config, {remote: "origin"});
         assert.deepStrictEqual(result.candidates, []);
+        assert.deepStrictEqual(result.remotes, []);
     });
 
     it("un candidate con origin desconocido se descarta entero", () => {

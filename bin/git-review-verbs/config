@@ -242,6 +242,10 @@ porcelain)
 	fi
 	porcelain_row config remote "$remote_val"
 
+	# Remotes first (for config remote), then branch candidates (for start /
+	# config base). Same constant-process budget as before: one extra `git
+	# remote` call, not one per name.
+	candidate_remotes "$remote_val"
 	candidate_branches "$remote_val"
 
 	if [ -n "$branch" ]; then

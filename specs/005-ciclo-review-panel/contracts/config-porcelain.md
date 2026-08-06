@@ -37,10 +37,10 @@ para `--porcelain -- <rama>`.
 Las del producto, **no** las claves crudas de git. La traducción es interna y
 puede cambiar sin romper a nadie, que es todo el punto (FR-008).
 
-| Clave | Qué es | Sin configurar |
-|-------|--------|----------------|
-| `base` | La rama contra la que se arma el rango de una review completa | Ausente. Un review completo falla pidiéndola. |
-| `remote` | El remoto del que sale la copia revisada | `origin` |
+| Clave    | Qué es                                                        | Sin configurar                                |
+|----------|---------------------------------------------------------------|-----------------------------------------------|
+| `base`   | La rama contra la que se arma el rango de una review completa | Ausente. Un review completo falla pidiéndola. |
+| `remote` | El remoto del que sale la copia revisada                      | `origin`                                      |
 
 Una clave desconocida es un error de uso (exit `1`), no un valor vacío: escribir
 `git review config bese main` tiene que decirlo, no guardar silenciosamente algo
@@ -48,10 +48,10 @@ que nadie va a leer.
 
 ### Exit codes
 
-| Code | Significado |
-|------|-------------|
-| `0` | Éxito. En la forma de lectura de una clave sin valor configurado y sin default, no se imprime nada y el código sigue siendo `0`. |
-| `1` | Error: no es un repositorio git, clave desconocida, uso inválido, o el valor no se pudo escribir. |
+| Code | Significado                                                                                                                      |
+|------|----------------------------------------------------------------------------------------------------------------------------------|
+| `0`  | Éxito. En la forma de lectura de una clave sin valor configurado y sin default, no se imprime nada y el código sigue siendo `0`. |
+| `1`  | Error: no es un repositorio git, clave desconocida, uso inválido, o el valor no se pudo escribir.                                |
 
 No hay exit `2`: este verbo no depende de que haya una review, así que "no hay
 review" no es una condición que pueda observar.
@@ -85,6 +85,36 @@ Ejemplo, repositorio recién clonado sin configurar (es un estado normal, exit `
 ```text
 config	remote	origin
 ```
+
+---
+
+## Registro `remote-candidate` (cero o más, uno por remoto del repositorio)
+
+```text
+remote-candidate<TAB>name<TAB>current
+```
+
+- `name`: el nombre del remoto tal como lo lista `git remote` (`origin`,
+  `upstream`, …). Es el valor que vuelve a la CLI como argumento de
+  `config remote`.
+- `current`: `1` si coincide con el remoto **efectivo** del registro `config`
+  (`reviewworkflow.remote`, o `origin` por default); `0` si no. A lo sumo una
+  fila lo tiene en `1`. Si el remoto efectivo no existe entre los del
+  repositorio (config desfasada), ninguna fila lleva `1`.
+
+**Orden**: el de `git remote` (el orden en que git los tiene registrados).
+
+**Bytes**: un nombre de remoto no puede contener tabs ni newlines en la práctica
+de git; el campo es el nombre byte por byte.
+
+Ejemplo:
+
+```text
+remote-candidate	origin	1
+remote-candidate	upstream	0
+```
+
+Ausente (cero filas) cuando el repositorio no tiene ningún remoto configurado.
 
 ---
 
@@ -169,11 +199,11 @@ un costo constante en uno por rama.
 ## Costo
 
 La forma `--porcelain` completa cuesta un **número constante de procesos**, no uno
-por rama: una invocación de `git for-each-ref` con `--format` sobre los dos
-namespaces, más las lecturas de config. Es la misma regla que `001` y `003`
-aplicaron a `status` y por el mismo motivo medido: bajo Git Bash en Windows,
-donde `fork()` está emulado, un proceso por ítem es lo que hace inusable a un
-repositorio grande.
+por rama ni por remoto: una invocación de `git remote`, una de `git for-each-ref`
+con `--format` sobre los dos namespaces, más las lecturas de config. Es la misma
+regla que `001` y `003` aplicaron a `status` y por el mismo motivo medido: bajo
+Git Bash en Windows, donde `fork()` está emulado, un proceso por ítem es lo que
+hace inusable a un repositorio grande.
 
 ---
 

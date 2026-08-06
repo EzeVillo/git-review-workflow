@@ -520,6 +520,7 @@ describe("buildPanelModel", () => {
         };
         const model = buildPanelModel(state, {busy: false});
         assert.strictEqual(model.configuredBase, "main");
+        assert.strictEqual(model.configuredRemote, "origin");
         assert.strictEqual(model.noBaseConfigured, false, "los dos son mutuamente excluyentes");
     });
 
@@ -530,12 +531,15 @@ describe("buildPanelModel", () => {
             branches: [],
             config: {remote: "origin"},
         };
-        assert.strictEqual(buildPanelModel(state, {busy: false}).configuredBase, undefined);
+        const model = buildPanelModel(state, {busy: false});
+        assert.strictEqual(model.configuredBase, undefined);
+        assert.strictEqual(model.configuredRemote, "origin", "remote efectivo se muestra en setup");
     });
 
     it("configuredBase ausente cuando el reporte de config nunca llego", () => {
         const state: ReviewState = {situation: "no-review", entries: [], branches: []};
         assert.strictEqual(buildPanelModel(state, {busy: false}).configuredBase, undefined);
+        assert.strictEqual(buildPanelModel(state, {busy: false}).configuredRemote, undefined);
     });
 
     it("configuredBase ausente fuera de no-review, aunque config trajera una", () => {
@@ -545,7 +549,9 @@ describe("buildPanelModel", () => {
             branches: [],
             config: {base: "main", remote: "origin"},
         };
-        assert.strictEqual(buildPanelModel(state, {busy: false}).configuredBase, undefined);
+        const model = buildPanelModel(state, {busy: false});
+        assert.strictEqual(model.configuredBase, undefined);
+        assert.strictEqual(model.configuredRemote, undefined);
     });
 });
 

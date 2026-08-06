@@ -23,6 +23,7 @@ export const PANEL_MESSAGES = [
     "continueReview",
     "startReview",
     "setBase",
+    "setRemote",
     // Finish / Save / Cancel no pasan por el webview: son iconos de view/title
     // (y la paleta). Undo/Continue de un finish trabado sí, porque viven en el
     // banner del panel, no en el chrome.
@@ -103,10 +104,6 @@ export class WalkthroughViewProvider implements vscode.WebviewViewProvider {
      */
     readonly onDidChangeVisibility = this.visibilityEmitter.event;
 
-    get isVisible(): boolean {
-        return this.view?.visible === true;
-    }
-
     /**
      * `index` / `id` / `kind` son los únicos datos que un mensaje puede traer
      * además del `type` (contracts/extension-surface.md § Protocolo). Viajan
@@ -118,6 +115,10 @@ export class WalkthroughViewProvider implements vscode.WebviewViewProvider {
      * por `type`.
      */
     constructor(private readonly onMessage: (message: PanelMessage, extra?: unknown) => void) {
+    }
+
+    get isVisible(): boolean {
+        return this.view?.visible === true;
     }
 
     /**
@@ -150,7 +151,7 @@ export class WalkthroughViewProvider implements vscode.WebviewViewProvider {
                 if (type === "openSupport") {
                     extra = msg?.id;
                 } else if (type === "copyCliInstall") {
-                    extra = (msg as {kind?: unknown}).kind;
+                    extra = (msg as { kind?: unknown }).kind;
                 }
                 this.onMessage(type, extra);
             }

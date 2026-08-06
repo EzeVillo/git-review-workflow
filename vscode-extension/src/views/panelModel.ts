@@ -103,12 +103,11 @@ export interface PanelModel {
      */
     pendingFinish?: { branch: string; onto: boolean };
     /**
-     * `true` cuando el empty state puede ofrecer Start (`no-review`) y el
-     * reporte de `git review config --porcelain` llegó sin `base` — la señal
-     * para el párrafo de "Set the base branch" (T026). No bloquea el
-     * asistente de inicio, que ya resuelve la base inline; esto es sólo lo
-     * que se ofrece *además*. `false` en cualquier otra situación (incluido
-     * `finish-pending`, que no es empty state), y también si el reporte de
+     * `true` cuando el empty state está en **modo setup**: `no-review` y el
+     * reporte de `git review config --porcelain` llegó sin `base`. El panel
+     * entonces solo ofrece configurar base (obligatoria) y remote (opcional);
+     * sin Start, inventario ni footer de Other actions. `false` en cualquier
+     * otra situación (incluido `finish-pending`), y también si el reporte de
      * config nunca llegó.
      */
     noBaseConfigured: boolean;
@@ -117,9 +116,16 @@ export interface PanelModel {
      * `base` de acá abajo, que es la de una review YA activa (whole). Sólo
      * presente en el empty state (`no-review`) y el reporte de config con
      * `base` (FR-010/US1 escenario 6). Ausente si el reporte nunca llegó o
-     * si llegó sin base — ahí es `noBaseConfigured`.
+     * si llegó sin base — ahí es `noBaseConfigured` (setup).
      */
     configuredBase?: string;
+    /**
+     * Remoto efectivo (`origin` por default de la CLI). Presente en
+     * `no-review` cuando el reporte de config llegó, con o sin base — setup
+     * y Settings lo muestran. Ausente si el reporte nunca llegó o fuera de
+     * `no-review`.
+     */
+    configuredRemote?: string;
     /** De acá para abajo, sólo con `situation === "review"`. */
     mode?: ReviewMode;
     branch?: string;
@@ -382,8 +388,11 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
     if (inputs.repoLabel !== undefined) {
         base.repoLabel = inputs.repoLabel;
     }
-    if (state.situation === "no-review" && state.config?.base !== undefined) {
-        base.configuredBase = state.config.base;
+    if (state.situation === "no-review" && state.config !== undefined) {
+        base.configuredRemote = state.config.remote;
+        if (state.config.base !== undefined) {
+            base.configuredBase = state.config.base;
+        }
     }
     if (state.stderr !== undefined && state.stderr.trim().length > 0) {
         base.stderr = state.stderr;

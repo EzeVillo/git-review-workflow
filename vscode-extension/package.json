@@ -103,6 +103,11 @@
         "category": "git review"
       },
       {
+        "command": "gitReview.setRemote",
+        "title": "Set the Remote",
+        "category": "git review"
+      },
+      {
         "command": "gitReview.abortReview",
         "title": "Cancel Review",
         "category": "git review",
@@ -250,6 +255,9 @@
         },
         {
           "command": "gitReview.setBase"
+        },
+        {
+          "command": "gitReview.setRemote"
         },
         {
           "command": "gitReview.abortReview",

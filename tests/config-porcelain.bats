@@ -33,11 +33,13 @@ teardown() {
 	rm -rf "$TMP"
 }
 
-# The single candidate/config line tagged <tag> for <name> (candidate: also
-# filtered by <origin>), from the last run's output.
+# The single candidate/config/remote-candidate line tagged <tag> for <name>
+# (candidate: also filtered by <origin>), from the last run's output.
 row() {
 	if [ "$1" = candidate ]; then
 		printf '%s\n' "$output" | awk -F'\t' -v n="$2" -v o="$3" '$1=="candidate" && $2==n && $3==o'
+	elif [ "$1" = "remote-candidate" ]; then
+		printf '%s\n' "$output" | awk -F'\t' -v n="$2" '$1=="remote-candidate" && $2==n'
 	else
 		printf '%s\n' "$output" | awk -F'\t' -v t="$1" -v n="$2" '$1==t && $2==n'
 	fi
@@ -68,6 +70,26 @@ delta_row() {
 	[ "$status" -eq 0 ]
 	[ "$(row config base)" = "$(printf 'config\tbase\tdevelop')" ]
 	[ "$(row config remote)" = "$(printf 'config\tremote\torigin')" ]
+}
+
+# ── remote-candidate: remotes of the repo for config remote ───────────────────
+
+@test "porcelain emits a remote-candidate per remote, marking the effective one current" {
+	git remote add upstream "$ORIGIN"
+	run git review config --porcelain
+	[ "$status" -eq 0 ]
+	[ "$(row remote-candidate origin)" = "$(printf 'remote-candidate\torigin\t1')" ]
+	[ "$(row remote-candidate upstream)" = "$(printf 'remote-candidate\tupstream\t0')" ]
+}
+
+@test "porcelain marks remote-candidate current for a configured non-origin remote" {
+	git remote add upstream "$ORIGIN"
+	git config reviewworkflow.remote upstream
+	run git review config --porcelain
+	[ "$status" -eq 0 ]
+	[ "$(row config remote)" = "$(printf 'config\tremote\tupstream')" ]
+	[ "$(row remote-candidate origin)" = "$(printf 'remote-candidate\torigin\t0')" ]
+	[ "$(row remote-candidate upstream)" = "$(printf 'remote-candidate\tupstream\t1')" ]
 }
 
 # ── candidate branches: per-namespace, origin, current ────────────────────────

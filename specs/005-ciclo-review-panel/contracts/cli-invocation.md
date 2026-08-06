@@ -1,7 +1,9 @@
 # Contrato: invocaciones permitidas a la CLI (ampliado)
 
 **Este documento enmienda
-[`002-extension-vscode/contracts/cli-invocation.md`](../../002-extension-vscode/contracts/cli-invocation.md)**
+[
+`002-extension-vscode/contracts/cli-invocation.md`](../../002-extension-vscode/contracts/cli-invocation.md)
+**
 y, a partir de esta feature, es el que rige. Aquel queda con un puntero a éste:
 la regla de FR-001 es que no pueden convivir dos listas vigentes que se
 contradigan sobre qué puede invocar la extensión.
@@ -58,16 +60,17 @@ necesita.
 **Argumento opcional**: el `name` de una `candidate`, verbatim, para obtener el
 registro `delta` de esa rama. Nunca un valor construido por la extensión.
 
-**Se consume**: registros `config`, `candidate` y `delta`, según
-[`config-porcelain.md`](config-porcelain.md). Etiquetas desconocidas y campos
-extra al final: **se ignoran**, igual que en los demás.
+**Se consume**: registros `config`, `remote-candidate`, `candidate` y `delta`,
+según [`config-porcelain.md`](config-porcelain.md). Etiquetas desconocidas y
+campos extra al final: **se ignoran**, igual que en los demás.
 
-**Se produce**: la configuración efectiva, las ramas candidatas y la
-disponibilidad del rango incremental.
+**Se produce**: la configuración efectiva, los remotos del repositorio, las
+ramas candidatas y la disponibilidad del rango incremental.
 
-**Es la única fuente de**: la base, el remoto efectivo, qué ramas se pueden
-elegir y si hay un punto de referencia previo. Un fallo acá deja el asistente sin
-abrirse, con el `stderr` a la vista: no se abre "con lo que había".
+**Es la única fuente de**: la base, el remoto efectivo, qué remotos se pueden
+elegir (`config remote`), qué ramas se pueden elegir y si hay un punto de
+referencia previo. Un fallo acá deja el asistente sin abrirse, con el `stderr` a
+la vista: no se abre "con lo que había".
 
 ---
 
@@ -90,13 +93,13 @@ el verbo ya lo soporta (`bin/git-review-verbs/start:92-109`); pasarlo siempre, y
 no sólo cuando el nombre "parece" una opción, evita una rama de código
 condicional que se ejercita una vez cada mil.
 
-| Argumento | De dónde sale | Cuándo se pasa |
-|-----------|----------------|----------------|
-| `<rama>` | El `name` de una `candidate`, verbatim, precedido por `--` | Siempre, explícito. Nunca se omite para "usar la actual": lo que el usuario eligió se dice. |
-| `--base <rama>` | El `name` de una `candidate` | Nunca por ahora. La base sale de la configuración; si falta, se fija con `config` **antes**, no se pasa por línea de comandos — así lo que el revisor eligió queda para la próxima vez (FR-010a). |
-| `--step` / `--no-walk` | `ReviewIntent.layout` | Mutuamente excluyentes. `layout = auto` no pasa ninguno. |
-| `--delta` | `ReviewIntent.range` | Sólo si existe un registro `delta` cuyo `origin` coincide con el source elegido (`remote` → `remote`; `local`/`offline` → `local`). |
-| `--local` / `--offline` | `ReviewIntent.source` | Mutuamente excluyentes. `source = remote` no pasa ninguno. |
+| Argumento               | De dónde sale                                              | Cuándo se pasa                                                                                                                                                                                    |
+|-------------------------|------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `<rama>`                | El `name` de una `candidate`, verbatim, precedido por `--` | Siempre, explícito. Nunca se omite para "usar la actual": lo que el usuario eligió se dice.                                                                                                       |
+| `--base <rama>`         | El `name` de una `candidate`                               | Nunca por ahora. La base sale de la configuración; si falta, se fija con `config` **antes**, no se pasa por línea de comandos — así lo que el revisor eligió queda para la próxima vez (FR-010a). |
+| `--step` / `--no-walk`  | `ReviewIntent.layout`                                      | Mutuamente excluyentes. `layout = auto` no pasa ninguno.                                                                                                                                          |
+| `--delta`               | `ReviewIntent.range`                                       | Sólo si existe un registro `delta` cuyo `origin` coincide con el source elegido (`remote` → `remote`; `local`/`offline` → `local`).                                                               |
+| `--local` / `--offline` | `ReviewIntent.source`                                      | Mutuamente excluyentes. `source = remote` no pasa ninguno.                                                                                                                                        |
 
 **Prohibidos explícitamente**: `--from <commit>` (no hay superficie que lo
 produzca sin un selector de commits, que esta feature no incluye) y el `<base>`
@@ -189,19 +192,19 @@ frontera es la misma; lo que cambió es que ahora hay un verbo del otro lado.
 
 ## Prohibiciones explícitas (actualizada)
 
-| Prohibido | Por qué |
-|-----------|---------|
-| Leer `branch.review/*.review*`, `reviewworkflow.*` u otra config de git | FR-004 — es estado del producto, y es de la CLI |
-| Leer o escribir `refs/review-edits/*`, `refs/review-saved-edits/*`, `refs/review-undo/*` | FR-004, FR-005 |
-| Determinar el modo, la posición, la secuencia o el estado de un cierre mirando ramas o refs | FR-004 |
-| **Enumerar ramas del repositorio por cualquier vía que no sea el registro `candidate`** | FR-009a — incluida la API de `vscode.git`, cuya excepción sigue acotada a dos cosas |
-| Parsear `.review/walkthrough.md` | Sigue habiendo dos únicos puntos de normalización de paths |
-| Escribir config, mover refs o tocar el índice **directamente** | FR-005 — vía el verbo `config` sí; a mano no |
-| Parsear la salida humana de cualquier verbo | El contrato existe para no hacer esto — ver "Clasificar no es parsear" abajo |
-| Invocar `clean`, `forget`, `walkthrough`, `compare`, `preview` | **Enmendado por `006-superficie-panel-completa`**: ver `specs/006-superficie-panel-completa/contracts/cli-invocation.md` (confirmación sustituye a la inversa; lista cerrada de args) |
-| Pasar un argumento no enumerado en este documento | FR-002 — la lista es cerrada también en los argumentos |
-| Pasar `--force` sin la segunda confirmación | FR-021 |
-| Re-citar un `PathRef.display` para pasárselo a la CLI | Decisión 8 de `002` — el des-citado es unidireccional |
+| Prohibido                                                                                   | Por qué                                                                                                                                                                               |
+|---------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Leer `branch.review/*.review*`, `reviewworkflow.*` u otra config de git                     | FR-004 — es estado del producto, y es de la CLI                                                                                                                                       |
+| Leer o escribir `refs/review-edits/*`, `refs/review-saved-edits/*`, `refs/review-undo/*`    | FR-004, FR-005                                                                                                                                                                        |
+| Determinar el modo, la posición, la secuencia o el estado de un cierre mirando ramas o refs | FR-004                                                                                                                                                                                |
+| **Enumerar ramas del repositorio por cualquier vía que no sea el registro `candidate`**     | FR-009a — incluida la API de `vscode.git`, cuya excepción sigue acotada a dos cosas                                                                                                   |
+| Parsear `.review/walkthrough.md`                                                            | Sigue habiendo dos únicos puntos de normalización de paths                                                                                                                            |
+| Escribir config, mover refs o tocar el índice **directamente**                              | FR-005 — vía el verbo `config` sí; a mano no                                                                                                                                          |
+| Parsear la salida humana de cualquier verbo                                                 | El contrato existe para no hacer esto — ver "Clasificar no es parsear" abajo                                                                                                          |
+| Invocar `clean`, `forget`, `walkthrough`, `compare`, `preview`                              | **Enmendado por `006-superficie-panel-completa`**: ver `specs/006-superficie-panel-completa/contracts/cli-invocation.md` (confirmación sustituye a la inversa; lista cerrada de args) |
+| Pasar un argumento no enumerado en este documento                                           | FR-002 — la lista es cerrada también en los argumentos                                                                                                                                |
+| Pasar `--force` sin la segunda confirmación                                                 | FR-021                                                                                                                                                                                |
+| Re-citar un `PathRef.display` para pasárselo a la CLI                                       | Decisión 8 de `002` — el des-citado es unidireccional                                                                                                                                 |
 
 **Único uso permitido de la API de `vscode.git`** (sin cambios respecto de
 `002`): descubrir la raíz del repositorio y recibir la señal de que algo cambió.
@@ -218,10 +221,10 @@ La prohibición de parsear salida humana se vuelve ambigua en un solo punto —
 ofrecer *Run in Terminal* implica mirarlo. La frontera queda fijada acá para no
 tener que re-deducirla:
 
-| Permitido | Prohibido |
-|-----------|-----------|
+| Permitido                                                                                               | Prohibido                                                                                               |
+|---------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------|
 | Clasificar el `stderr` de **git** que un verbo propaga, para elegir qué acción ofrecer junto al mensaje | Leer la salida de **un verbo de `git review`** para derivar cualquier cosa sobre el estado de la review |
-| Mostrar ese `stderr` verbatim, siempre | Reemplazarlo, resumirlo o condicionarlo a haberlo entendido |
+| Mostrar ese `stderr` verbatim, siempre                                                                  | Reemplazarlo, resumirlo o condicionarlo a haberlo entendido                                             |
 
 La prueba que separa los dos casos: **si la clasificación se equivoca, ¿cambia
 algún campo del view-model?** Con el `stderr` de git, no — el usuario ve el mismo

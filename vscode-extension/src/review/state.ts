@@ -1,5 +1,10 @@
 import * as vscode from "vscode";
-import {CandidateBranch, EffectiveConfig, parseConfigPorcelain} from "../cli/configPorcelain";
+import {
+    CandidateBranch,
+    CandidateRemote,
+    EffectiveConfig,
+    parseConfigPorcelain,
+} from "../cli/configPorcelain";
 import {invokeGitReview, InvokeOptions} from "../cli/invoke";
 import {
     BranchRecord,
@@ -39,6 +44,11 @@ export interface ReviewState {
     config?: EffectiveConfig;
     /** Ver `config`; ausente (no `[]`) cuando el reporte no llegó, para no confundirlo con "cero candidatas". */
     candidates?: CandidateBranch[];
+    /**
+     * Remotos del repositorio (`remote-candidate`). Ausente cuando el reporte
+     * no llegó; `[]` si llegó sin remotes (repositorio sin `git remote`).
+     */
+    remotes?: CandidateRemote[];
     /**
      * Asunto y autor de cada commit de la secuencia, por `position`. Sólo en
      * modo step, y sólo con una CLI que los reporte: ausentes significa "esta
@@ -120,13 +130,21 @@ async function listBranches(options: ReviewStateOptions): Promise<BranchRecord[]
  */
 async function loadConfigReport(
     options: ReviewStateOptions
-): Promise<{ config?: EffectiveConfig; candidates: CandidateBranch[] }> {
+): Promise<{
+    config?: EffectiveConfig;
+    candidates: CandidateBranch[];
+    remotes: CandidateRemote[];
+}> {
     const result = await invokeGitReview("config", ["--porcelain"], options);
     if (result.errorCode || result.exitCode !== 0) {
-        return {candidates: []};
+        return {candidates: [], remotes: []};
     }
     const parsed = parseConfigPorcelain(result.stdout);
-    return {config: parsed.config, candidates: parsed.candidates};
+    return {
+        config: parsed.config,
+        candidates: parsed.candidates,
+        remotes: parsed.remotes,
+    };
 }
 
 /**
@@ -255,6 +273,7 @@ export class ReviewStateManager {
                 if (report.config !== undefined) {
                     next.config = report.config;
                     next.candidates = report.candidates;
+                    next.remotes = report.remotes;
                 }
             }
             return this.setState(next);

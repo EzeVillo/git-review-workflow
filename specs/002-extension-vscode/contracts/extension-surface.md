@@ -22,10 +22,10 @@ un repositorio cualquiera no debe costar un proceso.
 
 Un view container propio en la Activity Bar, con una sola vista.
 
-| Campo        | Valor                            |
-|--------------|----------------------------------|
-| Container id | `gitReview`                      |
-| View id      | `gitReview.walkthrough`          |
+| Campo        | Valor                             |
+|--------------|-----------------------------------|
+| Container id | `gitReview`                       |
+| View id      | `gitReview.walkthrough`           |
 | Tipo         | `webview` (`WebviewViewProvider`) |
 
 El tipo es interfaz pública igual que los ids: cambiarlo cambia qué
@@ -71,8 +71,8 @@ Reglas normativas:
       entrada, que ya es la correcta, con el *why* cargando adentro;
     - ningún control acciona sobre una entrada que no es la dibujada, ni siquiera
       en la ventana previa al esqueleto.
-  El esqueleto lleva `role="status"` y su texto para lectores de pantalla, y su
-  pulso se apaga con `prefers-reduced-motion` (FR-031).
+      El esqueleto lleva `role="status"` y su texto para lectores de pantalla, y su
+      pulso se apaga con `prefers-reduced-motion` (FR-031).
 - Esencial (walk) y con ediciones guardadas (step) se distinguen por **texto**
   (`key` / `edits`) además del color (FR-007, FR-027, FR-031).
 - **El texto visible de toda la extensión va en inglés**, igual que el de la CLI
@@ -115,13 +115,13 @@ panel: párrafo explicativo y un botón, salvo `error` (Decisión 5). **No** son
 contribuciones `viewsWelcome` del manifiesto — el host sólo las renderiza en
 vistas de tipo `tree`, así que con esta vista no se mostrarían.
 
-| `situation`    | Acción principal                                                                 | Comando / mensaje                          |
-|----------------|----------------------------------------------------------------------------------|--------------------------------------------|
-| `no-review`    | How to start a review                                                            | (link a los README)                        |
-| `out-of-range` | How to fix it                                                                    | `gitReview.showOutOfRangeHelp`             |
-| `cli-missing`  | Bloque npm `npm install -g git-review-workflow` + Copy; *Other install options*  | `copyCliInstall` / `gitReview.installCli`  |
-| `cli-outdated` | Bloque npm `…@latest` + Copy; *Other install options*                            | `copyCliInstall` / `gitReview.installCli`  |
-| `error`        | (ninguno)                                                                        | —                                          |
+| `situation`    | Acción principal                                                                | Comando / mensaje                         |
+|----------------|---------------------------------------------------------------------------------|-------------------------------------------|
+| `no-review`    | How to start a review                                                           | (link a los README)                       |
+| `out-of-range` | How to fix it                                                                   | `gitReview.showOutOfRangeHelp`            |
+| `cli-missing`  | Bloque npm `npm install -g git-review-workflow` + Copy; *Other install options* | `copyCliInstall` / `gitReview.installCli` |
+| `cli-outdated` | Bloque npm `…@latest` + Copy; *Other install options*                           | `copyCliInstall` / `gitReview.installCli` |
+| `error`        | (ninguno)                                                                       | —                                         |
 
 En `error`, `out-of-range`, `cli-missing` y `cli-outdated` el `stderr` de la CLI
 se muestra íntegro y tal cual (FR-024).
@@ -177,18 +177,21 @@ El webview **no ejecuta comandos**. Postea mensajes `{type}` de un conjunto
 cerrado y el host decide qué hacer con cada uno; un `type` desconocido se
 ignora. La lista es exactamente: `openEntry`, `openChange`, `openAllChanges`,
 `showWhy`, `next`, `prev`, `refresh`, `installCli`, `copyCliInstall`,
-`outOfRangeHelp`, `continueReview`, `startReview`, `setBase`, `undoFinish`,
-`resumeFinish`, `discardInventory`, `cleanReview`, `compareReview`,
+`outOfRangeHelp`, `continueReview`, `startReview`, `setBase`, `setRemote`,
+`undoFinish`, `resumeFinish`, `discardInventory`, `cleanReview`, `compareReview`,
 `walkthroughInit`, `walkthroughBuild`, `openSupport`.
 
 Finish / Save / Cancel **no** están en ese conjunto: se invocan como comandos
 desde el título de la vista (`view/title`) o la paleta, no como mensajes del
 webview. `undoFinish` / `resumeFinish` sí, porque viven en el banner del panel
 (no en el chrome). `compareReview` / `walkthroughInit` / `walkthroughBuild` se
-dibujan sólo en el empty state `no-review` (sección *Other actions*); la paleta
-sigue ofreciéndolos. `openSupport` también es sólo del empty `no-review`
-(sección *Support*, debajo de *Other actions*): no es un comando de la paleta
-ni de la CLI; el host abre una URL del allowlist con `env.openExternal`.
+dibujan sólo en el empty state `no-review` **con base configurada** (sección
+*Other actions*); la paleta sigue ofreciéndolos. `setBase` / `setRemote` se
+dibujan en el **setup** (sin base: pantalla única de configuración) y, una vez
+hay base, en la sección *Settings* del footer. `openSupport` también es sólo
+del empty `no-review` configurado (sección *Support*, debajo de *Settings*): no
+es un comando de la paleta ni de la CLI; el host abre una URL del allowlist con
+`env.openExternal`.
 
 `continueReview`, `openEntry` y `openChange` son los que llevan un dato además
 del `type`, y es un **índice** (`{type, index}`), nunca el nombre de la rama ni
@@ -214,10 +217,13 @@ escribe al clipboard; un `kind` desconocido se ignora. El panel muestra el
 mismo comando y un botón Copy (feedback local "Copied"); no se confía texto
 arbitrario del webview.
 
-En `no-review` el layout del panel es un split vertical al estilo del Explorer
+En `no-review` **sin base** (`noBaseConfigured`) el panel es sólo el setup
+(base obligatoria + remote opcional): no hay inventario, Start ni footer.
+
+En `no-review` **con base** el layout es un split vertical al estilo del Explorer
 (Outline / Timeline): el cuerpo (inventario + Start) scrollea y las secciones
-*Other actions* / *Support* viven en un footer anclado al borde inferior; al
-abrir crecen hacia arriba sin abandonar el pie.
+*Other actions* / *Settings* / *Support* viven en un footer anclado al borde
+inferior (en ese orden); al abrir crecen hacia arriba sin abandonar el pie.
 
 `openAllChanges` no lleva índice ni ningún otro dato: su unidad es el rango
 entero de una review `whole`, no una de sus filas.
@@ -231,25 +237,27 @@ con CSP restrictiva y `nonce` para el único script inline (Decisión 4).
 
 Los ids son interfaz pública.
 
-| Command id                | Título                  | Dónde aparece                     |
-|---------------------------|-------------------------|-----------------------------------|
-| `gitReview.openEntry`     | Open Entry              | panel (botón `File`), paleta      |
-| `gitReview.openChange`    | Open Changes            | panel (botón `Diff`), paleta      |
-| `gitReview.openAllChanges`| Open All Changes        | panel (botón `Diff` de whole), paleta |
-| `gitReview.showWhy`       | Show Why                | panel (link), paleta              |
-| `gitReview.next`          | Next Entry              | panel (ícono), paleta             |
-| `gitReview.prev`          | Previous Entry          | panel (ícono), paleta             |
-| `gitReview.goToEntry`     | Go to Entry             | paleta                            |
-| `gitReview.showUncovered` | Show Uncovered Files    | panel (pie), paleta               |
-| `gitReview.refresh`       | Refresh                 | título de la vista, paleta        |
-| `gitReview.finishReview`  | Finish Review           | título de la vista, paleta        |
-| `gitReview.saveReview`    | Save Review for Later   | título de la vista, paleta        |
-| `gitReview.abortReview`   | Cancel Review           | título de la vista, paleta        |
-| `gitReview.installCli`    | How to Install the CLI  | panel (*Other install options*), paleta |
-| `gitReview.continueReview`| Continue Saved Review   | panel (inventario de `no-review`) |
-| `gitReview.undoFinish`    | Undo Finish             | panel (banner / finish-pending), paleta |
-| `gitReview.resumeFinish`  | Resume Finish           | panel (banner finish-conflict), paleta |
-| `gitReview.showCliLog`    | Show CLI Log            | paleta (diagnóstico; no se auto-abre) |
+| Command id                 | Título                 | Dónde aparece                           |
+|----------------------------|------------------------|-----------------------------------------|
+| `gitReview.openEntry`      | Open Entry             | panel (botón `File`), paleta            |
+| `gitReview.openChange`     | Open Changes           | panel (botón `Diff`), paleta            |
+| `gitReview.openAllChanges` | Open All Changes       | panel (botón `Diff` de whole), paleta   |
+| `gitReview.showWhy`        | Show Why               | panel (link), paleta                    |
+| `gitReview.next`           | Next Entry             | panel (ícono), paleta                   |
+| `gitReview.prev`           | Previous Entry         | panel (ícono), paleta                   |
+| `gitReview.goToEntry`      | Go to Entry            | paleta                                  |
+| `gitReview.showUncovered`  | Show Uncovered Files   | panel (pie), paleta                     |
+| `gitReview.refresh`        | Refresh                | título de la vista, paleta              |
+| `gitReview.finishReview`   | Finish Review          | título de la vista, paleta              |
+| `gitReview.saveReview`     | Save Review for Later  | título de la vista, paleta              |
+| `gitReview.abortReview`    | Cancel Review          | título de la vista, paleta              |
+| `gitReview.installCli`     | How to Install the CLI | panel (*Other install options*), paleta |
+| `gitReview.continueReview` | Continue Saved Review  | panel (inventario de `no-review`)       |
+| `gitReview.setBase`        | Set the Base Branch    | panel (setup / *Settings*), paleta      |
+| `gitReview.setRemote`      | Set the Remote         | panel (setup / *Settings*), paleta      |
+| `gitReview.undoFinish`     | Undo Finish            | panel (banner / finish-pending), paleta |
+| `gitReview.resumeFinish`   | Resume Finish          | panel (banner finish-conflict), paleta  |
+| `gitReview.showCliLog`     | Show CLI Log           | paleta (diagnóstico; no se auto-abre)   |
 
 El título de la vista lleva el **ciclo de vida** de la review — `refresh`,
 `finishReview`, `saveReview`, `abortReview` — como íconos. Navegar y saltar de

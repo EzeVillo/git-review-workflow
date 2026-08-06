@@ -25,6 +25,13 @@ export interface CandidateBranch {
     current: boolean;
 }
 
+/** Remoto del repositorio elegible para `git review config remote` (porcelain `remote-candidate`). */
+export interface CandidateRemote {
+    name: string;
+    /** Coincide con el remoto efectivo del registro `config`. */
+    current: boolean;
+}
+
 /** Eje del marker `--delta`: tip de origin/<rama> vs refs/heads/<rama>. */
 export type DeltaOrigin = "remote" | "local";
 
@@ -47,6 +54,11 @@ export interface ConfigPorcelainResult {
     config: EffectiveConfig;
     /** En el orden de `git for-each-ref` (lexicográfico); duplicados (misma rama, dos orígenes) esperados, nunca fusionados. */
     candidates: CandidateBranch[];
+    /**
+     * Remotos del repositorio (`remote-candidate`), en el orden de `git remote`.
+     * Vacío cuando no hay remotes; ausente del resultado no — siempre array.
+     */
+    remotes: CandidateRemote[];
     /**
      * Sólo cuando la invocación nombró una rama Y hay al menos un tip reviewed
      * previo (FR-015). Cero, una o dos filas — remote y local son ejes disjuntos.
@@ -86,6 +98,7 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
     let base: string | undefined;
     let remote: string | undefined;
     const candidates: CandidateBranch[] = [];
+    const remotes: CandidateRemote[] = [];
     const deltas: DeltaRecord[] = [];
     const offers: ReadingOffer[] = [];
 
@@ -106,6 +119,14 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
                 } else if (key === "remote") {
                     remote = value;
                 }
+                break;
+            }
+            case "remote-candidate": {
+                const name = fields[1];
+                if (name === undefined || name.length === 0) {
+                    break;
+                }
+                remotes.push({name, current: toBool(fields[2])});
                 break;
             }
             case "candidate": {
@@ -148,7 +169,7 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
     if (base !== undefined) {
         config.base = base;
     }
-    const result: ConfigPorcelainResult = {config, candidates};
+    const result: ConfigPorcelainResult = {config, candidates, remotes};
     if (deltas.length > 0) {
         result.deltas = deltas;
     }

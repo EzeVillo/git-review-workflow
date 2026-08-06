@@ -1,5 +1,5 @@
-import { NPM_INSTALL_CMD, NPM_UPDATE_CMD } from "../cli/installHint";
-import { MIN_CLI_VERSION } from "../cli/version";
+import {NPM_INSTALL_CMD, NPM_UPDATE_CMD} from "../cli/installHint";
+import {MIN_CLI_VERSION} from "../cli/version";
 
 /**
  * El HTML del panel, aparte del provider y sin dependencia de `vscode`: es lo
@@ -29,8 +29,9 @@ export function panelHtml(nonce: string): string {
 <style nonce="${nonce}">
   /* 100% del webview: no-review es un split vertical al estilo del Explorer
      (archivos arriba, Outline/Timeline abajo). El body scrollea; el footer
-     (Other actions + Support) queda anclado al borde inferior y al abrir
-     crece hacia arriba robándole alto al body — no salta al flujo de Start. */
+     (Other actions + Settings + Support) queda anclado al borde inferior y
+     al abrir crece hacia arriba robándole alto al body — no salta al flujo
+     de Start. El modo setup (sin base) no usa footer. */
   html, body { height: 100%; }
   body {
     margin: 0;
@@ -709,8 +710,9 @@ export function panelHtml(nonce: string): string {
   }
 
   // El panel redibuja el root en cada modelo; sin esto, expandir Other
-  // actions / Support se pliega al primer refresh (busy, inventario, etc.).
+  // actions / Settings / Support se pliega al primer refresh (busy, etc.).
   let otherActionsOpen = false;
+  let settingsOpen = false;
   let supportOpen = false;
 
   /**
@@ -775,24 +777,58 @@ export function panelHtml(nonce: string): string {
   }
 
   /**
-   * Start + base del empty no-review (sin las secciones del pie).
+   * Modo setup: config llegó sin base. Solo base (obligatoria) y remote
+   * (opcional con valor efectivo). Sin Start, inventario ni footer.
    */
-  function renderEmptyStartBlock(model) {
-    const box = empty("No active review on this branch.", button("Start a review", "startReview", "primary"));
-    if (model.configuredBase !== undefined) {
-      box.appendChild(el("p", null, "Compares against " + model.configuredBase + "."));
-      box.appendChild(button("Change the base branch", "setBase", null));
-    } else if (model.noBaseConfigured) {
-      box.appendChild(el("p", null, "No base branch is configured for a full review."));
-      box.appendChild(button("Set the base branch", "setBase", null));
-    }
+  function renderSetup(model) {
+    const box = empty(
+      "Configure git review for this repository.",
+      button("Set the base branch", "setBase", "primary")
+    );
+    box.appendChild(el("p", null, "A base branch is required before starting a full review."));
+    const remote = model.configuredRemote !== undefined ? model.configuredRemote : "origin";
+    box.appendChild(el("p", null, "Remote: " + remote + " (optional)."));
+    const changeRemote = button("Change remote", "setRemote", null);
+    changeRemote.disabled = model.busy;
+    box.appendChild(changeRemote);
     return box;
   }
 
-  /** Pie fijo: Other actions + Support (split estilo Outline/Timeline). */
+  /**
+   * Start del empty no-review ya configurado (base en Settings del pie).
+   */
+  function renderEmptyStartBlock(model) {
+    return empty("No active review on this branch.", button("Start a review", "startReview", "primary"));
+  }
+
+  /**
+   * Base y remote del repo, plegados. Solo con base ya configurada (el setup
+   * los muestra inline). Debajo de Other actions, encima de Support.
+   */
+  function renderSettings(model) {
+    const kids = [];
+    if (model.configuredBase !== undefined) {
+      kids.push(el("p", null, "Base: " + model.configuredBase + "."));
+      const changeBase = button("Change the base branch", "setBase", null);
+      changeBase.disabled = model.busy;
+      kids.push(changeBase);
+    }
+    if (model.configuredRemote !== undefined) {
+      kids.push(el("p", null, "Remote: " + model.configuredRemote + "."));
+      const changeRemote = button("Change remote", "setRemote", null);
+      changeRemote.disabled = model.busy;
+      kids.push(changeRemote);
+    }
+    return toolsSection("Settings", settingsOpen, function (open) {
+      settingsOpen = open;
+    }, kids);
+  }
+
+  /** Pie fijo: Other actions + Settings + Support (split Outline/Timeline). */
   function renderPaneFooter(model) {
     const footer = el("div", "pane-footer");
     footer.appendChild(renderOtherActions(model));
+    footer.appendChild(renderSettings(model));
     footer.appendChild(renderSupport());
     return footer;
   }
@@ -800,6 +836,10 @@ export function panelHtml(nonce: string): string {
   function renderEmptyState(model) {
     switch (model.situation) {
       case "no-review": {
+        // Setup gate: sin base solo se dibuja la configuración.
+        if (model.noBaseConfigured) {
+          return renderSetup(model);
+        }
         // El fallback a lista vacía no sobra: el webview redibuja el modelo que
         // guardó con setState, que puede venir de una versión sin este campo.
         // pane-main = body scrolleable + footer anclado (fills lo pone render).
@@ -1150,10 +1190,10 @@ export function panelHtml(nonce: string): string {
 
   function render(model) {
     root.textContent = "";
-    // fills solo en no-review: body scrollea y el footer (Other actions /
-    // Support) queda anclado abajo, estilo Outline/Timeline. En el resto
-    // de situaciones el root no debe estirar en flex.
-    root.className = model.situation === "no-review" ? "fills" : "";
+    // fills solo en no-review configurado: body scrollea y el footer
+    // (Other actions / Settings / Support) queda anclado abajo. Setup
+    // (sin base) y el resto de situaciones no estiran en flex.
+    root.className = model.situation === "no-review" && !model.noBaseConfigured ? "fills" : "";
     // finish-conflict sigue siendo una review legible (FR-027) — el estado
     // vacío es sólo para no-review/out-of-range/error/cli-*.
     if (model.situation !== "review" && model.situation !== "finish-conflict") {

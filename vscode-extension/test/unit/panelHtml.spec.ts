@@ -237,35 +237,41 @@ describe("panelHtml", () => {
     });
 
     it("no-review ofrece compare y walkthrough bajo Other actions; finish-pending no", () => {
-        // Empty state sin review activa: compare/walkthrough viven en el
-        // footer del split (solo no-review). finish-pending es una pantalla
-        // propia de post-cierre, sin empty state ni Other actions.
+        // Empty state sin review activa y con base: compare/walkthrough viven
+        // en el footer del split. finish-pending es una pantalla propia de
+        // post-cierre, sin empty state ni Other actions.
         // Other actions es un <details> plegado por defecto.
         assert.ok(html.includes('function renderOtherActions(model)'));
         assert.ok(html.includes('function renderEmptyStartBlock(model)'));
         assert.ok(html.includes('function renderPaneFooter(model)'));
+        assert.ok(html.includes('function renderSetup(model)'));
+        assert.ok(html.includes('function renderSettings(model)'));
         assert.ok(html.includes('el("details", "tools")'));
         assert.ok(html.includes('"Other actions"'));
+        assert.ok(html.includes('"Settings"'));
         assert.ok(html.includes("otherActionsOpen"), "el toggle sobrevive al redibujado del modelo");
-        // Split Outline/Timeline: body scrollea, footer anclado abajo; al abrir
-        // crece hacia arriba (max-height del footer) sin saltar al flujo de Start.
-        assert.ok(html.includes('#root.fills') || html.includes('root.className = model.situation === "no-review" ? "fills"'));
+        assert.ok(html.includes("settingsOpen"), "Settings sobrevive al redibujado");
+        // Split Outline/Timeline solo con base: setup (sin base) no usa fills.
+        assert.ok(html.includes("!model.noBaseConfigured") || html.includes("model.noBaseConfigured"));
         assert.ok(html.includes(".pane-footer"), "footer anclado al pie");
         assert.ok(html.includes(".pane-body"), "cuerpo scrolleable encima del footer");
         assert.ok(html.includes("max-height: 55%"), "el footer no borra el body al abrir");
         assert.ok(html.includes("grid-template-rows"), "apertura animada 0fr→1fr");
-        assert.ok(html.includes('el("div", "pane-main")'), "split body+footer siempre en no-review");
+        assert.ok(html.includes('el("div", "pane-main")'), "split body+footer en no-review con base");
         assert.ok(html.includes('button("Compare revisions", "compareReview")'));
         assert.ok(html.includes('button("Walkthrough: Init", "walkthroughInit")'));
         assert.ok(html.includes('button("Walkthrough: Build", "walkthroughBuild")'));
         assert.ok(html.includes("renderOtherActions"), "Other actions en el pie compartido");
         assert.ok(html.includes('case "no-review"') && html.includes("renderEmptyStartBlock"));
+        assert.ok(html.includes("noBaseConfigured") && html.includes("renderSetup"));
+        assert.ok(html.includes('"setRemote"') || html.includes("'setRemote'") || html.includes("setRemote"));
         const pendingBranch = /case "finish-pending": \{([^]*?)\n {6}case "out-of-range"/.exec(html)?.[1] ?? "";
         assert.ok(pendingBranch.length > 0, "no se encontro el caso finish-pending");
         assert.ok(
             !pendingBranch.includes("renderEmptyStartBlock")
-                && !pendingBranch.includes("renderOtherActions")
-                && !pendingBranch.includes("renderPaneFooter"),
+            && !pendingBranch.includes("renderOtherActions")
+            && !pendingBranch.includes("renderPaneFooter")
+            && !pendingBranch.includes("renderSetup"),
             "finish-pending no reutiliza el empty state de no-review"
         );
     });
@@ -273,6 +279,7 @@ describe("panelHtml", () => {
     it("no-review ofrece Support con Star on GitHub; finish-pending no", () => {
         // Mismo pie que Other actions: <details> plegado, toggle que
         // sobrevive al redibujado. Un solo link (star = repo); openSupport + id.
+        // Orden del footer: Other actions → Settings → Support.
         assert.ok(html.includes("function renderSupport("));
         assert.ok(html.includes('"Support"'));
         assert.ok(html.includes("supportOpen"), "el toggle sobrevive al redibujado del modelo");
@@ -283,8 +290,10 @@ describe("panelHtml", () => {
         assert.ok(html.includes("renderPaneFooter") && html.includes("renderSupport"));
         const footer = /function renderPaneFooter\(model\) \{([^]*?)\n {2}\}/.exec(html)?.[1] ?? "";
         const otherIdx = footer.indexOf("renderOtherActions");
+        const settingsIdx = footer.indexOf("renderSettings");
         const supportIdx = footer.indexOf("renderSupport");
-        assert.ok(otherIdx >= 0 && supportIdx > otherIdx, "Support va debajo de Other actions");
+        assert.ok(otherIdx >= 0 && settingsIdx > otherIdx, "Settings va debajo de Other actions");
+        assert.ok(settingsIdx >= 0 && supportIdx > settingsIdx, "Support va debajo de Settings");
         const pendingBranch = /case "finish-pending": \{([^]*?)\n {6}case "out-of-range"/.exec(html)?.[1] ?? "";
         assert.ok(
             !pendingBranch.includes("renderSupport") && !pendingBranch.includes("openSupport"),

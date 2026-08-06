@@ -132,7 +132,11 @@ load_step_review_meta() {
 	# A key deleted by a hand-edit (while reviewmode stays "step") would otherwise
 	# let set -e kill us silently mid-script; read with || true and report it.
 	if [ -z "$src" ] || [ -z "$tip" ] || [ -z "$start" ] || [ -z "$count" ]; then
-		echo "error: missing review metadata; was $cur created with git review start?" >&2
+		if [ -z "$src" ]; then
+			echo "error: missing review metadata; was $cur created with git review start? Switch away, then delete it with 'git branch -D $cur'." >&2
+		else
+			echo "error: missing review metadata; was $cur created with git review start? Discard the review with 'git review abort'." >&2
+		fi
 		exit 1
 	fi
 
@@ -144,22 +148,22 @@ load_step_review_meta() {
 	total="$(printf '%s\n' "$commits" | grep -c .)"
 	case "$count" in
 	*[!0-9]*)
-		echo "error: corrupt review metadata: reviewcount is '$count', not a positive integer" >&2
+		echo "error: corrupt review metadata: reviewcount is '$count', not a positive integer. Discard the review with 'git review abort'." >&2
 		exit 1
 		;;
 	esac
 	[ "$count" -ge 1 ] || {
-		echo "error: corrupt review metadata: reviewcount is '$count', not a positive integer" >&2
+		echo "error: corrupt review metadata: reviewcount is '$count', not a positive integer. Discard the review with 'git review abort'." >&2
 		exit 1
 	}
 	case "$step" in
 	'' | *[!0-9]*)
-		echo "error: corrupt review metadata: reviewstep is '$step', not a positive integer" >&2
+		echo "error: corrupt review metadata: reviewstep is '$step', not a positive integer. Discard the review with 'git review abort'." >&2
 		exit 1
 		;;
 	esac
 	if [ "$step" -lt 1 ] || [ "$step" -gt "$total" ]; then
-		echo "error: review step $step out of range (1..$total) — corrupt metadata?" >&2
+		echo "error: review step $step out of range (1..$total) — corrupt metadata? Discard the review with 'git review abort'." >&2
 		exit 1
 	fi
 }
@@ -587,7 +591,7 @@ walk_range_error() {
 		echo "error: HEAD has moved off this review's base — the walkthrough cursor is at entry $_wre_step but only $_wre_total of $_wre_count entr$([ "$_wre_count" -eq 1 ] && echo y || echo ies) remain in range. Walk mode keeps the whole-PR diff staged with HEAD at the base; you now have commit(s) on top (did you run git commit?). Undo them with 'git reset --soft' to restage the diff, or 'git review abort' to discard the review, then retry." >&2
 		exit 3
 	fi
-	echo "error: review entry $_wre_step out of range (1..$_wre_total) — corrupt metadata?" >&2
+	echo "error: review entry $_wre_step out of range (1..$_wre_total) — corrupt metadata? Discard the review with 'git review abort'." >&2
 	exit 1
 }
 
@@ -624,7 +628,11 @@ load_walk_review_meta() {
 	walkcount="$(git config "branch.$cur.reviewwalkcount" || true)"
 
 	if [ -z "$src" ] || [ -z "$tip" ]; then
-		echo "error: missing review metadata; was $cur created with git review start?" >&2
+		if [ -z "$src" ]; then
+			echo "error: missing review metadata; was $cur created with git review start? Switch away, then delete it with 'git branch -D $cur'." >&2
+		else
+			echo "error: missing review metadata; was $cur created with git review start? Discard the review with 'git review abort'." >&2
+		fi
 		exit 1
 	fi
 
@@ -635,17 +643,17 @@ load_walk_review_meta() {
 
 	case "$walkcount" in
 	'' | *[!0-9]*)
-		echo "error: corrupt review metadata: reviewwalkcount is '$walkcount', not a positive integer" >&2
+		echo "error: corrupt review metadata: reviewwalkcount is '$walkcount', not a positive integer. Discard the review with 'git review abort'." >&2
 		exit 1
 		;;
 	esac
 	[ "$walkcount" -ge 1 ] || {
-		echo "error: corrupt review metadata: reviewwalkcount is '$walkcount', not a positive integer" >&2
+		echo "error: corrupt review metadata: reviewwalkcount is '$walkcount', not a positive integer. Discard the review with 'git review abort'." >&2
 		exit 1
 	}
 	case "$walkstep" in
 	'' | *[!0-9]*)
-		echo "error: corrupt review metadata: reviewwalkstep is '$walkstep', not a positive integer" >&2
+		echo "error: corrupt review metadata: reviewwalkstep is '$walkstep', not a positive integer. Discard the review with 'git review abort'." >&2
 		exit 1
 		;;
 	esac

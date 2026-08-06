@@ -385,10 +385,20 @@ export function panelHtml(nonce: string): string {
     return a;
   }
 
+  /** Recovery command for an orphan inventory row (mirrors git review list). */
+  function orphanFix(review) {
+    if (review.saved && review.name.indexOf("review-saved/") === 0) {
+      return "git review forget --saved " + review.name.slice("review-saved/".length);
+    }
+    return "git branch -D " + review.name;
+  }
+
   /** El modo y, en step/walk, la posición REGISTRADA — el inventario no la
    *  re-deriva (contracts/list-porcelain.md), a diferencia de la barra. */
   function reviewMeta(review) {
-    if (review.orphan) { return "no metadata"; }
+    if (review.orphan) {
+      return "no metadata — " + orphanFix(review);
+    }
     if (review.position !== undefined && review.total !== undefined) {
       return review.mode + " · " + review.position + "/" + review.total;
     }
@@ -418,7 +428,7 @@ export function panelHtml(nonce: string): string {
       // los que el verbo rechazaría, y el inventario ya los deja ver.
       if (!review.resumable) {
         go.title = review.orphan
-          ? "This branch has no review metadata"
+          ? "This branch has no review metadata — discard with: " + orphanFix(review)
           : "A review of this branch is already active";
       }
       meta.appendChild(go);
@@ -508,6 +518,14 @@ export function panelHtml(nonce: string): string {
         return empty(
           "The installed git-review CLI is older than 0.4.0.",
           button("Update the CLI", "installCli", "primary"),
+          model.stderr
+        );
+      case "error":
+        // Same pattern as out-of-range: the CLI stderr already names the fix
+        // (abort / branch -D / forget --saved); re-show it on demand (FR-024).
+        return empty(
+          "Something went wrong reading the review state.",
+          button("How to fix it", "outOfRangeHelp", "primary"),
           model.stderr
         );
       default:

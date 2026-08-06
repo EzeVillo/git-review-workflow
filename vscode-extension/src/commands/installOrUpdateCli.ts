@@ -8,11 +8,14 @@ export async function installOrUpdateCli(): Promise<void> {
 }
 
 /**
- * Botón "How to fix it" del estado `out-of-range`: muestra el diagnóstico
- * que la CLI ya produce con la acción concreta (`git reset --soft`),
- * preservado tal cual, sin texto propio (FR-023, FR-024).
+ * Botón "How to fix it" de `out-of-range` y `error`: muestra el diagnóstico
+ * que la CLI ya produce con la acción concreta (`git reset --soft`,
+ * `git review abort`, `git branch -D`, …), preservado tal cual, sin texto
+ * propio (FR-023, FR-024).
  */
 export async function showOutOfRangeHelp(stderr: string | undefined): Promise<void> {
-    const message = stderr && stderr.trim().length > 0 ? stderr.trim() : "The cursor is out of range; run 'git review status' in a terminal for the diagnosis.";
+    const message = stderr && stderr.trim().length > 0
+        ? stderr.trim()
+        : "Run 'git review status' in a terminal for the diagnosis and recovery command.";
     await vscode.window.showWarningMessage(message);
 }

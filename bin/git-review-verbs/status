@@ -78,7 +78,11 @@ src="$(git config "branch.$cur.reviewsource" || true)"
 tip="$(git config "branch.$cur.reviewtip" || true)"
 mode="$(git config "branch.$cur.reviewmode" || echo whole)"
 if [ -z "$src" ] || [ -z "$tip" ]; then
-	echo "error: missing review metadata; was $cur created with git review start?" >&2
+	if [ -z "$src" ]; then
+		echo "error: missing review metadata; was $cur created with git review start? Switch away, then delete it with 'git branch -D $cur'." >&2
+	else
+		echo "error: missing review metadata; was $cur created with git review start? Discard the review with 'git review abort'." >&2
+	fi
 	exit 1
 fi
 
@@ -239,7 +243,7 @@ if [ "$mode" = "step" ]; then
 	# let set -e kill the bare read silently mid-script; read with || true and report
 	# it. reviewstep falls through to the numeric guard below for a precise message.
 	if [ -z "$count" ] || [ -z "$start" ]; then
-		echo "error: missing review metadata; was $cur created with git review start?" >&2
+		echo "error: missing review metadata; was $cur created with git review start? Discard the review with 'git review abort'." >&2
 		exit 1
 	fi
 	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
@@ -249,12 +253,12 @@ if [ "$mode" = "step" ]; then
 	total="$(printf '%s\n' "$commits" | grep -c .)"
 	case "$step" in
 	'' | *[!0-9]*)
-		echo "error: corrupt review metadata: reviewstep is '$step', not a positive integer" >&2
+		echo "error: corrupt review metadata: reviewstep is '$step', not a positive integer. Discard the review with 'git review abort'." >&2
 		exit 1
 		;;
 	esac
 	if [ "$step" -lt 1 ] || [ "$step" -gt "$total" ]; then
-		echo "error: review step $step out of range (1..$total) — corrupt metadata?" >&2
+		echo "error: review step $step out of range (1..$total) — corrupt metadata? Discard the review with 'git review abort'." >&2
 		exit 1
 	fi
 	cnow="$(printf '%s\n' "$commits" | sed -n "${step}p")"
@@ -293,7 +297,7 @@ elif [ "$mode" = "walk" ]; then
 	total="$(printf '%s\n' "$walkpaths" | grep -c . || true)"
 	case "$walkstep" in
 	'' | *[!0-9]*)
-		echo "error: corrupt review metadata: reviewwalkstep is '$walkstep', not a positive integer" >&2
+		echo "error: corrupt review metadata: reviewwalkstep is '$walkstep', not a positive integer. Discard the review with 'git review abort'." >&2
 		exit 1
 		;;
 	esac

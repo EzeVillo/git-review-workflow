@@ -369,7 +369,7 @@ export const PREVIEW_PANES: PreviewPane[] = [
     {
         name: "out-of-range",
         caption: "out-of-range — el cursor quedó fuera del rango",
-        model: empty("out-of-range", "error: step 5 is out of range (4 commits)"),
+        model: empty("out-of-range", "error: HEAD has moved off this review's base — the walkthrough cursor is at entry 5 but only 4 of 9 entries remain in range. Undo them with 'git reset --soft' to restage the diff, or 'git review abort' to discard the review, then retry."),
     },
     {
         name: "cli-missing",

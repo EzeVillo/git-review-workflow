@@ -89,7 +89,7 @@ mode="$(git config "branch.$saved.reviewmode" || echo whole)"
 tip="$(git config "branch.$saved.reviewtip" || true)"
 # A saved review missing its tip (hand-edited or half-deleted config) would let
 # set -e kill us silently while restoring; report it instead.
-[ -n "$tip" ] || die "missing review metadata for $saved; was it created with git review start?"
+[ -n "$tip" ] || die "missing review metadata for $saved; was it created with git review start? Discard it with 'git review forget --saved $src'."
 
 # restore_meta <key>: copy branch.<saved>.<key> to branch.<rb>.<key> when set.
 # Explicit if so the function returns 0 for absent optional keys (set -e safety).
@@ -105,7 +105,7 @@ if [ "$mode" = "step" ]; then
 	count="$(git config "branch.$saved.reviewcount" || true)"
 	step="$(git config "branch.$saved.reviewstep" || true)"
 	if [ -z "$start" ] || [ -z "$count" ] || [ -z "$step" ]; then
-		die "missing review metadata for $saved; was it created with git review start?"
+		die "missing review metadata for $saved; was it created with git review start? Discard it with 'git review forget --saved $src'."
 	fi
 
 	# Bring the banked edits back to where git review next/prev expect them.
@@ -152,7 +152,7 @@ else
 	# bail before creating the review branch, the way the step path validates its
 	# keys above.
 	lower="$(git config "branch.$saved.reviewsavedlower" || true)"
-	[ -n "$lower" ] || die "missing review metadata for $saved; was it created with git review start?"
+	[ -n "$lower" ] || die "missing review metadata for $saved; was it created with git review start? Discard it with 'git review forget --saved $src'."
 
 	git switch -q -c "$rb" "$tip"
 	git reset -q --soft "$lower"

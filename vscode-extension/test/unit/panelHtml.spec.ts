@@ -164,8 +164,30 @@ describe("panelHtml", () => {
 
     it("un Continue deshabilitado dice por que lo esta", () => {
         assert.ok(/go\.title = review\.orphan/.test(html), "el motivo depende de la fila");
-        assert.ok(html.includes("This branch has no review metadata"));
+        assert.ok(html.includes("git review forget --saved"), "huérfana guardada: comando de descarte");
         assert.ok(html.includes("A review of this branch is already active"));
+    });
+
+    it("orphan en el inventario lleva el comando de recovery en la meta", () => {
+        assert.ok(/function reviewMeta\(review\)/.test(html));
+        assert.ok(html.includes("git review forget --saved") || html.includes("git branch -D"),
+            "orphan debe nombrar el comando de salida");
+    });
+
+    it("error y out-of-range ofrecen How to fix it con el stderr de la CLI", () => {
+        assert.ok(html.includes('case "out-of-range"'));
+        assert.ok(html.includes('case "error"'));
+        // Ambos empty states cablean el mismo boton: el stderr de la CLI ya
+        // trae el how-to y el host lo re-muestra (FR-024).
+        const howTo = 'button("How to fix it", "outOfRangeHelp", "primary")';
+        const outOfRangeIdx = html.indexOf('case "out-of-range"');
+        const errorIdx = html.indexOf('case "error"');
+        assert.ok(outOfRangeIdx >= 0 && errorIdx >= 0);
+        assert.ok(html.includes(howTo));
+        assert.ok(
+            html.slice(errorIdx, errorIdx + 400).includes("outOfRangeHelp"),
+            "error debe ofrecer How to fix it como out-of-range"
+        );
     });
 
     it("el mensaje del inventario lleva un indice, nunca el nombre de la rama", () => {

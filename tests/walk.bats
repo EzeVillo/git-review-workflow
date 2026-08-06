@@ -301,6 +301,7 @@ teardown() {
 	[[ "$output" == *"out of range (1..4)"* ]]
 	[[ "$output" == *"corrupt metadata"* ]]
 	[[ "$output" != *"HEAD has moved"* ]]
+	[[ "$output" == *"git review abort"* ]]
 }
 
 # ── range filtering ───────────────────────────────────────────────────────────

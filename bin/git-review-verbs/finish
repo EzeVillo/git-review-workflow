@@ -263,7 +263,11 @@ esac
 src="$(git config "branch.$cur.reviewsource" || true)"
 tip="$(git config "branch.$cur.reviewtip" || true)"
 if [ -z "$src" ] || [ -z "$tip" ]; then
-	echo "error: missing review metadata; was $cur created with git review start?" >&2
+	if [ -z "$src" ]; then
+		echo "error: missing review metadata; was $cur created with git review start? Switch away, then delete it with 'git branch -D $cur'." >&2
+	else
+		echo "error: missing review metadata; was $cur created with git review start? Discard the review with 'git review abort'." >&2
+	fi
 	exit 1
 fi
 
@@ -292,7 +296,7 @@ mode="$(git config "branch.$cur.reviewmode" || true)"
 if [ "$mode" != "step" ]; then
 	for k in reviewstart reviewcount reviewstep; do
 		[ -z "$(git config "branch.$cur.$k" || true)" ] || {
-			echo "error: corrupt review metadata: $cur has step-review keys but reviewmode is not 'step'" >&2
+			echo "error: corrupt review metadata: $cur has step-review keys but reviewmode is not 'step'. Discard the review with 'git review abort'." >&2
 			exit 1
 		}
 	done
@@ -304,7 +308,7 @@ fi
 if [ "$mode" != "walk" ]; then
 	for k in reviewwalkstep reviewwalkcount; do
 		[ -z "$(git config "branch.$cur.$k" || true)" ] || {
-			echo "error: corrupt review metadata: $cur has walkthrough keys but reviewmode is not 'walk'" >&2
+			echo "error: corrupt review metadata: $cur has walkthrough keys but reviewmode is not 'walk'. Discard the review with 'git review abort'." >&2
 			exit 1
 		}
 	done

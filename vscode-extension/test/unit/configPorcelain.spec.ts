@@ -1,5 +1,5 @@
 import * as assert from "node:assert";
-import {parseConfigPorcelain} from "../../src/cli/configPorcelain";
+import {deltaForSource, parseConfigPorcelain} from "../../src/cli/configPorcelain";
 
 describe("parseConfigPorcelain", () => {
     it("config remote sin base configurada", () => {
@@ -7,7 +7,7 @@ describe("parseConfigPorcelain", () => {
         const result = parseConfigPorcelain(out);
         assert.deepStrictEqual(result.config, {remote: "origin"});
         assert.deepStrictEqual(result.candidates, []);
-        assert.strictEqual(result.delta, undefined);
+        assert.strictEqual(result.deltas, undefined);
     });
 
     it("config base y remote, los dos presentes", () => {
@@ -47,20 +47,38 @@ describe("parseConfigPorcelain", () => {
         assert.notStrictEqual(result.candidates[0].origin, result.candidates[1].origin);
     });
 
-    it("parsea delta sólo cuando el registro llega", () => {
+    it("parsea delta con origin y admite hasta dos filas", () => {
         const out = [
             "config\tremote\torigin",
-            "delta\tfeature/checkout\tabc123def456",
+            "delta\tfeature/checkout\tabc123def456\tremote",
+            "delta\tfeature/checkout\tfedcba654321\tlocal",
             "",
         ].join("\n");
         const result = parseConfigPorcelain(out);
-        assert.deepStrictEqual(result.delta, {name: "feature/checkout", tip: "abc123def456"});
+        assert.deepStrictEqual(result.deltas, [
+            {name: "feature/checkout", tip: "abc123def456", origin: "remote"},
+            {name: "feature/checkout", tip: "fedcba654321", origin: "local"},
+        ]);
     });
 
     it("sin registro delta el campo queda ausente, no undefined a medias", () => {
         const out = "config\tremote\torigin\n";
         const result = parseConfigPorcelain(out);
-        assert.strictEqual("delta" in result, false);
+        assert.strictEqual("deltas" in result, false);
+    });
+
+    it("descarta un delta sin origin o con origin desconocido", () => {
+        const out = [
+            "config\tremote\torigin",
+            "delta\tfeature/checkout\tabc123def456",
+            "delta\tfeature/checkout\tabc123def456\tupstream",
+            "delta\tfeature/checkout\tabc123def456\tremote",
+            "",
+        ].join("\n");
+        const result = parseConfigPorcelain(out);
+        assert.deepStrictEqual(result.deltas, [
+            {name: "feature/checkout", tip: "abc123def456", origin: "remote"},
+        ]);
     });
 
     it("ignora etiquetas desconocidas", () => {
@@ -78,11 +96,13 @@ describe("parseConfigPorcelain", () => {
         const out = [
             "config\tremote\torigin\textra1\textra2",
             "candidate\tfeature/x\tlocal\t1\textra",
+            "delta\tfeature/x\tabc\tremote\textra",
             "",
         ].join("\n");
         const result = parseConfigPorcelain(out);
         assert.deepStrictEqual(result.config, {remote: "origin"});
         assert.deepStrictEqual(result.candidates, [{name: "feature/x", origin: "local", current: true}]);
+        assert.deepStrictEqual(result.deltas, [{name: "feature/x", tip: "abc", origin: "remote"}]);
     });
 
     it("una entrada de salida vacia no produce config ni candidatos", () => {
@@ -99,5 +119,28 @@ describe("parseConfigPorcelain", () => {
         ].join("\n");
         const result = parseConfigPorcelain(out);
         assert.deepStrictEqual(result.candidates, []);
+    });
+});
+
+describe("deltaForSource", () => {
+    const deltas = [
+        {name: "feature/x", tip: "aaa", origin: "remote" as const},
+        {name: "feature/x", tip: "bbb", origin: "local" as const},
+    ];
+
+    it("remote source picks the remote row", () => {
+        assert.deepStrictEqual(deltaForSource(deltas, "remote"), deltas[0]);
+    });
+
+    it("local and offline both pick the local row", () => {
+        assert.deepStrictEqual(deltaForSource(deltas, "local"), deltas[1]);
+        assert.deepStrictEqual(deltaForSource(deltas, "offline"), deltas[1]);
+    });
+
+    it("absent when that origin has no marker", () => {
+        assert.strictEqual(deltaForSource([deltas[0]], "local"), undefined);
+        assert.strictEqual(deltaForSource([deltas[1]], "remote"), undefined);
+        assert.strictEqual(deltaForSource(undefined, "remote"), undefined);
+        assert.strictEqual(deltaForSource([], "offline"), undefined);
     });
 });

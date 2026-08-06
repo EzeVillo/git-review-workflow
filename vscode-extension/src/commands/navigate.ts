@@ -41,9 +41,12 @@ export async function navigate(
         const state = await stateManager.refresh();
 
         if (result.exitCode !== 0) {
-            if (result.stderr.trim().length > 0) {
-                void vscode.window.showInformationMessage(result.stderr.trim());
-            }
+            // stderr de la CLI tal cual; si viene vacío (CLI matada / rota),
+            // un mensaje genérico evita el fallo silencioso.
+            const text = result.stderr.trim();
+            void vscode.window.showInformationMessage(
+                text.length > 0 ? text : `git review ${direction} failed.`
+            );
             return;
         }
 

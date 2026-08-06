@@ -95,10 +95,12 @@ export async function finishReview(
         );
 
         if (invocation.exitCode !== 0) {
+            // stderr de la CLI tal cual (FR-024); si viene vacío (CLI matada /
+            // rota), un toast genérico evita el fallo silencioso.
             const text = message(invocation.stderr);
-            if (text.length > 0) {
-                void vscode.window.showErrorMessage(text);
-            }
+            void vscode.window.showErrorMessage(
+                text.length > 0 ? text : "git review finish failed."
+            );
             return;
         }
 
@@ -185,8 +187,11 @@ export async function undoFinish(
     // Fallo esperado: hay trabajo nuevo en la rama del cierre. El stderr es lo
     // que habilita la segunda confirmación (contracts/cli-invocation.md §
     // finish --abort --force) — se muestra tal cual, sin redactar (FR-024).
+    // Sin stderr no hay diagnóstico ni mención de --force: toast genérico y
+    // se detiene (nunca ofrecer force a ciegas).
     const text = message(invocation.stderr);
     if (text.length === 0) {
+        void vscode.window.showErrorMessage("git review finish --abort failed.");
         return;
     }
 
@@ -237,9 +242,9 @@ export async function undoFinish(
         }
         if (forceInvocation && forceInvocation.exitCode !== 0) {
             const forceText = message(forceInvocation.stderr);
-            if (forceText.length > 0) {
-                void vscode.window.showErrorMessage(forceText);
-            }
+            void vscode.window.showErrorMessage(
+                forceText.length > 0 ? forceText : "git review finish --abort --force failed."
+            );
         }
     });
 }
@@ -279,9 +284,9 @@ export async function resumeFinish(
         );
         if (result.exitCode !== 0) {
             const text = message(result.stderr);
-            if (text.length > 0) {
-                void vscode.window.showErrorMessage(text);
-            }
+            void vscode.window.showErrorMessage(
+                text.length > 0 ? text : "git review finish --resume failed."
+            );
         }
     });
 }

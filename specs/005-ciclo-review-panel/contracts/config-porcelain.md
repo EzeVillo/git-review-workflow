@@ -130,10 +130,10 @@ candidate	main	local	0
 
 ---
 
-## Registro `delta` (cero o una, sólo cuando se pregunta por una rama)
+## Registro `delta` (cero, una o dos, sólo cuando se pregunta por una rama)
 
 ```text
-delta<TAB>name<TAB>tip
+delta<TAB>name<TAB>tip<TAB>origin
 ```
 
 Emitido sólo cuando la invocación nombra una rama:
@@ -143,13 +143,26 @@ git review config --porcelain <rama>
 ```
 
 - `name`: la rama por la que se preguntó.
-- `tip`: el SHA completo del último tip revisado de esa rama.
+- `tip`: el SHA completo del último tip revisado de **ese** eje de origen.
+- `origin`: `remote` | `local`. Qué marker es: el de una review por defecto
+  (`reviewworkflow.<rama>.reviewed`, tip de `origin/<rama>`) o el de
+  `--local`/`--offline` (`reviewworkflowlocal.<rama>.reviewed`, tip de
+  `refs/heads/<rama>`). Son progreso personal y **disjunto**: el mismo nombre
+  de rama puede tener cero, uno o los dos.
 
-**Ausente cuando esa rama nunca se revisó**, que es la forma en que el consumidor
-sabe que no puede ofrecer el rango incremental (FR-015): sin este registro, la
-opción no se ofrece. Ausente también cuando la invocación no nombra ninguna rama
-— el reporte general no lo incluye, porque emitirlo para todas las ramas
-convertiría un costo constante en uno por rama.
+**Cero, una o dos filas.** Cada marker presente emite su propia fila; nunca se
+fusionan en un solo tip. Orden estable: primero `remote` (si hay), después
+`local` (si hay). El consumidor que ofrece `--delta` MUST filtrar por el
+`origin` que corresponde al source elegido (`remote` → fila `remote`;
+`local`/`offline` → fila `local`). Ofrecer delta con el marker del otro origen
+es el fallo que este campo evita: `start --offline --delta` sólo mira el marker
+local.
+
+**Ausente (ninguna fila) cuando esa rama nunca se revisó en ningún eje**, que es
+la forma en que el consumidor sabe que no puede ofrecer el rango incremental
+(FR-015). Ausente también cuando la invocación no nombra ninguna rama — el
+reporte general no lo incluye, porque emitirlo para todas las ramas convertiría
+un costo constante en uno por rama.
 
 ---
 

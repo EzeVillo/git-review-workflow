@@ -715,13 +715,15 @@ git review config --porcelain [<branch>]  # machine-readable + candidate branche
   ```
   config	<key>	<value>
   candidate	<name>	remote|local	<current>
-  delta	<branch>	<tip>
+  delta	<branch>	<tip>	remote|local
   ```
 
   A key with no effective value omits its `config` line entirely (so `base` is
   absent until set; `remote` always appears). `candidate` lists every branch
   eligible to start a review; `current` is `1`/`0`. Pass an optional `<branch>`
-  to also emit a `delta` row when that branch has a prior `--delta` marker.
+  to also emit `delta` rows when that branch has a prior `--delta` marker —
+  zero, one or two: remote and local reviews keep separate markers, so each
+  present axis gets its own row (`origin` is `remote` or `local`).
 - `--` ends option parsing, so a value that starts with `-` (a legal branch name)
   is not taken as a flag: `git review config base -- -foo`.
 

@@ -198,9 +198,9 @@ coinciden con los del comando equivalente (quickstart.md Â§ 2).
 - [ ] T019 [US1] En `bin/git-review-verbs/config`, la forma `--porcelain
   [<rama>]`: registros `config` (uno por clave con valor efectivo, `remote`
   siempre, `base` si estÃ¡), `candidate` (vÃ­a `candidate_branches`), y `delta`
-  (sÃ³lo si se pasÃ³ `<rama>` y `reviewworkflow.<rama>.reviewed` o
-  `reviewworkflowlocal.<rama>.reviewed` existe â€” mismo par de claves que lee
-  `start`). Depende de T018.
+  (sÃ³lo si se pasÃ³ `<rama>`; una fila por marker presente, con `origin`
+  remote|local â€” no OR de tips; mismo par de claves que lee `start`). Depende
+  de T018.
 - [ ] T020 [US1] Registrar `config` en el listado de `-h` de `bin/git-review`.
 - [ ] T021 [US1] `shellcheck` limpio sobre `bin/git-review-verbs/config`,
   `bin/git-review-lib.sh` y `bin/git-review` (vÃ­a Docker). `./tests/run-docker.sh
@@ -208,9 +208,9 @@ coinciden con los del comando equivalente (quickstart.md Â§ 2).
 - [ ] T022 [P] [US1] Crear `vscode-extension/src/cli/configPorcelain.ts`:
   parser de lÃ­nea a lÃ­nea con el mismo tokenizador de `porcelain.ts` (split por
   tab, primer campo = etiqueta, `switch`, ignorar etiqueta/campos desconocidos).
-  Exporta `EffectiveConfig`, `CandidateBranch`, `parseConfigPorcelain(stdout):
-  {config: EffectiveConfig; candidates: CandidateBranch[]; delta?: {name:
-  string; tip: string}}`. Depende de T015.
+  Exporta `EffectiveConfig`, `CandidateBranch`, `DeltaRecord`,
+  `parseConfigPorcelain(stdout): {config; candidates; deltas?: DeltaRecord[]}`
+  y `deltaForSource`. Depende de T015.
 - [ ] T022a [US1] En `vscode-extension/src/review/state.ts`, poblar
   `ReviewState` con el reporte de configuraciÃ³n (`EffectiveConfig` + las
   `candidate`) cuando `situation === "no-review"` o `"finish-pending"`, con el
@@ -642,14 +642,15 @@ del comando equivalente (quickstart.md Â§ 2, variantes).
   config --porcelain <rama-nunca-revisada>` no emite registro `delta`; sobre una
   rama con un `reviewworkflow.<rama>.reviewed` seteado (simulado a mano en el
   fixture, o generado corriendo un `start`+`finish` de esa rama primero),
-  `--porcelain <rama>` emite `delta	<rama>	<tip>` con el SHA completo. Verificar
+  `--porcelain <rama>` emite `delta	<rama>	<tip>	remote|local` con el SHA
+  completo (cero, una o dos filas: ejes remoto y local disjuntos). Verificar
   tambiÃ©n el caso `reviewworkflowlocal.<rama>.reviewed` (marcador de `--local`).
 - [X] T069 [P] [US6] Extender `vscode-extension/test/unit/configPorcelain.spec.ts`
-  (T015): parsea el registro `delta` opcional.
+  (T015): parsea el registro `delta` opcional (con `origin`).
 - [X] T070 [P] [US6] Extender `vscode-extension/test/unit/reviewIntent.spec.ts`
   (T016): `range: "delta"` sÃ³lo es una combinaciÃ³n vÃ¡lida cuando el `ReviewIntent`
-  se construyÃ³ con un `delta` presente â€” la funciÃ³n de validaciÃ³n (no la de
-  traducciÃ³n a args) lo rechaza si no.
+  se construyÃ³ con un `delta` del origin del source elegido â€” la funciÃ³n de
+  validaciÃ³n (no la de traducciÃ³n a args) lo rechaza si no.
 - [X] T071 [P] [US6] Crear `vscode-extension/test/unit/sourcePreference.spec.ts`:
   con el ajuste `gitReview.defaultSource` en `"local"` a nivel *workspace* y
   `"remote"` a nivel *user*, el valor efectivo que lee el asistente es
@@ -661,9 +662,9 @@ del comando equivalente (quickstart.md Â§ 2, variantes).
 - [X] T072 [US6] Extender `vscode-extension/src/commands/startReview.ts`
   (T024) con el paso "MÃ¡s opcionesâ€¦" detrÃ¡s de un Ã­tem del paso de forma de
   lectura: origen (Remoto / Local / Local sin red, con descripciÃ³n de la
-  diferencia â€” FR-014) y, sÃ³lo si el `delta` del reporte de `config` estÃ¡
-  presente para la rama elegida, la opciÃ³n de rango incremental (FR-015 â€” no se
-  ofrece si no estÃ¡). Depende de T068-T070.
+  diferencia â€” FR-014) y, sÃ³lo si hay un `delta` del origin del source elegido,
+  la opciÃ³n de rango incremental (FR-015 â€” no se ofrece con el marker del otro
+  origen). Depende de T068-T070.
 - [X] T073 [US6] En `vscode-extension/package.json`, agregar
   `contributes.configuration.properties["gitReview.defaultSource"]`: enum
   `["remote", "local", "offline"]`, default `"remote"`, con la descripciÃ³n de

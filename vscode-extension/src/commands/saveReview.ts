@@ -91,11 +91,13 @@ export async function saveReview(
 
         if (result && result.exitCode !== 0) {
             // El mensaje de la CLI se muestra tal cual, sin redactar aca
-            // (FR-024) — es la misma garantia que abortReview.ts.
+            // (FR-024) — es la misma garantia que abortReview.ts. Si el exit
+            // no es 0 y no hay stderr (CLI matada / rota), un toast genérico
+            // evita el fallo silencioso.
             const text = message(result.stderr);
-            if (text.length > 0) {
-                void vscode.window.showErrorMessage(text);
-            }
+            void vscode.window.showErrorMessage(
+                text.length > 0 ? text : "git review save failed."
+            );
         }
     });
 }

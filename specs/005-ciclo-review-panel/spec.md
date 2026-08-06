@@ -505,7 +505,9 @@ explícitamente. Las referencias con prefijo (`002/FR-001`) apuntan a esa featur
   resuelve la base.
 - **FR-015**: El panel MUST NOT ofrecer el rango incremental como viable cuando el
   reporte de configuración ya indica que no existe punto de referencia para esa
-  rama; MUST NOT anticipar ninguna otra condición de fallo (`002/FR-033`).
+  rama **en el origen elegido** (marker remoto vs local son ejes disjuntos; un
+  marker del otro origen no cuenta); MUST NOT anticipar ninguna otra condición
+  de fallo (`002/FR-033`).
 - **FR-016**: La elección de origen —y **sólo** ésa— MUST poder fijarse como
   preferencia persistente, y MUST seguir visible y modificable en cada
   invocación: cambia qué instantánea se revisa, así que nunca puede quedar

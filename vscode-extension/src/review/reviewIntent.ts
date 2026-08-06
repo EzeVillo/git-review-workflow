@@ -5,8 +5,12 @@
  *
  * `range`/`source` cubren full|delta y remote|local|offline: el asistente de
  * `start` los elige en pasos lineales (origen siempre; rango sólo con registro
- * delta). El tipo y `intentToArgs` son el contrato de esa UI con la CLI.
+ * delta del source elegido). El tipo y `intentToArgs` son el contrato de esa
+ * UI con la CLI.
  */
+
+import {DeltaRecord} from "../cli/configPorcelain";
+
 export type ReviewLayout = "auto" | "step" | "no-walk";
 export type ReviewRange = "full" | "delta";
 export type ReviewSource = "remote" | "local" | "offline";
@@ -26,10 +30,11 @@ export interface ReviewIntent {
  */
 export interface IntentValidationContext {
     /**
-     * Registro `delta` de `config --porcelain <rama>` para la rama elegida.
-     * Ausente = esa rama nunca se revisó, o el reporte no se pidió por rama.
+     * Registro `delta` ya filtrado al origin del source elegido
+     * (`deltaForSource`). Ausente = esa rama nunca se revisó en ese eje, o el
+     * reporte no se pidió por rama.
      */
-    delta?: { name: string; tip: string };
+    delta?: DeltaRecord;
 }
 
 export type IntentValidationResult =
@@ -38,9 +43,9 @@ export type IntentValidationResult =
 
 /**
  * Valida las reglas de un `ReviewIntent` que dependen del reporte de la CLI.
- * Hoy: `range = "delta"` sólo es legal cuando hay un `delta` presente para la
- * rama (FR-015). Todo lo demás —working tree sucio, review ya existente— lo
- * deja fallar la CLI (FR-032 / `002/FR-033`).
+ * Hoy: `range = "delta"` sólo es legal cuando hay un `delta` del origin que
+ * corresponde al source (FR-015). Todo lo demás —working tree sucio, review
+ * ya existente— lo deja fallar la CLI (FR-032 / `002/FR-033`).
  */
 export function validateIntent(
     intent: ReviewIntent,
@@ -49,7 +54,7 @@ export function validateIntent(
     if (intent.range === "delta" && context.delta === undefined) {
         return {
             ok: false,
-            reason: 'range "delta" requires a prior review tip (delta record) for the branch',
+            reason: 'range "delta" requires a prior review tip (delta record) for the chosen source',
         };
     }
     return {ok: true};

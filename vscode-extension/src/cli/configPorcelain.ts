@@ -23,12 +23,24 @@ export interface CandidateBranch {
     current: boolean;
 }
 
+/** Eje del marker `--delta`: tip de origin/<rama> vs refs/heads/<rama>. */
+export type DeltaOrigin = "remote" | "local";
+
+export interface DeltaRecord {
+    name: string;
+    tip: string;
+    origin: DeltaOrigin;
+}
+
 export interface ConfigPorcelainResult {
     config: EffectiveConfig;
     /** En el orden de `git for-each-ref` (lexicográfico); duplicados (misma rama, dos orígenes) esperados, nunca fusionados. */
     candidates: CandidateBranch[];
-    /** Sólo cuando la invocación nombró una rama Y esa rama tiene un tip reviewed previo (FR-015). */
-    delta?: { name: string; tip: string };
+    /**
+     * Sólo cuando la invocación nombró una rama Y hay al menos un tip reviewed
+     * previo (FR-015). Cero, una o dos filas — remote y local son ejes disjuntos.
+     */
+    deltas?: DeltaRecord[];
 }
 
 function toBool(field: string | undefined): boolean {
@@ -37,16 +49,16 @@ function toBool(field: string | undefined): boolean {
 
 /**
  * Parsea `config<TAB>clave<TAB>valor`, `candidate<TAB>name<TAB>origin<TAB>current`
- * y `delta<TAB>name<TAB>tip`. `remote` cae a "origin" sólo como último recurso
- * defensivo: el contrato lo emite siempre, así que su ausencia implica una CLI
- * rota, no un estado válido a distinguir (a diferencia de `base`, que sí puede
- * estar legítimamente ausente).
+ * y `delta<TAB>name<TAB>tip<TAB>origin`. `remote` cae a "origin" sólo como último
+ * recurso defensivo: el contrato lo emite siempre, así que su ausencia implica
+ * una CLI rota, no un estado válido a distinguir (a diferencia de `base`, que
+ * sí puede estar legítimamente ausente).
  */
 export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
     let base: string | undefined;
     let remote: string | undefined;
     const candidates: CandidateBranch[] = [];
-    let delta: { name: string; tip: string } | undefined;
+    const deltas: DeltaRecord[] = [];
 
     for (const line of stdout.split("\n")) {
         if (line.length === 0) {
@@ -79,8 +91,13 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
             case "delta": {
                 const name = fields[1];
                 const tip = fields[2];
-                if (name !== undefined && tip !== undefined) {
-                    delta = {name, tip};
+                const origin = fields[3];
+                if (
+                    name !== undefined &&
+                    tip !== undefined &&
+                    (origin === "remote" || origin === "local")
+                ) {
+                    deltas.push({name, tip, origin});
                 }
                 break;
             }
@@ -95,8 +112,23 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
         config.base = base;
     }
     const result: ConfigPorcelainResult = {config, candidates};
-    if (delta) {
-        result.delta = delta;
+    if (deltas.length > 0) {
+        result.deltas = deltas;
     }
     return result;
+}
+
+/**
+ * Marker `--delta` usable para un source de start: remote → fila remote;
+ * local y offline → fila local (mismo marker en la CLI).
+ */
+export function deltaForSource(
+    deltas: readonly DeltaRecord[] | undefined,
+    source: "remote" | "local" | "offline"
+): DeltaRecord | undefined {
+    if (deltas === undefined || deltas.length === 0) {
+        return undefined;
+    }
+    const origin: DeltaOrigin = source === "remote" ? "remote" : "local";
+    return deltas.find((d) => d.origin === origin);
 }

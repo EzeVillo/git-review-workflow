@@ -55,8 +55,11 @@ export async function setBase(
         const options = getInvokeOptions();
         const result = await invokeGitReview("config", ["base", "--", picked.candidate.name], options);
         await stateManager.refresh();
-        if (result.exitCode !== 0 && result.stderr.trim().length > 0) {
-            void vscode.window.showErrorMessage(result.stderr.trim());
+        if (result.exitCode !== 0) {
+            const text = result.stderr.trim();
+            void vscode.window.showErrorMessage(
+                text.length > 0 ? text : "git review config failed."
+            );
         }
     });
 }

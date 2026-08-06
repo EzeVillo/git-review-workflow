@@ -1,5 +1,10 @@
 import * as vscode from "vscode";
-import {CandidateBranch, parseConfigPorcelain} from "../cli/configPorcelain";
+import {
+    CandidateBranch,
+    deltaForSource,
+    DeltaRecord,
+    parseConfigPorcelain,
+} from "../cli/configPorcelain";
 import {invokeGitReview, InvokeOptions, resolveCommand} from "../cli/invoke";
 import {MutationLock} from "../review/mutationLock";
 import {
@@ -142,8 +147,9 @@ async function pickSource(defaultSource: ReviewSource): Promise<ReviewSource | u
 }
 
 /**
- * Rango incremental: sólo se llama cuando el reporte `delta` existe para la
- * rama (FR-015). Sin ese registro este paso no se ofrece.
+ * Rango incremental: sólo se llama cuando hay un `delta` del origin que
+ * corresponde al source elegido (FR-015). Sin ese registro este paso no se
+ * ofrece.
  */
 async function pickRange(): Promise<ReviewRange | undefined> {
     const picked = await vscode.window.showQuickPick(RANGE_ITEMS, {
@@ -154,22 +160,22 @@ async function pickRange(): Promise<ReviewRange | undefined> {
 }
 
 /**
- * Disponibilidad de --delta: SIEMPRE del registro CLI
+ * Markers --delta de la rama: SIEMPRE del registro CLI
  * (`config --porcelain <rama>`), nunca heurística local. La invocación inicial
- * de config no nombra rama y por contrato no emite el registro
- * (config-porcelain.md).
+ * de config no nombra rama y por contrato no emite filas delta
+ * (config-porcelain.md). Puede traer remote, local, ambos o ninguno.
  */
-async function loadDeltaForBranch(
+async function loadDeltasForBranch(
     branch: CandidateBranch,
     options: InvokeOptions
-): Promise<{name: string; tip: string} | undefined> {
+): Promise<DeltaRecord[] | undefined> {
     const deltaReport = await invokeGitReview(
         "config",
         ["--porcelain", "--", branch.name],
         {...options, network: false}
     );
     if (!deltaReport.errorCode && deltaReport.exitCode === 0) {
-        return parseConfigPorcelain(deltaReport.stdout).delta;
+        return parseConfigPorcelain(deltaReport.stdout).deltas;
     }
     return undefined;
 }
@@ -286,7 +292,10 @@ export async function startReview(
         return;
     }
 
-    const delta = await loadDeltaForBranch(branch, options);
+    // Source primero: el marker remoto no habilita --delta en --local/--offline
+    // ni al revés (config-porcelain.md § delta / FR-015).
+    const deltas = await loadDeltasForBranch(branch, options);
+    const delta = deltaForSource(deltas, source);
     let range: ReviewRange = "full";
     if (delta !== undefined) {
         const pickedRange = await pickRange();
@@ -299,8 +308,9 @@ export async function startReview(
     const intent: ReviewIntent = {branch: branch.name, layout, range, source};
     const check = validateIntent(intent, {delta});
     if (!check.ok) {
-        // Defensa en profundidad: la UI no ofrece delta sin registro, pero si
-        // algo se desfasó no mandamos un intent ilegal a la CLI.
+        // Defensa en profundidad: la UI no ofrece delta sin registro del
+        // origin del source, pero si algo se desfasó no mandamos un intent
+        // ilegal a la CLI.
         void vscode.window.showErrorMessage(check.reason);
         return;
     }
@@ -349,8 +359,12 @@ export async function startReview(
                 if (action === "Run in Terminal") {
                     runInTerminal(args, options);
                 }
-            } else if (text.length > 0) {
-                void vscode.window.showErrorMessage(text);
+            } else {
+                // Mismo fallback que el camino de red: exit ≠ 0 sin stderr
+                // (CLI matada / rota) no debe ser un fallo silencioso.
+                void vscode.window.showErrorMessage(
+                    text.length > 0 ? text : "git review start failed."
+                );
             }
             return;
         }

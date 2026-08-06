@@ -738,14 +738,16 @@ git review config --porcelain [<rama>]    # legible por máquina + candidatas
   ```
   config	<clave>	<valor>
   candidate	<name>	remote|local	<current>
-  delta	<rama>	<tip>
+  delta	<rama>	<tip>	remote|local
   ```
 
   Una clave sin valor efectivo omite su línea `config` entera (así `base` no
   aparece hasta configurarla; `remote` siempre está). `candidate` lista cada
   rama elegible para empezar una review; `current` es `1`/`0`. Con una
-  `<rama>` opcional también emite una fila `delta` si esa rama tiene un
-  marcador `--delta` previo.
+  `<rama>` opcional también emite filas `delta` si esa rama tiene un
+  marcador `--delta` previo — cero, una o dos: las reviews remotas y locales
+  guardan markers separados, y cada eje presente emite su fila (`origin` es
+  `remote` o `local`).
 - `--` termina el parseo de opciones, así un valor que empieza con `-` (un
   nombre de rama legal) no se toma como flag: `git review config base -- -foo`.
 

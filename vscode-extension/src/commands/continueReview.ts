@@ -77,11 +77,12 @@ export async function continueReview(
             // El working tree sucio es el modo de fallo que no se puede
             // anticipar desde el inventario, y su mensaje ya dice qué hacer
             // ("commit or stash them first"): se muestra el de la CLI, no uno
-            // redactado acá (FR-024).
+            // redactado acá (FR-024). Si no hay stderr (CLI matada / rota),
+            // un toast genérico evita el fallo silencioso.
             const text = message(result.stderr);
-            if (text.length > 0) {
-                void vscode.window.showErrorMessage(text);
-            }
+            void vscode.window.showErrorMessage(
+                text.length > 0 ? text : "git review continue failed."
+            );
         }
     });
 }

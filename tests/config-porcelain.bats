@@ -43,8 +43,13 @@ row() {
 	fi
 }
 
+# delta_row <name> [origin] — origin optional; without it any delta for name.
 delta_row() {
-	printf '%s\n' "$output" | awk -F'\t' -v n="$1" '$1=="delta" && $2==n'
+	if [ $# -ge 2 ]; then
+		printf '%s\n' "$output" | awk -F'\t' -v n="$1" -v o="$2" '$1=="delta" && $2==n && $4==o'
+	else
+		printf '%s\n' "$output" | awk -F'\t' -v n="$1" '$1=="delta" && $2==n'
+	fi
 }
 
 # ── config record: base omitted unset, remote always present ─────────────────
@@ -121,7 +126,7 @@ delta_row() {
 	run git review config --porcelain -- -weird
 	[ "$status" -eq 0 ]
 	[ "$(row candidate -weird local)" = "$(printf 'candidate\t-weird\tlocal\t0')" ]
-	[ "$(delta_row -weird)" = "$(printf 'delta\t-weird\t%s' "$(git rev-parse develop)")" ]
+	[ "$(delta_row -weird remote)" = "$(printf 'delta\t-weird\t%s\tremote' "$(git rev-parse develop)")" ]
 }
 
 # ── bytes and cost (Decision 2 of 001/003, applied here) ──────────────────────
@@ -189,7 +194,8 @@ delta_row() {
 
 	run git review config --porcelain feature/checkout
 	[ "$status" -eq 0 ]
-	[ "$(delta_row feature/checkout)" = "$(printf 'delta\tfeature/checkout\t%s' "$tip")" ]
+	[ "$(delta_row feature/checkout remote)" = "$(printf 'delta\tfeature/checkout\t%s\tremote' "$tip")" ]
+	[ -z "$(delta_row feature/checkout local)" ]
 }
 
 @test "porcelain <branch> emits no delta when that branch was never reviewed" {
@@ -211,5 +217,32 @@ delta_row() {
 
 	run git review config --porcelain feature/local-only
 	[ "$status" -eq 0 ]
-	[ "$(delta_row feature/local-only)" = "$(printf 'delta\tfeature/local-only\t%s' "$tip")" ]
+	[ "$(delta_row feature/local-only local)" = "$(printf 'delta\tfeature/local-only\t%s\tlocal' "$tip")" ]
+	[ -z "$(delta_row feature/local-only remote)" ]
+}
+
+@test "porcelain <branch> emits remote and local delta rows separately when both markers exist" {
+	git switch --quiet -c feature/both
+	printf 'a\n' >a.txt
+	git add a.txt
+	git commit --quiet -m c1
+	git push --quiet -u origin feature/both
+	printf 'b\n' >b.txt
+	git add b.txt
+	git commit --quiet -m c2
+	git switch --quiet develop
+	remote_tip="$(git rev-parse origin/feature/both)"
+	local_tip="$(git rev-parse feature/both)"
+	git config "reviewworkflow.feature/both.reviewed" "$remote_tip"
+	git config "reviewworkflowlocal.feature/both.reviewed" "$local_tip"
+
+	run git review config --porcelain feature/both
+	[ "$status" -eq 0 ]
+	[ "$(delta_row feature/both remote)" = "$(printf 'delta\tfeature/both\t%s\tremote' "$remote_tip")" ]
+	[ "$(delta_row feature/both local)" = "$(printf 'delta\tfeature/both\t%s\tlocal' "$local_tip")" ]
+	n="$(printf '%s\n' "$output" | grep -c '^delta' || true)"
+	[ "$n" -eq 2 ]
+	# Stable order: remote first, then local — never a collapsed OR tip.
+	first="$(printf '%s\n' "$output" | awk -F'\t' '$1=="delta"{print $4; exit}')"
+	[ "$first" = "remote" ]
 }

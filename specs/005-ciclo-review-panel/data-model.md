@@ -115,8 +115,9 @@ se persiste**: si el asistente se cancela, no queda nada.
 
 **Reglas de validez, todas leídas del reporte de la CLI y ninguna adivinada**:
 
-- `range = delta` sólo se ofrece si el reporte indica que hay un punto de
-  referencia previo para esa rama (FR-015).
+- `range = delta` sólo se ofrece si el reporte indica un punto de referencia
+  previo **para el source elegido** (fila `delta` con `origin` matching;
+  FR-015). Un marker del otro origen no habilita el rango.
 - Con `source = local` u `offline`, las candidatas que se ofrecen son las de
   origen `local`; con `remote`, las remotas.
 - Todo lo demás —working tree sucio, review ya existente, rama que no resuelve—

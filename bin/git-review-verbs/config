@@ -203,17 +203,19 @@ porcelain)
 	candidate_branches "$remote_val"
 
 	if [ -n "$branch" ]; then
-		# Same pair of keys start reads to warn about new commits since the last
-		# review (bin/git-review-verbs/start:157-193): a remote review markers a
-		# plain reviewworkflow.<branch>.reviewed, a --local/--offline one its own
-		# reviewworkflowlocal.<branch>.reviewed, kept apart so the two never
-		# overwrite each other's progress for a branch of the same name.
-		tip="$(git config "reviewworkflow.$branch.reviewed" || true)"
-		if [ -z "$tip" ]; then
-			tip="$(git config "reviewworkflowlocal.$branch.reviewed" || true)"
+		# Same pair of keys start reads for --delta (bin/git-review-verbs/start):
+		# a remote review stores reviewworkflow.<branch>.reviewed; a
+		# --local/--offline one stores reviewworkflowlocal.<branch>.reviewed.
+		# Emit zero, one or two rows — never OR them into a single tip — so a
+		# consumer can offer --delta only for the source that actually has a
+		# marker (start --offline --delta must not see a remote-only tip).
+		remote_tip="$(git config "reviewworkflow.$branch.reviewed" || true)"
+		local_tip="$(git config "reviewworkflowlocal.$branch.reviewed" || true)"
+		if [ -n "$remote_tip" ]; then
+			porcelain_row delta "$branch" "$remote_tip" remote
 		fi
-		if [ -n "$tip" ]; then
-			porcelain_row delta "$branch" "$tip"
+		if [ -n "$local_tip" ]; then
+			porcelain_row delta "$branch" "$local_tip" local
 		fi
 	fi
 	;;

@@ -292,8 +292,9 @@ propio VS Code documenta como *multi-step input*—, con este recorrido:
    commit* (`--step`), *Ignorar el walkthrough* (`--no-walk`).
 3. **Origen** — remoto / local / local sin red. Siempre visible (FR-016); la
    preferencia `gitReview.defaultSource` sólo preselecciona el ítem.
-4. **Rango** — sólo si `config --porcelain <rama>` reporta registro `delta`
-   (FR-015): full o sólo lo nuevo (`--delta`).
+4. **Rango** — sólo si `config --porcelain <rama>` reporta un `delta` cuyo
+   `origin` coincide con el source elegido (FR-015): full o sólo lo nuevo
+   (`--delta`). Un marker del otro eje no habilita el rango.
 5. **Confirmación** — una frase con la review resultante (FR-017).
 
 **Rationale**: el `QuickPick` es la superficie nativa para elegir de una lista y

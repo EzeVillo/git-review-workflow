@@ -95,7 +95,7 @@ condicional que se ejercita una vez cada mil.
 | `<rama>` | El `name` de una `candidate`, verbatim, precedido por `--` | Siempre, explícito. Nunca se omite para "usar la actual": lo que el usuario eligió se dice. |
 | `--base <rama>` | El `name` de una `candidate` | Nunca por ahora. La base sale de la configuración; si falta, se fija con `config` **antes**, no se pasa por línea de comandos — así lo que el revisor eligió queda para la próxima vez (FR-010a). |
 | `--step` / `--no-walk` | `ReviewIntent.layout` | Mutuamente excluyentes. `layout = auto` no pasa ninguno. |
-| `--delta` | `ReviewIntent.range` | Sólo si el registro `delta` existe para esa rama. |
+| `--delta` | `ReviewIntent.range` | Sólo si existe un registro `delta` cuyo `origin` coincide con el source elegido (`remote` → `remote`; `local`/`offline` → `local`). |
 | `--local` / `--offline` | `ReviewIntent.source` | Mutuamente excluyentes. `source = remote` no pasa ninguno. |
 
 **Prohibidos explícitamente**: `--from <commit>` (no hay superficie que lo

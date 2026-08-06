@@ -1,4 +1,5 @@
 import * as assert from "node:assert";
+import * as cp from "node:child_process";
 import * as vscode from "vscode";
 import {getTestApi} from "./helpers/extensionApi";
 import {
@@ -7,6 +8,7 @@ import {
     addWalkthrough,
     createBranchWithChanges,
     git,
+    gitReview,
     removeOrigin,
     sharedFixtureRepo,
     withBaseConfigured,
@@ -222,6 +224,119 @@ describe("US1: empezar a revisar sin escribir el comando", function () {
         const state = await api.refresh();
         assert.strictEqual(state.situation, "review");
         assert.strictEqual(state.state?.source, branch);
+    });
+
+    /**
+     * FR-015 / bug delta×source: un marker remoto no habilita el paso de
+     * rango cuando el origen elegido es Offline (start --offline --delta
+     * sólo lee reviewworkflowlocal.*). Antes porcelain hacía OR de las dos
+     * claves y el wizard ofrecía "Only what is new" → la CLI rechazaba.
+     */
+    it("marker remoto solo: Offline no ofrece rango; Remote si (delta x source)", async () => {
+        const branch = "us1-delta-source";
+        createBranchWithChanges(repo, branch, {"src/a.ts": "a\n"});
+        git(["checkout", branch], repo.dir);
+        const tip = git(["rev-parse", "HEAD"], repo.dir).trim();
+        // Solo el eje remoto: el local debe quedar ausente.
+        git(["config", `reviewworkflow.${branch}.reviewed`, tip], repo.dir);
+        cp.spawnSync("git", ["config", "--unset", `reviewworkflowlocal.${branch}.reviewed`], {
+            cwd: repo.dir,
+            encoding: "utf8",
+        });
+
+        const api = await getTestApi();
+        assert.strictEqual((await api.refresh()).situation, "no-review");
+
+        // Precondición del fixture: la CLI real reporta remote y no local.
+        const porcelain = gitReview(["config", "--porcelain", "--", branch], repo.dir);
+        assert.strictEqual(porcelain.status, 0, porcelain.stderr);
+        assert.match(
+            porcelain.stdout,
+            new RegExp(`^delta\\t${branch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\t${tip}\\tremote$`, "m")
+        );
+        assert.doesNotMatch(porcelain.stdout, /^delta\t.*\tlocal$/m);
+
+        const originalQuickPick = vscode.window.showQuickPick;
+        const originalWarning = vscode.window.showWarningMessage;
+
+        async function runWizard(sourceLabel: string): Promise<string[]> {
+            const stepKinds: string[] = [];
+            (vscode.window as unknown as {showQuickPick: unknown}).showQuickPick = async (
+                items: readonly WizardItem[]
+            ) => {
+                const sample = items[0];
+                if (sample?.layout !== undefined) {
+                    stepKinds.push("layout");
+                    return items.find((item) => item.label === "Automatic");
+                }
+                if (sample?.source !== undefined) {
+                    stepKinds.push("source");
+                    const picked = items.find((item) => item.label === sourceLabel);
+                    assert.ok(picked, `expected source item "${sourceLabel}"`);
+                    return picked;
+                }
+                if (sample?.range !== undefined) {
+                    stepKinds.push("range");
+                    // Full range: si el paso se ofrece indebidamente y se eligiera
+                    // "Only what is new", start fallaría; acá lo que importa es
+                    // si el paso aparece o no.
+                    return items.find((item) => item.label === "Full range");
+                }
+                stepKinds.push("branch");
+                // Por nombre: tras abort HEAD vuelve a main, y pickCurrent
+                // elegiría una rama sin el marker del caso.
+                const picked = items.find((item) => item.candidate?.name === branch);
+                assert.ok(picked, `expected candidate branch ${branch}`);
+                return picked;
+            };
+            (vscode.window as unknown as {showWarningMessage: unknown}).showWarningMessage =
+                async () => "Start the review";
+            try {
+                await vscode.commands.executeCommand("gitReview.startReview");
+            } finally {
+                (vscode.window as unknown as {showQuickPick: unknown}).showQuickPick =
+                    originalQuickPick;
+                (vscode.window as unknown as {showWarningMessage: unknown}).showWarningMessage =
+                    originalWarning;
+            }
+            return stepKinds;
+        }
+
+        try {
+            // 1) Offline + solo marker remoto → NO rango (el bug).
+            const offlineSteps = await runWizard("Offline");
+            assert.ok(offlineSteps.includes("source"), "se eligio origen Offline");
+            assert.ok(
+                !offlineSteps.includes("range"),
+                "marker remoto no debe ofrecer --delta con Offline"
+            );
+            let state = await api.refresh();
+            assert.strictEqual(state.situation, "review", "start offline full debe completar");
+            assert.strictEqual(state.state?.source, branch);
+            abortReview(repo);
+            assert.strictEqual((await api.refresh()).situation, "no-review");
+
+            // 2) Control: Remote + marker remoto → SÍ rango (el marker no es decorativo).
+            const remoteSteps = await runWizard("Remote");
+            assert.ok(remoteSteps.includes("source"), "se eligio origen Remote");
+            assert.ok(
+                remoteSteps.includes("range"),
+                "marker remoto debe ofrecer el paso de rango con Remote"
+            );
+            state = await api.refresh();
+            assert.strictEqual(state.situation, "review", "start remote full debe completar");
+            assert.strictEqual(state.state?.source, branch);
+        } finally {
+            // No dejar markers en el fixture compartido para los tests siguientes.
+            cp.spawnSync("git", ["config", "--unset", `reviewworkflow.${branch}.reviewed`], {
+                cwd: repo.dir,
+                encoding: "utf8",
+            });
+            cp.spawnSync("git", ["config", "--unset", `reviewworkflowlocal.${branch}.reviewed`], {
+                cwd: repo.dir,
+                encoding: "utf8",
+            });
+        }
     });
 
     it("sin base configurada, el asistente no se abre sin resolverla primero", async () => {

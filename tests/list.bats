@@ -83,7 +83,9 @@ teardown() {
 	run git review list
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"review-saved/orphan"* ]]
-	[[ "$output" == *"(no metadata)"* ]]
+	[[ "$output" == *"(no metadata"* ]]
+	# Recovery: forget --saved uses the source name (suffix), not the full ref.
+	[[ "$output" == *"git review forget --saved orphan"* ]]
 	[[ "$output" != *"no reviews in progress"* ]]
 }
 
@@ -96,7 +98,9 @@ teardown() {
 	[[ "$output" == *"review/feature/x"* ]]
 	[[ "$output" == *"whole"* ]]
 	[[ "$output" == *"review/orphan"* ]]
-	[[ "$output" == *"(no metadata)"* ]]
+	[[ "$output" == *"(no metadata"* ]]
+	# Active orphan: abort cannot run without reviewsource — point at branch -D.
+	[[ "$output" == *"git branch -D review/orphan"* ]]
 }
 
 @test "review list rejects unexpected arguments" {

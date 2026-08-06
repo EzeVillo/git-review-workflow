@@ -124,10 +124,37 @@ const FINISH_TEST_BRANCHES = [
     "us4-undo-clean",
     "us4-undo-force",
     "us4-undo-dismiss-force",
+    "us4-undo-from-main",
+    "us4-clean-on-fixes",
+    "us4-clean-from-main",
     "us4-resume-nav",
     "us4-resume-resolve",
     "us4-resume-onto",
 ];
+
+/** Sale de review-fixes/* (con edits staged) a main, como el sandbox / CLI. */
+function switchAwayToMain(repo: FixtureRepo): void {
+    try {
+        git(["switch", "--quiet", "--discard-changes", "main"], repo.dir);
+    } catch {
+        git(["reset", "--quiet", "--hard"], repo.dir);
+        git(["clean", "--quiet", "-fd"], repo.dir);
+        git(["switch", "--quiet", "main"], repo.dir);
+    }
+    git(["reset", "--quiet", "--hard"], repo.dir);
+    git(["clean", "--quiet", "-fd"], repo.dir);
+    assert.strictEqual(headBranch(repo), "main");
+}
+
+function finishLineFor(repo: FixtureRepo, branch: string): string | undefined {
+    return listPorcelain(repo)
+        .split("\n")
+        .find((l) => l.startsWith(`finish\treview/${branch}\t`));
+}
+
+function branchExists(repo: {dir: string}, name: string): boolean {
+    return git(["branch", "--list", name], repo.dir).trim().length > 0;
+}
 
 function tryDelete(repo: { dir: string }, ref: string): void {
     try {
@@ -226,6 +253,10 @@ describe("US3 (005): quedarse con las ediciones al terminar", function () {
         assert.strictEqual(state.situation, "finish-pending");
         const model = await api.getPanelModel();
         assert.deepStrictEqual(model.pendingFinish, {branch: `review/${branch}`, onto: false});
+        // Pantalla de post-cierre: sin inventario ni empty-state Start/base.
+        assert.deepStrictEqual(model.reviews, []);
+        assert.strictEqual(model.noBaseConfigured, false);
+        assert.strictEqual(model.configuredBase, undefined);
     });
 
     it("elegir 'Onto the PR branch itself' deja las ediciones sobre la rama del PR, con onto=1 (T053)", async () => {
@@ -332,7 +363,7 @@ describe("US4 (005): deshacer un cierre o destrabar uno a mitad", function () {
         }
     });
 
-    // ── T055: undoFinish ──────────────────────────────────────────────────
+    // ── T055: undoFinish / clean desde finish-pending (cualquier HEAD) ────
 
     it("undoFinish sobre un pending sin tocar restaura review/<src> con las ediciones intactas (T055)", async () => {
         const branch = "us4-undo-clean";
@@ -457,10 +488,141 @@ describe("US4 (005): deshacer un cierre o destrabar uno a mitad", function () {
         );
 
         // El punto de undo sigue vivo: el cierre pending no se resolvio.
-        const finishLine = listPorcelain(repo)
-            .split("\n")
-            .find((l) => l.startsWith(`finish\treview/${branch}\t`));
-        assert.strictEqual(finishLine, `finish\treview/${branch}\tpending\t0`);
+        assert.strictEqual(finishLineFor(repo, branch), `finish\treview/${branch}\tpending\t0`);
+    });
+
+    it("undoFinish desde main (fuera de review-fixes) restaura la review (T055)", async () => {
+        // El pending es del repo: Clean/Undo no dependen de estar en review-fixes.
+        const branch = "us4-undo-from-main";
+        createBranchWithChanges(repo, branch, {"src/a.ts": "a\n"});
+        git(["checkout", branch], repo.dir);
+
+        const api = await getTestApi();
+        startReview(repo, branch);
+        writeFile(repo, "src/a.ts", "a\nedited-off-branch\n");
+        gitReviewOrThrow(["finish"], repo.dir);
+        assert.strictEqual(headBranch(repo), `review-fixes/${branch}`);
+        assert.strictEqual((await api.refresh()).situation, "finish-pending");
+
+        switchAwayToMain(repo);
+        // HEAD ya no es review-fixes; situation sigue finish-pending (list).
+        let state = await api.refresh();
+        assert.strictEqual(state.situation, "finish-pending");
+        assert.strictEqual(headBranch(repo), "main");
+        const model = await api.getPanelModel();
+        assert.deepStrictEqual(model.pendingFinish, {branch: `review/${branch}`, onto: false});
+        assert.deepStrictEqual(model.reviews, [], "sin inventario en finish-pending");
+
+        await withScriptedConfirms(["Undo Finish"], () =>
+            vscode.commands.executeCommand("gitReview.undoFinish")
+        );
+
+        assert.strictEqual(headBranch(repo), `review/${branch}`);
+        const diff = git(["diff", "HEAD"], repo.dir);
+        assert.ok(diff.includes("edited-off-branch"), "edits restauradas tras abort desde main");
+        assert.strictEqual(finishLineFor(repo, branch), undefined, "finish pending se fue");
+        assert.strictEqual(branchExists(repo, `review-fixes/${branch}`), false);
+
+        state = await api.refresh();
+        assert.strictEqual(state.situation, "review");
+    });
+
+    it("clean desde finish-pending en review-fixes elimina undo y deja no-review (T055)", async () => {
+        // Estando en review-fixes, clean skipea esa rama: se va review/ + undo,
+        // quedan las edits staged en review-fixes (entregable).
+        const branch = "us4-clean-on-fixes";
+        createBranchWithChanges(repo, branch, {"src/a.ts": "a\n"});
+        git(["checkout", branch], repo.dir);
+
+        const api = await getTestApi();
+        startReview(repo, branch);
+        writeFile(repo, "src/a.ts", "a\nclean-keeps-staged\n");
+        gitReviewOrThrow(["finish"], repo.dir);
+        assert.strictEqual(headBranch(repo), `review-fixes/${branch}`);
+        assert.strictEqual((await api.refresh()).situation, "finish-pending");
+
+        const deltaKey = `reviewworkflow.${branch}.reviewed`;
+        const deltaBefore = configGet(repo, deltaKey);
+
+        await withScriptedConfirms(["Clean"], () =>
+            vscode.commands.executeCommand("gitReview.cleanReview")
+        );
+
+        assert.strictEqual(headBranch(repo), `review-fixes/${branch}`, "sigue en el entregable");
+        assert.strictEqual(
+            reviewBranchExists(repo, branch),
+            false,
+            "review/<src> (undo) tiene que borrarse"
+        );
+        assert.strictEqual(
+            branchExists(repo, `review-fixes/${branch}`),
+            true,
+            "review-fixes se skipea al estar checked out"
+        );
+        const staged = git(["diff", "--cached"], repo.dir);
+        assert.ok(staged.includes("clean-keeps-staged"), "edits staged tienen que sobrevivir");
+        assert.strictEqual(finishLineFor(repo, branch), undefined, "finish pending se fue");
+        assert.strictEqual(
+            configGet(repo, deltaKey),
+            deltaBefore,
+            "clean no toca el marcador --delta"
+        );
+
+        const state = await api.refresh();
+        assert.strictEqual(state.situation, "no-review");
+        const model = await api.getPanelModel();
+        assert.strictEqual(model.pendingFinish, undefined);
+        assert.strictEqual(model.situation, "no-review");
+    });
+
+    it("clean desde finish-pending en main elimina review y review-fixes (T055)", async () => {
+        // Desde otra rama, clean borra las dos familias de leftovers del source.
+        const branch = "us4-clean-from-main";
+        createBranchWithChanges(repo, branch, {"src/a.ts": "a\n"});
+        git(["checkout", branch], repo.dir);
+
+        const api = await getTestApi();
+        startReview(repo, branch);
+        writeFile(repo, "src/a.ts", "a\nwill-go-with-clean\n");
+        gitReviewOrThrow(["finish"], repo.dir);
+        assert.strictEqual((await api.refresh()).situation, "finish-pending");
+
+        // Commitear en review-fixes para que al ir a main no se pierda el
+        // contenido solo por un switch: el test afirma el -D de la rama.
+        git(["add", "-A"], repo.dir);
+        git(["commit", "-m", "fixes commit before clean"], repo.dir);
+        const fixesSha = git(["rev-parse", "HEAD"], repo.dir).trim();
+
+        switchAwayToMain(repo);
+        assert.strictEqual((await api.refresh()).situation, "finish-pending");
+        assert.strictEqual(headBranch(repo), "main");
+        assert.ok(branchExists(repo, `review-fixes/${branch}`));
+        assert.ok(reviewBranchExists(repo, branch));
+
+        await withScriptedConfirms(["Clean"], () =>
+            vscode.commands.executeCommand("gitReview.cleanReview")
+        );
+
+        assert.strictEqual(headBranch(repo), "main");
+        assert.strictEqual(reviewBranchExists(repo, branch), false, "review/ borrada");
+        assert.strictEqual(
+            branchExists(repo, `review-fixes/${branch}`),
+            false,
+            "review-fixes/ borrada al no estar checked out"
+        );
+        // El commit local ya no es alcanzable por esa rama (branch -D).
+        try {
+            git(["rev-parse", "--verify", `refs/heads/review-fixes/${branch}`], repo.dir);
+            assert.fail("review-fixes no deberia resolverse");
+        } catch {
+            // esperado
+        }
+        void fixesSha;
+
+        assert.strictEqual(finishLineFor(repo, branch), undefined);
+        const state = await api.refresh();
+        assert.strictEqual(state.situation, "no-review");
+        assert.strictEqual((await api.getPanelModel()).pendingFinish, undefined);
     });
 
     // ── T056: resumeFinish + navigationLocked + onto ──────────────────────

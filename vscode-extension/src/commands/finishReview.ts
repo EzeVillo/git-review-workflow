@@ -61,6 +61,14 @@ export async function finishReview(
     if (state.situation !== "review" || !state.state) {
         return;
     }
+    // Defensa: la UI ya oculta Finish con gitReview.readonly; la CLI también
+    // rechazaría. No abrir el QuickPick de destino si no hay a dónde escribir.
+    if (state.readonly) {
+        void vscode.window.showInformationMessage(
+            "This is a read-only compare review; there is nothing to finish. Use Cancel when done."
+        );
+        return;
+    }
     const branch = state.state.branch;
     const source = state.state.source;
     const token = captureToken(state);

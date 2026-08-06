@@ -69,10 +69,19 @@ describe() {
 	# A branch with no reviewsource is an orphan: either hand-made, or left by a
 	# git review save / git review start that died after creating the branch but before
 	# writing its metadata. Surface it instead of skipping silently — otherwise an
-	# orphan-only state prints nothing at all — so it can be cleaned up (e.g. with
-	# git review forget --saved).
+	# orphan-only state prints nothing at all — and name the cleanup command so the
+	# line is actionable (abort cannot run without reviewsource).
 	if [ -z "$src" ]; then
-		printf '%s %s  %s(no metadata)\n' "$label" "$b" "$prefix"
+		case "$b" in
+		review-saved/*)
+			printf '%s %s  %s(no metadata — discard with: git review forget --saved %s)\n' \
+				"$label" "$b" "$prefix" "${b#review-saved/}"
+			;;
+		*)
+			printf '%s %s  %s(no metadata — switch away, then: git branch -D %s)\n' \
+				"$label" "$b" "$prefix" "$b"
+			;;
+		esac
 		return
 	fi
 	tip="$(git config "branch.$b.reviewtip" || true)"

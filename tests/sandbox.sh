@@ -529,7 +529,7 @@ bank_i18n() {
 
 if bank_search && bank_i18n; then
 	# A saved branch with no metadata behind it: hand-made, or left by an older
-	# version. The inventory shows it as an orphan and offers nothing.
+	# version. The inventory shows it as an orphan with the forget --saved fix.
 	git branch --quiet review-saved/feature/refunds develop
 	saved_reviews=1
 else
@@ -689,7 +689,7 @@ state) reads — three saved reviews, one resumable and two not:
 
   review-saved/feature/search   walk 2/3, resumable
   review-saved/feature/i18n     blocked: review/feature/i18n is already active
-  review-saved/feature/refunds  no metadata behind it (hand-made branch)
+  review-saved/feature/refunds  no metadata (discard: git review forget --saved feature/refunds)
 
 Finish-unresolved states left for the panel (list --porcelain / status):
 

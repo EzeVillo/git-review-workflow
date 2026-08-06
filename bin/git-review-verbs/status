@@ -78,7 +78,11 @@ src="$(git config "branch.$cur.reviewsource" || true)"
 tip="$(git config "branch.$cur.reviewtip" || true)"
 mode="$(git config "branch.$cur.reviewmode" || echo whole)"
 if [ -z "$src" ] || [ -z "$tip" ]; then
-	echo "error: missing review metadata; was $cur created with git review start?" >&2
+	if [ -z "$src" ]; then
+		echo "error: missing review metadata; was $cur created with git review start? Switch away, then delete it with 'git branch -D $cur'." >&2
+	else
+		echo "error: missing review metadata; was $cur created with git review start? Discard the review with 'git review abort'." >&2
+	fi
 	exit 1
 fi
 
@@ -225,11 +229,21 @@ if [ "$porcelain" -eq 1 ]; then
 			porcelain_row finish conflict "$ponto"
 		fi
 	fi
+	# compare (git review compare): reviewreadonly=1 means finish will refuse.
+	# Separate record, omitted when not set — additive, same pattern as base/finish.
+	if [ "$(git config "branch.$cur.reviewreadonly" || true)" = "1" ]; then
+		porcelain_row readonly
+	fi
 	exit 0
 fi
 
 printf 'review of %s (tip %s)\n' "$src" "$(git rev-parse --short "$tip")"
 printf '  branch  %s\n' "$cur"
+# Not named "readonly": that is a shell special builtin and would break assignment.
+is_readonly="$(git config "branch.$cur.reviewreadonly" || true)"
+if [ "$is_readonly" = "1" ]; then
+	printf '  note    read-only compare — git review finish will refuse; abort or clean when done\n'
+fi
 
 if [ "$mode" = "step" ]; then
 	count="$(git config "branch.$cur.reviewcount" || true)"
@@ -239,7 +253,7 @@ if [ "$mode" = "step" ]; then
 	# let set -e kill the bare read silently mid-script; read with || true and report
 	# it. reviewstep falls through to the numeric guard below for a precise message.
 	if [ -z "$count" ] || [ -z "$start" ]; then
-		echo "error: missing review metadata; was $cur created with git review start?" >&2
+		echo "error: missing review metadata; was $cur created with git review start? Discard the review with 'git review abort'." >&2
 		exit 1
 	fi
 	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
@@ -249,12 +263,12 @@ if [ "$mode" = "step" ]; then
 	total="$(printf '%s\n' "$commits" | grep -c .)"
 	case "$step" in
 	'' | *[!0-9]*)
-		echo "error: corrupt review metadata: reviewstep is '$step', not a positive integer" >&2
+		echo "error: corrupt review metadata: reviewstep is '$step', not a positive integer. Discard the review with 'git review abort'." >&2
 		exit 1
 		;;
 	esac
 	if [ "$step" -lt 1 ] || [ "$step" -gt "$total" ]; then
-		echo "error: review step $step out of range (1..$total) — corrupt metadata?" >&2
+		echo "error: review step $step out of range (1..$total) — corrupt metadata? Discard the review with 'git review abort'." >&2
 		exit 1
 	fi
 	cnow="$(printf '%s\n' "$commits" | sed -n "${step}p")"
@@ -283,7 +297,11 @@ if [ "$mode" = "step" ]; then
 
 	hint="git review next"
 	[ "$step" -gt 1 ] && hint="$hint / git review prev"
-	printf '  next    edit, then %s  (git review finish when done)\n' "$hint"
+	if [ "$is_readonly" = "1" ]; then
+		printf '  next    read, then %s  (read-only compare; finish refuses)\n' "$hint"
+	else
+		printf '  next    edit, then %s  (git review finish when done)\n' "$hint"
+	fi
 elif [ "$mode" = "walk" ]; then
 	# Re-derive the reading sequence to report the live [k/N] and current path, the
 	# same way the walk commands do.
@@ -293,7 +311,7 @@ elif [ "$mode" = "walk" ]; then
 	total="$(printf '%s\n' "$walkpaths" | grep -c . || true)"
 	case "$walkstep" in
 	'' | *[!0-9]*)
-		echo "error: corrupt review metadata: reviewwalkstep is '$walkstep', not a positive integer" >&2
+		echo "error: corrupt review metadata: reviewwalkstep is '$walkstep', not a positive integer. Discard the review with 'git review abort'." >&2
 		exit 1
 		;;
 	esac
@@ -312,7 +330,11 @@ elif [ "$mode" = "walk" ]; then
 	printf '  mode    walk  [%s/%s] on %s%s\n' "$walkstep" "$total" "$pnow" "$mark"
 	hint="git review next"
 	[ "$walkstep" -gt 1 ] && hint="$hint / git review prev"
-	printf '  next    read, then %s  (git review finish when done)\n' "$hint"
+	if [ "$is_readonly" = "1" ]; then
+		printf '  next    read, then %s  (read-only compare; finish refuses)\n' "$hint"
+	else
+		printf '  next    read, then %s  (git review finish when done)\n' "$hint"
+	fi
 else
 	base="$(git config "branch.$cur.reviewbase" || true)"
 	printf '  mode    whole%s\n' "${base:+  (base $base)}"
@@ -331,5 +353,9 @@ else
 			i=$((i + 1))
 		done
 	fi
-	printf '  next    edit, then git review finish\n'
+	if [ "$is_readonly" = "1" ]; then
+		printf '  next    read (read-only compare; finish refuses)\n'
+	else
+		printf '  next    edit, then git review finish\n'
+	fi
 fi

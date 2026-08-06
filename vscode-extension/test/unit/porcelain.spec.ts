@@ -260,6 +260,22 @@ describe("parsePorcelain", () => {
         ].join("\n");
         assert.strictEqual(parsePorcelain(out).finish, undefined);
     });
+
+    // ── readonly (compare, reviewreadonly=1) ────────────────────────────────
+
+    it("registro readonly marca la review de solo lectura (compare)", () => {
+        const out = [
+            "state\treview/v2.0\tv2.0\tabc123\twhole\tnone",
+            "readonly",
+            "",
+        ].join("\n");
+        assert.strictEqual(parsePorcelain(out).readonly, true);
+    });
+
+    it("sin registro readonly el campo queda ausente, no false inventado", () => {
+        const out = "state\treview/feat-x\torigin/feat-x\tabc123\twhole\tnone\n";
+        assert.strictEqual(parsePorcelain(out).readonly, undefined);
+    });
 });
 
 describe("parseListPorcelain", () => {

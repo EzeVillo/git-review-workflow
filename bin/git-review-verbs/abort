@@ -43,7 +43,7 @@ esac
 
 src="$(git config "branch.$cur.reviewsource" || true)"
 [ -n "$src" ] || {
-	echo "error: missing review metadata; was $cur created with git review start?" >&2
+	echo "error: missing review metadata; was $cur created with git review start? Switch away, then delete it with 'git branch -D $cur'." >&2
 	exit 1
 }
 base="$(git config "branch.$cur.reviewbase" || true)"

@@ -249,7 +249,11 @@ export async function startReview(
     stateManager: ReviewStateManager,
     getInvokeOptions: () => InvokeOptions
 ): Promise<void> {
-    if (stateManager.state.situation !== "no-review") {
+    // finish-pending is still an empty working branch: a leftover finish of
+    // another source must not block starting a different review (CLI start only
+    // refuses when review/<that-source> already exists).
+    const situation = stateManager.state.situation;
+    if (situation !== "no-review" && situation !== "finish-pending") {
         return;
     }
 

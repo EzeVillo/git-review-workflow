@@ -34,20 +34,33 @@ const NETWORK_MUTATION_TIMEOUT_MS = 300000;
 // Mutación local: replica ediciones o mueve refs sin tocar la red, pero puede
 // recorrer un PR grande commit por commit — un timeout de lectura la mataría
 // a mitad (research.md Decisión 6 de `005`).
-const LOCAL_MUTATION_VERBS = new Set(["finish", "save", "abort", "continue", "next", "prev"]);
-// Sólo `start` hace `fetch`; es la única invocación que puede esperar a un
-// remoto lento además de replicar el diff completo del PR.
+const LOCAL_MUTATION_VERBS = new Set([
+    "finish",
+    "save",
+    "abort",
+    "continue",
+    "next",
+    "prev",
+    "clean",
+    "forget",
+    "compare",
+    "walkthrough",
+]);
+// `start` hace fetch del tip; `forget --delta --stale` hace fetch --prune.
+// El resto de forget es local — ver timeoutForClass + args.
 const NETWORK_MUTATION_VERBS = new Set(["start"]);
 
 /**
- * Timeout según la clase de la invocación (research.md Decisión 6 de `005`).
- * La clasificación depende sólo de `verb`; `args` está por forma — ningún
- * verbo de la tabla tiene una variante de argumentos que cambie de clase. Un
- * verbo desconocido se trata como lectura, el default más conservador: nada
- * hoy amerita un timeout largo sin estar en la tabla.
+ * Timeout según la clase de la invocación (research.md Decisión 6 de `005`,
+ * enmienda `006` para clean/forget/compare/walkthrough y forget --stale).
+ * Un verbo desconocido se trata como lectura, el default más conservador.
  */
-export function timeoutForClass(verb: string, _args: string[]): number {
+export function timeoutForClass(verb: string, args: string[]): number {
     if (NETWORK_MUTATION_VERBS.has(verb)) {
+        return NETWORK_MUTATION_TIMEOUT_MS;
+    }
+    // forget --delta --stale: fetch; el único caso donde args cambian la clase.
+    if (verb === "forget" && args.includes("--stale")) {
         return NETWORK_MUTATION_TIMEOUT_MS;
     }
     if (LOCAL_MUTATION_VERBS.has(verb)) {

@@ -3,15 +3,20 @@ import {InvokeOptions} from "./cli/invoke";
 import {EntryRecord} from "./cli/porcelain";
 import {PathRef} from "./cli/unquote";
 import {abortReview} from "./commands/abortReview";
+import {cleanReview} from "./commands/cleanReview";
+import {compareReview} from "./commands/compareReview";
 import {continueReview} from "./commands/continueReview";
+import {discardInventoryReview, forgetReview} from "./commands/forgetReview";
 import {finishReview, resumeFinish, undoFinish} from "./commands/finishReview";
 import {saveReview} from "./commands/saveReview";
 import {installOrUpdateCli, showOutOfRangeHelp} from "./commands/installOrUpdateCli";
 import {navigate} from "./commands/navigate";
 import {openChange, openEntry, openRangeChanges} from "./commands/openEntry";
 import {pickEntry} from "./commands/pickEntry";
+import {previewEdits} from "./commands/previewEdits";
 import {setBase} from "./commands/setBase";
 import {startReview} from "./commands/startReview";
+import {walkthroughBuild, walkthroughInit} from "./commands/walkthrough";
 import {
     ensureGitApi,
     GitApi,
@@ -184,6 +189,8 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
         void vscode.commands.executeCommand("setContext", "gitReview.situation", state.situation);
         void vscode.commands.executeCommand("setContext", "gitReview.mode", state.state?.mode);
         void vscode.commands.executeCommand("setContext", "gitReview.busy", lock.isBusy);
+        // Compare: finish se oculta en view/title y palette (package.json when).
+        void vscode.commands.executeCommand("setContext", "gitReview.readonly", state.readonly === true);
     }
 
     function updateView(state: ReviewState): void {
@@ -221,12 +228,19 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
             setBase: "gitReview.setBase",
             undoFinish: "gitReview.undoFinish",
             resumeFinish: "gitReview.resumeFinish",
+            discardInventory: "gitReview.discardInventory",
+            cleanReview: "gitReview.cleanReview",
+            compareReview: "gitReview.compareReview",
+            walkthroughInit: "gitReview.walkthroughInit",
+            walkthroughBuild: "gitReview.walkthroughBuild",
         };
         // El índice viaja tal cual y lo valida el comando contra el estado del
         // host (extension-surface.md § Protocolo): en el inventario resuelve una
         // fila, acá una entrada por `position` — la fila de whole no tiene una
         // "actual" a la que resolverArgEntry pueda caer por default.
-        if (message === "continueReview") {
+        // cleanReview desde finish-pending no lleva índice: el comando resuelve
+        // el source del pending desde state.
+        if (message === "continueReview" || message === "discardInventory") {
             void vscode.commands.executeCommand(commands[message], index);
             return;
         }
@@ -405,6 +419,22 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
             undoFinish(lock, stateManager, getInvokeOptions)),
         vscode.commands.registerCommand("gitReview.resumeFinish", () =>
             resumeFinish(lock, stateManager, getInvokeOptions)),
+        vscode.commands.registerCommand("gitReview.discardInventory", (index?: unknown) =>
+            discardInventoryReview(index, lock, stateManager, getInvokeOptions)),
+        vscode.commands.registerCommand("gitReview.cleanReview", (target?: unknown) =>
+            cleanReview(lock, stateManager, getInvokeOptions, target)),
+        vscode.commands.registerCommand("gitReview.forgetReview", () =>
+            forgetReview(lock, stateManager, getInvokeOptions)),
+        vscode.commands.registerCommand("gitReview.previewEdits", () =>
+            previewEdits(stateManager, getInvokeOptions, false)),
+        vscode.commands.registerCommand("gitReview.previewEditsStat", () =>
+            previewEdits(stateManager, getInvokeOptions, true)),
+        vscode.commands.registerCommand("gitReview.compareReview", () =>
+            compareReview(lock, stateManager, getInvokeOptions)),
+        vscode.commands.registerCommand("gitReview.walkthroughInit", () =>
+            walkthroughInit(lock, stateManager, getInvokeOptions)),
+        vscode.commands.registerCommand("gitReview.walkthroughBuild", () =>
+            walkthroughBuild(lock, stateManager, getInvokeOptions)),
         vscode.commands.registerCommand("gitReview.installCli", () => installOrUpdateCli()),
         vscode.commands.registerCommand("gitReview.showOutOfRangeHelp", () => showOutOfRangeHelp(stateManager.state.stderr))
     );

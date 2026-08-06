@@ -135,7 +135,9 @@ comportamiento por defecto, y equivocarse hacia el default es reversible.
 
 ### `git review finish --abort`
 
-**Cuándo**: con `finish pending` o `finish conflict` presente.
+**Cuándo**: con `finish pending` o `finish conflict` presente (en la rama
+actual o en el repositorio: la CLI resuelve el target; ver
+`contracts/finish-state.md` § abort).
 
 **Se consume**: el exit code y el `stderr`. Un rechazo por trabajo nuevo en la
 rama del cierre es un fallo **esperado**, no un error a esconder: su `stderr` es
@@ -196,7 +198,7 @@ frontera es la misma; lo que cambió es que ahora hay un verbo del otro lado.
 | Parsear `.review/walkthrough.md` | Sigue habiendo dos únicos puntos de normalización de paths |
 | Escribir config, mover refs o tocar el índice **directamente** | FR-005 — vía el verbo `config` sí; a mano no |
 | Parsear la salida humana de cualquier verbo | El contrato existe para no hacer esto — ver "Clasificar no es parsear" abajo |
-| Invocar `clean`, `forget`, `walkthrough`, `compare`, `preview` | Criterio de admisión: `clean`/`forget` no tienen inversa; `walkthrough` es flujo de autor; `compare`/`preview` no participan del ciclo |
+| Invocar `clean`, `forget`, `walkthrough`, `compare`, `preview` | **Enmendado por `006-superficie-panel-completa`**: ver `specs/006-superficie-panel-completa/contracts/cli-invocation.md` (confirmación sustituye a la inversa; lista cerrada de args) |
 | Pasar un argumento no enumerado en este documento | FR-002 — la lista es cerrada también en los argumentos |
 | Pasar `--force` sin la segunda confirmación | FR-021 |
 | Re-citar un `PathRef.display` para pasárselo a la CLI | Decisión 8 de `002` — el des-citado es unidireccional |

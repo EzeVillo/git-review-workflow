@@ -579,6 +579,67 @@ setup_conflict_pr() {
 	[[ "$output" == *"no finish to abort"* ]]
 }
 
+@test "abort from another branch undoes the only pending finish" {
+	# After finish HEAD is on review-fixes/*; walking away to develop is the
+	# sandbox / everyday case. --abort must still find the undo (not invent
+	# review/develop).
+	git review start feature/x develop
+	printf 'a1\na2\nWHOLEFIX\n' >a.txt
+	git review finish
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
+	# Staged edits on review-fixes block a plain switch; discard like the sandbox.
+	git switch --quiet --discard-changes develop 2>/dev/null || {
+		git reset --quiet --hard
+		git clean --quiet -fd
+		git switch --quiet develop
+	}
+	git reset --quiet --hard
+	git clean --quiet -fd
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "develop" ]
+
+	run git review finish --abort
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
+	[ -z "$(git rev-parse --verify --quiet refs/heads/review-fixes/feature/x || true)" ]
+	[ -z "$(git config branch.review/feature/x.reviewundohead || true)" ]
+	run git diff HEAD
+	[[ "$output" == *"WHOLEFIX"* ]]
+}
+
+@test "abort from another branch prefers the completed finish when a conflict undo also exists" {
+	# Sandbox shape: one pending (outhead set) + one mid-conflict (no outhead).
+	# From develop, abort the completed one without requiring a switch.
+	git review start feature/x develop
+	printf 'a1\na2\nWHOLEFIX\n' >a.txt
+	git review finish
+	git switch --quiet --discard-changes develop 2>/dev/null || {
+		git reset --quiet --hard
+		git clean --quiet -fd
+		git switch --quiet develop
+	}
+	git reset --quiet --hard
+	git clean --quiet -fd
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "develop" ]
+	[ -n "$(git config branch.review/feature/x.reviewundohead || true)" ]
+	[ -n "$(git config branch.review/feature/x.reviewundoouthead || true)" ]
+
+	# Second undo without outhead (list would report finish conflict): same keys
+	# list uses, enough for the scan to see two undos.
+	git branch review/feature/z develop
+	git config branch.review/feature/z.reviewsource feature/z
+	git config branch.review/feature/z.reviewmode whole
+	git config branch.review/feature/z.reviewundohead "$(git rev-parse develop)"
+	git config branch.review/feature/z.reviewresume conflict
+	git update-ref refs/review-undo/feature/z/index "$(git commit-tree "$(git rev-parse develop^{tree})" -m z-idx)"
+	git update-ref refs/review-undo/feature/z/worktree "$(git commit-tree "$(git rev-parse develop^{tree})" -m z-wt)"
+
+	run git review finish --abort
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
+	[ -z "$(git config branch.review/feature/x.reviewundohead || true)" ]
+	[ -n "$(git config branch.review/feature/z.reviewundohead || true)" ]
+}
+
 @test "a second abort fails: there is no longer a finish to undo" {
 	git review start feature/x develop
 	printf 'a1\na2\nWHOLEFIX\n' >a.txt

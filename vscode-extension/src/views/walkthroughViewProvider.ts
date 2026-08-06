@@ -25,6 +25,15 @@ export const PANEL_MESSAGES = [
     // banner del panel, no en el chrome.
     "undoFinish",
     "resumeFinish",
+    // Housekeeping (006): fila del inventario → índice como continueReview.
+    "discardInventory",
+    // finish-pending: clean del source del pending (sin índice; el host
+    // resuelve desde state). También palette con picker.
+    "cleanReview",
+    // Superficie del empty state (006): solo se dibujan en no-review.
+    "compareReview",
+    "walkthroughInit",
+    "walkthroughBuild",
 ] as const;
 
 export type PanelMessage = (typeof PANEL_MESSAGES)[number];

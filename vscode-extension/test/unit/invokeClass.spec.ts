@@ -9,20 +9,36 @@ describe("timeoutForClass", () => {
     });
 
     it("120000 para mutaciones locales", () => {
-        for (const verb of ["finish", "save", "abort", "continue", "next", "prev"]) {
+        for (const verb of [
+            "finish",
+            "save",
+            "abort",
+            "continue",
+            "next",
+            "prev",
+            "clean",
+            "forget",
+            "compare",
+            "walkthrough",
+        ]) {
             assert.strictEqual(timeoutForClass(verb, []), 120000, verb);
         }
     });
 
-    it("300000 para start", () => {
+    it("300000 para start y forget --stale", () => {
         assert.strictEqual(timeoutForClass("start", []), 300000);
+        assert.strictEqual(timeoutForClass("forget", ["--delta", "--stale"]), 300000);
     });
 
-    it("un verbo desconocido se trata como lectura, el default más conservador", () => {
-        assert.strictEqual(timeoutForClass("walkthrough", []), 15000);
+    it("forget sin --stale sigue siendo mutacion local", () => {
+        assert.strictEqual(timeoutForClass("forget", ["--saved", "f/x"]), 120000);
     });
 
-    it("args no cambia la clasificación (depende sólo del verbo)", () => {
+    it("un verbo desconocido se trata como lectura, el default mas conservador", () => {
+        assert.strictEqual(timeoutForClass("unknown-verb", []), 15000);
+    });
+
+    it("args no cambia la clasificacion salvo forget --stale", () => {
         assert.strictEqual(timeoutForClass("status", ["--porcelain", "some/branch"]), 15000);
         assert.strictEqual(timeoutForClass("start", ["--step", "--", "-foo"]), 300000);
     });

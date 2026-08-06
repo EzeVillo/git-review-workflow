@@ -162,10 +162,89 @@ describe("panelHtml", () => {
         assert.ok(/button\("Continue", "continueReview", null, null, index\)/.test(html));
     });
 
+    it("las acciones del inventario van en una fila debajo de la meta", () => {
+        // No en la misma flex que "step · 2/4": en sidebar angosto eso
+        // partía los botones a medias. Meta, y debajo .rev-actions compactas.
+        assert.ok(html.includes('el("div", "rev-meta", reviewMeta(review))'));
+        assert.ok(html.includes('el("div", "rev-actions")'));
+        assert.ok(html.includes(".rev-actions"), "estilo de la fila de botones");
+        assert.ok(html.includes("flex: 0 1 auto") || html.includes("width: auto"),
+            "botones del inventario no toman todo el ancho del sidebar");
+    });
+
     it("un Continue deshabilitado dice por que lo esta", () => {
         assert.ok(/go\.title = review\.orphan/.test(html), "el motivo depende de la fila");
-        assert.ok(html.includes("This branch has no review metadata"));
+        assert.ok(html.includes("use Discard") || html.includes("Discard"),
+            "huerfana guardada: apunta a Discard en el panel");
         assert.ok(html.includes("A review of this branch is already active"));
+    });
+
+    it("orphan en el inventario ofrece Discard a un clic", () => {
+        assert.ok(/function reviewMeta\(review\)/.test(html));
+        assert.ok(html.includes('button(review.orphan ? "Discard orphan" : "Discard", "discardInventory"'),
+            "orphan/saved llevan boton discardInventory");
+        assert.ok(html.includes("git review forget --saved") || html.includes("git review clean"),
+            "title del boton nombra el verbo");
+    });
+
+    it("una review activa en otra rama explica por que no hay botones", () => {
+        // Sin saved ni orphan no hay verbo seguro: badge ? con title al hover
+        // (sandbox: review/feature/shipping o conflict desde develop).
+        assert.ok(html.includes("function inventoryHelpTitle(review)"));
+        assert.ok(html.includes("Still active — switch to this branch to work on it."));
+        assert.ok(html.includes("Finish waiting on") || html.includes("use Undo above"));
+        assert.ok(html.includes("badge help") || html.includes('"badge help"'));
+        assert.ok(/help:\s*\[/.test(html), "el ? de ayuda es un path SVG inline");
+    });
+
+    it("una review readonly (compare) avisa y no sugiere finish en el panel", () => {
+        // Finish vive en view/title y se oculta con gitReview.readonly; el
+        // webview solo muestra la nota para que el revisor entienda por que.
+        assert.ok(
+            /if \(model\.readonly\) \{/.test(html) || /model\.readonly/.test(html),
+            "el panel lee readonly del modelo"
+        );
+        assert.ok(
+            html.includes("read-only") || html.includes("Read-only") || html.includes("compare"),
+            "nota visible de compare de solo lectura"
+        );
+    });
+
+    it("no-review ofrece compare y walkthrough bajo Other actions; finish-pending no", () => {
+        // Empty state sin review activa: compare/walkthrough viven en
+        // renderEmptyStartBlock (solo no-review). finish-pending es una
+        // pantalla propia de post-cierre, sin empty state ni Other actions.
+        assert.ok(html.includes('function renderOtherActions(model)'));
+        assert.ok(html.includes('function renderEmptyStartBlock(model)'));
+        assert.ok(html.includes('el("h2", null, "Other actions")'));
+        assert.ok(html.includes('button("Compare revisions", "compareReview")'));
+        assert.ok(html.includes('button("Walkthrough: Init", "walkthroughInit")'));
+        assert.ok(html.includes('button("Walkthrough: Build", "walkthroughBuild")'));
+        const startBlock = /function renderEmptyStartBlock\(model\) \{([^]*?)\n {2}\}/.exec(html)?.[1] ?? "";
+        assert.ok(startBlock.includes("renderOtherActions"), "Other actions salen del bloque compartido");
+        assert.ok(html.includes('case "no-review"') && html.includes("renderEmptyStartBlock"));
+        const pendingBranch = /case "finish-pending": \{([^]*?)\n {6}case "out-of-range"/.exec(html)?.[1] ?? "";
+        assert.ok(pendingBranch.length > 0, "no se encontro el caso finish-pending");
+        assert.ok(
+            !pendingBranch.includes("renderEmptyStartBlock") && !pendingBranch.includes("renderOtherActions"),
+            "finish-pending no reutiliza el empty state de no-review"
+        );
+    });
+
+    it("error y out-of-range ofrecen How to fix it con el stderr de la CLI", () => {
+        assert.ok(html.includes('case "out-of-range"'));
+        assert.ok(html.includes('case "error"'));
+        // Ambos empty states cablean el mismo boton: el stderr de la CLI ya
+        // trae el how-to y el host lo re-muestra (FR-024).
+        const howTo = 'button("How to fix it", "outOfRangeHelp", "primary")';
+        const outOfRangeIdx = html.indexOf('case "out-of-range"');
+        const errorIdx = html.indexOf('case "error"');
+        assert.ok(outOfRangeIdx >= 0 && errorIdx >= 0);
+        assert.ok(html.includes(howTo));
+        assert.ok(
+            html.slice(errorIdx, errorIdx + 400).includes("outOfRangeHelp"),
+            "error debe ofrecer How to fix it como out-of-range"
+        );
     });
 
     it("el mensaje del inventario lleva un indice, nunca el nombre de la rama", () => {
@@ -281,19 +360,28 @@ describe("panelHtml", () => {
         );
     });
 
-    it("finish-pending encabeza el inventario con el cierre pendiente, no 'No active review'", () => {
+    it("finish-pending es pantalla propia: staged edits, Undo finish y Clean, sin empty state", () => {
         const pendingBranch = /case "finish-pending": \{([^]*?)\n {6}case "out-of-range"/.exec(html)?.[1] ?? "";
         assert.ok(pendingBranch.length > 0, "no se encontro el caso finish-pending en renderEmptyState");
+        // Cierre ya hecho: el panel ancla al destino de las edits y al undo,
+        // no a un empty state de "empezá otra cosa".
         assert.ok(
-            pendingBranch.includes("waiting to be confirmed"),
-            "el encabezado tiene que describir el cierre pendiente, no la ausencia de review"
+            pendingBranch.includes("staged") || pendingBranch.includes("Source Control"),
+            "el copy tiene que anclar a edits staged / SCM"
         );
-        assert.ok(pendingBranch.includes('"Undo", "undoFinish"'));
+        assert.ok(pendingBranch.includes('"Undo finish", "undoFinish"') || pendingBranch.includes("undoFinish"));
         assert.ok(
-            pendingBranch.includes("renderInventory(model, reviews)"),
-            "el inventario tiene que seguir dibujandose, igual que en no-review"
+            pendingBranch.includes('"Clean", "cleanReview"') || pendingBranch.includes("cleanReview"),
+            "Clean (git review clean) cierra el limbo del undo"
         );
-        assert.ok(!pendingBranch.includes("No active review"));
+        assert.ok(
+            !pendingBranch.includes("renderEmptyStartBlock") && !pendingBranch.includes("startReview"),
+            "Start no va en finish-pending (palette / terminal si hace falta)"
+        );
+        assert.ok(
+            !pendingBranch.includes("renderInventory"),
+            "sin inventario: el flujo mental es cerrar o deshacer este finish"
+        );
     });
 
     it("finish-pending nombra el destino real de las ediciones, no la rama de la review (M2)", () => {

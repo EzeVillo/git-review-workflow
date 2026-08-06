@@ -70,7 +70,10 @@ src="$(git config "branch.$cur.reviewsource" || true)"
 tip="$(git config "branch.$cur.reviewtip" || true)"
 mode="$(git config "branch.$cur.reviewmode" || echo whole)"
 if [ -z "$src" ] || [ -z "$tip" ]; then
-	die "missing review metadata; was $cur created with git review start?"
+	if [ -z "$src" ]; then
+		die "missing review metadata; was $cur created with git review start? Switch away, then delete it with 'git branch -D $cur'."
+	fi
+	die "missing review metadata; was $cur created with git review start? Discard the review with 'git review abort'."
 fi
 
 # A git review finish left mid-conflict has conflict markers in the working tree; a
@@ -111,7 +114,7 @@ if [ "$mode" = "step" ]; then
 	# let set -e kill the bare read silently mid-script; read with || true and report
 	# it. reviewstep falls through to the numeric guard below for a precise message.
 	if [ -z "$start" ] || [ -z "$count" ]; then
-		die "missing review metadata; was $cur created with git review start?"
+		die "missing review metadata; was $cur created with git review start? Discard the review with 'git review abort'."
 	fi
 	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
 	# Guard against a step that maps to no commit (corrupt config, hand-edited
@@ -119,10 +122,10 @@ if [ "$mode" = "step" ]; then
 	# an opaque exit 128 instead of a clear message.
 	total="$(printf '%s\n' "$commits" | grep -c .)"
 	case "$step" in
-	'' | *[!0-9]*) die "corrupt review metadata: reviewstep is '$step', not a positive integer" ;;
+	'' | *[!0-9]*) die "corrupt review metadata: reviewstep is '$step', not a positive integer. Discard the review with 'git review abort'." ;;
 	esac
 	if [ "$step" -lt 1 ] || [ "$step" -gt "$total" ]; then
-		die "review step $step out of range (1..$total) — corrupt metadata?"
+		die "review step $step out of range (1..$total) — corrupt metadata? Discard the review with 'git review abort'."
 	fi
 	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
 

@@ -20,20 +20,21 @@ export interface ReviewState {
     state?: StateRecord;
     entries: EntryRecord[];
     /**
-     * Inventario de reviews del repositorio. Se puebla con `no-review` y con
-     * `finish-pending` (que se deriva de este mismo inventario — ver
-     * `doRefresh`): son los únicos estados que lo muestran, y estando dentro
-     * de una review agregar un proceso por refresco iría contra SC-002
-     * (contracts/cli-invocation.md § `list --porcelain`).
+     * Inventario de reviews del repositorio (`list --porcelain`). Se puebla
+     * con `no-review` (el panel lo dibuja) y con `finish-pending` (deriva la
+     * situación y el source del Clean / Undo; el panel no lista filas).
+     * Dentro de una review activa no se invoca: un proceso extra por refresco
+     * iría contra SC-002 (contracts/cli-invocation.md § `list --porcelain`).
      */
     branches: BranchRecord[];
     /**
      * La config efectiva y las ramas candidatas de `git review config
      * --porcelain` — lo que el asistente de inicio necesita antes de que
      * exista una review (contracts/config-porcelain.md). Se puebla con
-     * `no-review` y con `finish-pending`, con el mismo criterio que
-     * `branches`: con una review activa esto no se invoca (T022a), así que en
-     * cualquier otra situación quedan ausentes, nunca un reporte viejo.
+     * `no-review` y con `finish-pending` (Start sigue en la paleta), con el
+     * mismo criterio que `branches`: con una review activa esto no se invoca
+     * (T022a), así que en cualquier otra situación quedan ausentes, nunca un
+     * reporte viejo.
      */
     config?: EffectiveConfig;
     /** Ver `config`; ausente (no `[]`) cuando el reporte no llegó, para no confundirlo con "cero candidatas". */
@@ -58,6 +59,11 @@ export interface ReviewState {
      * que es donde `list --porcelain` lo reporta.
      */
     finish?: StatusFinishRecord;
+    /**
+     * Compare de solo lectura (`status --porcelain` → registro `readonly`).
+     * Ausente cuando la CLI no lo emitió; no se inventa `false`.
+     */
+    readonly?: true;
     /** stderr crudo de la CLI; presente en error/out-of-range/cli-missing/cli-outdated. */
     stderr?: string;
 }
@@ -270,6 +276,9 @@ export class ReviewStateManager {
         }
         if (parsed.finish !== undefined) {
             next.finish = parsed.finish;
+        }
+        if (parsed.readonly) {
+            next.readonly = true;
         }
         return this.setState(next);
     }

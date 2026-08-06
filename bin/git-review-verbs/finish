@@ -107,17 +107,109 @@ record_exit() {
 # --abort restores the undo point recorded by the finish being undone. It runs
 # before the review/* check on purpose: after a finish you are on
 # review-fixes/<branch> (or, with --onto-source, on the PR branch), never on
-# review/<branch>.
-do_abort() {
-	# Find the review branch the undo point belongs to from wherever we landed
-	# after the finish.
+# review/<branch>. You may also abort from another branch (e.g. develop): the
+# CLI resolves which finish to undo the same way list --porcelain finds finish
+# rows — see resolve_abort_target.
+#
+# resolve_abort_target: set asrc + rb for the finish to undo, or exit.
+# 1) HEAD on review-fixes/<src>, review/<src>, or the PR branch with an undo
+#    on review/<that name> → that target.
+# 2) Else every review/* with reviewundohead (same universe as list's finish
+#    rows). Zero → error. One → that one. Several → prefer a completed finish
+#    (reviewundoouthead set: pending after a successful finish); if exactly
+#    one completed, use it; otherwise refuse and list them (no silent pick).
+resolve_abort_target() {
+	asrc=""
+	rb=""
 	case "$cur" in
-	review-fixes/*) asrc="${cur#review-fixes/}" ;;
-	review/*) asrc="${cur#review/}" ;;
-	*) asrc="$cur" ;;
+	review-fixes/*)
+		asrc="${cur#review-fixes/}"
+		rb="review/$asrc"
+		;;
+	review/*)
+		asrc="${cur#review/}"
+		rb="review/$asrc"
+		;;
+	*)
+		# Onto-source leaves HEAD on the PR branch itself (<src>), not on
+		# review-fixes/*. Only accept that name when review/<src> has an undo.
+		if [ -n "$(git config "branch.review/$cur.reviewundohead" || true)" ]; then
+			asrc="$cur"
+			rb="review/$asrc"
+		fi
+		;;
 	esac
+	if [ -n "$rb" ] && [ -n "$(git config "branch.$rb.reviewundohead" || true)" ]; then
+		return 0
+	fi
 
-	rb="review/$asrc"
+	# HEAD did not name a live undo (wrong branch, or develop after walking
+	# away). Scan the repo. Newline-delimited so paths with spaces stay intact.
+	n=0
+	first=""
+	completed_n=0
+	completed=""
+	while IFS= read -r ref; do
+		[ -n "$ref" ] || continue
+		case "$ref" in
+		review/*) ;;
+		*) continue ;;
+		esac
+		[ -n "$(git config "branch.$ref.reviewundohead" || true)" ] || continue
+		n=$((n + 1))
+		[ -z "$first" ] && first="$ref"
+		if [ -n "$(git config "branch.$ref.reviewundoouthead" || true)" ]; then
+			completed_n=$((completed_n + 1))
+			completed="$ref"
+		fi
+	done <<EOF
+$(git for-each-ref --format='%(refname:short)' refs/heads)
+EOF
+
+	if [ "$n" -eq 0 ]; then
+		echo "error: no finish to abort" >&2
+		exit 1
+	fi
+	if [ "$n" -eq 1 ]; then
+		rb="$first"
+		asrc="${rb#review/}"
+		return 0
+	fi
+	# Several undos: a completed finish (pending) is the usual one to undo from
+	# another branch; mid-conflict undos lack outhead and need the review tree.
+	if [ "$completed_n" -eq 1 ]; then
+		rb="$completed"
+		asrc="${rb#review/}"
+		return 0
+	fi
+
+	echo "error: multiple finishes to abort; switch to the branch of the one you want and retry:" >&2
+	while IFS= read -r ref; do
+		[ -n "$ref" ] || continue
+		case "$ref" in
+		review/*) ;;
+		*) continue ;;
+		esac
+		[ -n "$(git config "branch.$ref.reviewundohead" || true)" ] || continue
+		_src="${ref#review/}"
+		_kind="$(git config "branch.$ref.reviewundokind" || echo fixes)"
+		_resume="$(git config "branch.$ref.reviewresume" || true)"
+		if [ "$_resume" = "conflict" ]; then
+			echo "  $ref  (finish conflict — switch to this branch)" >&2
+		elif [ "$_kind" = "onto-source" ]; then
+			echo "  $ref  (finish pending — switch to $_src)" >&2
+		else
+			echo "  $ref  (finish pending — switch to review-fixes/$_src)" >&2
+		fi
+	done <<EOF
+$(git for-each-ref --format='%(refname:short)' refs/heads)
+EOF
+	exit 1
+}
+
+do_abort() {
+	resolve_abort_target
+
 	head="$(git config "branch.$rb.reviewundohead" || true)"
 	[ -n "$head" ] || {
 		echo "error: no finish to abort (no undo point for $rb)" >&2
@@ -263,7 +355,11 @@ esac
 src="$(git config "branch.$cur.reviewsource" || true)"
 tip="$(git config "branch.$cur.reviewtip" || true)"
 if [ -z "$src" ] || [ -z "$tip" ]; then
-	echo "error: missing review metadata; was $cur created with git review start?" >&2
+	if [ -z "$src" ]; then
+		echo "error: missing review metadata; was $cur created with git review start? Switch away, then delete it with 'git branch -D $cur'." >&2
+	else
+		echo "error: missing review metadata; was $cur created with git review start? Discard the review with 'git review abort'." >&2
+	fi
 	exit 1
 fi
 
@@ -292,7 +388,7 @@ mode="$(git config "branch.$cur.reviewmode" || true)"
 if [ "$mode" != "step" ]; then
 	for k in reviewstart reviewcount reviewstep; do
 		[ -z "$(git config "branch.$cur.$k" || true)" ] || {
-			echo "error: corrupt review metadata: $cur has step-review keys but reviewmode is not 'step'" >&2
+			echo "error: corrupt review metadata: $cur has step-review keys but reviewmode is not 'step'. Discard the review with 'git review abort'." >&2
 			exit 1
 		}
 	done
@@ -304,7 +400,7 @@ fi
 if [ "$mode" != "walk" ]; then
 	for k in reviewwalkstep reviewwalkcount; do
 		[ -z "$(git config "branch.$cur.$k" || true)" ] || {
-			echo "error: corrupt review metadata: $cur has walkthrough keys but reviewmode is not 'walk'" >&2
+			echo "error: corrupt review metadata: $cur has walkthrough keys but reviewmode is not 'walk'. Discard the review with 'git review abort'." >&2
 			exit 1
 		}
 	done

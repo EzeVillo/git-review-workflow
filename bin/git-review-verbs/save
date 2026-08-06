@@ -57,7 +57,10 @@ esac
 src="$(git config "branch.$cur.reviewsource" || true)"
 tip="$(git config "branch.$cur.reviewtip" || true)"
 if [ -z "$src" ] || [ -z "$tip" ]; then
-	die "missing review metadata; was $cur created with git review start?"
+	if [ -z "$src" ]; then
+		die "missing review metadata; was $cur created with git review start? Switch away, then delete it with 'git branch -D $cur'."
+	fi
+	die "missing review metadata; was $cur created with git review start? Discard the review with 'git review abort'."
 fi
 
 saved="review-saved/$src"
@@ -96,7 +99,7 @@ if [ "$mode" = "step" ]; then
 	# let set -e kill the bare read silently mid-script; read with || true and report
 	# it. Unlike status/preview there is no later numeric guard, so cover step too.
 	if [ -z "$start" ] || [ -z "$count" ] || [ -z "$step" ]; then
-		die "missing review metadata; was $cur created with git review start?"
+		die "missing review metadata; was $cur created with git review start? Discard the review with 'git review abort'."
 	fi
 	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
 
@@ -165,6 +168,8 @@ copy_meta reviewbase
 copy_meta reviewtip
 copy_meta reviewprevreviewed
 copy_meta reviewlocal
+# compare reviews: finish must keep refusing after save → continue.
+copy_meta reviewreadonly
 git config "branch.$saved.reviewreturn" "$target"
 
 # Leave the review branch: drop its working-tree changes (captured above), return

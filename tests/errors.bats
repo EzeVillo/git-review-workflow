@@ -200,6 +200,8 @@ step_review_two_with_edits() {
 	run git review status
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"missing review metadata"* ]]
+	# No reviewsource: abort cannot run — tell how to leave and drop the branch.
+	[[ "$output" == *"git branch -D review/orphan"* ]]
 }
 
 @test "review abort reports missing metadata" {
@@ -207,6 +209,7 @@ step_review_two_with_edits() {
 	run git review abort
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"missing review metadata"* ]]
+	[[ "$output" == *"git branch -D review/orphan"* ]]
 }
 
 @test "review finish reports missing metadata" {
@@ -214,6 +217,7 @@ step_review_two_with_edits() {
 	run git review finish
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"missing review metadata"* ]]
+	[[ "$output" == *"git branch -D review/orphan"* ]]
 }
 
 # ── review start guards ──────────────────────────────────────────────────────────
@@ -594,6 +598,8 @@ step_review_two_with_edits() {
 	run git review finish
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"out of range"* ]]
+	# Recovery path when metadata is still enough for abort to run.
+	[[ "$output" == *"git review abort"* ]]
 }
 
 @test "review finish on a step review with deleted reviewmode does not leak author commits" {

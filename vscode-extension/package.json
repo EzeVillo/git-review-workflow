@@ -84,7 +84,7 @@
       },
       {
         "command": "gitReview.installCli",
-        "title": "Install the CLI",
+        "title": "How to Install the CLI",
         "category": "git review"
       },
       {

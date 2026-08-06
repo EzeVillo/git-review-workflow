@@ -115,13 +115,13 @@ panel: párrafo explicativo y un botón, salvo `error` (Decisión 5). **No** son
 contribuciones `viewsWelcome` del manifiesto — el host sólo las renderiza en
 vistas de tipo `tree`, así que con esta vista no se mostrarían.
 
-| `situation`    | Botón                  | Comando                        |
-|----------------|------------------------|--------------------------------|
-| `no-review`    | How to start a review  | (link a los README)            |
-| `out-of-range` | How to fix it          | `gitReview.showOutOfRangeHelp` |
-| `cli-missing`  | Install the CLI        | `gitReview.installCli`         |
-| `cli-outdated` | Update the CLI         | `gitReview.installCli`         |
-| `error`        | (ninguno)              | —                              |
+| `situation`    | Acción principal                                                                 | Comando / mensaje                          |
+|----------------|----------------------------------------------------------------------------------|--------------------------------------------|
+| `no-review`    | How to start a review                                                            | (link a los README)                        |
+| `out-of-range` | How to fix it                                                                    | `gitReview.showOutOfRangeHelp`             |
+| `cli-missing`  | Bloque npm `npm install -g git-review-workflow` + Copy; *Other install options*  | `copyCliInstall` / `gitReview.installCli`  |
+| `cli-outdated` | Bloque npm `…@latest` + Copy; *Other install options*                            | `copyCliInstall` / `gitReview.installCli`  |
+| `error`        | (ninguno)                                                                        | —                                          |
 
 En `error`, `out-of-range`, `cli-missing` y `cli-outdated` el `stderr` de la CLI
 se muestra íntegro y tal cual (FR-024).
@@ -176,10 +176,10 @@ Reglas normativas:
 El webview **no ejecuta comandos**. Postea mensajes `{type}` de un conjunto
 cerrado y el host decide qué hacer con cada uno; un `type` desconocido se
 ignora. La lista es exactamente: `openEntry`, `openChange`, `openAllChanges`,
-`showWhy`, `next`, `prev`, `refresh`, `installCli`, `outOfRangeHelp`,
-`continueReview`, `startReview`, `setBase`, `undoFinish`, `resumeFinish`,
-`discardInventory`, `cleanReview`, `compareReview`, `walkthroughInit`,
-`walkthroughBuild`, `openSupport`.
+`showWhy`, `next`, `prev`, `refresh`, `installCli`, `copyCliInstall`,
+`outOfRangeHelp`, `continueReview`, `startReview`, `setBase`, `undoFinish`,
+`resumeFinish`, `discardInventory`, `cleanReview`, `compareReview`,
+`walkthroughInit`, `walkthroughBuild`, `openSupport`.
 
 Finish / Save / Cancel **no** están en ese conjunto: se invocan como comandos
 desde el título de la vista (`view/title`) o la paleta, no como mensajes del
@@ -207,6 +207,12 @@ una URL libre: el id es de un conjunto cerrado (`star`, …) y el host resuelve
 la URL contra su allowlist. Un id desconocido se ignora. Sumar un destino nuevo
 (LinkedIn, donaciones, rating de la extensión) es agregar el id al allowlist
 del host y el botón en `renderSupport` del webview.
+
+`copyCliInstall` lleva un **`kind`** (`{type: "copyCliInstall", kind}`),
+`"install"` o `"update"`. El host resuelve el string npm allowlisteado y lo
+escribe al clipboard; un `kind` desconocido se ignora. El panel muestra el
+mismo comando y un botón Copy (feedback local "Copied"); no se confía texto
+arbitrario del webview.
 
 En `no-review` el layout del panel es un split vertical al estilo del Explorer
 (Outline / Timeline): el cuerpo (inventario + Start) scrollea y las secciones
@@ -239,7 +245,7 @@ Los ids son interfaz pública.
 | `gitReview.finishReview`  | Finish Review           | título de la vista, paleta        |
 | `gitReview.saveReview`    | Save Review for Later   | título de la vista, paleta        |
 | `gitReview.abortReview`   | Cancel Review           | título de la vista, paleta        |
-| `gitReview.installCli`    | Install the CLI         | panel (estados sin CLI), paleta   |
+| `gitReview.installCli`    | How to Install the CLI  | panel (*Other install options*), paleta |
 | `gitReview.continueReview`| Continue Saved Review   | panel (inventario de `no-review`) |
 | `gitReview.undoFinish`    | Undo Finish             | panel (banner / finish-pending), paleta |
 | `gitReview.resumeFinish`  | Resume Finish           | panel (banner finish-conflict), paleta |

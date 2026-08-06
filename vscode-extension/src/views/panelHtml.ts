@@ -1,3 +1,4 @@
+import { NPM_INSTALL_CMD, NPM_UPDATE_CMD } from "../cli/installHint";
 import { MIN_CLI_VERSION } from "../cli/version";
 
 /**
@@ -441,6 +442,43 @@ export function panelHtml(nonce: string): string {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
+  /* Bloque copiable del empty state cli-missing/cli-outdated (estilo fenced
+     code de un .md: fondo de code block + Copy al costado). */
+  .code-block {
+    display: flex;
+    align-items: stretch;
+    margin: 0 0 .8em;
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--vscode-textCodeBlock-background);
+    border: 1px solid var(--vscode-panel-border);
+  }
+  .code-block code {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: .5em .65em;
+    font-family: var(--vscode-editor-font-family);
+    font-size: .9em;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .code-block .code-copy {
+    flex: none;
+    border-radius: 0;
+    padding: .35em .65em;
+    font-size: .85em;
+  }
+  /* Más específico que .empty p para no heredar el margin 1em de ahí. */
+  .empty p.cli-install-hint {
+    margin: 0 0 .4em;
+    color: var(--vscode-descriptionForeground);
+    font-size: .9em;
+  }
+  .empty p.cli-install-reload {
+    margin: 0 0 .9em;
+    color: var(--vscode-descriptionForeground);
+    font-size: .85em;
+  }
   a { color: var(--vscode-textLink-foreground); }
 </style>
 </head>
@@ -527,6 +565,49 @@ export function panelHtml(nonce: string): string {
     const box = el("div", "empty");
     box.appendChild(el("p", null, text));
     if (action) { box.appendChild(action); }
+    if (stderr) { box.appendChild(el("pre", "stderr", stderr)); }
+    return box;
+  }
+
+  /**
+   * Empty state de cli-missing / cli-outdated: el camino recomendado es npm
+   * con Copy (el host resuelve el string; acá solo viaja kind). "Other
+   * install options" abre la guía completa (Homebrew / PowerShell / curl).
+   */
+  function cliInstallHint(kind) {
+    const cmd = kind === "update"
+      ? ${JSON.stringify(NPM_UPDATE_CMD)}
+      : ${JSON.stringify(NPM_INSTALL_CMD)};
+    const wrap = el("div", "cli-install");
+    wrap.appendChild(el("p", "cli-install-hint",
+      kind === "update"
+        ? "Update with npm (recommended):"
+        : "Install with npm (recommended):"));
+    const codeRow = el("div", "code-block");
+    codeRow.appendChild(el("code", null, cmd));
+    const copyBtn = el("button", "code-copy");
+    const copyLabel = el("span", null, "Copy");
+    copyBtn.appendChild(copyLabel);
+    copyBtn.title = "Copy to clipboard";
+    copyBtn.setAttribute("aria-label", "Copy install command");
+    copyBtn.addEventListener("click", function () {
+      if (stale()) { return; }
+      vscode.postMessage({type: "copyCliInstall", kind: kind});
+      copyLabel.textContent = "Copied";
+      setTimeout(function () { copyLabel.textContent = "Copy"; }, 1500);
+    });
+    codeRow.appendChild(copyBtn);
+    wrap.appendChild(codeRow);
+    wrap.appendChild(el("p", "cli-install-reload",
+      "Reload the window after installing, or wait — the panel checks again every few seconds."));
+    wrap.appendChild(button("Other install options", "installCli", "link"));
+    return wrap;
+  }
+
+  function emptyCli(text, kind, stderr) {
+    const box = el("div", "empty");
+    box.appendChild(el("p", null, text));
+    box.appendChild(cliInstallHint(kind));
     if (stderr) { box.appendChild(el("pre", "stderr", stderr)); }
     return box;
   }
@@ -774,15 +855,15 @@ export function panelHtml(nonce: string): string {
           model.stderr
         );
       case "cli-missing":
-        return empty(
+        return emptyCli(
           "The git-review CLI (${MIN_CLI_VERSION} or newer) was not found.",
-          button("Install the CLI", "installCli", "primary"),
+          "install",
           model.stderr
         );
       case "cli-outdated":
-        return empty(
+        return emptyCli(
           "The installed git-review CLI is older than ${MIN_CLI_VERSION}.",
-          button("Update the CLI", "installCli", "primary"),
+          "update",
           model.stderr
         );
       case "error":

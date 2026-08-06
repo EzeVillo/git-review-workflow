@@ -10,7 +10,11 @@ import {continueReview} from "./commands/continueReview";
 import {discardInventoryReview, forgetReview} from "./commands/forgetReview";
 import {finishReview, resumeFinish, undoFinish} from "./commands/finishReview";
 import {saveReview} from "./commands/saveReview";
-import {installOrUpdateCli, showOutOfRangeHelp} from "./commands/installOrUpdateCli";
+import {
+    copyCliInstallCommand,
+    installOrUpdateCli,
+    showOutOfRangeHelp,
+} from "./commands/installOrUpdateCli";
 import {navigate} from "./commands/navigate";
 import {openChange, openEntry, openRangeChanges} from "./commands/openEntry";
 import {pickEntry} from "./commands/pickEntry";
@@ -233,7 +237,13 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
             }
             return;
         }
-        const commands: Record<Exclude<PanelMessage, "openSupport">, string> = {
+        // Copy del empty state cli-*: el webview manda kind; el host resuelve
+        // el string npm allowlisteado (no se confía texto del panel).
+        if (message === "copyCliInstall") {
+            void copyCliInstallCommand(extra);
+            return;
+        }
+        const commands: Record<Exclude<PanelMessage, "openSupport" | "copyCliInstall">, string> = {
             openEntry: "gitReview.openEntry",
             openChange: "gitReview.openChange",
             openAllChanges: "gitReview.openAllChanges",

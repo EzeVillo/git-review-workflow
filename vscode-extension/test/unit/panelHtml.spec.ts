@@ -161,8 +161,20 @@ describe("panelHtml", () => {
             html.includes(`The installed git-review CLI is older than ${MIN_CLI_VERSION}.`),
             "cli-outdated debe citar el minimo actual"
         );
-        assert.ok(html.includes('button("Install the CLI", "installCli"'));
-        assert.ok(html.includes('button("Update the CLI", "installCli"'));
+    });
+
+    it("cli-missing y cli-outdated recomiendan npm con Copy y otras opciones", () => {
+        // Camino principal: comando a la vista + Copy (el host resuelve el string).
+        assert.ok(html.includes("Install with npm (recommended):"));
+        assert.ok(html.includes("Update with npm (recommended):"));
+        assert.ok(html.includes("npm install -g git-review-workflow"));
+        assert.ok(html.includes("npm install -g git-review-workflow@latest"));
+        assert.ok(html.includes('type: "copyCliInstall"'));
+        assert.ok(html.includes('kind: "install"') || html.includes('kind: kind'));
+        assert.ok(html.includes('button("Other install options", "installCli", "link")'));
+        // Ya no hay un primary que solo abre el README.
+        assert.ok(!html.includes('button("Install the CLI"'));
+        assert.ok(!html.includes('button("Update the CLI"'));
     });
 
     it("el inventario solo ofrece Continue sobre una fila guardada y resumible", () => {

@@ -16,6 +16,9 @@ export const PANEL_MESSAGES = [
     "prev",
     "refresh",
     "installCli",
+    // Copia el comando npm del empty state cli-missing/cli-outdated. Lleva
+    // `kind` ("install" | "update"); el host resuelve el string allowlisteado.
+    "copyCliInstall",
     "outOfRangeHelp",
     "continueReview",
     "startReview",
@@ -105,13 +108,14 @@ export class WalkthroughViewProvider implements vscode.WebviewViewProvider {
     }
 
     /**
-     * `index` / `id` son los únicos datos que un mensaje puede traer además
-     * del `type` (contracts/extension-surface.md § Protocolo). Viajan como
-     * `unknown` a propósito: acá no se valida nada, lo resuelve el host
+     * `index` / `id` / `kind` son los únicos datos que un mensaje puede traer
+     * además del `type` (contracts/extension-surface.md § Protocolo). Viajan
+     * como `unknown` a propósito: acá no se valida nada, lo resuelve el host
      * contra su propio estado / allowlist.
      *
-     * El segundo argumento es `index` para los mensajes de inventario/whole
-     * y el `id` de Support para `openSupport` — el host discrimina por `type`.
+     * El segundo argumento es `index` para inventario/whole, `id` de Support
+     * para `openSupport`, y `kind` para `copyCliInstall` — el host discrimina
+     * por `type`.
      */
     constructor(private readonly onMessage: (message: PanelMessage, extra?: unknown) => void) {
     }
@@ -140,9 +144,15 @@ export class WalkthroughViewProvider implements vscode.WebviewViewProvider {
                 return;
             }
             if (isPanelMessage(type)) {
-                // openSupport lleva `id` (string allowlisteado); el resto de
-                // mensajes con payload llevan `index` (número de fila/entrada).
-                this.onMessage(type, type === "openSupport" ? msg?.id : msg?.index);
+                // openSupport → `id`; copyCliInstall → `kind`; el resto con
+                // payload → `index` (fila/entrada). El host valida cada uno.
+                let extra: unknown = msg?.index;
+                if (type === "openSupport") {
+                    extra = msg?.id;
+                } else if (type === "copyCliInstall") {
+                    extra = (msg as {kind?: unknown}).kind;
+                }
+                this.onMessage(type, extra);
             }
         });
         const visibility = view.onDidChangeVisibility(() => {

@@ -153,6 +153,7 @@ else
 		git config "branch.$saved.reviewmode" walk
 		copy_meta reviewwalkstep
 		copy_meta reviewwalkcount
+		copy_meta reviewwalkkeys
 		wstep="$(git config "branch.$cur.reviewwalkstep" || echo '?')"
 		wcount="$(git config "branch.$cur.reviewwalkcount" || echo '?')"
 		note="walkthrough review on entry $wstep/$wcount"

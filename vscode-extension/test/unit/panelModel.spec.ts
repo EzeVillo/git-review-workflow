@@ -31,6 +31,9 @@ function reviewState(stdout: string): ReviewState {
     if (parsed.readonly) {
         state.readonly = true;
     }
+    if (parsed.keysOnly) {
+        state.keysOnly = true;
+    }
     return state;
 }
 
@@ -141,6 +144,24 @@ describe("buildPanelModel", () => {
 
     it("readonly es false fuera de un compare (sin registro)", () => {
         assert.strictEqual(buildPanelModel(reviewState(WALK), {busy: false}).readonly, false);
+    });
+
+    it("keysOnly se proyecta cuando status reporta el registro keys", () => {
+        const stdout = [
+            "state\treview/feat\torigin/feat\tabc123\twalk\tapplied\t1\t2\t2\tsrc/a.ts\t1",
+            "entry\t1\tsrc/a.ts\t1\t1",
+            "entry\t2\tsrc/b.ts\t1\t1",
+            "keys",
+            "",
+        ].join("\n");
+        const model = buildPanelModel(reviewState(stdout), {busy: false});
+        assert.strictEqual(model.keysOnly, true);
+        assert.strictEqual(model.entryCount, 2);
+        assert.strictEqual(model.current?.essential, true);
+    });
+
+    it("keysOnly es false sin registro keys", () => {
+        assert.strictEqual(buildPanelModel(reviewState(WALK), {busy: false}).keysOnly, false);
     });
 
     it("total > recorded no es baseMoved: es la secuencia creciendo (el upgrade de los no anotados)", () => {
@@ -441,8 +462,14 @@ describe("buildPanelModel", () => {
             buildPanelModel(state, {busy: false, why: {state: "present", text: "porque sí"}}).why,
             {state: "present", text: "porque sí"}
         );
-        assert.deepStrictEqual(buildPanelModel(state, {busy: false, why: {state: "absent"}}).why, {state: "absent"});
-        assert.deepStrictEqual(buildPanelModel(state, {busy: false, why: {state: "failed"}}).why, {state: "failed"});
+        assert.deepStrictEqual(buildPanelModel(state, {
+            busy: false,
+            why: {state: "absent"}
+        }).why, {state: "absent"});
+        assert.deepStrictEqual(buildPanelModel(state, {
+            busy: false,
+            why: {state: "failed"}
+        }).why, {state: "failed"});
     });
 
     it("noBaseConfigured cuando no-review trae config sin base", () => {
@@ -587,7 +614,10 @@ describe("buildPanelModel — finish (005 US3)", () => {
         // El host sigue leyendo branches del state para clean/undo; el panel
         // no dibuja inventario en esta situación.
         assert.deepStrictEqual(model.reviews, []);
-        assert.deepStrictEqual(model.pendingFinish, {branch: "review/feature/checkout", onto: true});
+        assert.deepStrictEqual(model.pendingFinish, {
+            branch: "review/feature/checkout",
+            onto: true
+        });
         assert.strictEqual(model.noBaseConfigured, false);
         assert.strictEqual(model.configuredBase, undefined);
     });

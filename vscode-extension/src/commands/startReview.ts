@@ -44,8 +44,21 @@ interface RangeItem extends vscode.QuickPickItem {
 
 const LAYOUT_ITEMS: LayoutItem[] = [
     {label: "Automatic", description: "follow the PR's walkthrough, if it has one", layout: "auto"},
-    {label: "Commit by commit", description: "review one commit at a time (--step)", layout: "step"},
-    {label: "Ignore the walkthrough", description: "review the whole diff at once (--no-walk)", layout: "no-walk"},
+    {
+        label: "Commit by commit",
+        description: "review one commit at a time (--step)",
+        layout: "step"
+    },
+    {
+        label: "Walkthrough — keys only",
+        description: "only entries marked > key (--keys)",
+        layout: "keys",
+    },
+    {
+        label: "Ignore the walkthrough",
+        description: "review the whole diff at once (--no-walk)",
+        layout: "no-walk"
+    },
 ];
 
 /**
@@ -342,9 +355,15 @@ export async function startReview(
 
     await lock.run(async () => {
         const result = await vscode.window.withProgress(
-            {location: vscode.ProgressLocation.Notification, title: `Starting the review of ${branch.name}…`},
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: `Starting the review of ${branch.name}…`
+            },
             async () => {
-                const invocation = await invokeGitReview("start", args, {...options, network: true});
+                const invocation = await invokeGitReview("start", args, {
+                    ...options,
+                    network: true
+                });
                 // Refrescar pase lo que pase: aunque start falle, es lo que dice
                 // dónde quedó el repositorio — la salida humana no se parsea
                 // nunca (FR-015/FR-024).

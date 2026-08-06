@@ -178,14 +178,14 @@ else
 		git config "branch.$rb.reviewmode" walk
 		restore_meta reviewwalkstep
 		restore_meta reviewwalkcount
+		restore_meta reviewwalkkeys
 		git branch -D "$saved" >/dev/null
 
 		# Re-derive the sequence and reprint the entry you were on, so continue lands
 		# you back on the same reading cursor the way the step path reprints its commit.
+		# load_walk_review_meta applies the keys-only filter when reviewwalkkeys is set.
 		cur="$rb"
-		walkstep="$(git config "branch.$rb.reviewwalkstep" || echo 1)"
-		walkpaths="$(walk_reading_order "$tip" "$(git rev-parse HEAD)")"
-		total="$(printf '%s\n' "$walkpaths" | grep -c . || true)"
+		load_walk_review_meta
 		echo "resumed review of $src — walkthrough entry $walkstep/$total"
 		show_walk_entry "$walkstep"
 	else

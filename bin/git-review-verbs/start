@@ -15,7 +15,7 @@ prog="git review start"
 
 usage() {
 	cat <<EOF
-usage: $prog [<branch>] [<base> | --base <base> | --delta | --from <commit>] [--step | --no-walk] [--local | --offline]
+usage: $prog [<branch>] [<base> | --base <base> | --delta | --from <commit>] [--step | --no-walk | --keys] [--local | --offline]
 
 Stage a pull request diff on a review/<branch> branch for inline review.
 With no <branch>, review the branch you currently have checked out.
@@ -30,6 +30,9 @@ With no <branch>, review the branch you currently have checked out.
   --from <commit>   review only the commits after <commit>
   --step            review one commit at a time; advance with git review next
   --no-walk         ignore any walkthrough on the PR; review the whole diff
+  --keys            walk mode restricted to entries marked > key (requires a
+                    walkthrough with at least one key in range; not with
+                    --step or --no-walk)
   --local           review your local <branch>, not origin's copy; the base
                     is still fetched and resolved against origin
   --offline         like --local, but also skip fetching and resolve the base
@@ -49,6 +52,7 @@ from=""
 delta=0
 step=0
 no_walk=0
+keys_only=0
 local_mode=0
 offline_mode=0
 while [ $# -gt 0 ]; do
@@ -60,6 +64,7 @@ while [ $# -gt 0 ]; do
 	-d | --delta) delta=1 ;;
 	--step) step=1 ;;
 	--no-walk) no_walk=1 ;;
+	--keys) keys_only=1 ;;
 	--local) local_mode=1 ;;
 	--offline)
 		local_mode=1
@@ -132,6 +137,15 @@ fi
 
 if [ "$base_explicit" -eq 1 ] && { [ "$delta" -eq 1 ] || [ -n "$from" ]; }; then
 	die "base is ignored with --delta/--from; pass only one"
+fi
+
+if [ "$keys_only" -eq 1 ]; then
+	if [ "$step" -eq 1 ]; then
+		die "--keys cannot be combined with --step"
+	fi
+	if [ "$no_walk" -eq 1 ]; then
+		die "--keys cannot be combined with --no-walk"
+	fi
 fi
 
 git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
@@ -334,20 +348,37 @@ lower="$(fold_lower "$start" "$baseref" "$tip")"
 # it. The sequence is filtered to this review's range, so a stale walkthrough
 # (e.g. under --delta) that no longer intersects the range degrades to a plain
 # whole review with a note — a broken or stale walkthrough never aborts a review.
+# --keys is the exception: it requires a walk with at least one > key entry and
+# fails before creating the branch rather than degrading.
 walk=0
 walkcount=0
+keys_filter=0
 if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$tip")" && [ -n "$wtcontent" ]; then
 	curated="$(walk_sequence "$tip" "$lower")"
 	# grep -c returns 1 (aborting under set -e in POSIX sh) on an empty sequence.
 	curatedcount="$(printf '%s\n' "$curated" | grep -c . || true)"
 	if [ "$curatedcount" -ge 1 ]; then
 		walk=1
-		walkpaths="$(walk_reading_order "$tip" "$lower")"
-		walkcount="$(printf '%s\n' "$walkpaths" | grep -c . || true)"
+		if [ "$keys_only" -eq 1 ]; then
+			walkpaths="$(walk_keys_order "$tip" "$lower")"
+			walkcount="$(printf '%s\n' "$walkpaths" | grep -c . || true)"
+			if [ "$walkcount" -lt 1 ]; then
+				die "--keys requires at least one walkthrough entry marked > key in range; mark keys or start without --keys"
+			fi
+			keys_filter=1
+		else
+			walkpaths="$(walk_reading_order "$tip" "$lower")"
+			walkcount="$(printf '%s\n' "$walkpaths" | grep -c . || true)"
+		fi
 	else
+		if [ "$keys_only" -eq 1 ]; then
+			die "--keys requires a walkthrough with entries in range; none apply to this review"
+		fi
 		degradedfiles="$(range_files "$tip" "$lower" | tr '\n' ' ')"
 		echo "note: $src has a walkthrough, but none of its entries apply to this review range; reviewing the whole diff: $degradedfiles"
 	fi
+elif [ "$keys_only" -eq 1 ]; then
+	die "--keys requires a walkthrough on the PR; none found (or use without --keys)"
 fi
 
 git switch -q -c "$rb" "$tip" || die "could not create $rb"
@@ -371,24 +402,31 @@ if [ "$walk" -eq 1 ]; then
 	git config "branch.$rb.reviewmode" "walk"
 	git config "branch.$rb.reviewwalkstep" "1"
 	git config "branch.$rb.reviewwalkcount" "$walkcount"
-
-	# Files in the review range with no walkthrough entry: the walkthrough may be
-	# stale (typical when re-reviewing with --delta). The review still covers them
-	# — they are appended to the end of the reading order (walk_reading_order) — so
-	# note them rather than leave them to be discovered silently.
-	uncovered="$(printf '%s\n' "$walkpaths" | tail -n +"$((curatedcount + 1))")"
-	if [ -n "$uncovered" ]; then
-		echo "note: file(s) in range not in the walkthrough are added to the end of the reading order: $(printf '%s\n' "$uncovered" | tr '\n' ' ')"
+	if [ "$keys_filter" -eq 1 ]; then
+		git config "branch.$rb.reviewwalkkeys" "1"
 	fi
 
-	# Entries the author flagged "> key": the few files a reviewer must not skim.
-	keycount="$(printf '%s\n' "$walkpaths" | walk_count_keys "$tip")"
-	keysuffix=""
-	if [ "$keycount" -ge 1 ]; then
-		keysuffix=" ($keycount key)"
-	fi
+	if [ "$keys_filter" -eq 0 ]; then
+		# Files in the review range with no walkthrough entry: the walkthrough may be
+		# stale (typical when re-reviewing with --delta). The review still covers them
+		# — they are appended to the end of the reading order (walk_reading_order) — so
+		# note them rather than leave them to be discovered silently.
+		uncovered="$(printf '%s\n' "$walkpaths" | tail -n +"$((curatedcount + 1))")"
+		if [ -n "$uncovered" ]; then
+			echo "note: file(s) in range not in the walkthrough are added to the end of the reading order: $(printf '%s\n' "$uncovered" | tr '\n' ' ')"
+		fi
 
-	echo "$rb ready ($range) — walkthrough: $walkcount entr$([ "$walkcount" -eq 1 ] && echo y || echo ies)$keysuffix; read, edit, then run git review next"
+		# Entries the author flagged "> key": the few files a reviewer must not skim.
+		keycount="$(printf '%s\n' "$walkpaths" | walk_count_keys "$tip")"
+		keysuffix=""
+		if [ "$keycount" -ge 1 ]; then
+			keysuffix=" ($keycount key)"
+		fi
+
+		echo "$rb ready ($range) — walkthrough: $walkcount entr$([ "$walkcount" -eq 1 ] && echo y || echo ies)$keysuffix; read, edit, then run git review next"
+	else
+		echo "$rb ready ($range) — walkthrough keys-only: $walkcount key$([ "$walkcount" -eq 1 ] || echo s); read, edit, then run git review next"
+	fi
 
 	# The author's heads-up, printed once before the first entry: what is delicate
 	# in this PR, read before opening a file. Absent on a walkthrough that carries

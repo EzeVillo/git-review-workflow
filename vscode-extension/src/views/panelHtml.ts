@@ -968,6 +968,9 @@ export function panelHtml(nonce: string): string {
     if (model.readonly) {
       root.appendChild(note("Read-only compare: finish is not available. Use Cancel when done."));
     }
+    if (model.keysOnly) {
+      root.appendChild(note("Keys-only: reading order is restricted to walkthrough entries marked key."));
+    }
     if (model.baseMoved) { root.appendChild(note("The base moved: fewer entries remain in range than when the review started.")); }
     if (model.degraded) {
       root.appendChild(note("The walkthrough does not cover the review's current range; showing the full range diff."));

@@ -174,6 +174,11 @@ export interface PanelModel {
      * "no es readonly").
      */
     readonly: boolean;
+    /**
+     * Walk keys-only (`status --porcelain` → registro `keys`). Siempre
+     * booleano en el modelo (ausencia en porcelain = false).
+     */
+    keysOnly: boolean;
     /** La entrada actual, elegida por `position` y nunca por `id`. */
     current?: PanelEntry;
     entryCount: number;
@@ -370,6 +375,7 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
         navigationLocked: state.situation === "finish-conflict",
         degraded: false,
         readonly: false,
+        keysOnly: false,
         entryCount: 0,
         files: [],
     };
@@ -400,6 +406,7 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
     base.tip = review.tip;
     base.degraded = review.walkthrough === "degraded";
     base.readonly = state.readonly === true;
+    base.keysOnly = state.keysOnly === true;
     base.entryCount = state.entries.length;
 
     if (review.mode === "whole") {

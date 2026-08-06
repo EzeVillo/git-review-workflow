@@ -234,6 +234,10 @@ if [ "$porcelain" -eq 1 ]; then
 	if [ "$(git config "branch.$cur.reviewreadonly" || true)" = "1" ]; then
 		porcelain_row readonly
 	fi
+	# keys-only walk submode (start/compare --keys): presence record, like readonly.
+	if [ "$(git config "branch.$cur.reviewwalkkeys" || true)" = "1" ]; then
+		porcelain_row keys
+	fi
 	exit 0
 fi
 
@@ -304,10 +308,16 @@ if [ "$mode" = "step" ]; then
 	fi
 elif [ "$mode" = "walk" ]; then
 	# Re-derive the reading sequence to report the live [k/N] and current path, the
-	# same way the walk commands do.
+	# same way the walk commands do (including keys-only when reviewwalkkeys=1).
 	walkstep="$(git config "branch.$cur.reviewwalkstep" || true)"
 	walkcount="$(git config "branch.$cur.reviewwalkcount" || true)"
-	walkpaths="$(walk_reading_order "$tip" "$(git rev-parse HEAD)")"
+	if [ "$(git config "branch.$cur.reviewwalkkeys" || true)" = "1" ]; then
+		walkpaths="$(walk_keys_order "$tip" "$(git rev-parse HEAD)")"
+		keys_only_note="  (keys-only)"
+	else
+		walkpaths="$(walk_reading_order "$tip" "$(git rev-parse HEAD)")"
+		keys_only_note=""
+	fi
 	total="$(printf '%s\n' "$walkpaths" | grep -c . || true)"
 	case "$walkstep" in
 	'' | *[!0-9]*)
@@ -327,7 +337,7 @@ elif [ "$mode" = "walk" ]; then
 	else
 		mark="  (uncovered)"
 	fi
-	printf '  mode    walk  [%s/%s] on %s%s\n' "$walkstep" "$total" "$pnow" "$mark"
+	printf '  mode    walk  [%s/%s] on %s%s%s\n' "$walkstep" "$total" "$pnow" "$mark" "$keys_only_note"
 	hint="git review next"
 	[ "$walkstep" -gt 1 ] && hint="$hint / git review prev"
 	if [ "$is_readonly" = "1" ]; then

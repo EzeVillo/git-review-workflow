@@ -116,7 +116,7 @@ describe("parsePorcelain", () => {
         ].join("\n");
         const result = parsePorcelain(out);
         assert.strictEqual(result.entries.length, 1);
-        assert.strictEqual((result as unknown as {uncovered?: unknown}).uncovered, undefined);
+        assert.strictEqual((result as unknown as { uncovered?: unknown }).uncovered, undefined);
     });
 
     it("lanza si no hay registro state", () => {
@@ -276,6 +276,24 @@ describe("parsePorcelain", () => {
         const out = "state\treview/feat-x\torigin/feat-x\tabc123\twhole\tnone\n";
         assert.strictEqual(parsePorcelain(out).readonly, undefined);
     });
+
+    // ── keys (walk keys-only submode) ────────────────────────────────────────
+
+    it("registro keys marca walk keys-only", () => {
+        const out = [
+            "state\treview/feat-x\torigin/feat-x\tabc123\twalk\tapplied\t1\t2\t2\tsrc/a.ts\t1",
+            "entry\t1\tsrc/a.ts\t1\t1",
+            "entry\t2\tsrc/b.ts\t1\t1",
+            "keys",
+            "",
+        ].join("\n");
+        assert.strictEqual(parsePorcelain(out).keysOnly, true);
+    });
+
+    it("sin registro keys el campo queda ausente, no false inventado", () => {
+        const out = "state\treview/feat-x\torigin/feat-x\tabc123\twalk\tapplied\t1\t1\t1\tsrc/a.ts\t0\nentry\t1\tsrc/a.ts\t0\t1\n";
+        assert.strictEqual(parsePorcelain(out).keysOnly, undefined);
+    });
 });
 
 describe("parseListPorcelain", () => {
@@ -404,14 +422,24 @@ describe("parseListPorcelain", () => {
 describe("sourceOf", () => {
     it("saca el prefijo review/", () => {
         assert.strictEqual(
-            sourceOf({name: "review/feature/checkout", saved: false, current: false, orphan: false}),
+            sourceOf({
+                name: "review/feature/checkout",
+                saved: false,
+                current: false,
+                orphan: false
+            }),
             "feature/checkout"
         );
     });
 
     it("saca el prefijo review-saved/ y no confunde el review/ que contiene", () => {
         assert.strictEqual(
-            sourceOf({name: "review-saved/feature/checkout", saved: true, current: false, orphan: false}),
+            sourceOf({
+                name: "review-saved/feature/checkout",
+                saved: true,
+                current: false,
+                orphan: false
+            }),
             "feature/checkout"
         );
     });

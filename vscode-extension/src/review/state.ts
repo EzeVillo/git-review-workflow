@@ -64,6 +64,11 @@ export interface ReviewState {
      * Ausente cuando la CLI no lo emitió; no se inventa `false`.
      */
     readonly?: true;
+    /**
+     * Walk solo-keys (`status --porcelain` → registro `keys`). Ausente cuando
+     * la CLI no lo emitió; no se inventa `false`.
+     */
+    keysOnly?: true;
     /** stderr crudo de la CLI; presente en error/out-of-range/cli-missing/cli-outdated. */
     stderr?: string;
 }
@@ -279,6 +284,9 @@ export class ReviewStateManager {
         }
         if (parsed.readonly) {
             next.readonly = true;
+        }
+        if (parsed.keysOnly) {
+            next.keysOnly = true;
         }
         return this.setState(next);
     }

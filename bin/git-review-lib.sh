@@ -570,6 +570,25 @@ walk_reading_order() {
 	done
 }
 
+# walk_keys_order <tip> <lower>
+# Curated walk_sequence paths that carry the reserved "> key" marker, in
+# walkthrough order. Uncovered paths never appear (they have no body to mark).
+# One walkthrough read for the whole list (same pattern as walk_count_keys /
+# walk_entry_fields), not one git show per path. Empty output means no essential
+# entry intersects the range — callers that asked for --keys fail before opening
+# a review rather than materializing an empty sequence.
+walk_keys_order() {
+	_wko_content="$(walk_read "$1" || true)"
+	[ -n "$_wko_content" ] || return 0
+	walk_sequence "$1" "$2" | while IFS= read -r _wko_p; do
+		[ -n "$_wko_p" ] || continue
+		if printf '%s\n' "$_wko_content" | walk_body "$_wko_p" |
+			grep -q '^> key[[:space:]]*$'; then
+			printf '%s\n' "$_wko_p"
+		fi
+	done
+}
+
 # walk_range_error <walkstep> <total> <walkcount>
 # Emit the right diagnostic for a walk cursor that fell outside the live reading
 # range, then exit 1. A walk review's tip and its committed walkthrough are frozen,
@@ -636,7 +655,13 @@ load_walk_review_meta() {
 		exit 1
 	fi
 
-	walkpaths="$(walk_reading_order "$tip" "$(git rev-parse HEAD)")"
+	# Keys-only submode (start/compare --keys): sequence is curated ∩ keys, not
+	# the full reading order. The flag lives on the branch; absence is full walk.
+	if [ "$(git config "branch.$cur.reviewwalkkeys" || true)" = "1" ]; then
+		walkpaths="$(walk_keys_order "$tip" "$(git rev-parse HEAD)")"
+	else
+		walkpaths="$(walk_reading_order "$tip" "$(git rev-parse HEAD)")"
+	fi
 	# grep -c returns 1 (aborting under set -e in POSIX sh) when walkpaths is empty;
 	# guard it so a lost sequence reaches the range check below as total=0.
 	total="$(printf '%s\n' "$walkpaths" | grep -c . || true)"

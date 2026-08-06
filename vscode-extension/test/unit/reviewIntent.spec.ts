@@ -2,7 +2,12 @@ import * as assert from "node:assert";
 import {deltaForSource, parseConfigPorcelain} from "../../src/cli/configPorcelain";
 import {intentToArgs, ReviewIntent, validateIntent} from "../../src/review/reviewIntent";
 
-const BASE: ReviewIntent = {branch: "feature/checkout", layout: "auto", range: "full", source: "remote"};
+const BASE: ReviewIntent = {
+    branch: "feature/checkout",
+    layout: "auto",
+    range: "full",
+    source: "remote"
+};
 
 /**
  * Cadena real del asistente: porcelain → deltaForSource(source) → validateIntent.
@@ -13,7 +18,11 @@ function intentFromPorcelain(
     stdout: string,
     source: ReviewIntent["source"],
     range: ReviewIntent["range"] = "delta"
-): {intent: ReviewIntent; check: ReturnType<typeof validateIntent>; delta: ReturnType<typeof deltaForSource>} {
+): {
+    intent: ReviewIntent;
+    check: ReturnType<typeof validateIntent>;
+    delta: ReturnType<typeof deltaForSource>
+} {
     const deltas = parseConfigPorcelain(stdout).deltas;
     const delta = deltaForSource(deltas, source);
     const intent: ReviewIntent = {branch: "feature/checkout", layout: "auto", range, source};
@@ -151,6 +160,11 @@ describe("intentToArgs", () => {
         assert.deepStrictEqual(args, ["--no-walk", "--", "feature/checkout"]);
     });
 
+    it("layout keys agrega --keys", () => {
+        const args = intentToArgs({...BASE, layout: "keys"}, "develop");
+        assert.deepStrictEqual(args, ["--keys", "--", "feature/checkout"]);
+    });
+
     it("source local agrega --local", () => {
         const args = intentToArgs({...BASE, source: "local"}, "develop");
         assert.deepStrictEqual(args, ["--local", "--", "feature/checkout"]);
@@ -193,7 +207,12 @@ describe("intentToArgs", () => {
     });
 
     it("todos los flags posibles van antes del --, en el mismo orden en cualquier combinacion", () => {
-        const args = intentToArgs({branch: "-weird", layout: "no-walk", range: "delta", source: "offline"}, "develop");
+        const args = intentToArgs({
+            branch: "-weird",
+            layout: "no-walk",
+            range: "delta",
+            source: "offline"
+        }, "develop");
         assert.deepStrictEqual(args, ["--no-walk", "--delta", "--offline", "--", "-weird"]);
     });
 });

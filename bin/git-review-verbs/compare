@@ -14,7 +14,7 @@ prog="git review compare"
 
 usage() {
 	cat <<EOF
-usage: $prog <a> <b> [--step | --no-walk]
+usage: $prog <a> <b> [--step | --no-walk | --keys]
 
 Stage the diff between two commit-ish on a review/<b> branch for inline reading.
 This is a read-only review: there is no branch to write back to, so git review
@@ -24,6 +24,9 @@ finish refuses on it.
   <b>        the upper bound — what to diff to; names the review branch
   --step     read one commit at a time; advance with git review next
   --no-walk  ignore any walkthrough on <b>; read the whole diff
+  --keys     walk mode restricted to entries marked > key (requires a
+             walkthrough with at least one key in range; not with --step
+             or --no-walk)
 EOF
 }
 
@@ -38,6 +41,7 @@ have_a=0
 have_b=0
 step=0
 no_walk=0
+keys_only=0
 # Collect the two positional commit-ish; mirror start's parser, including -- as the
 # end-of-options separator so a commit-ish that starts with "-" stays positional.
 add_positional() {
@@ -59,6 +63,7 @@ while [ $# -gt 0 ]; do
 		;;
 	--step) step=1 ;;
 	--no-walk) no_walk=1 ;;
+	--keys) keys_only=1 ;;
 	--)
 		shift
 		while [ $# -gt 0 ]; do
@@ -81,6 +86,15 @@ done
 
 if [ "$have_a" -ne 1 ] || [ "$have_b" -ne 1 ]; then
 	die "need two commit-ish to compare: $prog <a> <b>"
+fi
+
+if [ "$keys_only" -eq 1 ]; then
+	if [ "$step" -eq 1 ]; then
+		die "--keys cannot be combined with --step"
+	fi
+	if [ "$no_walk" -eq 1 ]; then
+		die "--keys cannot be combined with --no-walk"
+	fi
 fi
 
 git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
@@ -148,21 +162,37 @@ fi
 # Walkthrough auto-detection, exactly like git review start: if <b>'s tree carries
 # a .review/walkthrough.md whose entries intersect the compared range, enter walk
 # mode. It stays read-only — reviewreadonly is still set below, so git review finish
-# refuses regardless of mode — walk only adds a reading cursor.
+# refuses regardless of mode — walk only adds a reading cursor. --keys fails before
+# creating the branch when there is no walk or no key in range (same as start).
 walk=0
 walkcount=0
+keys_filter=0
 if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$bcommit")" && [ -n "$wtcontent" ]; then
 	curated="$(walk_sequence "$bcommit" "$acommit")"
 	# grep -c returns 1 (aborting under set -e in POSIX sh) on an empty sequence.
 	curatedcount="$(printf '%s\n' "$curated" | grep -c . || true)"
 	if [ "$curatedcount" -ge 1 ]; then
 		walk=1
-		walkpaths="$(walk_reading_order "$bcommit" "$acommit")"
-		walkcount="$(printf '%s\n' "$walkpaths" | grep -c . || true)"
+		if [ "$keys_only" -eq 1 ]; then
+			walkpaths="$(walk_keys_order "$bcommit" "$acommit")"
+			walkcount="$(printf '%s\n' "$walkpaths" | grep -c . || true)"
+			if [ "$walkcount" -lt 1 ]; then
+				die "--keys requires at least one walkthrough entry marked > key in range; mark keys or compare without --keys"
+			fi
+			keys_filter=1
+		else
+			walkpaths="$(walk_reading_order "$bcommit" "$acommit")"
+			walkcount="$(printf '%s\n' "$walkpaths" | grep -c . || true)"
+		fi
 	else
+		if [ "$keys_only" -eq 1 ]; then
+			die "--keys requires a walkthrough with entries in range; none apply to $a..$b"
+		fi
 		degradedfiles="$(range_files "$bcommit" "$acommit" | tr '\n' ' ')"
 		echo "note: $b has a walkthrough, but none of its entries apply to $a..$b; reading the whole diff: $degradedfiles"
 	fi
+elif [ "$keys_only" -eq 1 ]; then
+	die "--keys requires a walkthrough on $b; none found (or compare without --keys)"
 fi
 
 # Whole range: create review/<name> at <b> and soft-reset to <a> so the staged diff
@@ -183,21 +213,28 @@ if [ "$walk" -eq 1 ]; then
 	git config "branch.$rb.reviewmode" "walk"
 	git config "branch.$rb.reviewwalkstep" "1"
 	git config "branch.$rb.reviewwalkcount" "$walkcount"
-
-	# Files in range with no walkthrough entry: appended to the end of the reading
-	# order (walk_reading_order), so name them rather than leave them to be
-	# discovered silently — same as start.
-	uncovered="$(printf '%s\n' "$walkpaths" | tail -n +"$((curatedcount + 1))")"
-	if [ -n "$uncovered" ]; then
-		echo "note: file(s) in range not in the walkthrough are added to the end of the reading order: $(printf '%s\n' "$uncovered" | tr '\n' ' ')"
+	if [ "$keys_filter" -eq 1 ]; then
+		git config "branch.$rb.reviewwalkkeys" "1"
 	fi
 
-	keycount="$(printf '%s\n' "$walkpaths" | walk_count_keys "$bcommit")"
-	keysuffix=""
-	if [ "$keycount" -ge 1 ]; then
-		keysuffix=" ($keycount key)"
+	if [ "$keys_filter" -eq 0 ]; then
+		# Files in range with no walkthrough entry: appended to the end of the reading
+		# order (walk_reading_order), so name them rather than leave them to be
+		# discovered silently — same as start.
+		uncovered="$(printf '%s\n' "$walkpaths" | tail -n +"$((curatedcount + 1))")"
+		if [ -n "$uncovered" ]; then
+			echo "note: file(s) in range not in the walkthrough are added to the end of the reading order: $(printf '%s\n' "$uncovered" | tr '\n' ' ')"
+		fi
+
+		keycount="$(printf '%s\n' "$walkpaths" | walk_count_keys "$bcommit")"
+		keysuffix=""
+		if [ "$keycount" -ge 1 ]; then
+			keysuffix=" ($keycount key)"
+		fi
+		echo "$rb ready (compare $a..$b, read-only walkthrough$keysuffix) — read, then git review next (git review finish will refuse)"
+	else
+		echo "$rb ready (compare $a..$b, read-only walkthrough keys-only: $walkcount key$([ "$walkcount" -eq 1 ] || echo s)) — read, then git review next (git review finish will refuse)"
 	fi
-	echo "$rb ready (compare $a..$b, read-only walkthrough$keysuffix) — read, then git review next (git review finish will refuse)"
 	# The author's heads-up, once, before the first entry — same as in start.
 	headsup="$(printf '%s\n' "$wtcontent" | walk_preamble)"
 	if [ -n "$headsup" ]; then

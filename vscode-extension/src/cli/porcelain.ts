@@ -62,6 +62,11 @@ export interface PorcelainResult {
      */
     readonly?: true;
     /**
+     * `true` sólo cuando la CLI emitió el registro `keys` (walk solo-keys,
+     * `start`/`compare --keys`). Ausente en cualquier otra review.
+     */
+    keysOnly?: true;
+    /**
      * Asunto de cada commit de la secuencia, por `position` — sólo en modo step
      * (contracts/status-porcelain.md).
      *
@@ -181,6 +186,7 @@ export function parsePorcelain(stdout: string): PorcelainResult {
     let base: string | undefined;
     let finish: StatusFinishRecord | undefined;
     let isReadonly: true | undefined;
+    let isKeysOnly: true | undefined;
 
     for (const line of lines) {
         const fields = line.split("\t");
@@ -274,6 +280,11 @@ export function parsePorcelain(stdout: string): PorcelainResult {
                 isReadonly = true;
                 break;
             }
+            // Walk keys-only submode: tag alone, no fields. Presence = true.
+            case "keys": {
+                isKeysOnly = true;
+                break;
+            }
             default:
                 // Etiqueta desconocida: se ignora (FR-003).
                 break;
@@ -299,6 +310,9 @@ export function parsePorcelain(stdout: string): PorcelainResult {
     }
     if (isReadonly) {
         result.readonly = true;
+    }
+    if (isKeysOnly) {
+        result.keysOnly = true;
     }
     return result;
 }

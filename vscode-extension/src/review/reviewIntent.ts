@@ -11,7 +11,7 @@
 
 import {DeltaRecord} from "../cli/configPorcelain";
 
-export type ReviewLayout = "auto" | "step" | "no-walk";
+export type ReviewLayout = "auto" | "step" | "no-walk" | "keys";
 export type ReviewRange = "full" | "delta";
 export type ReviewSource = "remote" | "local" | "offline";
 
@@ -84,6 +84,8 @@ export function intentToArgs(intent: ReviewIntent, currentBranch: string): strin
         args.push("--step");
     } else if (intent.layout === "no-walk") {
         args.push("--no-walk");
+    } else if (intent.layout === "keys") {
+        args.push("--keys");
     }
 
     if (intent.range === "delta") {

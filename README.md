@@ -733,9 +733,13 @@ git review config --porcelain [<branch>]  # machine-readable + candidate branche
 <summary><code>git review finish</code></summary>
 
 - Default — create `review-fixes/<branch>` on top of the PR tip with your edits
-  staged, so you can review and commit them yourself.
+  staged, so you can review and commit them yourself. If you made no edits, the
+  branch is still created (at the tip, nothing staged) so the session closes the
+  same way — `git review finish --abort` undoes it, or `git review clean` drops
+  the leftover.
 - `--onto-source` — stage your edits on the PR branch itself instead, so you can
-  review and commit them yourself there.
+  review and commit them yourself there. With no edits, you still land on the PR
+  branch at the tip (and the same undo point is kept).
 - Either way the result stays local — review it and push it yourself when ready.
 - `--resume` — in `--step` mode, if banked edits overlap the PR tip, the replay
   leaves conflict markers and stops. Resolve them in the working tree, then run

@@ -166,11 +166,17 @@ teardown() {
 	[ -z "$output" ]
 }
 
-@test "review finish with no edits exits early" {
+@test "review finish with no edits lands on empty review-fixes" {
 	git review start feature/x --step
+	tip="$(git rev-parse feature/x)"
 	run git review finish
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"no review changes"* ]]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
+	[ "$(git rev-parse HEAD)" = "$tip" ]
+	run git diff --cached --quiet
+	[ "$status" -eq 0 ]
+	[ -n "$(git config branch.review/feature/x.reviewundohead || true)" ]
 }
 
 @test "--step on a single-commit PR stages its diff then ends" {

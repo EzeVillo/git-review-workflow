@@ -302,7 +302,7 @@ describe("US3 (005): quedarse con las ediciones al terminar", function () {
         assert.deepStrictEqual(model.pendingFinish, {branch: `review/${branch}`, onto: true});
     });
 
-    it("sin ediciones que extraer, se informa como resultado normal, nunca como error (T050/FR-019)", async () => {
+    it("sin ediciones que extraer, se informa como resultado normal y cierra la sesion (T050/FR-019)", async () => {
         const branch = "us3-finish-no-edits";
         createBranchWithChanges(repo, branch, {"src/a.ts": "a\n"});
         git(["checkout", branch], repo.dir);
@@ -318,16 +318,21 @@ describe("US3 (005): quedarse con las ediciones al terminar", function () {
         assert.deepStrictEqual(errors, [], "sin ediciones no es un error");
         assert.ok(infos.length > 0, "se informa igual, como resultado normal");
 
-        // Sin ediciones, finish nunca deja un punto de undo (no hay nada que
-        // deshacer) y HEAD se queda en review/<branch> — la senal que
-        // finishOutcome lee es justamente esta ausencia.
+        // Extract vacio: review-fixes en el tip, sin staged, con undo pending —
+        // el panel deja de ofrecer Next/Finish de la review activa.
+        assert.strictEqual(headBranch(repo), `review-fixes/${branch}`);
+        const staged = git(["diff", "--cached"], repo.dir);
+        assert.strictEqual(staged.trim(), "", "nada staged en el extract vacio");
+
         const finishLine = listPorcelain(repo)
             .split("\n")
             .find((l) => l.startsWith(`finish\treview/${branch}\t`));
-        assert.strictEqual(finishLine, undefined, "sin ediciones no queda ningun cierre pendiente");
+        assert.strictEqual(finishLine, `finish\treview/${branch}\tpending\t0`);
 
         const state = await api.refresh();
-        assert.strictEqual(state.situation, "review", "la review sigue activa: no hubo nada que cerrar");
+        assert.strictEqual(state.situation, "finish-pending");
+        const model = await api.getPanelModel();
+        assert.deepStrictEqual(model.pendingFinish, {branch: `review/${branch}`, onto: false});
     });
 
     it("descartar el QuickPick de ubicacion no invoca finish (FR-030)", async () => {

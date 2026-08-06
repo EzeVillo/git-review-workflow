@@ -757,9 +757,13 @@ git review config --porcelain [<rama>]    # legible por máquina + candidatas
 <summary><code>git review finish</code></summary>
 
 - Por defecto — crea `review-fixes/<rama>` sobre el tip del PR con tus ediciones
-  staged, para que las revises y commitees vos.
+  staged, para que las revises y commitees vos. Si no hiciste ediciones, la rama
+  se crea igual (en el tip, sin nada staged) para que la sesión se cierre del
+  mismo modo — `git review finish --abort` la deshace, o `git review clean`
+  tira el leftover.
 - `--onto-source` — en su lugar deja tus ediciones staged sobre la rama del PR
-  misma, para que las revises y commitees vos ahí.
+  misma, para que las revises y commitees vos ahí. Sin ediciones, igual aterrizás
+  en la rama del PR en el tip (y se conserva el mismo punto de undo).
 - En cualquiera de los dos casos el resultado queda local — revisalo y pusheá a
   mano cuando estés listo.
 - `--resume` — en modo `--step`, si las ediciones bancadas chocan con el tip del

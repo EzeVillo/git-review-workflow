@@ -854,6 +854,43 @@ EOF
 	[[ "$output" != *"+a2"* ]]
 }
 
+@test "finish with no edits lands on empty review-fixes and abort restores walk" {
+	# Mid-cursor shape (same as the sandbox's saved feature/search): finish
+	# without reviewer edits must still close the session — empty review-fixes
+	# at the tip — not strand you on review/* (panel still offering Next/Finish)
+	# or leave HEAD off the base so status dies with "HEAD has moved off".
+	git review start feature/x >/dev/null
+	git review next >/dev/null
+	base="$(git rev-parse HEAD)"
+	tip="$(git rev-parse feature/x)"
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "2" ]
+
+	run git review finish
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"no review changes"* ]]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
+	[ "$(git rev-parse HEAD)" = "$tip" ]
+	run git diff --cached --quiet
+	[ "$status" -eq 0 ]
+	# Not on review/*: status is "no active review here", not a walk range error.
+	run git review status --porcelain
+	[ "$status" -eq 2 ]
+
+	run git review finish --abort
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
+	[ "$(git rev-parse HEAD)" = "$base" ]
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "2" ]
+
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	printf '%s\n' "$output" | grep -q $'^state\treview/feature/x\tfeature/x\t.*\twalk\t'
+
+	run git review next
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "3" ]
+}
+
 @test "finish rejects corrupt metadata: walk keys without reviewmode=walk" {
 	git review start feature/x --no-walk >/dev/null
 	# Inject a walk key onto a non-walk review.

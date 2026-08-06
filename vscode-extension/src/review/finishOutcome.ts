@@ -7,16 +7,16 @@ export type FinishOutcome = "no-edits" | "pending";
  * con exit `0`, mirando ÚNICAMENTE el `ReviewState` ya refrescado — nunca el
  * `stdout`/`stderr` del propio `finish` (contracts/cli-invocation.md § "no
  * parsear la salida humana de ningún verbo"; tasks.md T050/T050a lo llaman
- * "la regla que más fácil se pierde": la CLI dice con todas las letras "no
- * review changes to apply", y leer esa línea sería lo más corto).
+ * "la regla que más fácil se pierde").
  *
- * La señal es la ausencia/presencia del registro `finish … pending` para
- * `branch` en el inventario (contracts/finish-state.md): la CLI misma deshace
- * su propio punto de undo cuando no hubo ediciones que extraer
- * (`bin/git-review-verbs/finish:446-451`), así que un cierre sin ediciones
- * nunca deja ese registro — pero uno CON ediciones siempre lo deja, aunque el
- * exit haya sido `0` sin ninguna advertencia. `finishReview.ts` es el único
- * llamador: refresca el estado después de invocar y pasa el resultado acá.
+ * La señal es la presencia del registro `finish … pending` para `branch` en el
+ * inventario (contracts/finish-state.md). Un finish exitoso — con o sin
+ * ediciones que extraer — deja ese registro y aterriza en el destino
+ * (`review-fixes/<src>` o la rama del PR): el extract vacío también es un
+ * cierre pendiente (nada staged, undo vivo para `finish --abort`). La ausencia
+ * del registro tras exit 0 es el caso residual "sin cierre" (p. ej. un camino
+ * viejo o un estado raro); se informa igual como resultado normal, no como
+ * error. `finishReview.ts` es el único llamador.
  */
 export function finishOutcome(refreshed: ReviewState, branch: string): FinishOutcome {
     const pending = refreshed.branches.some((b) => b.name === branch && b.finish?.state === "pending");

@@ -20,11 +20,11 @@ export const PANEL_MESSAGES = [
     "continueReview",
     "startReview",
     "setBase",
-    "abortReview",
-    "finishReview",
+    // Finish / Save / Cancel no pasan por el webview: son iconos de view/title
+    // (y la paleta). Undo/Continue de un finish trabado sí, porque viven en el
+    // banner del panel, no en el chrome.
     "undoFinish",
     "resumeFinish",
-    "saveReview",
 ] as const;
 
 export type PanelMessage = (typeof PANEL_MESSAGES)[number];

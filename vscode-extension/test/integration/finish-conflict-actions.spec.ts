@@ -15,9 +15,9 @@ import {
 
 /**
  * I1 (revisión de la Fase 5, fix round 1): con `situation === "finish-conflict"`
- * el panel dibuja "Cancel review" y "Diff" igual que en una review normal
- * (`panelHtml.ts` trata las dos situaciones como legibles), pero antes de este
- * fix los comandos que esos controles disparan (`gitReview.abortReview`,
+ * la review sigue legible (mode/branch/entrada; Diff y demás controles de
+ * entrada en el webview) y Cancel/Finish viven como iconos de view/title, pero
+ * antes de este fix los comandos (`gitReview.abortReview`,
  * `gitReview.openChange`) se negaban en silencio por un guard que sólo
  * aceptaba `"review"` — un control visible y clickeable que no hacía nada.
  * Estos tests reconstruyen el fixture de conflicto de

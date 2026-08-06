@@ -310,4 +310,16 @@ describe("panelHtml", () => {
             "con --onto-source el destino tiene que ser la propia rama del PR, no review/<x>"
         );
     });
+
+    it("el ciclo de vida no se dibuja en el webview: vive en view/title", () => {
+        // Finish / Save / Cancel son iconos del chrome del panel (package.json
+        // view/title). Duplicarlos acá partía el trio y gastaba el sidebar.
+        const barBody = /function renderBar\(model, loading\) \{([^]*?)\n  \}/.exec(html)?.[1] ?? "";
+        assert.ok(barBody.length > 0, "no se encontro renderBar para afirmar sobre el");
+        assert.ok(!barBody.includes("saveReview"), "Save no va en la barra del webview");
+        assert.ok(!barBody.includes("abortReview"), "Cancel no va en la barra del webview");
+        assert.ok(!barBody.includes("finishReview"), "Finish no va en la barra del webview");
+        assert.ok(!html.includes("Save for later"));
+        assert.ok(!html.includes("Cancel review"));
+    });
 });

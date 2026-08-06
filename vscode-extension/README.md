@@ -21,16 +21,18 @@ is a branch checkout and the editor's branch picker already does that.
 
 ## Panel actions
 
-Everything below is a command the panel exposes (Command Palette or a button on
-the pane). Each one shells out to the matching `git review` verb — the extension
-never invents a second way to change review state.
+Everything below is a command the panel exposes. Lifecycle actions (Finish,
+Save, Cancel, and Refresh) are icon buttons on the view title bar; the rest are
+buttons inside the webview or the Command Palette. Each one shells out to the
+matching `git review` verb — the extension never invents a second way to change
+review state.
 
 | Action | When it appears | CLI |
 |--------|-----------------|-----|
 | **Start a review** | Empty state (`no-review`): pick branch, how to read it, origin, and range (if a prior tip exists) from the assistant | `git review start …` |
-| **Cancel review** | Active review, and also mid-conflict finish | `git review abort` |
-| **Finish review** | Active review with your edits ready to extract | `git review finish` / `finish --onto-source` |
-| **Save for later** | Active review only (not while a finish is mid-conflict) | `git review save` |
+| **Cancel review** | View title icon while an active review (or a mid-conflict finish) is open | `git review abort` |
+| **Finish review** | View title icon while an active review is open | `git review finish` / `finish --onto-source` |
+| **Save for later** | View title icon while an active review is open (not during a mid-conflict finish) | `git review save` |
 | **Undo** (finish) | After a completed finish still waiting (`finish-pending`), or a finish stopped mid-conflict (`finish-conflict`) | `git review finish --abort` |
 | **Continue** (finish) | Finish stopped mid-conflict, after you resolve the markers in the tree | `git review finish --resume` |
 

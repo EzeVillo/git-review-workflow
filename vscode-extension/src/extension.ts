@@ -219,11 +219,8 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
             continueReview: "gitReview.continueReview",
             startReview: "gitReview.startReview",
             setBase: "gitReview.setBase",
-            abortReview: "gitReview.abortReview",
-            finishReview: "gitReview.finishReview",
             undoFinish: "gitReview.undoFinish",
             resumeFinish: "gitReview.resumeFinish",
-            saveReview: "gitReview.saveReview",
         };
         // El índice viaja tal cual y lo valida el comando contra el estado del
         // host (extension-surface.md § Protocolo): en el inventario resuelve una

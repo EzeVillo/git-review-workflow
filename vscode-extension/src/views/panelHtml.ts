@@ -51,14 +51,6 @@ export function panelHtml(nonce: string): string {
      pega en una terminal. Quien cede el ancho es el nombre del origen. */
   .bar .tip { flex: none; }
   .bar .pos { margin-left: auto; font-variant-numeric: tabular-nums; }
-  /* margin-left:auto propio en vez de depender del de .pos: whole no dibuja
-     .pos (no tiene posicion/total), y el boton igual tiene que quedar contra
-     el borde derecho ahi. */
-  /* margin-left:auto en el primero del grupo (save en review, cancel solo en
-     finish-conflict): ambos botones de ciclo de vida van al borde derecho. */
-  .bar .save { margin-left: auto; flex: none; padding: .15em .55em; font-size: .85em; }
-  .bar .cancel { flex: none; padding: .15em .55em; font-size: .85em; }
-  .bar .cancel.push { margin-left: auto; }
   .note {
     padding: .5em .8em;
     border-bottom: 1px solid var(--vscode-panel-border);
@@ -547,27 +539,10 @@ export function panelHtml(nonce: string): string {
     } else if (model.position !== undefined && model.total !== undefined) {
       bar.appendChild(el("span", "pos", model.position + "/" + model.total));
     }
-    // Viven en la barra y no en las filas de la entrada porque, a diferencia de
-    // "Diff"/"File"/prev/next, no son una accion sobre la entrada actual: son
-    // sobre la review entera, y la barra es lo unico que sobrevive igual en
-    // whole (sin entrada) que en step/walk. Deshabilitados por model.busy con
-    // el mismo criterio que prev/next (renderNavRow): no hay nada que pausar
-    // ni cancelar mientras otra mutacion ya esta en vuelo.
-    // "Save for later" solo en review (no en finish-conflict): pausar un
-    // cierre trabado no es un camino documentado.
-    if (model.situation === "review") {
-      const save = button("Save for later", "saveReview", "save", null);
-      save.disabled = model.busy === true;
-      bar.appendChild(save);
-    }
-    const cancel = button(
-      "Cancel review",
-      "abortReview",
-      model.situation === "review" ? "cancel" : "cancel push",
-      null
-    );
-    cancel.disabled = model.busy === true;
-    bar.appendChild(cancel);
+    // La barra es solo identidad (modo, origen, tip, posición). El ciclo de
+    // vida de la review — Finish, Save, Cancel, Refresh — vive en view/title
+    // como iconos del chrome del panel, no acá: duplicarlos en el webview
+    // gastaba el ancho del sidebar y partía el trio (Finish solo arriba).
     return bar;
   }
 

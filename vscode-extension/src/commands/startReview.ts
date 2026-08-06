@@ -44,7 +44,7 @@ const LAYOUT_ITEMS: LayoutItem[] = [
 ];
 
 /**
- * Origen (FR-014): remoto / local / local sin red. Las dos últimas se explican
+ * Origen (FR-014): remoto / local / offline. Las dos últimas se explican
  * en la descripción porque deciden red y resolución de la base.
  */
 const SOURCE_ITEMS: SourceItem[] = [
@@ -59,7 +59,7 @@ const SOURCE_ITEMS: SourceItem[] = [
         source: "local",
     },
     {
-        label: "Local, offline",
+        label: "Offline",
         description: "review the local branch with no network; base is resolved locally",
         source: "offline",
     },
@@ -136,7 +136,7 @@ async function pickSource(defaultSource: ReviewSource): Promise<ReviewSource | u
     const items = [preferred, ...rest];
     const picked = await vscode.window.showQuickPick(items, {
         title: "Start a review — origin",
-        placeHolder: "Remote, local, or local without network",
+        placeHolder: "Remote, local, or offline",
     });
     return picked?.source;
 }

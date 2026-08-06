@@ -60,6 +60,15 @@ export interface PanelReview {
      * sucio, su tercer modo de fallo, no se ve desde acá y se deja fallar.
      */
     resumable: boolean;
+    /**
+     * Cierre sin resolver de esta fila (`list --porcelain` → `finish`), si lo
+     * hay. El panel lo usa para el title del badge `?` cuando no hay verbo en
+     * la fila; no cruza a ninguna invocación.
+     */
+    finish?: {
+        state: "pending" | "conflict";
+        onto: boolean;
+    };
 }
 
 /**
@@ -76,41 +85,39 @@ export interface PanelModel {
     /** Sólo con más de un repositorio en la ventana (FR-029). */
     repoLabel?: string;
     /**
-     * Inventario del repositorio, en el orden de la CLI. Se puebla con
-     * `situation === "no-review"` y con `"finish-pending"` (`state.branches`
-     * trae lo mismo en las dos — ver `ReviewState.branches`); en cualquier
-     * otra es un array vacío.
+     * Inventario del repositorio, en el orden de la CLI. Sólo con
+     * `situation === "no-review"` (`state.branches`); en `finish-pending` el
+     * panel no dibuja inventario (pantalla de post-cierre) y el host resuelve
+     * el source del clean/undo desde `state.branches` + `pendingFinish`.
+     * En cualquier otra situación es un array vacío.
      */
     reviews: PanelReview[];
     /**
-     * El cierre completo pendiente que encabeza el inventario del estado
-     * vacío, sólo con `situation === "finish-pending"` (contracts/finish-
-     * state.md): la fila `finish … pending` que hizo que el estado dejara de
-     * ser `"no-review"`, proyectada a lo que `finishReview.ts` necesita para
-     * ofrecer deshacerlo o continuarlo en una fase posterior (US4). Ausente
-     * en cualquier otra situación, y también si por algún motivo el
-     * inventario no trae ninguna fila `pending` (no debería ocurrir: es la
-     * misma fila que decidió la situación).
+     * Cierre completo con undo vivo, sólo con `situation === "finish-pending"`
+     * (contracts/finish-state.md): la fila `finish … pending` que hizo que el
+     * estado dejara de ser `"no-review"`. El panel nombra el destino de las
+     * edits y ofrece `finish --abort` / `clean <src>`. Ausente en cualquier
+     * otra situación, y también si el inventario no trae ninguna fila
+     * `pending` (no debería ocurrir: es la misma fila que decidió la
+     * situación).
      */
     pendingFinish?: { branch: string; onto: boolean };
     /**
-     * `true` cuando `situation === "no-review"` y el reporte de `git review
-     * config --porcelain` llegó sin `base` — la señal para el párrafo de
-     * "Set the base branch" del estado vacío (T026). No bloquea el asistente
-     * de inicio, que ya resuelve la base inline; esto es sólo lo que se ofrece
-     * *además*, para quien no lo abre. `false` en cualquier otra situación, y
-     * también si el reporte de config nunca llegó (sin dato no hay nada que
-     * avisar, no se asume lo peor).
+     * `true` cuando el empty state puede ofrecer Start (`no-review`) y el
+     * reporte de `git review config --porcelain` llegó sin `base` — la señal
+     * para el párrafo de "Set the base branch" (T026). No bloquea el
+     * asistente de inicio, que ya resuelve la base inline; esto es sólo lo
+     * que se ofrece *además*. `false` en cualquier otra situación (incluido
+     * `finish-pending`, que no es empty state), y también si el reporte de
+     * config nunca llegó.
      */
     noBaseConfigured: boolean;
     /**
      * La base configurada para arrancar una review nueva — distinta de
      * `base` de acá abajo, que es la de una review YA activa (whole). Sólo
-     * presente con `situation === "no-review"` y el reporte de config con
-     * `base` (FR-010/US1 escenario 6: el revisor tiene que ver contra qué se
-     * va a comparar sin buscarlo en un archivo de configuración, y poder
-     * cambiarla desde el mismo lugar). Ausente si el reporte nunca llegó o si
-     * llegó sin base — ahí es `noBaseConfigured` quien lo dice.
+     * presente en el empty state (`no-review`) y el reporte de config con
+     * `base` (FR-010/US1 escenario 6). Ausente si el reporte nunca llegó o
+     * si llegó sin base — ahí es `noBaseConfigured`.
      */
     configuredBase?: string;
     /** De acá para abajo, sólo con `situation === "review"`. */
@@ -161,6 +168,12 @@ export interface PanelModel {
     navigationLocked: boolean;
     /** `walkthrough === "degraded"` (FR-010). */
     degraded: boolean;
+    /**
+     * Compare de solo lectura: `finish` no aplica. Siempre booleano en el
+     * modelo (el panel no distingue "CLI vieja" de "start normal": ambos son
+     * "no es readonly").
+     */
+    readonly: boolean;
     /** La entrada actual, elegida por `position` y nunca por `id`. */
     current?: PanelEntry;
     entryCount: number;
@@ -309,6 +322,9 @@ function toPanelReviews(branches: BranchRecord[]): PanelReview[] {
             review.position = branch.position;
             review.total = branch.total;
         }
+        if (branch.finish !== undefined) {
+            review.finish = {state: branch.finish.state, onto: branch.finish.onto};
+        }
         return review;
     });
 }
@@ -337,16 +353,23 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
     const base: PanelModel = {
         situation: state.situation,
         busy: inputs.busy,
-        reviews: toPanelReviews(state.branches),
+        // Inventario sólo en no-review: finish-pending es pantalla de
+        // post-cierre (Undo / Clean), no el empty state con Start.
+        reviews: state.situation === "no-review" ? toPanelReviews(state.branches) : [],
         // Ausencia de dato (config nunca llegó) y "config llegó sin base" son
         // distintos, pero ambos se dibujan igual acá: nada que avisar. Sólo
-        // "config llegó, y base está ausente" prende el aviso.
-        noBaseConfigured: state.situation === "no-review" && state.config !== undefined && state.config.base === undefined,
+        // "config llegó, y base está ausente" prende el aviso — y sólo en el
+        // empty state que ofrece Start.
+        noBaseConfigured:
+            state.situation === "no-review"
+            && state.config !== undefined
+            && state.config.base === undefined,
         baseMoved: false,
         atFirst: false,
         atLast: false,
         navigationLocked: state.situation === "finish-conflict",
         degraded: false,
+        readonly: false,
         entryCount: 0,
         files: [],
     };
@@ -376,6 +399,7 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
     base.source = review.source;
     base.tip = review.tip;
     base.degraded = review.walkthrough === "degraded";
+    base.readonly = state.readonly === true;
     base.entryCount = state.entries.length;
 
     if (review.mode === "whole") {

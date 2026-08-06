@@ -168,6 +168,8 @@ copy_meta reviewbase
 copy_meta reviewtip
 copy_meta reviewprevreviewed
 copy_meta reviewlocal
+# compare reviews: finish must keep refusing after save → continue.
+copy_meta reviewreadonly
 git config "branch.$saved.reviewreturn" "$target"
 
 # Leave the review branch: drop its working-tree changes (captured above), return

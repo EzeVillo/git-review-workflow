@@ -28,6 +28,9 @@ function reviewState(stdout: string): ReviewState {
     if (parsed.base !== undefined) {
         state.base = parsed.base;
     }
+    if (parsed.readonly) {
+        state.readonly = true;
+    }
     return state;
 }
 
@@ -124,6 +127,20 @@ describe("buildPanelModel", () => {
     it("baseMoved cuando total < recorded (la secuencia se achico)", () => {
         const moved = "state\treview/feat\torigin/feat\tabc123\twalk\tapplied\t1\t4\t7\tsrc/a.ts\t0\nentry\t1\tsrc/a.ts\t0\t1\n";
         assert.strictEqual(buildPanelModel(reviewState(moved), {busy: false}).baseMoved, true);
+    });
+
+    it("readonly se proyecta cuando status reporta el registro (compare)", () => {
+        const stdout = [
+            "state\treview/v2.0\tv2.0\tabc123\twhole\tnone",
+            "entry\t1\tapp.txt",
+            "readonly",
+            "",
+        ].join("\n");
+        assert.strictEqual(buildPanelModel(reviewState(stdout), {busy: false}).readonly, true);
+    });
+
+    it("readonly es false fuera de un compare (sin registro)", () => {
+        assert.strictEqual(buildPanelModel(reviewState(WALK), {busy: false}).readonly, false);
     });
 
     it("total > recorded no es baseMoved: es la secuencia creciendo (el upgrade de los no anotados)", () => {
@@ -556,7 +573,7 @@ describe("buildPanelModel — finish (005 US3)", () => {
         assert.strictEqual(model.navigationLocked, false);
     });
 
-    it("finish-pending: reviews se sigue poblando desde branches, y pendingFinish trae branch y onto", () => {
+    it("finish-pending: sin inventario en el modelo; pendingFinish trae branch y onto", () => {
         const state: ReviewState = {
             situation: "finish-pending",
             entries: [],
@@ -567,9 +584,12 @@ describe("buildPanelModel — finish (005 US3)", () => {
             ].join("\n")),
         };
         const model = buildPanelModel(state, {busy: false});
-        assert.strictEqual(model.reviews.length, 1);
-        assert.strictEqual(model.reviews[0].name, "review/feature/checkout");
+        // El host sigue leyendo branches del state para clean/undo; el panel
+        // no dibuja inventario en esta situación.
+        assert.deepStrictEqual(model.reviews, []);
         assert.deepStrictEqual(model.pendingFinish, {branch: "review/feature/checkout", onto: true});
+        assert.strictEqual(model.noBaseConfigured, false);
+        assert.strictEqual(model.configuredBase, undefined);
     });
 
     it("pendingFinish ausente sin ninguna fila finish pending en el inventario", () => {

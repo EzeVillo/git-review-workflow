@@ -56,6 +56,12 @@ export interface PorcelainResult {
     /** Sólo si hay un cierre trabado en curso sobre esta review (FR-027). */
     finish?: StatusFinishRecord;
     /**
+     * `true` sólo cuando la CLI emitió el registro `readonly` (`git review
+     * compare` / `reviewreadonly=1`). Ausente en cualquier otra review: no se
+     * inventa `false` (omit, never blank — mismo criterio que `base`/`finish`).
+     */
+    readonly?: true;
+    /**
      * Asunto de cada commit de la secuencia, por `position` — sólo en modo step
      * (contracts/status-porcelain.md).
      *
@@ -174,6 +180,7 @@ export function parsePorcelain(stdout: string): PorcelainResult {
     let authors: Map<number, string> | undefined;
     let base: string | undefined;
     let finish: StatusFinishRecord | undefined;
+    let isReadonly: true | undefined;
 
     for (const line of lines) {
         const fields = line.split("\t");
@@ -262,6 +269,11 @@ export function parsePorcelain(stdout: string): PorcelainResult {
                 }
                 break;
             }
+            // Compare read-only: tag alone, no fields. Presence = true.
+            case "readonly": {
+                isReadonly = true;
+                break;
+            }
             default:
                 // Etiqueta desconocida: se ignora (FR-003).
                 break;
@@ -284,6 +296,9 @@ export function parsePorcelain(stdout: string): PorcelainResult {
     }
     if (finish !== undefined) {
         result.finish = finish;
+    }
+    if (isReadonly) {
+        result.readonly = true;
     }
     return result;
 }

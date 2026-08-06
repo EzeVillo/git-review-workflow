@@ -131,6 +131,52 @@
         "title": "Resume Finish",
         "category": "git review",
         "icon": "$(debug-continue)"
+      },
+      {
+        "command": "gitReview.discardInventory",
+        "title": "Discard Inventory Review",
+        "category": "git review"
+      },
+      {
+        "command": "gitReview.cleanReview",
+        "title": "Clean",
+        "category": "git review"
+      },
+      {
+        "command": "gitReview.forgetReview",
+        "title": "Forget Saved Review or Delta Marker",
+        "category": "git review"
+      },
+      {
+        "command": "gitReview.previewEdits",
+        "title": "Preview Edits",
+        "category": "git review",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "gitReview.previewEditsStat",
+        "title": "Preview Edits (stat)",
+        "category": "git review"
+      },
+      {
+        "command": "gitReview.compareReview",
+        "title": "Compare Revisions",
+        "category": "git review"
+      },
+      {
+        "command": "gitReview.walkthroughInit",
+        "title": "Walkthrough: Init",
+        "category": "git review"
+      },
+      {
+        "command": "gitReview.walkthroughBuild",
+        "title": "Walkthrough: Build",
+        "category": "git review"
+      },
+      {
+        "command": "gitReview.showCliLog",
+        "title": "Show CLI Log",
+        "category": "git review"
       }
     ],
     "menus": {
@@ -142,7 +188,7 @@
         },
         {
           "command": "gitReview.finishReview",
-          "when": "view == gitReview.walkthrough && gitReview.situation == review",
+          "when": "view == gitReview.walkthrough && gitReview.situation == review && !gitReview.readonly",
           "group": "navigation@2"
         },
         {
@@ -154,6 +200,11 @@
           "command": "gitReview.abortReview",
           "when": "view == gitReview.walkthrough && (gitReview.situation == review || gitReview.situation == finish-conflict)",
           "group": "navigation@4"
+        },
+        {
+          "command": "gitReview.previewEdits",
+          "when": "view == gitReview.walkthrough && (gitReview.situation == review || gitReview.situation == finish-conflict)",
+          "group": "navigation@5"
         }
       ],
       "commandPalette": [
@@ -195,7 +246,7 @@
         },
         {
           "command": "gitReview.startReview",
-          "when": "gitReview.situation == no-review"
+          "when": "gitReview.situation == no-review || gitReview.situation == finish-pending"
         },
         {
           "command": "gitReview.setBase"
@@ -210,7 +261,7 @@
         },
         {
           "command": "gitReview.finishReview",
-          "when": "gitReview.situation == review"
+          "when": "gitReview.situation == review && !gitReview.readonly"
         },
         {
           "command": "gitReview.undoFinish",
@@ -219,6 +270,36 @@
         {
           "command": "gitReview.resumeFinish",
           "when": "gitReview.situation == finish-conflict"
+        },
+        {
+          "command": "gitReview.discardInventory",
+          "when": "false"
+        },
+        {
+          "command": "gitReview.cleanReview"
+        },
+        {
+          "command": "gitReview.forgetReview"
+        },
+        {
+          "command": "gitReview.previewEdits",
+          "when": "gitReview.situation == review || gitReview.situation == finish-conflict"
+        },
+        {
+          "command": "gitReview.previewEditsStat",
+          "when": "gitReview.situation == review || gitReview.situation == finish-conflict"
+        },
+        {
+          "command": "gitReview.compareReview"
+        },
+        {
+          "command": "gitReview.walkthroughInit"
+        },
+        {
+          "command": "gitReview.walkthroughBuild"
+        },
+        {
+          "command": "gitReview.showCliLog"
         }
       ]
     },

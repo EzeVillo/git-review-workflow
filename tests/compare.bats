@@ -91,6 +91,27 @@ teardown() {
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/v2.0" ]
 }
 
+@test "status --porcelain emits a readonly record on a compare review" {
+	git review compare v1.0 v2.0
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	# Presence of the tag line (no fields): omit when not a compare, never blank.
+	printf '%s\n' "$output" | grep -qx 'readonly'
+}
+
+@test "save and continue keep the readonly marker of a compare" {
+	git review compare v1.0 v2.0
+	run git review save
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review-saved/v2.0.reviewreadonly)" = "1" ]
+	run git review continue v2.0
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/v2.0.reviewreadonly)" = "1" ]
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	printf '%s\n' "$output" | grep -qx 'readonly'
+}
+
 @test "compare --step starts on the first commit of the range" {
 	run git review compare v1.0 v2.0 --step
 	[ "$status" -eq 0 ]

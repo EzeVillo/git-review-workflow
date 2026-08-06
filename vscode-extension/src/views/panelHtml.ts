@@ -24,12 +24,35 @@ export function panelHtml(nonce: string): string {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style nonce="${nonce}">
+  /* 100% del webview: el empty state de no-review usa flex para clavar
+     Other actions al borde inferior cuando está colapsado (no solo debajo
+     del contenido, que en un sidebar alto deja un hueco vacío abajo). */
+  html, body { height: 100%; }
   body {
     margin: 0;
     padding: 0;
     color: var(--vscode-foreground);
     font-family: var(--vscode-font-family);
     font-size: var(--vscode-font-size);
+  }
+  #root { min-height: 100%; box-sizing: border-box; }
+  #root.fills {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+  }
+  /* Inventario + Start: el bloque Start crece y empuja Other actions al fondo. */
+  .pane-main {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+  }
+  #root.fills > .empty,
+  .pane-main > .empty {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
   }
   .bar {
     display: flex;
@@ -241,17 +264,100 @@ export function panelHtml(nonce: string): string {
     font-family: var(--vscode-editor-font-family);
     overflow-wrap: anywhere;
   }
+  /* Meta y acciones en filas distintas: en un sidebar angosto los botones no
+     pelean con "step · 2/4" ni envuelven a medias la segunda línea. */
   .rev-meta {
-    display: flex;
-    align-items: center;
-    gap: .5em;
-    min-height: 1.9em;
     font-family: var(--vscode-editor-font-family);
     font-size: .9em;
     color: var(--vscode-descriptionForeground);
+    margin-bottom: .35em;
   }
-  .rev-meta button { margin-left: auto; }
+  /* Acciones del inventario: a la izquierda, ancho por el label (no flex:1 a
+     todo el sidebar). "Discard orphan" es el más largo; el tope deja aire
+     sin forzar una sola columna. */
+  .rev-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: .4em;
+    margin-bottom: 0;
+  }
+  .rev-actions button {
+    flex: 0 1 auto;
+    width: auto;
+    max-width: 100%;
+    white-space: nowrap;
+  }
+  /* Badge "?" a la altura de current/orphan: el mensaje va solo en title. */
+  .badge.help {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.15em;
+    padding: 0 .25em;
+    cursor: default;
+    border-color: transparent;
+    color: var(--vscode-descriptionForeground);
+  }
+  .badge.help .icon {
+    width: .85em;
+    height: .85em;
+  }
   .empty.after-inv { border-top: 1px solid var(--vscode-panel-border); }
+  /* Acciones del empty state que no son "empezar un PR": compare (review
+     de solo lectura) y autoría del walkthrough. No aparecen con review
+     activa — ambos verbos necesitan un working tree sin review montada.
+     Colapsadas: margin-top:auto las clava al borde inferior del panel
+     (el empty crece con #root.fills / .pane-main), sin divider.
+     Abiertas: vuelven al flujo bajo Start/base, con el separador de sección. */
+  .tools {
+    flex-shrink: 0;
+    margin-top: auto;
+  }
+  .tools[open] {
+    margin-top: 1.2em;
+    padding-top: 1.2em;
+    border-top: 1px solid var(--vscode-panel-border);
+  }
+  .tools summary {
+    cursor: pointer;
+    font-size: .9em;
+    font-weight: 600;
+    color: var(--vscode-descriptionForeground);
+    list-style: none;
+  }
+  .tools summary::-webkit-details-marker { display: none; }
+  /* Chevron al estilo de las secciones del sidebar: el triángulo nativo
+     varía por motor y en webviews a veces se ve tosco; éste usa el color
+     del summary y gira al abrir. */
+  .tools summary::before {
+    content: "";
+    display: inline-block;
+    width: .45em;
+    height: .45em;
+    margin-right: .45em;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(-45deg);
+    vertical-align: .15em;
+  }
+  .tools[open] summary {
+    margin-bottom: .6em;
+  }
+  .tools[open] summary::before {
+    transform: rotate(45deg);
+    vertical-align: .25em;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .tools summary::before { transition: transform .12s ease; }
+  }
+  .tools > button {
+    display: flex;
+    width: 100%;
+    margin-bottom: .45em;
+  }
+  .tools .row { margin-bottom: 0; }
+  .tools .row button { margin-bottom: 0; }
   /* El listado de whole (FR-010): mismo encabezado que el inventario, filas
      clickeables en vez de tarjetas — no hay estado por fila que mostrar. */
   .files { padding: 1.2em .9em; }
@@ -313,15 +419,21 @@ export function panelHtml(nonce: string): string {
 
   // Los íconos son SVG inline y no codicons: la fuente de codicons es un
   // recurso que habría que servir desde la extensión y abrirle font-src a la
-  // CSP, y este html se abre tal cual en un navegador para mirarlo. Cuatro
-  // trazos alcanzan, y siguen el vocabulario que el revisor ya conoce de la
-  // vista Source Control: archivo, diff, y los chevrones de navegar.
+  // CSP, y este html se abre tal cual en un navegador para mirarlo. Los
+  // trazos siguen el vocabulario del revisor (archivo, diff, chevrones) más
+  // un ? de ayuda para las filas del inventario sin verbo.
   const SVG_NS = "http://www.w3.org/2000/svg";
   const ICONS = {
     file: ["M4 1.6h5l3 3v9.8H4z", "M9 1.6v3h3"],
     diff: ["M2.5 5.6h8.4", "M8.1 2.8 10.9 5.6 8.1 8.4", "M13.5 10.4H5.1", "M7.9 7.6 5.1 10.4 7.9 13.2"],
     left: ["M10 3.4 5.4 8 10 12.6"],
-    right: ["M6 3.4 10.6 8 6 12.6"]
+    right: ["M6 3.4 10.6 8 6 12.6"],
+    // Círculo + trazo del ? + punto: legible a 1em en el hint del inventario.
+    help: [
+      "M8 2.2a5.8 5.8 0 1 0 .01 11.6A5.8 5.8 0 0 0 8 2.2z",
+      "M6.55 6.15c0-1.05.9-1.85 1.95-1.85s1.95.75 1.95 1.8c0 .9-.5 1.3-1.1 1.75-.55.4-.9.75-.9 1.4",
+      "M8 10.85v.9"
+    ]
   };
 
   function icon(name) {
@@ -385,19 +497,11 @@ export function panelHtml(nonce: string): string {
     return a;
   }
 
-  /** Recovery command for an orphan inventory row (mirrors git review list). */
-  function orphanFix(review) {
-    if (review.saved && review.name.indexOf("review-saved/") === 0) {
-      return "git review forget --saved " + review.name.slice("review-saved/".length);
-    }
-    return "git branch -D " + review.name;
-  }
-
   /** El modo y, en step/walk, la posición REGISTRADA — el inventario no la
    *  re-deriva (contracts/list-porcelain.md), a diferencia de la barra. */
   function reviewMeta(review) {
     if (review.orphan) {
-      return "no metadata — " + orphanFix(review);
+      return "no metadata";
     }
     if (review.position !== undefined && review.total !== undefined) {
       return review.mode + " · " + review.position + "/" + review.total;
@@ -406,10 +510,25 @@ export function panelHtml(nonce: string): string {
   }
 
   /**
-   * Una review del repositorio. Sólo las guardadas llevan acción: para volver a
-   * una activa no hay verbo —sería un checkout— y el selector de rama del
-   * editor ya lo resuelve. Listarla igual es lo que contesta la pregunta real,
-   * que es acordarse de que está abierta.
+   * Hover del badge "?" cuando la fila no ofrece Continue/Discard: el inventario
+   * lista la review para no olvidarla; el title dice por qué no hay verbo.
+   */
+  function inventoryHelpTitle(review) {
+    if (review.finish) {
+      const source = review.name.indexOf("review/") === 0 ? review.name.slice(7) : review.name;
+      if (review.finish.state === "pending") {
+        const dest = review.finish.onto ? source : "review-fixes/" + source;
+        return "Finish waiting on " + dest + " — use Undo above.";
+      }
+      return "Finish stopped mid-conflict — switch to this branch to resolve or undo.";
+    }
+    return "Still active — switch to this branch to work on it.";
+  }
+
+  /**
+   * Una review del repositorio. Tres capas: nombre (+ badges), meta, y debajo
+   * acciones compactas a la izquierda. Guardadas: Continue + Discard. Orphans:
+   * Discard. Activas en otra rama sin verbo: badge "?" con title al hover.
    */
   function renderReview(model, review, index) {
     const box = el("div", "rev");
@@ -417,23 +536,44 @@ export function panelHtml(nonce: string): string {
     const head = el("div", "rev-head");
     head.appendChild(el("span", "rev-name", review.name));
     if (review.current) { head.appendChild(el("span", "badge", "current")); }
+    if (review.orphan) { head.appendChild(el("span", "badge", "orphan")); }
+
+    // Discard: saved (incl. orphan saved) o orphan no-saved. Nunca la current
+    // activa legible (abort cubre eso). Continue solo en saved.
+    const canDiscard = review.saved || review.orphan;
+    if (!canDiscard && !review.current) {
+      const tip = inventoryHelpTitle(review);
+      const help = el("span", "badge help");
+      help.setAttribute("role", "img");
+      help.setAttribute("aria-label", tip);
+      help.title = tip;
+      help.appendChild(icon("help"));
+      head.appendChild(help);
+    }
     box.appendChild(head);
 
-    const meta = el("div", "rev-meta");
-    meta.appendChild(el("span", null, reviewMeta(review)));
-    if (review.saved) {
-      const go = button("Continue", "continueReview", null, null, index);
-      go.disabled = model.busy || !review.resumable;
-      // Un control deshabilitado sin motivo es una pared: los dos casos son
-      // los que el verbo rechazaría, y el inventario ya los deja ver.
-      if (!review.resumable) {
-        go.title = review.orphan
-          ? "This branch has no review metadata — discard with: " + orphanFix(review)
-          : "A review of this branch is already active";
+    box.appendChild(el("div", "rev-meta", reviewMeta(review)));
+
+    if (canDiscard) {
+      const actions = el("div", "rev-actions");
+      if (review.saved) {
+        const go = button("Continue", "continueReview", null, null, index);
+        go.disabled = model.busy || !review.resumable;
+        if (!review.resumable) {
+          go.title = review.orphan
+            ? "This branch has no review metadata — use Discard"
+            : "A review of this branch is already active";
+        }
+        actions.appendChild(go);
       }
-      meta.appendChild(go);
+      const discard = button(review.orphan ? "Discard orphan" : "Discard", "discardInventory", null, null, index);
+      discard.disabled = model.busy;
+      discard.title = review.saved
+        ? "git review forget --saved (with confirmation)"
+        : "git review clean (with confirmation)";
+      actions.appendChild(discard);
+      box.appendChild(actions);
     }
-    box.appendChild(meta);
     return box;
   }
 
@@ -446,61 +586,100 @@ export function panelHtml(nonce: string): string {
     return box;
   }
 
+  // El panel redibuja el root en cada modelo; sin esto, expandir Other
+  // actions se pliega al primer refresh (busy, inventario, etc.).
+  let otherActionsOpen = false;
+
+  /**
+   * Compare y walkthrough init/build en el empty state (no-review): montan
+   * o escriben fuera de una sesion de lectura. No en finish-pending.
+   * Van plegadas por defecto: son secundarias respecto de Start / base.
+   */
+  function renderOtherActions(model) {
+    const box = el("details", "tools");
+    if (otherActionsOpen) { box.open = true; }
+    box.addEventListener("toggle", function () {
+      otherActionsOpen = box.open;
+    });
+    box.appendChild(el("summary", null, "Other actions"));
+    const compare = button("Compare revisions", "compareReview");
+    compare.disabled = model.busy;
+    box.appendChild(compare);
+    const walk = el("div", "row");
+    const init = button("Walkthrough: Init", "walkthroughInit");
+    const build = button("Walkthrough: Build", "walkthroughBuild");
+    init.disabled = model.busy;
+    build.disabled = model.busy;
+    walk.appendChild(init);
+    walk.appendChild(build);
+    box.appendChild(walk);
+    return box;
+  }
+
+  /**
+   * Empty state de no-review: Start, base, Other actions.
+   */
+  function renderEmptyStartBlock(model) {
+    const box = empty("No active review on this branch.", button("Start a review", "startReview", "primary"));
+    if (model.configuredBase !== undefined) {
+      box.appendChild(el("p", null, "Compares against " + model.configuredBase + "."));
+      box.appendChild(button("Change the base branch", "setBase", null));
+    } else if (model.noBaseConfigured) {
+      box.appendChild(el("p", null, "No base branch is configured for a full review."));
+      box.appendChild(button("Set the base branch", "setBase", null));
+    }
+    box.appendChild(renderOtherActions(model));
+    return box;
+  }
+
   function renderEmptyState(model) {
     switch (model.situation) {
       case "no-review": {
         // El fallback a lista vacía no sobra: el webview redibuja el modelo que
         // guardó con setState, que puede venir de una versión sin este campo.
+        // #root.fills (lo pone render) hace que el empty crezca a la altura del
+        // panel y Other actions colapsado se clave al fondo con margin-top:auto.
         const reviews = model.reviews || [];
-        const box = empty("No active review on this branch.", button("Start a review", "startReview", "primary"));
-        // Contra qué se compararía una review completa (FR-010, US1 escenario
-        // 6): siempre visible con base configurada, no sólo cuando falta — el
-        // botón de cambiarla acompaña en los dos casos, nunca bloquea el
-        // asistente, que ya la resuelve inline un paso antes de confirmar.
-        if (model.configuredBase !== undefined) {
-          box.appendChild(el("p", null, "Compares against " + model.configuredBase + "."));
-          box.appendChild(button("Change the base branch", "setBase", null));
-        } else if (model.noBaseConfigured) {
-          box.appendChild(el("p", null, "No base branch is configured for a full review."));
-          box.appendChild(button("Set the base branch", "setBase", null));
-        }
+        const box = renderEmptyStartBlock(model);
         if (reviews.length === 0) { return box; }
         // Con reviews abiertas el párrafo pasa a ser el pie del inventario, no
-        // el contenido: lleva el separador y va debajo.
+        // el contenido: lleva el separador y va debajo. .pane-main reparte el
+        // alto: inventario arriba, Start+Other actions crecen al resto.
         box.className = "empty after-inv";
-        const wrap = el("div");
+        const wrap = el("div", "pane-main");
         wrap.appendChild(renderInventory(model, reviews));
         wrap.appendChild(box);
         return wrap;
       }
-      // Un cierre completo dejó review/<src> con un punto de undo sin
-      // resolver (contracts/finish-state.md): el panel deja de decir "no hay
-      // ninguna review" y encabeza el inventario con ese cierre en vez de la
-      // invitación a empezar una — "Start a review" seguiría sin invocar
-      // nada, así que no corresponde ofrecerla acá. undoFinish es la única
-      // salida (cableado a gitReview.undoFinish via PANEL_MESSAGES).
+      // Cierre completo con undo vivo (contracts/finish-state.md): el finish
+      // ya entregó las edits; esto no es empty state. Flujo: commit en SCM,
+      // finish --abort, o clean del leftover (el delta no se toca).
       case "finish-pending": {
-        const reviews = model.reviews || [];
         const pending = model.pendingFinish;
-        // El destino real de las ediciones, no la rama de la review: la
-        // review siempre se llama "review/<x>" y onto dice si terminaron en
-        // "<x>" (la rama del PR) o en "review-fixes/<x>" — el mismo cómputo
-        // que el toast de finishReview.ts hace al terminar (contracts/
-        // finish-state.md: el destino se deriva de branch+onto, nunca se
-        // adivina ni se guarda aparte).
-        let headline = "A finish completed and is waiting to be confirmed.";
+        let source = "this branch";
+        let destination = "review-fixes/...";
         if (pending) {
-          const source = pending.branch.indexOf("review/") === 0 ? pending.branch.slice(7) : pending.branch;
-          const destination = pending.onto ? source : "review-fixes/" + source;
-          headline = "A finish completed and is waiting to be confirmed on " + destination + ".";
+          source = pending.branch.indexOf("review/") === 0 ? pending.branch.slice(7) : pending.branch;
+          destination = pending.onto ? source : "review-fixes/" + source;
         }
-        const box = empty(headline, button("Undo", "undoFinish", "primary"));
-        if (reviews.length === 0) { return box; }
-        box.className = "empty after-inv";
-        const wrap = el("div");
-        wrap.appendChild(renderInventory(model, reviews));
-        wrap.appendChild(box);
-        return wrap;
+        const notice = el("div", "note finish-banner");
+        notice.appendChild(el("p", null,
+          "Finished. Your edits are staged on " + destination + "."));
+        notice.appendChild(el("p", null,
+          "Commit and push them from Source Control. The review branch is kept so you can undo with git review finish --abort, or clean --keep-fixes when you no longer need the undo."));
+        const actions = el("div", "row");
+        const clean = button("Clean", "cleanReview", "primary");
+        clean.disabled = model.busy;
+        clean.title = pending
+          ? "git review clean --keep-fixes " + source
+          : "git review clean --keep-fixes";
+        const undo = button("Undo finish", "undoFinish", null);
+        undo.disabled = model.busy;
+        undo.title = "git review finish --abort";
+        actions.appendChild(clean);
+        actions.appendChild(undo);
+        notice.appendChild(actions);
+        return notice;
       }
       case "out-of-range":
         return empty(
@@ -687,8 +866,8 @@ export function panelHtml(nonce: string): string {
    * El banner de finish-conflict (contracts/finish-state.md): explica el
    * cierre trabado y ofrece deshacerlo o continuarlo — en vez de los
    * controles de navegación que renderEntry/renderPending retiran arriba.
-   * undoFinish / resumeFinish viven en PANEL_MESSAGES y rutean a
-   * gitReview.undoFinish / gitReview.resumeFinish.
+   * undoFinish / resumeFinish / cleanReview viven en PANEL_MESSAGES y rutean
+   * a gitReview.undoFinish / resumeFinish / cleanReview.
    */
   function renderFinishConflictBanner() {
     const box = el("div", "note finish-banner");
@@ -786,6 +965,9 @@ export function panelHtml(nonce: string): string {
   // review, no la entrada, así que no cambian al navegar. Sacarlas mientras
   // carga haría saltar el panel dos veces por cada paso.
   function renderNotes(model) {
+    if (model.readonly) {
+      root.appendChild(note("Read-only compare: finish is not available. Use Cancel when done."));
+    }
     if (model.baseMoved) { root.appendChild(note("The base moved: fewer entries remain in range than when the review started.")); }
     if (model.degraded) {
       root.appendChild(note("The walkthrough does not cover the review's current range; showing the full range diff."));
@@ -798,6 +980,9 @@ export function panelHtml(nonce: string): string {
 
   function render(model) {
     root.textContent = "";
+    // fills solo en no-review: Other actions colapsado se clava al fondo del
+    // panel. En el resto de situaciones el root no debe estirar en flex.
+    root.className = model.situation === "no-review" ? "fills" : "";
     // finish-conflict sigue siendo una review legible (FR-027) — el estado
     // vacío es sólo para no-review/out-of-range/error/cli-*.
     if (model.situation !== "review" && model.situation !== "finish-conflict") {
@@ -861,6 +1046,7 @@ export function panelHtml(nonce: string): string {
     showTimer = 0;
     painted = SKELETON;
     root.textContent = "";
+    root.className = "";
     root.appendChild(renderBar(model, true));
     renderNotes(model);
     root.appendChild(renderPending(model));

@@ -306,17 +306,17 @@ Every command is a verb under `git review`. Run `git review -h` for the list, or
 | `git review compare <a> <b> [--step \| --no-walk]`                                                                                 | Stage the diff between two commit-ish (tags, commits, branches) read-only, to read or walk it. `git review finish` refuses — there is nothing to write back.                                                                                                                                                    |
 | `git review walkthrough (init [--base <base>] [--force] \| build [--check])`                                                       | Author a reading walkthrough for the current branch's PR — a curated order of the changed files with a note on each, committed as `.review/walkthrough.md`.                                                                                                                                                     |
 | `git review next` / `git review prev`                                                                                              | Move a `--step` or walkthrough review to the next / previous entry.                                                                                                                                                                                                                                             |
-| `git review status [--porcelain \| --why <path>]`                                                                                  | Show the state of the review on the current branch (`--porcelain` for machine-readable output, including a `finish` record when a closure is mid-conflict; `--why <path>` for a walkthrough entry's explanation).                                                                                                 |
+| `git review status [--porcelain \| --why <path>]`                                                                                  | Show the state of the review on the current branch (`--porcelain` for machine-readable output, including a `finish` record when a closure is mid-conflict; `--why <path>` for a walkthrough entry's explanation).                                                                                               |
 | `git review list [--porcelain]`                                                                                                    | List every review in progress and every saved one (current branch marked `*`; `--porcelain` also reports unresolved finishes as `pending` or `conflict`).                                                                                                                                                       |
 | `git review save`                                                                                                                  | Pause the current review as `review-saved/<branch>` and return to where you started.                                                                                                                                                                                                                            |
 | `git review continue [branch]`                                                                                                     | Resume a review saved with `git review save`.                                                                                                                                                                                                                                                                   |
 | `git review finish [--onto-source] [--resume \| --abort [--force]]`                                                                | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch); `--abort` undoes the last finish.                                                                                                                                                                                 |
 | `git review preview [--stat]`                                                                                                      | Show the edits you have made so far — the diff `finish` would extract — without committing or switching branch.                                                                                                                                                                                                 |
 | `git review abort`                                                                                                                 | Cancel the current review and return to where you started.                                                                                                                                                                                                                                                      |
-| `git review clean [branch]`                                                                                                        | Delete the `review/*` and `review-fixes/*` branches for `<branch>`, or all of them.                                                                                                                                                                                                                             |
+| `git review clean [--keep-fixes] [branch]`                                                                                         | Delete the `review/*` (and by default `review-fixes/*`) branches for `<branch>`, or all of them; `--keep-fixes` leaves `review-fixes/*` alone.                                                                                                                                                                  |
 | `git review forget --delta (<branch> \| --all \| --stale [--dry-run])`                                                             | Discard the `--delta` marker for one branch, all of them, or only stale ones.                                                                                                                                                                                                                                   |
 | `git review forget --saved (<branch> \| --all) [--dry-run]`                                                                        | Discard a review saved with `git review save`.                                                                                                                                                                                                                                                                  |
-| `git review config [<key> [<value>]] [--unset <key>] [--porcelain [<branch>]]`                                                      | Read or write the product's config (`base`, `remote`); `--porcelain` also lists candidate branches to review.                                                                                                                                                                                                   |
+| `git review config [<key> [<value>]] [--unset <key>] [--porcelain [<branch>]]`                                                     | Read or write the product's config (`base`, `remote`); `--porcelain` also lists candidate branches to review.                                                                                                                                                                                                   |
 
 <details>
 <summary id="git-review-start"><code>git review start</code></summary>
@@ -733,9 +733,13 @@ git review config --porcelain [<branch>]  # machine-readable + candidate branche
 <summary><code>git review finish</code></summary>
 
 - Default — create `review-fixes/<branch>` on top of the PR tip with your edits
-  staged, so you can review and commit them yourself.
+  staged, so you can review and commit them yourself. If you made no edits, the
+  branch is still created (at the tip, nothing staged) so the session closes the
+  same way — `git review finish --abort` undoes it, or `git review clean` drops
+  the leftover.
 - `--onto-source` — stage your edits on the PR branch itself instead, so you can
-  review and commit them yourself there.
+  review and commit them yourself there. With no edits, you still land on the PR
+  branch at the tip (and the same undo point is kept).
 - Either way the result stays local — review it and push it yourself when ready.
 - `--resume` — in `--step` mode, if banked edits overlap the PR tip, the replay
   leaves conflict markers and stops. Resolve them in the working tree, then run
@@ -780,10 +784,14 @@ reviewed.
 <details>
 <summary><code>git review clean</code></summary>
 
-- With no `<branch>`, deletes every `review/*` and `review-fixes/*` branch.
+- With no `<branch>`, deletes every matching leftover (`review/*` and, by
+  default, `review-fixes/*`).
+- `--keep-fixes` — delete only `review/*` (the finish undo / active session
+  leftover) and leave `review-fixes/*` alone. Useful after a successful
+  `finish` when you want to drop the undo point but keep your staged edits.
 - Never deletes the branch you are currently on.
-- Also drops any banked commit-by-commit edit refs, even when no review branches
-  remain.
+- Also drops any banked commit-by-commit edit refs and finish undo records,
+  even when no review branches remain.
 - Leaves the `--delta` marker untouched — discard it with `git review forget --delta`.
 - Leaves saved reviews (`review-saved/*`) untouched — discard one with
   `git review forget --saved`.

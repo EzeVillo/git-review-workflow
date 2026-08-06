@@ -177,12 +177,15 @@ El webview **no ejecuta comandos**. Postea mensajes `{type}` de un conjunto
 cerrado y el host decide qué hacer con cada uno; un `type` desconocido se
 ignora. La lista es exactamente: `openEntry`, `openChange`, `openAllChanges`,
 `showWhy`, `next`, `prev`, `refresh`, `installCli`, `outOfRangeHelp`,
-`continueReview`, `startReview`, `setBase`, `undoFinish`, `resumeFinish`.
+`continueReview`, `startReview`, `setBase`, `undoFinish`, `resumeFinish`,
+`discardInventory`, `compareReview`, `walkthroughInit`, `walkthroughBuild`.
 
 Finish / Save / Cancel **no** están en ese conjunto: se invocan como comandos
 desde el título de la vista (`view/title`) o la paleta, no como mensajes del
 webview. `undoFinish` / `resumeFinish` sí, porque viven en el banner del panel
-(no en el chrome).
+(no en el chrome). `compareReview` / `walkthroughInit` / `walkthroughBuild` se
+dibujan sólo en el empty state `no-review` (sección *Other actions*); la paleta
+sigue ofreciéndolos.
 
 `continueReview`, `openEntry` y `openChange` son los que llevan un dato además
 del `type`, y es un **índice** (`{type, index}`), nunca el nombre de la rama ni
@@ -226,6 +229,7 @@ Los ids son interfaz pública.
 | `gitReview.continueReview`| Continue Saved Review   | panel (inventario de `no-review`) |
 | `gitReview.undoFinish`    | Undo Finish             | panel (banner / finish-pending), paleta |
 | `gitReview.resumeFinish`  | Resume Finish           | panel (banner finish-conflict), paleta |
+| `gitReview.showCliLog`    | Show CLI Log            | paleta (diagnóstico; no se auto-abre) |
 
 El título de la vista lleva el **ciclo de vida** de la review — `refresh`,
 `finishReview`, `saveReview`, `abortReview` — como íconos. Navegar y saltar de

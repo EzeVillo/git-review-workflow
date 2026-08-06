@@ -39,15 +39,15 @@ const LOCATION_ITEMS: LocationItem[] = [
  * (FR-038): el diálogo puede quedar abierto un rato, y el repositorio puede
  * cambiar debajo mientras el revisor elige.
  *
- * **"No había ediciones que extraer" se deriva del estado posterior, nunca
- * del texto de la CLI** (T050, contracts/cli-invocation.md § "no parsear la
- * salida humana de ningún verbo" — es la regla que más fácil se pierde acá: la
- * CLI dice con todas las letras "no review changes to apply", y leer esa
- * línea sería lo más corto). `finishOutcome` mira si el refresco posterior
- * reporta un cierre `pending` para esta review; su ausencia es la señal — la
- * CLI misma deshace su propio punto de undo cuando no hubo ediciones que
- * extraer (`bin/git-review-verbs/finish:446-451`) — y se informa como
- * resultado normal, no como error (FR-019).
+ * **El toast de éxito se deriva del estado posterior, nunca del texto de la
+ * CLI** (T050, contracts/cli-invocation.md § "no parsear la salida humana de
+ * ningún verbo"). `finishOutcome` mira si el refresco reporta un cierre
+ * `pending` para esta review: un finish exitoso (con o sin ediciones)
+ * siempre lo deja y aterriza en el destino; la ausencia del registro es el
+ * caso residual y también se informa como resultado normal, no como error
+ * (FR-019). El extract vacío deja `review-fixes/<src>` (o la rama del PR) sin
+ * nada staged y el undo vivo — el panel pasa a `finish-pending`, no se queda
+ * en la review activa ofreciendo otra vez Finish/Next.
  *
  * Deshacer/continuar un cierre (`undoFinish` / `resumeFinish` abajo) es US4:
  * este comando sólo arranca un cierre nuevo.
@@ -59,6 +59,14 @@ export async function finishReview(
 ): Promise<void> {
     const state = stateManager.state;
     if (state.situation !== "review" || !state.state) {
+        return;
+    }
+    // Defensa: la UI ya oculta Finish con gitReview.readonly; la CLI también
+    // rechazaría. No abrir el QuickPick de destino si no hay a dónde escribir.
+    if (state.readonly) {
+        void vscode.window.showInformationMessage(
+            "This is a read-only compare review; there is nothing to finish. Use Cancel when done."
+        );
         return;
     }
     const branch = state.state.branch;
@@ -106,7 +114,9 @@ export async function finishReview(
 
         if (finishOutcome(refreshed, branch) === "pending") {
             const destination = picked.ontoSource ? source : `review-fixes/${source}`;
-            void vscode.window.showInformationMessage(`${destination} is ready with your edits staged.`);
+            // Same toast for empty and non-empty extracts: both land on the
+            // destination with a live undo. SCM shows whether anything is staged.
+            void vscode.window.showInformationMessage(`${destination} is ready.`);
         } else {
             void vscode.window.showInformationMessage(`No review changes to apply for ${source}.`);
         }

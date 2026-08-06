@@ -127,9 +127,19 @@ push_pr2() {
 
 @test "review finish reports when there are no edits" {
 	git review start feature/x
+	tip="$(git rev-parse feature/x)"
 	run git review finish
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"no review changes"* ]]
+	# Empty extract still closes the session: land on review-fixes at the tip
+	# with nothing staged, keep the undo so finish --abort can resume.
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
+	[ "$(git rev-parse HEAD)" = "$tip" ]
+	run git diff --quiet
+	[ "$status" -eq 0 ]
+	run git diff --cached --quiet
+	[ "$status" -eq 0 ]
+	[ -n "$(git config branch.review/feature/x.reviewundohead || true)" ]
 }
 
 @test "review finish --onto-source with no edits still lands on the PR branch" {
@@ -141,20 +151,25 @@ push_pr2() {
 	# the flag's whole point: you end up on the PR branch, not review/feature/x
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "feature/x" ]
 	[ "$(git rev-parse feature/x)" = "$tip" ]
-	# the undo point was rolled back, leaving nothing to abort
-	run git config --get-regexp '^branch\.review/feature/x\.reviewundo'
-	[ "$status" -ne 0 ]
+	# empty extract still records an undo (finish --abort restores the session)
+	[ -n "$(git config branch.review/feature/x.reviewundohead || true)" ]
 }
 
-@test "review finish with no edits leaves no undo point blocking a later finish" {
+@test "review finish --abort after a no-edit finish restores the review for a later finish" {
 	git review start feature/x
 	run git review finish
 	[ "$status" -eq 0 ]
-	# a real edit + second finish must not be refused by a dangling undo point
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
+
+	run git review finish --abort
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
+
 	printf 'a\nB\nc\nd\nfix\n' >app.txt
 	run git review finish
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"ready with your edits staged"* ]]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
 }
 
 @test "review start --delta stages only new commits" {

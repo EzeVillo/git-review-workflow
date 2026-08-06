@@ -107,17 +107,109 @@ record_exit() {
 # --abort restores the undo point recorded by the finish being undone. It runs
 # before the review/* check on purpose: after a finish you are on
 # review-fixes/<branch> (or, with --onto-source, on the PR branch), never on
-# review/<branch>.
-do_abort() {
-	# Find the review branch the undo point belongs to from wherever we landed
-	# after the finish.
+# review/<branch>. You may also abort from another branch (e.g. develop): the
+# CLI resolves which finish to undo the same way list --porcelain finds finish
+# rows — see resolve_abort_target.
+#
+# resolve_abort_target: set asrc + rb for the finish to undo, or exit.
+# 1) HEAD on review-fixes/<src>, review/<src>, or the PR branch with an undo
+#    on review/<that name> → that target.
+# 2) Else every review/* with reviewundohead (same universe as list's finish
+#    rows). Zero → error. One → that one. Several → prefer a completed finish
+#    (reviewundoouthead set: pending after a successful finish); if exactly
+#    one completed, use it; otherwise refuse and list them (no silent pick).
+resolve_abort_target() {
+	asrc=""
+	rb=""
 	case "$cur" in
-	review-fixes/*) asrc="${cur#review-fixes/}" ;;
-	review/*) asrc="${cur#review/}" ;;
-	*) asrc="$cur" ;;
+	review-fixes/*)
+		asrc="${cur#review-fixes/}"
+		rb="review/$asrc"
+		;;
+	review/*)
+		asrc="${cur#review/}"
+		rb="review/$asrc"
+		;;
+	*)
+		# Onto-source leaves HEAD on the PR branch itself (<src>), not on
+		# review-fixes/*. Only accept that name when review/<src> has an undo.
+		if [ -n "$(git config "branch.review/$cur.reviewundohead" || true)" ]; then
+			asrc="$cur"
+			rb="review/$asrc"
+		fi
+		;;
 	esac
+	if [ -n "$rb" ] && [ -n "$(git config "branch.$rb.reviewundohead" || true)" ]; then
+		return 0
+	fi
 
-	rb="review/$asrc"
+	# HEAD did not name a live undo (wrong branch, or develop after walking
+	# away). Scan the repo. Newline-delimited so paths with spaces stay intact.
+	n=0
+	first=""
+	completed_n=0
+	completed=""
+	while IFS= read -r ref; do
+		[ -n "$ref" ] || continue
+		case "$ref" in
+		review/*) ;;
+		*) continue ;;
+		esac
+		[ -n "$(git config "branch.$ref.reviewundohead" || true)" ] || continue
+		n=$((n + 1))
+		[ -z "$first" ] && first="$ref"
+		if [ -n "$(git config "branch.$ref.reviewundoouthead" || true)" ]; then
+			completed_n=$((completed_n + 1))
+			completed="$ref"
+		fi
+	done <<EOF
+$(git for-each-ref --format='%(refname:short)' refs/heads)
+EOF
+
+	if [ "$n" -eq 0 ]; then
+		echo "error: no finish to abort" >&2
+		exit 1
+	fi
+	if [ "$n" -eq 1 ]; then
+		rb="$first"
+		asrc="${rb#review/}"
+		return 0
+	fi
+	# Several undos: a completed finish (pending) is the usual one to undo from
+	# another branch; mid-conflict undos lack outhead and need the review tree.
+	if [ "$completed_n" -eq 1 ]; then
+		rb="$completed"
+		asrc="${rb#review/}"
+		return 0
+	fi
+
+	echo "error: multiple finishes to abort; switch to the branch of the one you want and retry:" >&2
+	while IFS= read -r ref; do
+		[ -n "$ref" ] || continue
+		case "$ref" in
+		review/*) ;;
+		*) continue ;;
+		esac
+		[ -n "$(git config "branch.$ref.reviewundohead" || true)" ] || continue
+		_src="${ref#review/}"
+		_kind="$(git config "branch.$ref.reviewundokind" || echo fixes)"
+		_resume="$(git config "branch.$ref.reviewresume" || true)"
+		if [ "$_resume" = "conflict" ]; then
+			echo "  $ref  (finish conflict — switch to this branch)" >&2
+		elif [ "$_kind" = "onto-source" ]; then
+			echo "  $ref  (finish pending — switch to $_src)" >&2
+		else
+			echo "  $ref  (finish pending — switch to review-fixes/$_src)" >&2
+		fi
+	done <<EOF
+$(git for-each-ref --format='%(refname:short)' refs/heads)
+EOF
+	exit 1
+}
+
+do_abort() {
+	resolve_abort_target
+
 	head="$(git config "branch.$rb.reviewundohead" || true)"
 	[ -n "$head" ] || {
 		echo "error: no finish to abort (no undo point for $rb)" >&2
@@ -436,46 +528,21 @@ elif [ "$resume" -eq 1 ]; then
 	git config --unset "branch.$cur.reviewresume" || true
 fi
 
-# Fold any edits into the review branch so we can diff them back out cleanly.
+# Detect real review edits against the PR tip *before* folding them into a
+# session commit. In whole/walk the index already holds the tip tree (the staged
+# PR on top of the base). Committing that when there is nothing to extract moved
+# HEAD off the base and broke walk — and the old early-exit left you stranded on
+# review/* still "in progress" (panel still offering Finish/Next) with no
+# review-fixes destination. Compare the staged tree to the tip; only commit when
+# they differ. Either way, finish always lands on the destination branch and
+# keeps the undo point so finish --abort can restore the session (including the
+# empty-extract case: review-fixes/<src> at the tip with nothing staged).
 git add -A
-if ! git diff --cached --quiet; then
+has_edits=1
+if git diff --cached --quiet "$tip"; then
+	has_edits=0
+else
 	git commit -q -m "review session ($src)"
-fi
-
-if git diff --quiet "$tip" "$cur"; then
-	# No edits came out of the review. The undo point recorded above guards a
-	# finish branch that will never be produced, so roll it back — otherwise it
-	# would block a later finish on this branch (and leave nothing meaningful to
-	# --abort). Then honour --onto-source by leaving you on the PR branch, the
-	# whole point of the flag, instead of stranding you on review/<branch>.
-	git config --unset "branch.$cur.reviewresume" 2>/dev/null || true
-	for k in reviewundohead reviewundokind reviewundosrccreated \
-		reviewundoeditstep reviewundoeditold reviewundoouthead reviewundoouttree; do
-		git config --unset "branch.$cur.$k" 2>/dev/null || true
-	done
-	git for-each-ref --format='%(refname)' "refs/review-undo/$src/" |
-		while read -r ref; do
-			git update-ref -d "$ref"
-		done
-
-	if [ "$onto" -eq 1 ]; then
-		# Same guard as the edited path: never move onto a local $src that sits
-		# somewhere other than the reviewed tip.
-		if git rev-parse --verify --quiet "refs/heads/$src" >/dev/null; then
-			if [ "$(git rev-parse "$src")" != "$tip" ]; then
-				echo "error: local $src is not at the reviewed tip; move or delete it first" >&2
-				exit 1
-			fi
-			git switch -q "$src"
-		else
-			git switch -q -c "$src" "$tip"
-		fi
-		echo "no review changes to apply; on $src at the reviewed tip" >&2
-		exit 0
-	fi
-
-	echo "no review changes to apply" >&2
-	exit 0
 fi
 
 if [ "$onto" -eq 1 ]; then
@@ -488,12 +555,17 @@ if [ "$onto" -eq 1 ]; then
 	else
 		git switch -q -c "$src" "$tip"
 	fi
-	apply_review_patch "$tip" "$cur" --index --3way || {
-		echo "error: could not apply review changes onto $src" >&2
-		exit 1
-	}
-	record_exit "$src"
-	echo "$src ready with your edits staged — review and commit"
+	if [ "$has_edits" -eq 1 ]; then
+		apply_review_patch "$tip" "$cur" --index --3way || {
+			echo "error: could not apply review changes onto $src" >&2
+			exit 1
+		}
+		record_exit "$src"
+		echo "$src ready with your edits staged — review and commit"
+	else
+		record_exit "$src"
+		echo "no review changes to apply; on $src at the reviewed tip" >&2
+	fi
 else
 	fb="review-fixes/$src"
 	git rev-parse --verify --quiet "refs/heads/$fb" >/dev/null && {
@@ -501,10 +573,15 @@ else
 		exit 1
 	}
 	git switch -q -c "$fb" "$tip"
-	apply_review_patch "$tip" "$cur" --index --3way || {
-		echo "error: could not apply review changes onto $fb" >&2
-		exit 1
-	}
-	record_exit "$fb"
-	echo "$fb ready with your edits staged — review and commit"
+	if [ "$has_edits" -eq 1 ]; then
+		apply_review_patch "$tip" "$cur" --index --3way || {
+			echo "error: could not apply review changes onto $fb" >&2
+			exit 1
+		}
+		record_exit "$fb"
+		echo "$fb ready with your edits staged — review and commit"
+	else
+		record_exit "$fb"
+		echo "no review changes to apply; on $fb at the reviewed tip" >&2
+	fi
 fi

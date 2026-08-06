@@ -69,9 +69,9 @@ function inventory(rows: string[][]): PanelModel {
 }
 
 /**
- * `finish-pending`: HEAD ya no está en `review/*`, el inventario de
- * `list --porcelain` trae una fila `finish … pending` — el mismo camino que
- * `doRefresh` usa para pasar de `no-review` a `finish-pending`.
+ * `finish-pending`: HEAD ya no está en `review/*`, `list --porcelain` trae
+ * una fila `finish … pending` — el mismo camino que `doRefresh` usa para
+ * pasar de `no-review` a `finish-pending`. El panel no proyecta inventario.
  */
 function finishPending(rows: string[][]): PanelModel {
     const state: ReviewState = {
@@ -318,12 +318,12 @@ export const PREVIEW_PANES: PreviewPane[] = [
         model: empty("no-review"),
     },
     {
-        // Las cuatro variantes de fila en un solo pane: activa (sin acción),
+        // Variantes de fila: activa en otra rama (hint "Still active…"),
         // guardada resumible, guardada bloqueada por su activa gemela, y
-        // huérfana. Es el pane donde se ve si el botón se deshabilita por el
-        // motivo correcto.
+        // huérfana con Discard. Es el pane donde se ve la fila de acciones
+        // debajo de la meta y el ? cuando no hay verbo.
         name: "no-review-inventory",
-        caption: "no-review — con reviews abiertas en otras ramas",
+        caption: "no-review — inventario: acciones / hint / discard",
         model: inventory([
             ["branch", "review/feature/checkout", "0", "0", "0", "walk", "3", "9"],
             ["branch", "review/fix/quoting", "0", "0", "0", "whole"],
@@ -333,10 +333,10 @@ export const PREVIEW_PANES: PreviewPane[] = [
         ]),
     },
     {
-        // list --porcelain con finish … pending: HEAD no está en review/*,
-        // el inventario sigue ahí y el encabezado ofrece deshacer el cierre.
+        // list --porcelain con finish … pending: pantalla de post-cierre
+        // (staged edits + Clean / Undo finish), sin empty state ni inventario.
         name: "finish-pending",
-        caption: "finish-pending — cierre completo en review-fixes, undo vivo",
+        caption: "finish-pending — edits staged, Clean / Undo finish",
         model: finishPending([
             ["branch", "review/feature/shipping", "0", "0", "0", "whole"],
             ["finish", "review/feature/shipping", "pending", "0"],

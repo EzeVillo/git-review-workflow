@@ -27,20 +27,34 @@ buttons inside the webview or the Command Palette. Each one shells out to the
 matching `git review` verb — the extension never invents a second way to change
 review state.
 
-| Action | When it appears | CLI |
-|--------|-----------------|-----|
-| **Start a review** | Empty state (`no-review`): pick branch, how to read it, origin, and range (if a prior tip exists) from the assistant | `git review start …` |
-| **Cancel review** | View title icon while an active review (or a mid-conflict finish) is open | `git review abort` |
-| **Finish review** | View title icon while an active review is open | `git review finish` / `finish --onto-source` |
-| **Save for later** | View title icon while an active review is open (not during a mid-conflict finish) | `git review save` |
-| **Undo** (finish) | After a completed finish still waiting (`finish-pending`), or a finish stopped mid-conflict (`finish-conflict`) | `git review finish --abort` |
-| **Continue** (finish) | Finish stopped mid-conflict, after you resolve the markers in the tree | `git review finish --resume` |
+| Action                       | When it appears                                                                                                                                                                                                 | CLI                                                                                                         |
+|------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------|
+| **Start a review**           | Empty state (`no-review`): pick branch, how to read it, origin, and range (if a prior tip exists) from the assistant. Also Command Palette while `finish-pending` (another source is fine if the tree is clean) | `git review start …`                                                                                        |
+| **Cancel review**            | View title icon while an active review (or a mid-conflict finish) is open                                                                                                                                       | `git review abort`                                                                                          |
+| **Finish review**            | View title icon while an active review is open (hidden on a read-only **compare**)                                                                                                                              | `git review finish` / `finish --onto-source`                                                                |
+| **Save for later**           | View title icon while an active review is open (not during a mid-conflict finish)                                                                                                                               | `git review save`                                                                                           |
+| **Undo finish**              | After a completed finish with undo still available (`finish-pending`), or a finish stopped mid-conflict (`finish-conflict`)                                                                                     | `git review finish --abort`                                                                                 |
+| **Clean**                    | `finish-pending` panel (the finished source); also Command Palette for any leftover                                                                                                                             | `git review clean --keep-fixes <branch>` from the panel; palette default is full `clean` / `clean <branch>` |
+| **Continue** (finish)        | Finish stopped mid-conflict, after you resolve the markers in the tree                                                                                                                                          | `git review finish --resume`                                                                                |
+| **Discard** (saved / orphan) | Inventory row: saved review or orphan leftover                                                                                                                                                                  | `git review forget --saved …` / `git review clean …`                                                        |
+| **Forget** saved / delta     | Command Palette                                                                                                                                                                                                 | `git review forget --saved` / `--delta` (`--all`, `--stale`)                                                |
+| **Preview edits**            | View title (active review) or palette; optional stat                                                                                                                                                            | `git review preview` / `--stat`                                                                             |
+| **Compare revisions**        | Empty state (`no-review`): secondary actions under Start; also Command Palette. The resulting review is **read-only**: the panel shows a note and hides Finish (CLI refuses writeback)                          | `git review compare <a> <b>`                                                                                |
+| **Walkthrough Init / Build** | Empty state (`no-review`): secondary actions under Start (author flow); also Command Palette                                                                                                                    | `git review walkthrough init` / `build`                                                                     |
+
+Mutations (clean, forget, compare, walkthrough write, and the lifecycle
+actions above) ask for a confirmation that names what will happen. Preview is
+read-only and does not.
 
 A completed finish that left edits on `review-fixes/<branch>` (or on the PR
-branch with `--onto-source`) is **not** treated as "no review": the panel shows
-the pending closure, names the real destination of the edits, and offers *Undo*.
-A finish stopped mid-conflict keeps the review readable (mode, branch, current
-entry) but locks navigation until you *Continue* or *Undo*.
+branch with `--onto-source`) is **not** the empty state: the review already
+finished. The panel names the destination of the staged edits and offers
+*Clean* (`git review clean --keep-fixes <src>` — drops the leftover `review/*`
+undo point; leaves your staged edits where finish put them — `review-fixes/*`
+or the PR branch with `--onto-source` — and leaves `--delta` alone) or *Undo finish*
+(`finish --abort`). Commit and push the edits from Source Control as usual. A finish
+stopped mid-conflict keeps the review readable (mode, branch, current entry)
+but locks navigation until you *Continue* or *Undo finish*.
 
 ## The CLI is the only source of truth
 
@@ -56,9 +70,11 @@ the CLI.** Never to the extension. A value this side could compute from the
 repository is still a second source of truth, and the moment the two disagree
 the panel is lying about a review the reviewer is trusting it with.
 
-`../specs/002-extension-vscode/` has the full design;
-`contracts/cli-invocation.md` is the closed list of what the extension may
-invoke, and the explicit list of what it may never do.
+`../specs/002-extension-vscode/` has the original design;
+`../specs/005-ciclo-review-panel/` adds the lifecycle; and
+`../specs/006-superficie-panel-completa/contracts/cli-invocation.md` is the
+current closed list of what the extension may invoke (including housekeeping,
+preview, compare, and walkthrough).
 
 One thing that list does not yet settle: the panel shells out to git directly to
 build the file list behind a multi-file diff — `readCommitChanges` for a commit
@@ -109,12 +125,16 @@ git -C <sandbox>/work review start feature/checkout
 It also builds one branch per state the panel can reach but a single well-formed
 pull request never shows — start `feature/notifications` for the unannotated
 entries that close a reading order, `feature/telemetry` for whole mode,
-`feature/legacy` for the degraded note — plus a completed finish still waiting
-(`feature/shipping` → `review-fixes/…`, panel `finish-pending`) and a finish
-stopped mid-conflict (`feature/conflict`, panel `finish-conflict`), and leaves
-three saved reviews on `develop`, which is the empty state's inventory: one row
-offering `Continue`, and two that explain why they cannot. The script prints the
-whole map when it finishes.
+`feature/legacy` for the degraded note — plus a completed finish with undo
+still available (`feature/shipping` → `review-fixes/…`, panel
+`finish-pending`) and a finish stopped mid-conflict (`feature/conflict`,
+panel `finish-conflict`), and leaves three saved reviews on `develop`, which
+is the empty state's inventory: one row offering `Continue`, and two that
+explain why they cannot. On `develop` the panel also shows a finish-pending
+screen for `feature/shipping` (*Clean* / *Undo finish*; Start lives on the
+Command Palette if you need another PR). The mid-conflict branch appears as
+an active leftover with a `?` hover — switch to `review/feature/conflict`
+for the conflict banner. The script prints the whole map when it finishes.
 
 Then open `<sandbox>/work` in the development host. Note that the host inherits
 the `PATH` of the VS Code that launched it, not the one `env.sh` sets up inside

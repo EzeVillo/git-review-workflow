@@ -137,6 +137,7 @@ if [ "$mode" = "step" ]; then
 	restore_meta reviewtip
 	restore_meta reviewprevreviewed
 	restore_meta reviewlocal
+	restore_meta reviewreadonly
 	restore_meta reviewreturn
 
 	git branch -D "$saved" >/dev/null
@@ -170,6 +171,7 @@ else
 	restore_meta reviewtip
 	restore_meta reviewprevreviewed
 	restore_meta reviewlocal
+	restore_meta reviewreadonly
 	restore_meta reviewreturn
 
 	if [ "$mode" = "walk" ]; then

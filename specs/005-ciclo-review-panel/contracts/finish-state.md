@@ -138,6 +138,32 @@ sigue siendo un resultado válido).
   caminos: deshacerlo, continuarlo hasta el final, o tirar la review entera. El
   consumidor no necesita saber cuál ocurrió: vuelve a preguntar.
 
+## Resolución de `git review finish --abort`
+
+El verbo **no** recibe el nombre de la review: identifica el cierre a deshacer
+y después restaura `review/<src>`, elimina o revierte la rama producto del
+finish y limpia el registro de undo (igual que si se invocara desde
+`review-fixes/<src>`).
+
+Orden de resolución del target:
+
+1. Si `HEAD` es `review-fixes/<src>`, `review/<src>`, o la rama del PR cuando
+   `review/<src>` tiene undo (caso `--onto-source`), y ese undo existe → ese
+   target.
+2. Si no, se listan todas las `review/*` con `reviewundohead` (el mismo
+   universo que las filas `finish` de `list --porcelain`):
+   - **cero** → error `no finish to abort` (sin inventar `review/<rama-actual>`);
+   - **una** → esa;
+   - **varias** → si hay **exactamente un** finish completado
+     (`reviewundoouthead` presente, el caso `pending`), se usa ese; si no, error
+     listando los targets y pidiendo cambiar a la rama del cierre deseado.
+
+Efectos de un abort exitoso (invariantes): `HEAD` en `review/<src>`; tree e
+index del snapshot pre-finish; `review-fixes/<src>` borrada (o la rama del PR
+revertida/borrada según onto); registro de undo y fila `finish` de `list`
+desaparecen. La rama desde la que se invocó **no** se reescribe salvo al
+cambiar `HEAD` hacia la review.
+
 ## Qué NO expone este registro
 
 | Dato | Motivo |

@@ -95,6 +95,8 @@ assert_zero_mutation() {
 	# what this test is about is the arity and content of `state` itself.
 	firstline="$(printf '%s\n' "$output" | sed -n '1p')"
 	[ "$firstline" = "$expected" ]
+	# A normal start is not a compare: no readonly tag (omit, never blank).
+	! printf '%s\n' "$output" | grep -qx 'readonly'
 }
 
 @test "status --porcelain emits the exact state line for step mode" {

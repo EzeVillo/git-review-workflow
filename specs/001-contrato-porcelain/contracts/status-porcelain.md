@@ -223,6 +223,28 @@ entry	2	src/quoting.ts
 base	main
 ```
 
+## Registro `readonly` (cero o una línea)
+
+```
+readonly
+```
+
+Sólo cuando la review es de **solo lectura** (`branch.review/<x>.reviewreadonly=1`,
+hoy: `git review compare`). Sin campos: la presencia del registro es el dato.
+**Omitido** en cualquier otra review (nunca una línea en blanco, nunca un
+`readonly\t0`). Un consumidor viejo ignora la etiqueta (FR-003).
+
+`finish` se niega en estas reviews; el consumidor debería ocultar o deshabilitar
+esa acción y dejar `abort` / `clean` / navegación / `preview` disponibles.
+
+Ejemplo (compare whole):
+
+```
+state	review/v2.0	v2.0	a1b2c3d4e5f6…	whole	none
+entry	1	app.txt
+readonly
+```
+
 ## `--why <path>`
 
 ```

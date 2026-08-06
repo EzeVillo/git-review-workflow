@@ -229,11 +229,21 @@ if [ "$porcelain" -eq 1 ]; then
 			porcelain_row finish conflict "$ponto"
 		fi
 	fi
+	# compare (git review compare): reviewreadonly=1 means finish will refuse.
+	# Separate record, omitted when not set — additive, same pattern as base/finish.
+	if [ "$(git config "branch.$cur.reviewreadonly" || true)" = "1" ]; then
+		porcelain_row readonly
+	fi
 	exit 0
 fi
 
 printf 'review of %s (tip %s)\n' "$src" "$(git rev-parse --short "$tip")"
 printf '  branch  %s\n' "$cur"
+# Not named "readonly": that is a shell special builtin and would break assignment.
+is_readonly="$(git config "branch.$cur.reviewreadonly" || true)"
+if [ "$is_readonly" = "1" ]; then
+	printf '  note    read-only compare — git review finish will refuse; abort or clean when done\n'
+fi
 
 if [ "$mode" = "step" ]; then
 	count="$(git config "branch.$cur.reviewcount" || true)"
@@ -287,7 +297,11 @@ if [ "$mode" = "step" ]; then
 
 	hint="git review next"
 	[ "$step" -gt 1 ] && hint="$hint / git review prev"
-	printf '  next    edit, then %s  (git review finish when done)\n' "$hint"
+	if [ "$is_readonly" = "1" ]; then
+		printf '  next    read, then %s  (read-only compare; finish refuses)\n' "$hint"
+	else
+		printf '  next    edit, then %s  (git review finish when done)\n' "$hint"
+	fi
 elif [ "$mode" = "walk" ]; then
 	# Re-derive the reading sequence to report the live [k/N] and current path, the
 	# same way the walk commands do.
@@ -316,7 +330,11 @@ elif [ "$mode" = "walk" ]; then
 	printf '  mode    walk  [%s/%s] on %s%s\n' "$walkstep" "$total" "$pnow" "$mark"
 	hint="git review next"
 	[ "$walkstep" -gt 1 ] && hint="$hint / git review prev"
-	printf '  next    read, then %s  (git review finish when done)\n' "$hint"
+	if [ "$is_readonly" = "1" ]; then
+		printf '  next    read, then %s  (read-only compare; finish refuses)\n' "$hint"
+	else
+		printf '  next    read, then %s  (git review finish when done)\n' "$hint"
+	fi
 else
 	base="$(git config "branch.$cur.reviewbase" || true)"
 	printf '  mode    whole%s\n' "${base:+  (base $base)}"
@@ -335,5 +353,9 @@ else
 			i=$((i + 1))
 		done
 	fi
-	printf '  next    edit, then git review finish\n'
+	if [ "$is_readonly" = "1" ]; then
+		printf '  next    read (read-only compare; finish refuses)\n'
+	else
+		printf '  next    edit, then git review finish\n'
+	fi
 fi

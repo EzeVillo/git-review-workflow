@@ -109,6 +109,12 @@
         "icon": "$(discard)"
       },
       {
+        "command": "gitReview.saveReview",
+        "title": "Save Review for Later",
+        "category": "git review",
+        "icon": "$(history)"
+      },
+      {
         "command": "gitReview.finishReview",
         "title": "Finish Review",
         "category": "git review",
@@ -140,9 +146,14 @@
           "group": "navigation@2"
         },
         {
+          "command": "gitReview.saveReview",
+          "when": "view == gitReview.walkthrough && gitReview.situation == review",
+          "group": "navigation@3"
+        },
+        {
           "command": "gitReview.abortReview",
           "when": "view == gitReview.walkthrough && (gitReview.situation == review || gitReview.situation == finish-conflict)",
-          "group": "navigation@3"
+          "group": "navigation@4"
         }
       ],
       "commandPalette": [
@@ -192,6 +203,10 @@
         {
           "command": "gitReview.abortReview",
           "when": "gitReview.situation == review || gitReview.situation == finish-conflict"
+        },
+        {
+          "command": "gitReview.saveReview",
+          "when": "gitReview.situation == review"
         },
         {
           "command": "gitReview.finishReview",

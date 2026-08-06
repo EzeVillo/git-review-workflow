@@ -589,7 +589,7 @@ Independiente de US2/US3/US4.
 
 ### Tests para US5 ⚠️
 
-- [ ] T062 [P] [US5] Crear
+- [X] T062 [P] [US5] Crear
   `vscode-extension/test/integration/save-review.spec.ts`: con una review en
   modo `whole` con ediciones sin commitear, invocar `gitReview.saveReview` con
   confirmación simulada, afirmar que `review-saved/<src>` existe, `HEAD` volvió
@@ -598,24 +598,24 @@ Independiente de US2/US3/US4.
   paso, afirmando que ninguna se pierde tras retomar con `gitReview.continueReview`
   (ya existente). **Y FR-030**: descartar la confirmación no invoca `save` — la
   review sigue activa y `review-saved/<src>` no existe.
-- [ ] T063 [P] [US5] En el mismo archivo: con `review-saved/<src>` ya existente
+- [X] T063 [P] [US5] En el mismo archivo: con `review-saved/<src>` ya existente
   para ese source, invocar `gitReview.saveReview` sobre otra review del mismo
   source y afirmar que falla con el diagnóstico de la CLI y que la review activa
   original **sigue existiendo intacta** (no sólo que el comando devolvió error).
 
 ### Implementación para US5
 
-- [ ] T064 [US5] Crear `vscode-extension/src/commands/saveReview.ts`, mismo
+- [X] T064 [US5] Crear `vscode-extension/src/commands/saveReview.ts`, mismo
   molde que `abortReview.ts` (T033): confirmación fuera del lock (más suave que
   la de abort — no se pierde nada, sólo se pausa), captura y revalida
   `StateToken`, invoca `git review save` sin argumentos, refresca pase lo que
   pase.
-- [ ] T065 [US5] En `vscode-extension/src/extension.ts`, registrar
+- [X] T065 [US5] En `vscode-extension/src/extension.ts`, registrar
   `gitReview.saveReview`. En `package.json`: comando, entrada de paleta con
   `"when": "gitReview.situation == review"`, botón en la barra del panel.
-- [ ] T066 [US5] En `vscode-extension/src/views/panelHtml.ts`, agregar el botón
+- [X] T066 [US5] En `vscode-extension/src/views/panelHtml.ts`, agregar el botón
   "Save for later" junto al de cancelar (T035).
-- [ ] T067 [US5] `npm run compile`, `test:unit`, `test:integration` en verde
+- [X] T067 [US5] `npm run compile`, `test:unit`, `test:integration` en verde
   (incluidas T062, T063).
 
 **Checkpoint**: el ciclo pausar→retomar queda cerrado por los dos lados —

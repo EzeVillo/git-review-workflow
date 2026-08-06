@@ -24,6 +24,7 @@ export const PANEL_MESSAGES = [
     "finishReview",
     "undoFinish",
     "resumeFinish",
+    "saveReview",
 ] as const;
 
 export type PanelMessage = (typeof PANEL_MESSAGES)[number];

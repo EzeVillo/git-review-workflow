@@ -666,7 +666,7 @@ export function panelHtml(nonce: string): string {
         notice.appendChild(el("p", null,
           "Finished. Your edits are staged on " + destination + "."));
         notice.appendChild(el("p", null,
-          "Commit them from Source Control. The review branch is kept so you can undo with git review finish --abort, or clean --keep-fixes when you no longer need the undo."));
+          "Commit and push them from Source Control. The review branch is kept so you can undo with git review finish --abort, or clean --keep-fixes when you no longer need the undo."));
         const actions = el("div", "row");
         const clean = button("Clean", "cleanReview", "primary");
         clean.disabled = model.busy;

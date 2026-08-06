@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import {InvokeOptions} from "../cli/invoke";
 import {BranchRecord, sourceOf} from "../cli/porcelain";
 import {MutationLock} from "../review/mutationLock";
-import {pendingFinishSource, sourceFromReviewName} from "../review/housekeeping";
+import {pendingFinishInfo, sourceFromReviewName} from "../review/housekeeping";
 import {ReviewStateManager} from "../review/state";
 import {captureToken} from "../review/staleGuard";
 import {runHousekeeping} from "./runHousekeeping";
@@ -18,7 +18,7 @@ type CleanPick = vscode.QuickPickItem & { action: "one" | "all" };
  * - `string`: source explícito (`feature/x`).
  * - omitido en `finish-pending`: limpia el source del cierre con undo vivo
  *   (botón Clean del panel), sin picker y **sin mirar HEAD** — el pending es
- *   del repo (`pendingFinishSource`).
+ *   del repo (`pendingFinishInfo`).
  * - omitido en cualquier otro caso: QuickPick de palette (one / all).
  */
 export async function cleanReview(
@@ -55,12 +55,13 @@ export async function cleanReview(
     }
 
     // Panel finish-pending: el finish ya entregó las edits. Clean con
-    // --keep-fixes tira solo review/* + undo (cierra el pending) y deja el
-    // entregable review-fixes/*. HEAD no importa: el source sale del inventario.
-    const pendingSource = pendingFinishSource(stateManager.state);
-    if (pendingSource !== undefined) {
+    // --keep-fixes tira solo review/* + undo (cierra el pending). Las edits
+    // staged quedan donde el finish las dejó (review-fixes/* o la rama del PR
+    // si fue --onto-source). HEAD no importa: source/onto salen del inventario.
+    const pending = pendingFinishInfo(stateManager.state);
+    if (pending !== undefined) {
         await runHousekeeping(
-            {kind: "clean-keep-fixes", source: pendingSource},
+            {kind: "clean-keep-fixes", source: pending.source, onto: pending.onto},
             lock,
             stateManager,
             getInvokeOptions,

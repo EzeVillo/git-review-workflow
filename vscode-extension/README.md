@@ -50,8 +50,9 @@ A completed finish that left edits on `review-fixes/<branch>` (or on the PR
 branch with `--onto-source`) is **not** the empty state: the review already
 finished. The panel names the destination of the staged edits and offers
 *Clean* (`git review clean --keep-fixes <src>` — drops the leftover `review/*`
-undo point and leaves `review-fixes/*` and `--delta` alone) or *Undo finish*
-(`finish --abort`). Commit the edits from Source Control as usual. A finish
+undo point; leaves your staged edits where finish put them — `review-fixes/*`
+or the PR branch with `--onto-source` — and leaves `--delta` alone) or *Undo finish*
+(`finish --abort`). Commit and push the edits from Source Control as usual. A finish
 stopped mid-conflict keeps the review readable (mode, branch, current entry)
 but locks navigation until you *Continue* or *Undo finish*.
 

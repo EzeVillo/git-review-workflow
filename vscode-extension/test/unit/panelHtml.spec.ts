@@ -378,6 +378,10 @@ describe("panelHtml", () => {
             pendingBranch.includes("staged") || pendingBranch.includes("Source Control"),
             "el copy tiene que anclar a edits staged / SCM"
         );
+        assert.ok(
+            pendingBranch.includes("Commit and push"),
+            "tiene que recordar commitear y pushear las edits staged"
+        );
         assert.ok(pendingBranch.includes('"Undo finish", "undoFinish"') || pendingBranch.includes("undoFinish"));
         assert.ok(
             pendingBranch.includes('"Clean", "cleanReview"') || pendingBranch.includes("cleanReview"),

@@ -4,6 +4,7 @@ import {
     argsForHousekeeping,
     confirmCopyFor,
     housekeepingNeedsNetwork,
+    pendingFinishInfo,
     pendingFinishSource,
     sourceFromReviewName,
     verbForHousekeeping,
@@ -88,21 +89,63 @@ describe("pendingFinishSource", () => {
         );
     });
 
-    it("confirm clean-keep-fixes borra review/ y deja review-fixes/", () => {
+    it("confirm clean-keep-fixes sin onto nombra review-fixes y pide commit/push", () => {
         const c = confirmCopyFor({kind: "clean-keep-fixes", source: "feature/shipping"});
         assert.strictEqual(c.button, "Clean");
         assert.ok(c.detail.includes("--keep-fixes"));
         assert.ok(c.detail.includes("review/feature/shipping"));
         assert.ok(
-            /leaves review-fixes\/feature\/shipping|Leaves review-fixes\/feature\/shipping/i.test(
-                c.detail
-            ),
-            "tiene que decir que review-fixes se conserva"
+            c.detail.includes("review-fixes/feature/shipping"),
+            "sin onto las edits staged viven en review-fixes"
+        );
+        assert.ok(
+            !c.detail.includes("stay on feature/shipping;"),
+            "sin onto no debe nombrar la rama del PR como destino de las edits"
+        );
+        assert.ok(
+            /commit and push/i.test(c.detail),
+            "tiene que recordar commitear y pushear"
         );
         assert.ok(
             !/Deletes review\/feature\/shipping and review-fixes/i.test(c.detail),
             "no debe prometer borrar review-fixes"
         );
+    });
+
+    it("confirm clean-keep-fixes con onto nombra la rama del PR, no review-fixes", () => {
+        const c = confirmCopyFor({
+            kind: "clean-keep-fixes",
+            source: "feature/shipping",
+            onto: true,
+        });
+        assert.strictEqual(c.button, "Clean");
+        assert.ok(c.detail.includes("review/feature/shipping"));
+        assert.ok(
+            c.detail.includes("feature/shipping"),
+            "con onto las edits staged viven en la rama del PR"
+        );
+        assert.ok(
+            /stay on feature\/shipping/i.test(c.detail),
+            "tiene que decir que las edits se quedan en la rama del PR"
+        );
+        assert.ok(
+            !c.detail.includes("review-fixes/feature/shipping"),
+            "con onto no debe inventar review-fixes como destino de las edits"
+        );
+        assert.ok(/commit and push/i.test(c.detail), "tiene que recordar commitear y pushear");
+    });
+
+    it("pendingFinishInfo devuelve source y onto del pending", () => {
+        const list = [
+            "branch\treview/feature/shipping\t0\t0\t0\twhole",
+            "finish\treview/feature/shipping\tpending\t1",
+            "",
+        ].join("\n");
+        assert.deepStrictEqual(pendingFinishInfo(stateWith("finish-pending", list)), {
+            source: "feature/shipping",
+            onto: true,
+        });
+        assert.strictEqual(pendingFinishInfo(stateWith("no-review", list)), undefined);
     });
 });
 

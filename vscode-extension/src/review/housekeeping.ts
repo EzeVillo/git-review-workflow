@@ -21,6 +21,12 @@ export interface HousekeepingAction {
     kind: HousekeepingKind;
     /** Source name (`feature/x`), nunca `review-saved/x`. Requerido en `*-one` y `clean-keep-fixes`. */
     source?: string;
+    /**
+     * Solo `clean-keep-fixes`: si el finish fue con `--onto-source`. Define el
+     * destino que nombra el confirm (rama del PR vs `review-fixes/<src>`).
+     * Ausente se trata como no-onto (destino por defecto).
+     */
+    onto?: boolean;
 }
 
 /** Prefijos de rama de review → source (mismo criterio que `sourceOf` en porcelain). */
@@ -34,23 +40,28 @@ export function sourceFromReviewName(name: string): string {
 }
 
 /**
- * Source del cierre `pending` a limpiar desde el panel
- * (`git review clean --keep-fixes <src>`). No depende de HEAD: el pending es
- * del repo (`list --porcelain`), igual que `finish --abort` resuelve el undo
- * sin inventar la rama actual.
+ * Cierre `pending` a limpiar/deshacer desde el panel. No depende de HEAD: el
+ * pending es del repo (`list --porcelain`), igual que `finish --abort`.
  *
  * Ausente fuera de `finish-pending`, o si el inventario no trae fila pending
  * (no debería ocurrir cuando la situación es esa).
  */
-export function pendingFinishSource(state: ReviewState): string | undefined {
+export function pendingFinishInfo(
+    state: ReviewState
+): {source: string; onto: boolean} | undefined {
     if (state.situation !== "finish-pending") {
         return undefined;
     }
     const pending = state.branches.find((branch) => branch.finish?.state === "pending");
-    if (!pending) {
+    if (!pending?.finish) {
         return undefined;
     }
-    return sourceOf(pending);
+    return {source: sourceOf(pending), onto: pending.finish.onto};
+}
+
+/** Source del pending de finish, o `undefined`. Ver `pendingFinishInfo`. */
+export function pendingFinishSource(state: ReviewState): string | undefined {
+    return pendingFinishInfo(state)?.source;
 }
 
 export function verbForHousekeeping(action: HousekeepingAction): "clean" | "forget" {
@@ -119,12 +130,16 @@ export function confirmCopyFor(action: HousekeepingAction): ConfirmCopy {
                 detail: `Deletes review/${src} and review-fixes/${src} (and banked edit refs) if they exist and are not checked out. Does not touch delta markers.`,
                 button: "Clean",
             };
-        case "clean-keep-fixes":
+        case "clean-keep-fixes": {
+            // onto → edits en la rama del PR; sin onto → review-fixes/<src>.
+            // El clean no toca el working tree: solo tira el undo review/*.
+            const destination = action.onto ? src : `review-fixes/${src}`;
             return {
                 title: `Drop the finish undo for ${src}?`,
-                detail: `Runs git review clean --keep-fixes ${src}: deletes review/${src} and the finish undo point so the pending finish goes away. Leaves review-fixes/${src} (your staged edits) and delta markers alone.`,
+                detail: `Runs git review clean --keep-fixes ${src}: deletes review/${src} and the finish undo point so the pending finish goes away. Your staged edits stay on ${destination}; delta markers are left alone. Remember to commit and push them from Source Control.`,
                 button: "Clean",
             };
+        }
         case "clean-all":
             return {
                 title: "Clean all leftover review branches?",

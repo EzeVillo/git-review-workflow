@@ -5,6 +5,7 @@
   "version": "0.1.0",
   "publisher": "EzeVillo",
   "license": "MIT",
+  "icon": "media/icon.png",
   "engines": {
     "vscode": "^1.75.0"
   },
@@ -21,7 +22,7 @@
         {
           "id": "gitReview",
           "title": "git review",
-          "icon": "$(checklist)"
+          "icon": "media/activity-bar.png"
         }
       ]
     },

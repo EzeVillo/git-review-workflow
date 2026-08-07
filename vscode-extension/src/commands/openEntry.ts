@@ -1,9 +1,15 @@
 import * as cp from "node:child_process";
+import {promisify} from "node:util";
 import * as vscode from "vscode";
 import {CommitChange, parseNameStatus} from "../cli/nameStatus";
 import {EntryRecord, ReviewMode} from "../cli/porcelain";
 import {PathRef} from "../cli/unquote";
 import {ensureGitApi, GitApi, gitApiUnavailableReason} from "../review/repository";
+
+const execFile = promisify(cp.execFile);
+/** Multi-diff inventory for a commit/range can be large; do not block the host forever. */
+const GIT_DIFF_TIMEOUT_MS = 30000;
+const GIT_DIFF_MAX_BUFFER = 20 * 1024 * 1024;
 
 function isPathRef(id: string | PathRef): id is PathRef {
     return typeof id !== "string";
@@ -119,14 +125,22 @@ export function commitChangeResources(
  * (formato, `diff.renames`, `core.quotePath`). `--root` es lo que hace que el
  * primer commit del repo liste sus archivos en vez de nada.
  */
-export function readCommitChanges(rootUri: vscode.Uri, sha: string): CommitChange[] | undefined {
+export async function readCommitChanges(
+    rootUri: vscode.Uri,
+    sha: string
+): Promise<CommitChange[] | undefined> {
     try {
-        const output = cp.execFileSync(
+        const {stdout} = await execFile(
             "git",
             ["diff-tree", "-r", "-z", "--no-commit-id", "--name-status", "--root", sha],
-            {cwd: rootUri.fsPath, encoding: "utf8"}
+            {
+                cwd: rootUri.fsPath,
+                encoding: "utf8",
+                timeout: GIT_DIFF_TIMEOUT_MS,
+                maxBuffer: GIT_DIFF_MAX_BUFFER,
+            }
         );
-        return parseNameStatus(output);
+        return parseNameStatus(stdout);
     } catch {
         return undefined;
     }
@@ -147,14 +161,19 @@ export function readCommitChanges(rootUri: vscode.Uri, sha: string): CommitChang
  * correctas del multi-diff, mientras que depender de la config haría que la
  * misma review se viera distinta en dos máquinas.
  */
-export function readRangeChanges(rootUri: vscode.Uri): CommitChange[] | undefined {
+export async function readRangeChanges(rootUri: vscode.Uri): Promise<CommitChange[] | undefined> {
     try {
-        const output = cp.execFileSync(
+        const {stdout} = await execFile(
             "git",
             ["diff", "--name-status", "-z", "--no-renames", "HEAD"],
-            {cwd: rootUri.fsPath, encoding: "utf8"}
+            {
+                cwd: rootUri.fsPath,
+                encoding: "utf8",
+                timeout: GIT_DIFF_TIMEOUT_MS,
+                maxBuffer: GIT_DIFF_MAX_BUFFER,
+            }
         );
-        return parseNameStatus(output);
+        return parseNameStatus(stdout);
     } catch {
         return undefined;
     }
@@ -193,7 +212,7 @@ export async function openRangeChanges(rootUri: vscode.Uri, label: string): Prom
         await reportMissingGitApi("the changes of a review");
         return;
     }
-    const changes = readRangeChanges(rootUri);
+    const changes = await readRangeChanges(rootUri);
     if (!changes) {
         void vscode.window.showErrorMessage("Could not read the files of this review's range.");
         return;
@@ -216,7 +235,7 @@ async function openCommitChanges(rootUri: vscode.Uri, sha: string): Promise<void
         await reportMissingGitApi("a commit's changes");
         return;
     }
-    const changes = readCommitChanges(rootUri, sha);
+    const changes = await readCommitChanges(rootUri, sha);
     if (!changes) {
         void vscode.window.showErrorMessage(`Could not read the files of commit ${sha}.`);
         return;

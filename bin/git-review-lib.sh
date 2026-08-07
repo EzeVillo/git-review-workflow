@@ -132,6 +132,49 @@ require_not_finish_conflict() {
 	fi
 }
 
+# require_clean_work_tree
+# Refuse start/compare/continue when the worktree is dirty: tracked changes
+# (diff / cached) *or* untracked non-ignored files. finish/save capture untracked
+# with `git add -A` as review edits, so allowing pre-existing untracked through
+# start would absorb junk as if the reviewer wrote it. Same message as before.
+require_clean_work_tree() {
+	if ! git diff --quiet || ! git diff --cached --quiet ||
+		[ -n "$(git ls-files --others --exclude-standard)" ]; then
+		echo "error: you have local changes; commit or stash them first" >&2
+		exit 1
+	fi
+}
+
+# apply_review_patch FROM TO [git-apply-args...]
+# Diff FROM..TO and apply it, routing the patch through a temp file rather than a
+# shell variable. Capturing a binary patch with command substitution drops its
+# NUL bytes and trailing newline, so git apply later rejects it ("corrupt binary
+# patch"). An empty diff is a no-op success; returns git apply's exit status.
+apply_review_patch() {
+	_from="$1"
+	_to="$2"
+	shift 2
+	_pf="$(git rev-parse --git-dir)/review-apply.$$"
+	git diff --binary "$_from" "$_to" >"$_pf"
+	if [ -s "$_pf" ]; then
+		if git apply "$@" <"$_pf"; then _rc=0; else _rc=$?; fi
+	else
+		_rc=0
+	fi
+	rm -f "$_pf"
+	return "$_rc"
+}
+
+# entry_noun <count>
+# "entry" or "entries" for human messages (avoids the A && B || C plural idiom).
+entry_noun() {
+	if [ "$1" -eq 1 ]; then
+		printf '%s' "entry"
+	else
+		printf '%s' "entries"
+	fi
+}
+
 # load_step_review_meta
 # Confirm HEAD is on a review/* branch started with --step and load its metadata
 # into the globals the caller and goto_step rely on: cur, src, tip, start, count,
@@ -252,9 +295,12 @@ load_step_texts() {
 # Move a --step review to step <target>: bank the current commit's edits, reset
 # clean to the target commit, restore the target's previously banked edits (if
 # any), then soft-reset so its diff is staged. Relies on the globals set by
-# load_step_review_meta (cur, src, count, step, commits).
+# load_step_review_meta (cur, src, count, step, commits). On apply failure the
+# working tree is rolled back to the step we left (cursor unchanged) so the
+# session is not left half-moved on the target with the origin already banked.
 goto_step() {
 	target="$1"
+	prev_step="$step"
 	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
 	git add -A
 	tree="$(git write-tree)"
@@ -270,10 +316,20 @@ goto_step() {
 	git reset -q --hard "$ctarget"
 	ref="refs/review-edits/$src/$target"
 	if git rev-parse --verify --quiet "$ref" >/dev/null; then
-		git diff --binary "${ref}^" "$ref" | git apply || {
+		# No --3way here: it implies --index and would leave banked edits staged,
+		# so git diff (unstaged) goes empty and the step UI/tests lose the edit.
+		# Temp-file apply still keeps binary hunks intact.
+		if ! apply_review_patch "${ref}^" "$ref"; then
 			echo "error: could not restore banked edits for step $target" >&2
+			# Roll back: hard-reset to the origin step and re-apply its bank.
+			git reset -q --hard "$cstep"
+			pref="refs/review-edits/$src/$prev_step"
+			if git rev-parse --verify --quiet "$pref" >/dev/null; then
+				apply_review_patch "${pref}^" "$pref" || true
+			fi
+			git reset -q --soft "$cstep^"
 			exit 1
-		}
+		fi
 	fi
 	git reset -q --soft "$ctarget^"
 	git config "branch.$cur.reviewstep" "$target"
@@ -764,7 +820,7 @@ walk_range_error() {
 	'' | *[!0-9]*) _wre_count=0 ;;
 	esac
 	if [ "$_wre_step" -ge 1 ] && [ "$_wre_count" -ge 1 ] && [ "$_wre_total" -lt "$_wre_count" ]; then
-		echo "error: HEAD has moved off this review's base — the walkthrough cursor is at entry $_wre_step but only $_wre_total of $_wre_count entr$([ "$_wre_count" -eq 1 ] && echo y || echo ies) remain in range. Walk mode keeps the whole-PR diff staged with HEAD at the base; you now have commit(s) on top (did you run git commit?). Undo them with 'git reset --soft' to restage the diff, or 'git review abort' to discard the review, then retry." >&2
+		echo "error: HEAD has moved off this review's base — the walkthrough cursor is at entry $_wre_step but only $_wre_total of $_wre_count $(entry_noun "$_wre_count") remain in range. Walk mode keeps the whole-PR diff staged with HEAD at the base; you now have commit(s) on top (did you run git commit?). Undo them with 'git reset --soft' to restage the diff, or 'git review abort' to discard the review, then retry." >&2
 		exit 3
 	fi
 	echo "error: review entry $_wre_step out of range (1..$_wre_total) — corrupt metadata? Discard the review with 'git review abort'." >&2

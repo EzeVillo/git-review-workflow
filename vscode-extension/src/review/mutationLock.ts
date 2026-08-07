@@ -14,7 +14,7 @@
 // Motivo fijo, no derivado de la operación en vuelo: quien escucha (paleta de
 // comandos, atajo) no tiene por qué saber cuál era esa operación, sólo que la
 // suya no corrió (research.md Decisión 7, FR-036).
-const DISCARD_REASON = "otra operación está en curso";
+const DISCARD_REASON = "Another operation is already in progress";
 
 export class MutationLock {
     private busy = false;

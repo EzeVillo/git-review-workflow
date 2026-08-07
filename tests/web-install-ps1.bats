@@ -46,3 +46,13 @@ _run_ps1_test() {
 	run _run_ps1_test "ref_skips_api"
 	[ "$status" -eq 0 ]
 }
+
+@test "web-install.ps1 falls back to default_branch when no release exists" {
+	run _run_ps1_test "falls_back_to_default_branch"
+	[ "$status" -eq 0 ]
+}
+
+@test "web-install.ps1: REF=main downloads a branch archive" {
+	run _run_ps1_test "ref_main_uses_heads_or_archive"
+	[ "$status" -eq 0 ]
+}

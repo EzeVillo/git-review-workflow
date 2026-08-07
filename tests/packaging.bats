@@ -5,7 +5,7 @@
 # without requiring Homebrew to be installed.
 
 setup() {
-	REPO="$BATS_TEST_DIRNAME/.."
+	REPO="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
 	FORMULA="$REPO/Formula/git-review-workflow.rb"
 	VERSION="$(cat "$REPO/VERSION")"
 }
@@ -91,6 +91,36 @@ setup() {
 		grep -qE "^[[:space:]]+${entry},?[[:space:]]*\$" "$REPO/package.json" ||
 			{ echo "files array is missing $entry"; false; }
 	done
+}
+
+@test "npm: pack + install + git-review --version smoke" {
+	# Structural checks above can green-light a broken tarball layout. Pack into a
+	# temp prefix, install globally into an isolated prefix, and require --version.
+	command -v npm >/dev/null 2>&1 || skip "npm not available"
+	TMP="$(mktemp -d)"
+	PACKDIR="$TMP/npm-pack"
+	PREFIX="$TMP/npm-prefix"
+	mkdir -p "$PACKDIR" "$PREFIX"
+	# npm pack writes <name>-<version>.tgz into CWD.
+	(
+		cd "$PACKDIR"
+		npm pack "$REPO" --silent
+	)
+	tgz="$(printf '%s\n' "$PACKDIR"/git-review-workflow-*.tgz | head -1)"
+	[ -f "$tgz" ]
+	npm install -g --prefix "$PREFIX" "$tgz" --silent
+	# Global bin lives under prefix/bin (Unix) or prefix (Windows npm quirks).
+	if [ -x "$PREFIX/bin/git-review" ]; then
+		run "$PREFIX/bin/git-review" --version
+	elif [ -x "$PREFIX/git-review" ]; then
+		run "$PREFIX/git-review" --version
+	else
+		# npm may install only the shim name without +x in some environments.
+		run env PATH="$PREFIX/bin:$PREFIX:$PATH" git-review --version
+	fi
+	rm -rf "$TMP"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"$VERSION"* ]]
 }
 
 # ── Executable bits ─────────────────────────────────────────────────────────────

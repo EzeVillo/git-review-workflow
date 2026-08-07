@@ -3,7 +3,7 @@
 # Tests for git review clean after the --forget split:
 #   - it deletes both review/ and review-fixes/ branches, even if only one exists
 #   - it drops banked edit refs even when no review branches remain
-#   - it no longer owns the --delta marker (--forget is gone; use review forget --delta)
+#   - incomplete reviews roll back their --delta marker (like abort); finished ones keep it
 
 setup() {
 	TMP="$(mktemp -d)"
@@ -13,6 +13,7 @@ setup() {
 
 	git config --global user.email t@example.com
 	git config --global user.name tester
+	git config --global core.autocrlf false
 	git config --global init.defaultBranch develop
 
 	ORIGIN="$TMP/origin.git"
@@ -134,7 +135,7 @@ teardown() {
 	[[ "$output" == *"no review branches found"* ]]
 }
 
-# ── --forget is gone; the marker is no longer this command's concern ───────────
+# ── --forget is gone; delta rollback is only for incomplete review sessions ────
 
 @test "review clean rejects the removed --forget option" {
 	run git review clean feature/x --forget
@@ -142,13 +143,61 @@ teardown() {
 	[[ "$output" == *"unknown option --forget"* ]]
 }
 
-@test "review clean keeps the delta marker (forgetting moved to review forget --delta)" {
+@test "review clean keeps a hand-set delta marker when the review branch has no session metadata" {
+	# A bare review/* ref without start metadata is not a session: do not touch markers.
 	git config reviewworkflow.feature/x.reviewed "$(git rev-parse origin/feature/x)"
 	git branch review/feature/x develop
 
 	run git review clean feature/x
 	[ "$status" -eq 0 ]
 	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$(git rev-parse origin/feature/x)" ]
+}
+
+@test "review clean rolls back delta marker for an abandoned start" {
+	# start advances the marker; clean of incomplete review/* must restore prev
+	# so the next --delta does not skip never-reviewed commits.
+	git config reviewworkflow.feature/x.reviewed "$(git rev-parse origin/feature/x~1)"
+	git review start feature/x >/dev/null
+	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$(git rev-parse origin/feature/x)" ]
+	git switch --quiet develop
+	git reset --hard --quiet
+
+	run git review clean feature/x
+	[ "$status" -eq 0 ]
+	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$(git rev-parse origin/feature/x~1)" ]
+}
+
+@test "review clean keeps delta marker after a completed finish" {
+	git review start feature/x >/dev/null
+	printf 'edited\n' >f.txt
+	git review finish >/dev/null
+	marker="$(git rev-parse origin/feature/x)"
+	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$marker" ]
+	git switch --quiet --discard-changes develop 2>/dev/null || {
+		git reset --quiet --hard
+		git clean --quiet -fd
+		git switch --quiet develop
+	}
+
+	run git review clean feature/x
+	[ "$status" -eq 0 ]
+	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$marker" ]
+}
+
+@test "review clean clears reviewresume with the undo keys" {
+	git review start feature/x --step >/dev/null
+	# Force a mid-conflict marker + undo without needing an overlapping PR:
+	# finish records undo then we plant reviewresume as clean would see it.
+	printf 'edited\n' >f.txt
+	git review finish >/dev/null || true
+	# After a normal finish we are on review-fixes; plant resume on the review branch.
+	git config branch.review/feature/x.reviewresume conflict
+	[ "$(git config branch.review/feature/x.reviewresume)" = "conflict" ]
+
+	run git review clean feature/x
+	[ "$status" -eq 0 ]
+	[ -z "$(git config branch.review/feature/x.reviewresume || true)" ]
+	[ -z "$(git config branch.review/feature/x.reviewundohead || true)" ]
 }
 
 # ── --keep-fixes: drop the finish undo, keep the deliverable ───────────────────

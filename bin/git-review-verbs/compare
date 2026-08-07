@@ -107,9 +107,7 @@ acommit="$(git rev-parse --verify --quiet "$a^{commit}")" || die "unknown commit
 bcommit="$(git rev-parse --verify --quiet "$b^{commit}")" || die "unknown commit: $b"
 [ "$acommit" != "$bcommit" ] || die "$a and $b are the same commit; nothing to compare"
 
-if ! git diff --quiet || ! git diff --cached --quiet; then
-	die "you have local changes; commit or stash them first"
-fi
+require_clean_work_tree
 
 # Remember where to return to when the compare is aborted.
 returnbranch="$(git symbolic-ref --quiet --short HEAD || true)"

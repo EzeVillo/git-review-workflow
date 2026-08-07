@@ -118,8 +118,10 @@ repo, no en archivos del working tree:
   a `refs/review-saved-edits/` para que `git review clean` (que poda
   `refs/review-edits/`) nunca toque un review guardado.
 - **Marcadores `--delta`:** las claves de config `reviewworkflow.<src>.reviewed`
-  registran el último tip revisado. Son deliberadamente *persistentes* —
-  sobreviven a `git review clean`; solo se limpian con `git review forget --delta`.
+  registran el último tip revisado. Una review **completada** (finish con
+  `reviewundoouthead`) los conserva a través de `git review clean`; un start
+  abandonado (clean/abort sin finish exitoso) los revierte como abort. Para
+  borrarlos a mano: `git review forget --delta`.
 - **Entradas de config:** `reviewworkflow.base` (dónde se integran los PRs — sin
   default, un review completo falla sin él) y `reviewworkflow.remote` (default
   `origin`). Ambas son claves `git config` por repo, por diseño.

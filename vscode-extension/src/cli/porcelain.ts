@@ -172,7 +172,8 @@ function toOptionalInt(field: string | undefined): number | undefined {
  * extra al final: se ignoran (FR-003).
  */
 export function parsePorcelain(stdout: string): PorcelainResult {
-    const lines = stdout.split("\n").filter((line) => line.length > 0);
+    // Strip CR so CRLF (wrappers / Windows redirections) does not poison fields.
+    const lines = stdout.split(/\r?\n/).filter((line) => line.length > 0);
     if (lines.length === 0) {
         throw new Error("porcelain output has no state record");
     }
@@ -348,7 +349,7 @@ export function parseListPorcelain(stdout: string): BranchRecord[] {
     // consumidor empareja por etiqueta, nunca por orden de aparición (001).
     const finishByBranch = new Map<string, { state: "pending" | "conflict"; onto: boolean }>();
 
-    for (const line of stdout.split("\n")) {
+    for (const line of stdout.split(/\r?\n/)) {
         if (line.length === 0) {
             continue;
         }

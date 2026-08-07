@@ -344,9 +344,11 @@ Has two independent axes — **range** (where the review starts) and **layout**
   you reach the base without naming the branch). Cannot be combined with a
   positional base.
 - `--delta` — review only the commits added **since your last review** of this
-  branch, instead of the whole PR. Perfect for re-reviewing an updated PR. The
-  recorded tip survives `git review clean`, so this works even after you deleted
-  the review branches; discard it explicitly with `git review forget --delta`.
+  branch, instead of the whole PR. Perfect for re-reviewing an updated PR. A
+  **completed** review keeps its recorded tip through `git review clean`; an
+  **abandoned** start (cleaned or aborted without finishing) rolls the marker
+  back so `--delta` never skips commits you never reviewed. Discard the marker
+  explicitly with `git review forget --delta`.
 - `--from <commit>` — review only the commits **after `<commit>`**. Handy when
   there is no recorded review to delta from, or to pick an exact starting point.
   Mutually exclusive with `--delta`.
@@ -403,7 +405,8 @@ Has two independent axes — **range** (where the review starts) and **layout**
   name points somewhere else, it prints a note: the review reflects the remote,
   not your checkout, and a later `git review finish --onto-source` would refuse
   until your local branch matches.
-- Refuses to run if you have local changes — start from a clean branch.
+- Refuses to run if you have local changes (tracked **or** untracked, non-ignored)
+  — start from a clean branch.
 - **Merges of the base branch are excluded.** If the author merged the base
   (e.g. `develop`) into the PR, that merged-in content is left out of the review
   in every mode, so you only see the author's own changes.
@@ -797,9 +800,12 @@ reviewed.
   leftover) and leave `review-fixes/*` alone. Useful after a successful
   `finish` when you want to drop the undo point but keep your staged edits.
 - Never deletes the branch you are currently on.
-- Also drops any banked commit-by-commit edit refs and finish undo records,
-  even when no review branches remain.
-- Leaves the `--delta` marker untouched — discard it with `git review forget --delta`.
+- Also drops any banked commit-by-commit edit refs and finish undo records
+  (including a mid-conflict `reviewresume` flag), even when no review branches
+  remain.
+- Rolls back the `--delta` marker when deleting an **incomplete** `review/*`
+  (same as `git review abort`). A finish that completed keeps the marker. Clear
+  markers explicitly with `git review forget --delta`.
 - Leaves saved reviews (`review-saved/*`) untouched — discard one with
   `git review forget --saved`.
 
@@ -808,9 +814,9 @@ reviewed.
 <details>
 <summary><code>git review forget --delta</code></summary>
 
-Discards the recorded last-reviewed tip that `--delta` relies on. The marker is
-kept deliberately so `--delta` survives `git review clean`; this is how you clear
-it.
+Discards the recorded last-reviewed tip that `--delta` relies on. Completed
+reviews keep that marker through `git review clean`; use this when you want to
+forget it yourself.
 
 - `<branch>` — forget the marker(s) for one source branch, both the remote one
   and the `--local` one if present.

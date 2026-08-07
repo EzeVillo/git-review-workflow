@@ -6,6 +6,23 @@
   "publisher": "EzeVillo",
   "license": "MIT",
   "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/EzeVillo/git-review-workflow.git",
+    "directory": "vscode-extension"
+  },
+  "bugs": {
+    "url": "https://github.com/EzeVillo/git-review-workflow/issues"
+  },
+  "homepage": "https://github.com/EzeVillo/git-review-workflow/tree/main/vscode-extension#readme",
+  "keywords": [
+    "git",
+    "review",
+    "pull-request",
+    "code-review",
+    "walkthrough",
+    "scm"
+  ],
   "engines": {
     "vscode": "^1.75.0"
   },

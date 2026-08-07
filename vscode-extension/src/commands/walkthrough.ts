@@ -29,10 +29,15 @@ export async function walkthroughInit(
             await stateManager.refresh();
             return "ok" as const;
         }
-        const err = result.stderr.trim() || result.stdout.trim();
-        if (/already exists|pass --force/i.test(err)) {
+        // Machine signal: file already present (do not parse human CLI prose).
+        const wtPath = path.join(options.cwd, ".review", "walkthrough.md");
+        try {
+            await vscode.workspace.fs.stat(vscode.Uri.file(wtPath));
             return "exists" as const;
+        } catch {
+            // not present
         }
+        const err = result.stderr.trim() || result.stdout.trim();
         void vscode.window.showErrorMessage(err.length > 0 ? err : "git review walkthrough init failed.");
         return "fail" as const;
     });

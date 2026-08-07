@@ -46,6 +46,8 @@ const LOCAL_MUTATION_VERBS = new Set([
     "forget",
     "compare",
     "walkthrough",
+    // preview walks the full edit set (step replay can be large); same budget as finish.
+    "preview",
 ]);
 // `start` hace fetch del tip; `forget --delta --stale` hace fetch --prune.
 // El resto de forget es local — ver timeoutForClass + args.

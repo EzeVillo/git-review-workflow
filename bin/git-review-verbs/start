@@ -178,9 +178,7 @@ if [ -z "$base" ]; then
 	base="$(git config reviewworkflow.base || true)"
 fi
 
-if ! git diff --quiet || ! git diff --cached --quiet; then
-	die "you have local changes; commit or stash them first"
-fi
+require_clean_work_tree
 
 # --local reviews your local <branch> directly; the default reviews the remote's.
 # The base is a separate concern: it is the shared merge target, so it still
@@ -423,7 +421,7 @@ if [ "$walk" -eq 1 ]; then
 			keysuffix=" ($keycount key)"
 		fi
 
-		echo "$rb ready ($range) — walkthrough: $walkcount entr$([ "$walkcount" -eq 1 ] && echo y || echo ies)$keysuffix; read, edit, then run git review next"
+		echo "$rb ready ($range) — walkthrough: $walkcount $(entry_noun "$walkcount")$keysuffix; read, edit, then run git review next"
 	else
 		echo "$rb ready ($range) — walkthrough keys-only: $walkcount key$([ "$walkcount" -eq 1 ] || echo s); read, edit, then run git review next"
 	fi

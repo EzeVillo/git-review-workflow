@@ -16,6 +16,7 @@ setup() {
 
 	git config --global user.email t@example.com
 	git config --global user.name tester
+	git config --global core.autocrlf false
 	git config --global init.defaultBranch develop
 
 	ORIGIN="$TMP/origin.git"
@@ -103,6 +104,40 @@ teardown() {
 	[ -f newfile.txt ]
 	run git status --porcelain newfile.txt
 	[[ "$output" == "?? newfile.txt" ]]
+}
+
+@test "finish refuses pre-existing review-fixes without recording undo" {
+	# Seed a fixes branch with real content; finish must refuse before undo so a
+	# later --abort cannot delete that pre-existing work.
+	git branch review-fixes/feature/x develop
+	git update-ref refs/heads/review-fixes/feature/x "$(
+		git commit-tree "$(git rev-parse develop^{tree})" -m 'preexisting fixes'
+	)"
+	pre="$(git rev-parse review-fixes/feature/x)"
+	git review start feature/x develop
+	printf 'a1\na2\nEDIT\n' >a.txt
+	run git review finish
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"already exists"* ]]
+	# No undo point: abort would have nothing to restore and must not be required.
+	[ -z "$(git config branch.review/feature/x.reviewundohead || true)" ]
+	# Pre-existing branch untouched.
+	[ "$(git rev-parse review-fixes/feature/x)" = "$pre" ]
+	run git review finish --abort
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"no finish to abort"* ]]
+	[ "$(git rev-parse review-fixes/feature/x)" = "$pre" ]
+}
+
+@test "abort after a successful finish deletes the review-fixes it created" {
+	git review start feature/x develop
+	printf 'a1\na2\nEDIT\n' >a.txt
+	git review finish
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
+	run git review finish --abort
+	[ "$status" -eq 0 ]
+	run git rev-parse --verify --quiet refs/heads/review-fixes/feature/x
+	[ "$status" -ne 0 ]
 }
 
 # ── step mode ─────────────────────────────────────────────────────────────────

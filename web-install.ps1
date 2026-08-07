@@ -10,7 +10,8 @@
 #
 #     $env:REF = 'v0.0.1'; irm .../web-install.ps1 | iex
 #
-# With no REF it installs the latest release.
+# With no REF it installs the latest release, falling back to the default branch
+# (same policy as web-install.sh).
 #
 $ErrorActionPreference = 'Stop'
 
@@ -39,12 +40,18 @@ $repo       = 'EzeVillo/git-review-workflow'
 $installDir = if ($env:PREFIX) { $env:PREFIX } else { "$env:USERPROFILE\.local\bin" }
 $api        = "https://api.github.com/repos/$repo"
 
-# Resolve which ref to install.
+# Resolve which ref to install: explicit REF, else latest release, else default branch.
 $ref = $env:REF
 if (-not $ref) {
     try {
         $release = Invoke-RestMethod "$api/releases/latest"
         $ref = $release.tag_name
+    } catch {}
+}
+if (-not $ref) {
+    try {
+        $repoInfo = Invoke-RestMethod $api
+        $ref = $repoInfo.default_branch
     } catch {}
 }
 if (-not $ref) {
@@ -58,9 +65,29 @@ $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ([System.Guid]::NewGuid().ToS
 New-Item -ItemType Directory -Path $tmp | Out-Null
 
 try {
-    $zipUrl  = "https://github.com/$repo/archive/refs/tags/$ref.zip"
+    # GitHub archive URLs accept tags, branch names, and short SHAs under
+    # archive/<ref>.zip (and under refs/tags/ or refs/heads/ when needed).
+    # Prefer archive/$ref.zip first so REF=main works; fall back to tags/heads.
     $zipPath = Join-Path $tmp 'archive.zip'
-    Invoke-WebRequest $zipUrl -OutFile $zipPath
+    $candidates = @(
+        "https://github.com/$repo/archive/$ref.zip",
+        "https://github.com/$repo/archive/refs/tags/$ref.zip",
+        "https://github.com/$repo/archive/refs/heads/$ref.zip"
+    )
+    $downloaded = $false
+    foreach ($zipUrl in $candidates) {
+        try {
+            Invoke-WebRequest $zipUrl -OutFile $zipPath
+            $downloaded = $true
+            break
+        } catch {
+            # try next layout
+        }
+    }
+    if (-not $downloaded) {
+        Write-Error "error: could not download archive for ref '$ref'"
+        exit 1
+    }
 
     Expand-Archive $zipPath -DestinationPath $tmp
 

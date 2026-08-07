@@ -13,6 +13,17 @@ describe("parsePorcelain", () => {
         assert.deepStrictEqual(result.entries, []);
     });
 
+    it("acepta CRLF sin envenenar campos (wrappers Windows)", () => {
+        const out = "state\treview/feat-x\torigin/feat-x\tabc123\twhole\tnone\r\nentry\t1\ta.txt\r\n";
+        const result = parsePorcelain(out);
+        assert.strictEqual(result.state.mode, "whole");
+        assert.strictEqual(result.state.walkthrough, "none");
+        assert.strictEqual(result.entries.length, 1);
+        const id0 = result.entries[0].id as PathRef;
+        assert.strictEqual(id0.display, "a.txt");
+        assert.ok(!id0.display.includes("\r"), "path must not keep CR");
+    });
+
     it("parsea state en modo step (10 campos), current como string", () => {
         const out = "state\treview/feat-x\torigin/feat-x\tabc123\tstep\tnone\t2\t9\t9\t9fe1c0d\n";
         const result = parsePorcelain(out);

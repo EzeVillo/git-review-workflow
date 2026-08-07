@@ -13,6 +13,7 @@ setup() {
 
 	git config --global user.email t@example.com
 	git config --global user.name tester
+	git config --global core.autocrlf false
 	git config --global init.defaultBranch develop
 
 	ORIGIN="$TMP/origin.git"
@@ -361,6 +362,19 @@ step_review_two_with_edits() {
 	run git review finish
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"already exists"* ]]
+	# Refused before record_undo: no stuck undo, pre-existing branch survives.
+	[ -z "$(git config branch.review/feature/x.reviewundohead || true)" ]
+	run git rev-parse --verify --quiet refs/heads/review-fixes/feature/x
+	[ "$status" -eq 0 ]
+}
+
+@test "review start refuses untracked files as local changes" {
+	printf 'orphan\n' >orphan.txt
+	run git review start feature/x
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"local changes"* ]]
+	run git rev-parse --verify --quiet refs/heads/review/feature/x
+	[ "$status" -ne 0 ]
 }
 
 @test "review finish --onto-source refuses a local branch behind the tip" {
@@ -415,15 +429,16 @@ step_review_two_with_edits() {
 	[ -z "$output" ]
 }
 
-@test "review clean keeps the recorded reviewed tip (forgetting moved to review forget --delta)" {
+@test "review clean rolls back the reviewed tip of an abandoned start (like abort)" {
+	# start advances the marker; cleaning an incomplete review must not leave
+	# never-reviewed commits skipped for the next --delta.
 	git review start feature/x
 	git switch --quiet develop
 	git reset --hard --quiet
 	[ -n "$(git config reviewworkflow.feature/x.reviewed)" ]
 	run git review clean feature/x
 	[ "$status" -eq 0 ]
-	# review clean no longer owns the delta marker; it must survive
-	[ -n "$(git config reviewworkflow.feature/x.reviewed)" ]
+	[ -z "$(git config reviewworkflow.feature/x.reviewed || true)" ]
 }
 
 # ── review status: banked steps display ───────────────────────────────────────

@@ -8,11 +8,7 @@ import {
 } from "../cli/configPorcelain";
 import {invokeGitReview, InvokeOptions, resolveCommand} from "../cli/invoke";
 import {MutationLock} from "../review/mutationLock";
-import {
-    buildLayoutItems,
-    layoutSummary,
-    offerConfigFlags,
-} from "../review/layoutOffers";
+import {buildLayoutItems, layoutSummary, offerConfigFlags,} from "../review/layoutOffers";
 import {
     intentToArgs,
     ReviewIntent,
@@ -173,7 +169,11 @@ async function loadBranchContext(
     source: ReviewSource,
     range: ReviewRange,
     options: InvokeOptions
-): Promise<{deltas: DeltaRecord[] | undefined; offers: ReadingOffer[] | undefined; error?: string}> {
+): Promise<{
+    deltas: DeltaRecord[] | undefined;
+    offers: ReadingOffer[] | undefined;
+    error?: string
+}> {
     const flags = offerConfigFlags(source, range);
     const report = await invokeGitReview(
         "config",
@@ -225,7 +225,7 @@ function runInTerminal(args: string[], options: InvokeOptions): void {
     const {command, args: commandArgs} = resolveCommand("start", args, options.gitReviewPath);
     const terminal = vscode.window.createTerminal({name: "git review start", cwd: options.cwd});
     terminal.show();
-    terminal.sendText([command, ...commandArgs].map(quoteForTerminal).join(" "));
+    terminal.sendText([command, ...commandArgs].map((arg) => quoteForTerminal(arg)).join(" "));
 }
 
 /**

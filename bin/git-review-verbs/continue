@@ -80,10 +80,9 @@ rb="review/$src"
 git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null &&
 	die "$rb is already active; finish or abort it before resuming the saved one"
 
-# Resuming materialises a working tree, so refuse to clobber local changes.
-if ! git diff --quiet || ! git diff --cached --quiet; then
-	die "you have local changes; commit or stash them first"
-fi
+# Resuming materialises a working tree, so refuse to clobber local changes
+# (tracked or untracked — same rule as start/compare).
+require_clean_work_tree
 
 mode="$(git config "branch.$saved.reviewmode" || echo whole)"
 tip="$(git config "branch.$saved.reviewtip" || true)"
@@ -119,11 +118,13 @@ if [ "$mode" = "step" ]; then
 	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
 
 	# Land on the saved step exactly like review-next's goto_step does: hard-reset
-	# to the commit, re-apply its banked edits, then soft-reset so its diff is staged.
+	# to the commit, re-apply its banked edits (temp file, worktree-only — not
+	# --3way/--index, or the edit lands staged and vanishes from git diff),
+	# then soft-reset so the commit's diff is staged and the edit stays unstaged.
 	git switch -q -c "$rb" "$cstep"
 	ref="refs/review-edits/$src/$step"
 	if git rev-parse --verify --quiet "$ref" >/dev/null; then
-		git diff --binary "${ref}^" "$ref" | git apply ||
+		apply_review_patch "${ref}^" "$ref" ||
 			die "could not restore your edits for step $step"
 	fi
 	git reset -q --soft "$cstep^"
@@ -157,12 +158,9 @@ else
 
 	git switch -q -c "$rb" "$tip"
 	git reset -q --soft "$lower"
-	# Pipe the saved edits straight from git diff into git apply. Capturing the
-	# patch in a shell variable drops its NUL bytes and trailing newline, which
-	# corrupts a binary hunk and silently lost a binary edit on resume. The step
-	# path above (refs/review-edits) already pipes the diff directly.
+	# Binary-safe apply via apply_review_patch (temp file, not command substitution).
 	if ! git diff --quiet "$tip" "$saved"; then
-		git diff --binary "$tip" "$saved" | git apply ||
+		apply_review_patch "$tip" "$saved" ||
 			die "could not restore your edits"
 	fi
 

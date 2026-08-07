@@ -4,8 +4,11 @@
 # review-fixes/<branch> too).
 #
 # With no <branch> it cleans every matching leftover. It never deletes the
-# branch you are currently on. The recorded last-reviewed tip (used by --delta)
-# is left alone; discard it with git review forget --delta.
+# branch you are currently on. When it deletes an *incomplete* review/* (one
+# that never finished successfully), it rolls back that review's --delta marker
+# the same way git review abort does, so abandoned starts do not skip commits.
+# A finish that completed (reviewundoouthead set) keeps the marker — that tip
+# was reviewed. For fully independent marker cleanup use git review forget --delta.
 #
 # --keep-fixes drops the review session / finish undo (review/* + undo refs)
 # but leaves review-fixes/* alone — the usual "I'm done with this finish" step
@@ -26,8 +29,31 @@ With no <branch>, clean every matching leftover.
   --keep-fixes     delete review/<branch> only; leave review-fixes/<branch>
 
 Never deletes the branch you are currently on.
-The --delta marker is left untouched; use git review forget --delta to discard it.
+Incomplete reviews roll back their --delta marker (like abort); finished ones keep it.
 EOF
+}
+
+# restore_delta_if_incomplete <src>
+# If review/<src> never completed a finish (no reviewundoouthead), roll the
+# --delta marker back using reviewprevreviewed — same as git review abort.
+restore_delta_if_incomplete() {
+	_rdi_src="$1"
+	_rdi_rb="review/$_rdi_src"
+	# Completed finish: tip was reviewed; keep the marker advanced at start.
+	[ -z "$(git config "branch.$_rdi_rb.reviewundoouthead" || true)" ] || return 0
+	# No tip metadata: not a real review session config; leave markers alone.
+	[ -n "$(git config "branch.$_rdi_rb.reviewtip" || true)" ] || return 0
+	_rdi_prev="$(git config "branch.$_rdi_rb.reviewprevreviewed" || true)"
+	if [ "$(git config "branch.$_rdi_rb.reviewlocal" || true)" = "1" ]; then
+		_rdi_mk="reviewworkflowlocal.$_rdi_src.reviewed"
+	else
+		_rdi_mk="reviewworkflow.$_rdi_src.reviewed"
+	fi
+	if [ -n "$_rdi_prev" ]; then
+		git config "$_rdi_mk" "$_rdi_prev"
+	else
+		git config --unset "$_rdi_mk" 2>/dev/null || true
+	fi
 }
 
 arg=""
@@ -85,6 +111,13 @@ if [ -n "$list" ]; then
 			echo "skipping $b (currently checked out)" >&2
 			continue
 		fi
+		case "$b" in
+		review/*)
+			# Roll back --delta before deleting the branch (config keys stay readable
+			# after branch -D, but read first for clarity / future key cleanup).
+			restore_delta_if_incomplete "${b#review/}"
+			;;
+		esac
 		git branch -D "$b"
 		cleaned=1
 	done
@@ -156,8 +189,11 @@ fi
 # Word splitting is intentional: branch names cannot contain whitespace.
 # shellcheck disable=SC2086
 for b in $undobranches; do
+	# reviewresume must die with the undo: otherwise next/prev/save stay blocked
+	# ("mid-conflict") while finish --abort has nothing to restore.
 	for k in reviewundohead reviewundokind reviewundosrccreated \
-		reviewundoeditstep reviewundoeditold reviewundoouthead reviewundoouttree; do
+		reviewundoeditstep reviewundoeditold reviewundoouthead reviewundoouttree \
+		reviewresume; do
 		git config --unset "branch.review/$b.$k" 2>/dev/null || true
 	done
 done

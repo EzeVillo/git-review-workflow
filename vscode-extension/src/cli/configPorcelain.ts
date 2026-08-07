@@ -102,7 +102,7 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
     const deltas: DeltaRecord[] = [];
     const offers: ReadingOffer[] = [];
 
-    for (const line of stdout.split("\n")) {
+    for (const line of stdout.split(/\r?\n/)) {
         if (line.length === 0) {
             continue;
         }

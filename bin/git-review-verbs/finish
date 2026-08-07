@@ -71,28 +71,6 @@ worktree_tree() {
 	rm -f "$_ti"
 }
 
-# apply_review_patch FROM TO [git-apply-args...]
-# Diff FROM..TO and apply it, routing the patch through a temp file rather than a
-# shell variable. Capturing a binary patch with command substitution drops its
-# NUL bytes and trailing newline, so git apply later rejects it ("corrupt binary
-# patch") — which broke every review edit touching a binary file. An empty diff
-# is a no-op success; the function returns git apply's exit status so callers can
-# branch on conflicts.
-apply_review_patch() {
-	_from="$1"
-	_to="$2"
-	shift 2
-	_pf="$(git rev-parse --git-dir)/finish-apply.$$"
-	git diff --binary "$_from" "$_to" >"$_pf"
-	if [ -s "$_pf" ]; then
-		if git apply "$@" <"$_pf"; then _rc=0; else _rc=$?; fi
-	else
-		_rc=0
-	fi
-	rm -f "$_pf"
-	return "$_rc"
-}
-
 # record_exit: once a finish has produced its branch ($1), snapshot that branch's
 # HEAD and working tree onto the review branch's config so a later --abort can tell
 # whether you have changed it since — and tell you up front that abort will not
@@ -301,8 +279,10 @@ do_abort() {
 	# already existed, finish staged onto it without committing and left it at the
 	# reviewed tip ($outhead), so reset it back there — this also discards any
 	# commits made on it since, which is what reaching here (untouched, or --force)
-	# means. Skipped when no exit state was recorded (mid-conflict never touched
-	# the PR branch).
+	# means. Default (fixes) only deletes review-fixes/* when this finish created
+	# it (srccreated=1): never a pre-existing fixes branch that blocked finish.
+	# Skipped when no exit state was recorded (mid-conflict never touched the
+	# destination branch).
 	if [ "$kind" = "onto-source" ]; then
 		if [ "$srccreated" = "1" ] &&
 			git rev-parse --verify --quiet "refs/heads/$asrc" >/dev/null; then
@@ -311,7 +291,8 @@ do_abort() {
 			git rev-parse --verify --quiet "refs/heads/$asrc" >/dev/null; then
 			git update-ref "refs/heads/$asrc" "$outhead"
 		fi
-	elif git rev-parse --verify --quiet "refs/heads/review-fixes/$asrc" >/dev/null; then
+	elif [ "$srccreated" = "1" ] &&
+		git rev-parse --verify --quiet "refs/heads/review-fixes/$asrc" >/dev/null; then
 		git branch -D "review-fixes/$asrc" >/dev/null
 	fi
 
@@ -375,6 +356,8 @@ fi
 # Shared helpers, sourced from the libexec directory the dispatcher points us at,
 # so the step block below validates its metadata through load_step_review_meta —
 # the same guard the other step commands use — instead of reading the keys raw.
+# Also provides apply_review_patch (binary-safe patch apply used by step replay
+# and the final extract onto review-fixes / the PR branch).
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
@@ -433,7 +416,11 @@ record_undo() {
 		fi
 	else
 		git config "branch.$cur.reviewundokind" "fixes"
-		git config "branch.$cur.reviewundosrccreated" 0
+		# finish creates review-fixes/<src> (it refuses when that branch already
+		# exists, before record_undo). Mark created so --abort only deletes the
+		# branch this finish made, never a pre-existing review-fixes/* someone
+		# left around.
+		git config "branch.$cur.reviewundosrccreated" 1
 	fi
 
 	# In step mode finish overwrites the current step's banked edit ref; record
@@ -466,6 +453,16 @@ if [ "$resume" -eq 0 ] && [ -n "$(git config "branch.$cur.reviewundohead" || tru
 		echo "run git review finish --abort to undo it (or git review abort to drop the whole review) before finishing again." >&2
 	fi
 	exit 1
+fi
+
+# Refuse a pre-existing review-fixes/<src> *before* recording undo. Checking after
+# undo left a trapped session: finish --abort used to delete that pre-existing
+# branch (treating it as "created by finish") and destroy prior work.
+if [ "$resume" -eq 0 ] && [ "$onto" -eq 0 ]; then
+	if git rev-parse --verify --quiet "refs/heads/review-fixes/$src" >/dev/null; then
+		echo "error: review-fixes/$src already exists; remove it first" >&2
+		exit 1
+	fi
 fi
 
 # Only a fresh finish records an undo point; --resume continues the same finish
@@ -582,8 +579,12 @@ if [ "$onto" -eq 1 ]; then
 	fi
 else
 	fb="review-fixes/$src"
+	# Pre-checked before record_undo; re-check in case something raced, and keep
+	# the undo so --abort can restore the session without touching $fb (srccreated
+	# is 1 only for the branch *this* finish creates — which it has not yet).
 	git rev-parse --verify --quiet "refs/heads/$fb" >/dev/null && {
 		echo "error: $fb already exists; remove it first" >&2
+		echo "the undo point is still recorded — recover with: git review finish --abort" >&2
 		exit 1
 	}
 	git switch -q -c "$fb" "$tip"

@@ -289,7 +289,18 @@ export class ReviewStateManager {
             return this.setState(next);
         }
 
-        const parsed = parsePorcelain(result.stdout);
+        let parsed;
+        try {
+            parsed = parsePorcelain(result.stdout);
+        } catch (err) {
+            const message =
+                err instanceof Error ? err.message : "failed to parse git review status --porcelain";
+            return this.setState({
+                situation: "error",
+                ...EMPTY_ARRAYS,
+                stderr: result.stderr.trim().length > 0 ? result.stderr : message,
+            });
+        }
         const situation = situationFor(result.exitCode, parsed.finish !== undefined, false);
         const next: ReviewState = {
             situation,

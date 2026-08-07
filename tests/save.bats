@@ -16,6 +16,7 @@ setup() {
 
 	git config --global user.email t@example.com
 	git config --global user.name tester
+	git config --global core.autocrlf false
 	git config --global init.defaultBranch develop
 
 	ORIGIN="$TMP/origin.git"
@@ -68,6 +69,22 @@ teardown() {
 	[ "$status" -ne 0 ]
 	run git rev-parse --verify --quiet refs/heads/review-saved/feature/x
 	[ "$status" -eq 0 ]
+}
+
+@test "save refuses when a finish undo is still live on the review branch" {
+	git review start feature/x develop
+	printf 'a1\na2\nWHOLEFIX\n' >a.txt
+	git review finish
+	# Switch back to the review branch by hand with undo still recorded.
+	git switch --quiet review/feature/x
+	run git review save
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"finish"* ]]
+	[[ "$output" == *"--abort"* ]]
+	# Nothing saved, undo still on the review branch.
+	run git rev-parse --verify --quiet refs/heads/review-saved/feature/x
+	[ "$status" -ne 0 ]
+	[ -n "$(git config branch.review/feature/x.reviewundohead || true)" ]
 }
 
 @test "continue (whole) restores the staged PR diff and the edits, then finish extracts them" {
@@ -399,10 +416,17 @@ teardown() {
 	# preceded the saved one. This covers the other branch: when a prior review
 	# recorded a tip, review start stored it as reviewprevreviewed, and forget-saved
 	# must roll the marker *back* to it rather than unset it.
+	# Finish first so clean keeps the marker (incomplete clean rolls it back).
 	git review start feature/x develop
 	first_tip="$(git rev-parse origin/feature/x)"
-	git switch --quiet develop
-	git review clean feature/x
+	git review finish >/dev/null
+	git switch --quiet --discard-changes develop 2>/dev/null || {
+		git reset --quiet --hard
+		git clean --quiet -fd
+		git switch --quiet develop
+	}
+	git review clean feature/x >/dev/null
+	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$first_tip" ]
 
 	# A new commit is pushed and reviewed again: the second review records
 	# reviewprevreviewed = first_tip and advances the marker to the new tip.

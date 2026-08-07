@@ -353,7 +353,7 @@ elif [ "$keys" -eq 0 ] && [ "$count" -ge 6 ]; then
 fi
 
 if [ "$check" -eq 1 ]; then
-	echo "walkthrough ok: $count entr$([ "$count" -eq 1 ] && echo y || echo ies)$keysuffix, in sync with the PR"
+	echo "walkthrough ok: $count $(entry_noun "$count")$keysuffix, in sync with the PR"
 	warn_dirty
 	exit 0
 fi
@@ -393,5 +393,5 @@ tmp="$wtpath.tmp.$$"
 } >"$tmp"
 mv "$tmp" "$wtpath"
 
-echo "built $wtrel: $count entr$([ "$count" -eq 1 ] && echo y || echo ies)$keysuffix, ordered and renumbered"
+echo "built $wtrel: $count $(entry_noun "$count")$keysuffix, ordered and renumbered"
 warn_dirty

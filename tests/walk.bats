@@ -320,9 +320,11 @@ teardown() {
 	[[ "$output" == *"[1/3] src/c.txt"* ]]
 	git review next >/dev/null
 	run git review status
+	[ "$status" -eq 0 ]
 	[[ "$output" == *"[2/3] on b.txt"* ]]
 	git review next >/dev/null
 	run git review status
+	[ "$status" -eq 0 ]
 	[[ "$output" == *"[3/3] on .review/walkthrough.md  (uncovered)"* ]]
 }
 
@@ -559,7 +561,7 @@ neither is this
 EOF
 	run git review start feature/x
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"walkthrough"* ]]
+	[[ "$output" == *"none of its entries apply"* ]]
 	run git config branch.review/feature/x.reviewmode
 	[ "$status" -ne 0 ]
 	run git config branch.review/feature/x.reviewwalkstep
@@ -588,7 +590,7 @@ EOF
 	[ "$status" -eq 0 ]
 	# Only e.txt is in the delta range; no walkthrough entry covers it, so it falls
 	# back to a plain whole review with a note (no walk keys recorded).
-	[[ "$output" == *"walkthrough"* ]]
+	[[ "$output" == *"none of its entries apply"* ]]
 	run git config branch.review/feature/x.reviewmode
 	[ "$status" -ne 0 ]
 }
@@ -608,7 +610,8 @@ EOF
 
 	run git review start feature/broken
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"walkthrough"* ]]
+	[[ "$output" == *"none of its entries apply"* ]] || [[ "$output" == *"walkthrough"* ]]
+	# Malformed (no entries) degrades to whole: no walk mode keys.
 	run git config branch.review/feature/broken.reviewmode
 	[ "$status" -ne 0 ]
 }

@@ -29,18 +29,35 @@ $env:PATH = "$_installDir$([System.IO.Path]::PathSeparator)$_savedPath"
 # or races on the real user PATH.
 $env:GRW_USER_PATH_STORE = Join-Path $TestTmpDir 'userpath.txt'
 
-# Track which URIs Invoke-RestMethod is called with.
+# Track which URIs Invoke-RestMethod / Invoke-WebRequest are called with.
 $script:_apiCalls = [System.Collections.Generic.List[string]]::new()
+$script:_webCalls = [System.Collections.Generic.List[string]]::new()
+# When set, releases/latest fails so the installer must fall back to default_branch.
+$script:_noRelease = $false
 
 # ── mock cmdlets (visible to dot-sourced code via same scope) ─────────────────
 function Invoke-RestMethod {
     param([string]$Uri)
     $script:_apiCalls.Add($Uri)
+    if ($Uri -like '*/releases/latest*') {
+        if ($script:_noRelease) {
+            throw "404 no release"
+        }
+        return [pscustomobject]@{ tag_name = 'v0.0.1' }
+    }
+    if ($Uri -match '/repos/[^/]+/[^/]+$') {
+        return [pscustomobject]@{ default_branch = 'main' }
+    }
     return [pscustomobject]@{ tag_name = 'v0.0.1' }
 }
 
 function Invoke-WebRequest {
     param([string]$Uri, [string]$OutFile)
+    $script:_webCalls.Add($Uri)
+    # Accept archive/$ref.zip, refs/tags/, and refs/heads/ layouts.
+    if ($Uri -notmatch '/archive/') {
+        throw "unexpected archive URL: $Uri"
+    }
     Copy-Item $_fakeZip -Destination $OutFile -Force
 }
 
@@ -78,6 +95,40 @@ try {
             $hit = $script:_apiCalls | Where-Object { $_ -like '*/releases/latest*' }
             if ($hit) {
                 throw "releases/latest was called even though REF was set: $hit"
+            }
+        }
+
+        'falls_back_to_default_branch' {
+            $script:_noRelease = $true
+            _invoke_installer
+            $repoCall = $script:_apiCalls | Where-Object { $_ -match '/repos/[^/]+/[^/]+$' -and $_ -notlike '*/releases/*' }
+            if (-not $repoCall) {
+                throw "repo API (default_branch) was not called after releases/latest failed"
+            }
+            $arch = $script:_webCalls | Where-Object { $_ -like '*/archive/main.zip' -or $_ -like '*/archive/refs/heads/main.zip' }
+            if (-not $arch) {
+                throw "expected archive download for default branch main; got: $($script:_webCalls -join ', ')"
+            }
+            $p = Join-Path $_installDir 'git-review'
+            if (-not (Test-Path $p)) {
+                throw "Missing installed file: git-review"
+            }
+        }
+
+        'ref_main_uses_heads_or_archive' {
+            $env:REF = 'main'
+            try {
+                _invoke_installer
+            } finally {
+                $env:REF = ''
+            }
+            $arch = $script:_webCalls | Where-Object {
+                $_ -like '*/archive/main.zip' -or
+                $_ -like '*/archive/refs/heads/main.zip' -or
+                $_ -like '*/archive/refs/tags/main.zip'
+            }
+            if (-not $arch) {
+                throw "REF=main must download an archive for main; got: $($script:_webCalls -join ', ')"
             }
         }
 

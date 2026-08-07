@@ -221,12 +221,13 @@ describe("US6: revisar commit por commit", function () {
         const gitApi = await ensureGitApi();
         assert.ok(gitApi, "la extensión de git no expuso su API");
 
-        const commits = state.entries.map((entry) => {
+        const commits = [];
+        for (const entry of state.entries) {
             const sha = entry.id as string;
-            const changes = readCommitChanges(rootUri, sha);
+            const changes = await readCommitChanges(rootUri, sha);
             assert.ok(changes, `no se pudieron leer los archivos del commit ${sha}`);
-            return {sha, resources: commitChangeResources(gitApi!, rootUri, sha, changes!)};
-        });
+            commits.push({sha, resources: commitChangeResources(gitApi!, rootUri, sha, changes!)});
+        }
 
         // 1. agrega un archivo: no hay lado izquierdo que pedir.
         assert.strictEqual(commits[0].resources.length, 1);

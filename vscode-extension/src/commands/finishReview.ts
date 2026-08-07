@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
 import {invokeGitReview, InvokeOptions} from "../cli/invoke";
 import {MutationLock} from "../review/mutationLock";
-import {finishOutcome} from "../review/finishOutcome";
 import {ReviewStateManager} from "../review/state";
 import {captureToken, tokenStillValid} from "../review/staleGuard";
 
@@ -39,15 +38,12 @@ const LOCATION_ITEMS: LocationItem[] = [
  * (FR-038): el diálogo puede quedar abierto un rato, y el repositorio puede
  * cambiar debajo mientras el revisor elige.
  *
- * **El toast de éxito se deriva del estado posterior, nunca del texto de la
- * CLI** (T050, contracts/cli-invocation.md § "no parsear la salida humana de
- * ningún verbo"). `finishOutcome` mira si el refresco reporta un cierre
- * `pending` para esta review: un finish exitoso (con o sin ediciones)
- * siempre lo deja y aterriza en el destino; la ausencia del registro es el
- * caso residual y también se informa como resultado normal, no como error
- * (FR-019). El extract vacío deja `review-fixes/<src>` (o la rama del PR) sin
- * nada staged y el undo vivo — el panel pasa a `finish-pending`, no se queda
- * en la review activa ofreciendo otra vez Finish/Next.
+ * **El toast de éxito no se deriva del texto de la CLI** (T050,
+ * contracts/cli-invocation.md § "no parsear la salida humana"). Un finish con
+ * exit 0 siempre aterrizó en el destino (extract vacío incluido: undo vivo en
+ * `review-fixes/<src>` o la rama del PR). El panel se refresca después y pasa a
+ * `finish-pending` cuando el inventario lo reporta; un list fallido no debe
+ * decir "sin cambios" porque el finish ya corrió.
  *
  * Deshacer/continuar un cierre (`undoFinish` / `resumeFinish` abajo) es US4:
  * este comando sólo arranca un cierre nuevo.
@@ -69,7 +65,6 @@ export async function finishReview(
         );
         return;
     }
-    const branch = state.state.branch;
     const source = state.state.source;
     const token = captureToken(state);
 
@@ -90,15 +85,16 @@ export async function finishReview(
 
     await lock.run(async () => {
         const args = picked.ontoSource ? ["--onto-source"] : [];
-        const {invocation, refreshed} = await vscode.window.withProgress(
-            {location: vscode.ProgressLocation.Notification, title: `Finishing the review of ${source}…`},
+        const invocation = await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: `Finishing the review of ${source}…`
+            },
             async () => {
                 const result = await invokeGitReview("finish", args, getInvokeOptions());
-                // Refrescar pase lo que pase: aunque finish falle, es lo que
-                // dice dónde quedó el repositorio, y es lo que finishOutcome
-                // necesita para decidir el mensaje de éxito.
-                const next = await stateManager.refresh();
-                return {invocation: result, refreshed: next};
+                // Refrescar pase lo que pase: el panel necesita el estado real.
+                await stateManager.refresh();
+                return result;
             }
         );
 
@@ -112,14 +108,11 @@ export async function finishReview(
             return;
         }
 
-        if (finishOutcome(refreshed, branch) === "pending") {
-            const destination = picked.ontoSource ? source : `review-fixes/${source}`;
-            // Same toast for empty and non-empty extracts: both land on the
-            // destination with a live undo. SCM shows whether anything is staged.
-            void vscode.window.showInformationMessage(`${destination} is ready.`);
-        } else {
-            void vscode.window.showInformationMessage(`No review changes to apply for ${source}.`);
-        }
+        // Exit 0 always lands on the destination (empty extract included). Never
+        // claim "no changes" from a missing inventory row — list --porcelain can
+        // fail after a successful finish and would collapse to empty branches.
+        const destination = picked.ontoSource ? source : `review-fixes/${source}`;
+        void vscode.window.showInformationMessage(`${destination} is ready.`);
     });
 }
 

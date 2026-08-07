@@ -20,6 +20,7 @@ describe("timeoutForClass", () => {
             "forget",
             "compare",
             "walkthrough",
+            "preview",
         ]) {
             assert.strictEqual(timeoutForClass(verb, []), 120000, verb);
         }

@@ -350,9 +350,11 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   flag es la forma de llegar a la base sin nombrar la rama). No se puede combinar
   con una base posicional.
 - `--delta` — revisar solo los commits agregados **desde tu última review** de
-  esta rama, en vez de todo el PR. Ideal para re-revisar un PR actualizado. El
-  tip registrado sobrevive a `git review clean`, así que funciona aunque hayas
-  borrado las ramas de review; para descartarlo usá `git review forget --delta`.
+  esta rama, en vez de todo el PR. Ideal para re-revisar un PR actualizado. Una
+  review **completada** conserva el tip a través de `git review clean`; un start
+  **abandonado** (clean o abort sin finish) revierte el marcador para que
+  `--delta` no se saltee commits que nunca revisaste. Descartalo a mano con
+  `git review forget --delta`.
 - `--from <commit>` — revisar solo los commits **después de `<commit>`**. Útil
   cuando no hay review registrada para usar `--delta`, o para elegir un punto de
   inicio exacto. Mutuamente excluyente con `--delta`.
@@ -411,7 +413,8 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   mismo nombre apunta a otro lado, te avisa: la review refleja el remoto, no tu
   checkout, y un `git review finish --onto-source` posterior se va a negar hasta
   que tu rama local coincida.
-- No corre si tenés cambios locales — arrancá desde una rama limpia.
+- No corre si tenés cambios locales (tracked **o** untracked no ignorados) —
+  arrancá desde una rama limpia.
 - **Los merges de la rama base se excluyen.** Si el autor mergeó la base (ej.
   `develop`) dentro del PR, ese contenido mergeado queda afuera de la review en
   todos los modos, así ves solo los cambios del autor.
@@ -823,8 +826,11 @@ real, así un `--delta` posterior no se saltea commits que nunca revisaste.
   querés soltar el punto de undo y quedarte con las edits staged.
 - Nunca borra la rama en la que estás parado.
 - También descarta los edit refs bancados commit-a-commit y los registros de
-  undo del finish, incluso cuando no queda ninguna rama de review.
-- Deja intacto el marcador de `--delta` — para descartarlo usá `git review forget --delta`.
+  undo del finish (incluido el flag mid-conflict `reviewresume`), incluso cuando
+  no queda ninguna rama de review.
+- Revierte el marcador de `--delta` al borrar un `review/*` **incompleto** (igual
+  que `git review abort`). Un finish completado conserva el marcador. Borrá
+  marcadores a mano con `git review forget --delta`.
 - Deja intactas las reviews guardadas (`review-saved/*`) — para descartar una usá
   `git review forget --saved`.
 
@@ -833,8 +839,9 @@ real, así un `--delta` posterior no se saltea commits que nunca revisaste.
 <details>
 <summary><code>git review forget --delta</code></summary>
 
-Descarta el tip de la última review que usa `--delta`. El marcador se conserva a
-propósito para que `--delta` sobreviva a `git review clean`; así es como lo borrás.
+Descarta el tip de la última review que usa `--delta`. Las reviews completadas
+conservan ese marcador a través de `git review clean`; usá este comando cuando
+quieras olvidarlo vos.
 
 - `<rama>` — olvidar el/los marcador(es) de una rama de origen: el remoto y el de
   `--local` si existe.

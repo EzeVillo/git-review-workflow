@@ -61,6 +61,13 @@ esac
 # away and leave refs/review-undo orphaned with conflict markers banked as edits.
 require_not_finish_conflict
 
+# A completed finish leaves reviewundohead while you sit on review-fixes (or the
+# PR branch). Saving from a hand-switched review/* with that undo live would
+# rename the branch that owns the undo and orphan review-fixes / the undo point.
+if [ -n "$(git config "branch.$cur.reviewundohead" || true)" ]; then
+	die "a previous finish on $cur has not been resolved; run git review finish --abort (or git review abort) before saving"
+fi
+
 src="$(git config "branch.$cur.reviewsource" || true)"
 tip="$(git config "branch.$cur.reviewtip" || true)"
 if [ -z "$src" ] || [ -z "$tip" ]; then

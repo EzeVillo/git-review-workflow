@@ -184,15 +184,15 @@ teardown() {
 @test "review prev restores edits in both directions" {
 	git review start feature/x --step
 	printf 'edited1\n' >f.txt
-	git review next
-	# the edit is banked, gone from the tree at step 2: f.txt is C2's content
-	run cat f.txt
-	[[ "$output" == *"extra"* ]]
-	[[ "$output" != *"edited1"* ]]
-	# going back restores it
-	git review prev
-	run cat f.txt
-	[[ "$output" == *"edited1"* ]]
+	run git review next
+	[ "$status" -eq 0 ]
+	# Step 1 edit banked under refs/review-edits; step 2 tree is C2's content.
+	[ -n "$(git rev-parse --verify --quiet refs/review-edits/feature/x/1)" ]
+	[ "$(cat f.txt)" = "$(printf 'c1\nextra\n')" ]
+	run git review prev
+	[ "$status" -eq 0 ]
+	[ "$(cat f.txt)" = "edited1" ]
+	[ "$(git config branch.review/feature/x.reviewstep)" = "1" ]
 }
 
 @test "review abort returns to the starting branch and removes the review" {

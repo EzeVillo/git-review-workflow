@@ -128,7 +128,10 @@ offer_lines() {
 @test "offers --delta without marker fails" {
 	run git review config --porcelain --delta -- feature/plain
 	[ "$status" -ne 0 ]
-	# diagnostic is on stderr; bats may not put it in $output — status is enough
+	# bats captures stderr into $output; require the real diagnostic, not any crash.
+	[[ "$output" == *"no previous review"* ]] || [[ "$output" == *"full review first"* ]]
+	run git rev-parse --verify --quiet refs/heads/review/feature/plain
+	[ "$status" -ne 0 ]
 }
 
 @test "offers --delta with marker and no intersecting walk degrades to step+whole" {
@@ -171,8 +174,7 @@ EOF
 @test "offers --local and --offline are mutually exclusive" {
 	run git review config --porcelain --local --offline -- feature/plain
 	[ "$status" -ne 0 ]
-	[[ "$output" == *"mutually exclusive"* ]] || [[ "$output" == *"--local"* ]]
-	# Must not have written any review branch as a side effect of the error path.
+	[[ "$output" == *"--local and --offline are mutually exclusive"* ]]
 	run git rev-parse --verify --quiet refs/heads/review/feature/plain
 	[ "$status" -ne 0 ]
 }
@@ -188,7 +190,7 @@ EOF
 @test "offers --local missing branch fails hard" {
 	run git review config --porcelain --local -- no-such-branch
 	[ "$status" -ne 0 ]
-	[[ "$output" == *"no-such-branch"* ]] || [[ "$output" == *"not found"* ]] || [[ "$output" == *"error"* ]]
+	[[ "$output" == *"no-such-branch not found"* ]]
 	run git rev-parse --verify --quiet refs/heads/review/no-such-branch
 	[ "$status" -ne 0 ]
 }

@@ -233,8 +233,12 @@ EOF
 	printf 'x\n' >>a.txt
 	run git review abort
 	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "develop" ]
 	run git rev-parse --verify --quiet refs/heads/review/feature/x
 	[ "$status" -ne 0 ]
+	# Working tree on the return branch must not keep the abandoned edit.
+	run git status --porcelain
+	[ -z "$output" ]
 }
 
 @test "preview on keys-only does not change step or keys flag" {
@@ -243,6 +247,10 @@ EOF
 	printf 'p\n' >>a.txt
 	run git review preview --stat
 	[ "$status" -eq 0 ]
+	[[ "$output" == *"a.txt"* ]]
 	[ "$(git config branch.review/feature/x.reviewwalkkeys)" = "1" ]
 	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "2" ]
+	# Edit still live in the working tree; preview must not bank or reset it.
+	run grep -q p a.txt
+	[ "$status" -eq 0 ]
 }

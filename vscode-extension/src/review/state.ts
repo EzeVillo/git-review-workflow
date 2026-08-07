@@ -227,6 +227,16 @@ export class ReviewStateManager {
 
     private async doRefresh(): Promise<ReviewState> {
         const options = this.getOptions();
+        // Sin cwd no hay `git review` que invocar (multi-root ambiguo o workspace
+        // sin carpeta): no inventar un proceso en process.cwd() del host.
+        if (!options.cwd) {
+            return this.setState({
+                situation: "error",
+                ...EMPTY_ARRAYS,
+                stderr:
+                    "Open a single-folder workspace that is a git repository. git review uses one root (like the CLI cwd); multi-root is not supported.",
+            });
+        }
         const generation = this.versionCheckGeneration;
 
         if (this.versionCheckedGeneration !== generation || this.current.situation === "cli-missing") {

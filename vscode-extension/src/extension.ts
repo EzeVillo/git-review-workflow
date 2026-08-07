@@ -28,6 +28,7 @@ import {
     GitApi,
     listRepositoryTargets,
     peekGitApi,
+    pickSoleTarget,
     RepositoryTarget,
     watchGitApiChanges,
     watchGitDirFallback,
@@ -124,6 +125,9 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
     let whyPending: Promise<void> | undefined;
 
     function multiRootLabel(): string | undefined {
+        // Solo hay target cuando hay exactamente un root; la etiqueta multi-root
+        // del panel no aplica (no se elige entre N). Se deja por si el modelo
+        // la pide con un único repo abierto en un workspace multi-folder.
         return allTargets.length > 1 && target ? target.label : undefined;
     }
 
@@ -360,19 +364,19 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
     );
 
     function resolveTargets(): void {
-        allTargets = gitApi ? listRepositoryTargets(gitApi) : [];
-        // La extensión git puede no haber terminado de escanear los repos del
-        // workspace todavía (activación perezosa, o justo después de abrir la
-        // ventana): mientras tanto, cada carpeta del workspace es un target
-        // razonable por sí sola — es el mismo `cwd` que usaría un `git review`
-        // corrido a mano ahí. `watchGitApiChanges` re-resuelve cuando la API
-        // se pone al día.
-        if (allTargets.length === 0) {
-            allTargets = workspaceFolderTargets();
+        // Como la CLI: un solo cwd. Nunca allTargets[0] a ciegas cuando hay
+        // varios repos (finish/abort en el repo equivocado).
+        const fromGit = gitApi ? listRepositoryTargets(gitApi) : [];
+        if (fromGit.length > 0) {
+            allTargets = fromGit;
+        } else {
+            // Git API ausente o aún sin repos: fallback a carpetas del workspace
+            // solo si hay exactamente una (ventana single-folder). Con multi-folder
+            // y API aún no lista, no inventamos root — se re-resuelve al activar.
+            const folders = workspaceFolderTargets();
+            allTargets = folders.length === 1 ? folders : [];
         }
-        if (!target || !allTargets.some((t) => t.rootUri.toString() === target?.rootUri.toString())) {
-            target = allTargets[0];
-        }
+        target = pickSoleTarget(allTargets);
     }
 
     // Señal de refresco: la API de git si está, el watcher de `.git` si no

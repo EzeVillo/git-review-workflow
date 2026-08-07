@@ -818,7 +818,11 @@ EOF
 	[ -s "$TMP/err" ]
 }
 
-@test "a consumer reading only label and path/id stays correct even with an unknown record type (additivity, FR-002)" {
+@test "porcelain entry records keep stable leading fields for cut -f1-2 consumers (FR-002)" {
+	# Additivity for *unknown* labels is asserted in the extension parser unit
+	# tests (ignora etiquetas desconocidas). Here we only check real CLI output:
+	# known entry lines keep position in field 2 so a consumer that cuts label+id
+	# is not shifted by extra trailing fields.
 	recommit_walkthrough <<'EOF'
 # Walkthrough
 
@@ -832,13 +836,16 @@ covered
 EOF
 	git review start feature/x >/dev/null
 	out="$(git review status --porcelain)"
+	[ -n "$out" ]
 
-	firstentry="$(printf '%s\n' "$out" | grep '^entry' | sed -n '1p' | cut -f1-2)"
-	[ "$firstentry" = "$(printf 'entry\t1')" ]
-
-	# A record type this consumer does not know must not disturb the cut -f1-2
-	# recipe on the records it does know (the promise, fixed by test).
-	withbogus="$(printf '%s\nbogus\tsome-field\textra\n' "$out")"
-	bogusline="$(printf '%s\n' "$withbogus" | grep '^bogus' | cut -f1-2)"
-	[ "$bogusline" = "$(printf 'bogus\tsome-field')" ]
+	firstentry="$(printf '%s\n' "$out" | grep '^entry' | sed -n '1p')"
+	# entry <pos> <path...> — at least three tab fields; pos is 1 for the first.
+	[ "$(printf '%s\n' "$firstentry" | cut -f1)" = "entry" ]
+	[ "$(printf '%s\n' "$firstentry" | cut -f2)" = "1" ]
+	# Second entry still starts at field 2 = 2 (no column drift).
+	secondentry="$(printf '%s\n' "$out" | grep '^entry' | sed -n '2p')"
+	[ "$(printf '%s\n' "$secondentry" | cut -f1-2)" = "$(printf 'entry\t2')" ]
+	# state record present and parseable as first field only.
+	stateline="$(printf '%s\n' "$out" | grep '^state' | sed -n '1p')"
+	[ "$(printf '%s\n' "$stateline" | cut -f1)" = "state" ]
 }

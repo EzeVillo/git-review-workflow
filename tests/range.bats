@@ -114,12 +114,16 @@ push_more() {
 	run git review start feature/x --delta --from "$c1"
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"only one of --delta and --from"* ]]
+	run git rev-parse --verify --quiet refs/heads/review/feature/x
+	[ "$status" -ne 0 ]
 }
 
 @test "an explicit base cannot be combined with --delta" {
 	run git review start feature/x develop --delta
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"base is ignored with --delta/--from"* ]]
+	run git rev-parse --verify --quiet refs/heads/review/feature/x
+	[ "$status" -ne 0 ]
 }
 
 @test "an explicit base cannot be combined with --from" {
@@ -127,6 +131,8 @@ push_more() {
 	run git review start feature/x develop --from "$c1"
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"base is ignored with --delta/--from"* ]]
+	run git rev-parse --verify --quiet refs/heads/review/feature/x
+	[ "$status" -ne 0 ]
 }
 
 @test "--delta --step walks only the new commits after a prior review" {

@@ -54,15 +54,31 @@ export function classifyStartFailure(stderr: string): StartFailureCategory {
 }
 
 /**
- * Cita un argumento para reproducirlo en una terminal (`Run in Terminal`):
- * literal cuando es "seguro" en cualquier shell común, entre comillas dobles
- * si no. No es un citado universal —no cubre `$`/backticks bajo PowerShell,
- * por ejemplo— porque lo que produce es texto para que una persona lo lea y
- * confirme antes de que corra, no un argv que otro proceso vaya a parsear.
+ * Cita un argumento para reproducirlo en una terminal integrada (`Run in
+ * Terminal`). El host de VS Code en Windows suele abrir PowerShell; en
+ * Linux/macOS, un shell POSIX. `$` y backticks en comillas dobles de
+ * PowerShell se expanden — por eso en win32 se usa comilla simple (literal,
+ * con `''` para embeber `'`). En POSIX se mantienen comillas dobles con
+ * escape de `"`.
+ *
+ * Es texto para que una persona lo vea y la terminal lo ejecute al pegarlo,
+ * no un argv de spawn.
+ *
+ * @param platform inyectable en tests; por defecto `process.platform`.
  */
-export function quoteForTerminal(value: string): string {
-    // Sin guion inicial a propósito, aunque el `--` que siempre lo precede ya
-    // lo vuelve inofensivo ahí: quoted, un nombre que empieza como una opción
-    // se lee sin ambigüedad si alguien copia sólo ese token suelto.
+export function quoteForTerminal(
+    value: string,
+    platform: NodeJS.Platform = process.platform
+): string {
+    if (platform === "win32") {
+        // Token simple sin metacaracteres de PowerShell ni espacio: literal.
+        // Guion inicial se cita para que no se lea como flag al copiar suelto.
+        if (/^[\w./\\-]+$/.test(value) && !value.startsWith("-")) {
+            return value;
+        }
+        // Single-quoted PS string: todo literal salvo '' → '
+        return `'${value.replace(/'/g, "''")}'`;
+    }
+    // POSIX: sin guion inicial a propósito (mismo criterio que antes).
     return /^[\w./][\w./-]*$/.test(value) ? value : `"${value.replace(/"/g, '\\"')}"`;
 }

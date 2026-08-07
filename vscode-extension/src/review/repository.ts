@@ -102,6 +102,8 @@ export function listRepositoryTargets(gitApi: GitApi | undefined): RepositoryTar
 	}));
 }
 
+export {pickSoleTarget} from "./soleTarget";
+
 /**
  * Se suscribe a cambios de cualquier repositorio conocido (apertura, cierre,
  * o `state.onDidChange` de cada uno) y llama a `onChange` por cada evento.

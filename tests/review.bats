@@ -534,5 +534,8 @@ push_pr2() {
 	base="$(git rev-parse develop)"
 	run git review start --from "$base"
 	[ "$status" -ne 0 ]
-	[[ "$output" == *"no commits to review"* || "$output" == *"not an ancestor"* ]]
+	# On develop with --from at develop's tip, start==tip → this exact die().
+	[[ "$output" == *"no commits to review after"* ]]
+	run git rev-parse --verify --quiet refs/heads/review/develop
+	[ "$status" -ne 0 ]
 }

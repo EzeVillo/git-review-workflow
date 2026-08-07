@@ -551,8 +551,7 @@ setup_conflict_pr() {
 	printf 'a1\na2\nWHOLEFIX\n' >a.txt
 	run git review finish
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"--abort"* ]]
-	[[ "$output" == *"--force"* ]]
+	[[ "$output" == *"git review finish --abort refuses to discard them without --force"* ]]
 }
 
 @test "step finish warns the same way" {
@@ -560,7 +559,7 @@ setup_conflict_pr() {
 	printf 'a1\na2\nFIXA\n' >a.txt
 	run git review finish
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"--force"* ]]
+	[[ "$output" == *"git review finish --abort refuses to discard them without --force"* ]]
 }
 
 @test "--force without --abort is rejected" {

@@ -68,20 +68,43 @@ describe("classifyStartFailure", () => {
     });
 });
 
-describe("quoteForTerminal", () => {
+describe("quoteForTerminal (POSIX)", () => {
     it("deja un nombre simple sin comillas", () => {
-        assert.strictEqual(quoteForTerminal("feature/checkout"), "feature/checkout");
+        assert.strictEqual(quoteForTerminal("feature/checkout", "linux"), "feature/checkout");
     });
 
     it("cita un nombre con espacios", () => {
-        assert.strictEqual(quoteForTerminal("feature/with space"), '"feature/with space"');
+        assert.strictEqual(quoteForTerminal("feature/with space", "linux"), '"feature/with space"');
     });
 
     it("escapa una comilla doble interna", () => {
-        assert.strictEqual(quoteForTerminal('feature/"quoted"'), '"feature/\\"quoted\\""');
+        assert.strictEqual(quoteForTerminal('feature/"quoted"', "linux"), '"feature/\\"quoted\\""');
     });
 
     it("cita un nombre que empieza con guion, para que no se lea como flag al pegarlo", () => {
-        assert.strictEqual(quoteForTerminal("-foo"), '"-foo"');
+        assert.strictEqual(quoteForTerminal("-foo", "linux"), '"-foo"');
+    });
+});
+
+describe("quoteForTerminal (PowerShell / win32)", () => {
+    it("deja un nombre simple sin comillas", () => {
+        assert.strictEqual(quoteForTerminal("feature/checkout", "win32"), "feature/checkout");
+    });
+
+    it("cita con comillas simples un nombre con espacios", () => {
+        assert.strictEqual(quoteForTerminal("feature/with space", "win32"), "'feature/with space'");
+    });
+
+    it("no expande $ ni backticks: comilla simple literal", () => {
+        assert.strictEqual(quoteForTerminal("cost_$total", "win32"), "'cost_$total'");
+        assert.strictEqual(quoteForTerminal("a`n", "win32"), "'a`n'");
+    });
+
+    it("embebe comilla simple duplicandola ('' en PowerShell)", () => {
+        assert.strictEqual(quoteForTerminal("it's", "win32"), "'it''s'");
+    });
+
+    it("cita un nombre que empieza con guion", () => {
+        assert.strictEqual(quoteForTerminal("-foo", "win32"), "'-foo'");
     });
 });

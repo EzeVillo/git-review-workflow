@@ -130,8 +130,13 @@ teardown() {
 	printf 'a1\na2\nFIXA\n' >a.txt
 	run git review finish
 	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/x" ]
 	run git diff --cached
 	[[ "$output" == *"+FIXA"* ]]
+	# Only the reviewer's edit is staged, not the rest of the PR tip as new content.
+	[[ "$output" != *"+a2"* ]]
+	run git rev-parse --verify --quiet refs/heads/review/feature/x
+	[ "$status" -eq 0 ]
 }
 
 @test "review next requires step mode" {

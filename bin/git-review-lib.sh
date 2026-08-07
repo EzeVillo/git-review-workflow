@@ -118,6 +118,20 @@ show_commit() {
 		"$(git show -s --format='%s%n%n%b' "$1")"
 }
 
+# require_not_finish_conflict
+# Refuse verbs that would bank/move/capture the working tree while a finish is
+# stopped mid-conflict (reviewresume=conflict). Only finish --resume / --abort
+# (and abort of the whole review) are valid exits; next/prev/save would bank
+# conflict markers as "edits" or delete the review branch that holds the undo.
+# Mirror of the same guard in git review preview.
+require_not_finish_conflict() {
+	_rnfc_cur="$(git symbolic-ref --quiet --short HEAD || true)"
+	if [ "$(git config "branch.$_rnfc_cur.reviewresume" || true)" = "conflict" ]; then
+		echo "error: git review finish is mid-conflict; resolve the markers and run git review finish --resume first (or git review finish --abort)" >&2
+		exit 1
+	fi
+}
+
 # load_step_review_meta
 # Confirm HEAD is on a review/* branch started with --step and load its metadata
 # into the globals the caller and goto_step rely on: cur, src, tip, start, count,
@@ -165,7 +179,10 @@ load_step_review_meta() {
 	# Guard against a step that maps to no commit (corrupt config, hand-edited
 	# metadata): otherwise goto_step's sed yields an empty commit and git rev-parse
 	# '^{tree}' crashes mid-move.
-	total="$(printf '%s\n' "$commits" | grep -c .)"
+	# grep -c exits 1 when the count is 0; under set -e that aborts the verb
+	# without the corrupt-metadata diagnostic below. Walk uses || true for the
+	# same reason.
+	total="$(printf '%s\n' "$commits" | grep -c . || true)"
 	case "$count" in
 	*[!0-9]*)
 		echo "error: corrupt review metadata: reviewcount is '$count', not a positive integer. Discard the review with 'git review abort'." >&2
@@ -182,6 +199,10 @@ load_step_review_meta() {
 		exit 1
 		;;
 	esac
+	if [ "$total" -lt 1 ]; then
+		echo "error: corrupt review metadata: no commits in range $start..$tip. Discard the review with 'git review abort'." >&2
+		exit 1
+	fi
 	if [ "$step" -lt 1 ] || [ "$step" -gt "$total" ]; then
 		echo "error: review step $step out of range (1..$total) — corrupt metadata? Discard the review with 'git review abort'." >&2
 		exit 1

@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import {invokeGitReview, InvokeOptions} from "../cli/invoke";
 import {MutationLock} from "../review/mutationLock";
 import {ReviewStateManager} from "../review/state";
+import {captureToken, tokenStillValid} from "../review/staleGuard";
 import {resumableSourceAt} from "../views/panelModel";
 
 /** El stderr de la CLI, aplanado a una línea para el toast del editor. */
@@ -23,6 +24,10 @@ function message(stderr: string): string {
  * contra el inventario del host, así que el argumento que llega a la CLI sale
  * del estado del host. Un índice que no resuelve no hace nada.
  *
+ * El `StateToken` se captura al abrir el diálogo y se revalida justo antes de
+ * invocar (FR-012 / staleGuard), igual que finish/save/abort: el inventario
+ * puede cambiar debajo del modal.
+ *
  * La espera se muestra con el progreso del editor y no con el esqueleto del
  * panel: el esqueleto es la silueta de una entrada y acá no hay ninguna —el
  * panel está en `no-review`—, y lo que el panel no puede comunicar es
@@ -40,6 +45,7 @@ export async function continueReview(
     if (source === undefined) {
         return;
     }
+    const token = captureToken(stateManager.state);
 
     const answer = await vscode.window.showWarningMessage(
         `Continue the saved review of ${source}?`,
@@ -58,12 +64,23 @@ export async function continueReview(
         // soltarlo antes dejaría el panel con el inventario viejo justo cuando
         // el indicador dice que ya terminó. No es cancelable — a mitad de un
         // checkout no hay nada que cancelar.
+        let stale = false;
+        // Re-resolver el source dentro del lock: el índice del webview puede
+        // apuntar a otra fila si el inventario cambió bajo el modal.
+        const freshSource = resumableSourceAt(stateManager.state.branches, index);
+        if (freshSource === undefined || freshSource !== source || !tokenStillValid(token, stateManager.state)) {
+            stale = true;
+        }
+
         const result = await vscode.window.withProgress(
             {
                 location: vscode.ProgressLocation.Notification,
                 title: `Continuing the review of ${source}…`,
             },
             async () => {
+                if (stale) {
+                    return undefined;
+                }
                 const invocation = await invokeGitReview("continue", [source], getInvokeOptions());
                 // Refrescar pase lo que pase: aunque el verbo falle, es lo que
                 // dice dónde quedó el repositorio — la salida humana no se
@@ -72,6 +89,13 @@ export async function continueReview(
                 return invocation;
             }
         );
+
+        if (stale || result === undefined) {
+            void vscode.window.showInformationMessage(
+                "The review state changed before continue ran; nothing was resumed."
+            );
+            return;
+        }
 
         if (result.exitCode !== 0) {
             // El working tree sucio es el modo de fallo que no se puede

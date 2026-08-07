@@ -303,6 +303,12 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
     }
 
     lock.onDidChangeBusy(() => updateView(stateManager.state));
+    // FR-036: palette/atajos no ven gitReview.busy del panel; avisar el descarte.
+    context.subscriptions.push(
+        lock.onDidDiscard((reason) => {
+            void vscode.window.showInformationMessage(reason);
+        })
+    );
     stateManager.onDidChange((state) => {
         updateView(state);
         syncCliProbe();

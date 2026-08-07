@@ -41,6 +41,7 @@ esac
 # review walks a curated file cursor. Anything else (whole, or not a review) falls
 # through to load_step_review_meta, whose diagnostics cover every wrong-state case.
 cur="$(git symbolic-ref --quiet --short HEAD || true)"
+require_not_finish_conflict
 case "$(git config "branch.$cur.reviewmode" || true)" in
 walk)
 	load_walk_review_meta

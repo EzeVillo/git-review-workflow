@@ -90,29 +90,69 @@ if [ -n "$list" ]; then
 	done
 fi
 
-# Drop any banked commit-by-commit edit refs, plus any git review finish undo points
-# (refs/review-undo/* and their branch.review/<branch>.reviewundo* config) left
-# behind by a finish that was never aborted.
+# Drop orphaned banked commit-by-commit edit refs, plus any git review finish
+# undo points (refs/review-undo/* and their branch.review/<branch>.reviewundo*
+# config) left behind by a finish that was never aborted.
+#
+# Live step banks (refs/review-edits/<src>/* while review/<src> still exists)
+# are session state, not leftover junk — purging them while a step review is
+# active would silently destroy banked edits. Only purge edit-refs whose
+# review/<src> branch is already gone. Undo refs stay janitorial: clean always
+# tears down unresolved finish undo, even when the review branch is still
+# checked out (see clean.bats).
 if [ -n "$arg" ]; then
-	editns="refs/review-edits/$arg/"
 	undons="refs/review-undo/$arg/"
 	undobranches="$arg"
 else
-	editns="refs/review-edits/"
 	undons="refs/review-undo/"
 	undobranches="$(git for-each-ref --format='%(refname)' refs/review-undo/ |
 		sed -n 's#^refs/review-undo/\(.*\)/[^/]*$#\1#p' | sort -u)"
 fi
-for ns in "$editns" "$undons"; do
-	# Read refs into a variable first: a `... | while read` pipeline runs the
-	# loop body in a subshell, so a `cleaned=1` set there would not survive.
-	refs="$(git for-each-ref --format='%(refname)' "$ns")"
-	[ -n "$refs" ] || continue
-	echo "$refs" | while read -r ref; do
+
+# Edit-ref purge: named arg only when review/<arg> is gone; global walks every
+# edit ref and skips any src that still has a live review/<src>.
+# A here-doc while-read is used (not a pipe) so cleaned=1 survives the loop.
+if [ -n "$arg" ]; then
+	if ! git rev-parse --verify --quiet "refs/heads/review/$arg" >/dev/null; then
+		_edit_refs="$(git for-each-ref --format='%(refname)' "refs/review-edits/$arg/")"
+		if [ -n "$_edit_refs" ]; then
+			while IFS= read -r ref; do
+				[ -n "$ref" ] || continue
+				git update-ref -d "$ref"
+			done <<EOF
+$_edit_refs
+EOF
+			cleaned=1
+		fi
+	fi
+else
+	_edit_refs="$(git for-each-ref --format='%(refname)' refs/review-edits/)"
+	if [ -n "$_edit_refs" ]; then
+		while IFS= read -r ref; do
+			[ -n "$ref" ] || continue
+			_rest="${ref#refs/review-edits/}"
+			_esrc="${_rest%/*}"
+			if git rev-parse --verify --quiet "refs/heads/review/$_esrc" >/dev/null; then
+				continue
+			fi
+			git update-ref -d "$ref"
+			cleaned=1
+		done <<EOF
+$_edit_refs
+EOF
+	fi
+fi
+
+_undo_refs="$(git for-each-ref --format='%(refname)' "$undons")"
+if [ -n "$_undo_refs" ]; then
+	while IFS= read -r ref; do
+		[ -n "$ref" ] || continue
 		git update-ref -d "$ref"
-	done
+	done <<EOF
+$_undo_refs
+EOF
 	cleaned=1
-done
+fi
 # Word splitting is intentional: branch names cannot contain whitespace.
 # shellcheck disable=SC2086
 for b in $undobranches; do

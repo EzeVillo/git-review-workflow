@@ -512,11 +512,10 @@ if [ "$mode" = "step" ] && [ "$resume" -eq 0 ]; then
 	done
 	if [ "$conflict" -eq 1 ]; then
 		git config "branch.$cur.reviewresume" conflict
-		flags=""
-		[ "$onto" -eq 1 ] && flags="$flags --onto-source"
 		echo "conflict: some banked edits overlap the PR tip." >&2
 		echo "the working tree has conflict markers — resolve them, then run:" >&2
-		echo "    git review finish --resume$flags" >&2
+		echo "    git review finish --resume" >&2
+		echo "(destination is remembered from this finish; --onto-source is not required again.)" >&2
 		echo "(git review finish --abort here discards the resolution, like git rebase --abort.)" >&2
 		exit 1
 	fi
@@ -525,6 +524,19 @@ elif [ "$resume" -eq 1 ]; then
 		echo "error: nothing to resume" >&2
 		exit 1
 	fi
+	# Destination was pinned when record_undo ran; never re-derive it from the
+	# CLI flag alone. Forcing from reviewundokind means a plain --resume after
+	# finish --onto-source still lands on the PR branch (and the reverse cannot
+	# silently create review-fixes/* while abort still thinks onto-source).
+	_kind="$(git config "branch.$cur.reviewundokind" || echo fixes)"
+	case "$_kind" in
+	onto-source) onto=1 ;;
+	fixes) onto=0 ;;
+	*)
+		echo "error: corrupt review metadata: reviewundokind is '$_kind'. Discard the finish with 'git review finish --abort'." >&2
+		exit 1
+		;;
+	esac
 	git config --unset "branch.$cur.reviewresume" || true
 fi
 
@@ -549,6 +561,7 @@ if [ "$onto" -eq 1 ]; then
 	if git rev-parse --verify --quiet "refs/heads/$src" >/dev/null; then
 		if [ "$(git rev-parse "$src")" != "$tip" ]; then
 			echo "error: local $src is not at the reviewed tip; move or delete it first" >&2
+			echo "the undo point is still recorded — recover with: git review finish --abort" >&2
 			exit 1
 		fi
 		git switch -q "$src"
@@ -558,6 +571,7 @@ if [ "$onto" -eq 1 ]; then
 	if [ "$has_edits" -eq 1 ]; then
 		apply_review_patch "$tip" "$cur" --index --3way || {
 			echo "error: could not apply review changes onto $src" >&2
+			echo "the undo point is still recorded — recover with: git review finish --abort" >&2
 			exit 1
 		}
 		record_exit "$src"
@@ -576,6 +590,7 @@ else
 	if [ "$has_edits" -eq 1 ]; then
 		apply_review_patch "$tip" "$cur" --index --3way || {
 			echo "error: could not apply review changes onto $fb" >&2
+			echo "the undo point is still recorded — recover with: git review finish --abort" >&2
 			exit 1
 		}
 		record_exit "$fb"

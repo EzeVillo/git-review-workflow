@@ -239,7 +239,10 @@ setup_conflict_pr() {
 	printf 'a1\na2\nWHOLEFIX\n' >a.txt
 	git review preview >/dev/null
 	git review preview >/dev/null
-	run sh -c 'ls "$(git rev-parse --git-dir)"/review preview-* 2>/dev/null'
+	# Real prefix is review-preview-* (see bin/git-review-verbs/preview). A space
+	# between "review" and "preview-*" made this a two-arg ls that never matched
+	# residue, so the assert was always green.
+	run sh -c 'ls "$(git rev-parse --git-dir)"/review-preview-* 2>/dev/null'
 	[ -z "$output" ]
 }
 

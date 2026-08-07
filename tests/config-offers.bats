@@ -171,6 +171,10 @@ EOF
 @test "offers --local and --offline are mutually exclusive" {
 	run git review config --porcelain --local --offline -- feature/plain
 	[ "$status" -ne 0 ]
+	[[ "$output" == *"mutually exclusive"* ]] || [[ "$output" == *"--local"* ]]
+	# Must not have written any review branch as a side effect of the error path.
+	run git rev-parse --verify --quiet refs/heads/review/feature/plain
+	[ "$status" -ne 0 ]
 }
 
 @test "offers without fetch: remote URL is unreachable but tracking ref exists" {
@@ -183,5 +187,8 @@ EOF
 
 @test "offers --local missing branch fails hard" {
 	run git review config --porcelain --local -- no-such-branch
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"no-such-branch"* ]] || [[ "$output" == *"not found"* ]] || [[ "$output" == *"error"* ]]
+	run git rev-parse --verify --quiet refs/heads/review/no-such-branch
 	[ "$status" -ne 0 ]
 }

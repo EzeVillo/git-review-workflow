@@ -240,3 +240,20 @@ teardown() {
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"unknown option --keep-fix"* ]]
 }
+
+@test "review clean skips edit banks when review branch is still checked out" {
+	git review start feature/x --step
+	printf 'edited\n' >f.txt
+	git review next
+	[ -n "$(git for-each-ref refs/review-edits/feature/x/)" ]
+	# HEAD stays on review/* so clean skips deleting the branch; banks are still
+	# live session state and must not be purged alongside the skip.
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
+
+	run git review clean feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"skipping"* ]]
+	[ -n "$(git for-each-ref refs/review-edits/feature/x/)" ]
+	run git rev-parse --verify --quiet refs/heads/review/feature/x
+	[ "$status" -eq 0 ]
+}

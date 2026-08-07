@@ -194,22 +194,22 @@
         },
         {
           "command": "gitReview.finishReview",
-          "when": "view == gitReview.walkthrough && gitReview.situation == review && !gitReview.readonly",
+          "when": "view == gitReview.walkthrough && gitReview.situation == review && !gitReview.readonly && !gitReview.busy",
           "group": "navigation@2"
         },
         {
           "command": "gitReview.saveReview",
-          "when": "view == gitReview.walkthrough && gitReview.situation == review",
+          "when": "view == gitReview.walkthrough && gitReview.situation == review && !gitReview.busy",
           "group": "navigation@3"
         },
         {
           "command": "gitReview.abortReview",
-          "when": "view == gitReview.walkthrough && (gitReview.situation == review || gitReview.situation == finish-conflict)",
+          "when": "view == gitReview.walkthrough && (gitReview.situation == review || gitReview.situation == finish-conflict) && !gitReview.busy",
           "group": "navigation@4"
         },
         {
           "command": "gitReview.previewEdits",
-          "when": "view == gitReview.walkthrough && (gitReview.situation == review || gitReview.situation == finish-conflict)",
+          "when": "view == gitReview.walkthrough && (gitReview.situation == review || gitReview.situation == finish-conflict) && !gitReview.busy",
           "group": "navigation@5"
         }
       ],
@@ -232,15 +232,15 @@
         },
         {
           "command": "gitReview.next",
-          "when": "gitReview.situation == review"
+          "when": "gitReview.situation == review && !gitReview.busy"
         },
         {
           "command": "gitReview.prev",
-          "when": "gitReview.situation == review"
+          "when": "gitReview.situation == review && !gitReview.busy"
         },
         {
           "command": "gitReview.goToEntry",
-          "when": "gitReview.situation == review || gitReview.situation == finish-conflict"
+          "when": "(gitReview.situation == review || gitReview.situation == finish-conflict) && !gitReview.busy"
         },
         {
           "command": "gitReview.installCli",
@@ -252,60 +252,67 @@
         },
         {
           "command": "gitReview.startReview",
-          "when": "gitReview.situation == no-review || gitReview.situation == finish-pending"
+          "when": "(gitReview.situation == no-review || gitReview.situation == finish-pending) && !gitReview.busy"
         },
         {
-          "command": "gitReview.setBase"
+          "command": "gitReview.setBase",
+          "when": "!gitReview.busy"
         },
         {
-          "command": "gitReview.setRemote"
+          "command": "gitReview.setRemote",
+          "when": "!gitReview.busy"
         },
         {
           "command": "gitReview.abortReview",
-          "when": "gitReview.situation == review || gitReview.situation == finish-conflict"
+          "when": "(gitReview.situation == review || gitReview.situation == finish-conflict) && !gitReview.busy"
         },
         {
           "command": "gitReview.saveReview",
-          "when": "gitReview.situation == review"
+          "when": "gitReview.situation == review && !gitReview.busy"
         },
         {
           "command": "gitReview.finishReview",
-          "when": "gitReview.situation == review && !gitReview.readonly"
+          "when": "gitReview.situation == review && !gitReview.readonly && !gitReview.busy"
         },
         {
           "command": "gitReview.undoFinish",
-          "when": "gitReview.situation == finish-pending || gitReview.situation == finish-conflict"
+          "when": "(gitReview.situation == finish-pending || gitReview.situation == finish-conflict) && !gitReview.busy"
         },
         {
           "command": "gitReview.resumeFinish",
-          "when": "gitReview.situation == finish-conflict"
+          "when": "gitReview.situation == finish-conflict && !gitReview.busy"
         },
         {
           "command": "gitReview.discardInventory",
           "when": "false"
         },
         {
-          "command": "gitReview.cleanReview"
+          "command": "gitReview.cleanReview",
+          "when": "!gitReview.busy"
         },
         {
-          "command": "gitReview.forgetReview"
+          "command": "gitReview.forgetReview",
+          "when": "!gitReview.busy"
         },
         {
           "command": "gitReview.previewEdits",
-          "when": "gitReview.situation == review || gitReview.situation == finish-conflict"
+          "when": "(gitReview.situation == review || gitReview.situation == finish-conflict) && !gitReview.busy"
         },
         {
           "command": "gitReview.previewEditsStat",
-          "when": "gitReview.situation == review || gitReview.situation == finish-conflict"
+          "when": "(gitReview.situation == review || gitReview.situation == finish-conflict) && !gitReview.busy"
         },
         {
-          "command": "gitReview.compareReview"
+          "command": "gitReview.compareReview",
+          "when": "!gitReview.busy"
         },
         {
-          "command": "gitReview.walkthroughInit"
+          "command": "gitReview.walkthroughInit",
+          "when": "!gitReview.busy"
         },
         {
-          "command": "gitReview.walkthroughBuild"
+          "command": "gitReview.walkthroughBuild",
+          "when": "!gitReview.busy"
         },
         {
           "command": "gitReview.showCliLog"

@@ -38,6 +38,7 @@ esac
 
 # Dispatch on the review's layout, mirroring git review next.
 cur="$(git symbolic-ref --quiet --short HEAD || true)"
+require_not_finish_conflict
 case "$(git config "branch.$cur.reviewmode" || true)" in
 walk)
 	load_walk_review_meta

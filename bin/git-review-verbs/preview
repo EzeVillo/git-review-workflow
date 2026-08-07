@@ -120,7 +120,7 @@ if [ "$mode" = "step" ]; then
 	# Guard against a step that maps to no commit (corrupt config, hand-edited
 	# metadata): otherwise cstep is empty and git diff '' aborts the preview with
 	# an opaque exit 128 instead of a clear message.
-	total="$(printf '%s\n' "$commits" | grep -c .)"
+	total="$(printf '%s\n' "$commits" | grep -c . || true)"
 	case "$step" in
 	'' | *[!0-9]*) die "corrupt review metadata: reviewstep is '$step', not a positive integer. Discard the review with 'git review abort'." ;;
 	esac

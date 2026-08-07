@@ -45,6 +45,9 @@ case "${1:-}" in
 	;;
 esac
 
+# shellcheck source=../git-review-lib.sh
+. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
+
 cur="$(git symbolic-ref --quiet --short HEAD || true)"
 case "$cur" in
 review/*) ;;
@@ -53,6 +56,10 @@ review/*) ;;
 	exit 2
 	;;
 esac
+
+# A mid-finish conflict keeps undo/resume on this branch; saving would rename it
+# away and leave refs/review-undo orphaned with conflict markers banked as edits.
+require_not_finish_conflict
 
 src="$(git config "branch.$cur.reviewsource" || true)"
 tip="$(git config "branch.$cur.reviewtip" || true)"

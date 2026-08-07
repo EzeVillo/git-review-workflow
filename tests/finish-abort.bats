@@ -669,6 +669,51 @@ setup_conflict_pr() {
 	[[ "$output" == *"nothing to resume"* ]]
 }
 
+@test "finish --resume after --onto-source conflict lands on the PR without re-passing the flag" {
+	# reviewundokind was recorded at the first finish; --resume must honor it even
+	# when the CLI flag is omitted (otherwise abort cleans onto-source while the
+	# edits sit on review-fixes/*).
+	setup_conflict_pr
+	run git review finish --onto-source
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"overlap the PR tip"* ]]
+	[ "$(git config branch.review/feature/conflict.reviewundokind)" = "onto-source" ]
+	printf 'X0\nX1-RESOLVED\n' >x.txt
+	git add x.txt
+	run git review finish --resume
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "feature/conflict" ]
+	run git rev-parse --verify --quiet refs/heads/review-fixes/feature/conflict
+	[ "$status" -ne 0 ]
+}
+
+@test "next prev and save refuse mid finish-conflict" {
+	setup_conflict_pr
+	run git review finish
+	[ "$status" -ne 0 ]
+	[ "$(git config branch.review/feature/conflict.reviewresume)" = "conflict" ]
+	step_before="$(git config branch.review/feature/conflict.reviewstep)"
+
+	run git review next
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"mid-conflict"* ]]
+	[ "$(git config branch.review/feature/conflict.reviewstep)" = "$step_before" ]
+
+	run git review prev
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"mid-conflict"* ]]
+	[ "$(git config branch.review/feature/conflict.reviewstep)" = "$step_before" ]
+
+	run git review save
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"mid-conflict"* ]]
+	run git rev-parse --verify --quiet refs/heads/review/feature/conflict
+	[ "$status" -eq 0 ]
+	run git rev-parse --verify --quiet refs/heads/review-saved/feature/conflict
+	[ "$status" -ne 0 ]
+	[ "$(git config branch.review/feature/conflict.reviewresume)" = "conflict" ]
+}
+
 @test "review clean removes a finish undo point left unaborted" {
 	git review start feature/x develop
 	printf 'a1\na2\nWHOLEFIX\n' >a.txt

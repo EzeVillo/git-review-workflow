@@ -132,6 +132,20 @@ require_not_finish_conflict() {
 	fi
 }
 
+# require_not_pending_finish
+# Refuse verbs that would bank/move/rename a review/* branch while a completed
+# finish still holds reviewundohead on it. After finish, HEAD sits on
+# review-fixes/* (or the PR) with undo live on review/*; hand-switching back and
+# running next/prev/save would desync the cursor/banks and break finish --abort.
+# Shared message for save/next/prev so consumers match one diagnostic.
+require_not_pending_finish() {
+	_rnpf_cur="$(git symbolic-ref --quiet --short HEAD || true)"
+	if [ -n "$(git config "branch.$_rnpf_cur.reviewundohead" || true)" ]; then
+		echo "error: a previous finish on $_rnpf_cur has not been resolved; run git review finish --abort (or git review abort) first" >&2
+		exit 1
+	fi
+}
+
 # require_clean_work_tree
 # Refuse start/compare/continue when the worktree is dirty: tracked changes
 # (diff / cached) *or* untracked non-ignored files. finish/save capture untracked
@@ -149,7 +163,9 @@ require_clean_work_tree() {
 # Diff FROM..TO and apply it, routing the patch through a temp file rather than a
 # shell variable. Capturing a binary patch with command substitution drops its
 # NUL bytes and trailing newline, so git apply later rejects it ("corrupt binary
-# patch"). An empty diff is a no-op success; returns git apply's exit status.
+# patch"). Always passes --binary to git apply (in addition to any caller args)
+# so continue/finish/goto_step get the same binary safety as preview. An empty
+# diff is a no-op success; returns git apply's exit status.
 apply_review_patch() {
 	_from="$1"
 	_to="$2"
@@ -157,7 +173,7 @@ apply_review_patch() {
 	_pf="$(git rev-parse --git-dir)/review-apply.$$"
 	git diff --binary "$_from" "$_to" >"$_pf"
 	if [ -s "$_pf" ]; then
-		if git apply "$@" <"$_pf"; then _rc=0; else _rc=$?; fi
+		if git apply --binary "$@" <"$_pf"; then _rc=0; else _rc=$?; fi
 	else
 		_rc=0
 	fi
@@ -344,29 +360,48 @@ goto_step() {
 # over it. Nothing here stages, resets or banks anything — the working tree is the
 # whole PR throughout, exactly as in whole mode; only a cursor config key moves.
 
-# fold_lower <start> <baseref> <tip>
-# Compute a review's lower bound (exclusive). Normally it is <start>, but if the
-# base branch was merged into the PR, fold that already-merged base content into
-# the lower bound so base-derived changes are not shown as part of the review.
-# Prints the resulting commit-ish. A no-op (prints <start>) when there is nothing
-# to fold, when <baseref> is empty, or on a git without merge-tree. This is the
-# logic git review start applies to its staged diff, shared so walkthrough
-# init/build compute the exact same bound a reviewer will see.
-fold_lower() {
-	_fl_start="$1"
-	_fl_baseref="$2"
-	_fl_tip="$3"
-	_fl_lower="$_fl_start"
-	if [ -n "$_fl_baseref" ]; then
-		_fl_mb="$(git merge-base "$_fl_baseref" "$_fl_tip" 2>/dev/null || true)"
-		if [ -n "$_fl_mb" ] && [ "$_fl_mb" != "$_fl_tip" ] &&
-			! git merge-base --is-ancestor "$_fl_mb" "$_fl_start"; then
-			if _fl_tree="$(git merge-tree --write-tree "$_fl_start" "$_fl_mb" 2>/dev/null)"; then
-				_fl_lower="$(git commit-tree "$_fl_tree" -p "$_fl_start" -m 'review lower bound')"
+# resolve_lower_bound <start> <baseref> <tip>
+# Same fold decision as fold_lower, but never creates a commit: prints <start>
+# (a commit) when nothing needs folding, or the merge-tree tree OID when base
+# content must be folded into the lower bound. Read-only probes (config
+# --porcelain offers) use this so they do not leave dangling commit-tree objects
+# in the object DB. git diff / walk_sequence accept a tree OID as either side.
+resolve_lower_bound() {
+	_rlb_start="$1"
+	_rlb_baseref="$2"
+	_rlb_tip="$3"
+	_rlb_lower="$_rlb_start"
+	if [ -n "$_rlb_baseref" ]; then
+		_rlb_mb="$(git merge-base "$_rlb_baseref" "$_rlb_tip" 2>/dev/null || true)"
+		if [ -n "$_rlb_mb" ] && [ "$_rlb_mb" != "$_rlb_tip" ] &&
+			! git merge-base --is-ancestor "$_rlb_mb" "$_rlb_start"; then
+			if _rlb_tree="$(git merge-tree --write-tree "$_rlb_start" "$_rlb_mb" 2>/dev/null)"; then
+				_rlb_lower="$_rlb_tree"
 			else
 				echo "note: could not exclude merged base content from the review diff" >&2
 			fi
 		fi
+	fi
+	printf '%s\n' "$_rlb_lower"
+}
+
+# fold_lower <start> <baseref> <tip>
+# Compute a review's lower bound (exclusive). Normally it is <start>, but if the
+# base branch was merged into the PR, fold that already-merged base content into
+# the lower bound so base-derived changes are not shown as part of the review.
+# Prints the resulting commit-ish. When folding is needed, materializes a real
+# commit (commit-tree) so start can soft-reset onto it. A no-op (prints <start>)
+# when there is nothing to fold, when <baseref> is empty, or on a git without
+# merge-tree. Shared by start and walkthrough init/build.
+fold_lower() {
+	_fl_start="$1"
+	_fl_baseref="$2"
+	_fl_tip="$3"
+	_fl_bound="$(resolve_lower_bound "$_fl_start" "$_fl_baseref" "$_fl_tip")"
+	if [ "$_fl_bound" != "$_fl_start" ]; then
+		_fl_lower="$(git commit-tree "$_fl_bound" -p "$_fl_start" -m 'review lower bound')"
+	else
+		_fl_lower="$_fl_start"
 	fi
 	printf '%s\n' "$_fl_lower"
 }
@@ -655,16 +690,23 @@ walk_sequence() {
 # walk mode would run on.
 #
 # Built on top of walk_sequence rather than duplicating its awk: one git show
-# and one git diff live there, and this adds one more diff to find the paths
-# the curated sequence left out. Still O(1) per --porcelain invocation — no
-# call scales with the number of entries.
+# and one git diff live there, and this adds one more diff plus a single awk pass
+# over range paths (set membership of the curated sequence — not one grep
+# process per path).
 walk_reading_order() {
 	_wro_seq="$(walk_sequence "$1" "$2")"
 	[ -n "$_wro_seq" ] || return 0
 	printf '%s\n' "$_wro_seq"
-	range_files "$1" "$2" | while IFS= read -r _wro_p; do
-		printf '%s\n' "$_wro_seq" | grep -Fxq "$_wro_p" || printf '%s\n' "$_wro_p"
-	done
+	# One awk: load curated paths into a set, emit range paths not in it (git order).
+	range_files "$1" "$2" | awk -v seq="$_wro_seq" '
+		BEGIN {
+			n = split(seq, a, "\n")
+			for (i = 1; i <= n; i++) {
+				if (a[i] != "") seen[a[i]] = 1
+			}
+		}
+		$0 != "" && !($0 in seen) { print }
+	'
 }
 
 # walk_keys_order <tip> <lower>
@@ -720,16 +762,14 @@ emit_reading_offers() {
 		_ero_markerkey="reviewworkflow.$_ero_branch.reviewed"
 	fi
 
-	# Tip missing: hard error when the caller asked for this origin explicitly
-	# (local/offline/delta). Soft-skip (no offer rows) for the default remote
-	# probe so config --porcelain <branch> still works for delta-only clients
-	# when the remote tracking ref is absent (local-only branch).
+	# Tip missing: hard error for every origin (remote default, local, offline,
+	# delta). Soft-skip used to return 0 with zero offer rows for a missing
+	# remote tracking ref; that looks like a pre-008 CLI to consumers
+	# (synthetic whole+step fallback) instead of "no remote tip". Local-only
+	# branches must use --local.
 	if ! git rev-parse --verify --quiet "$_ero_srcref^{commit}" >/dev/null; then
-		if [ "$_ero_delta" -eq 1 ] || [ "$_ero_local" -eq 1 ]; then
-			echo "error: $_ero_srclabel not found" >&2
-			return 1
-		fi
-		return 0
+		echo "error: $_ero_srclabel not found" >&2
+		return 1
 	fi
 	_ero_tip="$(git rev-parse "$_ero_srcref")"
 
@@ -778,7 +818,9 @@ emit_reading_offers() {
 		[ "$_ero_start" != "$_ero_tip" ] || return 0
 	fi
 
-	_ero_lower="$(fold_lower "$_ero_start" "$_ero_baseref" "$_ero_tip")"
+	# Tree-only lower bound: offers must not commit-tree dangling "review lower
+	# bound" objects into the DB on every porcelain probe.
+	_ero_lower="$(resolve_lower_bound "$_ero_start" "$_ero_baseref" "$_ero_tip")"
 
 	_ero_walk=0
 	if wtcontent="$(walk_read "$_ero_tip")" && [ -n "$wtcontent" ]; then

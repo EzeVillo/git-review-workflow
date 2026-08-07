@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import {PathRef} from "../../src/cli/unquote";
-import {closeAllEditors, waitForActiveTab} from "./helpers/editors";
+import {closeAllEditors, snapshotTabs, waitForActiveTab, waitForNewTab} from "./helpers/editors";
 import {getTestApi} from "./helpers/extensionApi";
 import {
     abortReview,
@@ -77,8 +77,18 @@ describe("US2: saltar al archivo de una entrada", function () {
 
         // Forma EXACTA con la que el panel lo dispara: sin argumento
         // (`resolveEntryArg` cae en la entrada de `state.position`).
+        const previousTabs = snapshotTabs();
         await vscode.commands.executeCommand("gitReview.openChange");
-        const tab = await waitForActiveTab();
+        const tab = await waitForNewTab(previousTabs, (candidate) => {
+            const input = candidate.input;
+            if (input instanceof vscode.TabInputTextDiff) {
+                return path.basename(input.modified.fsPath) === "inline.ts";
+            }
+            if (input instanceof vscode.TabInputText) {
+                return path.basename(input.uri.fsPath) === "inline.ts";
+            }
+            return false;
+        }) ?? await waitForActiveTab();
         assert.ok(tab, "el boton de cambios no abrio ningun tab");
 
         // Qué superficie exacta usa el host para mostrar los cambios lo decide

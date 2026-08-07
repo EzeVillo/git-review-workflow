@@ -22,6 +22,7 @@ setup() {
 	git config --global user.email t@example.com
 	git config --global user.name tester
 	git config --global init.defaultBranch develop
+	git config --global core.autocrlf false
 
 	ORIGIN="$TMP/origin.git"
 	WORK="$TMP/work"
@@ -119,6 +120,8 @@ teardown() {
 @test "a local review does not disturb a prior remote review's marker" {
 	git review start feature/x
 	remote_marker="$(git config reviewworkflow.feature/x.reviewed)"
+	# Finish so clean keeps the remote marker (incomplete clean rolls it back).
+	git review finish >/dev/null
 	git switch --quiet --discard-changes develop
 	git review clean feature/x
 	git review start feature/x --local
@@ -141,6 +144,8 @@ teardown() {
 @test "abort rolls back the local marker, leaving the remote marker intact" {
 	git review start feature/x
 	remote_marker="$(git config reviewworkflow.feature/x.reviewed)"
+	# Complete the remote review so clean keeps its marker.
+	git review finish >/dev/null
 	git switch --quiet --discard-changes develop
 	git review clean feature/x
 	git review start feature/x --local
@@ -155,6 +160,7 @@ teardown() {
 
 @test "review forget --delta <branch> clears the local marker" {
 	git review start feature/x --local
+	git review finish >/dev/null
 	git switch --quiet develop
 	git review clean feature/x
 	run git review forget --delta feature/x
@@ -166,6 +172,7 @@ teardown() {
 
 @test "review forget --delta --stale clears a local marker when the local branch is gone" {
 	git review start feature/x --local
+	git review finish >/dev/null
 	git switch --quiet develop
 	git review clean feature/x
 	git branch -D feature/x
@@ -178,6 +185,7 @@ teardown() {
 
 @test "review forget --delta --stale keeps a local marker whose local branch still exists" {
 	git review start feature/x --local
+	git review finish >/dev/null
 	git switch --quiet develop
 	git review clean feature/x
 	# Delete the remote branch but keep the local one: the local marker must stay.
@@ -191,6 +199,7 @@ teardown() {
 @test "--local --delta reviews only the commits added since the last local review" {
 	# A full local review records the local marker at the local tip (C2)...
 	git review start feature/x --local
+	git review finish >/dev/null
 	git switch --quiet --discard-changes develop
 	git review clean feature/x
 	# ...then a third, local-only commit (C3) lands on top.
@@ -213,10 +222,12 @@ teardown() {
 @test "--local --delta is bounded by the local marker, not the remote one" {
 	# A remote review records the remote marker at the pushed tip (C1)...
 	git review start feature/x
+	git review finish >/dev/null
 	git switch --quiet --discard-changes develop
 	git review clean feature/x
 	# ...and a local review records the local marker at the local tip (C2).
 	git review start feature/x --local
+	git review finish >/dev/null
 	git switch --quiet --discard-changes develop
 	git review clean feature/x
 	# A new local-only commit (C3) lands on top of the local tip.
@@ -318,6 +329,7 @@ make_dotlocal_branch() {
 
 	# Remote review of feature/x.local -> reviewworkflow.feature/x.local.reviewed
 	git review start feature/x.local
+	git review finish >/dev/null
 	git switch --quiet --discard-changes develop
 	git review clean feature/x.local
 	# Local review of feature/x -> reviewworkflowlocal.feature/x.reviewed
@@ -334,9 +346,11 @@ make_dotlocal_branch() {
 	make_dotlocal_branch
 
 	git review start feature/x.local
+	git review finish >/dev/null
 	git switch --quiet --discard-changes develop
 	git review clean feature/x.local
 	git review start feature/x --local
+	git review finish >/dev/null
 	git switch --quiet --discard-changes develop
 	git review clean feature/x
 
@@ -353,6 +367,7 @@ make_dotlocal_branch() {
 	make_dotlocal_branch
 
 	git review start feature/x.local       # remote marker reviewworkflow.feature/x.local.reviewed
+	git review finish >/dev/null
 	git switch --quiet --discard-changes develop
 	git review clean feature/x.local
 

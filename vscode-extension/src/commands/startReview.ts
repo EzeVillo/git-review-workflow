@@ -336,9 +336,10 @@ export async function startReview(
     // siendo el valor de ANTES de ese paso, así que no alcanza por sí solo.
     const base = parsed.config.base ?? stateManager.state.config?.base;
 
-    // Capturado justo antes de la confirmación, revalidado justo después
-    // (FR-038): si el repositorio cambió mientras el revisor elegía, la
-    // premisa con la que arrancó el asistente ya no vale.
+    // Capturado justo antes de la confirmación (FR-038). Check externo: UX
+    // si el modal ya quedó obsoleto. Check **dentro** del lock (como abort/
+    // save/continue): cierra la ventana entre "Start the review" y el spawn
+    // (otro proceso arrancó una review, HEAD cambió, watcher refresh).
     const token = captureToken(stateManager.state);
     if (!(await confirmIntent(intent, args, base))) {
         return;
@@ -351,12 +352,25 @@ export async function startReview(
     }
 
     await lock.run(async () => {
+        let stale = false;
         const result = await vscode.window.withProgress(
             {
                 location: vscode.ProgressLocation.Notification,
                 title: `Starting the review of ${branch.name}…`
             },
             async () => {
+                // Re-check situation inside the lock: empty-state tokens only
+                // carry situation (no branch/tip), so a concurrent start of
+                // another review still invalidates via situation change.
+                if (!tokenStillValid(token, stateManager.state)) {
+                    stale = true;
+                    return undefined;
+                }
+                const situation = stateManager.state.situation;
+                if (situation !== "no-review" && situation !== "finish-pending") {
+                    stale = true;
+                    return undefined;
+                }
                 const invocation = await invokeGitReview("start", args, {
                     ...options,
                     network: true
@@ -369,9 +383,16 @@ export async function startReview(
             }
         );
 
-        if (result.exitCode !== 0) {
-            const text = flatten(result.stderr);
-            if (classifyStartFailure(result.stderr) === "network") {
+        if (stale) {
+            void vscode.window.showInformationMessage(
+                "The repository changed before the start ran; nothing was started."
+            );
+            return;
+        }
+
+        if (!result || result.exitCode !== 0) {
+            const text = flatten(result?.stderr ?? "");
+            if (result && classifyStartFailure(result.stderr) === "network") {
                 const action = await vscode.window.showErrorMessage(
                     text.length > 0 ? text : "git review start failed.",
                     "Run in Terminal"

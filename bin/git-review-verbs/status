@@ -326,26 +326,13 @@ if [ "$mode" = "step" ]; then
 		fi
 	fi
 elif [ "$mode" = "walk" ]; then
-	# Re-derive the reading sequence to report the live [k/N] and current path, the
-	# same way the walk commands do (including keys-only when reviewwalkkeys=1).
-	walkstep="$(git config "branch.$cur.reviewwalkstep" || true)"
-	walkcount="$(git config "branch.$cur.reviewwalkcount" || true)"
+	# Same load path as --porcelain / next / prev: re-derives the sequence and
+	# rejects corrupt walkstep/walkcount consistently (including keys-only).
+	load_walk_review_meta
 	if [ "$(git config "branch.$cur.reviewwalkkeys" || true)" = "1" ]; then
-		walkpaths="$(walk_keys_order "$tip" "$(git rev-parse HEAD)")"
 		keys_only_note="  (keys-only)"
 	else
-		walkpaths="$(walk_reading_order "$tip" "$(git rev-parse HEAD)")"
 		keys_only_note=""
-	fi
-	total="$(printf '%s\n' "$walkpaths" | grep -c . || true)"
-	case "$walkstep" in
-	'' | *[!0-9]*)
-		echo "error: corrupt review metadata: reviewwalkstep is '$walkstep', not a positive integer. Discard the review with 'git review abort'." >&2
-		exit 1
-		;;
-	esac
-	if [ "$walkstep" -lt 1 ] || [ "$walkstep" -gt "$total" ]; then
-		walk_range_error "$walkstep" "$total" "$walkcount"
 	fi
 	pnow="$(printf '%s\n' "$walkpaths" | sed -n "${walkstep}p")"
 	mark=""

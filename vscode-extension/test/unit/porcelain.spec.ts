@@ -13,6 +13,11 @@ describe("parsePorcelain", () => {
         assert.deepStrictEqual(result.entries, []);
     });
 
+    it("mode corrupto en state lanza (no inventa whole ni paths basura)", () => {
+        const out = "state\treview/feat-x\torigin/feat-x\tabc123\tnot-a-mode\tnone\n";
+        assert.throws(() => parsePorcelain(out), /invalid mode/);
+    });
+
     it("acepta CRLF sin envenenar campos (wrappers Windows)", () => {
         const out = "state\treview/feat-x\torigin/feat-x\tabc123\twhole\tnone\r\nentry\t1\ta.txt\r\n";
         const result = parsePorcelain(out);

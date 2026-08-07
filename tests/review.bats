@@ -175,6 +175,7 @@ push_pr2() {
 
 @test "review start --delta stages only new commits" {
 	git review start feature/x
+	git review finish >/dev/null
 	git switch --quiet develop
 	git review clean feature/x
 	push_pr2
@@ -450,6 +451,7 @@ push_pr2() {
 	# then an omitted-branch --delta must stage only that new commit.
 	git switch --quiet feature/x
 	git review start --local
+	git review finish >/dev/null
 	git switch --quiet feature/x
 	git review clean feature/x
 	printf 'a\nB\nc\nd\ne\n' >app.txt
@@ -519,6 +521,7 @@ push_pr2() {
 	git switch --quiet feature/x
 	# a first local review records the local marker at the tip
 	git review start --local
+	git review finish >/dev/null
 	git switch --quiet feature/x
 	git review clean feature/x
 	# a new unpushed commit lands on top

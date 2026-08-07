@@ -18,6 +18,7 @@ setup() {
 	git config --global user.email t@example.com
 	git config --global user.name tester
 	git config --global init.defaultBranch develop
+	git config --global core.autocrlf false
 
 	ORIGIN="$TMP/origin.git"
 	WORK="$TMP/work"
@@ -187,6 +188,116 @@ setup_conflict_pr() {
 	n="$(printf '%s\n' "$output" | grep -c '^finish' || true)"
 	[ "$n" -eq 0 ]
 	[ -z "$(git config branch.review/feature/x.reviewundohead || true)" ]
+}
+
+# ── next/prev refuse a live finish undo on the review branch ────────────────
+
+@test "next refuses after finish when reviewundohead is still live and leaves step/refs alone" {
+	# Multi-commit --step PR; finish from the tip step so replay is clean.
+	git switch --quiet -c feature/step
+	printf 'a1\na2\n' >a.txt
+	git add a.txt
+	git commit --quiet -m s1
+	printf 'a1\na2\na3\n' >a.txt
+	git add a.txt
+	git commit --quiet -m s2
+	git push --quiet -u origin feature/step
+	git switch --quiet develop
+
+	git review start feature/step --step >/dev/null
+	git review next >/dev/null
+	printf 'EDIT\n' >>a.txt
+	run git review finish
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review-fixes/feature/step" ]
+	[ -n "$(git config branch.review/feature/step.reviewundohead || true)" ]
+
+	step_before="$(git config branch.review/feature/step.reviewstep)"
+	[ "$step_before" = "2" ]
+	banked_before="$(git for-each-ref --format='%(objectname) %(refname)' "refs/review-edits/feature/step/")"
+
+	git switch --quiet review/feature/step
+	run git review next
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"a previous finish on review/feature/step has not been resolved"* ]]
+	[[ "$output" == *"git review finish --abort"* ]]
+
+	[ "$(git config branch.review/feature/step.reviewstep)" = "$step_before" ]
+	banked_after="$(git for-each-ref --format='%(objectname) %(refname)' "refs/review-edits/feature/step/")"
+	[ "$banked_after" = "$banked_before" ]
+	[ -n "$(git config branch.review/feature/step.reviewundohead || true)" ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/step" ]
+}
+
+@test "prev refuses after finish when reviewundohead is still live and leaves step alone" {
+	git switch --quiet -c feature/step2
+	printf 'a1\na2\n' >a.txt
+	git add a.txt
+	git commit --quiet -m s1
+	printf 'a1\na2\na3\n' >a.txt
+	git add a.txt
+	git commit --quiet -m s2
+	git push --quiet -u origin feature/step2
+	git switch --quiet develop
+
+	git review start feature/step2 --step >/dev/null
+	git review next >/dev/null
+	printf 'EDIT\n' >>a.txt
+	run git review finish
+	[ "$status" -eq 0 ]
+
+	step_before="$(git config branch.review/feature/step2.reviewstep)"
+	[ "$step_before" = "2" ]
+
+	git switch --quiet review/feature/step2
+	run git review prev
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"a previous finish on review/feature/step2 has not been resolved"* ]]
+	[[ "$output" == *"git review finish --abort"* ]]
+
+	[ "$(git config branch.review/feature/step2.reviewstep)" = "$step_before" ]
+	[ -n "$(git config branch.review/feature/step2.reviewundohead || true)" ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/step2" ]
+}
+
+@test "next refuses after finish on a walk review and leaves walkstep alone" {
+	git switch --quiet -c feature/walkfin
+	printf 'a1\na2\n' >a.txt
+	printf 'b1\nb2\n' >b.txt
+	git add a.txt b.txt
+	git commit --quiet -m walk-files
+	mkdir -p .review
+	cat >.review/walkthrough.md <<'EOF'
+# Walkthrough
+
+## 1. a.txt
+why a
+
+## 2. b.txt
+why b
+EOF
+	git add .review/walkthrough.md
+	git commit --quiet -m walkthrough
+	git push --quiet -u origin feature/walkfin
+	git switch --quiet develop
+
+	git review start feature/walkfin >/dev/null
+	[ "$(git config branch.review/feature/walkfin.reviewmode)" = "walk" ]
+	printf 'FIX\n' >>a.txt
+	run git review finish
+	[ "$status" -eq 0 ]
+
+	walk_before="$(git config branch.review/feature/walkfin.reviewwalkstep)"
+	[ "$walk_before" = "1" ]
+
+	git switch --quiet review/feature/walkfin
+	run git review next
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"a previous finish on review/feature/walkfin has not been resolved"* ]]
+	[[ "$output" == *"git review finish --abort"* ]]
+
+	[ "$(git config branch.review/feature/walkfin.reviewwalkstep)" = "$walk_before" ]
+	[ -n "$(git config branch.review/feature/walkfin.reviewundohead || true)" ]
 }
 
 # ── additivity: no closure means the old output is untouched (T041) ────────

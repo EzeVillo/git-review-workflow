@@ -11,6 +11,30 @@ const execFile = promisify(cp.execFile);
 const GIT_DIFF_TIMEOUT_MS = 30000;
 const GIT_DIFF_MAX_BUFFER = 20 * 1024 * 1024;
 
+/**
+ * Ejecutable de git: respeta `git.path` del host (misma setting que la
+ * extensión de git de VS Code) y, si no hay, cae a `git` en el PATH.
+ */
+function gitExecutable(): string {
+    const configured = vscode.workspace.getConfiguration("git").get<string>("path");
+    if (typeof configured === "string" && configured.trim().length > 0) {
+        return configured.trim();
+    }
+    return "git";
+}
+
+/** Opciones de `execFile` para las lecturas de diff multi-archivo. */
+function gitExecFileOptions(cwd: string): cp.ExecFileOptionsWithStringEncoding {
+    return {
+        cwd,
+        encoding: "utf8",
+        timeout: GIT_DIFF_TIMEOUT_MS,
+        maxBuffer: GIT_DIFF_MAX_BUFFER,
+        // En Windows evita el flash de consola al spawnear git.
+        windowsHide: true,
+    };
+}
+
 function isPathRef(id: string | PathRef): id is PathRef {
     return typeof id !== "string";
 }
@@ -131,14 +155,9 @@ export async function readCommitChanges(
 ): Promise<CommitChange[] | undefined> {
     try {
         const {stdout} = await execFile(
-            "git",
+            gitExecutable(),
             ["diff-tree", "-r", "-z", "--no-commit-id", "--name-status", "--root", sha],
-            {
-                cwd: rootUri.fsPath,
-                encoding: "utf8",
-                timeout: GIT_DIFF_TIMEOUT_MS,
-                maxBuffer: GIT_DIFF_MAX_BUFFER,
-            }
+            gitExecFileOptions(rootUri.fsPath)
         );
         return parseNameStatus(stdout);
     } catch {
@@ -164,14 +183,9 @@ export async function readCommitChanges(
 export async function readRangeChanges(rootUri: vscode.Uri): Promise<CommitChange[] | undefined> {
     try {
         const {stdout} = await execFile(
-            "git",
+            gitExecutable(),
             ["diff", "--name-status", "-z", "--no-renames", "HEAD"],
-            {
-                cwd: rootUri.fsPath,
-                encoding: "utf8",
-                timeout: GIT_DIFF_TIMEOUT_MS,
-                maxBuffer: GIT_DIFF_MAX_BUFFER,
-            }
+            gitExecFileOptions(rootUri.fsPath)
         );
         return parseNameStatus(stdout);
     } catch {

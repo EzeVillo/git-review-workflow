@@ -613,10 +613,19 @@ export function panelHtml(nonce: string): string {
     return box;
   }
 
+  /**
+   * Link de docs: no raw href al repo. Mismo molde que Support — el webview
+   * manda un id allowlisteado y el host abre con openExternal.
+   */
   function docsLink(label) {
     const a = document.createElement("a");
-    a.href = "https://github.com/EzeVillo/git-review-workflow#readme";
+    a.href = "#";
     a.textContent = label;
+    a.addEventListener("click", function (e) {
+      e.preventDefault();
+      if (stale()) { return; }
+      vscode.postMessage({type: "openSupport", id: "docs"});
+    });
     return a;
   }
 

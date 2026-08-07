@@ -15,6 +15,7 @@ setup() {
 	git config --global user.email t@example.com
 	git config --global user.name tester
 	git config --global init.defaultBranch develop
+	git config --global core.autocrlf false
 
 	ORIGIN="$TMP/origin.git"
 	WORK="$TMP/work"

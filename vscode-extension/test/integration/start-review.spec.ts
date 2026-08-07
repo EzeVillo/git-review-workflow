@@ -34,21 +34,26 @@ interface WizardItem {
  * `showQuickPick` / `showWarningMessage` por respuestas fijas mientras corre
  * el comando; se restauran siempre, incluso si el comando lanza.
  *
- * Cada paso se reconoce por la forma del ítem (no por el orden de llamadas):
- * layout labels pueden incluir " (recommended)".
+ * Cada paso se reconoce por la forma del ítem (no por el orden de llamadas).
+ * Layout: preferir el discriminador `layout` del ítem (exacto) — un
+ * `startsWith` sobre el label matcheaba de más ("Walkthrough" ⊆
+ * "Walkthrough — keys only").
  */
+const LAYOUT_ID_BY_LABEL: Record<string, string> = {
+    "Whole diff": "whole",
+    "Commit by commit": "step",
+    Walkthrough: "walk",
+    "Walkthrough — keys only": "keys",
+};
+
 function matchLayoutLabel(items: readonly WizardItem[], layoutLabel: string): WizardItem | undefined {
-    const exact = items.find((item) => item.label === layoutLabel);
-    if (exact) {
-        return exact;
+    const layoutId = LAYOUT_ID_BY_LABEL[layoutLabel] ?? layoutLabel;
+    const byLayout = items.find((item) => item.layout === layoutId);
+    if (byLayout) {
+        return byLayout;
     }
-    // "Walkthrough" debe matchear "Walkthrough (recommended)".
-    return items.find(
-        (item) =>
-            item.label === layoutLabel ||
-            item.label.startsWith(`${layoutLabel} (`) ||
-            item.label.startsWith(layoutLabel)
-    );
+    // Exact label (incluye "Walkthrough (recommended)" si el caller lo pasa).
+    return items.find((item) => item.label === layoutLabel);
 }
 
 async function withScriptedWizard<T>(

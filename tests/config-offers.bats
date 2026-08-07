@@ -128,10 +128,13 @@ offer_lines() {
 @test "offers --delta without marker fails" {
 	run git review config --porcelain --delta -- feature/plain
 	[ "$status" -ne 0 ]
-	# bats captures stderr into $output; require the real diagnostic, not any crash.
-	[[ "$output" == *"no previous review"* ]] || [[ "$output" == *"full review first"* ]]
+	# Contractual diagnostic (single phrase); no review branch as side effect.
+	[[ "$output" == *"no previous review of feature/plain recorded for this origin"* ]]
 	run git rev-parse --verify --quiet refs/heads/review/feature/plain
 	[ "$status" -ne 0 ]
+	# Zero offer rows even if something leaked to stdout before the die.
+	n="$(printf '%s\n' "$output" | grep -c '^offer' || true)"
+	[ "$n" -eq 0 ]
 }
 
 @test "offers --delta with marker and no intersecting walk degrades to step+whole" {
@@ -193,4 +196,99 @@ EOF
 	[[ "$output" == *"no-such-branch not found"* ]]
 	run git rev-parse --verify --quiet refs/heads/review/no-such-branch
 	[ "$status" -ne 0 ]
+}
+
+@test "offers default remote hard-fails when tracking ref is absent (local-only branch)" {
+	git switch --quiet -c feature/local-only
+	printf 'loc\n' >loc.txt
+	git add loc.txt
+	git commit --quiet -m local-only
+	git switch --quiet develop
+
+	run git review config --porcelain -- feature/local-only
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"origin/feature/local-only not found"* ]]
+	n="$(printf '%s\n' "$output" | grep -c '^offer' || true)"
+	[ "$n" -eq 0 ]
+	run git rev-parse --verify --quiet refs/heads/review/feature/local-only
+	[ "$status" -ne 0 ]
+}
+
+@test "config --porcelain does not create review lower bound commits when fold would apply" {
+	# Fold only fires when the range start is not an ancestor of the tip's
+	# merge-base with base (typical --delta after base was merged into the PR).
+	# Offers must use the tree-only path (no commit-tree 'review lower bound').
+	# rev-list --all misses dangling commits, so scan every commit object.
+	git switch --quiet -c feature/merged
+	printf 'f1\n' >feature.txt
+	git add feature.txt
+	git commit --quiet -m c1
+	git push --quiet -u origin feature/merged
+
+	git switch --quiet develop
+	printf 'DEV\n' >dev-only.txt
+	git add dev-only.txt
+	git commit --quiet -m "develop D2"
+	git push --quiet origin develop
+	git switch --quiet feature/merged
+	git merge --quiet --no-edit develop
+	printf 'f2\n' >>feature.txt
+	git add feature.txt
+	git commit --quiet -m c3
+	git push --quiet origin feature/merged
+
+	# Marker at current tip; then merge more base content so delta start is
+	# older than the new merge-base (forces fold_lower / resolve_lower_bound).
+	marker="$(git rev-parse feature/merged)"
+	git config "reviewworkflow.feature/merged.reviewed" "$marker"
+
+	git switch --quiet develop
+	printf 'DEV2\n' >dev-only2.txt
+	git add dev-only2.txt
+	git commit --quiet -m "develop D3"
+	git push --quiet origin develop
+	git switch --quiet feature/merged
+	git merge --quiet --no-edit develop
+	printf 'f4\n' >>feature.txt
+	git add feature.txt
+	git commit --quiet -m c5
+	git push --quiet origin feature/merged
+	git switch --quiet develop
+
+	list_commits() {
+		git cat-file --batch-check='%(objecttype) %(objectname)' --batch-all-objects |
+			awk '$1 == "commit" { print $2 }' | LC_ALL=C sort
+	}
+	count_lower_bound_msgs() {
+		list_commits | while IFS= read -r c; do
+			[ -n "$c" ] || continue
+			if [ "$(git log -1 --format=%s "$c" 2>/dev/null || true)" = "review lower bound" ]; then
+				printf '%s\n' "$c"
+			fi
+		done | grep -c . || true
+	}
+
+	before_list="$(list_commits)"
+	before_lb="$(count_lower_bound_msgs)"
+	[ "$before_lb" -eq 0 ]
+
+	run git review config --porcelain --delta -- feature/merged
+	[ "$status" -eq 0 ]
+	[ "$(offer_lines)" = "$(printf 'step\tavailable\nwhole\tavailable')" ]
+	run git review config --porcelain --delta -- feature/merged
+	[ "$status" -eq 0 ]
+	run git review config --porcelain --delta -- feature/merged
+	[ "$status" -eq 0 ]
+
+	after_list="$(list_commits)"
+	after_lb="$(count_lower_bound_msgs)"
+	# No new commits at all (trees from merge-tree --write-tree are fine).
+	[ "$after_list" = "$before_list" ]
+	[ "$after_lb" -eq 0 ]
+
+	# start --delta still materializes a real lower-bound commit when folding.
+	run git review start feature/merged --delta
+	[ "$status" -eq 0 ]
+	after_start_lb="$(count_lower_bound_msgs)"
+	[ "$after_start_lb" -gt 0 ]
 }

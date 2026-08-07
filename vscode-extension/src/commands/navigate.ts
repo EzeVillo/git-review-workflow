@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import {invokeGitReview, InvokeOptions} from "../cli/invoke";
+import {EntryRecord, ReviewMode} from "../cli/porcelain";
 import {MutationLock} from "../review/mutationLock";
 import {ReviewStateManager} from "../review/state";
 import {openChange} from "./openEntry";
@@ -19,6 +20,11 @@ function firstLine(text: string): string {
  * avanzar es pasar a leer *el diff* de esa entrada, y el archivo entero sigue a
  * un clic de distancia desde el panel. Los límites de la secuencia se
  * propagan tal cual desde la CLI, sin comportamiento propio (FR-016).
+ *
+ * El lock **sólo** cubre CLI + refresh. Abrir el editor (`openChange`) es
+ * solo lectura y puede tardar (multi-diff de un commit grande): dejar el
+ * `MutationLock` / `gitReview.busy` tomados durante eso descartaría finish/
+ * abort/save confirmados con un toast de "already in progress".
  */
 export async function navigate(
     direction: NavigateDirection,
@@ -33,6 +39,9 @@ export async function navigate(
     if (stateManager.state.situation !== "review") {
         return;
     }
+
+    // Capturado dentro del lock; openChange corre después de soltarlo.
+    let openAfter: {cwd: string; mode: ReviewMode; entry: EntryRecord} | undefined;
 
     await lock.run(async () => {
         const options = getInvokeOptions();
@@ -69,7 +78,11 @@ export async function navigate(
 
         const current = state.entries.find((e) => e.position === state.state?.position);
         if (current) {
-            await openChange(vscode.Uri.file(options.cwd), state.state.mode, current);
+            openAfter = {cwd: options.cwd, mode: state.state.mode, entry: current};
         }
     });
+
+    if (openAfter) {
+        await openChange(vscode.Uri.file(openAfter.cwd), openAfter.mode, openAfter.entry);
+    }
 }

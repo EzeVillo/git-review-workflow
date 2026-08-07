@@ -4,7 +4,7 @@ import * as vscode from "vscode";
 import {PathRef} from "../../src/cli/unquote";
 import {GitReviewTestApi} from "../../src/extension";
 import {ReviewState} from "../../src/review/state";
-import {closeAllEditors, waitForActiveTab} from "./helpers/editors";
+import {closeAllEditors, snapshotTabs, waitForNewTab} from "./helpers/editors";
 import {getTestApi} from "./helpers/extensionApi";
 import {
     abortReview,
@@ -123,12 +123,22 @@ describe("US4: avanzar y retroceder en la secuencia", function () {
         assert.strictEqual(state.state?.mode, "walk");
         assert.strictEqual(state.state?.position, 1);
 
+        const previousTabs = snapshotTabs();
         await vscode.commands.executeCommand("gitReview.next");
         state = api.getState();
         assert.strictEqual(state.state?.position, 2);
 
-        const tab = await waitForActiveTab();
-        assert.ok(tab, "avanzar no abrio ningun tab");
+        const tab = await waitForNewTab(previousTabs, (candidate) => {
+            const input = candidate.input;
+            if (input instanceof vscode.TabInputTextDiff) {
+                return path.basename(input.modified.fsPath) === "second.ts";
+            }
+            if (input instanceof vscode.TabInputText) {
+                return path.basename(input.uri.fsPath) === "second.ts";
+            }
+            return false;
+        });
+        assert.ok(tab, "avanzar no abrio ningun tab para second.ts");
 
         // Misma garantia que afirma `openChange` en open-entry.spec.ts: qué
         // superficie exacta se usa lo decide la extension de git, pero NO puede

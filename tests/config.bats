@@ -14,6 +14,7 @@ setup() {
 	git config --global user.email t@example.com
 	git config --global user.name tester
 	git config --global init.defaultBranch develop
+	git config --global core.autocrlf false
 
 	ORIGIN="$TMP/origin.git"
 	WORK="$TMP/work"
@@ -130,21 +131,26 @@ teardown() {
 @test "config with an unknown key on write exits 1, names the key, and writes nothing" {
 	run git review config bese main
 	[ "$status" -eq 1 ]
-	[[ "$output" == *bese* ]]
+	[[ "$output" == *"unknown key bese"* ]]
 	run git config --get reviewworkflow.bese
+	[ "$status" -ne 0 ]
+	# No side effect on known keys either.
+	run git config --get reviewworkflow.base
 	[ "$status" -ne 0 ]
 }
 
 @test "config with an unknown key on read exits 1 and names the key" {
 	run git review config bese
 	[ "$status" -eq 1 ]
-	[[ "$output" == *bese* ]]
+	[[ "$output" == *"unknown key bese"* ]]
 }
 
 @test "config --unset with an unknown key exits 1 and writes nothing" {
+	git config reviewworkflow.base develop
 	run git review config --unset bese
 	[ "$status" -eq 1 ]
-	[[ "$output" == *bese* ]]
+	[[ "$output" == *"unknown key bese"* ]]
+	[ "$(git config --get reviewworkflow.base)" = "develop" ]
 }
 
 # ── outside a git repository ───────────────────────────────────────────────────

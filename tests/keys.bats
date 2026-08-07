@@ -82,11 +82,10 @@ teardown() {
 	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "1" ]
 	[[ "$output" == *"keys-only"* ]]
 	[[ "$output" == *"[1/2] src/c.txt  (key)"* ]]
-	# Full PR still staged.
+	# Full PR still staged (exact sorted path list — not a subset glob).
 	run git diff --cached --name-only
-	[[ "$output" == *"a.txt"* ]]
-	[[ "$output" == *"b.txt"* ]]
-	[[ "$output" == *"src/c.txt"* ]]
+	[ "$status" -eq 0 ]
+	[ "$(printf '%s\n' "$output" | LC_ALL=C sort)" = "$(printf '%s\n' '.review/walkthrough.md' 'a.txt' 'b.txt' 'src/c.txt')" ]
 }
 
 @test "next and prev stay on keys only" {
@@ -110,12 +109,13 @@ teardown() {
 
 @test "status --porcelain emits keys record and only essential entries" {
 	git review start feature/x --keys >/dev/null
+	tip="$(git config branch.review/feature/x.reviewtip)"
 	run git review status --porcelain
 	[ "$status" -eq 0 ]
 	printf '%s\n' "$output" | grep -qx 'keys'
+	# Exact state line (branch/source/tip/mode/…), same style as status-porcelain.bats.
 	state="$(printf '%s\n' "$output" | grep '^state')"
-	# position total recorded current essential — total/recorded = 2
-	[[ "$state" == *$'\twalk\tapplied\t1\t2\t2\tsrc/c.txt\t1' ]]
+	[ "$state" = "$(printf 'state\treview/feature/x\tfeature/x\t%s\twalk\tapplied\t1\t2\t2\tsrc/c.txt\t1' "$tip")" ]
 	entries="$(printf '%s\n' "$output" | grep '^entry')"
 	expected="$(printf 'entry\t1\tsrc/c.txt\t1\t1\nentry\t2\ta.txt\t1\t1')"
 	[ "$entries" = "$expected" ]
@@ -253,4 +253,108 @@ EOF
 	# Edit still live in the working tree; preview must not bank or reset it.
 	run grep -q p a.txt
 	[ "$status" -eq 0 ]
+}
+
+# ── range composition and paths with spaces ───────────────────────────────────
+
+@test "start --keys --delta reviews only keys among the new commits" {
+	# Full keys review first so the remote marker is set, then finish+clean
+	# (clean of a completed finish keeps the marker). Push a new key path and a
+	# non-key path; --keys --delta must open a keys-only walk of the new key only.
+	git review start feature/x --keys >/dev/null
+	run git review finish
+	[ "$status" -eq 0 ]
+	git switch --quiet develop
+	run git review clean feature/x
+	[ "$status" -eq 0 ]
+
+	git switch --quiet feature/x
+	printf 'newkey\n' >src/d.txt
+	printf 'noise\n' >noise.txt
+	git add src/d.txt noise.txt
+	# Amend walkthrough: mark d as key; noise stays unannotated (uncovered if full).
+	cat >.review/walkthrough.md <<'EOF'
+# Walkthrough
+
+## 1. src/c.txt
+> key
+read the new helper first
+
+## 2. a.txt
+> key
+then the a change
+
+## 3. b.txt
+finally b (not essential)
+
+## 4. src/d.txt
+> key
+new essential path in the delta
+EOF
+	git add .review/walkthrough.md
+	git commit --quiet -m delta-key-and-noise
+	git push --quiet origin feature/x
+	git switch --quiet develop
+
+	run git review start feature/x --keys --delta
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
+	[ "$(git config branch.review/feature/x.reviewwalkkeys)" = "1" ]
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "1" ]
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "1" ]
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	printf '%s\n' "$output" | grep -qx 'keys'
+	entries="$(printf '%s\n' "$output" | grep '^entry')"
+	[ "$entries" = "$(printf 'entry\t1\tsrc/d.txt\t1\t1')" ]
+	# Staged range is only the delta commit paths, not the prior PR files alone.
+	run git diff --cached --name-only
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"src/d.txt"* ]]
+	[[ "$output" == *"noise.txt"* ]]
+	[[ "$output" == *".review/walkthrough.md"* ]]
+	# Non-key noise must not appear as a walk entry under --keys.
+	! printf '%s\n' "$entries" | grep -q 'noise.txt'
+	! printf '%s\n' "$entries" | grep -q 'a.txt'
+}
+
+@test "start --keys handles a key path with spaces" {
+	git switch --quiet feature/x
+	mkdir -p "docs with spaces"
+	printf 'guide\n' >"docs with spaces/style guide.md"
+	git add "docs with spaces/style guide.md"
+	cat >.review/walkthrough.md <<'EOF'
+# Walkthrough
+
+## 1. src/c.txt
+> key
+helper
+
+## 2. docs with spaces/style guide.md
+> key
+spaced path must stay one entry
+EOF
+	git add .review/walkthrough.md
+	git commit --quiet -m spaced-key
+	git push --quiet origin feature/x
+	git switch --quiet develop
+
+	run git review start feature/x --keys
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/x.reviewwalkkeys)" = "1" ]
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "2" ]
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	printf '%s\n' "$output" | grep -qx 'keys'
+	entries="$(printf '%s\n' "$output" | grep '^entry')"
+	expected="$(printf 'entry\t1\tsrc/c.txt\t1\t1\nentry\t2\tdocs with spaces/style guide.md\t1\t1')"
+	[ "$entries" = "$expected" ]
+	run git review next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[2/2] docs with spaces/style guide.md  (key)"* ]]
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	state="$(printf '%s\n' "$output" | grep '^state')"
+	tip="$(git config branch.review/feature/x.reviewtip)"
+	[ "$state" = "$(printf 'state\treview/feature/x\tfeature/x\t%s\twalk\tapplied\t2\t2\t2\tdocs with spaces/style guide.md\t1' "$tip")" ]
 }

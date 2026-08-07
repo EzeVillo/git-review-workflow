@@ -170,15 +170,28 @@ export function invokeGitReview(
         child.stderr?.setEncoding("utf8").on("data", (chunk: string) => (stderr += chunk));
 
         child.on("error", (error: NodeJS.ErrnoException) => {
+            // Windows + gitReview.path POSIX (sin .cmd/.exe): se spawnea `sh`.
+            // ENOENT suele ser "sh no está en PATH", no "falta el dispatcher".
+            let errorStderr = stderr;
+            if (
+                error.code === "ENOENT" &&
+                command === "sh" &&
+                options.gitReviewPath &&
+                options.gitReviewPath.trim() !== ""
+            ) {
+                const hint =
+                    "Could not run git-review via sh (ENOENT). On Windows, put Git Bash sh on PATH, or set gitReview.path to a .cmd/.bat/.exe shim (or leave it empty and use `git review`).";
+                errorStderr = errorStderr.length > 0 ? `${errorStderr}\n${hint}` : hint;
+            }
             logCliEnd({
                 exitCode: null,
                 errorCode: error.code,
                 durationMs: Date.now() - started,
-                stderr,
+                stderr: errorStderr,
             });
             resolve({
                 stdout,
-                stderr,
+                stderr: errorStderr,
                 exitCode: null,
                 errorCode: error.code,
             });

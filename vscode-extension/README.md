@@ -99,6 +99,23 @@ range — the mark can only ever point at a row the CLI just reported.
 - VS Code ^1.75.0.
 - `git review` ≥ 0.4.0 discoverable as a git subcommand (or point the
   `gitReview.path` setting at the dispatcher directly).
+- **Single-folder workspace.** Multi-root (multi-folder) workspaces are not
+  supported: the panel needs exactly one git repository root, the same way the
+  CLI has one cwd. Open the repo folder alone, or pick one root and open that.
+
+### `gitReview.path` on Windows
+
+On Windows, a bare POSIX path such as `…/bin/git-review` (no `.cmd` / `.bat` /
+`.exe` extension) is spawned via `sh`. That only works if Git Bash's `sh` is on
+`PATH`. Prefer one of:
+
+- leave `gitReview.path` empty and install so `git review` works as a subcommand
+  (`../install.sh` or the npm / PowerShell installers), or
+- point `gitReview.path` at a **Windows-native** shim (`.cmd` from an npm global
+  install, for example).
+
+If spawn fails with `ENOENT` while `gitReview.path` points at a file without an
+extension, the usual cause is missing `sh` — not a missing CLI binary.
 
 ## Developing
 

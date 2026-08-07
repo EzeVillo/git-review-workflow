@@ -164,6 +164,14 @@ function toOptionalInt(field: string | undefined): number | undefined {
     return Number.isNaN(value) ? undefined : value;
 }
 
+/** Modos que emite el contrato; cualquier otro es salida corrupta, no "whole" inventado. */
+function parseReviewMode(field: string | undefined): ReviewMode | undefined {
+    if (field === "whole" || field === "step" || field === "walk") {
+        return field;
+    }
+    return undefined;
+}
+
 /**
  * Tokeniza la salida de `git review status --porcelain` (registros
  * `state`/`entry`). El campo `mode` del registro `state` se lee **primero** y
@@ -195,7 +203,12 @@ export function parsePorcelain(stdout: string): PorcelainResult {
 
         switch (tag) {
             case "state": {
-                const mode = fields[4] as ReviewMode;
+                const mode = parseReviewMode(fields[4]);
+                if (mode === undefined) {
+                    throw new Error(
+                        `porcelain state has invalid mode: ${fields[4] === undefined ? "(missing)" : JSON.stringify(fields[4])}`
+                    );
+                }
                 const walkthrough = fields[5] as WalkthroughStatus;
                 const record: StateRecord = {
                     branch: fields[1],
@@ -372,7 +385,12 @@ export function parseListPorcelain(stdout: string): BranchRecord[] {
             orphan: toBool(fields[4]),
         };
         if (!record.orphan) {
-            record.mode = (fields[5] ?? "whole") as ReviewMode;
+            // Ausente o corrupto: sin mode (como orphan de metadata), no
+            // inventar "whole" — un valor basura abriría paths basura.
+            const mode = parseReviewMode(fields[5] ?? "whole");
+            if (mode !== undefined) {
+                record.mode = mode;
+            }
             // Omitidos, nunca a medias: el contrato los emite de a pares o no
             // los emite, así que un solo campo presente es salida que no
             // entendemos y se descarta entera (nunca se rellena con un 0, que

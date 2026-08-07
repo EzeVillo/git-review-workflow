@@ -12,6 +12,7 @@ setup() {
 	git config --global user.email t@example.com
 	git config --global user.name tester
 	git config --global init.defaultBranch develop
+	git config --global core.autocrlf false
 
 	ORIGIN="$TMP/origin.git"
 	WORK="$TMP/work"
@@ -137,6 +138,7 @@ push_more() {
 
 @test "--delta --step walks only the new commits after a prior review" {
 	git review start feature/x
+	git review finish >/dev/null
 	git switch --quiet develop
 	git review clean feature/x
 	push_more
@@ -148,6 +150,7 @@ push_more() {
 
 @test "--delta --step then finish replays edits onto the new tip" {
 	git review start feature/x
+	git review finish >/dev/null
 	git switch --quiet develop
 	git review clean feature/x
 	push_more
@@ -214,6 +217,7 @@ push_more() {
 
 @test "--delta then finish extracts only the reviewer edits" {
 	git review start feature/x
+	git review finish >/dev/null
 	git switch --quiet develop
 	git review clean feature/x
 	push_more
@@ -290,6 +294,7 @@ push_more() {
 
 @test "--delta --delta is harmless (a duplicated flag)" {
 	git review start feature/x
+	git review finish >/dev/null
 	git switch --quiet develop
 	git review clean feature/x
 	push_more

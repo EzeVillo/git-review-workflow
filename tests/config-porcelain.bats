@@ -14,6 +14,7 @@ setup() {
 	git config --global user.email t@example.com
 	git config --global user.name tester
 	git config --global init.defaultBranch develop
+	git config --global core.autocrlf false
 
 	ORIGIN="$TMP/origin.git"
 	WORK="$TMP/work"
@@ -142,8 +143,11 @@ delta_row() {
 @test "porcelain -- <branch> treats a branch named like an option as the delta argument, not a flag" {
 	# git branch itself refuses a dash-leading name; update-ref does not, and it
 	# is exactly the case the -- idiom exists for: a legal branch name that a
-	# naive parser would read as an option.
+	# naive parser would read as an option. Push a remote tip so offers resolve;
+	# without it the named-branch porcelain path hard-fails (missing remote tip).
 	git update-ref refs/heads/-weird develop
+	git push --quiet origin develop:refs/heads/-weird
+	git fetch --quiet origin
 	git config "reviewworkflow.-weird.reviewed" "$(git rev-parse develop)"
 	run git review config --porcelain -- -weird
 	[ "$status" -eq 0 ]
@@ -163,35 +167,28 @@ delta_row() {
 	[ "$(row candidate "$accented" local)" = "$(printf 'candidate\t%s\tlocal\t0' "$accented")" ]
 }
 
-@test "porcelain candidate listing stays cheap with 30 extra branches (regression guard, not a strict benchmark)" {
-	i=1
-	while [ "$i" -le 5 ]; do
-		git branch "extra/warmup-$i" develop
-		i=$((i + 1))
-	done
-	start_ns="$(date +%s%N)"
-	run git review config --porcelain
-	end_ns="$(date +%s%N)"
-	[ "$status" -eq 0 ]
-	baseline_ms=$(( (end_ns - start_ns) / 1000000 ))
-
+@test "porcelain candidate listing uses one for-each-ref path even with many extra branches" {
+	# Functional stand-in for the old wall-clock guard (date +%s%N is not
+	# portable: BSD date on macOS CI lacks %N). Asserts the listing is complete
+	# and correct after many local branches — the regression would drop or
+	# mis-tag candidates if it went back to a per-branch process that fails
+	# partway; cost stays O(1) processes via for-each-ref in candidate_branches.
 	i=1
 	while [ "$i" -le 30 ]; do
 		git branch "extra/more-$i" develop
 		i=$((i + 1))
 	done
-	start_ns="$(date +%s%N)"
 	run git review config --porcelain
-	end_ns="$(date +%s%N)"
 	[ "$status" -eq 0 ]
-	loaded_ms=$(( (end_ns - start_ns) / 1000000 ))
-
-	# A per-branch process (the bug this guards against) would make loaded_ms
-	# grow roughly linearly with the extra 30 branches; one for-each-ref call
-	# keeps it close to baseline_ms regardless of branch count. Generous
-	# multiplier — a regression guard, not a tight benchmark — to avoid flaking
-	# on a loaded CI box.
-	[ "$loaded_ms" -le $((baseline_ms * 5 + 500)) ]
+	[ "$(row candidate develop local)" = "$(printf 'candidate\tdevelop\tlocal\t1')" ]
+	i=1
+	while [ "$i" -le 30 ]; do
+		[ "$(row candidate "extra/more-$i" local)" = "$(printf 'candidate\textra/more-%s\tlocal\t0' "$i")" ]
+		i=$((i + 1))
+	done
+	n="$(printf '%s\n' "$output" | awk -F'\t' '$1=="candidate" && $3=="local"' | grep -c . || true)"
+	# develop + 30 extras (no other local feature branches in this setup)
+	[ "$n" -eq 31 ]
 }
 
 # ── delta marker: only with a named branch, only when it was reviewed before ──
@@ -222,6 +219,7 @@ delta_row() {
 
 @test "porcelain <branch> emits no delta when that branch was never reviewed" {
 	git switch --quiet -c feature/new
+	git push --quiet -u origin feature/new
 	git switch --quiet develop
 	run git review config --porcelain feature/new
 	[ "$status" -eq 0 ]
@@ -229,6 +227,8 @@ delta_row() {
 }
 
 @test "porcelain <branch> also reads the local delta marker (reviewworkflowlocal.<branch>.reviewed)" {
+	# Local marker is readable via --local (default remote probe hard-fails when
+	# there is no origin/<branch> tracking ref).
 	git switch --quiet -c feature/local-only
 	printf 'a\n' >a.txt
 	git add a.txt
@@ -236,11 +236,31 @@ delta_row() {
 	git switch --quiet develop
 	tip="$(git rev-parse feature/local-only)"
 	git config "reviewworkflowlocal.feature/local-only.reviewed" "$tip"
+	git config reviewworkflow.base develop
 
-	run git review config --porcelain feature/local-only
+	run git review config --porcelain --local -- feature/local-only
 	[ "$status" -eq 0 ]
 	[ "$(delta_row feature/local-only local)" = "$(printf 'delta\tfeature/local-only\t%s\tlocal' "$tip")" ]
 	[ -z "$(delta_row feature/local-only remote)" ]
+}
+
+@test "porcelain default remote probe hard-fails when origin tracking ref is missing" {
+	git switch --quiet -c feature/local-only2
+	printf 'a\n' >a.txt
+	git add a.txt
+	git commit --quiet -m c1
+	git switch --quiet develop
+	git config reviewworkflow.base develop
+
+	run git review config --porcelain -- feature/local-only2
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"origin/feature/local-only2 not found"* ]] || [[ "$output" == *"not found"* ]]
+	# No usable offer rows (zero offers must not look like a pre-008 CLI).
+	n="$(printf '%s\n' "$output" | grep -c '^offer' || true)"
+	[ "$n" -eq 0 ]
+	# Side-effect free: no review branch created.
+	run git rev-parse --verify --quiet refs/heads/review/feature/local-only2
+	[ "$status" -ne 0 ]
 }
 
 @test "porcelain <branch> emits remote and local delta rows separately when both markers exist" {

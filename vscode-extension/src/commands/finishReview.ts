@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import {invokeGitReview, InvokeOptions} from "../cli/invoke";
+import {finishOutcome} from "../review/finishOutcome";
 import {MutationLock} from "../review/mutationLock";
 import {ReviewStateManager} from "../review/state";
 import {captureToken, tokenStillValid} from "../review/staleGuard";
@@ -39,11 +40,15 @@ const LOCATION_ITEMS: LocationItem[] = [
  * cambiar debajo mientras el revisor elige.
  *
  * **El toast de éxito no se deriva del texto de la CLI** (T050,
- * contracts/cli-invocation.md § "no parsear la salida humana"). Un finish con
- * exit 0 siempre aterrizó en el destino (extract vacío incluido: undo vivo en
- * `review-fixes/<src>` o la rama del PR). El panel se refresca después y pasa a
- * `finish-pending` cuando el inventario lo reporta; un list fallido no debe
- * decir "sin cambios" porque el finish ya corrió.
+ * contracts/cli-invocation.md § "no parsear la salida humana"). Tras exit 0 se
+ * mira el `ReviewState` ya refrescado con `finishOutcome` (pending vs residual
+ * no-edits). Un list fallido no inventa "sin cambios": sin fila pending el toast
+ * sigue siendo de éxito normal sobre el destino.
+ *
+ * El `StateToken` se revalida **dentro** del lock justo antes de invocar (mismo
+ * molde que abort/save): el check externo evita el progreso cuando el QuickPick
+ * ya quedó obsoleto; el de adentro cierra la ventana entre la confirmación y la
+ * mutación (otro proceso aborta / HEAD cambia → watcher refresh).
  *
  * Deshacer/continuar un cierre (`undoFinish` / `resumeFinish` abajo) es US4:
  * este comando sólo arranca un cierre nuevo.
@@ -66,6 +71,7 @@ export async function finishReview(
         return;
     }
     const source = state.state.source;
+    const reviewBranch = state.state.branch;
     const token = captureToken(state);
 
     const picked = await vscode.window.showQuickPick(LOCATION_ITEMS, {
@@ -76,6 +82,8 @@ export async function finishReview(
         return;
     }
 
+    // UX: no abrir el progreso si el estado ya cambió mientras el QuickPick
+    // esperaba. La revalidación autoritativa va otra vez dentro del lock.
     if (!tokenStillValid(token, stateManager.state)) {
         void vscode.window.showInformationMessage(
             "The review state changed while choosing where to finish; nothing was finished."
@@ -84,6 +92,7 @@ export async function finishReview(
     }
 
     await lock.run(async () => {
+        let stale = false;
         const args = picked.ontoSource ? ["--onto-source"] : [];
         const invocation = await vscode.window.withProgress(
             {
@@ -91,6 +100,10 @@ export async function finishReview(
                 title: `Finishing the review of ${source}…`
             },
             async () => {
+                if (!tokenStillValid(token, stateManager.state)) {
+                    stale = true;
+                    return undefined;
+                }
                 const result = await invokeGitReview("finish", args, getInvokeOptions());
                 // Refrescar pase lo que pase: el panel necesita el estado real.
                 await stateManager.refresh();
@@ -98,21 +111,34 @@ export async function finishReview(
             }
         );
 
-        if (invocation.exitCode !== 0) {
+        if (stale) {
+            void vscode.window.showInformationMessage(
+                "The review state changed before the finish ran; nothing was finished."
+            );
+            return;
+        }
+
+        if (!invocation || invocation.exitCode !== 0) {
             // stderr de la CLI tal cual (FR-024); si viene vacío (CLI matada /
             // rota), un toast genérico evita el fallo silencioso.
-            const text = message(invocation.stderr);
+            const text = message(invocation?.stderr ?? "");
             void vscode.window.showErrorMessage(
                 text.length > 0 ? text : "git review finish failed."
             );
             return;
         }
 
-        // Exit 0 always lands on the destination (empty extract included). Never
-        // claim "no changes" from a missing inventory row — list --porcelain can
-        // fail after a successful finish and would collapse to empty branches.
+        // Exit 0 always landed on the destination. Toast from refreshed state
+        // only (finishOutcome), never from finish stdout/stderr.
         const destination = picked.ontoSource ? source : `review-fixes/${source}`;
-        void vscode.window.showInformationMessage(`${destination} is ready.`);
+        const outcome = finishOutcome(stateManager.state, reviewBranch);
+        if (outcome === "pending") {
+            void vscode.window.showInformationMessage(
+                `${destination} is ready. Undo is available if you need it.`
+            );
+        } else {
+            void vscode.window.showInformationMessage(`${destination} is ready.`);
+        }
     });
 }
 

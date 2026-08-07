@@ -89,15 +89,42 @@ export function writeFile(repo: FixtureRepo, relPath: string, content: string): 
     fs.writeFileSync(filePath, content);
 }
 
+function hasRemote(repo: FixtureRepo, name = "origin"): boolean {
+    const result = cp.spawnSync("git", ["remote"], {
+        cwd: repo.dir,
+        encoding: "utf8",
+        env: envWithBinOnPath(),
+    });
+    return (result.stdout ?? "")
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .includes(name);
+}
+
+/**
+ * Espeja un tip local en `refs/remotes/origin/<branch>` sin `git push`.
+ * El self-origin del fixture es un working tree (no bare): push está denegado
+ * por defecto. Los probes de `config --porcelain` (origen Remote) no fetchean y
+ * hard-failan si falta el tracking ref — este helper es el puente.
+ */
+export function mirrorRemoteTracking(repo: FixtureRepo, branch: string, remote = "origin"): void {
+    const tip = git(["rev-parse", branch], repo.dir).trim();
+    git(["update-ref", `refs/remotes/${remote}/${branch}`, tip], repo.dir);
+}
+
 /** Crea `branch` desde `main` con `files` committeados encima, y vuelve a `main`. */
 export function createBranchWithChanges(repo: FixtureRepo, branch: string, files: Record<string, string>): void {
-    git(["checkout", "-b", branch], repo.dir);
+    // -B: el fixture es compartido; un escenario previo puede haber dejado la rama.
+    git(["checkout", "-B", branch, "main"], repo.dir);
     for (const [file, content] of Object.entries(files)) {
         writeFile(repo, file, content);
     }
     git(["add", "."], repo.dir);
     git(["commit", "-m", `changes for ${branch}`], repo.dir);
     git(["checkout", "main"], repo.dir);
+    if (hasRemote(repo)) {
+        mirrorRemoteTracking(repo, branch);
+    }
 }
 
 /** Crea `branch` desde `main` con un commit separado por entrada de `commits`. */
@@ -106,13 +133,16 @@ export function createBranchWithCommits(repo: FixtureRepo, branch: string, commi
     content: string;
     message: string
 }>): void {
-    git(["checkout", "-b", branch], repo.dir);
+    git(["checkout", "-B", branch, "main"], repo.dir);
     for (const commit of commits) {
         writeFile(repo, commit.file, commit.content);
         git(["add", "."], repo.dir);
         git(["commit", "-m", commit.message], repo.dir);
     }
     git(["checkout", "main"], repo.dir);
+    if (hasRemote(repo)) {
+        mirrorRemoteTracking(repo, branch);
+    }
 }
 
 /** `git review start <branch> --offline [...extraArgs]` — sin remoto, contra el checkout local. */
@@ -171,6 +201,11 @@ export function addWalkthrough(repo: FixtureRepo, branch: string, entries: Walkt
     git(["add", ".review/walkthrough.md"], repo.dir);
     git(["commit", "-m", "add walkthrough"], repo.dir);
     git(["checkout", "main"], repo.dir);
+    // Tip moved after the walkthrough commit; keep origin tracking in sync for
+    // remote probes (config --porcelain / start Remote without a prior fetch).
+    if (hasRemote(repo)) {
+        mirrorRemoteTracking(repo, branch);
+    }
 }
 
 function escapeRegExp(s: string): string {
@@ -206,6 +241,8 @@ export function withBaseConfigured(repo: FixtureRepo, branch = "main"): void {
  */
 export function addSelfOrigin(repo: FixtureRepo): void {
     git(["remote", "add", "origin", repo.dir], repo.dir);
+    // Base tracking ref for remote-layout offers (no fetch in config porcelain).
+    mirrorRemoteTracking(repo, "main");
 }
 
 export function removeOrigin(repo: FixtureRepo): void {
@@ -215,8 +252,17 @@ export function removeOrigin(repo: FixtureRepo): void {
 export function cleanupRepo(repo: FixtureRepo): void {
     // En Windows el borrado tira EPERM si git o el propio host de pruebas
     // todavía tienen un handle abierto sobre el repo temporal; no es un fallo
-    // del test, pero corta la corrida al final. Reintentar cubre esa ventana.
-    fs.rmSync(repo.dir, {recursive: true, force: true, maxRetries: 5, retryDelay: 100});
+    // del test. Reintentar + tragar el error residual: un fixture huérfano en
+    // %TEMP% no debe pintar de rojo una suite que ya pasó.
+    try {
+        fs.rmSync(repo.dir, {recursive: true, force: true, maxRetries: 15, retryDelay: 200});
+    } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code === "EPERM" || code === "EBUSY" || code === "ENOTEMPTY") {
+            return;
+        }
+        throw err;
+    }
 }
 
 /**

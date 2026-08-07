@@ -68,7 +68,17 @@ export async function openWorkingTreeFile(rootUri: vscode.Uri, display: string):
     try {
         await vscode.workspace.fs.stat(fileUri);
     } catch {
-        // Archivo eliminado en el rango: la única superficie con contenido es el diff.
+        // Archivo eliminado en el rango: no hay working tree. Abrimos el blob
+        // pre-borrado en HEAD (en review, lower bound) vía la API de git — un
+        // documento `git:` real, no `file:`. `git.openChange` en paths ausentes
+        // a menudo no materializa tab en el host de test de Windows.
+        const gitApi = await ensureGitApi();
+        if (gitApi) {
+            const left = gitApi.toGitUri(fileUri, "HEAD");
+            const document = await vscode.workspace.openTextDocument(left);
+            await vscode.window.showTextDocument(document);
+            return;
+        }
         await vscode.commands.executeCommand("git.openChange", fileUri);
         return;
     }

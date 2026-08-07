@@ -144,12 +144,29 @@ describe("US2: saltar al archivo de una entrada", function () {
         }, "src/doomed.ts no debería existir en el working tree de la review");
 
         // El comando no debe tirar, y no puede haber abierto el archivo del
-        // working tree como texto editable (no existe): git.openChange delega
-        // en la extensión de git, que muestra el contenido bajo un esquema
-        // propio (diff, o el blob de `git:`) — nunca `file:` sobre el path
-        // eliminado.
+        // working tree como texto editable (no existe): openEntry cae al
+        // vscode.diff del blob en HEAD (o git.openChange) — nunca `file:` sobre
+        // el path eliminado.
+        await closeAllEditors();
+        const previousTabs = snapshotTabs();
         await vscode.commands.executeCommand("gitReview.openEntry", entry);
-        const activeTab = await waitForActiveTab();
+        const activeTab =
+            (await waitForNewTab(
+                previousTabs,
+                (candidate) => {
+                    const input = candidate.input;
+                    if (input instanceof vscode.TabInputTextDiff) {
+                        return true;
+                    }
+                    if (input instanceof vscode.TabInputText) {
+                        return input.uri.scheme !== "file";
+                    }
+                    return false;
+                },
+                30000
+            )) ??
+            (await waitForNewTab(previousTabs, undefined, 30000)) ??
+            (await waitForActiveTab(30000));
         assert.ok(activeTab, "no se abrió ningún tab");
         const input = activeTab!.input;
         const isPlainFileEditor = input instanceof vscode.TabInputText && input.uri.scheme === "file";
@@ -207,8 +224,28 @@ describe("US2: saltar al archivo de una entrada", function () {
         const entry = state.entries.find((e) => displayOf(e.id) === "src/doomed-whole.ts");
         assert.ok(entry, "no se encontró la entrada para src/doomed-whole.ts en whole");
 
+        await closeAllEditors();
+        const previousTabs = snapshotTabs();
         await vscode.commands.executeCommand("gitReview.openEntry", entry);
-        const activeTab = await waitForActiveTab();
+        // Path eliminado: openEntry abre el blob en HEAD (esquema git:) o un
+        // diff — nunca un TabInputText file: del working tree.
+        const activeTab =
+            (await waitForNewTab(
+                previousTabs,
+                (candidate) => {
+                    const input = candidate.input;
+                    if (input instanceof vscode.TabInputTextDiff) {
+                        return true;
+                    }
+                    if (input instanceof vscode.TabInputText) {
+                        return input.uri.scheme !== "file";
+                    }
+                    return false;
+                },
+                30000
+            )) ??
+            (await waitForNewTab(previousTabs, undefined, 30000)) ??
+            (await waitForActiveTab(30000));
         assert.ok(activeTab, "no se abrió ningún tab");
         const input = activeTab!.input;
         const isPlainFileEditor = input instanceof vscode.TabInputText && input.uri.scheme === "file";

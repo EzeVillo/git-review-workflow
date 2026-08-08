@@ -572,19 +572,14 @@ walk_is_key() {
 }
 
 # walk_count_keys <tip>  (stdin: paths, one per line)
-# How many of the given entries carry the "> key" marker. Reads the walkthrough
-# once rather than per path, so a long reading order costs one git show.
+# How many of the given entries carry the "> key" marker. A count over
+# walk_entry_fields' essential column rather than its own marker parsing: one
+# definition of what "> key" means, and a constant number of processes for a
+# reading order of any length (see the note there). Always prints a number —
+# `n + 0` so an empty path list is 0, not the empty string a bare `print n`
+# would give and a caller would then compare numerically under set -eu.
 walk_count_keys() {
-	_wck_content="$(walk_read "$1" || true)"
-	_wck_n=0
-	while IFS= read -r _wck_p; do
-		[ -n "$_wck_p" ] || continue
-		if printf '%s\n' "$_wck_content" | walk_body "$_wck_p" |
-			grep -q '^> key[[:space:]]*$'; then
-			_wck_n=$((_wck_n + 1))
-		fi
-	done
-	printf '%s\n' "$_wck_n"
+	walk_entry_fields "$1" | awk -F'\t' '$3 == "1" { n++ } END { print n + 0 }'
 }
 
 # walk_is_annotated <tip> <path>
@@ -602,29 +597,74 @@ walk_is_annotated() {
 # Emit "position<TAB>path<TAB>essential<TAB>annotated" for each path on stdin,
 # 1-based position in the order given, essential 1/0 for the "> key" marker,
 # annotated 1/0 for whether the path has a walkthrough entry at all (0 for a
-# file walk_reading_order appended because it has none). Reads the walkthrough
-# at <tip> once (extends the walk_count_keys one-read pattern) so a long
-# reading order costs one git show per --porcelain invocation, not one per
-# entry — the O(1) performance goal of the porcelain contract. Fields only, not
-# a porcelain line: the caller passes each field through porcelain_row.
+# file walk_reading_order appended because it has none). Fields only, not a
+# porcelain line: the caller passes each field through porcelain_row. This is
+# also the one place that decides those two flags — walk_count_keys and
+# walk_keys_order are filters over this output rather than three near-copies of
+# the same marker parsing.
+#
+# ONE awk for the whole list, not one process per path. Reading the walkthrough
+# once (a single git show) was never the expensive part: the loop this replaced
+# spawned a walk_body awk plus two greps per entry, so a 184-entry reading order
+# cost ~900 processes and 27s under Git Bash on Windows, where fork() is
+# emulated — enough for the VS Code panel to hit its 15s read timeout on every
+# refresh. That is the actual O(1)-per-invocation goal of the porcelain
+# contract; one git show with an O(N) loop around it does not meet it.
+#
+# The two streams go into that single awk back to back and are told apart by a
+# sentinel line holding one tab, with the PATHS FIRST: a path can never be a
+# lone tab (git quotes control characters unconditionally, the same property
+# walk_sequence relies on to tell its two streams apart), whereas a walkthrough
+# body is arbitrary prose that may well contain a tab-only line. Feeding the
+# content first and the paths second would let the author's own text end the
+# first phase early. The paths are buffered and printed at END so the caller's
+# order — the reading order — survives, and so a path that appears twice gets
+# the same flags both times.
+#
+# The content cannot travel as `awk -v` (the way walk_reading_order passes its
+# path list): -v processes escape sequences, so a why containing a literal \n
+# or \t would be silently rewritten. Paths survive it only because git quotes
+# any path holding a backslash.
 walk_entry_fields() {
 	_we_content="$(walk_read "$1" || true)"
-	_we_annotated="$(printf '%s\n' "$_we_content" | walk_parse | cut -f2-)"
-	_we_n=0
-	while IFS= read -r _we_p; do
-		[ -n "$_we_p" ] || continue
-		_we_n=$((_we_n + 1))
-		_we_ess=0
-		if printf '%s\n' "$_we_content" | walk_body "$_we_p" |
-			grep -q '^> key[[:space:]]*$'; then
-			_we_ess=1
-		fi
-		_we_ann=0
-		if printf '%s\n' "$_we_annotated" | grep -Fxq "$_we_p"; then
-			_we_ann=1
-		fi
-		printf '%s\t%s\t%s\t%s\n' "$_we_n" "$_we_p" "$_we_ess" "$_we_ann"
-	done
+	{
+		cat
+		printf '\t\n'
+		printf '%s\n' "$_we_content"
+	} | awk '
+		# Phase 1: the caller path list, up to the lone-tab sentinel.
+		!tail {
+			if ($0 == "\t") { tail = 1; next }
+			if ($0 != "") { n++; p[n] = $0 }
+			next
+		}
+		# Phase 2: the walkthrough. Entry headers are recognised exactly as
+		# walk_body does it (numbered AND skeleton "?." entries carry a body),
+		# while "annotated" follows walk_parse instead (numbered entries only,
+		# empty path skipped) — the two differ on purpose and the flags must
+		# keep differing the same way. A "## " heading that is not an entry
+		# (## Heads-up) closes the current body, as it does there.
+		/^## / {
+			line = substr($0, 4)
+			if (sub(/^[0-9]+\. /, "", line)) {
+				sub(/[ \t]+$/, "", line)
+				cur = line
+				if (line != "") ann[line] = 1
+			} else if (sub(/^\?\. /, "", line)) {
+				sub(/[ \t]+$/, "", line)
+				cur = line
+			} else {
+				cur = ""
+			}
+			next
+		}
+		cur != "" && /^> key[[:space:]]*$/ { key[cur] = 1 }
+		END {
+			for (i = 1; i <= n; i++)
+				printf "%s\t%s\t%s\t%s\n", i, p[i], \
+					(p[i] in key) ? 1 : 0, (p[i] in ann) ? 1 : 0
+		}
+	'
 }
 
 # walk_why <tip> <path>
@@ -711,21 +751,16 @@ walk_reading_order() {
 
 # walk_keys_order <tip> <lower>
 # Curated walk_sequence paths that carry the reserved "> key" marker, in
-# walkthrough order. Uncovered paths never appear (they have no body to mark).
-# One walkthrough read for the whole list (same pattern as walk_count_keys /
-# walk_entry_fields), not one git show per path. Empty output means no essential
-# entry intersects the range — callers that asked for --keys fail before opening
-# a review rather than materializing an empty sequence.
+# walkthrough order. Uncovered paths never appear — walk_sequence only yields
+# curated entries, so the annotated column is 1 throughout and filtering on
+# essential alone is enough. A filter over walk_entry_fields for the same reason
+# walk_count_keys is one: a single definition of the "> key" marker, and a
+# constant number of processes for a reading order of any length. Empty output
+# means no essential entry intersects the range — callers that asked for --keys
+# fail before opening a review rather than materializing an empty sequence.
 walk_keys_order() {
-	_wko_content="$(walk_read "$1" || true)"
-	[ -n "$_wko_content" ] || return 0
-	walk_sequence "$1" "$2" | while IFS= read -r _wko_p; do
-		[ -n "$_wko_p" ] || continue
-		if printf '%s\n' "$_wko_content" | walk_body "$_wko_p" |
-			grep -q '^> key[[:space:]]*$'; then
-			printf '%s\n' "$_wko_p"
-		fi
-	done
+	walk_sequence "$1" "$2" | walk_entry_fields "$1" |
+		awk -F'\t' '$3 == "1" { print $2 }'
 }
 
 # emit_reading_offers <branch> <remote> <source_mode> <delta>

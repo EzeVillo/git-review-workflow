@@ -373,23 +373,58 @@ tmp="$wtpath.tmp.$$"
 	if [ -n "$preamble" ]; then
 		printf '%s\n\n' "$preamble"
 	fi
-	i=1
-	printf '%s\n' "$sorted_paths" | while IFS= read -r p; do
-		[ -n "$p" ] || continue
-		printf '## %s. %s\n' "$i" "$p"
-		printf '%s\n' "$content" | walk_body "$p" | awk -v key_re="$key_re" '
-			$0 ~ key_re { key = 1; next }
-			{ buf[++n] = $0 }
-			END {
-				s = 1; while (s <= n && buf[s] ~ /^[ \t]*$/) s++
-				e = n; while (e >= s && buf[e] ~ /^[ \t]*$/) e--
-				if (key) print "> key"
-				for (k = s; k <= e; k++) print buf[k]
+	# ONE awk for every entry, not one walk_body plus one awk per entry: that loop
+	# cost three processes per entry, and under Git Bash on Windows — where fork()
+	# is emulated — a 200-entry walkthrough spent ~15s here (the same fault fixed
+	# in git-review-lib.sh's walk_entry_fields; this was its last instance).
+	#
+	# Same two-stream, paths-first, lone-tab-sentinel shape as walk_entry_fields,
+	# and for the same reason: a path can never be a bare tab (git quotes control
+	# characters), while a why body is arbitrary prose that may well contain a
+	# tab-only line, so feeding the content first could end the path phase early.
+	# Bodies are accumulated per path and emitted in the caller's order, which is
+	# what renumbers them 1..N; a path cannot repeat here, the duplicate check
+	# above already rejected that.
+	{
+		printf '%s\n' "$sorted_paths"
+		printf '\t\n'
+		printf '%s\n' "$content"
+	} | awk -v key_re="$key_re" '
+		# Phase 1: the paths in the author-ordered sequence, up to the sentinel.
+		!tail {
+			if ($0 == "\t") { tail = 1; next }
+			if ($0 != "") { n++; order[n] = $0 }
+			next
+		}
+		# Phase 2: the walkthrough, split into bodies. Headers are recognised
+		# exactly as walk_body did it, since that is what this replaced.
+		/^## / {
+			line = substr($0, 4)
+			if (sub(/^[0-9]+\. /, "", line) || sub(/^\?\. /, "", line)) {
+				sub(/[ \t]+$/, "", line)
+				cur = line
+			} else {
+				cur = ""
 			}
-		'
-		printf '\n'
-		i=$((i + 1))
-	done
+			next
+		}
+		cur != "" && $0 ~ key_re { key[cur] = 1; next }
+		cur != "" { cnt[cur]++; body[cur, cnt[cur]] = $0 }
+		END {
+			for (i = 1; i <= n; i++) {
+				p = order[i]
+				printf "## %s. %s\n", i, p
+				# Blank-line trim runs after the key lines are dropped, as
+				# before: the marker is hoisted, never left padding the body.
+				c = cnt[p] + 0
+				s = 1; while (s <= c && body[p, s] ~ /^[ \t]*$/) s++
+				e = c; while (e >= s && body[p, e] ~ /^[ \t]*$/) e--
+				if (p in key) print "> key"
+				for (k = s; k <= e; k++) print body[p, k]
+				printf "\n"
+			}
+		}
+	'
 } >"$tmp"
 mv "$tmp" "$wtpath"
 

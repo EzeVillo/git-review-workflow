@@ -256,6 +256,20 @@ npm run preview:watch
 - **Dos specs de integración abren tabs y son flaky en Windows** por el host de
   test, no por la extensión. Ante un `no se abrió ningún tab`, medí el baseline
   en un checkout sin tocar antes de buscar la causa en tu cambio.
+- **El `--user-data-dir` del host va a un temp corto, no al default de
+  test-electron** (`test/integration/helpers/userDataDir.ts`). VS Code arma el
+  socket IPC de su main como `<user-data-dir>/<version>-main.sock`, y en POSIX
+  ese path no puede pasar de `sun_path` (103 chars en macOS, 107 en Linux): con
+  el default `<extensionRoot>/.vscode-test/user-data`, el checkout del runner de
+  GitHub —que repite el nombre del repo— se iba a 113 y el editor moría con
+  `EINVAL` antes de correr un test. Fallaba sólo en macOS, pero no por margen:
+  el mismo path mide 112 en Linux y ubuntu zafa porque VS Code prefiere
+  `XDG_RUNTIME_DIR` cuando existe (Windows usa named pipes, sin límite). O sea
+  que un contenedor Linux sin esa variable y con el checkout en un path largo
+  reproduce el fallo de macOS. Si tocás esos args, el flag tiene que ir como
+  `--user-data-dir=<dir>`: con un espacio, `hasArg` de test-electron no lo ve y
+  reinyecta el default largo. `test/unit/userDataDir.spec.ts` cubre las dos
+  cosas contra `darwin` explícito, así que la regresión cae en cualquier SO.
 - **`npm run preview`** genera `out/preview/index.html` (y lo imprime como URL
   `file://`): los nueve estados del panel lado a lado, a ancho de sidebar, con
   selector de tema dark/light/alto contraste. El pane es el `panelHtml()` real y

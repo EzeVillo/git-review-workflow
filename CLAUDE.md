@@ -208,8 +208,10 @@ repo, no en archivos del working tree:
 `vscode-extension/` es un proyecto npm aparte (TypeScript + esbuild), con su
 propio job en CI. Nunca deriva estado por su cuenta: todo lo que muestra sale de
 reinvocar `git review status --porcelain` / `--why` sobre la CLI del `PATH`, así
-que hay que tener este checkout instalado (`./install.sh`) para correrla o
-testearla. El diseño completo está en `specs/002-extension-vscode/`
+que hay que tener este checkout instalado (`./install.sh`) para **correrla** en
+un editor de verdad. Los tests no: `runTests.ts` pone el `bin/` del checkout al
+frente del PATH que hereda el host, así que el fixture y la extensión bajo test
+corren siempre la CLI de este árbol. El diseño completo está en `specs/002-extension-vscode/`
 (`contracts/cli-invocation.md` es la lista cerrada de lo que puede invocar). Su
 `README.md` es único y va en **inglés** (es producto, no documento de trabajo):
 la regla de los dos README es de los README de la raíz, no de éste.

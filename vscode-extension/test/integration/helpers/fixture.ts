@@ -4,13 +4,51 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 /**
+ * Raíz del checkout: el primer ancestro que contiene `bin/git-review`.
+ *
+ * Contar `..` no sirve — este archivo corre compilado desde
+ * `out/test/integration/helpers/` (`test:integration` es `tsc -p . --outDir
+ * out && node ./out/test/integration/runTests.js`), un nivel más profundo que
+ * el fuente, así que un conteo fijo se descalibra con el `outDir`. Y falla en
+ * silencio: `REPO_BIN_DIR` queda apuntando a un directorio inexistente, el
+ * PATH que arma `envWithBinOnPath` no surte efecto y los fixtures resuelven
+ * `git review` desde el PATH del sistema — o sea contra la CLI *instalada*,
+ * que puede ser otra versión que la del checkout que se está probando. Por eso
+ * acá se falla fuerte en vez de degradar a un default.
+ */
+function findRepoRoot(startDir: string): string {
+    let dir = startDir;
+    for (; ;) {
+        if (fs.existsSync(path.join(dir, "bin", "git-review"))) {
+            return dir;
+        }
+        const parent = path.dirname(dir);
+        if (parent === dir) {
+            throw new Error(`fixture: no encontré bin/git-review subiendo desde ${startDir}`);
+        }
+        dir = parent;
+    }
+}
+
+/**
  * Construye repos fixture invocando el `bin/git-review` real del checkout
  * (research.md Decisión 11, "deuda anotada"): un fixture de salida porcelain
  * escrita a mano probaría el parser contra sí mismo.
  */
-const REPO_ROOT = path.resolve(__dirname, "../../../..");
+const REPO_ROOT = findRepoRoot(__dirname);
 export const GIT_REVIEW_DISPATCHER = path.join(REPO_ROOT, "bin", "git-review");
 const REPO_BIN_DIR = path.join(REPO_ROOT, "bin");
+
+/** En Windows la variable puede venir como `Path`, no `PATH`. */
+function pathKey(): string {
+    return Object.keys(process.env).find((k) => k.toUpperCase() === "PATH") ?? "PATH";
+}
+
+/** Idempotente: `runTests` ya deja `bin/` al frente del PATH que heredamos. */
+function withBinFirst(existing: string): string {
+    const prefix = `${REPO_BIN_DIR}${path.delimiter}`;
+    return existing.startsWith(prefix) ? existing : `${prefix}${existing}`;
+}
 
 /**
  * `bin/git-review` es un script `#!/usr/bin/env sh`: en Windows, invocarlo
@@ -21,9 +59,24 @@ const REPO_BIN_DIR = path.join(REPO_ROOT, "bin");
  * mecanismo de descubrimiento, y el único portable en los tres SO.
  */
 function envWithBinOnPath(): NodeJS.ProcessEnv {
-    const pathKey = Object.keys(process.env).find((k) => k.toUpperCase() === "PATH") ?? "PATH";
-    const existing = process.env[pathKey] ?? "";
-    return {...process.env, [pathKey]: `${REPO_BIN_DIR}${path.delimiter}${existing}`};
+    const key = pathKey();
+    return {...process.env, [key]: withBinFirst(process.env[key] ?? "")};
+}
+
+/**
+ * Pone el `bin/` del checkout al frente del PATH **de este proceso**, para que
+ * lo herede el host de VS Code y, con él, la extensión: `invokeGitReview`
+ * spawnea `git review` con `process.env` (invoke.ts), y `runTests` lanza el
+ * host con `Object.assign({}, process.env, testRunnerEnv)`.
+ *
+ * Sin esto la suite prueba dos CLIs a la vez — el fixture arma el repo con la
+ * del checkout y el panel lo lee con la que haya *instalada* en el PATH del
+ * sistema, que puede ser otra versión. Es lo que antes obligaba a correr
+ * `./install.sh` para que la suite pasara.
+ */
+export function putBinOnPath(): void {
+    const key = pathKey();
+    process.env[key] = withBinFirst(process.env[key] ?? "");
 }
 
 export interface CommandResult {

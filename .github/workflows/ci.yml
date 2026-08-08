@@ -78,14 +78,6 @@ jobs:
           # y la 2.x muere con ENOENT al lanzar el host — sólo en macOS, porque
           # el archive de Windows sigue teniendo `Code.exe` en la raíz.
           node-version: 22
-      # Los tests de integración construyen fixtures invocando `git review`
-      # de verdad (research.md Decisión 11, "deuda anotada"): instalar el
-      # checkout local es lo que hace que `git` lo descubra, igual que en un
-      # entorno de desarrollo real — sin tocar gitReview.path.
-      - name: Install the CLI from this checkout
-        run: |
-          ./install.sh
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Install extension dependencies
         working-directory: vscode-extension
         run: npm install
@@ -95,6 +87,12 @@ jobs:
       - name: Unit tests
         working-directory: vscode-extension
         run: npm run test:unit
+      # Los fixtures construyen repos invocando `git review` de verdad
+      # (research.md Decisión 11, "deuda anotada"), y runTests.ts pone el
+      # bin/ del checkout al frente del PATH que hereda el host, así que
+      # tanto el fixture como la extensión corren la CLI de este árbol: no
+      # hace falta instalarla antes. install.sh tiene su propia cobertura en
+      # tests/install.bats, sobre los mismos tres runners.
       - name: Integration tests
         working-directory: vscode-extension
         run: |

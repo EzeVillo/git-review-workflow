@@ -114,10 +114,13 @@ npm run test:unit         # pure functions, no VS Code host
 npm run test:integration  # @vscode/test-electron, builds fixtures with the real CLI
 ```
 
-Integration tests shell out to the `git review` on `PATH`, so install this
-checkout first (`../install.sh`) if you haven't already. On Linux without a
-display, run the integration suite under `xvfb-run -a`. They also need **Node 22
-or newer**: `@vscode/test-electron` 3.x asks for it, and 3.x is the first release
+Integration tests shell out to a real `git review`, and they run the one in this
+checkout: `runTests.ts` puts `../bin` at the front of the `PATH` it hands to the
+test host, so both the fixtures and the extension under test resolve it there —
+no `../install.sh` needed, and a CLI installed elsewhere on your `PATH` cannot
+shadow the tree you are testing. On Linux without a display, run the integration
+suite under `xvfb-run -a`. They also need **Node 22 or newer**: `@vscode/test-electron` 3.x asks for
+it, and 3.x is the first release
 that locates the macOS binary through the app bundle's `Info.plist` instead of
 the historical `Contents/MacOS/Electron` — a name VS Code renamed to `Code` in
 1.110 and stopped shipping a symlink for, which fails on macOS alone with

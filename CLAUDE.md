@@ -214,6 +214,17 @@ testearla. El diseño completo está en `specs/002-extension-vscode/`
 `README.md` es único y va en **inglés** (es producto, no documento de trabajo):
 la regla de los dos README es de los README de la raíz, no de éste.
 
+Ese `README.md` y el `CHANGELOG.md` de al lado **viajan dentro del `.vsix`**: son
+las pestañas *Details* y *Changelog* del listado del Marketplace, así que están
+escritos para quien instala la extensión, no para quien la desarrolla — eso vive
+en `vscode-extension/CONTRIBUTING.md` (excluido del paquete por `.vscodeignore`,
+junto con `src/`, `test/` y `preview/`). Dos cosas que se rompen fácil ahí: los
+**links tienen que ser absolutos**, porque `vsce` reescribe los relativos contra
+la raíz del repo ignorando el `repository.directory` del `package.json` (un
+`../README.md` termina como `.../blob/HEAD/../README.md`, roto), y la superficie
+que el README describe —acciones del panel, settings, versión mínima de la CLI—
+tiene que seguir a `contributes` del `package.json`.
+
 ```sh
 cd vscode-extension
 npm install

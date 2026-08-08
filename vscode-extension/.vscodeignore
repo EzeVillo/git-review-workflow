@@ -4,6 +4,7 @@ preview/**
 out/**
 .vscode-test/**
 .gitignore
+CONTRIBUTING.md
 esbuild.js
 tsconfig.json
 test/unit/.mocharc.json

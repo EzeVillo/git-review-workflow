@@ -1,207 +1,157 @@
 # git review — VS Code extension
 
-Review a [git-review-workflow](../README.md) pull request from a panel that
-shows where you are: the current entry of the walkthrough, its position in the
-reading order the author chose, whether they marked it `key`, and the *why*
-they wrote for it. The full sequence and the files the walkthrough doesn't cover
-are one keystroke away in a quick pick, and commands jump to the file, advance
-and go back — all without leaving the editor.
+Review a pull request by **editing and running** it, from a panel that shows
+where you are in it.
 
-A review without a walkthrough runs in whole mode, and there the panel is the
-list of files the range touches: a row opens that file's diff, and one control
-above them opens every change at once — the same thing step's *Diff* does for a
-commit, applied to the range. The last row you opened stays marked, so a list
-you are halfway through still says where you were after closing the editor.
+This is the editor surface of
+[git-review-workflow](https://github.com/EzeVillo/git-review-workflow), a git
+subcommand that stages an entire PR in your working tree as **staged,
+uncommitted changes** — so you read the diff, edit it inline and run the tests
+like ordinary local work, and `git review finish` then extracts *your* edits
+onto a separate branch. The extension does not reimplement any of that: it
+drives the same CLI and shows you its state.
 
-With no review on the current branch the panel lists the ones open elsewhere in
-the repository — active and saved, with their mode and position — so a review
-you put aside doesn't have to be remembered by name. Saved ones offer
-*Continue*; an active one is listed without an action, because going back to it
-is a branch checkout and the editor's branch picker already does that.
+> **The CLI is required.** The extension is a panel over `git review`, not a
+> standalone reviewer. See [Requirements](#requirements).
+
+## What the panel shows
+
+**A reading order, when the PR has one.** If the author (often an AI coding
+agent) committed a walkthrough alongside the change, the review runs in *walk*
+mode and the panel shows the current entry: the file, its position in the order
+the author chose, whether they marked it `key`, and the *why* they wrote for it.
+The full sequence — and the files the walkthrough doesn't cover — is one
+keystroke away in a quick pick, and commands jump to the file, advance and go
+back without leaving the editor.
+
+**The files the range touches, when it doesn't.** A review without a walkthrough
+runs in *whole* mode, and there the panel is the list of changed files: a row
+opens that file's diff, and one control above them opens every change at once.
+The last row you opened stays marked, so a list you are halfway through still
+says where you were after closing the editor.
+
+**Your other reviews, when this branch has none.** With no review on the current
+branch the panel lists the ones open elsewhere in the repository — active and
+saved, with their mode and position — so a review you put aside doesn't have to
+be remembered by name. Saved ones offer *Continue*; an active one is listed
+without an action, because going back to it is a branch checkout and the
+editor's branch picker already does that.
+
+## Getting started
+
+1. **Install the CLI.** With Node:
+
+   ```sh
+   npm install -g git-review-workflow
+   ```
+
+   Homebrew, a native Windows (PowerShell) installer and a no-Node one-liner are
+   all in the
+   [installation guide](https://github.com/EzeVillo/git-review-workflow#installation).
+
+2. **Tell it where PRs are integrated,** once per repository — from the panel
+   (*git review: Set the Base Branch*) or on the command line:
+
+   ```sh
+   git config reviewworkflow.base develop
+   ```
+
+3. **Open the git review panel** in the activity bar and hit *Start a review*.
+   It asks for the branch, where to read it from, the range, and how to read it
+   — offering only the layouts the CLI reports as viable for that PR. (Or run
+   `git review start feature/login` in a terminal; the panel follows.)
 
 ## Panel actions
 
 Everything below is a command the panel exposes. Lifecycle actions (Finish,
-Save, Cancel, and Refresh) are icon buttons on the view title bar; the rest are
-buttons inside the webview or the Command Palette. Each one shells out to the
-matching `git review` verb — the extension never invents a second way to change
-review state.
+Save, Cancel, Preview and Refresh) are icon buttons on the view title bar; the
+rest are buttons inside the panel or entries in the Command Palette, all under
+the **git review** category.
 
-| Action                       | When it appears                                                                                                                                                                                                 | CLI                                                                                                         |
-|------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------|
-| **Start a review**           | Empty state (`no-review`): pick branch, origin, range (if a prior tip exists), then how to read it — only layouts the CLI reports as viable for that tip/range (walk when the PR has a walkthrough, keys only when there are keys; no opaque “automatic”). Also Command Palette while `finish-pending` (another source is fine if the tree is clean) | `git review start …`                                                                                        |
-| **Cancel review**            | View title icon while an active review (or a mid-conflict finish) is open                                                                                                                                       | `git review abort`                                                                                          |
-| **Finish review**            | View title icon while an active review is open (hidden on a read-only **compare**)                                                                                                                              | `git review finish` / `finish --onto-source`                                                                |
-| **Save for later**           | View title icon while an active review is open (not during a mid-conflict finish)                                                                                                                               | `git review save`                                                                                           |
-| **Undo finish**              | After a completed finish with undo still available (`finish-pending`), or a finish stopped mid-conflict (`finish-conflict`)                                                                                     | `git review finish --abort`                                                                                 |
-| **Clean**                    | `finish-pending` panel (the finished source); also Command Palette for any leftover                                                                                                                             | `git review clean --keep-fixes <branch>` from the panel; palette default is full `clean` / `clean <branch>` |
-| **Continue** (finish)        | Finish stopped mid-conflict, after you resolve the markers in the tree                                                                                                                                          | `git review finish --resume`                                                                                |
-| **Discard** (saved / orphan) | Inventory row: saved review or orphan leftover                                                                                                                                                                  | `git review forget --saved …` / `git review clean …`                                                        |
-| **Forget** saved / delta     | Command Palette                                                                                                                                                                                                 | `git review forget --saved` / `--delta` (`--all`, `--stale`)                                                |
-| **Preview edits**            | View title (active review) or palette; optional stat                                                                                                                                                            | `git review preview` / `--stat`                                                                             |
-| **Compare revisions**        | Empty state (`no-review`): secondary actions under Start; also Command Palette. The resulting review is **read-only**: the panel shows a note and hides Finish (CLI refuses writeback)                          | `git review compare <a> <b>`                                                                                |
-| **Walkthrough Init / Build** | Empty state (`no-review`): secondary actions under Start (author flow); also Command Palette                                                                                                                    | `git review walkthrough init` / `build`                                                                     |
+Each one shells out to the matching `git review` verb — the extension never
+invents a second way to change review state.
 
-Mutations (clean, forget, compare, walkthrough write, and the lifecycle
-actions above) ask for a confirmation that names what will happen. Preview is
+| Action                       | When it appears                                                                              | CLI                                                          |
+|------------------------------|----------------------------------------------------------------------------------------------|--------------------------------------------------------------|
+| **Start a review**           | Empty state; also the palette after a finished review, if the tree is clean                  | `git review start …`                                         |
+| **Next / Previous entry**    | While a walk or step review is open                                                          | `git review next` / `prev`                                   |
+| **Go to entry**              | While a review is open — the quick pick with the whole sequence                              | *(navigation only)*                                          |
+| **Open entry / Open changes**| While a review is open — opens the file or its diff                                          | *(opens the editor's diff view)*                             |
+| **Finish review**            | Title bar, while an active review is open (hidden on a read-only compare)                    | `git review finish` / `--onto-source`                        |
+| **Save for later**           | Title bar, while an active review is open                                                    | `git review save`                                            |
+| **Cancel review**            | Title bar, while an active review (or a mid-conflict finish) is open                         | `git review abort`                                           |
+| **Preview edits**            | Title bar or palette, while a review is open; optional diffstat                              | `git review preview` / `--stat`                              |
+| **Undo finish**              | After a finish, while undo is still available — including one stopped mid-conflict           | `git review finish --abort`                                  |
+| **Continue** (finish)        | A finish stopped mid-conflict, once you resolve the markers in the tree                      | `git review finish --resume`                                 |
+| **Clean**                    | After a finished review; also the palette for any leftover                                   | `git review clean [--keep-fixes] [<branch>]`                 |
+| **Continue** (saved review)  | Inventory row for a review paused with *Save for later*                                      | `git review continue <branch>`                               |
+| **Discard / Forget**         | Inventory row, or the palette for saved reviews and `--delta` markers                        | `git review forget --saved` / `--delta`, `git review clean`  |
+| **Compare revisions**        | Empty state, under Start; also the palette. The result is **read-only** — no writeback       | `git review compare <a> <b>`                                 |
+| **Walkthrough: Init / Build**| Empty state, under Start (this is the *author* flow); also the palette                       | `git review walkthrough init` / `build`                      |
+
+Mutations (the lifecycle actions, clean, forget, compare and writing a
+walkthrough) ask for a confirmation that names what will happen. Preview is
 read-only and does not.
 
-A completed finish that left edits on `review-fixes/<branch>` (or on the PR
-branch with `--onto-source`) is **not** the empty state: the review already
-finished. The panel names the destination of the staged edits and offers
-*Clean* (`git review clean --keep-fixes <src>` — drops the leftover `review/*`
-undo point; leaves your staged edits where finish put them — `review-fixes/*`
-or the PR branch with `--onto-source` — and leaves `--delta` alone) or *Undo finish*
-(`finish --abort`). Commit and push the edits from Source Control as usual. A finish
-stopped mid-conflict keeps the review readable (mode, branch, current entry)
-but locks navigation until you *Continue* or *Undo finish*.
-
-## The CLI is the only source of truth
-
-The extension never derives review state on its own. Everything it shows comes
-from re-invoking `git review status --porcelain` / `--why` / `list --porcelain`
-and reading the result — it does not read git config, refs or branches to work
-out the mode, the position or the sequence, and it does not write config, move
-refs or touch the index to change them.
-
-The rule that follows from that, and the one to remember when adding anything
-here: **if the panel needs something the CLI does not report, it gets added to
-the CLI.** Never to the extension. A value this side could compute from the
-repository is still a second source of truth, and the moment the two disagree
-the panel is lying about a review the reviewer is trusting it with.
-
-`../specs/002-extension-vscode/` has the original design;
-`../specs/005-ciclo-review-panel/` adds the lifecycle; and
-`../specs/006-superficie-panel-completa/contracts/cli-invocation.md` is the
-current closed list of what the extension may invoke (including housekeeping,
-preview, compare, and walkthrough).
-
-One thing that list does not yet settle: the panel shells out to git directly to
-build the file list behind a multi-file diff — `readCommitChanges` for a commit
-in step, `readRangeChanges` for the range in whole, both in
-`src/commands/openEntry.ts`. Neither derives anything about the review: the
-commit id comes from the CLI, `HEAD` on a review branch is the merge-base by
-construction, and git is only asked which files are on each side so the diff
-knows what to open. But they are direct git calls in a codebase whose whole
-point is not making them, and no spec covers them either way. Left as is on
-purpose, to be decided.
-
-The one thing the extension does keep between sessions is which file you last
-opened from whole's list, per review branch, in the host's `workspaceState`
-(`LAST_OPENED_KEY` in `src/extension.ts`). That is not review state and does not
-compete with the CLI for it: whole has no cursor and there is no verb to ask,
-so where you had got to is only ever known by the editor that opened the diff.
-It is stored by path, and the model drops it when that path is no longer in the
-range — the mark can only ever point at a row the CLI just reported.
+A finished review is **not** the empty state: the panel names where your staged
+edits landed — `review-fixes/<branch>`, or the PR branch itself with
+`--onto-source` — and offers *Clean* (drop the leftover undo point, keep the
+edits) or *Undo finish*. Commit and push those edits from Source Control as
+usual. A finish stopped mid-conflict keeps the review readable (mode, branch,
+current entry) but locks navigation until you *Continue* or *Undo finish*.
 
 ## Requirements
 
-- VS Code ^1.75.0.
-- `git review` ≥ 0.4.0 discoverable as a git subcommand (or point the
-  `gitReview.path` setting at the dispatcher directly).
-- **Single-folder workspace.** Multi-root (multi-folder) workspaces are not
-  supported: the panel needs exactly one git repository root, the same way the
-  CLI has one cwd. Open the repo folder alone, or pick one root and open that.
+- **VS Code 1.75** or newer.
+- **[git-review-workflow](https://github.com/EzeVillo/git-review-workflow) 0.4.0
+  or newer**, discoverable as a git subcommand (`git review -h` works), or
+  pointed at directly with the `gitReview.path` setting.
+- A **single-folder workspace.** Multi-root workspaces are not supported: the
+  panel needs exactly one git repository root, the same way the CLI has one cwd.
+  Open the repository folder on its own, or pick one root and open that.
+- On Windows the CLI itself runs under **Git Bash**, which
+  [Git for Windows](https://gitforwindows.org) provides.
+
+## Settings
+
+| Setting                    | Default    | What it does                                                                                                                                |
+|----------------------------|------------|---------------------------------------------------------------------------------------------------------------------------------------------|
+| `gitReview.path`           | *(empty)*  | Path to the `git-review` dispatcher, for when `git` does not discover it. Empty means the extension invokes `git review`.                    |
+| `gitReview.defaultSource`  | `remote`   | Which origin the start wizard preselects: `remote` (fetch and review the remote tip), `local` (no fetch), `offline` (no network at all).     |
 
 ### `gitReview.path` on Windows
 
-On Windows, a bare POSIX path such as `…/bin/git-review` (no `.cmd` / `.bat` /
-`.exe` extension) is spawned via `sh`. That only works if Git Bash's `sh` is on
-`PATH`. Prefer one of:
+On Windows, a bare POSIX path such as `…/bin/git-review` — no `.cmd`, `.bat` or
+`.exe` extension — is spawned through `sh`, which only works if Git Bash's `sh`
+is on your `PATH`. Prefer one of:
 
-- leave `gitReview.path` empty and install so `git review` works as a subcommand
-  (`../install.sh` or the npm / PowerShell installers), or
-- point `gitReview.path` at a **Windows-native** shim (`.cmd` from an npm global
-  install, for example).
+- leave `gitReview.path` empty and install the CLI so that `git review` works as
+  a subcommand (npm or the PowerShell installer both set that up), or
+- point `gitReview.path` at a **Windows-native** shim — the `.cmd` an npm global
+  install leaves behind, for example.
 
-If spawn fails with `ENOENT` while `gitReview.path` points at a file without an
-extension, the usual cause is missing `sh` — not a missing CLI binary.
+If spawning fails with `ENOENT` while `gitReview.path` points at an
+extensionless file, the cause is the missing `sh`, not a missing CLI.
 
-## Developing
+## Troubleshooting
 
-```sh
-npm install
-npm run watch      # esbuild in watch mode
-```
+The panel reports what it found rather than failing silently — a missing CLI, a
+version too old, a repository with no base configured — and offers the action
+that fixes it. When you need the detail, **git review: Show CLI Log** prints
+every invocation the extension made and what came back.
 
-### Running it in a real editor
+## Learn more
 
-Open this folder in VS Code and press F5 (the *Run Extension* launch
-configuration) to launch an Extension Development Host — a second window with
-the extension loaded from this checkout. Changes need a reload of that window
-(*Developer: Reload Window*), not a restart.
+- [Project README](https://github.com/EzeVillo/git-review-workflow#readme) — the
+  full command surface, the walkthrough format, and how the workflow fits
+  together. Also in
+  [Spanish](https://github.com/EzeVillo/git-review-workflow/blob/main/README.es.md).
+- [Website](https://ezevillo.github.io/git-review-workflow/)
+- [Issues](https://github.com/EzeVillo/git-review-workflow/issues)
+- [Contributing to the extension](https://github.com/EzeVillo/git-review-workflow/blob/main/vscode-extension/CONTRIBUTING.md)
+  — running it from source, tests, and the panel preview.
 
-The panel only has something to show inside a repository with an active review.
-The sandbox builds a throwaway pull request to open there:
+## License
 
-```sh
-../tests/sandbox.sh                 # prints where it built the repo
-git -C <sandbox>/work review start feature/checkout
-```
-
-It also builds one branch per state the panel can reach but a single well-formed
-pull request never shows — start `feature/notifications` for the unannotated
-entries that close a reading order, `feature/telemetry` for whole mode,
-`feature/legacy` for the degraded note — plus a completed finish with undo
-still available (`feature/shipping` → `review-fixes/…`, panel
-`finish-pending`) and a finish stopped mid-conflict (`feature/conflict`,
-panel `finish-conflict`), and leaves three saved reviews on `develop`, which
-is the empty state's inventory: one row offering `Continue`, and two that
-explain why they cannot. On `develop` the panel also shows a finish-pending
-screen for `feature/shipping` (*Clean* / *Undo finish*; Start lives on the
-Command Palette if you need another PR). The mid-conflict branch appears as
-an active leftover with a `?` hover — switch to `review/feature/conflict`
-for the conflict banner. The script prints the whole map when it finishes.
-
-Then open `<sandbox>/work` in the development host. Note that the host inherits
-the `PATH` of the VS Code that launched it, not the one `env.sh` sets up inside
-the sandbox: either install this checkout (`../install.sh`) or point the
-`gitReview.path` setting at `bin/git-review`.
-
-### Previewing the panel
-
-```sh
-npm run preview        # writes out/preview/index.html and prints its file:// URL
-npm run preview:watch  # regenerates on save; reload the browser
-```
-
-Renders the panel's states side by side in a browser — walk, step, whole,
-loading and the empty states — at sidebar width, with a switch for the dark,
-light and high-contrast themes. It's the real `panelHtml()` fed by
-`parsePorcelain()` + `buildPanelModel()` over sample porcelain output, so it
-follows the source with nothing to keep in sync by hand; edit
-`preview/fixtures.ts` to add a state.
-
-Three things it can't show: the buttons have no extension behind them; the
-theme variables in `preview/build.ts` are an approximation of VS Code's, not
-the ones your editor resolves (a `--vscode-*` variable the panel starts using
-has to be added there too, or it will look wrong in the preview and fine in the
-editor); and the `loading` pane is that state held still — the timing around it
-(the delay before the skeleton appears, the cap on a slow `--why`) only happens
-while navigating. For anything beyond the render, use F5.
-
-## Testing
-
-```sh
-npm test                  # unit + integration, compiling first
-npm run test:unit         # pure functions, no VS Code host
-npm run test:integration  # @vscode/test-electron, builds fixtures with the real CLI
-```
-
-Integration tests shell out to the `git review` on `PATH`, so install this
-checkout first (`../install.sh`) if you haven't already. On Linux without a
-display, run the integration suite under `xvfb-run -a`.
-
-They also load the extension from `dist/`, which they rebuild first
-(`pretest:integration`) whether you run them on their own or through `npm test`,
-so a green run is always about the code you have now.
-
-## Packaging locally
-
-```sh
-npx vsce package
-```
-
-Produces a `.vsix` you can install with `code --install-extension
-git-review-workflow-<version>.vsix`. This isn't a Marketplace listing —
-publishing there is out of scope for this feature.
+[MIT](https://github.com/EzeVillo/git-review-workflow/blob/main/LICENSE) ©
+EzeVillo

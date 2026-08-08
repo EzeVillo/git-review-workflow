@@ -52,15 +52,13 @@ export type PanelMessage = (typeof PANEL_MESSAGES)[number];
  * ciegas). Sumar LinkedIn / donate / rate = una entrada acá + en el mapa del
  * host + un botón en `renderSupport`.
  */
-export const SUPPORT_LINK_IDS = ["star", "docs"] as const;
+export const SUPPORT_LINK_IDS = ["star"] as const;
 export type SupportLinkId = (typeof SUPPORT_LINK_IDS)[number];
 
 export const SUPPORT_URLS: Record<SupportLinkId, string> = {
     // GitHub no tiene deep-link público de "star": abre el repo, donde está el
     // botón. Si algún día hay marketplace rating u otro destino, se desdobla.
     star: "https://github.com/EzeVillo/git-review-workflow",
-    // README del producto (docsLink del empty state y installOrUpdateCli).
-    docs: "https://github.com/EzeVillo/git-review-workflow#readme",
 };
 
 /**

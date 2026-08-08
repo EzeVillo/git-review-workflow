@@ -178,13 +178,14 @@ lo postee: el `Refresh` de la extensión vive en `view/title`. El cuerpo dibuja
 Como `PANEL_MESSAGES` no alcanza para decidir esto, la verificación #2 de abajo
 comprueba pertenencia, no igualdad de conjuntos.
 
-**`docsLink` es código muerto de la extensión.** `panelHtml.ts:620` define un
-constructor de link que postea `openSupport` con id `docs`, pero no lo llama
-nadie; el canónico registra sólo `Star on GitHub` (`support.star_url`) porque es
-lo único que el panel pinta. La verificación #3 sólo mira controles construidos,
-así que el código muerto no la ensucia — y si alguien lo empieza a usar, #3
-falla y obliga a decidir si el plugin lo lleva también. Limpiarlo es un cambio
-de la extensión y queda fuera de esta feature.
+**`openSupport` tiene un solo id: `star`.** La auditoría de esta feature encontró
+un `docsLink` en `panelHtml.ts` que posteaba `openSupport` con id `docs` y no lo
+llamaba nadie; se borró junto con `docs` de `SUPPORT_LINK_IDS`/`SUPPORT_URLS`
+(el README del producto lo abre `installOrUpdateCli` con su propia URL, no por
+el allowlist de Support). El canónico registra sólo `Star on GitHub`
+(`support.star_url`), que es lo único que el panel pinta. Si mañana aparece un
+id nuevo, la verificación #3 —que mira controles construidos, no constantes—
+falla y obliga a decidir si el plugin lo lleva también.
 
 ---
 

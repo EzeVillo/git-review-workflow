@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Drop **Open all changes** / bulk multi-diff in whole mode. IntelliJ opens one
+  editor tab per file (unlike VS Code's single multi-diff tab), so the bulk
+  action flooded the tab bar. Open files one at a time from the list. Step
+  commit diffs still open, but as one `DiffRequestChain` window with Prev/Next
+  file instead of N tabs.
+
 ## 0.1.0
 
 - Initial IntelliJ IDEA plugin with full action/situation parity target vs the VS Code extension.

@@ -13,9 +13,8 @@ class PanelLayoutWholeTest {
         assertEquals(300, files.rows.size)
         val heading = layout.blocks.filterIsInstance<Block.Heading>().first()
         assertEquals("300 files in this review", heading.text)
-        val allDiff = layout.collectControls().first { it.id == ControlId.OPEN_ALL_CHANGES }
-        assertEquals("Diff", allDiff.label)
-        assertEquals("Open every change in this review at once", allDiff.tooltip)
+        // openAllChanges is VS Code only — IntelliJ opens one tab per file
+        assertTrue(layout.collectControls().none { it.id.wire == "openAllChanges" })
         assertTrue(files.rows.first().lastOpened)
     }
 

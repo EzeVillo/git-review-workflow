@@ -22,14 +22,15 @@ enum class Emphasis {
 }
 
 /**
- * Closed set of 26 control ids: 21 body + 5 title bar.
+ * Closed set of 25 control ids: 20 body + 5 title bar.
  * Excluded palette-only actions are intentionally not representable here.
+ * `openAllChanges` is VS Code only: IntelliJ has no multi-diff tab (one pane
+ * per file), so whole mode opens files one at a time from the list.
  */
 enum class ControlId {
-    // Body (21)
+    // Body (20) — openAllChanges intentionally omitted (IntelliJ)
     OPEN_ENTRY,
     OPEN_CHANGE,
-    OPEN_ALL_CHANGES,
     SHOW_WHY,
     NEXT,
     PREV,
@@ -60,7 +61,6 @@ enum class ControlId {
         get() = when (this) {
             OPEN_ENTRY -> "openEntry"
             OPEN_CHANGE -> "openChange"
-            OPEN_ALL_CHANGES -> "openAllChanges"
             SHOW_WHY -> "showWhy"
             NEXT -> "next"
             PREV -> "prev"
@@ -484,19 +484,8 @@ private fun wholeBlocks(model: PanelModel, enabled: Boolean): List<Block> {
     val heading = if (n == 1) "1 file in this review" else "$n files in this review"
     val out = ArrayList<Block>()
     out.add(Block.Heading(heading))
-    out.add(
-        Block.Row(
-            listOf(
-                ctrl(
-                    ControlId.OPEN_ALL_CHANGES,
-                    "Diff",
-                    Emphasis.SECONDARY,
-                    enabled,
-                    tooltip = "Open every change in this review at once",
-                ),
-            ),
-        ),
-    )
+    // No open-all Diff row: IntelliJ opens one editor tab per file, so bulk open
+    // floods the tab bar. Click a file row to open that change alone.
     out.add(
         Block.FileRows(
             model.files.mapIndexed { i, f ->

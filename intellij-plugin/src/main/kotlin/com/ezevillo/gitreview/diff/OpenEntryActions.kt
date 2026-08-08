@@ -10,7 +10,9 @@ import com.ezevillo.gitreview.host.Bg
 import com.ezevillo.gitreview.settings.LastOpenedStore
 import com.ezevillo.gitreview.ui.UiMessages
 import com.intellij.diff.DiffContentFactory
+import com.intellij.diff.DiffDialogHints
 import com.intellij.diff.DiffManager
+import com.intellij.diff.chains.SimpleDiffRequestChain
 import com.intellij.diff.contents.DiffContent
 import com.intellij.diff.requests.SimpleDiffRequest
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -118,28 +120,6 @@ object OpenEntryActions {
         }
     }
 
-    fun openAllChanges(project: Project, state: ReviewState, cwd: String) {
-        if (state.state?.mode != ReviewMode.WHOLE) return
-        Bg.async(
-            project,
-            "git review: loading changes",
-            work = {
-                try {
-                    Pair(true, RangeChanges.nameStatusHead(cwd).map { rangeDiff(cwd, it) })
-                } catch (_: Exception) {
-                    Pair(false, emptyList())
-                }
-            },
-            then = { (ok, diffs) ->
-                when {
-                    !ok -> UiMessages.error(project, UserCopy.OPEN_RANGE_FAILED)
-                    diffs.isEmpty() -> UiMessages.info(project, UserCopy.OPEN_RANGE_EMPTY)
-                    else -> show(project, diffs)
-                }
-            },
-        )
-    }
-
     private fun openWorkingTreeFile(project: Project, cwd: String, relative: String) {
         val file = File(cwd, relative)
         Bg.async(
@@ -206,16 +186,30 @@ object OpenEntryActions {
         LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file)
             ?: LocalFileSystem.getInstance().findFileByIoFile(file)
 
+    /**
+     * One file → single request. Several (step commit) → [SimpleDiffRequestChain]
+     * so IntelliJ keeps one window with Prev/Next file instead of one tab each.
+     * Whole-range open-all is intentionally not offered (see PanelLayout.wholeBlocks).
+     */
     private fun show(project: Project, diffs: List<FileDiff>) {
-        for (diff in diffs) {
-            val request = SimpleDiffRequest(
+        if (diffs.isEmpty()) return
+        val requests = diffs.map { diff ->
+            SimpleDiffRequest(
                 diff.title,
                 diff.before.content(project),
                 diff.after.content(project),
                 diff.before.label,
                 diff.after.label,
             )
-            DiffManager.getInstance().showDiff(project, request)
+        }
+        if (requests.size == 1) {
+            DiffManager.getInstance().showDiff(project, requests[0])
+        } else {
+            DiffManager.getInstance().showDiff(
+                project,
+                SimpleDiffRequestChain(requests),
+                DiffDialogHints.DEFAULT,
+            )
         }
     }
 }

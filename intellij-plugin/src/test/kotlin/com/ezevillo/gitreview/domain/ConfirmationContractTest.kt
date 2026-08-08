@@ -10,7 +10,7 @@ import java.io.File
  */
 class ConfirmationContractTest {
     @Test
-    fun `requiresConfirmation matches canonical confirms for all 26 ControlIds`() {
+    fun `requiresConfirmation matches canonical confirms for all ControlIds`() {
         val yaml = loadCanonical()
         val expected = HashMap<String, Boolean>()
 

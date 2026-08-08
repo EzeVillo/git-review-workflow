@@ -115,9 +115,6 @@
             <action id="GitReview.OpenChange"
                     class="com.ezevillo.gitreview.ui.actions.OpenChangeAction"
                     text="Open Changes"/>
-            <action id="GitReview.OpenAllChanges"
-                    class="com.ezevillo.gitreview.ui.actions.OpenAllChangesAction"
-                    text="Open All Changes"/>
             <action id="GitReview.ShowWhy"
                     class="com.ezevillo.gitreview.ui.actions.ShowWhyAction"
                     text="Show Why"/>

@@ -243,15 +243,27 @@ invocan la CLI con `GeneralCommandLine` UTF-8.
 # Desde intellij-plugin/ (el wrapper Gradle vive ahí, no en la raíz del monorepo):
 ./gradlew test              # unit domain (ubuntu/macos/windows en CI)
 ./gradlew platformTest      # headless (Linux CI; harness T030a)
-./gradlew runIde            # sandbox IDE
+./gradlew runIde            # sandbox IDE (equivalente a F5 de la extensión)
 ./gradlew runPanelPreview   # preview Swing del PanelModel
 ./gradlew buildPlugin       # zip
 ./gradlew verifyPlugin
 ```
 
-En Windows: `cd intellij-plugin; .\gradlew.bat test`. La CLI y la extensión
-siguen yendo al contenedor Docker cuando el host es Windows; el plugin se
-prueba con Gradle nativo (y `platformTest` en el runner Linux de CI).
+Shell: en Git Bash / POSIX usá `./gradlew`; en PowerShell `.\gradlew.bat`
+(no mezclar: en MINGW64 `.\gradlew.bat` falla con `command not found`).
+
+**Prueba manual (como la extensión):** `./tests/sandbox.sh` →
+`git -C <sandbox>/work review start feature/checkout` → `./gradlew runIde` →
+abrir solo `<sandbox>/work` → setting **Tools → git review → Path to
+git-review** al `bin/git-review` del checkout si hace falta → tool window
+**git review** + menú **Tools → git review**. Detalle en `CONTRIBUTING.md`
+(sección *The IntelliJ IDEA plugin*) y `specs/009-plugin-intellij/quickstart.md`.
+
+**UX:** paridad de producto (CLI + matriz de acciones/situaciones), no de
+píxeles. El panel es Swing nativo a propósito (no CEF/HTML del webview de
+VS Code). La extensión y la CLI siguen yendo al contenedor Docker en Windows;
+el plugin se prueba con Gradle nativo (y `platformTest` en el runner Linux de
+CI).
 
 ## Extensión de VS Code
 

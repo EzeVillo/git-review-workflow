@@ -195,6 +195,94 @@ the theme variables in `preview/build.ts` approximate VS Code's. A `--vscode-*`
 variable the panel starts using must be added there too, or it will look wrong
 in the preview and fine in the editor. For behaviour, use F5.
 
+## The IntelliJ IDEA plugin
+
+[`intellij-plugin/`](intellij-plugin/) is a separate Gradle module (Kotlin +
+IntelliJ Platform Plugin). Same rule as the VS Code extension: the CLI is the
+source of truth; the plugin only invokes porcelain/argv and paints a
+`PanelModel`. Platform pin and versions live only in
+[`intellij-plugin/gradle.properties`](intellij-plugin/gradle.properties).
+
+```sh
+cd intellij-plugin
+./gradlew test              # domain unit tests (no IDE)
+./gradlew runPanelPreview   # Swing fixtures, no full IDE
+./gradlew runIde            # sandbox IDEA with the plugin loaded
+```
+
+### Shell: which wrapper?
+
+The Gradle wrapper lives **inside** `intellij-plugin/` (not at the monorepo
+root). Use the form that matches your shell:
+
+| Shell | Command |
+|-------|---------|
+| Git Bash / WSL / Linux / macOS | `cd intellij-plugin && ./gradlew runIde` |
+| PowerShell / cmd | `cd intellij-plugin` then `.\gradlew.bat runIde` |
+
+Do **not** run `.\gradlew.bat` from Git Bash (MINGW64) — bash looks for a
+command named `.gradlew.bat` and fails with `command not found`. Use
+`./gradlew` there.
+
+### Running it in a real IDE (like VS Code F5)
+
+`./gradlew runIde` is the IntelliJ equivalent of opening `vscode-extension/`
+and pressing F5: it downloads the pinned IDEA (first run is slow), then opens
+a **sandbox IDE** with this checkout’s plugin loaded. It does **not** inject
+the plugin into the IDEA you already use for coding.
+
+The tool window only has something useful to show inside a single-root git
+repo with an active review, so use the same [sandbox](#trying-the-commands-by-hand)
+as for VS Code:
+
+```sh
+# from the monorepo root (Git Bash / WSL / Linux / macOS)
+./tests/sandbox.sh
+git -C <sandbox>/work review start feature/checkout
+```
+
+Then in the sandbox IDEA:
+
+1. **File → Open** → `<sandbox>/work` only (one git root; multi-root is not
+   supported).
+2. **Settings → Tools → git review → Path to git-review** → absolute path to
+   this checkout’s `bin/git-review` if that IDEA’s `PATH` does not see the CLI
+   (same caveat as the VS Code Extension Development Host).
+3. Open the **git review** tool window (tool window bar / View → Tool Windows).
+4. Drive the flow from the panel where buttons exist, and from
+   **Tools → git review** for the full action set (Next, Finish, Open, …).
+
+Kotlin changes are not hot-reloaded like `npm run watch` + Reload Window:
+rebuild and run `runIde` again (or restart the sandbox IDE after a rebuild).
+
+Product surface (27 actions, situations, critical strings) is checked by:
+
+```sh
+# from the monorepo root
+node scripts/check-client-product-surface.mjs
+```
+
+More validation detail:
+[`specs/009-plugin-intellij/quickstart.md`](specs/009-plugin-intellij/quickstart.md)
+and [`intellij-plugin/README.md`](intellij-plugin/README.md).
+
+### UX vs the VS Code panel
+
+**Parity is product, not pixels.** Both clients share the same CLI contract and
+the same action/situation matrix
+([`contracts/client-product-surface.yaml`](contracts/client-product-surface.yaml)).
+The IntelliJ panel is **native Swing** on purpose (not a CEF/HTML clone of
+`panelHtml.ts`): theming, accessibility, and HiDPI follow the IDE; remote /
+some Linux hosts without CEF still work. See research decision 3 in
+[`specs/009-plugin-intellij/research.md`](specs/009-plugin-intellij/research.md).
+
+So it will *look* different from the VS Code sidebar even when every action
+exists. Actions that are “in the panel” in VS Code may appear as tool-window
+controls **and/or** as `Tools → git review` / keymap actions in IDEA — that is
+allowed by the surface contract (`surface: panel | action | both`). If a
+control is missing from both the panel and the menu for a situation the YAML
+enables, that is a product gap to fix, not a platform limitation.
+
 ## Releasing
 
 > Maintainers only.

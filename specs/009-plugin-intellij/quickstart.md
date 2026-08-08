@@ -49,17 +49,28 @@ porcelain reales: walk, step, whole, finish-*, cli-*, empty setup, etc.
 
 ## Run IDE con el plugin
 
+Equivalente a F5 / Extension Development Host de la extensión VS Code.
+Documentación de contrib: monorepo `CONTRIBUTING.md` → *The IntelliJ IDEA plugin*.
+
 ```sh
-./gradlew runIde
+# desde intellij-plugin/
+./gradlew runIde          # Git Bash / Linux / macOS
+# PowerShell: .\gradlew.bat runIde  (no usar .\gradlew.bat desde MINGW64)
 ```
 
-1. Abrir el sandbox como único root git.
-2. Tool window **git review** → no debe haber corrido CLI antes del open.
-3. Con review walk activa (preparar vía terminal en el sandbox):
+1. Abrir el sandbox como único root git (`File → Open` → `<sandbox>/work`).
+2. Si la CLI no está en el PATH del sandbox IDE:
+   **Settings → Tools → git review → Path to git-review** →
+   path absoluto a `bin/git-review` del monorepo.
+3. Tool window **git review** → no debe haber corrido CLI antes del open.
+4. Con review walk activa (preparar vía terminal en el sandbox):
    - panel muestra posición y entry;
-   - Open / Diff / Why / Next / Prev.
-4. Abort/Save/Finish solo con confirmaciones correctas.
-5. Sin CLI en PATH: situación cli-missing + copy npm.
+   - Open / Diff / Why / Next / Prev (panel y/o **Tools → git review**).
+5. Abort/Save/Finish solo con confirmaciones correctas.
+6. Sin CLI en PATH ni setting de path: situación cli-missing + copy npm.
+
+La UI es Swing nativo (no clon HTML del webview); la paridad exigida es de
+acciones/situaciones/argv, no de layout idéntico a VS Code.
 
 ## Matriz smoke multi-OS (release)
 

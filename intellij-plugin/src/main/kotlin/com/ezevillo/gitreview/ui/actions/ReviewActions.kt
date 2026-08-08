@@ -4,6 +4,10 @@ import com.ezevillo.gitreview.diff.OpenEntryActions
 import com.ezevillo.gitreview.domain.ActionParams
 import com.ezevillo.gitreview.domain.HousekeepingAction
 import com.ezevillo.gitreview.domain.HousekeepingKind
+import com.ezevillo.gitreview.domain.ReviewLayout
+import com.ezevillo.gitreview.domain.Situation
+import com.ezevillo.gitreview.domain.UserCopy
+import com.ezevillo.gitreview.domain.branchPickerLabel
 import com.ezevillo.gitreview.domain.confirmCopyFor
 import com.ezevillo.gitreview.domain.currentEntry
 import com.ezevillo.gitreview.domain.entryPickLabel
@@ -14,11 +18,16 @@ import com.ezevillo.gitreview.host.Bg
 import com.ezevillo.gitreview.host.GitReviewService
 import com.ezevillo.gitreview.host.MutationActions
 import com.ezevillo.gitreview.ui.StartWizard
+import com.ezevillo.gitreview.ui.UiMessages
 import com.ezevillo.gitreview.vcs.pickSoleGitRoot
+import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.DumbAware
-import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.LocalFileSystem
+import java.io.File
 
 private fun service(e: AnActionEvent) = e.project?.let { GitReviewService.getInstance(it) }
 private fun mutations(e: AnActionEvent): MutationActions? {
@@ -47,13 +56,11 @@ class GoToEntryAction : AnAction(), DumbAware {
         val labels = state.entries.map {
             entryPickLabel(it, state.state?.position, state.subjects?.get(it.position)).label
         }.toTypedArray()
-        val idx = Messages.showChooseDialog(
+        val idx = UiMessages.choose(
             project,
             "Go to entry",
-            "git review",
-            Messages.getQuestionIcon(),
+            UserCopy.PRODUCT_TITLE,
             labels,
-            labels.first(),
         )
         if (idx < 0) return
         val entry = state.entries[idx]
@@ -74,52 +81,63 @@ class ContinueReviewAction : AnAction(), DumbAware {
         val service = GitReviewService.getInstance(project)
         val branches = service.currentState().branches
         if (branches.isEmpty()) {
-            Messages.showInfoMessage(project, "No saved reviews.", "git review")
+            UiMessages.info(project, UserCopy.NO_SAVED_REVIEWS)
             return
         }
         val labels = branches.mapIndexed { i, b ->
             val src = resumableSourceAt(branches, i)
             "${b.name}" + if (src != null) " (resumable)" else ""
         }.toTypedArray()
-        val idx = Messages.showChooseDialog(
+        val idx = UiMessages.choose(
             project,
             "Continue which saved review?",
-            "git review",
-            Messages.getQuestionIcon(),
+            UserCopy.PRODUCT_TITLE,
             labels,
-            labels.first(),
         )
         if (idx < 0) return
         val source = resumableSourceAt(branches, idx) ?: run {
-            Messages.showErrorDialog(project, "That review is not resumable.", "git review")
+            UiMessages.error(project, UserCopy.NOT_RESUMABLE)
             return
         }
-        val confirm = Messages.showYesNoDialog(
-            project,
-            "Continue saved review $source?",
-            "git review",
-            Messages.getQuestionIcon(),
+        if (!UiMessages.confirm(
+                project,
+                UserCopy.continueTitle(source),
+                UserCopy.continueDetail(source),
+                UserCopy.CONTINUE_BUTTON,
+            )
+        ) {
+            return
+        }
+        mutations(e)?.runSimple(
+            "continueReview",
+            ActionParams.Continue(source),
+            progressTitle = UserCopy.continuingProgress(source),
         )
-        if (confirm != Messages.YES) return
-        mutations(e)?.runSimple("continueReview", ActionParams.Continue(source))
     }
 }
 
 class FinishReviewAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        val onto = Messages.showYesNoDialog(
+        val service = GitReviewService.getInstance(project)
+        val state = service.currentState()
+        if (state.readonly == true) {
+            UiMessages.info(project, UserCopy.READONLY_FINISH)
+            return
+        }
+        val source = state.state?.source ?: return
+        val options = arrayOf(UserCopy.FINISH_LOCATION_SEPARATE, UserCopy.FINISH_LOCATION_ONTO)
+        val idx = UiMessages.choose(
             project,
-            "Extract edits onto the PR branch (--onto-source)?\nChoose No for review-fixes/*.",
-            "Finish Review",
-            "Onto source",
-            "review-fixes",
-            Messages.getQuestionIcon(),
+            UserCopy.FINISH_LOCATION_PLACEHOLDER,
+            UserCopy.finishLocationTitle(source),
+            options,
         )
-        // YES = onto-source, NO = default destination
-        mutations(e)?.runFinish(onto == Messages.YES) { msg ->
+        if (idx < 0) return
+        val onto = idx == 1
+        mutations(e)?.runFinish(onto) { msg ->
             if (msg != null) {
-                Messages.showInfoMessage(project, msg, "git review")
+                UiMessages.info(project, msg)
             }
         }
     }
@@ -128,7 +146,7 @@ class FinishReviewAction : AnAction(), DumbAware {
         val model = service(e)?.currentModel()
         e.presentation.isEnabled =
             model != null &&
-                model.situation == com.ezevillo.gitreview.domain.Situation.REVIEW &&
+                model.situation == Situation.REVIEW &&
                 !model.readonly &&
                 !model.busy
     }
@@ -140,14 +158,20 @@ class FinishReviewAction : AnAction(), DumbAware {
 class AbortReviewAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        val ok = Messages.showYesNoDialog(
-            project,
-            "Cancel the active review? Uncommitted edits may be lost.",
-            "Cancel Review",
-            Messages.getWarningIcon(),
+        val source = service(e)?.currentState()?.state?.source ?: return
+        if (!UiMessages.confirm(
+                project,
+                UserCopy.abortTitle(source),
+                UserCopy.ABORT_DETAIL,
+                UserCopy.ABORT_BUTTON,
+            )
+        ) {
+            return
+        }
+        mutations(e)?.runSimple(
+            "abortReview",
+            progressTitle = UserCopy.abortingProgress(source),
         )
-        if (ok != Messages.YES) return
-        mutations(e)?.runSimple("abortReview")
     }
 
     override fun update(e: AnActionEvent) {
@@ -156,8 +180,7 @@ class AbortReviewAction : AnAction(), DumbAware {
         e.presentation.isEnabled =
             model != null &&
                 !model.busy &&
-                (sit == com.ezevillo.gitreview.domain.Situation.REVIEW ||
-                    sit == com.ezevillo.gitreview.domain.Situation.FINISH_CONFLICT)
+                (sit == Situation.REVIEW || sit == Situation.FINISH_CONFLICT)
     }
 
     override fun getActionUpdateThread() =
@@ -167,21 +190,27 @@ class AbortReviewAction : AnAction(), DumbAware {
 class SaveReviewAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        val ok = Messages.showYesNoDialog(
-            project,
-            "Save this review for later?",
-            "Save Review",
-            Messages.getQuestionIcon(),
+        val source = service(e)?.currentState()?.state?.source ?: return
+        if (!UiMessages.confirm(
+                project,
+                UserCopy.saveTitle(source),
+                UserCopy.SAVE_DETAIL,
+                UserCopy.SAVE_BUTTON,
+            )
+        ) {
+            return
+        }
+        mutations(e)?.runSimple(
+            "saveReview",
+            progressTitle = UserCopy.savingProgress(source),
         )
-        if (ok != Messages.YES) return
-        mutations(e)?.runSimple("saveReview")
     }
 
     override fun update(e: AnActionEvent) {
         val model = service(e)?.currentModel()
         e.presentation.isEnabled =
             model != null &&
-                model.situation == com.ezevillo.gitreview.domain.Situation.REVIEW &&
+                model.situation == Situation.REVIEW &&
                 !model.busy
     }
 
@@ -191,21 +220,53 @@ class SaveReviewAction : AnAction(), DumbAware {
 
 class UndoFinishAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
+        val project = e.project ?: return
         val m = mutations(e) ?: return
-        // The callback outlives actionPerformed; hold the project, not the event.
-        val project = e.project
-        m.runSimple("undoFinish", ActionParams.UndoFinish(false)) { ok ->
-            if (ok) return@runSimple
-            val force = Messages.showYesNoDialog(
-                project,
-                "Undo finish failed. Force (--force)?",
-                "Undo Finish",
-                Messages.getWarningIcon(),
-            )
-            if (force == Messages.YES) {
-                m.runSimple("undoFinish", ActionParams.UndoFinish(true))
-            }
+        runUndoFinish(project, m, service(e)?.currentState()?.situation)
+    }
+}
+
+/** Shared by the menu action and the panel control. */
+internal fun runUndoFinish(project: Project, mutations: MutationActions, situation: Situation?) {
+    val detail = if (situation == Situation.FINISH_CONFLICT) {
+        UserCopy.UNDO_DETAIL_CONFLICT
+    } else {
+        UserCopy.UNDO_DETAIL_PENDING
+    }
+    if (!UiMessages.confirm(project, UserCopy.UNDO_TITLE, detail, UserCopy.UNDO_BUTTON)) {
+        return
+    }
+    mutations.runSimple(
+        "undoFinish",
+        ActionParams.UndoFinish(false),
+        showFailure = false,
+        progressTitle = UserCopy.UNDOING_PROGRESS,
+    ) { done ->
+        if (done.ok || done.stale || done.discarded) return@runSimple
+        val text = com.ezevillo.gitreview.domain.flattenCliMessage(done.stderr)
+        if (text.isEmpty()) {
+            UiMessages.error(project, UserCopy.UNDO_ABORT_FAILED)
+            return@runSimple
         }
+        // Only when the CLI names --force as the escape (same gate as VS Code).
+        if (!text.contains("--force")) {
+            UiMessages.error(project, text)
+            return@runSimple
+        }
+        if (!UiMessages.confirm(
+                project,
+                text,
+                UserCopy.UNDO_FORCE_DETAIL,
+                UserCopy.UNDO_FORCE_BUTTON,
+            )
+        ) {
+            return@runSimple
+        }
+        mutations.runSimple(
+            "undoFinish",
+            ActionParams.UndoFinish(true),
+            progressTitle = UserCopy.FORCE_UNDOING_PROGRESS,
+        )
     }
 }
 
@@ -213,7 +274,11 @@ class ResumeFinishAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val state = service(e)?.currentState() ?: return
         val onto = state.finish?.onto == true
-        mutations(e)?.runSimple("resumeFinish", ActionParams.ResumeFinish(onto))
+        mutations(e)?.runSimple(
+            "resumeFinish",
+            ActionParams.ResumeFinish(onto),
+            progressTitle = UserCopy.RESUME_PROGRESS,
+        )
     }
 }
 
@@ -254,29 +319,26 @@ class SetBaseAction : AnAction(), DumbAware {
         val service = GitReviewService.getInstance(project)
         val candidates = service.currentState().candidates
         if (candidates.isNullOrEmpty()) {
-            // Ensure config is loaded
             Bg.sync(project, "git review config") { service.refreshNow() }
         }
         val list = service.currentState().candidates
         if (list.isNullOrEmpty()) {
-            Messages.showErrorDialog(
-                project,
-                "No branches to pick a base from were found.",
-                "git review",
-            )
+            UiMessages.error(project, UserCopy.NO_BRANCHES_FOR_BASE)
             return
         }
-        val names = list.map { "${it.name} (${it.origin})" }.toTypedArray()
-        val idx = Messages.showChooseDialog(
+        val sorted = list.sortedWith(
+            compareByDescending<com.ezevillo.gitreview.domain.CandidateBranch> { it.current }
+                .thenBy { it.name },
+        )
+        val names = sorted.map { branchPickerLabel(it) }.toTypedArray()
+        val idx = UiMessages.choose(
             project,
-            "Base branch",
-            "Set the Base Branch",
-            Messages.getQuestionIcon(),
+            UserCopy.SET_BASE_PROMPT,
+            UserCopy.SET_BASE_TITLE,
             names,
-            names.first(),
         )
         if (idx < 0) return
-        mutations(e)?.runSimple("setBase", ActionParams.SetConfig("base", list[idx].name))
+        mutations(e)?.runSimple("setBase", ActionParams.SetConfig("base", sorted[idx].name))
     }
 }
 
@@ -287,59 +349,56 @@ class SetRemoteAction : AnAction(), DumbAware {
         Bg.sync(project, "git review config") { service.refreshNow() }
         val remotes = service.currentState().remotes
         if (remotes.isNullOrEmpty()) {
-            Messages.showErrorDialog(project, "No remotes found.", "git review")
+            UiMessages.error(project, UserCopy.NO_REMOTES)
             return
         }
-        val names = remotes.map { it.name }.toTypedArray()
-        val idx = Messages.showChooseDialog(
+        val sorted = remotes.sortedWith(
+            compareByDescending<com.ezevillo.gitreview.domain.CandidateRemote> { it.current }
+                .thenBy { it.name },
+        )
+        val names = sorted.map {
+            if (it.current) "${it.name}  (current)" else it.name
+        }.toTypedArray()
+        val idx = UiMessages.choose(
             project,
-            "Remote",
-            "Set the Remote",
-            Messages.getQuestionIcon(),
+            UserCopy.SET_REMOTE_PROMPT,
+            UserCopy.SET_REMOTE_TITLE,
             names,
-            names.first(),
         )
         if (idx < 0) return
-        mutations(e)?.runSimple("setRemote", ActionParams.SetConfig("remote", names[idx]))
+        mutations(e)?.runSimple("setRemote", ActionParams.SetConfig("remote", sorted[idx].name))
     }
 }
 
 class CleanReviewAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        val kinds = arrayOf(
-            "Clean one source",
-            "Clean keep-fixes (pending finish)",
-            "Clean all",
-        )
-        val idx = Messages.showChooseDialog(
+        val pending = service(e)?.currentState()?.let { pendingFinishInfo(it) }
+        if (pending != null) {
+            confirmAndRun(
+                project,
+                e,
+                HousekeepingAction(HousekeepingKind.CLEAN_KEEP_FIXES, pending.first, onto = pending.second),
+            )
+            return
+        }
+        val kinds = arrayOf(UserCopy.CLEAN_ONE_LABEL, UserCopy.CLEAN_ALL_LABEL)
+        val idx = UiMessages.choose(
             project,
-            "Clean",
-            "git review",
-            Messages.getQuestionIcon(),
+            "What to delete",
+            UserCopy.CLEAN_PICK_TITLE,
             kinds,
-            kinds[0],
         )
         if (idx < 0) return
         val action = when (idx) {
             0 -> {
-                val src = Messages.showInputDialog(project, "Source name:", "Clean", null) ?: return
-                HousekeepingAction(HousekeepingKind.CLEAN_ONE, src)
-            }
-            1 -> {
-                val info = service(e)?.currentState()?.let { pendingFinishInfo(it) }
-                val src = info?.first
-                    ?: Messages.showInputDialog(project, "Source name:", "Clean keep-fixes", null)
+                val src = pickSourceName(project, service(e), savedOnly = false, forClean = true)
                     ?: return
-                HousekeepingAction(HousekeepingKind.CLEAN_KEEP_FIXES, src, onto = info?.second)
+                HousekeepingAction(HousekeepingKind.CLEAN_ONE, src)
             }
             else -> HousekeepingAction(HousekeepingKind.CLEAN_ALL)
         }
-        val copy = confirmCopyFor(action)
-        if (Messages.showYesNoDialog(project, copy.detail, copy.title, Messages.getWarningIcon()) != Messages.YES) {
-            return
-        }
-        mutations(e)?.runHousekeeping(action)
+        confirmAndRun(project, e, action)
     }
 }
 
@@ -347,53 +406,52 @@ class ForgetReviewAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val kinds = arrayOf(
-            "Forget one saved",
-            "Forget all saved",
-            "Forget one delta",
-            "Forget all deltas",
-            "Forget stale deltas",
+            UserCopy.FORGET_SAVED_ONE_LABEL,
+            UserCopy.FORGET_SAVED_ALL_LABEL,
+            UserCopy.FORGET_DELTA_ONE_LABEL,
+            UserCopy.FORGET_DELTA_ALL_LABEL,
+            UserCopy.FORGET_DELTA_STALE_LABEL,
         )
-        val idx = Messages.showChooseDialog(
+        val idx = UiMessages.choose(
             project,
-            "Forget",
-            "git review",
-            Messages.getQuestionIcon(),
+            "What to discard",
+            UserCopy.FORGET_PICK_TITLE,
             kinds,
-            kinds[0],
         )
         if (idx < 0) return
         val action = when (idx) {
             0 -> {
-                val src = Messages.showInputDialog(project, "Source:", "Forget saved", null) ?: return
+                val src = pickSourceName(project, service(e), savedOnly = true, forClean = false)
+                    ?: return
                 HousekeepingAction(HousekeepingKind.FORGET_SAVED_ONE, src)
             }
             1 -> HousekeepingAction(HousekeepingKind.FORGET_SAVED_ALL)
             2 -> {
-                val src = Messages.showInputDialog(project, "Source:", "Forget delta", null) ?: return
+                val src = pickSourceName(project, service(e), savedOnly = false, forClean = false)
+                    ?: return
                 HousekeepingAction(HousekeepingKind.FORGET_DELTA_ONE, src)
             }
             3 -> HousekeepingAction(HousekeepingKind.FORGET_DELTA_ALL)
             else -> HousekeepingAction(HousekeepingKind.FORGET_DELTA_STALE)
         }
-        val copy = confirmCopyFor(action)
-        if (Messages.showYesNoDialog(project, copy.detail, copy.title, Messages.getWarningIcon()) != Messages.YES) {
-            return
-        }
-        mutations(e)?.runHousekeeping(action)
+        confirmAndRun(project, e, action)
     }
 }
 
 class DiscardInventoryAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        // Menu path: ask for the name. Panel path uses discardResolved().
-        val name = Messages.showInputDialog(project, "Review branch name to discard:", "Discard", null) ?: return
+        val name = UiMessages.input(
+            project,
+            "Review branch name to discard (e.g. review-saved/feature/x):",
+            "Discard",
+        ) ?: return
         discardResolved(project, name)
     }
 
     companion object {
         /** Panel path: review name already known from the inventory row. Confirmation still required. */
-        fun discardResolved(project: com.intellij.openapi.project.Project, name: String) {
+        fun discardResolved(project: Project, name: String) {
             val src = sourceFromReviewName(name)
             val action = if (name.startsWith("review-saved/")) {
                 HousekeepingAction(HousekeepingKind.FORGET_SAVED_ONE, src)
@@ -401,9 +459,7 @@ class DiscardInventoryAction : AnAction(), DumbAware {
                 HousekeepingAction(HousekeepingKind.CLEAN_ONE, src)
             }
             val copy = confirmCopyFor(action)
-            if (Messages.showYesNoDialog(project, copy.detail, copy.title, Messages.getWarningIcon()) != Messages.YES) {
-                return
-            }
+            if (!UiMessages.confirm(project, copy.title, copy.detail, copy.button)) return
             MutationActions(project, GitReviewService.getInstance(project)).runHousekeeping(action)
         }
     }
@@ -411,13 +467,7 @@ class DiscardInventoryAction : AnAction(), DumbAware {
 
 class PreviewEditsAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
-        val project = e.project ?: return
-        val cwd = pickSoleGitRoot(project)?.rootPath ?: return
-        val service = GitReviewService.getInstance(project)
-        val result = Bg.sync(project, "git review preview") {
-            service.cliInvoker.invoke("preview", emptyList(), cwd)
-        }
-        Messages.showInfoMessage(project, result.stdout.ifBlank { result.stderr }, "Preview Edits")
+        preview(e, stat = false)
     }
 
     override fun update(e: AnActionEvent) {
@@ -426,8 +476,7 @@ class PreviewEditsAction : AnAction(), DumbAware {
         e.presentation.isEnabled =
             model != null &&
                 !model.busy &&
-                (sit == com.ezevillo.gitreview.domain.Situation.REVIEW ||
-                    sit == com.ezevillo.gitreview.domain.Situation.FINISH_CONFLICT)
+                (sit == Situation.REVIEW || sit == Situation.FINISH_CONFLICT)
     }
 
     override fun getActionUpdateThread() =
@@ -436,65 +485,172 @@ class PreviewEditsAction : AnAction(), DumbAware {
 
 class PreviewEditsStatAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
-        val project = e.project ?: return
-        val cwd = pickSoleGitRoot(project)?.rootPath ?: return
-        val service = GitReviewService.getInstance(project)
-        val result = Bg.sync(project, "git review preview --stat") {
-            service.cliInvoker.invoke("preview", listOf("--stat"), cwd)
-        }
-        Messages.showInfoMessage(project, result.stdout.ifBlank { result.stderr }, "Preview Edits (stat)")
+        preview(e, stat = true)
     }
+}
+
+private fun preview(e: AnActionEvent, stat: Boolean) {
+    val project = e.project ?: return
+    val cwd = pickSoleGitRoot(project)?.rootPath ?: return
+    val service = GitReviewService.getInstance(project)
+    val state = service.currentState()
+    if (state.situation != Situation.REVIEW && state.situation != Situation.FINISH_CONFLICT) {
+        UiMessages.info(project, UserCopy.NO_ACTIVE_PREVIEW)
+        return
+    }
+    val args = if (stat) listOf("--stat") else emptyList()
+    val result = Bg.sync(project, "git review preview") {
+        service.cliInvoker.invoke("preview", args, cwd)
+    }
+    if (result.exitCode != 0 || result.timedOut) {
+        UiMessages.cliError(
+            project,
+            result.stderr,
+            UserCopy.PREVIEW_FAILED,
+            result.stdout,
+        )
+        return
+    }
+    val note = result.stderr.trim()
+    if (note.isNotEmpty()) {
+        UiMessages.info(project, note.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() } ?: note)
+    }
+    val body = result.stdout.ifEmpty { UserCopy.PREVIEW_EMPTY + "\n" }
+    val suffix = if (stat) "-stat.txt" else ".diff"
+    val tmp = File.createTempFile("git-review-preview", suffix)
+    tmp.writeText(body)
+    tmp.deleteOnExit()
+    val vf = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(tmp) ?: run {
+        UiMessages.info(project, body, "Preview edits")
+        return
+    }
+    FileEditorManager.getInstance(project).openFile(vf, true)
 }
 
 class CompareReviewAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        val lower = Messages.showInputDialog(project, "Lower bound (commit/ref):", "Compare", null) ?: return
-        val upper = Messages.showInputDialog(project, "Upper bound (commit/ref):", "Compare", null) ?: return
+        val lower = UiMessages.input(project, "Branch, tag or commit", UserCopy.COMPARE_LOWER_TITLE)
+            ?: return
+        val upper = UiMessages.input(project, "Branch, tag or commit", UserCopy.COMPARE_UPPER_TITLE)
+            ?: return
+        val layoutOptions = arrayOf(
+            "Walkthrough — curated reading order if the upper tip has a walkthrough",
+            "Walkthrough — keys only — only entries marked key (--keys)",
+            "Commit by commit — one commit at a time (--step)",
+            "Whole diff — entire diff at once (--no-walk)",
+        )
+        val layoutIdx = UiMessages.choose(
+            project,
+            UserCopy.COMPARE_LAYOUT_PLACEHOLDER,
+            UserCopy.COMPARE_LAYOUT_TITLE,
+            layoutOptions,
+        )
+        if (layoutIdx < 0) return
+        val layout = when (layoutIdx) {
+            0 -> ReviewLayout.WALK
+            1 -> ReviewLayout.KEYS
+            2 -> ReviewLayout.STEP
+            else -> ReviewLayout.WHOLE
+        }
+        if (!UiMessages.confirm(
+                project,
+                UserCopy.compareConfirmTitle(lower, upper, layout),
+                UserCopy.COMPARE_CONFIRM_DETAIL,
+                UserCopy.COMPARE_BUTTON,
+            )
+        ) {
+            return
+        }
+        val flags = when (layout) {
+            ReviewLayout.STEP -> listOf("--step")
+            ReviewLayout.WHOLE -> listOf("--no-walk")
+            ReviewLayout.KEYS -> listOf("--keys")
+            ReviewLayout.WALK -> emptyList()
+        }
         mutations(e)?.runSimple(
             "compareReview",
-            ActionParams.Compare(emptyList(), lower, upper),
-        ) { ok ->
-            if (ok) {
-                Messages.showInfoMessage(
-                    project,
-                    "Compare is read-only. Use the review panel to navigate.",
-                    "git review",
-                )
-            }
-        }
+            ActionParams.Compare(flags, lower, upper),
+            progressTitle = UserCopy.comparingProgress(lower, upper),
+        )
     }
 }
 
 class WalkthroughInitAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        val force = Messages.showYesNoDialog(
-            project,
-            "Force overwrite existing walkthrough?",
-            "Walkthrough Init",
-            Messages.getQuestionIcon(),
-        ) == Messages.YES
-        mutations(e)?.runSimple("walkthroughInit", ActionParams.WalkthroughInit(force))
+        val m = mutations(e) ?: return
+        val cwd = pickSoleGitRoot(project)?.rootPath
+        m.runSimple(
+            "walkthroughInit",
+            ActionParams.WalkthroughInit(false),
+            showFailure = false,
+            progressTitle = UserCopy.WALKTHROUGH_INIT_PROGRESS,
+        ) { first ->
+            if (first.ok) {
+                openWalkthroughFile(project, cwd)
+                return@runSimple
+            }
+            if (first.stale || first.discarded) return@runSimple
+            val exists = cwd != null && java.io.File(cwd, ".review/walkthrough.md").isFile
+            if (!exists) {
+                UiMessages.cliError(
+                    project,
+                    first.stderr,
+                    UserCopy.WALKTHROUGH_INIT_FAILED,
+                    first.stdout,
+                )
+                return@runSimple
+            }
+            if (!UiMessages.confirm(
+                    project,
+                    UserCopy.WALKTHROUGH_EXISTS_TITLE,
+                    UserCopy.WALKTHROUGH_EXISTS_DETAIL,
+                    UserCopy.WALKTHROUGH_OVERWRITE_BUTTON,
+                )
+            ) {
+                return@runSimple
+            }
+            m.runSimple(
+                "walkthroughInit",
+                ActionParams.WalkthroughInit(true),
+                progressTitle = UserCopy.WALKTHROUGH_OVERWRITE_PROGRESS,
+            ) { forced ->
+                if (forced.ok) openWalkthroughFile(project, cwd)
+            }
+        }
     }
 }
 
 class WalkthroughBuildAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
-        mutations(e)?.runSimple("walkthroughBuild")
+        val project = e.project ?: return
+        if (!UiMessages.confirm(
+                project,
+                UserCopy.WALKTHROUGH_BUILD_TITLE,
+                UserCopy.WALKTHROUGH_BUILD_DETAIL,
+                UserCopy.WALKTHROUGH_BUILD_BUTTON,
+            )
+        ) {
+            return
+        }
+        val cwd = pickSoleGitRoot(project)?.rootPath
+        mutations(e)?.runSimple(
+            "walkthroughBuild",
+            progressTitle = UserCopy.WALKTHROUGH_BUILD_PROGRESS,
+        ) { done ->
+            if (done.ok) {
+                UiMessages.info(project, UserCopy.WALKTHROUGH_BUILT)
+                openWalkthroughFile(project, cwd)
+            }
+        }
     }
 }
 
 class InstallCliAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
-        val project = e.project ?: return
-        Messages.showInfoMessage(
-            project,
-            "Install: npm install -g git-review-workflow\n" +
-                "Update: npm install -g git-review-workflow@latest\n\n" +
-                "Other options: https://github.com/EzeVillo/git-review-workflow#readme",
-            "How to Install the CLI",
-        )
+        // Same as VS Code: open the install docs ("Other install options").
+        BrowserUtil.browse(UserCopy.INSTALL_DOCS_URL)
     }
 }
 
@@ -502,7 +658,53 @@ class ShowWhyAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val model = GitReviewService.getInstance(project).currentModel()
-        val text = model.why?.text ?: model.why?.state?.id ?: "(no why)"
-        Messages.showInfoMessage(project, text, "Why")
+        val text = model.why?.text ?: model.why?.state?.id ?: return
+        UiMessages.info(project, text, "Why")
     }
+}
+
+private fun confirmAndRun(project: Project, e: AnActionEvent, action: HousekeepingAction) {
+    val copy = confirmCopyFor(action)
+    if (!UiMessages.confirm(project, copy.title, copy.detail, copy.button)) return
+    mutations(e)?.runHousekeeping(action)
+}
+
+private fun pickSourceName(
+    project: Project,
+    service: GitReviewService?,
+    savedOnly: Boolean,
+    forClean: Boolean,
+): String? {
+    val branches = service?.currentState()?.branches.orEmpty()
+    val filtered = if (savedOnly) {
+        branches.filter { it.saved || it.name.startsWith("review-saved/") }
+    } else {
+        branches
+    }
+    val names = filtered.map { sourceFromReviewName(it.name) }.distinct()
+    if (names.isNotEmpty()) {
+        val options = (names + UserCopy.ENTER_BRANCH_NAME).toTypedArray()
+        val title = when {
+            forClean -> UserCopy.CLEAN_BRANCH_TITLE
+            savedOnly -> UserCopy.FORGET_SAVED_SOURCE_TITLE
+            else -> "Branch"
+        }
+        val idx = UiMessages.choose(project, "Source branch name", title, options)
+        if (idx < 0) return null
+        if (options[idx] != UserCopy.ENTER_BRANCH_NAME) return options[idx]
+    }
+    val promptTitle = when {
+        forClean -> UserCopy.CLEAN_BRANCH_TITLE
+        savedOnly -> UserCopy.FORGET_SAVED_SOURCE_TITLE
+        else -> UserCopy.FORGET_DELTA_SOURCE_TITLE
+    }
+    val prompt = if (forClean) UserCopy.CLEAN_BRANCH_PROMPT else UserCopy.FORGET_SOURCE_PROMPT
+    return UiMessages.input(project, prompt, promptTitle)
+}
+
+private fun openWalkthroughFile(project: Project, cwd: String?) {
+    if (cwd == null) return
+    val file = File(cwd, ".review/walkthrough.md")
+    val vf = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file) ?: return
+    FileEditorManager.getInstance(project).openFile(vf, true)
 }

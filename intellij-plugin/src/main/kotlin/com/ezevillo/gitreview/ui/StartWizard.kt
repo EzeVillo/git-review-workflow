@@ -3,15 +3,17 @@ package com.ezevillo.gitreview.ui
 import com.ezevillo.gitreview.domain.ReviewIntent
 import com.ezevillo.gitreview.domain.ReviewRange
 import com.ezevillo.gitreview.domain.ReviewSource
+import com.ezevillo.gitreview.domain.UserCopy
 import com.ezevillo.gitreview.domain.branchPickerItems
 import com.ezevillo.gitreview.domain.branchPickerLabel
 import com.ezevillo.gitreview.domain.buildLayoutItems
+import com.ezevillo.gitreview.domain.deltaForSource
 import com.ezevillo.gitreview.domain.formatCommandLine
+import com.ezevillo.gitreview.domain.intentToArgs
 import com.ezevillo.gitreview.domain.offerConfigFlags
 import com.ezevillo.gitreview.domain.parseConfigPorcelain
 import com.ezevillo.gitreview.domain.resolveDefaultSource
 import com.ezevillo.gitreview.domain.SourcePreferenceLevels
-import com.ezevillo.gitreview.domain.deltaForSource
 import com.ezevillo.gitreview.domain.validateIntent
 import com.ezevillo.gitreview.domain.IntentValidationContext
 import com.ezevillo.gitreview.domain.IntentValidationResult
@@ -22,19 +24,18 @@ import com.ezevillo.gitreview.host.StartRunResult
 import com.ezevillo.gitreview.settings.GitReviewSettings
 import com.ezevillo.gitreview.vcs.pickSoleGitRoot
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.Messages
 
 /**
  * Multi-step start wizard (dialogs). Branch list comes from
  * `git review config --porcelain` candidates — same source as the VS Code
- * start assistant — not free-text input.
+ * start assistant — not free-text input. Confirm / error copy matches VS Code.
  */
 object StartWizard {
     fun run(project: Project) {
         val service = GitReviewService.getInstance(project)
         val cwd = pickSoleGitRoot(project)?.rootPath
         if (cwd == null) {
-            Messages.showErrorDialog(project, "Need a single git repository root.", "git review")
+            UiMessages.error(project, UserCopy.NO_SOLE_ROOT)
             return
         }
 
@@ -43,68 +44,85 @@ object StartWizard {
             service.cliInvoker.invoke("config", listOf("--porcelain"), cwd)
         }
         if (bootstrap.exitCode != 0 || bootstrap.timedOut) {
-            val text = bootstrap.stderr.trim().ifEmpty { "Could not read the review configuration." }
-            Messages.showErrorDialog(project, text, "git review")
+            val text = bootstrap.stderr.trim().ifEmpty { UserCopy.COULD_NOT_READ_CONFIG }
+            UiMessages.error(project, text)
             return
         }
         val parsed = try {
             parseConfigPorcelain(bootstrap.stdout)
         } catch (e: Exception) {
-            Messages.showErrorDialog(
-                project,
-                e.message ?: "Could not parse the review configuration.",
-                "git review",
-            )
+            UiMessages.error(project, e.message ?: UserCopy.COULD_NOT_PARSE_CONFIG)
             return
         }
 
         if (parsed.config.base == null) {
-            Messages.showErrorDialog(
-                project,
-                "Configure a base branch first (git review → Set the Base Branch).",
-                "git review",
-            )
+            UiMessages.error(project, UserCopy.CONFIGURE_BASE_FIRST)
             return
         }
 
         val branches = branchPickerItems(parsed.candidates)
         if (branches.isEmpty()) {
-            Messages.showErrorDialog(
-                project,
-                "No branches to pick a review from were found.",
-                "git review",
-            )
+            UiMessages.error(project, UserCopy.NO_BRANCHES_FOR_REVIEW)
             return
         }
         val branchLabels = branches.map { branchPickerLabel(it) }.toTypedArray()
-        val branchIdx = Messages.showChooseDialog(
+        val branchIdx = UiMessages.choose(
             project,
-            "Branch to review",
-            "Start a Review",
-            Messages.getQuestionIcon(),
+            UserCopy.START_BRANCH_PLACEHOLDER,
+            UserCopy.START_BRANCH_TITLE,
             branchLabels,
-            branchLabels.first(),
         )
         if (branchIdx < 0) return
         val branch = branches[branchIdx].name
 
-        val sources = arrayOf("remote", "local", "offline")
         val defaultSrc = resolveDefaultSource(
             SourcePreferenceLevels(globalValue = GitReviewSettings.getInstance().defaultSource),
-        ).id
-        val sourceIdx = Messages.showChooseDialog(
+        )
+        val sourceLabels = UserCopy.SOURCE_LABELS.map { it.second }.toTypedArray()
+        val defaultLabel = UserCopy.SOURCE_LABELS.first { it.first == defaultSrc }.second
+        val sourceIdx = UiMessages.choose(
             project,
-            "Source",
-            "Start a Review",
-            Messages.getQuestionIcon(),
-            sources,
-            defaultSrc,
+            UserCopy.START_ORIGIN_PLACEHOLDER,
+            UserCopy.START_ORIGIN_TITLE,
+            sourceLabels,
+            defaultLabel,
         )
         if (sourceIdx < 0) return
-        val source = ReviewSource.parse(sources[sourceIdx]) ?: ReviewSource.REMOTE
+        val source = UserCopy.SOURCE_LABELS[sourceIdx].first
 
-        // Probe offers for layout
-        val flags = offerConfigFlags(source, ReviewRange.FULL).toMutableList()
+        // Range only when a delta marker exists for this source (same as VS Code).
+        var range = ReviewRange.FULL
+        val deltaProbe = Bg.sync(project, "git review config") {
+            service.cliInvoker.invoke(
+                "config",
+                listOf("--porcelain", "--", branch),
+                cwd,
+            )
+        }
+        var deltas = if (deltaProbe.exitCode == 0) {
+            try {
+                parseConfigPorcelain(deltaProbe.stdout).deltas
+            } catch (_: Exception) {
+                null
+            }
+        } else {
+            null
+        }
+        val hasDelta = deltaForSource(deltas, source.id) != null
+        if (hasDelta) {
+            val rangeLabels = UserCopy.RANGE_LABELS.map { it.second }.toTypedArray()
+            val rangeIdx = UiMessages.choose(
+                project,
+                UserCopy.START_RANGE_PLACEHOLDER,
+                UserCopy.START_RANGE_TITLE,
+                rangeLabels,
+            )
+            if (rangeIdx < 0) return
+            range = UserCopy.RANGE_LABELS[rangeIdx].first
+        }
+
+        // Offers for layout (depend on source + range tip context).
+        val flags = offerConfigFlags(source, range).toMutableList()
         flags.add(0, "--porcelain")
         flags.add("--")
         flags.add(branch)
@@ -113,35 +131,33 @@ object StartWizard {
         }
         val offers = if (cfgResult.exitCode == 0) {
             try {
-                parseConfigPorcelain(cfgResult.stdout).offers
+                val report = parseConfigPorcelain(cfgResult.stdout)
+                if (report.deltas != null) deltas = report.deltas
+                report.offers
             } catch (_: Exception) {
                 null
             }
-        } else null
+        } else {
+            null
+        }
+        if (cfgResult.exitCode != 0) {
+            val text = cfgResult.stderr.trim().ifEmpty { UserCopy.COULD_NOT_READ_OFFERS }
+            UiMessages.error(project, text)
+            return
+        }
 
         val items = buildLayoutItems(offers)
-        val labels = items.map { it.label }.toTypedArray()
-        val layoutIdx = Messages.showChooseDialog(
+        val labels = items.map { item ->
+            if (item.description.isNotEmpty()) "${item.label} — ${item.description}" else item.label
+        }.toTypedArray()
+        val layoutIdx = UiMessages.choose(
             project,
-            "Reading layout",
-            "Start a Review",
-            Messages.getQuestionIcon(),
+            UserCopy.START_LAYOUT_PLACEHOLDER,
+            UserCopy.START_LAYOUT_TITLE,
             labels,
-            labels.first(),
         )
         if (layoutIdx < 0) return
         val layout = items[layoutIdx].layout
-
-        val rangeChoice = Messages.showYesNoDialog(
-            project,
-            "Review only changes since the last tip (--delta)?",
-            "Start a Review",
-            "Full",
-            "Delta",
-            Messages.getQuestionIcon(),
-        )
-        // YesNo: YES=0 (Full), NO=1 (Delta) — inverted labels carefully
-        val range = if (rangeChoice == Messages.NO) ReviewRange.DELTA else ReviewRange.FULL
 
         val intent = ReviewIntent(
             branch = branch,
@@ -150,57 +166,48 @@ object StartWizard {
             source = source,
         )
 
-        val delta = if (range == ReviewRange.DELTA) {
-            val probe = Bg.sync(project, "git review config") {
-                service.cliInvoker.invoke(
-                    "config",
-                    listOf("--porcelain") + offerConfigFlags(source, range) +
-                        listOf("--", branch),
-                    cwd,
-                )
-            }
-            if (probe.exitCode == 0) {
-                try {
-                    deltaForSource(parseConfigPorcelain(probe.stdout).deltas, source.id)
-                } catch (_: Exception) {
-                    null
-                }
-            } else null
-        } else null
-
+        val delta = deltaForSource(deltas, source.id)
         val validation = validateIntent(intent, IntentValidationContext(delta = delta))
         if (validation is IntentValidationResult.Fail) {
-            Messages.showErrorDialog(project, validation.reason, "git review")
+            UiMessages.error(project, validation.reason)
             return
         }
 
-        val confirm = Messages.showYesNoDialog(
-            project,
-            "Start ${layout.name.lowercase()} review of $branch from $source?",
-            "Confirm Start",
-            Messages.getQuestionIcon(),
-        )
-        if (confirm != Messages.YES) return
+        val args = intentToArgs(intent, branch)
+        val base = parsed.config.base
+        if (!UiMessages.confirm(
+                project,
+                UserCopy.startConfirmTitle(branch, layout),
+                UserCopy.startConfirmDetail(args, base),
+                UserCopy.START_CONFIRM_BUTTON,
+            )
+        ) {
+            return
+        }
 
         MutationActions(project, service).runStart(intent, branch) { result ->
             when (result) {
-                StartRunResult.Ok -> Messages.showInfoMessage(project, "Review started.", "git review")
-                StartRunResult.Busy -> Messages.showWarningDialog(
-                    project,
-                    "Another operation is already in progress",
-                    "git review",
-                )
-                StartRunResult.Stale -> Messages.showWarningDialog(project, "State changed; try again.", "git review")
-                StartRunResult.NoCwd -> Messages.showErrorDialog(project, "No sole git root.", "git review")
+                is StartRunResult.Ok -> {
+                    // Successful start can still emit notes on stderr (FR-031).
+                    if (result.note != null) {
+                        UiMessages.info(project, result.note)
+                    }
+                }
+                StartRunResult.Busy -> UiMessages.info(project, UserCopy.DISCARD_BUSY)
+                StartRunResult.Stale -> UiMessages.info(project, UserCopy.START_STALE_RUN)
+                StartRunResult.NoCwd -> UiMessages.error(project, UserCopy.NO_SOLE_ROOT)
                 is StartRunResult.Network -> {
+                    val text = result.stderr.trim().ifEmpty { UserCopy.START_FAILED }
                     val line = formatCommandLine(result.command, result.args)
-                    Messages.showErrorDialog(
+                    UiMessages.error(
                         project,
-                        "Network failure starting the review.\n\n${result.stderr}\n\nRun in Terminal:\n$line",
-                        "git review",
+                        "$text\n\nTo retry with credentials, run in Terminal:\n$line",
                     )
                 }
-                is StartRunResult.Failed -> Messages.showErrorDialog(project, result.stderr, "git review")
+                is StartRunResult.Failed -> {
+                    val text = result.stderr.trim().ifEmpty { UserCopy.START_FAILED }
+                    UiMessages.error(project, text)
+                }
             }
         }
     }

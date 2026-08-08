@@ -9,6 +9,7 @@ import com.ezevillo.gitreview.domain.NPM_INSTALL_CMD
 import com.ezevillo.gitreview.domain.NPM_UPDATE_CMD
 import com.ezevillo.gitreview.domain.PanelModel
 import com.ezevillo.gitreview.domain.Situation
+import com.ezevillo.gitreview.domain.UserCopy
 import com.ezevillo.gitreview.domain.confirmCopyFor
 import com.ezevillo.gitreview.domain.currentEntry
 import com.ezevillo.gitreview.domain.pendingFinishInfo
@@ -17,16 +18,18 @@ import com.ezevillo.gitreview.domain.resumableSourceAt
 import com.ezevillo.gitreview.domain.sourceFromReviewName
 import com.ezevillo.gitreview.host.GitReviewService
 import com.ezevillo.gitreview.host.MutationActions
+import com.ezevillo.gitreview.ui.actions.runUndoFinish
 import com.ezevillo.gitreview.vcs.pickSoleGitRoot
+import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.Messages
-import com.intellij.ide.BrowserUtil
 import java.awt.datatransfer.StringSelection
 
 /**
  * Routes [ControlId] (+ optional index) to existing host actions.
  * Returns true when the caller should show transient "Copied" feedback.
+ *
+ * Confirmations and error/success toasts use the same English copy as VS Code.
  */
 class PanelActionDispatcher(
     private val project: Project,
@@ -35,7 +38,6 @@ class PanelActionDispatcher(
     private val mutations = MutationActions(project, service)
 
     fun dispatch(id: ControlId, index: Int?): Boolean {
-        val model = service.currentModel()
         // Guard: confirmation path must run when required (FR-032)
         if (requiresConfirmation(id)) {
             // Actual dialog is inside the routed action (or here for index-resolved paths)
@@ -66,8 +68,8 @@ class PanelActionDispatcher(
                 false
             }
             ControlId.SHOW_WHY -> {
-                val text = model.why?.text ?: return false
-                Messages.showInfoMessage(project, text, "Why")
+                val text = modelWhy() ?: return false
+                UiMessages.info(project, text, "Why")
                 false
             }
             ControlId.START_REVIEW -> {
@@ -91,37 +93,21 @@ class PanelActionDispatcher(
                 false
             }
             ControlId.UNDO_FINISH -> {
-                if (requiresConfirmation(ControlId.UNDO_FINISH)) {
-                    val ok = Messages.showYesNoDialog(
-                        project,
-                        "Undo this finish?",
-                        "Undo Finish",
-                        Messages.getWarningIcon(),
-                    )
-                    if (ok != Messages.YES) return false
-                }
-                mutations.runSimple("undoFinish", ActionParams.UndoFinish(false)) { ok ->
-                    if (ok) return@runSimple
-                    val force = Messages.showYesNoDialog(
-                        project,
-                        "Undo finish failed. Force (--force)?",
-                        "Undo Finish",
-                        Messages.getWarningIcon(),
-                    )
-                    if (force == Messages.YES) {
-                        mutations.runSimple("undoFinish", ActionParams.UndoFinish(true))
-                    }
-                }
+                runUndoFinish(project, mutations, service.currentState().situation)
                 false
             }
             ControlId.RESUME_FINISH -> {
                 val state = service.currentState()
                 val onto = state.finish?.onto == true
-                mutations.runSimple("resumeFinish", ActionParams.ResumeFinish(onto))
+                mutations.runSimple(
+                    "resumeFinish",
+                    ActionParams.ResumeFinish(onto),
+                    progressTitle = UserCopy.RESUME_PROGRESS,
+                )
                 false
             }
             ControlId.CLEAN_REVIEW -> {
-                cleanPending(model)
+                cleanPending(service.currentModel())
                 false
             }
             ControlId.FINISH_REVIEW -> {
@@ -157,13 +143,19 @@ class PanelActionDispatcher(
                 false
             }
             ControlId.COPY_CLI_INSTALL -> {
-                val cmd = if (model.situation == Situation.CLI_OUTDATED) NPM_UPDATE_CMD else NPM_INSTALL_CMD
+                val cmd = if (service.currentModel().situation == Situation.CLI_OUTDATED) {
+                    NPM_UPDATE_CMD
+                } else {
+                    NPM_INSTALL_CMD
+                }
                 CopyPasteManager.getInstance().setContents(StringSelection(cmd))
                 true
             }
             ControlId.OUT_OF_RANGE_HELP -> {
-                val stderr = model.stderr ?: "(no details)"
-                Messages.showInfoMessage(project, stderr, "How to fix it")
+                val stderr = service.currentModel().stderr?.trim().orEmpty()
+                val text = if (stderr.isNotEmpty()) stderr else UserCopy.OUT_OF_RANGE_FALLBACK
+                // VS Code uses a warning toast for the diagnostic.
+                UiMessages.warning(project, text, "How to fix it")
                 false
             }
             ControlId.OPEN_SUPPORT -> {
@@ -172,6 +164,8 @@ class PanelActionDispatcher(
             }
         }
     }
+
+    private fun modelWhy(): String? = service.currentModel().why?.text
 
     private fun openEntry() {
         val state = service.currentState()
@@ -199,19 +193,23 @@ class PanelActionDispatcher(
     private fun continueAt(index: Int?) {
         val branches = service.currentState().branches
         val source = resumableSourceAt(branches, index) ?: run {
-            Messages.showErrorDialog(project, "That review is not resumable.", "git review")
+            UiMessages.error(project, UserCopy.NOT_RESUMABLE)
             return
         }
-        if (requiresConfirmation(ControlId.CONTINUE_REVIEW)) {
-            val ok = Messages.showYesNoDialog(
+        if (!UiMessages.confirm(
                 project,
-                "Continue saved review $source?",
-                "git review",
-                Messages.getQuestionIcon(),
+                UserCopy.continueTitle(source),
+                UserCopy.continueDetail(source),
+                UserCopy.CONTINUE_BUTTON,
             )
-            if (ok != Messages.YES) return
+        ) {
+            return
         }
-        mutations.runSimple("continueReview", ActionParams.Continue(source))
+        mutations.runSimple(
+            "continueReview",
+            ActionParams.Continue(source),
+            progressTitle = UserCopy.continuingProgress(source),
+        )
     }
 
     private fun discardAt(index: Int?) {
@@ -225,9 +223,7 @@ class PanelActionDispatcher(
             HousekeepingAction(HousekeepingKind.CLEAN_ONE, src)
         }
         val copy = confirmCopyFor(action)
-        if (Messages.showYesNoDialog(project, copy.detail, copy.title, Messages.getWarningIcon()) != Messages.YES) {
-            return
-        }
+        if (!UiMessages.confirm(project, copy.title, copy.detail, copy.button)) return
         mutations.runHousekeeping(action)
     }
 
@@ -238,9 +234,7 @@ class PanelActionDispatcher(
             ?: return
         val action = HousekeepingAction(HousekeepingKind.CLEAN_KEEP_FIXES, src, onto = info?.second)
         val copy = confirmCopyFor(action)
-        if (Messages.showYesNoDialog(project, copy.detail, copy.title, Messages.getWarningIcon()) != Messages.YES) {
-            return
-        }
+        if (!UiMessages.confirm(project, copy.title, copy.detail, copy.button)) return
         mutations.runHousekeeping(action)
     }
 
@@ -259,7 +253,7 @@ class PanelActionDispatcher(
             )
             action.actionPerformed(event)
         } catch (e: Exception) {
-            Messages.showErrorDialog(project, "Action failed: ${e.message}", "git review")
+            UiMessages.error(project, e.message ?: "Action failed.")
         }
     }
 }

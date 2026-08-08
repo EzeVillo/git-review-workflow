@@ -5,8 +5,10 @@ import com.ezevillo.gitreview.domain.EntryRecord
 import com.ezevillo.gitreview.domain.PathRef
 import com.ezevillo.gitreview.domain.ReviewMode
 import com.ezevillo.gitreview.domain.ReviewState
+import com.ezevillo.gitreview.domain.UserCopy
 import com.ezevillo.gitreview.host.Bg
 import com.ezevillo.gitreview.settings.LastOpenedStore
+import com.ezevillo.gitreview.ui.UiMessages
 import com.intellij.diff.DiffContentFactory
 import com.intellij.diff.DiffManager
 import com.intellij.diff.contents.DiffContent
@@ -90,15 +92,21 @@ object OpenEntryActions {
                     project,
                     "git review: loading diff",
                     work = {
-                        val change = RangeChanges.nameStatusHead(cwd)
-                            .find { it.path == path || it.after == path || it.before == path }
-                        change?.let { listOf(rangeDiff(cwd, it)) }
+                        try {
+                            val changes = RangeChanges.nameStatusHead(cwd)
+                            val change = changes.find {
+                                it.path == path || it.after == path || it.before == path
+                            }
+                            Pair(true, change?.let { listOf(rangeDiff(cwd, it)) })
+                        } catch (_: Exception) {
+                            Pair(false, null)
+                        }
                     },
-                    then = { diffs ->
-                        if (diffs == null) {
-                            openWorkingTreeFile(project, cwd, path)
-                        } else {
-                            show(project, diffs)
+                    then = { (ok, diffs) ->
+                        when {
+                            !ok -> UiMessages.error(project, UserCopy.OPEN_RANGE_FAILED)
+                            diffs == null -> UiMessages.info(project, UserCopy.openNoChangesLeft(path))
+                            else -> show(project, diffs)
                         }
                     },
                 )
@@ -115,8 +123,20 @@ object OpenEntryActions {
         Bg.async(
             project,
             "git review: loading changes",
-            work = { RangeChanges.nameStatusHead(cwd).map { rangeDiff(cwd, it) } },
-            then = { diffs -> show(project, diffs) },
+            work = {
+                try {
+                    Pair(true, RangeChanges.nameStatusHead(cwd).map { rangeDiff(cwd, it) })
+                } catch (_: Exception) {
+                    Pair(false, emptyList())
+                }
+            },
+            then = { (ok, diffs) ->
+                when {
+                    !ok -> UiMessages.error(project, UserCopy.OPEN_RANGE_FAILED)
+                    diffs.isEmpty() -> UiMessages.info(project, UserCopy.OPEN_RANGE_EMPTY)
+                    else -> show(project, diffs)
+                }
+            },
         )
     }
 
@@ -135,9 +155,19 @@ object OpenEntryActions {
             project,
             "git review: loading commit",
             work = {
-                RangeChanges.nameStatusCommit(cwd, sha).take(20).map { commitDiff(cwd, sha, it) }
+                try {
+                    Pair(true, RangeChanges.nameStatusCommit(cwd, sha).take(20).map { commitDiff(cwd, sha, it) })
+                } catch (_: Exception) {
+                    Pair(false, emptyList())
+                }
             },
-            then = { diffs -> show(project, diffs) },
+            then = { (ok, diffs) ->
+                when {
+                    !ok -> UiMessages.error(project, UserCopy.openCommitFailed(sha))
+                    diffs.isEmpty() -> UiMessages.info(project, UserCopy.openCommitEmpty(sha))
+                    else -> show(project, diffs)
+                }
+            },
         )
     }
 

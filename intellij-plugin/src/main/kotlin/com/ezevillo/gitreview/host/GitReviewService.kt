@@ -10,6 +10,7 @@ import com.ezevillo.gitreview.domain.buildPanelModel
 import com.ezevillo.gitreview.domain.isReviewReadable
 import com.ezevillo.gitreview.settings.GitReviewSettings
 import com.ezevillo.gitreview.settings.LastOpenedStore
+import com.ezevillo.gitreview.ui.UiMessages
 import com.ezevillo.gitreview.vcs.pickSoleGitRoot
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
@@ -45,6 +46,15 @@ class GitReviewService(private val project: Project) {
         // paint. Both refreshes of a mutation happen while the lock is held; without
         // this the model would stay busy until some later refresh cleared it.
         lock.onDidChangeBusy { publish() }
+        // FR-036: palette/shortcuts do not see panel busy — surface the discard reason
+        // (same string as VS Code: "Another operation is already in progress").
+        lock.onDidDiscard { reason ->
+            ApplicationManager.getApplication().invokeLater {
+                if (!project.isDisposed) {
+                    UiMessages.info(project, reason)
+                }
+            }
+        }
     }
 
     fun currentState(): ReviewState = stateManager.current

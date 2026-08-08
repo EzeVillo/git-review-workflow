@@ -116,7 +116,12 @@ npm run test:integration  # @vscode/test-electron, builds fixtures with the real
 
 Integration tests shell out to the `git review` on `PATH`, so install this
 checkout first (`../install.sh`) if you haven't already. On Linux without a
-display, run the integration suite under `xvfb-run -a`.
+display, run the integration suite under `xvfb-run -a`. They also need **Node 22
+or newer**: `@vscode/test-electron` 3.x asks for it, and 3.x is the first release
+that locates the macOS binary through the app bundle's `Info.plist` instead of
+the historical `Contents/MacOS/Electron` — a name VS Code renamed to `Code` in
+1.110 and stopped shipping a symlink for, which fails on macOS alone with
+`spawn .../Contents/MacOS/Electron ENOENT`.
 
 They also load the extension from `dist/`, which they rebuild first
 (`pretest:integration`) whether you run them on their own or through `npm test`,

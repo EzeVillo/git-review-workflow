@@ -69,7 +69,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # @vscode/test-electron >= 3 declara engines.node >= 22, y es la
+          # primera versión que ubica el binario de macOS por el
+          # CFBundleExecutable del Info.plist en vez de asumir el histórico
+          # `Contents/MacOS/Electron`: VS Code lo renombró a `Code` en 1.110
+          # (microsoft/vscode#291948) y borró el symlink de compatibilidad en
+          # microsoft/vscode#326502, así que las stable actuales ya no lo traen
+          # y la 2.x muere con ENOENT al lanzar el host — sólo en macOS, porque
+          # el archive de Windows sigue teniendo `Code.exe` en la raíz.
+          node-version: 22
       # Los tests de integración construyen fixtures invocando `git review`
       # de verdad (research.md Decisión 11, "deuda anotada"): instalar el
       # checkout local es lo que hace que `git` lo descubra, igual que en un

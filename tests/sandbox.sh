@@ -115,6 +115,22 @@ git config core.autocrlf false
 git remote add origin "$origin"
 git config reviewworkflow.base develop
 
+# IntelliJ IDEA escribe .idea/ en cualquier directorio que abra, y el sandbox es
+# justamente el repo contra el que se prueba el plugin a mano (`./gradlew runIde`
+# -> abrir work/). Sin ignorarlos, esos archivos quedan untracked: bloquean
+# `git review start` con "you have local changes" y el `git add -A` de finish se
+# los lleva puestos a review-fixes/. Son de la herramienta, no del fixture, así
+# que van en .git/info/exclude y no en un .gitignore committeado: el pull request
+# bajo revisión queda exactamente igual que antes.
+cat >>.git/info/exclude <<'EOF'
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.ipr
+*.iws
+EOF
+
 # ── base branch ───────────────────────────────────────────────────────────────
 
 mkdir -p src docs

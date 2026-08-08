@@ -260,6 +260,20 @@ export class ReviewStateManager {
                 stderr: result.stderr
             });
         }
+        // Un timeout llega con exitCode null y sin errorCode, o sea que caería
+        // en `error` con el stderr vacío: el panel diría que algo falló sin
+        // decir qué, que es lo peor que puede decir de una CLI que está sana y
+        // sólo tardó. La situación sigue siendo `error` (no hay estado que
+        // mostrar), pero con un diagnóstico que apunta a dónde mirar.
+        if (result.timedOut) {
+            return this.setState({
+                situation: "error", ...EMPTY_ARRAYS,
+                stderr:
+                    "`git review status --porcelain` did not finish in time and was stopped. " +
+                    "Run it in a terminal to see how long it takes; if the CLI is an old " +
+                    "version, updating it may be enough. See the Git Review CLI output channel.",
+            });
+        }
 
         const baseSituation = situationForExitCode(result.exitCode);
         if (baseSituation !== "review") {

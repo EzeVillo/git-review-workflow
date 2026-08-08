@@ -30,14 +30,26 @@ des-citado unidireccional de paths, y el uso acotado de la API de `vscode.git`.
 Sin cambios respecto de `002`:
 
 ```text
-spawn(gitPath, ["review", <verbo>, …args], { cwd: RepositoryTarget.rootUri, shell: false, timeout, signal })
+spawn(gitPath, ["review", <verbo>, …args], { cwd: RepositoryTarget.rootUri, shell: false, signal })
 ```
 
 Con dos precisiones que agrega esta feature:
 
-- **`timeout` depende de la clase** (research.md, Decisión 6): 15 s lectura,
+- **El timeout depende de la clase** (research.md, Decisión 6): 15 s lectura,
   120 s mutación local, 300 s mutación con red. El valor único de `002` se
   calibró para un `status` y matar un `finish` a mitad es peor que esperar.
+
+  El techo lo aplica un temporizador **propio**, no la opción `timeout` de
+  `spawn` — por eso ya no figura en la firma de arriba. Esa opción no lo
+  cumplía: Node manda SIGTERM y después espera el evento `close`, que no llega
+  hasta que se cierran los pipes, y los sostienen los nietos que la señal no
+  alcanzó. Medido en Windows, un hijo con timeout de 2000 ms resolvía a los
+  8117 ms, o sea al terminar por su cuenta. Al vencer, la invocación mata lo que
+  puede (`taskkill /T` en Windows, señal al grupo de procesos en POSIX; en
+  Windows la capa MSYS no registra la paternidad, así que un nieto puede
+  sobrevivir), suelta los pipes y **resuelve en el acto** con `timedOut: true`,
+  sin esperar a que el kill surta efecto. Un timeout llega con `exitCode: null`
+  y sin `errorCode`; `timedOut` es lo que lo distingue de una CLI rota.
 - **Entorno no interactivo en la única invocación que toca la red** (`start`):
   `GIT_TERMINAL_PROMPT=0` y los askpass neutralizados, para que un pedido de
   credenciales falle de inmediato con el diagnóstico de git en vez de colgarse

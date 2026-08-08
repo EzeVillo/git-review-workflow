@@ -65,6 +65,8 @@ export interface CliLogEnd {
     errorCode?: string;
     durationMs: number;
     stderr: string;
+    /** La invocación se cortó por timeout; ver `invoke.ts`. */
+    timedOut?: boolean;
 }
 
 /**
@@ -76,6 +78,14 @@ export function logCliEnd(result: CliLogEnd): void {
         return;
     }
     const ms = `${result.durationMs}ms`;
+    // Antes que el resto: un timeout llega con exitCode null y sin errorCode,
+    // indistinguible en el log de un proceso que murió por su cuenta. Ésa fue
+    // exactamente la línea ilegible que hizo pasar por misterio un `status`
+    // que tardaba 30s ("← exit null 29656ms" con un timeout de 15000).
+    if (result.timedOut) {
+        channel.warn(`← timed out after ${ms} (killed)`);
+        return;
+    }
     if (result.errorCode) {
         channel.error(`← spawn failed ${result.errorCode}  ${ms}`);
         return;

@@ -9,12 +9,13 @@ function reviewState(branch: string, tip: string): ReviewState {
         situation: "review",
         state: {branch, source: "origin/" + branch, tip, mode: "whole", walkthrough: "none"},
         entries: [],
+        files: [],
         branches: [],
     };
 }
 
 function noReviewState(): ReviewState {
-    return {situation: "no-review", entries: [], branches: []};
+    return {situation: "no-review", entries: [], files: [], branches: []};
 }
 
 describe("staleGuard", () => {

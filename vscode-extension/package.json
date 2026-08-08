@@ -2,7 +2,7 @@
   "name": "git-review-workflow",
   "displayName": "git review workflow",
   "description": "Review a git-review-workflow pull request as a native walkthrough panel",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "EzeVillo",
   "license": "MIT",
   "icon": "media/icon.png",

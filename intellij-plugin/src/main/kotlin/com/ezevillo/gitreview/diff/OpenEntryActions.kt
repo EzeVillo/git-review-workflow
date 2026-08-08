@@ -114,10 +114,49 @@ object OpenEntryActions {
                 )
             }
             ReviewMode.STEP -> {
-                val sha = entry.id as? String ?: return
-                openCommitDiff(project, cwd, sha)
+                // PathRef = one file of the current commit (file-row). String = full commit Diff.
+                val path = (entry.id as? PathRef)?.display
+                if (path != null) {
+                    val sha = state.state.current as? String ?: return
+                    openCommitFileDiff(project, cwd, sha, path)
+                    project.getService(LastOpenedStore::class.java)
+                        .set(state.state.branch, path)
+                } else {
+                    val sha = entry.id as? String ?: return
+                    openCommitDiff(project, cwd, sha)
+                }
             }
         }
+        if (mode == ReviewMode.WHOLE) {
+            project.getService(LastOpenedStore::class.java)
+                .set(state.state.branch, entry.displayPath())
+        }
+    }
+
+    /** Single path inside a step commit (parent vs commit blob). */
+    fun openCommitFileDiff(project: Project, cwd: String, sha: String, path: String) {
+        Bg.async(
+            project,
+            "git review: loading diff",
+            work = {
+                try {
+                    val changes = RangeChanges.nameStatusCommit(cwd, sha)
+                    val change = changes.find {
+                        it.path == path || it.after == path || it.before == path
+                    }
+                    Pair(true, change?.let { listOf(commitDiff(cwd, sha, it)) })
+                } catch (_: Exception) {
+                    Pair(false, null)
+                }
+            },
+            then = { (ok, diffs) ->
+                when {
+                    !ok -> UiMessages.error(project, UserCopy.openCommitFailed(sha))
+                    diffs == null -> UiMessages.info(project, UserCopy.openNoChangesLeft(path))
+                    else -> show(project, diffs)
+                }
+            },
+        )
     }
 
     /**

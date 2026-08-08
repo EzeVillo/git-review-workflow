@@ -2,7 +2,7 @@
 # Source of bootstrap strings: vscode-extension code as of 2026-08-08.
 # Normative for CI: scripts/check-client-product-surface.mjs
 schema_version: 1
-min_cli_version: "0.4.0" # verified: vscode-extension/src/cli/version.ts
+min_cli_version: "0.5.0" # verified: vscode-extension/src/cli/version.ts
 npm_install: "npm install -g git-review-workflow" # verified: src/cli/installHint.ts
 npm_update: "npm install -g git-review-workflow@latest" # verified: src/cli/installHint.ts
 docs_readme_url: "https://github.com/EzeVillo/git-review-workflow#readme"
@@ -228,13 +228,15 @@ panel_layout:
       - {block: row, controls: [{id: openEntry, label: "File", emphasis: secondary, confirms: false}, {id: openChange, label: "Diff", emphasis: secondary, confirms: false}]}
       - {block: row, controls: [{id: prev, label: null, accessible_name: "Previous entry", emphasis: icon, confirms: false}, {id: next, label: null, accessible_name: "Next entry", emphasis: icon, confirms: false}]}
   review-step:
-    source_fns: [renderEntry, renderOpenRow, renderNavRow]
+    source_fns: [renderEntry, renderOpenRow, renderNavRow, renderFiles]
     blocks:
       - {block: identity_bar}
       - {block: notes}
       - {block: entry_head}
       - {block: entry_title}
       - {block: row, controls: [{id: openChange, label: "Diff", emphasis: secondary, confirms: false}]}
+      - {block: heading, text: "{n} file(s) in this commit"}
+      - {block: file_rows}
       - {block: row, controls: [{id: prev, label: null, accessible_name: "Previous entry", emphasis: icon, confirms: false}, {id: next, label: null, accessible_name: "Next entry", emphasis: icon, confirms: false}]}
   review-whole:
     source_fns: [renderFiles]
@@ -245,7 +247,7 @@ panel_layout:
       - {block: row, controls: [{id: openAllChanges, label: "Diff", emphasis: secondary, confirms: false, tooltip: "Open every change in this review at once"}]}
       - {block: file_rows}
   finish-conflict:
-    source_fns: [renderFinishConflictBanner, renderEntry, renderOpenRow]
+    source_fns: [renderFinishConflictBanner, renderEntry, renderOpenRow, renderFiles]
     blocks:
       - {block: identity_bar}
       - block: banner
@@ -262,6 +264,8 @@ panel_layout:
       - {block: row, controls: [{id: showWhy, label: "open in editor", emphasis: link, confirms: false}], when: why_present}
       - {block: row, controls: [{id: openEntry, label: "File", emphasis: secondary, confirms: false}, {id: openChange, label: "Diff", emphasis: secondary, confirms: false}], when: walk}
       - {block: row, controls: [{id: openChange, label: "Diff", emphasis: secondary, confirms: false}], when: step}
+      - {block: heading, text: "{n} file(s) in this commit", when: step}
+      - {block: file_rows, when: step}
       # navigation row intentionally absent
 
 title_actions:

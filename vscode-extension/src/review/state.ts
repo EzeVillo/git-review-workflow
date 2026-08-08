@@ -62,6 +62,12 @@ export interface ReviewState {
      */
     base?: string;
     /**
+     * Archivos del commit actual en modo step (registros `file`). Ausente o
+     * vacío fuera de step o cuando el commit no toca paths. No son las
+     * entradas de la secuencia (`entries` sigue siendo commits).
+     */
+    files?: EntryRecord[];
+    /**
      * El cierre trabado que llevó a `situation === "finish-conflict"`
      * (contracts/finish-state.md). Ausente en cualquier otra situación — el
      * cierre `pending` que lleva a `finish-pending` no vive acá, sino en la
@@ -320,6 +326,7 @@ export class ReviewStateManager {
             situation,
             state: parsed.state,
             entries: parsed.entries,
+            files: parsed.files,
             branches: [],
         };
         // Se copian sólo si llegaron: asignar `undefined` explícito daría lo

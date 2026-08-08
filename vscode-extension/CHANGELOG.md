@@ -6,6 +6,24 @@ its own [releases](https://github.com/EzeVillo/git-review-workflow/releases).
 This project follows [semantic versioning](https://semver.org/spec/v2.0.0.html)
 and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 
+## [0.1.2] — 2026-08-08
+
+Requires `git review` **0.5.0** or newer.
+
+### Added
+
+- **Step mode file list.** While reviewing commit by commit, the panel lists
+  every file the current commit touches (from `status --porcelain` `file`
+  records), the same selectable inventory whole mode already had for the full
+  range. The commit **Diff** control still opens every change at once; each row
+  opens that file's diff against the parent. The last file you opened stays
+  marked for the review branch. Requires a CLI that emits `file` lines (current
+  `git review` on this branch).
+
+### Changed
+
+- Minimum required CLI raised from 0.4.0 to **0.5.0**.
+
 ## [0.1.1] — 2026-08-08
 
 Two fixes to actions that could silently do nothing. Still requires

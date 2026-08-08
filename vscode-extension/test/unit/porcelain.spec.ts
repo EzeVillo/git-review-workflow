@@ -82,6 +82,36 @@ describe("parsePorcelain", () => {
         assert.strictEqual(result.entries[1].banked, false);
     });
 
+    it("file en modo step: inventario del commit actual, path como PathRef", () => {
+        const out = [
+            "state\treview/feat-x\torigin/feat-x\tabc123\tstep\tnone\t2\t2\t2\t9fe1c0d",
+            "entry\t1\t1111111\t0",
+            "entry\t2\t9fe1c0d\t0",
+            "file\t1\tb.txt",
+            "file\t2\tsrc/c.txt",
+            "",
+        ].join("\n");
+        const result = parsePorcelain(out);
+        assert.strictEqual(result.files.length, 2);
+        assert.strictEqual(result.files[0].position, 1);
+        const id0 = result.files[0].id as PathRef;
+        assert.strictEqual(id0.display, "b.txt");
+        assert.strictEqual((result.files[1].id as PathRef).display, "src/c.txt");
+        // entries siguen siendo commits; files no se mezclan.
+        assert.strictEqual(result.entries.length, 2);
+        assert.strictEqual(typeof result.entries[0].id, "string");
+    });
+
+    it("sin lineas file el inventario queda vacio (no ausente)", () => {
+        const out = [
+            "state\treview/feat-x\torigin/feat-x\tabc123\tstep\tnone\t1\t1\t1\t1111111",
+            "entry\t1\t1111111\t0",
+            "",
+        ].join("\n");
+        const result = parsePorcelain(out);
+        assert.deepStrictEqual(result.files, []);
+    });
+
     it("entry en modo whole trae sólo posición y path, id como PathRef", () => {
         const out = [
             "state\treview/feat-x\torigin/feat-x\tabc123\twhole\tnone",

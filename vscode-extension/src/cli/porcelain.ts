@@ -85,6 +85,14 @@ export interface PorcelainResult {
     authors?: Map<number, string>;
     /** Base del rango. Sólo en modo whole, y sólo si hay una registrada. */
     base?: string;
+    /**
+     * Inventario de archivos del **commit actual** en modo step (registros
+     * `file` del contrato). Posición 1-based *dentro de ese commit*, no de la
+     * secuencia de commits. Vacío (nunca ausente en el parseo) cuando no hay
+     * líneas `file` — commit sin paths, o CLI que no las emite. En whole/walk
+     * la CLI no emite `file` (en whole los paths ya van como `entry`).
+     */
+    files: EntryRecord[];
 }
 
 /**
@@ -188,6 +196,7 @@ export function parsePorcelain(stdout: string): PorcelainResult {
 
     let state: StateRecord | undefined;
     const entries: EntryRecord[] = [];
+    const files: EntryRecord[] = [];
     // Se crean sólo si el registro llegó: un mapa vacío diría "la CLI reporta
     // asuntos y esta review no tiene ninguno", que es otra cosa (FR-004).
     let subjects: Map<number, string> | undefined;
@@ -251,6 +260,20 @@ export function parsePorcelain(stdout: string): PorcelainResult {
                 entries.push(entry);
                 break;
             }
+            // Inventario del commit actual en step (no de la secuencia). El
+            // path se trata como en whole/walk: PathRef, no string suelto.
+            case "file": {
+                if (!state) {
+                    throw new Error("file record before state record");
+                }
+                const position = toInt(fields[1]);
+                const rawPath = fields[2];
+                if (rawPath === undefined || rawPath.length === 0) {
+                    break;
+                }
+                files.push({position, id: toPathRef(rawPath)});
+                break;
+            }
             // El texto libre se lee como "el resto de la línea desde el segundo
             // tab", nunca como `fields[2]`: un asunto o un nombre de autor
             // pueden contener un tab literal y `split` los partiría en varios
@@ -309,7 +332,7 @@ export function parsePorcelain(stdout: string): PorcelainResult {
         throw new Error("porcelain output has no state record");
     }
 
-    const result: PorcelainResult = {state, entries};
+    const result: PorcelainResult = {state, entries, files};
     if (subjects) {
         result.subjects = subjects;
     }

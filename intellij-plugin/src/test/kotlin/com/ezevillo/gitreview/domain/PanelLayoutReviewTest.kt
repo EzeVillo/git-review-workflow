@@ -39,6 +39,13 @@ class PanelLayoutReviewTest {
         assertTrue(layout.blocks.none { it is Block.Why })
         val title = layout.blocks.filterIsInstance<Block.EntryTitle>().first()
         assertEquals("Fix the thing", title.text)
+        // Inventario del commit actual (file rows), como whole.
+        val files = layout.blocks.filterIsInstance<Block.FileRows>().first()
+        assertEquals(2, files.rows.size)
+        assertEquals("src/a.kt", files.rows[0].display)
+        assertTrue(files.rows[0].lastOpened)
+        val heading = layout.blocks.filterIsInstance<Block.Heading>().first()
+        assertEquals("2 files in this commit", heading.text)
     }
 
     @Test

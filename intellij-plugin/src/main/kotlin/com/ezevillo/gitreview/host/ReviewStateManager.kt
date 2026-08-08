@@ -125,6 +125,7 @@ class ReviewStateManager(
                         situation = situation,
                         state = porcelain.state,
                         entries = porcelain.entries,
+                        files = porcelain.files,
                         branches = emptyList(),
                         subjects = porcelain.subjects,
                         authors = porcelain.authors,

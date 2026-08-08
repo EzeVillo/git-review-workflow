@@ -470,38 +470,62 @@ private fun entryBlocks(model: PanelModel, enabled: Boolean, includeNav: Boolean
         }
     }
     out.add(openRow(model, enabled))
+    // Step: file inventory of the current commit under the Diff of the commit
+    // (same selectable rows as whole; openChange with index opens one path).
+    if (model.mode == ReviewMode.STEP) {
+        out.addAll(fileInventoryBlocks(model, enabled, unit = "commit", includeOpenAll = false))
+    }
     if (includeNav && !model.navigationLocked) {
         out.add(navRow(model, enabled))
     }
     return out
 }
 
-private fun wholeBlocks(model: PanelModel, enabled: Boolean): List<Block> {
+private fun wholeBlocks(model: PanelModel, enabled: Boolean): List<Block> =
+    fileInventoryBlocks(model, enabled, unit = "review", includeOpenAll = true)
+
+/**
+ * Selectable file list shared by whole (range) and step (current commit).
+ * [unit] is "review" or "commit" for the heading / empty copy.
+ * [includeOpenAll] is whole-only (step already has Diff on the commit row).
+ */
+private fun fileInventoryBlocks(
+    model: PanelModel,
+    enabled: Boolean,
+    unit: String,
+    includeOpenAll: Boolean,
+): List<Block> {
     if (model.files.isEmpty()) {
-        return listOf(Block.EmptyMessage("This review's range does not touch any files."))
+        val empty = if (unit == "commit") {
+            "This commit changes no files."
+        } else {
+            "This review's range does not touch any files."
+        }
+        return listOf(Block.EmptyMessage(empty))
     }
     val n = model.files.size
-    val heading = if (n == 1) "1 file in this review" else "$n files in this review"
+    val heading = if (n == 1) "1 file in this $unit" else "$n files in this $unit"
     val out = ArrayList<Block>()
     out.add(Block.Heading(heading))
-    // Diff opens a single DiffRequestChain window (Prev/Next file), not one tab each.
-    out.add(
-        Block.Row(
-            listOf(
-                ctrl(
-                    ControlId.OPEN_ALL_CHANGES,
-                    "Diff",
-                    Emphasis.SECONDARY,
-                    enabled,
-                    tooltip = "Open every change in this review at once",
+    if (includeOpenAll) {
+        // Diff opens a single DiffRequestChain window (Prev/Next file), not one tab each.
+        out.add(
+            Block.Row(
+                listOf(
+                    ctrl(
+                        ControlId.OPEN_ALL_CHANGES,
+                        "Diff",
+                        Emphasis.SECONDARY,
+                        enabled,
+                        tooltip = "Open every change in this review at once",
+                    ),
                 ),
             ),
-        ),
-    )
+        )
+    }
     out.add(
         Block.FileRows(
-            model.files.mapIndexed { i, f ->
-                // position is 1-based in porcelain; use list index for dispatcher
+            model.files.map { f ->
                 FileRow(
                     display = f.display,
                     index = f.position,
@@ -748,6 +772,9 @@ private fun skeletonBody(model: PanelModel): List<Block> {
     }
     // Real controls, all disabled
     out.add(openRow(model, enabled = false))
+    if (model.mode == ReviewMode.STEP) {
+        out.addAll(fileInventoryBlocks(model, enabled = false, unit = "commit", includeOpenAll = false))
+    }
     if (!model.navigationLocked) {
         out.add(navRow(model, enabled = false))
     }

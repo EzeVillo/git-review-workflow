@@ -228,6 +228,17 @@ fun buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelModel {
     }
 
     val current = currentEntry(state.entries, review.position)
+    // Step: file inventory of the commit under the cursor (`file` records).
+    val stepFiles = if (review.mode == ReviewMode.STEP) {
+        state.files.map { toPanelEntry(it, state.subjects, state.authors) }
+    } else {
+        emptyList()
+    }
+    val stepLastOpened = if (review.mode == ReviewMode.STEP) {
+        inputs.lastOpened?.takeIf { lo -> stepFiles.any { it.display == lo } }
+    } else {
+        null
+    }
     model = model.copy(
         position = review.position,
         total = review.total,
@@ -235,6 +246,8 @@ fun buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelModel {
         atFirst = atFirst,
         atLast = atLast,
         current = current?.let { toPanelEntry(it, state.subjects, state.authors) },
+        files = stepFiles,
+        lastOpened = stepLastOpened,
         why = if (review.mode == ReviewMode.WALK && current != null) {
             inputs.why ?: PanelWhy(WhyState.LOADING)
         } else null,

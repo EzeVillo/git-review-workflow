@@ -71,6 +71,12 @@ data class StatusFinishRecord(
 data class PorcelainResult(
     val state: StateRecord,
     val entries: List<EntryRecord>,
+    /**
+     * Step-mode inventory of files in the *current* commit (`file` records).
+     * Position is 1-based within that commit. Empty when the CLI emits none
+     * (empty commit, or walk/whole where `file` is not used).
+     */
+    val files: List<EntryRecord> = emptyList(),
     val finish: StatusFinishRecord? = null,
     val readonly: Boolean? = null,
     val keysOnly: Boolean? = null,
@@ -129,6 +135,7 @@ fun parsePorcelain(stdout: String): PorcelainResult {
 
     var state: StateRecord? = null
     val entries = ArrayList<EntryRecord>()
+    val files = ArrayList<EntryRecord>()
     var subjects: MutableMap<Int, String>? = null
     var authors: MutableMap<Int, String>? = null
     var base: String? = null
@@ -196,6 +203,14 @@ fun parsePorcelain(stdout: String): PorcelainResult {
                 }
                 entries.add(entry)
             }
+            // Step: files of the current commit only (path as PathRef, like whole).
+            "file" -> {
+                state ?: throw IllegalArgumentException("file record before state record")
+                val position = toInt(fields.getOrNull(1))
+                val rawPath = fields.getOrNull(2)
+                if (rawPath.isNullOrEmpty()) continue
+                files.add(EntryRecord(position = position, id = toPathRef(rawPath)))
+            }
             "subject", "author" -> {
                 val position = toOptionalInt(fields.getOrNull(1))
                 val text = restAfterTab(line, 2)
@@ -225,6 +240,7 @@ fun parsePorcelain(stdout: String): PorcelainResult {
     return PorcelainResult(
         state = st,
         entries = entries,
+        files = files,
         finish = finish,
         readonly = isReadonly,
         keysOnly = isKeysOnly,

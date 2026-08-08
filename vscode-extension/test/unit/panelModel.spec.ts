@@ -17,6 +17,7 @@ function reviewState(stdout: string): ReviewState {
         situation: "review",
         state: parsed.state,
         entries: parsed.entries,
+        files: parsed.files,
         branches: [],
     };
     if (parsed.subjects) {
@@ -355,28 +356,48 @@ describe("buildPanelModel", () => {
         ]);
     });
 
-    it("lastOpened no se proyecta fuera de whole", () => {
-        // En step/walk la entrada abierta es siempre la del cursor, que ya está
-        // dibujada: una marca ahí sería una copia.
+    it("lastOpened en step se proyecta si el path sigue en el commit", () => {
         const walk = buildPanelModel(reviewState(WALK), {busy: false, lastOpened: "src/a.ts"});
         assert.strictEqual(walk.lastOpened, undefined);
 
-        const step = buildPanelModel(
-            reviewState("state\treview/feat\torigin/feat\tabc123\tstep\tnone\t1\t1\t1\tabc1234\nentry\t1\tabc1234\t0\n"),
-            {busy: false, lastOpened: "abc1234"}
-        );
-        assert.strictEqual(step.lastOpened, undefined);
+        const stepStdout = [
+            "state\treview/feat\torigin/feat\tabc123\tstep\tnone\t1\t1\t1\tabc1234",
+            "entry\t1\tabc1234\t0",
+            "file\t1\tsrc/a.ts",
+            "file\t2\tsrc/b.ts",
+            "",
+        ].join("\n");
+        const step = buildPanelModel(reviewState(stepStdout), {busy: false, lastOpened: "src/b.ts"});
+        assert.strictEqual(step.lastOpened, "src/b.ts");
+        // SHA del commit no es una fila de archivo: no se marca.
+        const bySha = buildPanelModel(reviewState(stepStdout), {busy: false, lastOpened: "abc1234"});
+        assert.strictEqual(bySha.lastOpened, undefined);
     });
 
-    it("files queda vacío (no ausente) fuera de whole", () => {
+    it("files en step viene de registros file; vacio en walk o sin file", () => {
         const walk = buildPanelModel(reviewState(WALK), {busy: false});
         assert.deepStrictEqual(walk.files, []);
 
-        const step = buildPanelModel(
+        const stepEmpty = buildPanelModel(
             reviewState("state\treview/feat\torigin/feat\tabc123\tstep\tnone\t1\t1\t1\tabc1234\nentry\t1\tabc1234\t0\n"),
             {busy: false}
         );
-        assert.deepStrictEqual(step.files, []);
+        assert.deepStrictEqual(stepEmpty.files, []);
+
+        const stepWith = buildPanelModel(
+            reviewState([
+                "state\treview/feat\torigin/feat\tabc123\tstep\tnone\t1\t1\t1\tabc1234",
+                "entry\t1\tabc1234\t0",
+                "file\t1\ta.txt",
+                "file\t2\tsrc/b.txt",
+                "",
+            ].join("\n")),
+            {busy: false}
+        );
+        assert.deepStrictEqual(stepWith.files, [
+            {position: 1, display: "a.txt", essential: false, annotated: true, banked: false},
+            {position: 2, display: "src/b.txt", essential: false, annotated: true, banked: false},
+        ]);
     });
 
     it("el origen y el tip llegan al modelo en los tres modos (003 US2)", () => {
@@ -566,6 +587,7 @@ describe("buildPanelModel — finish (005 US3)", () => {
             situation: "finish-conflict",
             state: parsed.state,
             entries: parsed.entries,
+            files: parsed.files,
             branches: [],
         };
         if (parsed.finish) {

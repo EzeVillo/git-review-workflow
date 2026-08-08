@@ -8,6 +8,7 @@ import com.ezevillo.gitreview.domain.HousekeepingKind
 import com.ezevillo.gitreview.domain.NPM_INSTALL_CMD
 import com.ezevillo.gitreview.domain.NPM_UPDATE_CMD
 import com.ezevillo.gitreview.domain.PanelModel
+import com.ezevillo.gitreview.domain.ReviewMode
 import com.ezevillo.gitreview.domain.Situation
 import com.ezevillo.gitreview.domain.UserCopy
 import com.ezevillo.gitreview.domain.confirmCopyFor
@@ -177,8 +178,14 @@ class PanelActionDispatcher(
     private fun openChange(index: Int?) {
         val state = service.currentState()
         val cwd = pickSoleGitRoot(project)?.rootPath ?: return
+        // Step + index: position is within the current commit's file list, not
+        // the commit sequence (entries). Whole + index: entries are the files.
         val entry = if (index != null) {
-            state.entries.find { it.position == index }
+            if (state.state?.mode == ReviewMode.STEP) {
+                state.files.find { it.position == index }
+            } else {
+                state.entries.find { it.position == index }
+            }
         } else {
             currentEntry(state.entries, state.state?.position)
         } ?: return

@@ -33,6 +33,7 @@ function review(rows: string[][], inputs: PanelInputs = {busy: false}): PanelMod
         situation: "review",
         state: parsed.state,
         entries: parsed.entries,
+        files: parsed.files,
         branches: [],
     };
     // Sólo si el parser los produjo: es lo que hace que un pane sin registros
@@ -51,7 +52,7 @@ function review(rows: string[][], inputs: PanelInputs = {busy: false}): PanelMod
 }
 
 function empty(situation: Situation, stderr?: string): PanelModel {
-    const state: ReviewState = {situation, entries: [], branches: []};
+    const state: ReviewState = {situation, entries: [], files: [], branches: []};
     if (stderr !== undefined) {
         state.stderr = stderr;
     }
@@ -63,6 +64,7 @@ function inventory(rows: string[][]): PanelModel {
     const state: ReviewState = {
         situation: "no-review",
         entries: [],
+        files: [],
         branches: parseListPorcelain(porcelain(rows)),
     };
     return buildPanelModel(state, {busy: false});
@@ -77,6 +79,7 @@ function finishPending(rows: string[][]): PanelModel {
     const state: ReviewState = {
         situation: "finish-pending",
         entries: [],
+        files: [],
         branches: parseListPorcelain(porcelain(rows)),
     };
     return buildPanelModel(state, {busy: false});
@@ -153,6 +156,13 @@ const STEP_ROWS: string[][] = [
     ["entry", "4", "d4e5f6a", "0"],
 ];
 
+/** Inventario `file` del commit bajo el cursor (posición 1 en STEP_ROWS). */
+const STEP_FILE_ROWS: string[][] = [
+    ["file", "1", "src/cli/porcelain.ts"],
+    ["file", "2", "src/views/panelModel.ts"],
+    ["file", "3", "README.md"],
+];
+
 /**
  * Los registros que 003 agrega. El asunto de la posición 3 es deliberadamente
  * largo: es el que muestra qué hace el panel cuando no entra en el ancho del
@@ -215,13 +225,17 @@ export const PREVIEW_PANES: PreviewPane[] = [
     },
     {
         name: "step",
-        caption: "step — primer commit, con ediciones bancadas, asunto y autor",
-        model: review([...STEP_ROWS, ...STEP_TEXT_ROWS], {busy: false}),
+        caption: "step — primer commit, con ediciones bancadas, asunto, autor y archivos",
+        model: review([...STEP_ROWS, ...STEP_TEXT_ROWS, ...STEP_FILE_ROWS], {
+            busy: false,
+            lastOpened: "src/views/panelModel.ts",
+        }),
     },
     {
         // El mismo review contra una CLI anterior a los registros subject/author.
         // Al lado del pane de arriba es la prueba de que degradar no deja huecos:
         // el SHA vuelve a ser el cuerpo y la línea de autor no existe (FR-003).
+        // Sin file lines: CLI que no emite el inventario de paths del commit.
         name: "step-legacy-cli",
         caption: "step — misma review con una CLI que no reporta asunto ni autor",
         model: review(STEP_ROWS, {busy: false}),

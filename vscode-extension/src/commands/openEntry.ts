@@ -85,9 +85,25 @@ export async function openWorkingTreeFile(rootUri: vscode.Uri, display: string):
     await vscode.window.showTextDocument(document);
 }
 
-/** Comando `gitReview.openChange` — siempre el diff, nunca el archivo del working tree. */
-export async function openChange(rootUri: vscode.Uri, mode: ReviewMode, entry: EntryRecord): Promise<void> {
+/**
+ * Comando `gitReview.openChange` — siempre el diff, nunca el archivo del working tree.
+ *
+ * En step:
+ * - `entry.id` string (SHA) → multi-diff de todo el commit (botón Diff);
+ * - `entry.id` PathRef + `commitSha` → diff de un solo archivo de ese commit
+ *   (fila del inventario `file`).
+ */
+export async function openChange(
+    rootUri: vscode.Uri,
+    mode: ReviewMode,
+    entry: EntryRecord,
+    commitSha?: string
+): Promise<void> {
     if (mode === "step") {
+        if (isPathRef(entry.id) && commitSha !== undefined && commitSha.length > 0) {
+            await openCommitFileChange(rootUri, commitSha, entry.id.display);
+            return;
+        }
         if (typeof entry.id === "string") {
             await openCommitChanges(rootUri, entry.id);
         }
@@ -97,6 +113,59 @@ export async function openChange(rootUri: vscode.Uri, mode: ReviewMode, entry: E
         return;
     }
     await openFileChange(rootUri, entry.id.display);
+}
+
+/**
+ * Un solo archivo del commit en step: mismos lados que el multi-diff del
+ * commit (padre vs blob del commit), no el working tree.
+ */
+async function openCommitFileChange(
+    rootUri: vscode.Uri,
+    sha: string,
+    display: string
+): Promise<void> {
+    const gitApi = await ensureGitApi();
+    if (!gitApi) {
+        await reportMissingGitApi("a commit's changes");
+        return;
+    }
+    const changes = await readCommitChanges(rootUri, sha);
+    if (!changes) {
+        void vscode.window.showErrorMessage(`Could not read the files of commit ${sha}.`);
+        return;
+    }
+    const change = changes.find(
+        (candidate) =>
+            candidate.path === display
+            || candidate.after === display
+            || candidate.before === display
+    );
+    if (!change) {
+        void vscode.window.showInformationMessage(
+            `${display} has no changes in commit ${sha.slice(0, 7)}.`
+        );
+        return;
+    }
+    const resources = commitChangeResources(gitApi, rootUri, sha, [change])[0];
+    if (!resources) {
+        return;
+    }
+    const [, left, right] = resources;
+    if (left !== undefined && right !== undefined) {
+        await vscode.commands.executeCommand(
+            "vscode.diff",
+            left,
+            right,
+            `${fileName(display)} (${sha.slice(0, 7)})`
+        );
+        return;
+    }
+    const single = right ?? left;
+    if (single === undefined) {
+        return;
+    }
+    const document = await vscode.workspace.openTextDocument(single);
+    await vscode.window.showTextDocument(document);
 }
 
 /** El nombre del archivo; los paths de git son siempre POSIX, con `/`. */

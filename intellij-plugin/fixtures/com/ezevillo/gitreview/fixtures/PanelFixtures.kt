@@ -137,7 +137,16 @@ object PanelFixtures {
     fun reviewStep(
         busy: Boolean = false,
         position: Int = 2,
+        withFiles: Boolean = true,
     ): PanelModel {
+        val stepFiles = if (withFiles) {
+            listOf(
+                EntryRecord(1, toPathRef("src/a.kt")),
+                EntryRecord(2, toPathRef("src/b.kt")),
+            )
+        } else {
+            emptyList()
+        }
         return buildPanelModel(
             ReviewState(
                 situation = Situation.REVIEW,
@@ -151,10 +160,14 @@ object PanelFixtures {
                     EntryRecord(3, "ccc3333", banked = false),
                     EntryRecord(4, "ddd4444", banked = false),
                 ),
+                files = stepFiles,
                 subjects = mapOf(2 to "Fix the thing"),
                 authors = mapOf(2 to "Ada"),
             ),
-            PanelInputs(busy = busy),
+            PanelInputs(
+                busy = busy,
+                lastOpened = if (withFiles) "src/a.kt" else null,
+            ),
         )
     }
 

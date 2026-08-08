@@ -8,6 +8,8 @@ data class ReviewState(
     val situation: Situation,
     val state: StateRecord? = null,
     val entries: List<EntryRecord> = emptyList(),
+    /** Step: files of the current commit (`file` porcelain). Empty otherwise. */
+    val files: List<EntryRecord> = emptyList(),
     val branches: List<BranchRecord> = emptyList(),
     val config: EffectiveConfig? = null,
     val candidates: List<CandidateBranch>? = null,

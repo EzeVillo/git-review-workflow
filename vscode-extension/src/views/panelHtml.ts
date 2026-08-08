@@ -1032,6 +1032,12 @@ export function panelHtml(nonce: string): string {
     }
 
     body.appendChild(renderOpenRow(model));
+    // Step: debajo del Diff del commit, la lista de archivos de ese commit
+    // (misma UX de filas que whole). Vive dentro del body de la entrada porque
+    // el cursor de commits sigue siendo el de arriba (prev/next).
+    if (model.mode === "step") {
+      body.appendChild(renderFiles(model));
+    }
     // FR-027: un cierre trabado retira los controles de navegación del todo —
     // no basta con deshabilitarlos, porque eso deja ver una secuencia que ya
     // no corresponde recorrer. El banner de más arriba es la salida ofrecida
@@ -1061,6 +1067,10 @@ export function panelHtml(nonce: string): string {
     if (model.mode === "walk") { body.appendChild(whyLoading()); }
 
     body.appendChild(renderOpenRow(model));
+    // Misma silueta que renderEntry en step: hueco del listado de archivos.
+    if (model.mode === "step") {
+      body.appendChild(renderFiles(model));
+    }
     if (!model.navigationLocked) { body.appendChild(renderNavRow(model)); }
     return freeze(body);
   }
@@ -1120,34 +1130,34 @@ export function panelHtml(nonce: string): string {
   }
 
   /**
-   * El listado de whole (FR-010): un inventario, no una secuencia — sin
-   * cursor, sin controles de navegación. Cada fila abre el diff de su propia
-   * entrada por su posición (no la "actual": whole no tiene una), reusando
-   * el mismo helper button() que ya postea type+index para el inventario del
-   * estado vacío. El diff y no el archivo del working tree: acá el objetivo
-   * es revisar el cambio, no editar el resultado aplicado. Un rango sin
-   * archivos MUST decirlo explícitamente (FR-007) — nunca una lista en
-   * blanco sin explicación.
-   *
-   * Arriba de la lista va el mismo control que step tiene por commit, y por la
-   * misma razón: la unidad de revisión del modo, entera y de un vistazo. Acá esa
-   * unidad es el rango completo, así que abre todos los archivos juntos en un
-   * multi-diff. Lleva title porque en esta pantalla "Diff" sin más se confunde
-   * con el de cada fila.
+   * Inventario de archivos seleccionables:
+   * - whole (FR-010): paths del rango; Diff arriba abre todo el rango
+   *   (openAllChanges); cada fila abre un path.
+   * - step: paths del commit actual (registros file del porcelain); el Diff
+   *   del commit vive en renderOpenRow (openChange sin indice); cada fila
+   *   abre un path de ese commit. Sin openAllChanges aca para no duplicar
+   *   el Diff del commit.
+   * Sin cursor en la lista. Vacio se dice explicitamente (FR-007).
    */
   function renderFiles(model) {
+    const step = model.mode === "step";
     if (model.files.length === 0) {
-      return empty("This review's range does not touch any files.");
+      return empty(step
+        ? "This commit changes no files."
+        : "This review's range does not touch any files.");
     }
     const box = el("div", "files");
     const n = model.files.length;
-    box.appendChild(el("h2", null, n + (n === 1 ? " file" : " files") + " in this review"));
+    const unit = step ? " in this commit" : " in this review";
+    box.appendChild(el("h2", null, n + (n === 1 ? " file" : " files") + unit));
 
-    const all = el("div", "row");
-    const allButton = button("Diff", "openAllChanges", null, "diff");
-    allButton.title = "Open every change in this review at once";
-    all.appendChild(allButton);
-    box.appendChild(all);
+    if (!step) {
+      const all = el("div", "row");
+      const allButton = button("Diff", "openAllChanges", null, "diff");
+      allButton.title = "Open every change in this review at once";
+      all.appendChild(allButton);
+      box.appendChild(all);
+    }
 
     model.files.forEach(function (file) {
       const row = button(file.display, "openChange", "file-row", "diff", file.position);

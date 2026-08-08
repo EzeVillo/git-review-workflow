@@ -189,24 +189,20 @@ export interface PanelModel {
     current?: PanelEntry;
     entryCount: number;
     /**
-     * Los archivos del rango en modo whole (FR-010): un inventario, no una
-     * secuencia — sin cursor, sin `essential`/`annotated`/`banked` con
-     * significado (siempre `false`/`true`/`false` por ausencia de campo, como
-     * en cualquier `PanelEntry` de un modo que no los reporta). Vacío (nunca
-     * ausente) fuera de whole, donde la colección se recorre con el cursor.
+     * Inventario de archivos seleccionables:
+     * - whole: los del rango (FR-010), desde `entry`;
+     * - step: los del commit actual, desde registros `file`.
+     * Sin cursor propio. Vacío (nunca ausente) en walk o cuando no hay paths.
      */
     files: PanelEntry[];
     /**
-     * `PanelEntry.display` de la última entrada que el revisor abrió en whole,
-     * para marcarla en la lista. Sólo en whole y sólo si sigue estando en el
-     * rango: una marca que no corresponde a ninguna fila no se emite, así que un
-     * archivo que salió del PR no deja un recuerdo apuntando a la nada.
+     * `PanelEntry.display` de la última fila de archivo que el revisor abrió
+     * (whole o step), para marcarla en la lista. Sólo si sigue en `files`: un
+     * path que salió del rango o del commit actual no deja una marca huérfana.
      *
-     * No es estado del review y la CLI no lo conoce (la lista de whole no tiene
-     * cursor): es del lado del editor, que es el único que sabe qué se abrió
-     * desde el panel. Se lleva por `display` y no por posición porque las
-     * posiciones se corren cuando el rango cambia, y ahí la marca señalaría otro
-     * archivo en silencio.
+     * No es estado del review y la CLI no lo conoce: es del lado del editor.
+     * Se lleva por `display` y no por posición porque las posiciones se corren
+     * cuando el rango/commit cambia.
      */
     lastOpened?: string;
     /** Sólo en walk: el modo step no tiene explicaciones. */
@@ -451,6 +447,15 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
     const current = currentEntry(state.entries, review.position);
     if (current) {
         base.current = toPanelEntry(current, state.subjects, state.authors);
+    }
+
+    // Step: inventario del commit bajo el cursor (registros `file`), no de la
+    // secuencia de commits. Misma marca lastOpened que whole, validada acá.
+    if (review.mode === "step") {
+        base.files = (state.files ?? []).map((file) => toPanelEntry(file));
+        if (inputs.lastOpened !== undefined && base.files.some((file) => file.display === inputs.lastOpened)) {
+            base.lastOpened = inputs.lastOpened;
+        }
     }
 
     if (review.mode === "walk" && current) {

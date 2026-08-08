@@ -48,6 +48,10 @@ import {
     WalkthroughViewProvider,
 } from "./views/walkthroughViewProvider";
 
+function isEntryRecordArg(value: unknown): value is EntryRecord {
+    return typeof value === "object" && value !== null && (value as EntryRecord).id !== undefined;
+}
+
 function isPathRef(id: string | PathRef): id is PathRef {
     return typeof id !== "string";
 }
@@ -172,13 +176,21 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
     }
 
     /**
-     * Registra la fila que se acaba de abrir y redibuja el panel con la marca.
-     * Sólo en whole: en step/walk la entrada abierta es siempre la del cursor,
-     * que ya está en pantalla, y una marca ahí sería una copia.
+     * Registra la fila de archivo abierta y redibuja el panel con la marca.
+     * Whole (lista del rango) y step (lista del commit actual). Walk no: la
+     * entrada abierta es siempre la del cursor.
      */
     function rememberOpened(state: ReviewState, entry: EntryRecord): void {
         const review = state.state;
-        if (state.situation !== "review" || !review || review.mode !== "whole") {
+        if (
+            state.situation !== "review"
+            || !review
+            || (review.mode !== "whole" && review.mode !== "step")
+        ) {
+            return;
+        }
+        // Sólo paths: en step el Diff del commit (SHA) no es una fila de la lista.
+        if (!isPathRef(entry.id)) {
             return;
         }
         const map = lastOpenedMap();
@@ -186,7 +198,7 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
         // de inserción: es lo que hace que el recorte de abajo saque las reviews
         // menos usadas y no la que se acaba de tocar.
         delete map[review.branch];
-        map[review.branch] = isPathRef(entry.id) ? entry.id.display : entry.id;
+        map[review.branch] = entry.id.display;
         const keys = Object.keys(map);
         for (const key of keys.slice(0, Math.max(0, keys.length - LAST_OPENED_LIMIT))) {
             delete map[key];
@@ -282,10 +294,19 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
         }
         if (message === "openEntry" || message === "openChange") {
             const state = stateManager.state;
-            const entry = typeof extra === "number" ? currentEntry(state.entries, extra) : undefined;
-            if (entry) {
-                void vscode.commands.executeCommand(commands[message], entry);
-                return;
+            if (typeof extra === "number") {
+                // Whole: index → entries (paths). Step + openChange: index →
+                // files del commit actual (no confudir con entries = commits).
+                // Walk no manda index desde filas de archivo.
+                const list =
+                    message === "openChange" && state.state?.mode === "step"
+                        ? (state.files ?? [])
+                        : state.entries;
+                const entry = currentEntry(list, extra);
+                if (entry) {
+                    void vscode.commands.executeCommand(commands[message], entry);
+                    return;
+                }
             }
         }
         void vscode.commands.executeCommand(commands[message]);
@@ -438,12 +459,25 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
 
         vscode.commands.registerCommand("gitReview.openChange", async (arg?: unknown) => {
             const state = stateManager.state;
-            const entry = resolveArgEntry(arg);
-            if (!target || !entry || !isReviewReadable(state.situation) || !state.state) {
+            if (!target || !isReviewReadable(state.situation) || !state.state) {
+                return;
+            }
+            // Fila de archivo en step: PathRef en state.files (el panel manda el
+            // EntryRecord ya resuelto). Commit Diff / walk / whole: resolveArgEntry.
+            let entry: EntryRecord | undefined;
+            let commitSha: string | undefined;
+            if (state.state.mode === "step" && isEntryRecordArg(arg) && isPathRef(arg.id)) {
+                entry = arg;
+                commitSha =
+                    typeof state.state.current === "string" ? state.state.current : undefined;
+            } else {
+                entry = resolveArgEntry(arg);
+            }
+            if (!entry) {
                 return;
             }
             rememberOpened(state, entry);
-            await openChange(target.rootUri, state.state.mode, entry);
+            await openChange(target.rootUri, state.state.mode, entry, commitSha);
         }),
 
         // Sin entrada y sin índice: la unidad acá es el rango, no una fila. Por

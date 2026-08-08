@@ -14,16 +14,22 @@ comandos.
 ## Comandos (desarrollo)
 
 ```sh
-# Lint — todo script de shell debe pasar shellcheck. `find` recorre bin/
-# (incluido el subdirectorio privado bin/git-review-verbs/, que el glob `bin/*`
-# ya no alcanza) y excluye el .gitkeep; cubre el dispatcher y todos los verbos.
-shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh tests/sandbox.sh
+# Lint — todo script de shell debe pasar shellcheck. shellcheck no viene con
+# ninguna de las tres herramientas del proyecto (git, node, docker), así que
+# corrélo por el contenedor: la lista de archivos es la misma de CI.
+./lint-docker.sh                      # los archivos que lintea CI
+./lint-docker.sh algun-script.sh      # uno solo, mientras iterás
 
-# Tests — bats. En Windows NO corras bats bajo Git Bash (minutos por archivo,
-# fork emulado lento). Corré en el contenedor Linux:
+# Tests de la CLI — bats. En Windows NO corras bats bajo Git Bash (minutos por
+# archivo, fork emulado lento). Corré en el contenedor Linux:
 ./tests/run-docker.sh                 # toda la suite
 ./tests/run-docker.sh review.bats     # un solo archivo
 ./tests/run-docker.sh tests/range.bats extras.bats   # cualquier arg/path de bats
+
+# Tests de integración de la extensión — misma regla, mismo motivo, otro
+# contenedor (trae node + el VS Code headless). Ver la sección de la extensión.
+./vscode-extension/test/run-docker.sh             # los 66 tests
+./vscode-extension/test/run-docker.sh open-entry  # las specs que matcheen
 
 # Pruebas manuales — arma un PR de juguete descartable (feature/checkout: 4
 # commits, 5 archivos, walkthrough committeado, paths con espacio y acento) para
@@ -36,6 +42,16 @@ shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-in
 ./tests/sandbox.sh                    # (re)construye y dice cómo entrar
 ./tests/sandbox.sh -d /tmp/box        # en otro lado
 ```
+
+**Todo lo que se puede correr en el contenedor se corre en el contenedor.** No
+es preferencia: en Windows crear un proceso cuesta ~50 ms (CreateProcess + DLLs
++ Defender) contra ~1 ms en Linux, y las dos suites son básicamente procesos —
+un `git review status --porcelain` son 9 procesos `git` más dos de shell, o sea
+~960 ms en Windows contra ~41 ms en Linux. Un mismo escenario de spec midió
+15,0 s nativo contra 0,69 s en el contenedor (~22×). CI igual corre las dos
+suites en runners reales de ubuntu, macos y windows, así que el contenedor no
+saltea nada: lo único que evita es esperar de más para aprender lo mismo. Cada
+script construye su imagen en el primer uso.
 
 La imagen de Docker (bats + git, `tests/Dockerfile`) se construye en el primer
 uso y el repo se monta read-only; los tests crean sus repos temporales dentro
@@ -232,12 +248,17 @@ cd vscode-extension
 npm install
 npm run watch             # esbuild, recompila dist/ al guardar
 
-npm test                  # unit + integration, compilando antes
 npm run test:unit         # funciones puras, sin editor, milisegundos
-npm run test:integration  # @vscode/test-electron; baja un VS Code la 1ra vez
 
 npm run preview           # render del panel en el navegador (ver abajo)
 npm run preview:watch
+
+# Integración: en el contenedor, NO con `npm run test:integration`.
+cd ..
+./vscode-extension/test/run-docker.sh             # los 66 tests
+./vscode-extension/test/run-docker.sh open-entry  # las specs que matcheen
+MOCHA_GREP='abre el diff' ./vscode-extension/test/run-docker.sh
+./vscode-extension/test/run-docker.sh -- sh       # una shell adentro
 ```
 
 - **Editor de pruebas:** abrir `vscode-extension/` en VS Code y F5 (config *Run
@@ -250,11 +271,26 @@ npm run preview:watch
   el host. Ojo: el host hereda el `PATH` del VS Code que lo lanzó, no el que
   arma el `env.sh` del sandbox — o instalás el checkout, o apuntás la setting
   `gitReview.path` a `bin/git-review`.
+- **La suite de integración va en el contenedor**, misma regla que bats: los 66
+  tests tardan 38 s adentro contra 16 minutos nativos en Windows (26×), y pasan
+  los mismos 66. El script
+  (`vscode-extension/test/run-docker.sh` + `test/Dockerfile` + `entrypoint.sh`)
+  monta el repo read-only, lo copia a `/work` porque `npm install` escribe, y
+  cachea `node_modules`, el VS Code descargado y el cache de npm en volúmenes
+  nombrados (`grv-vscode-*`) — sólo la primera corrida los paga. Tres cosas de
+  ahí adentro que no son obvias: corre como el usuario `node` y no como root,
+  porque Electron se niega a arrancar como root sin `--no-sandbox` y ese flag
+  saldría de `runTests.ts`, o sea del árbol; hace `chmod +x` sobre `bin/`,
+  porque el bind mount desde Windows puede aplanar el bit ejecutable y sin él
+  todo fixture muere con un `is not a git command` que no dice nada; y la imagen
+  fija **`VSCODE_CLI=1`**, sin lo cual VS Code resuelve el entorno de un login
+  shell y pisa con él el `PATH` que `runTests.ts` preparó — la extensión no
+  encuentra la CLI y los 66 tests fallan con `cli-missing`.
 - **`test:integration` corre contra `dist/`** y lo recompila solo
-  (`pretest:integration`), tanto suelto como vía `npm test`, así que lo verde
-  siempre es el código actual. En Linux sin display, `xvfb-run -a`.
+  (`pretest:integration`), así que lo verde siempre es el código actual.
 - **Dos specs de integración abren tabs y son flaky en Windows** por el host de
-  test, no por la extensión. Ante un `no se abrió ningún tab`, medí el baseline
+  test, no por la extensión. Correr en el contenedor las saca del medio; si aun
+  así ves un `no se abrió ningún tab` en el runner de Windows, medí el baseline
   en un checkout sin tocar antes de buscar la causa en tu cambio.
 - **El `--user-data-dir` del host va a un temp corto, no al default de
   test-electron** (`test/integration/helpers/userDataDir.ts`). VS Code arma el

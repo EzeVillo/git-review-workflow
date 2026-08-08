@@ -9,13 +9,26 @@ The commands are POSIX shell scripts under `bin/`. Run the checks locally before
 opening a pull request:
 
 ```sh
+./lint-docker.sh    # shellcheck, over the same files CI checks
+./tests/run-docker.sh
+```
+
+Both run in a container, which is the recommended way and the only requirement
+beyond git: shellcheck isn't part of any toolchain this project already needs,
+and the test suite is slow enough on Windows to be worth avoiding (see
+[Running the tests](#running-the-tests) below). The tools themselves work the
+same if you have them installed:
+
+```sh
 shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh tests/sandbox.sh
 bats tests/
 ```
 
 CI runs both on every push and pull request (see
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)). Please make sure both
-pass before requesting a review.
+pass before requesting a review. The extension has its own suite and its own
+container — see
+[`vscode-extension/CONTRIBUTING.md`](vscode-extension/CONTRIBUTING.md).
 
 ### Pointing `git review` at this checkout
 
@@ -50,12 +63,7 @@ where git-review        # or: command -v -a git-review
 git review --version
 ```
 
-### Running the tests on Windows
-
-Under Git Bash/MSYS the suite is very slow: every test spawns many `git`
-processes and emulated `fork()` is expensive, so a single file can take minutes.
-If you have Docker, run the tests on a native Linux kernel instead — the same
-suite finishes in seconds:
+### Running the tests
 
 ```sh
 ./tests/run-docker.sh                 # whole suite
@@ -64,8 +72,14 @@ suite finishes in seconds:
 
 The script builds a small image ([`tests/Dockerfile`](tests/Dockerfile): bats +
 git) on first use and mounts the repo read-only; tests create their temp repos
-inside the container, so the Windows filesystem is never on the hot path. This
-is a local convenience only — CI still runs the suite on a real Windows runner.
+inside the container, so the host filesystem is never on the hot path.
+
+On Windows this is not just a convenience. Every test spawns many `git`
+processes, and creating a process costs about 50ms there against 1ms on Linux —
+`CreateProcess`, the DLL loads and the antivirus scan, all of which Linux's
+`fork()` does not do — so a single file can take minutes for the same work the
+container does in seconds. Nothing is skipped by running it this way: CI still
+runs the suite on real Ubuntu, macOS and Windows runners.
 
 ### Trying the commands by hand
 
@@ -109,7 +123,9 @@ rest of the sandbox still comes out usable.
 
 [`vscode-extension/`](vscode-extension/) is a separate npm project with its own
 checks, which CI runs as a second job. It shells out to the `git review` on
-`PATH`, so install this checkout (`./install.sh`) before running or testing it.
+`PATH`, so install this checkout (`./install.sh`) before running it in an
+editor. The tests need no install: they put this checkout's `bin/` at the front
+of the `PATH` they hand the test host.
 
 ```sh
 cd vscode-extension
@@ -140,20 +156,23 @@ the one the sandbox's `env.sh` sets up: either install this checkout
 ### Testing it
 
 ```sh
-npm test                  # unit + integration, compiling first
-npm run test:unit         # pure functions, no editor, milliseconds
-npm run test:integration  # downloads a VS Code build on first run and drives it
+npm run test:unit                        # pure functions, no editor, milliseconds
+./vscode-extension/test/run-docker.sh    # integration, in a container
 ```
 
-The integration suite loads the extension from `dist/`, so it rebuilds it first
-(`pretest:integration`) whether you run the whole `npm test` or just
-`npm run test:integration` — a green run is always about the code you have now.
-On Linux without a display, wrap it in `xvfb-run -a`.
+The integration suite drives a real editor and a real `git review`, so it runs
+in a container for the same reason the bats suite does — 38 seconds there
+against 16 minutes natively on Windows, for the same 66 tests. The first run
+builds the image and downloads a VS Code; after that both live in named
+volumes. It loads the extension from `dist/` and rebuilds it first
+(`pretest:integration`), so a green run is always about the code you have now.
 
-Two of the integration specs open editor tabs and are flaky on Windows for
-reasons that have nothing to do with the extension. Before chasing a failure
-like *"no se abrió ningún tab"*, re-run the suite on an unmodified checkout to
-see whether it was already failing.
+`npm run test:integration` runs the same suite directly, which is what CI does
+and what the container runs inside. Use it when you need the editor on your own
+machine, and expect it to be slow on Windows.
+[`vscode-extension/CONTRIBUTING.md`](vscode-extension/CONTRIBUTING.md) has the
+detail, including the two specs that open editor tabs and are flaky on Windows
+for reasons that have nothing to do with the extension.
 
 ### Previewing the panel
 

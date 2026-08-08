@@ -109,26 +109,64 @@ while navigating. For anything beyond the render, use F5.
 ## Testing
 
 ```sh
-npm test                  # unit + integration, compiling first
-npm run test:unit         # pure functions, no VS Code host
-npm run test:integration  # @vscode/test-electron, builds fixtures with the real CLI
+npm run test:unit      # pure functions, no VS Code host
+test/run-docker.sh     # integration, in a Linux container
 ```
 
-Integration tests shell out to a real `git review`, and they run the one in this
-checkout: `runTests.ts` puts `../bin` at the front of the `PATH` it hands to the
-test host, so both the fixtures and the extension under test resolve it there —
-no `../install.sh` needed, and a CLI installed elsewhere on your `PATH` cannot
-shadow the tree you are testing. On Linux without a display, run the integration
-suite under `xvfb-run -a`. They also need **Node 22 or newer**: `@vscode/test-electron` 3.x asks for
-it, and 3.x is the first release
-that locates the macOS binary through the app bundle's `Info.plist` instead of
-the historical `Contents/MacOS/Electron` — a name VS Code renamed to `Code` in
-1.110 and stopped shipping a symlink for, which fails on macOS alone with
-`spawn .../Contents/MacOS/Electron ENOENT`.
+Unit tests are pure functions and run anywhere in milliseconds. **The
+integration suite runs in the container** — like the CLI's bats suite, and for
+the same reason. It shells out to a real `git review` for every fixture and
+every panel refresh, each verb costs a dozen processes, and a process costs
+about 50ms on Windows against 1ms on Linux (`CreateProcess`, the DLL loads and
+the antivirus scan). The whole suite takes 38 seconds in the container against
+16 minutes natively on Windows — the same 66 tests, passing either way. CI still
+runs it on real Ubuntu, macOS and Windows runners, so this skips no coverage.
+
+```sh
+test/run-docker.sh                     # the whole suite
+test/run-docker.sh open-entry          # specs whose path matches
+MOCHA_GREP='opens the diff' test/run-docker.sh
+test/run-docker.sh -- sh               # a shell inside the container
+```
+
+The first run builds the image ([`test/Dockerfile`](test/Dockerfile): node, git,
+xvfb and Electron's shared libraries) and downloads a VS Code. After that,
+`node_modules`, that download and the npm cache live in named volumes, so a run
+is only the suite. To start from scratch:
+
+```sh
+docker volume rm grv-vscode-node-modules grv-vscode-test-cache grv-vscode-npm-cache
+```
+
+`npm run test:integration` still runs the suite directly, which is what CI
+invokes and what the container runs internally. Reach for it when you need the
+editor on your own machine — a screenshot, a debugger, a platform-specific
+failure — knowing it will be slow on Windows. It needs **Node 22 or newer**:
+`@vscode/test-electron` 3.x asks for it, and 3.x is the first release that
+locates the macOS binary through the app bundle's `Info.plist` instead of the
+historical `Contents/MacOS/Electron` — a name VS Code renamed to `Code` in 1.110
+and stopped shipping a symlink for, which fails on macOS alone with
+`spawn .../Contents/MacOS/Electron ENOENT`. On Linux without a display, run it
+under `xvfb-run -a`.
+
+Whichever way you run them, the tests resolve the `git review` in this checkout:
+`runTests.ts` puts `../bin` at the front of the `PATH` it hands to the test
+host, so both the fixtures and the extension under test find it there — no
+`../install.sh` needed, and a CLI installed elsewhere on your `PATH` cannot
+shadow the tree you are testing. The container has to defend that: it sets
+`VSCODE_CLI=1`, because otherwise VS Code resolves a login shell's environment
+and replaces its own with it, dropping that `PATH` and leaving every test
+failing as `cli-missing`.
 
 They also load the extension from `dist/`, which they rebuild first
 (`pretest:integration`) whether you run them on their own or through `npm test`,
 so a green run is always about the code you have now.
+
+Two of the specs open editor tabs and are flaky on Windows for reasons that have
+nothing to do with the extension — the container takes them out of the picture,
+but the Windows runner still hits them. Before chasing a *"no se abrió ningún
+tab"* there, re-run the suite on an unmodified checkout to see whether it was
+already failing.
 
 ## Packaging
 

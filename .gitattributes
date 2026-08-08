@@ -14,6 +14,12 @@ bin/git-review-verbs/* text eol=lf
 install.sh   text eol=lf
 uninstall.sh text eol=lf
 
+# Both containers are built from a Windows checkout as often as from a Linux
+# one, and `core.autocrlf=true` would hand the build a CRLF Dockerfile — where a
+# trailing backslash is followed by a carriage return and the line continuation
+# is no longer one. Extensionless, so *.sh above does not cover them.
+Dockerfile text eol=lf
+
 # VERSION travels in the release tarball and is read verbatim by the version
 # tests; a CRLF here breaks the bare-semver check and every version comparison.
 VERSION text eol=lf

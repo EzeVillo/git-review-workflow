@@ -6,7 +6,32 @@ its own [releases](https://github.com/EzeVillo/git-review-workflow/releases).
 This project follows [semantic versioning](https://semver.org/spec/v2.0.0.html)
 and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 
-## [0.1.0] — unreleased
+## [0.1.1] — 2026-08-08
+
+Two fixes to actions that could silently do nothing. Still requires
+`git review` 0.4.0 or newer.
+
+### Fixed
+
+- **Open changes did nothing for the first seconds of a review.** The action
+  asked the built-in git extension for that file's diff, and that extension
+  rescans the repository asynchronously: right after a start moves `HEAD` and
+  stages the whole PR at once, its view still describes the previous state, so
+  the request resolved against nothing — no error, no editor, nothing to retry.
+  Measured on Linux the rescan ran up to ~2.6 s late, and it affected every kind
+  of change, not only added files. The diff is now read from git directly — the
+  same read that already backs *Open all changes*, which is always current. A
+  file the range modifies opens against the working tree and stays editable; one
+  the PR only adds or only deletes opens the single side that exists, read-only.
+- **A slow CLI invocation now actually gets cut off.** The timeout never
+  enforced anything: the child was signalled but the call kept waiting on pipes
+  its grandchildren held open, so it returned only when the command finished on
+  its own (measured on Windows: 8.1 s under a 2 s timeout). Invocations now stop
+  at their ceiling, and a cut one is reported as a timeout — in the panel and as
+  its own line in **Show CLI Log** — instead of the empty error it used to look
+  like, which said the CLI was broken when it was merely slow.
+
+## [0.1.0] — 2026-08-07
 
 First release. Requires `git review` 0.4.0 or newer.
 

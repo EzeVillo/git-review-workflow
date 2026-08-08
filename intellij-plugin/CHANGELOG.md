@@ -10,6 +10,8 @@
 - Fix step Diff showing an empty pane titled **M**: `diff-tree` lacked
   `--no-commit-id`, so the commit SHA was parsed as a status field and the
   status letter became the "path".
+- Fix tool-window title bar: stop calling `DefaultActionGroup.getChildren(null)`
+  (platform throwable on 2024.3+); expand via `getChildren(ActionManager)`.
 
 ## 0.1.0
 

@@ -1,10 +1,14 @@
 package com.ezevillo.gitreview.ui
 
 import com.ezevillo.gitreview.host.GitReviewService
+import com.intellij.openapi.actionSystem.ActionGroup
+import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
+import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.openapi.wm.ex.ToolWindowManagerListener
 import com.intellij.ui.content.ContentFactory
 
@@ -23,18 +27,20 @@ class GitReviewToolWindowFactory : ToolWindowFactory, DumbAware {
 
         // Title-bar actions: Refresh / Finish / Save / Cancel / Preview edits.
         // Pass the group children (not the group itself) so each gets its own icon button.
-        val titleGroup = com.intellij.openapi.actionSystem.ActionManager.getInstance()
-            .getAction("GitReview.ToolWindowTitle")
-        if (titleGroup is com.intellij.openapi.actionSystem.DefaultActionGroup) {
-            toolWindow.setTitleActions(titleGroup.getChildren(null).toList())
-        } else if (titleGroup is com.intellij.openapi.actionSystem.ActionGroup) {
-            toolWindow.setTitleActions(listOf(titleGroup))
+        // Never call DefaultActionGroup.getChildren(null) — platform 2024.3+ logs a
+        // throwable (use ActionManager or getChildActionsOrStubs instead).
+        val actionManager = ActionManager.getInstance()
+        when (val titleGroup = actionManager.getAction("GitReview.ToolWindowTitle")) {
+            is DefaultActionGroup ->
+                toolWindow.setTitleActions(titleGroup.getChildren(actionManager).toList())
+            is ActionGroup ->
+                toolWindow.setTitleActions(listOf(titleGroup))
         }
 
         project.messageBus.connect(content).subscribe(
             ToolWindowManagerListener.TOPIC,
             object : ToolWindowManagerListener {
-                override fun stateChanged(toolWindowManager: com.intellij.openapi.wm.ToolWindowManager) {
+                override fun stateChanged(toolWindowManager: ToolWindowManager) {
                     service.setPanelVisible(toolWindow.isVisible)
                 }
             },

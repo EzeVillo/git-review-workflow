@@ -145,7 +145,7 @@ Para diffs / name-status:
 - `git -C <root> …` o cwd=root
 - UTF-8, clase `SUPPORT_GIT` (30 s), buffer grande
 - range: `diff --name-status -z --no-renames HEAD`
-- commit: `diff-tree -r -z --name-status --root <sha>`
+- commit: `diff-tree -r -z --no-commit-id --name-status --root <sha>`
 
 ## Prohibiciones
 

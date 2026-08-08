@@ -27,4 +27,30 @@ class NameStatusTest {
         assertEquals("old.kt", c[0].before)
         assertEquals("new.kt", c[0].after)
     }
+
+    /**
+     * Documents the contract for callers: output must use `--no-commit-id`.
+     * Without it, the first field is the full SHA and the first path becomes
+     * the status letter "M" — the empty-pane "file M" bug in step Diff.
+     */
+    @Test
+    fun leadingCommitIdCorruptsPaths() {
+        val sha = "87aaafe84f16d9376bc57f08ab2e5ff1dbc0b588"
+        val out = "$sha\u0000M\u0000src/edit.kt\u0000"
+        val c = parseNameStatus(out)
+        assertEquals(1, c.size)
+        assertEquals("M", c[0].path)
+        assertEquals("M", c[0].before)
+        assertEquals("M", c[0].after)
+    }
+
+    @Test
+    fun withoutLeadingCommitIdModifyIsPath() {
+        val out = "M\u0000src/edit.kt\u0000"
+        val c = parseNameStatus(out)
+        assertEquals(1, c.size)
+        assertEquals("src/edit.kt", c[0].path)
+        assertEquals("src/edit.kt", c[0].before)
+        assertEquals("src/edit.kt", c[0].after)
+    }
 }

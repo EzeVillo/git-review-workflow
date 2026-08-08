@@ -7,6 +7,9 @@
   action flooded the tab bar. Open files one at a time from the list. Step
   commit diffs still open, but as one `DiffRequestChain` window with Prev/Next
   file instead of N tabs.
+- Fix step Diff showing an empty pane titled **M**: `diff-tree` lacked
+  `--no-commit-id`, so the commit SHA was parsed as a status field and the
+  status letter became the "path".
 
 ## 0.1.0
 

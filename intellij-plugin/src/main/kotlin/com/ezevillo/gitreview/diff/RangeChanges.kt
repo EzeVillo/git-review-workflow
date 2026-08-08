@@ -25,9 +25,12 @@ object RangeChanges {
     }
 
     fun nameStatusCommit(cwd: String, sha: String, gitExecutable: String = "git"): List<CommitChange> {
+        // --no-commit-id is required: without it, -z output starts with
+        // `<sha>\0M\0path\0…` and parseNameStatus treats the status letter "M"
+        // as a path (empty panes titled "M"). Same argv as VS Code openEntry.
         val result = runGit(
             gitExecutable,
-            listOf("diff-tree", "-r", "-z", "--name-status", "--root", sha),
+            listOf("diff-tree", "-r", "-z", "--no-commit-id", "--name-status", "--root", sha),
             cwd,
         )
         if (result.exitCode != 0 || result.timedOut) return emptyList()

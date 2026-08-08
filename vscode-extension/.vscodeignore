@@ -13,3 +13,4 @@ node_modules/**
 media/_build_icon.py
 media/_face.png
 media/code-glyph.png
+**/__pycache__/**

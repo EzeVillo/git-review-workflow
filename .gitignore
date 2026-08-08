@@ -2,3 +2,20 @@
 *.tmp
 trailer/
 __pycache__/
+
+# Gradle / IntelliJ plugin
+intellij-plugin/.gradle/
+intellij-plugin/.intellijPlatform/
+intellij-plugin/.kotlin/
+intellij-plugin/build/
+intellij-plugin/out/
+*.class
+*.log
+.DS_Store
+Thumbs.db
+
+# Node (existing extension / root)
+node_modules/
+dist/
+.env*
+*.egg-info/

@@ -219,6 +219,40 @@ repo, no en archivos del working tree:
       `tests/test-names.bats` lo verifica sobre toda la suite, así que la regla
       se rompe en cualquier OS en un segundo y no recién en el runner de Windows.
 
+## Clientes del monorepo (VS Code + IntelliJ)
+
+La CLI es la única fuente de verdad. Hay dos UIs de cliente en el monorepo:
+
+- **`vscode-extension/`** — extensión VS Code (TypeScript + esbuild).
+- **`intellij-plugin/`** — plugin IntelliJ IDEA (Kotlin + Gradle Platform Plugin).
+
+Ambos leen solo porcelain/argv de la CLI; el canónico anti-drift multi-cliente
+vive en **`contracts/client-product-surface.yaml`** (raíz). CI lo verifica con
+`node scripts/check-client-product-surface.mjs` (min_cli_version, npm, strings
+críticos, matriz de 27 acciones vs `package.json` de la extensión y constantes
+del plugin).
+
+### Plugin de IntelliJ IDEA
+
+`intellij-plugin/` es un módulo Gradle aparte (JDK 21; pin de platform en
+`intellij-plugin/gradle.properties` — **única** fuente de since-build/versión).
+Dominio puro en `com.ezevillo.gitreview.domain` (sin `com.intellij`); host/UI
+invocan la CLI con `GeneralCommandLine` UTF-8.
+
+```sh
+# Desde intellij-plugin/ (el wrapper Gradle vive ahí, no en la raíz del monorepo):
+./gradlew test              # unit domain (ubuntu/macos/windows en CI)
+./gradlew platformTest      # headless (Linux CI; harness T030a)
+./gradlew runIde            # sandbox IDE
+./gradlew runPanelPreview   # preview Swing del PanelModel
+./gradlew buildPlugin       # zip
+./gradlew verifyPlugin
+```
+
+En Windows: `cd intellij-plugin; .\gradlew.bat test`. La CLI y la extensión
+siguen yendo al contenedor Docker cuando el host es Windows; el plugin se
+prueba con Gradle nativo (y `platformTest` en el runner Linux de CI).
+
 ## Extensión de VS Code
 
 `vscode-extension/` es un proyecto npm aparte (TypeScript + esbuild), con su

@@ -15,6 +15,8 @@
 
 [English](README.md) · **Español** · [Sitio web](https://ezevillo.github.io/git-review-workflow/)
 
+Clientes: [extensión VS Code](vscode-extension/README.md) · [plugin IntelliJ IDEA](intellij-plugin/README.md)
+
 [![Mirá la demo](trailer-poster.png)](https://youtu.be/LsSQtNFnjRQ)
 
 ---

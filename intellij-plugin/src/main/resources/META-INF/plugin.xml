@@ -1,0 +1,125 @@
+<!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
+<idea-plugin>
+    <id>com.ezevillo.gitreview</id>
+    <name>git review workflow</name>
+    <vendor email="ezevi@users.noreply.github.com" url="https://github.com/EzeVillo/git-review-workflow">EzeVillo</vendor>
+
+    <description><![CDATA[
+    Review a <b>git-review-workflow</b> pull request as a native IntelliJ IDEA tool window.
+    Full parity with the VS Code extension: start, walk/step/whole, finish, save, abort,
+    and housekeeping — all driven by the git-review CLI porcelain contract.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>Git4Idea</depends>
+
+    <!-- since/until-build are patched from gradle.properties by the platform plugin -->
+
+    <extensions defaultExtensionNs="com.intellij">
+        <toolWindow
+            id="gitReview.walkthrough"
+            anchor="right"
+            factoryClass="com.ezevillo.gitreview.ui.GitReviewToolWindowFactory"
+            icon="AllIcons.Actions.Preview"
+            secondary="false"/>
+        <projectService serviceImplementation="com.ezevillo.gitreview.host.GitReviewService"/>
+        <applicationService serviceImplementation="com.ezevillo.gitreview.settings.GitReviewSettings"/>
+        <projectService serviceImplementation="com.ezevillo.gitreview.settings.LastOpenedStore"/>
+        <applicationConfigurable
+            parentId="tools"
+            instance="com.ezevillo.gitreview.settings.GitReviewConfigurable"
+            id="com.ezevillo.gitreview.settings"
+            displayName="git review"/>
+    </extensions>
+
+    <actions>
+        <group id="GitReview.Menu" text="git review" popup="true">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+            <action id="GitReview.Refresh"
+                    class="com.ezevillo.gitreview.ui.actions.RefreshAction"
+                    text="Refresh"
+                    description="Refresh the git review panel"/>
+            <action id="GitReview.StartReview"
+                    class="com.ezevillo.gitreview.ui.actions.StartReviewAction"
+                    text="Start a Review"/>
+            <action id="GitReview.ContinueReview"
+                    class="com.ezevillo.gitreview.ui.actions.ContinueReviewAction"
+                    text="Continue Saved Review"/>
+            <action id="GitReview.FinishReview"
+                    class="com.ezevillo.gitreview.ui.actions.FinishReviewAction"
+                    text="Finish Review"/>
+            <action id="GitReview.SaveReview"
+                    class="com.ezevillo.gitreview.ui.actions.SaveReviewAction"
+                    text="Save Review for Later"/>
+            <action id="GitReview.AbortReview"
+                    class="com.ezevillo.gitreview.ui.actions.AbortReviewAction"
+                    text="Cancel Review"/>
+            <action id="GitReview.UndoFinish"
+                    class="com.ezevillo.gitreview.ui.actions.UndoFinishAction"
+                    text="Undo Finish"/>
+            <action id="GitReview.ResumeFinish"
+                    class="com.ezevillo.gitreview.ui.actions.ResumeFinishAction"
+                    text="Resume Finish"/>
+            <separator/>
+            <action id="GitReview.Next"
+                    class="com.ezevillo.gitreview.ui.actions.NextAction"
+                    text="Next Entry"/>
+            <action id="GitReview.Prev"
+                    class="com.ezevillo.gitreview.ui.actions.PrevAction"
+                    text="Previous Entry"/>
+            <action id="GitReview.GoToEntry"
+                    class="com.ezevillo.gitreview.ui.actions.GoToEntryAction"
+                    text="Go to Entry"/>
+            <action id="GitReview.OpenEntry"
+                    class="com.ezevillo.gitreview.ui.actions.OpenEntryAction"
+                    text="Open Entry"/>
+            <action id="GitReview.OpenChange"
+                    class="com.ezevillo.gitreview.ui.actions.OpenChangeAction"
+                    text="Open Changes"/>
+            <action id="GitReview.OpenAllChanges"
+                    class="com.ezevillo.gitreview.ui.actions.OpenAllChangesAction"
+                    text="Open All Changes"/>
+            <action id="GitReview.ShowWhy"
+                    class="com.ezevillo.gitreview.ui.actions.ShowWhyAction"
+                    text="Show Why"/>
+            <separator/>
+            <action id="GitReview.SetBase"
+                    class="com.ezevillo.gitreview.ui.actions.SetBaseAction"
+                    text="Set the Base Branch"/>
+            <action id="GitReview.SetRemote"
+                    class="com.ezevillo.gitreview.ui.actions.SetRemoteAction"
+                    text="Set the Remote"/>
+            <action id="GitReview.CleanReview"
+                    class="com.ezevillo.gitreview.ui.actions.CleanReviewAction"
+                    text="Clean"/>
+            <action id="GitReview.ForgetReview"
+                    class="com.ezevillo.gitreview.ui.actions.ForgetReviewAction"
+                    text="Forget Saved Review or Delta Marker"/>
+            <action id="GitReview.DiscardInventory"
+                    class="com.ezevillo.gitreview.ui.actions.DiscardInventoryAction"
+                    text="Discard Inventory Review"/>
+            <action id="GitReview.PreviewEdits"
+                    class="com.ezevillo.gitreview.ui.actions.PreviewEditsAction"
+                    text="Preview Edits"/>
+            <action id="GitReview.PreviewEditsStat"
+                    class="com.ezevillo.gitreview.ui.actions.PreviewEditsStatAction"
+                    text="Preview Edits (stat)"/>
+            <action id="GitReview.CompareReview"
+                    class="com.ezevillo.gitreview.ui.actions.CompareReviewAction"
+                    text="Compare Revisions"/>
+            <action id="GitReview.WalkthroughInit"
+                    class="com.ezevillo.gitreview.ui.actions.WalkthroughInitAction"
+                    text="Walkthrough: Init"/>
+            <action id="GitReview.WalkthroughBuild"
+                    class="com.ezevillo.gitreview.ui.actions.WalkthroughBuildAction"
+                    text="Walkthrough: Build"/>
+            <action id="GitReview.InstallCli"
+                    class="com.ezevillo.gitreview.ui.actions.InstallCliAction"
+                    text="How to Install the CLI"/>
+            <action id="GitReview.ShowCliLog"
+                    class="com.ezevillo.gitreview.ui.actions.ShowCliLogAction"
+                    text="Show CLI Log"
+                    description="Show the git-review CLI invocation log"/>
+        </group>
+    </actions>
+</idea-plugin>

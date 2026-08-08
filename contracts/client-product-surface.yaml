@@ -1,0 +1,139 @@
+# Canonical multi-client product surface (anti-drift).
+# Source of bootstrap strings: vscode-extension code as of 2026-08-08.
+# Normative for CI: scripts/check-client-product-surface.mjs
+schema_version: 1
+min_cli_version: "0.4.0" # verified: vscode-extension/src/cli/version.ts
+npm_install: "npm install -g git-review-workflow" # verified: src/cli/installHint.ts
+npm_update: "npm install -g git-review-workflow@latest" # verified: src/cli/installHint.ts
+docs_readme_url: "https://github.com/EzeVillo/git-review-workflow#readme"
+support:
+  star_url: "https://github.com/EzeVillo/git-review-workflow"
+strings:
+  # verified: panelHtml.ts ~911
+  cli_missing_title: "The git-review CLI ({min} or newer) was not found."
+  # verified: panelHtml.ts ~917 — keep the word "installed"
+  cli_outdated_title: "The installed git-review CLI is older than {min}."
+  # verified: commands/setBase.ts
+  no_base_candidates: "No branches to pick a base from were found."
+  reload_or_wait: "Reload the window after installing, or wait — the panel checks again every few seconds."
+  other_install_options: "Other install options"
+  # verified: review/state.ts multi-root message
+  multi_root_error: >-
+    Open a single-folder workspace that is a git repository. git review uses
+    one root (like the CLI cwd); multi-root is not supported.
+situations:
+  - cli-missing
+  - cli-outdated
+  - no-review
+  - finish-pending
+  - review
+  - finish-conflict
+  - out-of-range
+  - error
+# 27 actions from vscode-extension package.json contributes.commands
+# surface: panel | action | both
+# situations: list of situation ids where enabled (plus busy/readonly notes)
+actions:
+  openEntry:
+    surface: both
+    situations: [review, finish-conflict]
+  openChange:
+    surface: both
+    situations: [review, finish-conflict]
+  openAllChanges:
+    surface: both
+    situations: [review, finish-conflict]
+    mode: whole
+  showWhy:
+    surface: both
+    situations: [review, finish-conflict]
+  next:
+    surface: both
+    situations: [review]
+    requires_not_busy: true
+  prev:
+    surface: both
+    situations: [review]
+    requires_not_busy: true
+  goToEntry:
+    surface: both
+    situations: [review, finish-conflict]
+    requires_not_busy: true
+  refresh:
+    surface: both
+    situations: [cli-missing, cli-outdated, no-review, finish-pending, review, finish-conflict, out-of-range, error]
+  installCli:
+    surface: both
+    situations: [cli-missing, cli-outdated]
+  continueReview:
+    surface: panel
+    situations: [no-review]
+  startReview:
+    surface: both
+    situations: [no-review, finish-pending]
+    requires_not_busy: true
+  setBase:
+    surface: both
+    situations: [cli-missing, cli-outdated, no-review, finish-pending, review, finish-conflict, out-of-range, error]
+    requires_not_busy: true
+    requires_sole_cwd: true
+  setRemote:
+    surface: both
+    situations: [cli-missing, cli-outdated, no-review, finish-pending, review, finish-conflict, out-of-range, error]
+    requires_not_busy: true
+    requires_sole_cwd: true
+  abortReview:
+    surface: both
+    situations: [review, finish-conflict]
+    requires_not_busy: true
+  saveReview:
+    surface: both
+    situations: [review]
+    requires_not_busy: true
+  finishReview:
+    surface: both
+    situations: [review]
+    requires_not_busy: true
+    requires_not_readonly: true
+  undoFinish:
+    surface: both
+    situations: [finish-pending, finish-conflict]
+    requires_not_busy: true
+  resumeFinish:
+    surface: both
+    situations: [finish-conflict]
+    requires_not_busy: true
+  discardInventory:
+    surface: panel
+    situations: [no-review]
+  cleanReview:
+    surface: both
+    situations: [cli-missing, cli-outdated, no-review, finish-pending, review, finish-conflict, out-of-range, error]
+    requires_not_busy: true
+  forgetReview:
+    surface: both
+    situations: [cli-missing, cli-outdated, no-review, finish-pending, review, finish-conflict, out-of-range, error]
+    requires_not_busy: true
+  previewEdits:
+    surface: both
+    situations: [review, finish-conflict]
+    requires_not_busy: true
+  previewEditsStat:
+    surface: both
+    situations: [review, finish-conflict]
+    requires_not_busy: true
+  compareReview:
+    surface: both
+    situations: [cli-missing, cli-outdated, no-review, finish-pending, review, finish-conflict, out-of-range, error]
+    requires_not_busy: true
+  walkthroughInit:
+    surface: both
+    situations: [cli-missing, cli-outdated, no-review, finish-pending, review, finish-conflict, out-of-range, error]
+    requires_not_busy: true
+  walkthroughBuild:
+    surface: both
+    situations: [cli-missing, cli-outdated, no-review, finish-pending, review, finish-conflict, out-of-range, error]
+    requires_not_busy: true
+  showCliLog:
+    surface: both
+    situations: [cli-missing, cli-outdated, no-review, finish-pending, review, finish-conflict, out-of-range, error]

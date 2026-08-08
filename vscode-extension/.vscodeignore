@@ -2,10 +2,15 @@ src/**
 test/**
 preview/**
 out/**
+.vscode/**
 .vscode-test/**
 .gitignore
 CONTRIBUTING.md
 esbuild.js
+# Fuente del askpass no-op: sólo la consume esbuild (`copyStaticAssets`), que
+# lo copia a `dist/askpass-noop.js` — el único path que `invoke.ts` resuelve en
+# runtime (`__dirname` es `dist/` una vez bundleado).
+scripts/**
 tsconfig.json
 test/unit/.mocharc.json
 **/*.map

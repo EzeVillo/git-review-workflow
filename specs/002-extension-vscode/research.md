@@ -327,21 +327,39 @@ case de la CLI lenta y FR-030.
 
 ---
 
-## Decisión 10 — Abrir la entrada: documento del working tree, diff delegado al host
+## Decisión 10 — Abrir la entrada: documento del working tree, diff armado acá
 
 **Decisión**: el clic abre el **archivo del working tree**. Ver los cambios como
-diff es una acción aparte que delega en el comando incorporado
-`git.openChange`. Para una entrada cuyo archivo no existe en el working tree
-(archivo eliminado en el rango), se abre directamente el diff.
+diff es una acción aparte, que la extensión arma con los lados que le da `git
+diff --name-status HEAD` (`readRangeChanges`): con los dos lados presentes, un
+`vscode.diff` del blob del merge-base contra el archivo del working tree; con
+uno solo —el PR agrega el archivo, o lo elimina— el documento `git:` del único
+lado que existe. Para una entrada cuyo archivo no existe en el working tree
+(archivo eliminado en el rango), el clic abre directamente ese mismo documento.
 
 **Rationale**: FR-013 pide que los cambios estén "visibles y editables", y en
 una review de `git review` el working tree **ya es** el PR aplicado: abrir el
 archivo tal cual cumple las dos mitades, y es lo único que las mantiene juntas
-—un editor de diff contra el índice no es editable del mismo modo—. El diff como
-acción secundaria delega en el host en vez de construir URIs `git:` a mano, que
-sería acoplarse a los internos de otra extensión. El caso del archivo eliminado
-(Historia 2, escenario 3) es la única excepción, y ahí el diff no es una
+—un editor de diff contra el índice no es editable del mismo modo—. Por eso el
+diff de un archivo va también contra el working tree, igual que el multi-diff
+del rango de `openAllChanges`. El caso del archivo eliminado (Historia 2,
+escenario 3) es la excepción del clic, y ahí el blob previo al borrado no es una
 comodidad sino la única superficie que tiene contenido para mostrar.
+
+**Por qué ya no se delega en `git.openChange`**: esa era la decisión original
+—"delegar en el host en vez de construir URIs `git:` a mano, que sería acoplarse
+a los internos de otra extensión"—, y el acoplamiento que evitaba resultó menos
+grave que el que introducía. Ese comando no resuelve un path: resuelve un
+`Resource` de los grupos que la extensión de git tiene **escaneados** en ese
+instante, y el escaneo es asíncrono. `git review start` mueve `HEAD` y stagea el
+PR entero de un saque, así que durante los segundos siguientes esos grupos
+todavía describen el estado anterior; pedir el diff de un archivo que no figura
+ahí no falla, no abre nada, y nadie lo reintenta. Medido en Linux: hasta ~2,6 s
+de atraso, y en ese hueco el botón "Changes" no hacía absolutamente nada — con
+cualquier tipo de cambio, no sólo con archivos agregados. Windows no lo mostraba
+por diferencias de timing. Los Uri `git:` se siguen construyendo con `toGitUri`,
+que es API pública y una función pura; lo que se dejó de usar es el comando que
+depende del escaneo.
 
 ---
 

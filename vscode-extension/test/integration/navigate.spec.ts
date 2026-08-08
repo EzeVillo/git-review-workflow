@@ -140,10 +140,11 @@ describe("US4: avanzar y retroceder en la secuencia", function () {
         });
         assert.ok(tab, "avanzar no abrio ningun tab para second.ts");
 
-        // Misma garantia que afirma `openChange` en open-entry.spec.ts: qué
-        // superficie exacta se usa lo decide la extension de git, pero NO puede
-        // ser el archivo del working tree abierto como texto plano — esa es la
-        // accion aparte (`openEntry`, el boton "File").
+        // Misma garantia que afirma `openChange` en open-entry.spec.ts: la
+        // superficie depende de si el archivo tiene los dos lados del diff
+        // (aca no: second.ts lo agrega el PR), pero en ningun caso puede ser el
+        // archivo del working tree abierto como texto plano — esa es la accion
+        // aparte (`openEntry`, el boton "File").
         const input = tab!.input;
         const isPlainFileEditor = input instanceof vscode.TabInputText && input.uri.scheme === "file";
         assert.ok(!isPlainFileEditor, `avanzar debe mostrar los cambios, no el archivo: ${JSON.stringify(input)}`);

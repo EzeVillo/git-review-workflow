@@ -226,10 +226,13 @@ al construir el árbol, que es justo lo que el contrato 001 separó al sacar el
 ## 30. vscode-extension/src/commands/openEntry.ts
 > key
 La Decisión 10 hecha código: el clic abre el archivo del working tree (ya es
-el PR aplicado, y por lo tanto editable), y el diff queda como acción aparte
-delegada en `git.openChange`. Lo que más vale la pena revisar es el fallback
-cuando el archivo no existe (eliminado en el rango) y la rama de modo step,
-que nunca abre un archivo de texto plano sino los cambios del commit.
+el PR aplicado, y por lo tanto editable), y el diff queda como acción aparte,
+armada acá con los lados que da `git diff HEAD` en vez de delegada en
+`git.openChange` — el escaneo de la extensión de git va atrasado justo después
+de un `start`, y en ese hueco el botón no abría nada. Lo que más vale la pena
+revisar es el caso del archivo que existe de un solo lado (el PR lo agrega o lo
+elimina) y la rama de modo step, que nunca abre un archivo de texto plano sino
+los cambios del commit.
 
 ## 31. vscode-extension/src/commands/navigate.ts
 `next`/`prev` a través del `MutationLock`: invoca el verbo, refresca con

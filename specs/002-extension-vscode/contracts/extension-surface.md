@@ -282,7 +282,13 @@ Reglas normativas:
 - Los comandos de la paleta se ocultan con `when: gitReview.situation == review`
   — no tiene sentido ofrecer "entrada siguiente" donde no hay review.
 - `gitReview.openEntry` abre el documento del working tree; con el archivo
-  ausente (eliminado en el rango) cae en el diff (Decisión 10).
+  ausente (eliminado en el rango) cae en el blob en HEAD (Decisión 10).
+- `gitReview.openChange` abre los cambios de **un** archivo: el diff del blob
+  del merge-base contra el archivo del working tree —editable, igual que el
+  multi-diff del rango—, o, cuando el archivo existe de un solo lado (el PR lo
+  agrega o lo elimina), el documento `git:` de ese lado. Los lados salen de la
+  misma lectura de git que `openAllChanges` y no de la extensión de git, cuyo
+  escaneo va atrasado justo después de un `start` (Decisión 10).
 - `gitReview.openAllChanges` abre **todos** los archivos del rango en un solo
   multi-diff, y sólo existe en `whole`: es el equivalente del diff que `step`
   abre por commit, con el rango como unidad. Del lado derecho va el archivo del

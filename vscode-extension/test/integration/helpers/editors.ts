@@ -10,7 +10,7 @@ export function snapshotTabs(): readonly vscode.Tab[] {
 }
 
 /**
- * Los comandos que abren superficies del host (`git.openChange`,
+ * Los comandos que abren superficies del host (`vscode.diff`,
  * `vscode.changes`, la preview de markdown del why) lo hacen de forma
  * asíncrona; sondea hasta que haya un tab activo. Es el único sondeo de tabs de
  * la suite: el margen es generoso a propósito y una copia aparte se quedaría

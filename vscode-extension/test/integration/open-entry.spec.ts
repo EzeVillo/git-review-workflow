@@ -91,12 +91,12 @@ describe("US2: saltar al archivo de una entrada", function () {
         }) ?? await waitForActiveTab();
         assert.ok(tab, "el boton de cambios no abrio ningun tab");
 
-        // Qué superficie exacta usa el host para mostrar los cambios lo decide
-        // la extensión de git, no nosotros (Decisión 10: se delega en
-        // `git.openChange`): para un archivo añadido puede ser el diff de dos
-        // lados o el blob del índice. Lo que la extensión sí garantiza es que
-        // esto NO es el archivo del working tree abierto como texto plano —
-        // ésa es la otra acción, `openEntry`.
+        // `src/inline.ts` lo agrega el PR: no hay lado izquierdo con el que
+        // comparar, así que la vista de cambios es el contenido que el PR
+        // agrega, como documento `git:` de sólo lectura. Lo que se afirma es la
+        // garantía que vale para cualquiera de las dos formas: esto NO es el
+        // archivo del working tree abierto como texto plano — ésa es la otra
+        // acción, `openEntry`.
         const input = tab!.input;
         const isPlainFileEditor = input instanceof vscode.TabInputText && input.uri.scheme === "file";
         assert.ok(!isPlainFileEditor, `openChange no puede abrir el working tree como texto plano: ${JSON.stringify(input)}`);
@@ -105,6 +105,59 @@ describe("US2: saltar al archivo de una entrada", function () {
             ? input.modified.fsPath
             : (input as vscode.TabInputText).uri.fsPath;
         assert.strictEqual(path.basename(shownPath), "inline.ts");
+    });
+
+    it("un archivo modificado abre el diff de los dos lados, contra el working tree", async () => {
+        // El archivo ya existe en la base, asi que hay lado izquierdo (el
+        // merge-base) y derecho. Es el caso que la delegacion en
+        // `git.openChange` dejaba sin abrir mientras la extension de git no
+        // hubiera terminado de escanear el repo: el sintoma era mudo, ningun
+        // tab y ningun error. Los lados salen de `git diff HEAD`, que esta al
+        // dia siempre.
+        git(["checkout", "main"], repo.dir);
+        writeFile(repo, "src/tracked.ts", "export const tracked = 0;\n");
+        git(["add", "."], repo.dir);
+        git(["commit", "-m", "add tracked.ts on main"], repo.dir);
+
+        const branch = "us2-modified-diff";
+        createBranchWithChanges(repo, branch, {"src/tracked.ts": "export const tracked = 1;\n"});
+        addWalkthrough(repo, branch, [{path: "src/tracked.ts", why: "modificado"}]);
+
+        const api = await getTestApi();
+        startReview(repo, branch);
+        const state = await api.refresh();
+        assert.strictEqual(state.situation, "review");
+        const entry = state.entries.find((e) => displayOf(e.id) === "src/tracked.ts");
+        assert.ok(entry, "no se encontró la entrada para src/tracked.ts");
+
+        await closeAllEditors();
+        const previousTabs = snapshotTabs();
+        await vscode.commands.executeCommand("gitReview.openChange", entry);
+        const tab = await waitForNewTab(
+            previousTabs,
+            (candidate) => candidate.input instanceof vscode.TabInputTextDiff
+        );
+        assert.ok(tab, "no se abrió el diff del archivo modificado");
+
+        const input = tab!.input as vscode.TabInputTextDiff;
+        // Izquierda: el blob del merge-base, documento `git:` de sólo lectura.
+        assert.strictEqual(input.original.scheme, "git");
+        assert.ok(
+            input.original.fsPath.endsWith(path.normalize("src/tracked.ts")),
+            `el lado izquierdo no es tracked.ts: ${input.original.fsPath}`
+        );
+        // Derecha: el working tree. Es lo que hace editable el diff, que es el
+        // flujo entero de `git review` — un blob `git:` de los dos lados (lo
+        // que mostraba `git.openChange`) sería de sólo lectura.
+        assert.strictEqual(input.modified.scheme, "file");
+        assert.ok(
+            input.modified.fsPath.endsWith(path.normalize("src/tracked.ts")),
+            `el lado derecho no es el working tree de tracked.ts: ${input.modified.fsPath}`
+        );
+        assert.strictEqual(
+            fs.readFileSync(input.modified.fsPath, "utf8"),
+            "export const tracked = 1;\n"
+        );
     });
 
     it("cae al diff cuando el archivo de la entrada no existe en el working tree (eliminado en el rango, AC3)", async () => {
@@ -144,9 +197,8 @@ describe("US2: saltar al archivo de una entrada", function () {
         }, "src/doomed.ts no debería existir en el working tree de la review");
 
         // El comando no debe tirar, y no puede haber abierto el archivo del
-        // working tree como texto editable (no existe): openEntry cae al
-        // vscode.diff del blob en HEAD (o git.openChange) — nunca `file:` sobre
-        // el path eliminado.
+        // working tree como texto editable (no existe): openEntry cae al blob
+        // en HEAD — nunca `file:` sobre el path eliminado.
         await closeAllEditors();
         const previousTabs = snapshotTabs();
         await vscode.commands.executeCommand("gitReview.openEntry", entry);

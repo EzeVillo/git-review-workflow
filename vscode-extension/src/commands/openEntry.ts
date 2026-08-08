@@ -42,7 +42,8 @@ function isPathRef(id: string | PathRef): id is PathRef {
 /**
  * Comando `gitReview.openEntry`. En modo walk, abre el documento del working
  * tree de la entrada; si el archivo no existe (eliminado en el rango), cae al
- * diff. En modo step, muestra los cambios del commit (research.md Decisión 10).
+ * blob en HEAD. En modo step, muestra los cambios del commit (research.md
+ * Decisión 10).
  */
 export async function openEntry(rootUri: vscode.Uri, mode: ReviewMode, entry: EntryRecord): Promise<void> {
     if (mode === "step") {
@@ -60,8 +61,8 @@ export async function openEntry(rootUri: vscode.Uri, mode: ReviewMode, entry: En
 
 /**
  * Abre el archivo del working tree —que en una review *es* el PR aplicado— y
- * cae al diff si no existe (eliminado en el rango). Lo usan por igual las
- * entradas de la secuencia y los archivos sin cobertura.
+ * cae al blob en HEAD si no existe (eliminado en el rango). Lo usan por igual
+ * las entradas de la secuencia y los archivos sin cobertura.
  */
 export async function openWorkingTreeFile(rootUri: vscode.Uri, display: string): Promise<void> {
     const fileUri = vscode.Uri.joinPath(rootUri, display);
@@ -70,16 +71,14 @@ export async function openWorkingTreeFile(rootUri: vscode.Uri, display: string):
     } catch {
         // Archivo eliminado en el rango: no hay working tree. Abrimos el blob
         // pre-borrado en HEAD (en review, lower bound) vía la API de git — un
-        // documento `git:` real, no `file:`. `git.openChange` en paths ausentes
-        // a menudo no materializa tab en el host de test de Windows.
+        // documento `git:` real, no `file:`.
         const gitApi = await ensureGitApi();
-        if (gitApi) {
-            const left = gitApi.toGitUri(fileUri, "HEAD");
-            const document = await vscode.workspace.openTextDocument(left);
-            await vscode.window.showTextDocument(document);
+        if (!gitApi) {
+            await reportMissingGitApi("a deleted file's contents");
             return;
         }
-        await vscode.commands.executeCommand("git.openChange", fileUri);
+        const document = await vscode.workspace.openTextDocument(gitApi.toGitUri(fileUri, "HEAD"));
+        await vscode.window.showTextDocument(document);
         return;
     }
     const document = await vscode.workspace.openTextDocument(fileUri);
@@ -97,7 +96,72 @@ export async function openChange(rootUri: vscode.Uri, mode: ReviewMode, entry: E
     if (!isPathRef(entry.id)) {
         return;
     }
-    await vscode.commands.executeCommand("git.openChange", vscode.Uri.joinPath(rootUri, entry.id.display));
+    await openFileChange(rootUri, entry.id.display);
+}
+
+/** El nombre del archivo; los paths de git son siempre POSIX, con `/`. */
+function fileName(display: string): string {
+    return display.split("/").pop() ?? display;
+}
+
+/**
+ * Los cambios de UN archivo del rango. Se arman acá en vez de delegar en
+ * `git.openChange`, que era lo que hacía antes (research.md Decisión 10).
+ *
+ * El motivo del cambio: `git.openChange` no resuelve un path, resuelve un
+ * `Resource` de los grupos que la extensión de git tiene **escaneados** en ese
+ * instante, y ese escaneo es asíncrono. `git review start` mueve `HEAD` y
+ * stagea el PR entero de un saque, así que durante los segundos siguientes esos
+ * grupos todavía describen el estado anterior; pedirle el diff de un archivo
+ * que no figura ahí no falla, no abre nada, y nadie lo reintenta. Medido en
+ * Linux: el escaneo llegaba hasta ~2,6 s tarde, y en ese hueco el botón
+ * "Changes" no hacía absolutamente nada — con cualquier tipo de cambio, no sólo
+ * con archivos agregados. Windows no lo mostraba por diferencias de timing.
+ *
+ * Los lados salen del mismo `readRangeChanges` que ya usa `openAllChanges`, o
+ * sea de git directo, que es la única fuente que está al día siempre. Con los
+ * dos lados presentes el diff va contra el **working tree** y queda editable,
+ * igual que el multi-diff del rango; con uno solo no hay dos versiones que
+ * comparar y se abre la única que existe, como documento `git:` de sólo lectura
+ * — nunca el `file:` del working tree, que es la otra acción (`openEntry`).
+ */
+async function openFileChange(rootUri: vscode.Uri, display: string): Promise<void> {
+    const gitApi = await ensureGitApi();
+    if (!gitApi) {
+        await reportMissingGitApi("a file's changes");
+        return;
+    }
+    const changes = await readRangeChanges(rootUri);
+    if (!changes) {
+        void vscode.window.showErrorMessage("Could not read the files of this review's range.");
+        return;
+    }
+    const change = changes.find((candidate) => candidate.path === display);
+    if (!change) {
+        void vscode.window.showInformationMessage(`${display} has no changes left in this review.`);
+        return;
+    }
+
+    const gitUri = (path: string, ref: string) => gitApi.toGitUri(vscode.Uri.joinPath(rootUri, path), ref);
+    if (change.before !== undefined && change.after !== undefined) {
+        await vscode.commands.executeCommand(
+            "vscode.diff",
+            gitUri(change.before, "HEAD"),
+            vscode.Uri.joinPath(rootUri, change.after),
+            `${fileName(display)} (Review)`
+        );
+        return;
+    }
+    // Un solo lado: el archivo lo agrega el PR (blob del índice, que es el
+    // contenido que agrega) o lo elimina (blob en HEAD, previo al borrado).
+    const single = change.after ?? change.before;
+    if (single === undefined) {
+        return;
+    }
+    const document = await vscode.workspace.openTextDocument(
+        gitUri(single, change.after !== undefined ? "" : "HEAD")
+    );
+    await vscode.window.showTextDocument(document);
 }
 
 /**
@@ -176,11 +240,13 @@ export async function readCommitChanges(
 }
 
 /**
- * Los archivos del rango de una review `whole`, o `undefined` si git no pudo
- * decirlo. `HEAD` de una rama de review está clavado en el merge-base y el PR
- * vive como cambios staged encima, así que el rango entero es exactamente
- * `diff HEAD` — más las ediciones del revisor, que es lo mismo que ya muestra
- * `git.openChange` archivo por archivo.
+ * Los archivos del rango de una review, o `undefined` si git no pudo decirlo.
+ * `HEAD` de una rama de review está clavado en el merge-base y el PR vive como
+ * cambios staged encima, así que el rango entero es exactamente `diff HEAD` —
+ * más las ediciones del revisor. La usan las dos vistas de cambios, la del
+ * rango completo y la de un archivo suelto (`openFileChange`): una sola lectura
+ * de git como fuente de los lados del diff, sin depender de qué tenga escaneado
+ * la extensión de git en ese instante.
  *
  * `git diff` y no `diff-index` como en el commit: la porcelana refresca el
  * índice antes de comparar, y sin eso un índice desincronizado (típico en

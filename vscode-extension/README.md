@@ -203,5 +203,5 @@ npx vsce package
 ```
 
 Produces a `.vsix` you can install with `code --install-extension
-git-review-vscode-<version>.vsix`. This isn't a Marketplace listing —
+git-review-workflow-<version>.vsix`. This isn't a Marketplace listing —
 publishing there is out of scope for this feature.

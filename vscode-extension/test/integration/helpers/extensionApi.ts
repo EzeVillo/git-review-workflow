@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import {GitReviewTestApi} from "../../../src/extension";
 
-const EXTENSION_ID = "EzeVillo.git-review-vscode";
+const EXTENSION_ID = "EzeVillo.git-review-workflow";
 
 /**
  * Fuerza la activación de la extensión (perezosa por `onView:...`) y devuelve

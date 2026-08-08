@@ -184,9 +184,16 @@ describe("US6: revisar commit por commit", function () {
             `el tab abierto no es el del commit pedido: ${tab!.label}`
         );
 
-        // modo step nunca abre el archivo del working tree directamente.
-        const active = vscode.window.activeTextEditor?.document.uri.fsPath;
-        assert.notStrictEqual(active, path.join(repo.dir, "src", "two.ts"));
+        // modo step nunca abre el archivo del working tree directamente. Se
+        // afirma sobre el tab y no sobre `activeTextEditor`: `vscode.changes`
+        // identifica cada archivo del multi-diff con su Uri `file:`, y el host
+        // puede dejar el editor activo ahí aunque ambos lados del diff sean
+        // blobs `git:` — comportamiento suyo, distinto entre plataformas.
+        const input = tab!.input;
+        assert.ok(
+            !(input instanceof vscode.TabInputText && input.uri.scheme === "file"),
+            `el clic en un commit no puede abrir el working tree como texto plano: ${JSON.stringify(input)}`
+        );
     });
 
     it("los cambios de un commit sólo piden los lados del diff que existen", async function () {

@@ -621,10 +621,10 @@ walk_is_annotated() {
 # order — the reading order — survives, and so a path that appears twice gets
 # the same flags both times.
 #
-# The content cannot travel as `awk -v` (the way walk_reading_order passes its
-# path list): -v processes escape sequences, so a why containing a literal \n
-# or \t would be silently rewritten. Paths survive it only because git quotes
-# any path holding a backslash.
+# The content cannot travel as `awk -v` either, for two independent reasons: -v
+# processes escape sequences, so a why containing a literal \n or \t would be
+# silently rewritten, and BSD awk refuses a -v value containing a newline
+# outright (see walk_reading_order). Anything arbitrary goes in as a stream.
 walk_entry_fields() {
 	_we_content="$(walk_read "$1" || true)"
 	{
@@ -738,12 +738,25 @@ walk_reading_order() {
 	[ -n "$_wro_seq" ] || return 0
 	printf '%s\n' "$_wro_seq"
 	# One awk: load curated paths into a set, emit range paths not in it (git order).
-	range_files "$1" "$2" | awk -v seq="$_wro_seq" '
-		BEGIN {
-			n = split(seq, a, "\n")
-			for (i = 1; i <= n; i++) {
-				if (a[i] != "") seen[a[i]] = 1
-			}
+	#
+	# The sequence arrives as a stream, not as `awk -v`: BSD awk (the one true
+	# awk, which is what macOS ships) refuses a newline inside a -v value —
+	# "awk: newline in string <value>... at source line 1", exit 2 — while
+	# gawk and mawk accept it. A multi-line -v therefore aborts every walk
+	# review on macOS and nowhere else. Same two-stream, lone-tab-sentinel
+	# shape as walk_entry_fields, and safe for the same reason: git quotes
+	# control characters in a path unconditionally, so neither stream can
+	# produce a line that is just a tab.
+	{
+		printf '%s\n' "$_wro_seq"
+		printf '\t\n'
+		range_files "$1" "$2"
+	} | awk '
+		# Phase 1: the curated sequence, up to the lone-tab sentinel.
+		!tail {
+			if ($0 == "\t") { tail = 1; next }
+			if ($0 != "") seen[$0] = 1
+			next
 		}
 		$0 != "" && !($0 in seen) { print }
 	'

@@ -197,8 +197,24 @@ describe("US2: saltar al archivo de una entrada", function () {
         await vscode.commands.executeCommand("gitReview.openEntry", entry);
         const editor = vscode.window.activeTextEditor;
         assert.ok(editor, "no se abrió ningún editor");
-        assert.strictEqual(path.basename(editor!.document.uri.fsPath), path.basename(oddPath));
-        assert.strictEqual(editor!.document.getText(), "export const raro = 1;\n");
+        // El path relativo entero, no sólo el basename: es lo que distingue
+        // este archivo de otro con el mismo nombre en otra carpeta.
+        const openedPath = editor!.document.uri.fsPath;
+        assert.ok(
+            openedPath.endsWith(path.normalize(oddPath)),
+            `se abrió otro archivo: ${openedPath}`
+        );
+        // El contenido se lee del disco y no de `document.getText()`: el host
+        // cachea el TextDocument por Uri, y el primer escenario de este archivo
+        // abre y edita este mismo path a propósito (AC1). Al reabrirlo devuelve
+        // el modelo viejo — medido en Linux: en disco
+        // "export const raro = 1;\n" y en el documento
+        // "// edited by test\nexport const raro = 1;\n", con isDirty en false.
+        // Eso es caché del host, no lo que la extensión abrió.
+        assert.strictEqual(
+            fs.readFileSync(path.join(repo.dir, oddPath), "utf8"),
+            "export const raro = 1;\n"
+        );
     });
 
     it("modo whole: un archivo eliminado en el rango cae al diff, igual que en walk", async () => {
@@ -362,7 +378,20 @@ describe("US2: saltar al archivo de una entrada", function () {
             `el tab abierto no es el de los cambios del commit: ${tab!.label}`
         );
 
-        const active = vscode.window.activeTextEditor?.document.uri.fsPath;
-        assert.notStrictEqual(active, path.join(repo.dir, "src", "step.ts"));
+        // Sobre el tab, no sobre `activeTextEditor`: el multi-diff identifica
+        // cada archivo con el Uri `file:` del working tree (es el primer
+        // elemento de la terna que recibe `vscode.changes`), y el host puede
+        // dejar el editor activo apuntando ahí aunque los dos lados del diff
+        // sean blobs `git:`. Eso lo decide el host y difiere entre plataformas
+        // — en Linux el editor activo es ese `file:` y en Windows no—, así que
+        // afirmarlo probaba el host y no la extensión. Lo que la extensión
+        // garantiza, y lo que aquí se afirma, es que la pestaña abierta no es
+        // el archivo suelto: ésa es la otra acción (`openEntry`, el botón
+        // "File"). Misma forma que el test del rango completo, más arriba.
+        const input = tab!.input;
+        assert.ok(
+            !(input instanceof vscode.TabInputText && input.uri.scheme === "file"),
+            `el clic en un commit no puede abrir el working tree como texto plano: ${JSON.stringify(input)}`
+        );
     });
 });

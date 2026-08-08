@@ -702,6 +702,97 @@ EOF
 	[ "$(printf '%s\n' "$output" | sed -n '1p' | cut -f5)" = "walk" ]
 }
 
+# ── file records (step: inventory of the current commit) ──────────────────────
+
+@test "status --porcelain emits file lines for the current step commit only" {
+	# Fixture: c1 touches a.txt; c2 touches b.txt and adds src/c.txt.
+	run git review start feature/x --step
+	[ "$status" -eq 0 ]
+
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	files="$(printf '%s\n' "$output" | grep '^file')"
+	[ "$files" = "$(printf 'file\t1\ta.txt')" ]
+	# total is still the commit count (entry lines), never the file count.
+	[ "$(printf '%s\n' "$output" | sed -n '1p' | cut -f8)" = "2" ]
+	[ "$(printf '%s\n' "$output" | grep -c '^entry')" -eq 2 ]
+
+	run git review next
+	[ "$status" -eq 0 ]
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	files="$(printf '%s\n' "$output" | grep '^file')"
+	# Order is git's (diff-tree); both paths of c2, and only those.
+	[ "$files" = "$(printf 'file\t1\tb.txt\nfile\t2\tsrc/c.txt')" ]
+}
+
+@test "status --porcelain emits zero file lines for a commit that touches nothing" {
+	git switch --quiet -c feature/empty develop
+	git commit --quiet --allow-empty -m empty-step
+	printf 'z\n' >z.txt
+	git add z.txt
+	git commit --quiet -m touch-z
+	git push --quiet -u origin feature/empty
+	git switch --quiet develop
+
+	run git review start feature/empty --offline --step
+	[ "$status" -eq 0 ]
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	# Cursor is on the empty commit first.
+	found="$(printf '%s\n' "$output" | grep -c '^file' || true)"
+	[ "$found" -eq 0 ]
+	[ "$(printf '%s\n' "$output" | sed -n '1p' | cut -f8)" = "2" ]
+
+	run git review next
+	[ "$status" -eq 0 ]
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	[ "$(printf '%s\n' "$output" | grep '^file')" = "$(printf 'file\t1\tz.txt')" ]
+}
+
+@test "status --porcelain emits no file record in whole or walk mode" {
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	[ "$(printf '%s\n' "$output" | sed -n '1p' | cut -f5)" = "whole" ]
+	found="$(printf '%s\n' "$output" | grep -c '^file' || true)"
+	[ "$found" -eq 0 ]
+	git review abort
+
+	recommit_walkthrough <<'EOF'
+# Walkthrough
+
+## 1. a.txt
+main
+EOF
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	[ "$(printf '%s\n' "$output" | sed -n '1p' | cut -f5)" = "walk" ]
+	found="$(printf '%s\n' "$output" | grep -c '^file' || true)"
+	[ "$found" -eq 0 ]
+}
+
+@test "human status lists the current step commit files" {
+	run git review start feature/x --step
+	[ "$status" -eq 0 ]
+	run git review status
+	[ "$status" -eq 0 ]
+	printf '%s\n' "$output" | grep -q 'files   1'
+	printf '%s\n' "$output" | grep -q '    1  a.txt'
+
+	run git review next
+	[ "$status" -eq 0 ]
+	run git review status
+	[ "$status" -eq 0 ]
+	printf '%s\n' "$output" | grep -q 'files   2'
+	printf '%s\n' "$output" | grep -q '    1  b.txt'
+	printf '%s\n' "$output" | grep -q '    2  src/c.txt'
+}
+
 # ── base record (003 US2) ─────────────────────────────────────────────────────
 
 @test "status --porcelain emits the base record in whole mode" {

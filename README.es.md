@@ -633,6 +633,15 @@ base	<base>
   vacío (un commit cuyo mensaje no tiene primera línea): el registro se emite
   igual, con el campo vacío, para que "sin asunto" se distinga de "este
   git-review no reporta asuntos".
+- `file` — sólo en modo step: cero o más líneas del commit **actual** (el del
+  cursor / `state.current`), no de todos los commits del rango. Cada línea es
+  `file<TAB>position<TAB>path` con posición 1-based *dentro de ese commit* y un
+  path con las mismas reglas de bytes que el resto de paths. Los clientes usan
+  esta lista para dibujar el inventario de archivos del paso; abrir el diff de
+  un archivo queda del lado del host (git / el editor), no en el porcelain. Un
+  commit que no toca archivos emite cero líneas `file`. Walk y whole no emiten
+  ninguna (en whole los paths ya van como `entry`). `state.total` sigue contando
+  sólo las líneas `entry` (commits).
 - `base` — sólo en modo whole, y sólo si la review tiene una base registrada: el
   ref contra el que se armó su rango. Registro único y sin posición — la base es
   de la review, no de una entrada. Sin base registrada la línea se omite entera,

@@ -168,6 +168,20 @@ if [ "$porcelain" -eq 1 ]; then
 			porcelain_row author "$i" "$text"
 			i=$((i + 1))
 		done; }
+		# Files of the *current* step commit only — not every commit in the
+		# range. entry/subject/author still describe the full sequence; this is
+		# the inventory for the commit under the cursor (panel file list).
+		# Position is 1-based within that commit, independent of reviewstep.
+		# state.total still counts entry lines only (commits), never these.
+		# Full SHA from `commits` (load_step_review_meta), not the short pcurrent:
+		# same object, one less rev-parse, and independent of core.abbrev.
+		i=1
+		pfull="$(printf '%s\n' "$commits" | sed -n "${step}p")"
+		commit_files "$pfull" | while IFS= read -r pfile; do
+			[ -n "$pfile" ] || continue
+			porcelain_row file "$i" "$pfile"
+			i=$((i + 1))
+		done
 		;;
 	walk)
 		load_walk_review_meta
@@ -310,6 +324,20 @@ if [ "$mode" = "step" ]; then
 		i=$((i + 1))
 	done
 	printf '  banked  %s\n' "${banked:- none}"
+
+	# Files this step's commit touches (same inventory as porcelain `file` rows).
+	cfiles="$(commit_files "$cnow")"
+	cfilecount="$(printf '%s\n' "$cfiles" | grep -c . || true)"
+	if [ "$cfilecount" -eq 0 ]; then
+		printf '  files   no files in this commit\n'
+	else
+		printf '  files   %s\n' "$cfilecount"
+		i=1
+		printf '%s\n' "$cfiles" | while IFS= read -r f; do
+			printf '    %s  %s\n' "$i" "$f"
+			i=$((i + 1))
+		done
+	fi
 
 	# Mid-finish conflict: porcelain already emits finish conflict; human status
 	# must not steer the user toward next/prev while markers are live.

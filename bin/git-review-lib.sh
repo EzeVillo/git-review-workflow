@@ -440,6 +440,17 @@ range_files() {
 	changed_paths "$2" "$1" 2>/dev/null || true
 }
 
+# commit_files <sha>
+# Paths a single commit touches, one per line, in git's own order — the step-mode
+# inventory of "what does this commit change". Name-only (no status letter, no
+# patch): clients open each file's diff themselves; status only needs the list
+# to draw the panel. Same path rules as changed_paths (core.quotePath=false).
+# --root so an empty-tree parent still lists the commit; 2>/dev/null || true so a
+# bad/unresolvable SHA yields zero paths under set -eu instead of aborting.
+commit_files() {
+	git -c core.quotePath=false diff-tree --no-commit-id --name-only -r --root "$1" 2>/dev/null || true
+}
+
 # walk_normalize  (stdin: text)
 # Make an authored walkthrough's bytes comparable, whatever wrote it. Every reader
 # below matches on whole lines — the path in "## N. <path>", the "> key" marker,

@@ -49,12 +49,12 @@ precedente es `git status`, que no esconde los untracked). En step deriva de
 mecanismo que ya recorre `next`/`prev`.
 
 | Campo       | Modo  | Descripción                                                     |
-|-------------|-------|-------------------------------------------------------------------|
+|-------------|-------|-----------------------------------------------------------------|
 | `position`  | ambos | 1-based, coincide con el orden de lectura real                  |
 | `id`        | ambos | path (walk) o SHA corto del commit (step)                       |
-| `essential` | walk  | `1`/`0`, marca `> key` (FR-008); `0` en una posición no anotada  |
-| `annotated` | walk  | `1`/`0`, si el path tiene entrada propia en el walkthrough       |
-| `banked`    | step  | `1`/`0`, existe `refs/review-edits/<src>/<position>` (Q2 = C)    |
+| `essential` | walk  | `1`/`0`, marca `> key` (FR-008); `0` en una posición no anotada |
+| `annotated` | walk  | `1`/`0`, si el path tiene entrada propia en el walkthrough      |
+| `banked`    | step  | `1`/`0`, existe `refs/review-edits/<src>/<position>` (Q2 = C)   |
 
 El grupo no aplicable al modo (`essential`+`annotated` en step, `banked` en
 walk) se omite entero de la línea, no se envía vacío — mismo criterio que en
@@ -67,6 +67,20 @@ aplicable, sin que eso se reporte como error (Acceptance Scenario 4 de US2).
 | Campo | Descripción      |
 |-------|------------------|
 | `id`  | path sin entrada |
+
+## Archivos del commit actual (`file`, modo `step`)
+
+Cero o más registros **sólo en modo step**: los paths que toca el commit bajo
+el cursor (`state.current`). Es un inventario auxiliar, no la secuencia de
+lectura — esa sigue siendo `entry` (un commit por posición).
+
+| Campo      | Descripción                                                           |
+|------------|-----------------------------------------------------------------------|
+| `position` | 1-based dentro del commit actual (no es `reviewstep`)                 |
+| `path`     | path del archivo, mismas reglas de bytes que `entry.id` en walk/whole |
+
+No lleva status letter ni patch. Un commit sin archivos produce cero líneas.
+En walk/whole no se emite el tipo. `state.total` no los cuenta.
 
 ## Texto explicativo (`why`)
 

@@ -132,6 +132,42 @@ entry	1	README.md
 entry	2	src/quoting.ts
 ```
 
+## Registros `file` (cero o más; sólo modo `step`)
+
+```
+file<TAB>position<TAB>path
+```
+
+Inventario de **archivos del commit actual** (el de `state.current` /
+`reviewstep`), no de todo el rango:
+
+- Sólo se emiten en modo `step`. En `walk` y `whole` no hay ninguna línea
+  `file` (en whole la lista de archivos del rango ya son los `entry`).
+- `position`: 1-based **dentro de ese commit**, independiente de
+  `reviewstep` / de la posición del commit en la secuencia.
+- `path`: un path por línea, en el orden de git, con las mismas reglas de
+  bytes que cualquier otro path de este contrato (ver más abajo). Fuente:
+  `commit_files` → `git diff-tree --name-only` con `core.quotePath=false`.
+- Un commit que no toca archivos (p. ej. vacío) produce **cero** registros
+  `file` y exit `0`, nunca un error.
+- `state.total` sigue contando solo las líneas `entry` (commits). Los
+  registros `file` no entran en ese total.
+
+Los clientes usan esta lista para dibujar el panel (una fila por path). El
+patch / los lados del diff **no** van acá: cada fila se abre después con git
+/ el host del editor.
+
+Ejemplo (step en el commit 2, que toca `b.txt` y agrega `src/c.txt`):
+
+```
+state	review/feat-x	origin/feat-x	a1b2c3d4…	step	none	2	2	2	9fe1c0d
+entry	1	c1short	0
+entry	2	9fe1c0d	0
+…
+file	1	b.txt
+file	2	src/c.txt
+```
+
 ## Paths (FR-015, FR-016)
 
 Todo path se emite **byte a byte tal como lo devuelve `changed_paths`**, que es
@@ -150,8 +186,9 @@ Todo path se emite **byte a byte tal como lo devuelve `changed_paths`**, que es
   git (la señal es la comilla inicial). Es un caso extremo: esos dos bytes son
   ilegales en un path de Windows.
 
-Vale igual para `state.current` en modo walk que para el `id` de `entry` en
-walk o en whole: son el mismo dato de la misma fuente, sin importar el modo.
+Vale igual para `state.current` en modo walk, el `id` de `entry` en walk o
+whole, y el `path` de `file` en step: son el mismo dato de la misma familia de
+helpers (`changed_paths` / `commit_files`), sin importar el modo.
 
 ## Registros `subject`, `author` y `base`: texto escrito por una persona
 
@@ -164,9 +201,9 @@ base<TAB>base
 A diferencia de un path, el contenido de estos tres registros lo escribe una
 persona, no git, y **puede contener el separador de campos** (un tab):
 
-| Byte    | ¿Puede aparecer en el asunto? | ¿En el nombre del autor? |
-|---------|-------------------------------|---------------------------|
-| tab     | **sí**                        | **sí**                    |
+| Byte    | ¿Puede aparecer en el asunto? | ¿En el nombre del autor?                   |
+|---------|-------------------------------|--------------------------------------------|
+| tab     | **sí**                        | **sí**                                     |
 | newline | no (`%s` es la primera línea) | no (git lo elimina del ident al commitear) |
 
 De ahí la regla, que aplica a los tres y a cualquier registro futuro con texto
@@ -271,9 +308,9 @@ Mismos exit codes 1/2/3 que `--porcelain` para "error" / "no hay review activa"
 Datos que la salida humana muestra y que este contrato **deliberadamente** no
 expone, con su motivo:
 
-| Dato                                  | Motivo                                                                                                                       |
-|----------------------------------------|-------------------------------------------------------------------------------------------------------------------------------|
-| Cuerpo del mensaje de un commit       | Prosa multi-línea: no puede viajar en un registro de una línea, y exponerla requeriría una superficie de stream propia. |
-| Diffstat de un commit                 | El consumidor ya alcanza esos mismos archivos por la superficie de diff de su host; duplicarlo chocaría con la exclusión de interfaz de diff propia (`002-extension-vscode`). |
-| Textos de ayuda (`next`, `banked …`)  | Son la guía al usuario humano sobre qué comando correr, no estado de la review.                                       |
-| Tipo de cambio de un archivo del listado de `whole` (agregado/modificado/eliminado) | `walk` tampoco lo emite para sus entradas; agregarlo es una decisión separable que ninguna feature tomó todavía. |
+| Dato                                                                                | Motivo                                                                                                                                                                        |
+|-------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Cuerpo del mensaje de un commit                                                     | Prosa multi-línea: no puede viajar en un registro de una línea, y exponerla requeriría una superficie de stream propia.                                                       |
+| Diffstat de un commit                                                               | El consumidor ya alcanza esos mismos archivos por la superficie de diff de su host; duplicarlo chocaría con la exclusión de interfaz de diff propia (`002-extension-vscode`). |
+| Textos de ayuda (`next`, `banked …`)                                                | Son la guía al usuario humano sobre qué comando correr, no estado de la review.                                                                                               |
+| Tipo de cambio de un archivo del listado de `whole` (agregado/modificado/eliminado) | `walk` tampoco lo emite para sus entradas; agregarlo es una decisión separable que ninguna feature tomó todavía.                                                              |

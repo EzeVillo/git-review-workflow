@@ -616,6 +616,15 @@ base	<base>
   commit whose message has no first line); the record is still emitted, with an
   empty field, so "no subject" stays distinguishable from "this git-review does
   not report subjects".
+- `file` — step mode only: zero or more lines for the **current** commit (the
+  one under the cursor / `state.current`), not every commit in the range. Each
+  line is `file<TAB>position<TAB>path` with a 1-based position *within that
+  commit* and a path under the same byte rules as other path fields. Clients use
+  this list to draw the file inventory for the step; opening a single-file diff
+  stays on the host (git / the editor), not in porcelain. A commit that touches
+  no files emits zero `file` lines. Walk and whole emit none (`entry` already
+  lists paths in whole). `state.total` still counts only `entry` lines
+  (commits).
 - `base` — whole mode only, and only when the review has a base recorded: the
   ref its range was built against. A single record with no position — the base
   belongs to the review, not to an entry. With no base recorded the line is

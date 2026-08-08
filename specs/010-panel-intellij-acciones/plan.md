@@ -18,10 +18,15 @@ disposición como dato en el dominio puro**. Una función
 bloques y controles; el Swing pasa a ser un renderer genérico de esa estructura
 y deja de decidir nada; el canónico `contracts/client-product-surface.yaml` gana
 un bloque `panel_layout:` que un test de Kotlin compara al 100% del lado
-IntelliJ y el verificador de Node compara por pertenencia de rótulos del lado
-VS Code. Así las seis dimensiones del invariante rector (existencia, orden,
-grupo, jerarquía, rótulo, condición) son aserciones de igualdad que corren en
-los tres sistemas operativos de CI, no una inspección visual.
+IntelliJ, y que del lado VS Code el verificador de Node comprueba extrayendo los
+controles de `panelHtml.ts` por la forma de la llamada — rótulo, id, énfasis,
+adyacencia dentro de la fila y orden dentro de la situación (contrato completo
+en `contracts/panel-layout.md` § Verificación). Así cinco de las seis
+dimensiones del invariante rector (existencia, orden, grupo, jerarquía, rótulo)
+son aserciones automáticas en los tres sistemas operativos de CI; la sexta —las
+condiciones de aparición— se verifica entera del lado del plugin y queda
+enumerada en `panel_unverified` del lado de la extensión, para que su ausencia
+sea una decisión escrita y no un olvido.
 
 El resto es consecuencia: las acciones ya existen las 27 y no se agrega ninguna;
 el ciclo de vida se mueve del cuerpo del panel a la barra del tool window; el
@@ -35,7 +40,14 @@ herramienta con la que se hace la comparación lado a lado.
 
 **Primary Dependencies**: IntelliJ Platform Gradle Plugin 2.18.1, plataforma
 IntelliJ IDEA (versión pinneada en `intellij-plugin/gradle.properties`, única
-fuente de since-build), `Git4Idea`, Swing. Sin dependencias nuevas.
+fuente de since-build), `Git4Idea`, Swing. **Sin dependencias nuevas de
+runtime**: nada nuevo viaja en el `.zip` del plugin. La única incorporación es
+de test — `testImplementation("org.yaml:snakeyaml")` — porque
+`PanelLayoutContractTest` tiene que leer el canónico YAML desde Kotlin y el
+plugin hoy sólo trae `junit-jupiter`. Se prefiere la dependencia a un parser
+propio: el bloque `panel_layout:` usa flow style anidado, y un lector a mano
+sería código de test sin tests. (El verificador de Node parsea a mano porque
+sólo mira claves sueltas, no estructura.)
 
 **Storage**: ninguno. La feature no persiste nada: todo el estado sigue viniendo
 del porcelain de la CLI. El único estado nuevo es de componente (secciones
@@ -61,9 +73,11 @@ techo para el *why*).
 window a ningún ancho; los controles de ícono necesitan nombre accesible; ningún
 control puede ejecutar algo que la situación no permita.
 
-**Scale/Scope**: 9 situaciones × 3 modos de review, 22 controles en el cuerpo del
-panel + 5 en la barra de título, 4 acciones explícitamente excluidas. Alrededor
-de 300 archivos en el caso grande del listado de whole.
+**Scale/Scope**: 8 `Situation` que producen 9 pantallas (`no-review` se desdobla
+en *setup* y *con base*), y 3 modos dentro de `review` / `finish-conflict`. **21
+controles distintos en el cuerpo** del panel + 5 en la barra de título (26
+`ControlId` en total: `refresh` es sólo de barra), y 4 acciones explícitamente
+excluidas. Alrededor de 300 archivos en el caso grande del listado de whole.
 
 ## Constitution Check
 
@@ -88,10 +102,11 @@ En su lugar, los gates que este repositorio sí tiene escritos y son vinculantes
 | Los dos README se actualizan juntos | **N/A** | La feature no cambia la superficie de la CLI. El README del plugin sí se toca (ver estructura) |
 | La landing sólo se toca si cambian sus cuatro duplicados | **N/A** | Ninguno cambia |
 
-**Re-evaluación post-Phase 1**: sin cambios. El diseño no introdujo ninguna
-dependencia nueva, ningún estado persistido, ninguna invocación nueva a la CLI
-ni ninguna excepción a los gates. La única entrada de *Complexity Tracking* está
-justificada abajo.
+**Re-evaluación post-Phase 1**: sin cambios de gate. El diseño no introdujo
+ningún estado persistido, ninguna invocación nueva a la CLI, ninguna dependencia
+de runtime ni ninguna excepción a los gates. Sí agrega una dependencia **de
+test** (snakeyaml) y un source set de fixtures; las dos están en *Complexity
+Tracking* abajo.
 
 ## Project Structure
 
@@ -114,15 +129,18 @@ specs/010-panel-intellij-acciones/
 
 ```text
 contracts/
-└── client-product-surface.yaml        # + bloque panel_layout / title_actions / panel_excluded
+└── client-product-surface.yaml        # + panel_layout / title_actions / panel_excluded / panel_unverified
 
 scripts/
-└── check-client-product-surface.mjs   # + verificación de pertenencia de rótulos vs panelHtml.ts
+└── check-client-product-surface.mjs   # + las 6 verificaciones vs panelHtml.ts
+                                       #   y la coherencia con el bloque actions:
 
 intellij-plugin/
+├── build.gradle.kts                   # + source set `fixtures` + dependencia de test (snakeyaml)
 ├── src/main/kotlin/com/ezevillo/gitreview/
 │   ├── domain/
-│   │   ├── PanelLayout.kt             # NUEVO — Block, Control, ControlId, Emphasis, panelLayout(), titleBarActions()
+│   │   ├── PanelLayout.kt             # NUEVO — Block, Control, ControlId, Emphasis,
+│   │   │                              #   panelLayout(), titleBarActions(), requiresConfirmation()
 │   │   └── PanelModel.kt              # sin cambios (se consume tal cual)
 │   ├── ui/
 │   │   ├── PanelRenderer.kt           # NUEVO — PanelLayout -> Swing, sin Project
@@ -133,9 +151,20 @@ intellij-plugin/
 │   │   └── actions/ReviewActions.kt   # + condiciones de disponibilidad (update); discard por índice
 │   └── resources/META-INF/plugin.xml  # + grupo de acciones del tool window
 ├── src/test/kotlin/com/ezevillo/gitreview/
-│   ├── domain/PanelLayoutTest.kt          # NUEVO — una situación por test
-│   ├── domain/PanelLayoutContractTest.kt  # NUEVO — compara contra el canónico
-│   └── ui/PanelRendererTest.kt            # NUEVO — el renderer no pierde ni reordena
+│   ├── domain/PanelLayoutContractTest.kt    # NUEVO — compara contra el canónico
+│   ├── domain/PanelLayoutInvariantsTest.kt  # NUEVO — los invariantes de construcción
+│   ├── domain/PanelLayoutReviewTest.kt      # NUEVO — walk y step (una situación por archivo,
+│   ├── domain/PanelLayoutFinishTest.kt      #   agrupados por historia para que cada una
+│   ├── domain/PanelLayoutEmptyStateTest.kt  #   sea entregable por separado)
+│   ├── domain/PanelLayoutWholeTest.kt       # NUEVO
+│   ├── domain/PanelLayoutDiagnosticsTest.kt # NUEVO
+│   ├── domain/PanelLayoutFooterTest.kt      # NUEVO
+│   ├── domain/PanelLayoutSkeletonTest.kt    # NUEVO
+│   ├── domain/TitleBarActionsTest.kt        # NUEVO — la barra del tool window
+│   ├── domain/ConfirmationContractTest.kt   # NUEVO — requiresConfirmation vs canónico (FR-032)
+│   └── ui/PanelRendererTest.kt              # NUEVO — el renderer no pierde ni reordena
+├── fixtures/com/ezevillo/gitreview/fixtures/
+│   └── PanelFixtures.kt               # NUEVO — un PanelModel por situación, compartido test+preview
 ├── preview/com/ezevillo/gitreview/preview/
 │   └── PanelPreviewMain.kt            # REESCRITO — renderiza con PanelRenderer, no volcado de texto
 ├── README.md                          # la superficie que describe cambia
@@ -148,8 +177,11 @@ intellij-plugin/
 de qué se dibuja y en qué orden **baja** de `ui/ReviewPanel.kt` a
 `domain/PanelLayout.kt`. `ui/` queda con tres piezas de responsabilidad única
 (renderer, chrome, despachador) y un `ReviewPanel` que sólo conecta el servicio
-con el renderer. No se crean módulos ni source sets nuevos: `preview/` ya existe
-como source set desde la 009.
+con el renderer. No se crean módulos nuevos. Sí se agrega **un** source set,
+`fixtures/`, siguiendo el molde con el que la 009 ya creó `preview/`: los
+modelos de ejemplo los necesitan `test` y `preview` a la vez, y sin él habría
+que duplicarlos o hacer que uno dependa de la salida del otro (que es peor:
+acopla el preview a los tests).
 
 ## Complexity Tracking
 
@@ -162,3 +194,5 @@ capa, porque agregar indirección merece justificarse aunque nadie la prohíba:
 |---|---|---|
 | `PanelLayout` como capa intermedia entre `PanelModel` y Swing | El invariante rector exige verificar orden, agrupación, énfasis, rótulo y habilitación. Sin una estructura de datos, esas cinco dimensiones sólo existen como efectos de `body.add(...)` dentro de una clase que necesita un `Project` | Dejar el `when (situation)` en `ReviewPanel` y cubrirlo con tests de UI headless: exigiría el harness de plataforma (hoy un stub) y sólo correría en el runner Linux, dejando el invariante sin cobertura en macOS y Windows — que es donde más se usa el IDE |
 | `PanelChrome` inyectable (colores e iconos) | El preview corre fuera de la plataforma y `JBColor`/`AllIcons` pueden no resolver ahí; sin preview no hay comparación lado a lado barata, que es el criterio de aceptación central | Que el renderer use `JBColor` directo y el preview arranque un IDE sandbox: cada iteración de ajuste pasaría a costar un arranque de IDE |
+| Source set `fixtures` | Los `PanelModel` de ejemplo los consumen `test` (11 archivos) y `preview` a la vez; son la entrada de toda la verificación | Duplicarlos en los dos lados (se separan al primer cambio de porcelain) o hacer que `preview` dependa de la salida de `test` (acopla la herramienta de comparación a la suite) |
+| `testImplementation(snakeyaml)` | `PanelLayoutContractTest` lee el canónico YAML desde Kotlin; es de test, no viaja en el `.zip` | Un parser propio: sería código de test sin tests, sobre flow style anidado. Descartado también mantener una copia JSON del canónico: dos archivos que se separan |

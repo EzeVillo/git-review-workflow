@@ -14,19 +14,25 @@ contra specs previas. Referencias verificadas en esta sesión:
 ## Hallazgo previo: la lista cerrada de controles del panel
 
 `PANEL_MESSAGES` (walkthroughViewProvider.ts:10) es el conjunto **cerrado** de
-lo que el webview puede accionar: 22 entradas. Descompuesto:
+lo que el webview puede accionar: 22 entradas. Pero es una cota, no la lista:
+`refresh` está ahí y **ningún control del panel lo postea** (`panelHtml.ts` no
+construye ninguno; el `Refresh` de la extensión vive en `view/title`). El cuerpo
+del panel dibuja **21** controles distintos. Descompuesto contra las 27 acciones
+del contrato:
 
-- **19 acciones del contrato** de las 27 → el panel las pinta.
-- **8 acciones del contrato que el panel NO pinta**: `finishReview`,
+- **18 acciones del contrato** → el cuerpo del panel las pinta.
+- **9 acciones del contrato que el cuerpo NO pinta**: `refresh`, `finishReview`,
   `saveReview`, `abortReview`, `previewEdits` viven en `view/title`;
   `goToEntry`, `forgetReview`, `previewEditsStat`, `showCliLog` viven sólo en
   la paleta de comandos.
 - **3 controles que no son acciones del contrato**: `copyCliInstall`,
   `outOfRangeHelp`, `openSupport`.
 
-Esto confirma el criterio de la spec: la matriz `surface:` del canónico no
-alcanza como referencia (marca `both` para las cuatro de la paleta), y hay tres
-controles del panel que la matriz no conoce.
+18 + 9 = las 27 del contrato; 18 + 3 = los 21 del cuerpo. Esto confirma el
+criterio de la spec por partida doble: la matriz `surface:` del canónico no
+alcanza como referencia (marca `both` para las cuatro de la paleta), hay tres
+controles del panel que la matriz no conoce, y ni siquiera `PANEL_MESSAGES`
+sirve como lista — sólo el panel real la da.
 
 ---
 

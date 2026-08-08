@@ -440,8 +440,11 @@ se puede accionar sobre la entrada anterior.
 - **FR-003**: Los controles MUST conservar la agrupación de la extensión: lo
   que allá está en una misma fila, bloque, banner o sección plegable, acá
   también.
-- **FR-004**: El control principal de cada pantalla MUST distinguirse como tal,
-  y los secundarios como secundarios, siguiendo la jerarquía de la extensión.
+- **FR-004**: Cuando la extensión distingue un control como el principal de su
+  pantalla, el panel MUST distinguirlo también, y el resto MUST leerse como
+  secundarios. Las pantallas donde la extensión no marca ninguno —las tres de
+  `review`, `finish-conflict` y las de CLI ausente o vieja— MUST NOT introducir
+  un principal propio: la jerarquía se espeja, no se completa.
 - **FR-005**: Los rótulos de los controles y los títulos de las secciones MUST
   ser idénticos a los de la extensión, palabra por palabra.
 - **FR-006**: El gesto de activación MUST ser el mismo: lo que allá se acciona
@@ -537,9 +540,21 @@ se puede accionar sobre la entrada anterior.
   foco visible, y MUST exponer un nombre accesible cuando el control es solo un
   ícono.
 - **FR-036**: El canónico multi-cliente MUST registrar, por situación, qué
-  controles pinta el panel y en qué orden, y la verificación automática del
-  repositorio MUST fallar cuando los dos clientes se separen en cualquiera de
-  las dimensiones del invariante rector.
+  controles pinta el panel, en qué orden, agrupados cómo, con qué rótulo, con
+  qué jerarquía y bajo qué condición; y la verificación automática del
+  repositorio MUST fallar cuando cualquiera de los dos clientes se separe de ese
+  registro. El reparto es asimétrico porque las dos superficies lo son:
+    - **Del lado del plugin**, la verificación MUST comparar la estructura
+      completa por igualdad: existencia, rótulo, orden, agrupación en filas,
+      jerarquía y habilitación.
+    - **Del lado de la extensión**, MUST verificar existencia, rótulo,
+      jerarquía, agrupación en filas y orden relativo de los controles dentro de
+      cada situación, y MUST fallar tanto si desaparece un control registrado
+      como si aparece uno sin registrar.
+    - Lo que queda fuera de la verificación automática del lado de la extensión
+      —la posición de los textos que no son controles y las condiciones de
+      aparición— MUST estar enumerado en el canónico y cubierto por la
+      comparación lado a lado, para que sea una decisión escrita y no un olvido.
 
 ### Key Entities
 
@@ -564,7 +579,9 @@ se puede accionar sobre la entrada anterior.
 
 - **SC-001**: Comparadas las pantallas equivalentes de los dos clientes,
   **100%** de los controles coincide en existencia, rótulo, orden, grupo,
-  jerarquía y condición de aparición. Diferencias admitidas: cero.
+  jerarquía y condición de aparición. Diferencias admitidas: cero. La
+  verificación automática cubre lo que FR-036 le asigna a cada lado; el residuo
+  enumerado ahí se comprueba en la comparación lado a lado.
 - **SC-002**: Un revisor que usó la extensión encuentra en el plugin, **al
   primer intento y sin ayuda**, los controles de navegar, abrir el diff y
   cerrar la review.

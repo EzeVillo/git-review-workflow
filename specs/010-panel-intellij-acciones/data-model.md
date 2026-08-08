@@ -82,18 +82,26 @@ salen de un requisito del invariante rector.
 
 ## ControlId
 
-Espejo exacto de `PANEL_MESSAGES` de la extensión (22 entradas) más las cinco
-de la barra de título. Se declara como enumeración cerrada: agregar un control
-al panel es agregar una constante, y el test del canónico obliga a registrarlo.
+Enumeración cerrada de **26** constantes: los 21 controles que el panel de la
+extensión efectivamente dibuja, más las 5 de la barra del tool window. Agregar
+un control al panel es agregar una constante, y el test del canónico obliga a
+registrarlo.
 
-**Cuerpo del panel (22)** — `openEntry`, `openChange`, `openAllChanges`,
-`showWhy`, `next`, `prev`, `refresh`, `installCli`, `copyCliInstall`,
+**Cuerpo del panel (21)** — `openEntry`, `openChange`, `openAllChanges`,
+`showWhy`, `next`, `prev`, `installCli`, `copyCliInstall`,
 `outOfRangeHelp`, `continueReview`, `startReview`, `setBase`, `setRemote`,
 `undoFinish`, `resumeFinish`, `discardInventory`, `cleanReview`,
 `compareReview`, `walkthroughInit`, `walkthroughBuild`, `openSupport`.
 
 **Barra del tool window (5)** — `refresh`, `finishReview`, `saveReview`,
 `abortReview`, `previewEdits`.
+
+`refresh` es **una sola constante** y pertenece **sólo a la barra**. La
+referencia no es `PANEL_MESSAGES` (que tiene 22 entradas), sino el panel real:
+`refresh` está en esa lista pero el webview no lo postea desde ningún control
+—`panelHtml.ts` no construye ninguno—, así que el cuerpo dibuja 21. Ésa es la
+razón por la que el `Refresh` del cuerpo del `ReviewPanel` actual se retira: la
+extensión no lo tiene ahí, lo tiene en `view/title`.
 
 **Fuera del panel, sólo en el menú del plugin (4)** — `goToEntry`,
 `forgetReview`, `previewEditsStat`, `showCliLog`. No tienen `ControlId`: que no
@@ -111,6 +119,24 @@ Tres de los 22 no son acciones del contrato y no llegan a la CLI:
 | `SECONDARY` | El resto de los botones | Botón normal |
 | `LINK` | Abre otra superficie, no actúa sobre ésta | Enlace del tema (`open in editor`, `Other install options`) |
 | `ICON` | Sin rótulo visible | Botón de ícono con nombre accesible |
+
+### Cómo se lee el mismo control del lado de la extensión
+
+El verificador de Node no interpreta JS: extrae los controles de `panelHtml.ts`
+por la forma de la llamada, que es uniforme. Esta tabla es el contrato de esa
+extracción, y es lo que hace verificable la mitad VS Code de FR-036.
+
+| Forma en `panelHtml.ts` | Cómo se registra en el canónico |
+|---|---|
+| `button(label, id, className, iconName, index)` | `label` e `id` literales; `emphasis` = `PRIMARY`/`LINK` según `className`, `SECONDARY` cuando es `null` |
+| `iconButton(iconName, id, label)` | `label: null`, `accessibleName = label`, `emphasis = ICON` |
+| `button(file.display, "openChange", "file-row", …)` | fila de `FileRows`: rótulo dinámico, se registra el `id` y el bloque, no el texto |
+| `button(…, index)` del inventario | fila de `InventoryRows`, ídem; `Continue` sí lleva rótulo literal |
+| rótulo ternario (`review.orphan ? "Discard orphan" : "Discard"`) | dos rótulos como variantes del mismo control |
+| `el("button", "code-copy")` + `copyCliInstall` | el **Copy** del `CodeCommand`: no pasa por `button()`, se registra aparte |
+
+Lo que **no** es control y no se registra: el `?` del inventario (un `span` con
+`role="img"` y `title`, no accionable) y los `badge` de la cabecera.
 
 ## Filas compuestas
 
@@ -148,8 +174,25 @@ ya existe en `ui/actions/ReviewActions.kt` y `host/MutationActions.kt`.
 | `refresh` | `GitReviewService.scheduleRefresh` | Sólo en la barra de título. |
 | `finishReview` / `saveReview` / `abortReview` / `previewEdits` | acciones existentes | Sólo en la barra de título, con su condición. |
 
-**Confirmaciones**: las que ya pide el plugin se conservan tal cual; el control
-del panel no agrega ni saca diálogos (FR-032).
+**Confirmaciones**: el control del panel no agrega ni saca diálogos respecto de
+la acción a la que rutea (FR-032); lo único que cambia es de dónde sale el
+argumento (el índice del inventario, el source del pending). Para que eso sea
+*afirmable* y no una promesa, el canónico marca `confirms: true` en cada control
+cuya acción confirma en la extensión, y el dominio expone
+
+```kotlin
+fun requiresConfirmation(id: ControlId): Boolean
+```
+
+derivada de ese registro. Es **la misma función** que consulta el despachador
+antes de ejecutar, así que la condición se testea en JUnit puro sin leer un
+diálogo de Swing.
+
+Criterio para llenar `confirms` (verificable comando por comando en
+`vscode-extension/src/commands/*.ts`): el comando **confirma** cuando asigna el
+resultado de `showWarningMessage` y ramifica sobre él (`abortReview.ts:52`);
+cuando lo llama sin asignarlo es un aviso, no una confirmación
+(`installOrUpdateCli.ts:37`).
 
 ## Qué NO entra en el modelo
 

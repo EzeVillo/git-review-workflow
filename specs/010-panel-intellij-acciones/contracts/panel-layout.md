@@ -170,6 +170,22 @@ el plugin viven sólo en `Tools → git review`. Un control con cualquiera de es
 ids en el layout es un fallo de contrato, igual que la falta de uno de los que sí
 están.
 
+**`refresh` tampoco es un control del cuerpo.** Está en `PANEL_MESSAGES` (que
+por eso tiene 22 entradas), pero `panelHtml.ts` no construye ningún control que
+lo postee: el `Refresh` de la extensión vive en `view/title`. El cuerpo dibuja
+**21** controles distintos. Es la razón por la que el `Refresh` del cuerpo del
+`ReviewPanel` actual se retira en vez de mudarse: la extensión no lo tiene ahí.
+Como `PANEL_MESSAGES` no alcanza para decidir esto, la verificación #2 de abajo
+comprueba pertenencia, no igualdad de conjuntos.
+
+**`docsLink` es código muerto de la extensión.** `panelHtml.ts:620` define un
+constructor de link que postea `openSupport` con id `docs`, pero no lo llama
+nadie; el canónico registra sólo `Star on GitHub` (`support.star_url`) porque es
+lo único que el panel pinta. La verificación #3 sólo mira controles construidos,
+así que el código muerto no la ensucia — y si alguien lo empieza a usar, #3
+falla y obliga a decidir si el plugin lo lleva también. Limpiarlo es un cambio
+de la extensión y queda fuera de esta feature.
+
 ---
 
 ## Bloque a agregar al canónico
@@ -179,26 +195,56 @@ En `contracts/client-product-surface.yaml`, después de `actions:`. Forma
 
 ```yaml
 # Disposición del panel, en orden. Normativo para:
-#   - intellij: PanelLayoutContractTest compara estructura completa
-#   - vscode:   check-client-product-surface.mjs compara pertenencia de rótulos
+#   - intellij: PanelLayoutContractTest compara la estructura completa
+#   - vscode:   check-client-product-surface.mjs verifica lo de § Verificación
 panel_layout:
   cli-missing:
-    - {block: paragraph, key: cli_missing_title}
-    - {block: paragraph, key: npm_install_hint}
-    - {block: code_command, control: copyCliInstall, label: "Copy"}
-    - {block: paragraph, key: reload_or_wait}
-    - {block: row, controls: [{id: installCli, label: "Other install options", emphasis: link}]}
-    - {block: stderr, when: present}
-  # … una entrada por situación, más las variantes de modo de `review`
+    # Funciones de panelHtml.ts que dibujan esta situación, EN ORDEN DE
+    # COMPOSICION (no de aparición en el archivo). Es lo que hace verificable
+    # el orden del lado VS Code.
+    source_fns: [emptyCli, cliInstallHint]
+    blocks:
+      - {block: paragraph, key: cli_missing_title}
+      - {block: paragraph, key: npm_install_hint}
+      - {block: code_command, control: copyCliInstall, label: "Copy", raw_button: true}
+      - {block: paragraph, key: reload_or_wait}
+      - {block: row, controls: [{id: installCli, label: "Other install options", emphasis: link}]}
+      - {block: stderr, when: present}
+  # … una entrada por situación, más las variantes de modo de `review`.
+  # source_fns verificadas contra panelHtml.ts:
+  #   cli-missing | cli-outdated   [emptyCli, cliInstallHint]
+  #   no-review (setup)            [renderSetup]
+  #   no-review (con base)         [renderReview, renderEmptyStartBlock,
+  #                                 renderOtherActions, renderSettings, renderSupport]
+  #   finish-pending               [renderPending]
+  #   out-of-range | error         [render]
+  #   review walk | step           [renderEntry, renderOpenRow, renderNavRow]
+  #   review whole                 [renderFiles]
+  #   finish-conflict              [renderFinishConflictBanner, renderEntry, renderOpenRow]
 title_actions:
   - {id: refresh,       label: "Refresh"}
-  - {id: finishReview,  label: "Finish",        when: "review && !readonly && !busy"}
+  - {id: finishReview,  label: "Finish",        when: "review && !readonly && !busy", confirms: true}
   - {id: saveReview,    label: "Save",          when: "review && !busy"}
-  - {id: abortReview,   label: "Cancel",        when: "(review|finish-conflict) && !busy"}
+  - {id: abortReview,   label: "Cancel",        when: "(review|finish-conflict) && !busy", confirms: true}
   - {id: previewEdits,  label: "Preview edits", when: "(review|finish-conflict) && !busy"}
 panel_excluded:  # existen como acción, nunca como control del panel
   [goToEntry, forgetReview, previewEditsStat, showCliLog]
+panel_unverified:  # residuo de FR-036: no lo cubre el verificador de Node
+  - "posición de los bloques que no son controles (párrafos, notas, badges)"
+  - "condiciones de aparición (`when`) de los controles del cuerpo"
 ```
+
+Dos marcas del control merecen nota:
+
+- **`confirms: true`** — la acción pide confirmación. Se llena verificando
+  comando por comando en `vscode-extension/src/commands/*.ts`: confirma el que
+  **asigna** el resultado de `showWarningMessage` y ramifica sobre él
+  (`abortReview.ts:52`); el que lo llama sin asignarlo es un aviso
+  (`installOrUpdateCli.ts:37`). De ahí sale `requiresConfirmation(id)` del
+  dominio (data-model § Mapeo), que es lo que hace afirmable FR-032.
+- **`raw_button: true`** — el control no se construye con el helper `button()`
+  (hoy sólo el **Copy** del `CodeCommand`), así que la verificación #1 lo busca
+  por su literal y no por la forma de la llamada.
 
 ## Verificación
 
@@ -207,14 +253,41 @@ y, para cada situación, compara contra `panelLayout(fixture)`: identidad de los
 controles, orden, agrupación en filas, énfasis, rótulo y habilitación. Corre en
 `./gradlew test`, o sea en los tres sistemas operativos de CI.
 
-**VS Code (pertenencia)** — `scripts/check-client-product-surface.mjs`:
+**VS Code** — `scripts/check-client-product-surface.mjs`. Los controles se
+extraen de `panelHtml.ts` por la forma de la llamada (data-model § Cómo se lee
+el mismo control del lado de la extensión), no interpretando JS:
 
-1. cada `label` del canónico aparece literalmente en `panelHtml.ts`;
-2. cada `id` de control del canónico está en `PANEL_MESSAGES`
-   (o en `contributes.menus.view/title` si es de `title_actions`);
-3. **ningún** literal de botón de `panelHtml.ts` queda fuera del canónico;
-4. ningún id de `panel_excluded` aparece en `PANEL_MESSAGES`.
+1. cada control del canónico existe con **su rótulo y su énfasis**: hay una
+   llamada `button("<label>", "<id>", <emphasis>)` —o `iconButton` para los de
+   ícono— que coincide en las tres cosas. Esto es lo que cierra la dimensión de
+   **jerarquía**: bajar `Clean` de `primary` a secundario deja de matchear;
+2. cada `id` de control del canónico está en `PANEL_MESSAGES` (o en
+   `contributes.menus.view/title` si es de `title_actions`). Es **pertenencia,
+   no igualdad de conjuntos**: `PANEL_MESSAGES` tiene 22 entradas y el cuerpo
+   dibuja 21 (ver § Lo que el panel NO tiene);
+3. **ninguna** llamada `button(…)` / `iconButton(…)` de `panelHtml.ts` queda
+   fuera del canónico. Los rótulos dinámicos (filas de archivo e inventario) se
+   matchean por `id` y bloque, no por texto;
+4. ningún id de `panel_excluded` aparece en `PANEL_MESSAGES`;
+5. **agrupación y orden intra-fila**: para cada `row` de dos controles del
+   canónico, sus dos llamadas aparecen **consecutivas y en ese orden** en
+   `panelHtml.ts` (sin otra llamada de control entre medio). Es igualdad
+   estricta, y es lo que protege la composición de las filas (FR-002);
+6. **orden intra-situación**: la secuencia de ids del canónico para la situación
+   tiene que ser **subsecuencia** de la secuencia extraída de sus `source_fns`,
+   concatenadas en el orden declarado. Subsecuencia y no igualdad porque una
+   misma función dibuja ramas de modos distintos (`renderOpenRow` emite `Diff`
+   para step y `File`+`Diff` para walk); aun así, invertir una fila o mover un
+   control de bloque rompe la subsecuencia y falla.
 
 El punto 3 es el que atrapa el drift más probable: agregar un botón al panel de
 la extensión sin registrarlo obliga a decidir explícitamente si el plugin lo
-lleva también.
+lleva también. Los puntos 5 y 6 son los que hacen que FR-036 no dependa de mirar
+las dos pantallas.
+
+**Coherencia interna del canónico** — el mismo script verifica que
+`panel_layout` no contradiga el bloque `actions:` que ya existe en el archivo:
+toda situación en la que `panel_layout` pinta un control tiene que estar en
+`actions.<id>.situations`, y todo control con `requires_not_busy: true` tiene
+que estar deshabilitado por *busy* en el layout. Sin esto, el archivo tendría
+dos fuentes de verdad capaces de separarse entre sí.

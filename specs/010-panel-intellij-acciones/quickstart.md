@@ -21,19 +21,31 @@ Es el gate de la feature: si esto pasa, la paridad estructural está afirmada.
 cd intellij-plugin && ./gradlew test
 ```
 
-Cubre el layout completo: `PanelLayoutTest` (una situación por test: orden,
-rótulos, filas, énfasis, habilitación), `PanelLayoutContractTest` (compara
-contra el canónico) y `PanelRendererTest` (el renderer no pierde ni reordena
-controles). Son tests de dominio en JUnit puro, así que corren en ubuntu, macOS
-y Windows.
+Cubre el layout completo:
+
+- `PanelLayoutContractTest` — compara el layout de cada situación contra el
+  canónico (identidad, rótulo, orden, agrupación, énfasis, habilitación).
+- `PanelLayoutInvariantsTest` — los cinco invariantes de construcción del
+  `Control`, y que ningún id excluido sea construible.
+- `PanelLayout{Review,Finish,EmptyState,Whole,Diagnostics,Footer,Skeleton}Test`
+  — una situación por archivo, agrupadas por historia.
+- `TitleBarActionsTest` — las cinco acciones de la barra y sus condiciones.
+- `ConfirmationContractTest` — `requiresConfirmation` contra el `confirms:` del
+  canónico (FR-032).
+- `PanelRendererTest` — el renderer no pierde ni reordena controles.
+
+Son tests de dominio en JUnit puro, así que corren en ubuntu, macOS y Windows.
 
 ```bash
 node scripts/check-client-product-surface.mjs
 ```
 
-Verifica el otro lado: que cada rótulo del canónico exista en el panel de la
-extensión, y —lo que más importa— que ningún botón del panel de la extensión
-quede fuera del canónico.
+Verifica el otro lado con las seis comprobaciones de
+`contracts/panel-layout.md` § Verificación: rótulo, id y **énfasis** de cada
+control; que ningún botón del panel de la extensión quede fuera del canónico
+—lo que más importa—; la adyacencia de los dos controles de cada fila; y el
+orden de los controles dentro de cada situación. Verifica también que el bloque
+nuevo no contradiga el `actions:` que ya estaba en el mismo archivo.
 
 ```bash
 cd intellij-plugin && ./gradlew check
@@ -109,6 +121,13 @@ Recorrido mínimo que ejercita las historias P1 de la spec:
    **Undo** y **Continue** y que la fila de navegación **no está**.
 5. **Whole** — arrancar una review de una rama sin walkthrough y abrir el diff
    de un archivo con **un** clic.
+6. **Confirmaciones** (FR-032) — accionar **Discard** desde una fila del
+   inventario y **Clean** desde el aviso de finish pendiente: los dos tienen que
+   pedir confirmación antes de ejecutar, con el mismo texto que cuando se los
+   invoca desde `Tools → git review`. Cancelar el diálogo no debe dejar rastro.
+7. **Anclaje** (FR-008) — mover el tool window a la izquierda o abajo, cerrar el
+   IDE sandbox y volver a abrirlo: tiene que quedar donde el revisor lo dejó. El
+   `anchor="right"` es el valor por defecto, no una imposición.
 
 Para las situaciones que el sandbox no produce (`cli-missing`, `cli-outdated`),
 apuntá la setting a un path inexistente o a una CLI vieja.
@@ -135,3 +154,5 @@ Los dos controles de navegación no tienen rótulo: verificá que anuncien
 | Scroll horizontal en el tool window | El ancho fijo del texto volvió (research §4) |
 | Una sección del pie se pliega sola al refrescar | El estado de apertura se guardó en el modelo en vez de en el componente (research §6) |
 | El preview arranca pero el panel no dibuja colores | `JBColor` fuera de la plataforma; el renderer tiene que tomarlos del chrome inyectado (research §3) |
+| El panel se quedó sin `Refresh` | T009a (barra del tool window) tiene que ir **antes** de T010, que retira el `header()` del cuerpo |
+| Una acción destructiva del panel ejecuta sin preguntar | El despachador no pasó por `requiresConfirmation`; `ConfirmationContractTest` debería haberlo atrapado |

@@ -29,11 +29,13 @@ class VersionTest {
     @Test
     fun isOutdatedAgainstMin() {
         assertFalse(isOutdated(MIN_CLI_VERSION))
-        assertEquals("0.4.0", MIN_CLI_VERSION)
+        assertEquals("0.5.0", MIN_CLI_VERSION)
         assertTrue(isOutdated("0.2.1"))
         assertTrue(isOutdated("0.3.0"))
         assertTrue(isOutdated("0.3.9"))
-        assertFalse(isOutdated("0.4.1"))
+        assertTrue(isOutdated("0.4.0"))
+        assertTrue(isOutdated("0.4.9"))
+        assertFalse(isOutdated("0.5.1"))
         assertTrue(isOutdated("garbage"))
     }
 }

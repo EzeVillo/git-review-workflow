@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Minimum required CLI raised to **0.5.0** (parity with VS Code extension /
+  `contracts/client-product-surface.yaml`).
 - Whole and step multi-file Diff use a single `DiffRequestChain` window
   (Prev/Next file) instead of one editor tab per file. Whole keeps its **Diff**
   button for open-all.

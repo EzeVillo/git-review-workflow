@@ -103,7 +103,7 @@ current entry) but locks navigation until you *Continue* or *Undo finish*.
 ## Requirements
 
 - **VS Code 1.75** or newer.
-- **[git-review-workflow](https://github.com/EzeVillo/git-review-workflow) 0.4.0
+- **[git-review-workflow](https://github.com/EzeVillo/git-review-workflow) 0.5.0
   or newer**, discoverable as a git subcommand (`git review -h` works), or
   pointed at directly with the `gitReview.path` setting.
 - A **single-folder workspace.** Multi-root workspaces are not supported: the

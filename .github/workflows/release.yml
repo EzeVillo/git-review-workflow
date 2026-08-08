@@ -41,6 +41,12 @@ jobs:
       # Misma versión pinneada que el job `test` de ci.yml y que
       # tests/Dockerfile: un release no puede verificarse contra un bats
       # distinto del que corrió en los PRs. Bump los tres juntos.
+      # setup-node es obligatorio: sin él el npm del sistema del runner
+      # instala globales en /usr/local y muere con EACCES (el job test de
+      # ci.yml ya lo trae por eso).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
       - name: Install bats
         run: npm install -g bats@1.13.0
       - name: Run tests

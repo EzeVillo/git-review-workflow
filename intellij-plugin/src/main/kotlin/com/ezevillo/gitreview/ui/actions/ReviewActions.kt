@@ -304,6 +304,15 @@ class OpenChangeAction : AnAction(), DumbAware {
     }
 }
 
+class OpenAllChangesAction : AnAction(), DumbAware {
+    override fun actionPerformed(e: AnActionEvent) {
+        val project = e.project ?: return
+        val service = GitReviewService.getInstance(project)
+        val cwd = pickSoleGitRoot(project)?.rootPath ?: return
+        OpenEntryActions.openAllChanges(project, service.currentState(), cwd)
+    }
+}
+
 class SetBaseAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return

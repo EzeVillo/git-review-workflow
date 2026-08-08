@@ -2,11 +2,9 @@
 
 ## Unreleased
 
-- Drop **Open all changes** / bulk multi-diff in whole mode. IntelliJ opens one
-  editor tab per file (unlike VS Code's single multi-diff tab), so the bulk
-  action flooded the tab bar. Open files one at a time from the list. Step
-  commit diffs still open, but as one `DiffRequestChain` window with Prev/Next
-  file instead of N tabs.
+- Whole and step multi-file Diff use a single `DiffRequestChain` window
+  (Prev/Next file) instead of one editor tab per file. Whole keeps its **Diff**
+  button for open-all.
 - Fix step Diff showing an empty pane titled **M**: `diff-tree` lacked
   `--no-commit-id`, so the commit SHA was parsed as a status field and the
   status letter became the "path".

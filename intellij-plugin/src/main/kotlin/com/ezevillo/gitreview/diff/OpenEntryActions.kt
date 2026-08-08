@@ -120,6 +120,32 @@ object OpenEntryActions {
         }
     }
 
+    /**
+     * Whole mode: every change in the review range, in one DiffRequestChain window
+     * (same UX as step commit Diff — Prev/Next file, not one editor tab each).
+     */
+    fun openAllChanges(project: Project, state: ReviewState, cwd: String) {
+        if (state.state?.mode != ReviewMode.WHOLE) return
+        Bg.async(
+            project,
+            "git review: loading changes",
+            work = {
+                try {
+                    Pair(true, RangeChanges.nameStatusHead(cwd).map { rangeDiff(cwd, it) })
+                } catch (_: Exception) {
+                    Pair(false, emptyList())
+                }
+            },
+            then = { (ok, diffs) ->
+                when {
+                    !ok -> UiMessages.error(project, UserCopy.OPEN_RANGE_FAILED)
+                    diffs.isEmpty() -> UiMessages.info(project, UserCopy.OPEN_RANGE_EMPTY)
+                    else -> show(project, diffs)
+                }
+            },
+        )
+    }
+
     private fun openWorkingTreeFile(project: Project, cwd: String, relative: String) {
         val file = File(cwd, relative)
         Bg.async(
@@ -187,9 +213,9 @@ object OpenEntryActions {
             ?: LocalFileSystem.getInstance().findFileByIoFile(file)
 
     /**
-     * One file → single request. Several (step commit) → [SimpleDiffRequestChain]
-     * so IntelliJ keeps one window with Prev/Next file instead of one tab each.
-     * Whole-range open-all is intentionally not offered (see PanelLayout.wholeBlocks).
+     * One file → single request. Several (step commit or whole open-all) →
+     * [SimpleDiffRequestChain] so IntelliJ keeps one window with Prev/Next file
+     * instead of one editor tab each.
      */
     private fun show(project: Project, diffs: List<FileDiff>) {
         if (diffs.isEmpty()) return

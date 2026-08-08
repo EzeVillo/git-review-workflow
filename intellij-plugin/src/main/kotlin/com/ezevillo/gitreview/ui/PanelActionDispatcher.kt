@@ -63,6 +63,10 @@ class PanelActionDispatcher(
                 openChange(index)
                 false
             }
+            ControlId.OPEN_ALL_CHANGES -> {
+                openAll()
+                false
+            }
             ControlId.SHOW_WHY -> {
                 val text = modelWhy() ?: return false
                 UiMessages.info(project, text, "Why")
@@ -179,6 +183,11 @@ class PanelActionDispatcher(
             currentEntry(state.entries, state.state?.position)
         } ?: return
         OpenEntryActions.openChange(project, state, entry, cwd)
+    }
+
+    private fun openAll() {
+        val cwd = pickSoleGitRoot(project)?.rootPath ?: return
+        OpenEntryActions.openAllChanges(project, service.currentState(), cwd)
     }
 
     private fun continueAt(index: Int?) {

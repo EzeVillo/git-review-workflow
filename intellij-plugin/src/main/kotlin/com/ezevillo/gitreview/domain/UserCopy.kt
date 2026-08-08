@@ -228,6 +228,7 @@ object UserCopy {
     const val OPEN_RANGE_FAILED = "Could not read the files of this review's range."
     fun openNoChangesLeft(display: String): String =
         "$display has no changes left in this review."
+    const val OPEN_RANGE_EMPTY = "This review's range does not touch any files."
     fun openCommitFailed(sha: String): String = "Could not read the files of commit $sha."
     fun openCommitEmpty(sha: String): String = "Commit $sha changes no files."
 

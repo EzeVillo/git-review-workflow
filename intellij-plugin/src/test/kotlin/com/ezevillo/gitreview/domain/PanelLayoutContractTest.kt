@@ -58,10 +58,9 @@ class PanelLayoutContractTest {
     }
 
     @Test
-    fun `whole has no openAllChanges (IntelliJ has no multi-diff tab)`() {
+    fun `whole openAllChanges present`() {
         val layout = panelLayout(PanelFixtures.reviewWhole())
-        assertTrue(layout.collectControls().none { it.id.wire == "openAllChanges" })
-        assertTrue(ControlId.fromWire("openAllChanges") == null)
+        assertTrue(layout.collectControls().any { it.id == ControlId.OPEN_ALL_CHANGES && it.label == "Diff" })
     }
 
     private fun assertLayoutAgainstCanonical(key: String, layout: PanelLayout) {

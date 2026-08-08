@@ -1,16 +1,21 @@
 package com.ezevillo.gitreview.diff
 
+import com.ezevillo.gitreview.domain.CommitChange
 import com.ezevillo.gitreview.domain.EntryRecord
 import com.ezevillo.gitreview.domain.PathRef
 import com.ezevillo.gitreview.domain.ReviewMode
 import com.ezevillo.gitreview.domain.ReviewState
+import com.ezevillo.gitreview.host.Bg
 import com.ezevillo.gitreview.settings.LastOpenedStore
 import com.intellij.diff.DiffContentFactory
 import com.intellij.diff.DiffManager
+import com.intellij.diff.contents.DiffContent
 import com.intellij.diff.requests.SimpleDiffRequest
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.vfs.VirtualFile
 import java.io.File
 
 private fun EntryRecord.displayPath(): String = when (val id = this.id) {
@@ -19,8 +24,45 @@ private fun EntryRecord.displayPath(): String = when (val id = this.id) {
     else -> id.toString()
 }
 
+/** The working-tree side of a review diff, as opposed to a blob at some ref. */
+private const val WORKING_TREE = "Working tree"
+
 /**
- * Opens entry / change / all based on mode. Best-effort using VFS + DiffManager.
+ * One side of a diff, already resolved off the EDT.
+ *
+ * [bytes] is the blob at a ref; [file] is the working-tree file (kept as a
+ * `VirtualFile` so the reviewer can edit inside the diff, which is the whole point of
+ * a review). Both null means the side does not exist at all — the file is added, or
+ * deleted, and the viewer gets an empty pane.
+ */
+private class DiffSide(
+    val label: String,
+    val bytes: ByteArray? = null,
+    val file: VirtualFile? = null,
+    val fileName: String = "",
+) {
+    fun content(project: Project): DiffContent {
+        val factory = DiffContentFactory.getInstance()
+        if (file != null) return factory.create(project, file)
+        if (bytes == null) return factory.createEmpty()
+        val type = FileTypeManager.getInstance().getFileTypeByFileName(fileName)
+        return try {
+            factory.createFromBytes(project, bytes, type, fileName)
+        } catch (_: Exception) {
+            factory.createEmpty()
+        }
+    }
+}
+
+private class FileDiff(val title: String, val before: DiffSide, val after: DiffSide)
+
+/**
+ * Opens entry / change / all based on mode.
+ *
+ * Both halves matter: git is asked on a pooled thread ([Bg.async]), and the diff is
+ * built and shown on the EDT. A diff's *before* side is the blob at the base ref, not
+ * the file on disk — reading both sides from the working tree is the same file twice,
+ * which the viewer reports as "contents are identical".
  */
 object OpenEntryActions {
     fun openEntry(project: Project, state: ReviewState, entry: EntryRecord, cwd: String) {
@@ -34,9 +76,8 @@ object OpenEntryActions {
             }
         }
         if (mode == ReviewMode.WHOLE) {
-            state.state?.branch?.let { branch ->
-                project.getService(LastOpenedStore::class.java).set(branch, entry.displayPath())
-            }
+            project.getService(LastOpenedStore::class.java)
+                .set(state.state.branch, entry.displayPath())
         }
     }
 
@@ -44,14 +85,23 @@ object OpenEntryActions {
         val mode = state.state?.mode ?: return
         when (mode) {
             ReviewMode.WHOLE, ReviewMode.WALK -> {
-                val changes = RangeChanges.nameStatusHead(cwd)
                 val path = entry.displayPath()
-                val change = changes.find { it.path == path || it.after == path || it.before == path }
-                if (change != null) {
-                    openFileDiff(project, cwd, change.before, change.after, path)
-                } else {
-                    openWorkingTreeFile(project, cwd, path)
-                }
+                Bg.async(
+                    project,
+                    "git review: loading diff",
+                    work = {
+                        val change = RangeChanges.nameStatusHead(cwd)
+                            .find { it.path == path || it.after == path || it.before == path }
+                        change?.let { listOf(rangeDiff(cwd, it)) }
+                    },
+                    then = { diffs ->
+                        if (diffs == null) {
+                            openWorkingTreeFile(project, cwd, path)
+                        } else {
+                            show(project, diffs)
+                        }
+                    },
+                )
             }
             ReviewMode.STEP -> {
                 val sha = entry.id as? String ?: return
@@ -62,51 +112,80 @@ object OpenEntryActions {
 
     fun openAllChanges(project: Project, state: ReviewState, cwd: String) {
         if (state.state?.mode != ReviewMode.WHOLE) return
-        val changes = RangeChanges.nameStatusHead(cwd)
-        for (c in changes) {
-            openFileDiff(project, cwd, c.before, c.after, c.path)
-        }
+        Bg.async(
+            project,
+            "git review: loading changes",
+            work = { RangeChanges.nameStatusHead(cwd).map { rangeDiff(cwd, it) } },
+            then = { diffs -> show(project, diffs) },
+        )
     }
 
     private fun openWorkingTreeFile(project: Project, cwd: String, relative: String) {
         val file = File(cwd, relative)
-        val vf = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file)
-            ?: LocalFileSystem.getInstance().findFileByIoFile(file)
-        if (vf != null) {
-            FileEditorManager.getInstance(project).openFile(vf, true)
-        }
+        Bg.async(
+            project,
+            "git review: opening ${file.name}",
+            work = { findWorkingTreeFile(file) },
+            then = { vf -> if (vf != null) FileEditorManager.getInstance(project).openFile(vf, true) },
+        )
     }
 
     private fun openCommitDiff(project: Project, cwd: String, sha: String) {
-        val changes = RangeChanges.nameStatusCommit(cwd, sha)
-        for (c in changes.take(20)) {
-            openFileDiff(project, cwd, c.before, c.after, c.path)
-        }
+        Bg.async(
+            project,
+            "git review: loading commit",
+            work = {
+                RangeChanges.nameStatusCommit(cwd, sha).take(20).map { commitDiff(cwd, sha, it) }
+            },
+            then = { diffs -> show(project, diffs) },
+        )
     }
 
-    private fun openFileDiff(
-        project: Project,
-        cwd: String,
-        before: String?,
-        after: String?,
-        title: String,
-    ) {
-        val factory = DiffContentFactory.getInstance()
-        val left = if (before != null) {
-            val f = File(cwd, before)
-            val vf = LocalFileSystem.getInstance().findFileByIoFile(f)
-            if (vf != null) factory.create(project, vf) else factory.createEmpty()
-        } else {
-            factory.createEmpty()
+    /**
+     * Review range: HEAD sits at the lower bound and the PR's changes are staged on top,
+     * so *before* is the blob at HEAD and *after* is what the reviewer is editing.
+     */
+    private fun rangeDiff(cwd: String, change: CommitChange): FileDiff = FileDiff(
+        title = change.path,
+        before = blobSide(cwd, "HEAD", change.before, "HEAD"),
+        after = change.after
+            ?.let { DiffSide(WORKING_TREE, file = findWorkingTreeFile(File(cwd, it))) }
+            ?: DiffSide(WORKING_TREE),
+    )
+
+    /** Step mode: a single commit against its parent, neither side from the working tree. */
+    private fun commitDiff(cwd: String, sha: String, change: CommitChange): FileDiff {
+        val short = sha.take(7)
+        return FileDiff(
+            title = change.path,
+            before = blobSide(cwd, "$sha^", change.before, "$short^"),
+            after = blobSide(cwd, sha, change.after, short),
+        )
+    }
+
+    private fun blobSide(cwd: String, ref: String, path: String?, label: String): DiffSide {
+        if (path == null) return DiffSide(label)
+        return DiffSide(
+            label,
+            bytes = RangeChanges.showBytes(cwd, ref, path),
+            fileName = path.substringAfterLast('/'),
+        )
+    }
+
+    private fun findWorkingTreeFile(file: File): VirtualFile? =
+        LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file)
+            ?: LocalFileSystem.getInstance().findFileByIoFile(file)
+
+    private fun show(project: Project, diffs: List<FileDiff>) {
+        for (diff in diffs) {
+            val request = SimpleDiffRequest(
+                diff.title,
+                diff.before.content(project),
+                diff.after.content(project),
+                diff.before.label,
+                diff.after.label,
+            )
+            DiffManager.getInstance().showDiff(project, request)
         }
-        val right = if (after != null) {
-            val f = File(cwd, after)
-            val vf = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(f)
-            if (vf != null) factory.create(project, vf) else factory.createEmpty()
-        } else {
-            factory.createEmpty()
-        }
-        val request = SimpleDiffRequest(title, left, right, "Before", "After")
-        DiffManager.getInstance().showDiff(project, request)
     }
 }

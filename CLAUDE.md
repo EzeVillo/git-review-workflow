@@ -227,10 +227,13 @@ La CLI es la única fuente de verdad. Hay dos UIs de cliente en el monorepo:
 - **`intellij-plugin/`** — plugin IntelliJ IDEA (Kotlin + Gradle Platform Plugin).
 
 Ambos leen solo porcelain/argv de la CLI; el canónico anti-drift multi-cliente
-vive en **`contracts/client-product-surface.yaml`** (raíz). CI lo verifica con
-`node scripts/check-client-product-surface.mjs` (min_cli_version, npm, strings
-críticos, matriz de 27 acciones vs `package.json` de la extensión y constantes
-del plugin).
+vive en **`contracts/client-product-surface.yaml`** (raíz). Incluye la matriz de
+27 acciones y el bloque **`panel_layout:`** (disposición del panel por
+situación). CI lo verifica con `node scripts/check-client-product-surface.mjs`
+(min_cli_version, npm, strings críticos, 27 acciones vs `package.json` de la
+extensión, y las seis comprobaciones de layout vs `panelHtml.ts`). Del lado
+IntelliJ, `PanelLayoutContractTest` compara `panelLayout(fixture)` contra el
+mismo YAML en cada `./gradlew test`.
 
 ### Plugin de IntelliJ IDEA
 
@@ -259,11 +262,13 @@ git-review** al `bin/git-review` del checkout si hace falta → tool window
 **git review** + menú **Tools → git review**. Detalle en `CONTRIBUTING.md`
 (sección *The IntelliJ IDEA plugin*) y `specs/009-plugin-intellij/quickstart.md`.
 
-**UX:** paridad de producto (CLI + matriz de acciones/situaciones), no de
-píxeles. El panel es Swing nativo a propósito (no CEF/HTML del webview de
-VS Code). La extensión y la CLI siguen yendo al contenedor Docker en Windows;
-el plugin se prueba con Gradle nativo (y `platformTest` en el runner Linux de
-CI).
+**UX:** paridad de producto (CLI + matriz de acciones/situaciones + disposición
+del panel), no de píxeles. El panel es Swing nativo a propósito (no CEF/HTML del
+webview de VS Code): `domain/PanelLayout.kt` proyecta el modelo y
+`ui/PanelRenderer.kt` lo dibuja. Comparar lado a lado con
+`./gradlew runPanelPreview` vs `npm run preview` en la extensión. La extensión y
+la CLI siguen yendo al contenedor Docker en Windows; el plugin se prueba con
+Gradle nativo (y `platformTest` en el runner Linux de CI).
 
 ## Extensión de VS Code
 

@@ -57,25 +57,44 @@ when the IDE’s `PATH` does not see the CLI.
 ### Look & feel
 
 This is a **native Swing** tool window, not a port of the VS Code webview HTML.
-Product parity (actions, situations, CLI argv, critical strings) is required;
-pixel-identical layout is not. See
-[`../specs/009-plugin-intellij/research.md`](../specs/009-plugin-intellij/research.md)
-(decision 3) and the monorepo
-[`CONTRIBUTING.md`](../CONTRIBUTING.md#the-intellij-idea-plugin).
+**Product parity** (same controls, order, labels, grouping, emphasis, enablement)
+is required; pixel-identical layout is not. The panel layout is a pure domain
+projection (`panelLayout`) verified against
+[`../contracts/client-product-surface.yaml`](../contracts/client-product-surface.yaml)
+`panel_layout:`. Compare side-by-side with
+`cd vscode-extension && npm run preview` vs `./gradlew runPanelPreview`.
+
+## Panel surface (what each situation offers)
+
+| Situation | Panel body | Title bar |
+|-----------|------------|-----------|
+| `cli-missing` / `cli-outdated` | Install/update command, **Copy**, **Other install options** | Refresh |
+| `no-review` (no base) | **Set the base branch**, Change remote | Refresh |
+| `no-review` (ready) | Inventory (Continue / Discard), **Start a review**, collapsible Other actions / Settings / Support | Refresh |
+| `finish-pending` | Banner: **Clean** \| **Undo finish** | Refresh |
+| `review` walk | Identity bar, notes, entry, why, open in editor, File \| Diff, ◀ \| ▶ | Refresh, Finish, Save, Cancel, Preview edits |
+| `review` step | Same without why; Diff only | same |
+| `review` whole | File list (one-click Diff per file), Diff-all | same |
+| `finish-conflict` | Conflict banner Undo \| Continue; **no** nav row | Refresh, Cancel, Preview edits |
+| `out-of-range` / `error` | **How to fix it** + stderr | Refresh |
+
+**Menu only** (not on the panel): Go to Entry, Forget…, Preview Edits (stat),
+Show CLI Log — still under **Tools → git review**.
 
 ## Architecture
 
 | Layer | Package | Notes |
 |-------|---------|--------|
-| domain | `com.ezevillo.gitreview.domain` | Pure JVM; no `com.intellij` imports |
+| domain | `com.ezevillo.gitreview.domain` | Pure JVM; includes `PanelLayout` projection |
 | host | `…host` | Invoke CLI, refresh, mutation lock |
 | vcs | `…vcs` | Sole git root via Git4Idea |
 | diff | `…diff` | name-status + DiffManager |
-| ui | `…ui` | Tool window + Swing panel |
+| ui | `…ui` | `PanelRenderer`, `PanelActionDispatcher`, tool window |
 | settings | `…settings` | `path`, `defaultSource` |
 
-Canonical multi-client strings and the action matrix live in
+Canonical multi-client strings, action matrix, and **panel layout** live in
 [`../contracts/client-product-surface.yaml`](../contracts/client-product-surface.yaml).
+Node checks the VS Code side; `PanelLayoutContractTest` checks IntelliJ.
 
 ## Smoke matrix (release)
 

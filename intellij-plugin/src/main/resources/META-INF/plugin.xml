@@ -13,9 +13,18 @@
     <depends>com.intellij.modules.platform</depends>
     <depends>Git4Idea</depends>
 
+    <!-- Stripe title for toolWindow id gitReview.walkthrough (must not rename the id). -->
+    <resource-bundle>messages.GitReviewBundle</resource-bundle>
+
     <!-- since/until-build are patched from gradle.properties by the platform plugin -->
 
     <extensions defaultExtensionNs="com.intellij">
+        <!--
+          anchor="right" is the default placement only (FR-008 / invariant exception).
+          Nothing in the plugin calls setAnchor/setSplitMode at runtime, so if the
+          reviewer moves the tool window the platform keeps their choice.
+          Stripe label: messages/GitReviewBundle.properties → toolwindow.stripe.gitReview.walkthrough
+        -->
         <toolWindow
             id="gitReview.walkthrough"
             anchor="right"
@@ -33,6 +42,36 @@
     </extensions>
 
     <actions>
+        <!-- Tool-window title bar: Refresh, Finish, Save, Cancel, Preview edits (feature 010).
+             Icons required: without them the title bar shows empty/placeholder glyphs. -->
+        <group id="GitReview.ToolWindowTitle" text="git review title" popup="false">
+            <action id="GitReview.Title.Refresh"
+                    class="com.ezevillo.gitreview.ui.actions.RefreshAction"
+                    text="Refresh"
+                    description="Refresh the git review panel"
+                    icon="AllIcons.Actions.Refresh"/>
+            <action id="GitReview.Title.Finish"
+                    class="com.ezevillo.gitreview.ui.actions.FinishReviewAction"
+                    text="Finish"
+                    description="Finish the active review"
+                    icon="AllIcons.Actions.Checked"/>
+            <action id="GitReview.Title.Save"
+                    class="com.ezevillo.gitreview.ui.actions.SaveReviewAction"
+                    text="Save"
+                    description="Save the review for later"
+                    icon="AllIcons.Actions.MenuSaveall"/>
+            <action id="GitReview.Title.Cancel"
+                    class="com.ezevillo.gitreview.ui.actions.AbortReviewAction"
+                    text="Cancel"
+                    description="Cancel the active review"
+                    icon="AllIcons.Actions.Rollback"/>
+            <action id="GitReview.Title.PreviewEdits"
+                    class="com.ezevillo.gitreview.ui.actions.PreviewEditsAction"
+                    text="Preview edits"
+                    description="Preview banked edits"
+                    icon="AllIcons.Actions.Preview"/>
+        </group>
+
         <group id="GitReview.Menu" text="git review" popup="true">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
             <action id="GitReview.Refresh"

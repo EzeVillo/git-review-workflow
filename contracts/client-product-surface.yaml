@@ -137,3 +137,152 @@ actions:
   showCliLog:
     surface: both
     situations: [cli-missing, cli-outdated, no-review, finish-pending, review, finish-conflict, out-of-range, error]
+
+# Disposición del panel, en orden. Normativo para:
+#   - intellij: PanelLayoutContractTest compara la estructura completa
+#   - vscode:   check-client-product-surface.mjs verifica lo de panel-layout.md § Verificación
+# confirms: true cuando el comando asigna showWarningMessage y ramifica (panel-layout.md).
+panel_layout:
+  cli-missing:
+    source_fns: [emptyCli, cliInstallHint]
+    blocks:
+      - {block: paragraph, key: cli_missing_title}
+      - {block: paragraph, key: npm_install_hint}
+      - {block: code_command, control: copyCliInstall, label: "Copy", raw_button: true, confirms: false}
+      - {block: paragraph, key: reload_or_wait}
+      - {block: row, controls: [{id: installCli, label: "Other install options", emphasis: link, confirms: false}]}
+      - {block: stderr, when: present}
+  cli-outdated:
+    source_fns: [emptyCli, cliInstallHint]
+    blocks:
+      - {block: paragraph, key: cli_outdated_title}
+      - {block: paragraph, key: npm_update_hint}
+      - {block: code_command, control: copyCliInstall, label: "Copy", raw_button: true, confirms: false}
+      - {block: paragraph, key: reload_or_wait}
+      - {block: row, controls: [{id: installCli, label: "Other install options", emphasis: link, confirms: false}]}
+      - {block: stderr, when: present}
+  no-review-setup:
+    source_fns: [renderSetup]
+    blocks:
+      - {block: paragraph, text: "Configure git review for this repository."}
+      - {block: row, controls: [{id: setBase, label: "Set the base branch", emphasis: primary, confirms: false}]}
+      - {block: paragraph, text: "The base is where PRs land in this repo (main, develop, …). Full reviews compare the branch under review against it."}
+      - {block: paragraph, text: "Remote: {remote} (optional)."}
+      - {block: row, controls: [{id: setRemote, label: "Change remote", emphasis: secondary, confirms: false}]}
+  no-review:
+    source_fns: [renderReview, renderEmptyStartBlock, renderOtherActions, renderSettings, renderSupport]
+    fills_height: true
+    blocks:
+      - {block: heading, text: "Reviews in this repository", when: has_reviews}
+      - {block: inventory_rows}
+      - {block: paragraph, text: "No active review on this branch."}
+      - {block: row, controls: [{id: startReview, label: "Start a review", emphasis: primary, confirms: true}]}
+      - block: tools_section
+        title: "Other actions"
+        blocks:
+          - {block: row, controls: [{id: compareReview, label: "Compare revisions", emphasis: secondary, confirms: true}]}
+          - {block: row, controls: [{id: walkthroughInit, label: "Walkthrough: Init", emphasis: secondary, confirms: true}, {id: walkthroughBuild, label: "Walkthrough: Build", emphasis: secondary, confirms: true}]}
+      - block: tools_section
+        title: "Settings"
+        blocks:
+          - {block: paragraph, text: "Base: {base}."}
+          - {block: row, controls: [{id: setBase, label: "Change the base branch", emphasis: secondary, confirms: false}]}
+          - {block: paragraph, text: "Remote: {remote}."}
+          - {block: row, controls: [{id: setRemote, label: "Change remote", emphasis: secondary, confirms: false}]}
+      - block: tools_section
+        title: "Support"
+        blocks:
+          - {block: row, controls: [{id: openSupport, label: "Star on GitHub", emphasis: secondary, raw_button: true, confirms: false}]}
+  finish-pending:
+    source_fns: [renderEmptyState]
+    blocks:
+      - block: banner
+        paragraphs:
+          - "Finished. Your edits are staged on {destination}."
+          - "Commit and push them from Source Control. The review branch is kept so you can undo with git review finish --abort, or clean --keep-fixes when you no longer need the undo."
+        row:
+          controls:
+            - {id: cleanReview, label: "Clean", emphasis: primary, confirms: true}
+            - {id: undoFinish, label: "Undo finish", emphasis: secondary, confirms: true}
+  out-of-range:
+    source_fns: [render]
+    blocks:
+      - {block: paragraph, text: "The cursor is out of range: the base moved."}
+      - {block: row, controls: [{id: outOfRangeHelp, label: "How to fix it", emphasis: primary, confirms: false}]}
+      - {block: stderr, when: present}
+  error:
+    source_fns: [render]
+    blocks:
+      - {block: paragraph, text: "Something went wrong reading the review state."}
+      - {block: row, controls: [{id: outOfRangeHelp, label: "How to fix it", emphasis: primary, confirms: false}]}
+      - {block: stderr, when: present}
+  review-walk:
+    source_fns: [renderEntry, renderOpenRow, renderNavRow]
+    blocks:
+      - {block: identity_bar}
+      - {block: notes}
+      - {block: entry_head}
+      - {block: entry_title}
+      - {block: why}
+      - {block: row, controls: [{id: showWhy, label: "open in editor", emphasis: link, confirms: false}], when: why_present}
+      - {block: row, controls: [{id: openEntry, label: "File", emphasis: secondary, confirms: false}, {id: openChange, label: "Diff", emphasis: secondary, confirms: false}]}
+      - {block: row, controls: [{id: prev, label: null, accessible_name: "Previous entry", emphasis: icon, confirms: false}, {id: next, label: null, accessible_name: "Next entry", emphasis: icon, confirms: false}]}
+  review-step:
+    source_fns: [renderEntry, renderOpenRow, renderNavRow]
+    blocks:
+      - {block: identity_bar}
+      - {block: notes}
+      - {block: entry_head}
+      - {block: entry_title}
+      - {block: row, controls: [{id: openChange, label: "Diff", emphasis: secondary, confirms: false}]}
+      - {block: row, controls: [{id: prev, label: null, accessible_name: "Previous entry", emphasis: icon, confirms: false}, {id: next, label: null, accessible_name: "Next entry", emphasis: icon, confirms: false}]}
+  review-whole:
+    source_fns: [renderFiles]
+    blocks:
+      - {block: identity_bar}
+      - {block: notes}
+      - {block: heading, text: "{n} file(s) in this review"}
+      - {block: row, controls: [{id: openAllChanges, label: "Diff", emphasis: secondary, confirms: false, tooltip: "Open every change in this review at once"}]}
+      - {block: file_rows}
+  finish-conflict:
+    source_fns: [renderFinishConflictBanner, renderEntry, renderOpenRow]
+    blocks:
+      - {block: identity_bar}
+      - block: banner
+        paragraphs:
+          - "This finish stopped at a conflict. Resolve the markers, then continue — or undo it to go back to editing."
+        row:
+          controls:
+            - {id: undoFinish, label: "Undo", emphasis: secondary, confirms: true}
+            - {id: resumeFinish, label: "Continue", emphasis: secondary, confirms: false}
+      - {block: notes}
+      - {block: entry_head}
+      - {block: entry_title}
+      - {block: why, when: walk}
+      - {block: row, controls: [{id: showWhy, label: "open in editor", emphasis: link, confirms: false}], when: why_present}
+      - {block: row, controls: [{id: openEntry, label: "File", emphasis: secondary, confirms: false}, {id: openChange, label: "Diff", emphasis: secondary, confirms: false}], when: walk}
+      - {block: row, controls: [{id: openChange, label: "Diff", emphasis: secondary, confirms: false}], when: step}
+      # navigation row intentionally absent
+
+title_actions:
+  - {id: refresh, label: "Refresh", confirms: false}
+  - {id: finishReview, label: "Finish", when: "review && !readonly && !busy", confirms: false}
+  - {id: saveReview, label: "Save", when: "review && !busy", confirms: true}
+  - {id: abortReview, label: "Cancel", when: "(review|finish-conflict) && !busy", confirms: true}
+  - {id: previewEdits, label: "Preview edits", when: "(review|finish-conflict) && !busy", confirms: false}
+
+# existen como acción, nunca como control del panel
+panel_excluded: [goToEntry, forgetReview, previewEditsStat, showCliLog]
+
+# residuo de FR-036: no lo cubre el verificador de Node
+panel_unverified:
+  - "posición de los bloques que no son controles (párrafos, notas, badges)"
+  - "condiciones de aparición (`when`) de los controles del cuerpo"
+
+# Inventory control labels (variants) and body-only controls not in actions:
+# continueReview, discardInventory (panel surface), copyCliInstall, outOfRangeHelp, openSupport
+inventory_controls:
+  continueReview: {label: "Continue", confirms: true}
+  discardInventory:
+    labels: ["Discard", "Discard orphan"]
+    confirms: true

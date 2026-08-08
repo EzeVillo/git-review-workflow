@@ -255,26 +255,46 @@ Then in the sandbox IDEA:
 Kotlin changes are not hot-reloaded like `npm run watch` + Reload Window:
 rebuild and run `runIde` again (or restart the sandbox IDE after a rebuild).
 
-Product surface (27 actions, situations, critical strings) is checked by:
+Product surface (27 actions, situations, critical strings, **and panel layout**)
+is checked by:
 
 ```sh
 # from the monorepo root
 node scripts/check-client-product-surface.mjs
+# IntelliJ structural layout parity (all OSes in CI):
+cd intellij-plugin && ./gradlew test
 ```
 
+### Side-by-side parity check (feature 010)
+
+To validate that the plugin panel offers the same controls, order, labels, and
+grouping as the VS Code panel (product parity, not pixels):
+
+```sh
+# Terminal A — VS Code panel preview (real panelHtml)
+cd vscode-extension && npm run preview
+
+# Terminal B — IntelliJ panel preview (real PanelRenderer)
+cd intellij-plugin && ./gradlew runPanelPreview
+```
+
+Walk the same situations in both windows. Any missing control, wrong order, or
+relabelled button is a bug — fix `domain/PanelLayout.kt` or the canonical
+`panel_layout:` block, never by loosening the tests.
+
 More validation detail:
-[`specs/009-plugin-intellij/quickstart.md`](specs/009-plugin-intellij/quickstart.md)
+[`specs/010-panel-intellij-acciones/quickstart.md`](specs/010-panel-intellij-acciones/quickstart.md)
 and [`intellij-plugin/README.md`](intellij-plugin/README.md).
 
 ### UX vs the VS Code panel
 
-**Parity is product, not pixels.** Both clients share the same CLI contract and
-the same action/situation matrix
+**Parity is product, not pixels.** Both clients share the same CLI contract, the
+same action/situation matrix, and the same `panel_layout:` disposition
 ([`contracts/client-product-surface.yaml`](contracts/client-product-surface.yaml)).
 The IntelliJ panel is **native Swing** on purpose (not a CEF/HTML clone of
-`panelHtml.ts`): theming, accessibility, and HiDPI follow the IDE; remote /
-some Linux hosts without CEF still work. See research decision 3 in
-[`specs/009-plugin-intellij/research.md`](specs/009-plugin-intellij/research.md).
+`panelHtml.ts`): theming, accessibility, and HiDPI follow the IDE. Layout is a
+pure domain projection (`panelLayout`) rendered by a generic Swing
+`PanelRenderer`.
 
 So it will *look* different from the VS Code sidebar even when every action
 exists. Actions that are “in the panel” in VS Code may appear as tool-window

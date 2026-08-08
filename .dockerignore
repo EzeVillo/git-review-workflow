@@ -1,0 +1,16 @@
+﻿# Build/test context for repo Dockerfiles (tests/, vscode-extension/test/)
+.git/
+.github/
+.idea/
+.gradle/
+**/node_modules/
+**/dist/
+**/build/
+**/.vscode-test/
+intellij-plugin/build/
+intellij-plugin/.gradle/
+intellij-plugin/.intellijPlatform/
+*.log
+.env*
+coverage/
+**/*.class

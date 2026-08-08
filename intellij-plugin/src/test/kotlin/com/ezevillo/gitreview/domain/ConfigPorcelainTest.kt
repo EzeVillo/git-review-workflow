@@ -34,4 +34,29 @@ class ConfigPorcelainTest {
         assertEquals("origin", r.config.remote)
         assertNull(r.config.base)
     }
+
+    @Test
+    fun branchPickerCollapsesOriginsAndPutsCurrentFirst() {
+        val candidates = listOf(
+            CandidateBranch("main", "remote", current = false),
+            CandidateBranch("feature/checkout", "remote", current = false),
+            CandidateBranch("feature/checkout", "local", current = true),
+            CandidateBranch("develop", "local", current = false),
+        )
+        val items = branchPickerItems(candidates)
+        assertEquals(
+            listOf("feature/checkout", "develop", "main"),
+            items.map { it.name },
+        )
+        assertEquals(true, items[0].current)
+        assertEquals(
+            listOf("feature/checkout  (current)", "develop", "main"),
+            items.map { branchPickerLabel(it) },
+        )
+    }
+
+    @Test
+    fun branchPickerEmptyWhenNoCandidates() {
+        assertEquals(emptyList<CandidateBranch>(), branchPickerItems(emptyList()))
+    }
 }

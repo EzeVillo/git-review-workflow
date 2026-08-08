@@ -10,6 +10,13 @@ class RefreshAction : AnAction(), DumbAware {
         val project = e.project ?: return
         GitReviewService.getInstance(project).scheduleRefresh()
     }
+
+    override fun update(e: AnActionEvent) {
+        e.presentation.isEnabled = e.project != null
+    }
+
+    override fun getActionUpdateThread(): com.intellij.openapi.actionSystem.ActionUpdateThread =
+        com.intellij.openapi.actionSystem.ActionUpdateThread.BGT
 }
 
 class ShowCliLogAction : AnAction(), DumbAware {

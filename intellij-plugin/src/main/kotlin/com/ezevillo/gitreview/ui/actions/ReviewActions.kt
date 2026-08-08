@@ -10,6 +10,7 @@ import com.ezevillo.gitreview.domain.entryPickLabel
 import com.ezevillo.gitreview.domain.pendingFinishInfo
 import com.ezevillo.gitreview.domain.resumableSourceAt
 import com.ezevillo.gitreview.domain.sourceFromReviewName
+import com.ezevillo.gitreview.host.Bg
 import com.ezevillo.gitreview.host.GitReviewService
 import com.ezevillo.gitreview.host.MutationActions
 import com.ezevillo.gitreview.ui.StartWizard
@@ -116,11 +117,24 @@ class FinishReviewAction : AnAction(), DumbAware {
             Messages.getQuestionIcon(),
         )
         // YES = onto-source, NO = default destination
-        val msg = mutations(e)?.runFinish(onto == Messages.YES)
-        if (msg != null) {
-            Messages.showInfoMessage(project, msg, "git review")
+        mutations(e)?.runFinish(onto == Messages.YES) { msg ->
+            if (msg != null) {
+                Messages.showInfoMessage(project, msg, "git review")
+            }
         }
     }
+
+    override fun update(e: AnActionEvent) {
+        val model = service(e)?.currentModel()
+        e.presentation.isEnabled =
+            model != null &&
+                model.situation == com.ezevillo.gitreview.domain.Situation.REVIEW &&
+                !model.readonly &&
+                !model.busy
+    }
+
+    override fun getActionUpdateThread() =
+        com.intellij.openapi.actionSystem.ActionUpdateThread.BGT
 }
 
 class AbortReviewAction : AnAction(), DumbAware {
@@ -135,6 +149,19 @@ class AbortReviewAction : AnAction(), DumbAware {
         if (ok != Messages.YES) return
         mutations(e)?.runSimple("abortReview")
     }
+
+    override fun update(e: AnActionEvent) {
+        val model = service(e)?.currentModel()
+        val sit = model?.situation
+        e.presentation.isEnabled =
+            model != null &&
+                !model.busy &&
+                (sit == com.ezevillo.gitreview.domain.Situation.REVIEW ||
+                    sit == com.ezevillo.gitreview.domain.Situation.FINISH_CONFLICT)
+    }
+
+    override fun getActionUpdateThread() =
+        com.intellij.openapi.actionSystem.ActionUpdateThread.BGT
 }
 
 class SaveReviewAction : AnAction(), DumbAware {
@@ -149,14 +176,28 @@ class SaveReviewAction : AnAction(), DumbAware {
         if (ok != Messages.YES) return
         mutations(e)?.runSimple("saveReview")
     }
+
+    override fun update(e: AnActionEvent) {
+        val model = service(e)?.currentModel()
+        e.presentation.isEnabled =
+            model != null &&
+                model.situation == com.ezevillo.gitreview.domain.Situation.REVIEW &&
+                !model.busy
+    }
+
+    override fun getActionUpdateThread() =
+        com.intellij.openapi.actionSystem.ActionUpdateThread.BGT
 }
 
 class UndoFinishAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val m = mutations(e) ?: return
-        if (!m.runSimple("undoFinish", ActionParams.UndoFinish(false))) {
+        // The callback outlives actionPerformed; hold the project, not the event.
+        val project = e.project
+        m.runSimple("undoFinish", ActionParams.UndoFinish(false)) { ok ->
+            if (ok) return@runSimple
             val force = Messages.showYesNoDialog(
-                e.project,
+                project,
                 "Undo finish failed. Force (--force)?",
                 "Undo Finish",
                 Messages.getWarningIcon(),
@@ -214,7 +255,7 @@ class SetBaseAction : AnAction(), DumbAware {
         val candidates = service.currentState().candidates
         if (candidates.isNullOrEmpty()) {
             // Ensure config is loaded
-            service.refreshNow()
+            Bg.sync(project, "git review config") { service.refreshNow() }
         }
         val list = service.currentState().candidates
         if (list.isNullOrEmpty()) {
@@ -243,7 +284,7 @@ class SetRemoteAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val service = GitReviewService.getInstance(project)
-        service.refreshNow()
+        Bg.sync(project, "git review config") { service.refreshNow() }
         val remotes = service.currentState().remotes
         if (remotes.isNullOrEmpty()) {
             Messages.showErrorDialog(project, "No remotes found.", "git review")
@@ -345,18 +386,26 @@ class ForgetReviewAction : AnAction(), DumbAware {
 class DiscardInventoryAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
+        // Menu path: ask for the name. Panel path uses discardResolved().
         val name = Messages.showInputDialog(project, "Review branch name to discard:", "Discard", null) ?: return
-        val src = sourceFromReviewName(name)
-        val action = if (name.startsWith("review-saved/")) {
-            HousekeepingAction(HousekeepingKind.FORGET_SAVED_ONE, src)
-        } else {
-            HousekeepingAction(HousekeepingKind.CLEAN_ONE, src)
+        discardResolved(project, name)
+    }
+
+    companion object {
+        /** Panel path: review name already known from the inventory row. Confirmation still required. */
+        fun discardResolved(project: com.intellij.openapi.project.Project, name: String) {
+            val src = sourceFromReviewName(name)
+            val action = if (name.startsWith("review-saved/")) {
+                HousekeepingAction(HousekeepingKind.FORGET_SAVED_ONE, src)
+            } else {
+                HousekeepingAction(HousekeepingKind.CLEAN_ONE, src)
+            }
+            val copy = confirmCopyFor(action)
+            if (Messages.showYesNoDialog(project, copy.detail, copy.title, Messages.getWarningIcon()) != Messages.YES) {
+                return
+            }
+            MutationActions(project, GitReviewService.getInstance(project)).runHousekeeping(action)
         }
-        val copy = confirmCopyFor(action)
-        if (Messages.showYesNoDialog(project, copy.detail, copy.title, Messages.getWarningIcon()) != Messages.YES) {
-            return
-        }
-        mutations(e)?.runHousekeeping(action)
     }
 }
 
@@ -365,9 +414,24 @@ class PreviewEditsAction : AnAction(), DumbAware {
         val project = e.project ?: return
         val cwd = pickSoleGitRoot(project)?.rootPath ?: return
         val service = GitReviewService.getInstance(project)
-        val result = service.cliInvoker.invoke("preview", emptyList(), cwd)
+        val result = Bg.sync(project, "git review preview") {
+            service.cliInvoker.invoke("preview", emptyList(), cwd)
+        }
         Messages.showInfoMessage(project, result.stdout.ifBlank { result.stderr }, "Preview Edits")
     }
+
+    override fun update(e: AnActionEvent) {
+        val model = service(e)?.currentModel()
+        val sit = model?.situation
+        e.presentation.isEnabled =
+            model != null &&
+                !model.busy &&
+                (sit == com.ezevillo.gitreview.domain.Situation.REVIEW ||
+                    sit == com.ezevillo.gitreview.domain.Situation.FINISH_CONFLICT)
+    }
+
+    override fun getActionUpdateThread() =
+        com.intellij.openapi.actionSystem.ActionUpdateThread.BGT
 }
 
 class PreviewEditsStatAction : AnAction(), DumbAware {
@@ -375,7 +439,9 @@ class PreviewEditsStatAction : AnAction(), DumbAware {
         val project = e.project ?: return
         val cwd = pickSoleGitRoot(project)?.rootPath ?: return
         val service = GitReviewService.getInstance(project)
-        val result = service.cliInvoker.invoke("preview", listOf("--stat"), cwd)
+        val result = Bg.sync(project, "git review preview --stat") {
+            service.cliInvoker.invoke("preview", listOf("--stat"), cwd)
+        }
         Messages.showInfoMessage(project, result.stdout.ifBlank { result.stderr }, "Preview Edits (stat)")
     }
 }
@@ -388,12 +454,15 @@ class CompareReviewAction : AnAction(), DumbAware {
         mutations(e)?.runSimple(
             "compareReview",
             ActionParams.Compare(emptyList(), lower, upper),
-        )
-        Messages.showInfoMessage(
-            project,
-            "Compare is read-only. Use the review panel to navigate.",
-            "git review",
-        )
+        ) { ok ->
+            if (ok) {
+                Messages.showInfoMessage(
+                    project,
+                    "Compare is read-only. Use the review panel to navigate.",
+                    "git review",
+                )
+            }
+        }
     }
 }
 

@@ -40,6 +40,13 @@ class GitReviewService(private val project: Project) {
     val mutationLock: MutationLock get() = lock
     val cliInvoker: CliInvoker get() = invoker
 
+    init {
+        // Mutations run off the EDT now, so busy/idle is a real interval the panel can
+        // paint. Both refreshes of a mutation happen while the lock is held; without
+        // this the model would stay busy until some later refresh cleared it.
+        lock.onDidChangeBusy { publish() }
+    }
+
     fun currentState(): ReviewState = stateManager.current
 
     fun currentModel(): PanelModel {
@@ -84,6 +91,7 @@ class GitReviewService(private val project: Project) {
         }
     }
 
+    /** Blocking refresh — spawns CLI processes, so never call it from the EDT. */
     fun refreshNow() {
         doRefresh()
     }

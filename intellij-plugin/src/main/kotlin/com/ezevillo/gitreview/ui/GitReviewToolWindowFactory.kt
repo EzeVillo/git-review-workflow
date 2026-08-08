@@ -21,6 +21,16 @@ class GitReviewToolWindowFactory : ToolWindowFactory, DumbAware {
         val content = ContentFactory.getInstance().createContent(panel, "", false)
         toolWindow.contentManager.addContent(content)
 
+        // Title-bar actions: Refresh / Finish / Save / Cancel / Preview edits.
+        // Pass the group children (not the group itself) so each gets its own icon button.
+        val titleGroup = com.intellij.openapi.actionSystem.ActionManager.getInstance()
+            .getAction("GitReview.ToolWindowTitle")
+        if (titleGroup is com.intellij.openapi.actionSystem.DefaultActionGroup) {
+            toolWindow.setTitleActions(titleGroup.getChildren(null).toList())
+        } else if (titleGroup is com.intellij.openapi.actionSystem.ActionGroup) {
+            toolWindow.setTitleActions(listOf(titleGroup))
+        }
+
         project.messageBus.connect(content).subscribe(
             ToolWindowManagerListener.TOPIC,
             object : ToolWindowManagerListener {

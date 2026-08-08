@@ -29,6 +29,8 @@ dependencies {
     // Pure JUnit 5 for domain (no IDE host).
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    // PanelLayoutContractTest reads contracts/client-product-surface.yaml (test-only).
+    testImplementation("org.yaml:snakeyaml:2.3")
 }
 
 kotlin {
@@ -116,13 +118,31 @@ tasks.named("check") {
     dependsOn("checkDomainNoIntellij")
 }
 
-// Standalone panel preview (T029) — main lives under preview/ source set if present.
+// Fixtures shared by unit tests and standalone preview (feature 010).
+// Preview reuses domain + fixtures without the IntelliJ Platform host.
 sourceSets {
-    create("preview") {
-        kotlin.srcDir("preview")
+    create("fixtures") {
+        kotlin.srcDir("fixtures")
         compileClasspath += sourceSets["main"].output + configurations["compileClasspath"]
         runtimeClasspath += output + compileClasspath
     }
+    create("preview") {
+        kotlin.srcDir("preview")
+        compileClasspath += sourceSets["main"].output +
+            sourceSets["fixtures"].output +
+            configurations["compileClasspath"]
+        runtimeClasspath += output + compileClasspath
+    }
+    named("test") {
+        compileClasspath += sourceSets["fixtures"].output
+        runtimeClasspath += sourceSets["fixtures"].output
+    }
+}
+
+configurations {
+    getByName("fixturesImplementation").extendsFrom(configurations.getByName("implementation"))
+    getByName("previewImplementation").extendsFrom(configurations.getByName("implementation"))
+    getByName("testImplementation").extendsFrom(configurations.getByName("fixturesImplementation"))
 }
 
 tasks.register<JavaExec>("runPanelPreview") {
@@ -130,4 +150,15 @@ tasks.register<JavaExec>("runPanelPreview") {
     description = "Standalone Swing preview of panel states from porcelain fixtures"
     classpath = sourceSets["preview"].runtimeClasspath
     mainClass.set("com.ezevillo.gitreview.preview.PanelPreviewMain")
+}
+
+// Expose monorepo root contracts/ path to tests (PanelLayoutContractTest).
+tasks.named<Test>("test") {
+    systemProperty(
+        "git.review.contracts.dir",
+        rootProject.projectDir.parentFile.resolve("contracts").absolutePath,
+    )
+    // When intellij-plugin is the Gradle root, parent is the monorepo root.
+    val monorepoRoot = projectDir.parentFile
+    systemProperty("git.review.monorepo.root", monorepoRoot.absolutePath)
 }

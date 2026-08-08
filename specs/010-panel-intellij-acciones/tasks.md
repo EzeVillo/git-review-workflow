@@ -41,10 +41,10 @@ Monorepo multi-cliente. Rutas relativas a la raíz del repositorio:
 **Purpose**: dejar escrito el canónico y el andamiaje de fixtures antes de tocar
 código de panel. Nada de esto depende del plugin.
 
-- [ ] T001 Escribir los bloques `panel_layout:`, `title_actions:`, `panel_excluded:` y `panel_unverified:` en `contracts/client-product-surface.yaml`, transcribiendo situación por situación la tabla de `specs/010-panel-intellij-acciones/contracts/panel-layout.md` (9 pantallas de 8 `Situation` + las 3 variantes de modo de `review`, **21** controles de cuerpo, 5 de barra de título, 4 excluidos). Cada situación lleva sus `source_fns` (la lista verificada está en el contrato); cada control, su `emphasis` y su `confirms` — este último llenado comando por comando con el criterio de `contracts/panel-layout.md` (asigna el resultado de `showWarningMessage` y ramifica = confirma)
-- [ ] T002 [P] Extender `scripts/check-client-product-surface.mjs` con las **seis** verificaciones del lado VS Code de `contracts/panel-layout.md` § Verificación: (1) rótulo + id + énfasis por control, extraídos de `button(…)`/`iconButton(…)` de `vscode-extension/src/views/panelHtml.ts`; (2) cada id en `PANEL_MESSAGES` de `walkthroughViewProvider.ts` o en `contributes.menus.view/title`, por pertenencia; (3) ninguna llamada de control de `panelHtml.ts` fuera del canónico; (4) ningún id de `panel_excluded` en `PANEL_MESSAGES`; (5) adyacencia y orden estrictos de los dos controles de cada `row`; (6) la secuencia de ids de cada situación como subsecuencia de la extraída de sus `source_fns`
-- [ ] T002a [P] Agregar al mismo script la verificación de coherencia interna del canónico: toda situación en la que `panel_layout` pinta un control está en `actions.<id>.situations`, y todo control con `requires_not_busy: true` queda deshabilitado por *busy* en el layout. Sin esto el archivo tiene dos fuentes de verdad que pueden separarse entre sí
-- [ ] T003 [P] En `intellij-plugin/build.gradle.kts`: crear el source set `fixtures` (compilado contra `main`, agregado al classpath de `test` y de `preview`) para que los modelos de ejemplo no se dupliquen, y agregar `testImplementation("org.yaml:snakeyaml")`, que es lo que le permite a T012 leer el canónico desde Kotlin (dependencia de test: no viaja en el `.zip`; ver plan § Complexity Tracking)
+- [x] T001 Escribir los bloques `panel_layout:`, `title_actions:`, `panel_excluded:` y `panel_unverified:` en `contracts/client-product-surface.yaml`, transcribiendo situación por situación la tabla de `specs/010-panel-intellij-acciones/contracts/panel-layout.md` (9 pantallas de 8 `Situation` + las 3 variantes de modo de `review`, **21** controles de cuerpo, 5 de barra de título, 4 excluidos). Cada situación lleva sus `source_fns` (la lista verificada está en el contrato); cada control, su `emphasis` y su `confirms` — este último llenado comando por comando con el criterio de `contracts/panel-layout.md` (asigna el resultado de `showWarningMessage` y ramifica = confirma)
+- [x] T002 [P] Extender `scripts/check-client-product-surface.mjs` con las **seis** verificaciones del lado VS Code de `contracts/panel-layout.md` § Verificación: (1) rótulo + id + énfasis por control, extraídos de `button(…)`/`iconButton(…)` de `vscode-extension/src/views/panelHtml.ts`; (2) cada id en `PANEL_MESSAGES` de `walkthroughViewProvider.ts` o en `contributes.menus.view/title`, por pertenencia; (3) ninguna llamada de control de `panelHtml.ts` fuera del canónico; (4) ningún id de `panel_excluded` en `PANEL_MESSAGES`; (5) adyacencia y orden estrictos de los dos controles de cada `row`; (6) la secuencia de ids de cada situación como subsecuencia de la extraída de sus `source_fns`
+- [x] T002a [P] Agregar al mismo script la verificación de coherencia interna del canónico: toda situación en la que `panel_layout` pinta un control está en `actions.<id>.situations`, y todo control con `requires_not_busy: true` queda deshabilitado por *busy* en el layout. Sin esto el archivo tiene dos fuentes de verdad que pueden separarse entre sí
+- [x] T003 [P] En `intellij-plugin/build.gradle.kts`: crear el source set `fixtures` (compilado contra `main`, agregado al classpath de `test` y de `preview`) para que los modelos de ejemplo no se dupliquen, y agregar `testImplementation("org.yaml:snakeyaml")`, que es lo que le permite a T012 leer el canónico desde Kotlin (dependencia de test: no viaja en el `.zip`; ver plan § Complexity Tracking)
 
 **Checkpoint**: `node scripts/check-client-product-surface.mjs` pasa contra el canónico ampliado y el panel actual de la extensión.
 
@@ -57,15 +57,15 @@ historia puede empezar sin esto.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T004 Crear `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/PanelLayout.kt` con los tipos de `data-model.md`: `PanelLayout`, la suma cerrada `Block` (las 16 variantes), `Control`, `ControlId` (**26 constantes**: 21 de cuerpo + 5 de barra; `refresh` es una sola y pertenece sólo a la barra), `Emphasis`, `FileRow`, `InventoryRow` — sin la función de proyección todavía y sin importar `com.intellij`
-- [ ] T005 Agregar a `PanelLayout.kt` los cinco invariantes de construcción de `data-model.md` § Control (ícono ⟹ nombre accesible; fila de 1 o 2 controles; un solo `PRIMARY` por situación; `index` sólo en filas; ningún id ajeno a la situación) como validación en los constructores
-- [ ] T006 Agregar a `PanelLayout.kt` el esqueleto de `panelLayout(model: PanelModel): PanelLayout` y de `titleBarActions(model: PanelModel): List<Control>`: despacho por `Situation` con las ramas vacías que cada historia irá completando. Agregar también `requiresConfirmation(id: ControlId): Boolean`, derivada del `confirms` del canónico: es la única fuente de la condición de FR-032, y la consulta tanto el despachador como su test
-- [ ] T007 [P] Crear `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/ui/PanelChrome.kt`: interfaz de colores, iconos y fuentes, con la implementación del plugin (`JBColor` / `JBUI` / `AllIcons`) y la del preview (`UIManager` y glifos), según research §3
-- [ ] T008 Crear `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/ui/PanelRenderer.kt`: renderer genérico de `PanelLayout` a Swing que recibe un `PanelChrome` y un callback `(ControlId, Int?) -> Unit`, sin conocer `Project` ni `GitReviewService`. Texto con ancho variable contra el viewport y `JBScrollPane` que sigue el ancho del viewport (nunca scroll horizontal); filas de dos controles al 50% que se apilan conservando el orden cuando no entran (research §4)
-- [ ] T009 Crear `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/ui/PanelActionDispatcher.kt` con el mapeo de `data-model.md` § Mapeo: cada `ControlId` (más el índice cuando corresponde) a las acciones existentes de `ui/actions/ReviewActions.kt` y `host/MutationActions.kt`
-- [ ] T009a Crear la barra del tool window con **`Refresh`**, que es la única acción de barra presente en todas las situaciones: implementar esa rama de `titleBarActions` en `domain/PanelLayout.kt`, registrar el grupo de acciones en `intellij-plugin/src/main/resources/META-INF/plugin.xml` y engancharlo con `setTitleActions` en `ui/GitReviewToolWindowFactory.kt`. Va en Foundational y **antes de T010** a propósito: T010 retira el `Refresh` del cuerpo, y las otras cuatro acciones de barra recién llegan en US3 (T029/T030), así que sin esto el MVP quedaría sin ningún `Refresh`
-- [ ] T010 Reescribir `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/ui/ReviewPanel.kt` para suscribir el servicio, pedir `panelLayout(model)` y delegar en `PanelRenderer` + `PanelActionDispatcher`: se elimina todo `when (situation)`, los `renderX` propios y **el `header()` entero** (`ReviewPanel.kt:66-79`) — el rótulo `git review` en negrita, el indicador `…busy` y el botón `Refresh`. Ninguno de los tres tiene contraparte en el panel de la extensión: el título ya lo pone el tool window, el *busy* se expresa deshabilitando controles (FR-031) y el `Refresh` vive en la barra desde T009a
-- [ ] T011 [P] Crear `intellij-plugin/fixtures/com/ezevillo/gitreview/fixtures/PanelFixtures.kt` con un `PanelModel` por situación y por modo de review, derivados de porcelain de ejemplo con `parsePorcelain` (mismo criterio que el preview actual: salida real de la CLI pasada por el parser real)
+- [x] T004 Crear `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/PanelLayout.kt` con los tipos de `data-model.md`: `PanelLayout`, la suma cerrada `Block` (las 16 variantes), `Control`, `ControlId` (**26 constantes**: 21 de cuerpo + 5 de barra; `refresh` es una sola y pertenece sólo a la barra), `Emphasis`, `FileRow`, `InventoryRow` — sin la función de proyección todavía y sin importar `com.intellij`
+- [x] T005 Agregar a `PanelLayout.kt` los cinco invariantes de construcción de `data-model.md` § Control (ícono ⟹ nombre accesible; fila de 1 o 2 controles; un solo `PRIMARY` por situación; `index` sólo en filas; ningún id ajeno a la situación) como validación en los constructores
+- [x] T006 Agregar a `PanelLayout.kt` el esqueleto de `panelLayout(model: PanelModel): PanelLayout` y de `titleBarActions(model: PanelModel): List<Control>`: despacho por `Situation` con las ramas vacías que cada historia irá completando. Agregar también `requiresConfirmation(id: ControlId): Boolean`, derivada del `confirms` del canónico: es la única fuente de la condición de FR-032, y la consulta tanto el despachador como su test
+- [x] T007 [P] Crear `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/ui/PanelChrome.kt`: interfaz de colores, iconos y fuentes, con la implementación del plugin (`JBColor` / `JBUI` / `AllIcons`) y la del preview (`UIManager` y glifos), según research §3
+- [x] T008 Crear `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/ui/PanelRenderer.kt`: renderer genérico de `PanelLayout` a Swing que recibe un `PanelChrome` y un callback `(ControlId, Int?) -> Unit`, sin conocer `Project` ni `GitReviewService`. Texto con ancho variable contra el viewport y `JBScrollPane` que sigue el ancho del viewport (nunca scroll horizontal); filas de dos controles al 50% que se apilan conservando el orden cuando no entran (research §4)
+- [x] T009 Crear `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/ui/PanelActionDispatcher.kt` con el mapeo de `data-model.md` § Mapeo: cada `ControlId` (más el índice cuando corresponde) a las acciones existentes de `ui/actions/ReviewActions.kt` y `host/MutationActions.kt`
+- [x] T009a Crear la barra del tool window con **`Refresh`**, que es la única acción de barra presente en todas las situaciones: implementar esa rama de `titleBarActions` en `domain/PanelLayout.kt`, registrar el grupo de acciones en `intellij-plugin/src/main/resources/META-INF/plugin.xml` y engancharlo con `setTitleActions` en `ui/GitReviewToolWindowFactory.kt`. Va en Foundational y **antes de T010** a propósito: T010 retira el `Refresh` del cuerpo, y las otras cuatro acciones de barra recién llegan en US3 (T029/T030), así que sin esto el MVP quedaría sin ningún `Refresh`
+- [x] T010 Reescribir `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/ui/ReviewPanel.kt` para suscribir el servicio, pedir `panelLayout(model)` y delegar en `PanelRenderer` + `PanelActionDispatcher`: se elimina todo `when (situation)`, los `renderX` propios y **el `header()` entero** (`ReviewPanel.kt:66-79`) — el rótulo `git review` en negrita, el indicador `…busy` y el botón `Refresh`. Ninguno de los tres tiene contraparte en el panel de la extensión: el título ya lo pone el tool window, el *busy* se expresa deshabilitando controles (FR-031) y el `Refresh` vive en la barra desde T009a
+- [x] T011 [P] Crear `intellij-plugin/fixtures/com/ezevillo/gitreview/fixtures/PanelFixtures.kt` con un `PanelModel` por situación y por modo de review, derivados de porcelain de ejemplo con `parsePorcelain` (mismo criterio que el preview actual: salida real de la CLI pasada por el parser real)
 
 **Checkpoint**: el panel compila, se dibuja vacío o parcial en `runIde`, la barra del tool window ya tiene su `Refresh` y funciona, y `./gradlew check` pasa incluyendo `checkDomainNoIntellij`.
 
@@ -84,14 +84,14 @@ ejercitar con una sola situación implementada.
 
 ### Tests for User Story 1
 
-- [ ] T012 [P] [US1] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/PanelLayoutContractTest.kt`: lee `contracts/client-product-surface.yaml` con snakeyaml resolviendo `../contracts/…` desde el `projectDir` de Gradle (el canónico vive en la raíz del monorepo, no en `intellij-plugin/`), y para cada situación registrada compara `panelLayout(fixture)` contra el canónico en identidad, rótulo, orden, agrupación en filas, énfasis y habilitación; falla nombrando situación y control. Si el archivo no aparece, el test **falla** — nunca se saltea, o el gate de la feature se apaga solo
-- [ ] T013 [P] [US1] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/PanelLayoutInvariantsTest.kt`: los cinco invariantes de T005 se violan y el constructor falla; y ningún `ControlId` de `panel_excluded` es construible en ninguna situación
-- [ ] T014 [P] [US1] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/ui/PanelRendererTest.kt`: el renderer produce exactamente los controles del layout, en el mismo orden de recorrido, con el mismo estado de habilitación, y con nombre accesible en los de ícono (Swing sin ventana; JPanel/JButton se instancian en headless)
+- [x] T012 [P] [US1] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/PanelLayoutContractTest.kt`: lee `contracts/client-product-surface.yaml` con snakeyaml resolviendo `../contracts/…` desde el `projectDir` de Gradle (el canónico vive en la raíz del monorepo, no en `intellij-plugin/`), y para cada situación registrada compara `panelLayout(fixture)` contra el canónico en identidad, rótulo, orden, agrupación en filas, énfasis y habilitación; falla nombrando situación y control. Si el archivo no aparece, el test **falla** — nunca se saltea, o el gate de la feature se apaga solo
+- [x] T013 [P] [US1] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/PanelLayoutInvariantsTest.kt`: los cinco invariantes de T005 se violan y el constructor falla; y ningún `ControlId` de `panel_excluded` es construible en ninguna situación
+- [x] T014 [P] [US1] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/ui/PanelRendererTest.kt`: el renderer produce exactamente los controles del layout, en el mismo orden de recorrido, con el mismo estado de habilitación, y con nombre accesible en los de ícono (Swing sin ventana; JPanel/JButton se instancian en headless)
 
 ### Implementation for User Story 1
 
-- [ ] T015 [US1] Reescribir `intellij-plugin/preview/com/ezevillo/gitreview/preview/PanelPreviewMain.kt` para renderizar con `PanelRenderer` y `PanelChrome` de preview sobre las fixtures de T011, con selector de situación y de ancho (ancho de sidebar / ancho suelto), en lugar del volcado de texto actual
-- [ ] T016 [US1] Verificar en `intellij-plugin/src/main/resources/META-INF/plugin.xml` que el `toolWindow` conserva `anchor="right"` y documentar en el comentario contiguo que es la excepción explícita al invariante (spec § Invariante rector). Cubrir además la segunda mitad de FR-008: confirmar que nada del código fuerza la ubicación en runtime (ningún `setAnchor`/`setSplitMode` sobre el tool window), de modo que si el revisor lo movió, la plataforma conserve su elección; dejarlo probado con el paso 6 del quickstart
+- [x] T015 [US1] Reescribir `intellij-plugin/preview/com/ezevillo/gitreview/preview/PanelPreviewMain.kt` para renderizar con `PanelRenderer` y `PanelChrome` de preview sobre las fixtures de T011, con selector de situación y de ancho (ancho de sidebar / ancho suelto), en lugar del volcado de texto actual
+- [x] T016 [US1] Verificar en `intellij-plugin/src/main/resources/META-INF/plugin.xml` que el `toolWindow` conserva `anchor="right"` y documentar en el comentario contiguo que es la excepción explícita al invariante (spec § Invariante rector). Cubrir además la segunda mitad de FR-008: confirmar que nada del código fuerza la ubicación en runtime (ningún `setAnchor`/`setSplitMode` sobre el tool window), de modo que si el revisor lo movió, la plataforma conserve su elección; dejarlo probado con el paso 6 del quickstart
 
 **Checkpoint**: el build afirma la paridad de lo que ya esté implementado, y `./gradlew runPanelPreview` muestra el panel real al lado del `npm run preview` de la extensión.
 
@@ -108,17 +108,17 @@ feature/checkout`, recorrer la review de principio a fin en `runIde` sin abrir
 
 ### Tests for User Story 2
 
-- [ ] T017 [P] [US2] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/PanelLayoutReviewTest.kt`: para walk y para step, el layout produce la secuencia de `contracts/panel-layout.md` (barra, notas, cabecera, título, *why* sólo en walk, fila de apertura con 2 o 1 control, fila de navegación), con los rótulos `File`, `Diff`, `open in editor` y los nombres accesibles `Previous entry` / `Next entry`
-- [ ] T018 [P] [US2] En el mismo archivo, cubrir los extremos y las marcas: en la primera entrada `prev` va deshabilitado y presente, en la última `next`; con acción en curso todos los controles que mutan van deshabilitados; la cabecera lleva **una** marca (`key`, o `uncovered`, o `edits`) según la precedencia de la extensión; sin *why* presente no existe el control `open in editor`
+- [x] T017 [P] [US2] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/PanelLayoutReviewTest.kt`: para walk y para step, el layout produce la secuencia de `contracts/panel-layout.md` (barra, notas, cabecera, título, *why* sólo en walk, fila de apertura con 2 o 1 control, fila de navegación), con los rótulos `File`, `Diff`, `open in editor` y los nombres accesibles `Previous entry` / `Next entry`
+- [x] T018 [P] [US2] En el mismo archivo, cubrir los extremos y las marcas: en la primera entrada `prev` va deshabilitado y presente, en la última `next`; con acción en curso todos los controles que mutan van deshabilitados; la cabecera lleva **una** marca (`key`, o `uncovered`, o `edits`) según la precedencia de la extensión; sin *why* presente no existe el control `open in editor`
 
 ### Implementation for User Story 2
 
-- [ ] T019 [US2] Implementar en `domain/PanelLayout.kt` la rama común de review: `IdentityBar` (modo, origen o rama, tip a 7, posición/total) y las `Note` en el orden de la extensión (solo lectura, solo claves, base movida, degradado, base del rango)
-- [ ] T020 [US2] Implementar en `domain/PanelLayout.kt` la rama walk: `EntryHead` con número y marca, `EntryTitle` con el path, `Why` en sus cuatro estados con el texto propio de cada uno, `Row[open in editor]` sólo con *why* presente, `Row[File | Diff]` y `Row[◀ | ▶]`
-- [ ] T021 [US2] Implementar en `domain/PanelLayout.kt` la rama step: cabecera con sha y autor, título con el asunto (y `This commit has no subject.` cuando está vacío), sin bloque `Why`, `Row[Diff]` y `Row[◀ | ▶]`
-- [ ] T022 [US2] Implementar en `domain/PanelLayout.kt` el `EmptyMessage` de cursor sin entrada (`The cursor does not point at any entry in the sequence.`)
-- [ ] T023 [US2] Cablear en `ui/PanelActionDispatcher.kt` los controles de esta historia (`openEntry`, `openChange`, `showWhy`, `next`, `prev`) a `OpenEntryActions` y `MutationActions.runNextPrev`
-- [ ] T024 [US2] Hacer pasar `PanelLayoutContractTest` para walk y para step contra el canónico que T001 ya dejó escrito. Si aparece una diferencia, la referencia es el panel de la extensión: se corrige el lado que se desvió —el layout o el canónico—, nunca aflojando el test
+- [x] T019 [US2] Implementar en `domain/PanelLayout.kt` la rama común de review: `IdentityBar` (modo, origen o rama, tip a 7, posición/total) y las `Note` en el orden de la extensión (solo lectura, solo claves, base movida, degradado, base del rango)
+- [x] T020 [US2] Implementar en `domain/PanelLayout.kt` la rama walk: `EntryHead` con número y marca, `EntryTitle` con el path, `Why` en sus cuatro estados con el texto propio de cada uno, `Row[open in editor]` sólo con *why* presente, `Row[File | Diff]` y `Row[◀ | ▶]`
+- [x] T021 [US2] Implementar en `domain/PanelLayout.kt` la rama step: cabecera con sha y autor, título con el asunto (y `This commit has no subject.` cuando está vacío), sin bloque `Why`, `Row[Diff]` y `Row[◀ | ▶]`
+- [x] T022 [US2] Implementar en `domain/PanelLayout.kt` el `EmptyMessage` de cursor sin entrada (`The cursor does not point at any entry in the sequence.`)
+- [x] T023 [US2] Cablear en `ui/PanelActionDispatcher.kt` los controles de esta historia (`openEntry`, `openChange`, `showWhy`, `next`, `prev`) a `OpenEntryActions` y `MutationActions.runNextPrev`
+- [x] T024 [US2] Hacer pasar `PanelLayoutContractTest` para walk y para step contra el canónico que T001 ya dejó escrito. Si aparece una diferencia, la referencia es el panel de la extensión: se corrige el lado que se desvió —el layout o el canónico—, nunca aflojando el test
 
 **Checkpoint**: US1 + US2 son el MVP: se lee y se navega una review entera desde el panel, y el build afirma que la disposición coincide con la de la extensión.
 
@@ -135,18 +135,18 @@ navegación no está.
 
 ### Tests for User Story 3
 
-- [ ] T025 [P] [US3] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/TitleBarActionsTest.kt`: `titleBarActions` devuelve `Refresh`, `Finish`, `Save`, `Cancel`, `Preview edits` en ese orden y con las condiciones de `contributes.menus.view/title` (Finish ausente en solo lectura; todas menos Refresh ausentes fuera de review / finish-conflict; ninguna con acción en curso)
-- [ ] T026 [P] [US3] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/PanelLayoutFinishTest.kt`: en `finish-pending` el banner trae `Row[Clean (PRIMARY) | Undo finish]` con el texto del destino; en `finish-conflict` el banner va **antes** de las notas con `Row[Undo | Continue]` y el layout **no contiene** ningún control `next`/`prev`
-- [ ] T026a [P] [US3] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/ConfirmationContractTest.kt` (FR-032, US3 AS5): `requiresConfirmation(id)` coincide exactamente con el `confirms:` del canónico para los 26 `ControlId`, y ningún control marcado se puede despachar sin pasar por esa guarda. Cubre el riesgo concreto de T038, que cambia la ruta de entrada de una acción destructiva
+- [x] T025 [P] [US3] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/TitleBarActionsTest.kt`: `titleBarActions` devuelve `Refresh`, `Finish`, `Save`, `Cancel`, `Preview edits` en ese orden y con las condiciones de `contributes.menus.view/title` (Finish ausente en solo lectura; todas menos Refresh ausentes fuera de review / finish-conflict; ninguna con acción en curso)
+- [x] T026 [P] [US3] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/PanelLayoutFinishTest.kt`: en `finish-pending` el banner trae `Row[Clean (PRIMARY) | Undo finish]` con el texto del destino; en `finish-conflict` el banner va **antes** de las notas con `Row[Undo | Continue]` y el layout **no contiene** ningún control `next`/`prev`
+- [x] T026a [P] [US3] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/ConfirmationContractTest.kt` (FR-032, US3 AS5): `requiresConfirmation(id)` coincide exactamente con el `confirms:` del canónico para los 26 `ControlId`, y ningún control marcado se puede despachar sin pasar por esa guarda. Cubre el riesgo concreto de T038, que cambia la ruta de entrada de una acción destructiva
 
 ### Implementation for User Story 3
 
-- [ ] T027 [US3] Implementar en `domain/PanelLayout.kt` la situación `finish-pending`: los dos párrafos del aviso con el destino resuelto y su fila de controles
-- [ ] T028 [US3] Implementar en `domain/PanelLayout.kt` la situación `finish-conflict`: banner con su fila entre la barra y las notas, y retiro completo de la fila de navegación
-- [ ] T029 [US3] Completar `titleBarActions` en `domain/PanelLayout.kt` con las cuatro acciones que faltan —`Finish`, `Save`, `Cancel`, `Preview edits`— y sus condiciones (`Refresh` ya está desde T009a)
-- [ ] T030 [US3] Sumar esas cuatro al grupo de acciones del tool window ya registrado por T009a en `META-INF/plugin.xml`, respetando el orden de `titleBarActions`
-- [ ] T031 [US3] Agregar `update()` a `FinishReviewAction`, `SaveReviewAction`, `AbortReviewAction`, `PreviewEditsAction` y `RefreshAction` en `ui/actions/ReviewActions.kt` y `ui/actions/RefreshAction.kt` para que reflejen la disponibilidad del modelo (hoy están siempre habilitadas en el menú)
-- [ ] T032 [US3] Cablear en `ui/PanelActionDispatcher.kt` `undoFinish`, `resumeFinish` y `cleanReview`, resolviendo el source del finish pendiente desde el modelo (sin selector de tipo de limpieza, como la extensión)
+- [x] T027 [US3] Implementar en `domain/PanelLayout.kt` la situación `finish-pending`: los dos párrafos del aviso con el destino resuelto y su fila de controles
+- [x] T028 [US3] Implementar en `domain/PanelLayout.kt` la situación `finish-conflict`: banner con su fila entre la barra y las notas, y retiro completo de la fila de navegación
+- [x] T029 [US3] Completar `titleBarActions` en `domain/PanelLayout.kt` con las cuatro acciones que faltan —`Finish`, `Save`, `Cancel`, `Preview edits`— y sus condiciones (`Refresh` ya está desde T009a)
+- [x] T030 [US3] Sumar esas cuatro al grupo de acciones del tool window ya registrado por T009a en `META-INF/plugin.xml`, respetando el orden de `titleBarActions`
+- [x] T031 [US3] Agregar `update()` a `FinishReviewAction`, `SaveReviewAction`, `AbortReviewAction`, `PreviewEditsAction` y `RefreshAction` en `ui/actions/ReviewActions.kt` y `ui/actions/RefreshAction.kt` para que reflejen la disponibilidad del modelo (hoy están siempre habilitadas en el menú)
+- [x] T032 [US3] Cablear en `ui/PanelActionDispatcher.kt` `undoFinish`, `resumeFinish` y `cleanReview`, resolviendo el source del finish pendiente desde el modelo (sin selector de tipo de limpieza, como la extensión)
 
 **Checkpoint**: el ciclo de review se abre y se cierra entero desde el panel y su barra.
 
@@ -163,16 +163,16 @@ su fila, sin selector de por medio.
 
 ### Tests for User Story 4
 
-- [ ] T033 [P] [US4] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/PanelLayoutEmptyStateTest.kt`: sin base, el layout es exactamente los cinco bloques del setup con `Set the base branch` como único `PRIMARY` y **sin** inventario, sin `Start a review` y sin pie; con base, el inventario va antes del bloque de arrancar y `fillsHeight` es `true`
-- [ ] T034 [P] [US4] En el mismo archivo, cubrir las filas del inventario: `Continue` sólo en guardadas y deshabilitado con su tooltip cuando no es reanudable; `Discard` / `Discard orphan` según corresponda; fila sin ningún control ⟹ tooltip de ayuda presente; cada control lleva su `index`
+- [x] T033 [P] [US4] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/PanelLayoutEmptyStateTest.kt`: sin base, el layout es exactamente los cinco bloques del setup con `Set the base branch` como único `PRIMARY` y **sin** inventario, sin `Start a review` y sin pie; con base, el inventario va antes del bloque de arrancar y `fillsHeight` es `true`
+- [x] T034 [P] [US4] En el mismo archivo, cubrir las filas del inventario: `Continue` sólo en guardadas y deshabilitado con su tooltip cuando no es reanudable; `Discard` / `Discard orphan` según corresponda; fila sin ningún control ⟹ tooltip de ayuda presente; cada control lleva su `index`
 
 ### Implementation for User Story 4
 
-- [ ] T035 [US4] Implementar en `domain/PanelLayout.kt` la variante de setup (sin base) con sus cinco bloques y los textos de `contracts/panel-layout.md`
-- [ ] T036 [US4] Implementar en `domain/PanelLayout.kt` la variante `no-review` con base: `Heading`, `InventoryRows` (nombre, badges, meta, controles, tooltip de ayuda), párrafo y `Row[Start a review]`
-- [ ] T037 [US4] Cablear en `ui/PanelActionDispatcher.kt` `startReview`, `setBase`, `setRemote`, y `continueReview` / `discardInventory` **por índice**, resolviendo la review desde el modelo
-- [ ] T038 [US4] Corregir `DiscardInventoryAction` en `ui/actions/ReviewActions.kt` para aceptar la review ya resuelta cuando la invoca el panel, conservando el diálogo de entrada sólo para la invocación desde el menú (research §7). La **confirmación** es un paso aparte del diálogo de entrada (`confirmCopyFor` + `showYesNoDialog`, `ReviewActions.kt:355`) y se conserva en las dos rutas; T026a lo afirma
-- [ ] T039 [US4] Eliminar de `ui/ReviewPanel.kt` los textos que derivan al menú (`Start a review from the git review actions.` y `Use the "Set the Base Branch" action (Settings → git review).`), que quedan sin sentido al existir los controles (FR-010)
+- [x] T035 [US4] Implementar en `domain/PanelLayout.kt` la variante de setup (sin base) con sus cinco bloques y los textos de `contracts/panel-layout.md`
+- [x] T036 [US4] Implementar en `domain/PanelLayout.kt` la variante `no-review` con base: `Heading`, `InventoryRows` (nombre, badges, meta, controles, tooltip de ayuda), párrafo y `Row[Start a review]`
+- [x] T037 [US4] Cablear en `ui/PanelActionDispatcher.kt` `startReview`, `setBase`, `setRemote`, y `continueReview` / `discardInventory` **por índice**, resolviendo la review desde el modelo
+- [x] T038 [US4] Corregir `DiscardInventoryAction` en `ui/actions/ReviewActions.kt` para aceptar la review ya resuelta cuando la invoca el panel, conservando el diálogo de entrada sólo para la invocación desde el menú (research §7). La **confirmación** es un paso aparte del diálogo de entrada (`confirmCopyFor` + `showYesNoDialog`, `ReviewActions.kt:355`) y se conserva en las dos rutas; T026a lo afirma
+- [x] T039 [US4] Eliminar de `ui/ReviewPanel.kt` los textos que derivan al menú (`Start a review from the git review actions.` y `Use the "Set the Base Branch" action (Settings → git review).`), que quedan sin sentido al existir los controles (FR-010)
 
 **Checkpoint**: las cuatro historias P1 están completas; una sesión entera se hace desde el panel.
 
@@ -187,14 +187,14 @@ clic el diff de un archivo del final de la lista.
 
 ### Tests for User Story 5
 
-- [ ] T040 [P] [US5] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/PanelLayoutWholeTest.kt`: con 300 archivos el layout contiene 300 `FileRow` (ningún truncado), el `Heading` usa singular o plural según corresponda, el `Row[Diff]` de "todos" va antes de las filas con su tooltip, la fila del último abierto está marcada, y un rango vacío produce el `EmptyMessage` en lugar de la lista
+- [x] T040 [P] [US5] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/PanelLayoutWholeTest.kt`: con 300 archivos el layout contiene 300 `FileRow` (ningún truncado), el `Heading` usa singular o plural según corresponda, el `Row[Diff]` de "todos" va antes de las filas con su tooltip, la fila del último abierto está marcada, y un rango vacío produce el `EmptyMessage` en lugar de la lista
 
 ### Implementation for User Story 5
 
-- [ ] T041 [US5] Implementar en `domain/PanelLayout.kt` la rama whole: `Heading` con la cuenta, `Row[Diff]` de todos los cambios y `FileRows` con `index` y marca de último abierto
-- [ ] T042 [US5] Implementar en `domain/PanelLayout.kt` el `EmptyMessage` de rango sin archivos (`This review's range does not touch any files.`)
-- [ ] T043 [US5] Cablear en `ui/PanelActionDispatcher.kt` `openAllChanges` y `openChange` por índice contra `OpenEntryActions`
-- [ ] T044 [US5] Verificar en `ui/PanelRenderer.kt` que `FileRows` se dibuja como controles de una línea activables con **un** clic (no lista con doble clic) y que la lista larga scrollea sin scroll horizontal
+- [x] T041 [US5] Implementar en `domain/PanelLayout.kt` la rama whole: `Heading` con la cuenta, `Row[Diff]` de todos los cambios y `FileRows` con `index` y marca de último abierto
+- [x] T042 [US5] Implementar en `domain/PanelLayout.kt` el `EmptyMessage` de rango sin archivos (`This review's range does not touch any files.`)
+- [x] T043 [US5] Cablear en `ui/PanelActionDispatcher.kt` `openAllChanges` y `openChange` por índice contra `OpenEntryActions`
+- [x] T044 [US5] Verificar en `ui/PanelRenderer.kt` que `FileRows` se dibuja como controles de una línea activables con **un** clic (no lista con doble clic) y que la lista larga scrollea sin scroll horizontal
 
 **Checkpoint**: whole deja de ser texto inerte y se recorre entero.
 
@@ -209,14 +209,14 @@ el comando de instalación desde el panel y ver la confirmación transitoria.
 
 ### Tests for User Story 6
 
-- [ ] T045 [P] [US6] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/PanelLayoutDiagnosticsTest.kt`: `cli-missing` y `cli-outdated` producen los seis bloques de `contracts/panel-layout.md` con el comando correcto (`npm_install` vs `npm_update`) y `Other install options` como `LINK`; `out-of-range` y `error` producen párrafo, `Row[How to fix it]` (`PRIMARY`) y `Stderr` cuando hay
+- [x] T045 [P] [US6] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/PanelLayoutDiagnosticsTest.kt`: `cli-missing` y `cli-outdated` producen los seis bloques de `contracts/panel-layout.md` con el comando correcto (`npm_install` vs `npm_update`) y `Other install options` como `LINK`; `out-of-range` y `error` producen párrafo, `Row[How to fix it]` (`PRIMARY`) y `Stderr` cuando hay
 
 ### Implementation for User Story 6
 
-- [ ] T046 [US6] Implementar en `domain/PanelLayout.kt` las situaciones `cli-missing` y `cli-outdated` reusando las constantes de `domain/InstallHint.kt` y `domain/Version.kt`
-- [ ] T047 [US6] Implementar en `domain/PanelLayout.kt` las situaciones `out-of-range` y `error` con el bloque de `stderr`
-- [ ] T048 [US6] Implementar en `ui/PanelActionDispatcher.kt` el control `copyCliInstall`: copia al portapapeles y devuelve la señal de confirmación
-- [ ] T049 [US6] Implementar en `ui/PanelRenderer.kt` la confirmación transitoria del control de copiar (rótulo `Copied` durante 1500 ms y vuelta a `Copy`), y en el dispatcher el control `outOfRangeHelp`, que reexpone el `stderr` del modelo sin invocar la CLI
+- [x] T046 [US6] Implementar en `domain/PanelLayout.kt` las situaciones `cli-missing` y `cli-outdated` reusando las constantes de `domain/InstallHint.kt` y `domain/Version.kt`
+- [x] T047 [US6] Implementar en `domain/PanelLayout.kt` las situaciones `out-of-range` y `error` con el bloque de `stderr`
+- [x] T048 [US6] Implementar en `ui/PanelActionDispatcher.kt` el control `copyCliInstall`: copia al portapapeles y devuelve la señal de confirmación
+- [x] T049 [US6] Implementar en `ui/PanelRenderer.kt` la confirmación transitoria del control de copiar (rótulo `Copied` durante 1500 ms y vuelta a `Copy`), y en el dispatcher el control `outOfRangeHelp`, que reexpone el `stderr` del modelo sin invocar la CLI
 
 **Checkpoint**: ninguna pantalla de diagnóstico deja al revisor sin salida accionable.
 
@@ -232,14 +232,14 @@ sigue desplegada.
 
 ### Tests for User Story 7
 
-- [ ] T050 [P] [US7] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/PanelLayoutFooterTest.kt`: en `no-review` con base el layout termina con tres `ToolsSection` tituladas `Other actions`, `Settings` y `Support`, en ese orden, con sus controles y con los valores vigentes de base y remoto; en el resto de las situaciones no hay ninguna `ToolsSection`
-- [ ] T051 [P] [US7] Agregar a `PanelRendererTest.kt` que el estado de apertura de una sección sobrevive a un redibujado con un modelo nuevo (regresión del bug documentado en `panelHtml.ts:721`)
+- [x] T050 [P] [US7] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/PanelLayoutFooterTest.kt`: en `no-review` con base el layout termina con tres `ToolsSection` tituladas `Other actions`, `Settings` y `Support`, en ese orden, con sus controles y con los valores vigentes de base y remoto; en el resto de las situaciones no hay ninguna `ToolsSection`
+- [x] T051 [P] [US7] Agregar a `PanelRendererTest.kt` que el estado de apertura de una sección sobrevive a un redibujado con un modelo nuevo (regresión del bug documentado en `panelHtml.ts:721`)
 
 ### Implementation for User Story 7
 
-- [ ] T052 [US7] Implementar en `domain/PanelLayout.kt` las tres `ToolsSection` con sus bloques
-- [ ] T053 [US7] Implementar en `ui/PanelRenderer.kt` la sección plegable nativa, plegada por defecto, con el estado de apertura guardado en el componente y no en el modelo (FR-034, research §6)
-- [ ] T054 [US7] Cablear en `ui/PanelActionDispatcher.kt` `compareReview`, `walkthroughInit`, `walkthroughBuild` y `openSupport` (este último abre `support.star_url` del canónico, sin pasar por la CLI)
+- [x] T052 [US7] Implementar en `domain/PanelLayout.kt` las tres `ToolsSection` con sus bloques
+- [x] T053 [US7] Implementar en `ui/PanelRenderer.kt` la sección plegable nativa, plegada por defecto, con el estado de apertura guardado en el componente y no en el modelo (FR-034, research §6)
+- [x] T054 [US7] Cablear en `ui/PanelActionDispatcher.kt` `compareReview`, `walkthroughInit`, `walkthroughBuild` y `openSupport` (este último abre `support.star_url` del canónico, sin pasar por la CLI)
 
 **Checkpoint**: el pie está completo y no se pliega solo.
 
@@ -255,13 +255,13 @@ parpadeo.
 
 ### Tests for User Story 8
 
-- [ ] T055 [P] [US8] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/PanelLayoutSkeletonTest.kt`: el layout de carga conserva la silueta (barra con posición en bloque, notas normales, cabecera y título en bloque, *why* en bloque sólo en walk, las dos filas de controles) y **todos** sus controles vienen deshabilitados. Afirmar además `SKELETON_DELAY_MS <= 200`, que es la forma de hacer verificable SC-008 sin medir tiempos en un test
+- [x] T055 [P] [US8] Crear `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/PanelLayoutSkeletonTest.kt`: el layout de carga conserva la silueta (barra con posición en bloque, notas normales, cabecera y título en bloque, *why* en bloque sólo en walk, las dos filas de controles) y **todos** sus controles vienen deshabilitados. Afirmar además `SKELETON_DELAY_MS <= 200`, que es la forma de hacer verificable SC-008 sin medir tiempos en un test
 
 ### Implementation for User Story 8
 
-- [ ] T056 [US8] Implementar en `domain/PanelLayout.kt` la variante de esqueleto (parámetro de carga que devuelve el layout con bloques `Skeleton` y controles deshabilitados)
-- [ ] T057 [US8] Implementar en `ui/ReviewPanel.kt` la lógica de presentación de las dos fases con los umbrales de la extensión, declarados como constantes nombradas en `domain/PanelLayout.kt` (`SKELETON_DELAY_MS = 120`, `WHY_CEILING_MS = 800`) para que T055 pueda afirmarlas; los temporizadores van en el componente y no en el servicio (research §8)
-- [ ] T058 [US8] Implementar en `ui/ReviewPanel.kt` la guarda de obsolescencia: lo dibujado durante la carga no acciona nada aunque el usuario haga clic (equivalente del `stale()` de la extensión)
+- [x] T056 [US8] Implementar en `domain/PanelLayout.kt` la variante de esqueleto (parámetro de carga que devuelve el layout con bloques `Skeleton` y controles deshabilitados)
+- [x] T057 [US8] Implementar en `ui/ReviewPanel.kt` la lógica de presentación de las dos fases con los umbrales de la extensión, declarados como constantes nombradas en `domain/PanelLayout.kt` (`SKELETON_DELAY_MS = 120`, `WHY_CEILING_MS = 800`) para que T055 pueda afirmarlas; los temporizadores van en el componente y no en el servicio (research §8)
+- [x] T058 [US8] Implementar en `ui/ReviewPanel.kt` la guarda de obsolescencia: lo dibujado durante la carga no acciona nada aunque el usuario haga clic (equivalente del `stale()` de la extensión)
 
 **Checkpoint**: todas las historias implementadas.
 
@@ -271,13 +271,13 @@ parpadeo.
 
 **Purpose**: cierre transversal y verificación completa.
 
-- [ ] T059 [P] Recorrer el panel entero con Tab en `runIde` y corregir en `ui/PanelRenderer.kt` el orden de foco, la visibilidad del foco y los nombres accesibles de los controles de ícono (SC-010, FR-035)
-- [ ] T060 [P] Verificar el panel en tema claro, oscuro y alto contraste y con escalado de fuente al 200%, corrigiendo en `ui/PanelChrome.kt` cualquier color o métrica fija (SC-009)
-- [ ] T061 [P] Actualizar `intellij-plugin/README.md` con la superficie del panel: qué ofrece cada situación y qué vive en el menú. Cerrar SC-011 constatando que el resto de la documentación de producto no necesita aclaraciones por cliente: `README.md` / `README.es.md` de la raíz sólo linkean los README de cliente, y `docs/index.html` no nombra al plugin — si el texto nuevo introduce alguna asimetría, se arregla acá y no con una nota del tipo "en IntelliJ está en otro lado"
-- [ ] T062 [P] Actualizar la sección *The IntelliJ IDEA plugin* de `CONTRIBUTING.md` con la comparación lado a lado (`runPanelPreview` contra `npm run preview`) como forma de validar la paridad
-- [ ] T063 [P] Actualizar la sección de clientes del monorepo en `CLAUDE.md` para nombrar el canónico de disposición del panel y qué lo verifica de cada lado
-- [ ] T064 Correr la guía completa de `specs/010-panel-intellij-acciones/quickstart.md` sobre el sandbox, incluidos los cinco recorridos manuales y la regresión del menú (las 27 acciones siguen ahí)
-- [ ] T065 Correr la verificación completa: `cd intellij-plugin && ./gradlew check` y `node scripts/check-client-product-surface.mjs`, y confirmar que el CI del plugin cubre los tres sistemas operativos
+- [x] T059 [P] Recorrer el panel entero con Tab en `runIde` y corregir en `ui/PanelRenderer.kt` el orden de foco, la visibilidad del foco y los nombres accesibles de los controles de ícono (SC-010, FR-035)
+- [x] T060 [P] Verificar el panel en tema claro, oscuro y alto contraste y con escalado de fuente al 200%, corrigiendo en `ui/PanelChrome.kt` cualquier color o métrica fija (SC-009)
+- [x] T061 [P] Actualizar `intellij-plugin/README.md` con la superficie del panel: qué ofrece cada situación y qué vive en el menú. Cerrar SC-011 constatando que el resto de la documentación de producto no necesita aclaraciones por cliente: `README.md` / `README.es.md` de la raíz sólo linkean los README de cliente, y `docs/index.html` no nombra al plugin — si el texto nuevo introduce alguna asimetría, se arregla acá y no con una nota del tipo "en IntelliJ está en otro lado"
+- [x] T062 [P] Actualizar la sección *The IntelliJ IDEA plugin* de `CONTRIBUTING.md` con la comparación lado a lado (`runPanelPreview` contra `npm run preview`) como forma de validar la paridad
+- [x] T063 [P] Actualizar la sección de clientes del monorepo en `CLAUDE.md` para nombrar el canónico de disposición del panel y qué lo verifica de cada lado
+- [x] T064 Correr la guía completa de `specs/010-panel-intellij-acciones/quickstart.md` sobre el sandbox, incluidos los cinco recorridos manuales y la regresión del menú (las 27 acciones siguen ahí)
+- [x] T065 Correr la verificación completa: `cd intellij-plugin && ./gradlew check` y `node scripts/check-client-product-surface.mjs`, y confirmar que el CI del plugin cubre los tres sistemas operativos
 
 ---
 

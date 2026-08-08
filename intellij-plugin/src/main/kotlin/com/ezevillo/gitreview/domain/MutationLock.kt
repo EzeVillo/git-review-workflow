@@ -1,5 +1,7 @@
 package com.ezevillo.gitreview.domain
 
+import java.util.concurrent.CopyOnWriteArraySet
+
 /**
  * Depth-1 lock for mutations: a second call while busy is discarded, not queued.
  */
@@ -10,8 +12,9 @@ class MutationLock {
 
     @Volatile
     private var busy: Boolean = false
-    private val busyListeners = mutableSetOf<(Boolean) -> Unit>()
-    private val discardListeners = mutableSetOf<(String) -> Unit>()
+    // Mutations run on a pooled thread while the panel reads busy from the EDT.
+    private val busyListeners = CopyOnWriteArraySet<(Boolean) -> Unit>()
+    private val discardListeners = CopyOnWriteArraySet<(String) -> Unit>()
 
     val isBusy: Boolean get() = busy
 
@@ -28,17 +31,23 @@ class MutationLock {
     /**
      * Runs [fn] if not busy. Returns the result, or `null` if discarded.
      * Synchronous API: callers wrap async work inside [fn].
+     *
+     * Claiming the lock is atomic — callers arrive from pooled threads, so the
+     * check and the claim cannot be two steps. The monitor is reentrant, so a
+     * nested call on the same thread still sees `busy` and is discarded.
      */
     fun <T> run(fn: () -> T): T? {
-        if (busy) {
-            discardListeners.forEach { it(DISCARD_REASON) }
-            return null
+        synchronized(this) {
+            if (busy) {
+                discardListeners.forEach { it(DISCARD_REASON) }
+                return null
+            }
+            setBusy(true)
         }
-        setBusy(true)
         return try {
             fn()
         } finally {
-            setBusy(false)
+            synchronized(this) { setBusy(false) }
         }
     }
 

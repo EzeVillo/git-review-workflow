@@ -157,6 +157,31 @@ fun parseConfigPorcelain(stdout: String): ConfigPorcelainResult {
 }
 
 /**
+ * Branches for the start-review picker (parity with VS Code `pickBranch`).
+ *
+ * Porcelain may emit both a remote and a local row for the same name; origin
+ * is chosen later as the wizard source step, so the picker collapses to one
+ * entry per name. Prefer the row marked `current` when present. Current branch
+ * sorts first (FR-011 / research.md Decision 9).
+ */
+fun branchPickerItems(candidates: List<CandidateBranch>): List<CandidateBranch> {
+    val byName = LinkedHashMap<String, CandidateBranch>()
+    for (c in candidates) {
+        val prev = byName[c.name]
+        if (prev == null || (c.current && !prev.current)) {
+            byName[c.name] = c
+        }
+    }
+    return byName.values.sortedWith(
+        compareByDescending<CandidateBranch> { it.current }.thenBy { it.name },
+    )
+}
+
+/** Label for the start / set-base branch list: name, with `(current)` when applicable. */
+fun branchPickerLabel(candidate: CandidateBranch): String =
+    if (candidate.current) "${candidate.name}  (current)" else candidate.name
+
+/**
  * Delta marker usable for a start source: remote → remote row;
  * local and offline → local row.
  */

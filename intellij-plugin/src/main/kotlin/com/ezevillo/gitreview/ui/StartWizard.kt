@@ -1,9 +1,10 @@
 package com.ezevillo.gitreview.ui
 
 import com.ezevillo.gitreview.domain.ReviewIntent
-import com.ezevillo.gitreview.domain.ReviewLayout
 import com.ezevillo.gitreview.domain.ReviewRange
 import com.ezevillo.gitreview.domain.ReviewSource
+import com.ezevillo.gitreview.domain.branchPickerItems
+import com.ezevillo.gitreview.domain.branchPickerLabel
 import com.ezevillo.gitreview.domain.buildLayoutItems
 import com.ezevillo.gitreview.domain.formatCommandLine
 import com.ezevillo.gitreview.domain.offerConfigFlags
@@ -14,6 +15,7 @@ import com.ezevillo.gitreview.domain.deltaForSource
 import com.ezevillo.gitreview.domain.validateIntent
 import com.ezevillo.gitreview.domain.IntentValidationContext
 import com.ezevillo.gitreview.domain.IntentValidationResult
+import com.ezevillo.gitreview.host.Bg
 import com.ezevillo.gitreview.host.GitReviewService
 import com.ezevillo.gitreview.host.MutationActions
 import com.ezevillo.gitreview.host.StartRunResult
@@ -23,7 +25,9 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
 
 /**
- * Minimal multi-step start wizard (dialogs).
+ * Multi-step start wizard (dialogs). Branch list comes from
+ * `git review config --porcelain` candidates — same source as the VS Code
+ * start assistant — not free-text input.
  */
 object StartWizard {
     fun run(project: Project) {
@@ -34,9 +38,27 @@ object StartWizard {
             return
         }
 
-        val state = service.currentState()
-        val base = state.config?.base
-        if (base == null) {
+        // Fresh config --porcelain (config + candidates), not the panel cache.
+        val bootstrap = Bg.sync(project, "git review config") {
+            service.cliInvoker.invoke("config", listOf("--porcelain"), cwd)
+        }
+        if (bootstrap.exitCode != 0 || bootstrap.timedOut) {
+            val text = bootstrap.stderr.trim().ifEmpty { "Could not read the review configuration." }
+            Messages.showErrorDialog(project, text, "git review")
+            return
+        }
+        val parsed = try {
+            parseConfigPorcelain(bootstrap.stdout)
+        } catch (e: Exception) {
+            Messages.showErrorDialog(
+                project,
+                e.message ?: "Could not parse the review configuration.",
+                "git review",
+            )
+            return
+        }
+
+        if (parsed.config.base == null) {
             Messages.showErrorDialog(
                 project,
                 "Configure a base branch first (git review → Set the Base Branch).",
@@ -45,12 +67,26 @@ object StartWizard {
             return
         }
 
-        val branch = Messages.showInputDialog(
+        val branches = branchPickerItems(parsed.candidates)
+        if (branches.isEmpty()) {
+            Messages.showErrorDialog(
+                project,
+                "No branches to pick a review from were found.",
+                "git review",
+            )
+            return
+        }
+        val branchLabels = branches.map { branchPickerLabel(it) }.toTypedArray()
+        val branchIdx = Messages.showChooseDialog(
             project,
-            "Branch to review (empty = current):",
+            "Branch to review",
             "Start a Review",
-            null,
-        ) ?: return
+            Messages.getQuestionIcon(),
+            branchLabels,
+            branchLabels.first(),
+        )
+        if (branchIdx < 0) return
+        val branch = branches[branchIdx].name
 
         val sources = arrayOf("remote", "local", "offline")
         val defaultSrc = resolveDefaultSource(
@@ -70,11 +106,11 @@ object StartWizard {
         // Probe offers for layout
         val flags = offerConfigFlags(source, ReviewRange.FULL).toMutableList()
         flags.add(0, "--porcelain")
-        if (branch.isNotBlank()) {
-            flags.add("--")
-            flags.add(branch)
+        flags.add("--")
+        flags.add(branch)
+        val cfgResult = Bg.sync(project, "git review config") {
+            service.cliInvoker.invoke("config", flags, cwd)
         }
-        val cfgResult = service.cliInvoker.invoke("config", flags, cwd)
         val offers = if (cfgResult.exitCode == 0) {
             try {
                 parseConfigPorcelain(cfgResult.stdout).offers
@@ -108,19 +144,21 @@ object StartWizard {
         val range = if (rangeChoice == Messages.NO) ReviewRange.DELTA else ReviewRange.FULL
 
         val intent = ReviewIntent(
-            branch = branch.ifBlank { null },
+            branch = branch,
             layout = layout,
             range = range,
             source = source,
         )
 
         val delta = if (range == ReviewRange.DELTA) {
-            val probe = service.cliInvoker.invoke(
-                "config",
-                listOf("--porcelain") + offerConfigFlags(source, range) +
-                    listOf("--", branch.ifBlank { "HEAD" }),
-                cwd,
-            )
+            val probe = Bg.sync(project, "git review config") {
+                service.cliInvoker.invoke(
+                    "config",
+                    listOf("--porcelain") + offerConfigFlags(source, range) +
+                        listOf("--", branch),
+                    cwd,
+                )
+            }
             if (probe.exitCode == 0) {
                 try {
                     deltaForSource(parseConfigPorcelain(probe.stdout).deltas, source.id)
@@ -138,31 +176,32 @@ object StartWizard {
 
         val confirm = Messages.showYesNoDialog(
             project,
-            "Start ${layout.name.lowercase()} review of ${branch.ifBlank { "current branch" }} from $source?",
+            "Start ${layout.name.lowercase()} review of $branch from $source?",
             "Confirm Start",
             Messages.getQuestionIcon(),
         )
         if (confirm != Messages.YES) return
 
-        val currentBranch = branch.ifBlank { "HEAD" }
-        when (val result = MutationActions(project, service).runStart(intent, currentBranch)) {
-            StartRunResult.Ok -> Messages.showInfoMessage(project, "Review started.", "git review")
-            StartRunResult.Busy -> Messages.showWarningDialog(
-                project,
-                "Another operation is already in progress",
-                "git review",
-            )
-            StartRunResult.Stale -> Messages.showWarningDialog(project, "State changed; try again.", "git review")
-            StartRunResult.NoCwd -> Messages.showErrorDialog(project, "No sole git root.", "git review")
-            is StartRunResult.Network -> {
-                val line = formatCommandLine(result.command, result.args)
-                Messages.showErrorDialog(
+        MutationActions(project, service).runStart(intent, branch) { result ->
+            when (result) {
+                StartRunResult.Ok -> Messages.showInfoMessage(project, "Review started.", "git review")
+                StartRunResult.Busy -> Messages.showWarningDialog(
                     project,
-                    "Network failure starting the review.\n\n${result.stderr}\n\nRun in Terminal:\n$line",
+                    "Another operation is already in progress",
                     "git review",
                 )
+                StartRunResult.Stale -> Messages.showWarningDialog(project, "State changed; try again.", "git review")
+                StartRunResult.NoCwd -> Messages.showErrorDialog(project, "No sole git root.", "git review")
+                is StartRunResult.Network -> {
+                    val line = formatCommandLine(result.command, result.args)
+                    Messages.showErrorDialog(
+                        project,
+                        "Network failure starting the review.\n\n${result.stderr}\n\nRun in Terminal:\n$line",
+                        "git review",
+                    )
+                }
+                is StartRunResult.Failed -> Messages.showErrorDialog(project, result.stderr, "git review")
             }
-            is StartRunResult.Failed -> Messages.showErrorDialog(project, result.stderr, "git review")
         }
     }
 }

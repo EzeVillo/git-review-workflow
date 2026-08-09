@@ -11,6 +11,13 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const yamlPath = join(root, "contracts", "client-product-surface.yaml");
 
+// Los blobs son LF, pero un checkout de Windows los materializa como CRLF: sin
+// normalizar, las regex ancladas en `:\n` no matchean y los chequeos se saltean
+// en silencio localmente para reaparecer en CI. Toda lectura pasa por acá.
+function readText(path, encoding) {
+  return readFileSync(path, encoding).replace(/\r\n/g, "\n");
+}
+
 function fail(msg) {
   console.error(`check-client-product-surface: ${msg}`);
   process.exit(1);
@@ -20,7 +27,7 @@ if (!existsSync(yamlPath)) {
   fail(`missing ${yamlPath}`);
 }
 
-const text = readFileSync(yamlPath, "utf8");
+const text = readText(yamlPath, "utf8");
 
 function scalar(key) {
   const m = text.match(new RegExp(`^${key}:\\s*"([^"]*)"`, "m"));
@@ -43,7 +50,7 @@ if (actionKeys.length !== 27) {
 
 // VS Code package.json commands
 const pkgPath = join(root, "vscode-extension", "package.json");
-const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+const pkg = JSON.parse(readText(pkgPath, "utf8"));
 const commands = pkg.contributes?.commands ?? [];
 if (commands.length !== 27) {
   fail(`vscode package.json has ${commands.length} commands, expected 27`);
@@ -57,8 +64,8 @@ for (const id of actionKeys) {
 }
 
 // VS Code constants
-const versionTs = readFileSync(join(root, "vscode-extension", "src", "cli", "version.ts"), "utf8");
-const installTs = readFileSync(join(root, "vscode-extension", "src", "cli", "installHint.ts"), "utf8");
+const versionTs = readText(join(root, "vscode-extension", "src", "cli", "version.ts"), "utf8");
+const installTs = readText(join(root, "vscode-extension", "src", "cli", "installHint.ts"), "utf8");
 if (!versionTs.includes(`"${min}"`)) {
   fail(`vscode version.ts does not contain min_cli_version ${min}`);
 }
@@ -73,22 +80,22 @@ if (!installTs.includes(npmUpdate)) {
 const ijVersion = join(root, "intellij-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "domain", "Version.kt");
 const ijInstall = join(root, "intellij-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "domain", "InstallHint.kt");
 if (existsSync(ijVersion)) {
-  const v = readFileSync(ijVersion, "utf8");
+  const v = readText(ijVersion, "utf8");
   if (!v.includes(`"${min}"`)) fail(`intellij Version.kt missing min ${min}`);
 }
 if (existsSync(ijInstall)) {
-  const i = readFileSync(ijInstall, "utf8");
+  const i = readText(ijInstall, "utf8");
   if (!i.includes(npmInstall)) fail(`intellij InstallHint.kt missing npm_install`);
   if (!i.includes(npmUpdate)) fail(`intellij InstallHint.kt missing npm_update`);
 }
 
 // multi_root_error substring in both state managers
 const multi = "multi-root is not supported";
-const vsState = readFileSync(join(root, "vscode-extension", "src", "review", "state.ts"), "utf8");
+const vsState = readText(join(root, "vscode-extension", "src", "review", "state.ts"), "utf8");
 if (!vsState.includes(multi)) fail("vscode state.ts missing multi_root_error fragment");
 const ijState = join(root, "intellij-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "host", "ReviewStateManager.kt");
 if (existsSync(ijState)) {
-  const s = readFileSync(ijState, "utf8");
+  const s = readText(ijState, "utf8");
   if (!s.includes(multi)) fail("intellij ReviewStateManager missing multi_root_error fragment");
 }
 
@@ -96,7 +103,7 @@ if (existsSync(ijState)) {
 if (!text.includes("No branches to pick a base from were found.")) {
   fail("YAML missing no_base_candidates string");
 }
-const setBase = readFileSync(join(root, "vscode-extension", "src", "commands", "setBase.ts"), "utf8");
+const setBase = readText(join(root, "vscode-extension", "src", "commands", "setBase.ts"), "utf8");
 if (!setBase.includes("No branches to pick a base from were found.")) {
   fail("setBase.ts missing no_base_candidates");
 }
@@ -121,9 +128,9 @@ if (!/^panel_excluded:/m.test(text)) {
 }
 
 const panelHtmlPath = join(root, "vscode-extension", "src", "views", "panelHtml.ts");
-const panelHtml = readFileSync(panelHtmlPath, "utf8");
+const panelHtml = readText(panelHtmlPath, "utf8");
 const providerPath = join(root, "vscode-extension", "src", "views", "walkthroughViewProvider.ts");
-const providerSrc = readFileSync(providerPath, "utf8");
+const providerSrc = readText(providerPath, "utf8");
 
 // Extract PANEL_MESSAGES string literals
 const panelMessagesMatch = providerSrc.match(/export const PANEL_MESSAGES = \[([\s\S]*?)\] as const/);
@@ -143,10 +150,25 @@ const panelExcluded = excludedMatch[1].split(",").map((s) => s.trim()).filter(Bo
 const titleActionsBlock = text.split(/^title_actions:\s*$/m)[1]?.split(/^[a-z_][a-z0-9_]*:/m)[0] ?? "";
 const titleActionIds = [...titleActionsBlock.matchAll(/id:\s*([A-Za-z][A-Za-z0-9]*)/g)].map((m) => m[1]);
 
+// panel_layout, acotado: lo que sigue (title_actions) tiene la misma sangría de
+// 2 espacios en sus ids, así que sin este corte la última situación se lo come.
+const panelLayoutBlock =
+  text.split(/^panel_layout:\s*$/m)[1]?.split(/^title_actions:\s*$/m)[0] ?? "";
+
+/** El bloque YAML de una situación: hasta la próxima o hasta el fin del layout. */
+function situationBlock(key) {
+  const start = panelLayoutBlock.indexOf(`  ${key}:`);
+  if (start === -1) return "";
+  const next = panelLayoutBlock.slice(start + 1).search(/\n {2}[a-z][a-z0-9-]*:/);
+  return next === -1
+    ? panelLayoutBlock.slice(start)
+    : panelLayoutBlock.slice(start, start + 1 + next);
+}
+
 // Parse control entries from panel_layout (and inventory_controls)
 function collectCanonicalControls() {
   const controls = []; // {id, label|null, emphasis, raw, accessible, situation}
-  const layoutBlock = text.split(/^panel_layout:\s*$/m)[1]?.split(/^title_actions:\s*$/m)[0] ?? "";
+  const layoutBlock = panelLayoutBlock;
   // Match control objects in flow or nested form: id: foo, label: "..."
   const controlObjRe =
     /\{\s*id:\s*([A-Za-z][A-Za-z0-9]*)\s*,\s*label:\s*(null|"[^"]*")\s*,\s*(?:accessible_name:\s*"([^"]*)"\s*,\s*)?emphasis:\s*(primary|secondary|link|icon)\s*(?:,\s*raw_button:\s*(true|false))?\s*(?:,\s*confirms:\s*(true|false))?\s*(?:,\s*tooltip:\s*"[^"]*")?\s*\}/g;
@@ -205,6 +227,9 @@ const canonicalControls = collectCanonicalControls();
 if (canonicalControls.length === 0) {
   fail("panel_layout has no parsed controls");
 }
+const rawControlIds = new Set(
+  canonicalControls.filter((c) => c.raw).map((c) => c.id),
+);
 
 // Map emphasis className in button() third arg
 function emphasisFromClassArg(classArg) {
@@ -462,17 +487,18 @@ for (const se of situationEntries) {
   }
   const extracted = controlSequenceFromSource(combined);
   // control ids from this situation's YAML block
-  const sitBlockStart = text.indexOf(`  ${sit}:`);
-  const nextSit = text.slice(sitBlockStart + 1).search(/\n  [a-z][a-z0-9-]*:/);
-  const sitBlock =
-    nextSit === -1
-      ? text.slice(sitBlockStart)
-      : text.slice(sitBlockStart, sitBlockStart + 1 + nextSit);
-  const sitIds = [...sitBlock.matchAll(/\{id:\s*([A-Za-z][A-Za-z0-9]*)/g)].map((m) => m[1]);
-  // Also code_command controls
-  for (const m of sitBlock.matchAll(/control:\s*([A-Za-z][A-Za-z0-9]*)/g)) {
-    sitIds.push(m[1]);
-  }
+  const sitBlock = situationBlock(sit);
+  // Los ids del bloque, en el orden en que se pintan: `{id: ...}` de las rows y
+  // `control: ...` de los code_command, mezclados por posición (no primero unos
+  // y después otros, que invertiría el orden respecto del panel real).
+  const sitHits = [
+    ...sitBlock.matchAll(/\{id:\s*([A-Za-z][A-Za-z0-9]*)/g),
+    ...sitBlock.matchAll(/control:\s*([A-Za-z][A-Za-z0-9]*)/g),
+  ].sort((a, b) => a.index - b.index);
+  // Los raw_button se construyen a mano en panelHtml.ts (no via button()), así
+  // que nunca aparecen en la secuencia extraída: el chequeo (1) los cubre por
+  // label.
+  const sitIds = sitHits.map((m) => m[1]).filter((id) => !rawControlIds.has(id));
   if (sitIds.length === 0) continue;
   if (!isSubsequence(sitIds, extracted) && !isSubsequence(sitIds, controlSequenceFromSource(panelHtml))) {
     // Allow full-file fallback when composition is spread (e.g. renderEmptyState)
@@ -512,12 +538,7 @@ for (const id of actionKeys) {
 for (const se of situationEntries) {
   const key = se[1];
   const sits = layoutKeyToSituations(key);
-  const sitBlockStart = text.indexOf(`  ${key}:`);
-  const nextSit = text.slice(sitBlockStart + 1).search(/\n  [a-z][a-z0-9-]*:/);
-  const sitBlock =
-    nextSit === -1
-      ? text.slice(sitBlockStart)
-      : text.slice(sitBlockStart, sitBlockStart + 1 + nextSit);
+  const sitBlock = situationBlock(key);
   const ids = [...sitBlock.matchAll(/\{id:\s*([A-Za-z][A-Za-z0-9]*)/g)].map((m) => m[1]);
   for (const id of ids) {
     if (!actionKeys.includes(id)) continue; // panel-only controls

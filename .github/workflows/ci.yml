@@ -17,11 +17,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      # bin/ y el wrapper de Gradle: un checkout de Windows no lleva el bit de
+      # ejecución, así que un archivo agregado desde ahí llega a 100644 y sólo
+      # muere en los runners POSIX (`./gradlew: Permission denied`).
       - name: Check bin scripts are executable
         run: |
-          missing=$(git ls-files -s bin/ | awk '$1 != "100755" && $4 !~ /\/\.gitkeep$/ {print $4}')
+          missing=$(git ls-files -s bin/ intellij-plugin/gradlew | awk '$1 != "100755" && $4 !~ /\/\.gitkeep$/ {print $4}')
           if [ -n "$missing" ]; then
-            echo "These files in bin/ are missing the executable bit (100755):" >&2
+            echo "These files are missing the executable bit (100755):" >&2
             echo "$missing" >&2
             echo "Fix with: git update-index --chmod=+x <file>" >&2
             exit 1

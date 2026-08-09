@@ -340,6 +340,43 @@ describe("parsePorcelain", () => {
         const out = "state\treview/feat-x\torigin/feat-x\tabc123\twalk\tapplied\t1\t1\t1\tsrc/a.ts\t0\nentry\t1\tsrc/a.ts\t0\t1\n";
         assert.strictEqual(parsePorcelain(out).keysOnly, undefined);
     });
+
+    // ── draft (reviewer's own reading order, 011) ────────────────────────────
+
+    it("registro draft marca el orden de lectura como del revisor", () => {
+        const out = [
+            "state\treview/feat-x\torigin/feat-x\tabc123\twalk\tapplied\t1\t2\t2\tsrc/a.ts\t0",
+            "entry\t1\tsrc/a.ts\t0\t1",
+            "entry\t2\tsrc/b.ts\t0\t1",
+            "draft",
+            "",
+        ].join("\n");
+        const parsed = parsePorcelain(out);
+        assert.strictEqual(parsed.draft, true);
+        // Registro de presencia: no desplaza ni altera nada del resto.
+        assert.strictEqual(parsed.state.mode, "walk");
+        assert.strictEqual(parsed.state.total, 2);
+        assert.strictEqual(parsed.entries.length, 2);
+        assert.strictEqual(parsed.keysOnly, undefined);
+    });
+
+    it("sin registro draft el campo queda ausente, no false inventado", () => {
+        const out = "state\treview/feat-x\torigin/feat-x\tabc123\twalk\tapplied\t1\t1\t1\tsrc/a.ts\t0\nentry\t1\tsrc/a.ts\t0\t1\n";
+        assert.strictEqual(parsePorcelain(out).draft, undefined);
+    });
+
+    it("draft y keys conviven: un borrador tambien puede leerse solo-keys", () => {
+        const out = [
+            "state\treview/feat-x\torigin/feat-x\tabc123\twalk\tapplied\t1\t1\t1\tsrc/a.ts\t1",
+            "entry\t1\tsrc/a.ts\t1\t1",
+            "keys",
+            "draft",
+            "",
+        ].join("\n");
+        const parsed = parsePorcelain(out);
+        assert.strictEqual(parsed.draft, true);
+        assert.strictEqual(parsed.keysOnly, true);
+    });
 });
 
 describe("parseListPorcelain", () => {

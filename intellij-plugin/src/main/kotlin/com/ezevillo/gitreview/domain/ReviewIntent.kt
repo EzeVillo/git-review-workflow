@@ -88,3 +88,31 @@ fun intentToArgs(intent: ReviewIntent, currentBranch: String): List<String> {
     args.add(intent.branch ?: currentBranch)
     return args
 }
+
+/**
+ * Argv de `git review walkthrough draft` (011). El verbo es `walkthrough`;
+ * `draft` es el primer argumento.
+ *
+ * Origen y rango son **los mismos** que el asistente ya resolvió: el borrador
+ * tiene que listar los archivos de la review que se va a iniciar, no los de
+ * otro rango. Nunca `--force`: pisar un borrador empezado se pide a mano.
+ */
+fun draftArgs(
+    branch: String,
+    source: ReviewSource,
+    range: ReviewRange,
+    build: Boolean,
+): List<String> {
+    val args = ArrayList<String>()
+    args.add("draft")
+    if (build) args.add("--build")
+    when (source) {
+        ReviewSource.LOCAL -> args.add("--local")
+        ReviewSource.OFFLINE -> args.add("--offline")
+        ReviewSource.REMOTE -> { /* default */ }
+    }
+    if (range == ReviewRange.DELTA) args.add("--delta")
+    args.add("--")
+    args.add(branch)
+    return args
+}

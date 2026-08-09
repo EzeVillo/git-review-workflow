@@ -48,6 +48,12 @@ function review(rows: string[][], inputs: PanelInputs = {busy: false}): PanelMod
     if (parsed.base !== undefined) {
         state.base = parsed.base;
     }
+    if (parsed.keysOnly) {
+        state.keysOnly = true;
+    }
+    if (parsed.draft) {
+        state.draft = true;
+    }
     return buildPanelModel(state, inputs);
 }
 
@@ -191,6 +197,19 @@ export const PREVIEW_PANES: PreviewPane[] = [
             [
                 ["state", "review/feat/panel", "feat/panel", "a1b2c3d", "walk", "applied", "7", "15", "15", WALK_PATHS[6], "1"],
                 ...walkEntries(WALK_PATHS, [1, 7, 12], ["package.json", "esbuild.js", "tsconfig.json"]),
+            ],
+            {busy: false, why: {state: "present", text: WHY}}
+        ),
+    },
+    {
+        name: "walk-draft",
+        caption: "walk — el orden de lectura es el borrador del revisor, no el del PR",
+        model: review(
+            [
+                ["state", "review/feat/panel", "feat/panel", "a1b2c3d", "walk", "applied", "3", "15", "15", WALK_PATHS[2], "0"],
+                ...walkEntries(WALK_PATHS, [1, 7, 12], ["package.json", "esbuild.js", "tsconfig.json"]),
+                // Registro de presencia, sin campos: la única fuente del badge.
+                ["draft"],
             ],
             {busy: false, why: {state: "present", text: WHY}}
         ),

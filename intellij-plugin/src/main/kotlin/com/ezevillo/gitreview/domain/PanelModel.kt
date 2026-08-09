@@ -62,6 +62,8 @@ data class PanelModel(
     val degraded: Boolean = false,
     val readonly: Boolean = false,
     val keysOnly: Boolean = false,
+    /** 011: el orden de lectura es el borrador del revisor (registro `draft`). */
+    val draft: Boolean = false,
     val current: PanelEntry? = null,
     val entryCount: Int = 0,
     val files: List<PanelEntry> = emptyList(),
@@ -173,6 +175,7 @@ fun buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelModel {
         degraded = false,
         readonly = false,
         keysOnly = false,
+        draft = false,
         entryCount = 0,
         files = emptyList(),
         repoLabel = inputs.repoLabel,
@@ -207,6 +210,7 @@ fun buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelModel {
         degraded = review.walkthrough == WalkthroughStatus.DEGRADED,
         readonly = state.readonly == true,
         keysOnly = state.keysOnly == true,
+        draft = state.draft == true,
         entryCount = state.entries.size,
     )
 

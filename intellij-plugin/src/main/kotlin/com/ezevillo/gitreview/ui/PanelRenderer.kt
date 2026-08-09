@@ -180,6 +180,9 @@ class PanelRenderer(
         row.background = chrome.background()
         row.alignmentX = Component.LEFT_ALIGNMENT
         row.add(badgeLabel(bar.mode, bold = true))
+        if (bar.draft) {
+            row.add(JLabel("(draft)").apply { foreground = chrome.mutedForeground() })
+        }
         row.add(JLabel(bar.name).apply { foreground = chrome.foreground() })
         bar.tip?.let { row.add(JLabel(it).apply { foreground = chrome.mutedForeground() }) }
         if (bar.skeleton) {

@@ -35,7 +35,39 @@ class PorcelainTest {
         assertEquals(2, r.state.position)
         assertEquals(true, r.state.essential)
         assertEquals(true, r.keysOnly)
+        assertNull(r.draft)
         assertTrue((r.entries[1].id as PathRef).display.contains("foo"))
+    }
+
+    /** 011: registro de presencia, sin campos; no desplaza nada del resto. */
+    @Test
+    fun parseWalkStatusOnTheReviewersDraft() {
+        val out = """
+            state	review/feature	feature	deadbeef	walk	applied	2	5	5	"src/foo.kt"	0
+            entry	1	src/a.kt	0	1
+            entry	2	"src/foo.kt"	0	1
+            draft
+        """.trimIndent()
+        val r = parsePorcelain(out)
+        assertEquals(true, r.draft)
+        assertNull(r.keysOnly)
+        assertEquals(ReviewMode.WALK, r.state.mode)
+        assertEquals(2, r.state.position)
+        assertEquals(5, r.state.total)
+        assertEquals(2, r.entries.size)
+    }
+
+    @Test
+    fun draftAndKeysCoexist() {
+        val out = """
+            state	review/feature	feature	deadbeef	walk	applied	1	1	1	src/a.kt	1
+            entry	1	src/a.kt	1	1
+            keys
+            draft
+        """.trimIndent()
+        val r = parsePorcelain(out)
+        assertEquals(true, r.draft)
+        assertEquals(true, r.keysOnly)
     }
 
     @Test

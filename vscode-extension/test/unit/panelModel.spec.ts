@@ -35,6 +35,9 @@ function reviewState(stdout: string): ReviewState {
     if (parsed.keysOnly) {
         state.keysOnly = true;
     }
+    if (parsed.draft) {
+        state.draft = true;
+    }
     return state;
 }
 
@@ -163,6 +166,26 @@ describe("buildPanelModel", () => {
 
     it("keysOnly es false sin registro keys", () => {
         assert.strictEqual(buildPanelModel(reviewState(WALK), {busy: false}).keysOnly, false);
+    });
+
+    it("draft se proyecta cuando status reporta el registro draft", () => {
+        const stdout = [
+            "state\treview/feat\torigin/feat\tabc123\twalk\tapplied\t1\t2\t2\tsrc/a.ts\t0",
+            "entry\t1\tsrc/a.ts\t0\t1",
+            "entry\t2\tsrc/b.ts\t0\t1",
+            "draft",
+            "",
+        ].join("\n");
+        const model = buildPanelModel(reviewState(stdout), {busy: false});
+        assert.strictEqual(model.draft, true);
+        // El registro no cambia nada mas del modelo.
+        assert.strictEqual(model.mode, "walk");
+        assert.strictEqual(model.entryCount, 2);
+        assert.strictEqual(model.keysOnly, false);
+    });
+
+    it("draft es false sin registro draft", () => {
+        assert.strictEqual(buildPanelModel(reviewState(WALK), {busy: false}).draft, false);
     });
 
     it("total > recorded no es baseMoved: es la secuencia creciendo (el upgrade de los no anotados)", () => {

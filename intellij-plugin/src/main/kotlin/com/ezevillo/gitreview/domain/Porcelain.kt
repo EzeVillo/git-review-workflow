@@ -80,6 +80,11 @@ data class PorcelainResult(
     val finish: StatusFinishRecord? = null,
     val readonly: Boolean? = null,
     val keysOnly: Boolean? = null,
+    /**
+     * 011: el orden de lectura es el borrador del revisor, no el walkthrough
+     * del autor. Sólo se da en walk; nunca se infiere, llega por el registro.
+     */
+    val draft: Boolean? = null,
     val subjects: Map<Int, String>? = null,
     val authors: Map<Int, String>? = null,
     val base: String? = null,
@@ -142,6 +147,7 @@ fun parsePorcelain(stdout: String): PorcelainResult {
     var finish: StatusFinishRecord? = null
     var isReadonly: Boolean? = null
     var isKeysOnly: Boolean? = null
+    var isDraft: Boolean? = null
 
     for (line in lines) {
         val fields = line.split("\t")
@@ -232,6 +238,7 @@ fun parsePorcelain(stdout: String): PorcelainResult {
             }
             "readonly" -> isReadonly = true
             "keys" -> isKeysOnly = true
+            "draft" -> isDraft = true
             else -> { /* unknown tag: ignore (FR-003) */ }
         }
     }
@@ -244,6 +251,7 @@ fun parsePorcelain(stdout: String): PorcelainResult {
         finish = finish,
         readonly = isReadonly,
         keysOnly = isKeysOnly,
+        draft = isDraft,
         subjects = subjects,
         authors = authors,
         base = base,

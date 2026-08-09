@@ -138,20 +138,20 @@ revisor se pregunta cómo leer el PR.
 
 **Depends on**: US1 (los ids `offer` son dependencia dura).
 
-- [ ] T032 [US2] Agregar `draft` y `draft-resume` al tipo `OfferId` en `vscode-extension/src/cli/configPorcelain.ts`
-- [ ] T033 [US2] Agregar sus entradas a `OFFER_META` y `OFFER_ORDER` en `vscode-extension/src/review/layoutOffers.ts` con los textos de [contracts/client-draft-flow.md](contracts/client-draft-flow.md)
-- [ ] T034 [US2] Crear `vscode-extension/src/review/draftFlow.ts` con la máquina del bucle como **lógica pura** (estados: crear → esperar → validar → recargar ofertas → elegir walk/keys → confirmar; y la rama de cancelar que vuelve a forma de lectura), sin dependencias de `vscode`
-- [ ] T035 [US2] Extender la lista cerrada de invocaciones en `specs/002-extension-vscode/contracts/cli-invocation.md` con las dos formas de `walkthrough draft`, ambas `network: false`
-- [ ] T036 [US2] Implementar el argv de las dos invocaciones en `vscode-extension/src/review/reviewIntent.ts`, reusando los flags de origen y rango que el asistente ya resolvió
-- [ ] T037 [US2] Conectar la rama del asistente en `vscode-extension/src/commands/startReview.ts`: crear el borrador, abrirlo en el editor, y esperar con una notificación **con acciones** (`Continue` / `Cancel`) — nunca `{modal: true}`, que bloquearía la edición
-- [ ] T038 [US2] Implementar el reintento: en fallo de `--build`, mostrar el stderr aplanado y volver a presentar la notificación, sin límite de intentos
-- [ ] T039 [US2] Implementar el re-pick tras validación en verde: recargar ofertas y preguntar completo vs sólo esenciales **únicamente** si `keys` aparece; si no, continuar sin preguntar (FR-019)
-- [ ] T040 [US2] Implementar `Cancel`: volver al paso de forma de lectura conservando el borrador (FR-018a)
-- [ ] T041 [US2] Mostrar el badge de draft en `vscode-extension/src/views/panelHtml.ts` a partir del registro de presencia — **texto dentro de un bloque existente**, sin agregar bloques ni controles (ojo: el archivo entero es un template literal, **ningún backtick**, ni en comentarios)
-- [ ] T042 [P] [US2] Agregar el estado con badge de draft a `vscode-extension/preview/fixtures.ts` para que aparezca en `npm run preview`
-- [ ] T043 [P] [US2] Unit tests de `draftFlow` en `vscode-extension/test/unit/draftFlow.spec.ts`: transiciones, bucle de reintento, rama de cancelar, y el condicional del re-pick de keys
-- [ ] T044 [P] [US2] Unit test del parser en `vscode-extension/test/unit/`: los ids nuevos se parsean y ordenan; un id desconocido se sigue ignorando
-- [ ] T045 [US2] Test de integración en `vscode-extension/test/integration/`: el asistente ofrece la opción sobre un PR sin walkthrough y no la ofrece cuando hay sidecar del autor
+- [X] T032 [US2] Agregar `draft` y `draft-resume` al tipo `OfferId` en `vscode-extension/src/cli/configPorcelain.ts`
+- [X] T033 [US2] Agregar sus entradas a `OFFER_META` y `OFFER_ORDER` en `vscode-extension/src/review/layoutOffers.ts` con los textos de [contracts/client-draft-flow.md](contracts/client-draft-flow.md)
+- [X] T034 [US2] Crear `vscode-extension/src/review/draftFlow.ts` con la máquina del bucle como **lógica pura** (estados: crear → esperar → validar → recargar ofertas → elegir walk/keys → confirmar; y la rama de cancelar que vuelve a forma de lectura), sin dependencias de `vscode`
+- [X] T035 [US2] Extender la lista cerrada de invocaciones en `specs/002-extension-vscode/contracts/cli-invocation.md` con las dos formas de `walkthrough draft`, ambas `network: false`
+- [X] T036 [US2] Implementar el argv de las dos invocaciones en `vscode-extension/src/review/reviewIntent.ts`, reusando los flags de origen y rango que el asistente ya resolvió
+- [X] T037 [US2] Conectar la rama del asistente en `vscode-extension/src/commands/startReview.ts`: crear el borrador, abrirlo en el editor, y esperar con una notificación **con acciones** (`Continue` / `Cancel`) — nunca `{modal: true}`, que bloquearía la edición
+- [X] T038 [US2] Implementar el reintento: en fallo de `--build`, mostrar el stderr aplanado y volver a presentar la notificación, sin límite de intentos
+- [X] T039 [US2] Implementar el re-pick tras validación en verde: recargar ofertas y preguntar completo vs sólo esenciales **únicamente** si `keys` aparece; si no, continuar sin preguntar (FR-019)
+- [X] T040 [US2] Implementar `Cancel`: volver al paso de forma de lectura conservando el borrador (FR-018a)
+- [X] T041 [US2] Mostrar el badge de draft en `vscode-extension/src/views/panelHtml.ts` a partir del registro de presencia — **texto dentro de un bloque existente**, sin agregar bloques ni controles (ojo: el archivo entero es un template literal, **ningún backtick**, ni en comentarios)
+- [X] T042 [P] [US2] Agregar el estado con badge de draft a `vscode-extension/preview/fixtures.ts` para que aparezca en `npm run preview`
+- [X] T043 [P] [US2] Unit tests de `draftFlow` en `vscode-extension/test/unit/draftFlow.spec.ts`: transiciones, bucle de reintento, rama de cancelar, y el condicional del re-pick de keys
+- [X] T044 [P] [US2] Unit test del parser en `vscode-extension/test/unit/`: los ids nuevos se parsean y ordenan; un id desconocido se sigue ignorando
+- [X] T045 [US2] Test de integración en `vscode-extension/test/integration/`: el asistente ofrece la opción sobre un PR sin walkthrough y no la ofrece cuando hay sidecar del autor
 
 **Checkpoint**: US1 + US2 entregables juntas.
 
@@ -166,26 +166,49 @@ revisor se pregunta cómo leer el PR.
 **Depends on**: US1. Independiente de US2, aunque conviene portar el flujo ya
 estabilizado.
 
-- [ ] T046 [US3] Agregar los ids nuevos en `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/ConfigPorcelain.kt`
-- [ ] T047 [US3] Agregar sus entradas a `OFFER_META` y `OFFER_ORDER` en `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/LayoutOffers.kt`, con **los mismos textos** que la extensión
-- [ ] T048 [US3] Portar la máquina del bucle a `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/DraftFlow.kt` como dominio puro (sin `com.intellij`)
-- [ ] T049 [US3] Implementar `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/ui/DraftWaitDialog.kt` con `DialogWrapper` e `isModal = false` — toda la familia `Messages.*` bloquea el IDE y no sirve
-- [ ] T050 [US3] Conectar la rama en `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/ui/StartWizard.kt`: como el asistente es síncrono, corta y se reanuda desde el callback del diálogo, con rama/origen/rango capturados en la closure
-- [ ] T051 [US3] Mostrar el badge de draft en `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/PanelLayout.kt` y su render, **sin** modificar la estructura de bloques (`PanelLayoutContractTest` debe seguir verde sin tocar el YAML)
-- [ ] T052 [P] [US3] Tests de dominio en `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/`: ids nuevos, orden, y paridad de `DraftFlow` con la máquina de la extensión
-- [ ] T053 [P] [US3] Agregar el estado con badge a `intellij-plugin/fixtures/com/ezevillo/gitreview/fixtures/PanelFixtures.kt` para `./gradlew runPanelPreview`
+- [X] T046 [US3] Agregar los ids nuevos en `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/ConfigPorcelain.kt`
+- [X] T047 [US3] Agregar sus entradas a `OFFER_META` y `OFFER_ORDER` en `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/LayoutOffers.kt`, con **los mismos textos** que la extensión
+- [X] T048 [US3] Portar la máquina del bucle a `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/DraftFlow.kt` como dominio puro (sin `com.intellij`)
+- [X] T049 [US3] Implementar `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/ui/DraftWaitDialog.kt` con `DialogWrapper` e `isModal = false` — toda la familia `Messages.*` bloquea el IDE y no sirve
+- [X] T050 [US3] Conectar la rama en `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/ui/StartWizard.kt`: como el asistente es síncrono, corta y se reanuda desde el callback del diálogo, con rama/origen/rango capturados en la closure
+- [X] T051 [US3] Mostrar el badge de draft en `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/PanelLayout.kt` y su render, **sin** modificar la estructura de bloques (`PanelLayoutContractTest` debe seguir verde sin tocar el YAML)
+- [X] T052 [P] [US3] Tests de dominio en `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/`: ids nuevos, orden, y paridad de `DraftFlow` con la máquina de la extensión
+- [X] T053 [P] [US3] Agregar el estado con badge a `intellij-plugin/fixtures/com/ezevillo/gitreview/fixtures/PanelFixtures.kt` para `./gradlew runPanelPreview`
 
 ---
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T054 [P] Documentar la superficie de la extensión en `vscode-extension/README.md` (inglés, con links **absolutos** — `vsce` reescribe los relativos)
-- [ ] T055 [P] Agregar la entrada correspondiente a `vscode-extension/CHANGELOG.md`
-- [ ] T056 Revisar `contracts/client-product-surface.yaml`: subir `min_cli_version` porque los clientes pasan a depender de los ids nuevos, y **confirmar que `panel_layout` no cambió** (si cambió, el diseño se desvió del plan)
-- [ ] T057 Verificar que `node scripts/check-client-product-surface.mjs` sigue en verde (27 acciones, sin acciones nuevas)
-- [ ] T058 [P] Actualizar `CLAUDE.md` § Modelo de estado con el borrador del revisor y su ciclo de vida, en el párrafo del modo walk
+- [X] T054 [P] Documentar la superficie de la extensión en `vscode-extension/README.md` (inglés, con links **absolutos** — `vsce` reescribe los relativos)
+- [X] T055 [P] Agregar la entrada correspondiente a `vscode-extension/CHANGELOG.md`
+- [X] T056 Revisar `contracts/client-product-surface.yaml`: subir `min_cli_version` porque los clientes pasan a depender de los ids nuevos, y **confirmar que `panel_layout` no cambió** (si cambió, el diseño se desvió del plan)
+- [X] T057 Verificar que `node scripts/check-client-product-surface.mjs` sigue en verde (27 acciones, sin acciones nuevas)
+- [X] T058 [P] Actualizar `CLAUDE.md` § Modelo de estado con el borrador del revisor y su ciclo de vida, en el párrafo del modo walk
 - [ ] T059 Correr las cinco suites en verde: `./lint-docker.sh`, `./tests/run-docker.sh`, `npm run test:unit`, `./vscode-extension/test/run-docker.sh`, `cd intellij-plugin && ./gradlew test`
+  - **Cuatro de cinco en verde**: shellcheck; 713 bats; 368 unit de la extensión;
+    69 de integración (66 previos + 3 nuevos). Más
+    `node scripts/check-client-product-surface.mjs` (27 acciones, `panel_layout`
+    sin cambios).
+  - **`./gradlew test` no se pudo correr**: en esta máquina el daemon de Gradle
+    aborta con `java.io.IOException: Unable to establish loopback connection`
+    antes de compilar nada — falla igual en `./gradlew help`, o sea que es del
+    entorno y no del cambio (un `ServerSocket` sobre 127.0.0.1 desde el mismo
+    JDK 21 sí conecta). Los archivos Kotlin de US3 quedan **sin compilar ni
+    probar**: hay que correr `./gradlew test` en un entorno donde el daemon
+    levante antes de dar la fase por cerrada.
 - [ ] T060 Recorrer [quickstart.md](quickstart.md) a mano de punta a punta sobre el sandbox, incluidos los escenarios 7 y 8 (los dos avisos **no** deben bloquear la edición)
+  - **Escenarios 1 a 6 recorridos a mano** sobre `tests/sandbox.sh` y
+    `feature/telemetry` / `feature/pagos`: creación y `--build` del borrador con
+    `git status --porcelain` idéntico antes y después; `start` entrando en walk
+    con el orden escrito; `mode walk (draft)` y el registro `draft` en
+    porcelain; `(draft)` en `list`; `next` / `--why`; `save` moviendo el
+    borrador y `continue` devolviéndolo; `finish` dejando `review-fixes/` sin
+    rastro; `clean` podando el activo; y las tres situaciones de ofertas.
+  - **Escenario 7 (VS Code)**: cubierto por las tres specs de integración
+    nuevas, que corren el asistente real contra la CLI real; falta la pasada a
+    ojo en un editor de verdad para confirmar que el aviso no estorba la edición.
+  - **Escenario 8 (IntelliJ)**: pendiente — depende de que `./gradlew runIde`
+    pueda levantar (ver T059).
 
 ---
 

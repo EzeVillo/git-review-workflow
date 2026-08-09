@@ -161,6 +161,12 @@ enum class SkeletonShape {
 sealed class Block {
     data class IdentityBar(
         val mode: String,
+        /**
+         * 011: de quién es el orden de lectura. Es una precisión sobre el modo
+         * —el mismo "walk (draft)" que escribe la terminal—, no un bloque ni un
+         * control nuevo: `panel_layout` no cambia.
+         */
+        val draft: Boolean = false,
         val name: String,
         val tip: String? = null,
         val position: Int? = null,
@@ -371,6 +377,7 @@ private fun identityBar(model: PanelModel, skeleton: Boolean = false): Block.Ide
     val displayName = if (model.repoLabel != null) "$name · ${model.repoLabel}" else name
     return Block.IdentityBar(
         mode = model.mode?.id ?: "?",
+        draft = model.draft,
         name = displayName,
         tip = tipShort(model.tip),
         position = if (skeleton) null else model.position,

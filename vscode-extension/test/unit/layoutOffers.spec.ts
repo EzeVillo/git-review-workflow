@@ -53,6 +53,39 @@ describe("buildLayoutItems", () => {
         assert.strictEqual(items[2].layout, "whole");
     });
 
+    it("draft entra entre keys y step, y marca el desvio por el armado", () => {
+        const items = buildLayoutItems([
+            {id: "whole", rank: "available"},
+            {id: "step", rank: "available"},
+            {id: "draft", rank: "available"},
+        ]);
+        assert.deepStrictEqual(
+            items.map((i) => i.layout),
+            ["walk", "step", "whole"]
+        );
+        assert.strictEqual(items[0].draft, "create");
+        assert.strictEqual(items[0].label, "Walkthrough — draft one");
+        assert.strictEqual(items[0].description, "no reading order yet; write one");
+        // Los demas no llevan la marca: elegirlos va derecho a start.
+        assert.strictEqual(items[1].draft, undefined);
+        assert.strictEqual(items[2].draft, undefined);
+    });
+
+    it("draft-resume convive con walk recommended, que va primero", () => {
+        const items = buildLayoutItems([
+            {id: "draft-resume", rank: "available"},
+            {id: "walk", rank: "recommended"},
+            {id: "step", rank: "available"},
+        ]);
+        assert.deepStrictEqual(
+            items.map((i) => i.label),
+            ["Walkthrough (recommended)", "Walkthrough — continue draft", "Commit by commit"]
+        );
+        assert.strictEqual(items[0].draft, undefined, "walk se lee, no se arma");
+        assert.strictEqual(items[1].draft, "resume");
+        assert.strictEqual(items[1].layout, "walk");
+    });
+
     it("fallback sin recommended ni Automatic", () => {
         const items = buildLayoutItems(undefined);
         assert.deepStrictEqual(

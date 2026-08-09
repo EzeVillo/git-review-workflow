@@ -49,6 +49,29 @@ object UserCopy {
         "Walkthrough, commit by commit, keys only, or whole diff"
     const val START_CONFIRM_BUTTON = "Start the review"
 
+    // --- Reviewer's draft walkthrough (011) -------------------------------------
+
+    const val DRAFT_FAILED = "git review walkthrough draft failed."
+    const val DRAFT_BUILD_FAILED = "git review walkthrough draft --build failed."
+    const val DRAFT_WAIT_TITLE = "Draft your reading order"
+    const val DRAFT_CONTINUE_BUTTON = "Continue"
+    const val DRAFT_KEYS_PLACEHOLDER =
+        "Your draft marks key entries: read all of them, or only those"
+
+    fun draftProgress(branch: String, build: Boolean): String =
+        if (build) "Validating your draft for $branch…" else "Drafting a walkthrough for $branch…"
+
+    fun draftWaitMessage(branch: String): String =
+        "Fill in the reading order for $branch, then continue."
+
+    fun draftInvalidMessage(error: String): String = "The draft is not valid yet: $error"
+
+    /** Recorrido completo vs sólo esenciales, tras validar un borrador con keys. */
+    val DRAFT_KEYS_LABELS: List<Pair<Boolean, String>> = listOf(
+        false to "Walkthrough — the whole reading order you wrote",
+        true to "Walkthrough — keys only — only the entries you marked key",
+    )
+
     val SOURCE_LABELS: List<Pair<ReviewSource, String>> = listOf(
         ReviewSource.REMOTE to "Remote — fetch and review the remote tip of the branch",
         ReviewSource.LOCAL to

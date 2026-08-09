@@ -95,3 +95,38 @@ export function intentToArgs(intent: ReviewIntent, currentBranch: string): strin
     args.push("--", intent.branch ?? currentBranch);
     return args;
 }
+
+/**
+ * Argumentos de `git review walkthrough draft` (011,
+ * contracts/cli-invocation-draft.md). El verbo es `walkthrough`; `draft` es el
+ * primer argumento.
+ *
+ * Origen y rango son **los mismos** que el asistente ya resolvió: el borrador
+ * tiene que listar los archivos de la review que se va a iniciar, no los de
+ * otro rango. Nunca `--force`: pisar un borrador empezado se pide a mano.
+ */
+export function draftArgs(
+    branch: string,
+    source: ReviewSource,
+    range: ReviewRange,
+    build: boolean
+): string[] {
+    const args = ["draft"];
+
+    if (build) {
+        args.push("--build");
+    }
+
+    if (source === "local") {
+        args.push("--local");
+    } else if (source === "offline") {
+        args.push("--offline");
+    }
+
+    if (range === "delta") {
+        args.push("--delta");
+    }
+
+    args.push("--", branch);
+    return args;
+}

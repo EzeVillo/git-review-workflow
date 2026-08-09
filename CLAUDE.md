@@ -129,6 +129,24 @@ repo, no en archivos del working tree:
   dos lados del error de drift, o la entrada desapareciendo del orden de lectura
   en silencio. Un walkthrough roto/stale nunca
   falla una review: degrada a whole con nota.
+- **Borrador del revisor** (`git review walkthrough draft`): el otro lado del
+  walkthrough. Cuando el PR no trae uno, el revisor se escribe el suyo en
+  `<gitdir>/review-walkthrough/<src>.md` — **fuera del árbol versionado**, así
+  que no se commitea, no se stagea y `git status` no cambia en ningún momento.
+  Mismo formato que el sidecar y misma validación (`draft --build` reusa el
+  cuerpo de `build`, sin duplicar una sola regla). La precedencia se resuelve en
+  un único punto, `walk_read`: si hay borrador para el `<src>` del contexto
+  —fijado por `walk_use_draft` desde los dos cargadores de metadata, de modo que
+  todo verbo con review activa lo herede—, gana sobre el sidecar del tip; si no,
+  el sidecar como siempre. Las trece funciones de walk y los verbos que cuelgan
+  de ellas no se enteran. Ciclo de vida en espejo del de las refs de ediciones:
+  `save` lo mueve a `review-saved-walkthrough/`, `continue` lo devuelve **antes**
+  de reconstruir la review, `clean` poda sólo el activo y `forget --saved` borra
+  el guardado. Su presencia se reporta —nunca se infiere— con el registro
+  `draft` de `status --porcelain` y el sufijo `(draft)` en `status` y `list`; la
+  viabilidad de armarlo o continuarlo, con las ofertas `draft` / `draft-resume`
+  de `config --porcelain`, que se deciden con un test de archivo (cero procesos
+  nuevos en un camino caliente).
 - **Refs de ediciones:** `refs/review-edits/<src>/<step>` bancan las ediciones
   de cada commit en `--step` como objetos commit-tree; `git review save` los mueve
   a `refs/review-saved-edits/` para que `git review clean` (que poda

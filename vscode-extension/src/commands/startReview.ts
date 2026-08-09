@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import * as vscode from "vscode";
 import {
     CandidateBranch,
@@ -7,9 +8,16 @@ import {
     ReadingOffer,
 } from "../cli/configPorcelain";
 import {invokeGitReview, InvokeOptions, resolveCommand} from "../cli/invoke";
-import {MutationLock} from "../review/mutationLock";
-import {buildLayoutItems, layoutSummary, offerConfigFlags,} from "../review/layoutOffers";
 import {
+    advanceDraftFlow,
+    DraftFlowState,
+    gitdirFromLink,
+    initialDraftFlowState,
+} from "../review/draftFlow";
+import {MutationLock} from "../review/mutationLock";
+import {buildLayoutItems, DraftStep, layoutSummary, offerConfigFlags,} from "../review/layoutOffers";
+import {
+    draftArgs,
     intentToArgs,
     ReviewIntent,
     ReviewLayout,
@@ -34,6 +42,8 @@ interface BranchItem extends vscode.QuickPickItem {
 
 interface LayoutItem extends vscode.QuickPickItem {
     layout: ReviewLayout;
+    /** Presente sólo en las ofertas `draft` / `draft-resume` (011). */
+    draft?: DraftStep;
 }
 
 interface SourceItem extends vscode.QuickPickItem {
@@ -115,18 +125,46 @@ async function pickBranch(candidates: CandidateBranch[]): Promise<CandidateBranc
 /**
  * Paso 4 — cómo leerla (008): ítems dinámicos desde `offer` de la CLI.
  * Sin Automatic; solo lo viable para tip+rango (o fallback whole+step).
+ *
+ * 011: entre los ítems puede venir el de armarse el orden de lectura. Devuelve
+ * el ítem entero y no sólo el layout porque esa distinción —leer ya, o escribir
+ * primero lo que se va a leer— es la que decide el camino siguiente.
  */
-async function pickLayout(offers: readonly ReadingOffer[] | undefined): Promise<ReviewLayout | undefined> {
-    const items: LayoutItem[] = buildLayoutItems(offers).map((item) => ({
-        label: item.label,
-        description: item.description,
-        layout: item.layout,
-    }));
-    const picked = await vscode.window.showQuickPick(items, {
+async function pickLayout(offers: readonly ReadingOffer[] | undefined): Promise<LayoutItem | undefined> {
+    const items: LayoutItem[] = buildLayoutItems(offers).map((item) => {
+        const entry: LayoutItem = {
+            label: item.label,
+            description: item.description,
+            layout: item.layout,
+        };
+        if (item.draft !== undefined) {
+            entry.draft = item.draft;
+        }
+        return entry;
+    });
+    return vscode.window.showQuickPick(items, {
         title: "Start a review — how to read it",
         placeHolder: "Walkthrough, commit by commit, keys only, or whole diff",
     });
-    return picked?.layout;
+}
+
+/**
+ * Recorrido completo vs sólo esenciales, tras validar un borrador que marcó
+ * entradas con `key`. Sólo se pregunta cuando la CLI volvió a ofrecer `keys`
+ * (FR-019): sin entradas esenciales no hay dos recorridos que elegir.
+ */
+async function pickDraftKeys(): Promise<boolean | undefined> {
+    const picked = await vscode.window.showQuickPick(
+        [
+            {label: "Walkthrough", description: "the whole reading order you wrote", keysOnly: false},
+            {label: "Walkthrough — keys only", description: "only the entries you marked key", keysOnly: true},
+        ],
+        {
+            title: "Start a review — how to read it",
+            placeHolder: "Your draft marks key entries: read all of them, or only those",
+        }
+    );
+    return picked?.keysOnly;
 }
 
 /**
@@ -190,6 +228,167 @@ async function loadBranchContext(
     }
     const parsed = parseConfigPorcelain(report.stdout);
     return {deltas: parsed.deltas, offers: parsed.offers};
+}
+
+/**
+ * Abre el borrador en el editor. La ruta se arma, no se lee de la salida de la
+ * CLI (que la imprime para el humano, no para parsearla): el borrador vive en
+ * `<gitdir>/review-walkthrough/<branch>.md`, y `<gitdir>` es `<root>/.git`
+ * salvo en worktrees y submódulos, donde `.git` es un archivo que apunta al de
+ * verdad.
+ *
+ * Abrirlo es mostrarlo, no leerlo: la extensión no interpreta un byte de su
+ * contenido, igual que ya hace con `.review/walkthrough.md` tras un
+ * `walkthrough init`.
+ */
+async function openDraft(cwd: string, branch: string): Promise<void> {
+    if (!cwd) {
+        return;
+    }
+    try {
+        const dotGit = vscode.Uri.file(path.join(cwd, ".git"));
+        const stat = await vscode.workspace.fs.stat(dotGit);
+        let gitdir = dotGit.fsPath;
+        if (stat.type !== vscode.FileType.Directory) {
+            const raw = await vscode.workspace.fs.readFile(dotGit);
+            const target = gitdirFromLink(Buffer.from(raw).toString("utf8"));
+            if (target === undefined) {
+                return;
+            }
+            gitdir = path.isAbsolute(target) ? target : path.join(cwd, target);
+        }
+        const file = path.join(gitdir, "review-walkthrough", `${branch}.md`);
+        const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+        await vscode.window.showTextDocument(doc, {preview: false});
+    } catch {
+        // No se pudo abrir: el bucle sigue igual, y la CLI ya dijo dónde está el
+        // archivo. Un borrador que existe y no se abrió solo es menos malo que
+        // un asistente que se corta por no poder mostrarlo.
+    }
+}
+
+/** Una invocación de `walkthrough draft`, con su progreso y bajo el lock. */
+async function invokeDraft(
+    lock: MutationLock,
+    branch: string,
+    source: ReviewSource,
+    range: ReviewRange,
+    build: boolean,
+    options: InvokeOptions
+): Promise<{ok: boolean; text: string}> {
+    const result = await lock.run(async () =>
+        vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: build ? `Validating your draft for ${branch}…` : `Drafting a walkthrough for ${branch}…`,
+            },
+            async () =>
+                invokeGitReview("walkthrough", draftArgs(branch, source, range, build), {
+                    ...options,
+                    network: false,
+                })
+        )
+    );
+    const text = flatten(result?.stderr ?? "");
+    return {ok: result !== undefined && !result.errorCode && result.exitCode === 0, text};
+}
+
+/**
+ * El bucle del borrador (011, contracts/client-draft-flow.md). Las decisiones
+ * viven en `draftFlow`; acá sólo está el vehículo de cada paso.
+ *
+ * El aviso de espera es una notificación **con acciones** y nunca un modal: el
+ * revisor tiene que poder editar el borrador mientras está a la vista, que es
+ * literalmente lo que se le está pidiendo que haga.
+ */
+async function runDraftFlow(
+    step: DraftStep,
+    branch: CandidateBranch,
+    source: ReviewSource,
+    range: ReviewRange,
+    lock: MutationLock,
+    options: InvokeOptions
+): Promise<{kind: "done"; layout: ReviewLayout} | {kind: "back"; error?: string}> {
+    let state: DraftFlowState = initialDraftFlowState(step);
+
+    for (;;) {
+        switch (state.kind) {
+            case "create": {
+                const outcome = await invokeDraft(lock, branch.name, source, range, false, options);
+                if (outcome.ok && outcome.text.length > 0) {
+                    // Nota de un verbo exitoso (el borrador tapa el walkthrough
+                    // del autor): se muestra, como las de start.
+                    void vscode.window.showInformationMessage(outcome.text);
+                }
+                state = advanceDraftFlow(state, {
+                    kind: "created",
+                    ok: outcome.ok,
+                    error: outcome.ok
+                        ? undefined
+                        : outcome.text.length > 0
+                            ? outcome.text
+                            : "git review walkthrough draft failed.",
+                });
+                break;
+            }
+
+            case "open": {
+                await openDraft(options.cwd, branch.name);
+                state = advanceDraftFlow(state, {kind: "opened"});
+                break;
+            }
+
+            case "wait": {
+                const message =
+                    state.error !== undefined
+                        ? `The draft is not valid yet: ${state.error}`
+                        : `Fill in the reading order for ${branch.name}, then continue.`;
+                const answer =
+                    state.error !== undefined
+                        ? await vscode.window.showWarningMessage(message, "Continue", "Cancel")
+                        : await vscode.window.showInformationMessage(message, "Continue", "Cancel");
+                state = advanceDraftFlow(
+                    state,
+                    answer === "Continue" ? {kind: "continue"} : {kind: "cancel"}
+                );
+                break;
+            }
+
+            case "build": {
+                const outcome = await invokeDraft(lock, branch.name, source, range, true, options);
+                state = advanceDraftFlow(state, {
+                    kind: "built",
+                    ok: outcome.ok,
+                    error: outcome.ok
+                        ? undefined
+                        : outcome.text.length > 0
+                            ? outcome.text
+                            : "git review walkthrough draft --build failed.",
+                });
+                break;
+            }
+
+            case "reload": {
+                // El borrador ya es legible: lo que se relee es si marcó
+                // entradas esenciales, y eso sólo lo sabe la CLI.
+                const ctx = await loadBranchContext(branch, source, range, options);
+                state = advanceDraftFlow(state, {kind: "offers", offers: ctx.offers});
+                break;
+            }
+
+            case "pickKeys": {
+                const keysOnly = await pickDraftKeys();
+                state = advanceDraftFlow(state, {kind: "keysPicked", keysOnly});
+                break;
+            }
+
+            case "done":
+                return {kind: "done", layout: state.layout};
+
+            case "back":
+                return state.error !== undefined ? {kind: "back", error: state.error} : {kind: "back"};
+        }
+    }
 }
 
 /**
@@ -314,9 +513,34 @@ export async function startReview(
         deltas = ctx.deltas;
     }
 
-    const layout = await pickLayout(ctx.offers);
-    if (!layout) {
-        return;
+    // Forma de lectura. El paso se repite —y sólo por eso es un bucle— cuando
+    // el revisor entra al armado del borrador y vuelve: sale de ahí con el
+    // borrador intacto y la oferta convertida en `draft-resume`, así que lo
+    // honesto es devolverlo a este mismo paso con las ofertas al día (FR-018a).
+    let offers = ctx.offers;
+    let layout: ReviewLayout;
+    for (;;) {
+        const picked = await pickLayout(offers);
+        if (!picked) {
+            return;
+        }
+        if (picked.draft === undefined) {
+            layout = picked.layout;
+            break;
+        }
+
+        const outcome = await runDraftFlow(picked.draft, branch, source, range, lock, options);
+        if (outcome.kind === "done") {
+            layout = outcome.layout;
+            break;
+        }
+        if (outcome.error !== undefined) {
+            void vscode.window.showErrorMessage(outcome.error);
+        }
+        const reloaded = await loadBranchContext(branch, source, range, options);
+        if (reloaded.error === undefined) {
+            offers = reloaded.offers;
+        }
     }
 
     const intent: ReviewIntent = {branch: branch.name, layout, range, source};

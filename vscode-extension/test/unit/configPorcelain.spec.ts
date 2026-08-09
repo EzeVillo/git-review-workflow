@@ -177,6 +177,54 @@ describe("parseConfigPorcelain", () => {
         const result = parseConfigPorcelain(out);
         assert.deepStrictEqual(result.offers, [{id: "step", rank: "available"}]);
     });
+
+    // ── offer draft / draft-resume (011) ─────────────────────────────────────
+
+    it("parsea draft en un PR sin walkthrough ni borrador", () => {
+        const out = [
+            "config\tremote\torigin",
+            "offer\tdraft\tavailable",
+            "offer\tstep\tavailable",
+            "offer\twhole\tavailable",
+            "",
+        ].join("\n");
+        const result = parseConfigPorcelain(out);
+        assert.deepStrictEqual(result.offers, [
+            {id: "draft", rank: "available"},
+            {id: "step", rank: "available"},
+            {id: "whole", rank: "available"},
+        ]);
+    });
+
+    it("parsea draft-resume junto a walk cuando el borrador ya existe", () => {
+        const out = [
+            "config\tremote\torigin",
+            "offer\twalk\trecommended",
+            "offer\tdraft-resume\tavailable",
+            "offer\tstep\tavailable",
+            "offer\twhole\tavailable",
+            "",
+        ].join("\n");
+        const result = parseConfigPorcelain(out);
+        assert.deepStrictEqual(result.offers, [
+            {id: "walk", rank: "recommended"},
+            {id: "draft-resume", rank: "available"},
+            {id: "step", rank: "available"},
+            {id: "whole", rank: "available"},
+        ]);
+    });
+
+    it("un id parecido pero inexistente se sigue descartando", () => {
+        const out = [
+            "config\tremote\torigin",
+            "offer\tdrafts\tavailable",
+            "offer\tdraft_resume\tavailable",
+            "offer\tdraft\tavailable",
+            "",
+        ].join("\n");
+        const result = parseConfigPorcelain(out);
+        assert.deepStrictEqual(result.offers, [{id: "draft", rank: "available"}]);
+    });
 });
 
 describe("deltaForSource", () => {

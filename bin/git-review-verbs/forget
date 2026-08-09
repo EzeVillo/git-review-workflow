@@ -107,6 +107,12 @@ if [ "$mode" = saved ]; then
 
 	git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 
+	# Only for walk_saved_draft_path: a saved review may carry the reviewer's own
+	# walkthrough draft, and discarding the review discards that too. Sourcing is
+	# free of side effects — the library defines functions and nothing else.
+	# shellcheck source=../git-review-lib.sh
+	. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
+
 	cur="$(git symbolic-ref --quiet --short HEAD || true)"
 
 	# forget_saved_one <src>: discard the saved review for one source branch.
@@ -144,6 +150,11 @@ if [ "$mode" = saved ]; then
 		git for-each-ref --format='%(refname)' "refs/review-saved-edits/$src/" | while read -r ref; do
 			git update-ref -d "$ref"
 		done
+		# The reviewer's own walkthrough draft goes with it. This is the one verb
+		# that is allowed to take it: git review clean deliberately cannot, so
+		# discarding a paused review is the deliberate act that also discards the
+		# reading order it was paused with.
+		rm -f "$(walk_saved_draft_path "$src")"
 		git branch -D "$saved" >/dev/null
 
 		echo "discarded saved review of $src"

@@ -96,10 +96,10 @@ offer_lines() {
 	printf '%s\n' "$output" | awk -F'\t' '$1=="offer" {print $2"\t"$3}'
 }
 
-@test "offers without walkthrough: step and whole available only" {
+@test "offers without walkthrough: draft, step and whole available only" {
 	run git review config --porcelain -- feature/plain
 	[ "$status" -eq 0 ]
-	[ "$(offer_lines)" = "$(printf 'step\tavailable\nwhole\tavailable')" ]
+	[ "$(offer_lines)" = "$(printf 'draft\tavailable\nstep\tavailable\nwhole\tavailable')" ]
 }
 
 @test "offers with walkthrough no keys: walk recommended, no keys" {
@@ -119,7 +119,7 @@ offer_lines() {
 	git branch -f feature/walk origin/feature/plain
 	run git review config --porcelain --local -- feature/walk
 	[ "$status" -eq 0 ]
-	[ "$(offer_lines)" = "$(printf 'step\tavailable\nwhole\tavailable')" ]
+	[ "$(offer_lines)" = "$(printf 'draft\tavailable\nstep\tavailable\nwhole\tavailable')" ]
 	run git review config --porcelain -- feature/walk
 	[ "$status" -eq 0 ]
 	[ "$(offer_lines)" = "$(printf 'walk\trecommended\nstep\tavailable\nwhole\tavailable')" ]
@@ -171,7 +171,7 @@ EOF
 	run git review config --porcelain --delta -- feature/stale
 	[ "$status" -eq 0 ]
 	# walk_sequence empty for missing path -> no walk/keys
-	[ "$(offer_lines)" = "$(printf 'step\tavailable\nwhole\tavailable')" ]
+	[ "$(offer_lines)" = "$(printf 'draft\tavailable\nstep\tavailable\nwhole\tavailable')" ]
 }
 
 @test "offers --local and --offline are mutually exclusive" {
@@ -274,7 +274,7 @@ EOF
 
 	run git review config --porcelain --delta -- feature/merged
 	[ "$status" -eq 0 ]
-	[ "$(offer_lines)" = "$(printf 'step\tavailable\nwhole\tavailable')" ]
+	[ "$(offer_lines)" = "$(printf 'draft\tavailable\nstep\tavailable\nwhole\tavailable')" ]
 	run git review config --porcelain --delta -- feature/merged
 	[ "$status" -eq 0 ]
 	run git review config --porcelain --delta -- feature/merged

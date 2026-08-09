@@ -97,7 +97,22 @@ describe() {
 	elif [ "$mode" = "walk" ]; then
 		count="$(git config "branch.$b.reviewwalkcount" || echo '?')"
 		step="$(git config "branch.$b.reviewwalkstep" || echo '?')"
-		printf '%s %s  %swalk [%s/%s]  tip %s\n' "$label" "$b" "$prefix" "$step" "$count" "$shorttip"
+		# Whose reading order it is, here too: the inventory is where a reviewer
+		# looks days later to decide what to resume, which is exactly when "was
+		# this order mine or the author's?" stops being obvious. A paused review's
+		# draft lives in the saved namespace, so look where this row's review is.
+		dsrc="$(git config "branch.$b.reviewsource" || true)"
+		draft_note=""
+		if [ -n "$dsrc" ]; then
+			case "$b" in
+			review-saved/*) dpath="$(walk_saved_draft_path "$dsrc")" ;;
+			*) dpath="$(walk_draft_path "$dsrc")" ;;
+			esac
+			if [ -f "$dpath" ]; then
+				draft_note=" (draft)"
+			fi
+		fi
+		printf '%s %s  %swalk%s [%s/%s]  tip %s\n' "$label" "$b" "$prefix" "$draft_note" "$step" "$count" "$shorttip"
 	else
 		printf '%s %s  %swhole  tip %s\n' "$label" "$b" "$prefix" "$shorttip"
 	fi

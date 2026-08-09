@@ -312,6 +312,7 @@ lista, o `git review <verbo> -h` para el detalle de un verbo.
 | `git review start [<rama>] [<base> \| --base <base> \| --delta \| --from <commit>] [--step \| --no-walk \| --keys] [--local \| --offline]` | Hace fetch de `origin` y deja el diff del PR staged en una nueva rama `review/<rama>` (omití `<rama>` para revisar la rama actual; entra en modo walk si el PR trae un walkthrough; `--keys` restringe el walk a las entradas marcadas `> key`; `--local` revisa tu rama local pero sigue comparando contra la base de origin; `--offline` además salta el fetch y usa tu base local). |
 | `git review compare <a> <b> [--step \| --no-walk \| --keys]`                                                                               | Deja staged el diff entre dos commit-ish (tags, commits, ramas) en modo lectura, para leerlo o recorrerlo. `git review finish` se niega — no hay a dónde escribir.                                                                                                                                                                                                                     |
 | `git review walkthrough (init [--base <base>] [--force] \| build [--check])`                                                               | Escribe un walkthrough de lectura para el PR de la rama actual — un orden curado de los archivos cambiados con una nota en cada uno, committeado como `.review/walkthrough.md`.                                                                                                                                                                                                        |
+| `git review walkthrough draft [--build] [--local \| --offline] [--delta] [--force] [<branch>]`                                             | Escribí tu propio orden de lectura para el PR de otra persona, fuera del working tree — no se stagea, commitea ni deshace nada. `git review start` lo lee en lugar del walkthrough del PR. `--build` lo valida y renumera.                                                                                                                                                             |
 | `git review next` / `git review prev`                                                                                                      | Mueve una review `--step` o walkthrough a la entrada siguiente / anterior.                                                                                                                                                                                                                                                                                                             |
 | `git review status [--porcelain \| --why <path>]`                                                                                          | Muestra el estado de la review en la rama actual (`--porcelain` para salida legible por programas, incluido un registro `finish` cuando un cierre quedó trabado por conflicto; `--why <path>` para el porqué de una entrada del walkthrough).                                                                                                                                          |
 | `git review list [--porcelain]`                                                                                                            | Lista todas las reviews en curso y las guardadas (la rama actual marcada con `*`; `--porcelain` también reporta cierres sin resolver como `pending` o `conflict`).                                                                                                                                                                                                                     |
@@ -510,6 +511,44 @@ mano un orden de lectura sobre él, lo cual es circular, mientras que un agente
 que lee todo el diff puede escribir ese orden *antes* de que hayas leído un
 solo archivo (mirá el caso de review individual en
 [Flujo típico](#flujo-típico)).
+
+### Escribir uno para el PR de otra persona
+
+La mayoría de los PRs no traen walkthrough, y no podés commitear uno en una rama
+que no es tuya. `git review walkthrough draft` escribe el mismo esqueleto para la
+rama que le indiques, **fuera del working tree** — bajo `$GIT_DIR`, donde
+`git status` no lo ve, `git review start` no se tropieza con él y `git review
+finish` no puede arrastrarlo a tus ediciones extraídas. No hay nada que stagear,
+y nada que deshacer:
+
+```sh
+git review walkthrough draft feature/checkout          # esqueleto para el PR de otro
+# ...completás el orden y los porqués (a mano, o se lo pasás a un agente)...
+git review walkthrough draft --build feature/checkout  # valida, ordena y renumera
+git review start feature/checkout                      # entra en walk con tu orden
+```
+
+- Toma la rama como argumento, igual que `git review start` — estás parado en la
+  base, no en el PR — y por defecto usa la rama actual. `--local`, `--offline` y
+  `--delta` resuelven el rango exactamente como lo hace `start`, así que el
+  esqueleto lista precisamente los archivos que tu review va a cubrir. Nunca
+  hace fetch.
+- `--build` aplica la misma validación que `build` sobre el sidecar del autor:
+  placeholders, drift, paths duplicados, `> key` con valor. Es un control de
+  calidad, no una compuerta: un borrador sin validar ya se puede leer.
+- Tu borrador **tiene precedencia** sobre el walkthrough del propio PR mientras
+  exista, y `git review status` marca la review como `walk (draft)` para que un
+  orden de lectura que escribiste vos nunca se confunda con el del autor.
+  Escribir uno sobre un PR que ya tiene te lo avisa; borrá el borrador para
+  volver al de ellos.
+- Es tuyo y es local: `git review save` lo pone fuera del alcance de `git review
+  clean` junto con tus ediciones, y `git review forget --saved` lo descarta con
+  la review.
+
+**git review nunca escribe el walkthrough por vos y nunca habla con ningún
+servicio.** Te da el esqueleto con la consigna ya escrita adentro, y valida lo
+que vuelve. Quién lo completa —vos, un agente, lo que prefieras— es enteramente
+decisión tuya.
 
 El walkthrough se arma sobre **historia commiteada** (`base..HEAD`), no sobre el
 working tree: commiteá los cambios del PR antes de autorearlo. `init` y `build`

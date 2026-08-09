@@ -176,6 +176,38 @@ EOF
 	fi
 fi
 
+# Walkthrough drafts, on exactly the terms the edit refs above get: a draft whose
+# review/<src> is gone is leftover and goes; one whose review is still live stays.
+# Only the active namespace is walked — review-saved-walkthrough/ is deliberately
+# out of reach here, the same asymmetry refs/review-saved-edits/ already has, so
+# resuming a paused review always finds the reading order it was paused with.
+_draft_root="$(git rev-parse --git-dir)/review-walkthrough"
+if [ -d "$_draft_root" ]; then
+	# -type f, so a branch name with '/' (a directory here) is never mistaken for
+	# a draft; the empty directories it leaves behind are pruned right after.
+	_draft_files="$(find "$_draft_root" -type f -name '*.md' 2>/dev/null || true)"
+	if [ -n "$_draft_files" ]; then
+		while IFS= read -r _df; do
+			[ -n "$_df" ] || continue
+			_dsrc="${_df#"$_draft_root"/}"
+			_dsrc="${_dsrc%.md}"
+			if [ -n "$arg" ] && [ "$_dsrc" != "$arg" ]; then
+				continue
+			fi
+			if git rev-parse --verify --quiet "refs/heads/review/$_dsrc" >/dev/null; then
+				continue
+			fi
+			rm -f "$_df"
+			cleaned=1
+		done <<EOF
+$_draft_files
+EOF
+	fi
+	# Best-effort tidy of the directories a namespaced branch left behind. Never
+	# fatal: -delete on a non-empty dir is expected and means a draft is still live.
+	find "$_draft_root" -type d -empty -delete 2>/dev/null || true
+fi
+
 _undo_refs="$(git for-each-ref --format='%(refname)' "$undons")"
 if [ -n "$_undo_refs" ]; then
 	while IFS= read -r ref; do

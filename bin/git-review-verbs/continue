@@ -85,6 +85,17 @@ git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null &&
 require_clean_work_tree
 
 mode="$(git config "branch.$saved.reviewmode" || echo whole)"
+
+# Bring the reviewer's walkthrough draft back before anything reads it: the walk
+# path below rebuilds the cursor through walk_read, which has to find the draft
+# already in place or it would fall through to the PR's own walkthrough — or to
+# no walkthrough at all — and quietly resume in a different reading order.
+_saved_draft="$(walk_saved_draft_path "$src")"
+if [ -f "$_saved_draft" ]; then
+	_live_draft="$(walk_draft_path "$src")"
+	mkdir -p "$(dirname "$_live_draft")"
+	mv "$_saved_draft" "$_live_draft"
+fi
 tip="$(git config "branch.$saved.reviewtip" || true)"
 # A saved review missing its tip (hand-edited or half-deleted config) would let
 # set -e kill us silently while restoring; report it instead.

@@ -351,6 +351,10 @@ lower="$(fold_lower "$start" "$baseref" "$tip")"
 walk=0
 walkcount=0
 keys_filter=0
+# Read this source's own draft in preference to the PR's walkthrough, if the
+# reviewer wrote one. Set before the first walk_read below, and before the
+# --keys check, so every decision from here on describes the same walkthrough.
+walk_use_draft "$src"
 if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$tip")" && [ -n "$wtcontent" ]; then
 	curated="$(walk_sequence "$tip" "$lower")"
 	# grep -c returns 1 (aborting under set -e in POSIX sh) on an empty sequence.
@@ -442,4 +446,11 @@ if [ "$walk" -eq 1 ]; then
 	show_walk_entry 1
 else
 	echo "$rb ready ($range) — the staged diff is the PR; edit, then run git review finish"
+	# Landing in whole because nobody wrote a reading order is the moment the
+	# reviewer would want to know they can write one themselves — and the only
+	# moment they are looking. Suppressed when they opted out with --no-walk:
+	# they already made the call.
+	if [ "$no_walk" -eq 0 ] && ! walk_read "$tip" >/dev/null; then
+		echo "note: $src has no walkthrough. To read it in an order of your own: git review walkthrough draft $src (nothing gets committed)"
+	fi
 fi

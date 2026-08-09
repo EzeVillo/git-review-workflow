@@ -81,6 +81,19 @@ git rev-parse --verify --quiet "refs/heads/$saved" >/dev/null &&
 
 mode="$(git config "branch.$cur.reviewmode" || echo whole)"
 
+# Put the reviewer's own walkthrough draft out of git review clean's reach, the
+# same way the banked edits move to refs/review-saved-edits/ below — and for the
+# same reason: what you paused is yours, and a clean must not take it. Moved, not
+# copied, so an active and a saved draft for one branch can never diverge.
+# Outside the mode branch on purpose: the draft belongs to walk reviews, which
+# take the else path further down.
+_save_draft="$(walk_draft_path "$src")"
+if [ -f "$_save_draft" ]; then
+	_saved_draft="$(walk_saved_draft_path "$src")"
+	mkdir -p "$(dirname "$_saved_draft")"
+	mv "$_save_draft" "$_saved_draft"
+fi
+
 # Where to return to once the review is put aside — the branch you started from,
 # falling back to the base branch, exactly like git review abort.
 ret="$(git config "branch.$cur.reviewreturn" || true)"

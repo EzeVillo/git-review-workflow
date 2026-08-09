@@ -9,11 +9,18 @@
 # one is dropped into walk mode: the same staged, editable review, plus a cursor
 # that walks the files in this order (git review next / prev).
 #
-# Two subcommands, in the git stash push/pop spirit:
+# Three subcommands, in the git stash push/pop spirit:
 #   init   write a deterministic skeleton listing every changed file, for you (the
 #          author, typically an AI agent) to fill in with an order number and a why.
 #   build  validate what you filled in, order the entries by your numbers, renumber
 #          them 1..N and rewrite the file. --check validates without writing, for CI.
+#   draft  the same thing from the other side of the review: a walkthrough you
+#          write for someone else's PR, kept out of the working tree entirely.
+#
+# init and build are the author's: they operate on the committed sidecar of the
+# branch you are standing on. draft is the reviewer's, and that is the whole
+# difference — it names the branch (you are standing on the base, not on the PR)
+# and it writes into the gitdir, so nothing is ever staged, committed or undone.
 #
 set -eu
 
@@ -23,6 +30,7 @@ usage() {
 	cat <<EOF
 usage: $prog init [--base <base>] [--force]
        $prog build [--check]
+       $prog draft [--build] [--local | --offline] [--delta] [--force] [--] [<branch>]
 
 Author a reading walkthrough for the current branch's PR, committed as
 .review/walkthrough.md.
@@ -32,6 +40,17 @@ Author a reading walkthrough for the current branch's PR, committed as
     --force        overwrite an existing walkthrough
   build            validate, order by the numbers you set and renumber 1..N
     --check        validate only; write nothing, exit non-zero on any problem
+
+Review someone else's PR in a reading order of your own, without committing:
+
+  draft [<branch>]  write the same skeleton for <branch> (default: the current
+                    branch) outside the working tree; git review start then
+                    reads it instead of the PR's own walkthrough
+    --build         validate and renumber the draft, as build does for the PR's
+    --local         draft against your local <branch>, not origin's copy
+    --offline       like --local, and resolve the base locally too
+    --delta         cover only the commits added since your last review
+    --force         overwrite an existing draft
 EOF
 }
 
@@ -41,10 +60,26 @@ die() {
 }
 
 sub=""
+branch=""
 base=""
 base_explicit=0
 force=0
 check=0
+build_draft=0
+local_only=0
+offline=0
+delta_mode=0
+# Positional arguments in order: the subcommand, then (draft only) the branch.
+# Kept in one helper so "--" and the bare form agree on the shape.
+take_positional() {
+	if [ -z "$sub" ]; then
+		sub="$1"
+	elif [ -z "$branch" ]; then
+		branch="$1"
+	else
+		die "unexpected argument $1"
+	fi
+}
 while [ $# -gt 0 ]; do
 	case "$1" in
 	-h | --h)
@@ -64,11 +99,14 @@ while [ $# -gt 0 ]; do
 		;;
 	--force) force=1 ;;
 	--check) check=1 ;;
+	--build) build_draft=1 ;;
+	--local) local_only=1 ;;
+	--offline) offline=1 ;;
+	--delta) delta_mode=1 ;;
 	--)
 		shift
 		while [ $# -gt 0 ]; do
-			[ -z "$sub" ] || die "unexpected argument $1"
-			sub="$1"
+			take_positional "$1"
 			shift
 		done
 		break
@@ -79,8 +117,7 @@ while [ $# -gt 0 ]; do
 		exit 1
 		;;
 	*)
-		[ -z "$sub" ] || die "unexpected argument $1"
-		sub="$1"
+		take_positional "$1"
 		;;
 	esac
 	shift
@@ -91,8 +128,8 @@ done
 	exit 1
 }
 case "$sub" in
-init | build) ;;
-*) die "unknown subcommand '$sub'; use init or build" ;;
+init | build | draft) ;;
+*) die "unknown subcommand '$sub'; use init, build or draft" ;;
 esac
 
 # Flag/subcommand compatibility, checked up front so a misused flag never silently
@@ -102,6 +139,28 @@ if [ "$sub" = build ] && { [ "$base_explicit" -eq 1 ] || [ "$force" -eq 1 ]; }; 
 fi
 if [ "$sub" = init ] && [ "$check" -eq 1 ]; then
 	die "--check applies only to git review walkthrough build"
+fi
+if [ "$sub" != draft ] && { [ "$build_draft" -eq 1 ] || [ "$local_only" -eq 1 ] || [ "$offline" -eq 1 ] || [ "$delta_mode" -eq 1 ]; }; then
+	die "--build, --local, --offline and --delta apply only to git review walkthrough draft"
+fi
+if [ "$sub" != draft ] && [ -n "$branch" ]; then
+	die "only git review walkthrough draft takes a branch; init and build work on the branch you are on"
+fi
+if [ "$sub" = draft ]; then
+	if [ "$check" -eq 1 ]; then
+		die "--check applies only to git review walkthrough build; draft --build validates the draft"
+	fi
+	if [ "$base_explicit" -eq 1 ]; then
+		die "--base applies only to git review walkthrough init; draft uses reviewworkflow.base, like git review start"
+	fi
+	if [ "$local_only" -eq 1 ] && [ "$offline" -eq 1 ]; then
+		die "use only one of --local and --offline"
+	fi
+	# Asymmetric risk, as everywhere else in this suite: --force destroys work
+	# the reviewer typed, so it only means anything where something gets written.
+	if [ "$build_draft" -eq 1 ] && [ "$force" -eq 1 ]; then
+		die "--force applies only when creating a draft, not to --build"
+	fi
 fi
 
 git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
@@ -126,14 +185,94 @@ has_uncommitted() {
 # changes, so an author (often an AI agent) does not silently build a walkthrough
 # over work that never made it into base..HEAD.
 warn_dirty() {
+	# Never for a draft. That diagnostic exists because an author can annotate work
+	# they have not committed yet; a reviewer drafts against someone else's
+	# committed refs, so their own dirty tree — the review edits they are making —
+	# has nothing to do with it, and warning about it would be noise at best.
+	# Guarded here, once, rather than at each of the five call sites.
+	[ "$sub" != draft ] || return 0
 	has_uncommitted || return 0
 	echo "note: you have uncommitted changes; init and build cover committed history (base..HEAD), so uncommitted edits are invisible here. Commit the PR first; never push automatically." >&2
 }
+
+# ── Range resolution ──────────────────────────────────────────────────────────
+#
+# Two callers, one rule: annotate exactly the files the review will cover.
+#
+# init/build are the author's, standing on their own PR, so the tip is HEAD.
+# draft is the reviewer's, standing on the base branch, so the tip is the named
+# branch's remote (or local) copy — the same resolution git review start and
+# emit_reading_offers use, flags included, because the draft has to list the file
+# set of the review that start is about to create, not some other one.
+if [ "$sub" = draft ]; then
+	[ -n "$branch" ] || branch="$(git symbolic-ref --quiet --short HEAD || true)"
+	[ -n "$branch" ] || die "no branch given and HEAD is detached; name the branch to draft for"
+
+	base="$(git config reviewworkflow.base || true)"
+	[ -n "$base" ] ||
+		die "no base set; run: git config reviewworkflow.base <branch>"
+
+	remote="$(git config reviewworkflow.remote || echo origin)"
+	if [ "$local_only" -eq 1 ] || [ "$offline" -eq 1 ]; then
+		srcref="refs/heads/$branch"
+		srclabel="$branch"
+		markerkey="reviewworkflowlocal.$branch.reviewed"
+	else
+		srcref="refs/remotes/$remote/$branch"
+		srclabel="$remote/$branch"
+		markerkey="reviewworkflow.$branch.reviewed"
+	fi
+	# No fetch, ever: like config --porcelain, this reads the refs already in the
+	# clone. A missing tip is an actionable error, not an implicit network call.
+	if ! git rev-parse --verify --quiet "$srcref^{commit}" >/dev/null; then
+		die "$srclabel not found"
+	fi
+	tip="$(git rev-parse "$srcref")"
+
+	baseref=""
+	if [ "$offline" -eq 1 ]; then
+		if git rev-parse --verify --quiet "refs/heads/$base^{commit}" >/dev/null; then
+			baseref="refs/heads/$base"
+		fi
+	else
+		if git rev-parse --verify --quiet "refs/remotes/$remote/$base^{commit}" >/dev/null; then
+			baseref="refs/remotes/$remote/$base"
+		fi
+	fi
+	if [ -z "$baseref" ]; then
+		baseref="$(git rev-parse --verify --quiet "$base^{commit}" || true)"
+	fi
+	[ -n "$baseref" ] || die "base $base not found"
+
+	if [ "$delta_mode" -eq 1 ]; then
+		prev="$(git config "$markerkey" || true)"
+		[ -n "$prev" ] ||
+			die "no previous review of $branch recorded for this origin; run a full review first"
+		[ "$prev" != "$tip" ] ||
+			die "no new commits since your last review of $branch"
+		git merge-base --is-ancestor "$prev" "$tip" ||
+			die "$branch was force-pushed since your last review; draft for the full range instead"
+		start="$prev"
+	else
+		start="$(git merge-base "$baseref" "$tip")" ||
+			die "could not compute merge-base with $base"
+		[ "$start" != "$tip" ] || die "no changes vs $base; nothing to walk through"
+	fi
+	# Tree-only bound, like the offers path: a draft must not commit-tree a
+	# dangling "review lower bound" object just to list file names.
+	lower="$(resolve_lower_bound "$start" "$baseref" "$tip")"
+
+	draftpath="$(walk_draft_path "$branch")"
+	# Reported instead of the absolute path: shorter, and it is where the reviewer
+	# will look. The absolute one is what gets opened, either way.
+	draftrel="\$GIT_DIR/review-walkthrough/$branch.md"
+fi
 
 # Resolve the review range exactly as a reviewer's git review start would: HEAD is
 # the PR tip (you author on the PR branch), the lower bound is the fold-adjusted
 # merge-base with the base. Sharing fold_lower guarantees init lists — and build
 # validates against — precisely the file set a reviewer will see.
+if [ "$sub" != draft ]; then
 tip="$(git rev-parse --verify --quiet HEAD)" || die "no HEAD to walk through"
 
 if [ -z "$base" ]; then
@@ -166,10 +305,22 @@ if [ "$mb" = "$tip" ]; then
 	die "no changes vs $base; nothing to walk through"
 fi
 lower="$(fold_lower "$mb" "$baseref" "$tip")"
+fi
 
 toplevel="$(git rev-parse --show-toplevel)"
 wtrel=".review/walkthrough.md"
 wtpath="$toplevel/$wtrel"
+
+# What each subcommand reads and writes. The two differ in exactly one thing —
+# where the file lives — which is the entire point of the feature: the author's
+# is content of the PR, the reviewer's must never be.
+if [ "$sub" = draft ]; then
+	targetpath="$draftpath"
+	targetrel="$draftrel"
+else
+	targetpath="$wtpath"
+	targetrel="$wtrel"
+fi
 
 # The annotatable file set: everything the PR changes, minus the sidecar
 # directory itself (a walkthrough never annotates .review/ — the only place in
@@ -183,15 +334,20 @@ annotatable_files() {
 	changed_paths "$lower" "$tip" | grep -v '^\.review/' || true
 }
 
-if [ "$sub" = init ]; then
-	if [ -e "$wtpath" ] && [ "$force" -eq 0 ]; then
-		die "$wtrel already exists; pass --force to overwrite"
+# Skeleton generation, shared by init and draft rather than copied: the text is a
+# long set of instructions to whoever fills it in, and it is written for "the
+# person annotating this PR" without ever assuming that person is the author. Two
+# copies would drift, and the drift would be invisible until someone read the
+# wrong one.
+if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; then
+	if [ -e "$targetpath" ] && [ "$force" -eq 0 ]; then
+		die "$targetrel already exists; pass --force to overwrite"
 	fi
 	files="$(annotatable_files)"
 	[ -n "$files" ] || die "no changed files vs $base to list"
 
-	mkdir -p "$toplevel/.review"
-	tmp="$wtpath.tmp.$$"
+	mkdir -p "$(dirname "$targetpath")"
+	tmp="$targetpath.tmp.$$"
 	{
 		printf '# Walkthrough\n\n'
 		printf '<!-- Author the reading order for this PR. The entries below are\n'
@@ -235,16 +391,41 @@ if [ "$sub" = init ]; then
 			printf '<!-- why: -->\n\n'
 		done
 	} >"$tmp"
-	mv "$tmp" "$wtpath"
+	mv "$tmp" "$targetpath"
 
 	n="$(printf '%s\n' "$files" | grep -c .)"
-	echo "wrote $wtrel with $n file(s); fill in the order and why, then run git review walkthrough build"
-	warn_dirty
+	if [ "$sub" = draft ]; then
+		echo "wrote $targetrel with $n file(s) from $srclabel; fill in the order and why, then run git review walkthrough draft --build $branch"
+		# The reviewer's draft wins over the PR's own walkthrough for as long as it
+		# exists (see walk_read). Silently shadowing an author's reading order would
+		# be the kind of surprise this project spends its error messages avoiding —
+		# so say it, and carry on: choosing your own order is legitimate, and the
+		# assistant never proposes this, you had to ask for it.
+		if git show "$tip:.review/walkthrough.md" >/dev/null 2>&1; then
+			echo "note: $branch already carries a walkthrough from its author; your draft takes precedence over it while it exists. Delete it to go back to theirs." >&2
+		fi
+		# Deliberately no warn_dirty: a draft is derived from committed refs, not
+		# from your working tree, so what you have uncommitted is nobody's business
+		# here — you are reviewing someone else's branch.
+	else
+		echo "wrote $targetrel with $n file(s); fill in the order and why, then run git review walkthrough build"
+		warn_dirty
+	fi
 	exit 0
 fi
 
 # ── build ─────────────────────────────────────────────────────────────────────
-[ -e "$wtpath" ] || die "$wtrel not found; run git review walkthrough init first"
+# Reached by `build` (the author's sidecar) and by `draft --build` (the
+# reviewer's). Every rule below — placeholders, malformed headings, "> key" with
+# a value, duplicate paths, drift against the range — is one body of validation
+# serving both, so a draft is held to exactly the standard a committed
+# walkthrough is, and neither can gain a rule the other lacks.
+if [ "$sub" = draft ]; then
+	[ -e "$targetpath" ] ||
+		die "no draft for $branch; run git review walkthrough draft $branch first"
+else
+	[ -e "$targetpath" ] || die "$targetrel not found; run git review walkthrough init first"
+fi
 
 # Read through walk_normalize for the same reason the runtime readers do: an
 # editor that saved CRLF would otherwise leave a \r on every path (drift errors
@@ -252,7 +433,7 @@ fi
 # unmarked), and one that prepended a BOM would hide the "# Walkthrough" heading.
 # Since build rewrites the file from this content, such a walkthrough also comes
 # out normalised — the author's rebuild heals it for every reviewer.
-content="$(walk_normalize <"$wtpath")"
+content="$(walk_normalize <"$targetpath")"
 
 # Skeleton placeholders must all be filled: an unnumbered "## ?." entry or a
 # leftover "<!-- why" comment means the author did not finish. Both comment
@@ -367,7 +548,7 @@ fi
 # pattern) so a failure never leaves a half-written walkthrough.
 preamble="$(printf '%s\n' "$content" | walk_preamble)"
 sorted_paths="$(printf '%s\n' "$entries" | LC_ALL=C sort -k1,1n | cut -f2-)"
-tmp="$wtpath.tmp.$$"
+tmp="$targetpath.tmp.$$"
 {
 	printf '# Walkthrough\n\n'
 	if [ -n "$preamble" ]; then
@@ -426,7 +607,11 @@ tmp="$wtpath.tmp.$$"
 		}
 	'
 } >"$tmp"
-mv "$tmp" "$wtpath"
+mv "$tmp" "$targetpath"
 
-echo "built $wtrel: $count $(entry_noun "$count")$keysuffix, ordered and renumbered"
+if [ "$sub" = draft ]; then
+	echo "built $targetrel: $count $(entry_noun "$count")$keysuffix, ordered and renumbered; git review start $branch now reads it"
+else
+	echo "built $targetrel: $count $(entry_noun "$count")$keysuffix, ordered and renumbered"
+fi
 warn_dirty

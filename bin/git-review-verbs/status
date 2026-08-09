@@ -252,6 +252,14 @@ if [ "$porcelain" -eq 1 ]; then
 	if [ "$(git config "branch.$cur.reviewwalkkeys" || true)" = "1" ]; then
 		porcelain_row keys
 	fi
+	# The reading order is the reviewer's own draft, not the PR author's.
+	# A presence record, for the same reason keys and readonly are ones: the
+	# published clients parse `state` by position, so widening it is the kind of
+	# change that quietly misaligns a consumer, while an unknown label is
+	# something porcelain v1 already promises they ignore.
+	if [ "$mode" = walk ] && walk_is_draft "$src"; then
+		porcelain_row draft
+	fi
 	exit 0
 fi
 
@@ -371,7 +379,14 @@ elif [ "$mode" = "walk" ]; then
 	else
 		mark="  (uncovered)"
 	fi
-	printf '  mode    walk  [%s/%s] on %s%s%s\n' "$walkstep" "$total" "$pnow" "$mark" "$keys_only_note"
+	# Say whose reading order this is. Not decoration: two days into a review it is
+	# easy to read your own why as the author's, and give it an authority it never
+	# had. Suffixed to the mode so the rest of the line keeps its shape.
+	draft_note=""
+	if walk_is_draft "$src"; then
+		draft_note=" (draft)"
+	fi
+	printf '  mode    walk%s  [%s/%s] on %s%s%s\n' "$draft_note" "$walkstep" "$total" "$pnow" "$mark" "$keys_only_note"
 	hint="git review next"
 	[ "$walkstep" -gt 1 ] && hint="$hint / git review prev"
 	if [ "$is_readonly" = "1" ]; then

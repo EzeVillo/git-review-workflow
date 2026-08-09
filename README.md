@@ -307,6 +307,7 @@ Every command is a verb under `git review`. Run `git review -h` for the list, or
 | `git review start [<branch>] [<base> \| --base <base> \| --delta \| --from <commit>] [--step \| --no-walk \| --keys] [--local \| --offline]` | Fetch `origin`, then stage the PR diff on a new `review/<branch>` branch (omit `<branch>` to review the current branch; enters walk mode if the PR carries a walkthrough; `--keys` restricts walk to entries marked `> key`; `--local` reviews your local branch but still diffs against origin's base; `--offline` also skips fetching and uses your local base). |
 | `git review compare <a> <b> [--step \| --no-walk \| --keys]`                                                                                 | Stage the diff between two commit-ish (tags, commits, branches) read-only, to read or walk it. `git review finish` refuses — there is nothing to write back.                                                                                                                                                                                                       |
 | `git review walkthrough (init [--base <base>] [--force] \| build [--check])`                                                                 | Author a reading walkthrough for the current branch's PR — a curated order of the changed files with a note on each, committed as `.review/walkthrough.md`.                                                                                                                                                                                                        |
+| `git review walkthrough draft [--build] [--local \| --offline] [--delta] [--force] [<branch>]`                                               | Write your own reading order for someone else's PR, kept out of the working tree — nothing is staged, committed or undone. `git review start` then reads it instead of the PR's walkthrough. `--build` validates and renumbers it.                                                                                                                                 |
 | `git review next` / `git review prev`                                                                                                        | Move a `--step` or walkthrough review to the next / previous entry.                                                                                                                                                                                                                                                                                                |
 | `git review status [--porcelain \| --why <path>]`                                                                                            | Show the state of the review on the current branch (`--porcelain` for machine-readable output, including a `finish` record when a closure is mid-conflict; `--why <path>` for a walkthrough entry's explanation).                                                                                                                                                  |
 | `git review list [--porcelain]`                                                                                                              | List every review in progress and every saved one (current branch marked `*`; `--porcelain` also reports unresolved finishes as `pending` or `conflict`).                                                                                                                                                                                                          |
@@ -497,6 +498,42 @@ would need to already understand the PR to hand-curate a reading order for it,
 which defeats the purpose, whereas an agent that reads the whole diff can write
 that order *before* you've read a single file (see the solo-review case in
 [Typical workflow](#typical-workflow)).
+
+### Drafting one for someone else's PR
+
+Most PRs carry no walkthrough, and you can't commit one to a branch that isn't
+yours. `git review walkthrough draft` writes the same skeleton for a branch you
+name, **outside the working tree** — under `$GIT_DIR`, where `git status` never
+sees it, `git review start` never trips over it, and `git review finish` can
+never carry it into your extracted edits. There is nothing to stage, and nothing
+to undo:
+
+```sh
+git review walkthrough draft feature/checkout          # skeleton for someone else's PR
+# ...fill in the order and the whys (by hand, or hand it to an agent)...
+git review walkthrough draft --build feature/checkout  # validate, order, renumber
+git review start feature/checkout                      # enters walk mode on your order
+```
+
+- Takes the branch as an argument, like `git review start` — you're standing on
+  the base, not on the PR — and defaults to the current branch. `--local`,
+  `--offline` and `--delta` resolve the range exactly as `start` does, so the
+  skeleton lists precisely the files your review will cover. Never fetches.
+- `--build` applies the same validation `build` does for the author's sidecar:
+  placeholders, drift, duplicate paths, `> key` with a value. It's a quality
+  gate, not a gate — an unvalidated draft is already readable.
+- Your draft **takes precedence** over the PR's own walkthrough for as long as
+  it exists, and `git review status` marks the review `walk (draft)` so a reading
+  order you wrote is never mistaken for the author's. Drafting over a PR that
+  already has one says so; delete the draft to go back to theirs.
+- It's yours and it's local: `git review save` moves it out of `git review
+  clean`'s reach along with your edits, and `git review forget --saved` discards
+  it with the review.
+
+**git review never writes the walkthrough for you and never talks to any
+service.** It gives you the skeleton with the brief already written into it, and
+validates what comes back. Who fills it in — you, an agent, whatever you like —
+is entirely your call.
 
 The walkthrough is built from **committed history** (`base..HEAD`), not your
 working tree: commit the PR changes before authoring it. `init` and `build` never

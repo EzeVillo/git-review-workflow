@@ -165,6 +165,20 @@ fi
 walk=0
 walkcount=0
 keys_filter=0
+# Compare is the one reader that works with revisions rather than a branch, so
+# the draft context cannot be inferred the way it is everywhere else: it is set
+# only when <b> actually names a branch the reviewer has drafted for. Comparing
+# two SHAs or tags falls through to the PR's own walkthrough, the only reading
+# order a loose revision has. Without this, the same branch would read in one
+# order under start and another under compare, with nothing to explain it.
+# A local branch is its own source name; a remote-tracking one is the name minus
+# its remote's first segment. Stripping to the last segment would be wrong for
+# every namespaced branch: feature/checkout would look up a draft for "checkout".
+if git rev-parse --verify --quiet "refs/heads/$b" >/dev/null; then
+	walk_use_draft "$b"
+elif git rev-parse --verify --quiet "refs/remotes/$b" >/dev/null; then
+	walk_use_draft "${b#*/}"
+fi
 if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$bcommit")" && [ -n "$wtcontent" ]; then
 	curated="$(walk_sequence "$bcommit" "$acommit")"
 	# grep -c returns 1 (aborting under set -e in POSIX sh) on an empty sequence.

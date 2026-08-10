@@ -350,10 +350,11 @@ annotatable_files() {
 }
 
 # Skeleton generation, shared by init and draft rather than copied: the text is a
-# long set of instructions to whoever fills it in, and it is written for "the
-# person annotating this PR" without ever assuming that person is the author. Two
-# copies would drift, and the drift would be invisible until someone read the
-# wrong one.
+# long set of instructions to whoever fills it in, and all but its closing note is
+# written for "the person annotating this PR" without assuming that person is the
+# author. Two copies would drift, and the drift would be invisible until someone
+# read the wrong one — so the two lines that genuinely differ are switched inline
+# (see below) instead of forking the block.
 if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; then
 	if [ -e "$targetpath" ] && [ "$force" -eq 0 ]; then
 		die "$targetrel already exists; pass --force to overwrite"
@@ -399,11 +400,27 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		printf '         mechanical renames and the like are exactly what stays unmarked.\n'
 		printf '       * Fill in the "## Heads-up" section below with what a reviewer\n'
 		printf '         should keep in mind before opening a single file.\n\n'
-		printf '     Note: this walkthrough is built from committed history (base..HEAD).\n'
-		printf '     Commit the PR before authoring it -- with uncommitted changes you\n'
-		printf '     may be annotating incomplete work, and build will not see those\n'
-		printf '     files. Commit them first; never push automatically.\n\n'
-		printf '     Then validate and write with:  git review walkthrough build -->\n\n'
+		# The two passages that cannot be written for "whoever annotates this PR".
+		# Everything above genuinely is shared; these are the author's, and the
+		# reviewer used to be handed their copy of both: a command that dies from
+		# the base (build reads .review/walkthrough.md on the branch you are
+		# standing on, and the reviewer is not standing on the PR), and an
+		# instruction to commit a PR that is not theirs — the very advice warn_dirty
+		# is deliberately suppressed for on this path, contradicted in the file the
+		# reviewer has open.
+		if [ "$sub" = draft ]; then
+			printf '     Note: this walkthrough is built from the committed history of\n'
+			printf '     %s (base..tip), never from your working tree -- the edits\n' "$srclabel"
+			printf '     you make while reviewing are invisible here, and nothing you\n'
+			printf '     write in this file is ever staged or committed.\n\n'
+			printf '     Then validate and write with:  git review walkthrough draft --build%s %s -->\n\n' "$draftflags" "$branch"
+		else
+			printf '     Note: this walkthrough is built from committed history (base..HEAD).\n'
+			printf '     Commit the PR before authoring it -- with uncommitted changes you\n'
+			printf '     may be annotating incomplete work, and build will not see those\n'
+			printf '     files. Commit them first; never push automatically.\n\n'
+			printf '     Then validate and write with:  git review walkthrough build -->\n\n'
+		fi
 		printf '## Heads-up\n\n'
 		printf '<!-- heads-up: the delicate parts of this PR, in a few lines -- the\n'
 		printf '     invariants it can break, the subtle or risky bits, anything that\n'
@@ -522,7 +539,18 @@ fi
 
 # Numbered entries, as order<TAB>path in file order.
 entries="$(printf '%s\n' "$content" | walk_parse)"
-[ -n "$entries" ] || die "no entries found; run git review walkthrough init and fill it in"
+# No entry heading at all: an empty file, or prose with nothing to read in order.
+# (An unfilled "## ?." skeleton never reaches here — the unfilled check above owns
+# that case.) The way back differs by side, and pointing the reviewer at init is
+# pointing them at the author's flow, which writes .review/walkthrough.md into the
+# working tree of whatever branch they are standing on: the one thing this verb
+# exists to never do.
+if [ -z "$entries" ]; then
+	if [ "$sub" = draft ]; then
+		die "no entries found in $targetrel; write the skeleton again with git review walkthrough draft --force$draftflags $branch, then fill it in"
+	fi
+	die "no entries found; run git review walkthrough init and fill it in"
+fi
 
 # No path may appear twice.
 dups="$(printf '%s\n' "$entries" | cut -f2- | LC_ALL=C sort | uniq -d)"

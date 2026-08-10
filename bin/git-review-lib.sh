@@ -1172,6 +1172,12 @@ walk_recover_cursor() {
 # self-inflicted, undoable state. A cursor out of range while the range is intact
 # (total still == walkcount, or a non-numeric/absent walkcount) is genuine
 # corruption — a hand-edited key — and keeps the original diagnostic.
+#
+# The reviewer's draft adds two causes that are neither, and each gets its own
+# message: the draft is gone (deleted or emptied), and the draft is there but
+# contributes no entry to this range. Both are states of a file the reviewer owns
+# and can fix in place, so both name the command that fixes it. "Corrupt
+# metadata" is the last resort, not the catch-all.
 walk_range_error() {
 	_wre_step="$1"
 	_wre_total="$2"
@@ -1203,7 +1209,21 @@ walk_range_error() {
 		_wre_gone=1
 	fi
 	if [ "$_wre_gone" -eq 1 ]; then
-		echo "error: the walkthrough this review was reading is gone — it was $_wre_draft's draft, and the file no longer exists. Write it again with 'git review walkthrough draft $_wre_draft', or discard the review with 'git review abort'." >&2
+		# Deleted and emptied are the same thing to walk_read and two different
+		# things to the reviewer, who most likely has the file open. Reported with
+		# walk_has_draft_file — the custody question — precisely because
+		# walk_is_draft just answered the other one. It also decides the fix: the
+		# draft verb refuses to overwrite a file that exists, so telling someone
+		# with an empty draft to "write it again" without --force sends them to a
+		# second error.
+		if walk_has_draft_file "$_wre_draft"; then
+			_wre_what="the file is now empty"
+			_wre_fix="git review walkthrough draft --force $_wre_draft"
+		else
+			_wre_what="the file no longer exists"
+			_wre_fix="git review walkthrough draft $_wre_draft"
+		fi
+		echo "error: the walkthrough this review was reading is gone — it was $_wre_draft's draft, and $_wre_what. Write it again with '$_wre_fix', or discard the review with 'git review abort'." >&2
 		exit 1
 	fi
 	# The shrink is only evidence of a stray commit while nothing else can shrink
@@ -1216,6 +1236,24 @@ walk_range_error() {
 		! walk_at_base; then
 		echo "error: HEAD has moved off this review's base — the walkthrough cursor is at entry $_wre_step but only $_wre_total of $_wre_count $(entry_noun "$_wre_count") remain in range. Walk mode keeps the whole-PR diff staged with HEAD at the base; you now have commit(s) on top (did you run git commit?). Undo them with 'git reset --soft' to restage the diff, or 'git review abort' to discard the review, then retry." >&2
 		exit 3
+	fi
+	# A draft that is in force and yields no entry at all in this range. That is a
+	# state of the draft, not corruption: the reviewer either rewrote it down to
+	# the skeleton — "## ?." headings are not entries until they carry a number —
+	# or wrote one whose paths do not meet the range. walk_recover_cursor cannot
+	# clamp it because there is nothing to clamp to, and without this branch the
+	# reviewer who follows the "gone" message above, drafts the skeleton it asked
+	# for and runs the next command is answered with "corrupt metadata": untrue,
+	# and the only exit it names is discarding the review.
+	#
+	# Deliberately below the HEAD check and not above it. A stray commit empties
+	# the sequence too, and that state is about HEAD, not about the draft: ordering
+	# this first told a reviewer who had just committed over the staged diff to go
+	# number their entries, and dropped the exit code the clients read as
+	# out-of-range from 3 to 1.
+	if [ -n "$_wre_draft" ] && [ "$_wre_total" -eq 0 ]; then
+		echo "error: your walkthrough draft for $_wre_draft has no entries in this review's range; the cursor is at entry $_wre_step. Number the entries and run 'git review walkthrough draft --build $_wre_draft', or discard the review with 'git review abort'." >&2
+		exit 1
 	fi
 	echo "error: review entry $_wre_step out of range (1..$_wre_total) — corrupt metadata? Discard the review with 'git review abort'." >&2
 	exit 1

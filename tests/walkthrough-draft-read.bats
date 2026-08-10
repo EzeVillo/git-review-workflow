@@ -89,6 +89,31 @@ REVIEWER on the author's own file
 EOF
 }
 
+# The same reading order with two entries marked key. The author's walkthrough
+# marks none, so under --keys the reviewer's sequence is two entries and falling
+# back to the author's is observable as the sequence emptying — which is what
+# puts the cursor out of range without touching HEAD.
+write_keyed_draft() {
+	mkdir -p "$(dirname "$DRAFT")"
+	cat >"$DRAFT" <<'EOF'
+# Walkthrough
+
+## 1. src/c.txt
+> key
+REVIEWER says start at c
+
+## 2. b.txt
+> key
+REVIEWER on b
+
+## 3. a.txt
+REVIEWER on a
+
+## 4. .review/walkthrough.md
+REVIEWER on the author's own file
+EOF
+}
+
 # ── precedence ────────────────────────────────────────────────────────────────
 
 @test "with no draft the review reads the author's walkthrough" {
@@ -420,6 +445,86 @@ EOF
 	[[ "$output" == *"git review walkthrough draft feature/x"* ]]
 	[[ "$output" != *"HEAD has moved off"* ]]
 	[[ "$output" != *"git reset --soft"* ]]
+}
+
+@test "emptying the draft mid-review says empty, and names a command that works" {
+	write_keyed_draft
+	run git review start --keys feature/x
+	[ "$status" -eq 0 ]
+	git review next >/dev/null
+
+	# Select-all and save is a likelier accident than deleting the file, and the
+	# two are the same thing to walk_read. They are not the same thing to the
+	# reviewer, who has the file open -- and the fix differs: draft refuses to
+	# overwrite a file that exists, so "write it again" without --force would land
+	# them on a second error for following the first one.
+	: >"$DRAFT"
+	run git review status
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"the walkthrough this review was reading is gone"* ]]
+	[[ "$output" == *"the file is now empty"* ]]
+	[[ "$output" != *"no longer exists"* ]]
+	[[ "$output" == *"git review walkthrough draft --force feature/x"* ]]
+
+	# The command it names is one that works from here.
+	run git review walkthrough draft --force feature/x
+	[ "$status" -eq 0 ]
+	[ -s "$DRAFT" ]
+}
+
+@test "following the redraft the CLI suggests never answers corrupt metadata" {
+	# The whole loop, exactly as a reviewer walks it: the draft goes, the CLI says
+	# to write it again, they do -- and the skeleton it writes back has no numbered
+	# entry yet, so the sequence is empty while the draft is still very much in
+	# force. That used to come out as "corrupt metadata? Discard the review", which
+	# is untrue and names discarding as the only way out, at the end of a path the
+	# product itself had just recommended.
+	write_keyed_draft
+	run git review start --keys feature/x
+	[ "$status" -eq 0 ]
+	git review next >/dev/null
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "2" ]
+
+	rm "$DRAFT"
+	run git review status
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"git review walkthrough draft feature/x"* ]]
+
+	run git review walkthrough draft feature/x
+	[ "$status" -eq 0 ]
+	run git review status
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"has no entries in this review's range"* ]]
+	[[ "$output" == *"git review walkthrough draft --build feature/x"* ]]
+	[[ "$output" != *"corrupt metadata"* ]]
+	[[ "$output" != *"HEAD has moved off"* ]]
+
+	# And it really is recoverable: number the entries, build with the command the
+	# message named, and the review reads again at the cursor it was on -- rather
+	# than the review being discarded, which is all the old message offered.
+	# Without the .review/ entry here, unlike write_keyed_draft: --build calls that
+	# one drift, and this step has to be the buildable shape a reviewer following
+	# the message would end up with.
+	cat >"$DRAFT" <<'EOF'
+# Walkthrough
+
+## 1. src/c.txt
+> key
+REVIEWER says start at c
+
+## 2. b.txt
+> key
+REVIEWER on b
+
+## 3. a.txt
+REVIEWER on a
+EOF
+	run git review walkthrough draft --build feature/x
+	[ "$status" -eq 0 ]
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"(draft)"* ]]
+	[[ "$output" == *"[2/2] on b.txt"* ]]
 }
 
 @test "editing your own draft shorter re-seats the cursor instead of blaming HEAD" {

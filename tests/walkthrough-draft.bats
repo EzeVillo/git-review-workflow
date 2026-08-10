@@ -173,6 +173,55 @@ EOF
 	[ "$(cat "$DRAFT")" = "$expected" ]
 }
 
+@test "the draft skeleton closes with the draft's own build command" {
+	run git review walkthrough draft feature/plain
+	[ "$status" -eq 0 ]
+	# The file the reviewer has open in front of them used to close with the
+	# author's two instructions: "git review walkthrough build", which from the base
+	# dies on a .review/walkthrough.md that is not there, and "commit the PR before
+	# authoring it" -- about someone else's PR, and the very advice warn_dirty is
+	# deliberately suppressed for on this path.
+	grep -q 'Then validate and write with:  git review walkthrough draft --build feature/plain -->' "$DRAFT"
+	! grep -q 'git review walkthrough build' "$DRAFT"
+	! grep -q 'Commit the PR before authoring it' "$DRAFT"
+	! grep -q 'never push automatically' "$DRAFT"
+	# What it says instead is true of a draft, and says where the file is not.
+	grep -q 'never from your working tree' "$DRAFT"
+	grep -q 'ever staged or committed' "$DRAFT"
+	# The rest of the instructions are still the shared ones: switching those two
+	# passages must not have forked the block into two copies that drift.
+	grep -q '"> key"' "$DRAFT"
+	grep -q 'Fill in the "## Heads-up" section below' "$DRAFT"
+}
+
+@test "the draft skeleton repeats the flags the draft was written with" {
+	# Same shape as the line the verb prints on stdout: a reviewer who came back to
+	# the file a day later must not be told to rebuild it against origin's copy of a
+	# branch they drafted locally.
+	run git review walkthrough draft --offline feature/plain
+	[ "$status" -eq 0 ]
+	grep -q 'git review walkthrough draft --build --offline feature/plain -->' "$DRAFT"
+}
+
+@test "build on a draft with no entries points back at the draft, never at init" {
+	git review walkthrough draft feature/plain
+	# Prose and no entry heading at all -- the unfilled "## ?." check does not own
+	# this one. It is reachable from the IDE assistant, which offers to resume any
+	# draft file that exists, and init is the author's flow: it writes
+	# .review/walkthrough.md into the working tree of whatever branch you are
+	# standing on, the one thing this verb exists never to do.
+	printf '# Walkthrough\n\nnotes to myself, no order yet\n' >"$DRAFT"
+	run git review walkthrough draft --build feature/plain
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"no entries found in"* ]]
+	[[ "$output" == *"review-walkthrough/feature/plain.md"* ]]
+	[[ "$output" == *"git review walkthrough draft --force feature/plain"* ]]
+	[[ "$output" != *"walkthrough init"* ]]
+	# Rejected, and the reviewer's file is exactly as they left it.
+	[ "$(cat "$DRAFT")" = "$(printf '# Walkthrough\n\nnotes to myself, no order yet')" ]
+	[ ! -e .review/walkthrough.md ]
+}
+
 @test "writing a draft leaves no temporary file behind" {
 	git review walkthrough draft feature/plain
 	[ -f "$DRAFT" ]

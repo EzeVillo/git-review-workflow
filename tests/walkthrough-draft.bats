@@ -173,6 +173,63 @@ EOF
 	[ "$(cat "$DRAFT")" = "$expected" ]
 }
 
+@test "writing a draft leaves no temporary file behind" {
+	git review walkthrough draft feature/plain
+	[ -f "$DRAFT" ]
+	# The skeleton is written to "<target>.tmp.$$" and moved into place. Anything
+	# else left in the namespace is litter nobody collects: walk_draft_list only
+	# matches *.md, clean is deliberately hands-off in there, and forget --draft
+	# only knows names it can spell.
+	run find "$(dirname "$DRAFT")" -name '*.tmp.*'
+	[ "$status" -eq 0 ]
+	[ -z "$output" ]
+}
+
+@test "a draft is shared by the local and the remote reading of one branch" {
+	# The path encodes the branch and nothing else — not the origin it was drafted
+	# against, not the range — so --offline and the plain form are two ways into the
+	# same file. Deliberate: one branch, one reading order. Pinned because the
+	# alternative would only ever be discovered by a reviewer wondering where theirs
+	# went.
+	git review walkthrough draft --offline feature/plain
+	[ -f "$DRAFT" ]
+	run git review walkthrough draft feature/plain
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"already exists"* ]]
+	[[ "$output" == *"pass --force to overwrite"* ]]
+}
+
+@test "each git worktree keeps its own draft" {
+	# --git-dir, not --git-common-dir: a review is per working tree, and so is the
+	# order it is read in. Both clients resolve the same path by reading the
+	# worktree's .git link, so this is the CLI half of that contract.
+	git review walkthrough draft feature/plain
+	# Absolute, because the rest of this test runs from another working tree, where
+	# the "$(git rev-parse --git-dir)" DRAFT was built from means something else.
+	main_draft="$WORK/.git/review-walkthrough/feature/plain.md"
+	[ -f "$main_draft" ]
+
+	git worktree add --quiet --detach "$TMP/wt" develop
+	cd "$TMP/wt"
+	[ "$(git rev-parse --absolute-git-dir)" != "$(git -C "$WORK" rev-parse --absolute-git-dir)" ]
+
+	# The other working tree's draft is not this one's.
+	run git review forget --draft --all
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"no walkthrough drafts"* ]]
+
+	run git review walkthrough draft feature/plain
+	[ "$status" -eq 0 ]
+	wt_draft="$(git rev-parse --absolute-git-dir)/review-walkthrough/feature/plain.md"
+	[ -f "$wt_draft" ]
+	# Two files, one per working tree, neither disturbed by the other.
+	[ -f "$main_draft" ]
+	run git review forget --draft feature/plain
+	[ "$status" -eq 0 ]
+	[ ! -f "$wt_draft" ]
+	[ -f "$main_draft" ]
+}
+
 @test "draft on a PR that has a walkthrough warns that the draft wins" {
 	run git review walkthrough draft feature/annotated
 	[ "$status" -eq 0 ]

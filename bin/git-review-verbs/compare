@@ -201,7 +201,14 @@ if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$bcommit")" && [ -n "$wtconte
 			die "--keys requires a walkthrough with entries in range; none apply to $a..$b"
 		fi
 		degradedfiles="$(range_files "$bcommit" "$acommit" | tr '\n' ' ')"
-		echo "note: $b has a walkthrough, but none of its entries apply to $a..$b; reading the whole diff: $degradedfiles"
+		# Attributed to whoever wrote the order that failed to apply, as start does:
+		# the draft in force here belongs to the branch, which for a remote-tracking
+		# <b> is not even spelled the same as the review.
+		if [ -n "${walk_draft_src:-}" ] && walk_is_draft "$walk_draft_src"; then
+			echo "note: you have a walkthrough draft for $walk_draft_src, but none of its entries apply to $a..$b; reading the whole diff: $degradedfiles"
+		else
+			echo "note: $b has a walkthrough, but none of its entries apply to $a..$b; reading the whole diff: $degradedfiles"
+		fi
 	fi
 elif [ "$keys_only" -eq 1 ]; then
 	die "--keys requires a walkthrough on $b; none found (or compare without --keys)"
@@ -225,6 +232,10 @@ if [ "$walk" -eq 1 ]; then
 	git config "branch.$rb.reviewmode" "walk"
 	git config "branch.$rb.reviewwalkstep" "1"
 	git config "branch.$rb.reviewwalkcount" "$walkcount"
+	# The base HEAD was just pinned to, so the cursor's diagnostics can ask git
+	# whether HEAD moved instead of inferring it (walk_at_base). Same key start
+	# writes, for the same reason.
+	git config "branch.$rb.reviewwalkbase" "$(git rev-parse HEAD)"
 	if [ "$keys_filter" -eq 1 ]; then
 		git config "branch.$rb.reviewwalkkeys" "1"
 	fi

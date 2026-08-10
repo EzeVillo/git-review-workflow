@@ -40,6 +40,15 @@ setup() {
 	git commit --quiet -m work
 	git push --quiet -u origin feature/x
 
+	# A second PR, so "does this touch the other review?" can be asked of a command
+	# that succeeds rather than only of one that refuses.
+	git switch --quiet develop
+	git switch --quiet -c feature/y
+	printf 'y1\n' >y.txt
+	git add -A
+	git commit --quiet -m other
+	git push --quiet -u origin feature/y
+
 	git switch --quiet develop
 
 	GITDIR="$(git rev-parse --git-dir)"
@@ -296,6 +305,36 @@ teardown() {
 	[ ! -f "$DRAFT" ]
 }
 
+@test "forget --draft names the compare review that was reading it" {
+	# The review is review/origin/feature/x and the draft is feature/x's: the note
+	# has to come from what the review recorded, not from its own name.
+	git review compare develop origin/feature/x
+	[ "$(git config branch.review/origin/feature/x.reviewwalkdraft)" = "feature/x" ]
+	git switch --quiet develop
+
+	run git review forget --draft feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"forgot the walkthrough draft for feature/x"* ]]
+	[[ "$output" == *"review/origin/feature/x was reading it"* ]]
+	[ ! -f "$DRAFT" ]
+}
+
+@test "forget --draft rejects a name that is not a branch, and deletes nothing" {
+	# The draft's file name is its branch name, so an unchecked argument addressed
+	# any file on the disk: .git/review-walkthrough/../../victim.md is this one,
+	# sitting in the work tree.
+	victim="$WORK/victim.md"
+	printf 'not a draft\n' >"$victim"
+	run git review forget --draft '../../victim'
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"not a valid branch name: ../../victim"* ]]
+	[ -f "$victim" ]
+	[ "$(cat "$victim")" = "not a draft" ]
+	# And it did not report success for a deletion it never made.
+	[[ "$output" != *"forgot the walkthrough draft"* ]]
+	[ -f "$DRAFT" ]
+}
+
 @test "forget --draft without a target prints usage and deletes nothing" {
 	run git review forget --draft
 	[ "$status" -eq 1 ]
@@ -337,6 +376,82 @@ teardown() {
 	[[ "$output" == *"on a.txt"* ]]
 }
 
+@test "continue refuses rather than overwrite a draft written while paused" {
+	git review start feature/x
+	git review save
+	[ ! -f "$DRAFT" ]
+
+	# The reviewer writes a new one for the same branch while the review sleeps.
+	# Nothing so far has had reason to mention the archived copy.
+	cat >"$DRAFT" <<'EOF'
+# Walkthrough
+
+## 1. a.txt
+written while the review was paused
+EOF
+
+	run git review continue feature/x
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"already exists"* ]]
+	[[ "$output" == *"git review forget --draft feature/x"* ]]
+	# Both files still there, both untouched, and the review still paused: the
+	# refusal happens before anything moves.
+	[ "$(tail -n 1 "$DRAFT")" = "written while the review was paused" ]
+	[ -f "$SAVED_DRAFT" ]
+	git rev-parse --verify --quiet refs/heads/review-saved/feature/x >/dev/null
+	! git rev-parse --verify --quiet refs/heads/review/feature/x >/dev/null
+}
+
+@test "dropping the new draft lets continue resume on the archived one" {
+	git review start feature/x
+	git review next
+	git review save
+	printf '# Walkthrough\n\n## 1. a.txt\nmine\n' >"$DRAFT"
+
+	run git review forget --draft feature/x
+	[ "$status" -eq 0 ]
+	run git review continue feature/x
+	[ "$status" -eq 0 ]
+	[ ! -f "$SAVED_DRAFT" ]
+	# The archived draft is what came back: its order puts src/c.txt first, so the
+	# cursor saved at 2 lands on a.txt.
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"walk (draft)"* ]]
+	[[ "$output" == *"[2/2] on a.txt"* ]]
+}
+
+@test "drafting for a branch with a paused review says one is already filed" {
+	git review start feature/x
+	git review save
+	run git review walkthrough draft feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"a paused review of feature/x carries a walkthrough draft of its own"* ]]
+	[ -f "$DRAFT" ]
+	[ -f "$SAVED_DRAFT" ]
+}
+
+@test "list marks a paused step review's row as carrying a draft" {
+	# A draft belongs to a branch, not to a mode: a step or whole review of a
+	# branch you had drafted for takes that draft into the saved namespace when it
+	# pauses, and forget --saved would then discard it. Marking only walk rows left
+	# that prose invisible on the one surface a reviewer reads days later.
+	git review start --step feature/x
+	git review save
+	[ ! -f "$DRAFT" ]
+	[ -f "$SAVED_DRAFT" ]
+
+	run git review list
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"review-saved/feature/x"* ]]
+	[[ "$output" == *"step (draft) ["* ]]
+
+	rm "$SAVED_DRAFT"
+	run git review list
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"(draft)"* ]]
+}
+
 @test "list marks a paused review's row as reading a draft" {
 	git review start feature/x
 	git review next
@@ -376,6 +491,20 @@ teardown() {
 	[ "$status" -eq 0 ]
 	[ ! -f "$SAVED_DRAFT" ]
 	[ ! -f "$DRAFT" ]
+	# And it says so. Every other verb goes out of its way to keep hand-written
+	# prose — clean will not touch a draft — so the one command that destroys one
+	# has to name it rather than leave it to the docs.
+	[[ "$output" == *"its walkthrough draft for feature/x went with it"* ]]
+}
+
+@test "forget --saved says nothing about a draft when the review carried none" {
+	rm "$DRAFT"
+	git review start feature/x
+	git review save
+	run git review forget --saved feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"discarded saved review of feature/x"* ]]
+	[[ "$output" != *"went with it"* ]]
 }
 
 # ── finish ────────────────────────────────────────────────────────────────────
@@ -389,10 +518,17 @@ teardown() {
 	# finish lands the reviewer's edits staged on review-fixes/, so the staged set
 	# IS the extraction. It must be the edited file and nothing else.
 	[ "$(git diff --cached --name-only)" = "src/c.txt" ]
-	# And nothing named after the draft is tracked anywhere on that branch.
+	# And the branch tracks the PR's files and nothing else. Asserted as the whole
+	# tree rather than as "no path contains review-walkthrough": the draft lives
+	# inside the gitdir, where git cannot track a file whatever finish does, so that
+	# spelling of the check could not fail if the extraction went wrong.
 	run git ls-tree -r --name-only HEAD
 	[ "$status" -eq 0 ]
-	[[ "$output" != *"review-walkthrough"* ]]
+	[ "$output" = "a.txt
+src/c.txt" ]
+	# The draft itself is untouched on disk: not extracted, not moved, not deleted.
+	[ -f "$DRAFT" ]
+	[ "$(head -n 1 "$DRAFT")" = "# Walkthrough" ]
 }
 
 @test "finish leaves the draft in place for a later re-review" {
@@ -404,7 +540,7 @@ teardown() {
 
 # ── no effect on an active review ─────────────────────────────────────────────
 
-@test "drafting for another branch does not disturb an active review" {
+@test "a command that fails to draft leaves an active review alone" {
 	git review start feature/x
 	before_mode="$(git config branch.review/feature/x.reviewmode)"
 	before_step="$(git config branch.review/feature/x.reviewwalkstep)"
@@ -413,18 +549,65 @@ teardown() {
 	# develop has no changes vs itself, so this refuses — the point is that the
 	# active review's metadata is identical either way.
 	[ "$status" -ne 0 ]
+	[[ "$output" == *"no changes vs develop"* ]]
 	[ "$(git config branch.review/feature/x.reviewmode)" = "$before_mode" ]
 	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "$before_step" ]
 }
 
-@test "rebuilding the draft mid-review does not move the cursor" {
+@test "drafting for another branch does not disturb an active review" {
 	git review start feature/x
 	git review next
 	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "2" ]
-	run git review walkthrough draft --build feature/x
+
+	# A draft that actually gets written, for a different branch, from inside a
+	# live review — the case the failing command above cannot stand in for.
+	run git review walkthrough draft feature/y
 	[ "$status" -eq 0 ]
+	[ -f "$GITDIR/review-walkthrough/feature/y.md" ]
+
+	# The review still reads its own draft, at its own position.
 	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
 	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "2" ]
+	[ "$(git config branch.review/feature/x.reviewwalkdraft)" = "feature/x" ]
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[2/2] on a.txt"* ]]
+}
+
+@test "rebuilding the draft mid-review does not move the cursor" {
+	# Numbered 2 then 1, so --build has something to do: it sorts by those numbers
+	# and renumbers 1..N, rewriting the file. The reading order itself is derived
+	# from the numbers too (walk_sequence), so a rebuild normalises the file
+	# without ever changing which entry is entry 2 — which is the invariant worth
+	# pinning, and what the fixture's already-ordered draft could not have shown.
+	cat >"$DRAFT" <<'EOF'
+# Walkthrough
+
+## 2. a.txt
+second
+
+## 1. src/c.txt
+first
+EOF
+	git review start feature/x
+	git review next
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "2" ]
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[2/2] on a.txt"* ]]
+
+	run git review walkthrough draft --build feature/x
+	[ "$status" -eq 0 ]
+	# The file really was rewritten: the entry numbered 2 is now the one that used
+	# to be numbered 1.
+	[ "$(grep -c '^## 1\. src/c\.txt$' "$DRAFT")" = "1" ]
+	[ "$(grep -c '^## 2\. a\.txt$' "$DRAFT")" = "1" ]
+
+	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "2" ]
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[2/2] on a.txt"* ]]
 }
 
 # ── the presence record ───────────────────────────────────────────────────────

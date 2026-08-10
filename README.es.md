@@ -538,16 +538,25 @@ git review start feature/checkout                      # entra en walk con tu or
   placeholders, drift, paths duplicados, `> key` con valor. Es un control de
   calidad, no una compuerta: un borrador sin validar ya se puede leer.
 - Tu borrador **tiene precedencia** sobre el walkthrough del propio PR mientras
-  exista, y `git review status` marca la review como `walk (draft)` para que un
-  orden de lectura que escribiste vos nunca se confunda con el del autor.
-  Escribir uno sobre un PR que ya tiene te lo avisa; borrá el borrador para
-  volver al de ellos.
+  tenga algo adentro, y `git review status` marca la review como `walk (draft)`
+  para que un orden de lectura que escribiste vos nunca se confunda con el del
+  autor. Un borrador vacío no es un orden de lectura: la review cae al walkthrough
+  del PR, y te dice cuál de los dos usó. Escribir uno sobre un PR que ya tiene te
+  lo avisa; borrá el borrador para volver al de ellos.
+- **Editalo con la review abierta.** Es un archivo, no un sidecar congelado, así
+  que podés reescribir tu orden (o sacarle un `> key`) mientras la review está en
+  curso. Si eso deja el cursor pasado la última entrada, `git review` lo vuelve a
+  poner sobre la última y te lo dice: nunca confunde que hayas editado con un
+  `git commit` de más.
 - Es tuyo y es local, así que nada lo tira a tus espaldas: sobrevive a `abort`, a
   `finish` y a `git review clean` (arrancá la rama de nuevo y tu orden de lectura
   sigue ahí), `git review save` lo archiva junto con la review pausada, y los dos
   comandos que lo descartan son los que le apuntás vos — `git review forget
   --draft <rama>` (o `--all`), y `git review forget --saved`, que se lleva la
-  copia de la review pausada junto con la review.
+  copia de la review pausada junto con la review y lo dice. Si escribís un
+  borrador nuevo para una rama mientras su review está pausada, `git review
+  continue` se niega en vez de pisar uno de los dos: descartá el que no quieras y
+  retomá.
 
 **git review nunca escribe el walkthrough por vos y nunca habla con ningún
 servicio.** Te da el esqueleto con la consigna ya escrita adentro, y valida lo
@@ -938,7 +947,10 @@ vuelve a leer—, así que este es el comando para tirar uno.
 - `--all` — borrar todos los borradores.
 - `--dry-run` — listar lo que se borraría sin borrarlo.
 - Borrar el borrador de una review que sigue viva está permitido (volver al orden
-  del autor es algo legítimo de querer) y avisa qué cambió.
+  del autor es algo legítimo de querer) y nombra la review que lo estaba leyendo
+  —incluida una review de `git review compare`, que lee un borrador archivado bajo
+  un nombre distinto del suyo.
+- Toma un nombre de rama, y rechaza cualquier cosa que no lo sea.
 - Un borrador que viajó con una review pausada es de esa review, y se va con ella
   con `git review forget --saved`.
 

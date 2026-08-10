@@ -523,16 +523,25 @@ git review start feature/checkout                      # enters walk mode on you
 - `--build` applies the same validation `build` does for the author's sidecar:
   placeholders, drift, duplicate paths, `> key` with a value. It's a quality
   gate, not a gate — an unvalidated draft is already readable.
-- Your draft **takes precedence** over the PR's own walkthrough for as long as
-  it exists, and `git review status` marks the review `walk (draft)` so a reading
-  order you wrote is never mistaken for the author's. Drafting over a PR that
-  already has one says so; delete the draft to go back to theirs.
+- Your draft **takes precedence** over the PR's own walkthrough for as long as it
+  has something in it, and `git review status` marks the review `walk (draft)` so
+  a reading order you wrote is never mistaken for the author's. An empty draft is
+  not a reading order: the review falls back to the PR's walkthrough, and says
+  which of the two it did. Drafting over a PR that already has one says so; delete
+  the draft to go back to theirs.
+- **Edit it mid-review.** It's a file, not a frozen sidecar, so you can rewrite
+  your order (or unmark a `> key`) while the review is open. If that leaves the
+  cursor past the last entry, `git review` re-seats it on the last one and tells
+  you — it never mistakes your editing for a stray `git commit`.
 - It's yours and it's local, so nothing throws it away behind your back: it
   outlives `abort`, `finish` and `git review clean` (start the branch again and
   your reading order is still there), `git review save` files it with the paused
   review, and the two commands that discard it are the ones you point at it —
   `git review forget --draft <branch>` (or `--all`), and `git review forget
-  --saved`, which takes the paused review's copy with the review.
+  --saved`, which takes the paused review's copy with the review and says so. If
+  you write a new draft for a branch while its review is paused, `git review
+  continue` refuses rather than overwrite one of the two — drop whichever you
+  don't want and resume.
 
 **git review never writes the walkthrough for you and never talks to any
 service.** It gives you the skeleton with the brief already written into it, and
@@ -911,7 +920,10 @@ branch reads them again — so this is how you throw one away.
 - `--all` — delete every draft.
 - `--dry-run` — list what would be deleted without deleting it.
 - Deleting the draft of a review that is still live is allowed (going back to
-  the author's order is a legitimate thing to want) and says what it changed.
+  the author's order is a legitimate thing to want) and names the review that was
+  reading it — including a `git review compare` review, which reads a draft filed
+  under a different name than its own.
+- Takes a branch name, and refuses anything that is not one.
 - A draft that travelled with a paused review is that review's, and goes with it
   under `git review forget --saved`.
 

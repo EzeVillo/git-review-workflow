@@ -167,6 +167,7 @@ else
 		copy_meta reviewwalkcount
 		copy_meta reviewwalkkeys
 		copy_meta reviewwalkdraft
+		copy_meta reviewwalkbase
 		wstep="$(git config "branch.$cur.reviewwalkstep" || echo '?')"
 		wcount="$(git config "branch.$cur.reviewwalkcount" || echo '?')"
 		note="walkthrough review on entry $wstep/$wcount"
@@ -201,6 +202,11 @@ git config "branch.$saved.reviewreturn" "$target"
 # parked in a namespace no saved review claims — forget --saved would not find it
 # and clean must not take it. By here review-saved/<src> exists and holds every
 # key, so the draft has an owner whatever happens next.
+#
+# The gitdir is resolved here, in this shell: the two lookups below happen inside
+# "$(...)", where a cache written by walk_draft_path dies with the subshell and
+# each would spawn its own git rev-parse (see walk_gitdir_init).
+walk_gitdir_init
 draftsrc="$(git config "branch.$cur.reviewwalkdraft" || true)"
 [ -n "$draftsrc" ] || draftsrc="$src"
 _save_draft="$(walk_draft_path "$draftsrc")"

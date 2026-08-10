@@ -66,7 +66,10 @@ teardown() {
 
 # A draft whose order is the exact reverse of the author's, so which one is in
 # force can be read off entry 1 alone. The sidecar is part of the range too (the
-# PR adds it), so it needs an entry or the drift check would reject the draft.
+# PR adds it), and it carries an entry here so that the reading order is all four
+# entries rather than three plus one appended as uncovered — the totals in these
+# tests are counted on that. Note that this shape is deliberately NOT buildable:
+# annotatable_files filters .review/ out, so --build calls such an entry drift.
 write_draft() {
 	mkdir -p "$(dirname "$DRAFT")"
 	cat >"$DRAFT" <<'EOF'
@@ -200,6 +203,164 @@ EOF
 	# Degraded, not aborted: the review still happened.
 	[[ "$output" == *"reviewing the whole diff"* ]]
 	[ "$(git config branch.review/feature/x.reviewmode || echo whole)" = "whole" ]
+	# Attributed to whoever wrote the order that failed to apply. This PR carries a
+	# walkthrough of its own, so blaming "feature/x has a walkthrough" would send
+	# the reviewer to read the author's file looking for their own stale entry.
+	[[ "$output" == *"you have a walkthrough draft for feature/x, but none of its entries apply"* ]]
+	[[ "$output" != *"feature/x has a walkthrough, but"* ]]
+}
+
+@test "an author walkthrough that no longer applies offers the draft the assistant offers" {
+	# config --porcelain answers "draft" for this situation; start used to answer
+	# nothing, so the panel proposed a way out the terminal never mentioned.
+	git switch --quiet feature/x
+	printf '# Walkthrough\n\n## 1. gone.txt\nstale\n' >.review/walkthrough.md
+	git add -A
+	git commit --quiet -m stale
+	git push --quiet origin feature/x
+	git switch --quiet develop
+
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"feature/x has a walkthrough, but none of its entries apply"* ]]
+	[[ "$output" == *"to read it in an order of your own instead: git review walkthrough draft feature/x"* ]]
+	[ "$(git config branch.review/feature/x.reviewmode || echo whole)" = "whole" ]
+}
+
+@test "an empty draft falls back to the author's walkthrough instead of hiding it" {
+	# Zero bytes is what an editor opened and closed, or a redirect, leaves behind.
+	# It used to satisfy walk_read — rc 0, no content — so the author's walkthrough
+	# was never consulted and the review landed in whole without a single note.
+	mkdir -p "$(dirname "$DRAFT")"
+	: >"$DRAFT"
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
+	# The author's order, in the author's words. Four entries, not three: the PR
+	# adds the sidecar itself, and walk appends what the walkthrough does not name.
+	[[ "$output" == *"[1/4] a.txt"* ]]
+	[[ "$output" == *"AUTHOR says read a first"* ]]
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"mode    walk "* ]]
+	[[ "$output" != *"walk (draft)"* ]]
+}
+
+@test "a whitespace-only draft falls back the same way" {
+	mkdir -p "$(dirname "$DRAFT")"
+	printf '\n\n   \n\t\n' >"$DRAFT"
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
+	[[ "$output" == *"AUTHOR says read a first"* ]]
+}
+
+@test "an empty draft on a PR with no walkthrough says so instead of nothing" {
+	# Same file, but now there is nothing to fall back to. The review is whole
+	# either way; what changed is that it stopped being silent about why.
+	git switch --quiet feature/x
+	git rm --quiet .review/walkthrough.md
+	git commit --quiet -m "drop the walkthrough"
+	git push --quiet origin feature/x
+	git switch --quiet develop
+
+	mkdir -p "$(dirname "$DRAFT")"
+	: >"$DRAFT"
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/x.reviewmode || echo whole)" = "whole" ]
+	[[ "$output" == *"your walkthrough draft for feature/x is empty"* ]]
+	[[ "$output" == *"git review walkthrough draft feature/x --force"* ]]
+}
+
+@test "--keys over an empty draft blames the draft, not the PR" {
+	git switch --quiet feature/x
+	git rm --quiet .review/walkthrough.md
+	git commit --quiet -m "drop the walkthrough"
+	git push --quiet origin feature/x
+	git switch --quiet develop
+
+	mkdir -p "$(dirname "$DRAFT")"
+	: >"$DRAFT"
+	run git review start --keys feature/x
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"your draft for feature/x is empty"* ]]
+	! git rev-parse --verify --quiet refs/heads/review/feature/x >/dev/null
+}
+
+@test "--keys over an empty draft still finds the author's keys" {
+	# The other half: an empty draft must not make --keys report that the PR has no
+	# walkthrough when the PR has one with a key in it.
+	git switch --quiet feature/x
+	printf '# Walkthrough\n\n## 1. a.txt\n> key\nauthor key\n\n## 2. b.txt\nb\n\n## 3. src/c.txt\nc\n\n## 4. .review/walkthrough.md\nsidecar\n' >.review/walkthrough.md
+	git add -A
+	git commit --quiet -m keys
+	git push --quiet origin feature/x
+	git switch --quiet develop
+
+	mkdir -p "$(dirname "$DRAFT")"
+	: >"$DRAFT"
+	run git review start --keys feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"keys-only: 1 key"* ]]
+	[[ "$output" == *"[1/1] a.txt"* ]]
+}
+
+@test "a draft naming a path with an accent and a space reads it" {
+	# The sidecar's bytes arrive through git show; a draft's arrive through a file
+	# redirect. Same normalisation, different route in, and the symptom of getting
+	# it wrong is the same invisible one: the entry silently drops out of the
+	# reading order, or build names the identical file on both sides of a drift
+	# error. The author's walkthrough has tests on this axis; the draft had none
+	# beyond CRLF and a BOM.
+	git switch --quiet feature/x
+	mkdir -p src
+	printf 'x\n' >"src/métricas de sesión.js"
+	git add -A
+	git commit --quiet -m accents
+	git push --quiet origin feature/x
+	git switch --quiet develop
+
+	# .review/ is never annotated (annotatable_files filters it), so it gets no
+	# entry here and the reader appends it as uncovered — which is the other half
+	# of the same byte comparison.
+	mkdir -p "$(dirname "$DRAFT")"
+	cat >"$DRAFT" <<'EOF'
+# Walkthrough
+
+## 1. src/métricas de sesión.js
+> key
+REVIEWER starts on the accented one
+
+## 2. a.txt
+REVIEWER on a
+
+## 3. b.txt
+REVIEWER on b
+
+## 4. src/c.txt
+REVIEWER on c
+EOF
+	# --build first: the drift check compares every entry against git's own paths,
+	# so it is the strictest reading of those bytes there is.
+	run git review walkthrough draft --build feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"not changed in the PR"* ]]
+	[[ "$output" != *"missing from the walkthrough"* ]]
+	[ "$(grep -c '^## 1\. src/métricas de sesión\.js$' "$DRAFT")" = "1" ]
+
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
+	# Four annotated entries plus the sidecar, appended because nothing annotates it.
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "5" ]
+	[[ "$output" == *"[1/5] src/métricas de sesión.js  (key)"* ]]
+	[[ "$output" == *"REVIEWER starts on the accented one"* ]]
+	# The accented path matched, so it is not among the ones reported as uncovered —
+	# asserted on that note's own line, since the path is all over the rest.
+	uncovered="$(printf '%s\n' "$output" | grep 'not in the walkthrough are added')"
+	[[ "$uncovered" == *": .review/walkthrough.md"* ]]
+	[[ "$uncovered" != *"métricas"* ]]
 }
 
 @test "a corrupt draft never aborts the review" {
@@ -259,6 +420,100 @@ EOF
 	[[ "$output" == *"git review walkthrough draft feature/x"* ]]
 	[[ "$output" != *"HEAD has moved off"* ]]
 	[[ "$output" != *"git reset --soft"* ]]
+}
+
+@test "editing your own draft shorter re-seats the cursor instead of blaming HEAD" {
+	# The draft is the one walkthrough a reviewer is invited to edit mid-review, and
+	# under --keys the sequence really does shrink when they unmark an entry. The
+	# cursor then sits past the end — which used to be reported as "HEAD has moved
+	# off this review's base ... did you run git commit?", with an instruction to
+	# run git reset --soft over a HEAD that had not moved, and no way back short of
+	# discarding the review.
+	mkdir -p "$(dirname "$DRAFT")"
+	cat >"$DRAFT" <<'EOF'
+# Walkthrough
+
+## 1. a.txt
+> key
+one
+
+## 2. b.txt
+> key
+two
+
+## 3. src/c.txt
+> key
+three
+
+## 4. .review/walkthrough.md
+> key
+four
+EOF
+	run git review start --keys feature/x
+	[ "$status" -eq 0 ]
+	git review next
+	git review next
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "3" ]
+	head_before="$(git rev-parse HEAD)"
+
+	# Two entries stop being keys. Same file, same review, nothing committed.
+	cat >"$DRAFT" <<'EOF'
+# Walkthrough
+
+## 1. a.txt
+> key
+one
+
+## 2. b.txt
+two, no longer key
+
+## 3. src/c.txt
+three, no longer key
+
+## 4. .review/walkthrough.md
+> key
+four
+EOF
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"your walkthrough draft for feature/x now has 2 entries in this review's range"* ]]
+	[[ "$output" == *"the cursor was at 3 and moved to 2"* ]]
+	[[ "$output" != *"HEAD has moved off"* ]]
+	[[ "$output" != *"git reset --soft"* ]]
+	[ "$(git rev-parse HEAD)" = "$head_before" ]
+
+	# Re-seated for good, not just for that one command: the review is usable again.
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "2" ]
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "2" ]
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"moved to 2"* ]]
+	run git review prev
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[1/2] a.txt"* ]]
+}
+
+@test "a stray commit under a draft review still gets the HEAD diagnostic" {
+	# The other side of the same fork: the reviewer's draft is in force and intact,
+	# but HEAD really did move. Recovering the cursor here would hide a staged diff
+	# that has just been folded into a commit, so the range check has to ask git
+	# where HEAD is rather than infer it from the sequence having got shorter.
+	write_draft
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	git review next
+	git review next
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "3" ]
+
+	git commit --quiet -m "the stray commit"
+
+	run git review status
+	[ "$status" -eq 3 ]
+	[[ "$output" == *"HEAD has moved off this review's base"* ]]
+	[[ "$output" == *"did you run git commit?"* ]]
+	[[ "$output" != *"moved to"* ]]
+	# Nothing was re-seated behind the reviewer's back.
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "3" ]
 }
 
 # ── compare ───────────────────────────────────────────────────────────────────

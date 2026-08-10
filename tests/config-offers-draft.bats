@@ -161,6 +161,8 @@ EOF
 	[ "$status" -eq 0 ]
 	[ "${lines[0]}" = "walk" ]
 	[ "${lines[1]}" = "keys" ]
+	[ "${lines[2]}" = "step" ]
+	[ "${lines[3]}" = "whole" ]
 	[ "${#lines[@]}" -eq 4 ]
 }
 

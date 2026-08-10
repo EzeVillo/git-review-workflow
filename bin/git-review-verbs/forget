@@ -126,6 +126,10 @@ if [ "$mode" = saved ]; then
 	# shellcheck source=../git-review-lib.sh
 	. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
+	# Resolved once in this shell rather than per "$(walk_saved_draft_path ...)",
+	# which --all calls once per saved review (see walk_gitdir_init).
+	walk_gitdir_init
+
 	cur="$(git symbolic-ref --quiet --short HEAD || true)"
 
 	# forget_saved_one <src>: discard the saved review for one source branch.
@@ -171,10 +175,22 @@ if [ "$mode" = saved ]; then
 		# review saved before that key existed.
 		draftsrc="$(git config "branch.$saved.reviewwalkdraft" || true)"
 		[ -n "$draftsrc" ] || draftsrc="$src"
-		rm -f "$(walk_saved_draft_path "$draftsrc")"
+		saveddraft="$(walk_saved_draft_path "$draftsrc")"
+		hadraft=0
+		if [ -f "$saveddraft" ]; then
+			hadraft=1
+		fi
+		rm -f "$saveddraft"
 		git branch -D "$saved" >/dev/null
 
 		echo "discarded saved review of $src"
+		# Named, not left to be inferred from the docs: the draft is hand-written
+		# prose that every other verb goes out of its way to preserve — clean will
+		# not touch one — so the single command that does destroy it should be the
+		# one command that says so out loud.
+		if [ "$hadraft" -eq 1 ]; then
+			echo "note: its walkthrough draft for $draftsrc went with it" >&2
+		fi
 	}
 
 	if [ "$all" -eq 1 ]; then
@@ -221,6 +237,25 @@ if [ "$mode" = draft ]; then
 	# shellcheck source=../git-review-lib.sh
 	. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
+	# Once, here: every path below is built inside a "$(...)", where a cache written
+	# by walk_draft_path would die with the subshell — and --all builds one per
+	# draft (see walk_gitdir_init).
+	walk_gitdir_init
+
+	# A draft's file name is its branch name, so an argument that is not a legal
+	# branch name is not a draft — and unchecked it addressed any file on the disk:
+	# "forget --draft ../../../notes" deleted <gitdir>/../../../notes.md and reported
+	# having forgotten a draft. Checked against the ref name git itself would
+	# accept, which rejects ".." as a path component, so the only files this can
+	# reach are the ones it wrote. Only the typed argument needs it: --all's names
+	# come from the namespace it just read.
+	#
+	# The other two modes were never exposed this way — --saved resolves a ref and
+	# --delta a config key, so an invented name is a no-op in both.
+	if [ "$all" -eq 0 ] && ! git check-ref-format "refs/heads/$arg" 2>/dev/null; then
+		die "not a valid branch name: $arg"
+	fi
+
 	# forget_draft_one <src>: delete the draft written for one branch.
 	forget_draft_one() {
 		_fd_src="$1"
@@ -238,9 +273,25 @@ if [ "$mode" = draft ]; then
 		# Deleting it under a live review is allowed — going back to the author's
 		# order is a legitimate thing to want — but it changes what that review
 		# reads, so say so rather than let it be discovered at the next cursor move.
-		if git rev-parse --verify --quiet "refs/heads/review/$_fd_src" >/dev/null; then
-			echo "note: review/$_fd_src was reading it; that review falls back to the PR's own walkthrough, or to the whole diff if it has none" >&2
-		fi
+		#
+		# Found by asking each review which draft it records (reviewwalkdraft), not
+		# by assuming the review is named after the branch: a compare of
+		# origin/feature/x lives on review/origin/feature/x and reads feature/x's
+		# draft, which is the whole reason that key is written down. Testing
+		# review/<src> alone said nothing for exactly the reviews that most needed
+		# it. The source is the fallback for reviews opened before the key existed,
+		# which is also the plain start case.
+		git for-each-ref --format='%(refname:short)' refs/heads/review/ |
+			while IFS= read -r _fd_rb; do
+				[ -n "$_fd_rb" ] || continue
+				_fd_reads="$(git config "branch.$_fd_rb.reviewwalkdraft" || true)"
+				if [ -z "$_fd_reads" ]; then
+					_fd_reads="$(git config "branch.$_fd_rb.reviewsource" || true)"
+				fi
+				if [ "$_fd_reads" = "$_fd_src" ]; then
+					echo "note: $_fd_rb was reading it; that review falls back to the PR's own walkthrough, or to the whole diff if it has none" >&2
+				fi
+			done
 	}
 
 	if [ "$all" -eq 1 ]; then

@@ -106,11 +106,26 @@ mode="$(git config "branch.$saved.reviewmode" || echo whole)"
 # review's own source: a compare of origin/feature/x reads feature/x's draft, and
 # save filed it under that name.
 restore_draft() {
+	# Resolve the gitdir in this shell, where the two path lookups below can share
+	# it: inside "$(walk_draft_path ...)" the cache would die with the subshell and
+	# each would spawn its own git rev-parse (see walk_gitdir_init).
+	walk_gitdir_init
 	_draftsrc="$(git config "branch.$saved.reviewwalkdraft" || true)"
 	[ -n "$_draftsrc" ] || _draftsrc="$src"
 	_saved_draft="$(walk_saved_draft_path "$_draftsrc")"
 	if [ -f "$_saved_draft" ]; then
 		_live_draft="$(walk_draft_path "$_draftsrc")"
+		# Never over a draft that is already there. Both files are hand-written
+		# prose, this one is newer, and nothing in the resume can tell which the
+		# reviewer meant to keep — so refuse and let them say, rather than overwrite
+		# and mention nothing, which is what this did: write a draft while the review
+		# was paused and continue silently reinstated the archived one, cursor and
+		# all, as if the writing had never happened. The same asymmetry the
+		# destructive verbs are built on: refusing costs a command, guessing costs
+		# the only copy.
+		if [ -f "$_live_draft" ]; then
+			die "a walkthrough draft for $_draftsrc already exists, and the paused review carries one of its own; resuming would overwrite yours. Keep yours by discarding the archived one with 'git review forget --saved $src' (that discards the paused review too), or drop yours with 'git review forget --draft $_draftsrc' and resume."
+		fi
 		mkdir -p "$(dirname "$_live_draft")"
 		mv "$_saved_draft" "$_live_draft"
 	fi
@@ -213,6 +228,7 @@ else
 		restore_meta reviewwalkcount
 		restore_meta reviewwalkkeys
 		restore_meta reviewwalkdraft
+		restore_meta reviewwalkbase
 		git branch -D "$saved" >/dev/null
 
 		# Re-derive the sequence and reprint the entry you were on, so continue lands

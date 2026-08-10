@@ -363,6 +363,19 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 
 	mkdir -p "$(dirname "$targetpath")"
 	tmp="$targetpath.tmp.$$"
+	# Removed on any exit, not just the happy one. Without this a die between here
+	# and the mv below — or a Ctrl-C — left a .tmp.NNN beside the drafts forever:
+	# walk_draft_list only matches *.md so nothing mistook it for a draft, but
+	# nothing collected it either, since clean is deliberately hands-off in there
+	# and forget --draft only knows about names it can spell.
+	trap 'rm -f "$tmp"' EXIT INT TERM
+	# Fail on the file, not on the redirect. A branch name is a file name here, and
+	# some legal branch names are not legal files: "nul", "aux" and "com1" are
+	# reserved device names on Windows, and a bare shell redirection error would
+	# report a path with no hint of why that one is special.
+	if ! : >"$tmp" 2>/dev/null; then
+		die "could not write $targetrel; the branch name may not be usable as a file name on this system"
+	fi
 	{
 		printf '# Walkthrough\n\n'
 		printf '<!-- Author the reading order for this PR. The entries below are\n'
@@ -407,6 +420,7 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		done
 	} >"$tmp"
 	mv "$tmp" "$targetpath"
+	trap - EXIT INT TERM
 
 	n="$(printf '%s\n' "$files" | grep -c .)"
 	if [ "$sub" = draft ]; then
@@ -418,6 +432,14 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		# assistant never proposes this, you had to ask for it.
 		if git show "$tip:.review/walkthrough.md" >/dev/null 2>&1; then
 			echo "note: $branch already carries a walkthrough from its author; your draft takes precedence over it while it exists. Delete it to go back to theirs." >&2
+		fi
+		# A paused review took its draft with it (git review save), which is why the
+		# "already exists" guard above saw nothing to protect. Say it now, while the
+		# new file is one line old: the two only meet again at git review continue,
+		# which refuses rather than choose between them, and learning about the
+		# collision then means having written the whole thing first.
+		if [ -f "$(walk_saved_draft_path "$branch")" ]; then
+			echo "note: a paused review of $branch carries a walkthrough draft of its own; git review continue will not resume over this one until one of the two is gone." >&2
 		fi
 		# Deliberately no warn_dirty: a draft is derived from committed refs, not
 		# from your working tree, so what you have uncommitted is nobody's business

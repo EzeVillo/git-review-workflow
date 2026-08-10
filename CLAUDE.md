@@ -111,10 +111,14 @@ repo, no en archivos del working tree:
   filtra del why y se muestra como `(key)`). Los marcadores reservados van todos
   como líneas `> ...` al inicio del body — ver también el `> at: ` de v2. El
   cursor vive en claves **propias** — `reviewwalkstep`
-  (1-based) y `reviewwalkcount` (guard) — nunca en `reviewstart/reviewcount/
+  (1-based), `reviewwalkcount` (guard) y `reviewwalkbase` (el lower bound al que
+  `start`/`compare` clavaron `HEAD`) — nunca en `reviewstart/reviewcount/
   reviewstep`: el guard de metadata de `finish` aborta si esas claves de step
   existen sin `reviewmode=step` (y hay un guard espejo para claves walk sin
-  `reviewmode=walk`). La secuencia de entradas NO se persiste: se re-deriva en
+  `reviewmode=walk`). `reviewwalkbase` es lo que permite **preguntarle a git** si
+  `HEAD` se movió (`walk_at_base`) en vez de inferirlo de que la secuencia se
+  achicó: con el borrador del revisor esa inferencia tiene dos causas y elegía la
+  equivocada. Sin la clave (reviews viejas) se cae a la inferencia de antes. La secuencia de entradas NO se persiste: se re-deriva en
   cada verbo parseando el walkthrough del tip y filtrando por intersección de
   paths con el rango real, igual que step re-deriva `commits` con `rev-list`. En
   walk `HEAD` queda clavado en el lower bound, así que la derivación es estable
@@ -135,11 +139,20 @@ repo, no en archivos del working tree:
   que no se commitea, no se stagea y `git status` no cambia en ningún momento.
   Mismo formato que el sidecar y misma validación (`draft --build` reusa el
   cuerpo de `build`, sin duplicar una sola regla). La precedencia se resuelve en
-  un único punto, `walk_read`: si hay borrador para el `<src>` del contexto
-  —fijado por `walk_use_draft` desde los dos cargadores de metadata, de modo que
-  todo verbo con review activa lo herede—, gana sobre el sidecar del tip; si no,
-  el sidecar como siempre. Las trece funciones de walk y los verbos que cuelgan
-  de ellas no se enteran. **Qué borrador lee una review se persiste**
+  un único punto, `walk_read`: si hay borrador **en vigor** para el `<src>` del
+  contexto —fijado por `walk_use_draft` desde los dos cargadores de metadata, de
+  modo que todo verbo con review activa lo herede—, gana sobre el sidecar del tip;
+  si no, el sidecar como siempre. Las trece funciones de walk y los verbos que
+  cuelgan de ellas no se enteran. **«En vigor» y «el archivo existe» son dos
+  preguntas distintas y hay una función para cada una:** `walk_draft_body` (la
+  regla, un único lugar) responde la primera —un borrador vacío o de puro
+  whitespace no es un orden de lectura y se comporta como ausente, si no tapaba el
+  walkthrough del autor en silencio— y la usa `walk_is_draft`, que es el `(draft)`
+  de `status`; `walk_has_draft_file` responde la segunda, que es custodia, y la
+  usan `list`, las ofertas de `config --porcelain` y los mensajes de `start` sobre
+  un borrador propio vacío. Si mezclás las dos, o `status` dice `walk (draft)`
+  sobre la prosa del autor, o `forget --saved` se lleva un archivo que nadie
+  listó. **Qué borrador lee una review se persiste**
   (`branch.review/<x>.reviewwalkdraft = <rama del borrador>`, escrita por
   `start`/`compare` sólo cuando abren sobre uno): no siempre es el `reviewsource`
   —un `compare develop origin/feature/x` es la review de `origin/feature/x` y lee
@@ -152,7 +165,14 @@ repo, no en archivos del working tree:
   cubre el guard de metadata de `finish`.
   Ciclo de vida: `save` lo archiva en `review-saved-walkthrough/` (y `continue` lo
   devuelve) **como último paso, después de la última guarda que puede abortar** —
-  un movimiento a mitad de camino dejaba el archivo sin dueño de los dos lados.
+  un movimiento a mitad de camino dejaba el archivo sin dueño de los dos lados—, y
+  `continue` **nunca pisa** un borrador vivo: si escribiste uno con la review
+  pausada, se niega con las dos salidas (`forget --draft` o `forget --saved`) en
+  vez de elegir por vos cuál de las dos prosas escritas a mano sobrevive.
+  El borrador viaja con la review **en cualquier modo**, no sólo en walk, así que
+  las filas de `list` llevan `(draft)` también en `step` y `whole`: si sólo lo
+  marcara en walk, un `forget --saved` se llevaría prosa que ninguna superficie
+  llegó a mostrar.
   `clean` **no lo toca nunca**: es prosa escrita a mano que sobrevive a la review
   (arrancá la rama de nuevo y tu orden sigue ahí), así que va con los otros dos
   estados persistentes que `clean` deja quietos —los marcadores de `--delta` y las
@@ -160,10 +180,12 @@ repo, no en archivos del working tree:
   (`--saved` se lleva el de la review pausada). Su presencia se reporta —nunca se
   infiere— con el registro `draft` de `status --porcelain` y el sufijo `(draft)`
   en `status` y `list`; la viabilidad de armarlo o continuarlo, con las ofertas
-  `draft` / `draft-resume` de `config --porcelain`, que se deciden con un test de
-  archivo (cero procesos nuevos en un camino caliente: el gitdir del que cuelgan
-  todos esos paths se resuelve **una vez por proceso** en `walk_gitdir_init`, y
-  desde `walk_use_draft` porque un `$(...)` no puede cachear nada).
+  `draft` / `draft-resume` de `config --porcelain`. Las superficies de custodia se
+  deciden con un test de archivo y cero procesos nuevos; el gitdir del que cuelgan
+  todos esos paths se resuelve **una vez por proceso** en `walk_gitdir_init`,
+  llamado desde `walk_use_draft` (todo verbo con review activa) y a mano por los
+  cuatro que arman un path sin fijar contexto — `list`, `save`, `continue` y
+  `forget` —, porque un `$(...)` no puede cachear nada.
 - **Refs de ediciones:** `refs/review-edits/<src>/<step>` bancan las ediciones
   de cada commit en `--step` como objetos commit-tree; `git review save` los mueve
   a `refs/review-saved-edits/` para que `git review clean` (que poda

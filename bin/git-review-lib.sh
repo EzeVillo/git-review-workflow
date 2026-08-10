@@ -594,13 +594,60 @@ walk_use_draft() {
 	walk_gitdir_init
 }
 
+# walk_draft_body <src>
+# Print <src>'s draft, normalised, or nothing (non-zero rc) when <src> has no
+# draft in force. "In force" and "the file exists" are not the same thing: a draft
+# that is empty, or holds nothing but whitespace, has no reading order in it and
+# must behave exactly as an absent one. It used to be answered by the file test
+# alone, and an empty file then shadowed the author's walkthrough while telling
+# every caller a walkthrough existed — start landed in whole with no note at all,
+# and --keys reported the PR carried none, on a PR that carried one.
+#
+# The single place that rule is written down, so that walk_read's precedence and
+# walk_is_draft's badge cannot drift apart and disagree about the same file.
+#
+# -s before reading: zero bytes is the ordinary shape of this (an editor opened
+# and closed, a redirect, an interrupted write), and ruling it out costs nothing.
+walk_draft_body() {
+	_wdb_path="$(walk_draft_path "$1")"
+	[ -f "$_wdb_path" ] || return 1
+	[ -s "$_wdb_path" ] || return 1
+	# Redirection, not git show: one process fewer than the sidecar path below.
+	_wdb_body="$(walk_normalize <"$_wdb_path")"
+	case "$_wdb_body" in
+	*[![:space:]]*)
+		printf '%s\n' "$_wdb_body"
+		return 0
+		;;
+	esac
+	return 1
+}
+
 # walk_is_draft <src>
 # True when <src>'s review is reading the reviewer's own draft rather than the
-# author's committed walkthrough. A file test and no process of its own — the
-# gitdir the path needs was resolved once by walk_use_draft (walk_gitdir_init) —
-# which is what lets this sit on the status path, where the project has already
-# paid for extra processes in seconds under Git Bash.
+# author's committed walkthrough — the question behind the "(draft)" suffix in
+# status and the draft record in status --porcelain.
+#
+# Answered by walk_draft_body, which is to say by the same rule walk_read applies
+# when it picks one over the other. It costs the one process that reads the file
+# where it used to be a bare file test; the alternative was a status line that
+# said "walk (draft)" over the author's prose, which is the confusion the suffix
+# exists to prevent. list and the start assistant deliberately keep asking the
+# cheaper question — for them a draft file that exists is a draft they are
+# responsible for, empty or not, because they report custody, not what is being
+# read.
 walk_is_draft() {
+	walk_draft_body "$1" >/dev/null
+}
+
+# walk_has_draft_file <src>
+# Whether a draft file exists for <src> at all — custody, not what is being read.
+# The two questions came apart the moment an empty draft stopped counting as a
+# reading order: list has to badge a file it is responsible for handing to
+# forget --saved, the start assistant has to offer to reopen one, and start has to
+# be able to say "yours is empty" about a file walk_is_draft now denies. A file
+# test and no process of its own, which is what keeps it usable on those paths.
+walk_has_draft_file() {
 	[ -f "$(walk_draft_path "$1")" ]
 }
 
@@ -617,14 +664,9 @@ walk_is_draft() {
 # walk_use_draft; unset, this behaves exactly as it always did, which is what
 # keeps the author's flow untouched.
 walk_read() {
-	if [ -n "${walk_draft_src:-}" ]; then
-		_wr_draft="$(walk_draft_path "$walk_draft_src")"
-		if [ -f "$_wr_draft" ]; then
-			# Redirection, not git show: one less process on every read, on the
-			# same path whose process count the panel's latency is measured in.
-			walk_normalize <"$_wr_draft"
-			return 0
-		fi
+	if [ -n "${walk_draft_src:-}" ] && _wr_body="$(walk_draft_body "$walk_draft_src")"; then
+		printf '%s\n' "$_wr_body"
+		return 0
 	fi
 	_wr_content="$(git show "$1:.review/walkthrough.md" 2>/dev/null)" || return 1
 	printf '%s' "$_wr_content" | walk_normalize
@@ -1055,13 +1097,68 @@ emit_reading_offers() {
 	#
 	# A file test, no process: walk_use_draft above already resolved the gitdir
 	# the path is built from. This runs on every open of the start assistant.
-	if [ -f "$(walk_draft_path "$_ero_branch")" ]; then
+	if walk_has_draft_file "$_ero_branch"; then
 		porcelain_row offer draft-resume available
 	elif [ "$_ero_walk" -eq 0 ]; then
 		porcelain_row offer draft available
 	fi
 	porcelain_row offer step available
 	porcelain_row offer whole available
+	return 0
+}
+
+# walk_at_base
+# True when HEAD still sits where start pinned it, false when it moved, and
+# non-zero-with-no-answer when the review predates the key that records it.
+#
+# Walk mode keeps HEAD at the review's lower bound for the review's whole life, so
+# "did the reviewer run git commit?" is a question git can answer outright. It used
+# to be inferred instead, from the reading sequence having got shorter — which was
+# the only shrinking cause back when every walkthrough was the author's, frozen in
+# the tip. A reviewer's draft is a file they are invited to edit, so that inference
+# now has two causes and picks the wrong one: editing your own draft told you HEAD
+# had moved and to run git reset --soft.
+#
+# Three states, not two: a review created before reviewwalkbase existed has no
+# recorded base, and guessing for it would be the same mistake in the other
+# direction. Callers fall back to the old inference there.
+walk_at_base() {
+	_wab_base="$(git config "branch.$cur.reviewwalkbase" || true)"
+	[ -n "$_wab_base" ] || return 2
+	[ "$(git rev-parse HEAD)" = "$_wab_base" ]
+}
+
+# walk_recover_cursor
+# Re-seat a cursor that the reviewer's own draft got shorter under, or fail (and
+# leave walk_range_error to explain). True only when all of it holds: the cursor
+# ran off the end (not off the front, which no edit can cause), entries remain,
+# HEAD is provably still at the base, and the walkthrough in force is a draft that
+# still exists.
+#
+# Clamping rather than erroring, because every one of those conditions says the
+# state is intact and the reading position is the only thing that went stale — and
+# the position is not precious: the sequence behind it is re-derived on every
+# command by design. The alternative was a dead end. There is no verb that moves
+# the cursor without loading this metadata first, so an out-of-range cursor made
+# next, prev and status all abort with the same message, leaving `git review abort`
+# — discard the review — as the only way out of having edited your own prose.
+#
+# reviewwalkcount moves with it: it is the baseline a later genuine range change is
+# measured against, so leaving it at the old value would re-report this shrink for
+# the rest of the review.
+walk_recover_cursor() {
+	[ "$walkstep" -gt "$total" ] || return 1
+	[ "$total" -ge 1 ] || return 1
+	walk_at_base || return 1
+	_wrc_draft="$(git config "branch.$cur.reviewwalkdraft" || true)"
+	[ -n "$_wrc_draft" ] || return 1
+	walk_is_draft "$_wrc_draft" || return 1
+
+	echo "note: your walkthrough draft for $_wrc_draft now has $total $(entry_noun "$total") in this review's range; the cursor was at $walkstep and moved to $total." >&2
+	git config "branch.$cur.reviewwalkstep" "$total"
+	git config "branch.$cur.reviewwalkcount" "$total"
+	walkstep="$total"
+	walkcount="$total"
 	return 0
 }
 
@@ -1109,7 +1206,14 @@ walk_range_error() {
 		echo "error: the walkthrough this review was reading is gone — it was $_wre_draft's draft, and the file no longer exists. Write it again with 'git review walkthrough draft $_wre_draft', or discard the review with 'git review abort'." >&2
 		exit 1
 	fi
-	if [ "$_wre_step" -ge 1 ] && [ "$_wre_count" -ge 1 ] && [ "$_wre_total" -lt "$_wre_count" ]; then
+	# The shrink is only evidence of a stray commit while nothing else can shrink
+	# the sequence. When the base is recorded and HEAD is still on it, this message
+	# would be provably false — the reviewer would be sent to git reset --soft over
+	# a range that never moved — so it is skipped and the generic diagnostic below
+	# takes over. walk_recover_cursor has already handled the one shape of that
+	# which is recoverable (their own draft, still there, cursor past the end).
+	if [ "$_wre_step" -ge 1 ] && [ "$_wre_count" -ge 1 ] && [ "$_wre_total" -lt "$_wre_count" ] &&
+		! walk_at_base; then
 		echo "error: HEAD has moved off this review's base — the walkthrough cursor is at entry $_wre_step but only $_wre_total of $_wre_count $(entry_noun "$_wre_count") remain in range. Walk mode keeps the whole-PR diff staged with HEAD at the base; you now have commit(s) on top (did you run git commit?). Undo them with 'git reset --soft' to restage the diff, or 'git review abort' to discard the review, then retry." >&2
 		exit 3
 	fi
@@ -1207,7 +1311,10 @@ load_walk_review_meta() {
 		;;
 	esac
 	if [ "$walkstep" -lt 1 ] || [ "$walkstep" -gt "$total" ]; then
-		walk_range_error "$walkstep" "$total" "$walkcount"
+		# Recovery before diagnosis: the one cause that leaves the review intact is
+		# the reviewer editing their own draft, and that one is repaired rather than
+		# reported. Everything else still gets the message it earned.
+		walk_recover_cursor || walk_range_error "$walkstep" "$total" "$walkcount"
 	fi
 }
 

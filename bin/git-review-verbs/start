@@ -355,6 +355,37 @@ keys_filter=0
 # reviewer wrote one. Set before the first walk_read below, and before the
 # --keys check, so every decision from here on describes the same walkthrough.
 walk_use_draft "$src"
+
+# draft_command: the git review walkthrough draft invocation for this review,
+# flags and all. Three of the messages below suggest it, so it is built once, with
+# this review's own origin and range: drafting against a different range than the
+# one being reviewed would annotate the wrong file set, and on a branch with no
+# copy on the remote the bare form just fails.
+draft_command() {
+	_dc_flags=""
+	if [ "$offline_mode" -eq 1 ]; then
+		_dc_flags=" --offline"
+	elif [ "$local_mode" -eq 1 ]; then
+		_dc_flags=" --local"
+	fi
+	if [ "$delta" -eq 1 ]; then
+		_dc_flags="$_dc_flags --delta"
+	fi
+	printf 'git review walkthrough draft%s %s' "$_dc_flags" "$src"
+}
+
+# Whose reading order is in force, for the notes below. A reviewer's draft shadows
+# the author's walkthrough (walk_read), so a note that blames "the PR" for an order
+# that is actually the reviewer's own sends them to read someone else's branch
+# looking for their own typo — and the PR may carry no walkthrough at all. Same
+# distinction the "(draft)" suffix draws in status and list, on the surface the
+# reviewer sees first.
+if walk_is_draft "$src"; then
+	wtdesc="you have a walkthrough draft for $src"
+else
+	wtdesc="$src has a walkthrough"
+fi
+
 if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$tip")" && [ -n "$wtcontent" ]; then
 	curated="$(walk_sequence "$tip" "$lower")"
 	# grep -c returns 1 (aborting under set -e in POSIX sh) on an empty sequence.
@@ -377,9 +408,27 @@ if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$tip")" && [ -n "$wtcontent" 
 			die "--keys requires a walkthrough with entries in range; none apply to this review"
 		fi
 		degradedfiles="$(range_files "$tip" "$lower" | tr '\n' ' ')"
-		echo "note: $src has a walkthrough, but none of its entries apply to this review range; reviewing the whole diff: $degradedfiles"
+		echo "note: $wtdesc, but none of its entries apply to this review range; reviewing the whole diff: $degradedfiles"
+		# The same offer the start assistant makes for this situation (the "draft"
+		# offer of config --porcelain, which a stale walkthrough gets instead of
+		# "walk"). Without it the assistant proposed a way out that the terminal
+		# never mentioned. Guarded on the file, not on what is in force: with a draft
+		# already on disk — theirs, stale or empty — this command would refuse for
+		# want of --force, and suggesting a command that cannot run is worse than
+		# suggesting nothing.
+		if ! walk_has_draft_file "$src"; then
+			echo "note: to read it in an order of your own instead: $(draft_command) (nothing gets committed)"
+		fi
 	fi
 elif [ "$keys_only" -eq 1 ]; then
+	# An empty draft reaches here having shadowed nothing (walk_read treats it as
+	# absent), so "the PR has none" would be true and useless — the file standing
+	# between them and walk mode is their own, and it is empty. The file test, not
+	# walk_is_draft: what matters here is that the file is theirs and on disk,
+	# which is exactly what walk_is_draft now says no to.
+	if walk_has_draft_file "$src"; then
+		die "--keys needs a walkthrough to read keys from, and your draft for $src is empty; fill it in (or start it over with '$(draft_command) --force'), or start without --keys"
+	fi
 	die "--keys requires a walkthrough on the PR; none found (or use without --keys)"
 fi
 
@@ -404,6 +453,12 @@ if [ "$walk" -eq 1 ]; then
 	git config "branch.$rb.reviewmode" "walk"
 	git config "branch.$rb.reviewwalkstep" "1"
 	git config "branch.$rb.reviewwalkcount" "$walkcount"
+	# Where HEAD was just pinned, so that later on "did you commit on top of this
+	# review?" can be asked of git instead of guessed from the reading sequence
+	# having got shorter (walk_at_base). Its own key rather than reviewstart:
+	# finish's metadata guard treats the step keys as proof of a step review, and
+	# every walk key is spelled reviewwalk* for exactly that reason.
+	git config "branch.$rb.reviewwalkbase" "$(git rev-parse HEAD)"
 	if [ "$keys_filter" -eq 1 ]; then
 		git config "branch.$rb.reviewwalkkeys" "1"
 	fi
@@ -459,18 +514,14 @@ else
 	# moment they are looking. Suppressed when they opted out with --no-walk:
 	# they already made the call.
 	if [ "$no_walk" -eq 0 ] && ! walk_read "$tip" >/dev/null; then
-		# With this review's own origin and range flags: drafting against a
-		# different range than the one being reviewed would annotate the wrong file
-		# set, and on a branch with no copy on the remote the bare form just fails.
-		draftflags=""
-		if [ "$offline_mode" -eq 1 ]; then
-			draftflags=" --offline"
-		elif [ "$local_mode" -eq 1 ]; then
-			draftflags=" --local"
+		# Two ways to have no reading order, and they need different sentences. A
+		# draft that is there but empty used to produce neither: it satisfied
+		# walk_read, so this note was skipped, and the review landed in whole with
+		# nothing said at all — the only silent degradation left in walk mode.
+		if walk_has_draft_file "$src"; then
+			echo "note: your walkthrough draft for $src is empty, so it gave this review no reading order. Fill it in, or write it again with '$(draft_command) --force' (nothing gets committed)"
+		else
+			echo "note: $src has no walkthrough. To read it in an order of your own: $(draft_command) (nothing gets committed)"
 		fi
-		if [ "$delta" -eq 1 ]; then
-			draftflags="$draftflags --delta"
-		fi
-		echo "note: $src has no walkthrough. To read it in an order of your own: git review walkthrough draft$draftflags $src (nothing gets committed)"
 	fi
 fi

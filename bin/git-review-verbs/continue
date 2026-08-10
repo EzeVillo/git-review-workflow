@@ -86,16 +86,36 @@ require_clean_work_tree
 
 mode="$(git config "branch.$saved.reviewmode" || echo whole)"
 
-# Bring the reviewer's walkthrough draft back before anything reads it: the walk
-# path below rebuilds the cursor through walk_read, which has to find the draft
-# already in place or it would fall through to the PR's own walkthrough — or to
-# no walkthrough at all — and quietly resume in a different reading order.
-_saved_draft="$(walk_saved_draft_path "$src")"
-if [ -f "$_saved_draft" ]; then
-	_live_draft="$(walk_draft_path "$src")"
-	mkdir -p "$(dirname "$_live_draft")"
-	mv "$_saved_draft" "$_live_draft"
-fi
+# restore_draft: bring the reviewer's walkthrough draft back to the active
+# namespace. Called from both mode paths immediately before the review branch is
+# created, which is the one point that satisfies both constraints at once:
+#
+#   * late enough that every guard which can still die has already run. Moving it
+#     back and then aborting would leave the draft in the active namespace with
+#     the review still paused — and the next git review clean, seeing no
+#     review/<src>, used to delete it outright.
+#   * early enough that nothing has read a walkthrough yet: the walk path rebuilds
+#     its cursor through walk_read further down, which has to find the draft
+#     already in place or it would fall through to the PR's own walkthrough — or
+#     to none at all — and quietly resume in a different reading order.
+#
+# From the branch's creation onward the draft has an owner again, so a failure
+# below (a patch that will not apply) leaves it beside a live review, not adrift.
+#
+# The draft's branch is read from reviewwalkdraft rather than assumed to be the
+# review's own source: a compare of origin/feature/x reads feature/x's draft, and
+# save filed it under that name.
+restore_draft() {
+	_draftsrc="$(git config "branch.$saved.reviewwalkdraft" || true)"
+	[ -n "$_draftsrc" ] || _draftsrc="$src"
+	_saved_draft="$(walk_saved_draft_path "$_draftsrc")"
+	if [ -f "$_saved_draft" ]; then
+		_live_draft="$(walk_draft_path "$_draftsrc")"
+		mkdir -p "$(dirname "$_live_draft")"
+		mv "$_saved_draft" "$_live_draft"
+	fi
+}
+
 tip="$(git config "branch.$saved.reviewtip" || true)"
 # A saved review missing its tip (hand-edited or half-deleted config) would let
 # set -e kill us silently while restoring; report it instead.
@@ -117,6 +137,8 @@ if [ "$mode" = "step" ]; then
 	if [ -z "$start" ] || [ -z "$count" ] || [ -z "$step" ]; then
 		die "missing review metadata for $saved; was it created with git review start? Discard it with 'git review forget --saved $src'."
 	fi
+
+	restore_draft
 
 	# Bring the banked edits back to where git review next/prev expect them.
 	git for-each-ref --format='%(refname)' "refs/review-saved-edits/$src/" | while read -r ref; do
@@ -167,6 +189,8 @@ else
 	lower="$(git config "branch.$saved.reviewsavedlower" || true)"
 	[ -n "$lower" ] || die "missing review metadata for $saved; was it created with git review start? Discard it with 'git review forget --saved $src'."
 
+	restore_draft
+
 	git switch -q -c "$rb" "$tip"
 	git reset -q --soft "$lower"
 	# Binary-safe apply via apply_review_patch (temp file, not command substitution).
@@ -188,6 +212,7 @@ else
 		restore_meta reviewwalkstep
 		restore_meta reviewwalkcount
 		restore_meta reviewwalkkeys
+		restore_meta reviewwalkdraft
 		git branch -D "$saved" >/dev/null
 
 		# Re-derive the sequence and reprint the entry you were on, so continue lands

@@ -33,9 +33,9 @@ says where you were after closing the editor.
 **Or the reading order you write yourself.** When the PR ships without one, the
 start assistant offers *Walkthrough — draft one*: it writes a skeleton listing
 every file in the range, opens it, and waits — you can keep editing while the
-notice is up — until you say the order and the *why* are in. Validation runs on
-the CLI, so a rejection tells you exactly what to fix and you retry as often as
-you need. The draft is **yours and local**: it lives outside the working tree,
+notice is up, and closing the notice brings it back rather than ending the flow —
+until you say the order and the *why* are in. Validation runs on the CLI, so a
+rejection tells you exactly what to fix and you retry as often as you need. The draft is **yours and local**: it lives outside the working tree,
 never gets committed or staged, and `git status` does not change at any point.
 Nothing about it is written for you and no service is contacted; it is a file
 you fill in. Once it is in, the review reads it exactly like an author's

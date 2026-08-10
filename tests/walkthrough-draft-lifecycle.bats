@@ -63,9 +63,41 @@ teardown() {
 	rm -rf "$TMP"
 }
 
+# ── what the review records ───────────────────────────────────────────────────
+
+@test "start records whose walkthrough the review opened on" {
+	git review start feature/x
+	[ "$(git config branch.review/feature/x.reviewwalkdraft)" = "feature/x" ]
+	git review abort
+
+	# Same PR with no draft: nothing to record, so the key's absence keeps
+	# meaning "the author's" — which is what lets a draft written mid-review be
+	# picked up by the source's own name.
+	rm "$DRAFT"
+	git review start feature/x
+	run git config branch.review/feature/x.reviewwalkdraft
+	[ "$status" -ne 0 ]
+}
+
+@test "finish refuses when the draft key outlives its mode" {
+	git review start feature/x
+	# Hand-edited metadata, walk keys without walk mode. The other walk keys are
+	# unset so this lands on the draft key alone: it is a walk key like the rest
+	# and has to be guarded like the rest, or finish would run on a review whose
+	# recorded state is inconsistent.
+	git config --unset branch.review/feature/x.reviewmode
+	git config --unset branch.review/feature/x.reviewwalkstep
+	git config --unset branch.review/feature/x.reviewwalkcount
+	run git review finish
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"walkthrough keys but reviewmode is not 'walk'"* ]]
+	run git rev-parse --verify --quiet refs/heads/review-fixes/feature/x
+	[ "$status" -ne 0 ]
+}
+
 # ── save and continue ─────────────────────────────────────────────────────────
 
-@test "save moves the draft out of clean's reach" {
+@test "save files the draft with the paused review" {
 	git review start feature/x
 	run git review save
 	[ "$status" -eq 0 ]
@@ -74,13 +106,68 @@ teardown() {
 	grep -Fxq 'start here' "$SAVED_DRAFT"
 }
 
-@test "clean prunes a leftover draft but never a paused one" {
+@test "a save that cannot return anywhere leaves the draft alone" {
+	git review start feature/x
+	# Both answers to "where do I go back to" gone, so save refuses. It used to
+	# move the draft first and find out after: the review stayed live with no
+	# reading order at all, and the file sat in the saved namespace with no saved
+	# review to claim it — clean cannot reach there and forget --saved refuses.
+	git config --unset branch.review/feature/x.reviewreturn
+	git config --unset branch.review/feature/x.reviewbase
+	run git review save
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"could not determine a branch to return to"* ]]
+	[ -f "$DRAFT" ]
+	[ ! -f "$SAVED_DRAFT" ]
+	# Nothing was put aside: the review is still here, still on the draft.
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
+	run git rev-parse --verify --quiet refs/heads/review-saved/feature/x
+	[ "$status" -ne 0 ]
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"walk (draft)"* ]]
+	[[ "$output" == *"on src/c.txt"* ]]
+}
+
+@test "a continue that cannot restore leaves the draft with the saved review" {
 	git review start feature/x
 	git review save
+	# Half-deleted metadata, so continue refuses. It used to bring the draft back
+	# first, which left it in the active namespace beside a review that was still
+	# paused — and the next clean deleted it as a leftover.
+	git config --unset branch.review-saved/feature/x.reviewtip
+	run git review continue feature/x
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"missing review metadata"* ]]
+	[ ! -f "$DRAFT" ]
+	[ -f "$SAVED_DRAFT" ]
+	run git rev-parse --verify --quiet refs/heads/review/feature/x
+	[ "$status" -ne 0 ]
+	# Still the paused review's, so the one verb that owns it can still take it.
+	run git review forget --saved feature/x
+	[ "$status" -eq 0 ]
+	[ ! -f "$SAVED_DRAFT" ]
+}
+
+# ── clean ─────────────────────────────────────────────────────────────────────
+#
+# A draft is hand-written prose that outlives the review it was written for, so
+# clean leaves it alone in both namespaces — the rule it already follows for the
+# --delta markers and for a paused review. git review forget --draft is what
+# throws one away.
+
+@test "clean does not delete a draft written before the review exists" {
+	# The documented flow writes the draft first: draft, fill it in, --build,
+	# start. A clean in that window used to destroy the file without a word,
+	# because no review/<branch> existed yet for it to belong to.
 	run git review clean
 	[ "$status" -eq 0 ]
-	# The paused review keeps its reading order.
-	[ -f "$SAVED_DRAFT" ]
+	[ -f "$DRAFT" ]
+	grep -Fxq 'start here' "$DRAFT"
+	# And it is still the order the review starts in.
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[1/2] src/c.txt"* ]]
 }
 
 @test "clean run from inside a review leaves that review's draft alone" {
@@ -97,25 +184,137 @@ teardown() {
 	[[ "$output" == *"on src/c.txt"* ]]
 }
 
-@test "clean from elsewhere takes the review and its draft together" {
+@test "clean takes the review branch and leaves the draft" {
 	git review start feature/x
 	git switch --quiet develop
 	run git review clean
 	[ "$status" -eq 0 ]
-	# review/feature/x is leftover from clean's point of view, so it goes — and the
-	# draft goes with it rather than outliving the review it belonged to.
 	run git rev-parse --verify --quiet refs/heads/review/feature/x
 	[ "$status" -ne 0 ]
+	[ -f "$DRAFT" ]
+}
+
+@test "a draft outlives abort and clean, and the next start reads it again" {
+	git review start feature/x
+	git review next
+	git review abort
+	run git review clean
+	[ "$status" -eq 0 ]
+	[ -f "$DRAFT" ]
+	# What keeping it buys: re-reviewing the branch costs no re-typing. The
+	# cursor is a property of the review, so it starts at 1 again — the order,
+	# which is what was written by hand, is what survives.
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[1/2] src/c.txt"* ]]
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"walk (draft)"* ]]
+}
+
+@test "clean never touches a paused review's draft either" {
+	git review start feature/x
+	git review save
+	run git review clean
+	[ "$status" -eq 0 ]
+	[ -f "$SAVED_DRAFT" ]
 	[ ! -f "$DRAFT" ]
 }
 
-@test "clean removes a draft whose review is gone" {
-	git review start feature/x
-	git review abort
-	[ -f "$DRAFT" ]
-	run git review clean
+# ── forget --draft ────────────────────────────────────────────────────────────
+
+@test "forget --draft deletes the draft it names" {
+	run git review forget --draft feature/x
 	[ "$status" -eq 0 ]
+	[[ "$output" == *"forgot the walkthrough draft for feature/x"* ]]
 	[ ! -f "$DRAFT" ]
+	# Back to what the PR itself offers, which here is nothing: a whole review.
+	run git review start feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"the staged diff is the PR"* ]]
+	[ -z "$(git config branch.review/feature/x.reviewmode || true)" ]
+}
+
+@test "forget --draft on a branch with no draft says so and deletes nothing" {
+	run git review forget --draft feature/nope
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"no walkthrough draft for feature/nope"* ]]
+	[ -f "$DRAFT" ]
+}
+
+@test "forget --draft --dry-run reports without deleting" {
+	run git review forget --draft --dry-run feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"would forget the walkthrough draft for feature/x"* ]]
+	[ -f "$DRAFT" ]
+	grep -Fxq 'start here' "$DRAFT"
+}
+
+@test "forget --draft --all takes every draft, namespaced ones included" {
+	# A draft two levels deep: this is where a branch name with slashes lands, and
+	# a one-level glob would miss it entirely.
+	other="$GITDIR/review-walkthrough/team/a/b.md"
+	mkdir -p "$(dirname "$other")"
+	printf '# Walkthrough\n\n## 1. a.txt\nx\n' >"$other"
+	run git review forget --draft --all
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"forgot the walkthrough draft for feature/x"* ]]
+	[[ "$output" == *"forgot the walkthrough draft for team/a/b"* ]]
+	[ ! -f "$DRAFT" ]
+	[ ! -f "$other" ]
+}
+
+@test "forget --draft --all with no drafts says so" {
+	rm "$DRAFT"
+	run git review forget --draft --all
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"no walkthrough drafts"* ]]
+}
+
+@test "forget --draft leaves a paused review's draft to forget --saved" {
+	git review start feature/x
+	git review save
+	run git review forget --draft feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"no walkthrough draft for feature/x"* ]]
+	[ -f "$SAVED_DRAFT" ]
+	# Untouched means resumable: the paused review still comes back on it.
+	run git review continue feature/x
+	[ "$status" -eq 0 ]
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"walk (draft)"* ]]
+	[[ "$output" == *"on src/c.txt"* ]]
+}
+
+@test "forget --draft under a live review says what it changed" {
+	git review start feature/x
+	run git review forget --draft feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"forgot the walkthrough draft for feature/x"* ]]
+	[[ "$output" == *"review/feature/x was reading it"* ]]
+	[ ! -f "$DRAFT" ]
+}
+
+@test "forget --draft without a target prints usage and deletes nothing" {
+	run git review forget --draft
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"usage: git review forget"* ]]
+	[ -f "$DRAFT" ]
+}
+
+@test "forget --draft rejects a branch together with --all" {
+	run git review forget --draft --all feature/x
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"use either <branch> or --all, not both"* ]]
+	[ -f "$DRAFT" ]
+}
+
+@test "forget --draft rejects --stale" {
+	run git review forget --draft --stale
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"--stale only applies to --delta"* ]]
+	[ -f "$DRAFT" ]
 }
 
 @test "continue brings the draft back and resumes in the same order" {
@@ -129,11 +328,33 @@ teardown() {
 	[ "$status" -eq 0 ]
 	[ -f "$DRAFT" ]
 	[ ! -f "$SAVED_DRAFT" ]
+	# The record of whose walkthrough it is travels with the review, both ways.
+	[ "$(git config branch.review/feature/x.reviewwalkdraft)" = "feature/x" ]
 	run git review status
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"walk (draft)"* ]]
 	[[ "$output" == *"[2/2]"* ]]
 	[[ "$output" == *"on a.txt"* ]]
+}
+
+@test "list marks a paused review's row as reading a draft" {
+	git review start feature/x
+	git review next
+	git review save
+	run git review list
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"review-saved/feature/x"* ]]
+	[[ "$output" == *"walk (draft) [2/2]"* ]]
+	# The badge is read from the saved namespace, where the draft now is — the
+	# active path holds nothing for this branch.
+	[ ! -f "$DRAFT" ]
+	[ -f "$SAVED_DRAFT" ]
+	# And it is a real test of the file, not a label the row always carries.
+	rm "$SAVED_DRAFT"
+	run git review list
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"walk [2/2]"* ]]
+	[[ "$output" != *"(draft)"* ]]
 }
 
 @test "save then clean then continue still resumes on the draft" {

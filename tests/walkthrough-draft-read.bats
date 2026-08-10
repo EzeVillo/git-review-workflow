@@ -208,6 +208,57 @@ EOF
 	run git review start feature/x
 	[ "$status" -eq 0 ]
 	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
+	# Degraded to whole with a note, exactly like a stale one — never a walk with
+	# a cursor over nothing, and never the author's order behind the reviewer's
+	# back. The mode key is absent in whole mode, hence the default.
+	[[ "$output" == *"reviewing the whole diff"* ]]
+	[ "$(git config branch.review/feature/x.reviewmode || echo whole)" = "whole" ]
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"mode    whole"* ]]
+	# No cursor to move, and nothing claiming to be a reading order.
+	run git review next
+	[ "$status" -ne 0 ]
+	[[ "$output" != *"(draft)"* ]]
+}
+
+@test "deleting the draft names the real cause even when the PR has a walkthrough" {
+	# The draft marks two entries key; the author's walkthrough marks none. Start
+	# --keys, then delete the draft: the review falls back to the author's order,
+	# where nothing is key, and the keys-only sequence empties.
+	#
+	# walk_read still succeeds here — the sidecar answers — so a diagnostic keyed
+	# on "there is no walkthrough left" blamed HEAD instead, telling the reviewer
+	# to run git reset --soft over a HEAD that never moved.
+	mkdir -p "$(dirname "$DRAFT")"
+	cat >"$DRAFT" <<'EOF'
+# Walkthrough
+
+## 1. src/c.txt
+> key
+REVIEWER says start at c
+
+## 2. b.txt
+> key
+REVIEWER on b
+
+## 3. a.txt
+REVIEWER on a
+
+## 4. .review/walkthrough.md
+REVIEWER on the author's own file
+EOF
+	run git review start --keys feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"2 keys"* ]]
+
+	rm "$DRAFT"
+	run git review status
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"the walkthrough this review was reading is gone"* ]]
+	[[ "$output" == *"git review walkthrough draft feature/x"* ]]
+	[[ "$output" != *"HEAD has moved off"* ]]
+	[[ "$output" != *"git reset --soft"* ]]
 }
 
 # ── compare ───────────────────────────────────────────────────────────────────
@@ -219,6 +270,37 @@ EOF
 	run git review status
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"on src/c.txt"* ]]
+}
+
+@test "compare on a remote-tracking branch keeps reading the draft afterwards" {
+	# The review's identity is <b> ("origin/feature/x"); the draft it opens on is
+	# the branch's ("feature/x"). Every verb after the compare re-derives the
+	# reading order, so unless the compare recorded which draft it read, they all
+	# look one up under the review's own name, find none, and silently switch to
+	# the author's order — the exact drift this file exists to catch.
+	write_draft
+	run git review compare develop origin/feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[1/4] src/c.txt"* ]]
+	[ "$(git config branch.review/origin/feature/x.reviewwalkdraft)" = "feature/x" ]
+
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"on src/c.txt"* ]]
+	[[ "$output" == *"(draft)"* ]]
+	run git review status --why src/c.txt
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"REVIEWER says start at c"* ]]
+	[[ "$output" != *"AUTHOR"* ]]
+	run git review next
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"b.txt"* ]]
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	printf '%s\n' "$output" | grep -Fxq 'draft'
+	run git review list
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"walk (draft)"* ]]
 }
 
 @test "compare between loose revisions reads the author's walkthrough" {

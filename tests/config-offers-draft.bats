@@ -64,8 +64,20 @@ teardown() {
 }
 
 # The offer ids emitted for <branch>, in order, one per line.
+#
+# The CLI is run on its own and its status propagated deliberately: as a pipeline
+# `run` would report awk's exit status, which is 0 however badly git review had
+# failed, so every "$status" assertion below would have been decorative.
 offers_for() {
-	git review config --porcelain -- "$1" | awk -F'\t' '$1 == "offer" { print $2 }'
+	out="$(git review config --porcelain -- "$1")" || return $?
+	printf '%s\n' "$out" | awk -F'\t' '$1 == "offer" { print $2 }'
+}
+
+@test "offers_for reports the CLIs failure and not awks success" {
+	# The helper the rest of this file leans on, checked once: without this every
+	# status assertion below would pass on a CLI that never ran.
+	run offers_for no/such/branch
+	[ "$status" -ne 0 ]
 }
 
 @test "a PR with no walkthrough offers draft, step and whole" {
@@ -150,4 +162,23 @@ EOF
 	[ "${lines[0]}" = "walk" ]
 	[ "${lines[1]}" = "keys" ]
 	[ "${#lines[@]}" -eq 4 ]
+}
+
+@test "a stale author walkthrough is offered draft, not walk" {
+	# The author wrote one, but nothing it names is in range any more. There is no
+	# walk to offer, and that is exactly the moment writing an order of your own
+	# is the useful answer — the same situation as a PR with no walkthrough at all.
+	git switch --quiet feature/annotated
+	printf '# Walkthrough\n\n## 1. nothing/here.txt\nstale entry\n' >.review/walkthrough.md
+	git add -A
+	git commit --quiet -m stale
+	git push --quiet origin feature/annotated
+	git switch --quiet develop
+
+	run offers_for feature/annotated
+	[ "$status" -eq 0 ]
+	[ "${lines[0]}" = "draft" ]
+	[ "${lines[1]}" = "step" ]
+	[ "${lines[2]}" = "whole" ]
+	[ "${#lines[@]}" -eq 3 ]
 }

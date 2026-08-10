@@ -303,8 +303,27 @@ mark() {
 	[ -n "$(git config reviewworkflow.feature/x.reviewed)" ]
 }
 
-@test "review forget rejects combining --delta and --saved" {
+@test "review forget rejects combining two modes" {
+	mark feature/x
 	run git review forget --delta --saved feature/x
 	[ "$status" -ne 0 ]
-	[[ "$output" == *"only one of --delta and --saved"* ]]
+	[[ "$output" == *"only one of --delta, --saved and --draft"* ]]
+	# The marker is still there: an ambiguous request forgets nothing.
+	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$(git rev-parse origin/feature/x)" ]
+
+	run git review forget --draft --delta feature/x
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"only one of --delta, --saved and --draft"* ]]
+	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$(git rev-parse origin/feature/x)" ]
+}
+
+@test "review forget takes one mode flag twice without complaining" {
+	# Repeating a flag is not ambiguous, so it is not an error — only naming two
+	# different modes is.
+	mark feature/x
+	run git review forget --delta --delta feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"forgot delta marker for feature/x"* ]]
+	run git config reviewworkflow.feature/x.reviewed
+	[ "$status" -ne 0 ]
 }

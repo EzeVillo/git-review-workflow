@@ -81,19 +81,6 @@ git rev-parse --verify --quiet "refs/heads/$saved" >/dev/null &&
 
 mode="$(git config "branch.$cur.reviewmode" || echo whole)"
 
-# Put the reviewer's own walkthrough draft out of git review clean's reach, the
-# same way the banked edits move to refs/review-saved-edits/ below — and for the
-# same reason: what you paused is yours, and a clean must not take it. Moved, not
-# copied, so an active and a saved draft for one branch can never diverge.
-# Outside the mode branch on purpose: the draft belongs to walk reviews, which
-# take the else path further down.
-_save_draft="$(walk_draft_path "$src")"
-if [ -f "$_save_draft" ]; then
-	_saved_draft="$(walk_saved_draft_path "$src")"
-	mkdir -p "$(dirname "$_saved_draft")"
-	mv "$_save_draft" "$_saved_draft"
-fi
-
 # Where to return to once the review is put aside — the branch you started from,
 # falling back to the base branch, exactly like git review abort.
 ret="$(git config "branch.$cur.reviewreturn" || true)"
@@ -179,6 +166,7 @@ else
 		copy_meta reviewwalkstep
 		copy_meta reviewwalkcount
 		copy_meta reviewwalkkeys
+		copy_meta reviewwalkdraft
 		wstep="$(git config "branch.$cur.reviewwalkstep" || echo '?')"
 		wcount="$(git config "branch.$cur.reviewwalkcount" || echo '?')"
 		note="walkthrough review on entry $wstep/$wcount"
@@ -197,6 +185,30 @@ copy_meta reviewlocal
 # compare reviews: finish must keep refusing after save → continue.
 copy_meta reviewreadonly
 git config "branch.$saved.reviewreturn" "$target"
+
+# Put the reviewer's own walkthrough draft where a paused review's reading order
+# belongs, the same way the banked edits moved to refs/review-saved-edits/ above.
+# Moved, not copied, so an active and a saved draft for one branch can never
+# diverge. Outside the mode branch on purpose: a draft can sit next to any mode.
+#
+# Named by reviewwalkdraft when the review recorded one, because the draft's
+# branch is not always the review's — a compare of origin/feature/x reads
+# feature/x's draft — and moving the wrong name would leave the real file behind.
+#
+# Last, deliberately: everything above can still die (a missing return branch, a
+# key deleted by hand), and a save that aborted after moving the draft would
+# leave the review live but stripped of the order it was reading, with the file
+# parked in a namespace no saved review claims — forget --saved would not find it
+# and clean must not take it. By here review-saved/<src> exists and holds every
+# key, so the draft has an owner whatever happens next.
+draftsrc="$(git config "branch.$cur.reviewwalkdraft" || true)"
+[ -n "$draftsrc" ] || draftsrc="$src"
+_save_draft="$(walk_draft_path "$draftsrc")"
+if [ -f "$_save_draft" ]; then
+	_saved_draft="$(walk_saved_draft_path "$draftsrc")"
+	mkdir -p "$(dirname "$_saved_draft")"
+	mv "$_save_draft" "$_saved_draft"
+fi
 
 # Leave the review branch: drop its working-tree changes (captured above), return
 # to the starting branch and delete review/<src>. Its config goes with it; the

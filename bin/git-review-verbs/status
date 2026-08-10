@@ -257,7 +257,10 @@ if [ "$porcelain" -eq 1 ]; then
 	# published clients parse `state` by position, so widening it is the kind of
 	# change that quietly misaligns a consumer, while an unknown label is
 	# something porcelain v1 already promises they ignore.
-	if [ "$mode" = walk ] && walk_is_draft "$src"; then
+	# walk_draft_src, not $src: load_walk_review_meta resolved which draft this
+	# review reads (they differ for a compare of a remote-tracking branch), and it
+	# is set only on the walk path — which is the same condition as the mode test.
+	if [ "$mode" = walk ] && walk_is_draft "${walk_draft_src:-$src}"; then
 		porcelain_row draft
 	fi
 	exit 0
@@ -383,7 +386,7 @@ elif [ "$mode" = "walk" ]; then
 	# easy to read your own why as the author's, and give it an authority it never
 	# had. Suffixed to the mode so the rest of the line keeps its shape.
 	draft_note=""
-	if walk_is_draft "$src"; then
+	if walk_is_draft "${walk_draft_src:-$src}"; then
 		draft_note=" (draft)"
 	fi
 	printf '  mode    walk%s  [%s/%s] on %s%s%s\n' "$draft_note" "$walkstep" "$total" "$pnow" "$mark" "$keys_only_note"

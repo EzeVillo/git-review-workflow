@@ -78,6 +78,14 @@ git review continue feature/telemetry
 git review status                              # misma entrada, mismo orden ← SC-011
 ```
 
+`clean` tampoco toca un borrador **activo** (ni el escrito antes de que la review
+exista, que es el primer paso del flujo de arriba). Para borrar uno hay que
+pedirlo:
+
+```sh
+git review forget --draft feature/telemetry   # o --all, o --dry-run para ver
+```
+
 **Se valida**: FR-008, FR-008a, SC-011.
 
 ## Escenario 5 — Rechazos que no dejan nada a medias

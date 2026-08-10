@@ -30,6 +30,23 @@ class PanelLayoutReviewTest {
     }
 
     @Test
+    fun `walk on the reviewers own draft is marked in the identity bar`() {
+        // 011: whose reading order this is. Two days into a review it is easy to
+        // read your own why as the author's and give it an authority it never
+        // had, which is why the CLI writes "walk (draft)" and the panel says it
+        // too — in the same place, from the same porcelain record.
+        val layout = panelLayout(PanelFixtures.reviewWalkDraft())
+        val bar = layout.blocks.filterIsInstance<Block.IdentityBar>().first()
+        assertEquals("walk", bar.mode)
+        assertTrue(bar.draft)
+
+        // And it is the record that decides, not the mode: the same walk without
+        // it is unmarked.
+        val plain = panelLayout(PanelFixtures.reviewWalk())
+        assertFalse(plain.blocks.filterIsInstance<Block.IdentityBar>().first().draft)
+    }
+
+    @Test
     fun `step layout has diff only and no why`() {
         val layout = panelLayout(PanelFixtures.reviewStep())
         val body = layout.collectControls().filter { it.id !in titleIds }

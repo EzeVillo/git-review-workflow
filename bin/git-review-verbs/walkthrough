@@ -266,6 +266,21 @@ if [ "$sub" = draft ]; then
 	# Reported instead of the absolute path: shorter, and it is where the reviewer
 	# will look. The absolute one is what gets opened, either way.
 	draftrel="\$GIT_DIR/review-walkthrough/$branch.md"
+
+	# The origin and range flags this run resolved with, echoed back into the
+	# commands the messages below suggest. Without them the suggestion is a
+	# different command: --build would validate the draft against another range,
+	# and on a branch with no copy on the remote both --build and start fail
+	# outright with "origin/<branch> not found" — after telling you to run them.
+	draftflags=""
+	if [ "$offline" -eq 1 ]; then
+		draftflags=" --offline"
+	elif [ "$local_only" -eq 1 ]; then
+		draftflags=" --local"
+	fi
+	if [ "$delta_mode" -eq 1 ]; then
+		draftflags="$draftflags --delta"
+	fi
 fi
 
 # Resolve the review range exactly as a reviewer's git review start would: HEAD is
@@ -395,7 +410,7 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 
 	n="$(printf '%s\n' "$files" | grep -c .)"
 	if [ "$sub" = draft ]; then
-		echo "wrote $targetrel with $n file(s) from $srclabel; fill in the order and why, then run git review walkthrough draft --build $branch"
+		echo "wrote $targetrel with $n file(s) from $srclabel; fill in the order and why, then run git review walkthrough draft --build$draftflags $branch"
 		# The reviewer's draft wins over the PR's own walkthrough for as long as it
 		# exists (see walk_read). Silently shadowing an author's reading order would
 		# be the kind of surprise this project spends its error messages avoiding —
@@ -422,7 +437,7 @@ fi
 # walkthrough is, and neither can gain a rule the other lacks.
 if [ "$sub" = draft ]; then
 	[ -e "$targetpath" ] ||
-		die "no draft for $branch; run git review walkthrough draft $branch first"
+		die "no draft for $branch; run git review walkthrough draft$draftflags $branch first"
 else
 	[ -e "$targetpath" ] || die "$targetrel not found; run git review walkthrough init first"
 fi
@@ -610,7 +625,7 @@ tmp="$targetpath.tmp.$$"
 mv "$tmp" "$targetpath"
 
 if [ "$sub" = draft ]; then
-	echo "built $targetrel: $count $(entry_noun "$count")$keysuffix, ordered and renumbered; git review start $branch now reads it"
+	echo "built $targetrel: $count $(entry_noun "$count")$keysuffix, ordered and renumbered; git review start$draftflags $branch now reads it"
 else
 	echo "built $targetrel: $count $(entry_noun "$count")$keysuffix, ordered and renumbered"
 fi

@@ -228,6 +228,15 @@ if [ "$walk" -eq 1 ]; then
 	if [ "$keys_filter" -eq 1 ]; then
 		git config "branch.$rb.reviewwalkkeys" "1"
 	fi
+	# Whose walkthrough this compare opened on — same record start writes, and
+	# here it is load-bearing rather than merely useful: the review's identity is
+	# <b> ("origin/feature/x"), while the draft that was just read is the branch's
+	# ("feature/x"). Without this, every verb after the compare would look up a
+	# draft under the review's name, find none, and silently read the author's
+	# order instead — the one failure this whole design exists to prevent.
+	if [ -n "${walk_draft_src:-}" ] && walk_is_draft "$walk_draft_src"; then
+		git config "branch.$rb.reviewwalkdraft" "$walk_draft_src"
+	fi
 
 	if [ "$keys_filter" -eq 0 ]; then
 		# Files in range with no walkthrough entry: appended to the end of the reading

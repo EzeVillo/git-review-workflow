@@ -319,6 +319,7 @@ Every command is a verb under `git review`. Run `git review -h` for the list, or
 | `git review clean [--keep-fixes] [branch]`                                                                                                   | Delete the `review/*` (and by default `review-fixes/*`) branches for `<branch>`, or all of them; `--keep-fixes` leaves `review-fixes/*` alone.                                                                                                                                                                                                                     |
 | `git review forget --delta (<branch> \| --all \| --stale [--dry-run])`                                                                       | Discard the `--delta` marker for one branch, all of them, or only stale ones.                                                                                                                                                                                                                                                                                      |
 | `git review forget --saved (<branch> \| --all) [--dry-run]`                                                                                  | Discard a review saved with `git review save`.                                                                                                                                                                                                                                                                                                                     |
+| `git review forget --draft (<branch> \| --all) [--dry-run]`                                                                                  | Delete a walkthrough you drafted for someone else's PR.                                                                                                                                                                                                                                                                                                            |
 | `git review config [<key> [<value>]] [--unset <key>] [--porcelain [<branch>]]`                                                               | Read or write the product's config (`base`, `remote`); `--porcelain` also lists candidate branches to review.                                                                                                                                                                                                                                                      |
 
 <details>
@@ -526,9 +527,12 @@ git review start feature/checkout                      # enters walk mode on you
   it exists, and `git review status` marks the review `walk (draft)` so a reading
   order you wrote is never mistaken for the author's. Drafting over a PR that
   already has one says so; delete the draft to go back to theirs.
-- It's yours and it's local: `git review save` moves it out of `git review
-  clean`'s reach along with your edits, and `git review forget --saved` discards
-  it with the review.
+- It's yours and it's local, so nothing throws it away behind your back: it
+  outlives `abort`, `finish` and `git review clean` (start the branch again and
+  your reading order is still there), `git review save` files it with the paused
+  review, and the two commands that discard it are the ones you point at it —
+  `git review forget --draft <branch>` (or `--all`), and `git review forget
+  --saved`, which takes the paused review's copy with the review.
 
 **git review never writes the walkthrough for you and never talks to any
 service.** It gives you the skeleton with the brief already written into it, and
@@ -856,6 +860,9 @@ reviewed.
   markers explicitly with `git review forget --delta`.
 - Leaves saved reviews (`review-saved/*`) untouched — discard one with
   `git review forget --saved`.
+- Leaves your walkthrough drafts untouched too, for the same reason: they are
+  hand-written and outlive the review they were written for. Discard one with
+  `git review forget --draft`.
 
 </details>
 
@@ -889,6 +896,24 @@ actual review, the same way `git review abort` does.
 - `<branch>` — discard the saved review for one source branch.
 - `--all` — discard every saved review.
 - `--dry-run` — list what would be discarded without discarding it.
+
+</details>
+
+<details>
+<summary><code>git review forget --draft</code></summary>
+
+Deletes a walkthrough you wrote for someone else's PR with
+[`git review walkthrough draft`](#git-review-walkthrough). `git review clean`
+never touches those — they are prose you wrote by hand, and a re-review of the
+branch reads them again — so this is how you throw one away.
+
+- `<branch>` — delete the draft written for one branch.
+- `--all` — delete every draft.
+- `--dry-run` — list what would be deleted without deleting it.
+- Deleting the draft of a review that is still live is allowed (going back to
+  the author's order is a legitimate thing to want) and says what it changed.
+- A draft that travelled with a paused review is that review's, and goes with it
+  under `git review forget --saved`.
 
 </details>
 

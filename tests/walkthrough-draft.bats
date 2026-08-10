@@ -67,6 +67,14 @@ teardown() {
 	rm -rf "$TMP"
 }
 
+# Portable in-place edit (the same helper step-replay.bats carries, and for the
+# same reason): BSD/macOS sed consumes the script as -i's backup suffix, so the
+# bare `sed -i 'script' file` form errors on the macOS runner.
+edit_file() {
+	tmp="$(mktemp)"
+	sed "$1" "$2" >"$tmp" && mv "$tmp" "$2"
+}
+
 # Fill the draft for feature/plain with a valid, deliberately non-diff order.
 fill_draft() {
 	cat >"$DRAFT" <<'EOF'
@@ -97,6 +105,7 @@ EOF
 	[ -f "$DRAFT" ]
 	# Every path of the range is listed as an unfilled entry, and nothing else is.
 	run grep -c '^## ?\. ' "$DRAFT"
+	[ "$status" -eq 0 ]
 	[ "$output" = "3" ]
 	grep -Fxq '## ?. a.txt' "$DRAFT"
 	grep -Fxq '## ?. src/c.txt' "$DRAFT"
@@ -105,12 +114,21 @@ EOF
 
 @test "draft leaves the working tree and the index untouched" {
 	before="$(git status --porcelain)"
+	# Every path the work tree holds, tracked and untracked alike, before and
+	# after. The invariant is that drafting adds nothing anywhere a reviewer could
+	# commit it from — asserting only on one filename would pass even if the
+	# draft landed in the work tree under another.
+	before_files="$(git ls-files -co | LC_ALL=C sort)"
 	run git review walkthrough draft feature/plain
 	[ "$status" -eq 0 ]
+	[ -f "$DRAFT" ]
 	[ "$(git status --porcelain)" = "$before" ]
-	# And the draft is not a tracked path under any name.
-	run git ls-files --error-unmatch .review/walkthrough.md
-	[ "$status" -ne 0 ]
+	[ "$(git ls-files -co | LC_ALL=C sort)" = "$before_files" ]
+	# Not even as an ignored file: the draft is in the gitdir, which git status
+	# does not walk at all.
+	run git status --porcelain --ignored
+	[ "$status" -eq 0 ]
+	[ -z "$output" ]
 }
 
 @test "draft defaults to the branch you are on" {
@@ -139,7 +157,11 @@ EOF
 	[ "$status" -eq 0 ]
 	# Back to a skeleton: the filled entries are gone.
 	run grep -c '^## ?\. ' "$DRAFT"
+	[ "$status" -eq 0 ]
 	[ "$output" = "3" ]
+	run grep -c '^## [0-9]\+\. ' "$DRAFT"
+	[ "$status" -ne 0 ]
+	[ "$output" = "0" ]
 }
 
 @test "a draft survives between invocations with its content intact" {
@@ -250,10 +272,13 @@ EOF
 @test "draft --build rejects a > key marker carrying a value" {
 	git review walkthrough draft feature/plain
 	fill_draft
-	sed -i 's/^> key$/> key: because it matters/' "$DRAFT"
+	edit_file 's/^> key$/> key: because it matters/' "$DRAFT"
+	before="$(cat "$DRAFT")"
 	run git review walkthrough draft --build feature/plain
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"takes no value"* ]]
+	# A rejected build leaves the draft byte for byte as the reviewer left it.
+	[ "$(cat "$DRAFT")" = "$before" ]
 }
 
 @test "draft --build orders by the numbers and renumbers 1..N" {
@@ -264,6 +289,8 @@ EOF
 	[[ "$output" == *"3 entries (1 key)"* ]]
 	# Renumbered into the reviewer's order, not the diff order.
 	run grep '^## ' "$DRAFT"
+	[ "$status" -eq 0 ]
+	[ "${#lines[@]}" -eq 4 ]
 	[ "${lines[0]}" = "## Heads-up" ]
 	[ "${lines[1]}" = "## 1. src/c.txt" ]
 	[ "${lines[2]}" = "## 2. src/café con espacio.js" ]
@@ -280,4 +307,101 @@ EOF
 	run git review walkthrough draft --build feature/plain
 	[ "$status" -eq 0 ]
 	[ "$(cat "$DRAFT")" = "$first" ]
+}
+
+# ── origin, range, and the argv the clients send ──────────────────────────────
+
+@test "draft takes the branch after -- like the clients send it" {
+	# draftArgs() in both IDEs emits exactly this shape
+	# (contracts/cli-invocation-draft.md): draft [--build] [--local|--offline]
+	# [--delta] -- <branch>. Nothing else in the suite exercises the -- form, and
+	# the positional parser it goes through is where the branch is picked up.
+	run git review walkthrough draft --local -- feature/plain
+	[ "$status" -eq 0 ]
+	[ -f "$DRAFT" ]
+	fill_draft
+	run git review walkthrough draft --build --local -- feature/plain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"3 entries (1 key)"* ]]
+	run grep -c '^## [0-9]\+\. ' "$DRAFT"
+	[ "$status" -eq 0 ]
+	[ "$output" = "3" ]
+	# The branch was read as the branch, not swallowed as a second subcommand.
+	run grep '^## 1\. ' "$DRAFT"
+	[ "$status" -eq 0 ]
+	[ "$output" = "## 1. src/c.txt" ]
+}
+
+@test "draft --offline resolves both ends locally" {
+	# A branch with no copy on the remote: with --offline neither the tip nor the
+	# base goes near origin, which is the whole reason the flag exists.
+	git switch --quiet -c feature/onlylocal develop
+	printf 'z\n' >z.txt
+	git add -A
+	git commit --quiet -m z
+	git switch --quiet develop
+	d="$(git rev-parse --git-dir)/review-walkthrough/feature/onlylocal.md"
+
+	run git review walkthrough draft --offline feature/onlylocal
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"1 file(s) from feature/onlylocal"* ]]
+	run grep -c '^## ?\. ' "$d"
+	[ "$status" -eq 0 ]
+	[ "$output" = "1" ]
+	grep -Fxq '## ?. z.txt' "$d"
+}
+
+@test "the command a draft suggests carries the flags it was made with" {
+	git switch --quiet -c feature/onlylocal develop
+	printf 'z\n' >z.txt
+	git add -A
+	git commit --quiet -m z
+	git switch --quiet develop
+	d="$(git rev-parse --git-dir)/review-walkthrough/feature/onlylocal.md"
+
+	run git review walkthrough draft --offline feature/onlylocal
+	[ "$status" -eq 0 ]
+	# Bare, this suggested "draft --build feature/onlylocal", which dies with
+	# "origin/feature/onlylocal not found" — the command it had just told you to
+	# run, on the branch it had just drafted for.
+	[[ "$output" == *"git review walkthrough draft --build --offline feature/onlylocal"* ]]
+
+	printf '# Walkthrough\n\n## 1. z.txt\nwhy\n' >"$d"
+	run git review walkthrough draft --build --offline feature/onlylocal
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"git review start --offline feature/onlylocal now reads it"* ]]
+
+	# And what it suggests is a command that works, on the range it drafted.
+	run git review start --offline feature/onlylocal
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[1/1] z.txt"* ]]
+	[ "$(git config branch.review/feature/onlylocal.reviewmode)" = "walk" ]
+}
+
+@test "draft --delta covers only the commits since the last review" {
+	git config reviewworkflow.feature/plain.reviewed "$(git rev-parse origin/feature/plain)"
+	git switch --quiet feature/plain
+	printf 'new\n' >new.txt
+	git add -A
+	git commit --quiet -m more
+	git push --quiet origin feature/plain
+	git switch --quiet develop
+
+	run git review walkthrough draft --delta feature/plain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"1 file(s)"* ]]
+	[[ "$output" == *"git review walkthrough draft --build --delta feature/plain"* ]]
+	# Only the new commit's file: the three from the full range are not listed.
+	run grep -c '^## ?\. ' "$DRAFT"
+	[ "$status" -eq 0 ]
+	[ "$output" = "1" ]
+	grep -Fxq '## ?. new.txt' "$DRAFT"
+	run grep -Fxq '## ?. a.txt' "$DRAFT"
+	[ "$status" -ne 0 ]
+
+	# And it validates against that same range, so the entry it holds is enough.
+	printf '# Walkthrough\n\n## 1. new.txt\nwhy\n' >"$DRAFT"
+	run git review walkthrough draft --build --delta feature/plain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"1 entry"* ]]
 }

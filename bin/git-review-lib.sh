@@ -236,6 +236,14 @@ load_step_review_meta() {
 	# Same as the walk loader: a step review does not read a walkthrough itself,
 	# but its verbs share this scope with the walk readers, so the context is set
 	# here too rather than left half-applied depending on the mode.
+	#
+	# Note the asymmetry it creates, and keep it in mind before giving step any
+	# surface that shows a "why": the context is set, but nothing reports it —
+	# status only emits the draft record (and the "(draft)" suffix) in walk mode,
+	# because that is where a reading order exists. Today nothing reads a
+	# walkthrough here (status --why refuses outside walk), so it is inert; a step
+	# verb that started reading one would show the reviewer's own prose without
+	# saying whose it is, which is the one thing this feature exists to prevent.
 	walk_use_draft "$src"
 
 	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
@@ -484,6 +492,29 @@ walk_normalize() {
 	'
 }
 
+# walk_gitdir_init
+# Resolve the working tree's gitdir once for the life of the process, into
+# _walk_gitdir. Every draft path below derives from it.
+#
+# It has to be resolved in the caller's own shell, not lazily inside the path
+# helpers: those are called as "$(walk_draft_path ...)", and an assignment made
+# inside a command substitution dies with its subshell, so a cache written there
+# would never be read and every walk_read would pay another git process. That is
+# not hypothetical — walk_read consults the draft on every read, so a plain
+# status in walk mode called this four times, on the path whose process count the
+# panel's latency is measured in.
+#
+# walk_use_draft calls this, which covers every verb with an active review; the
+# verbs that build a draft path without setting a draft context (list, save,
+# continue, forget) call it themselves.
+#
+# Caching is safe because no verb in this suite ever changes directory: the value
+# may be relative (".git", from the top level of the work tree), which a chdir
+# would silently invalidate.
+walk_gitdir_init() {
+	[ -n "${_walk_gitdir:-}" ] || _walk_gitdir="$(git rev-parse --git-dir)"
+}
+
 # walk_draft_path <src>
 # Where the reviewer's own walkthrough for <src> lives while it is in play.
 #
@@ -497,15 +528,53 @@ walk_normalize() {
 # --git-dir (not --git-common-dir) so each git worktree keeps its own draft: a
 # review is per working tree, and so is its reading order.
 walk_draft_path() {
-	printf '%s/review-walkthrough/%s.md' "$(git rev-parse --git-dir)" "$1"
+	walk_gitdir_init
+	printf '%s/review-walkthrough/%s.md' "$_walk_gitdir" "$1"
 }
 
 # walk_saved_draft_path <src>
-# The same draft once git review save has put it out of git review clean's reach.
-# Mirrors refs/review-saved-edits/ exactly: paused work survives a clean, and the
-# reviewer learns one rule instead of two.
+# The same draft once git review save has put it aside with the paused review.
+# Mirrors refs/review-saved-edits/ exactly: paused work travels with the review
+# it belongs to, and the reviewer learns one rule instead of two.
 walk_saved_draft_path() {
-	printf '%s/review-saved-walkthrough/%s.md' "$(git rev-parse --git-dir)" "$1"
+	walk_gitdir_init
+	printf '%s/review-saved-walkthrough/%s.md' "$_walk_gitdir" "$1"
+}
+
+# walk_draft_list
+# Every draft in the active namespace, as its <src> (a branch name), one per
+# line. Nothing at all when the namespace does not exist. Used by
+# git review forget --draft --all, the one command that has to enumerate them.
+#
+# Recursion over globs rather than find: a branch name holding '/' is a
+# subdirectory here, so a single-level glob would miss every namespaced branch,
+# and find(1) has no other user in this suite — its -empty/-delete are outside
+# POSIX, and under Git Bash a stray PATH resolves it to Windows' own find.exe.
+walk_draft_list() {
+	walk_gitdir_init
+	_wdl_root="$_walk_gitdir/review-walkthrough"
+	[ -d "$_wdl_root" ] || return 0
+	_walk_draft_list_dir "$_wdl_root" ""
+}
+
+# _walk_draft_list_dir <dir> <prefix>  (walk_draft_list's recursion)
+# The loop variables are reused by the nested call on purpose: each is reassigned
+# at the top of every iteration and never read across the recursive call, while
+# <dir>/<prefix> are positional parameters, which each call frame keeps its own.
+_walk_draft_list_dir() {
+	for _wdl_entry in "$1"/*; do
+		# An unmatched glob stays literal in POSIX sh; -e is what tells the two
+		# apart, and it also skips a dangling symlink.
+		[ -e "$_wdl_entry" ] || continue
+		_wdl_name="${_wdl_entry##*/}"
+		if [ -d "$_wdl_entry" ]; then
+			_walk_draft_list_dir "$_wdl_entry" "$2$_wdl_name/"
+		elif [ -f "$_wdl_entry" ]; then
+			case "$_wdl_name" in
+			*.md) printf '%s%s\n' "$2" "${_wdl_name%.md}" ;;
+			esac
+		fi
+	done
 }
 
 # walk_use_draft <src>
@@ -520,13 +589,17 @@ walk_saved_draft_path() {
 # (start, compare, emit_reading_offers, walkthrough draft) call it directly.
 walk_use_draft() {
 	walk_draft_src="$1"
+	# Here rather than in walk_draft_path: this runs in the verb's own shell,
+	# where the resolved gitdir survives to be reused (see walk_gitdir_init).
+	walk_gitdir_init
 }
 
 # walk_is_draft <src>
 # True when <src>'s review is reading the reviewer's own draft rather than the
-# author's committed walkthrough. A file test, no process: this runs on the
-# status path, where the project has already paid for extra processes in seconds
-# under Git Bash.
+# author's committed walkthrough. A file test and no process of its own — the
+# gitdir the path needs was resolved once by walk_use_draft (walk_gitdir_init) —
+# which is what lets this sit on the status path, where the project has already
+# paid for extra processes in seconds under Git Bash.
 walk_is_draft() {
 	[ -f "$(walk_draft_path "$1")" ]
 }
@@ -980,7 +1053,8 @@ emit_reading_offers() {
 	# alongside walk, because that walk is the reviewer's own half-written draft
 	# and finishing it is the obvious next move.
 	#
-	# A file test, not a process: this runs on every open of the start assistant.
+	# A file test, no process: walk_use_draft above already resolved the gitdir
+	# the path is built from. This runs on every open of the start assistant.
 	if [ -f "$(walk_draft_path "$_ero_branch")" ]; then
 		porcelain_row offer draft-resume available
 	elif [ "$_ero_walk" -eq 0 ]; then
@@ -1010,11 +1084,29 @@ walk_range_error() {
 	esac
 	# A reviewer's draft, unlike a committed walkthrough, can be deleted out from
 	# under a live review — its tip is frozen, the draft is a file. When that
-	# happens the sequence empties exactly as it does after a stray commit, and
-	# without this the reviewer gets told HEAD moved and to run git reset --soft,
-	# which is both wrong and destructive-sounding. Name the real cause instead.
-	if [ "$_wre_total" -eq 0 ] && ! walk_read "$tip" >/dev/null 2>&1; then
-		echo "error: the walkthrough this review was reading is gone — it was $src's draft, and the file no longer exists. Write it again with 'git review walkthrough draft $src', or discard the review with 'git review abort'." >&2
+	# happens the sequence changes shape under the cursor exactly as it does after
+	# a stray commit, and without this the reviewer gets told HEAD moved and to run
+	# git reset --soft, which is both wrong and destructive-sounding. Name the real
+	# cause instead.
+	#
+	# Decided on the recorded draft (reviewwalkdraft), not on "there is no
+	# walkthrough left": when the PR carries one of its own, deleting the draft
+	# makes the review fall back to the author's order, so walk_read still succeeds
+	# and the range can still have collapsed — the exact case that got the HEAD
+	# message wrong. The old total==0 test stays as the fallback for a review
+	# started before that key existed.
+	_wre_draft="$(git config "branch.$cur.reviewwalkdraft" || true)"
+	_wre_gone=0
+	if [ -n "$_wre_draft" ]; then
+		if ! walk_is_draft "$_wre_draft"; then
+			_wre_gone=1
+		fi
+	elif [ "$_wre_total" -eq 0 ] && ! walk_read "$tip" >/dev/null 2>&1; then
+		_wre_draft="$src"
+		_wre_gone=1
+	fi
+	if [ "$_wre_gone" -eq 1 ]; then
+		echo "error: the walkthrough this review was reading is gone — it was $_wre_draft's draft, and the file no longer exists. Write it again with 'git review walkthrough draft $_wre_draft', or discard the review with 'git review abort'." >&2
 		exit 1
 	fi
 	if [ "$_wre_step" -ge 1 ] && [ "$_wre_count" -ge 1 ] && [ "$_wre_total" -lt "$_wre_count" ]; then
@@ -1066,12 +1158,26 @@ load_walk_review_meta() {
 		exit 1
 	fi
 
-	# Point the readers at this source's own draft, if the reviewer wrote one.
-	# It has to happen before the sequence below, which is the first thing here
-	# to go through walk_read. Doing it in the context loader rather than in each
-	# verb is what guarantees every surface of one review — next, prev,
-	# status --why, preview — reads the same walkthrough.
-	walk_use_draft "$src"
+	# Point the readers at the draft this review is reading, if any. It has to
+	# happen before the sequence below, which is the first thing here to go
+	# through walk_read. Doing it in the context loader rather than in each verb
+	# is what guarantees every surface of one review — next, prev, status --why,
+	# preview — reads the same walkthrough.
+	#
+	# reviewwalkdraft, recorded by start/compare, names whose draft that is; it is
+	# not always the review's own source. A compare of a remote-tracking branch
+	# reviews "origin/feature/x" while the draft it read at creation is
+	# "feature/x"'s, and deriving the name from reviewsource here would hand every
+	# later verb a different walkthrough than the one the compare opened with.
+	# Absent (no draft when the review was created, or a review started before the
+	# key existed), the source's own name is the right guess — that is also what
+	# lets a draft written mid-review be picked up.
+	walkdraft="$(git config "branch.$cur.reviewwalkdraft" || true)"
+	if [ -n "$walkdraft" ]; then
+		walk_use_draft "$walkdraft"
+	else
+		walk_use_draft "$src"
+	fi
 
 	# Keys-only submode (start/compare --keys): sequence is curated ∩ keys, not
 	# the full reading order. The flag lives on the branch; absence is full walk.

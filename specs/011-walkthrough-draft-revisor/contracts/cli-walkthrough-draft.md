@@ -86,9 +86,10 @@ se emiten como nota en stderr y **no** afectan el exit code.
 | `start <branch>` | Si hay borrador para `<branch>`, entra en walk sobre él. Si no hay borrador ni sidecar, imprime una nota accionable señalando `walkthrough draft`. |
 | `compare <a> <b>` | Usa el borrador cuando el argumento nombra una rama con borrador; con revisiones sueltas (SHA/tag) usa el walkthrough del autor. |
 | `list` | Marca `(draft)` junto al modo `walk`, en reviews activas y pausadas. |
-| `save` | Mueve el borrador de `review-walkthrough/` a `review-saved-walkthrough/`. |
-| `continue` | Movimiento inverso, antes de reconstruir el estado de la review. |
-| `clean` | Poda `review-walkthrough/`, nunca `review-saved-walkthrough/`. |
+| `save` | Mueve el borrador de `review-walkthrough/` a `review-saved-walkthrough/`, como último paso (después de la última guarda que puede abortar). |
+| `continue` | Movimiento inverso, después de las guardas y antes de crear `review/<src>`. |
+| `clean` | No toca ningún borrador, en ninguno de los dos namespaces (ver la revisión de la Decisión 4). |
+| `forget --draft (<branch> \| --all) [--dry-run]` | Borra el borrador activo de esa rama, o todos. |
 | `forget --saved <branch>` | Borra también el borrador guardado de esa rama. |
 | `finish` | No lo toca. El borrador no aparece jamás en `review-fixes/`. |
 

@@ -73,9 +73,11 @@ En rechazo no se escribe nada: el borrador queda como estaba.
                          │  start <branch>  ──►  review en modo walk (draft)
                          │
       ┌──────────────────┼──────────────────┬─────────────────────┐
-      │ save             │ clean            │ finish              │ forget --saved
+      │ save             │ clean / abort    │ finish              │ forget --draft
       ▼                  ▼                  ▼                     ▼
-  (pausado)          (eliminado)      (sigue existiendo)     (eliminado)
+  (pausado)        (sigue existiendo) (sigue existiendo)     (eliminado)
+                                                              forget --saved
+                                                              (el pausado)
 ```
 
 Notas sobre las transiciones:
@@ -87,9 +89,27 @@ Notas sobre las transiciones:
 - **`save` mueve, no copia**: no pueden coexistir un borrador activo y uno
   pausado para la misma rama.
 - **`continue`** hace el movimiento inverso antes de reconstruir el estado de la
-  review, de modo que la lectura ya encuentra el borrador en su lugar.
-- **`clean`** poda el namespace activo y nunca el pausado — la misma asimetría
-  que hoy existe entre `refs/review-edits/` y `refs/review-saved-edits/`.
+  review, de modo que la lectura ya encuentra el borrador en su lugar — pero
+  **después** de las guardas que todavía pueden abortar. Espejo exacto en `save`,
+  donde el movimiento es el último paso: un `mv` a mitad de camino dejaba el
+  archivo en un namespace sin dueño (activo con la review pausada, o guardado sin
+  review guardada que lo reclamara).
+- **`clean`** no toca ningún borrador, en ninguno de los dos namespaces. Un
+  borrador es prosa escrita a mano que sobrevive a la review para la que se
+  escribió, así que sigue la regla de los otros dos estados persistentes del
+  proyecto (los marcadores de `--delta` y las reviews guardadas): `clean` borra
+  ramas y refs de sesión, `forget` descarta lo que las sobrevive. Se borra con
+  **`forget --draft <rama> | --all`**. Ver la revisión de la Decisión 4 en
+  [research.md](research.md).
+- **`reviewwalkdraft`** (`branch.review/<x>.reviewwalkdraft`) registra **qué**
+  borrador lee la review — la rama del borrador, que no siempre es el
+  `reviewsource`: un `compare develop origin/feature/x` es la review de
+  `origin/feature/x` y lee el borrador de `feature/x`. La escriben `start` y
+  `compare` sólo cuando abren sobre un borrador, y la leen `load_walk_review_meta`
+  (para fijar el contexto), `status`/`list` (para el `(draft)`), `save`/`continue`
+  (para mover el archivo correcto) y `walk_range_error` (para distinguir un
+  borrador borrado de un `git commit` encima de la review). Es una clave walk como
+  las demás: la cubre el guard de metadata de `finish`.
 - **`finish`** no lo toca: el borrador no es una edición del revisor y no puede
   aparecer en `review-fixes/`. Sobrevive para una re-review con `--delta`.
 

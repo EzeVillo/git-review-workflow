@@ -49,6 +49,12 @@ git rev-parse --git-dir >/dev/null 2>&1 || {
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
+# Resolve the gitdir once here rather than inside every draft-path lookup: those
+# happen in command substitutions, one per walk row, and each would otherwise
+# spawn its own git rev-parse (see walk_gitdir_init). No verb with a draft
+# context needs this — walk_use_draft does it — but list has no review loaded.
+walk_gitdir_init
+
 cur="$(git symbolic-ref --quiet --short HEAD || true)"
 branches="$(git for-each-ref --format='%(refname:short)' refs/heads/review/)"
 saved="$(git for-each-ref --format='%(refname:short)' refs/heads/review-saved/)"
@@ -101,7 +107,12 @@ describe() {
 		# looks days later to decide what to resume, which is exactly when "was
 		# this order mine or the author's?" stops being obvious. A paused review's
 		# draft lives in the saved namespace, so look where this row's review is.
-		dsrc="$(git config "branch.$b.reviewsource" || true)"
+		#
+		# reviewwalkdraft names the draft the review actually reads, which is not
+		# the review's source for a compare of a remote-tracking branch; falling
+		# back to the source keeps rows written before that key existed correct.
+		dsrc="$(git config "branch.$b.reviewwalkdraft" || true)"
+		[ -n "$dsrc" ] || dsrc="$(git config "branch.$b.reviewsource" || true)"
 		draft_note=""
 		if [ -n "$dsrc" ]; then
 			case "$b" in

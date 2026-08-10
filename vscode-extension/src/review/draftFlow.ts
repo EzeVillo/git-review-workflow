@@ -46,8 +46,16 @@ export type DraftFlowEvent =
     | {kind: "opened"}
     /** El revisor apretó Continue en el aviso. */
     | {kind: "continue"}
-    /** El revisor apretó Cancel, o descartó el aviso. */
+    /** El revisor apretó Cancel. */
     | {kind: "cancel"}
+    /**
+     * El aviso se cerró sin elegir (la X, o un "clear all notifications").
+     * **No** es Cancel: descartar una notificación es lo más fácil de hacer sin
+     * querer mientras se edita el archivo que el aviso pide editar, y no es una
+     * respuesta a la pregunta. El bucle se queda donde está y vuelve a
+     * preguntar; sólo Cancel abandona.
+     */
+    | {kind: "dismiss"}
     /** Resultado de `walkthrough draft --build`. */
     | {kind: "built"; ok: boolean; error?: string}
     /** Ofertas recargadas tras un `--build` en verde. */
@@ -95,6 +103,10 @@ export function advanceDraftFlow(state: DraftFlowState, event: DraftFlowEvent): 
             if (event.kind === "cancel") {
                 return {kind: "back"};
             }
+            // `dismiss` cae acá y devuelve el mismo estado —con su error, si lo
+            // traía—, de modo que el host vuelve a mostrar el aviso. Es el
+            // equivalente al diálogo persistente del plugin de IntelliJ: se sale
+            // del bucle por Cancel, no por descartar una notificación.
             return state;
 
         case "build":

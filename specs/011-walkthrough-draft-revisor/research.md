@@ -125,8 +125,9 @@ ediciones bancadas de `--step`:
 | Review activa | `refs/review-edits/<src>/<n>` | `<gitdir>/review-walkthrough/<src>.md` |
 | `save` | mueve a `refs/review-saved-edits/` | mueve a `<gitdir>/review-saved-walkthrough/<src>.md` |
 | `continue` | devuelve al namespace activo | devuelve al namespace activo |
-| `clean` | poda sólo el namespace activo | poda sólo el namespace activo |
+| `clean` | poda sólo el namespace activo | ~~poda sólo el namespace activo~~ → **no toca ninguno** (revisado, ver abajo) |
 | `forget --saved` | borra el guardado | borra el guardado |
+| `forget --draft` | — | borra el activo (`<branch>` o `--all`) |
 
 **Rationale**: es la respuesta a la clarificación de sesión (FR-008a) y, sobre
 todo, no estrena una regla. El revisor que ya entendió que pausar pone sus
@@ -142,6 +143,20 @@ misma rama.
 - *Que `clean` los borre siempre*: retomar una review pausada devolvería al diff
   completo sin que el revisor haya pedido perder nada — la sorpresa que el
   proyecto ya evitó al crear `refs/review-saved-edits/`.
+
+**Revisión posterior a la implementación (la alternativa descartada era la
+correcta).** Podar «todo borrador cuya `review/<src>` no exista» destruye en
+silencio el borrador del **primer paso del flujo documentado** —
+`walkthrough draft` → completarlo → `--build` → `start` —, donde todavía no
+existe ninguna review para reclamarlo: un `git review clean` en esa ventana
+borraba trabajo escrito a mano sin decir una palabra, y `--keep-fixes` (cuyo
+contrato es *borrá menos*) también lo hacía. La corrección es la que este
+proyecto ya aplica a los otros dos estados persistentes: `clean` borra ramas y
+refs de sesión, y `forget` descarta lo que sobrevive a la review. El borrador es
+prosa del revisor, no un artefacto de la máquina, así que va del lado de
+`forget` — y la acumulación, que era el motivo para descartar esta opción, la
+resuelve `forget --draft --all`. De paso desaparece el único uso de `find(1)` de
+`bin/` (`-empty`/`-delete`, fuera de POSIX): borrar por nombre es un `rm -f`.
 
 ## Decisión 5 — Cómo lo reportan los offers
 

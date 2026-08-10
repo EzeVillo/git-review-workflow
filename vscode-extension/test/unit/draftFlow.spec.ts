@@ -84,6 +84,23 @@ describe("advanceDraftFlow", () => {
         assert.ok(!("error" in state) || state.error === undefined);
     });
 
+    it("descartar el aviso no es Cancel: el bucle se queda esperando", () => {
+        // Cerrar la notificacion con la X mientras se edita el borrador — que es
+        // lo que el aviso pide hacer — no es una respuesta a la pregunta.
+        const waiting = run(initialDraftFlowState("resume"), [{kind: "opened"}]);
+        assert.deepStrictEqual(waiting, {kind: "wait"});
+        assert.deepStrictEqual(advanceDraftFlow(waiting, {kind: "dismiss"}), {kind: "wait"});
+
+        // Con un rechazo a cuestas, descartar conserva el motivo: el aviso
+        // siguiente lo vuelve a mostrar en vez de perderlo.
+        const failed: DraftFlowState = {kind: "wait", error: "duplicate entry"};
+        assert.deepStrictEqual(advanceDraftFlow(failed, {kind: "dismiss"}), failed);
+
+        // Y desde ahi las dos salidas siguen siendo las de siempre.
+        assert.deepStrictEqual(advanceDraftFlow(failed, {kind: "cancel"}), {kind: "back"});
+        assert.deepStrictEqual(advanceDraftFlow(failed, {kind: "continue"}), {kind: "build"});
+    });
+
     it("si la creacion falla no se espera nada: vuelve atras con el motivo", () => {
         const state = advanceDraftFlow(
             {kind: "create"},

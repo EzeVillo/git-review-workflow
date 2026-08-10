@@ -1,14 +1,15 @@
 #!/usr/bin/env sh
 #
-# git review forget — discard the persistent state a review leaves behind:
-# the --delta markers (--delta) or a review paused with git review save (--saved).
-# Exactly one mode is required.
+# git review forget — discard the persistent state a review leaves behind: the
+# --delta markers (--delta), a review paused with git review save (--saved), or a
+# walkthrough you drafted for someone else's PR (--draft). Exactly one mode is
+# required.
 #
-# Both kinds of state outlive the review/<branch> and review-fixes/<branch>
-# branches on purpose — a later --delta keeps working, a paused review waits to
-# be resumed — so git review clean deliberately leaves them alone. This command
-# is how you throw them away. To delete the review branches themselves, use
-# git review clean.
+# All three outlive the review/<branch> and review-fixes/<branch> branches on
+# purpose — a later --delta keeps working, a paused review waits to be resumed,
+# and a draft is prose you wrote by hand that a re-review can read again — so
+# git review clean deliberately leaves them alone. This command is how you throw
+# them away. To delete the review branches themselves, use git review clean.
 #
 set -eu
 
@@ -18,6 +19,7 @@ usage() {
 	cat <<EOF
 usage: $prog --delta (<branch> | --all | --stale [--dry-run])
        $prog --saved (<branch> | --all) [--dry-run]
+       $prog --draft (<branch> | --all) [--dry-run]
 
 Discard the persistent state a review leaves behind. Choose one mode:
 
@@ -25,6 +27,7 @@ Discard the persistent state a review leaves behind. Choose one mode:
   --saved   discard a review paused with git review save: delete
             review-saved/<branch>, its banked edits and metadata, and roll back
             the --delta marker it left
+  --draft   delete a walkthrough you drafted with git review walkthrough draft
 
 --delta targets:
   <branch>     forget the marker(s) for one source branch (remote and --local)
@@ -38,6 +41,11 @@ Discard the persistent state a review leaves behind. Choose one mode:
   <branch>     discard the saved review for one source branch
   --all        discard every saved review
   --dry-run    list what would be discarded without discarding it
+
+--draft targets:
+  <branch>     delete the draft written for one branch
+  --all        delete every draft
+  --dry-run    list what would be deleted without deleting it
 EOF
 }
 
@@ -51,20 +59,25 @@ arg=""
 all=0
 stale=0
 dryrun=0
+
+# set_mode <kind>: pick which kind of state to discard. Repeating one flag is
+# harmless; naming two different ones is ambiguous and is refused.
+set_mode() {
+	if [ -n "$mode" ] && [ "$mode" != "$1" ]; then
+		die "use only one of --delta, --saved and --draft"
+	fi
+	mode="$1"
+}
+
 while [ $# -gt 0 ]; do
 	case "$1" in
 	-h | --h)
 		usage
 		exit 0
 		;;
-	--delta)
-		[ -z "$mode" ] || [ "$mode" = delta ] || die "use only one of --delta and --saved"
-		mode="delta"
-		;;
-	--saved)
-		[ -z "$mode" ] || [ "$mode" = saved ] || die "use only one of --delta and --saved"
-		mode="saved"
-		;;
+	--delta) set_mode delta ;;
+	--saved) set_mode saved ;;
+	--draft) set_mode draft ;;
 	--all) all=1 ;;
 	--stale) stale=1 ;;
 	--dry-run) dryrun=1 ;;
@@ -150,11 +163,15 @@ if [ "$mode" = saved ]; then
 		git for-each-ref --format='%(refname)' "refs/review-saved-edits/$src/" | while read -r ref; do
 			git update-ref -d "$ref"
 		done
-		# The reviewer's own walkthrough draft goes with it. This is the one verb
-		# that is allowed to take it: git review clean deliberately cannot, so
-		# discarding a paused review is the deliberate act that also discards the
-		# reading order it was paused with.
-		rm -f "$(walk_saved_draft_path "$src")"
+		# The reviewer's own walkthrough draft goes with it: discarding a paused
+		# review is the deliberate act that also discards the reading order it was
+		# paused with. Under the name the review recorded when it opened on that
+		# draft (reviewwalkdraft), which is not the review's own source for a
+		# compare of a remote-tracking branch; the source is the fallback for a
+		# review saved before that key existed.
+		draftsrc="$(git config "branch.$saved.reviewwalkdraft" || true)"
+		[ -n "$draftsrc" ] || draftsrc="$src"
+		rm -f "$(walk_saved_draft_path "$draftsrc")"
 		git branch -D "$saved" >/dev/null
 
 		echo "discarded saved review of $src"
@@ -171,6 +188,77 @@ if [ "$mode" = saved ]; then
 		done
 	else
 		forget_saved_one "$arg"
+	fi
+	exit 0
+fi
+
+# ── --draft ─────────────────────────────────────────────────────────────────────
+# The reviewer's own walkthrough for someone else's PR. git review clean never
+# touches it — it is hand-written prose that outlives the review it was written
+# for, like the two kinds of state above — so this is the way to throw one away.
+#
+# Only the active namespace: a draft that travelled with a paused review lives in
+# review-saved-walkthrough/ and belongs to that review, which forget --saved
+# discards as a whole. Two namespaces, one owner each.
+#
+# The directory a namespaced branch created is left behind empty, exactly as git
+# leaves .git/refs/heads/<ns>/ after the last branch in it is deleted.
+if [ "$mode" = draft ]; then
+	[ "$stale" -eq 0 ] || die "--stale only applies to --delta"
+
+	if [ -n "$arg" ] && [ "$all" -eq 1 ]; then
+		die "use either <branch> or --all, not both"
+	fi
+	if [ -z "$arg" ] && [ "$all" -eq 0 ]; then
+		usage >&2
+		exit 1
+	fi
+
+	git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
+
+	# For walk_draft_path / walk_draft_list. Sourcing has no side effects — the
+	# library defines functions and nothing else.
+	# shellcheck source=../git-review-lib.sh
+	. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
+
+	# forget_draft_one <src>: delete the draft written for one branch.
+	forget_draft_one() {
+		_fd_src="$1"
+		_fd_path="$(walk_draft_path "$_fd_src")"
+		if [ ! -f "$_fd_path" ]; then
+			echo "no walkthrough draft for $_fd_src" >&2
+			return
+		fi
+		if [ "$dryrun" -eq 1 ]; then
+			echo "would forget the walkthrough draft for $_fd_src"
+			return
+		fi
+		rm -f "$_fd_path"
+		echo "forgot the walkthrough draft for $_fd_src"
+		# Deleting it under a live review is allowed — going back to the author's
+		# order is a legitimate thing to want — but it changes what that review
+		# reads, so say so rather than let it be discovered at the next cursor move.
+		if git rev-parse --verify --quiet "refs/heads/review/$_fd_src" >/dev/null; then
+			echo "note: review/$_fd_src was reading it; that review falls back to the PR's own walkthrough, or to the whole diff if it has none" >&2
+		fi
+	}
+
+	if [ "$all" -eq 1 ]; then
+		drafts="$(walk_draft_list)"
+		[ -n "$drafts" ] || {
+			echo "no walkthrough drafts"
+			exit 0
+		}
+		# A here-doc while-read (not a pipe): forget_draft_one must run in this
+		# shell, the same reason the --delta loop below reads from a temp file.
+		while IFS= read -r d; do
+			[ -n "$d" ] || continue
+			forget_draft_one "$d"
+		done <<EOF
+$drafts
+EOF
+	else
+		forget_draft_one "$arg"
 	fi
 	exit 0
 fi

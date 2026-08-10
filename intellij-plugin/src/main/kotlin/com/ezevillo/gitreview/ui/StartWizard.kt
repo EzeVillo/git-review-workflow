@@ -2,6 +2,7 @@ package com.ezevillo.gitreview.ui
 
 import com.ezevillo.gitreview.domain.DeltaRecord
 import com.ezevillo.gitreview.domain.DraftFlowEvent
+import com.ezevillo.gitreview.domain.MutationLock
 import com.ezevillo.gitreview.domain.DraftFlowState
 import com.ezevillo.gitreview.domain.ReadingOffer
 import com.ezevillo.gitreview.domain.ReviewIntent
@@ -315,13 +316,20 @@ object StartWizard {
         service: GitReviewService,
         build: Boolean,
     ): DraftOutcome {
-        val result = Bg.sync(ctx.project, UserCopy.draftProgress(ctx.branch, build)) {
-            service.cliInvoker.invoke(
-                "walkthrough",
-                draftArgs(ctx.branch, ctx.source, ctx.range, build),
-                ctx.cwd,
-            )
-        }
+        // Under the mutation lock, like every other CLI invocation this plugin
+        // makes — and like the extension's own invokeDraft. Drafting touches no
+        // git state, but it runs with the panel and its refreshes live, and one
+        // client holding a lock the other does not is a difference in behaviour
+        // between the two IDEs rather than a detail of either.
+        val result = service.mutationLock.run {
+            Bg.sync(ctx.project, UserCopy.draftProgress(ctx.branch, build)) {
+                service.cliInvoker.invoke(
+                    "walkthrough",
+                    draftArgs(ctx.branch, ctx.source, ctx.range, build),
+                    ctx.cwd,
+                )
+            }
+        } ?: return DraftOutcome(ok = false, text = MutationLock.DISCARD_REASON)
         return DraftOutcome(
             ok = result.exitCode == 0 && !result.timedOut,
             text = UiMessages.flatten(result.stderr),

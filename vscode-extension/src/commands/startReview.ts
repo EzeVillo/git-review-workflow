@@ -10,6 +10,7 @@ import {
 import {invokeGitReview, InvokeOptions, resolveCommand} from "../cli/invoke";
 import {
     advanceDraftFlow,
+    DraftFlowEvent,
     DraftFlowState,
     gitdirFromLink,
     initialDraftFlowState,
@@ -347,10 +348,17 @@ async function runDraftFlow(
                     state.error !== undefined
                         ? await vscode.window.showWarningMessage(message, "Continue", "Cancel")
                         : await vscode.window.showInformationMessage(message, "Continue", "Cancel");
-                state = advanceDraftFlow(
-                    state,
-                    answer === "Continue" ? {kind: "continue"} : {kind: "cancel"}
-                );
+                // `undefined` es la notificación descartada, no Cancel: se cierra
+                // sola con la X o con "clear all notifications", que es fácil de
+                // hacer sin querer mientras se edita el borrador — justo lo que
+                // el aviso pide hacer. Se vuelve a mostrar; sólo Cancel sale.
+                let event: DraftFlowEvent = {kind: "dismiss"};
+                if (answer === "Continue") {
+                    event = {kind: "continue"};
+                } else if (answer === "Cancel") {
+                    event = {kind: "cancel"};
+                }
+                state = advanceDraftFlow(state, event);
                 break;
             }
 

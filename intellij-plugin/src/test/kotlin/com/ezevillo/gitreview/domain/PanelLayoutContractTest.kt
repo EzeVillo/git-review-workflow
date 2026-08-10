@@ -26,6 +26,17 @@ class PanelLayoutContractTest {
     }
 
     @Test
+    fun `a draft walk keeps the same control sequence as any walk`() {
+        // 011: whose walkthrough it is shows up as identity (the "(draft)" badge
+        // on the identity bar), never as a different set of actions — so the
+        // canonical review-walk row is what it has to match, unchanged.
+        assertLayoutAgainstCanonical(
+            key = "review-walk",
+            layout = panelLayout(PanelFixtures.reviewWalkDraft()),
+        )
+    }
+
+    @Test
     fun `step control sequence matches canonical`() {
         assertLayoutAgainstCanonical(
             key = "review-step",

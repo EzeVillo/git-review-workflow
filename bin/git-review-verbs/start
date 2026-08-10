@@ -407,6 +407,14 @@ if [ "$walk" -eq 1 ]; then
 	if [ "$keys_filter" -eq 1 ]; then
 		git config "branch.$rb.reviewwalkkeys" "1"
 	fi
+	# Whose walkthrough this review opened on. Recorded only when it is the
+	# reviewer's own draft, so its absence keeps meaning "the author's", and read
+	# back by every verb through load_walk_review_meta. It is also what lets the
+	# cursor's diagnostics tell "you deleted your draft" apart from "you committed
+	# on top of the review" when the sequence changes under them.
+	if walk_is_draft "$src"; then
+		git config "branch.$rb.reviewwalkdraft" "$src"
+	fi
 
 	if [ "$keys_filter" -eq 0 ]; then
 		# Files in the review range with no walkthrough entry: the walkthrough may be
@@ -451,6 +459,18 @@ else
 	# moment they are looking. Suppressed when they opted out with --no-walk:
 	# they already made the call.
 	if [ "$no_walk" -eq 0 ] && ! walk_read "$tip" >/dev/null; then
-		echo "note: $src has no walkthrough. To read it in an order of your own: git review walkthrough draft $src (nothing gets committed)"
+		# With this review's own origin and range flags: drafting against a
+		# different range than the one being reviewed would annotate the wrong file
+		# set, and on a branch with no copy on the remote the bare form just fails.
+		draftflags=""
+		if [ "$offline_mode" -eq 1 ]; then
+			draftflags=" --offline"
+		elif [ "$local_mode" -eq 1 ]; then
+			draftflags=" --local"
+		fi
+		if [ "$delta" -eq 1 ]; then
+			draftflags="$draftflags --delta"
+		fi
+		echo "note: $src has no walkthrough. To read it in an order of your own: git review walkthrough draft$draftflags $src (nothing gets committed)"
 	fi
 fi

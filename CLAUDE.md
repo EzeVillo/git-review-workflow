@@ -28,7 +28,7 @@ comandos.
 
 # Tests de integración de la extensión — misma regla, mismo motivo, otro
 # contenedor (trae node + el VS Code headless). Ver la sección de la extensión.
-./vscode-extension/test/run-docker.sh             # los 66 tests
+./vscode-extension/test/run-docker.sh             # los 70 tests
 ./vscode-extension/test/run-docker.sh open-entry  # las specs que matcheen
 
 # Pruebas manuales — arma un PR de juguete descartable (feature/checkout: 4
@@ -139,14 +139,31 @@ repo, no en archivos del working tree:
   —fijado por `walk_use_draft` desde los dos cargadores de metadata, de modo que
   todo verbo con review activa lo herede—, gana sobre el sidecar del tip; si no,
   el sidecar como siempre. Las trece funciones de walk y los verbos que cuelgan
-  de ellas no se enteran. Ciclo de vida en espejo del de las refs de ediciones:
-  `save` lo mueve a `review-saved-walkthrough/`, `continue` lo devuelve **antes**
-  de reconstruir la review, `clean` poda sólo el activo y `forget --saved` borra
-  el guardado. Su presencia se reporta —nunca se infiere— con el registro
-  `draft` de `status --porcelain` y el sufijo `(draft)` en `status` y `list`; la
-  viabilidad de armarlo o continuarlo, con las ofertas `draft` / `draft-resume`
-  de `config --porcelain`, que se deciden con un test de archivo (cero procesos
-  nuevos en un camino caliente).
+  de ellas no se enteran. **Qué borrador lee una review se persiste**
+  (`branch.review/<x>.reviewwalkdraft = <rama del borrador>`, escrita por
+  `start`/`compare` sólo cuando abren sobre uno): no siempre es el `reviewsource`
+  —un `compare develop origin/feature/x` es la review de `origin/feature/x` y lee
+  el borrador de `feature/x`— y sin ese registro cada verbo posterior buscaría
+  bajo el nombre de la review, no encontraría nada y se pasaría al orden del autor
+  en silencio. Es también lo que le permite a `walk_range_error` distinguir
+  «borraste tu borrador» de «commiteaste encima de la review» cuando la secuencia
+  cambia bajo el cursor, incluso si el PR trae walkthrough propio y la review cae
+  sobre él. Es una clave walk como las demás: la copian `save`/`continue` y la
+  cubre el guard de metadata de `finish`.
+  Ciclo de vida: `save` lo archiva en `review-saved-walkthrough/` (y `continue` lo
+  devuelve) **como último paso, después de la última guarda que puede abortar** —
+  un movimiento a mitad de camino dejaba el archivo sin dueño de los dos lados.
+  `clean` **no lo toca nunca**: es prosa escrita a mano que sobrevive a la review
+  (arrancá la rama de nuevo y tu orden sigue ahí), así que va con los otros dos
+  estados persistentes que `clean` deja quietos —los marcadores de `--delta` y las
+  reviews guardadas— y se descarta con `git review forget --draft <rama> | --all`
+  (`--saved` se lleva el de la review pausada). Su presencia se reporta —nunca se
+  infiere— con el registro `draft` de `status --porcelain` y el sufijo `(draft)`
+  en `status` y `list`; la viabilidad de armarlo o continuarlo, con las ofertas
+  `draft` / `draft-resume` de `config --porcelain`, que se deciden con un test de
+  archivo (cero procesos nuevos en un camino caliente: el gitdir del que cuelgan
+  todos esos paths se resuelve **una vez por proceso** en `walk_gitdir_init`, y
+  desde `walk_use_draft` porque un `$(...)` no puede cachear nada).
 - **Refs de ediciones:** `refs/review-edits/<src>/<step>` bancan las ediciones
   de cada commit en `--step` como objetos commit-tree; `git review save` los mueve
   a `refs/review-saved-edits/` para que `git review clean` (que poda
@@ -324,7 +341,7 @@ npm run preview:watch
 
 # Integración: en el contenedor, NO con `npm run test:integration`.
 cd ..
-./vscode-extension/test/run-docker.sh             # los 66 tests
+./vscode-extension/test/run-docker.sh             # los 70 tests
 ./vscode-extension/test/run-docker.sh open-entry  # las specs que matcheen
 MOCHA_GREP='abre el diff' ./vscode-extension/test/run-docker.sh
 ./vscode-extension/test/run-docker.sh -- sh       # una shell adentro
@@ -340,9 +357,9 @@ MOCHA_GREP='abre el diff' ./vscode-extension/test/run-docker.sh
   el host. Ojo: el host hereda el `PATH` del VS Code que lo lanzó, no el que
   arma el `env.sh` del sandbox — o instalás el checkout, o apuntás la setting
   `gitReview.path` a `bin/git-review`.
-- **La suite de integración va en el contenedor**, misma regla que bats: los 66
+- **La suite de integración va en el contenedor**, misma regla que bats: los 70
   tests tardan 38 s adentro contra 16 minutos nativos en Windows (26×), y pasan
-  los mismos 66. El script
+  los mismos 70. El script
   (`vscode-extension/test/run-docker.sh` + `test/Dockerfile` + `entrypoint.sh`)
   monta el repo read-only, lo copia a `/work` porque `npm install` escribe, y
   cachea `node_modules`, el VS Code descargado y el cache de npm en volúmenes
@@ -354,7 +371,7 @@ MOCHA_GREP='abre el diff' ./vscode-extension/test/run-docker.sh
   todo fixture muere con un `is not a git command` que no dice nada; y la imagen
   fija **`VSCODE_CLI=1`**, sin lo cual VS Code resuelve el entorno de un login
   shell y pisa con él el `PATH` que `runTests.ts` preparó — la extensión no
-  encuentra la CLI y los 66 tests fallan con `cli-missing`.
+  encuentra la CLI y los 70 tests fallan con `cli-missing`.
 - **`test:integration` corre contra `dist/`** y lo recompila solo
   (`pretest:integration`), así que lo verde siempre es el código actual.
 - **Dos specs de integración abren tabs y son flaky en Windows** por el host de
@@ -376,7 +393,7 @@ MOCHA_GREP='abre el diff' ./vscode-extension/test/run-docker.sh
   reinyecta el default largo. `test/unit/userDataDir.spec.ts` cubre las dos
   cosas contra `darwin` explícito, así que la regresión cae en cualquier SO.
 - **`npm run preview`** genera `out/preview/index.html` (y lo imprime como URL
-  `file://`): los nueve estados del panel lado a lado, a ancho de sidebar, con
+  `file://`): los dieciocho estados del panel lado a lado, a ancho de sidebar, con
   selector de tema dark/light/alto contraste. El pane es el `panelHtml()` real y
   los estados de `preview/fixtures.ts` son salida `--porcelain` de ejemplo pasada
   por el parser y el modelo reales, así que **sigue al código y no se mantiene

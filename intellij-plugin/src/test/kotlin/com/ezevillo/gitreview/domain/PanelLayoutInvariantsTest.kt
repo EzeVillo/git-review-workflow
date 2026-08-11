@@ -55,6 +55,77 @@ class PanelLayoutInvariantsTest {
     }
 
     @Test
+    fun `index is allowed only on inventory row controls`() {
+        // The rule the panel relies on to route a click back to the row it came
+        // from: an index identifies a row of the inventory, and nothing else. It
+        // is checked in PanelLayout's init, so a violation is an exception on the
+        // render path rather than a red test — which is why it needs one here.
+        val indexed = Control(
+            id = ControlId.CONTINUE_REVIEW,
+            label = "Resume",
+            accessibleName = "Resume",
+            emphasis = Emphasis.SECONDARY,
+            index = 0,
+        )
+        val row = InventoryRow(
+            name = "review-saved/feature",
+            badges = listOf("saved"),
+            meta = "walk [1/3]",
+            controls = listOf(indexed),
+        )
+        // Hosted by an InventoryRows block: legal, and it survives being nested
+        // in a ToolsSection, which is where the inventory actually lives.
+        PanelLayout(
+            situation = Situation.NO_REVIEW,
+            blocks = listOf(Block.ToolsSection("Reviews", listOf(Block.InventoryRows(listOf(row))))),
+            titleActions = emptyList(),
+        )
+
+        // The same control anywhere else is not: a plain Row, or a title action.
+        assertThrows(IllegalArgumentException::class.java) {
+            PanelLayout(
+                situation = Situation.NO_REVIEW,
+                blocks = listOf(Block.Row(listOf(indexed))),
+                titleActions = emptyList(),
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            PanelLayout(
+                situation = Situation.NO_REVIEW,
+                blocks = emptyList(),
+                titleActions = listOf(indexed),
+            )
+        }
+        // FileRows carries its position on the row (FileRow.index), never on a
+        // control, so having one in the layout does not license an indexed
+        // control the way it used to.
+        assertThrows(IllegalArgumentException::class.java) {
+            PanelLayout(
+                situation = Situation.REVIEW,
+                blocks = listOf(
+                    Block.FileRows(listOf(FileRow(display = "src/a.kt", index = 0, lastOpened = false))),
+                    Block.Row(listOf(indexed)),
+                ),
+                titleActions = emptyList(),
+            )
+        }
+    }
+
+    @Test
+    fun `inventory controls must carry an index`() {
+        assertThrows(IllegalArgumentException::class.java) {
+            InventoryRow(
+                name = "review/feature",
+                badges = emptyList(),
+                meta = "walk [1/3]",
+                controls = listOf(
+                    Control(ControlId.CONTINUE_REVIEW, "Resume", "Resume", Emphasis.SECONDARY),
+                ),
+            )
+        }
+    }
+
+    @Test
     fun `excluded ids are not ControlId entries`() {
         val wires = ControlId.entries.map { it.wire }.toSet()
         for (ex in listOf("goToEntry", "forgetReview", "previewEditsStat", "showCliLog")) {

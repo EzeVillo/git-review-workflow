@@ -273,6 +273,18 @@ EOF
 
 # ── the "> key" marker ────────────────────────────────────────────────────────
 
+@test "init closes with the author's own note and build command" {
+	run git review walkthrough init
+	[ "$status" -eq 0 ]
+	# The skeleton body is shared with the reviewer's draft, but its closing note is
+	# not: the command that validates it differs, and so does what "uncommitted
+	# changes" means. Pinned from the author's end too, so switching the two
+	# passages can never hand the author the reviewer's copy.
+	grep -q 'Then validate and write with:  git review walkthrough build -->' .review/walkthrough.md
+	grep -q 'Commit the PR before authoring it' .review/walkthrough.md
+	! grep -q 'walkthrough draft' .review/walkthrough.md
+}
+
 @test "init explains the key marker in its instructions" {
 	run git review walkthrough init
 	[ "$status" -eq 0 ]

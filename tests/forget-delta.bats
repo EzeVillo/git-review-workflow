@@ -303,8 +303,62 @@ mark() {
 	[ -n "$(git config reviewworkflow.feature/x.reviewed)" ]
 }
 
-@test "review forget rejects combining --delta and --saved" {
+@test "review forget rejects combining two modes" {
+	mark feature/x
 	run git review forget --delta --saved feature/x
 	[ "$status" -ne 0 ]
-	[[ "$output" == *"only one of --delta and --saved"* ]]
+	[[ "$output" == *"only one of --delta, --saved and --draft"* ]]
+	# The marker is still there: an ambiguous request forgets nothing.
+	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$(git rev-parse origin/feature/x)" ]
+
+	run git review forget --draft --delta feature/x
+	[ "$status" -ne 0 ]
+	[[ "$output" == *"only one of --delta, --saved and --draft"* ]]
+	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$(git rev-parse origin/feature/x)" ]
+}
+
+@test "review forget takes -- to end option parsing" {
+	mark feature/x
+	run git review forget --delta -- feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"forgot delta marker for feature/x"* ]]
+	run git config reviewworkflow.feature/x.reviewed
+	[ "$status" -ne 0 ]
+}
+
+@test "review forget takes -- in every mode" {
+	# One arm per mode, because the parser is shared but the modes are not: a caller
+	# that spells its arguments defensively must not have to know which of the three
+	# it is talking to.
+	mark feature/x
+	# Nothing saved and nothing drafted for feature/x, so each mode reaches its own
+	# "there is nothing here" -- which is the point: the branch arrived as the
+	# branch, not as an unknown option.
+	run git review forget --saved -- feature/x
+	[ "$status" -eq 0 ]
+	[ "$output" = "no saved review for feature/x" ]
+	run git review forget --draft -- feature/x
+	[ "$status" -eq 0 ]
+	[ "$output" = "no walkthrough draft for feature/x" ]
+	# And neither touched the delta marker, which is not theirs to touch.
+	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$(git rev-parse origin/feature/x)" ]
+}
+
+@test "review forget still rejects a second positional after --" {
+	mark feature/x
+	run git review forget --delta -- feature/x feature/y
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"unexpected argument feature/y"* ]]
+	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$(git rev-parse origin/feature/x)" ]
+}
+
+@test "review forget takes one mode flag twice without complaining" {
+	# Repeating a flag is not ambiguous, so it is not an error — only naming two
+	# different modes is.
+	mark feature/x
+	run git review forget --delta --delta feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"forgot delta marker for feature/x"* ]]
+	run git config reviewworkflow.feature/x.reviewed
+	[ "$status" -ne 0 ]
 }

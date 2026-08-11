@@ -30,6 +30,18 @@ opens that file's diff, and one control above them opens every change at once.
 The last row you opened stays marked, so a list you are halfway through still
 says where you were after closing the editor.
 
+**Or the reading order you write yourself.** When the PR ships without one, the
+start assistant offers *Walkthrough — draft one*: it writes a skeleton listing
+every file in the range, opens it, and waits — you can keep editing while the
+notice is up, and closing the notice brings it back rather than ending the flow —
+until you say the order and the *why* are in. Validation runs on the CLI, so a
+rejection tells you exactly what to fix and you retry as often as you need. The draft is **yours and local**: it lives outside the working tree,
+never gets committed or staged, and `git status` does not change at any point.
+Nothing about it is written for you and no service is contacted; it is a file
+you fill in. Once it is in, the review reads it exactly like an author's
+walkthrough, and the panel marks the mode `(draft)` so it is clear whose reading
+order you are on.
+
 **Your other reviews, when this branch has none.** With no review on the current
 branch the panel lists the ones open elsewhere in the repository — active and
 saved, with their mode and position — so a review you put aside doesn't have to
@@ -88,6 +100,7 @@ invents a second way to change review state.
 | **Discard / Forget**         | Inventory row, or the palette for saved reviews and `--delta` markers                        | `git review forget --saved` / `--delta`, `git review clean`  |
 | **Compare revisions**        | Empty state, under Start; also the palette. The result is **read-only** — no writeback       | `git review compare <a> <b>`                                 |
 | **Walkthrough: Init / Build**| Empty state, under Start (this is the *author* flow); also the palette                       | `git review walkthrough init` / `build`                      |
+| **Walkthrough — draft one**  | Inside *Start a review*, at the reading-order step, when the PR has none (the *reviewer* flow) | `git review walkthrough draft [--build]`                     |
 
 Mutations (the lifecycle actions, clean, forget, compare and writing a
 walkthrough) ask for a confirmation that names what will happen. Preview is
@@ -103,7 +116,7 @@ current entry) but locks navigation until you *Continue* or *Undo finish*.
 ## Requirements
 
 - **VS Code 1.75** or newer.
-- **[git-review-workflow](https://github.com/EzeVillo/git-review-workflow) 0.5.0
+- **[git-review-workflow](https://github.com/EzeVillo/git-review-workflow) 0.6.0
   or newer**, discoverable as a git subcommand (`git review -h` works), or
   pointed at directly with the `gitReview.path` setting.
 - A **single-folder workspace.** Multi-root workspaces are not supported: the

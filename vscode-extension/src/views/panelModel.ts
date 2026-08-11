@@ -185,6 +185,12 @@ export interface PanelModel {
      * booleano en el modelo (ausencia en porcelain = false).
      */
     keysOnly: boolean;
+    /**
+     * El orden de lectura es el borrador del revisor y no el walkthrough del
+     * PR (`status --porcelain` → registro `draft`, 011). Siempre booleano en el
+     * modelo, y **nunca** inferido: sólo refleja el registro.
+     */
+    draft: boolean;
     /** La entrada actual, elegida por `position` y nunca por `id`. */
     current?: PanelEntry;
     entryCount: number;
@@ -378,6 +384,7 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
         degraded: false,
         readonly: false,
         keysOnly: false,
+        draft: false,
         entryCount: 0,
         files: [],
     };
@@ -412,6 +419,7 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
     base.degraded = review.walkthrough === "degraded";
     base.readonly = state.readonly === true;
     base.keysOnly = state.keysOnly === true;
+    base.draft = state.draft === true;
     base.entryCount = state.entries.length;
 
     if (review.mode === "whole") {

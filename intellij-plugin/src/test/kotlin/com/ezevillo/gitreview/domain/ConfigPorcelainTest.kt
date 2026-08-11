@@ -28,6 +28,56 @@ class ConfigPorcelainTest {
         assertNull(deltaForSource(r.deltas, "local"))
     }
 
+    /** 011: los ids nuevos se parsean, y el orden del selector los ubica. */
+    @Test
+    fun draftOffersParseAndOrder() {
+        val out = """
+            config	remote	origin
+            offer	draft	available
+            offer	step	available
+            offer	whole	available
+        """.trimIndent()
+        val r = parseConfigPorcelain(out)
+        assertEquals(
+            listOf(OfferId.DRAFT, OfferId.STEP, OfferId.WHOLE),
+            r.offers?.map { it.id },
+        )
+        val items = buildLayoutItems(r.offers)
+        assertEquals(listOf("Walkthrough — draft one", "Commit by commit", "Whole diff"), items.map { it.label })
+        assertEquals(DraftStep.CREATE, items[0].draft)
+        assertEquals(ReviewLayout.WALK, items[0].layout)
+        assertNull(items[1].draft)
+    }
+
+    @Test
+    fun draftResumeSitsBehindWalkRecommended() {
+        val out = """
+            config	remote	origin
+            offer	walk	recommended
+            offer	draft-resume	available
+            offer	step	available
+        """.trimIndent()
+        val items = buildLayoutItems(parseConfigPorcelain(out).offers)
+        assertEquals(
+            listOf("Walkthrough (recommended)", "Walkthrough — continue draft", "Commit by commit"),
+            items.map { it.label },
+        )
+        assertNull(items[0].draft)
+        assertEquals(DraftStep.RESUME, items[1].draft)
+        assertEquals("finish the reading order you started", items[1].description)
+    }
+
+    @Test
+    fun unknownOfferIdsAreStillDropped() {
+        val out = """
+            config	remote	origin
+            offer	drafts	available
+            offer	draft_resume	available
+            offer	draft	available
+        """.trimIndent()
+        assertEquals(listOf(OfferId.DRAFT), parseConfigPorcelain(out).offers?.map { it.id })
+    }
+
     @Test
     fun remoteDefaultsToOrigin() {
         val r = parseConfigPorcelain("")

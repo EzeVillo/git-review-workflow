@@ -85,6 +85,11 @@ export interface ReviewState {
      * la CLI no lo emitió; no se inventa `false`.
      */
     keysOnly?: true;
+    /**
+     * El orden de lectura es el borrador del revisor (`status --porcelain` →
+     * registro `draft`, 011). Ausente cuando la CLI no lo emitió.
+     */
+    draft?: true;
     /** stderr crudo de la CLI; presente en error/out-of-range/cli-missing/cli-outdated. */
     stderr?: string;
 }
@@ -348,6 +353,9 @@ export class ReviewStateManager {
         }
         if (parsed.keysOnly) {
             next.keysOnly = true;
+        }
+        if (parsed.draft) {
+            next.draft = true;
         }
         return this.setState(next);
     }

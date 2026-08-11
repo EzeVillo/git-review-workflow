@@ -41,8 +41,15 @@ export interface DeltaRecord {
     origin: DeltaOrigin;
 }
 
-/** Forma de lectura viable reportada por la CLI (008). */
-export type OfferId = "walk" | "keys" | "step" | "whole";
+/**
+ * Forma de lectura viable reportada por la CLI (008).
+ *
+ * 011: `draft` / `draft-resume` no son formas de lectura sino el camino para
+ * conseguir una — el revisor se escribe el orden que el PR no trae. Viajan por
+ * el mismo registro porque se eligen en el mismo paso del asistente, y son
+ * mutuamente excluyentes entre sí (contracts/config-porcelain-draft.md).
+ */
+export type OfferId = "walk" | "keys" | "draft" | "draft-resume" | "step" | "whole";
 export type OfferRank = "recommended" | "available";
 
 export interface ReadingOffer {
@@ -77,7 +84,14 @@ function toBool(field: string | undefined): boolean {
 }
 
 function parseOfferId(raw: string | undefined): OfferId | undefined {
-    if (raw === "walk" || raw === "keys" || raw === "step" || raw === "whole") {
+    if (
+        raw === "walk" ||
+        raw === "keys" ||
+        raw === "draft" ||
+        raw === "draft-resume" ||
+        raw === "step" ||
+        raw === "whole"
+    ) {
         return raw;
     }
     return undefined;

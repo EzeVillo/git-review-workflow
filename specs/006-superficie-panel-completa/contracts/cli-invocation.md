@@ -115,7 +115,7 @@ Se **agregan**:
 | `git branch -D` / borrar refs a mano                      | FR-006 — solo clean/forget                              |
 | Pasar `--dry-run` a forget                                | No hay superficie; la confirmación es el dry-run humano |
 | Combinar `--saved` y `--delta`                            | El verbo lo prohíbe                                     |
-| `walkthrough` con subcomandos distintos de `init`/`build` | No existen                                              |
+| `walkthrough` con subcomandos distintos de `init`/`build` | No existen — **enmendado por `011-walkthrough-draft-revisor`**: `draft` ya existe; ver `specs/011-walkthrough-draft-revisor/contracts/cli-invocation-draft.md` |
 | Parsear stdout de `preview` para el view-model de review  | FR-005                                                  |
 
 Todo lo demás de la tabla de `005` se mantiene.

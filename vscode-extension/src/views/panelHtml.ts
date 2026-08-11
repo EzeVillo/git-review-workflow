@@ -85,6 +85,10 @@ export function panelHtml(nonce: string): string {
     color: var(--vscode-descriptionForeground);
   }
   .bar .mode { color: var(--vscode-textPreformat-foreground); }
+  /* De quién es el orden de lectura. Va en el color del resto de la barra —no
+     en el del modo— porque es una precisión sobre el modo, no otro dato: el
+     mismo peso visual que le da la terminal escribiendo "walk (draft)". */
+  .bar .draft { flex: none; }
   .bar .branch {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -924,6 +928,10 @@ export function panelHtml(nonce: string): string {
   function renderBar(model, loading) {
     const bar = el("div", "bar");
     bar.appendChild(el("span", "mode", model.mode));
+    // El orden de lectura es el borrador del revisor, no el walkthrough del PR
+    // (011). Sale del registro de presencia y de ningún otro lado; es texto en
+    // un bloque que ya existe, no un control ni un bloque nuevo.
+    if (model.draft) { bar.appendChild(el("span", "draft", "(draft)")); }
     // El ORIGEN en lugar de la rama, no además de ella (research.md Decisión 5):
     // la rama es siempre "review/<origen>", así que mostrar las dos es gastar dos
     // veces el recurso más escaso del panel en el mismo dato. El origen es

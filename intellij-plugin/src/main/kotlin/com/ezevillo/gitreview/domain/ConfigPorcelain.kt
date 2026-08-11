@@ -39,13 +39,21 @@ data class DeltaRecord(
     val origin: DeltaOrigin,
 )
 
+/**
+ * 011: DRAFT / DRAFT_RESUME no son formas de lectura sino el camino para
+ * conseguir una — el revisor se escribe el orden que el PR no trae. Viajan por
+ * el mismo registro porque se eligen en el mismo paso del asistente, y son
+ * mutuamente excluyentes entre sí.
+ */
 enum class OfferId {
-    WALK, KEYS, STEP, WHOLE;
+    WALK, KEYS, DRAFT, DRAFT_RESUME, STEP, WHOLE;
 
     val id: String
         get() = when (this) {
             WALK -> "walk"
             KEYS -> "keys"
+            DRAFT -> "draft"
+            DRAFT_RESUME -> "draft-resume"
             STEP -> "step"
             WHOLE -> "whole"
         }
@@ -54,6 +62,8 @@ enum class OfferId {
         fun parse(raw: String?): OfferId? = when (raw) {
             "walk" -> WALK
             "keys" -> KEYS
+            "draft" -> DRAFT
+            "draft-resume" -> DRAFT_RESUME
             "step" -> STEP
             "whole" -> WHOLE
             else -> null

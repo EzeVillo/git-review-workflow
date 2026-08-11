@@ -161,6 +161,12 @@ enum class SkeletonShape {
 sealed class Block {
     data class IdentityBar(
         val mode: String,
+        /**
+         * 011: de quién es el orden de lectura. Es una precisión sobre el modo
+         * —el mismo "walk (draft)" que escribe la terminal—, no un bloque ni un
+         * control nuevo: `panel_layout` no cambia.
+         */
+        val draft: Boolean = false,
         val name: String,
         val tip: String? = null,
         val position: Int? = null,
@@ -242,30 +248,17 @@ data class PanelLayout(
     val fillsHeight: Boolean = false,
 ) {
     init {
-        val primaries = collectControls().count { it.emphasis == Emphasis.PRIMARY }
+        val controls = collectControls()
+        val primaries = controls.count { it.emphasis == Emphasis.PRIMARY }
         require(primaries <= 1) {
             "At most one PRIMARY control per situation, found $primaries"
         }
-        for (c in collectControls()) {
+        // index allowed only inside InventoryRows: FileRows carries its index on the
+        // row (FileRow.index), not on a Control.
+        for (c in controls) {
             if (c.index != null) {
-                val inIndexed = blocks.any { b ->
-                    when (b) {
-                        is Block.FileRows -> true
-                        is Block.InventoryRows -> true
-                        is Block.ToolsSection -> b.blocks.any { it is Block.FileRows || it is Block.InventoryRows }
-                        else -> false
-                    }
-                }
-                // index allowed only inside FileRows / InventoryRows
-                val ok = blocks.any { b ->
-                    when (b) {
-                        is Block.InventoryRows -> b.rows.any { r -> r.controls.any { it === c || it.id == c.id && it.index == c.index } }
-                        is Block.FileRows -> true
-                        else -> false
-                    }
-                } || c.index == null
-                require(ok || c.index == null) {
-                    "index only allowed on FileRows/InventoryRows controls (${c.id.wire})"
+                require(hostedByInventory(blocks, c)) {
+                    "index only allowed on InventoryRows controls (${c.id.wire})"
                 }
             }
         }
@@ -289,6 +282,15 @@ data class PanelLayout(
         walk(blocks)
         out.addAll(titleActions)
         return out
+    }
+}
+
+/** Whether [c] is one of the controls of an InventoryRow reachable from [blocks]. */
+private fun hostedByInventory(blocks: List<Block>, c: Control): Boolean = blocks.any { b ->
+    when (b) {
+        is Block.InventoryRows -> b.rows.any { r -> r.controls.any { it === c } }
+        is Block.ToolsSection -> hostedByInventory(b.blocks, c)
+        else -> false
     }
 }
 
@@ -371,6 +373,7 @@ private fun identityBar(model: PanelModel, skeleton: Boolean = false): Block.Ide
     val displayName = if (model.repoLabel != null) "$name · ${model.repoLabel}" else name
     return Block.IdentityBar(
         mode = model.mode?.id ?: "?",
+        draft = model.draft,
         name = displayName,
         tip = tipShort(model.tip),
         position = if (skeleton) null else model.position,
@@ -449,10 +452,10 @@ private fun entryBlocks(model: PanelModel, enabled: Boolean, includeNav: Boolean
             badge = entryBadge(current, model.mode),
         ),
     )
-    if (named && current.subject!!.isEmpty()) {
+    if (named && current.subject.isEmpty()) {
         out.add(Block.EntryTitle("This commit has no subject.", muted = true))
     } else {
-        out.add(Block.EntryTitle(if (named) current.subject!! else current.display))
+        out.add(Block.EntryTitle(if (named) current.subject else current.display))
     }
     if (model.mode == ReviewMode.WALK) {
         val why = model.why

@@ -20,5 +20,6 @@ data class ReviewState(
     val finish: StatusFinishRecord? = null,
     val readonly: Boolean? = null,
     val keysOnly: Boolean? = null,
+    val draft: Boolean? = null,
     val stderr: String? = null,
 )

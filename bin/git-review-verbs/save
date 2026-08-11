@@ -93,6 +93,50 @@ elif [ -n "$base" ] && git rev-parse --verify --quiet "refs/heads/$base" >/dev/n
 fi
 [ -n "$target" ] || die "could not determine a branch to return to; switch away manually first"
 
+# The archived namespace already holding a draft under the name this review would
+# file its own under. The move at the end of this script is an mv: without this it
+# replaced whatever was there and said nothing, which is the one place in the suite
+# where hand-written prose was destroyed silently.
+#
+# Two reviews can want the same file name — a draft belongs to a branch, and both
+# git review start feature/x and git review compare develop origin/feature/x draft
+# for feature/x — so it is not enough that review-saved/<src> is free. Asked of the
+# paused reviews rather than of the file's name, for the same reason
+# forget --draft --all has to: the archived draft of review-saved/origin/feature/x
+# is filed under feature/x.
+#
+# Refuse when a paused review still claims it (its prose is the only copy and this
+# would be the command that ate it); replace it, out loud, when nothing does — an
+# entry no review can reclaim is already what forget --draft --all sweeps. Checked
+# here, before anything is written, while the move itself stays last: a guard that
+# can still die has no business running after the review has been put aside.
+#
+# Conditioned on this review having a draft at all, on exactly the file test the
+# move at the end makes: with no file there is no mv and nothing to protect, and
+# refusing anyway blocked a review that had never been annotated from being paused
+# — over prose that belongs to someone else and that saving would not have touched.
+# The likeliest way in is the ordinary one: the archive is normally there *because*
+# an earlier review of the same branch was saved with its draft.
+walk_gitdir_init
+_save_draftsrc="$(walk_review_draft_src "$cur")"
+_save_replaces=0
+if [ -n "$_save_draftsrc" ] && [ -f "$(walk_draft_path "$_save_draftsrc")" ] &&
+	[ -f "$(walk_saved_draft_path "$_save_draftsrc")" ]; then
+	_save_claimant=""
+	while IFS="$(printf '\t')" read -r _sc_name _sc_rb; do
+		if [ "$_sc_name" = "$_save_draftsrc" ]; then
+			_save_claimant="$_sc_rb"
+			break
+		fi
+	done <<EOF
+$(walk_saved_draft_claims)
+EOF
+	if [ -n "$_save_claimant" ]; then
+		die "$_save_claimant is paused on a walkthrough draft for $_save_draftsrc, and this review would file its own under the same name; resume that review with 'git review continue' and finish or discard it, or discard it with 'git review forget --saved ${_save_claimant#review-saved/}', then save this one."
+	fi
+	_save_replaces=1
+fi
+
 # copy_meta <key>: copy branch.<cur>.<key> to branch.<saved>.<key> when set.
 # The explicit if (rather than a && one-liner) keeps the function's exit status 0
 # when the key is absent, so it does not trip set -e for the optional keys.
@@ -166,6 +210,8 @@ else
 		copy_meta reviewwalkstep
 		copy_meta reviewwalkcount
 		copy_meta reviewwalkkeys
+		copy_meta reviewwalkfromdraft
+		copy_meta reviewwalkbase
 		wstep="$(git config "branch.$cur.reviewwalkstep" || echo '?')"
 		wcount="$(git config "branch.$cur.reviewwalkcount" || echo '?')"
 		note="walkthrough review on entry $wstep/$wcount"
@@ -181,9 +227,58 @@ copy_meta reviewbase
 copy_meta reviewtip
 copy_meta reviewprevreviewed
 copy_meta reviewlocal
+# Where this review's draft lives. Outside the mode branch, like the move below:
+# a draft sits next to any mode, and a saved review that lost this name would have
+# its archived draft looked up under the source instead — the wrong file, or none.
+copy_meta reviewdraft
 # compare reviews: finish must keep refusing after save → continue.
 copy_meta reviewreadonly
 git config "branch.$saved.reviewreturn" "$target"
+
+# Put the reviewer's own walkthrough draft where a paused review's reading order
+# belongs, the same way the banked edits moved to refs/review-saved-edits/ above.
+# Moved, not copied, so an active and a saved draft for one branch can never
+# diverge. Outside the mode branch on purpose: a draft can sit next to any mode.
+#
+# Named by walk_review_draft_src, because the draft's branch is not always the
+# review's — a compare of origin/feature/x drafts for feature/x — and moving the
+# wrong name would leave the real file behind, in the namespace clean is
+# hands-off in, owned by a review that no longer exists.
+#
+# Last, deliberately: everything above can still die (a missing return branch, a
+# key deleted by hand), and a save that aborted after moving the draft would
+# leave the review live but stripped of the order it was reading, with the file
+# parked in a namespace no saved review claims — forget --saved would not find it
+# and clean must not take it. By here review-saved/<src> exists and holds every
+# key, so the draft has an owner whatever happens next.
+#
+# The gitdir is resolved here, in this shell: the two lookups below happen inside
+# "$(...)", where a cache written by walk_draft_path dies with the subshell and
+# each would spawn its own git rev-parse (see walk_gitdir_init).
+walk_gitdir_init
+draftsrc="$(walk_review_draft_src "$cur")"
+_save_draft="$(walk_draft_path "$draftsrc")"
+_save_filed=0
+if [ -f "$_save_draft" ]; then
+	_saved_draft="$(walk_saved_draft_path "$draftsrc")"
+	mkdir -p "$(dirname "$_saved_draft")"
+	# Said, not discovered: the guard above established that nothing can reclaim
+	# what is there, but it is still prose someone typed, and this is the only mv in
+	# the suite that lands on top of some.
+	if [ "$_save_replaces" -eq 1 ]; then
+		echo "note: replaced an archived walkthrough draft for $draftsrc that no paused review could restore" >&2
+	fi
+	mv "$_save_draft" "$_saved_draft"
+	_save_filed=1
+fi
+
+# Whether this review is the one that filed the archived draft under its name, for
+# every reader that has to tell two paused reviews of one branch apart
+# (walk_saved_draft_filed). Written both ways, and only here, where the move has
+# either happened or not: an absent key means "paused before this key existed", so
+# leaving the 0 out would put every draftless review straight back in that bucket
+# and hand it the next review's prose at continue.
+git config "branch.$saved.reviewdraftfiled" "$_save_filed"
 
 # Leave the review branch: drop its working-tree changes (captured above), return
 # to the starting branch and delete review/<src>. Its config goes with it; the

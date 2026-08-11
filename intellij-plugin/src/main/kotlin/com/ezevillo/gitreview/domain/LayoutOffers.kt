@@ -6,26 +6,49 @@ val FALLBACK_OFFERS: List<ReadingOffer> = listOf(
     ReadingOffer(OfferId.WHOLE, OfferRank.AVAILABLE),
 )
 
+/**
+ * Elegir DRAFT no es elegir una forma distinta de leer: es escribir el orden
+ * que después se lee como walkthrough. Por eso el ítem lleva igual su `layout`
+ * —el que quedaría si el borrador se completa— y `draft` marca el desvío por el
+ * bucle de armado antes de llegar a start.
+ */
+enum class DraftStep { CREATE, RESUME }
+
 data class LayoutPickItem(
     val label: String,
     val description: String,
     val layout: ReviewLayout,
+    val draft: DraftStep? = null,
 )
 
 private data class OfferMeta(
     val label: String,
     val description: String,
     val layout: ReviewLayout,
+    val draft: DraftStep? = null,
 )
 
 private val OFFER_META: Map<OfferId, OfferMeta> = mapOf(
     OfferId.WALK to OfferMeta("Walkthrough", "curated reading order from the PR", ReviewLayout.WALK),
     OfferId.KEYS to OfferMeta("Walkthrough — keys only", "only entries marked key", ReviewLayout.KEYS),
+    OfferId.DRAFT to OfferMeta(
+        "Walkthrough — draft one",
+        "no reading order yet; write one",
+        ReviewLayout.WALK,
+        DraftStep.CREATE,
+    ),
+    OfferId.DRAFT_RESUME to OfferMeta(
+        "Walkthrough — continue draft",
+        "finish the reading order you started",
+        ReviewLayout.WALK,
+        DraftStep.RESUME,
+    ),
     OfferId.STEP to OfferMeta("Commit by commit", "one commit at a time (--step)", ReviewLayout.STEP),
     OfferId.WHOLE to OfferMeta("Whole diff", "entire diff at once", ReviewLayout.WHOLE),
 )
 
-private val OFFER_ORDER = listOf(OfferId.WALK, OfferId.KEYS, OfferId.STEP, OfferId.WHOLE)
+private val OFFER_ORDER =
+    listOf(OfferId.WALK, OfferId.KEYS, OfferId.DRAFT, OfferId.DRAFT_RESUME, OfferId.STEP, OfferId.WHOLE)
 
 fun effectiveOffers(offers: List<ReadingOffer>?): List<ReadingOffer> {
     if (offers.isNullOrEmpty()) return FALLBACK_OFFERS.toList()
@@ -52,7 +75,12 @@ fun buildLayoutItems(offers: List<ReadingOffer>?): List<LayoutPickItem> {
             if (rank == OfferRank.RECOMMENDED) "${meta.description} (recommended)" else meta.description
         val label =
             if (rank == OfferRank.RECOMMENDED) "${meta.label} (recommended)" else meta.label
-        LayoutPickItem(label = label, description = description, layout = meta.layout)
+        LayoutPickItem(
+            label = label,
+            description = description,
+            layout = meta.layout,
+            draft = meta.draft,
+        )
     }
 }
 

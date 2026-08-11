@@ -176,6 +176,18 @@ EOF
 	fi
 fi
 
+# Walkthrough drafts are deliberately NOT touched here, in either namespace.
+# They join the two other kinds of state clean already leaves alone — the --delta
+# markers and a review paused with git review save — and for the same reason: the
+# reviewer wrote them by hand, they outlive the review they were written for
+# (start it again and your reading order is still there), and throwing them away
+# is what git review forget --draft is for. The edit refs above take the opposite
+# rule because a machine produced them; a draft is prose.
+#
+# This used to prune every draft whose review/<src> was gone, which quietly
+# deleted the one written just before the review existed — the first step of the
+# documented flow (walkthrough draft → fill it in → --build → start).
+
 _undo_refs="$(git for-each-ref --format='%(refname)' "$undons")"
 if [ -n "$_undo_refs" ]; then
 	while IFS= read -r ref; do

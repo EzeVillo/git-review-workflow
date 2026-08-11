@@ -13,15 +13,24 @@ export const FALLBACK_OFFERS: readonly ReadingOffer[] = [
     {id: "whole", rank: "available"},
 ];
 
+/**
+ * Elegir `draft` no es elegir una forma distinta de leer: es escribir el orden
+ * que después se lee como walkthrough. Por eso el ítem lleva igual su `layout`
+ * —el que quedaría si el borrador se completa— y `draft` marca el desvío por el
+ * bucle de armado antes de llegar a start (contracts/client-draft-flow.md).
+ */
+export type DraftStep = "create" | "resume";
+
 export interface LayoutPickItem {
     label: string;
     description: string;
     layout: ReviewLayout;
+    draft?: DraftStep;
 }
 
 const OFFER_META: Record<
     OfferId,
-    {label: string; description: string; layout: ReviewLayout}
+    {label: string; description: string; layout: ReviewLayout; draft?: DraftStep}
 > = {
     walk: {
         label: "Walkthrough",
@@ -32,6 +41,18 @@ const OFFER_META: Record<
         label: "Walkthrough — keys only",
         description: "only entries marked key",
         layout: "keys",
+    },
+    draft: {
+        label: "Walkthrough — draft one",
+        description: "no reading order yet; write one",
+        layout: "walk",
+        draft: "create",
+    },
+    "draft-resume": {
+        label: "Walkthrough — continue draft",
+        description: "finish the reading order you started",
+        layout: "walk",
+        draft: "resume",
     },
     step: {
         label: "Commit by commit",
@@ -46,7 +67,7 @@ const OFFER_META: Record<
 };
 
 /** Orden estable del contrato cuando no hay recommended que reordene. */
-const OFFER_ORDER: OfferId[] = ["walk", "keys", "step", "whole"];
+const OFFER_ORDER: OfferId[] = ["walk", "keys", "draft", "draft-resume", "step", "whole"];
 
 /**
  * Ofertas efectivas: las de la CLI, o fallback whole+step sin recommended.
@@ -87,7 +108,11 @@ export function buildLayoutItems(offers: readonly ReadingOffer[] | undefined): L
         const description =
             rank === "recommended" ? `${meta.description} (recommended)` : meta.description;
         const label = rank === "recommended" ? `${meta.label} (recommended)` : meta.label;
-        return {label, description, layout: meta.layout};
+        const item: LayoutPickItem = {label, description, layout: meta.layout};
+        if (meta.draft !== undefined) {
+            item.draft = meta.draft;
+        }
+        return item;
     });
 }
 

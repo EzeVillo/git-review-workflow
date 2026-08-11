@@ -67,6 +67,13 @@ export interface PorcelainResult {
      */
     keysOnly?: true;
     /**
+     * `true` sólo cuando la CLI emitió el registro `draft` (011): el orden de
+     * lectura es el borrador del revisor y no el walkthrough del autor. Sólo se
+     * da en walk. De dónde sale el walkthrough **no se infiere** en ningún
+     * cliente: llega por este registro o no se sabe.
+     */
+    draft?: true;
+    /**
      * Asunto de cada commit de la secuencia, por `position` — sólo en modo step
      * (contracts/status-porcelain.md).
      *
@@ -205,6 +212,7 @@ export function parsePorcelain(stdout: string): PorcelainResult {
     let finish: StatusFinishRecord | undefined;
     let isReadonly: true | undefined;
     let isKeysOnly: true | undefined;
+    let isDraft: true | undefined;
 
     for (const line of lines) {
         const fields = line.split("\t");
@@ -322,6 +330,11 @@ export function parsePorcelain(stdout: string): PorcelainResult {
                 isKeysOnly = true;
                 break;
             }
+            // Reviewer's own draft walkthrough: tag alone. Presence = true.
+            case "draft": {
+                isDraft = true;
+                break;
+            }
             default:
                 // Etiqueta desconocida: se ignora (FR-003).
                 break;
@@ -350,6 +363,9 @@ export function parsePorcelain(stdout: string): PorcelainResult {
     }
     if (isKeysOnly) {
         result.keysOnly = true;
+    }
+    if (isDraft) {
+        result.draft = true;
     }
     return result;
 }

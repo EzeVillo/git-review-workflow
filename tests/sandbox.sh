@@ -335,7 +335,12 @@ git commit --quiet -m "docs: walkthrough"
 publish feature/notifications
 
 # A pull request with no walkthrough at all: `git review start` enters whole mode
-# on its own, with no flag needed.
+# on its own, with no flag needed. It is also the branch to try
+# `git review walkthrough draft feature/telemetry` on — the reviewer-side
+# walkthrough — which is why one of its paths carries a space and a non-ASCII
+# byte: those are what keep breaking path comparison in silence, and a draft
+# compares hand-written paths against git's exactly as a committed walkthrough
+# does.
 pr feature/telemetry
 
 cat >src/metrics.js <<'EOF'
@@ -351,7 +356,11 @@ export function sample(name, ms, rate = 0.1) {
 	return Math.random() < rate ? timing(name, ms) : null;
 }
 EOF
-git add src/metrics.js src/sampler.js
+cat >"src/métricas de sesión.js" <<'EOF'
+// Deliberately named with a space and a non-ASCII byte: see the note above.
+export const SESSION_WINDOW_MS = 30 * 60 * 1000;
+EOF
+git add src/metrics.js src/sampler.js "src/métricas de sesión.js"
 git commit --quiet -m "feat: sample checkout timings"
 publish feature/telemetry
 

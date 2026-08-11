@@ -28,7 +28,7 @@ comandos.
 
 # Tests de integración de la extensión — misma regla, mismo motivo, otro
 # contenedor (trae node + el VS Code headless). Ver la sección de la extensión.
-./vscode-extension/test/run-docker.sh             # los 66 tests
+./vscode-extension/test/run-docker.sh             # los 70 tests
 ./vscode-extension/test/run-docker.sh open-entry  # las specs que matcheen
 
 # Pruebas manuales — arma un PR de juguete descartable (feature/checkout: 4
@@ -45,13 +45,14 @@ comandos.
 
 **Todo lo que se puede correr en el contenedor se corre en el contenedor.** No
 es preferencia: en Windows crear un proceso cuesta ~50 ms (CreateProcess + DLLs
+
 + Defender) contra ~1 ms en Linux, y las dos suites son básicamente procesos —
-un `git review status --porcelain` son 9 procesos `git` más dos de shell, o sea
-~960 ms en Windows contra ~41 ms en Linux. Un mismo escenario de spec midió
-15,0 s nativo contra 0,69 s en el contenedor (~22×). CI igual corre las dos
-suites en runners reales de ubuntu, macos y windows, así que el contenedor no
-saltea nada: lo único que evita es esperar de más para aprender lo mismo. Cada
-script construye su imagen en el primer uso.
+  un `git review status --porcelain` son 9 procesos `git` más dos de shell, o sea
+  ~960 ms en Windows contra ~41 ms en Linux. Un mismo escenario de spec midió
+  15,0 s nativo contra 0,69 s en el contenedor (~22×). CI igual corre las dos
+  suites en runners reales de ubuntu, macos y windows, así que el contenedor no
+  saltea nada: lo único que evita es esperar de más para aprender lo mismo. Cada
+  script construye su imagen en el primer uso.
 
 La imagen de Docker (bats + git, `tests/Dockerfile`) se construye en el primer
 uso y el repo se monta read-only; los tests crean sus repos temporales dentro
@@ -111,10 +112,15 @@ repo, no en archivos del working tree:
   filtra del why y se muestra como `(key)`). Los marcadores reservados van todos
   como líneas `> ...` al inicio del body — ver también el `> at: ` de v2. El
   cursor vive en claves **propias** — `reviewwalkstep`
-  (1-based) y `reviewwalkcount` (guard) — nunca en `reviewstart/reviewcount/
+  (1-based), `reviewwalkcount` (guard) y `reviewwalkbase` (el lower bound al que
+  `start`/`compare` clavaron `HEAD`) — nunca en `reviewstart/reviewcount/
   reviewstep`: el guard de metadata de `finish` aborta si esas claves de step
   existen sin `reviewmode=step` (y hay un guard espejo para claves walk sin
-  `reviewmode=walk`). La secuencia de entradas NO se persiste: se re-deriva en
+  `reviewmode=walk`). `reviewwalkbase` es lo que permite **preguntarle a git** si
+  `HEAD` se movió (`walk_at_base`) en vez de inferirlo de que la secuencia se
+  achicó: con el borrador del revisor esa inferencia tiene dos causas y elegía la
+  equivocada. Sin la clave (reviews viejas) se cae a la inferencia de antes. La secuencia de
+  entradas NO se persiste: se re-deriva en
   cada verbo parseando el walkthrough del tip y filtrando por intersección de
   paths con el rango real, igual que step re-deriva `commits` con `rev-list`. En
   walk `HEAD` queda clavado en el lower bound, así que la derivación es estable
@@ -129,6 +135,112 @@ repo, no en archivos del working tree:
   dos lados del error de drift, o la entrada desapareciendo del orden de lectura
   en silencio. Un walkthrough roto/stale nunca
   falla una review: degrada a whole con nota.
+- **Borrador del revisor** (`git review walkthrough draft`): el otro lado del
+  walkthrough. Cuando el PR no trae uno, el revisor se escribe el suyo en
+  `<gitdir>/review-walkthrough/<src>.md` — **fuera del árbol versionado**, así
+  que no se commitea, no se stagea y `git status` no cambia en ningún momento.
+  Mismo formato que el sidecar y misma validación (`draft --build` reusa el
+  cuerpo de `build`, sin duplicar una sola regla). La precedencia se resuelve en
+  un único punto, `walk_read`: si hay borrador **en vigor** para el `<src>` del
+  contexto —fijado por `walk_use_draft` desde los dos cargadores de metadata, de
+  modo que todo verbo con review activa lo herede—, gana sobre el sidecar del tip;
+  si no, el sidecar como siempre. Las trece funciones de walk y los verbos que
+  cuelgan de ellas no se enteran. **«En vigor» y «el archivo existe» son dos
+  preguntas distintas y hay una función para cada una:** `walk_draft_body` (la
+  regla, un único lugar) responde la primera —un borrador vacío o de puro
+  whitespace no es un orden de lectura y se comporta como ausente, si no tapaba el
+  walkthrough del autor en silencio— y la usa `walk_is_draft`, que es el `(draft)`
+  de `status`; `walk_has_draft_file` responde la segunda, que es custodia, y la
+  usan `list`, las ofertas de `config --porcelain` y los mensajes de `start` sobre
+  un borrador propio vacío. Si mezclás las dos, o `status` dice `walk (draft)`
+  sobre la prosa del autor, o `forget --saved` se lleva un archivo que nadie
+  listó. **Bajo qué nombre vive el borrador de una review se decide una sola vez
+  y se persiste** (`branch.review/<x>.reviewdraft`, escrita por `start`/`compare`
+  al crear la review, en **todos los modos** y exista o no un borrador todavía).
+  No siempre es el `reviewsource` —un `compare develop origin/feature/x` es la
+  review de `origin/feature/x` y el borrador es de `feature/x`, porque el
+  borrador es de la *rama*, no del ref con el que la nombraste—: la única
+  derivación de ese nombre está en `compare` y de ahí sale a la clave. **Nadie lo
+  vuelve a derivar**, todos lo leen con `walk_review_draft_src` (los dos
+  cargadores, `list`, `save`, `continue`, `forget`, `walkthrough draft`); cuando
+  el escritor y el lector lo derivaban por su cuenta, discrepaban en silencio: el
+  borrador escrito desde adentro del compare se guardaba bajo `origin/feature/x`
+  y el `start` siguiente leía el orden del autor sin decir nada. Que además se
+  escriba siempre —y no sólo cuando hay borrador— es lo que hace que el escrito
+  **a mitad de review** caiga donde se lo va a buscar, y lo que le da nombre al
+  archivo en modo `whole`/`step`, donde no hay orden de lectura pero sí custodia.
+  Aparte va **un flag**, `reviewwalkfromdraft = 1`, que dice que el orden que se
+  está caminando salió de ese borrador: es la única cosa que no se puede
+  recalcular una vez que el archivo no está, y es lo que le permite a
+  `walk_range_error` distinguir «borraste tu borrador» de «commiteaste encima de
+  la review» incluso si el PR trae walkthrough propio y la review cae sobre él.
+  Ese sí es una clave walk como las demás (la copian `save`/`continue` y la cubre
+  el guard de metadata de `finish`); `reviewdraft` **no**, justamente porque
+  existe en todos los modos. Y el borrador en vigor no se lee nunca de la config:
+  es el que el cargador dejó en `walk_draft_src`, de donde lo toman también
+  `walk_recover_cursor` y `walk_range_error` —volver a `git config` en esas dos
+  las dejaba ciegas justo en el caso que existen para cubrir, el borrador escrito
+  a mitad de review, y el revisor recibía «corrupt metadata» con `git review
+  abort` como única salida—. `walk_range_error` adopta ese fallback sólo si
+  `walk_is_draft` confirma que hay borrador en vigor: sin esa condición, toda
+  review sin borrador parecería una a la que se le borró el suyo, y un commit
+  encima de la review contestaría «tu borrador desapareció» en vez del mensaje de
+  HEAD.
+  Ciclo de vida: `save` lo archiva en `review-saved-walkthrough/` (y `continue` lo
+  devuelve) **como último paso, después de la última guarda que puede abortar** —
+  un movimiento a mitad de camino dejaba el archivo sin dueño de los dos lados—, y
+  `continue` **nunca pisa** un borrador vivo: si escribiste uno con la review
+  pausada, se niega con las dos salidas (`forget --draft` o `forget --saved`) en
+  vez de elegir por vos cuál de las dos prosas escritas a mano sobrevive. `save`
+  hace lo mismo del otro lado, con la guarda temprano y el `mv` último: dos
+  reviews pueden querer el mismo archivo (un `start feature/x` y un `compare
+  develop origin/feature/x` archivan los dos bajo `feature/x`), así que si el
+  destino ya está ocupado se niega cuando una review pausada lo reclama y avisa
+  cuando reemplaza uno que nadie puede reclamar. La guarda cuelga de que **esta**
+  review tenga un borrador que archivar, con el mismo test de archivo que hace el
+  `mv`: sin archivo no hay `mv` y no hay nada que proteger, y negarse igual dejaba
+  la rama sin poder pausarse por prosa ajena que el `save` no iba a tocar —
+  justo el caso ordinario, porque el archivado suele estar ahí *porque* una review
+  anterior de esa misma rama se guardó con su borrador. **Quién reclama un
+  archivado se
+  le pregunta a las reviews pausadas (`walk_saved_draft_claims`), nunca al nombre
+  del archivo:** `review-saved/<archivo>` no existe justamente para las reviews
+  que necesitan la pregunta —el archivado de `review-saved/origin/feature/x` se
+  llama `feature/x`—, y las tres superficies que decidían por el nombre mentían o
+  borraban prosa viva: `forget --draft --all` barría el borrador de una review
+  pausada anunciando que no quedaba review que lo reclamara, `save` lo pisaba
+  callado, y `walkthrough draft` anunciaba una review pausada inexistente sobre un
+  archivado huérfano, mandando a un `continue` que no se podía correr. **Y una
+  review que no archivó nada no reclama nada** (`walk_saved_draft_filed`, sobre
+  `branch.<saved>.reviewdraftfiled`, que `save` escribe en los dos sentidos —la
+  ausencia de la clave significa «pausada antes de que existiera», y sin el `0`
+  toda review sin borrador volvía a ese bucket): dos reviews pausadas de una misma
+  rama comparten el nombre del archivado y sólo la segunda lo escribió, así que
+  `continue` sobre la primera se llevaba prosa ajena —dejando a la que sí la había
+  escrito negándose a retomar sobre «un borrador escrito con la review pausada»
+  que era el suyo, movido—, `forget --saved` la borraba y `list` le ponía `(draft)`
+  a una fila que no iba a volver con ninguno.
+  El borrador viaja con la review **en cualquier modo**, no sólo en walk, así que
+  las filas de `list` llevan `(draft)` también en `step` y `whole`: si sólo lo
+  marcara en walk, un `forget --saved` se llevaría prosa que ninguna superficie
+  llegó a mostrar.
+  `clean` **no lo toca nunca**: es prosa escrita a mano que sobrevive a la review
+  (arrancá la rama de nuevo y tu orden sigue ahí), así que va con los otros dos
+  estados persistentes que `clean` deja quietos —los marcadores de `--delta` y las
+  reviews guardadas— y se descarta con `git review forget --draft <rama> | --all`
+  (`--saved` se lleva el de la review pausada; `--all` barre además los
+  archivados que ya no tiene quién reclamar —su `review-saved/<rama>` se borró a
+  mano—, que si no quedan fuera del alcance de todos los comandos: `--saved`
+  exige el ref, `--draft` sólo deletrea nombres del namespace activo y `clean` es
+  hands-off en los dos). Su presencia se reporta —nunca se
+  infiere— con el registro `draft` de `status --porcelain` y el sufijo `(draft)`
+  en `status` y `list`; la viabilidad de armarlo o continuarlo, con las ofertas
+  `draft` / `draft-resume` de `config --porcelain`. Las superficies de custodia se
+  deciden con un test de archivo y cero procesos nuevos; el gitdir del que cuelgan
+  todos esos paths se resuelve **una vez por proceso** en `walk_gitdir_init`,
+  llamado desde `walk_use_draft` (todo verbo con review activa) y a mano por los
+  cuatro que arman un path sin fijar contexto — `list`, `save`, `continue` y
+  `forget` —, porque un `$(...)` no puede cachear nada.
 - **Refs de ediciones:** `refs/review-edits/<src>/<step>` bancan las ediciones
   de cada commit en `--step` como objetos commit-tree; `git review save` los mueve
   a `refs/review-saved-edits/` para que `git review clean` (que poda
@@ -306,7 +418,7 @@ npm run preview:watch
 
 # Integración: en el contenedor, NO con `npm run test:integration`.
 cd ..
-./vscode-extension/test/run-docker.sh             # los 66 tests
+./vscode-extension/test/run-docker.sh             # los 70 tests
 ./vscode-extension/test/run-docker.sh open-entry  # las specs que matcheen
 MOCHA_GREP='abre el diff' ./vscode-extension/test/run-docker.sh
 ./vscode-extension/test/run-docker.sh -- sh       # una shell adentro
@@ -322,9 +434,9 @@ MOCHA_GREP='abre el diff' ./vscode-extension/test/run-docker.sh
   el host. Ojo: el host hereda el `PATH` del VS Code que lo lanzó, no el que
   arma el `env.sh` del sandbox — o instalás el checkout, o apuntás la setting
   `gitReview.path` a `bin/git-review`.
-- **La suite de integración va en el contenedor**, misma regla que bats: los 66
+- **La suite de integración va en el contenedor**, misma regla que bats: los 70
   tests tardan 38 s adentro contra 16 minutos nativos en Windows (26×), y pasan
-  los mismos 66. El script
+  los mismos 70. El script
   (`vscode-extension/test/run-docker.sh` + `test/Dockerfile` + `entrypoint.sh`)
   monta el repo read-only, lo copia a `/work` porque `npm install` escribe, y
   cachea `node_modules`, el VS Code descargado y el cache de npm en volúmenes
@@ -336,7 +448,7 @@ MOCHA_GREP='abre el diff' ./vscode-extension/test/run-docker.sh
   todo fixture muere con un `is not a git command` que no dice nada; y la imagen
   fija **`VSCODE_CLI=1`**, sin lo cual VS Code resuelve el entorno de un login
   shell y pisa con él el `PATH` que `runTests.ts` preparó — la extensión no
-  encuentra la CLI y los 66 tests fallan con `cli-missing`.
+  encuentra la CLI y los 70 tests fallan con `cli-missing`.
 - **`test:integration` corre contra `dist/`** y lo recompila solo
   (`pretest:integration`), así que lo verde siempre es el código actual.
 - **Dos specs de integración abren tabs y son flaky en Windows** por el host de
@@ -358,7 +470,7 @@ MOCHA_GREP='abre el diff' ./vscode-extension/test/run-docker.sh
   reinyecta el default largo. `test/unit/userDataDir.spec.ts` cubre las dos
   cosas contra `darwin` explícito, así que la regresión cae en cualquier SO.
 - **`npm run preview`** genera `out/preview/index.html` (y lo imprime como URL
-  `file://`): los nueve estados del panel lado a lado, a ancho de sidebar, con
+  `file://`): los dieciocho estados del panel lado a lado, a ancho de sidebar, con
   selector de tema dark/light/alto contraste. El pane es el `panelHtml()` real y
   los estados de `preview/fixtures.ts` son salida `--porcelain` de ejemplo pasada
   por el parser y el modelo reales, así que **sigue al código y no se mantiene

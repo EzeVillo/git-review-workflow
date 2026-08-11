@@ -6,6 +6,30 @@ its own [releases](https://github.com/EzeVillo/git-review-workflow/releases).
 This project follows [semantic versioning](https://semver.org/spec/v2.0.0.html)
 and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 
+## [Unreleased]
+
+### Added
+
+- **Draft your own reading order.** When a PR ships without a walkthrough, the
+  start assistant now offers *Walkthrough — draft one*. It writes a skeleton
+  listing every file in the range, opens it, and waits behind a non-blocking
+  notice while you fill in the order and the *why* — *Continue* validates it on
+  the CLI and reports exactly what to fix, as many times as you need; *Cancel*
+  keeps what you wrote and the next pass offers *Walkthrough — continue draft*.
+  Dismissing the notice is not *Cancel*: it comes back, so closing it while you
+  edit does not drop you out of the flow. If the editor cannot show the file —
+  a folder opened below the repository root — the notice tells you where it is
+  rather than asking you to fill in something you cannot find.
+  The draft is yours and local: it lives outside the working tree, so nothing
+  gets committed or staged and `git status` never changes. Nothing is written
+  for you and no service is contacted. Reviews reading a draft show `(draft)`
+  next to the mode.
+
+### Changed
+
+- Minimum required CLI raised from 0.5.0 to **0.6.0**, the release that adds
+  `git review walkthrough draft`.
+
 ## [0.1.2] — 2026-08-08
 
 Requires `git review` **0.5.0** or newer.

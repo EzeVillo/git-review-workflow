@@ -36,6 +36,7 @@ object PanelFixtures {
         "review step" to reviewStep(),
         "review whole" to reviewWhole(),
         "finish-conflict" to finishConflict(),
+        "review walk draft" to reviewWalkDraft(),
         "review walk busy" to reviewWalk(busy = true),
         "review walk empty cursor" to reviewWalkEmptyCursor(),
         "review whole empty" to reviewWholeEmpty(),
@@ -127,6 +128,33 @@ object PanelFixtures {
         )
         val model = buildPanelModel(walkState, PanelInputs(busy = busy, why = why))
         return model.copy(atFirst = atFirst, atLast = atLast || position >= (model.total ?: 0))
+    }
+
+    /**
+     * 011: la misma review walk, leída sobre el borrador del revisor. El
+     * registro `draft` viaja por el porcelain como cualquier otro, así que el
+     * badge sale del mismo camino que en la extensión.
+     */
+    fun reviewWalkDraft(): PanelModel {
+        val porcelain = """
+            state	review/feature	feature	deadbeefcafebabe	walk	applied	1	3	3	"src/a.kt"	0
+            entry	1	src/a.kt	0	1
+            entry	2	src/b.kt	0	1
+            entry	3	src/c.kt	0	0
+            draft
+        """.trimIndent()
+        val parsed = parsePorcelain(porcelain)
+        val state = ReviewState(
+            situation = Situation.REVIEW,
+            state = parsed.state,
+            entries = parsed.entries,
+            draft = parsed.draft,
+        )
+        val model = buildPanelModel(
+            state,
+            PanelInputs(busy = false, why = PanelWhy(WhyState.PRESENT, "Because I read it first.")),
+        )
+        return model.copy(atFirst = true, atLast = false)
     }
 
     fun reviewWalkEmptyCursor(): PanelModel {

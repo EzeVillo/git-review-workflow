@@ -291,6 +291,46 @@ else
 	fi
 fi
 
+# Read this source's own draft in preference to the PR's walkthrough, if the
+# reviewer wrote one. Before the --step branch below and not after it: --step's
+# own walk_read is the note that says a reading order is being bypassed, and with
+# the context set later that note was the one thing in the suite that still saw
+# only the author's file — so a reviewer who wrote an order and then asked for
+# --step was told nothing at all, while the same PR annotated by its author said
+# so. It is also before the first walk_read and the --keys check, so every
+# decision from here on describes the same walkthrough.
+walk_use_draft "$src"
+
+# draft_command: the git review walkthrough draft invocation for this review,
+# flags and all. Three of the messages below suggest it, so it is built once, with
+# this review's own origin and range: drafting against a different range than the
+# one being reviewed would annotate the wrong file set, and on a branch with no
+# copy on the remote the bare form just fails.
+draft_command() {
+	_dc_flags=""
+	if [ "$offline_mode" -eq 1 ]; then
+		_dc_flags=" --offline"
+	elif [ "$local_mode" -eq 1 ]; then
+		_dc_flags=" --local"
+	fi
+	if [ "$delta" -eq 1 ]; then
+		_dc_flags="$_dc_flags --delta"
+	fi
+	printf 'git review walkthrough draft%s %s' "$_dc_flags" "$src"
+}
+
+# Whose reading order is in force, for the notes below. A reviewer's draft shadows
+# the author's walkthrough (walk_read), so a note that blames "the PR" for an order
+# that is actually the reviewer's own sends them to read someone else's branch
+# looking for their own typo — and the PR may carry no walkthrough at all. Same
+# distinction the "(draft)" suffix draws in status and list, on the surface the
+# reviewer sees first.
+if walk_is_draft "$src"; then
+	wtdesc="you have a walkthrough draft for $src"
+else
+	wtdesc="$src has a walkthrough"
+fi
+
 if [ "$step" -eq 1 ]; then
 	# --first-parent --no-merges: walk only the branch's own commits, skipping
 	# merge commits (e.g. merges of the base branch) so changes that came from
@@ -305,7 +345,7 @@ if [ "$step" -eq 1 ]; then
 	# --no-walk) so someone expecting the curated reading order is not left wondering
 	# where it went.
 	if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$tip")" && [ -n "$wtcontent" ]; then
-		echo "note: $src has a walkthrough; --step ignores it and reviews commit by commit"
+		echo "note: $wtdesc; --step ignores it and reviews commit by commit"
 	fi
 
 	git switch -q -c "$rb" "$first" || die "could not create $rb"
@@ -317,6 +357,13 @@ if [ "$step" -eq 1 ]; then
 	git config "branch.$rb.reviewmode" "step"
 	git config "branch.$rb.reviewcount" "$count"
 	git config "branch.$rb.reviewstep" "1"
+	# Where this review's draft lives, recorded here too — see the whole-mode write
+	# below for what the name is for. A step review reads no walkthrough, but it
+	# holds custody of one all the same: save files the draft with it, list badges
+	# the row and forget --saved discards it. Here the name happens to equal the
+	# source, so leaving it out was invisible; in compare it is not, and a key that
+	# only some modes write is a key every reader has to second-guess.
+	git config "branch.$rb.reviewdraft" "$src"
 	if [ -n "$prev" ]; then
 		git config "branch.$rb.reviewprevreviewed" "$prev"
 	fi
@@ -373,9 +420,27 @@ if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$tip")" && [ -n "$wtcontent" 
 			die "--keys requires a walkthrough with entries in range; none apply to this review"
 		fi
 		degradedfiles="$(range_files "$tip" "$lower" | tr '\n' ' ')"
-		echo "note: $src has a walkthrough, but none of its entries apply to this review range; reviewing the whole diff: $degradedfiles"
+		echo "note: $wtdesc, but none of its entries apply to this review range; reviewing the whole diff: $degradedfiles"
+		# The same offer the start assistant makes for this situation (the "draft"
+		# offer of config --porcelain, which a stale walkthrough gets instead of
+		# "walk"). Without it the assistant proposed a way out that the terminal
+		# never mentioned. Guarded on the file, not on what is in force: with a draft
+		# already on disk — theirs, stale or empty — this command would refuse for
+		# want of --force, and suggesting a command that cannot run is worse than
+		# suggesting nothing.
+		if ! walk_has_draft_file "$src"; then
+			echo "note: to read it in an order of your own instead: $(draft_command) (nothing gets committed)"
+		fi
 	fi
 elif [ "$keys_only" -eq 1 ]; then
+	# An empty draft reaches here having shadowed nothing (walk_read treats it as
+	# absent), so "the PR has none" would be true and useless — the file standing
+	# between them and walk mode is their own, and it is empty. The file test, not
+	# walk_is_draft: what matters here is that the file is theirs and on disk,
+	# which is exactly what walk_is_draft now says no to.
+	if walk_has_draft_file "$src"; then
+		die "--keys needs a walkthrough to read keys from, and your draft for $src is empty; fill it in (or start it over with '$(draft_command) --force'), or start without --keys"
+	fi
 	die "--keys requires a walkthrough on the PR; none found (or use without --keys)"
 fi
 
@@ -385,6 +450,13 @@ git reset -q --soft "$lower"
 git config "branch.$rb.reviewsource" "$src"
 git config "branch.$rb.reviewbase" "$base"
 git config "branch.$rb.reviewtip" "$tip"
+# The name this review's walkthrough draft lives under, decided here and read back
+# by everything that has to find the file (walk_review_draft_src). Recorded whether
+# or not a draft exists yet, and in every mode, because the question it answers is
+# "where would mine be?" — which is what a draft written mid-review, and the
+# custody surfaces (list, save, continue, forget), need. Here it is the source
+# itself; compare is where the two come apart.
+git config "branch.$rb.reviewdraft" "$src"
 if [ -n "$prev" ]; then
 	git config "branch.$rb.reviewprevreviewed" "$prev"
 fi
@@ -400,8 +472,23 @@ if [ "$walk" -eq 1 ]; then
 	git config "branch.$rb.reviewmode" "walk"
 	git config "branch.$rb.reviewwalkstep" "1"
 	git config "branch.$rb.reviewwalkcount" "$walkcount"
+	# Where HEAD was just pinned, so that later on "did you commit on top of this
+	# review?" can be asked of git instead of guessed from the reading sequence
+	# having got shorter (walk_at_base). Its own key rather than reviewstart:
+	# finish's metadata guard treats the step keys as proof of a step review, and
+	# every walk key is spelled reviewwalk* for exactly that reason.
+	git config "branch.$rb.reviewwalkbase" "$(git rev-parse HEAD)"
 	if [ "$keys_filter" -eq 1 ]; then
 		git config "branch.$rb.reviewwalkkeys" "1"
+	fi
+	# Whether this reading order came from the reviewer's own draft. A flag and not
+	# a name — reviewdraft above already holds the name — recorded only when the
+	# draft is the one being read, so its absence keeps meaning "the author's".
+	# It is what lets the cursor's diagnostics tell "you deleted your draft" apart
+	# from "you committed on top of the review" when the sequence changes under
+	# them: once the file is gone, nothing else can tell those two apart.
+	if walk_is_draft "$src"; then
+		git config "branch.$rb.reviewwalkfromdraft" "1"
 	fi
 
 	if [ "$keys_filter" -eq 0 ]; then
@@ -442,4 +529,19 @@ if [ "$walk" -eq 1 ]; then
 	show_walk_entry 1
 else
 	echo "$rb ready ($range) — the staged diff is the PR; edit, then run git review finish"
+	# Landing in whole because nobody wrote a reading order is the moment the
+	# reviewer would want to know they can write one themselves — and the only
+	# moment they are looking. Suppressed when they opted out with --no-walk:
+	# they already made the call.
+	if [ "$no_walk" -eq 0 ] && ! walk_read "$tip" >/dev/null; then
+		# Two ways to have no reading order, and they need different sentences. A
+		# draft that is there but empty used to produce neither: it satisfied
+		# walk_read, so this note was skipped, and the review landed in whole with
+		# nothing said at all — the only silent degradation left in walk mode.
+		if walk_has_draft_file "$src"; then
+			echo "note: your walkthrough draft for $src is empty, so it gave this review no reading order. Fill it in, or write it again with '$(draft_command) --force' (nothing gets committed)"
+		else
+			echo "note: $src has no walkthrough. To read it in an order of your own: $(draft_command) (nothing gets committed)"
+		fi
+	fi
 fi

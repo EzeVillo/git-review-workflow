@@ -85,6 +85,57 @@ git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null &&
 require_clean_work_tree
 
 mode="$(git config "branch.$saved.reviewmode" || echo whole)"
+
+# restore_draft: bring the reviewer's walkthrough draft back to the active
+# namespace. Called from both mode paths immediately before the review branch is
+# created, which is the one point that satisfies both constraints at once:
+#
+#   * late enough that every guard which can still die has already run. Moving it
+#     back and then aborting would leave the draft in the active namespace with
+#     the review still paused — and the next git review clean, seeing no
+#     review/<src>, used to delete it outright.
+#   * early enough that nothing has read a walkthrough yet: the walk path rebuilds
+#     its cursor through walk_read further down, which has to find the draft
+#     already in place or it would fall through to the PR's own walkthrough — or
+#     to none at all — and quietly resume in a different reading order.
+#
+# From the branch's creation onward the draft has an owner again, so a failure
+# below (a patch that will not apply) leaves it beside a live review, not adrift.
+#
+# The draft's branch comes from walk_review_draft_src rather than being assumed to
+# be the review's own source: a compare of origin/feature/x drafts for feature/x,
+# and save filed it under that name.
+restore_draft() {
+	# Resolve the gitdir in this shell, where the two path lookups below can share
+	# it: inside "$(walk_draft_path ...)" the cache would die with the subshell and
+	# each would spawn its own git rev-parse (see walk_gitdir_init).
+	walk_gitdir_init
+	# Only the review that filed it takes it back. Two paused reviews of one branch
+	# file under one name, and a review that carried no draft has no claim on the
+	# file sitting there — it used to walk off with it, which left the review that
+	# had written it refusing to resume over "a draft written while paused" that was
+	# its own prose, moved.
+	walk_saved_draft_filed "$saved" || return 0
+	_draftsrc="$(walk_review_draft_src "$saved")"
+	_saved_draft="$(walk_saved_draft_path "$_draftsrc")"
+	if [ -f "$_saved_draft" ]; then
+		_live_draft="$(walk_draft_path "$_draftsrc")"
+		# Never over a draft that is already there. Both files are hand-written
+		# prose, this one is newer, and nothing in the resume can tell which the
+		# reviewer meant to keep — so refuse and let them say, rather than overwrite
+		# and mention nothing, which is what this did: write a draft while the review
+		# was paused and continue silently reinstated the archived one, cursor and
+		# all, as if the writing had never happened. The same asymmetry the
+		# destructive verbs are built on: refusing costs a command, guessing costs
+		# the only copy.
+		if [ -f "$_live_draft" ]; then
+			die "a walkthrough draft for $_draftsrc already exists, and the paused review carries one of its own; resuming would overwrite yours. Keep yours by discarding the archived one with 'git review forget --saved $src' (that discards the paused review too), or drop yours with 'git review forget --draft $_draftsrc' and resume."
+		fi
+		mkdir -p "$(dirname "$_live_draft")"
+		mv "$_saved_draft" "$_live_draft"
+	fi
+}
+
 tip="$(git config "branch.$saved.reviewtip" || true)"
 # A saved review missing its tip (hand-edited or half-deleted config) would let
 # set -e kill us silently while restoring; report it instead.
@@ -106,6 +157,8 @@ if [ "$mode" = "step" ]; then
 	if [ -z "$start" ] || [ -z "$count" ] || [ -z "$step" ]; then
 		die "missing review metadata for $saved; was it created with git review start? Discard it with 'git review forget --saved $src'."
 	fi
+
+	restore_draft
 
 	# Bring the banked edits back to where git review next/prev expect them.
 	git for-each-ref --format='%(refname)' "refs/review-saved-edits/$src/" | while read -r ref; do
@@ -140,6 +193,10 @@ if [ "$mode" = "step" ]; then
 	restore_meta reviewlocal
 	restore_meta reviewreadonly
 	restore_meta reviewreturn
+	# The name the draft was filed under, restored in every mode for the same
+	# reason save copies it in every mode: the resumed review has to look the file
+	# up under the name it was written to, not under its own source.
+	restore_meta reviewdraft
 
 	git branch -D "$saved" >/dev/null
 
@@ -156,6 +213,8 @@ else
 	lower="$(git config "branch.$saved.reviewsavedlower" || true)"
 	[ -n "$lower" ] || die "missing review metadata for $saved; was it created with git review start? Discard it with 'git review forget --saved $src'."
 
+	restore_draft
+
 	git switch -q -c "$rb" "$tip"
 	git reset -q --soft "$lower"
 	# Binary-safe apply via apply_review_patch (temp file, not command substitution).
@@ -171,12 +230,18 @@ else
 	restore_meta reviewlocal
 	restore_meta reviewreadonly
 	restore_meta reviewreturn
+	# The name the draft was filed under, restored in every mode for the same
+	# reason save copies it in every mode: the resumed review has to look the file
+	# up under the name it was written to, not under its own source.
+	restore_meta reviewdraft
 
 	if [ "$mode" = "walk" ]; then
 		git config "branch.$rb.reviewmode" walk
 		restore_meta reviewwalkstep
 		restore_meta reviewwalkcount
 		restore_meta reviewwalkkeys
+		restore_meta reviewwalkfromdraft
+		restore_meta reviewwalkbase
 		git branch -D "$saved" >/dev/null
 
 		# Re-derive the sequence and reprint the entry you were on, so continue lands

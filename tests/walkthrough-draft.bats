@@ -415,7 +415,14 @@ draft_temps() (
 	[[ "$output" == *"already carries a walkthrough from its author"* ]]
 	[[ "$output" == *"takes precedence"* ]]
 	# The author's sidecar is untouched: it is committed content, not ours.
-	run git show origin/feature/annotated:.review/walkthrough.md
+	# The branch is resolved to a SHA first, for the same reason wt_blob in
+	# walk.bats does it: under Git Bash MSYS reads
+	# "origin/feature/annotated:.review/walkthrough.md" as a POSIX path list --
+	# two slash-bearing components around a colon -- and git.exe gets
+	# "origin\feature\annotated;.review\walkthrough.md". A SHA has no slash
+	# before the colon. The command under test is safe on its own: it resolves
+	# the rev with rev-parse before building the "<rev>:<path>" argument.
+	run git show "$(git rev-parse origin/feature/annotated):.review/walkthrough.md"
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"the author's own reading order"* ]]
 }

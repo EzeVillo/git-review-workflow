@@ -1,56 +1,61 @@
 # Changelog
 
-## Unreleased
+Notable changes to the **git review** IntelliJ IDEA plugin. The CLI it drives
+has its own [releases](https://github.com/EzeVillo/git-review-workflow/releases).
 
-- Target platform raised to IntelliJ IDEA **2026.2+** (build `262+`); build
-  toolchain is now **JDK 25**. Marketplace compatibility follows
-  `pluginSinceBuild` / open `until-build` from `gradle.properties`.
-- Minimum required CLI raised to **0.5.0** (parity with VS Code extension /
-  `contracts/client-product-surface.yaml`).
-- Whole and step multi-file Diff use a single `DiffRequestChain` window
-  (Prev/Next file) instead of one editor tab per file. Whole keeps its **Diff**
-  button for open-all.
-- Fix step Diff showing an empty pane titled **M**: `diff-tree` lacked
-  `--no-commit-id`, so the commit SHA was parsed as a status field and the
-  status letter became the "path".
-- Fix tool-window title bar: stop calling `DefaultActionGroup.getChildren(null)`
-  (platform throwable on 2024.3+); expand via `getChildren(ActionManager)`.
-- Fix the panel opening on a diagnostic nobody could act on: the tool window
-  materializes before git4idea has discovered the repositories, and that first
-  refresh reported "no single root" and stayed there until **Refresh** was hit
-  by hand. The panel now waits for the VCSes instead of drawing an error, and
-  re-reads itself when the repository mappings arrive.
-- The panel no longer stretches its blocks: the primary button of a pane sits
-  right under the text that introduces it, wrapped paragraphs keep their own
-  height, and the empty state rules the inventory off from **Start a review**.
-- Inventory rows read left to right like the extension's: name and actions on
-  the left, badges and the `?` hint on the right edge.
-- The primary control of each situation is painted with the IDE's default-button
-  style, and links with the theme's link colour.
-- The file list reads as a list of paths, not as a stack of buttons: each row is
-  borderless, in the editor font, with the diff glyph the extension gives it,
-  and takes a fill only under the pointer. The last opened one keeps the
-  selection fill plus a bar at the margin. **Diff** / **File** carry their
-  glyphs too, and the list heading is a quiet label above its list.
-- The plugin carries the product mark instead of borrowed platform glyphs: the
-  Marketplace and **Settings → Plugins** show the same tile as the VS Code
-  extension, and the tool-window stripe its mono form. Both come out of the
-  shared icon generator, so the geometry cannot drift from the other client;
-  only the stripe's fill follows the platform's grey, since VS Code's is a
-  dark-theme value and IntelliJ patches light to dark, never the other way.
-- The rest of the panel picks up the marks the extension gives the same things:
-  the why is quoted behind a rule (italics when there is none to quote); `key`,
-  `edits`, `current` and `orphan` are badges instead of grey words; a stopped
-  finish carries the theme's warning fill and bar; whatever the CLI printed and
-  the install command sit in a code block; a note is ruled off from the body;
-  and identifiers — the bar, the entry head, a path, a ref name — read in the
-  editor's font, which is also what the mono blocks now use instead of whatever
-  `Font.MONOSPACED` resolved to. A lone link stays inline instead of stretching
-  across the sidebar like a button.
+This project follows [semantic versioning](https://semver.org/spec/v2.0.0.html)
+and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 
-## 0.1.0
+## [0.1.0]
 
-- Initial IntelliJ IDEA plugin with full action/situation parity target vs the VS Code extension.
-- Domain layer (porcelain parsers, panel model, intent, housekeeping argv) covered by JUnit.
-- Native tool window, start wizard, open/diff, finish cycle, housekeeping, CLI log.
-- Canonical multi-client surface: `contracts/client-product-surface.yaml`.
+First release. Requires IntelliJ IDEA **2026.2+** (build `262+`) and a local
+`git review` **0.6.0** or newer.
+
+### Added
+
+- **Native tool window.** A Swing panel that always describes what the CLI
+  reports — no state is derived in the IDE — with the review's controls in the
+  title bar (Refresh, Finish, Save, Cancel, Preview edits) and the full action
+  set under **Tools → git review**.
+- **Walkthrough panel.** In walk mode it shows the current entry — the file, its
+  position in the author's reading order, its `key` mark and the *why* written
+  for it — with next / previous navigation and a **Go to Entry** pick over the
+  whole sequence, including the files the walkthrough does not cover.
+- **Whole mode.** A review without a walkthrough lists the files the range
+  touches; a row opens that file's diff, one control opens every change at once,
+  and the last row you opened stays marked per review branch.
+- **Step mode.** A commit-by-commit review shows the commit, its subject and
+  author, which steps have banked edits, and the files the current commit
+  touches.
+- **Draft your own reading order.** When a PR ships without a walkthrough, the
+  start wizard offers *Walkthrough — draft one*. It writes a skeleton listing
+  every file in the range, opens it, and waits behind a notice while you fill in
+  the order and the *why* — *Continue* validates it on the CLI and reports
+  exactly what to fix, as many times as you need; *Cancel* keeps what you wrote
+  and the next pass offers to continue the draft. The draft is yours and local:
+  it lives outside the working tree, so nothing gets committed or staged and
+  `git status` never changes. Reviews reading a draft show `(draft)` next to the
+  mode.
+- **Inventory.** With no review on the current branch, the panel lists the
+  reviews open elsewhere in the repository — active and saved — and offers
+  *Continue* / *Discard* on them.
+- **Lifecycle actions**, each shelling out to the matching verb: start (a wizard
+  offering only the layouts the CLI reports as viable — walkthrough, keys only,
+  commit by commit, whole diff), finish, save, cancel, preview edits, undo
+  finish, resume a finish stopped mid-conflict, clean and forget.
+- **Author flow**: `walkthrough init` and `build` from the empty state or the
+  menu.
+- **Read-only compare** between two revisions, with the panel hiding Finish.
+- **Diff integration.** Multi-file diffs open as a single window with
+  Prev / Next file rather than one editor tab per file; a file the range
+  modifies opens against the working tree and stays editable, one the PR only
+  adds or only deletes opens the single side that exists.
+- **Guidance when the CLI is missing or too old**, with the install command in a
+  copyable block and a link to the other install methods.
+- **Settings** `path` and `defaultSource` under **Settings → Tools → git
+  review**, plus **Show CLI Log** listing every invocation the plugin made.
+- Product parity with the VS Code extension — the same actions, situations and
+  panel layout — pinned by
+  [`contracts/client-product-surface.yaml`](../contracts/client-product-surface.yaml)
+  and verified on both clients in CI. The plugin carries the same product mark
+  as the extension, out of the shared icon generator.

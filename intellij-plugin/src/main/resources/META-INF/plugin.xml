@@ -25,11 +25,16 @@
           reviewer moves the tool window the platform keeps their choice.
           Stripe label: messages/GitReviewBundle.properties → toolwindow.stripe.gitReview.walkthrough
         -->
+        <!--
+          The stripe icon is the product mark, shared with the VS Code extension.
+          The platform picks the _dark and @20x20 siblings by name; do not point
+          this at a bare AllIcons.* again or the two clients stop matching.
+        -->
         <toolWindow
             id="gitReview.walkthrough"
             anchor="right"
             factoryClass="com.ezevillo.gitreview.ui.GitReviewToolWindowFactory"
-            icon="AllIcons.Actions.Preview"
+            icon="/icons/gitReviewToolWindow.svg"
             secondary="false"/>
         <projectService serviceImplementation="com.ezevillo.gitreview.host.GitReviewService"/>
         <applicationService serviceImplementation="com.ezevillo.gitreview.settings.GitReviewSettings"/>

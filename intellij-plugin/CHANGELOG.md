@@ -29,6 +29,12 @@
   and takes a fill only under the pointer. The last opened one keeps the
   selection fill plus a bar at the margin. **Diff** / **File** carry their
   glyphs too, and the list heading is a quiet label above its list.
+- The plugin carries the product mark instead of borrowed platform glyphs: the
+  Marketplace and **Settings → Plugins** show the same tile as the VS Code
+  extension, and the tool-window stripe its mono form. Both are the extension's
+  files, geometry untouched; only the stripe's fill follows the platform's grey,
+  since VS Code's is a dark-theme value and IntelliJ patches light to dark, never
+  the other way.
 - The rest of the panel picks up the marks the extension gives the same things:
   the why is quoted behind a rule (italics when there is none to quote); `key`,
   `edits`, `current` and `orphan` are badges instead of grey words; a stopped

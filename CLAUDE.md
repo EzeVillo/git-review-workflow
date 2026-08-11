@@ -382,6 +382,19 @@ webview de VS Code): `domain/PanelLayout.kt` proyecta el modelo y
 la CLI siguen yendo al contenedor Docker en Windows; el plugin se prueba con
 Gradle nativo (y `platformTest` en el runner Linux de CI).
 
+**El icono sí es compartido** — es la identidad del producto, no píxeles del
+panel. Los archivos de la extensión se **copian tal cual**, sin redibujar nada:
+`media/icon.svg` va como `META-INF/pluginIcon.svg` (+ `_dark`) y
+`media/activity-bar.svg` como `icons/gitReviewToolWindow.svg` (+ `_dark`). Son
+SVG, así que escalan solos a lo que pinte la stripe; lo único que cambia es el
+`width`/`height` declarado y **el color**: el `#C5C5C5` de la extensión es el
+gris de tema oscuro de VS Code, y IntelliJ parchea de claro a oscuro pero nunca
+al revés, así que sin cambiarlo el icono se lava en tema claro. La plataforma
+deriva sola el hermano `_dark`, y **si falta no falla nada: dibuja un
+placeholder**. Por eso `ToolWindowIconTest` ata las tres puntas: lo que pide el
+`plugin.xml`, lo que hay en `resources/`, y la geometría contra el archivo de la
+extensión forma por forma. Si cambiás el mark, cambialo en los dos clientes.
+
 ## Extensión de VS Code
 
 `vscode-extension/` es un proyecto npm aparte (TypeScript + esbuild), con su

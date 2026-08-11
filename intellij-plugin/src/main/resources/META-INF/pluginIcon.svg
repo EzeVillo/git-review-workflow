@@ -1,0 +1,38 @@
+<!-- Marketplace / Settings > Plugins icon. Same mark as the VS Code extension's
+     media/icon.svg (40x40 is what JetBrains asks for; the geometry is unchanged). -->
+<svg width="40" height="40" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grwTile" x1="64" y1="0" x2="64" y2="128" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1A2030"/>
+      <stop offset="1" stop-color="#10151F"/>
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="126" height="126" rx="27.2" fill="url(#grwTile)"/>
+  <rect x="0.5" y="0.5" width="127" height="127" rx="28.2" fill="none" stroke="#2A3344" stroke-width="1"/>
+  <g transform="translate(9.86 5.50)">
+  <g fill="#E0666B">
+    <rect x="5.81" y="23.13" width="33.18" height="5.81" rx="2.91"/>
+    <rect x="5.81" y="35.48" width="38.02" height="5.81" rx="2.91"/>
+    <rect x="5.81" y="47.83" width="38.26" height="5.81" rx="2.91"/>
+    <rect x="14.05" y="59.94" width="30.03" height="6.05" rx="3.03"/>
+    <rect x="5.81" y="72.29" width="33.42" height="6.05" rx="3.03"/>
+    <rect x="19.62" y="84.64" width="24.22" height="5.81" rx="2.91"/>
+  </g>
+  <g fill="#3DDC84">
+    <rect x="59.57" y="18.28" width="21.31" height="5.81" rx="2.91"/>
+    <rect x="59.82" y="30.63" width="36.33" height="5.81" rx="2.91"/>
+    <rect x="59.57" y="42.99" width="28.09" height="5.81" rx="2.91"/>
+    <rect x="59.57" y="55.34" width="41.90" height="5.81" rx="2.91"/>
+  </g>
+  <rect x="49.5" y="12" width="3" height="92" rx="1.5" fill="#6B7380"/>
+  <circle cx="51" cy="33" r="4" fill="#D5DAE2"/>
+  <circle cx="51" cy="93" r="3" fill="#D5DAE2"/>
+  <g fill="none" stroke="#F3F4F6" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <line x1="73.38" y1="77.13" x2="63.69" y2="81.97"/>
+    <line x1="73.38" y1="86.82" x2="63.69" y2="81.97"/>
+    <line x1="78.71" y1="94.08" x2="83.06" y2="71.80"/>
+    <line x1="88.39" y1="77.13" x2="98.08" y2="81.97"/>
+    <line x1="88.39" y1="86.82" x2="98.08" y2="81.97"/>
+  </g>
+  </g>
+</svg>

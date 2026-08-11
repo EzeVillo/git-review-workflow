@@ -1057,17 +1057,21 @@ manually curating a reading order for it is circular — an agent that reads the
 whole diff can write that order for you before you look at a single file.
 
 ```sh
-# No team buy-in needed: generate your own walkthrough on any PR you're
-# reviewing, use it, then throw it away:
-git fetch origin feature/login:pr-scratch    # grab the PR under a scratch name
-git switch pr-scratch
-git review walkthrough init && git review walkthrough build
+# No team buy-in needed: write your own reading order for any PR you're
+# reviewing. It lives outside the working tree — nothing to stage, commit or
+# undo — and start reads it instead of the PR's walkthrough (if any):
+git review walkthrough draft feature/login
 # ...fill in the order and a why for each (or point an agent at the diff)...
-git add .review/walkthrough.md && git commit  # local only — never push it
-git review start pr-scratch --local           # walks it, same as above
+git review walkthrough draft --build feature/login
+git review start feature/login               # walks your order; status says walk (draft)
 # ...read, edit, finish or abort as usual...
-git branch -D pr-scratch                      # drop it, walkthrough included
+# The draft outlives clean/abort — drop it only when you want:
+# git review forget --draft feature/login
 ```
+
+See [`git review walkthrough`](#git-review-walkthrough) → *Drafting one for
+someone else's PR* for precedence, mid-review edits, and how `save`/`continue`
+carry the draft with a paused review.
 
 </details>
 

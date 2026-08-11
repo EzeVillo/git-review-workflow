@@ -1083,17 +1083,22 @@ que curar el orden de lectura vos mismo es circular — un agente que lee todo
 el diff puede escribir ese orden antes de que mires un solo archivo.
 
 ```sh
-# No hace falta que el equipo se suba: generá tu propio walkthrough en
-# cualquier PR que estés revisando, usalo y después descartalo:
-git fetch origin feature/login:pr-scratch    # traer el PR con un nombre descartable
-git switch pr-scratch
-git review walkthrough init && git review walkthrough build
+# No hace falta que el equipo se suba: escribí tu propio orden de lectura para
+# cualquier PR que estés revisando. Vive fuera del working tree — no hay nada
+# que stagear, commitear ni deshacer — y start lo lee en lugar del walkthrough
+# del PR (si trae uno):
+git review walkthrough draft feature/login
 # ...completar el orden y un porqué en cada uno (o apuntarle un agente al diff)...
-git add .review/walkthrough.md && git commit  # solo local — nunca lo pusheás
-git review start pr-scratch --local           # lo recorre, igual que arriba
+git review walkthrough draft --build feature/login
+git review start feature/login               # recorre tu orden; status dice walk (draft)
 # ...leer, editar, finish o abort como siempre...
-git branch -D pr-scratch                      # descartala, walkthrough incluido
+# El borrador sobrevive a clean/abort — borralo solo cuando quieras:
+# git review forget --draft feature/login
 ```
+
+Mirá [`git review walkthrough`](#git-review-walkthrough) → *Escribir uno para
+el PR de otra persona* para precedencia, ediciones a mitad de review, y cómo
+`save`/`continue` llevan el borrador con una review pausada.
 
 </details>
 

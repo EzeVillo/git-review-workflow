@@ -179,12 +179,17 @@ export function draftWaitMessage(
     if (unopened === undefined) {
         return head;
     }
+    // El motivo del rechazo viene de la CLI y no siempre cierra la oración, así
+    // que la frase que sigue arrancaba pegada a la anterior ("...no entries found
+    // It could not be opened here"). Se cierra acá y no en el head, que cuando va
+    // solo se muestra tal cual lo escribió la CLI.
+    const lead = head.endsWith(".") ? head : `${head}.`;
     if (unopened.file !== undefined) {
-        return `${head} It could not be opened here — the draft is at ${unopened.file}.`;
+        return `${lead} It could not be opened here — the draft is at ${unopened.file}.`;
     }
     // Ni la ruta se pudo armar (no hay gitdir que resolver desde este cwd). Se
     // dice el nombre relativo, que es estable, en vez de callar.
-    return `${head} It could not be opened here — look for review-walkthrough/${branch}.md inside this repository's git directory.`;
+    return `${lead} It could not be opened here — look for review-walkthrough/${branch}.md inside this repository's git directory.`;
 }
 
 /** Si la CLI volvió a ofrecer `keys` sobre el borrador ya validado. */

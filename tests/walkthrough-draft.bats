@@ -257,6 +257,77 @@ EOF
 	[[ "$output" == *"whole (draft)"* ]]
 }
 
+@test "a compare --step of a remote-tracking branch records where its draft goes" {
+	# --step exits before the whole-mode tail, and the name used to be written only
+	# there: this review recorded nothing and every reader fell back to the source,
+	# which for a remote-tracking <b> is "origin/feature/plain". Step mode reads no
+	# walkthrough, but it holds custody of one exactly like the other two.
+	git review compare develop origin/feature/plain --step >/dev/null
+	[ "$(git config branch.review/origin/feature/plain.reviewsource)" = "origin/feature/plain" ]
+	[ "$(git config branch.review/origin/feature/plain.reviewdraft)" = "feature/plain" ]
+
+	# The bare draft command from inside the review died with
+	# "origin/origin/feature/plain not found" -- a ref that never existed.
+	run git review walkthrough draft
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"3 file(s) from origin/feature/plain"* ]]
+	[[ "$output" == *"git review walkthrough draft --build feature/plain"* ]]
+	[ -f "$DRAFT" ]
+	[ ! -f "$(git rev-parse --git-dir)/review-walkthrough/origin/feature/plain.md" ]
+}
+
+@test "a step review carries the draft into the saved namespace" {
+	# The custody chain the missing name broke: save filed nothing, so list never
+	# badged the paused row and forget --saved never took the file with the review.
+	git review walkthrough draft feature/plain >/dev/null
+	fill_draft
+	git review compare develop origin/feature/plain --step >/dev/null
+	git review save >/dev/null
+	[ ! -f "$DRAFT" ]
+	saved="$(git rev-parse --git-dir)/review-saved-walkthrough/feature/plain.md"
+	[ -f "$saved" ]
+	grep -Fxq 'start here' "$saved"
+
+	run git review list
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"review-saved/origin/feature/plain"* ]]
+	[[ "$output" == *"step (draft) ["* ]]
+
+	# And it comes back with the review, under the same name.
+	run git review continue origin/feature/plain
+	[ "$status" -eq 0 ]
+	[ -f "$DRAFT" ]
+	[ ! -f "$saved" ]
+	grep -Fxq 'start here' "$DRAFT"
+}
+
+@test "start --step records the draft name and says the order is being bypassed" {
+	git review walkthrough draft feature/plain >/dev/null
+	fill_draft
+	run git review start --step feature/plain
+	[ "$status" -eq 0 ]
+	# Attributed to whoever wrote it. The context was set after this branch, so a
+	# reviewer who had written an order and then asked for --step was told nothing,
+	# while the same PR annotated by its author said so.
+	[[ "$output" == *"you have a walkthrough draft for feature/plain; --step ignores it"* ]]
+	[[ "$output" != *"feature/plain has a walkthrough;"* ]]
+	[ "$(git config branch.review/feature/plain.reviewmode)" = "step" ]
+	[ "$(git config branch.review/feature/plain.reviewdraft)" = "feature/plain" ]
+	# The note is about the draft and nothing else: --step really is stepping.
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"mode    step"* ]]
+}
+
+@test "start --step on an author walkthrough still names the author" {
+	# The other arm of the same message: with no draft of ours the wording must not
+	# have changed.
+	run git review start --step feature/annotated
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"feature/annotated has a walkthrough; --step ignores it"* ]]
+	[[ "$output" != *"you have a walkthrough draft"* ]]
+}
+
 @test "draft refuses to overwrite an existing draft without --force" {
 	git review walkthrough draft feature/plain
 	fill_draft

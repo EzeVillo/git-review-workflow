@@ -176,6 +176,94 @@ teardown() {
 	[ ! -f "$SAVED_DRAFT" ]
 }
 
+@test "forget --draft --all leaves the archived draft of a paused compare" {
+	# The archived file is named after the branch (feature/x) and the paused review
+	# after the ref it was compared with (review-saved/origin/feature/x). Testing
+	# refs/heads/review-saved/<file name> therefore answered "no paused review" for
+	# exactly this shape: the sweep deleted a live paused review's reading order,
+	# announced that nothing was left to restore it, and the next continue came back
+	# to "the walkthrough this review was reading is gone" with abort as the only
+	# way out.
+	git review compare develop origin/feature/x >/dev/null
+	[ "$(git config branch.review/origin/feature/x.reviewdraft)" = "feature/x" ]
+	git review save >/dev/null
+	[ -f "$SAVED_DRAFT" ]
+
+	run git review forget --draft --all --dry-run
+	[ "$status" -eq 0 ]
+	[ "$output" = "no walkthrough drafts" ]
+	run git review forget --draft --all
+	[ "$status" -eq 0 ]
+	[ "$output" = "no walkthrough drafts" ]
+	[ -f "$SAVED_DRAFT" ]
+
+	# Still resumable, still on the reviewer's own order.
+	run git review continue origin/feature/x
+	[ "$status" -eq 0 ]
+	[ -f "$DRAFT" ]
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"walk (draft)"* ]]
+	[[ "$output" == *"on src/c.txt"* ]]
+}
+
+@test "forget --draft --all still takes a compares archived draft once its review is gone" {
+	# The other side of the same test: the claim is what protects the file, so
+	# deleting the claimant by hand must hand it back to the sweep -- under the
+	# name it is filed as, which is not the review's.
+	git review compare develop origin/feature/x >/dev/null
+	git review save >/dev/null
+	git branch -D review-saved/origin/feature/x >/dev/null
+	run git review forget --draft --all
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"forgot the archived walkthrough draft for feature/x"* ]]
+	[ ! -f "$SAVED_DRAFT" ]
+}
+
+@test "save refuses to file a draft over one a paused review still claims" {
+	# Two reviews of one branch can want the same file name: a draft belongs to the
+	# branch, so the compare of origin/feature/x and the start of feature/x both
+	# file under feature/x. The move at the end of save is an mv, and it replaced
+	# the paused review's prose without a word.
+	git review compare develop origin/feature/x >/dev/null
+	git review save >/dev/null
+	[ -f "$SAVED_DRAFT" ]
+	archived="$(cat "$SAVED_DRAFT")"
+
+	# A second draft for the same branch, and a second review reading it.
+	printf '# Walkthrough\n\n## 1. a.txt\nthe second draft\n' >"$DRAFT"
+	git review start feature/x >/dev/null
+	run git review save
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"review-saved/origin/feature/x is paused on a walkthrough draft for feature/x"* ]]
+	[[ "$output" == *"git review forget --saved origin/feature/x"* ]]
+
+	# Neither copy moved, and the review that could not be saved is still live.
+	[ "$(cat "$SAVED_DRAFT")" = "$archived" ]
+	[ "$(tail -n 1 "$DRAFT")" = "the second draft" ]
+	[ "$(git rev-parse --abbrev-ref HEAD)" = "review/feature/x" ]
+	run git rev-parse --verify --quiet refs/heads/review-saved/feature/x
+	[ "$status" -ne 0 ]
+}
+
+@test "save replaces an archived draft nobody claims and says so" {
+	# Same collision with the claimant deleted by hand: nothing can bring that file
+	# back, so saving proceeds -- but it is still prose someone typed, and this is
+	# the only mv in the suite that lands on top of some.
+	git review compare develop origin/feature/x >/dev/null
+	git review save >/dev/null
+	git branch -D review-saved/origin/feature/x >/dev/null
+	[ -f "$SAVED_DRAFT" ]
+
+	printf '# Walkthrough\n\n## 1. a.txt\nthe second draft\n' >"$DRAFT"
+	git review start feature/x >/dev/null
+	run git review save
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"replaced an archived walkthrough draft for feature/x"* ]]
+	[ ! -f "$DRAFT" ]
+	[ "$(tail -n 1 "$SAVED_DRAFT")" = "the second draft" ]
+}
+
 # ── clean ─────────────────────────────────────────────────────────────────────
 #
 # A draft is hand-written prose that outlives the review it was written for, so

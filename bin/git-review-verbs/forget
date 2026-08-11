@@ -331,13 +331,22 @@ if [ "$mode" = draft ]; then
 
 	if [ "$all" -eq 1 ]; then
 		drafts="$(walk_draft_list)"
+		# What the paused reviews claim, asked of each review rather than derived
+		# from the file's name. The two are not the same string — a compare of
+		# origin/feature/x is paused as review-saved/origin/feature/x and its draft
+		# is feature/x's — so testing refs/heads/review-saved/<file name> answered
+		# "no paused review" for precisely those reviews, and this loop then deleted
+		# a live paused review's reading order and said so in as many words. The next
+		# git review continue came back to "the walkthrough this review was reading
+		# is gone", with git review abort as the only way out.
+		claims="$(walk_saved_draft_claims | cut -f1)"
 		# Filtered before the emptiness test below, not while deleting: an archive
 		# entry whose review is still paused is not garbage and must not make the
 		# difference between "no walkthrough drafts" and silence.
 		orphans=""
 		while IFS= read -r d; do
 			[ -n "$d" ] || continue
-			if git show-ref --verify --quiet "refs/heads/review-saved/$d"; then
+			if printf '%s\n' "$claims" | grep -Fxq -e "$d"; then
 				continue
 			fi
 			orphans="$orphans$d

@@ -191,10 +191,18 @@ describe("draftWaitMessage", () => {
             " — the draft is at /repo/.git/review-walkthrough/feature/x.md."
         );
         // Y sigue diciendolo cuando el aviso vuelve con el motivo de un rechazo.
+        // El motivo lo escribe la CLI y no siempre termina en punto, asi que la
+        // frase que sigue no puede quedar pegada a la anterior.
         assert.strictEqual(
             draftWaitMessage("feature/x", "no entries found", {file: "/repo/.git/review-walkthrough/feature/x.md"}),
-            "The draft is not valid yet: no entries found It could not be opened here" +
+            "The draft is not valid yet: no entries found. It could not be opened here" +
             " — the draft is at /repo/.git/review-walkthrough/feature/x.md."
+        );
+        // Y cuando si termina en punto no se le agrega otro.
+        assert.strictEqual(
+            draftWaitMessage("feature/x", "no entries found.", {file: undefined}),
+            "The draft is not valid yet: no entries found. It could not be opened here" +
+            " — look for review-walkthrough/feature/x.md inside this repository's git directory."
         );
     });
 

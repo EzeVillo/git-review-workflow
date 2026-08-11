@@ -639,6 +639,29 @@ walk_review_draft_src() {
 	printf '%s' "$_wrds_name"
 }
 
+# walk_saved_draft_claims
+# Every paused review that owns an archived draft, as "<src><TAB><review-branch>",
+# one per line. The <src> is the name the review recorded, which is the name its
+# draft is filed under in review-saved-walkthrough/.
+#
+# It exists because that name and the branch's own are not the same string: a
+# compare of a remote-tracking branch is paused as review-saved/origin/feature/x
+# and its draft is feature/x's. Asking "is there a refs/heads/review-saved/<file
+# name>?" therefore answers no for exactly those reviews, and the two callers here
+# both act destructively on that answer — forget --draft --all swept the archived
+# draft of a live paused review, announcing that no paused review was left to
+# restore it, and save overwrote it. Ask each paused review what it claims instead;
+# it is the same question walk_review_draft_src answers everywhere else.
+walk_saved_draft_claims() {
+	git for-each-ref --format='%(refname:short)' refs/heads/review-saved/ |
+		while IFS= read -r _wsc_rb; do
+			[ -n "$_wsc_rb" ] || continue
+			_wsc_name="$(walk_review_draft_src "$_wsc_rb")"
+			[ -n "$_wsc_name" ] || continue
+			printf '%s\t%s\n' "$_wsc_name" "$_wsc_rb"
+		done
+}
+
 # walk_draft_body <src>
 # Print <src>'s draft, normalised, or nothing (non-zero rc) when <src> has no
 # draft in force. "In force" and "the file exists" are not the same thing: a draft

@@ -130,6 +130,39 @@ git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null &&
 git rev-parse --verify --quiet "refs/heads/review-saved/$name" >/dev/null &&
 	die "you have a saved review of $name; resume it with git review continue $name or discard it with git review forget --saved $name"
 
+# Compare is the one reader that works with revisions rather than a branch, so
+# the draft context cannot be inferred the way it is everywhere else: it is set
+# only when <b> actually names a branch the reviewer has drafted for. Comparing
+# two SHAs or tags falls through to the PR's own walkthrough, the only reading
+# order a loose revision has. Without this, the same branch would read in one
+# order under start and another under compare, with nothing to explain it.
+# A local branch is its own source name; a remote-tracking one is the name minus
+# its remote's first segment. Stripping to the last segment would be wrong for
+# every namespaced branch: feature/checkout would look up a draft for "checkout".
+#
+# This is the one derivation of a draft name in the suite. It is recorded on the
+# review below (reviewdraft) and read back from there ever after, so that the
+# name a draft is written under and the name it is looked up under cannot come
+# from two different computations — they used to, and the disagreement was
+# invisible: the draft written from inside this review went to origin/feature/x
+# while every other entry point looked under feature/x.
+#
+# Above the --step branch, because that branch exits: with the derivation below
+# it, a compare --step of a remote-tracking branch recorded no name at all and
+# every reader fell back to the review's source. That is the disagreement again,
+# in the one mode nobody thought to look at — git review walkthrough draft from
+# inside such a review died with "origin/origin/feature/x not found", and save
+# filed the draft nowhere, so the paused review's row never showed it and
+# forget --saved never took it.
+draftsrc="$name"
+if git rev-parse --verify --quiet "refs/heads/$b" >/dev/null; then
+	draftsrc="$b"
+	walk_use_draft "$draftsrc"
+elif git rev-parse --verify --quiet "refs/remotes/$b" >/dev/null; then
+	draftsrc="${b#*/}"
+	walk_use_draft "$draftsrc"
+fi
+
 if [ "$step" -eq 1 ]; then
 	# --first-parent --no-merges: walk only the range's own commits, skipping merge
 	# commits, exactly like start --step so git review next/prev behave identically.
@@ -148,6 +181,10 @@ if [ "$step" -eq 1 ]; then
 	git config "branch.$rb.reviewcount" "$count"
 	git config "branch.$rb.reviewstep" "1"
 	git config "branch.$rb.reviewreadonly" "1"
+	# The draft's name, from the single derivation above — see the whole-mode write
+	# below. A step review reads no walkthrough and still holds custody of one, and
+	# here the name really does differ from the review's own.
+	git config "branch.$rb.reviewdraft" "$draftsrc"
 	if [ -n "$returnbranch" ]; then
 		git config "branch.$rb.reviewreturn" "$returnbranch"
 	fi
@@ -165,30 +202,6 @@ fi
 walk=0
 walkcount=0
 keys_filter=0
-# Compare is the one reader that works with revisions rather than a branch, so
-# the draft context cannot be inferred the way it is everywhere else: it is set
-# only when <b> actually names a branch the reviewer has drafted for. Comparing
-# two SHAs or tags falls through to the PR's own walkthrough, the only reading
-# order a loose revision has. Without this, the same branch would read in one
-# order under start and another under compare, with nothing to explain it.
-# A local branch is its own source name; a remote-tracking one is the name minus
-# its remote's first segment. Stripping to the last segment would be wrong for
-# every namespaced branch: feature/checkout would look up a draft for "checkout".
-#
-# This is the one derivation of a draft name in the suite. It is recorded on the
-# review below (reviewdraft) and read back from there ever after, so that the
-# name a draft is written under and the name it is looked up under cannot come
-# from two different computations — they used to, and the disagreement was
-# invisible: the draft written from inside this review went to origin/feature/x
-# while every other entry point looked under feature/x.
-draftsrc="$name"
-if git rev-parse --verify --quiet "refs/heads/$b" >/dev/null; then
-	draftsrc="$b"
-	walk_use_draft "$draftsrc"
-elif git rev-parse --verify --quiet "refs/remotes/$b" >/dev/null; then
-	draftsrc="${b#*/}"
-	walk_use_draft "$draftsrc"
-fi
 if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$bcommit")" && [ -n "$wtcontent" ]; then
 	curated="$(walk_sequence "$bcommit" "$acommit")"
 	# grep -c returns 1 (aborting under set -e in POSIX sh) on an empty sequence.

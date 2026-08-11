@@ -291,6 +291,46 @@ else
 	fi
 fi
 
+# Read this source's own draft in preference to the PR's walkthrough, if the
+# reviewer wrote one. Before the --step branch below and not after it: --step's
+# own walk_read is the note that says a reading order is being bypassed, and with
+# the context set later that note was the one thing in the suite that still saw
+# only the author's file — so a reviewer who wrote an order and then asked for
+# --step was told nothing at all, while the same PR annotated by its author said
+# so. It is also before the first walk_read and the --keys check, so every
+# decision from here on describes the same walkthrough.
+walk_use_draft "$src"
+
+# draft_command: the git review walkthrough draft invocation for this review,
+# flags and all. Three of the messages below suggest it, so it is built once, with
+# this review's own origin and range: drafting against a different range than the
+# one being reviewed would annotate the wrong file set, and on a branch with no
+# copy on the remote the bare form just fails.
+draft_command() {
+	_dc_flags=""
+	if [ "$offline_mode" -eq 1 ]; then
+		_dc_flags=" --offline"
+	elif [ "$local_mode" -eq 1 ]; then
+		_dc_flags=" --local"
+	fi
+	if [ "$delta" -eq 1 ]; then
+		_dc_flags="$_dc_flags --delta"
+	fi
+	printf 'git review walkthrough draft%s %s' "$_dc_flags" "$src"
+}
+
+# Whose reading order is in force, for the notes below. A reviewer's draft shadows
+# the author's walkthrough (walk_read), so a note that blames "the PR" for an order
+# that is actually the reviewer's own sends them to read someone else's branch
+# looking for their own typo — and the PR may carry no walkthrough at all. Same
+# distinction the "(draft)" suffix draws in status and list, on the surface the
+# reviewer sees first.
+if walk_is_draft "$src"; then
+	wtdesc="you have a walkthrough draft for $src"
+else
+	wtdesc="$src has a walkthrough"
+fi
+
 if [ "$step" -eq 1 ]; then
 	# --first-parent --no-merges: walk only the branch's own commits, skipping
 	# merge commits (e.g. merges of the base branch) so changes that came from
@@ -305,7 +345,7 @@ if [ "$step" -eq 1 ]; then
 	# --no-walk) so someone expecting the curated reading order is not left wondering
 	# where it went.
 	if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$tip")" && [ -n "$wtcontent" ]; then
-		echo "note: $src has a walkthrough; --step ignores it and reviews commit by commit"
+		echo "note: $wtdesc; --step ignores it and reviews commit by commit"
 	fi
 
 	git switch -q -c "$rb" "$first" || die "could not create $rb"
@@ -317,6 +357,13 @@ if [ "$step" -eq 1 ]; then
 	git config "branch.$rb.reviewmode" "step"
 	git config "branch.$rb.reviewcount" "$count"
 	git config "branch.$rb.reviewstep" "1"
+	# Where this review's draft lives, recorded here too — see the whole-mode write
+	# below for what the name is for. A step review reads no walkthrough, but it
+	# holds custody of one all the same: save files the draft with it, list badges
+	# the row and forget --saved discards it. Here the name happens to equal the
+	# source, so leaving it out was invisible; in compare it is not, and a key that
+	# only some modes write is a key every reader has to second-guess.
+	git config "branch.$rb.reviewdraft" "$src"
 	if [ -n "$prev" ]; then
 		git config "branch.$rb.reviewprevreviewed" "$prev"
 	fi
@@ -351,41 +398,6 @@ lower="$(fold_lower "$start" "$baseref" "$tip")"
 walk=0
 walkcount=0
 keys_filter=0
-# Read this source's own draft in preference to the PR's walkthrough, if the
-# reviewer wrote one. Set before the first walk_read below, and before the
-# --keys check, so every decision from here on describes the same walkthrough.
-walk_use_draft "$src"
-
-# draft_command: the git review walkthrough draft invocation for this review,
-# flags and all. Three of the messages below suggest it, so it is built once, with
-# this review's own origin and range: drafting against a different range than the
-# one being reviewed would annotate the wrong file set, and on a branch with no
-# copy on the remote the bare form just fails.
-draft_command() {
-	_dc_flags=""
-	if [ "$offline_mode" -eq 1 ]; then
-		_dc_flags=" --offline"
-	elif [ "$local_mode" -eq 1 ]; then
-		_dc_flags=" --local"
-	fi
-	if [ "$delta" -eq 1 ]; then
-		_dc_flags="$_dc_flags --delta"
-	fi
-	printf 'git review walkthrough draft%s %s' "$_dc_flags" "$src"
-}
-
-# Whose reading order is in force, for the notes below. A reviewer's draft shadows
-# the author's walkthrough (walk_read), so a note that blames "the PR" for an order
-# that is actually the reviewer's own sends them to read someone else's branch
-# looking for their own typo — and the PR may carry no walkthrough at all. Same
-# distinction the "(draft)" suffix draws in status and list, on the surface the
-# reviewer sees first.
-if walk_is_draft "$src"; then
-	wtdesc="you have a walkthrough draft for $src"
-else
-	wtdesc="$src has a walkthrough"
-fi
-
 if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$tip")" && [ -n "$wtcontent" ]; then
 	curated="$(walk_sequence "$tip" "$lower")"
 	# grep -c returns 1 (aborting under set -e in POSIX sh) on an empty sequence.

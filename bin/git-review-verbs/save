@@ -93,6 +93,42 @@ elif [ -n "$base" ] && git rev-parse --verify --quiet "refs/heads/$base" >/dev/n
 fi
 [ -n "$target" ] || die "could not determine a branch to return to; switch away manually first"
 
+# The archived namespace already holding a draft under the name this review would
+# file its own under. The move at the end of this script is an mv: without this it
+# replaced whatever was there and said nothing, which is the one place in the suite
+# where hand-written prose was destroyed silently.
+#
+# Two reviews can want the same file name — a draft belongs to a branch, and both
+# git review start feature/x and git review compare develop origin/feature/x draft
+# for feature/x — so it is not enough that review-saved/<src> is free. Asked of the
+# paused reviews rather than of the file's name, for the same reason
+# forget --draft --all has to: the archived draft of review-saved/origin/feature/x
+# is filed under feature/x.
+#
+# Refuse when a paused review still claims it (its prose is the only copy and this
+# would be the command that ate it); replace it, out loud, when nothing does — an
+# entry no review can reclaim is already what forget --draft --all sweeps. Checked
+# here, before anything is written, while the move itself stays last: a guard that
+# can still die has no business running after the review has been put aside.
+walk_gitdir_init
+_save_draftsrc="$(walk_review_draft_src "$cur")"
+_save_replaces=0
+if [ -n "$_save_draftsrc" ] && [ -f "$(walk_saved_draft_path "$_save_draftsrc")" ]; then
+	_save_claimant=""
+	while IFS="$(printf '\t')" read -r _sc_name _sc_rb; do
+		if [ "$_sc_name" = "$_save_draftsrc" ]; then
+			_save_claimant="$_sc_rb"
+			break
+		fi
+	done <<EOF
+$(walk_saved_draft_claims)
+EOF
+	if [ -n "$_save_claimant" ]; then
+		die "$_save_claimant is paused on a walkthrough draft for $_save_draftsrc, and this review would file its own under the same name; resume that review with 'git review continue' and finish or discard it, or discard it with 'git review forget --saved ${_save_claimant#review-saved/}', then save this one."
+	fi
+	_save_replaces=1
+fi
+
 # copy_meta <key>: copy branch.<cur>.<key> to branch.<saved>.<key> when set.
 # The explicit if (rather than a && one-liner) keeps the function's exit status 0
 # when the key is absent, so it does not trip set -e for the optional keys.
@@ -217,6 +253,12 @@ _save_draft="$(walk_draft_path "$draftsrc")"
 if [ -f "$_save_draft" ]; then
 	_saved_draft="$(walk_saved_draft_path "$draftsrc")"
 	mkdir -p "$(dirname "$_saved_draft")"
+	# Said, not discovered: the guard above established that nothing can reclaim
+	# what is there, but it is still prose someone typed, and this is the only mv in
+	# the suite that lands on top of some.
+	if [ "$_save_replaces" -eq 1 ]; then
+		echo "note: replaced an archived walkthrough draft for $draftsrc that no paused review could restore" >&2
+	fi
 	mv "$_save_draft" "$_saved_draft"
 fi
 

@@ -191,7 +191,18 @@ repo, no en archivos del working tree:
   un movimiento a mitad de camino dejaba el archivo sin dueño de los dos lados—, y
   `continue` **nunca pisa** un borrador vivo: si escribiste uno con la review
   pausada, se niega con las dos salidas (`forget --draft` o `forget --saved`) en
-  vez de elegir por vos cuál de las dos prosas escritas a mano sobrevive.
+  vez de elegir por vos cuál de las dos prosas escritas a mano sobrevive. `save`
+  hace lo mismo del otro lado, con la guarda temprano y el `mv` último: dos
+  reviews pueden querer el mismo archivo (un `start feature/x` y un `compare
+  develop origin/feature/x` archivan los dos bajo `feature/x`), así que si el
+  destino ya está ocupado se niega cuando una review pausada lo reclama y avisa
+  cuando reemplaza uno que nadie puede reclamar. **Quién reclama un archivado se
+  le pregunta a las reviews pausadas (`walk_saved_draft_claims`), nunca al nombre
+  del archivo:** `review-saved/<archivo>` no existe justamente para las reviews
+  que necesitan la pregunta —el archivado de `review-saved/origin/feature/x` se
+  llama `feature/x`—, y las dos superficies que decidían por el nombre borraban
+  prosa viva: `forget --draft --all` barría el borrador de una review pausada
+  anunciando que no quedaba review que lo reclamara, y `save` lo pisaba callado.
   El borrador viaja con la review **en cualquier modo**, no sólo en walk, así que
   las filas de `list` llevan `(draft)` también en `step` y `whole`: si sólo lo
   marcara en walk, un `forget --saved` se llevaría prosa que ninguna superficie

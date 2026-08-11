@@ -12,6 +12,10 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent
+REPO = ROOT.parents[1]
+ASSETS = REPO / "assets"
+DOCS = REPO / "docs"  # GitHub Pages publishes /docs only, so the site needs its own copy
+INTELLIJ_RESOURCES = REPO / "intellij-plugin" / "src" / "main" / "resources"
 FACE = ROOT / "_face.png"  # optional; only needed to re-extract the glyph
 CODE_GLYPH_PNG = ROOT / "code-glyph.png"  # checked-in white </> from the logo
 
@@ -323,7 +327,16 @@ def draw_color_tile(size: int = SIZE) -> Image.Image:
     return tile
 
 
-def write_svg(path: Path, color: bool) -> None:
+def write_svg(
+    path: Path,
+    color: bool,
+    *,
+    width: int | None = None,
+    height: int | None = None,
+    gradient_id: str = "tile",
+    border: str = "#2A3344",
+    mono: str = "#C5C5C5",
+) -> None:
     """Vector companion matching the raster geometry."""
     mark_size = SIZE  # SVG mono fills the viewBox; color SVG includes tile
     spine_cx = to_mark_i(SPINE_X, 0, mark_size)[0]
@@ -339,7 +352,7 @@ def write_svg(path: Path, color: bool) -> None:
 
     def fill(name: str) -> str:
         if not color:
-            return "#C5C5C5"
+            return mono
         return {
             "left": "#E0666B",  # diff removals
             "green": "#3DDC84",  # diff additions
@@ -348,8 +361,13 @@ def write_svg(path: Path, color: bool) -> None:
             "code": "#F3F4F6",
         }[name]
 
+    size_attrs = ""
+    if width is not None:
+        size_attrs += f' width="{width}"'
+    if height is not None:
+        size_attrs += f' height="{height}"'
     lines: list[str] = [
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {SIZE} {SIZE}" fill="none">',
+        f'<svg{size_attrs} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {SIZE} {SIZE}" fill="none">',
     ]
 
     if color:
@@ -393,15 +411,15 @@ def write_svg(path: Path, color: bool) -> None:
 
         lines += [
             "  <defs>",
-            '    <linearGradient id="tile" x1="64" y1="0" x2="64" y2="128" gradientUnits="userSpaceOnUse">',
+            f'    <linearGradient id="{gradient_id}" x1="64" y1="0" x2="64" y2="128" gradientUnits="userSpaceOnUse">',
             '      <stop stop-color="#1A2030"/>',
             '      <stop offset="1" stop-color="#10151F"/>',
             "    </linearGradient>",
             "  </defs>",
             # Fill inset 1px; stroke on the outer edge (no fill halo past the border).
-            f'  <rect x="1" y="1" width="{SIZE - 2}" height="{SIZE - 2}" rx="{max(1, rx - 1):.1f}" fill="url(#tile)"/>',
+            f'  <rect x="1" y="1" width="{SIZE - 2}" height="{SIZE - 2}" rx="{max(1, rx - 1):.1f}" fill="url(#{gradient_id})"/>',
             f'  <rect x="0.5" y="0.5" width="{SIZE - 1}" height="{SIZE - 1}" rx="{rx:.1f}" '
-            f'fill="none" stroke="#2A3344" stroke-width="1"/>',
+            f'fill="none" stroke="{border}" stroke-width="1"/>',
             f'  <g transform="translate({tx:.2f} {ty:.2f})">',
         ]
 
@@ -456,6 +474,7 @@ def write_svg(path: Path, color: bool) -> None:
         lines.append("  </g>")  # close translate
 
     lines += ["</svg>", ""]
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
@@ -480,6 +499,37 @@ def main() -> None:
 
     write_svg(ROOT / "activity-bar.svg", color=False)
     write_svg(ROOT / "icon.svg", color=True)
+    write_svg(ASSETS / "logo.svg", color=True)
+    write_svg(DOCS / "logo.svg", color=True)  # favicon for the landing page
+    write_svg(
+        INTELLIJ_RESOURCES / "META-INF" / "pluginIcon.svg",
+        color=True,
+        width=40,
+        height=40,
+        gradient_id="grwTile",
+    )
+    write_svg(
+        INTELLIJ_RESOURCES / "META-INF" / "pluginIcon_dark.svg",
+        color=True,
+        width=40,
+        height=40,
+        gradient_id="grwTileDark",
+        border="#3D4759",
+    )
+    write_svg(
+        INTELLIJ_RESOURCES / "icons" / "gitReviewToolWindow.svg",
+        color=False,
+        width=16,
+        height=16,
+        mono="#6C707E",
+    )
+    write_svg(
+        INTELLIJ_RESOURCES / "icons" / "gitReviewToolWindow_dark.svg",
+        color=False,
+        width=16,
+        height=16,
+        mono="#CED0D6",
+    )
     print("saved SVGs")
 
     # Center check: for each node row, the opaque run around the node must

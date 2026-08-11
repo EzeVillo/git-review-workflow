@@ -1,11 +1,4 @@
-<!-- Tool window icon: vscode-extension/media/activity-bar.svg, unchanged geometry.
-     Only two things differ, and neither is a redraw: width/height are declared at
-     the 16px the New UI asks for (the viewBox keeps the original coordinates, so
-     it scales to whatever the stripe paints), and the fill is the platform's
-     light-theme grey — the extension's #C5C5C5 is VS Code's dark-theme grey, and
-     IntelliJ only patches light to dark, never the other way, so it would wash
-     out on a light stripe. Keep this file in step with the extension's. -->
-<svg width="16" height="16" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg width="16" height="16" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
   <g fill="#6C707E">
     <rect x="6.41" y="25.52" width="36.61" height="6.41" rx="3.21"/>
     <rect x="6.41" y="39.15" width="41.95" height="6.41" rx="3.21"/>

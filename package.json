@@ -41,6 +41,9 @@
   "bin": {
     "git-review": "bin/git-review"
   },
+  "scripts": {
+    "check:logo-assets": "node scripts/check-logo-assets.mjs"
+  },
   "files": [
     "bin/",
     "completions/",

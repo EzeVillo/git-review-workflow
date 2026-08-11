@@ -3,6 +3,10 @@
 trailer/
 __pycache__/
 
+# Visual check-sheets _build_icon.py writes on every run; the assets it ships
+# are the checked-in ones next to them.
+vscode-extension/media/_preview-*.png
+
 # Gradle / IntelliJ plugin
 intellij-plugin/.gradle/
 intellij-plugin/.intellijPlatform/

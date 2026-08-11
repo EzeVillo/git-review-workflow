@@ -113,6 +113,10 @@ jobs:
           node-version: 20
       - name: Check multi-client product surface
         run: node scripts/check-client-product-surface.mjs
+      # Same job on purpose: node is already set up, and both checks guard the
+      # same thing — a surface the clients share drifting apart in one of them.
+      - name: Check logo assets
+        run: node scripts/check-logo-assets.mjs
 
   intellij-plugin:
     strategy:

@@ -1,12 +1,12 @@
-<svg width="40" height="40" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
   <defs>
-    <linearGradient id="grwTileDark" x1="64" y1="0" x2="64" y2="128" gradientUnits="userSpaceOnUse">
+    <linearGradient id="tile" x1="64" y1="0" x2="64" y2="128" gradientUnits="userSpaceOnUse">
       <stop stop-color="#1A2030"/>
       <stop offset="1" stop-color="#10151F"/>
     </linearGradient>
   </defs>
-  <rect x="1" y="1" width="126" height="126" rx="27.2" fill="url(#grwTileDark)"/>
-  <rect x="0.5" y="0.5" width="127" height="127" rx="28.2" fill="none" stroke="#3D4759" stroke-width="1"/>
+  <rect x="1" y="1" width="126" height="126" rx="27.2" fill="url(#tile)"/>
+  <rect x="0.5" y="0.5" width="127" height="127" rx="28.2" fill="none" stroke="#2A3344" stroke-width="1"/>
   <g transform="translate(9.86 5.50)">
   <g fill="#E0666B">
     <rect x="5.81" y="23.13" width="33.18" height="5.81" rx="2.91"/>

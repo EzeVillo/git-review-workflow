@@ -383,17 +383,17 @@ la CLI siguen yendo al contenedor Docker en Windows; el plugin se prueba con
 Gradle nativo (y `platformTest` en el runner Linux de CI).
 
 **El icono sí es compartido** — es la identidad del producto, no píxeles del
-panel. Los archivos de la extensión se **copian tal cual**, sin redibujar nada:
-`media/icon.svg` va como `META-INF/pluginIcon.svg` (+ `_dark`) y
-`media/activity-bar.svg` como `icons/gitReviewToolWindow.svg` (+ `_dark`). Son
-SVG, así que escalan solos a lo que pinte la stripe; lo único que cambia es el
-`width`/`height` declarado y **el color**: el `#C5C5C5` de la extensión es el
-gris de tema oscuro de VS Code, y IntelliJ parchea de claro a oscuro pero nunca
-al revés, así que sin cambiarlo el icono se lava en tema claro. La plataforma
-deriva sola el hermano `_dark`, y **si falta no falla nada: dibuja un
-placeholder**. Por eso `ToolWindowIconTest` ata las tres puntas: lo que pide el
+panel. Los cuatro SVG del plugin (`META-INF/pluginIcon.svg` + `_dark`,
+`icons/gitReviewToolWindow.svg` + `_dark`) **no se editan a mano: los genera
+`_build_icon.py`** con la misma geometría que los de la extensión (ver *Assets
+del logo*). Lo único propio de IntelliJ son los tamaños que exige —40×40 el del
+Marketplace, 16×16 el de la stripe— y **el color** del mono: el `#C5C5C5` de la
+extensión es el gris de tema oscuro de VS Code, y IntelliJ parchea de claro a
+oscuro pero nunca al revés, así que sin cambiarlo se lava en tema claro. La
+plataforma deriva sola el hermano `_dark`, y **si falta no falla nada: dibuja un
+placeholder**; por eso `ToolWindowIconTest` ata las tres puntas: lo que pide el
 `plugin.xml`, lo que hay en `resources/`, y la geometría contra el archivo de la
-extensión forma por forma. Si cambiás el mark, cambialo en los dos clientes.
+extensión forma por forma.
 
 ## Extensión de VS Code
 
@@ -494,6 +494,26 @@ MOCHA_GREP='abre el diff' ./vscode-extension/test/run-docker.sh
   temporización (el umbral antes del esqueleto, el techo de un `--why` lento)
   sólo ocurre navegando. Para comportamiento, F5.
 
+## Assets del logo
+
+**`assets/logo.svg` es el maestro** — vector puro, `viewBox="0 0 128 128"` y
+**sin `width`/`height`**, para que escale a cualquier tamaño. Todo lo demás sale
+del mismo generador, `vscode-extension/media/_build_icon.py`, que en una corrida
+escribe los PNG y SVG de la extensión, el maestro, `docs/logo.svg` (el favicon de
+la landing) y los cuatro SVG del plugin de IntelliJ. **Ninguno se edita a mano:
+se cambia el generador y se regenera** (`python
+vscode-extension/media/_build_icon.py`) — los comentarios que le pongas a un SVG
+los borra la próxima corrida, y los `_preview-*.png` que deja al lado son hojas
+de control, están gitignoreadas.
+
+`docs/logo.svg` es byte por byte igual al maestro y existe sólo porque Pages
+publica **únicamente `/docs`**: la landing no puede referenciar `../assets/`.
+`npm run check:logo-assets` (`scripts/check-logo-assets.mjs`, en CI junto al
+check del contrato multi-cliente) verifica el contrato entero: el maestro sin
+tamaño fijo y sin raster embebido, su geometría contra `media/icon.svg`, la
+copia de `docs/` idéntica al maestro, que la landing la use de favicon, y los
+40×40 / 16×16 que exige JetBrains.
+
 ## Landing (GitHub Pages)
 
 `docs/index.html` se publica en GitHub Pages desde la rama `main`, carpeta
@@ -503,6 +523,8 @@ toque `docs/` lo republica solo en un par de minutos. Para previsualizarlo,
 abrilo directo en el navegador — no necesita servidor.
 
 - `docs/.nojekyll` evita que Pages lo pase por Jekyll.
+- `docs/logo.svg` es el favicon: copia generada del maestro (ver *Assets del
+  logo*), nunca a mano.
 - `docs/og.png` es la preview de los links (copia de `trailer-poster.png`);
   las URLs de `og:image` y `canonical` están hardcodeadas a
   `ezevillo.github.io/git-review-workflow/` — si algún día se le pone dominio

@@ -1,6 +1,4 @@
-<!-- Marketplace / Settings > Plugins icon. Same mark as the VS Code extension's
-     media/icon.svg (40x40 is what JetBrains asks for; the geometry is unchanged). -->
-<svg width="40" height="40" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg width="40" height="40" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
   <defs>
     <linearGradient id="grwTile" x1="64" y1="0" x2="64" y2="128" gradientUnits="userSpaceOnUse">
       <stop stop-color="#1A2030"/>

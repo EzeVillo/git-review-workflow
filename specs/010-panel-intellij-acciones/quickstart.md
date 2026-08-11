@@ -8,7 +8,7 @@ Guía de validación, no de implementación. El detalle de la disposición está
 
 ## Prerrequisitos
 
-- JDK 21 (el wrapper de Gradle vive en `intellij-plugin/`, no en la raíz).
+- JDK 25 (el wrapper de Gradle vive en `intellij-plugin/`, no en la raíz; pin en `gradle.properties`).
 - Node (para el verificador del canónico y para el preview de la extensión).
 - Shell: en Git Bash / POSIX usá `./gradlew`; en PowerShell `.\gradlew.bat`.
   No mezclar: en MINGW64 `.\gradlew.bat` falla con `command not found`.

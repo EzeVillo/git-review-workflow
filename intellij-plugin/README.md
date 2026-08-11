@@ -5,11 +5,13 @@ Full action and situation parity with the VS Code extension; state always comes 
 
 ## Requirements
 
-- IntelliJ IDEA **2026.1+** (build `261+`)
-- JDK **21** for building
+- IntelliJ IDEA **2026.2+** (build `262+`)
+- JDK **25** for building (platform 2026.2 requirement)
 - A local `git review` CLI (`npm install -g git-review-workflow` or this monorepo’s `./install.sh`)
 
-Platform pin lives only in [`gradle.properties`](./gradle.properties).
+Platform pin lives only in [`gradle.properties`](./gradle.properties). That file
+also drives `since-build` / `until-build` in the packaged `plugin.xml`, which is
+what JetBrains Marketplace uses to show compatible IDE versions.
 
 ## Build & run
 

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Target platform raised to IntelliJ IDEA **2026.2+** (build `262+`); build
+  toolchain is now **JDK 25**. Marketplace compatibility follows
+  `pluginSinceBuild` / open `until-build` from `gradle.properties`.
 - Minimum required CLI raised to **0.5.0** (parity with VS Code extension /
   `contracts/client-product-surface.yaml`).
 - Whole and step multi-file Diff use a single `DiffRequestChain` window

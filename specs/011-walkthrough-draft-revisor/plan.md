@@ -22,7 +22,7 @@ el aviso no bloqueante que espera mientras el revisor lo completa. Ver
 
 **Language/Version**: shell POSIX (`sh`, `set -eu`, sin bashisms — corre bajo
 `dash` y Git Bash) para la CLI; TypeScript (esbuild) para la extensión de VS
-Code; Kotlin/JDK 21 (Gradle IntelliJ Platform) para el plugin.
+Code; Kotlin/JDK 25 (Gradle IntelliJ Platform, IDEA 2026.2) para el plugin.
 
 **Primary Dependencies**: git (única dependencia de runtime de la CLI). Ninguna
 dependencia nueva en ninguno de los tres componentes. **Sin red y sin

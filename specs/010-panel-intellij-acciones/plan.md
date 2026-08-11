@@ -35,8 +35,8 @@ herramienta con la que se hace la comparación lado a lado.
 
 ## Technical Context
 
-**Language/Version**: Kotlin 2.3.20 sobre JDK 21 (toolchain fijado en
-`intellij-plugin/build.gradle.kts`)
+**Language/Version**: Kotlin 2.3.20 sobre JDK 25 (toolchain fijado en
+`intellij-plugin/build.gradle.kts`; platform 2026.2)
 
 **Primary Dependencies**: IntelliJ Platform Gradle Plugin 2.18.1, plataforma
 IntelliJ IDEA (versión pinneada en `intellij-plugin/gradle.properties`, única

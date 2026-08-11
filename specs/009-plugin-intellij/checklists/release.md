@@ -17,5 +17,5 @@
 
 ## Smoke notes
 
-- Pin: see `intellij-plugin/gradle.properties` (2026.1 / 261 / JDK 21 — 2026.2 needs Java 25).
+- Pin: see `intellij-plugin/gradle.properties` (2026.2 / 262 / JDK 25).
 - Commands: `test`, `platformTest`, `runIde`, `runPanelPreview`, `buildPlugin`, `verifyPlugin`.

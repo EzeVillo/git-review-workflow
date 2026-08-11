@@ -2,7 +2,8 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("java")
-    // IDEA 2026.1 bundles stdlib 2.3.20 — compiler must match metadata.
+    // IDEA 2026.2 still ships Kotlin 2.3.x metadata for the platform stdlib —
+    // compiler must match (Kotlin 2.3+ also emits JVM 25 bytecode).
     id("org.jetbrains.kotlin.jvm") version "2.3.20"
     id("org.jetbrains.intellij.platform") version "2.18.1"
 }
@@ -22,6 +23,10 @@ dependencies {
         // IC is no longer published since 2025.3 — use intellijIdea(version).
         intellijIdea(providers.gradleProperty("platformVersion"))
         bundledPlugin("Git4Idea")
+        // Extracted from the platform core in 2025.3+; in 2026.2 the manager/
+        // mapping types live in the .impl module (API jar alone is not enough).
+        bundledModule("intellij.platform.vcs.dvcs")
+        bundledModule("intellij.platform.vcs.dvcs.impl")
         // Platform test framework is for platformTest (T030a), not domain unit tests.
         // testFramework(TestFrameworkType.Platform)
     }
@@ -34,15 +39,15 @@ dependencies {
 }
 
 kotlin {
-    jvmToolchain(21)
+    jvmToolchain(25)
     compilerOptions {
-        jvmTarget.set(JvmTarget.JVM_21)
+        jvmTarget.set(JvmTarget.JVM_25)
     }
 }
 
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(21))
+        languageVersion.set(JavaLanguageVersion.of(25))
     }
 }
 

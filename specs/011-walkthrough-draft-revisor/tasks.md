@@ -193,7 +193,7 @@ estabilizado.
     aborta con `java.io.IOException: Unable to establish loopback connection`
     antes de compilar nada — falla igual en `./gradlew help`, o sea que es del
     entorno y no del cambio (un `ServerSocket` sobre 127.0.0.1 desde el mismo
-    JDK 21 sí conecta). Los archivos Kotlin de US3 quedan **sin compilar ni
+    JDK 25 sí conecta). Los archivos Kotlin de US3 quedan **sin compilar ni
     probar**: hay que correr `./gradlew test` en un entorno donde el daemon
     levante antes de dar la fase por cerrada.
 - [ ] T060 Recorrer [quickstart.md](quickstart.md) a mano de punta a punta sobre el sandbox, incluidos los escenarios 7 y 8 (los dos avisos **no** deben bloquear la edición)

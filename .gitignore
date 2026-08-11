@@ -1,6 +1,6 @@
 .idea/
 *.tmp
-trailer/
+demo/
 __pycache__/
 
 # Visual check-sheets _build_icon.py writes on every run; the assets it ships

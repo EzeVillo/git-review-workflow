@@ -34,6 +34,28 @@ interface PanelChrome {
     fun rowSelectedBackground(): Color
 
     /**
+     * The solid badge — the extension's `--vscode-badge-*`, which is what it
+     * paints `key` with. The IDE owns the same pair for its own counters, so a
+     * marked entry reads as marked in every theme without a colour of ours.
+     */
+    fun badgeBackground(): Color
+    fun badgeForeground(): Color
+
+    /**
+     * A block of code inside prose (`--vscode-textCodeBlock-background`): the
+     * install command and whatever the CLI wrote to stderr. What the fill says
+     * is "this is verbatim output", so it has to differ from the panel.
+     */
+    fun codeBackground(): Color
+
+    /**
+     * A stopped finish is not a passing note: it is the only thing the reviewer
+     * can act on, so it takes the theme's own warning pair — never one of ours.
+     */
+    fun warningBackground(): Color
+    fun warningBorder(): Color
+
+    /**
      * Marks the one primary control of a situation. The extension paints it with
      * `--vscode-button-background`; here it is the IDE's own default-button
      * style, so "this is the action" reads the same without inventing a colour
@@ -65,6 +87,15 @@ class PluginPanelChrome : PanelChrome {
     override fun linkForeground(): Color = JBUI.CurrentTheme.Link.Foreground.ENABLED
     override fun rowHoverBackground(): Color = JBUI.CurrentTheme.List.Hover.background(true)
     override fun rowSelectedBackground(): Color = UIUtil.getListSelectionBackground(false)
+    override fun badgeBackground(): Color =
+        JBColor.namedColor("Counter.background", JBColor(0x3574F0, 0x3574F0))
+    override fun badgeForeground(): Color =
+        JBColor.namedColor("Counter.foreground", JBColor(0xFFFFFF, 0xFFFFFF))
+    override fun codeBackground(): Color = UIUtil.getTextFieldBackground()
+    override fun warningBackground(): Color =
+        JBColor.namedColor("NotificationWarning.background", JBColor(0xFFF8E3, 0x594E32))
+    override fun warningBorder(): Color =
+        JBColor.namedColor("NotificationWarning.borderColor", JBColor(0xE0C888, 0x8A7A4B))
     override fun markPrimary(button: AbstractButton) {
         button.putClientProperty(DarculaButtonUI.DEFAULT_STYLE_KEY, true)
     }
@@ -110,6 +141,15 @@ class PreviewPanelChrome : PanelChrome {
     override fun rowSelectedBackground(): Color =
         UIManager.getColor("List.selectionInactiveBackground")
             ?: blend(foreground(), background(), 0.16f)
+
+    override fun badgeBackground(): Color =
+        UIManager.getColor("List.selectionBackground") ?: Color(0x35, 0x74, 0xF0)
+    override fun badgeForeground(): Color =
+        UIManager.getColor("List.selectionForeground") ?: Color.WHITE
+    override fun codeBackground(): Color =
+        UIManager.getColor("TextField.background") ?: blend(foreground(), background(), 0.06f)
+    override fun warningBackground(): Color = blend(Color(0xE0, 0xC8, 0x88), background(), 0.22f)
+    override fun warningBorder(): Color = Color(0xE0, 0xC8, 0x88)
 
     private fun blend(over: Color, under: Color, weight: Float): Color = Color(
         (over.red * weight + under.red * (1 - weight)).toInt(),

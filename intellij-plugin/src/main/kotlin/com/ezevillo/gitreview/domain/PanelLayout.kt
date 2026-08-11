@@ -603,7 +603,9 @@ private fun cliBlocks(model: PanelModel, missing: Boolean): List<Block> {
     val cmd = if (missing) NPM_INSTALL_CMD else NPM_UPDATE_CMD
     val out = ArrayList<Block>()
     out.add(Block.Paragraph(title))
-    out.add(Block.Paragraph(hint))
+    // The hint and the reload line are asides around the command, not the
+    // message itself (the extension's `.cli-install-hint` / `-reload`).
+    out.add(Block.Paragraph(hint, muted = true))
     out.add(
         Block.CodeCommand(
             command = cmd,
@@ -619,6 +621,7 @@ private fun cliBlocks(model: PanelModel, missing: Boolean): List<Block> {
     out.add(
         Block.Paragraph(
             "Reload the window after installing, or wait — the panel checks again every few seconds.",
+            muted = true,
         ),
     )
     out.add(

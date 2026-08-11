@@ -12,10 +12,13 @@ import java.awt.BorderLayout
 import java.awt.Component
 import java.awt.Dimension
 import java.awt.FlowLayout
+import java.awt.Font
 import java.awt.Graphics
+import java.awt.Graphics2D
 import java.awt.GridLayout
 import java.awt.Insets
 import java.awt.Rectangle
+import java.awt.RenderingHints
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
 import javax.swing.Box
@@ -33,6 +36,9 @@ import javax.swing.border.EmptyBorder
 
 /** The bar at the margin of the last opened row (the extension's `border-left`). */
 private const val ROW_MARKER_WIDTH = 2
+
+/** Corner of a badge (the extension's `border-radius: 3px`). */
+private const val CHIP_ARC = 6
 
 /**
  * Generic Swing renderer of [PanelLayout]. No Project / GitReviewService.
@@ -128,7 +134,7 @@ class PanelRenderer(
     private fun renderBlock(block: Block): JComponent {
         val c: JComponent = when (block) {
             is Block.IdentityBar -> renderIdentityBar(block)
-            is Block.Note -> wrapText(block.text, muted = true)
+            is Block.Note -> renderNote(block)
             is Block.Paragraph -> renderParagraph(block)
             is Block.Heading -> {
                 // The extension's `h2`: it labels the list under it, so it reads
@@ -144,24 +150,27 @@ class PanelRenderer(
             is Block.CodeCommand -> renderCodeCommand(block)
             is Block.EntryHead -> renderEntryHead(block)
             is Block.EntryTitle -> {
-                if (block.skeleton) skeletonBar(60) else wrapText(block.text, muted = block.muted)
+                // The entry's identifier: a path, or a commit subject. It is what
+                // gets pasted into a terminal, so it reads in the editor's font —
+                // and a missing subject is the absence said, in italics.
+                if (block.skeleton) {
+                    skeletonBar(60)
+                } else {
+                    val t = wrapText(block.text, muted = block.muted)
+                    t.font = if (block.muted) {
+                        chrome.normalFont(12f).deriveFont(Font.ITALIC)
+                    } else {
+                        chrome.monoFont(12f)
+                    }
+                    t
+                }
             }
             is Block.Why -> renderWhy(block)
             is Block.Row -> renderRow(block.controls)
             is Block.FileRows -> renderFileRows(block)
             is Block.InventoryRows -> renderInventory(block)
             is Block.ToolsSection -> renderToolsSection(block)
-            is Block.Stderr -> {
-                val area = WrappedText(block.text)
-                area.isEditable = false
-                area.lineWrap = true
-                area.wrapStyleWord = true
-                area.font = chrome.monoFont(11f)
-                area.foreground = chrome.mutedForeground()
-                area.background = chrome.background()
-                area.alignmentX = Component.LEFT_ALIGNMENT
-                area
-            }
+            is Block.Stderr -> renderStderr(block.text)
             is Block.EmptyMessage -> {
                 val p = JPanel()
                 p.layout = BoxLayout(p, BoxLayout.Y_AXIS)
@@ -174,7 +183,7 @@ class PanelRenderer(
                 }
                 block.stderr?.let {
                     p.add(Box.createVerticalStrut(6))
-                    p.add(stacked(wrapText(it, muted = true)))
+                    p.add(stacked(renderStderr(it)))
                 }
                 p
             }
@@ -208,6 +217,39 @@ class PanelRenderer(
         box.isOpaque = false
         box.alignmentX = Component.LEFT_ALIGNMENT
         box.add(child, BorderLayout.CENTER)
+        return box
+    }
+
+    /**
+     * What the CLI wrote, verbatim. The fill is what says so — the extension's
+     * `.stderr` block; muted text alone reads as one more sentence of ours.
+     */
+    private fun renderStderr(text: String): JComponent {
+        val area = WrappedText(text)
+        area.isEditable = false
+        area.lineWrap = true
+        area.wrapStyleWord = true
+        area.font = chrome.monoFont(11f)
+        area.foreground = chrome.mutedForeground()
+        area.background = chrome.codeBackground()
+        area.border = chrome.emptyBorder(6, 6, 6, 6)
+        area.alignmentX = Component.LEFT_ALIGNMENT
+        return area
+    }
+
+    /**
+     * A note describes the review, not the entry, so it sits between the bar and
+     * the body with a rule of its own — the extension's `.note { border-bottom }`.
+     */
+    private fun renderNote(note: Block.Note): JComponent {
+        val box = JPanel(BorderLayout())
+        box.background = chrome.background()
+        box.alignmentX = Component.LEFT_ALIGNMENT
+        box.border = javax.swing.BorderFactory.createCompoundBorder(
+            javax.swing.BorderFactory.createMatteBorder(0, 0, 1, 0, chrome.borderColor()),
+            chrome.emptyBorder(0, 0, 6, 0),
+        )
+        box.add(wrapText(note.text, muted = true), BorderLayout.CENTER)
         return box
     }
 
@@ -251,20 +293,21 @@ class PanelRenderer(
     }
 
     private fun renderIdentityBar(bar: Block.IdentityBar): JComponent {
+        // Every field of the bar is something the reviewer retypes in a terminal
+        // (the mode, the branch, the abbreviated tip), so the whole line reads in
+        // the editor's font like the extension's `.bar`.
         val left = ArrayList<JComponent>()
-        left.add(badgeLabel(bar.mode, bold = true))
+        left.add(monoLabel(bar.mode, muted = false, bold = true))
         if (bar.draft) {
-            left.add(JLabel("(draft)").apply { foreground = chrome.mutedForeground() })
+            left.add(monoLabel("(draft)"))
         }
-        left.add(JLabel(bar.name).apply { foreground = chrome.foreground() })
-        bar.tip?.let { left.add(JLabel(it).apply { foreground = chrome.mutedForeground() }) }
+        left.add(monoLabel(bar.name, muted = false))
+        bar.tip?.let { left.add(monoLabel(it)) }
         val right = ArrayList<JComponent>()
         if (bar.skeleton) {
             right.add(skeletonBar(36))
         } else if (bar.position != null && bar.total != null) {
-            right.add(
-                JLabel("${bar.position}/${bar.total}").apply { foreground = chrome.mutedForeground() },
-            )
+            right.add(monoLabel("${bar.position}/${bar.total}"))
         }
         // The bar is the panel's fixed chrome, ruled off from the entry below it
         // like the extension's `.bar { border-bottom }`.
@@ -280,15 +323,21 @@ class PanelRenderer(
         if (head.skeleton) return skeletonBar(48)
         val left = ArrayList<JComponent>()
         val n = if (head.position < 10) "0${head.position}" else head.position.toString()
-        left.add(badgeLabel(n, bold = true))
-        head.identifier?.let { left.add(JLabel(it).apply { foreground = chrome.mutedForeground() }) }
-        head.author?.let { left.add(JLabel(it).apply { foreground = chrome.mutedForeground() }) }
-        val right = head.badge?.let { listOf<JComponent>(badgeLabel(it)) } ?: emptyList()
+        left.add(monoLabel(n, bold = true))
+        head.identifier?.let { left.add(monoLabel(it)) }
+        head.author?.let { left.add(monoLabel(it)) }
+        val right = head.badge?.let { listOf<JComponent>(chipLabel(it)) } ?: emptyList()
         return headerRow(left, right)
     }
 
+    /**
+     * The why is quoted prose — the author's, or the panel saying there is none.
+     * The rule at its left is what separates it from the panel's own voice
+     * (the extension's `.why { border-left }`); without it a walkthrough entry
+     * and a diagnostic look like the same sentence.
+     */
     private fun renderWhy(why: Block.Why): JComponent {
-        return when (why.state) {
+        val content: JComponent = when (why.state) {
             WhyState.LOADING -> {
                 val p = JPanel()
                 p.layout = BoxLayout(p, BoxLayout.Y_AXIS)
@@ -301,15 +350,37 @@ class PanelRenderer(
                 p
             }
             WhyState.PRESENT -> wrapText(why.text.orEmpty())
-            WhyState.ABSENT, WhyState.FAILED -> wrapText(why.text.orEmpty(), muted = true)
+            WhyState.ABSENT, WhyState.FAILED -> {
+                val t = wrapText(why.text.orEmpty(), muted = true)
+                t.font = chrome.normalFont(12f).deriveFont(Font.ITALIC)
+                t
+            }
         }
+        val box = JPanel(BorderLayout())
+        box.background = chrome.background()
+        box.alignmentX = Component.LEFT_ALIGNMENT
+        box.border = javax.swing.BorderFactory.createCompoundBorder(
+            javax.swing.BorderFactory.createMatteBorder(0, 2, 0, 0, chrome.borderColor()),
+            chrome.emptyBorder(0, 7, 0, 0),
+        )
+        box.add(content, BorderLayout.CENTER)
+        return box
     }
 
+    /**
+     * A stopped finish: not a note in passing but the only thing that can be
+     * done right now, so it carries the theme's warning fill and a bar at its
+     * left, like the extension's `.note.finish-banner`.
+     */
     private fun renderBanner(banner: Block.Banner): JComponent {
         val box = JPanel()
         box.layout = BoxLayout(box, BoxLayout.Y_AXIS)
-        box.background = chrome.background()
-        box.border = chrome.emptyBorder(6, 6, 6, 6)
+        box.background = chrome.warningBackground()
+        box.isOpaque = true
+        box.border = javax.swing.BorderFactory.createCompoundBorder(
+            javax.swing.BorderFactory.createMatteBorder(0, 3, 0, 0, chrome.warningBorder()),
+            chrome.emptyBorder(6, 6, 6, 6),
+        )
         box.alignmentX = Component.LEFT_ALIGNMENT
         for (p in banner.paragraphs) {
             box.add(stacked(wrapText(p)))
@@ -328,15 +399,31 @@ class PanelRenderer(
         code.lineWrap = true
         code.wrapStyleWord = true
         code.font = chrome.monoFont(11f)
-        code.background = chrome.background()
+        // Fenced code, like the extension's `.code-block`: the fill is what says
+        // "this line is meant to be pasted", not the frame around it.
+        code.background = chrome.codeBackground()
         code.foreground = chrome.foreground()
-        code.border = javax.swing.BorderFactory.createLineBorder(chrome.borderColor())
+        code.border = javax.swing.BorderFactory.createCompoundBorder(
+            javax.swing.BorderFactory.createLineBorder(chrome.borderColor()),
+            chrome.emptyBorder(4, 5, 4, 5),
+        )
         row.add(code, BorderLayout.CENTER)
         row.add(renderControl(cmd.copy), BorderLayout.EAST)
         return row
     }
 
     private fun renderRow(controls: List<Control>): JComponent {
+        // A lone link is not a button in disguise: the extension leaves it inline
+        // at the start of the line, and stretching it across the sidebar made
+        // "open in editor" read as the pane's main action.
+        val single = controls.singleOrNull()
+        if (single != null && single.emphasis == Emphasis.LINK) {
+            val row = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0))
+            row.isOpaque = false
+            row.alignmentX = Component.LEFT_ALIGNMENT
+            row.add(renderControl(single))
+            return row
+        }
         val panel = object : JPanel() {
             override fun getMaximumSize(): Dimension {
                 val pref = preferredSize
@@ -344,7 +431,7 @@ class PanelRenderer(
             }
         }
         panel.alignmentX = Component.LEFT_ALIGNMENT
-        panel.background = chrome.background()
+        panel.isOpaque = false
         if (controls.size == 2) {
             panel.layout = GridLayout(1, 2, 6, 0)
             // Stack when too narrow: listen to resize
@@ -452,25 +539,25 @@ class PanelRenderer(
         box.alignmentX = Component.LEFT_ALIGNMENT
         for (r in inv.rows) {
             val badges = ArrayList<JComponent>()
-            for (b in r.badges) badges.add(badgeLabel(b))
+            for (b in r.badges) badges.add(chipLabel(b))
             if (r.controls.isEmpty() && r.helpTooltip != null) {
-                val help = JLabel("?")
+                val help = chipLabel("?")
                 help.toolTipText = r.helpTooltip
-                help.foreground = chrome.mutedForeground()
                 badges.add(help)
             }
             box.add(
                 stacked(
                     headerRow(
-                        listOf(JLabel(r.name).apply { font = chrome.boldFont(12f) }),
+                        // A ref name, in the editor's font: it is what gets
+                        // retyped after `git review continue`.
+                        listOf(monoLabel(r.name, muted = false)),
                         badges,
                     ),
                 ),
             )
             box.add(
                 stacked(
-                    JLabel(r.meta).apply {
-                        foreground = chrome.mutedForeground()
+                    monoLabel(r.meta).apply {
                         border = EmptyBorder(0, 0, 2, 0)
                     },
                 ),
@@ -497,12 +584,17 @@ class PanelRenderer(
         box.background = chrome.background()
         box.alignmentX = Component.LEFT_ALIGNMENT
 
+        // A section header of the sidebar: ruled off from what sits above it and
+        // quieter than the body, like the extension's `.tools summary`.
+        box.border = javax.swing.BorderFactory.createMatteBorder(1, 0, 0, 0, chrome.borderColor())
+
         val toggle = JButton((if (open) "▼ " else "▶ ") + section.title)
         toggle.isBorderPainted = false
         toggle.isContentAreaFilled = false
         toggle.horizontalAlignment = JButton.LEFT
         toggle.alignmentX = Component.LEFT_ALIGNMENT
-        toggle.foreground = chrome.foreground()
+        toggle.foreground = chrome.mutedForeground()
+        toggle.font = chrome.boldFont(11f)
 
         val content = JPanel()
         content.layout = BoxLayout(content, BoxLayout.Y_AXIS)
@@ -572,6 +664,10 @@ class PanelRenderer(
                         b.isContentAreaFilled = false
                         b.isOpaque = false
                         b.foreground = chrome.linkForeground()
+                        // No button padding around a link: it starts where the
+                        // text above it starts (the extension's `padding: 0`).
+                        b.margin = Insets(0, 0, 0, 0)
+                        b.border = chrome.emptyBorder()
                     }
                     Emphasis.PRIMARY -> chrome.markPrimary(b)
                     else -> Unit
@@ -639,11 +735,57 @@ class PanelRenderer(
         return area
     }
 
-    private fun badgeLabel(text: String, bold: Boolean = false): JLabel {
+    /** A field of the bar or the head: an identifier, in the editor's font. */
+    private fun monoLabel(text: String, muted: Boolean = true, bold: Boolean = false): JLabel {
         val l = JLabel(text)
-        l.font = if (bold) chrome.boldFont(11f) else chrome.normalFont(11f)
-        l.foreground = chrome.mutedForeground()
+        val base = chrome.monoFont(11f)
+        l.font = if (bold) base.deriveFont(Font.BOLD) else base
+        l.foreground = if (muted) chrome.mutedForeground() else chrome.foreground()
         return l
+    }
+
+    /**
+     * A mark on an entry or an inventory row, in the extension's three weights:
+     * `key` is what the walkthrough author called essential and goes solid, in
+     * the theme's own counter colours; `uncovered` is a warning of ours and goes
+     * bare; everything else — `edits`, `current`, `orphan` — is a state and goes
+     * in outline. Which is which is read off the text, exactly as the extension
+     * reads it off the class.
+     */
+    private fun chipLabel(text: String): JComponent {
+        val solid = text == "key"
+        val bare = text == "uncovered" || text == "?"
+        val fg = when {
+            solid -> chrome.badgeForeground()
+            bare -> chrome.mutedForeground()
+            else -> chrome.foreground()
+        }
+        val fill = if (solid) chrome.badgeBackground() else null
+        val line = if (solid || bare) null else chrome.borderColor()
+        val label = object : JLabel(text) {
+            override fun paintComponent(g: Graphics) {
+                val g2 = g.create() as Graphics2D
+                g2.setRenderingHint(
+                    RenderingHints.KEY_ANTIALIASING,
+                    RenderingHints.VALUE_ANTIALIAS_ON,
+                )
+                if (fill != null) {
+                    g2.color = fill
+                    g2.fillRoundRect(0, 0, width, height, CHIP_ARC, CHIP_ARC)
+                }
+                if (line != null) {
+                    g2.color = line
+                    g2.drawRoundRect(0, 0, width - 1, height - 1, CHIP_ARC, CHIP_ARC)
+                }
+                g2.dispose()
+                super.paintComponent(g)
+            }
+        }
+        label.font = chrome.normalFont(10f)
+        label.foreground = fg
+        label.isOpaque = false
+        label.border = chrome.emptyBorder(1, 4, 1, 4)
+        return label
     }
 
     private fun skeletonBar(widthPct: Int): JComponent {

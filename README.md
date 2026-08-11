@@ -542,9 +542,10 @@ git review start feature/checkout                      # enters walk mode on you
   --saved`, which takes the paused review's copy with the review and says so. If
   you write a new draft for a branch while its review is paused, `git review
   continue` refuses rather than overwrite one of the two — drop whichever you
-  don't want and resume. `git review save` refuses the mirror case — when another
-  paused review already has a draft filed under that name — and says so when the
-  one it replaces is an archived draft no review can reclaim.
+  don't want and resume. `git review save` refuses the mirror case — when you
+  have a draft to file and another paused review already has one filed under that
+  name — and says so when the one it replaces is an archived draft no review can
+  reclaim.
 
 **git review never writes the walkthrough for you and never talks to any
 service.** It gives you the skeleton with the brief already written into it, and

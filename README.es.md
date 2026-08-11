@@ -557,9 +557,9 @@ git review start feature/checkout                      # entra en walk con tu or
   copia de la review pausada junto con la review y lo dice. Si escribís un
   borrador nuevo para una rama mientras su review está pausada, `git review
   continue` se niega en vez de pisar uno de los dos: descartá el que no quieras y
-  retomá. `git review save` se niega en el caso espejo — cuando otra review
-  pausada ya tiene un borrador archivado con ese nombre — y avisa cuando el que
-  reemplaza no lo puede reclamar ninguna review.
+  retomá. `git review save` se niega en el caso espejo — cuando tenés un borrador
+  para archivar y otra review pausada ya tiene uno archivado con ese nombre — y
+  avisa cuando el que reemplaza no lo puede reclamar ninguna review.
 
 **git review nunca escribe el walkthrough por vos y nunca habla con ningún
 servicio.** Te da el esqueleto con la consigna ya escrita adentro, y valida lo

@@ -246,6 +246,31 @@ teardown() {
 	[ "$status" -ne 0 ]
 }
 
+@test "save of a review with no draft is not blocked by someone elses archive" {
+	# The guard protects an mv, and with no draft of its own this review makes no
+	# mv: nothing of the paused review's is at risk. Refusing anyway locked the
+	# branch out of being paused at all, over prose that would not have been
+	# touched -- and the archive is normally there for exactly this reason, because
+	# the earlier review of the same branch was saved with its draft.
+	git review compare develop origin/feature/x >/dev/null
+	git review save >/dev/null
+	[ -f "$SAVED_DRAFT" ]
+	archived="$(cat "$SAVED_DRAFT")"
+
+	git review start feature/x >/dev/null
+	[ ! -f "$DRAFT" ]
+	run git review save
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"replaced an archived walkthrough draft"* ]]
+	run git rev-parse --verify --quiet refs/heads/review-saved/feature/x
+	[ "$status" -eq 0 ]
+	# The other review's prose is exactly where it was, and still comes back to it.
+	[ "$(cat "$SAVED_DRAFT")" = "$archived" ]
+	run git review continue origin/feature/x
+	[ "$status" -eq 0 ]
+	[ "$(cat "$DRAFT")" = "$archived" ]
+}
+
 @test "save replaces an archived draft nobody claims and says so" {
 	# Same collision with the claimant deleted by hand: nothing can bring that file
 	# back, so saving proceeds -- but it is still prose someone typed, and this is
@@ -594,6 +619,25 @@ EOF
 	run git review walkthrough draft feature/x
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"a paused review of feature/x carries a walkthrough draft of its own"* ]]
+	[ -f "$DRAFT" ]
+	[ -f "$SAVED_DRAFT" ]
+}
+
+@test "drafting over a leftover archive says nobody can bring it back" {
+	# Same collision with the claimant deleted by hand. Deciding by the file's name
+	# announced a paused review that does not exist and pointed at a git review
+	# continue that cannot be run -- and the thing that actually happens next is the
+	# opposite of what it says: the next save replaces the leftover rather than
+	# refusing over it.
+	git review start feature/x
+	git review save
+	git branch -D review-saved/feature/x >/dev/null
+	[ -f "$SAVED_DRAFT" ]
+
+	run git review walkthrough draft feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"left over from a review that no longer exists"* ]]
+	[[ "$output" != *"a paused review of feature/x carries"* ]]
 	[ -f "$DRAFT" ]
 	[ -f "$SAVED_DRAFT" ]
 }

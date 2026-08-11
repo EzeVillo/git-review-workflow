@@ -110,10 +110,18 @@ fi
 # entry no review can reclaim is already what forget --draft --all sweeps. Checked
 # here, before anything is written, while the move itself stays last: a guard that
 # can still die has no business running after the review has been put aside.
+#
+# Conditioned on this review having a draft at all, on exactly the file test the
+# move at the end makes: with no file there is no mv and nothing to protect, and
+# refusing anyway blocked a review that had never been annotated from being paused
+# — over prose that belongs to someone else and that saving would not have touched.
+# The likeliest way in is the ordinary one: the archive is normally there *because*
+# an earlier review of the same branch was saved with its draft.
 walk_gitdir_init
 _save_draftsrc="$(walk_review_draft_src "$cur")"
 _save_replaces=0
-if [ -n "$_save_draftsrc" ] && [ -f "$(walk_saved_draft_path "$_save_draftsrc")" ]; then
+if [ -n "$_save_draftsrc" ] && [ -f "$(walk_draft_path "$_save_draftsrc")" ] &&
+	[ -f "$(walk_saved_draft_path "$_save_draftsrc")" ]; then
 	_save_claimant=""
 	while IFS="$(printf '\t')" read -r _sc_name _sc_rb; do
 		if [ "$_sc_name" = "$_save_draftsrc" ]; then

@@ -482,8 +482,18 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		# new file is one line old: the two only meet again at git review continue,
 		# which refuses rather than choose between them, and learning about the
 		# collision then means having written the whole thing first.
+		#
+		# Which of the two notes depends on whether a paused review still claims the
+		# archived file, asked of the reviews rather than of the file's name — the last
+		# surface that decided by the name, and the one where getting it wrong only
+		# misinforms: with no claimant there is no git review continue to refuse, and
+		# the next save replaces the leftover instead of stopping.
 		if [ -f "$(walk_saved_draft_path "$branch")" ]; then
-			echo "note: a paused review of $branch carries a walkthrough draft of its own; git review continue will not resume over this one until one of the two is gone." >&2
+			if walk_saved_draft_claims | cut -f1 | grep -Fxq -e "$branch"; then
+				echo "note: a paused review of $branch carries a walkthrough draft of its own; git review continue will not resume over this one until one of the two is gone." >&2
+			else
+				echo "note: an archived walkthrough draft for $branch is left over from a review that no longer exists; discard it with git review forget --draft --all, or the next git review save will replace it with this one." >&2
+			fi
 		fi
 		# Deliberately no warn_dirty: a draft is derived from committed refs, not
 		# from your working tree, so what you have uncommitted is nobody's business

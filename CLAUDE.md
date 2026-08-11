@@ -196,13 +196,21 @@ repo, no en archivos del working tree:
   reviews pueden querer el mismo archivo (un `start feature/x` y un `compare
   develop origin/feature/x` archivan los dos bajo `feature/x`), así que si el
   destino ya está ocupado se niega cuando una review pausada lo reclama y avisa
-  cuando reemplaza uno que nadie puede reclamar. **Quién reclama un archivado se
+  cuando reemplaza uno que nadie puede reclamar. La guarda cuelga de que **esta**
+  review tenga un borrador que archivar, con el mismo test de archivo que hace el
+  `mv`: sin archivo no hay `mv` y no hay nada que proteger, y negarse igual dejaba
+  la rama sin poder pausarse por prosa ajena que el `save` no iba a tocar —
+  justo el caso ordinario, porque el archivado suele estar ahí *porque* una review
+  anterior de esa misma rama se guardó con su borrador. **Quién reclama un
+  archivado se
   le pregunta a las reviews pausadas (`walk_saved_draft_claims`), nunca al nombre
   del archivo:** `review-saved/<archivo>` no existe justamente para las reviews
   que necesitan la pregunta —el archivado de `review-saved/origin/feature/x` se
-  llama `feature/x`—, y las dos superficies que decidían por el nombre borraban
-  prosa viva: `forget --draft --all` barría el borrador de una review pausada
-  anunciando que no quedaba review que lo reclamara, y `save` lo pisaba callado.
+  llama `feature/x`—, y las tres superficies que decidían por el nombre mentían o
+  borraban prosa viva: `forget --draft --all` barría el borrador de una review
+  pausada anunciando que no quedaba review que lo reclamara, `save` lo pisaba
+  callado, y `walkthrough draft` anunciaba una review pausada inexistente sobre un
+  archivado huérfano, mandando a un `continue` que no se podía correr.
   El borrador viaja con la review **en cualquier modo**, no sólo en walk, así que
   las filas de `list` llevan `(draft)` también en `step` y `whole`: si sólo lo
   marcara en walk, un `forget --saved` se llevaría prosa que ninguna superficie

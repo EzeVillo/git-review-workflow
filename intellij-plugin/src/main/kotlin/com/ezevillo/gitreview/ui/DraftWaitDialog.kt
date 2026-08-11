@@ -62,7 +62,4 @@ class DraftWaitDialog(
         super.doCancelAction()
         onClosed(false)
     }
-
-    private fun escapeHtml(text: String): String =
-        text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 }

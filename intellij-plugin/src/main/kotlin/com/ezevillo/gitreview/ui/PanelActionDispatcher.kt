@@ -23,6 +23,12 @@ import com.ezevillo.gitreview.host.MutationActions
 import com.ezevillo.gitreview.ui.actions.runUndoFinish
 import com.ezevillo.gitreview.vcs.pickSoleGitRoot
 import com.intellij.ide.BrowserUtil
+import com.intellij.openapi.actionSystem.ActionUiKind
+import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.CommonDataKeys
+import com.intellij.openapi.actionSystem.ex.ActionUtil
+import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.project.Project
 import java.awt.datatransfer.StringSelection
@@ -247,20 +253,32 @@ class PanelActionDispatcher(
         mutations.runHousekeeping(action)
     }
 
+    /**
+     * Runs a registered action from a panel button.
+     *
+     * `createEvent` + [ActionUtil.performAction] and not the shorter pair the
+     * panel used to build by hand: `AnActionEvent.createFromAnAction` is
+     * scheduled for removal, and calling `action.actionPerformed(event)`
+     * directly violates `@ApiStatus.OverrideOnly` — the Marketplace plugin
+     * verifier flags both. `performAction` is also the only path that fires the
+     * platform's before/after action listeners, which the hand-rolled call skipped.
+     */
     private fun invokeAction(className: String) {
         try {
             val clazz = Class.forName(className)
-            val action = clazz.getDeclaredConstructor().newInstance() as com.intellij.openapi.actionSystem.AnAction
-            val dataContext = com.intellij.openapi.actionSystem.impl.SimpleDataContext.builder()
-                .add(com.intellij.openapi.actionSystem.CommonDataKeys.PROJECT, project)
+            val action = clazz.getDeclaredConstructor().newInstance() as AnAction
+            val dataContext = SimpleDataContext.builder()
+                .add(CommonDataKeys.PROJECT, project)
                 .build()
-            val event = com.intellij.openapi.actionSystem.AnActionEvent.createFromAnAction(
+            val event = AnActionEvent.createEvent(
                 action,
+                dataContext,
                 null,
                 "GitReview.Panel",
-                dataContext,
+                ActionUiKind.NONE,
+                null,
             )
-            action.actionPerformed(event)
+            ActionUtil.performAction(action, event)
         } catch (e: Exception) {
             UiMessages.error(project, e.message ?: "Action failed.")
         }

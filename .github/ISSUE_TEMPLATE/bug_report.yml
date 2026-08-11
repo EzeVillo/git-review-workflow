@@ -1,0 +1,56 @@
+name: Bug report
+description: Report a problem with the CLI, VS Code extension, or IntelliJ plugin
+title: "[bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Fill in what you can —
+        the environment block is the most useful part for triage.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What went wrong? What did you see?
+      placeholder: A short description of the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps someone else can follow.
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+    validations:
+      required: false
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: >
+        Versions and platform. Run `git review --version` for the CLI; check
+        the extension/plugin version in the editor marketplace or About dialog.
+      placeholder: |
+        - CLI (`git review --version`):
+        - Client (VS Code extension / IntelliJ plugin / CLI only) and version:
+        - OS:
+        - Shell / git version (if relevant):
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Logs, screenshots, related PRs, or anything else that helps.
+    validations:
+      required: false

@@ -15,7 +15,10 @@ class PanelLayoutFooterTest {
         assertTrue(other.blocks.flatMap { controlsOf(it) }.any { it.id == ControlId.COMPARE_REVIEW })
         assertTrue(other.blocks.flatMap { controlsOf(it) }.any { it.id == ControlId.WALKTHROUGH_INIT })
         val support = sections[2]
-        assertTrue(support.blocks.flatMap { controlsOf(it) }.any { it.id == ControlId.OPEN_SUPPORT && it.label == "Star on GitHub" })
+        val supportControls = support.blocks.flatMap { controlsOf(it) }
+        assertTrue(supportControls.any { it.id == ControlId.OPEN_SUPPORT && it.label == "Star on GitHub" && it.supportLinkId == SupportLinks.STAR })
+        assertTrue(supportControls.any { it.id == ControlId.OPEN_SUPPORT && it.label == "Report a bug" && it.supportLinkId == SupportLinks.BUG })
+        assertEquals(2, supportControls.count { it.id == ControlId.OPEN_SUPPORT })
     }
 
     @Test

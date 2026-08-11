@@ -42,12 +42,13 @@ private const val CHIP_ARC = 6
 
 /**
  * Generic Swing renderer of [PanelLayout]. No Project / GitReviewService.
- * @param onAction callback with control id and optional inventory/file index
+ * @param onAction callback with control id, optional inventory/file index, and
+ *   optional openSupport link id (`star` / `bug`)
  * @return true from onAction if the control should show transient "Copied" feedback
  */
 class PanelRenderer(
     private val chrome: PanelChrome,
-    private val onAction: (ControlId, Int?) -> Boolean = { _, _ -> false },
+    private val onAction: (ControlId, Int?, String?) -> Boolean = { _, _, _ -> false },
 ) {
     /** Section open state survives re-renders (FR-034). */
     private val sectionOpen = mutableMapOf<String, Boolean>()
@@ -527,7 +528,7 @@ class PanelRenderer(
         // A sidebar clips a long path; the whole of it stays one hover away.
         btn.toolTipText = if (f.lastOpened) "Last opened: ${f.display}" else f.display
         btn.addActionListener {
-            onAction(ControlId.OPEN_CHANGE, f.index)
+            onAction(ControlId.OPEN_CHANGE, f.index, null)
         }
         return btn
     }
@@ -679,7 +680,7 @@ class PanelRenderer(
         c.tooltip?.let { btn.toolTipText = it }
         btn.addActionListener {
             if (!btn.isEnabled) return@addActionListener
-            val copied = onAction(c.id, c.index)
+            val copied = onAction(c.id, c.index, c.supportLinkId)
             if (copied && c.id == ControlId.COPY_CLI_INSTALL) {
                 val original = btn.text
                 btn.text = "Copied"

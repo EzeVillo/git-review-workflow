@@ -37,7 +37,7 @@ object PanelPreviewMain {
             val widthCombo = JComboBox(arrayOf("Sidebar (280)", "Loose (420)"))
             val host = JPanel(BorderLayout())
             val chrome = PreviewPanelChrome()
-            val renderer = PanelRenderer(chrome) { _, _ -> false }
+            val renderer = PanelRenderer(chrome) { _, _, _ -> false }
 
             fun show() {
                 val model = models[combo.selectedIndex].second

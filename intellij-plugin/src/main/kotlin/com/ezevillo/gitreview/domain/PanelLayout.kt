@@ -115,6 +115,8 @@ data class Control(
     val enabled: Boolean = true,
     val tooltip: String? = null,
     val index: Int? = null,
+    /** openSupport allowlist id (`star`, `bug`); null for every other control. */
+    val supportLinkId: String? = null,
 ) {
     init {
         // 1. icon ⟹ accessible name
@@ -313,6 +315,7 @@ private fun ctrl(
     accessibleName: String? = null,
     tooltip: String? = null,
     index: Int? = null,
+    supportLinkId: String? = null,
 ): Control {
     val name = accessibleName
         ?: label
@@ -325,6 +328,7 @@ private fun ctrl(
         enabled = enabled,
         tooltip = tooltip,
         index = index,
+        supportLinkId = supportLinkId,
     )
 }
 
@@ -756,7 +760,20 @@ private fun noReviewReadyBlocks(model: PanelModel): List<Block> {
             title = "Support",
             blocks = listOf(
                 Block.Row(
-                    listOf(ctrl(ControlId.OPEN_SUPPORT, "Star on GitHub", Emphasis.SECONDARY)),
+                    listOf(
+                        ctrl(
+                            ControlId.OPEN_SUPPORT,
+                            "Star on GitHub",
+                            Emphasis.SECONDARY,
+                            supportLinkId = SupportLinks.STAR,
+                        ),
+                        ctrl(
+                            ControlId.OPEN_SUPPORT,
+                            "Report a bug",
+                            Emphasis.SECONDARY,
+                            supportLinkId = SupportLinks.BUG,
+                        ),
+                    ),
                 ),
             ),
         ),

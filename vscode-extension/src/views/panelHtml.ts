@@ -753,9 +753,9 @@ export function panelHtml(nonce: string): string {
 
   /**
    * Links externos de apoyo al proyecto. El webview manda un id del conjunto
-   * cerrado y el host abre la URL allowlisteada con openExternal. Solo
-   * "Star on GitHub" por ahora (el repo y el star son la misma URL); sumar
-   * linkedin / donate / rate es un par de filas acá + el allowlist del host.
+   * cerrado y el host abre la URL allowlisteada con openExternal. Hoy: star
+   * (repo) y bug (issue form). Sumar linkedin / donate / rate es un par de
+   * filas acá + el allowlist del host.
    */
   function supportButton(label, id) {
     const node = el("button", null);
@@ -768,9 +768,12 @@ export function panelHtml(nonce: string): string {
   }
 
   function renderSupport() {
+    const row = el("div", "row");
+    row.appendChild(supportButton("Star on GitHub", "star"));
+    row.appendChild(supportButton("Report a bug", "bug"));
     return toolsSection("Support", supportOpen, function (open) {
       supportOpen = open;
-    }, [supportButton("Star on GitHub", "star")]);
+    }, [row]);
   }
 
   /**

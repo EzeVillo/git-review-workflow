@@ -10,6 +10,7 @@ import com.ezevillo.gitreview.domain.NPM_UPDATE_CMD
 import com.ezevillo.gitreview.domain.PanelModel
 import com.ezevillo.gitreview.domain.ReviewMode
 import com.ezevillo.gitreview.domain.Situation
+import com.ezevillo.gitreview.domain.SupportLinks
 import com.ezevillo.gitreview.domain.UserCopy
 import com.ezevillo.gitreview.domain.confirmCopyFor
 import com.ezevillo.gitreview.domain.currentEntry
@@ -38,7 +39,7 @@ class PanelActionDispatcher(
 ) {
     private val mutations = MutationActions(project, service)
 
-    fun dispatch(id: ControlId, index: Int?): Boolean {
+    fun dispatch(id: ControlId, index: Int?, supportLinkId: String? = null): Boolean {
         // Guard: confirmation path must run when required (FR-032)
         if (requiresConfirmation(id)) {
             // Actual dialog is inside the routed action (or here for index-resolved paths)
@@ -160,7 +161,8 @@ class PanelActionDispatcher(
                 false
             }
             ControlId.OPEN_SUPPORT -> {
-                BrowserUtil.browse("https://github.com/EzeVillo/git-review-workflow")
+                val url = SupportLinks.urlFor(supportLinkId) ?: SupportLinks.STAR_URL
+                BrowserUtil.browse(url)
                 false
             }
         }

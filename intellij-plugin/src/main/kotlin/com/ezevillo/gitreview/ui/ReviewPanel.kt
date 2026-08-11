@@ -25,9 +25,9 @@ class ReviewPanel(
 ) : JPanel(BorderLayout()) {
     private val chrome = PluginPanelChrome()
     private val dispatcher = PanelActionDispatcher(project, service)
-    private val renderer = PanelRenderer(chrome) { id, index ->
+    private val renderer = PanelRenderer(chrome) { id, index, supportLinkId ->
         if (stale) return@PanelRenderer false
-        dispatcher.dispatch(id, index)
+        dispatcher.dispatch(id, index, supportLinkId)
     }
 
     private var disposeListener: (() -> Unit)? = null

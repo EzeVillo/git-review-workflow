@@ -8,6 +8,8 @@ npm_update: "npm install -g git-review-workflow@latest" # verified: src/cli/inst
 docs_readme_url: "https://github.com/EzeVillo/git-review-workflow#readme"
 support:
   star_url: "https://github.com/EzeVillo/git-review-workflow"
+  # openSupport id "bug" — issue form lives at .github/ISSUE_TEMPLATE/bug_report.yml
+  bug_url: "https://github.com/EzeVillo/git-review-workflow/issues/new?template=bug_report.yml"
 strings:
   # verified: panelHtml.ts ~911
   cli_missing_title: "The git-review CLI ({min} or newer) was not found."
@@ -192,7 +194,7 @@ panel_layout:
       - block: tools_section
         title: "Support"
         blocks:
-          - {block: row, controls: [{id: openSupport, label: "Star on GitHub", emphasis: secondary, raw_button: true, confirms: false}]}
+          - {block: row, controls: [{id: openSupport, label: "Star on GitHub", emphasis: secondary, raw_button: true, confirms: false}, {id: openSupport, label: "Report a bug", emphasis: secondary, raw_button: true, confirms: false}]}
   finish-pending:
     source_fns: [renderEmptyState]
     blocks:

@@ -282,16 +282,18 @@ describe("panelHtml", () => {
         );
     });
 
-    it("no-review ofrece Support con Star on GitHub; finish-pending no", () => {
+    it("no-review ofrece Support con Star on GitHub y Report a bug; finish-pending no", () => {
         // Mismo pie que Other actions: <details> plegado, toggle que
-        // sobrevive al redibujado. Un solo link (star = repo); openSupport + id.
-        // Orden del footer: Other actions → Settings → Support.
+        // sobrevive al redibujado. Dos links (star = repo, bug = issue form);
+        // openSupport + id. Orden del footer: Other actions → Settings → Support.
         assert.ok(html.includes("function renderSupport("));
         assert.ok(html.includes('"Support"'));
         assert.ok(html.includes("supportOpen"), "el toggle sobrevive al redibujado del modelo");
         assert.ok(html.includes('type: "openSupport"') || html.includes("type: \"openSupport\""));
         assert.ok(html.includes('"star"') || html.includes("'star'"));
+        assert.ok(html.includes('"bug"') || html.includes("'bug'"));
         assert.ok(html.includes("Star on GitHub"));
+        assert.ok(html.includes("Report a bug"));
         assert.ok(!html.includes("GitHub repository"), "repo y star eran la misma URL: solo star");
         assert.ok(html.includes("renderPaneFooter") && html.includes("renderSupport"));
         const footer = /function renderPaneFooter\(model\) \{([^]*?)\n {2}\}/.exec(html)?.[1] ?? "";

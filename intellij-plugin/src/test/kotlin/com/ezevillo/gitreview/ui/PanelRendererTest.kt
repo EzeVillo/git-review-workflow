@@ -24,7 +24,7 @@ class PanelRendererTest {
                 ControlId.NEXT,
             )
         }
-        val renderer = PanelRenderer(PreviewPanelChrome()) { _, _ -> false }
+        val renderer = PanelRenderer(PreviewPanelChrome()) { _, _, _ -> false }
         val root = renderer.render(layout)
         val buttons = PanelRenderer.collectButtons(root)
         // At least as many body buttons as expected body controls
@@ -40,7 +40,7 @@ class PanelRendererTest {
     @Test
     fun `icon controls expose accessible names`() {
         val layout = panelLayout(PanelFixtures.reviewWalk())
-        val renderer = PanelRenderer(PreviewPanelChrome()) { _, _ -> false }
+        val renderer = PanelRenderer(PreviewPanelChrome()) { _, _, _ -> false }
         val buttons = PanelRenderer.collectButtons(renderer.render(layout))
         val names = buttons.mapNotNull { it.accessibleContext?.accessibleName ?: it.toolTipText }
         assertTrue(names.any { it == "Previous entry" })
@@ -49,7 +49,7 @@ class PanelRendererTest {
 
     @Test
     fun `section open state survives re-render`() {
-        val renderer = PanelRenderer(PreviewPanelChrome()) { _, _ -> false }
+        val renderer = PanelRenderer(PreviewPanelChrome()) { _, _, _ -> false }
         val layout1 = panelLayout(PanelFixtures.noReviewReady())
         val root1 = renderer.render(layout1)
         // Open first tools section toggle if present
@@ -69,7 +69,7 @@ class PanelRendererTest {
     @Test
     fun `the primary control is painted as the primary one and the rest are not`() {
         val chrome = PreviewPanelChrome()
-        val renderer = PanelRenderer(chrome) { _, _ -> false }
+        val renderer = PanelRenderer(chrome) { _, _, _ -> false }
         val buttons = PanelRenderer.collectButtons(
             renderer.render(panelLayout(PanelFixtures.noReviewReady())),
         )
@@ -88,7 +88,7 @@ class PanelRendererTest {
     fun `no block in the column may grow past the height it asked for`() {
         // The stretch is what pushed Start to the bottom of the pane and blew
         // air between every paragraph.
-        val renderer = PanelRenderer(PreviewPanelChrome()) { _, _ -> false }
+        val renderer = PanelRenderer(PreviewPanelChrome()) { _, _, _ -> false }
         val offenders = ArrayList<String>()
         var situation = ""
         fun walk(c: java.awt.Component) {
@@ -119,7 +119,7 @@ class PanelRendererTest {
         // A stack of framed buttons reads as a stack of actions; the extension
         // paints the same list as paths with no chrome of their own.
         val layout = panelLayout(PanelFixtures.reviewWhole(3))
-        val renderer = PanelRenderer(PreviewPanelChrome()) { _, _ -> false }
+        val renderer = PanelRenderer(PreviewPanelChrome()) { _, _, _ -> false }
         val buttons = PanelRenderer.collectButtons(renderer.render(layout))
         val row = buttons.find { it.text == "file2.kt" }
         assertTrue(row != null, "file row present")
@@ -137,7 +137,7 @@ class PanelRendererTest {
     @Test
     fun `the last opened row says so`() {
         val layout = panelLayout(PanelFixtures.reviewWhole(3))
-        val renderer = PanelRenderer(PreviewPanelChrome()) { _, _ -> false }
+        val renderer = PanelRenderer(PreviewPanelChrome()) { _, _, _ -> false }
         val buttons = PanelRenderer.collectButtons(renderer.render(layout))
         val opened = buttons.find { it.text == "file1.kt" }
         assertTrue(opened != null, "first file is the last opened one in the fixture")
@@ -147,7 +147,7 @@ class PanelRendererTest {
     @Test
     fun `file rows are single click buttons`() {
         val layout = panelLayout(PanelFixtures.reviewWhole(3))
-        val renderer = PanelRenderer(PreviewPanelChrome()) { id, index ->
+        val renderer = PanelRenderer(PreviewPanelChrome()) { id, index, _ ->
             assertEquals(ControlId.OPEN_CHANGE, id)
             assertTrue(index != null)
             false

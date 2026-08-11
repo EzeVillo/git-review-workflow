@@ -113,6 +113,44 @@ if (!text.includes("The installed git-review CLI is older than")) {
   fail('cli_outdated_title must include "installed"');
 }
 
+// support URLs: star + bug (openSupport allowlist)
+const starUrlMatch = text.match(/^\s*star_url:\s*"([^"]+)"/m);
+const bugUrlMatch = text.match(/^\s*bug_url:\s*"([^"]+)"/m);
+if (!starUrlMatch) fail("missing support.star_url");
+if (!bugUrlMatch) fail("missing support.bug_url");
+const starUrl = starUrlMatch[1];
+const bugUrl = bugUrlMatch[1];
+const providerSupport = readText(
+  join(root, "vscode-extension", "src", "views", "walkthroughViewProvider.ts"),
+  "utf8",
+);
+if (!providerSupport.includes(`star: "${starUrl}"`)) {
+  fail(`vscode SUPPORT_URLS.star missing or drifted from support.star_url`);
+}
+if (!providerSupport.includes(`bug: "${bugUrl}"`)) {
+  fail(`vscode SUPPORT_URLS.bug missing or drifted from support.bug_url`);
+}
+const ijSupport = join(
+  root,
+  "intellij-plugin",
+  "src",
+  "main",
+  "kotlin",
+  "com",
+  "ezevillo",
+  "gitreview",
+  "domain",
+  "SupportLinks.kt",
+);
+if (existsSync(ijSupport)) {
+  const s = readText(ijSupport, "utf8");
+  if (!s.includes(starUrl)) fail(`intellij SupportLinks missing star_url ${starUrl}`);
+  if (!s.includes(bugUrl)) fail(`intellij SupportLinks missing bug_url ${bugUrl}`);
+}
+if (!existsSync(join(root, ".github", "ISSUE_TEMPLATE", "bug_report.yml"))) {
+  fail("missing .github/ISSUE_TEMPLATE/bug_report.yml (support.bug_url template)");
+}
+
 // ---------------------------------------------------------------------------
 // panel_layout: six VS Code checks + internal coherence (feature 010)
 // ---------------------------------------------------------------------------
@@ -260,6 +298,20 @@ function extractPanelCalls(src) {
         emphasis: "icon",
         line: i + 1,
         pos: im.index,
+      });
+    }
+    // supportButton("Label", "star"|"bug") → wire id openSupport (host allowlist)
+    const supportRe = /supportButton\(\s*"([^"]*)"\s*,\s*"([A-Za-z][A-Za-z0-9]*)"\s*\)/g;
+    let sm;
+    while ((sm = supportRe.exec(line)) !== null) {
+      calls.push({
+        kind: "button",
+        label: sm[1],
+        accessible: null,
+        id: "openSupport",
+        emphasis: "secondary",
+        line: i + 1,
+        pos: sm.index,
       });
     }
     // button(firstArg, "id", className?, ...) — firstArg may be string, null, ternary, or expression

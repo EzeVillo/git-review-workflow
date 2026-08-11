@@ -483,6 +483,13 @@ git review walkthrough build    # validate, order by your numbers, renumber 1..N
   them on entry. Reviewers can start with `git review start --keys` to walk only
   those entries. The marker only works while it stays selective, so `build` notes
   it when every entry is marked (or when a long walkthrough marks none).
+- **Authoring guide (optional):** commit `.review/walkthrough-guide.md` with team
+  rules for **content only** — which files to mark `> key`, how to write whys and
+  Heads-up, local conventions. It does **not** change the walkthrough format;
+  `build` does not validate it. `init` and `draft` mention the path in the
+  skeleton instructions and note on stderr whether the file is present (resolved
+  from the work tree you are in — useful for team conventions when drafting
+  someone else's PR too).
 - `build` validates the file, orders the entries by your numbers, renumbers them
   `1..N` and rewrites it, preserving the heads-up. `--check` validates **without
   writing** and exits non-zero on any problem — meant for CI. It fails if any

@@ -59,13 +59,15 @@ teardown() {
 
 @test "init excludes the .review/ sidecar itself from the listing" {
 	# A prior walkthrough committed to the PR must never list itself on regen.
+	# The skeleton instructions may mention .review/walkthrough-guide.md; only
+	# entry headings count as "listed".
 	mkdir -p .review
 	printf 'stale\n' >.review/walkthrough.md
 	git add .review/walkthrough.md
 	git commit --quiet -m "old walkthrough"
 	run git review walkthrough init --force
 	[ "$status" -eq 0 ]
-	run grep -c '\.review/' .review/walkthrough.md
+	run grep -c '^## ?\. \.review/' .review/walkthrough.md
 	# grep -c prints 0 and exits 1 when nothing matches; assert the count is 0.
 	[ "$output" = "0" ]
 }
@@ -701,6 +703,30 @@ add_nonascii_file() {
 	# All four changed files are listed, exactly once each.
 	run grep -c '^## ?\. ' .review/walkthrough.md
 	[ "$output" = "4" ]
+}
+
+@test "init skeleton mentions the optional authoring guide path" {
+	run git review walkthrough init
+	[ "$status" -eq 0 ]
+	grep -q '\.review/walkthrough-guide\.md' .review/walkthrough.md
+	grep -qi 'cannot change' .review/walkthrough.md
+}
+
+@test "init notes optional guide when none exists" {
+	run git review walkthrough init
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"optional authoring guide"* ]]
+	[[ "$output" == *".review/walkthrough-guide.md"* ]]
+	[[ "$output" != *"authoring guide found"* ]]
+}
+
+@test "init notes found guide when the file exists" {
+	mkdir -p .review
+	printf '# team rules\nmark entry points as key\n' >.review/walkthrough-guide.md
+	run git review walkthrough init
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"authoring guide found at .review/walkthrough-guide.md"* ]]
+	[[ "$output" != *"optional authoring guide: create"* ]]
 }
 
 @test "build accepts a walkthrough naming a non-ASCII path" {

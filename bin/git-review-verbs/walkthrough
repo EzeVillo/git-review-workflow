@@ -442,7 +442,12 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		printf '         so mark a handful, not half the PR. Generated files, lockfiles,\n'
 		printf '         mechanical renames and the like are exactly what stays unmarked.\n'
 		printf '       * Fill in the "## Heads-up" section below with what a reviewer\n'
-		printf '         should keep in mind before opening a single file.\n\n'
+		printf '         should keep in mind before opening a single file.\n'
+		printf '       * Optional authoring guide: if .review/walkthrough-guide.md exists\n'
+		printf '         in this repository, follow it for content choices only (which\n'
+		printf '         entries are key, how to write whys / Heads-up, team conventions).\n'
+		printf '         It cannot change this format, the file list, or the numbering\n'
+		printf '         rules above.\n\n'
 		# The two passages that cannot be written for "whoever annotates this PR".
 		# Everything above genuinely is shared; these are the author's, and the
 		# reviewer used to be handed their copy of both: a command that dies from
@@ -517,6 +522,16 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 	else
 		echo "wrote $targetrel with $n file(s); fill in the order and why, then run git review walkthrough build"
 		warn_dirty
+	fi
+	# Optional repo guide for content choices (keys/whys/Heads-up). Not interpreted
+	# here — only pointed at — so build keeps owning the format. Resolved from the
+	# work tree of the repo you are in, including on draft: team conventions for
+	# who is drafting, not a guide from the PR tip.
+	guide_path="$(git rev-parse --show-toplevel)/.review/walkthrough-guide.md"
+	if [ -f "$guide_path" ]; then
+		echo "note: authoring guide found at .review/walkthrough-guide.md; use it for keys/whys (it cannot change the format)" >&2
+	else
+		echo "note: optional authoring guide: create .review/walkthrough-guide.md for team rules on keys/whys (it cannot change the format)" >&2
 	fi
 	exit 0
 fi

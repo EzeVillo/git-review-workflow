@@ -405,6 +405,30 @@ EOF
 	grep -q 'Fill in the "## Heads-up" section below' "$DRAFT"
 }
 
+@test "draft skeleton mentions the optional authoring guide path" {
+	run git review walkthrough draft feature/plain
+	[ "$status" -eq 0 ]
+	grep -q '\.review/walkthrough-guide\.md' "$DRAFT"
+	grep -qi 'cannot change' "$DRAFT"
+}
+
+@test "draft notes optional guide when none exists in the work tree" {
+	run git review walkthrough draft feature/plain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"optional authoring guide"* ]]
+	[[ "$output" == *".review/walkthrough-guide.md"* ]]
+	[[ "$output" != *"authoring guide found"* ]]
+}
+
+@test "draft notes found guide when the work tree has one" {
+	mkdir -p .review
+	printf '# team rules\n' >.review/walkthrough-guide.md
+	run git review walkthrough draft feature/plain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"authoring guide found at .review/walkthrough-guide.md"* ]]
+	[[ "$output" != *"optional authoring guide: create"* ]]
+}
+
 @test "the draft skeleton repeats the flags the draft was written with" {
 	# Same shape as the line the verb prints on stdout: a reviewer who came back to
 	# the file a day later must not be told to rebuild it against origin's copy of a

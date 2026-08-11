@@ -494,6 +494,13 @@ git review walkthrough build    # valida, ordena por tus números y renumera 1..
   `git review start --keys` para recorrer solo esas entradas. El marcador solo
   sirve mientras sea selectivo, así que `build` avisa si están todas marcadas (o
   si un walkthrough largo no marca ninguna).
+- **Guide de autoría (opcional):** commiteá `.review/walkthrough-guide.md` con las
+  reglas del equipo solo de **contenido** — qué marcar `> key`, cómo escribir los
+  porqués y el Heads-up, convenciones locales. **No** cambia el formato del
+  walkthrough; `build` no lo valida. `init` y `draft` mencionan el path en las
+  instrucciones del esqueleto y avisan por stderr si el archivo está (se resuelve
+  en el work tree donde corrés el comando — también sirve al draftear el PR de
+  otro con las convenciones de tu equipo).
 - `build` valida el archivo, ordena las entradas por tus números, las renumera
   `1..N` y lo reescribe, preservando el heads-up. `--check` valida **sin escribir**
   y sale con código distinto de cero ante cualquier problema — pensado para CI.

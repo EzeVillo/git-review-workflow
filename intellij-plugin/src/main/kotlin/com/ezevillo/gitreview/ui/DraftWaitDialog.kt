@@ -1,5 +1,6 @@
 package com.ezevillo.gitreview.ui
 
+import com.ezevillo.gitreview.domain.UnopenedDraft
 import com.ezevillo.gitreview.domain.UserCopy
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
@@ -27,6 +28,7 @@ class DraftWaitDialog(
     project: Project,
     private val branch: String,
     private val error: String?,
+    private val unopened: UnopenedDraft?,
     private val onClosed: (proceed: Boolean) -> Unit,
 ) : DialogWrapper(project, false) {
 
@@ -40,11 +42,7 @@ class DraftWaitDialog(
     override fun createCenterPanel(): JComponent {
         val panel = JPanel(BorderLayout())
         panel.border = JBUI.Borders.empty(8)
-        val text = if (error != null) {
-            UserCopy.draftInvalidMessage(error)
-        } else {
-            UserCopy.draftWaitMessage(branch)
-        }
+        val text = UserCopy.draftWaitMessage(branch, error, unopened)
         // HTML para que un stderr largo se envuelva en vez de estirar el diálogo
         // a lo ancho de la pantalla.
         panel.add(

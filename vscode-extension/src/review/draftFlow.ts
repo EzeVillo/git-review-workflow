@@ -149,6 +149,38 @@ export function advanceDraftFlow(state: DraftFlowState, event: DraftFlowEvent): 
     }
 }
 
+/**
+ * El texto del aviso de espera. `unopened` viaja **sólo** cuando el editor no
+ * pudo mostrar el borrador: en ese caso el aviso pide llenar un archivo que el
+ * revisor no tiene delante, y la ruta no aparece en ninguna otra parte de la UI
+ * —la CLI la imprime por stdout y los dos clientes muestran únicamente stderr—,
+ * así que el aviso es el único lugar donde puede decirla.
+ *
+ * Ocurre cuando el workspace abierto no es el toplevel del repo (una subcarpeta
+ * de un monorepo): `<cwd>/.git` no existe, no hay gitdir que resolver y el
+ * archivo se escribió igual. Sin esto el asistente pedía editar algo sin decir
+ * qué ni dónde.
+ */
+export function draftWaitMessage(
+    branch: string,
+    error: string | undefined,
+    unopened: {file?: string} | undefined
+): string {
+    const head =
+        error !== undefined
+            ? `The draft is not valid yet: ${error}`
+            : `Fill in the reading order for ${branch}, then continue.`;
+    if (unopened === undefined) {
+        return head;
+    }
+    if (unopened.file !== undefined) {
+        return `${head} It could not be opened here — the draft is at ${unopened.file}.`;
+    }
+    // Ni la ruta se pudo armar (no hay gitdir que resolver desde este cwd). Se
+    // dice el nombre relativo, que es estable, en vez de callar.
+    return `${head} It could not be opened here — look for review-walkthrough/${branch}.md inside this repository's git directory.`;
+}
+
 /** Si la CLI volvió a ofrecer `keys` sobre el borrador ya validado. */
 export function offersIncludeKeys(offers: readonly ReadingOffer[] | undefined): boolean {
     return offers !== undefined && offers.some((offer) => offer.id === "keys");

@@ -222,6 +222,17 @@ EOF
 	[ ! -e .review/walkthrough.md ]
 }
 
+# Every temp file the draft namespace can be left holding, as a newline-separated
+# list. A glob and not find: the lib avoids find by writing, because under Git
+# Bash a stray PATH resolves it to Windows' own find.exe, whose -name means
+# nothing to it — and CI runs this suite on a real Windows runner, where the test
+# would then pass or fail for reasons that have nothing to do with the draft.
+# nullglob is a bashism but this is a bats file, not a POSIX verb.
+draft_temps() (
+	shopt -s nullglob
+	printf '%s\n' "$(dirname "$DRAFT")"/*.tmp.*
+)
+
 @test "writing a draft leaves no temporary file behind" {
 	git review walkthrough draft feature/plain
 	[ -f "$DRAFT" ]
@@ -229,7 +240,7 @@ EOF
 	# else left in the namespace is litter nobody collects: walk_draft_list only
 	# matches *.md, clean is deliberately hands-off in there, and forget --draft
 	# only knows names it can spell.
-	run find "$(dirname "$DRAFT")" -name '*.tmp.*'
+	run draft_temps
 	[ "$status" -eq 0 ]
 	[ -z "$output" ]
 }

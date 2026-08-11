@@ -1,6 +1,12 @@
 package com.ezevillo.gitreview.domain
 
 /**
+ * Un borrador que el asistente escribió y no pudo mostrar. [file] es la ruta
+ * calculada, o `null` cuando ni el gitdir se pudo resolver desde este cwd.
+ */
+data class UnopenedDraft(val file: String?)
+
+/**
  * User-facing copy shared with the VS Code extension.
  *
  * Keep strings byte-for-byte aligned with the VS Code command modules and
@@ -65,6 +71,34 @@ object UserCopy {
         "Fill in the reading order for $branch, then continue."
 
     fun draftInvalidMessage(error: String): String = "The draft is not valid yet: $error"
+
+    /**
+     * El texto completo del aviso de espera, espejo de `draftWaitMessage` en
+     * `draftFlow.ts`. [unopened] viaja **sólo** cuando el borrador no se pudo
+     * mostrar: el aviso pide entonces llenar un archivo que el revisor no tiene
+     * delante, y la ruta no aparece en ninguna otra parte de la UI —la CLI la
+     * imprime por stdout y acá sólo se muestra stderr—, así que este es el único
+     * lugar donde puede decirla.
+     *
+     * Pasa cuando el proyecto abierto no es el toplevel del repo (una subcarpeta
+     * de un monorepo): `<cwd>/.git` no existe, no hay gitdir que resolver, y el
+     * archivo se escribió igual.
+     */
+    fun draftWaitMessage(branch: String, error: String?, unopened: UnopenedDraft?): String {
+        val head = if (error != null) draftInvalidMessage(error) else draftWaitMessage(branch)
+        if (unopened == null) {
+            return head
+        }
+        val file = unopened.file
+        return if (file != null) {
+            "$head It could not be opened here — the draft is at $file."
+        } else {
+            // Ni la ruta se pudo armar. Se dice el nombre relativo, que es estable,
+            // en vez de callar.
+            "$head It could not be opened here — look for review-walkthrough/$branch.md " +
+                "inside this repository's git directory."
+        }
+    }
 
     /** Recorrido completo vs sólo esenciales, tras validar un borrador con keys. */
     val DRAFT_KEYS_LABELS: List<Pair<Boolean, String>> = listOf(

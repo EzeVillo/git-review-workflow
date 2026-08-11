@@ -17,9 +17,9 @@ prog="git review forget"
 
 usage() {
 	cat <<EOF
-usage: $prog --delta (<branch> | --all | --stale [--dry-run])
-       $prog --saved (<branch> | --all) [--dry-run]
-       $prog --draft (<branch> | --all) [--dry-run]
+usage: $prog --delta ([--] <branch> | --all | --stale [--dry-run])
+       $prog --saved ([--] <branch> | --all) [--dry-run]
+       $prog --draft ([--] <branch> | --all) [--dry-run]
 
 Discard the persistent state a review leaves behind. Choose one mode:
 
@@ -69,6 +69,16 @@ set_mode() {
 	mode="$1"
 }
 
+# The one positional (the branch), taken the same way whether it arrived before
+# "--" or after it, so the two spellings cannot disagree on the shape.
+take_positional() {
+	if [ -n "$arg" ]; then
+		echo "error: unexpected argument $1" >&2
+		usage >&2
+		exit 1
+	fi
+	arg="$1"
+}
 while [ $# -gt 0 ]; do
 	case "$1" in
 	-h | --h)
@@ -81,20 +91,26 @@ while [ $# -gt 0 ]; do
 	--all) all=1 ;;
 	--stale) stale=1 ;;
 	--dry-run) dryrun=1 ;;
+	# Ends option parsing, as git does everywhere and as walkthrough draft already
+	# did. Uniformity, not safety — git refuses to create a ref whose name starts
+	# with "-", so no branch can arrive here disguised as a flag. What it fixes is a
+	# caller (a client, a script) that spells its arguments defensively having to
+	# know which verb of the suite accepts the spelling and which answers "unknown
+	# option --". Must stay above the -* arm, which would otherwise claim it.
+	--)
+		shift
+		while [ $# -gt 0 ]; do
+			take_positional "$1"
+			shift
+		done
+		break
+		;;
 	-*)
 		echo "error: unknown option $1" >&2
 		usage >&2
 		exit 1
 		;;
-	*)
-		if [ -z "$arg" ]; then
-			arg="$1"
-		else
-			echo "error: unexpected argument $1" >&2
-			usage >&2
-			exit 1
-		fi
-		;;
+	*) take_positional "$1" ;;
 	esac
 	shift
 done

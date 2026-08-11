@@ -189,4 +189,53 @@ class DraftFlowTest {
                 .contains("--force"),
         )
     }
+
+    // --- aviso de espera (paridad con draftWaitMessage en draftFlow.ts) ----------
+
+    @Test
+    fun waitMessageAsksToFillTheDraftWhenItIsOnScreen() {
+        assertEquals(
+            "Fill in the reading order for feature/x, then continue.",
+            UserCopy.draftWaitMessage("feature/x", null, null),
+        )
+        assertEquals(
+            "The draft is not valid yet: no entries found",
+            UserCopy.draftWaitMessage("feature/x", "no entries found", null),
+        )
+    }
+
+    @Test
+    fun waitMessageSaysWhereTheDraftIsWhenItCouldNotBeOpened() {
+        // El caso real: el proyecto abierto es una subcarpeta del repo, <cwd>/.git
+        // no existe, el borrador se escribio igual y la ruta solo va por el stdout
+        // de la CLI, que ningun cliente muestra.
+        assertEquals(
+            "Fill in the reading order for feature/x, then continue. It could not be opened here" +
+                " — the draft is at /repo/.git/review-walkthrough/feature/x.md.",
+            UserCopy.draftWaitMessage(
+                "feature/x",
+                null,
+                UnopenedDraft("/repo/.git/review-walkthrough/feature/x.md"),
+            ),
+        )
+        // Y sigue diciendolo cuando el aviso vuelve con el motivo de un rechazo.
+        assertEquals(
+            "The draft is not valid yet: no entries found It could not be opened here" +
+                " — the draft is at /repo/.git/review-walkthrough/feature/x.md.",
+            UserCopy.draftWaitMessage(
+                "feature/x",
+                "no entries found",
+                UnopenedDraft("/repo/.git/review-walkthrough/feature/x.md"),
+            ),
+        )
+    }
+
+    @Test
+    fun waitMessageNamesTheRelativeFileWhenThePathCouldNotBeBuilt() {
+        assertEquals(
+            "Fill in the reading order for feature/x, then continue. It could not be opened here" +
+                " — look for review-walkthrough/feature/x.md inside this repository's git directory.",
+            UserCopy.draftWaitMessage("feature/x", null, UnopenedDraft(null)),
+        )
+    }
 }

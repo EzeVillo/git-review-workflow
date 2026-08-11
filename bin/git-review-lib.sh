@@ -1155,8 +1155,20 @@ walk_recover_cursor() {
 	walk_is_draft "$_wrc_draft" || return 1
 
 	echo "note: your walkthrough draft for $_wrc_draft now has $total $(entry_noun "$total") in this review's range; the cursor was at $walkstep and moved to $total." >&2
-	git config "branch.$cur.reviewwalkstep" "$total"
-	git config "branch.$cur.reviewwalkcount" "$total"
+	# Best-effort on purpose: this is the one place the read path writes config, so
+	# it also runs from `git review status` — on every panel refresh and every
+	# watcher beat. A config write can fail for reasons that have nothing to do with
+	# the review: another process holding .git/config.lock (git takes it with no
+	# retry and exits 255), a read-only gitdir. None of that is worth killing the
+	# command over. The clamp below is already in force for this invocation, the
+	# whole thing is idempotent, and the next one re-derives and retries.
+	#
+	# Not redundant with the caller being an AND-OR list. It is today — POSIX
+	# suppresses -e inside a function run as the non-final command of one — but that
+	# is an invariant living in another function, and one refactor away from turning
+	# a lost lock into an aborted status.
+	git config "branch.$cur.reviewwalkstep" "$total" || true
+	git config "branch.$cur.reviewwalkcount" "$total" || true
 	walkstep="$total"
 	walkcount="$total"
 	return 0

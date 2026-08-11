@@ -9,6 +9,7 @@ import com.ezevillo.gitreview.domain.ReviewIntent
 import com.ezevillo.gitreview.domain.ReviewLayout
 import com.ezevillo.gitreview.domain.ReviewRange
 import com.ezevillo.gitreview.domain.ReviewSource
+import com.ezevillo.gitreview.domain.UnopenedDraft
 import com.ezevillo.gitreview.domain.UserCopy
 import com.ezevillo.gitreview.domain.advanceDraftFlow
 import com.ezevillo.gitreview.domain.branchPickerItems
@@ -221,9 +222,14 @@ object StartWizard {
      * espera la función retorna, y el callback del diálogo la vuelve a entrar
      * con el estado que corresponda.
      */
-    private fun runDraftFlow(ctx: WizardContext, start: DraftFlowState) {
+    private fun runDraftFlow(ctx: WizardContext, start: DraftFlowState, unopened: UnopenedDraft? = null) {
         val service = GitReviewService.getInstance(ctx.project)
         var state = start
+        // Viaja por el parámetro y no por una local, porque este asistente es
+        // síncrono: cada Wait corta el bucle y la reentrada empieza en Wait sin
+        // volver a pasar por Open. Una local se perdería en el primer reintento —
+        // justo cuando el revisor más necesita saber dónde está el archivo.
+        var notShown = unopened
         while (true) {
             when (val current = state) {
                 is DraftFlowState.Create -> {
@@ -243,20 +249,21 @@ object StartWizard {
                 }
 
                 is DraftFlowState.Open -> {
-                    openDraft(ctx)
+                    notShown = openDraft(ctx)
                     state = advanceDraftFlow(current, DraftFlowEvent.Opened)
                 }
 
                 is DraftFlowState.Wait -> {
                     // Acá se corta: el diálogo no bloquea, así que el resto del
                     // bucle vive en su callback.
-                    DraftWaitDialog(ctx.project, ctx.branch, current.error) { proceed ->
+                    DraftWaitDialog(ctx.project, ctx.branch, current.error, notShown) { proceed ->
                         runDraftFlow(
                             ctx,
                             advanceDraftFlow(
                                 current,
                                 if (proceed) DraftFlowEvent.Continue else DraftFlowEvent.Cancel,
                             ),
+                            notShown,
                         )
                     }.show()
                     return
@@ -360,23 +367,31 @@ object StartWizard {
      * que apunta al de verdad. Mostrarlo no es leerlo: el plugin no interpreta
      * un byte de su contenido.
      */
-    private fun openDraft(ctx: WizardContext) {
+    private fun openDraft(ctx: WizardContext): UnopenedDraft? {
+        // No se pudo mostrar: el bucle sigue igual — un borrador que existe y no
+        // se mostró es menos malo que un asistente que se corta por no poder
+        // mostrarlo. Pero el aviso que sigue pide llenarlo, así que se devuelve
+        // la ruta para que la diga: la CLI la imprime por **stdout** y acá sólo
+        // se muestra stderr, de modo que sin esto el revisor no tiene por dónde
+        // encontrar el archivo. `null` = quedó a la vista.
+        var draft: File? = null
         try {
             val dotGit = File(ctx.cwd, ".git")
             val gitdir = if (dotGit.isDirectory) {
                 dotGit
             } else {
-                val target = gitdirFromLink(dotGit.readText()) ?: return
+                val target = gitdirFromLink(dotGit.readText()) ?: return UnopenedDraft(null)
                 val resolved = File(target)
                 if (resolved.isAbsolute) resolved else File(ctx.cwd, target)
             }
-            val draft = File(File(gitdir, "review-walkthrough"), "${ctx.branch}.md")
-            if (!draft.isFile) return
-            val vf = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(draft) ?: return
+            draft = File(File(gitdir, "review-walkthrough"), "${ctx.branch}.md")
+            if (!draft.isFile) return UnopenedDraft(draft.path)
+            val vf = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(draft)
+                ?: return UnopenedDraft(draft.path)
             FileEditorManager.getInstance(ctx.project).openFile(vf, true)
+            return null
         } catch (_: Exception) {
-            // No se pudo abrir: el bucle sigue igual, y la CLI ya dijo dónde
-            // está el archivo.
+            return UnopenedDraft(draft?.path)
         }
     }
 

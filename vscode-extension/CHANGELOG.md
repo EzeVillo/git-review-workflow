@@ -17,7 +17,9 @@ and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
   the CLI and reports exactly what to fix, as many times as you need; *Cancel*
   keeps what you wrote and the next pass offers *Walkthrough — continue draft*.
   Dismissing the notice is not *Cancel*: it comes back, so closing it while you
-  edit does not drop you out of the flow.
+  edit does not drop you out of the flow. If the editor cannot show the file —
+  a folder opened below the repository root — the notice tells you where it is
+  rather than asking you to fill in something you cannot find.
   The draft is yours and local: it lives outside the working tree, so nothing
   gets committed or staged and `git status` never changes. Nothing is written
   for you and no service is contacted. Reviews reading a draft show `(draft)`

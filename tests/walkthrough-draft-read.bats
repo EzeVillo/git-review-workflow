@@ -598,6 +598,130 @@ EOF
 	[[ "$output" == *"[1/2] a.txt"* ]]
 }
 
+@test "re-seating the cursor survives a config write it cannot make" {
+	# Re-seating is the one thing the read path writes, so it runs from status --
+	# every panel refresh, every watcher beat -- and git takes .git/config.lock with
+	# no retry: a second client mid-write is enough to make it exit 255. The write
+	# is best-effort for that reason, and this pins both halves of it: the command
+	# still succeeds with the clamped cursor in its porcelain, and once the write
+	# can land, it does.
+	mkdir -p "$(dirname "$DRAFT")"
+	cat >"$DRAFT" <<'EOF'
+# Walkthrough
+
+## 1. a.txt
+> key
+one
+
+## 2. b.txt
+> key
+two
+
+## 3. src/c.txt
+> key
+three
+
+## 4. .review/walkthrough.md
+> key
+four
+EOF
+	run git review start --keys feature/x
+	[ "$status" -eq 0 ]
+	git review next
+	git review next
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "3" ]
+
+	# Two entries left, cursor at 3 -- the re-seating case, config unwritable.
+	cat >"$DRAFT" <<'EOF'
+# Walkthrough
+
+## 1. a.txt
+> key
+one
+
+## 2. b.txt
+> key
+two
+
+## 3. src/c.txt
+three, no longer key
+
+## 4. .review/walkthrough.md
+four, no longer key
+EOF
+	: >"$(git rev-parse --git-dir)/config.lock"
+
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	state="$(printf '%s\n' "$output" | grep '^state')"
+	[ "$(printf '%s' "$state" | cut -f7)" = "2" ]
+	[ "$(printf '%s' "$state" | cut -f8)" = "2" ]
+	[ "$(printf '%s' "$state" | cut -f9)" = "2" ]
+	[ "$(printf '%s' "$state" | cut -f10)" = "b.txt" ]
+	# The write really did fail: the keys still hold the pre-clamp values.
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "3" ]
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "4" ]
+
+	# And the reading surfaces work off the clamped cursor too, not just porcelain.
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[2/2] on b.txt"* ]]
+
+	# Lock gone: the same command persists it, with no help from the reviewer.
+	rm "$(git rev-parse --git-dir)/config.lock"
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "2" ]
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "2" ]
+}
+
+@test "re-seating does not abort a caller outside an AND-OR list" {
+	# The test above passes through load_walk_review_meta, where the call sits in
+	# "walk_recover_cursor || walk_range_error" -- and POSIX suppresses set -e
+	# inside a function run as the non-final command of an AND-OR list, so a failed
+	# write cannot kill that path whether or not it is guarded. The guard exists for
+	# the caller that is not written that way. This is that caller: source the lib
+	# and call it directly under set -eu, which is the only way to observe the
+	# difference from a test.
+	mkdir -p "$(dirname "$DRAFT")"
+	cat >"$DRAFT" <<'EOF'
+# Walkthrough
+
+## 1. a.txt
+> key
+one
+
+## 2. b.txt
+> key
+two
+
+## 3. src/c.txt
+> key
+three
+EOF
+	run git review start --keys feature/x
+	[ "$status" -eq 0 ]
+	git review next
+	git review next
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "3" ]
+	: >"$(git rev-parse --git-dir)/config.lock"
+
+	run env LIB="$BATS_TEST_DIRNAME/../bin/git-review-lib.sh" sh -c '
+		set -eu
+		. "$LIB"
+		cur=review/feature/x
+		walkstep=3
+		total=2
+		walk_recover_cursor
+		printf "returned %s, still alive\n" "$?"
+	'
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"returned 0, still alive"* ]]
+	[[ "$output" == *"the cursor was at 3 and moved to 2"* ]]
+	# The write it could not make is the one this is about.
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "3" ]
+}
+
 @test "a stray commit under a draft review still gets the HEAD diagnostic" {
 	# The other side of the same fork: the reviewer's draft is in force and intact,
 	# but HEAD really did move. Recovering the cursor here would hide a staged diff

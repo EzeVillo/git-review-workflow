@@ -4,10 +4,19 @@ package com.ezevillo.gitreview.domain
  * El bucle del borrador del revisor (011, contracts/client-draft-flow.md):
  * crear → abrir → esperar → validar → recargar ofertas → elegir → confirmar.
  *
- * Dominio puro, sin `com.intellij`, y **la misma máquina** que `draftFlow.ts`
- * en la extensión: la paridad de producto entre los dos clientes se sostiene
- * si las transiciones viven en un solo lugar por cliente y se prueban igual,
- * no si cada host las reinventa entre sus diálogos.
+ * Dominio puro, sin `com.intellij`, y los mismos estados y transiciones que
+ * `draftFlow.ts` en la extensión: la paridad de producto entre los dos clientes
+ * se sostiene si las transiciones viven en un solo lugar por cliente y se
+ * prueban igual, no si cada host las reinventa entre sus diálogos.
+ *
+ * Con **un** evento de menos, a propósito: no hay `Dismiss`. En VS Code
+ * descartar la notificación no es Cancel —se cierra sola con un *Clear All
+ * Notifications*, que es fácil de apretar sin querer mientras se edita el
+ * archivo que el aviso pide editar— y por eso allá el aviso se vuelve a mostrar.
+ * Acá el vehículo es un `DialogWrapper`: nada lo cierra en masa, cerrarlo es un
+ * acto sobre ese diálogo, y Swing entrega la cruz y el botón por el mismo
+ * `doCancelAction`. Un `Dismiss` sería un estado que ningún host puede producir.
+ * La divergencia está admitida en el contrato, junto a la del flujo síncrono.
  */
 sealed class DraftFlowState {
     /** Invocar `walkthrough draft` (sólo cuando el revisor eligió DRAFT). */

@@ -12,6 +12,7 @@ import {
     advanceDraftFlow,
     DraftFlowEvent,
     DraftFlowState,
+    draftWaitMessage,
     gitdirFromLink,
     initialDraftFlowState,
 } from "../review/draftFlow";
@@ -242,10 +243,11 @@ async function loadBranchContext(
  * contenido, igual que ya hace con `.review/walkthrough.md` tras un
  * `walkthrough init`.
  */
-async function openDraft(cwd: string, branch: string): Promise<void> {
+async function openDraft(cwd: string, branch: string): Promise<{opened: boolean; file?: string}> {
     if (!cwd) {
-        return;
+        return {opened: false};
     }
+    let file: string | undefined;
     try {
         const dotGit = vscode.Uri.file(path.join(cwd, ".git"));
         const stat = await vscode.workspace.fs.stat(dotGit);
@@ -254,17 +256,22 @@ async function openDraft(cwd: string, branch: string): Promise<void> {
             const raw = await vscode.workspace.fs.readFile(dotGit);
             const target = gitdirFromLink(Buffer.from(raw).toString("utf8"));
             if (target === undefined) {
-                return;
+                return {opened: false};
             }
             gitdir = path.isAbsolute(target) ? target : path.join(cwd, target);
         }
-        const file = path.join(gitdir, "review-walkthrough", `${branch}.md`);
+        file = path.join(gitdir, "review-walkthrough", `${branch}.md`);
         const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
         await vscode.window.showTextDocument(doc, {preview: false});
+        return {opened: true, file};
     } catch {
-        // No se pudo abrir: el bucle sigue igual, y la CLI ya dijo dónde está el
-        // archivo. Un borrador que existe y no se abrió solo es menos malo que
-        // un asistente que se corta por no poder mostrarlo.
+        // No se pudo abrir: el bucle sigue igual — un borrador que existe y no se
+        // mostró es menos malo que un asistente que se corta por no poder
+        // mostrarlo. Pero el aviso que sigue pide llenarlo, así que la ruta se
+        // devuelve para que la diga: la CLI la imprime por **stdout** y acá sólo
+        // se muestra stderr, de modo que sin esto el revisor no tiene por dónde
+        // encontrar el archivo.
+        return {opened: false, file};
     }
 }
 
@@ -311,6 +318,10 @@ async function runDraftFlow(
     options: InvokeOptions
 ): Promise<{kind: "done"; layout: ReviewLayout} | {kind: "back"; error?: string}> {
     let state: DraftFlowState = initialDraftFlowState(step);
+    // Sólo definido mientras el borrador NO esté a la vista: es lo que hace que
+    // el aviso diga dónde quedó el archivo en vez de pedir que se llene algo
+    // invisible. Se recalcula en cada paso `open`.
+    let unopened: {file?: string} | undefined;
 
     for (;;) {
         switch (state.kind) {
@@ -334,16 +345,14 @@ async function runDraftFlow(
             }
 
             case "open": {
-                await openDraft(options.cwd, branch.name);
+                const shown = await openDraft(options.cwd, branch.name);
+                unopened = shown.opened ? undefined : {file: shown.file};
                 state = advanceDraftFlow(state, {kind: "opened"});
                 break;
             }
 
             case "wait": {
-                const message =
-                    state.error !== undefined
-                        ? `The draft is not valid yet: ${state.error}`
-                        : `Fill in the reading order for ${branch.name}, then continue.`;
+                const message = draftWaitMessage(branch.name, state.error, unopened);
                 const answer =
                     state.error !== undefined
                         ? await vscode.window.showWarningMessage(message, "Continue", "Cancel")

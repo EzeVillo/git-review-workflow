@@ -561,7 +561,17 @@ dups="$(printf '%s\n' "$entries" | cut -f2- | LC_ALL=C sort | uniq -d)"
 gd="$(git rev-parse --git-dir)"
 rf="$gd/walkthrough-range.$$"
 ef="$gd/walkthrough-entries.$$"
-trap 'rm -f "$rf" "$ef"' EXIT
+# $tmp is written further down and is deliberately in this trap from here. Unlike
+# the skeleton's, no guard dies between its write and its mv — every rule has
+# already run by then — but a Ctrl-C or a failing write during the rewrite itself
+# leaves it behind, and in the draft namespace nothing ever collects it:
+# walk_draft_list only matches *.md, clean is hands-off in there, and
+# forget --draft only knows names it can spell. Cheap here, and there is no test
+# that could pin it without faking a signal, which is the other reason to make the
+# trap own it rather than a cleanup line the next edit can walk past. Guarded with
+# ${tmp:-} because the trap outlives the paths where it is never set, and an unset
+# expansion under set -u would turn any exit into a failure inside the handler.
+trap 'rm -f "$rf" "$ef" "${tmp:-}"' EXIT INT TERM
 annotatable_files | LC_ALL=C sort >"$rf"
 printf '%s\n' "$entries" | cut -f2- | LC_ALL=C sort >"$ef"
 missing="$(comm -23 "$rf" "$ef")"

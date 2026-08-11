@@ -54,6 +54,24 @@ Al elegir `draft` o `draft-resume`:
 4. **Recuperable**: si el revisor lo descarta o cierra el editor, el borrador
    sobrevive y se retoma reabriendo el asistente, donde la oferta pasa a ser
    `draft-resume`.
+5. **Con la ruta a mano cuando el archivo no se pudo mostrar**: si el cliente no
+   logró abrir el borrador —el caso real es un proyecto abierto en una subcarpeta
+   del repo, donde `<cwd>/.git` no existe—, el aviso dice dónde quedó. La CLI
+   imprime la ruta por **stdout** y los dos clientes muestran únicamente stderr,
+   así que el aviso es el único lugar donde el revisor puede enterarse. Se sigue
+   diciendo en cada reintento, no sólo la primera vez.
+
+**Cerrar el aviso no significa lo mismo en los dos clientes, y es deliberado.**
+En VS Code, descartar la notificación (la cruz, o un *Clear All Notifications*)
+**no** es Cancel: es lo más fácil de hacer sin querer mientras se edita el archivo
+que el aviso pide editar, así que el aviso se vuelve a mostrar y sólo *Cancel*
+abandona el bucle. En IntelliJ la cruz del `DialogWrapper` **sí** equivale a
+Cancel, y por eso `DraftFlowEvent` no tiene el caso `Dismiss`: no existe ahí el
+accidente que lo motiva —no hay nada que cierre ese diálogo en masa, y cerrarlo es
+un acto sobre ese diálogo y no sobre una bandeja de avisos—, y Swing entrega la
+cruz y el botón por el mismo `doCancelAction`. En ninguno de los dos se pierde
+trabajo: el borrador sobrevive y la vuelta siguiente lo ofrece como
+`draft-resume` (requisito 4).
 
 ### Vehículo por plataforma
 

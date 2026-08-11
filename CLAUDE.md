@@ -45,13 +45,14 @@ comandos.
 
 **Todo lo que se puede correr en el contenedor se corre en el contenedor.** No
 es preferencia: en Windows crear un proceso cuesta ~50 ms (CreateProcess + DLLs
+
 + Defender) contra ~1 ms en Linux, y las dos suites son básicamente procesos —
-un `git review status --porcelain` son 9 procesos `git` más dos de shell, o sea
-~960 ms en Windows contra ~41 ms en Linux. Un mismo escenario de spec midió
-15,0 s nativo contra 0,69 s en el contenedor (~22×). CI igual corre las dos
-suites en runners reales de ubuntu, macos y windows, así que el contenedor no
-saltea nada: lo único que evita es esperar de más para aprender lo mismo. Cada
-script construye su imagen en el primer uso.
+  un `git review status --porcelain` son 9 procesos `git` más dos de shell, o sea
+  ~960 ms en Windows contra ~41 ms en Linux. Un mismo escenario de spec midió
+  15,0 s nativo contra 0,69 s en el contenedor (~22×). CI igual corre las dos
+  suites en runners reales de ubuntu, macos y windows, así que el contenedor no
+  saltea nada: lo único que evita es esperar de más para aprender lo mismo. Cada
+  script construye su imagen en el primer uso.
 
 La imagen de Docker (bats + git, `tests/Dockerfile`) se construye en el primer
 uso y el repo se monta read-only; los tests crean sus repos temporales dentro
@@ -118,7 +119,8 @@ repo, no en archivos del working tree:
   `reviewmode=walk`). `reviewwalkbase` es lo que permite **preguntarle a git** si
   `HEAD` se movió (`walk_at_base`) en vez de inferirlo de que la secuencia se
   achicó: con el borrador del revisor esa inferencia tiene dos causas y elegía la
-  equivocada. Sin la clave (reviews viejas) se cae a la inferencia de antes. La secuencia de entradas NO se persiste: se re-deriva en
+  equivocada. Sin la clave (reviews viejas) se cae a la inferencia de antes. La secuencia de
+  entradas NO se persiste: se re-deriva en
   cada verbo parseando el walkthrough del tip y filtrando por intersección de
   paths con el rango real, igual que step re-deriva `commits` con `rev-list`. En
   walk `HEAD` queda clavado en el lower bound, así que la derivación es estable
@@ -162,7 +164,18 @@ repo, no en archivos del working tree:
   «borraste tu borrador» de «commiteaste encima de la review» cuando la secuencia
   cambia bajo el cursor, incluso si el PR trae walkthrough propio y la review cae
   sobre él. Es una clave walk como las demás: la copian `save`/`continue` y la
-  cubre el guard de metadata de `finish`.
+  cubre el guard de metadata de `finish`. Pero **la clave no es el único borrador
+  posible y ningún verbo la lee por su cuenta**: el borrador en vigor es el que
+  el cargador dejó en `walk_draft_src` (la clave, y si no hay, el `reviewsource`),
+  y de ahí lo toman también `walk_recover_cursor` y `walk_range_error`. Volver a
+  `git config` en esas dos las dejaba ciegas justo en el caso que existen para
+  cubrir —el borrador escrito **a mitad de review**, que por definición no tiene
+  clave— y el revisor recibía «corrupt metadata» con `git review abort` como
+  única salida. `walk_range_error` adopta ese fallback sólo si
+  `walk_is_draft` confirma que hay borrador en vigor: sin esa condición, toda
+  review sin borrador parecería una a la que se le borró el suyo, y un commit
+  encima de la review contestaría «tu borrador desapareció» en vez del mensaje de
+  HEAD.
   Ciclo de vida: `save` lo archiva en `review-saved-walkthrough/` (y `continue` lo
   devuelve) **como último paso, después de la última guarda que puede abortar** —
   un movimiento a mitad de camino dejaba el archivo sin dueño de los dos lados—, y
@@ -177,7 +190,11 @@ repo, no en archivos del working tree:
   (arrancá la rama de nuevo y tu orden sigue ahí), así que va con los otros dos
   estados persistentes que `clean` deja quietos —los marcadores de `--delta` y las
   reviews guardadas— y se descarta con `git review forget --draft <rama> | --all`
-  (`--saved` se lleva el de la review pausada). Su presencia se reporta —nunca se
+  (`--saved` se lleva el de la review pausada; `--all` barre además los
+  archivados que ya no tiene quién reclamar —su `review-saved/<rama>` se borró a
+  mano—, que si no quedan fuera del alcance de todos los comandos: `--saved`
+  exige el ref, `--draft` sólo deletrea nombres del namespace activo y `clean` es
+  hands-off en los dos). Su presencia se reporta —nunca se
   infiere— con el registro `draft` de `status --porcelain` y el sufijo `(draft)`
   en `status` y `list`; la viabilidad de armarlo o continuarlo, con las ofertas
   `draft` / `draft-resume` de `config --porcelain`. Las superficies de custodia se

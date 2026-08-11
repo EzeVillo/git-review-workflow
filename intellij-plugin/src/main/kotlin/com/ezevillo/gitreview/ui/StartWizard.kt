@@ -34,6 +34,8 @@ import com.ezevillo.gitreview.host.MutationActions
 import com.ezevillo.gitreview.host.StartRunResult
 import com.ezevillo.gitreview.settings.GitReviewSettings
 import com.ezevillo.gitreview.vcs.pickSoleGitRoot
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
@@ -222,7 +224,11 @@ object StartWizard {
      * espera la función retorna, y el callback del diálogo la vuelve a entrar
      * con el estado que corresponda.
      */
-    private fun runDraftFlow(ctx: WizardContext, start: DraftFlowState, unopened: UnopenedDraft? = null) {
+    private fun runDraftFlow(
+        ctx: WizardContext,
+        start: DraftFlowState,
+        unopened: UnopenedDraft? = null
+    ) {
         val service = GitReviewService.getInstance(ctx.project)
         var state = start
         // Viaja por el parámetro y no por una local, porque este asistente es
@@ -270,6 +276,7 @@ object StartWizard {
                 }
 
                 is DraftFlowState.Build -> {
+                    saveDraft(ctx)
                     val outcome = invokeDraft(ctx, service, build = true)
                     state = advanceDraftFlow(
                         current,
@@ -283,7 +290,8 @@ object StartWizard {
                 is DraftFlowState.Reload -> {
                     // El borrador ya es legible: lo que se relee es si marcó
                     // entradas esenciales, y eso sólo lo sabe la CLI.
-                    state = advanceDraftFlow(current, DraftFlowEvent.Offers(loadOffers(ctx, service)))
+                    state =
+                        advanceDraftFlow(current, DraftFlowEvent.Offers(loadOffers(ctx, service)))
                 }
 
                 is DraftFlowState.PickKeys -> {
@@ -367,6 +375,49 @@ object StartWizard {
      * que apunta al de verdad. Mostrarlo no es leerlo: el plugin no interpreta
      * un byte de su contenido.
      */
+    /**
+     * Dónde vive el borrador de esta rama, o `null` si no se puede resolver el
+     * gitdir. Compartida por quien lo abre y quien lo guarda: dos formas de
+     * armar la misma ruta son dos formas de que una de ellas se quede vieja.
+     */
+    private fun draftFile(ctx: WizardContext): File? {
+        return try {
+            val dotGit = File(ctx.cwd, ".git")
+            val gitdir = if (dotGit.isDirectory) {
+                dotGit
+            } else {
+                val target = gitdirFromLink(dotGit.readText()) ?: return null
+                val resolved = File(target)
+                if (resolved.isAbsolute) resolved else File(ctx.cwd, target)
+            }
+            File(File(gitdir, "review-walkthrough"), "${ctx.branch}.md")
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Guarda el borrador antes de validarlo. `walkthrough draft --build` lee el
+     * archivo del disco, y el editor puede tener el orden escrito y sin
+     * guardar: entonces la CLI valida el esqueleto vacío y responde "unfilled
+     * entries remain" con el texto a la vista. El IDE guarda solo al perder el
+     * foco, que es justo lo que no pasa mientras el asistente conduce.
+     *
+     * Sólo este documento, nunca `saveAllDocuments`: el asistente pidió editar
+     * uno.
+     */
+    private fun saveDraft(ctx: WizardContext) {
+        val file = draftFile(ctx) ?: return
+        val vf = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file) ?: return
+        val fdm = FileDocumentManager.getInstance()
+        val doc = fdm.getDocument(vf) ?: return
+        if (!fdm.isDocumentUnsaved(doc)) return
+        // Guardar es una escritura y va en el EDT; el bucle llega acá desde el
+        // hilo del diálogo, pero también detrás de un Bg.sync, así que el hilo
+        // se pide en vez de suponerse.
+        ApplicationManager.getApplication().invokeAndWait { fdm.saveDocument(doc) }
+    }
+
     private fun openDraft(ctx: WizardContext): UnopenedDraft? {
         // No se pudo mostrar: el bucle sigue igual — un borrador que existe y no
         // se mostró es menos malo que un asistente que se corta por no poder
@@ -374,24 +425,15 @@ object StartWizard {
         // la ruta para que la diga: la CLI la imprime por **stdout** y acá sólo
         // se muestra stderr, de modo que sin esto el revisor no tiene por dónde
         // encontrar el archivo. `null` = quedó a la vista.
-        var draft: File? = null
+        val draft = draftFile(ctx) ?: return UnopenedDraft(null)
         try {
-            val dotGit = File(ctx.cwd, ".git")
-            val gitdir = if (dotGit.isDirectory) {
-                dotGit
-            } else {
-                val target = gitdirFromLink(dotGit.readText()) ?: return UnopenedDraft(null)
-                val resolved = File(target)
-                if (resolved.isAbsolute) resolved else File(ctx.cwd, target)
-            }
-            draft = File(File(gitdir, "review-walkthrough"), "${ctx.branch}.md")
             if (!draft.isFile) return UnopenedDraft(draft.path)
             val vf = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(draft)
                 ?: return UnopenedDraft(draft.path)
             FileEditorManager.getInstance(ctx.project).openFile(vf, true)
             return null
         } catch (_: Exception) {
-            return UnopenedDraft(draft?.path)
+            return UnopenedDraft(draft.path)
         }
     }
 
@@ -434,6 +476,7 @@ object StartWizard {
                         UiMessages.info(project, result.note)
                     }
                 }
+
                 StartRunResult.Busy -> UiMessages.info(project, UserCopy.DISCARD_BUSY)
                 StartRunResult.Stale -> UiMessages.info(project, UserCopy.START_STALE_RUN)
                 StartRunResult.NoCwd -> UiMessages.error(project, UserCopy.NO_SOLE_ROOT)
@@ -445,6 +488,7 @@ object StartWizard {
                         "$text\n\nTo retry with credentials, run in Terminal:\n$line",
                     )
                 }
+
                 is StartRunResult.Failed -> {
                     val text = result.stderr.trim().ifEmpty { UserCopy.START_FAILED }
                     UiMessages.error(project, text)

@@ -26,7 +26,7 @@ import {
  */
 interface WizardItem {
     label: string;
-    candidate?: {name?: string; current?: boolean};
+    candidate?: { name?: string; current?: boolean };
     layout?: string;
     draft?: string;
     source?: string;
@@ -68,7 +68,7 @@ describe("US2: el asistente ofrece armar el orden de lectura", function () {
 
         const layoutSteps: WizardItem[][] = [];
         const originalQuickPick = vscode.window.showQuickPick;
-        (vscode.window as unknown as {showQuickPick: unknown}).showQuickPick = async (
+        (vscode.window as unknown as { showQuickPick: unknown }).showQuickPick = async (
             items: readonly WizardItem[]
         ) => {
             if (isLayoutStep(items)) {
@@ -83,7 +83,9 @@ describe("US2: el asistente ofrece armar el orden de lectura", function () {
         try {
             await vscode.commands.executeCommand("gitReview.startReview");
         } finally {
-            (vscode.window as unknown as {showQuickPick: unknown}).showQuickPick = originalQuickPick;
+            (vscode.window as unknown as {
+                showQuickPick: unknown
+            }).showQuickPick = originalQuickPick;
         }
 
         assert.strictEqual(layoutSteps.length, 1, "el asistente llego al paso de forma de lectura");
@@ -111,7 +113,7 @@ describe("US2: el asistente ofrece armar el orden de lectura", function () {
 
         const layoutSteps: WizardItem[][] = [];
         const originalQuickPick = vscode.window.showQuickPick;
-        (vscode.window as unknown as {showQuickPick: unknown}).showQuickPick = async (
+        (vscode.window as unknown as { showQuickPick: unknown }).showQuickPick = async (
             items: readonly WizardItem[]
         ) => {
             if (isLayoutStep(items)) {
@@ -126,7 +128,9 @@ describe("US2: el asistente ofrece armar el orden de lectura", function () {
         try {
             await vscode.commands.executeCommand("gitReview.startReview");
         } finally {
-            (vscode.window as unknown as {showQuickPick: unknown}).showQuickPick = originalQuickPick;
+            (vscode.window as unknown as {
+                showQuickPick: unknown
+            }).showQuickPick = originalQuickPick;
         }
 
         assert.strictEqual(layoutSteps.length, 1);
@@ -146,6 +150,12 @@ describe("US2: el asistente ofrece armar el orden de lectura", function () {
         // crear → llenar → Continue → --build en verde → recorrido → start. Lo
         // que se afirma al final es la review que quedó viva y lo que el panel
         // muestra de ella, no un paso intermedio.
+        //
+        // El borrador se llena **por el buffer del editor y sin guardar**, que es
+        // lo que hace el revisor: VS Code no autoguarda por defecto. Escribirlo
+        // con fs.writeFileSync esquivaba el único paso que puede fallar acá —el
+        // `--build` lee del disco— y dejaba en verde un camino que en el editor
+        // real terminaba en "unfilled entries remain" con el texto a la vista.
         const branch = "us2-draft-happy";
         createBranchWithChanges(repo, branch, {"src/a.ts": "a\n", "src/b.ts": "b\n"});
         git(["checkout", branch], repo.dir);
@@ -156,12 +166,17 @@ describe("US2: el asistente ofrece armar el orden de lectura", function () {
         const draft = draftPath(repo.dir, branch);
         let waitPrompts = 0;
         let keysAsked = 0;
+        // El estado del borrador en el momento de apretar Continue: sin guardar en
+        // el editor, y con el esqueleto todavía en disco. Es lo que hace que este
+        // test pruebe el guardado y no lo suponga.
+        let dirtyAtContinue: boolean | undefined;
+        let onDiskAtContinue = "";
 
         const originalQuickPick = vscode.window.showQuickPick;
         const originalInfo = vscode.window.showInformationMessage;
         const originalWarning = vscode.window.showWarningMessage;
-        (vscode.window as unknown as {showQuickPick: unknown}).showQuickPick = async (
-            items: readonly (WizardItem & {keysOnly?: boolean})[]
+        (vscode.window as unknown as { showQuickPick: unknown }).showQuickPick = async (
+            items: readonly (WizardItem & { keysOnly?: boolean })[]
         ) => {
             // El paso de recorrido completo vs sólo esenciales: sólo aparece
             // porque el borrador de abajo marca una entrada con "> key".
@@ -177,7 +192,9 @@ describe("US2: el asistente ofrece armar el orden de lectura", function () {
             }
             return pickCurrent(items);
         };
-        (vscode.window as unknown as {showInformationMessage: unknown}).showInformationMessage = async (
+        (vscode.window as unknown as {
+            showInformationMessage: unknown
+        }).showInformationMessage = async (
             _message: string,
             ...actions: string[]
         ) => {
@@ -188,27 +205,53 @@ describe("US2: el asistente ofrece armar el orden de lectura", function () {
             // Lo que hace el revisor mientras el aviso está a la vista: llenar el
             // borrador que la CLI acaba de escribir, en un orden propio — acá el
             // inverso del diff, para que cuál de los dos manda sea observable.
-            fs.writeFileSync(
-                draft,
-                "# Walkthrough\n\n## 2. src/a.ts\nthen a\n\n## 1. src/b.ts\n> key\nstart here\n",
-                "utf8"
+            // El documento ya está abierto (el asistente lo abrió): esto edita ese
+            // buffer y lo deja sucio, sin tocar el disco.
+            const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(draft));
+            const whole = new vscode.Range(
+                new vscode.Position(0, 0),
+                doc.lineAt(doc.lineCount - 1).range.end
             );
+            const edit = new vscode.WorkspaceEdit();
+            edit.replace(
+                doc.uri,
+                whole,
+                "# Walkthrough\n\n## 2. src/a.ts\nthen a\n\n## 1. src/b.ts\n> key\nstart here\n"
+            );
+            assert.ok(await vscode.workspace.applyEdit(edit), "no se pudo editar el borrador");
+            dirtyAtContinue = doc.isDirty;
+            onDiskAtContinue = fs.readFileSync(draft, "utf8");
             return "Continue";
         };
-        (vscode.window as unknown as {showWarningMessage: unknown}).showWarningMessage = async () =>
+        (vscode.window as unknown as {
+            showWarningMessage: unknown
+        }).showWarningMessage = async () =>
             "Start the review";
         try {
             await vscode.commands.executeCommand("gitReview.startReview");
         } finally {
-            (vscode.window as unknown as {showQuickPick: unknown}).showQuickPick = originalQuickPick;
-            (vscode.window as unknown as {showInformationMessage: unknown}).showInformationMessage =
+            (vscode.window as unknown as {
+                showQuickPick: unknown
+            }).showQuickPick = originalQuickPick;
+            (vscode.window as unknown as {
+                showInformationMessage: unknown
+            }).showInformationMessage =
                 originalInfo;
-            (vscode.window as unknown as {showWarningMessage: unknown}).showWarningMessage =
+            (vscode.window as unknown as { showWarningMessage: unknown }).showWarningMessage =
                 originalWarning;
         }
 
         assert.strictEqual(waitPrompts, 1, "el aviso de espera se mostro una vez");
         assert.strictEqual(keysAsked, 1, "el borrador marca una entrada key: se pregunta el recorrido");
+        // Las dos mitades de la premisa: al apretar Continue el orden estaba
+        // escrito sólo en el buffer, y en disco seguía el esqueleto sin llenar.
+        // Sin esto, el test volvería a pasar por el camino que no es el del
+        // revisor en cuanto alguien cambie cómo se llena el borrador.
+        assert.strictEqual(dirtyAtContinue, true, "el borrador tenia que quedar sin guardar");
+        assert.ok(
+            onDiskAtContinue.includes("## ?. src/a.ts"),
+            `en disco tenia que seguir el esqueleto: ${onDiskAtContinue}`
+        );
 
         const state = await api.refresh();
         assert.strictEqual(state.situation, "review");
@@ -256,7 +299,7 @@ describe("US2: el asistente ofrece armar el orden de lectura", function () {
 
         const originalQuickPick = vscode.window.showQuickPick;
         const originalInfo = vscode.window.showInformationMessage;
-        (vscode.window as unknown as {showQuickPick: unknown}).showQuickPick = async (
+        (vscode.window as unknown as { showQuickPick: unknown }).showQuickPick = async (
             items: readonly WizardItem[]
         ) => {
             if (isLayoutStep(items)) {
@@ -271,7 +314,9 @@ describe("US2: el asistente ofrece armar el orden de lectura", function () {
             }
             return pickCurrent(items);
         };
-        (vscode.window as unknown as {showInformationMessage: unknown}).showInformationMessage = async (
+        (vscode.window as unknown as {
+            showInformationMessage: unknown
+        }).showInformationMessage = async (
             _message: string,
             ...actions: string[]
         ) => {
@@ -289,8 +334,12 @@ describe("US2: el asistente ofrece armar el orden de lectura", function () {
         try {
             await vscode.commands.executeCommand("gitReview.startReview");
         } finally {
-            (vscode.window as unknown as {showQuickPick: unknown}).showQuickPick = originalQuickPick;
-            (vscode.window as unknown as {showInformationMessage: unknown}).showInformationMessage =
+            (vscode.window as unknown as {
+                showQuickPick: unknown
+            }).showQuickPick = originalQuickPick;
+            (vscode.window as unknown as {
+                showInformationMessage: unknown
+            }).showInformationMessage =
                 originalInfo;
         }
 

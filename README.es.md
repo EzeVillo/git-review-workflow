@@ -322,9 +322,9 @@ lista, o `git review <verbo> -h` para el detalle de un verbo.
 | `git review preview [--stat]`                                                                                                              | Muestra las ediciones que hiciste hasta ahora — el diff que `finish` extraería — sin commitear ni cambiar de rama.                                                                                                                                                                                                                                                                     |
 | `git review abort`                                                                                                                         | Cancela la review actual y vuelve a donde empezaste.                                                                                                                                                                                                                                                                                                                                   |
 | `git review clean [--keep-fixes] [rama]`                                                                                                   | Borra las ramas `review/*` (y por defecto también `review-fixes/*`) de `<rama>`, o todas; `--keep-fixes` deja `review-fixes/*` intactas.                                                                                                                                                                                                                                               |
-| `git review forget --delta ([--] <rama> \| --all \| --stale [--dry-run])`                                                                       | Descarta el marcador de `--delta` de una rama, de todas, o solo de las obsoletas.                                                                                                                                                                                                                                                                                                      |
-| `git review forget --saved ([--] <rama> \| --all) [--dry-run]`                                                                                  | Descarta una review guardada con `git review save`.                                                                                                                                                                                                                                                                                                                                    |
-| `git review forget --draft ([--] <rama> \| --all) [--dry-run]`                                                                                  | Borra un walkthrough que escribiste para el PR de otra persona.                                                                                                                                                                                                                                                                                                                        |
+| `git review forget --delta ([--] <rama> \| --all \| --stale [--dry-run])`                                                                  | Descarta el marcador de `--delta` de una rama, de todas, o solo de las obsoletas.                                                                                                                                                                                                                                                                                                      |
+| `git review forget --saved ([--] <rama> \| --all) [--dry-run]`                                                                             | Descarta una review guardada con `git review save`.                                                                                                                                                                                                                                                                                                                                    |
+| `git review forget --draft ([--] <rama> \| --all) [--dry-run]`                                                                             | Borra un walkthrough que escribiste para el PR de otra persona.                                                                                                                                                                                                                                                                                                                        |
 | `git review config [<clave> [<valor>]] [--unset <clave>] [--porcelain [<rama>]]`                                                           | Lee o escribe la config del producto (`base`, `remote`); `--porcelain` también lista las ramas candidatas a revisar.                                                                                                                                                                                                                                                                   |
 
 <details>
@@ -530,7 +530,8 @@ git review start feature/checkout                      # entra en walk con tu or
 ```
 
 - Toma la rama como argumento, igual que `git review start` — estás parado en la
-  base, no en el PR — y por defecto usa la rama actual. `--local`, `--offline` y
+  base, no en el PR — y por defecto usa la rama en la que estás o, si lo corrés
+  desde adentro de una review, la rama que esa review está leyendo. `--local`, `--offline` y
   `--delta` resuelven el rango exactamente como lo hace `start`, así que el
   esqueleto lista precisamente los archivos que tu review va a cubrir. Nunca
   hace fetch.
@@ -944,7 +945,9 @@ nunca los toca —son prosa que escribiste a mano, y una re-review de la rama lo
 vuelve a leer—, así que este es el comando para tirar uno.
 
 - `<rama>` — borrar el borrador escrito para una rama.
-- `--all` — borrar todos los borradores.
+- `--all` — borrar todos los borradores, más los que hayan quedado archivados
+  por una review pausada que ya no existe (una cuya `review-saved/<rama>`
+  borraste a mano): a esos no los alcanza ningún otro comando.
 - `--dry-run` — listar lo que se borraría sin borrarlo.
 - Borrar el borrador de una review que sigue viva está permitido (volver al orden
   del autor es algo legítimo de querer) y nombra la review que lo estaba leyendo

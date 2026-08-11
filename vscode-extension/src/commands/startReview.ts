@@ -15,9 +15,15 @@ import {
     draftWaitMessage,
     gitdirFromLink,
     initialDraftFlowState,
+    sameDraftFile,
 } from "../review/draftFlow";
 import {MutationLock} from "../review/mutationLock";
-import {buildLayoutItems, DraftStep, layoutSummary, offerConfigFlags,} from "../review/layoutOffers";
+import {
+    buildLayoutItems,
+    DraftStep,
+    layoutSummary,
+    offerConfigFlags,
+} from "../review/layoutOffers";
 import {
     draftArgs,
     intentToArgs,
@@ -158,8 +164,16 @@ async function pickLayout(offers: readonly ReadingOffer[] | undefined): Promise<
 async function pickDraftKeys(): Promise<boolean | undefined> {
     const picked = await vscode.window.showQuickPick(
         [
-            {label: "Walkthrough", description: "the whole reading order you wrote", keysOnly: false},
-            {label: "Walkthrough — keys only", description: "only the entries you marked key", keysOnly: true},
+            {
+                label: "Walkthrough",
+                description: "the whole reading order you wrote",
+                keysOnly: false
+            },
+            {
+                label: "Walkthrough — keys only",
+                description: "only the entries you marked key",
+                keysOnly: true
+            },
         ],
         {
             title: "Start a review — how to read it",
@@ -243,7 +257,7 @@ async function loadBranchContext(
  * contenido, igual que ya hace con `.review/walkthrough.md` tras un
  * `walkthrough init`.
  */
-async function openDraft(cwd: string, branch: string): Promise<{opened: boolean; file?: string}> {
+async function openDraft(cwd: string, branch: string): Promise<{ opened: boolean; file?: string }> {
     if (!cwd) {
         return {opened: false};
     }
@@ -275,6 +289,39 @@ async function openDraft(cwd: string, branch: string): Promise<{opened: boolean;
     }
 }
 
+/**
+ * Guarda el borrador antes de validarlo. `walkthrough draft --build` lee el
+ * archivo del disco, y VS Code **no autoguarda por defecto**: sin esto el
+ * camino normal del asistente —abrir el borrador, escribir el orden en el
+ * editor, apretar Continue— validaba el esqueleto vacío que seguía en disco y
+ * respondía "unfilled entries remain" con el texto a la vista, sin nombrar la
+ * única causa. El bucle devolvía al mismo aviso, indefinidamente.
+ *
+ * Sólo este archivo, nunca `saveAll`: el asistente pidió editar uno, y guardar
+ * de paso todo lo demás que el revisor tuviera abierto no es algo que haya
+ * pedido nadie.
+ */
+async function saveDraft(file: string | undefined): Promise<void> {
+    if (file === undefined) {
+        return;
+    }
+    const doc = vscode.workspace.textDocuments.find((candidate) =>
+        sameDraftFile(candidate.uri.fsPath, file)
+    );
+    if (doc === undefined || !doc.isDirty) {
+        return;
+    }
+    // Un guardado fallido no corta el bucle: el `--build` que sigue lee lo que
+    // haya en disco y su error es el que el revisor tiene que ver, con la ruta
+    // adentro. Cortar acá cambiaría un mensaje de la CLI por uno del editor
+    // sobre un archivo que el revisor no eligió abrir.
+    try {
+        await doc.save();
+    } catch {
+        // Deliberadamente sin ruido: lo dice el --build de la línea siguiente.
+    }
+}
+
 /** Una invocación de `walkthrough draft`, con su progreso y bajo el lock. */
 async function invokeDraft(
     lock: MutationLock,
@@ -283,7 +330,7 @@ async function invokeDraft(
     range: ReviewRange,
     build: boolean,
     options: InvokeOptions
-): Promise<{ok: boolean; text: string}> {
+): Promise<{ ok: boolean; text: string }> {
     const result = await lock.run(async () =>
         vscode.window.withProgress(
             {
@@ -316,14 +363,18 @@ async function runDraftFlow(
     range: ReviewRange,
     lock: MutationLock,
     options: InvokeOptions
-): Promise<{kind: "done"; layout: ReviewLayout} | {kind: "back"; error?: string}> {
+): Promise<{ kind: "done"; layout: ReviewLayout } | { kind: "back"; error?: string }> {
     let state: DraftFlowState = initialDraftFlowState(step);
     // Sólo definido mientras el borrador NO esté a la vista: es lo que hace que
     // el aviso diga dónde quedó el archivo en vez de pedir que se llene algo
     // invisible. Se recalcula en cada paso `open`.
-    let unopened: {file?: string} | undefined;
+    let unopened: { file?: string } | undefined;
+    // La ruta del borrador, haya podido abrirse o no: es con lo que se busca el
+    // documento a guardar antes de cada `--build`. Se resuelve en el paso
+    // `open`, por el que pasan los dos arranques del bucle (create y resume).
+    let draftFile: string | undefined;
 
-    for (;;) {
+    for (; ;) {
         switch (state.kind) {
             case "create": {
                 const outcome = await invokeDraft(lock, branch.name, source, range, false, options);
@@ -347,6 +398,7 @@ async function runDraftFlow(
             case "open": {
                 const shown = await openDraft(options.cwd, branch.name);
                 unopened = shown.opened ? undefined : {file: shown.file};
+                draftFile = shown.file;
                 state = advanceDraftFlow(state, {kind: "opened"});
                 break;
             }
@@ -372,6 +424,7 @@ async function runDraftFlow(
             }
 
             case "build": {
+                await saveDraft(draftFile);
                 const outcome = await invokeDraft(lock, branch.name, source, range, true, options);
                 state = advanceDraftFlow(state, {
                     kind: "built",
@@ -403,7 +456,10 @@ async function runDraftFlow(
                 return {kind: "done", layout: state.layout};
 
             case "back":
-                return state.error !== undefined ? {kind: "back", error: state.error} : {kind: "back"};
+                return state.error !== undefined ? {
+                    kind: "back",
+                    error: state.error
+                } : {kind: "back"};
         }
     }
 }
@@ -536,7 +592,7 @@ export async function startReview(
     // honesto es devolverlo a este mismo paso con las ofertas al día (FR-018a).
     let offers = ctx.offers;
     let layout: ReviewLayout;
-    for (;;) {
+    for (; ;) {
         const picked = await pickLayout(offers);
         if (!picked) {
             return;

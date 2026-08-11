@@ -14,9 +14,9 @@ No se agrega un paso nuevo ni se reordena el asistente.
 
 ### Metadatos de los ids nuevos
 
-| id | label | description |
-| --- | --- | --- |
-| `draft` | `Walkthrough — draft one` | `no reading order yet; write one` |
+| id             | label                          | description                            |
+|----------------|--------------------------------|----------------------------------------|
+| `draft`        | `Walkthrough — draft one`      | `no reading order yet; write one`      |
 | `draft-resume` | `Walkthrough — continue draft` | `finish the reading order you started` |
 
 Orden en el selector: el de `OFFER_ORDER`, extendido a
@@ -60,6 +60,13 @@ Al elegir `draft` o `draft-resume`:
    imprime la ruta por **stdout** y los dos clientes muestran únicamente stderr,
    así que el aviso es el único lugar donde el revisor puede enterarse. Se sigue
    diciendo en cada reintento, no sólo la primera vez.
+6. **Guardado antes de validar**: en *Continue*, el cliente guarda el borrador
+   —y únicamente ése, nunca todo lo abierto— antes de invocar `--build`, que lee
+   del disco. VS Code no autoguarda por defecto y IntelliJ guarda al perder el
+   foco, que es justo lo que no ocurre mientras el asistente conduce: sin esto
+   el camino normal —escribir el orden en el editor y apretar Continue— valida
+   el esqueleto vacío que quedó en disco y responde con el error de entradas sin
+   llenar mientras el texto está a la vista, sin nombrar la causa.
 
 **Cerrar el aviso no significa lo mismo en los dos clientes, y es deliberado.**
 En VS Code, descartar la notificación (la cruz, o un *Clear All Notifications*)
@@ -75,9 +82,9 @@ trabajo: el borrador sobrevive y la vuelta siguiente lo ofrece como
 
 ### Vehículo por plataforma
 
-| Cliente | Vehículo | Por qué |
-| --- | --- | --- |
-| VS Code | Notificación con acciones | No bloquea, y al tener botones no se auto-oculta. `{modal: true}` bloquea el editor y queda descartado. |
+| Cliente  | Vehículo                              | Por qué                                                                                                                |
+|----------|---------------------------------------|------------------------------------------------------------------------------------------------------------------------|
+| VS Code  | Notificación con acciones             | No bloquea, y al tener botones no se auto-oculta. `{modal: true}` bloquea el editor y queda descartado.                |
 | IntelliJ | `DialogWrapper` con `isModal = false` | Mismo efecto; toda la familia `Messages.*` bloquea el IDE. Menos infraestructura que registrar un `NotificationGroup`. |
 
 Diferencia estructural admitida: el asistente de VS Code es asíncrono y espera
@@ -89,7 +96,8 @@ tiene que reabrir el asistente en el camino normal.
 ## Invocaciones permitidas
 
 Ampliación de la lista cerrada de
-[`002-extension-vscode/contracts/cli-invocation.md`](../../002-extension-vscode/contracts/cli-invocation.md):
+[
+`002-extension-vscode/contracts/cli-invocation.md`](../../002-extension-vscode/contracts/cli-invocation.md):
 
 ```sh
 git review walkthrough draft [--local|--offline] [--delta] -- <branch>

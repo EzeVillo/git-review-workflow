@@ -7,6 +7,7 @@ import {
     gitdirFromLink,
     initialDraftFlowState,
     offersIncludeKeys,
+    sameDraftFile,
 } from "../../src/review/draftFlow";
 
 /** Aplica una secuencia de eventos desde un estado inicial. */
@@ -28,7 +29,10 @@ describe("advanceDraftFlow", () => {
             {kind: "opened"},
             {kind: "continue"},
             {kind: "built", ok: true},
-            {kind: "offers", offers: [{id: "walk", rank: "recommended"}, {id: "step", rank: "available"}]},
+            {
+                kind: "offers",
+                offers: [{id: "walk", rank: "recommended"}, {id: "step", rank: "available"}]
+            },
         ]);
         assert.deepStrictEqual(end, {kind: "done", layout: "walk"});
     });
@@ -57,7 +61,10 @@ describe("advanceDraftFlow", () => {
     });
 
     it("cerrar el selector de esenciales vuelve al paso de forma de lectura, sin error", () => {
-        const back = advanceDraftFlow({kind: "pickKeys"}, {kind: "keysPicked", keysOnly: undefined});
+        const back = advanceDraftFlow({kind: "pickKeys"}, {
+            kind: "keysPicked",
+            keysOnly: undefined
+        });
         assert.deepStrictEqual(back, {kind: "back"});
     });
 
@@ -67,11 +74,18 @@ describe("advanceDraftFlow", () => {
             {kind: "continue"},
             {kind: "built", ok: false, error: "entry 3 still has the placeholder why"},
         ]);
-        assert.deepStrictEqual(state, {kind: "wait", error: "entry 3 still has the placeholder why"});
+        assert.deepStrictEqual(state, {
+            kind: "wait",
+            error: "entry 3 still has the placeholder why"
+        });
 
         // Segundo intento: el aviso vuelve a llevar a build, y otro fallo
         // vuelve a dejarlo disponible con el error nuevo.
-        state = run(state, [{kind: "continue"}, {kind: "built", ok: false, error: "duplicate entry"}]);
+        state = run(state, [{kind: "continue"}, {
+            kind: "built",
+            ok: false,
+            error: "duplicate entry"
+        }]);
         assert.deepStrictEqual(state, {kind: "wait", error: "duplicate entry"});
 
         // Tercero, en verde: el error no queda pegado.
@@ -174,13 +188,13 @@ describe("draftWaitMessage", () => {
         assert.strictEqual(
             draftWaitMessage("feature/x", undefined, {file: "/repo/.git/review-walkthrough/feature/x.md"}),
             "Fill in the reading order for feature/x, then continue. It could not be opened here" +
-                " — the draft is at /repo/.git/review-walkthrough/feature/x.md."
+            " — the draft is at /repo/.git/review-walkthrough/feature/x.md."
         );
         // Y sigue diciendolo cuando el aviso vuelve con el motivo de un rechazo.
         assert.strictEqual(
             draftWaitMessage("feature/x", "no entries found", {file: "/repo/.git/review-walkthrough/feature/x.md"}),
             "The draft is not valid yet: no entries found It could not be opened here" +
-                " — the draft is at /repo/.git/review-walkthrough/feature/x.md."
+            " — the draft is at /repo/.git/review-walkthrough/feature/x.md."
         );
     });
 
@@ -188,7 +202,31 @@ describe("draftWaitMessage", () => {
         assert.strictEqual(
             draftWaitMessage("feature/x", undefined, {file: undefined}),
             "Fill in the reading order for feature/x, then continue. It could not be opened here" +
-                " — look for review-walkthrough/feature/x.md inside this repository's git directory."
+            " — look for review-walkthrough/feature/x.md inside this repository's git directory."
         );
+    });
+});
+
+describe("sameDraftFile", () => {
+    it("empareja la ruta armada con la que devuelve el editor", () => {
+        assert.strictEqual(
+            sameDraftFile("/repo/.git/review-walkthrough/feature/x.md", "/repo/.git/review-walkthrough/feature/x.md", "linux"),
+            true
+        );
+        assert.strictEqual(
+            sameDraftFile("/repo/.git/review-walkthrough/feature/x.md", "/repo/.git/review-walkthrough/feature/y.md", "linux"),
+            false
+        );
+    });
+
+    it("en Windows ignora la caja y el separador; en Linux no", () => {
+        // Es el caso que decide si el borrador se guarda: path.join deja
+        // "C:\repo\..." y Uri.file devuelve "c:\repo\...", asi que un ===
+        // no encuentra el documento abierto y --build lee el archivo sin
+        // guardar. En Linux la caja distingue archivos de verdad.
+        const built = "C:\\repo\\.git\\review-walkthrough\\feature\\x.md";
+        const fromEditor = "c:/repo/.git/review-walkthrough/feature/x.md";
+        assert.strictEqual(sameDraftFile(built, fromEditor, "win32"), true);
+        assert.strictEqual(sameDraftFile("/repo/A.md", "/repo/a.md", "linux"), false);
     });
 });

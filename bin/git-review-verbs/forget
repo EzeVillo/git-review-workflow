@@ -300,6 +300,12 @@ if [ "$mode" = draft ]; then
 		git for-each-ref --format='%(refname:short)' refs/heads/review/ |
 			while IFS= read -r _fd_rb; do
 				[ -n "$_fd_rb" ] || continue
+				# Walk reviews only: they are the ones that read a walkthrough.
+				# The reviewsource fallback below is what a walk review predating
+				# the key needs, but on its own it also matched the step and whole
+				# reviews of the same branch — which never read the draft, and for
+				# which the fallback this note promises does not happen either.
+				[ "$(git config "branch.$_fd_rb.reviewmode" || true)" = walk ] || continue
 				_fd_reads="$(git config "branch.$_fd_rb.reviewwalkdraft" || true)"
 				if [ -z "$_fd_reads" ]; then
 					_fd_reads="$(git config "branch.$_fd_rb.reviewsource" || true)"
@@ -310,12 +316,45 @@ if [ "$mode" = draft ]; then
 			done
 	}
 
+	# forget_orphan_draft_one <src>: delete one archived draft that no paused review
+	# can reclaim. git review save puts a draft aside with the review it belongs to
+	# and git review continue brings it back, so the archive has exactly one owner
+	# per entry — until that owner is deleted by hand (git branch -D review-saved/x,
+	# a prune), and then the file answers to nothing: --saved refuses without the
+	# ref, --draft spells names in the active namespace only, and clean is
+	# deliberately hands-off in both. Swept here rather than given a flag of its
+	# own: --all already means "every draft I am still holding", and an entry with
+	# no review behind it is not a paused review's prose any more, just a file.
+	forget_orphan_draft_one() {
+		_fo_src="$1"
+		if [ "$dryrun" -eq 1 ]; then
+			echo "would forget the archived walkthrough draft for $_fo_src (no paused review left to restore it)"
+			return
+		fi
+		rm -f "$(walk_saved_draft_path "$_fo_src")"
+		echo "forgot the archived walkthrough draft for $_fo_src (no paused review left to restore it)"
+	}
+
 	if [ "$all" -eq 1 ]; then
 		drafts="$(walk_draft_list)"
-		[ -n "$drafts" ] || {
+		# Filtered before the emptiness test below, not while deleting: an archive
+		# entry whose review is still paused is not garbage and must not make the
+		# difference between "no walkthrough drafts" and silence.
+		orphans=""
+		while IFS= read -r d; do
+			[ -n "$d" ] || continue
+			if git show-ref --verify --quiet "refs/heads/review-saved/$d"; then
+				continue
+			fi
+			orphans="$orphans$d
+"
+		done <<EOF
+$(walk_saved_draft_list)
+EOF
+		if [ -z "$drafts" ] && [ -z "$orphans" ]; then
 			echo "no walkthrough drafts"
 			exit 0
-		}
+		fi
 		# A here-doc while-read (not a pipe): forget_draft_one must run in this
 		# shell, the same reason the --delta loop below reads from a temp file.
 		while IFS= read -r d; do
@@ -323,6 +362,12 @@ if [ "$mode" = draft ]; then
 			forget_draft_one "$d"
 		done <<EOF
 $drafts
+EOF
+		while IFS= read -r d; do
+			[ -n "$d" ] || continue
+			forget_orphan_draft_one "$d"
+		done <<EOF
+$orphans
 EOF
 	else
 		forget_draft_one "$arg"

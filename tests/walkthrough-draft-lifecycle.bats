@@ -280,6 +280,65 @@ teardown() {
 	[[ "$output" == *"no walkthrough drafts"* ]]
 }
 
+@test "forget --draft says nothing about a step review of the same branch" {
+	# The note is about what a review will read next, and a step review reads no
+	# walkthrough at all. Its own branch is review/feature/x, so the fallback that
+	# finds walk reviews predating the reviewwalkdraft key used to catch it too,
+	# and promise it a fallback that never happens.
+	git review start --step feature/x
+	run git review forget --draft feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"forgot the walkthrough draft for feature/x"* ]]
+	[[ "$output" != *"was reading it"* ]]
+	[ ! -f "$DRAFT" ]
+	# The review is still there, still stepping.
+	[ "$(git config branch.review/feature/x.reviewmode)" = "step" ]
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"step"* ]]
+}
+
+@test "forget --draft --all leaves an archived draft its paused review can restore" {
+	git review start feature/x
+	git review save
+	[ -f "$SAVED_DRAFT" ]
+	run git review forget --draft --all
+	[ "$status" -eq 0 ]
+	# The active namespace is empty and the archive has an owner, so there is
+	# nothing to take -- and saying so is the point: the sweep must not be able to
+	# report having forgotten prose that is still coming back.
+	[[ "$output" == *"no walkthrough drafts"* ]]
+	[ -f "$SAVED_DRAFT" ]
+	run git review continue feature/x
+	[ "$status" -eq 0 ]
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"walk (draft)"* ]]
+}
+
+@test "forget --draft --all takes an archived draft whose paused review is gone" {
+	git review start feature/x
+	git review save
+	[ -f "$SAVED_DRAFT" ]
+	# The owner deleted by hand. Every command that could reach the file went
+	# through that branch, so from here it answered to nothing at all.
+	git branch -D review-saved/feature/x >/dev/null
+	run git review forget --saved feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"no saved review for feature/x"* ]]
+	[ -f "$SAVED_DRAFT" ]
+
+	run git review forget --draft --all --dry-run
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"would forget the archived walkthrough draft for feature/x"* ]]
+	[ -f "$SAVED_DRAFT" ]
+
+	run git review forget --draft --all
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"forgot the archived walkthrough draft for feature/x"* ]]
+	[ ! -f "$SAVED_DRAFT" ]
+}
+
 @test "forget --draft leaves a paused review's draft to forget --saved" {
 	git review start feature/x
 	git review save

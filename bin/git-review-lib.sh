@@ -557,6 +557,21 @@ walk_draft_list() {
 	_walk_draft_list_dir "$_wdl_root" ""
 }
 
+# walk_saved_draft_list
+# The same enumeration over the archived namespace, as <src> names. Its only
+# caller is forget --draft --all, and only for the ones no paused review claims:
+# an archive entry normally belongs to a review-saved/<src> branch and is returned
+# by git review continue, but the branch can be deleted by hand, and then the file
+# it left behind was reachable from nothing — forget --saved refused without the
+# ref, forget --draft --all looked only at the active namespace, and clean is
+# hands-off in there by design.
+walk_saved_draft_list() {
+	walk_gitdir_init
+	_wdl_root="$_walk_gitdir/review-saved-walkthrough"
+	[ -d "$_wdl_root" ] || return 0
+	_walk_draft_list_dir "$_wdl_root" ""
+}
+
 # _walk_draft_list_dir <dir> <prefix>  (walk_draft_list's recursion)
 # The loop variables are reused by the nested call on purpose: each is reassigned
 # at the top of every iteration and never read across the recursive call, while
@@ -1150,7 +1165,14 @@ walk_recover_cursor() {
 	[ "$walkstep" -gt "$total" ] || return 1
 	[ "$total" -ge 1 ] || return 1
 	walk_at_base || return 1
-	_wrc_draft="$(git config "branch.$cur.reviewwalkdraft" || true)"
+	# walk_draft_src, not the reviewwalkdraft key: the key is only written when
+	# start/compare open *on* a draft, and the case this function exists for is a
+	# draft written mid-review — a review that by definition never had it. Reading
+	# the key here made the recovery unreachable on its own motivating path, which
+	# is also the one the loader's fallback (absent key means the source's own
+	# name) was added to support. Whether that name has a draft in force is the
+	# next line's question, so widening this one costs nothing.
+	_wrc_draft="${walk_draft_src:-}"
 	[ -n "$_wrc_draft" ] || return 1
 	walk_is_draft "$_wrc_draft" || return 1
 
@@ -1211,6 +1233,17 @@ walk_range_error() {
 	# message wrong. The old total==0 test stays as the fallback for a review
 	# started before that key existed.
 	_wre_draft="$(git config "branch.$cur.reviewwalkdraft" || true)"
+	# A draft written mid-review has no key to have been recorded in: start/compare
+	# wrote none because there was nothing to record yet. It is adopted from the
+	# context the loader resolved instead — but only once walk_is_draft confirms a
+	# draft is actually in force. That confirmation is the whole of it:
+	# walk_draft_src falls back to the review's own source name, so taking it
+	# unconditionally would make every draft-less walk review look like one whose
+	# draft went missing, and answer a stray commit with "your draft is gone"
+	# instead of the HEAD message below.
+	if [ -z "$_wre_draft" ] && [ -n "${walk_draft_src:-}" ] && walk_is_draft "$walk_draft_src"; then
+		_wre_draft="$walk_draft_src"
+	fi
 	_wre_gone=0
 	if [ -n "$_wre_draft" ]; then
 		if ! walk_is_draft "$_wre_draft"; then

@@ -43,8 +43,9 @@ Author a reading walkthrough for the current branch's PR, committed as
 
 Review someone else's PR in a reading order of your own, without committing:
 
-  draft [<branch>]  write the same skeleton for <branch> (default: the current
-                    branch) outside the working tree; git review start then
+  draft [<branch>]  write the same skeleton for <branch> (default: the branch
+                    you are on, or the one a review you are inside is reading)
+                    outside the working tree; git review start then
                     reads it instead of the PR's own walkthrough
     --build         validate and renumber the draft, as build does for the PR's
     --local         draft against your local <branch>, not origin's copy
@@ -205,6 +206,28 @@ warn_dirty() {
 # emit_reading_offers use, flags included, because the draft has to list the file
 # set of the review that start is about to create, not some other one.
 if [ "$sub" = draft ]; then
+	# Standing inside the review is the likeliest moment to want a draft: the
+	# reviewer has just been shown the diff and wants to write the reading order
+	# down. The branch they are on is not one anybody drafts for — review/feature/x
+	# has no remote copy — so the bare command died with "origin/review/feature/x
+	# not found", naming a ref that never existed and never will.
+	#
+	# Resolved exactly the way every verb with an active review resolves it (the
+	# recorded draft first, the source second), which is what makes the draft this
+	# writes the same one that review then reads.
+	from_review=0
+	if [ -z "$branch" ]; then
+		rb="$(git symbolic-ref --quiet --short HEAD || true)"
+		case "$rb" in
+		review/*)
+			branch="$(git config "branch.$rb.reviewwalkdraft" || true)"
+			if [ -z "$branch" ]; then
+				branch="$(git config "branch.$rb.reviewsource" || true)"
+			fi
+			[ -z "$branch" ] || from_review=1
+			;;
+		esac
+	fi
 	[ -n "$branch" ] || branch="$(git symbolic-ref --quiet --short HEAD || true)"
 	[ -n "$branch" ] || die "no branch given and HEAD is detached; name the branch to draft for"
 
@@ -217,6 +240,15 @@ if [ "$sub" = draft ]; then
 		srcref="refs/heads/$branch"
 		srclabel="$branch"
 		markerkey="reviewworkflowlocal.$branch.reviewed"
+	elif [ "$from_review" -eq 1 ] && git rev-parse --verify --quiet "refs/remotes/$branch^{commit}" >/dev/null; then
+		# A compare of a remote-tracking branch reviews "origin/feature/x", and that
+		# is the name its metadata carries, so the usual prefixing would go looking
+		# for origin/origin/feature/x. Only on a name that came from a review's own
+		# metadata, never on one that came from the keyboard: there, an argument
+		# that reads as remote-tracking is more likely a typo than an intention.
+		srcref="refs/remotes/$branch"
+		srclabel="$branch"
+		markerkey="reviewworkflow.$branch.reviewed"
 	else
 		srcref="refs/remotes/$remote/$branch"
 		srclabel="$remote/$branch"
@@ -369,7 +401,16 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 	# walk_draft_list only matches *.md so nothing mistook it for a draft, but
 	# nothing collected it either, since clean is deliberately hands-off in there
 	# and forget --draft only knows about names it can spell.
-	trap 'rm -f "$tmp"' EXIT INT TERM
+	trap 'rm -f "$tmp"' EXIT
+	# Cleaning up is not the same as stopping. A POSIX shell resumes the script
+	# where the signal hit once the handler returns, so a Ctrl-C that only ran the
+	# rm above deleted the temp file and then let the rest of the command write it
+	# again and move it into place — the interrupt did nothing. Exiting from the
+	# handler is what makes it an interrupt; the EXIT trap runs on the way out and
+	# does the removing, once, for both paths. 128+signal, the way a shell reports
+	# a signalled child.
+	trap 'exit 130' INT
+	trap 'exit 143' TERM
 	# Fail on the file, not on the redirect. A branch name is a file name here, and
 	# some legal branch names are not legal files: "nul", "aux" and "com1" are
 	# reserved device names on Windows, and a bare shell redirection error would
@@ -571,7 +612,13 @@ ef="$gd/walkthrough-entries.$$"
 # trap own it rather than a cleanup line the next edit can walk past. Guarded with
 # ${tmp:-} because the trap outlives the paths where it is never set, and an unset
 # expansion under set -u would turn any exit into a failure inside the handler.
-trap 'rm -f "$rf" "$ef" "${tmp:-}"' EXIT INT TERM
+trap 'rm -f "$rf" "$ef" "${tmp:-}"' EXIT
+# See the skeleton's traps: the handler has to exit, or the shell carries on from
+# where the signal hit. Here that was worse than a no-op — the removal above left
+# the comm below reading two files that no longer exist, so a Ctrl-C aborted after
+# all with an error from comm about a missing path.
+trap 'exit 130' INT
+trap 'exit 143' TERM
 annotatable_files | LC_ALL=C sort >"$rf"
 printf '%s\n' "$entries" | cut -f2- | LC_ALL=C sort >"$ef"
 missing="$(comm -23 "$rf" "$ef")"

@@ -14,40 +14,40 @@ import {ReadingOffer} from "../cli/configPorcelain";
 import {ReviewLayout} from "./reviewIntent";
 
 export type DraftFlowState =
-    /** Invocar `walkthrough draft` (sólo cuando el revisor eligió `draft`). */
-    | {kind: "create"}
+/** Invocar `walkthrough draft` (sólo cuando el revisor eligió `draft`). */
+    | { kind: "create" }
     /** Abrir el borrador en el editor; el archivo ya existe. */
-    | {kind: "open"}
+    | { kind: "open" }
     /**
      * El aviso no bloqueante. `error` es el stderr del `--build` que acaba de
      * fallar: se muestra junto al aviso y el revisor vuelve a intentar sin
      * límite (requisito 3 del contrato).
      */
-    | {kind: "wait"; error?: string}
+    | { kind: "wait"; error?: string }
     /** Invocar `walkthrough draft --build`. */
-    | {kind: "build"}
+    | { kind: "build" }
     /** Releer `config --porcelain` para saber si el borrador trae esenciales. */
-    | {kind: "reload"}
+    | { kind: "reload" }
     /** Preguntar recorrido completo vs sólo esenciales. */
-    | {kind: "pickKeys"}
+    | { kind: "pickKeys" }
     /** Seguir con el asistente normal (confirmación + start) con este layout. */
-    | {kind: "done"; layout: ReviewLayout}
+    | { kind: "done"; layout: ReviewLayout }
     /**
      * Volver al paso de forma de lectura. El borrador **no** se borra: la
      * siguiente vuelta lo ofrece como `draft-resume` (FR-018a). `error` sólo
      * cuando se vuelve por un fallo, nunca al cancelar.
      */
-    | {kind: "back"; error?: string};
+    | { kind: "back"; error?: string };
 
 export type DraftFlowEvent =
-    /** Resultado de `walkthrough draft`. */
-    | {kind: "created"; ok: boolean; error?: string}
+/** Resultado de `walkthrough draft`. */
+    | { kind: "created"; ok: boolean; error?: string }
     /** El borrador quedó a la vista (o no se pudo abrir: el bucle sigue igual). */
-    | {kind: "opened"}
+    | { kind: "opened" }
     /** El revisor apretó Continue en el aviso. */
-    | {kind: "continue"}
+    | { kind: "continue" }
     /** El revisor apretó Cancel. */
-    | {kind: "cancel"}
+    | { kind: "cancel" }
     /**
      * El aviso se cerró sin elegir (la X, o un "clear all notifications").
      * **No** es Cancel: descartar una notificación es lo más fácil de hacer sin
@@ -55,13 +55,13 @@ export type DraftFlowEvent =
      * respuesta a la pregunta. El bucle se queda donde está y vuelve a
      * preguntar; sólo Cancel abandona.
      */
-    | {kind: "dismiss"}
+    | { kind: "dismiss" }
     /** Resultado de `walkthrough draft --build`. */
-    | {kind: "built"; ok: boolean; error?: string}
+    | { kind: "built"; ok: boolean; error?: string }
     /** Ofertas recargadas tras un `--build` en verde. */
-    | {kind: "offers"; offers: readonly ReadingOffer[] | undefined}
+    | { kind: "offers"; offers: readonly ReadingOffer[] | undefined }
     /** `undefined` = el revisor cerró el selector de esenciales. */
-    | {kind: "keysPicked"; keysOnly: boolean | undefined};
+    | { kind: "keysPicked"; keysOnly: boolean | undefined };
 
 /**
  * Dónde arranca el bucle: `resume` salta la creación porque el borrador ya
@@ -117,7 +117,10 @@ export function advanceDraftFlow(state: DraftFlowState, event: DraftFlowEvent): 
                 // El motivo del rechazo vuelve al aviso, que queda disponible de
                 // nuevo: el revisor corrige el borrador —que sigue byte por byte
                 // como lo dejó— y reintenta.
-                return event.error !== undefined ? {kind: "wait", error: event.error} : {kind: "wait"};
+                return event.error !== undefined ? {
+                    kind: "wait",
+                    error: event.error
+                } : {kind: "wait"};
             }
             return state;
 
@@ -125,7 +128,10 @@ export function advanceDraftFlow(state: DraftFlowState, event: DraftFlowEvent): 
             if (event.kind === "offers") {
                 // Sólo se pregunta si hay algo que elegir (FR-019): un borrador
                 // sin ninguna entrada marcada key no tiene dos recorridos.
-                return offersIncludeKeys(event.offers) ? {kind: "pickKeys"} : {kind: "done", layout: "walk"};
+                return offersIncludeKeys(event.offers) ? {kind: "pickKeys"} : {
+                    kind: "done",
+                    layout: "walk"
+                };
             }
             return state;
 
@@ -164,7 +170,7 @@ export function advanceDraftFlow(state: DraftFlowState, event: DraftFlowEvent): 
 export function draftWaitMessage(
     branch: string,
     error: string | undefined,
-    unopened: {file?: string} | undefined
+    unopened: { file?: string } | undefined
 ): string {
     const head =
         error !== undefined
@@ -184,6 +190,28 @@ export function draftWaitMessage(
 /** Si la CLI volvió a ofrecer `keys` sobre el borrador ya validado. */
 export function offersIncludeKeys(offers: readonly ReadingOffer[] | undefined): boolean {
     return offers !== undefined && offers.some((offer) => offer.id === "keys");
+}
+
+/**
+ * Si dos rutas nombran el mismo archivo, para encontrar entre los documentos
+ * abiertos el borrador que el asistente escribió — y guardarlo antes de que
+ * `draft --build` lo lea del disco.
+ *
+ * No es `===`: la ruta se arma con `path.join` y el editor devuelve la suya
+ * pasada por `Uri.file`, que normaliza separadores y baja la letra de unidad.
+ * En Windows las dos cadenas nombran el mismo archivo y se comparan distinto,
+ * y de esa comparación depende que el borrador llegue al disco: fallarla no da
+ * un error, da una validación silenciosa del archivo sin guardar.
+ *
+ * El sistema se pasa en vez de leerse acá, como en `userDataDir`, para que la
+ * regla de Windows se pueda probar desde cualquier runner.
+ */
+export function sameDraftFile(a: string, b: string, platform: string = process.platform): boolean {
+    const normalise = (p: string): string => {
+        const slashed = p.replace(/\\/g, "/");
+        return platform === "win32" ? slashed.toLowerCase() : slashed;
+    };
+    return normalise(a) === normalise(b);
 }
 
 /**

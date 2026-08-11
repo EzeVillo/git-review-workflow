@@ -317,9 +317,9 @@ Every command is a verb under `git review`. Run `git review -h` for the list, or
 | `git review preview [--stat]`                                                                                                                | Show the edits you have made so far — the diff `finish` would extract — without committing or switching branch.                                                                                                                                                                                                                                                    |
 | `git review abort`                                                                                                                           | Cancel the current review and return to where you started.                                                                                                                                                                                                                                                                                                         |
 | `git review clean [--keep-fixes] [branch]`                                                                                                   | Delete the `review/*` (and by default `review-fixes/*`) branches for `<branch>`, or all of them; `--keep-fixes` leaves `review-fixes/*` alone.                                                                                                                                                                                                                     |
-| `git review forget --delta ([--] <branch> \| --all \| --stale [--dry-run])`                                                                       | Discard the `--delta` marker for one branch, all of them, or only stale ones.                                                                                                                                                                                                                                                                                      |
-| `git review forget --saved ([--] <branch> \| --all) [--dry-run]`                                                                                  | Discard a review saved with `git review save`.                                                                                                                                                                                                                                                                                                                     |
-| `git review forget --draft ([--] <branch> \| --all) [--dry-run]`                                                                                  | Delete a walkthrough you drafted for someone else's PR.                                                                                                                                                                                                                                                                                                            |
+| `git review forget --delta ([--] <branch> \| --all \| --stale [--dry-run])`                                                                  | Discard the `--delta` marker for one branch, all of them, or only stale ones.                                                                                                                                                                                                                                                                                      |
+| `git review forget --saved ([--] <branch> \| --all) [--dry-run]`                                                                             | Discard a review saved with `git review save`.                                                                                                                                                                                                                                                                                                                     |
+| `git review forget --draft ([--] <branch> \| --all) [--dry-run]`                                                                             | Delete a walkthrough you drafted for someone else's PR.                                                                                                                                                                                                                                                                                                            |
 | `git review config [<key> [<value>]] [--unset <key>] [--porcelain [<branch>]]`                                                               | Read or write the product's config (`base`, `remote`); `--porcelain` also lists candidate branches to review.                                                                                                                                                                                                                                                      |
 
 <details>
@@ -517,7 +517,8 @@ git review start feature/checkout                      # enters walk mode on you
 ```
 
 - Takes the branch as an argument, like `git review start` — you're standing on
-  the base, not on the PR — and defaults to the current branch. `--local`,
+  the base, not on the PR — and defaults to the branch you are on, or, run from
+  inside a review, to the branch that review is reading. `--local`,
   `--offline` and `--delta` resolve the range exactly as `start` does, so the
   skeleton lists precisely the files your review will cover. Never fetches.
 - `--build` applies the same validation `build` does for the author's sidecar:
@@ -917,7 +918,9 @@ never touches those — they are prose you wrote by hand, and a re-review of the
 branch reads them again — so this is how you throw one away.
 
 - `<branch>` — delete the draft written for one branch.
-- `--all` — delete every draft.
+- `--all` — delete every draft, plus any left in the archive by a paused review
+  that no longer exists (one whose `review-saved/<branch>` you deleted by hand):
+  nothing else can reach those.
 - `--dry-run` — list what would be deleted without deleting it.
 - Deleting the draft of a review that is still live is allowed (going back to
   the author's order is a legitimate thing to want) and names the review that was

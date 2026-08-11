@@ -114,6 +114,33 @@ REVIEWER on the author's own file
 EOF
 }
 
+# Re-publish feature/x with every entry of the author's own walkthrough marked
+# key. It is what lets a review open under --keys with no draft at all, which is
+# the starting position for the two "written mid-review" tests below: the key
+# that names a draft is only written when start opens on one, so a review that
+# began on the author's prose has to find the draft some other way.
+author_keys() {
+	git switch --quiet feature/x
+	cat >.review/walkthrough.md <<'EOF'
+# Walkthrough
+
+## 1. a.txt
+> key
+AUTHOR on a
+
+## 2. b.txt
+> key
+AUTHOR on b
+
+## 3. src/c.txt
+> key
+AUTHOR on c
+EOF
+	git commit --quiet -am "author marks three keys"
+	git push --quiet origin feature/x
+	git switch --quiet develop
+}
+
 # ── precedence ────────────────────────────────────────────────────────────────
 
 @test "with no draft the review reads the author's walkthrough" {
@@ -710,6 +737,8 @@ EOF
 		set -eu
 		. "$LIB"
 		cur=review/feature/x
+		# What the loader sets before calling it: which draft this review reads.
+		walk_use_draft feature/x
 		walkstep=3
 		total=2
 		walk_recover_cursor
@@ -720,6 +749,90 @@ EOF
 	[[ "$output" == *"the cursor was at 3 and moved to 2"* ]]
 	# The write it could not make is the one this is about.
 	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "3" ]
+}
+
+@test "a draft written mid-review re-seats the cursor instead of blaming the metadata" {
+	# The review opened on the author's walkthrough, so nothing recorded a draft:
+	# that key is only written when start or compare open on one. Writing a draft
+	# afterwards is a supported move -- the loader falls back to the source's own
+	# name precisely so it gets picked up -- and it was picked up for reading while
+	# the cursor's diagnostics still went to the key, so the reviewer's next
+	# command answered "corrupt metadata" and offered only git review abort.
+	#
+	# --keys because a full walk cannot shrink: a file with no entry is appended to
+	# the reading order, so the sequence is the whole range either way.
+	author_keys
+	run git review start --keys feature/x
+	[ "$status" -eq 0 ]
+	git review next
+	git review next
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "3" ]
+	# The starting position: this review has no recorded draft to consult.
+	run git config branch.review/feature/x.reviewwalkdraft
+	[ "$status" -ne 0 ]
+	head_before="$(git rev-parse HEAD)"
+
+	mkdir -p "$(dirname "$DRAFT")"
+	cat >"$DRAFT" <<'EOF'
+# Walkthrough
+
+## 1. src/c.txt
+> key
+REVIEWER says start at c
+
+## 2. b.txt
+REVIEWER on b
+
+## 3. a.txt
+REVIEWER on a
+EOF
+
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"your walkthrough draft for feature/x now has 1 entry in this review's range"* ]]
+	[[ "$output" == *"the cursor was at 3 and moved to 1"* ]]
+	[[ "$output" != *"corrupt metadata"* ]]
+	[[ "$output" != *"HEAD has moved off"* ]]
+	[ "$(git rev-parse HEAD)" = "$head_before" ]
+	# Re-seated for good, and reading the reviewer's prose from here on.
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "1" ]
+	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "1" ]
+	run git review status --why src/c.txt
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"REVIEWER says start at c"* ]]
+	[[ "$output" != *"AUTHOR"* ]]
+}
+
+@test "a draft written mid-review with no entry in range names the draft, not corrupt metadata" {
+	# Same starting position, and the state walk_recover_cursor cannot clamp:
+	# there is nothing left to clamp to. The reviewer owns the file and can fix it
+	# in place, so the diagnostic has to name it and the command that validates it.
+	author_keys
+	run git review start --keys feature/x
+	[ "$status" -eq 0 ]
+	git review next
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "2" ]
+
+	# A reading order with no key in it at all: under --keys the sequence is empty.
+	mkdir -p "$(dirname "$DRAFT")"
+	cat >"$DRAFT" <<'EOF'
+# Walkthrough
+
+## 1. src/c.txt
+REVIEWER says start at c
+
+## 2. b.txt
+REVIEWER on b
+EOF
+
+	run git review status
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"your walkthrough draft for feature/x has no entries in this review's range"* ]]
+	[[ "$output" == *"git review walkthrough draft --build feature/x"* ]]
+	[[ "$output" != *"corrupt metadata"* ]]
+	[[ "$output" != *"HEAD has moved off"* ]]
+	# Nothing was re-seated behind the reviewer's back.
+	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "2" ]
 }
 
 @test "a stray commit under a draft review still gets the HEAD diagnostic" {

@@ -136,6 +136,60 @@ EOF
 	run git review walkthrough draft
 	[ "$status" -eq 0 ]
 	[ -f "$DRAFT" ]
+	# The file existing says nothing about which branch it was written for: the
+	# range is what tells "took the branch I am on" apart from "took anything at
+	# all and wrote it there".
+	run grep -c '^## ?\. ' "$DRAFT"
+	[ "$status" -eq 0 ]
+	[ "$output" = "3" ]
+	grep -Fxq '## ?. a.txt' "$DRAFT"
+	grep -Fxq '## ?. src/c.txt' "$DRAFT"
+	grep -Fxq '## ?. src/café con espacio.js' "$DRAFT"
+}
+
+@test "draft with no argument inside a review drafts for the review's source" {
+	# Standing inside the review is when a reviewer knows they want their own
+	# order, and the branch they are standing on is review/feature/plain -- a name
+	# nobody drafts for and one with no remote copy, so the bare command died
+	# naming origin/review/feature/plain, a ref that never existed.
+	git review start feature/plain
+	[ "$(git symbolic-ref --short HEAD)" = "review/feature/plain" ]
+	run git review walkthrough draft
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"3 file(s)"* ]]
+	# Named for the source, so the command it suggests is the one that works.
+	[[ "$output" == *"git review walkthrough draft --build feature/plain"* ]]
+	[ -f "$DRAFT" ]
+	run grep -c '^## ?\. ' "$DRAFT"
+	[ "$status" -eq 0 ]
+	[ "$output" = "3" ]
+	grep -Fxq '## ?. src/café con espacio.js' "$DRAFT"
+	# And --build from the same place validates that same draft.
+	fill_draft
+	run git review walkthrough draft --build
+	[ "$status" -eq 0 ]
+	grep -Fxq '## 1. src/c.txt' "$DRAFT"
+	grep -Fxq '## 3. a.txt' "$DRAFT"
+}
+
+@test "draft with no argument inside a compare of a remote-tracking branch resolves it" {
+	# The review's identity here is "origin/feature/plain", which is also the name
+	# its metadata carries and the one every later verb looks a draft up under.
+	# Prefixing the remote again would have gone looking for
+	# origin/origin/feature/plain.
+	git review compare develop origin/feature/plain
+	[ "$(git config branch.review/origin/feature/plain.reviewsource)" = "origin/feature/plain" ]
+	run git review walkthrough draft
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"3 file(s)"* ]]
+	remote_draft="$(git rev-parse --git-dir)/review-walkthrough/origin/feature/plain.md"
+	[ -f "$remote_draft" ]
+	run grep -c '^## ?\. ' "$remote_draft"
+	[ "$status" -eq 0 ]
+	[ "$output" = "3" ]
+	# Written under the name the review itself records, which is what makes it the
+	# draft this review would read rather than one filed beside it.
+	[ ! -f "$DRAFT" ]
 }
 
 @test "draft refuses to overwrite an existing draft without --force" {

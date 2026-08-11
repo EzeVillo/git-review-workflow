@@ -212,20 +212,15 @@ if [ "$sub" = draft ]; then
 	# has no remote copy — so the bare command died with "origin/review/feature/x
 	# not found", naming a ref that never existed and never will.
 	#
-	# Resolved exactly the way every verb with an active review resolves it (the
-	# recorded draft first, the source second), which is what makes the draft this
-	# writes the same one that review then reads.
-	from_review=0
+	# Resolved through walk_review_draft_src, the same function every verb with an
+	# active review resolves it with, which is what makes the draft this writes the
+	# one that review then reads. It hands back a branch name — never a
+	# remote-tracking one — so the range resolution below needs no special case for
+	# where the name came from.
 	if [ -z "$branch" ]; then
 		rb="$(git symbolic-ref --quiet --short HEAD || true)"
 		case "$rb" in
-		review/*)
-			branch="$(git config "branch.$rb.reviewwalkdraft" || true)"
-			if [ -z "$branch" ]; then
-				branch="$(git config "branch.$rb.reviewsource" || true)"
-			fi
-			[ -z "$branch" ] || from_review=1
-			;;
+		review/*) branch="$(walk_review_draft_src "$rb")" ;;
 		esac
 	fi
 	[ -n "$branch" ] || branch="$(git symbolic-ref --quiet --short HEAD || true)"
@@ -240,15 +235,6 @@ if [ "$sub" = draft ]; then
 		srcref="refs/heads/$branch"
 		srclabel="$branch"
 		markerkey="reviewworkflowlocal.$branch.reviewed"
-	elif [ "$from_review" -eq 1 ] && git rev-parse --verify --quiet "refs/remotes/$branch^{commit}" >/dev/null; then
-		# A compare of a remote-tracking branch reviews "origin/feature/x", and that
-		# is the name its metadata carries, so the usual prefixing would go looking
-		# for origin/origin/feature/x. Only on a name that came from a review's own
-		# metadata, never on one that came from the keyboard: there, an argument
-		# that reads as remote-tracking is more likely a typo than an intention.
-		srcref="refs/remotes/$branch"
-		srclabel="$branch"
-		markerkey="reviewworkflow.$branch.reviewed"
 	else
 		srcref="refs/remotes/$remote/$branch"
 		srclabel="$remote/$branch"

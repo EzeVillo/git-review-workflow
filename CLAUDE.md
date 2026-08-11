@@ -154,24 +154,34 @@ repo, no en archivos del working tree:
   usan `list`, las ofertas de `config --porcelain` y los mensajes de `start` sobre
   un borrador propio vacío. Si mezclás las dos, o `status` dice `walk (draft)`
   sobre la prosa del autor, o `forget --saved` se lleva un archivo que nadie
-  listó. **Qué borrador lee una review se persiste**
-  (`branch.review/<x>.reviewwalkdraft = <rama del borrador>`, escrita por
-  `start`/`compare` sólo cuando abren sobre uno): no siempre es el `reviewsource`
-  —un `compare develop origin/feature/x` es la review de `origin/feature/x` y lee
-  el borrador de `feature/x`— y sin ese registro cada verbo posterior buscaría
-  bajo el nombre de la review, no encontraría nada y se pasaría al orden del autor
-  en silencio. Es también lo que le permite a `walk_range_error` distinguir
-  «borraste tu borrador» de «commiteaste encima de la review» cuando la secuencia
-  cambia bajo el cursor, incluso si el PR trae walkthrough propio y la review cae
-  sobre él. Es una clave walk como las demás: la copian `save`/`continue` y la
-  cubre el guard de metadata de `finish`. Pero **la clave no es el único borrador
-  posible y ningún verbo la lee por su cuenta**: el borrador en vigor es el que
-  el cargador dejó en `walk_draft_src` (la clave, y si no hay, el `reviewsource`),
-  y de ahí lo toman también `walk_recover_cursor` y `walk_range_error`. Volver a
-  `git config` en esas dos las dejaba ciegas justo en el caso que existen para
-  cubrir —el borrador escrito **a mitad de review**, que por definición no tiene
-  clave— y el revisor recibía «corrupt metadata» con `git review abort` como
-  única salida. `walk_range_error` adopta ese fallback sólo si
+  listó. **Bajo qué nombre vive el borrador de una review se decide una sola vez
+  y se persiste** (`branch.review/<x>.reviewdraft`, escrita por `start`/`compare`
+  al crear la review, en **todos los modos** y exista o no un borrador todavía).
+  No siempre es el `reviewsource` —un `compare develop origin/feature/x` es la
+  review de `origin/feature/x` y el borrador es de `feature/x`, porque el
+  borrador es de la *rama*, no del ref con el que la nombraste—: la única
+  derivación de ese nombre está en `compare` y de ahí sale a la clave. **Nadie lo
+  vuelve a derivar**, todos lo leen con `walk_review_draft_src` (los dos
+  cargadores, `list`, `save`, `continue`, `forget`, `walkthrough draft`); cuando
+  el escritor y el lector lo derivaban por su cuenta, discrepaban en silencio: el
+  borrador escrito desde adentro del compare se guardaba bajo `origin/feature/x`
+  y el `start` siguiente leía el orden del autor sin decir nada. Que además se
+  escriba siempre —y no sólo cuando hay borrador— es lo que hace que el escrito
+  **a mitad de review** caiga donde se lo va a buscar, y lo que le da nombre al
+  archivo en modo `whole`/`step`, donde no hay orden de lectura pero sí custodia.
+  Aparte va **un flag**, `reviewwalkfromdraft = 1`, que dice que el orden que se
+  está caminando salió de ese borrador: es la única cosa que no se puede
+  recalcular una vez que el archivo no está, y es lo que le permite a
+  `walk_range_error` distinguir «borraste tu borrador» de «commiteaste encima de
+  la review» incluso si el PR trae walkthrough propio y la review cae sobre él.
+  Ese sí es una clave walk como las demás (la copian `save`/`continue` y la cubre
+  el guard de metadata de `finish`); `reviewdraft` **no**, justamente porque
+  existe en todos los modos. Y el borrador en vigor no se lee nunca de la config:
+  es el que el cargador dejó en `walk_draft_src`, de donde lo toman también
+  `walk_recover_cursor` y `walk_range_error` —volver a `git config` en esas dos
+  las dejaba ciegas justo en el caso que existen para cubrir, el borrador escrito
+  a mitad de review, y el revisor recibía «corrupt metadata» con `git review
+  abort` como única salida—. `walk_range_error` adopta ese fallback sólo si
   `walk_is_draft` confirma que hay borrador en vigor: sin esa condición, toda
   review sin borrador parecería una a la que se le borró el suyo, y un commit
   encima de la review contestaría «tu borrador desapareció» en vez del mensaje de

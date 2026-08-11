@@ -172,24 +172,89 @@ EOF
 	grep -Fxq '## 3. a.txt' "$DRAFT"
 }
 
-@test "draft with no argument inside a compare of a remote-tracking branch resolves it" {
-	# The review's identity here is "origin/feature/plain", which is also the name
-	# its metadata carries and the one every later verb looks a draft up under.
-	# Prefixing the remote again would have gone looking for
-	# origin/origin/feature/plain.
+@test "draft with no argument inside a compare of a remote-tracking branch writes the branch's draft" {
+	# The review's identity here is "origin/feature/plain"; the draft belongs to
+	# "feature/plain", because a draft belongs to the branch and not to the ref you
+	# happened to name it by. The compare records that name and this reads it back,
+	# so the file lands where every other entry point looks for it.
+	#
+	# The two used to be derived separately -- the compare stripping the remote,
+	# this one taking the source verbatim -- and they disagreed in silence: the
+	# draft went to origin/feature/plain.md, where a later git review start,
+	# forget --draft and the command this very message prints would none of them
+	# ever look.
 	git review compare develop origin/feature/plain
 	[ "$(git config branch.review/origin/feature/plain.reviewsource)" = "origin/feature/plain" ]
+	[ "$(git config branch.review/origin/feature/plain.reviewdraft)" = "feature/plain" ]
 	run git review walkthrough draft
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"3 file(s)"* ]]
-	remote_draft="$(git rev-parse --git-dir)/review-walkthrough/origin/feature/plain.md"
-	[ -f "$remote_draft" ]
-	run grep -c '^## ?\. ' "$remote_draft"
+	[ -f "$DRAFT" ]
+	[ ! -f "$(git rev-parse --git-dir)/review-walkthrough/origin/feature/plain.md" ]
+	run grep -c '^## ?\. ' "$DRAFT"
 	[ "$status" -eq 0 ]
 	[ "$output" = "3" ]
-	# Written under the name the review itself records, which is what makes it the
-	# draft this review would read rather than one filed beside it.
+}
+
+@test "the build command a compare review suggests is one that runs" {
+	# It named the review's source, and drafting for "origin/feature/plain" goes
+	# looking for origin/origin/feature/plain: the next step the tool itself
+	# printed was a dead end with no hint of where to go instead.
+	git review compare develop origin/feature/plain
+	run git review walkthrough draft
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"git review walkthrough draft --build feature/plain"* ]]
+	fill_draft
+
+	# Typed exactly as printed, from where you are when you read it: inside the
+	# review, on review/origin/feature/plain.
+	run git review walkthrough draft --build feature/plain
+	[ "$status" -eq 0 ]
+	grep -Fxq '## 1. src/c.txt' "$DRAFT"
+	grep -Fxq '## 3. a.txt' "$DRAFT"
+}
+
+@test "a draft written inside a compare is the one a later start reads" {
+	# The whole point of writing it: the compare is where you find out nobody
+	# ordered the PR, and the review you do afterwards is the one that has to read
+	# what you wrote there. Filed under the review's own name it was invisible
+	# here, and start opened on the whole diff without a word about the draft.
+	git review compare develop origin/feature/plain
+	git review walkthrough draft
+	fill_draft
+	git review abort
+
+	run git review start feature/plain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"[1/3] src/c.txt"* ]]
+	[[ "$output" == *"start here"* ]]
+	run git review status
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"walk (draft)"* ]]
+	# And custody answers to the same name: this is the command that throws it away.
+	run git review forget --draft feature/plain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"forgot the walkthrough draft for feature/plain"* ]]
+	[[ "$output" == *"review/feature/plain was reading it"* ]]
 	[ ! -f "$DRAFT" ]
+}
+
+@test "a compare in whole mode records where its draft goes" {
+	# No walkthrough anywhere, so this compare is a plain whole-diff review -- and
+	# the draft written inside it still has to land under the branch's name. The
+	# name used to be recorded only by the walk path, so the one mode where a
+	# reviewer is most likely to start writing an order was the one that did not
+	# know where to put it.
+	git review compare develop origin/feature/plain
+	[ "$(git config branch.review/origin/feature/plain.reviewmode || true)" = "" ]
+	[ "$(git config branch.review/origin/feature/plain.reviewdraft)" = "feature/plain" ]
+	git review walkthrough draft
+	[ -f "$DRAFT" ]
+	fill_draft
+	# list badges custody in every mode, under the name the review recorded.
+	run git review list
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"whole (draft)"* ]]
 }
 
 @test "draft refuses to overwrite an existing draft without --force" {

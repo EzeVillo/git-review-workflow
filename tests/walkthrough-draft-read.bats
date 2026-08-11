@@ -752,12 +752,13 @@ EOF
 }
 
 @test "a draft written mid-review re-seats the cursor instead of blaming the metadata" {
-	# The review opened on the author's walkthrough, so nothing recorded a draft:
-	# that key is only written when start or compare open on one. Writing a draft
-	# afterwards is a supported move -- the loader falls back to the source's own
-	# name precisely so it gets picked up -- and it was picked up for reading while
-	# the cursor's diagnostics still went to the key, so the reviewer's next
-	# command answered "corrupt metadata" and offered only git review abort.
+	# The review opened on the author's walkthrough, so nothing raised the flag:
+	# it is only set when start or compare open on a draft. Writing a draft
+	# afterwards is a supported move -- the review recorded the name a draft of its
+	# own would live under precisely so it gets picked up -- and it was picked up
+	# for reading while the cursor's diagnostics still went by the flag, so the
+	# reviewer's next command answered "corrupt metadata" and offered only
+	# git review abort.
 	#
 	# --keys because a full walk cannot shrink: a file with no entry is appended to
 	# the reading order, so the sequence is the whole range either way.
@@ -767,9 +768,10 @@ EOF
 	git review next
 	git review next
 	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "3" ]
-	# The starting position: this review has no recorded draft to consult.
-	run git config branch.review/feature/x.reviewwalkdraft
+	# The starting position: this review did not open on a draft.
+	run git config branch.review/feature/x.reviewwalkfromdraft
 	[ "$status" -ne 0 ]
+	[ "$(git config branch.review/feature/x.reviewdraft)" = "feature/x" ]
 	head_before="$(git rev-parse HEAD)"
 
 	mkdir -p "$(dirname "$DRAFT")"
@@ -879,7 +881,8 @@ EOF
 	run git review compare develop origin/feature/x
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"[1/4] src/c.txt"* ]]
-	[ "$(git config branch.review/origin/feature/x.reviewwalkdraft)" = "feature/x" ]
+	[ "$(git config branch.review/origin/feature/x.reviewdraft)" = "feature/x" ]
+	[ "$(git config branch.review/origin/feature/x.reviewwalkfromdraft)" = "1" ]
 
 	run git review status
 	[ "$status" -eq 0 ]

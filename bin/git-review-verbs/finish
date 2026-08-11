@@ -381,7 +381,7 @@ fi
 # or corrupt metadata. Walk itself needs no special extraction — its edits live in
 # the working tree, so it falls through to the whole-mode tail below, correctly.
 if [ "$mode" != "walk" ]; then
-	for k in reviewwalkstep reviewwalkcount reviewwalkkeys reviewwalkdraft reviewwalkbase; do
+	for k in reviewwalkstep reviewwalkcount reviewwalkkeys reviewwalkfromdraft reviewwalkbase; do
 		[ -z "$(git config "branch.$cur.$k" || true)" ] || {
 			echo "error: corrupt review metadata: $cur has walkthrough keys but reviewmode is not 'walk'. Discard the review with 'git review abort'." >&2
 			exit 1

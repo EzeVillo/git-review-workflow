@@ -102,16 +102,15 @@ mode="$(git config "branch.$saved.reviewmode" || echo whole)"
 # From the branch's creation onward the draft has an owner again, so a failure
 # below (a patch that will not apply) leaves it beside a live review, not adrift.
 #
-# The draft's branch is read from reviewwalkdraft rather than assumed to be the
-# review's own source: a compare of origin/feature/x reads feature/x's draft, and
-# save filed it under that name.
+# The draft's branch comes from walk_review_draft_src rather than being assumed to
+# be the review's own source: a compare of origin/feature/x drafts for feature/x,
+# and save filed it under that name.
 restore_draft() {
 	# Resolve the gitdir in this shell, where the two path lookups below can share
 	# it: inside "$(walk_draft_path ...)" the cache would die with the subshell and
 	# each would spawn its own git rev-parse (see walk_gitdir_init).
 	walk_gitdir_init
-	_draftsrc="$(git config "branch.$saved.reviewwalkdraft" || true)"
-	[ -n "$_draftsrc" ] || _draftsrc="$src"
+	_draftsrc="$(walk_review_draft_src "$saved")"
 	_saved_draft="$(walk_saved_draft_path "$_draftsrc")"
 	if [ -f "$_saved_draft" ]; then
 		_live_draft="$(walk_draft_path "$_draftsrc")"
@@ -188,6 +187,10 @@ if [ "$mode" = "step" ]; then
 	restore_meta reviewlocal
 	restore_meta reviewreadonly
 	restore_meta reviewreturn
+	# The name the draft was filed under, restored in every mode for the same
+	# reason save copies it in every mode: the resumed review has to look the file
+	# up under the name it was written to, not under its own source.
+	restore_meta reviewdraft
 
 	git branch -D "$saved" >/dev/null
 
@@ -221,13 +224,17 @@ else
 	restore_meta reviewlocal
 	restore_meta reviewreadonly
 	restore_meta reviewreturn
+	# The name the draft was filed under, restored in every mode for the same
+	# reason save copies it in every mode: the resumed review has to look the file
+	# up under the name it was written to, not under its own source.
+	restore_meta reviewdraft
 
 	if [ "$mode" = "walk" ]; then
 		git config "branch.$rb.reviewmode" walk
 		restore_meta reviewwalkstep
 		restore_meta reviewwalkcount
 		restore_meta reviewwalkkeys
-		restore_meta reviewwalkdraft
+		restore_meta reviewwalkfromdraft
 		restore_meta reviewwalkbase
 		git branch -D "$saved" >/dev/null
 

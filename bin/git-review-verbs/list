@@ -101,9 +101,9 @@ describe() {
 	# author's?" stops being obvious. A paused review's draft lives in the saved
 	# namespace, so look where this row's review is.
 	#
-	# reviewwalkdraft names the draft the review actually reads, which is not the
-	# review's source for a compare of a remote-tracking branch; falling back to the
-	# source keeps rows written before that key existed correct.
+	# walk_review_draft_src is what names the file: the review's source is not it
+	# for a compare of a remote-tracking branch, and this row is the surface that
+	# hands that file to forget --saved.
 	#
 	# Outside the mode branch, because save moves the draft outside it too: a whole
 	# or step review of a branch you had drafted for carries that draft into the
@@ -111,8 +111,7 @@ describe() {
 	# the review. Marking only walk rows meant the one surface that could have shown
 	# the reviewer their prose was in there did not, and it left with the review
 	# without ever having been listed.
-	dsrc="$(git config "branch.$b.reviewwalkdraft" || true)"
-	[ -n "$dsrc" ] || dsrc="$(git config "branch.$b.reviewsource" || true)"
+	dsrc="$(walk_review_draft_src "$b")"
 	draft_note=""
 	if [ -n "$dsrc" ]; then
 		case "$b" in

@@ -174,10 +174,20 @@ keys_filter=0
 # A local branch is its own source name; a remote-tracking one is the name minus
 # its remote's first segment. Stripping to the last segment would be wrong for
 # every namespaced branch: feature/checkout would look up a draft for "checkout".
+#
+# This is the one derivation of a draft name in the suite. It is recorded on the
+# review below (reviewdraft) and read back from there ever after, so that the
+# name a draft is written under and the name it is looked up under cannot come
+# from two different computations — they used to, and the disagreement was
+# invisible: the draft written from inside this review went to origin/feature/x
+# while every other entry point looked under feature/x.
+draftsrc="$name"
 if git rev-parse --verify --quiet "refs/heads/$b" >/dev/null; then
-	walk_use_draft "$b"
+	draftsrc="$b"
+	walk_use_draft "$draftsrc"
 elif git rev-parse --verify --quiet "refs/remotes/$b" >/dev/null; then
-	walk_use_draft "${b#*/}"
+	draftsrc="${b#*/}"
+	walk_use_draft "$draftsrc"
 fi
 if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$bcommit")" && [ -n "$wtcontent" ]; then
 	curated="$(walk_sequence "$bcommit" "$acommit")"
@@ -224,6 +234,13 @@ git config "branch.$rb.reviewsource" "$name"
 git config "branch.$rb.reviewbase" "$a"
 git config "branch.$rb.reviewtip" "$bcommit"
 git config "branch.$rb.reviewreadonly" "1"
+# Where this review's draft lives, from the single derivation above. Recorded in
+# every mode and whether or not a draft exists yet, because the surfaces that need
+# it are not the walk ones: a draft written inside a whole-mode compare, and the
+# custody of it in list, save, continue and forget. For a loose revision it is the
+# review's own identity — the only name that comparison has — which is what those
+# surfaces used to derive for every review, correctly there and nowhere else.
+git config "branch.$rb.reviewdraft" "$draftsrc"
 if [ -n "$returnbranch" ]; then
 	git config "branch.$rb.reviewreturn" "$returnbranch"
 fi
@@ -239,14 +256,12 @@ if [ "$walk" -eq 1 ]; then
 	if [ "$keys_filter" -eq 1 ]; then
 		git config "branch.$rb.reviewwalkkeys" "1"
 	fi
-	# Whose walkthrough this compare opened on — same record start writes, and
-	# here it is load-bearing rather than merely useful: the review's identity is
-	# <b> ("origin/feature/x"), while the draft that was just read is the branch's
-	# ("feature/x"). Without this, every verb after the compare would look up a
-	# draft under the review's name, find none, and silently read the author's
-	# order instead — the one failure this whole design exists to prevent.
+	# Whether this reading order came from the reviewer's own draft — the same flag
+	# start writes, and for the same diagnostics. The name it belongs to is
+	# reviewdraft, written above for every compare; this says only that the order
+	# being walked is the one in that file.
 	if [ -n "${walk_draft_src:-}" ] && walk_is_draft "$walk_draft_src"; then
-		git config "branch.$rb.reviewwalkdraft" "$walk_draft_src"
+		git config "branch.$rb.reviewwalkfromdraft" "1"
 	fi
 
 	if [ "$keys_filter" -eq 0 ]; then

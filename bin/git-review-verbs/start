@@ -438,6 +438,13 @@ git reset -q --soft "$lower"
 git config "branch.$rb.reviewsource" "$src"
 git config "branch.$rb.reviewbase" "$base"
 git config "branch.$rb.reviewtip" "$tip"
+# The name this review's walkthrough draft lives under, decided here and read back
+# by everything that has to find the file (walk_review_draft_src). Recorded whether
+# or not a draft exists yet, and in every mode, because the question it answers is
+# "where would mine be?" — which is what a draft written mid-review, and the
+# custody surfaces (list, save, continue, forget), need. Here it is the source
+# itself; compare is where the two come apart.
+git config "branch.$rb.reviewdraft" "$src"
 if [ -n "$prev" ]; then
 	git config "branch.$rb.reviewprevreviewed" "$prev"
 fi
@@ -462,13 +469,14 @@ if [ "$walk" -eq 1 ]; then
 	if [ "$keys_filter" -eq 1 ]; then
 		git config "branch.$rb.reviewwalkkeys" "1"
 	fi
-	# Whose walkthrough this review opened on. Recorded only when it is the
-	# reviewer's own draft, so its absence keeps meaning "the author's", and read
-	# back by every verb through load_walk_review_meta. It is also what lets the
-	# cursor's diagnostics tell "you deleted your draft" apart from "you committed
-	# on top of the review" when the sequence changes under them.
+	# Whether this reading order came from the reviewer's own draft. A flag and not
+	# a name — reviewdraft above already holds the name — recorded only when the
+	# draft is the one being read, so its absence keeps meaning "the author's".
+	# It is what lets the cursor's diagnostics tell "you deleted your draft" apart
+	# from "you committed on top of the review" when the sequence changes under
+	# them: once the file is gone, nothing else can tell those two apart.
 	if walk_is_draft "$src"; then
-		git config "branch.$rb.reviewwalkdraft" "$src"
+		git config "branch.$rb.reviewwalkfromdraft" "1"
 	fi
 
 	if [ "$keys_filter" -eq 0 ]; then

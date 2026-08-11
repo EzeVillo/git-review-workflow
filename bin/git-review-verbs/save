@@ -166,7 +166,7 @@ else
 		copy_meta reviewwalkstep
 		copy_meta reviewwalkcount
 		copy_meta reviewwalkkeys
-		copy_meta reviewwalkdraft
+		copy_meta reviewwalkfromdraft
 		copy_meta reviewwalkbase
 		wstep="$(git config "branch.$cur.reviewwalkstep" || echo '?')"
 		wcount="$(git config "branch.$cur.reviewwalkcount" || echo '?')"
@@ -183,6 +183,10 @@ copy_meta reviewbase
 copy_meta reviewtip
 copy_meta reviewprevreviewed
 copy_meta reviewlocal
+# Where this review's draft lives. Outside the mode branch, like the move below:
+# a draft sits next to any mode, and a saved review that lost this name would have
+# its archived draft looked up under the source instead — the wrong file, or none.
+copy_meta reviewdraft
 # compare reviews: finish must keep refusing after save → continue.
 copy_meta reviewreadonly
 git config "branch.$saved.reviewreturn" "$target"
@@ -192,9 +196,10 @@ git config "branch.$saved.reviewreturn" "$target"
 # Moved, not copied, so an active and a saved draft for one branch can never
 # diverge. Outside the mode branch on purpose: a draft can sit next to any mode.
 #
-# Named by reviewwalkdraft when the review recorded one, because the draft's
-# branch is not always the review's — a compare of origin/feature/x reads
-# feature/x's draft — and moving the wrong name would leave the real file behind.
+# Named by walk_review_draft_src, because the draft's branch is not always the
+# review's — a compare of origin/feature/x drafts for feature/x — and moving the
+# wrong name would leave the real file behind, in the namespace clean is
+# hands-off in, owned by a review that no longer exists.
 #
 # Last, deliberately: everything above can still die (a missing return branch, a
 # key deleted by hand), and a save that aborted after moving the draft would
@@ -207,8 +212,7 @@ git config "branch.$saved.reviewreturn" "$target"
 # "$(...)", where a cache written by walk_draft_path dies with the subshell and
 # each would spawn its own git rev-parse (see walk_gitdir_init).
 walk_gitdir_init
-draftsrc="$(git config "branch.$cur.reviewwalkdraft" || true)"
-[ -n "$draftsrc" ] || draftsrc="$src"
+draftsrc="$(walk_review_draft_src "$cur")"
 _save_draft="$(walk_draft_path "$draftsrc")"
 if [ -f "$_save_draft" ]; then
 	_saved_draft="$(walk_saved_draft_path "$draftsrc")"

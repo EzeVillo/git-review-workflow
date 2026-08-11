@@ -74,29 +74,47 @@ teardown() {
 
 # ── what the review records ───────────────────────────────────────────────────
 
-@test "start records whose walkthrough the review opened on" {
+@test "start records where the draft lives and that it opened on it" {
 	git review start feature/x
-	[ "$(git config branch.review/feature/x.reviewwalkdraft)" = "feature/x" ]
+	[ "$(git config branch.review/feature/x.reviewdraft)" = "feature/x" ]
+	[ "$(git config branch.review/feature/x.reviewwalkfromdraft)" = "1" ]
 	git review abort
 
-	# Same PR with no draft: nothing to record, so the key's absence keeps
-	# meaning "the author's" — which is what lets a draft written mid-review be
-	# picked up by the source's own name.
+	# Same PR with no draft: the name is recorded all the same — it is where a
+	# draft written mid-review will go, and where every custody surface looks —
+	# while the flag's absence keeps meaning "the author's order".
 	rm "$DRAFT"
 	git review start feature/x
-	run git config branch.review/feature/x.reviewwalkdraft
+	[ "$(git config branch.review/feature/x.reviewdraft)" = "feature/x" ]
+	run git config branch.review/feature/x.reviewwalkfromdraft
 	[ "$status" -ne 0 ]
 }
 
-@test "finish refuses when the draft key outlives its mode" {
+@test "a whole review carrying the draft name still finishes" {
+	# reviewdraft is recorded in every mode, walk included, so it must not read as
+	# a walk key: finish's guard aborts on those outside walk mode, and a whole
+	# review of a branch you had drafted for would have been unfinishable.
+	rm "$DRAFT"
+	git review start --no-walk feature/x
+	[ "$(git config branch.review/feature/x.reviewdraft)" = "feature/x" ]
+	printf 'edited\n' >>a.txt
+	run git review finish
+	[ "$status" -eq 0 ]
+	run git rev-parse --verify --quiet refs/heads/review-fixes/feature/x
+	[ "$status" -eq 0 ]
+}
+
+@test "finish refuses when the draft flag outlives its mode" {
 	git review start feature/x
 	# Hand-edited metadata, walk keys without walk mode. The other walk keys are
-	# unset so this lands on the draft key alone: it is a walk key like the rest
+	# unset so this lands on the draft flag alone: it is a walk key like the rest
 	# and has to be guarded like the rest, or finish would run on a review whose
 	# recorded state is inconsistent.
 	git config --unset branch.review/feature/x.reviewmode
 	git config --unset branch.review/feature/x.reviewwalkstep
 	git config --unset branch.review/feature/x.reviewwalkcount
+	git config --unset branch.review/feature/x.reviewwalkbase
+	[ "$(git config branch.review/feature/x.reviewwalkfromdraft)" = "1" ]
 	run git review finish
 	[ "$status" -ne 0 ]
 	[[ "$output" == *"walkthrough keys but reviewmode is not 'walk'"* ]]
@@ -282,9 +300,9 @@ teardown() {
 
 @test "forget --draft says nothing about a step review of the same branch" {
 	# The note is about what a review will read next, and a step review reads no
-	# walkthrough at all. Its own branch is review/feature/x, so the fallback that
-	# finds walk reviews predating the reviewwalkdraft key used to catch it too,
-	# and promise it a fallback that never happens.
+	# walkthrough at all. It records the draft's name like every other mode does —
+	# custody is mode-blind — so without the walk filter it would be caught here
+	# and promised a fallback that never happens.
 	git review start --step feature/x
 	run git review forget --draft feature/x
 	[ "$status" -eq 0 ]
@@ -368,7 +386,7 @@ teardown() {
 	# The review is review/origin/feature/x and the draft is feature/x's: the note
 	# has to come from what the review recorded, not from its own name.
 	git review compare develop origin/feature/x
-	[ "$(git config branch.review/origin/feature/x.reviewwalkdraft)" = "feature/x" ]
+	[ "$(git config branch.review/origin/feature/x.reviewdraft)" = "feature/x" ]
 	git switch --quiet develop
 
 	run git review forget --draft feature/x
@@ -426,8 +444,10 @@ teardown() {
 	[ "$status" -eq 0 ]
 	[ -f "$DRAFT" ]
 	[ ! -f "$SAVED_DRAFT" ]
-	# The record of whose walkthrough it is travels with the review, both ways.
-	[ "$(git config branch.review/feature/x.reviewwalkdraft)" = "feature/x" ]
+	# Both records travel with the review, both ways: where the draft lives, and
+	# that this review's order came out of it.
+	[ "$(git config branch.review/feature/x.reviewdraft)" = "feature/x" ]
+	[ "$(git config branch.review/feature/x.reviewwalkfromdraft)" = "1" ]
 	run git review status
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"walk (draft)"* ]]
@@ -627,7 +647,7 @@ src/c.txt" ]
 	# The review still reads its own draft, at its own position.
 	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
 	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "2" ]
-	[ "$(git config branch.review/feature/x.reviewwalkdraft)" = "feature/x" ]
+	[ "$(git config branch.review/feature/x.reviewdraft)" = "feature/x" ]
 	run git review status
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"[2/2] on a.txt"* ]]

@@ -8,13 +8,13 @@ Orden de lectura escrito por el revisor para una rama bajo review.
 
 ### Identidad y ubicación
 
-| Campo | Valor |
-| --- | --- |
-| Identidad | La rama de origen (`<src>`). Uno por rama, por working tree. |
-| Ubicación (activo) | `<gitdir>/review-walkthrough/<src>.md` |
-| Ubicación (pausado) | `<gitdir>/review-saved-walkthrough/<src>.md` |
-| `<gitdir>` | `git rev-parse --git-dir` — el del working tree, así que cada `git worktree` tiene el suyo |
-| Nombres con `/` | Se materializan como subdirectorios (`feature/checkout` → `review-walkthrough/feature/checkout.md`), igual que las refs |
+| Campo               | Valor                                                                                                                   |
+|---------------------|-------------------------------------------------------------------------------------------------------------------------|
+| Identidad           | La rama de origen (`<src>`). Uno por rama, por working tree.                                                            |
+| Ubicación (activo)  | `<gitdir>/review-walkthrough/<src>.md`                                                                                  |
+| Ubicación (pausado) | `<gitdir>/review-saved-walkthrough/<src>.md`                                                                            |
+| `<gitdir>`          | `git rev-parse --git-dir` — el del working tree, así que cada `git worktree` tiene el suyo                              |
+| Nombres con `/`     | Se materializan como subdirectorios (`feature/checkout` → `review-walkthrough/feature/checkout.md`), igual que las refs |
 
 No hay índice ni registro paralelo: la existencia del archivo **es** el estado.
 Esto evita cualquier posibilidad de desincronización entre un registro y el dato.
@@ -37,16 +37,16 @@ capacidad de esta feature, pero tampoco queda cerrada.
 Las mismas de `walkthrough build`, aplicadas contra el rango de la rama
 indicada en vez de contra `base..HEAD`:
 
-| Regla | Efecto |
-| --- | --- |
-| Entradas sin numerar (`## ?. `) | Rechazo |
-| Placeholders `<!-- why` sin reemplazar | Rechazo |
-| Placeholder de heads-up sin reemplazar (en el preámbulo) | Rechazo |
-| Encabezado casi-entrada mal formado | Rechazo, nombrando línea y texto |
-| `> key` con valor | Rechazo |
-| Rutas duplicadas | Rechazo |
-| Drift contra el rango (falta o sobra un path) | Rechazo, nombrando ambos lados |
-| Todas las entradas marcadas `key`, o ninguna con ≥6 entradas | Nota, nunca rechazo |
+| Regla                                                        | Efecto                           |
+|--------------------------------------------------------------|----------------------------------|
+| Entradas sin numerar (`## ?. `)                              | Rechazo                          |
+| Placeholders `<!-- why` sin reemplazar                       | Rechazo                          |
+| Placeholder de heads-up sin reemplazar (en el preámbulo)     | Rechazo                          |
+| Encabezado casi-entrada mal formado                          | Rechazo, nombrando línea y texto |
+| `> key` con valor                                            | Rechazo                          |
+| Rutas duplicadas                                             | Rechazo                          |
+| Drift contra el rango (falta o sobra un path)                | Rechazo, nombrando ambos lados   |
+| Todas las entradas marcadas `key`, o ninguna con ≥6 entradas | Nota, nunca rechazo              |
 
 En rechazo no se escribe nada: el borrador queda como estaba.
 
@@ -101,15 +101,26 @@ Notas sobre las transiciones:
   ramas y refs de sesión, `forget` descarta lo que las sobrevive. Se borra con
   **`forget --draft <rama> | --all`**. Ver la revisión de la Decisión 4 en
   [research.md](research.md).
-- **`reviewwalkdraft`** (`branch.review/<x>.reviewwalkdraft`) registra **qué**
-  borrador lee la review — la rama del borrador, que no siempre es el
+- **`reviewdraft`** (`branch.review/<x>.reviewdraft`) registra **dónde** vive el
+  borrador de la review — la rama del borrador, que no siempre es el
   `reviewsource`: un `compare develop origin/feature/x` es la review de
-  `origin/feature/x` y lee el borrador de `feature/x`. La escriben `start` y
-  `compare` sólo cuando abren sobre un borrador, y la leen `load_walk_review_meta`
-  (para fijar el contexto), `status`/`list` (para el `(draft)`), `save`/`continue`
-  (para mover el archivo correcto) y `walk_range_error` (para distinguir un
-  borrador borrado de un `git commit` encima de la review). Es una clave walk como
-  las demás: la cubre el guard de metadata de `finish`.
+  `origin/feature/x` y el borrador es de `feature/x`, porque el borrador es de la
+  rama y no del ref con el que la nombraste. La escriben `start` y `compare` al
+  crear la review, **en todos los modos y exista o no un borrador todavía**: la
+  pregunta que contesta es «¿dónde iría el mío?», que es la que necesitan tanto un
+  borrador escrito a mitad de review como la custodia en `whole`/`step`. La lee
+  un único punto, `walk_review_draft_src`, y de ahí los dos cargadores (para fijar
+  el contexto), `list` (para el `(draft)`), `save`/`continue` (para mover el
+  archivo correcto), `forget` y `walkthrough draft` (para escribirlo donde se lo
+  va a buscar). **No** es una clave walk: existe en todos los modos, así que el
+  guard de metadata de `finish` no la incluye.
+- **`reviewwalkfromdraft`** (`= 1`) registra que el orden que se está caminando
+  salió de ese borrador. Un flag y no un nombre —el nombre ya está arriba—,
+  porque es lo único que no se puede recalcular una vez que el archivo no está:
+  lo usa `walk_range_error` para distinguir un borrador borrado de un
+  `git commit` encima de la review. Lo escriben `start`/`compare` sólo cuando
+  abren sobre un borrador, y sí es una clave walk como las demás: la copian
+  `save`/`continue` y la cubre el guard de metadata de `finish`.
 - **`finish`** no lo toca: el borrador no es una edición del revisor y no puede
   aparecer en `review-fixes/`. Sobrevive para una re-review con `--delta`.
 
@@ -143,14 +154,14 @@ se pierde; vuelve a regir en cuanto el borrador desaparece.
 
 Registro existente de `config --porcelain`, con dos ids nuevos:
 
-| id | Se emite cuando | Rank |
-| --- | --- | --- |
-| `walk` | *(sin cambios)* hay walkthrough vigente con ≥1 entrada en rango | `recommended` |
-| `keys` | *(sin cambios)* se emite `walk` y hay ≥1 entrada `> key` en rango | `available` |
-| `draft` | **no** hay borrador para `<src>` **y** el tip no trae walkthrough del autor utilizable | `available` |
-| `draft-resume` | hay borrador para `<src>` | `available` |
-| `step` | *(sin cambios)* tip y lower resolubles | `available` |
-| `whole` | *(sin cambios)* tip y lower resolubles | `available` |
+| id             | Se emite cuando                                                                        | Rank          |
+|----------------|----------------------------------------------------------------------------------------|---------------|
+| `walk`         | *(sin cambios)* hay walkthrough vigente con ≥1 entrada en rango                        | `recommended` |
+| `keys`         | *(sin cambios)* se emite `walk` y hay ≥1 entrada `> key` en rango                      | `available`   |
+| `draft`        | **no** hay borrador para `<src>` **y** el tip no trae walkthrough del autor utilizable | `available`   |
+| `draft-resume` | hay borrador para `<src>`                                                              | `available`   |
+| `step`         | *(sin cambios)* tip y lower resolubles                                                 | `available`   |
+| `whole`        | *(sin cambios)* tip y lower resolubles                                                 | `available`   |
 
 `draft` y `draft-resume` son mutuamente excluyentes. Orden de emisión estable:
 `walk`, `keys`, `draft`/`draft-resume`, `step`, `whole`.

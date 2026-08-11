@@ -185,12 +185,11 @@ if [ "$mode" = saved ]; then
 		done
 		# The reviewer's own walkthrough draft goes with it: discarding a paused
 		# review is the deliberate act that also discards the reading order it was
-		# paused with. Under the name the review recorded when it opened on that
-		# draft (reviewwalkdraft), which is not the review's own source for a
-		# compare of a remote-tracking branch; the source is the fallback for a
-		# review saved before that key existed.
-		draftsrc="$(git config "branch.$saved.reviewwalkdraft" || true)"
-		[ -n "$draftsrc" ] || draftsrc="$src"
+		# paused with. Under the name the review recorded (walk_review_draft_src),
+		# which is not the review's own source for a compare of a remote-tracking
+		# branch — and getting that wrong here means leaving the real file behind
+		# with nothing left to claim it.
+		draftsrc="$(walk_review_draft_src "$saved")"
 		saveddraft="$(walk_saved_draft_path "$draftsrc")"
 		hadraft=0
 		if [ -f "$saveddraft" ]; then
@@ -290,26 +289,21 @@ if [ "$mode" = draft ]; then
 		# order is a legitimate thing to want — but it changes what that review
 		# reads, so say so rather than let it be discovered at the next cursor move.
 		#
-		# Found by asking each review which draft it records (reviewwalkdraft), not
-		# by assuming the review is named after the branch: a compare of
-		# origin/feature/x lives on review/origin/feature/x and reads feature/x's
-		# draft, which is the whole reason that key is written down. Testing
-		# review/<src> alone said nothing for exactly the reviews that most needed
-		# it. The source is the fallback for reviews opened before the key existed,
-		# which is also the plain start case.
+		# Found by asking each review which draft it records
+		# (walk_review_draft_src), not by assuming the review is named after the
+		# branch: a compare of origin/feature/x lives on review/origin/feature/x
+		# and drafts for feature/x, which is the whole reason that name is written
+		# down. Testing review/<src> alone said nothing for exactly the reviews
+		# that most needed it.
 		git for-each-ref --format='%(refname:short)' refs/heads/review/ |
 			while IFS= read -r _fd_rb; do
 				[ -n "$_fd_rb" ] || continue
-				# Walk reviews only: they are the ones that read a walkthrough.
-				# The reviewsource fallback below is what a walk review predating
-				# the key needs, but on its own it also matched the step and whole
-				# reviews of the same branch — which never read the draft, and for
-				# which the fallback this note promises does not happen either.
+				# Walk reviews only: they are the ones that read a walkthrough. The
+				# name below is recorded in every mode — custody is mode-blind — so
+				# without this the step and whole reviews of the same branch, which
+				# never read the draft, would match and claim to fall back.
 				[ "$(git config "branch.$_fd_rb.reviewmode" || true)" = walk ] || continue
-				_fd_reads="$(git config "branch.$_fd_rb.reviewwalkdraft" || true)"
-				if [ -z "$_fd_reads" ]; then
-					_fd_reads="$(git config "branch.$_fd_rb.reviewsource" || true)"
-				fi
+				_fd_reads="$(walk_review_draft_src "$_fd_rb")"
 				if [ "$_fd_reads" = "$_fd_src" ]; then
 					echo "note: $_fd_rb was reading it; that review falls back to the PR's own walkthrough, or to the whole diff if it has none" >&2
 				fi

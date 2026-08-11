@@ -244,7 +244,12 @@ load_step_review_meta() {
 	# walkthrough here (status --why refuses outside walk), so it is inert; a step
 	# verb that started reading one would show the reviewer's own prose without
 	# saying whose it is, which is the one thing this feature exists to prevent.
-	walk_use_draft "$src"
+	#
+	# Through the recorded name, like the walk loader: a step review of a
+	# remote-tracking branch (compare --step) drafts under the branch's name too,
+	# and one config read is what keeps the two loaders from disagreeing about
+	# whose file it is.
+	walk_use_draft "$(walk_review_draft_src "$cur")"
 
 	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
 
@@ -607,6 +612,31 @@ walk_use_draft() {
 	# Here rather than in walk_draft_path: this runs in the verb's own shell,
 	# where the resolved gitdir survives to be reused (see walk_gitdir_init).
 	walk_gitdir_init
+}
+
+# walk_review_draft_src <review-branch>
+# The name the draft of the review on <review-branch> lives under, as recorded by
+# the verb that created the review (branch.<rb>.reviewdraft).
+#
+# The name is *recorded*, never re-derived, and this is the only function that
+# reads it — the point being that one review cannot have two names for its own
+# draft. It is not always the review's source: a compare of a remote-tracking
+# branch reviews "origin/feature/x" and drafts for "feature/x", because the draft
+# belongs to the branch, not to the ref you happened to name it by. When both a
+# creator and a reader derived that separately, they disagreed — the draft was
+# written under one name and looked up under the other, so a later git review
+# start read the author's order and reported no draft at all, over prose the
+# reviewer had just written.
+#
+# The source is the fallback for reviews created before the key existed; for
+# those, deriving it is what the readers did anyway, so they keep behaving
+# exactly as they did.
+walk_review_draft_src() {
+	_wrds_name="$(git config "branch.$1.reviewdraft" || true)"
+	if [ -z "$_wrds_name" ]; then
+		_wrds_name="$(git config "branch.$1.reviewsource" || true)"
+	fi
+	printf '%s' "$_wrds_name"
 }
 
 # walk_draft_body <src>
@@ -1165,13 +1195,12 @@ walk_recover_cursor() {
 	[ "$walkstep" -gt "$total" ] || return 1
 	[ "$total" -ge 1 ] || return 1
 	walk_at_base || return 1
-	# walk_draft_src, not the reviewwalkdraft key: the key is only written when
+	# walk_draft_src, not the reviewwalkfromdraft flag: the flag is only raised when
 	# start/compare open *on* a draft, and the case this function exists for is a
-	# draft written mid-review — a review that by definition never had it. Reading
-	# the key here made the recovery unreachable on its own motivating path, which
-	# is also the one the loader's fallback (absent key means the source's own
-	# name) was added to support. Whether that name has a draft in force is the
-	# next line's question, so widening this one costs nothing.
+	# draft written mid-review — a review that by definition never had one. Reading
+	# the flag here made the recovery unreachable on its own motivating path, the
+	# one the recorded name exists to support. Whether that name has a draft in
+	# force is the next line's question, so widening this one costs nothing.
 	_wrc_draft="${walk_draft_src:-}"
 	[ -n "$_wrc_draft" ] || return 1
 	walk_is_draft "$_wrc_draft" || return 1
@@ -1226,22 +1255,26 @@ walk_range_error() {
 	# git reset --soft, which is both wrong and destructive-sounding. Name the real
 	# cause instead.
 	#
-	# Decided on the recorded draft (reviewwalkdraft), not on "there is no
-	# walkthrough left": when the PR carries one of its own, deleting the draft
-	# makes the review fall back to the author's order, so walk_read still succeeds
-	# and the range can still have collapsed — the exact case that got the HEAD
-	# message wrong. The old total==0 test stays as the fallback for a review
-	# started before that key existed.
-	_wre_draft="$(git config "branch.$cur.reviewwalkdraft" || true)"
-	# A draft written mid-review has no key to have been recorded in: start/compare
-	# wrote none because there was nothing to record yet. It is adopted from the
-	# context the loader resolved instead — but only once walk_is_draft confirms a
-	# draft is actually in force. That confirmation is the whole of it:
-	# walk_draft_src falls back to the review's own source name, so taking it
-	# unconditionally would make every draft-less walk review look like one whose
-	# draft went missing, and answer a stray commit with "your draft is gone"
-	# instead of the HEAD message below.
-	if [ -z "$_wre_draft" ] && [ -n "${walk_draft_src:-}" ] && walk_is_draft "$walk_draft_src"; then
+	# Decided on whether this review's reading order came from the draft
+	# (reviewwalkfromdraft, recorded at creation), not on "there is no walkthrough
+	# left": when the PR carries one of its own, deleting the draft makes the
+	# review fall back to the author's order, so walk_read still succeeds and the
+	# range can still have collapsed — the exact case that got the HEAD message
+	# wrong. A flag and not the name, because the name is recorded separately and
+	# unconditionally (walk_review_draft_src): whether a draft *was* being read is
+	# the one thing that cannot be recomputed once the file is gone. The old
+	# total==0 test stays as the fallback for a review started before the flag.
+	_wre_draft=""
+	if [ "$(git config "branch.$cur.reviewwalkfromdraft" || true)" = "1" ]; then
+		_wre_draft="${walk_draft_src:-$src}"
+	elif [ -n "${walk_draft_src:-}" ] && walk_is_draft "$walk_draft_src"; then
+		# A draft written mid-review carries no flag: at creation there was nothing
+		# to record. It is adopted from the context the loader resolved instead —
+		# but only once walk_is_draft confirms a draft is actually in force. That
+		# confirmation is the whole of it: walk_draft_src falls back to the review's
+		# own source name, so taking it unconditionally would make every draft-less
+		# walk review look like one whose draft went missing, and answer a stray
+		# commit with "your draft is gone" instead of the HEAD message below.
 		_wre_draft="$walk_draft_src"
 	fi
 	_wre_gone=0
@@ -1351,20 +1384,13 @@ load_walk_review_meta() {
 	# is what guarantees every surface of one review — next, prev, status --why,
 	# preview — reads the same walkthrough.
 	#
-	# reviewwalkdraft, recorded by start/compare, names whose draft that is; it is
-	# not always the review's own source. A compare of a remote-tracking branch
-	# reviews "origin/feature/x" while the draft it read at creation is
-	# "feature/x"'s, and deriving the name from reviewsource here would hand every
-	# later verb a different walkthrough than the one the compare opened with.
-	# Absent (no draft when the review was created, or a review started before the
-	# key existed), the source's own name is the right guess — that is also what
-	# lets a draft written mid-review be picked up.
-	walkdraft="$(git config "branch.$cur.reviewwalkdraft" || true)"
-	if [ -n "$walkdraft" ]; then
-		walk_use_draft "$walkdraft"
-	else
-		walk_use_draft "$src"
-	fi
+	# walk_review_draft_src is the one place that answers "under what name?", and
+	# it answers it from what the review recorded rather than from reviewsource —
+	# a compare of a remote-tracking branch reviews "origin/feature/x" while its
+	# draft is "feature/x"'s. The name is recorded whether or not a draft existed
+	# at creation, so a draft written mid-review is picked up under the same name
+	# git review walkthrough draft wrote it to.
+	walk_use_draft "$(walk_review_draft_src "$cur")"
 
 	# Keys-only submode (start/compare --keys): sequence is curated ∩ keys, not
 	# the full reading order. The flag lives on the branch; absence is full walk.

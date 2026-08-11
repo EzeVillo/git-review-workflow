@@ -639,6 +639,31 @@ walk_review_draft_src() {
 	printf '%s' "$_wrds_name"
 }
 
+# walk_saved_draft_filed <saved-branch>
+# Whether <saved-branch> is the review that filed the archived draft under its
+# name — the answer git review save wrote down (branch.<saved>.reviewdraftfiled)
+# when it put the review aside.
+#
+# The name cannot answer it on its own. A draft belongs to a branch, so two
+# reviews of one branch file under one name, and save only refuses that collision
+# when it has a file of its own to move — pause a draftless review of feature/x
+# first and a drafted compare of origin/feature/x after, and both sit paused over
+# one archived file that only the second wrote. Every reader then answered "mine"
+# for both: continue on the first walked off with the second's prose (and left the
+# second refusing to resume over a draft it had written itself), forget --saved on
+# it destroyed prose it had never written, and list badged a row for a file that
+# was not its.
+#
+# Absent on reviews paused before the key existed. For those the answer is the one
+# every reader gave then — the file under your name is yours — so a review paused
+# across the upgrade still comes back with its reading order.
+walk_saved_draft_filed() {
+	case "$(git config "branch.$1.reviewdraftfiled" || true)" in
+	1 | "") return 0 ;;
+	esac
+	return 1
+}
+
 # walk_saved_draft_claims
 # Every paused review that owns an archived draft, as "<src><TAB><review-branch>",
 # one per line. The <src> is the name the review recorded, which is the name its
@@ -652,10 +677,15 @@ walk_review_draft_src() {
 # draft of a live paused review, announcing that no paused review was left to
 # restore it, and save overwrote it. Ask each paused review what it claims instead;
 # it is the same question walk_review_draft_src answers everywhere else.
+#
+# A review that filed nothing claims nothing (walk_saved_draft_filed): it will not
+# restore that file at continue, so it must not be what stops save from replacing
+# it or forget --draft --all from sweeping it either. One rule, all four surfaces.
 walk_saved_draft_claims() {
 	git for-each-ref --format='%(refname:short)' refs/heads/review-saved/ |
 		while IFS= read -r _wsc_rb; do
 			[ -n "$_wsc_rb" ] || continue
+			walk_saved_draft_filed "$_wsc_rb" || continue
 			_wsc_name="$(walk_review_draft_src "$_wsc_rb")"
 			[ -n "$_wsc_name" ] || continue
 			printf '%s\t%s\n' "$_wsc_name" "$_wsc_rb"

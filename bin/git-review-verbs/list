@@ -115,7 +115,13 @@ describe() {
 	draft_note=""
 	if [ -n "$dsrc" ]; then
 		case "$b" in
-		review-saved/*) dpath="$(walk_saved_draft_path "$dsrc")" ;;
+		review-saved/*)
+			dpath="$(walk_saved_draft_path "$dsrc")"
+			# And only if this row's review is the one that filed it: two paused
+			# reviews of a branch share the name, so the badge used to promise a
+			# reading order to a review that will not come back with one.
+			walk_saved_draft_filed "$b" || dpath=""
+			;;
 		*) dpath="$(walk_draft_path "$dsrc")" ;;
 		esac
 		if [ -f "$dpath" ]; then

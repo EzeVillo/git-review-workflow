@@ -210,7 +210,16 @@ repo, no en archivos del working tree:
   borraban prosa viva: `forget --draft --all` barría el borrador de una review
   pausada anunciando que no quedaba review que lo reclamara, `save` lo pisaba
   callado, y `walkthrough draft` anunciaba una review pausada inexistente sobre un
-  archivado huérfano, mandando a un `continue` que no se podía correr.
+  archivado huérfano, mandando a un `continue` que no se podía correr. **Y una
+  review que no archivó nada no reclama nada** (`walk_saved_draft_filed`, sobre
+  `branch.<saved>.reviewdraftfiled`, que `save` escribe en los dos sentidos —la
+  ausencia de la clave significa «pausada antes de que existiera», y sin el `0`
+  toda review sin borrador volvía a ese bucket): dos reviews pausadas de una misma
+  rama comparten el nombre del archivado y sólo la segunda lo escribió, así que
+  `continue` sobre la primera se llevaba prosa ajena —dejando a la que sí la había
+  escrito negándose a retomar sobre «un borrador escrito con la review pausada»
+  que era el suyo, movido—, `forget --saved` la borraba y `list` le ponía `(draft)`
+  a una fila que no iba a volver con ninguno.
   El borrador viaja con la review **en cualquier modo**, no sólo en walk, así que
   las filas de `list` llevan `(draft)` también en `step` y `whole`: si sólo lo
   marcara en walk, un `forget --saved` se llevaría prosa que ninguna superficie

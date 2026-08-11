@@ -553,8 +553,10 @@ git review start feature/checkout                      # entra en walk con tu or
   `finish` y a `git review clean` (arrancá la rama de nuevo y tu orden de lectura
   sigue ahí), `git review save` lo archiva junto con la review pausada, y los dos
   comandos que lo descartan son los que le apuntás vos — `git review forget
-  --draft <rama>` (o `--all`), y `git review forget --saved`, que se lleva la
-  copia de la review pausada junto con la review y lo dice. Si escribís un
+  --draft <rama>` (o `--all`), y `git review forget --saved`, que se lleva junto
+  con la review la copia que esa review archivó, y lo dice — el borrador es de la
+  rama, así que dos reviews pausadas de una misma rama comparten el nombre, y sólo
+  la que lo escribió se lo lleva, de vuelta o al tacho. Si escribís un
   borrador nuevo para una rama mientras su review está pausada, `git review
   continue` se niega en vez de pisar uno de los dos: descartá el que no quieras y
   retomá. `git review save` se niega en el caso espejo — cuando tenés un borrador

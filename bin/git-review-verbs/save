@@ -258,6 +258,7 @@ git config "branch.$saved.reviewreturn" "$target"
 walk_gitdir_init
 draftsrc="$(walk_review_draft_src "$cur")"
 _save_draft="$(walk_draft_path "$draftsrc")"
+_save_filed=0
 if [ -f "$_save_draft" ]; then
 	_saved_draft="$(walk_saved_draft_path "$draftsrc")"
 	mkdir -p "$(dirname "$_saved_draft")"
@@ -268,7 +269,16 @@ if [ -f "$_save_draft" ]; then
 		echo "note: replaced an archived walkthrough draft for $draftsrc that no paused review could restore" >&2
 	fi
 	mv "$_save_draft" "$_saved_draft"
+	_save_filed=1
 fi
+
+# Whether this review is the one that filed the archived draft under its name, for
+# every reader that has to tell two paused reviews of one branch apart
+# (walk_saved_draft_filed). Written both ways, and only here, where the move has
+# either happened or not: an absent key means "paused before this key existed", so
+# leaving the 0 out would put every draftless review straight back in that bucket
+# and hand it the next review's prose at continue.
+git config "branch.$saved.reviewdraftfiled" "$_save_filed"
 
 # Leave the review branch: drop its working-tree changes (captured above), return
 # to the starting branch and delete review/<src>. Its config goes with it; the

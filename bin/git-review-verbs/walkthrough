@@ -217,10 +217,14 @@ if [ "$sub" = draft ]; then
 	# one that review then reads. It hands back a branch name — never a
 	# remote-tracking one — so the range resolution below needs no special case for
 	# where the name came from.
+	from_review=0
 	if [ -z "$branch" ]; then
 		rb="$(git symbolic-ref --quiet --short HEAD || true)"
 		case "$rb" in
-		review/*) branch="$(walk_review_draft_src "$rb")" ;;
+		review/*)
+			branch="$(walk_review_draft_src "$rb")"
+			[ -z "$branch" ] || from_review=1
+			;;
 		esac
 	fi
 	[ -n "$branch" ] || branch="$(git symbolic-ref --quiet --short HEAD || true)"
@@ -231,6 +235,18 @@ if [ "$sub" = draft ]; then
 		die "no base set; run: git config reviewworkflow.base <branch>"
 
 	remote="$(git config reviewworkflow.remote || echo origin)"
+	# A compare of a loose revision records its own identity as the draft's name,
+	# because a short SHA is the only name that comparison has — and that names no
+	# branch, so the resolution below went looking for origin/<short-sha> and died
+	# on a ref that never existed, exactly the way the bare command used to die on
+	# origin/review/feature/x. Only for a name this verb derived from the review the
+	# reviewer is standing in: a name they typed themselves is theirs to be told is
+	# missing, which is what "$srclabel not found" already says.
+	if [ "$from_review" -eq 1 ] &&
+		! git rev-parse --verify --quiet "refs/heads/$branch" >/dev/null &&
+		! git rev-parse --verify --quiet "refs/remotes/$remote/$branch" >/dev/null; then
+		die "this review compares $branch, which is not a branch; a walkthrough draft belongs to one, so name it: git review walkthrough draft <branch>"
+	fi
 	if [ "$local_only" -eq 1 ] || [ "$offline" -eq 1 ]; then
 		srcref="refs/heads/$branch"
 		srclabel="$branch"

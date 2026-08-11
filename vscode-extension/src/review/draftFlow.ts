@@ -183,7 +183,11 @@ export function draftWaitMessage(
     // que la frase que sigue arrancaba pegada a la anterior ("...no entries found
     // It could not be opened here"). Se cierra acá y no en el head, que cuando va
     // solo se muestra tal cual lo escribió la CLI.
-    const lead = head.endsWith(".") ? head : `${head}.`;
+    //
+    // Cualquier signo que ya cierre, no sólo el punto: los mensajes de la CLI
+    // terminan a veces en dos puntos o en un signo de exclamación, y agregarle un
+    // punto a eso daba "...intentá esto:.".
+    const lead = /[.!?:;]$/.test(head) ? head : `${head}.`;
     if (unopened.file !== undefined) {
         return `${lead} It could not be opened here — the draft is at ${unopened.file}.`;
     }

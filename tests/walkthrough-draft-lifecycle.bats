@@ -271,6 +271,88 @@ teardown() {
 	[ "$(cat "$DRAFT")" = "$archived" ]
 }
 
+@test "an archived draft goes back only to the review that filed it" {
+	# Two paused reviews of one branch share the name of the archived file, and save
+	# only refuses the collision when it has a file of its own to move -- so pausing
+	# a draftless review first and a drafted one after leaves both sitting over one
+	# file that only the second wrote. Every reader used to answer "mine" for both.
+	rm -f "$DRAFT"
+	git review start feature/x >/dev/null
+	git review save >/dev/null
+	[ "$(git config branch.review-saved/feature/x.reviewdraftfiled)" = "0" ]
+	[ ! -f "$SAVED_DRAFT" ]
+
+	printf '# Walkthrough\n\n## 1. a.txt\nthe compares own order\n' >"$DRAFT"
+	git review compare develop origin/feature/x >/dev/null
+	git review save >/dev/null
+	[ "$(git config branch.review-saved/origin/feature/x.reviewdraftfiled)" = "1" ]
+	[ -f "$SAVED_DRAFT" ]
+	archived="$(cat "$SAVED_DRAFT")"
+
+	# The row that filed nothing must not promise a reading order it cannot bring.
+	run git review list
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"review-saved/origin/feature/x"* ]]
+	[[ "$output" != *"review-saved/feature/x  whole (draft)"* ]]
+
+	# Resuming it walks off with nothing.
+	run git review continue feature/x
+	[ "$status" -eq 0 ]
+	[ ! -f "$DRAFT" ]
+	[ "$(cat "$SAVED_DRAFT")" = "$archived" ]
+
+	# And the review that wrote it still gets it back, unchanged.
+	git review abort >/dev/null
+	run git review continue origin/feature/x
+	[ "$status" -eq 0 ]
+	[ "$(cat "$DRAFT")" = "$archived" ]
+	[ ! -f "$SAVED_DRAFT" ]
+}
+
+@test "forget --saved leaves an archived draft it did not file" {
+	# The same shape, on the one command that destroys a draft on purpose: it says
+	# so out loud, and it used to say it while deleting prose the review it was
+	# discarding had never written.
+	rm -f "$DRAFT"
+	git review start feature/x >/dev/null
+	git review save >/dev/null
+
+	printf '# Walkthrough\n\n## 1. a.txt\nthe compares own order\n' >"$DRAFT"
+	git review compare develop origin/feature/x >/dev/null
+	git review save >/dev/null
+	archived="$(cat "$SAVED_DRAFT")"
+
+	run git review forget --saved feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"discarded saved review of feature/x"* ]]
+	[[ "$output" != *"walkthrough draft"* ]]
+	[ "$(cat "$SAVED_DRAFT")" = "$archived" ]
+
+	# Its real owner still has it, and discarding that one does take it.
+	run git review forget --saved origin/feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"its walkthrough draft for feature/x went with it"* ]]
+	[ ! -f "$SAVED_DRAFT" ]
+}
+
+@test "save can replace an archived draft the only paused review never filed" {
+	# The claim is what protects the file, and a review that filed nothing does not
+	# claim it -- otherwise the sweep and the guard would both defer to a review
+	# that is never going to restore it.
+	rm -f "$DRAFT"
+	git review start feature/x >/dev/null
+	git review save >/dev/null
+	mkdir -p "$(dirname "$SAVED_DRAFT")"
+	printf '# Walkthrough\n\n## 1. a.txt\nleft over\n' >"$SAVED_DRAFT"
+
+	printf '# Walkthrough\n\n## 1. a.txt\nthe compares own order\n' >"$DRAFT"
+	git review compare develop origin/feature/x >/dev/null
+	run git review save
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"replaced an archived walkthrough draft for feature/x"* ]]
+	[ "$(tail -n 1 "$SAVED_DRAFT")" = "the compares own order" ]
+}
+
 @test "save replaces an archived draft nobody claims and says so" {
 	# Same collision with the claimant deleted by hand: nothing can bring that file
 	# back, so saving proceeds -- but it is still prose someone typed, and this is
@@ -550,6 +632,7 @@ teardown() {
 	git review start feature/x
 	git review next
 	run git review status
+	[ "$status" -eq 0 ]
 	[[ "$output" == *"[2/2]"* ]]
 	git review save
 

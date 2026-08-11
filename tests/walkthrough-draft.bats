@@ -257,6 +257,27 @@ EOF
 	[[ "$output" == *"whole (draft)"* ]]
 }
 
+@test "drafting inside a compare of a loose revision says there is no branch" {
+	# A compare of a SHA records its own identity as the draft's name, because that
+	# is the only name the comparison has. It names no branch, so the bare command
+	# went looking for origin/<short-sha> and died on a ref that never existed --
+	# the same shape as the origin/review/feature/x error the review-aware
+	# resolution exists to prevent.
+	sha="$(git rev-parse --short origin/feature/plain)"
+	git review compare develop "$sha" >/dev/null
+	run git review walkthrough draft
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"this review compares $sha, which is not a branch"* ]]
+	[[ "$output" == *"git review walkthrough draft <branch>"* ]]
+	[[ "$output" != *"origin/$sha"* ]]
+	[ ! -f "$(git rev-parse --git-dir)/review-walkthrough/$sha.md" ]
+
+	# Naming the branch from in there still works, and lands where it belongs.
+	run git review walkthrough draft feature/plain
+	[ "$status" -eq 0 ]
+	[ -f "$DRAFT" ]
+}
+
 @test "a compare --step of a remote-tracking branch records where its draft goes" {
 	# --step exits before the whole-mode tail, and the name used to be written only
 	# there: this review recorded nothing and every reader fell back to the source,

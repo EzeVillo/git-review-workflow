@@ -189,13 +189,17 @@ if [ "$mode" = saved ]; then
 		# which is not the review's own source for a compare of a remote-tracking
 		# branch — and getting that wrong here means leaving the real file behind
 		# with nothing left to claim it.
+		# And only the one this review filed (walk_saved_draft_filed): a review
+		# paused without a draft shares the name but not the file, and deleting it
+		# here destroyed the only copy of prose another paused review had written
+		# and was still going to resume on.
 		draftsrc="$(walk_review_draft_src "$saved")"
 		saveddraft="$(walk_saved_draft_path "$draftsrc")"
 		hadraft=0
-		if [ -f "$saveddraft" ]; then
+		if walk_saved_draft_filed "$saved" && [ -f "$saveddraft" ]; then
 			hadraft=1
+			rm -f "$saveddraft"
 		fi
-		rm -f "$saveddraft"
 		git branch -D "$saved" >/dev/null
 
 		echo "discarded saved review of $src"

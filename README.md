@@ -539,7 +539,9 @@ git review start feature/checkout                      # enters walk mode on you
   your reading order is still there), `git review save` files it with the paused
   review, and the two commands that discard it are the ones you point at it —
   `git review forget --draft <branch>` (or `--all`), and `git review forget
-  --saved`, which takes the paused review's copy with the review and says so. If
+  --saved`, which takes the copy that review filed with the review and says so —
+  a draft belongs to a branch, so two paused reviews of one branch share the
+  name, and only the one that wrote it takes it, back or away. If
   you write a new draft for a branch while its review is paused, `git review
   continue` refuses rather than overwrite one of the two — drop whichever you
   don't want and resume. `git review save` refuses the mirror case — when you

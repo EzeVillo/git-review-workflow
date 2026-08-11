@@ -204,6 +204,13 @@ describe("draftWaitMessage", () => {
             "The draft is not valid yet: no entries found. It could not be opened here" +
             " — look for review-walkthrough/feature/x.md inside this repository's git directory."
         );
+        // Ni cuando cierra con otro signo: un mensaje que termina en dos puntos
+        // quedaba como "...esto:." con un test que mirara solo el punto.
+        assert.strictEqual(
+            draftWaitMessage("feature/x", "the entries in range are:", {file: undefined}),
+            "The draft is not valid yet: the entries in range are: It could not be opened here" +
+            " — look for review-walkthrough/feature/x.md inside this repository's git directory."
+        );
     });
 
     it("nombra el archivo relativo cuando ni la ruta se pudo armar", () => {

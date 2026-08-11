@@ -110,6 +110,12 @@ restore_draft() {
 	# it: inside "$(walk_draft_path ...)" the cache would die with the subshell and
 	# each would spawn its own git rev-parse (see walk_gitdir_init).
 	walk_gitdir_init
+	# Only the review that filed it takes it back. Two paused reviews of one branch
+	# file under one name, and a review that carried no draft has no claim on the
+	# file sitting there — it used to walk off with it, which left the review that
+	# had written it refusing to resume over "a draft written while paused" that was
+	# its own prose, moved.
+	walk_saved_draft_filed "$saved" || return 0
 	_draftsrc="$(walk_review_draft_src "$saved")"
 	_saved_draft="$(walk_saved_draft_path "$_draftsrc")"
 	if [ -f "$_saved_draft" ]; then

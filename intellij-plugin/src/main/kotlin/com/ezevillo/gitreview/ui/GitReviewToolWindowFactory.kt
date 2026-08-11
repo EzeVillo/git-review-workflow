@@ -45,9 +45,12 @@ class GitReviewToolWindowFactory : ToolWindowFactory, DumbAware {
                 }
             },
         )
-        // Content is built at create, but first refresh only when shown.
-        if (toolWindow.isVisible) {
-            service.setPanelVisible(true)
-        }
+        // The content is only built when the window is being shown, so this is
+        // still "no CLI before the panel is on screen" (FR-017) — but it no
+        // longer hangs on `isVisible`, which the platform may not have flipped
+        // yet at create time. When it was false here and the state change had
+        // already gone by, nothing ever asked for the first refresh and the
+        // panel sat on its seed state until the reviewer hit Refresh.
+        service.setPanelVisible(true)
     }
 }

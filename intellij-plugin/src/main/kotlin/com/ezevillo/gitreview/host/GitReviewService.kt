@@ -8,18 +8,23 @@ import com.ezevillo.gitreview.domain.WhyState
 import com.ezevillo.gitreview.domain.PanelWhy
 import com.ezevillo.gitreview.domain.buildPanelModel
 import com.ezevillo.gitreview.domain.isReviewReadable
+import com.ezevillo.gitreview.domain.pickSoleTarget
 import com.ezevillo.gitreview.settings.GitReviewSettings
 import com.ezevillo.gitreview.settings.LastOpenedStore
 import com.ezevillo.gitreview.ui.UiMessages
-import com.ezevillo.gitreview.vcs.pickSoleGitRoot
+import com.ezevillo.gitreview.vcs.listGitRoots
+import com.intellij.dvcs.repo.VcsRepositoryManager
+import com.intellij.dvcs.repo.VcsRepositoryMappingListener
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vcs.ProjectLevelVcsManager
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 
 @Service(Service.Level.PROJECT)
-class GitReviewService(private val project: Project) {
+class GitReviewService(private val project: Project) : Disposable {
     private val lock = MutationLock()
     private val invoker = CliInvoker(
         gitReviewPath = {
@@ -33,10 +38,21 @@ class GitReviewService(private val project: Project) {
 
     private val listeners = CopyOnWriteArrayList<(PanelModel) -> Unit>()
     private val refreshScheduled = AtomicBoolean(false)
+    private val refreshRequested = AtomicBoolean(false)
+    private val vcsWaitRegistered = AtomicBoolean(false)
+    private val vcsWaitDone = AtomicBoolean(false)
     @Volatile
     private var panelVisible: Boolean = false
     @Volatile
     private var lastWhy: PanelWhy? = null
+
+    /**
+     * Whether a refresh ever resolved a state. Before that there is nothing to
+     * draw: the manager's seed value is an `ERROR` placeholder, and painting it
+     * would tell the reviewer the review state is broken when it was never read.
+     */
+    @Volatile
+    private var stateResolved: Boolean = false
 
     val mutationLock: MutationLock get() = lock
     val cliInvoker: CliInvoker get() = invoker
@@ -55,9 +71,30 @@ class GitReviewService(private val project: Project) {
                 }
             }
         }
+        // The panel derives nothing on its own, so someone has to tell it when
+        // git4idea finished discovering the repositories: opening a project
+        // materializes the tool window before the VCS mappings are up, and
+        // without this signal that first refresh stayed on "no single root"
+        // until the reviewer hit Refresh by hand. The extension does the same
+        // thing waiting for `vscode.git` to activate.
+        // Still lazy (SC-006 / FR-017): a mapping change wakes the CLI only when
+        // someone is looking at the panel.
+        project.messageBus.connect(this).subscribe(
+            VcsRepositoryManager.VCS_REPOSITORY_MAPPING_UPDATED,
+            VcsRepositoryMappingListener {
+                if (panelVisible || listeners.isNotEmpty()) scheduleRefresh()
+            },
+        )
+    }
+
+    override fun dispose() {
+        // The message-bus connection is tied to this service; nothing else to release.
     }
 
     fun currentState(): ReviewState = stateManager.current
+
+    /** False until a refresh resolved a state — the panel has nothing to draw yet. */
+    fun hasResolvedState(): Boolean = stateResolved
 
     fun currentModel(): PanelModel {
         val state = stateManager.current
@@ -87,17 +124,30 @@ class GitReviewService(private val project: Project) {
         }
     }
 
+    /**
+     * Coalesced, but never dropped: a request that lands while a refresh is in
+     * flight re-runs it instead of being swallowed. The signals that fix a wrong
+     * state (VCS mappings arriving, a mutation finishing) all arrive that way, so
+     * losing one is exactly the case where the panel stays stale until the
+     * reviewer refreshes by hand.
+     */
     fun scheduleRefresh() {
         if (!panelVisible && listeners.isEmpty()) {
             // Lazy: no CLI until someone is listening (tool window shown) or refresh forced.
         }
+        refreshRequested.set(true)
         if (!refreshScheduled.compareAndSet(false, true)) return
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
-                doRefresh()
+                while (refreshRequested.compareAndSet(true, false)) {
+                    doRefresh()
+                }
             } finally {
                 refreshScheduled.set(false)
             }
+            // A request between the loop exit and releasing the flag would have
+            // no one to run it.
+            if (refreshRequested.get()) scheduleRefresh()
         }
     }
 
@@ -107,8 +157,17 @@ class GitReviewService(private val project: Project) {
     }
 
     private fun doRefresh() {
-        val target = pickSoleGitRoot(project)
+        val roots = listGitRoots(project)
+        if (roots.isEmpty() && !vcsWaitDone.get() && !vcsesActivated()) {
+            // Not "this project has no git root" — nobody looked yet. Publishing
+            // the multi-root error here is what left the panel on a diagnostic
+            // the reviewer could not act on; wait for the VCSes instead.
+            awaitVcsInitialization()
+            return
+        }
+        val target = pickSoleTarget(roots)
         val state = stateManager.refresh(target?.rootPath)
+        stateResolved = true
         lastWhy = null
         if (isReviewReadable(state.situation) && state.state?.mode?.id == "walk") {
             lastWhy = PanelWhy(WhyState.LOADING)
@@ -116,6 +175,22 @@ class GitReviewService(private val project: Project) {
             fetchWhy(target?.rootPath, state)
         } else {
             publish()
+        }
+    }
+
+    private fun vcsesActivated(): Boolean =
+        ProjectLevelVcsManager.getInstance(project).areVcsesActivated()
+
+    /**
+     * One-shot: re-refresh once the project's VCSes are up. [vcsWaitDone] is
+     * never cleared, so a project that genuinely has no git root waits exactly
+     * once and then gets the error like before.
+     */
+    private fun awaitVcsInitialization() {
+        if (!vcsWaitRegistered.compareAndSet(false, true)) return
+        ProjectLevelVcsManager.getInstance(project).runAfterInitialization {
+            vcsWaitDone.set(true)
+            scheduleRefresh()
         }
     }
 

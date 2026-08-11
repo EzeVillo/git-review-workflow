@@ -4,6 +4,7 @@ import com.ezevillo.gitreview.domain.Block
 import com.ezevillo.gitreview.domain.Control
 import com.ezevillo.gitreview.domain.ControlId
 import com.ezevillo.gitreview.domain.Emphasis
+import com.ezevillo.gitreview.domain.FileRow
 import com.ezevillo.gitreview.domain.PanelLayout
 import com.ezevillo.gitreview.domain.SkeletonShape
 import com.ezevillo.gitreview.domain.WhyState
@@ -11,7 +12,10 @@ import java.awt.BorderLayout
 import java.awt.Component
 import java.awt.Dimension
 import java.awt.FlowLayout
+import java.awt.Graphics
 import java.awt.GridLayout
+import java.awt.Insets
+import java.awt.Rectangle
 import java.awt.event.ComponentAdapter
 import java.awt.event.ComponentEvent
 import javax.swing.Box
@@ -22,9 +26,13 @@ import javax.swing.JLabel
 import javax.swing.JPanel
 import javax.swing.JScrollPane
 import javax.swing.JTextArea
+import javax.swing.Scrollable
 import javax.swing.ScrollPaneConstants
-import javax.swing.SwingUtilities
+import javax.swing.SwingConstants
 import javax.swing.border.EmptyBorder
+
+/** The bar at the margin of the last opened row (the extension's `border-left`). */
+private const val ROW_MARKER_WIDTH = 2
 
 /**
  * Generic Swing renderer of [PanelLayout]. No Project / GitReviewService.
@@ -43,7 +51,7 @@ class PanelRenderer(
         val root = JPanel(BorderLayout())
         root.background = chrome.background()
 
-        val body = JPanel()
+        val body = ScrollBody()
         body.layout = BoxLayout(body, BoxLayout.Y_AXIS)
         body.background = chrome.background()
         body.border = chrome.emptyBorder(8, 8, 8, 8)
@@ -92,23 +100,28 @@ class PanelRenderer(
         return root
     }
 
+    /**
+     * The panel is a column in a sidebar: it follows the viewport width and only
+     * ever scrolls vertically. Saying so through [Scrollable] is what lets the
+     * wrapped text be measured at the width it will actually get — pinning
+     * `preferredSize` by hand froze it at whatever the first pass computed, and
+     * every paragraph after that was clipped to the line count of that guess.
+     */
+    private class ScrollBody : JPanel(), Scrollable {
+        override fun getPreferredScrollableViewportSize(): Dimension = preferredSize
+        override fun getScrollableTracksViewportWidth(): Boolean = true
+        override fun getScrollableTracksViewportHeight(): Boolean = false
+        override fun getScrollableUnitIncrement(r: Rectangle, orientation: Int, direction: Int) = 16
+        override fun getScrollableBlockIncrement(r: Rectangle, orientation: Int, direction: Int) =
+            r.height
+    }
+
     private fun scrollPane(view: JComponent): JScrollPane {
         val scroll = JScrollPane(view)
         scroll.horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
         scroll.verticalScrollBarPolicy = ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
         scroll.border = null
         scroll.viewport.background = chrome.background()
-        // Follow viewport width — never force horizontal scroll.
-        scroll.addComponentListener(object : ComponentAdapter() {
-            override fun componentResized(e: ComponentEvent?) {
-                val w = scroll.viewport.width
-                if (w > 0) {
-                    view.preferredSize = Dimension(w, view.preferredSize.height)
-                    view.maximumSize = Dimension(w, Int.MAX_VALUE)
-                    view.revalidate()
-                }
-            }
-        })
         return scroll
     }
 
@@ -116,10 +129,14 @@ class PanelRenderer(
         val c: JComponent = when (block) {
             is Block.IdentityBar -> renderIdentityBar(block)
             is Block.Note -> wrapText(block.text, muted = true)
-            is Block.Paragraph -> wrapText(block.text, muted = block.muted)
+            is Block.Paragraph -> renderParagraph(block)
             is Block.Heading -> {
+                // The extension's `h2`: it labels the list under it, so it reads
+                // quieter than the content — not louder, the way a bold
+                // foreground-coloured line did.
                 val l = JLabel(block.text)
-                l.font = chrome.boldFont(13f)
+                l.font = chrome.boldFont(11f)
+                l.foreground = chrome.mutedForeground()
                 l.alignmentX = Component.LEFT_ALIGNMENT
                 l
             }
@@ -135,7 +152,7 @@ class PanelRenderer(
             is Block.InventoryRows -> renderInventory(block)
             is Block.ToolsSection -> renderToolsSection(block)
             is Block.Stderr -> {
-                val area = JTextArea(block.text)
+                val area = WrappedText(block.text)
                 area.isEditable = false
                 area.lineWrap = true
                 area.wrapStyleWord = true
@@ -150,14 +167,14 @@ class PanelRenderer(
                 p.layout = BoxLayout(p, BoxLayout.Y_AXIS)
                 p.background = chrome.background()
                 p.alignmentX = Component.LEFT_ALIGNMENT
-                p.add(wrapText(block.text))
+                p.add(stacked(wrapText(block.text)))
                 block.control?.let {
                     p.add(Box.createVerticalStrut(6))
-                    p.add(renderControl(it))
+                    p.add(stacked(renderControl(it)))
                 }
                 block.stderr?.let {
                     p.add(Box.createVerticalStrut(6))
-                    p.add(wrapText(it, muted = true))
+                    p.add(stacked(wrapText(it, muted = true)))
                 }
                 p
             }
@@ -172,38 +189,102 @@ class PanelRenderer(
             )
         }
         c.alignmentX = Component.LEFT_ALIGNMENT
-        return c
+        return stacked(c)
+    }
+
+    /**
+     * A block in a vertical stack keeps the height it asked for. BoxLayout hands
+     * the leftover height to whoever declares an unbounded maximum — and a
+     * wrapped JTextArea, a BorderLayout row and a glue all do — which is what
+     * pushed the primary button of a pane to the far bottom and blew air between
+     * every paragraph. Capping at the preferred height reproduces the document
+     * flow the extension gets for free.
+     */
+    private fun stacked(child: JComponent): JComponent {
+        val box = object : JPanel(BorderLayout()) {
+            override fun getMaximumSize(): Dimension =
+                Dimension(Int.MAX_VALUE, preferredSize.height)
+        }
+        box.isOpaque = false
+        box.alignmentX = Component.LEFT_ALIGNMENT
+        box.add(child, BorderLayout.CENTER)
+        return box
+    }
+
+    private fun renderParagraph(p: Block.Paragraph): JComponent {
+        val text = wrapText(p.text, muted = p.muted)
+        if (!p.separated) return text
+        val box = JPanel(BorderLayout())
+        box.background = chrome.background()
+        box.alignmentX = Component.LEFT_ALIGNMENT
+        box.border = javax.swing.BorderFactory.createCompoundBorder(
+            javax.swing.BorderFactory.createMatteBorder(1, 0, 0, 0, chrome.borderColor()),
+            chrome.emptyBorder(8, 0, 0, 0),
+        )
+        box.add(text, BorderLayout.CENTER)
+        return box
+    }
+
+    /**
+     * A header line: what names the thing on the left, what qualifies it on the
+     * right. The trailing group is the extension's `margin-left: auto` (the
+     * position counter, the entry badge, the inventory badges) — it belongs at
+     * the far edge, not glued to the name.
+     */
+    private fun headerRow(left: List<JComponent>, right: List<JComponent>): JComponent {
+        val row = JPanel()
+        row.layout = BoxLayout(row, BoxLayout.X_AXIS)
+        row.background = chrome.background()
+        row.alignmentX = Component.LEFT_ALIGNMENT
+        left.forEachIndexed { i, c ->
+            if (i > 0) row.add(Box.createHorizontalStrut(6))
+            c.alignmentY = Component.CENTER_ALIGNMENT
+            row.add(c)
+        }
+        row.add(Box.createHorizontalGlue())
+        right.forEachIndexed { i, c ->
+            if (i > 0) row.add(Box.createHorizontalStrut(6))
+            c.alignmentY = Component.CENTER_ALIGNMENT
+            row.add(c)
+        }
+        return row
     }
 
     private fun renderIdentityBar(bar: Block.IdentityBar): JComponent {
-        val row = JPanel(FlowLayout(FlowLayout.LEFT, 6, 0))
-        row.background = chrome.background()
-        row.alignmentX = Component.LEFT_ALIGNMENT
-        row.add(badgeLabel(bar.mode, bold = true))
+        val left = ArrayList<JComponent>()
+        left.add(badgeLabel(bar.mode, bold = true))
         if (bar.draft) {
-            row.add(JLabel("(draft)").apply { foreground = chrome.mutedForeground() })
+            left.add(JLabel("(draft)").apply { foreground = chrome.mutedForeground() })
         }
-        row.add(JLabel(bar.name).apply { foreground = chrome.foreground() })
-        bar.tip?.let { row.add(JLabel(it).apply { foreground = chrome.mutedForeground() }) }
+        left.add(JLabel(bar.name).apply { foreground = chrome.foreground() })
+        bar.tip?.let { left.add(JLabel(it).apply { foreground = chrome.mutedForeground() }) }
+        val right = ArrayList<JComponent>()
         if (bar.skeleton) {
-            row.add(skeletonBar(36))
+            right.add(skeletonBar(36))
         } else if (bar.position != null && bar.total != null) {
-            row.add(JLabel("${bar.position}/${bar.total}").apply { foreground = chrome.mutedForeground() })
+            right.add(
+                JLabel("${bar.position}/${bar.total}").apply { foreground = chrome.mutedForeground() },
+            )
         }
+        // The bar is the panel's fixed chrome, ruled off from the entry below it
+        // like the extension's `.bar { border-bottom }`.
+        val row = headerRow(left, right)
+        row.border = javax.swing.BorderFactory.createCompoundBorder(
+            javax.swing.BorderFactory.createMatteBorder(0, 0, 1, 0, chrome.borderColor()),
+            chrome.emptyBorder(0, 0, 6, 0),
+        )
         return row
     }
 
     private fun renderEntryHead(head: Block.EntryHead): JComponent {
         if (head.skeleton) return skeletonBar(48)
-        val row = JPanel(FlowLayout(FlowLayout.LEFT, 6, 0))
-        row.background = chrome.background()
-        row.alignmentX = Component.LEFT_ALIGNMENT
+        val left = ArrayList<JComponent>()
         val n = if (head.position < 10) "0${head.position}" else head.position.toString()
-        row.add(badgeLabel(n, bold = true))
-        head.identifier?.let { row.add(JLabel(it).apply { foreground = chrome.mutedForeground() }) }
-        head.author?.let { row.add(JLabel(it).apply { foreground = chrome.mutedForeground() }) }
-        head.badge?.let { row.add(badgeLabel(it)) }
-        return row
+        left.add(badgeLabel(n, bold = true))
+        head.identifier?.let { left.add(JLabel(it).apply { foreground = chrome.mutedForeground() }) }
+        head.author?.let { left.add(JLabel(it).apply { foreground = chrome.mutedForeground() }) }
+        val right = head.badge?.let { listOf<JComponent>(badgeLabel(it)) } ?: emptyList()
+        return headerRow(left, right)
     }
 
     private fun renderWhy(why: Block.Why): JComponent {
@@ -231,10 +312,10 @@ class PanelRenderer(
         box.border = chrome.emptyBorder(6, 6, 6, 6)
         box.alignmentX = Component.LEFT_ALIGNMENT
         for (p in banner.paragraphs) {
-            box.add(wrapText(p))
+            box.add(stacked(wrapText(p)))
             box.add(Box.createVerticalStrut(4))
         }
-        box.add(renderRow(banner.row.controls))
+        box.add(stacked(renderRow(banner.row.controls)))
         return box
     }
 
@@ -242,7 +323,7 @@ class PanelRenderer(
         val row = JPanel(BorderLayout(6, 0))
         row.background = chrome.background()
         row.alignmentX = Component.LEFT_ALIGNMENT
-        val code = JTextArea(cmd.command)
+        val code = WrappedText(cmd.command)
         code.isEditable = false
         code.lineWrap = true
         code.wrapStyleWord = true
@@ -296,20 +377,72 @@ class PanelRenderer(
         box.background = chrome.background()
         box.alignmentX = Component.LEFT_ALIGNMENT
         for (f in files.rows) {
-            val btn = JButton(f.display)
-            btn.isEnabled = true
-            btn.horizontalAlignment = JButton.LEFT
-            btn.alignmentX = Component.LEFT_ALIGNMENT
-            btn.maximumSize = Dimension(Int.MAX_VALUE, btn.preferredSize.height)
-            if (f.lastOpened) {
-                btn.toolTipText = "Last opened"
-            }
-            btn.addActionListener {
-                onAction(ControlId.OPEN_CHANGE, f.index)
-            }
-            box.add(btn)
+            box.add(fileRow(f))
         }
         return box
+    }
+
+    /**
+     * A path in the list is a row, not a button: the extension paints it with
+     * `background: none` and hands it a fill only under the pointer, so what the
+     * eye picks up from the column is the list of paths — a stack of framed
+     * buttons reads as a stack of actions and buries them. The last opened one
+     * carries the inactive-selection fill *and* a bar at the margin, because in
+     * a high-contrast theme the fill alone can be indistinguishable (FR-031).
+     */
+    private fun fileRow(f: FileRow): JButton {
+        val hover = chrome.rowHoverBackground()
+        val selected = chrome.rowSelectedBackground()
+        val marker = chrome.linkForeground()
+        val focus = chrome.linkForeground()
+        val btn = object : JButton(f.display) {
+            override fun getMaximumSize(): Dimension =
+                Dimension(Int.MAX_VALUE, preferredSize.height)
+
+            override fun paintComponent(g: Graphics) {
+                val fill = when {
+                    model.isRollover || model.isPressed -> hover
+                    f.lastOpened -> selected
+                    else -> null
+                }
+                if (fill != null) {
+                    g.color = fill
+                    g.fillRect(0, 0, width, height)
+                }
+                if (f.lastOpened) {
+                    g.color = marker
+                    g.fillRect(0, 0, ROW_MARKER_WIDTH, height)
+                }
+                // The LaF paints no focus ring on a borderless button, and
+                // keyboard is the only way through this list without a mouse.
+                if (isFocusOwner) {
+                    g.color = focus
+                    g.drawRect(0, 0, width - 1, height - 1)
+                }
+                super.paintComponent(g)
+            }
+        }
+        btn.horizontalAlignment = SwingConstants.LEFT
+        btn.alignmentX = Component.LEFT_ALIGNMENT
+        btn.isContentAreaFilled = false
+        btn.isBorderPainted = false
+        btn.isFocusPainted = false
+        btn.isOpaque = false
+        btn.isRolloverEnabled = true
+        btn.margin = Insets(0, 0, 0, 0)
+        btn.border = chrome.emptyBorder(3, ROW_MARKER_WIDTH + 5, 3, 5)
+        btn.font = chrome.monoFont(12f)
+        btn.foreground = chrome.foreground()
+        chrome.iconDiff()?.let {
+            btn.icon = it
+            btn.iconTextGap = 6
+        }
+        // A sidebar clips a long path; the whole of it stays one hover away.
+        btn.toolTipText = if (f.lastOpened) "Last opened: ${f.display}" else f.display
+        btn.addActionListener {
+            onAction(ControlId.OPEN_CHANGE, f.index)
+        }
+        return btn
     }
 
     private fun renderInventory(inv: Block.InventoryRows): JComponent {
@@ -318,30 +451,39 @@ class PanelRenderer(
         box.background = chrome.background()
         box.alignmentX = Component.LEFT_ALIGNMENT
         for (r in inv.rows) {
-            val head = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0))
-            head.background = chrome.background()
-            head.add(JLabel(r.name).apply { font = chrome.boldFont(12f) })
-            for (b in r.badges) head.add(badgeLabel(b))
+            val badges = ArrayList<JComponent>()
+            for (b in r.badges) badges.add(badgeLabel(b))
             if (r.controls.isEmpty() && r.helpTooltip != null) {
                 val help = JLabel("?")
                 help.toolTipText = r.helpTooltip
                 help.foreground = chrome.mutedForeground()
-                head.add(help)
+                badges.add(help)
             }
-            box.add(head)
-            box.add(JLabel(r.meta).apply {
-                foreground = chrome.mutedForeground()
-                alignmentX = Component.LEFT_ALIGNMENT
-                border = EmptyBorder(0, 4, 2, 0)
-            })
+            box.add(
+                stacked(
+                    headerRow(
+                        listOf(JLabel(r.name).apply { font = chrome.boldFont(12f) }),
+                        badges,
+                    ),
+                ),
+            )
+            box.add(
+                stacked(
+                    JLabel(r.meta).apply {
+                        foreground = chrome.mutedForeground()
+                        border = EmptyBorder(0, 0, 2, 0)
+                    },
+                ),
+            )
             if (r.controls.isNotEmpty()) {
+                // Left, at label width — never one button per sidebar row.
                 val actions = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0))
                 actions.background = chrome.background()
                 actions.alignmentX = Component.LEFT_ALIGNMENT
                 for (c in r.controls) {
                     actions.add(renderControl(c))
                 }
-                box.add(actions)
+                box.add(stacked(actions))
             }
             box.add(Box.createVerticalStrut(6))
         }
@@ -411,10 +553,28 @@ class PanelRenderer(
             }
             else -> {
                 val b = JButton(c.label ?: c.accessibleName)
-                if (c.emphasis == Emphasis.LINK) {
-                    b.isBorderPainted = false
-                    b.isContentAreaFilled = false
-                    b.foreground = JBLinkColor
+                // The verbs that open something carry the same glyph as their
+                // rows do in the extension: two "Diff" buttons on one pane are
+                // told apart by what sits next to them, not by their label.
+                if (c.emphasis != Emphasis.LINK) {
+                    when (c.id) {
+                        ControlId.OPEN_CHANGE, ControlId.OPEN_ALL_CHANGES -> chrome.iconDiff()
+                        ControlId.OPEN_ENTRY -> chrome.iconFile()
+                        else -> null
+                    }?.let {
+                        b.icon = it
+                        b.iconTextGap = 6
+                    }
+                }
+                when (c.emphasis) {
+                    Emphasis.LINK -> {
+                        b.isBorderPainted = false
+                        b.isContentAreaFilled = false
+                        b.isOpaque = false
+                        b.foreground = chrome.linkForeground()
+                    }
+                    Emphasis.PRIMARY -> chrome.markPrimary(b)
+                    else -> Unit
                 }
                 b
             }
@@ -439,11 +599,35 @@ class PanelRenderer(
         return btn
     }
 
-    private val JBLinkColor: java.awt.Color
-        get() = chrome.primaryButtonBackground()
+    /**
+     * Wrapped text whose preferred height is the height *at the width it will
+     * get*. Swing measures a text area against its own current size, which on
+     * the first pass is zero, so it reports one line and the block ends up
+     * clipped; asking the parent for the width first is what makes it wrap.
+     * Capping the maximum at that height keeps it from eating the leftover
+     * space of the column.
+     */
+    private class WrappedText(text: String) : JTextArea(text) {
+        override fun getPreferredSize(): Dimension {
+            // Own width once laid out (a BorderLayout centre is narrower than
+            // its parent — the copy button sits next to it); the parent's only
+            // as the first-pass hint, when nothing has a width yet.
+            if (width <= 0) {
+                val p = parent
+                if (p != null && p.width > 0) {
+                    val insets = p.insets
+                    val w = p.width - insets.left - insets.right
+                    if (w > 0) setSize(w, height.coerceAtLeast(1))
+                }
+            }
+            return super.getPreferredSize()
+        }
+
+        override fun getMaximumSize(): Dimension = Dimension(Int.MAX_VALUE, preferredSize.height)
+    }
 
     private fun wrapText(text: String, muted: Boolean = false): JComponent {
-        val area = JTextArea(text)
+        val area = WrappedText(text)
         area.isEditable = false
         area.lineWrap = true
         area.wrapStyleWord = true
@@ -452,7 +636,6 @@ class PanelRenderer(
         area.font = chrome.normalFont(12f)
         area.foreground = if (muted) chrome.mutedForeground() else chrome.foreground()
         area.alignmentX = Component.LEFT_ALIGNMENT
-        area.maximumSize = Dimension(Int.MAX_VALUE, Int.MAX_VALUE)
         return area
     }
 

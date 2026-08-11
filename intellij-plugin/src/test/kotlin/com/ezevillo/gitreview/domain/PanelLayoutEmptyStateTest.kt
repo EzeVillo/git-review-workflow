@@ -38,6 +38,19 @@ class PanelLayoutEmptyStateTest {
     }
 
     @Test
+    fun `the start paragraph is ruled off from the inventory only when there is one`() {
+        val withReviews = panelLayout(PanelFixtures.noReviewReady())
+            .blocks.filterIsInstance<Block.Paragraph>()
+            .first { it.text == "No active review on this branch." }
+        assertTrue(withReviews.separated, "a listed inventory needs the rule under it")
+
+        val withoutReviews = panelLayout(PanelFixtures.noReviewEmpty())
+            .blocks.filterIsInstance<Block.Paragraph>()
+            .first { it.text == "No active review on this branch." }
+        assertFalse(withoutReviews.separated, "with no inventory there is nothing to separate")
+    }
+
+    @Test
     fun `inventory rows carry index and continue only on saved`() {
         val layout = panelLayout(PanelFixtures.noReviewReady())
         val inv = layout.blocks.filterIsInstance<Block.InventoryRows>().firstOrNull() ?: return

@@ -12,6 +12,23 @@
   status letter became the "path".
 - Fix tool-window title bar: stop calling `DefaultActionGroup.getChildren(null)`
   (platform throwable on 2024.3+); expand via `getChildren(ActionManager)`.
+- Fix the panel opening on a diagnostic nobody could act on: the tool window
+  materializes before git4idea has discovered the repositories, and that first
+  refresh reported "no single root" and stayed there until **Refresh** was hit
+  by hand. The panel now waits for the VCSes instead of drawing an error, and
+  re-reads itself when the repository mappings arrive.
+- The panel no longer stretches its blocks: the primary button of a pane sits
+  right under the text that introduces it, wrapped paragraphs keep their own
+  height, and the empty state rules the inventory off from **Start a review**.
+- Inventory rows read left to right like the extension's: name and actions on
+  the left, badges and the `?` hint on the right edge.
+- The primary control of each situation is painted with the IDE's default-button
+  style, and links with the theme's link colour.
+- The file list reads as a list of paths, not as a stack of buttons: each row is
+  borderless, in the editor font, with the diff glyph the extension gives it,
+  and takes a fill only under the pointer. The last opened one keeps the
+  selection fill plus a bar at the margin. **Diff** / **File** carry their
+  glyphs too, and the list heading is a quiet label above its list.
 
 ## 0.1.0
 

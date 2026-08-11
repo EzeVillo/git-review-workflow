@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import javax.swing.JButton
+import javax.swing.SwingConstants
 
 class PanelRendererTest {
     @Test
@@ -63,6 +64,84 @@ class PanelRendererTest {
         if (toggle2 != null && toggles.isNotEmpty()) {
             assertTrue(toggle2.text.startsWith("▼"), "section should stay open: ${toggle2.text}")
         }
+    }
+
+    @Test
+    fun `the primary control is painted as the primary one and the rest are not`() {
+        val chrome = PreviewPanelChrome()
+        val renderer = PanelRenderer(chrome) { _, _ -> false }
+        val buttons = PanelRenderer.collectButtons(
+            renderer.render(panelLayout(PanelFixtures.noReviewReady())),
+        )
+        val start = buttons.find { it.text == "Start a review" }
+        assertTrue(start != null, "start button present")
+        assertEquals(chrome.primaryButtonBackground(), start!!.background)
+        val discard = buttons.find { it.text == "Discard" }
+        assertTrue(discard != null, "inventory button present")
+        assertTrue(
+            discard!!.background != chrome.primaryButtonBackground(),
+            "only one control per situation carries the primary paint",
+        )
+    }
+
+    @Test
+    fun `no block in the column may grow past the height it asked for`() {
+        // The stretch is what pushed Start to the bottom of the pane and blew
+        // air between every paragraph.
+        val renderer = PanelRenderer(PreviewPanelChrome()) { _, _ -> false }
+        val offenders = ArrayList<String>()
+        var situation = ""
+        fun walk(c: java.awt.Component) {
+            if (c is java.awt.Container) {
+                val column = c.layout as? javax.swing.BoxLayout
+                if (column != null) {
+                    for (child in c.components) {
+                        // A filler is the deliberate stretch: the glue that pins
+                        // the footer to the bottom edge, and the struts.
+                        if (child is javax.swing.Box.Filler) continue
+                        if (child is javax.swing.JComponent && child.maximumSize.height == Int.MAX_VALUE) {
+                            offenders.add("$situation: ${child::class.simpleName} in ${c::class.simpleName}")
+                        }
+                    }
+                }
+                for (child in c.components) walk(child)
+            }
+        }
+        for ((name, model) in PanelFixtures.all()) {
+            situation = name
+            walk(renderer.render(panelLayout(model)))
+        }
+        assertTrue(offenders.isEmpty(), "unbounded blocks in a column: $offenders")
+    }
+
+    @Test
+    fun `a file row is painted as a list row and not as a framed button`() {
+        // A stack of framed buttons reads as a stack of actions; the extension
+        // paints the same list as paths with no chrome of their own.
+        val layout = panelLayout(PanelFixtures.reviewWhole(3))
+        val renderer = PanelRenderer(PreviewPanelChrome()) { _, _ -> false }
+        val buttons = PanelRenderer.collectButtons(renderer.render(layout))
+        val row = buttons.find { it.text == "file2.kt" }
+        assertTrue(row != null, "file row present")
+        assertFalse(row!!.isContentAreaFilled, "a row takes no button fill")
+        assertFalse(row.isBorderPainted, "a row takes no button frame")
+        assertEquals(SwingConstants.LEFT, row.horizontalAlignment)
+        assertEquals("file2.kt", row.toolTipText, "the full path stays one hover away")
+        // The whole-range Diff above the list is still a button, and it is not
+        // one of the rows.
+        val diff = buttons.find { it.text == "Diff" }
+        assertTrue(diff != null, "Diff button present")
+        assertTrue(diff!!.isContentAreaFilled, "the verb above the list keeps its fill")
+    }
+
+    @Test
+    fun `the last opened row says so`() {
+        val layout = panelLayout(PanelFixtures.reviewWhole(3))
+        val renderer = PanelRenderer(PreviewPanelChrome()) { _, _ -> false }
+        val buttons = PanelRenderer.collectButtons(renderer.render(layout))
+        val opened = buttons.find { it.text == "file1.kt" }
+        assertTrue(opened != null, "first file is the last opened one in the fixture")
+        assertEquals("Last opened: file1.kt", opened!!.toolTipText)
     }
 
     @Test

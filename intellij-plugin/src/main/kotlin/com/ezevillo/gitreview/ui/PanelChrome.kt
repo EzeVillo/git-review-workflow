@@ -1,10 +1,14 @@
 package com.ezevillo.gitreview.ui
 
 import com.intellij.icons.AllIcons
+import com.intellij.ide.ui.laf.darcula.ui.DarculaButtonUI
+import com.intellij.openapi.editor.colors.EditorColorsManager
 import com.intellij.ui.JBColor
 import com.intellij.util.ui.JBUI
+import com.intellij.util.ui.UIUtil
 import java.awt.Color
 import java.awt.Font
+import javax.swing.AbstractButton
 import javax.swing.Icon
 import javax.swing.UIManager
 import javax.swing.border.Border
@@ -18,6 +22,24 @@ interface PanelChrome {
     fun background(): Color
     fun borderColor(): Color
     fun primaryButtonBackground(): Color
+    fun linkForeground(): Color
+
+    /**
+     * The two fills of a list row — the extension's `--vscode-list-hoverBackground`
+     * and `--vscode-list-inactiveSelectionBackground`. A file row is a row of a
+     * list and not a button: it only takes a fill under the pointer, or when it
+     * is the one the reviewer opened last.
+     */
+    fun rowHoverBackground(): Color
+    fun rowSelectedBackground(): Color
+
+    /**
+     * Marks the one primary control of a situation. The extension paints it with
+     * `--vscode-button-background`; here it is the IDE's own default-button
+     * style, so "this is the action" reads the same without inventing a colour
+     * the theme does not own.
+     */
+    fun markPrimary(button: AbstractButton)
     fun emptyBorder(top: Int = 0, left: Int = 0, bottom: Int = 0, right: Int = 0): Border
     fun monoFont(size: Float = 12f): Font
     fun boldFont(size: Float = 13f): Font
@@ -40,9 +62,25 @@ class PluginPanelChrome : PanelChrome {
     override fun borderColor(): Color = JBColor.border()
     override fun primaryButtonBackground(): Color =
         JBColor.namedColor("Button.default.startBackground", JBColor.BLUE)
+    override fun linkForeground(): Color = JBUI.CurrentTheme.Link.Foreground.ENABLED
+    override fun rowHoverBackground(): Color = JBUI.CurrentTheme.List.Hover.background(true)
+    override fun rowSelectedBackground(): Color = UIUtil.getListSelectionBackground(false)
+    override fun markPrimary(button: AbstractButton) {
+        button.putClientProperty(DarculaButtonUI.DEFAULT_STYLE_KEY, true)
+    }
     override fun emptyBorder(top: Int, left: Int, bottom: Int, right: Int): Border =
         JBUI.Borders.empty(top, left, bottom, right)
-    override fun monoFont(size: Float): Font = Font(Font.MONOSPACED, Font.PLAIN, size.toInt())
+
+    /**
+     * Paths, commands and stderr in the editor's own font — the extension's
+     * `--vscode-editor-font-family`. `Font.MONOSPACED` resolves to whatever the
+     * JDK picked (Courier New on Windows), which is not the face the reviewer
+     * reads code in two panes over.
+     */
+    override fun monoFont(size: Float): Font {
+        val name = EditorColorsManager.getInstance().globalScheme.editorFontName
+        return Font(name, Font.PLAIN, size.toInt())
+    }
     override fun boldFont(size: Float): Font = Font(Font.SANS_SERIF, Font.BOLD, size.toInt())
     override fun normalFont(size: Float): Font = Font(Font.SANS_SERIF, Font.PLAIN, size.toInt())
     override fun iconPrev(): Icon = AllIcons.Actions.Back
@@ -59,6 +97,37 @@ class PreviewPanelChrome : PanelChrome {
     override fun borderColor(): Color = UIManager.getColor("Component.borderColor") ?: Color.LIGHT_GRAY
     override fun primaryButtonBackground(): Color =
         UIManager.getColor("Button.default.background") ?: Color(0x4A90D9)
+    override fun linkForeground(): Color = Color(0x38, 0x7C, 0xC8)
+
+    /**
+     * No list tokens outside the IDE: the two fills are the panel foreground laid
+     * over the panel background at the weight the extension gives them, so the
+     * preview keeps working on whatever LaF it lands on (light or dark).
+     */
+    override fun rowHoverBackground(): Color =
+        UIManager.getColor("List.hoverBackground") ?: blend(foreground(), background(), 0.08f)
+
+    override fun rowSelectedBackground(): Color =
+        UIManager.getColor("List.selectionInactiveBackground")
+            ?: blend(foreground(), background(), 0.16f)
+
+    private fun blend(over: Color, under: Color, weight: Float): Color = Color(
+        (over.red * weight + under.red * (1 - weight)).toInt(),
+        (over.green * weight + under.green * (1 - weight)).toInt(),
+        (over.blue * weight + under.blue * (1 - weight)).toInt(),
+    )
+
+    /**
+     * No IDE LaF here: the fill is ours, so the preview shows the same weight.
+     * `isContentAreaFilled = false` is what keeps the platform LaF from painting
+     * its own background over it.
+     */
+    override fun markPrimary(button: AbstractButton) {
+        button.isContentAreaFilled = false
+        button.isOpaque = true
+        button.background = primaryButtonBackground()
+        button.foreground = Color.WHITE
+    }
     override fun emptyBorder(top: Int, left: Int, bottom: Int, right: Int): Border =
         javax.swing.BorderFactory.createEmptyBorder(top, left, bottom, right)
     override fun monoFont(size: Float): Font = Font(Font.MONOSPACED, Font.PLAIN, size.toInt())

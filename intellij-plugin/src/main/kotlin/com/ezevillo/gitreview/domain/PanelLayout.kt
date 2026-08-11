@@ -175,7 +175,18 @@ sealed class Block {
     ) : Block()
 
     data class Note(val text: String) : Block()
-    data class Paragraph(val text: String, val muted: Boolean = false) : Block()
+
+    /**
+     * @param separated a rule above the paragraph, the extension's
+     *   `.empty.after-inv`: what separates "you already have these reviews"
+     *   from "this is how you start one". Carried by the paragraph and not by
+     *   the list, so with no reviews the empty state is untouched.
+     */
+    data class Paragraph(
+        val text: String,
+        val muted: Boolean = false,
+        val separated: Boolean = false,
+    ) : Block()
     data class Heading(val text: String) : Block()
 
     data class Banner(
@@ -697,7 +708,12 @@ private fun noReviewReadyBlocks(model: PanelModel): List<Block> {
         out.add(Block.Heading("Reviews in this repository"))
         out.add(inventoryRows(model))
     }
-    out.add(Block.Paragraph("No active review on this branch."))
+    out.add(
+        Block.Paragraph(
+            "No active review on this branch.",
+            separated = model.reviews.isNotEmpty(),
+        ),
+    )
     out.add(
         Block.Row(listOf(ctrl(ControlId.START_REVIEW, "Start a review", Emphasis.PRIMARY, enabled))),
     )

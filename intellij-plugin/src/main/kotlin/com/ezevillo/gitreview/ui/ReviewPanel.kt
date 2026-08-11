@@ -10,6 +10,7 @@ import com.ezevillo.gitreview.host.GitReviewService
 import com.intellij.openapi.project.Project
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
+import javax.swing.JLabel
 import javax.swing.JPanel
 import javax.swing.SwingUtilities
 import javax.swing.Timer
@@ -43,7 +44,14 @@ class ReviewPanel(
         disposeListener = service.onModelChanged { model ->
             SwingUtilities.invokeLater { onModel(model) }
         }
-        onModel(service.currentModel())
+        // Nothing has been read yet: the seed state is an ERROR placeholder and
+        // drawing it would claim the review state is broken before anyone looked
+        // (the extension shows an empty webview until the first model arrives).
+        if (service.hasResolvedState()) {
+            onModel(service.currentModel())
+        } else {
+            paintWaiting()
+        }
     }
 
     fun disposePanel() {
@@ -104,11 +112,26 @@ class ReviewPanel(
         return false
     }
 
+    /** Pre-first-refresh surface: no situation, no controls — just "hold on". */
+    private fun paintWaiting() {
+        val label = JLabel(WAITING_TEXT)
+        label.foreground = chrome.mutedForeground()
+        label.border = JBUI.Borders.empty(8)
+        removeAll()
+        add(label, BorderLayout.NORTH)
+        revalidate()
+        repaint()
+    }
+
     private fun paintLayout(model: PanelModel, loading: Boolean) {
         val layout = panelLayout(model, loading = loading)
         removeAll()
         add(renderer.render(layout), BorderLayout.CENTER)
         revalidate()
         repaint()
+    }
+
+    private companion object {
+        const val WAITING_TEXT = "Reading the review state…"
     }
 }

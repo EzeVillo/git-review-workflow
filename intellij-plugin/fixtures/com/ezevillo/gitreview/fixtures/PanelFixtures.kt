@@ -75,6 +75,15 @@ object PanelFixtures {
         )
     }
 
+    /** Configured, with nothing in the repository yet: the bare empty state. */
+    fun noReviewEmpty(): PanelModel = buildPanelModel(
+        ReviewState(
+            situation = Situation.NO_REVIEW,
+            config = EffectiveConfig(base = "main", remote = "origin"),
+        ),
+        PanelInputs(busy = false),
+    )
+
     fun finishPending(): PanelModel {
         val branches = listOf(
             BranchRecord(

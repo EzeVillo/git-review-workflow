@@ -5,8 +5,8 @@ Guía para validar el plugin localmente. No es tutorial de usuario final.
 ## Prerrequisitos
 
 1. **IntelliJ IDEA** en la línea pinneada — la que diga
-   `intellij-plugin/gradle.properties`, única fuente del pin (2026.2 / branch
-   platform **262** al planear).
+   `intellij-plugin/gradle.properties`, única fuente del pin (2026.1 / branch
+   platform **261**; sin techo de `until-build`).
 2. **JDK** del platform (ver `intellij-plugin/gradle.properties`).
 3. **git** en PATH.
 4. **CLI** `git-review-workflow` ≥ `min_cli_version` del canónico

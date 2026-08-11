@@ -349,8 +349,9 @@ mismo YAML en cada `./gradlew test`.
 
 ### Plugin de IntelliJ IDEA
 
-`intellij-plugin/` es un módulo Gradle aparte (JDK 25; pin de platform en
-`intellij-plugin/gradle.properties` — **única** fuente de since-build/versión).
+`intellij-plugin/` es un módulo Gradle aparte (JDK 21; pin de platform en
+`intellij-plugin/gradle.properties` — **única** fuente de since-build/versión;
+mínimo IDEA **2026.1** / branch **261**, sin techo de `until-build`).
 Dominio puro en `com.ezevillo.gitreview.domain` (sin `com.intellij`); host/UI
 invocan la CLI con `GeneralCommandLine` UTF-8.
 

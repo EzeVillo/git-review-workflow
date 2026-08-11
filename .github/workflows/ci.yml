@@ -129,8 +129,8 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          # Platform 2026.2 requires Java 25 (see intellij-plugin/gradle.properties).
-          java-version: 25
+          # Platform 2026.1 requires Java 21 (see intellij-plugin/gradle.properties).
+          java-version: 21
       - name: Domain unit tests
         working-directory: intellij-plugin
         # bash so the POSIX gradlew wrapper runs on Windows runners too

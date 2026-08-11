@@ -5,8 +5,8 @@ Full action and situation parity with the VS Code extension; state always comes 
 
 ## Requirements
 
-- IntelliJ IDEA **2026.2+** (build `262+`)
-- JDK **25** for building (platform 2026.2 requirement)
+- IntelliJ IDEA **2026.1+** (build `261+`; open-ended for later releases)
+- JDK **21** for building (platform 2026.1 requirement)
 - A local `git review` CLI (`npm install -g git-review-workflow` or this monorepo’s `./install.sh`)
 
 Platform pin lives only in [`gradle.properties`](./gradle.properties). That file

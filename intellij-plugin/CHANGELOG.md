@@ -8,8 +8,9 @@ and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 
 ## [0.1.0]
 
-First release. Requires IntelliJ IDEA **2026.2+** (build `262+`) and a local
-`git review` **0.6.0** or newer.
+First release. Requires IntelliJ IDEA **2026.1+** (build `261+`; later IDE
+releases included via open `until-build`) and a local `git review` **0.6.0** or
+newer.
 
 ### Added
 

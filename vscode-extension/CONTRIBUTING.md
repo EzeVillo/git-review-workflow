@@ -170,8 +170,15 @@ already failing.
 
 ## Packaging
 
+Bump the extension version (stamps `package.json` and the package's own entries
+in `package-lock.json` so they cannot drift — same idea as the CLI's root
+`./bump-version.sh`) before packaging:
+
 ```sh
-npm run package     # esbuild --production, then vsce package
+./bump-version.sh X.Y.Z   # from this directory
+# or from the monorepo root: ./vscode-extension/bump-version.sh X.Y.Z
+# then move Unreleased notes under ## [X.Y.Z] in CHANGELOG.md
+npm run package           # esbuild --production, then vsce package
 ```
 
 Produces a `.vsix` you can install with

@@ -7,7 +7,7 @@
 **Status**: Draft
 
 **Input**: User description: "Plugin de IntelliJ IDEA en este mismo repo
-(`intellij-plugin/`), paridad total con la extensión de VS Code, panel nativo
+(`jetbrains-plugin/`), paridad total con la extensión de VS Code, panel nativo
 del IDE (no webview), solo IntelliJ IDEA en la última línea de versiones
 soportada, multiplataforma Windows/macOS/Linux. La spec se deriva del código
 real de la extensión y de la CLI, no de specs de features previas que pueden
@@ -466,7 +466,7 @@ local).
 - **FR-018**: El plugin MUST limitarse a **IntelliJ IDEA** en el primer
   release; la versión mínima de IDE es la **última línea estable** fijada
   en el plan al implementar (since-build / until-build de esa línea).
-- **FR-019**: El plugin MUST vivir en este monorepo bajo `intellij-plugin/`
+- **FR-019**: El plugin MUST vivir en este monorepo bajo `jetbrains-plugin/`
   y versionar el contrato CLI-cliente junto al resto del producto.
 - **FR-020**: El proyecto MUST mantener una **fuente canónica anti-drift**
   para textos y reglas de producto compartidos entre la extensión VS Code
@@ -559,7 +559,7 @@ local).
 - **Solo IntelliJ IDEA**, última línea estable de IDE al pinnear
   `since-build` en implementación. Otras IDEs de la familia quedan fuera
   del primer release (alcance de testing).
-- **Ubicación del código**: `intellij-plugin/` en este monorepo.
+- **Ubicación del código**: `jetbrains-plugin/` en este monorepo.
 - **CLI mínima**: 0.4.0 (la que trae el contrato que el cliente actual
   exige). Si la CLI sube de major de contrato, ambos clientes suben juntos.
 - **Idioma de UI del plugin**: inglés en strings de producto, igual que la

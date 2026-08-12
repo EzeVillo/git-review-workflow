@@ -80,7 +80,7 @@ class ToolWindowIconTest {
     private fun resources(): File {
         val root = System.getProperty("git.review.monorepo.root")
         assertNotNull(root, "git.review.monorepo.root is not set — see build.gradle.kts")
-        val dir = File(root, "intellij-plugin/src/main/resources")
+        val dir = File(root, "jetbrains-plugin/src/main/resources")
         assertTrue(dir.isDirectory, "resources missing at ${dir.absolutePath}")
         return dir
     }

@@ -10,12 +10,12 @@
 | SC-004 | Non-ASCII paths open | unit unquote + manual Win/macOS/Linux | [ ] |
 | SC-005 | cli-missing/outdated + install copy | panel + InstallHint + YAML | [x] |
 | SC-006 | No CLI until tool window shown | factory lazy design; platformTest TODO | [ ] |
-| SC-007 | Domain unit suite green | `./gradlew -p intellij-plugin test` (2026-08-08 BUILD SUCCESSFUL) | [x] |
+| SC-007 | Domain unit suite green | `./gradlew -p jetbrains-plugin test` (2026-08-08 BUILD SUCCESSFUL) | [x] |
 | SC-008 | Anti-drift CI | `check-client-product-surface.mjs` | [x] |
 | SC-009 | Three OS smoke | README smoke matrix | [ ] |
 | SC-010 | Diff deleted/added files | NameStatusTest + OpenEntryActions | [x] |
 
 ## Smoke notes
 
-- Pin: see `intellij-plugin/gradle.properties` (2026.1 / 261 / JDK 21; open until-build).
+- Pin: see `jetbrains-plugin/gradle.properties` (2026.1 / 261 / JDK 21; open until-build).
 - Commands: `test`, `platformTest`, `runIde`, `runPanelPreview`, `buildPlugin`, `verifyPlugin`.

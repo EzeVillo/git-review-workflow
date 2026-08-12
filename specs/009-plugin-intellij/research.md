@@ -6,7 +6,7 @@ no specs `002`–`008`.
 
 ## Decisión 1 — Ubicación del código
 
-**Decision**: monorepo en `intellij-plugin/` (hermano de `vscode-extension/`).
+**Decision**: monorepo en `jetbrains-plugin/` (hermano de `vscode-extension/`).
 
 **Rationale**: el contrato CLI↔cliente se versiona junto; los cambios de
 porcelain y de textos anti-drift tocan un solo PR; mismo patrón que ya usa el
@@ -25,7 +25,7 @@ estable al implementar; docs actuales: **2.18.1**), target **IntelliJ IDEA
 circulaba en el primer borrador de esta feature era de 2026.1). El par
 línea/JDK se **verifica contra la tabla oficial de build ranges el día de
 implementación** (T001) y se estampa en un solo lugar,
-`intellij-plugin/gradle.properties`; `plugin.xml` toma de ahí
+`jetbrains-plugin/gradle.properties`; `plugin.xml` toma de ahí
 `since-build`/`until-build`.
 
 **Rationale**: el usuario pidió “la última versión” de IDE y solo IDEA.
@@ -162,7 +162,7 @@ matriz de acciones. Resolverlo en la spec/plan, no “después”.
 ## Decisión 10 — Estrategia de port de tests
 
 **Decision**: traducir `vscode-extension/test/unit/*.spec.ts` de la capa
-pura a JUnit 5 en `intellij-plugin/.../domain` **caso por caso** (mismos
+pura a JUnit 5 en `jetbrains-plugin/.../domain` **caso por caso** (mismos
 fixtures de strings porcelain). No reescribir specs de integración VS Code;
 añadir tests de platform acotados (tool window model wiring, process
 invoke con git-review real en sandbox) donde la infra lo permita.
@@ -209,7 +209,7 @@ se etiqueta “completo” hasta SC-001–SC-010.
 | Familia de IDEs | Solo IntelliJ IDEA |
 | Versión IDE | Última estable (2026.2 / branch 262 al planear; se reverifica en T001) |
 | Panel | Swing |
-| Repo | `intellij-plugin/` |
+| Repo | `jetbrains-plugin/` |
 | JCEF | No en v1 |
 | Multi-root picker | No; error de un solo cwd |
 | i18n UI | Inglés como la extensión |

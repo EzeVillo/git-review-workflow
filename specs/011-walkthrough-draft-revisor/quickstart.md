@@ -143,7 +143,7 @@ Requiere el checkout instalado (`./install.sh`) o `gitReview.path` apuntando a
 ## Escenario 8 — Lo mismo en IntelliJ (US3)
 
 ```sh
-cd intellij-plugin && ./gradlew runIde
+cd jetbrains-plugin && ./gradlew runIde
 ```
 
 Abrir sólo `<sandbox>/work`, tool window **git review**, mismo recorrido que el
@@ -159,7 +159,7 @@ IDE**: el archivo tiene que poder editarse con el diálogo abierto.
 ./tests/run-docker.sh                             # bats (CLI)
 cd vscode-extension && npm run test:unit          # unit de la extensión
 ./vscode-extension/test/run-docker.sh             # integración de la extensión
-cd intellij-plugin && ./gradlew test              # dominio del plugin
+cd jetbrains-plugin && ./gradlew test              # dominio del plugin
 ```
 
 Los tests van al contenedor por la razón de siempre: en Windows crear un proceso

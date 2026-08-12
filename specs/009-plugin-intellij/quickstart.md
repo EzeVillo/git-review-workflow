@@ -5,9 +5,9 @@ Guía para validar el plugin localmente. No es tutorial de usuario final.
 ## Prerrequisitos
 
 1. **IntelliJ IDEA** en la línea pinneada — la que diga
-   `intellij-plugin/gradle.properties`, única fuente del pin (2026.1 / branch
+   `jetbrains-plugin/gradle.properties`, única fuente del pin (2026.1 / branch
    platform **261**; sin techo de `until-build`).
-2. **JDK** del platform (ver `intellij-plugin/gradle.properties`).
+2. **JDK** del platform (ver `jetbrains-plugin/gradle.properties`).
 3. **git** en PATH.
 4. **CLI** `git-review-workflow` ≥ `min_cli_version` del canónico
    (`contracts/client-product-surface.yaml`), o path al dispatcher vía setting.
@@ -18,7 +18,7 @@ Guía para validar el plugin localmente. No es tutorial de usuario final.
 ## Build y tests de dominio
 
 ```sh
-cd intellij-plugin
+cd jetbrains-plugin
 ./gradlew test          # Windows: gradlew.bat test — unit de dominio, sin IDE
 ./gradlew verifyPlugin  # cuando exista
 ```
@@ -30,7 +30,7 @@ la tabla de paridad argv de las 27 acciones.
 ## Platform tests (headless, Linux)
 
 ```sh
-./gradlew -p intellij-plugin platformTest
+./gradlew -p jetbrains-plugin platformTest
 ```
 
 Levanta un IDE headless: wiring del tool window, activación perezosa
@@ -53,7 +53,7 @@ Equivalente a F5 / Extension Development Host de la extensión VS Code.
 Documentación de contrib: monorepo `CONTRIBUTING.md` → *The IntelliJ IDEA plugin*.
 
 ```sh
-# desde intellij-plugin/
+# desde jetbrains-plugin/
 ./gradlew runIde          # Git Bash / Linux / macOS
 # PowerShell: .\gradlew.bat runIde  (no usar .\gradlew.bat desde MINGW64)
 ```

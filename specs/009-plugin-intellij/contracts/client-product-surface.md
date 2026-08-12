@@ -76,7 +76,7 @@ resúmenes; ante divergencia se corrigen ellas, no el YAML.
    PR actualiza el YAML **y** regenera/verifica ambos clientes.
 2. **CI**: job (puede ser script Node o Python del repo) que:
    - parsea el YAML;
-   - grepea/constantes generadas en `vscode-extension` y `intellij-plugin`;
+   - grepea/constantes generadas en `vscode-extension` y `jetbrains-plugin`;
    - falla si hay divergencia.
 3. **README**: la regla “DOS README” se extiende: cambios de superficie de
    cliente documentados en README EN+ES y, si aplica, mención del plugin.

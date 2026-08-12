@@ -1,3 +1,4 @@
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -68,22 +69,52 @@ intellijPlatform {
     pluginConfiguration {
         name = providers.gradleProperty("pluginName")
         version = providers.gradleProperty("pluginVersion")
+        // Marketplace listing body (HTML). Keep in sync with the source plugin.xml
+        // description intent: multi-IDE, not IDEA-only.
         description.set(
-            "Review a git-review-workflow pull request as a native IntelliJ IDEA tool window.",
+            """
+            Walk a PR in order, then edit and run it — not just read the diff.
+            Full parity with the VS Code extension: start, walk/step/whole, finish,
+            save, abort, and housekeeping — all driven by the git-review CLI porcelain
+            contract.<br><br>
+            Built for JetBrains IDEs on the IntelliJ Platform (IntelliJ IDEA, WebStorm,
+            PhpStorm, PyCharm, GoLand, CLion, RubyMine, RustRover, DataGrip, and other
+            products that ship <code>com.intellij.modules.platform</code> + Git).
+            Requires a local <code>git review</code> CLI.
+            Not supported on Android Studio or Rider.
+            """.trimIndent(),
         )
 
         ideaVersion {
             sinceBuild = providers.gradleProperty("pluginSinceBuild")
-            val until = providers.gradleProperty("pluginUntilBuild").orNull
-            if (!until.isNullOrBlank()) {
-                untilBuild = until
-            }
+            // Empty pluginUntilBuild → open-ended (no until-build attribute). Explicit
+            // null, not the Gradle-plugin default of MAJOR.*, so later IDE lines stay
+            // installable without a plugin rebuild for the range alone.
+            untilBuild = providers.gradleProperty("pluginUntilBuild")
+                .map { it.takeIf(String::isNotBlank) }
+                .orElse(provider { null })
         }
     }
 
     pluginVerification {
         ides {
-            recommended()
+            // Same platform line we compile against, one binary per product that
+            // publishes a verifier download for that line. Marketplace product
+            // coverage still comes from plugin.xml (platform + Git4Idea); this
+            // list is binary-compat only. Android Studio and Rider are omitted
+            // on purpose — plugin.xml marks them incompatible-with.
+            // DataGrip is not in the JetBrains plugin-verifier binary index for
+            // this line (create() fails to resolve a download URL); it remains
+            // Marketplace-eligible via the same depends as the others.
+            val line = providers.gradleProperty("platformVersion")
+            create(IntelliJPlatformType.IntellijIdea, line)
+            create(IntelliJPlatformType.WebStorm, line)
+            create(IntelliJPlatformType.PhpStorm, line)
+            create(IntelliJPlatformType.PyCharm, line)
+            create(IntelliJPlatformType.GoLand, line)
+            create(IntelliJPlatformType.CLion, line)
+            create(IntelliJPlatformType.RubyMine, line)
+            create(IntelliJPlatformType.RustRover, line)
         }
     }
 }
@@ -172,7 +203,7 @@ tasks.named<Test>("test") {
         "git.review.contracts.dir",
         rootProject.projectDir.parentFile.resolve("contracts").absolutePath,
     )
-    // When intellij-plugin is the Gradle root, parent is the monorepo root.
+    // When jetbrains-plugin is the Gradle root, parent is the monorepo root.
     val monorepoRoot = projectDir.parentFile
     systemProperty("git.review.monorepo.root", monorepoRoot.absolutePath)
 }

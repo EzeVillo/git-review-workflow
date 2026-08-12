@@ -26,7 +26,7 @@ pruebe y entregue por separado.
 
 Monorepo, según [plan.md](plan.md) § Project Structure: CLI de shell en `bin/`,
 suites bats en `tests/`, extensión en `vscode-extension/`, plugin en
-`intellij-plugin/`.
+`jetbrains-plugin/`.
 
 **Recordatorios que aplican a toda la lista**:
 
@@ -166,14 +166,14 @@ revisor se pregunta cómo leer el PR.
 **Depends on**: US1. Independiente de US2, aunque conviene portar el flujo ya
 estabilizado.
 
-- [X] T046 [US3] Agregar los ids nuevos en `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/ConfigPorcelain.kt`
-- [X] T047 [US3] Agregar sus entradas a `OFFER_META` y `OFFER_ORDER` en `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/LayoutOffers.kt`, con **los mismos textos** que la extensión
-- [X] T048 [US3] Portar la máquina del bucle a `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/DraftFlow.kt` como dominio puro (sin `com.intellij`)
-- [X] T049 [US3] Implementar `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/ui/DraftWaitDialog.kt` con `DialogWrapper` e `isModal = false` — toda la familia `Messages.*` bloquea el IDE y no sirve
-- [X] T050 [US3] Conectar la rama en `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/ui/StartWizard.kt`: como el asistente es síncrono, corta y se reanuda desde el callback del diálogo, con rama/origen/rango capturados en la closure
-- [X] T051 [US3] Mostrar el badge de draft en `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/PanelLayout.kt` y su render, **sin** modificar la estructura de bloques (`PanelLayoutContractTest` debe seguir verde sin tocar el YAML)
-- [X] T052 [P] [US3] Tests de dominio en `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/`: ids nuevos, orden, y paridad de `DraftFlow` con la máquina de la extensión
-- [X] T053 [P] [US3] Agregar el estado con badge a `intellij-plugin/fixtures/com/ezevillo/gitreview/fixtures/PanelFixtures.kt` para `./gradlew runPanelPreview`
+- [X] T046 [US3] Agregar los ids nuevos en `jetbrains-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/ConfigPorcelain.kt`
+- [X] T047 [US3] Agregar sus entradas a `OFFER_META` y `OFFER_ORDER` en `jetbrains-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/LayoutOffers.kt`, con **los mismos textos** que la extensión
+- [X] T048 [US3] Portar la máquina del bucle a `jetbrains-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/DraftFlow.kt` como dominio puro (sin `com.intellij`)
+- [X] T049 [US3] Implementar `jetbrains-plugin/src/main/kotlin/com/ezevillo/gitreview/ui/DraftWaitDialog.kt` con `DialogWrapper` e `isModal = false` — toda la familia `Messages.*` bloquea el IDE y no sirve
+- [X] T050 [US3] Conectar la rama en `jetbrains-plugin/src/main/kotlin/com/ezevillo/gitreview/ui/StartWizard.kt`: como el asistente es síncrono, corta y se reanuda desde el callback del diálogo, con rama/origen/rango capturados en la closure
+- [X] T051 [US3] Mostrar el badge de draft en `jetbrains-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/PanelLayout.kt` y su render, **sin** modificar la estructura de bloques (`PanelLayoutContractTest` debe seguir verde sin tocar el YAML)
+- [X] T052 [P] [US3] Tests de dominio en `jetbrains-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/`: ids nuevos, orden, y paridad de `DraftFlow` con la máquina de la extensión
+- [X] T053 [P] [US3] Agregar el estado con badge a `jetbrains-plugin/fixtures/com/ezevillo/gitreview/fixtures/PanelFixtures.kt` para `./gradlew runPanelPreview`
 
 ---
 
@@ -184,7 +184,7 @@ estabilizado.
 - [X] T056 Revisar `contracts/client-product-surface.yaml`: subir `min_cli_version` porque los clientes pasan a depender de los ids nuevos, y **confirmar que `panel_layout` no cambió** (si cambió, el diseño se desvió del plan)
 - [X] T057 Verificar que `node scripts/check-client-product-surface.mjs` sigue en verde (27 acciones, sin acciones nuevas)
 - [X] T058 [P] Actualizar `CLAUDE.md` § Modelo de estado con el borrador del revisor y su ciclo de vida, en el párrafo del modo walk
-- [ ] T059 Correr las cinco suites en verde: `./lint-docker.sh`, `./tests/run-docker.sh`, `npm run test:unit`, `./vscode-extension/test/run-docker.sh`, `cd intellij-plugin && ./gradlew test`
+- [ ] T059 Correr las cinco suites en verde: `./lint-docker.sh`, `./tests/run-docker.sh`, `npm run test:unit`, `./vscode-extension/test/run-docker.sh`, `cd jetbrains-plugin && ./gradlew test`
   - **Cuatro de cinco en verde**: shellcheck; 713 bats; 368 unit de la extensión;
     69 de integración (66 previos + 3 nuevos). Más
     `node scripts/check-client-product-surface.mjs` (27 acciones, `panel_layout`

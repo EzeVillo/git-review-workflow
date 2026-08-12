@@ -36,10 +36,10 @@ herramienta con la que se hace la comparación lado a lado.
 ## Technical Context
 
 **Language/Version**: Kotlin 2.3.20 sobre JDK 25 (toolchain fijado en
-`intellij-plugin/build.gradle.kts`; platform 2026.2)
+`jetbrains-plugin/build.gradle.kts`; platform 2026.2)
 
 **Primary Dependencies**: IntelliJ Platform Gradle Plugin 2.18.1, plataforma
-IntelliJ IDEA (versión pinneada en `intellij-plugin/gradle.properties`, única
+IntelliJ IDEA (versión pinneada en `jetbrains-plugin/gradle.properties`, única
 fuente de since-build), `Git4Idea`, Swing. **Sin dependencias nuevas de
 runtime**: nada nuevo viaja en el `.zip` del plugin. La única incorporación es
 de test — `testImplementation("org.yaml:snakeyaml")` — porque
@@ -135,7 +135,7 @@ scripts/
 └── check-client-product-surface.mjs   # + las 6 verificaciones vs panelHtml.ts
                                        #   y la coherencia con el bloque actions:
 
-intellij-plugin/
+jetbrains-plugin/
 ├── build.gradle.kts                   # + source set `fixtures` + dependencia de test (snakeyaml)
 ├── src/main/kotlin/com/ezevillo/gitreview/
 │   ├── domain/

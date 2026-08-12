@@ -17,12 +17,12 @@ interno** usable es US1+US2+US7 (leer panel + abrir + CLI missing).
 
 - **[P]**: paralelizable
 - **[Story]**: [US1]…[US8] según [spec.md](./spec.md)
-- Paths bajo `intellij-plugin/` salvo canónico en `contracts/`
+- Paths bajo `jetbrains-plugin/` salvo canónico en `contracts/`
 
 ## Path Conventions
 
-- Plugin: `intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/…`
-- Tests: `intellij-plugin/src/test/kotlin/com/ezevillo/gitreview/…`
+- Plugin: `jetbrains-plugin/src/main/kotlin/com/ezevillo/gitreview/…`
+- Tests: `jetbrains-plugin/src/test/kotlin/com/ezevillo/gitreview/…`
 - Canónico: `contracts/client-product-surface.yaml` (raíz del repo)
 - Extensión (anti-drift): `vscode-extension/test/unit/…` + script CI
 
@@ -37,14 +37,14 @@ mezclado con el anterior.
 
 **Purpose**: scaffold Gradle + esqueleto de paquetes.
 
-- [X] T001 Crear `intellij-plugin/` con IntelliJ Platform Gradle Plugin 2.x,
+- [X] T001 Crear `jetbrains-plugin/` con IntelliJ Platform Gradle Plugin 2.x,
   `settings.gradle.kts`, `build.gradle.kts`, `gradle.properties`, wrapper, y
   paquete base `com.ezevillo.gitreview`. **Verificar primero** la línea
   estable y su JDK contra la tabla oficial de build ranges de JetBrains del
   día: al planear es IDEA **2026.2 → branch 262** (`20YY.N → (YY)(N)`; el 261
   del primer borrador era 2026.1). `gradle.properties` es la **única** fuente
   del pin — plan, research y quickstart lo citan, no lo fijan.
-- [X] T002 [P] Añadir `intellij-plugin/src/main/resources/META-INF/plugin.xml`
+- [X] T002 [P] Añadir `jetbrains-plugin/src/main/resources/META-INF/plugin.xml`
   (nombre, vendor, dependencia `com.intellij.modules.platform` + Git4Idea,
   tool window stub con id **`gitReview.walkthrough`** — confirmar que la
   validación del descriptor acepta el punto; si no, `GitReviewWalkthrough` y
@@ -53,11 +53,11 @@ mezclado con el anterior.
 - [X] T003 [P] Crear árbol de fuentes vacío:
   `domain/`, `host/`, `vcs/`, `diff/`, `ui/`, `settings/` bajo el paquete base
   + `src/test/kotlin/…/domain/`.
-- [X] T004 [P] README del módulo `intellij-plugin/README.md` (build, runIde,
+- [X] T004 [P] README del módulo `jetbrains-plugin/README.md` (build, runIde,
   test) en inglés de producto; una línea en `README.md` + `README.es.md` de
   la raíz apuntando al plugin (ambos README).
 - [X] T005 Configurar job CI en `.github/workflows/` que corra
-  `./gradlew -p intellij-plugin test` en **ubuntu, macos y windows** (unit
+  `./gradlew -p jetbrains-plugin test` en **ubuntu, macos y windows** (unit
   domain) y, **solo en ubuntu**, `platformTest` (el harness headless llega en
   T030a; hasta entonces el target puede estar vacío). runIde no corre en CI.
 
@@ -124,7 +124,7 @@ mezclado con el anterior.
   `openEntry.ts` de la extensión).
 - [X] T017a [P] Copiar/adaptar fixtures de strings porcelain desde
   `vscode-extension/test/unit/*.spec.ts` a
-  `intellij-plugin/src/test/resources/fixtures/` para no re-inventar casos.
+  `jetbrains-plugin/src/test/resources/fixtures/` para no re-inventar casos.
 - [X] T018 Implementar `host/CliInvoker.kt`: `GeneralCommandLine` +
   capturadores UTF-8, timeouts, kill best-effort, env network, askpass
   no-op embebido en resources; log a `host/CliLog.kt`.
@@ -297,7 +297,7 @@ verde en Linux.
 - [X] T061 [US8] Panel solo JBColor/UIManager — sin hex hardcodeados de VS
   Code; checklist a11y básica (contraste, teclado en controles custom).
 - [X] T062 [US8] Documentar matriz smoke tres SO en
-  `intellij-plugin/README.md` + quickstart.
+  `jetbrains-plugin/README.md` + quickstart.
 
 **Checkpoint**: SC-004, SC-009, SC-010 en checklist de release.
 

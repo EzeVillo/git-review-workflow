@@ -20,7 +20,7 @@ and the test suite is slow enough on Windows to be worth avoiding (see
 same if you have them installed:
 
 ```sh
-shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh tests/sandbox.sh
+shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh tests/sandbox.sh
 bats tests/
 ```
 
@@ -195,30 +195,38 @@ the theme variables in `preview/build.ts` approximate VS Code's. A `--vscode-*`
 variable the panel starts using must be added there too, or it will look wrong
 in the preview and fine in the editor. For behaviour, use F5.
 
-## The IntelliJ IDEA plugin
+## The JetBrains IDE plugin
 
-[`intellij-plugin/`](intellij-plugin/) is a separate Gradle module (Kotlin +
+[`jetbrains-plugin/`](jetbrains-plugin/) is a separate Gradle module (Kotlin +
 IntelliJ Platform Plugin). Same rule as the VS Code extension: the CLI is the
 source of truth; the plugin only invokes porcelain/argv and paints a
 `PanelModel`. Platform pin and versions live only in
-[`intellij-plugin/gradle.properties`](intellij-plugin/gradle.properties).
+[`jetbrains-plugin/gradle.properties`](jetbrains-plugin/gradle.properties).
+
+One zip, many IDEs: compatibility is declared in `plugin.xml` with
+`com.intellij.modules.platform` + `Git4Idea`, and Android Studio / Rider are
+excluded via `<incompatible-with>`. That is what Marketplace uses — not a
+product checkbox in Gradle. `runIde` still boots IntelliJ IDEA as the
+development host; smoke other products by installing
+`build/distributions/*.zip` from disk.
 
 ```sh
-cd intellij-plugin
+cd jetbrains-plugin
 ./gradlew test              # domain unit tests (no IDE)
 ./gradlew runPanelPreview   # Swing fixtures, no full IDE
-./gradlew runIde            # sandbox IDEA with the plugin loaded
+./gradlew runIde            # sandbox IDEA host with the plugin loaded
+./gradlew verifyPlugin      # pluginVerifier on the claimed multi-IDE set
 ```
 
 ### Shell: which wrapper?
 
-The Gradle wrapper lives **inside** `intellij-plugin/` (not at the monorepo
+The Gradle wrapper lives **inside** `jetbrains-plugin/` (not at the monorepo
 root). Use the form that matches your shell:
 
 | Shell | Command |
 |-------|---------|
-| Git Bash / WSL / Linux / macOS | `cd intellij-plugin && ./gradlew runIde` |
-| PowerShell / cmd | `cd intellij-plugin` then `.\gradlew.bat runIde` |
+| Git Bash / WSL / Linux / macOS | `cd jetbrains-plugin && ./gradlew runIde` |
+| PowerShell / cmd | `cd jetbrains-plugin` then `.\gradlew.bat runIde` |
 
 Do **not** run `.\gradlew.bat` from Git Bash (MINGW64) — bash looks for a
 command named `.gradlew.bat` and fails with `command not found`. Use
@@ -262,7 +270,7 @@ is checked by:
 # from the monorepo root
 node scripts/check-client-product-surface.mjs
 # IntelliJ structural layout parity (all OSes in CI):
-cd intellij-plugin && ./gradlew test
+cd jetbrains-plugin && ./gradlew test
 ```
 
 ### Side-by-side parity check (feature 010)
@@ -275,7 +283,7 @@ grouping as the VS Code panel (product parity, not pixels):
 cd vscode-extension && npm run preview
 
 # Terminal B — IntelliJ panel preview (real PanelRenderer)
-cd intellij-plugin && ./gradlew runPanelPreview
+cd jetbrains-plugin && ./gradlew runPanelPreview
 ```
 
 Walk the same situations in both windows. Any missing control, wrong order, or
@@ -284,7 +292,7 @@ relabelled button is a bug — fix `domain/PanelLayout.kt` or the canonical
 
 More validation detail:
 [`specs/010-panel-intellij-acciones/quickstart.md`](specs/010-panel-intellij-acciones/quickstart.md)
-and [`intellij-plugin/README.md`](intellij-plugin/README.md).
+and [`jetbrains-plugin/README.md`](jetbrains-plugin/README.md).
 
 ### UX vs the VS Code panel
 
@@ -340,3 +348,32 @@ Releases are cut by pushing a `v*` tag.
       is no `NPM_TOKEN` secret — the repo and `release.yml` workflow are
       registered as a trusted publisher on npmjs.com, and provenance is attached
       automatically.
+
+### VS Code extension
+
+Versioned independently of the CLI. Stamp every place that must agree with
+[`vscode-extension/bump-version.sh`](vscode-extension/bump-version.sh)
+(`package.json` + the package's own entries in `package-lock.json`), then fill
+the CHANGELOG heading by hand and package/publish:
+
+```sh
+./vscode-extension/bump-version.sh X.Y.Z
+git diff vscode-extension/
+# move Unreleased notes under ## [X.Y.Z] in vscode-extension/CHANGELOG.md
+cd vscode-extension && npm run package   # then publish the .vsix as usual
+```
+
+### JetBrains IDE plugin
+
+Versioned independently of the CLI. The sole source of truth is
+`pluginVersion` in [`jetbrains-plugin/gradle.properties`](jetbrains-plugin/gradle.properties)
+(Gradle patches `plugin.xml` at build time). Stamp it with
+[`jetbrains-plugin/bump-version.sh`](jetbrains-plugin/bump-version.sh), then
+fill the CHANGELOG heading by hand and build/publish:
+
+```sh
+./jetbrains-plugin/bump-version.sh X.Y.Z
+git diff jetbrains-plugin/gradle.properties
+# move Unreleased notes under ## [X.Y.Z] in jetbrains-plugin/CHANGELOG.md
+cd jetbrains-plugin && ./gradlew buildPlugin
+```

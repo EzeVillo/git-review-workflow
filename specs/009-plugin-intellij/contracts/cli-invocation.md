@@ -1,6 +1,6 @@
 # Contract: CLI invocation (IntelliJ plugin client)
 
-**Normative consumer**: `intellij-plugin/`  
+**Normative consumer**: `jetbrains-plugin/`  
 **Sibling consumer**: `vscode-extension/` (misma semántica; distinta implementación)  
 **Source of truth for wire format**: CLI `bin/` + parsers de referencia en
 `vscode-extension/src/cli/{porcelain,configPorcelain,unquote,nameStatus}.ts`

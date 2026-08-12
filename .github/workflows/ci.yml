@@ -22,7 +22,7 @@ jobs:
       # muere en los runners POSIX (`./gradlew: Permission denied`).
       - name: Check bin scripts are executable
         run: |
-          missing=$(git ls-files -s bin/ intellij-plugin/gradlew | awk '$1 != "100755" && $4 !~ /\/\.gitkeep$/ {print $4}')
+          missing=$(git ls-files -s bin/ jetbrains-plugin/gradlew | awk '$1 != "100755" && $4 !~ /\/\.gitkeep$/ {print $4}')
           if [ -n "$missing" ]; then
             echo "These files are missing the executable bit (100755):" >&2
             echo "$missing" >&2
@@ -39,7 +39,7 @@ jobs:
       - name: shellcheck
         # find recorre bin/ (incl. bin/git-review-verbs/, fuera del glob bin/*) y
         # excluye .gitkeep; cubre el dispatcher y todos los verbos.
-        run: shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh tests/sandbox.sh
+        run: shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh tests/sandbox.sh
 
   test:
     strategy:
@@ -118,7 +118,7 @@ jobs:
       - name: Check logo assets
         run: node scripts/check-logo-assets.mjs
 
-  intellij-plugin:
+  jetbrains-plugin:
     strategy:
       fail-fast: false
       matrix:
@@ -129,19 +129,19 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          # Platform 2026.1 requires Java 21 (see intellij-plugin/gradle.properties).
+          # Platform 2026.1 requires Java 21 (see jetbrains-plugin/gradle.properties).
           java-version: 21
       - name: Domain unit tests
-        working-directory: intellij-plugin
+        working-directory: jetbrains-plugin
         # bash so the POSIX gradlew wrapper runs on Windows runners too
         shell: bash
         run: ./gradlew test --no-daemon
       - name: Domain no-IntelliJ import rule
-        working-directory: intellij-plugin
+        working-directory: jetbrains-plugin
         shell: bash
         run: ./gradlew checkDomainNoIntellij --no-daemon
       - name: Platform tests (Linux only)
         if: runner.os == 'Linux'
-        working-directory: intellij-plugin
+        working-directory: jetbrains-plugin
         shell: bash
         run: ./gradlew platformTest --no-daemon

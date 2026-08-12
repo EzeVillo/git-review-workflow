@@ -541,7 +541,7 @@ abrilo directo en el navegador — no necesita servidor.
 
 ## Release
 
-La versión está duplicada a propósito: `VERSION`, `bin/git-review` y
+La versión de la **CLI** está duplicada a propósito: `VERSION`, `bin/git-review` y
 `package.json` viajan dentro del tarball (npm publica la versión de
 `package.json`); `Formula/git-review-workflow.rb` apunta al tarball.
 `./bump-version.sh X.Y.Z` estampa los tres desde un solo argumento (deja a
@@ -549,5 +549,16 @@ propósito el `sha256` de la fórmula —desconocido hasta que existe el tarball
 tag; el workflow de release lo fija). Los releases se cortan pusheando un tag
 `v*`: el workflow crea el GitHub Release, fija la fórmula y publica a npm vía
 Trusted Publishing (OIDC, sin `NPM_TOKEN`: el repo está registrado como trusted
-publisher en npmjs.com). Un `tests/version-consistency.bats` protege contra el
-drift.
+publisher en npmjs.com).
+
+Los clientes versionan **aparte** de la CLI y entre sí, con el mismo patrón de
+un comando que estampa todos los sitios que deben coincidir:
+
+- `./vscode-extension/bump-version.sh X.Y.Z` — `package.json` + las entradas
+  propias del paquete en `package-lock.json`
+- `./jetbrains-plugin/bump-version.sh X.Y.Z` — `pluginVersion` en
+  `gradle.properties` (Gradle parchea `plugin.xml` al build)
+
+Los headings del CHANGELOG de cada cliente se escriben a mano. Un
+`tests/version-consistency.bats` protege contra el drift de la CLI y de los dos
+clientes.

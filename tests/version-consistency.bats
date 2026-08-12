@@ -40,3 +40,51 @@ setup() {
 	# so it can never go stale. Guard against the old hardcoded form coming back.
 	! grep -qE '\*\*Version:\*\* +`[0-9]' "$REPO/README.md"
 }
+
+# --- VS Code extension (versioned independently of the CLI) -----------------
+#
+# package.json is what vsce publishes; package-lock.json repeats the package's
+# own version at the root and under packages[""]. Both are stamped by
+# vscode-extension/bump-version.sh.
+
+vscode_ext_version() {
+	sed -nE 's#^  "version": "([^"]*)".*#\1#p' "$REPO/vscode-extension/package.json"
+}
+
+@test "version: vscode-extension package.json is a bare semver" {
+	v="$(vscode_ext_version)"
+	[[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+}
+
+@test "version: vscode-extension package-lock matches package.json" {
+	pkg="$(vscode_ext_version)"
+	# Both own-version fields follow a "name": "git-review-workflow" line
+	# (root + packages[""]); dependency versions must not be in this list.
+	# shellcheck disable=SC2016 # awk program is single-quoted on purpose
+	got="$(awk '
+		/"name": "git-review-workflow"/ { stamp = 1; next }
+		stamp && /"version":/ {
+			sub(/.*"version": "/, "")
+			sub(/".*/, "")
+			print
+			stamp = 0
+		}
+	' "$REPO/vscode-extension/package-lock.json")"
+	count="$(printf '%s\n' "$got" | grep -c .)"
+	[ "$count" -eq 2 ] || { echo "expected 2 package-lock own-versions, got $count: $got"; false; }
+	while IFS= read -r line; do
+		[ "$line" = "$pkg" ] || { echo "package-lock version $line != package.json $pkg"; false; }
+	done <<EOF
+$got
+EOF
+}
+
+# --- JetBrains IDE plugin (versioned independently of the CLI) --------------
+#
+# pluginVersion in gradle.properties is the sole source of truth; Gradle patches
+# plugin.xml at build time. Stamped by jetbrains-plugin/bump-version.sh.
+
+@test "version: jetbrains-plugin pluginVersion is a bare semver" {
+	v="$(sed -nE 's#^pluginVersion = (.*)#\1#p' "$REPO/jetbrains-plugin/gradle.properties")"
+	[[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+}

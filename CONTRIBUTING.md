@@ -20,7 +20,7 @@ and the test suite is slow enough on Windows to be worth avoiding (see
 same if you have them installed:
 
 ```sh
-shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh tests/sandbox.sh
+shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh tests/sandbox.sh
 bats tests/
 ```
 
@@ -348,3 +348,32 @@ Releases are cut by pushing a `v*` tag.
       is no `NPM_TOKEN` secret — the repo and `release.yml` workflow are
       registered as a trusted publisher on npmjs.com, and provenance is attached
       automatically.
+
+### VS Code extension
+
+Versioned independently of the CLI. Stamp every place that must agree with
+[`vscode-extension/bump-version.sh`](vscode-extension/bump-version.sh)
+(`package.json` + the package's own entries in `package-lock.json`), then fill
+the CHANGELOG heading by hand and package/publish:
+
+```sh
+./vscode-extension/bump-version.sh X.Y.Z
+git diff vscode-extension/
+# move Unreleased notes under ## [X.Y.Z] in vscode-extension/CHANGELOG.md
+cd vscode-extension && npm run package   # then publish the .vsix as usual
+```
+
+### JetBrains IDE plugin
+
+Versioned independently of the CLI. The sole source of truth is
+`pluginVersion` in [`jetbrains-plugin/gradle.properties`](jetbrains-plugin/gradle.properties)
+(Gradle patches `plugin.xml` at build time). Stamp it with
+[`jetbrains-plugin/bump-version.sh`](jetbrains-plugin/bump-version.sh), then
+fill the CHANGELOG heading by hand and build/publish:
+
+```sh
+./jetbrains-plugin/bump-version.sh X.Y.Z
+git diff jetbrains-plugin/gradle.properties
+# move Unreleased notes under ## [X.Y.Z] in jetbrains-plugin/CHANGELOG.md
+cd jetbrains-plugin && ./gradlew buildPlugin
+```

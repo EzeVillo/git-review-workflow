@@ -15,6 +15,19 @@ extension; state always comes from the CLI porcelain contract.
 - JDK **21** for building (platform 2026.1 requirement)
 - A local `git review` CLI (`npm install -g git-review-workflow` or this monorepo’s `./install.sh`)
 
+### Bumping the plugin version
+
+`pluginVersion` in [`gradle.properties`](./gradle.properties) is the sole
+source of truth (Gradle patches `plugin.xml` at build time). Stamp it the same
+way the CLI and the VS Code extension do — one argument, no hand edits:
+
+```sh
+./bump-version.sh X.Y.Z   # from this directory
+# or from the monorepo root: ./jetbrains-plugin/bump-version.sh X.Y.Z
+# then move Unreleased notes under ## [X.Y.Z] in CHANGELOG.md
+./gradlew buildPlugin
+```
+
 Platform pin lives only in [`gradle.properties`](./gradle.properties). That file
 drives `since-build` / `until-build` in the packaged `plugin.xml`. **Which
 products** are compatible is not a separate Marketplace enum: it follows from

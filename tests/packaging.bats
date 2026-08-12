@@ -164,3 +164,11 @@ git_mode() {
 		[ "$mode" = "100755" ] || { echo "$f is $mode, expected 100755"; false; }
 	done
 }
+
+@test "exec bits: client bump-version scripts are committed as 100755" {
+	for f in vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh; do
+		[ -f "$REPO/$f" ]
+		mode=$(git_mode "$f")
+		[ "$mode" = "100755" ] || { echo "$f is $mode, expected 100755"; false; }
+	done
+}

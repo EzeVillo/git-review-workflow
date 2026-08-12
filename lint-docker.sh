@@ -33,7 +33,9 @@ cd "$repo_root"
 if [ "$#" -eq 0 ]; then
 	# shellcheck disable=SC2046 # deliberate word splitting: one argument per file
 	set -- $(find bin -type f ! -name '.gitkeep') \
-		install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh tests/sandbox.sh
+		install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh \
+		vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh \
+		tests/sandbox.sh
 fi
 
 exec docker run --rm -v "$repo_root:/mnt:ro" -w /mnt "$image" "$@"

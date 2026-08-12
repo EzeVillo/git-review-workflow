@@ -7,11 +7,24 @@
     <description><![CDATA[
     Walk a PR in order, then edit and run it — not just read the diff.
     Full parity with the VS Code extension: start, walk/step/whole, finish, save, abort,
-    and housekeeping — all driven by the git-review CLI porcelain contract.
+    and housekeeping — all driven by the git-review CLI porcelain contract.<br><br>
+    Built for JetBrains IDEs on the IntelliJ Platform (IntelliJ IDEA, WebStorm, PhpStorm,
+    PyCharm, GoLand, CLion, RubyMine, RustRover, DataGrip, …). Requires a local
+    <code>git review</code> CLI. Not supported on Android Studio or Rider.
     ]]></description>
 
+    <!--
+      Product matrix (single listing, single zip):
+      - platform + Git4Idea → any JetBrains IDE that ships both (Marketplace derives
+        the "compatible products" list from these, not from a product-code enum).
+      - incompatible-with → explicit opt-out for the two we do not support.
+      Keep this list in lockstep with pluginVerification.ides in build.gradle.kts
+      and PluginCompatibilityTest.
+    -->
     <depends>com.intellij.modules.platform</depends>
     <depends>Git4Idea</depends>
+    <incompatible-with>com.intellij.modules.androidstudio</incompatible-with>
+    <incompatible-with>com.intellij.modules.rider</incompatible-with>
 
     <!-- Stripe title for toolWindow id gitReview.walkthrough (must not rename the id). -->
     <resource-bundle>messages.GitReviewBundle</resource-bundle>

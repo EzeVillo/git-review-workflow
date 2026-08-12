@@ -195,7 +195,7 @@ the theme variables in `preview/build.ts` approximate VS Code's. A `--vscode-*`
 variable the panel starts using must be added there too, or it will look wrong
 in the preview and fine in the editor. For behaviour, use F5.
 
-## The IntelliJ IDEA plugin
+## The JetBrains IDE plugin
 
 [`intellij-plugin/`](intellij-plugin/) is a separate Gradle module (Kotlin +
 IntelliJ Platform Plugin). Same rule as the VS Code extension: the CLI is the
@@ -203,11 +203,19 @@ source of truth; the plugin only invokes porcelain/argv and paints a
 `PanelModel`. Platform pin and versions live only in
 [`intellij-plugin/gradle.properties`](intellij-plugin/gradle.properties).
 
+One zip, many IDEs: compatibility is declared in `plugin.xml` with
+`com.intellij.modules.platform` + `Git4Idea`, and Android Studio / Rider are
+excluded via `<incompatible-with>`. That is what Marketplace uses — not a
+product checkbox in Gradle. `runIde` still boots IntelliJ IDEA as the
+development host; smoke other products by installing
+`build/distributions/*.zip` from disk.
+
 ```sh
 cd intellij-plugin
 ./gradlew test              # domain unit tests (no IDE)
 ./gradlew runPanelPreview   # Swing fixtures, no full IDE
-./gradlew runIde            # sandbox IDEA with the plugin loaded
+./gradlew runIde            # sandbox IDEA host with the plugin loaded
+./gradlew verifyPlugin      # pluginVerifier on the claimed multi-IDE set
 ```
 
 ### Shell: which wrapper?

@@ -1,10 +1,25 @@
 # Changelog
 
-Notable changes to the **git review** IntelliJ IDEA plugin. The CLI it drives
-has its own [releases](https://github.com/EzeVillo/git-review-workflow/releases).
+Notable changes to the **git review** JetBrains IDE plugin (IntelliJ Platform).
+The CLI it drives has its own
+[releases](https://github.com/EzeVillo/git-review-workflow/releases).
 
 This project follows [semantic versioning](https://semver.org/spec/v2.0.0.html)
 and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
+
+## [Unreleased]
+
+### Changed
+
+- **Multi-IDE product matrix.** The same zip targets every JetBrains IDE that
+  ships `com.intellij.modules.platform` and Git (`Git4Idea`) — IntelliJ IDEA,
+  WebStorm, PhpStorm, PyCharm, GoLand, CLion, RubyMine, RustRover, DataGrip, and
+  peers. Android Studio and Rider are excluded with
+  `<incompatible-with>` in `plugin.xml` (not a Marketplace checkbox hack).
+  `verifyPlugin` checks binary compatibility on the products that publish a
+  verifier build for the pinned line (DataGrip is Marketplace-eligible via the
+  same depends but is not in that binary index); `PluginCompatibilityTest`
+  locks the descriptor contract.
 
 ## [0.1.1]
 
@@ -27,9 +42,9 @@ warning the JetBrains Marketplace plugin verifier raised against 0.1.0.
 
 ## [0.1.0]
 
-First release. Requires IntelliJ IDEA **2026.1+** (build `261+`; later IDE
-releases included via open `until-build`) and a local `git review` **0.6.0** or
-newer.
+First release. Requires an IntelliJ Platform IDE **2026.1+** (build `261+`;
+later IDE releases included via open `until-build`) and a local `git review`
+**0.6.0** or newer.
 
 ### Added
 

@@ -336,7 +336,10 @@ repo, no en archivos del working tree:
 La CLI es la única fuente de verdad. Hay dos UIs de cliente en el monorepo:
 
 - **`vscode-extension/`** — extensión VS Code (TypeScript + esbuild).
-- **`intellij-plugin/`** — plugin IntelliJ IDEA (Kotlin + Gradle Platform Plugin).
+- **`intellij-plugin/`** — plugin JetBrains IDE / IntelliJ Platform (Kotlin +
+  Gradle Platform Plugin). Un zip para IDEA, WebStorm, PhpStorm, PyCharm,
+  GoLand, CLion, RubyMine, RustRover, DataGrip, etc.; **no** Android Studio ni
+  Rider (`<incompatible-with>` en `plugin.xml`).
 
 Ambos leen solo porcelain/argv de la CLI; el canónico anti-drift multi-cliente
 vive en **`contracts/client-product-surface.yaml`** (raíz). Incluye la matriz de
@@ -347,13 +350,16 @@ extensión, y las seis comprobaciones de layout vs `panelHtml.ts`). Del lado
 IntelliJ, `PanelLayoutContractTest` compara `panelLayout(fixture)` contra el
 mismo YAML en cada `./gradlew test`.
 
-### Plugin de IntelliJ IDEA
+### Plugin de JetBrains IDE (IntelliJ Platform)
 
 `intellij-plugin/` es un módulo Gradle aparte (JDK 21; pin de platform en
 `intellij-plugin/gradle.properties` — **única** fuente de since-build/versión;
-mínimo IDEA **2026.1** / branch **261**, sin techo de `until-build`).
-Dominio puro en `com.ezevillo.gitreview.domain` (sin `com.intellij`); host/UI
-invocan la CLI con `GeneralCommandLine` UTF-8.
+mínimo **2026.1** / branch **261**, sin techo de `until-build`). La
+compatibilidad multi-producto sale de `plugin.xml` (`platform` + `Git4Idea`,
+más `incompatible-with` para Android Studio y Rider), no de un enum de
+productos en el Marketplace. Dominio puro en
+`com.ezevillo.gitreview.domain` (sin `com.intellij`); host/UI invocan la CLI
+con `GeneralCommandLine` UTF-8.
 
 ```sh
 # Desde intellij-plugin/ (el wrapper Gradle vive ahí, no en la raíz del monorepo):
@@ -373,7 +379,7 @@ Shell: en Git Bash / POSIX usá `./gradlew`; en PowerShell `.\gradlew.bat`
 abrir solo `<sandbox>/work` → setting **Tools → git review → Path to
 git-review** al `bin/git-review` del checkout si hace falta → tool window
 **git review** + menú **Tools → git review**. Detalle en `CONTRIBUTING.md`
-(sección *The IntelliJ IDEA plugin*) y `specs/009-plugin-intellij/quickstart.md`.
+(sección *The JetBrains IDE plugin*) y `specs/009-plugin-intellij/quickstart.md`.
 
 **UX:** paridad de producto (CLI + matriz de acciones/situaciones + disposición
 del panel), no de píxeles. El panel es Swing nativo a propósito (no CEF/HTML del

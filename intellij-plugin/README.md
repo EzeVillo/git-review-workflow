@@ -1,17 +1,26 @@
-# git review workflow — IntelliJ IDEA plugin
+# git review workflow — JetBrains IDE plugin
 
-Native IntelliJ IDEA tool window for [git-review-workflow](https://github.com/EzeVillo/git-review-workflow).
-Full action and situation parity with the VS Code extension; state always comes from the CLI porcelain contract.
+Native tool window for [git-review-workflow](https://github.com/EzeVillo/git-review-workflow)
+on the IntelliJ Platform. Full action and situation parity with the VS Code
+extension; state always comes from the CLI porcelain contract.
 
 ## Requirements
 
-- IntelliJ IDEA **2026.1+** (build `261+`; open-ended for later releases)
+- A JetBrains IDE on the IntelliJ Platform **2026.1+** (build `261+`; open-ended
+  for later releases): IntelliJ IDEA, WebStorm, PhpStorm, PyCharm, GoLand, CLion,
+  RubyMine, RustRover, DataGrip, and any other product that ships the platform
+  module plus Git
+- **Not** Android Studio or Rider (declared with `<incompatible-with>` in
+  `plugin.xml` — the IDE will not offer or load the plugin there)
 - JDK **21** for building (platform 2026.1 requirement)
 - A local `git review` CLI (`npm install -g git-review-workflow` or this monorepo’s `./install.sh`)
 
 Platform pin lives only in [`gradle.properties`](./gradle.properties). That file
-also drives `since-build` / `until-build` in the packaged `plugin.xml`, which is
-what JetBrains Marketplace uses to show compatible IDE versions.
+drives `since-build` / `until-build` in the packaged `plugin.xml`. **Which
+products** are compatible is not a separate Marketplace enum: it follows from
+`<depends>` (`com.intellij.modules.platform` + `Git4Idea`) and the two
+`<incompatible-with>` entries. `./gradlew verifyPlugin` checks the claimed set
+at the same platform line.
 
 ## Build & run
 
@@ -21,10 +30,10 @@ The Gradle wrapper lives **in this directory** (not at the monorepo root).
 # Git Bash / WSL / Linux / macOS (from this directory):
 ./gradlew test              # domain unit tests (all OSes)
 ./gradlew platformTest      # headless platform tests (Linux CI)
-./gradlew runIde            # sandbox IDE with the plugin loaded (≈ VS Code F5)
+./gradlew runIde            # sandbox IDE (IntelliJ IDEA host) with the plugin loaded
 ./gradlew runPanelPreview   # standalone Swing panel preview
 ./gradlew buildPlugin       # zip under build/distributions/
-./gradlew verifyPlugin      # pluginVerifier
+./gradlew verifyPlugin      # pluginVerifier on the multi-IDE binary set (not AS / Rider)
 ```
 
 On Windows **PowerShell** / cmd (not Git Bash):
@@ -48,10 +57,12 @@ git -C <sandbox>/work review start feature/checkout
 cd intellij-plugin && ./gradlew runIde
 ```
 
-In the sandbox IDEA: open only `<sandbox>/work`, set
+In the sandbox IDE: open only `<sandbox>/work`, set
 **Settings → Tools → git review → Path to git-review** to this checkout’s
 `bin/git-review` if needed, open the **git review** tool window, and use
-**Tools → git review** for the full action set.
+**Tools → git review** for the full action set. `runIde` boots IntelliJ IDEA as
+the development host; install the built zip from disk to smoke WebStorm,
+PhpStorm, PyCharm, etc.
 
 Point the setting **git review → path** at this checkout’s `bin/git-review`
 when the IDE’s `PATH` does not see the CLI.

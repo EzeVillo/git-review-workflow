@@ -1,3 +1,4 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -41,6 +42,15 @@ kotlin {
     jvmToolchain(21)
     compilerOptions {
         jvmTarget.set(JvmTarget.JVM_21)
+        // Sin esto, kotlinc genera un override delegante por cada default method
+        // de las interfaces Java que implementamos — p. ej. ToolWindowFactory —,
+        // y cada delegación es un `invokespecial` a la interfaz. El verifier del
+        // Marketplace las lee como uso propio de API deprecada/experimental
+        // (isApplicable, isDoNotActivateOnStart, getAnchor, getIcon, manage) sobre
+        // métodos que el plugin nunca escribió ni llama. NO_COMPATIBILITY no emite
+        // esos puentes ni las clases DefaultImpls: nada externo compila contra este
+        // módulo, así que la ABI que se pierde no la usa nadie.
+        jvmDefault.set(JvmDefaultMode.NO_COMPATIBILITY)
     }
 }
 

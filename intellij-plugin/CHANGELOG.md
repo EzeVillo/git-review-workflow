@@ -6,6 +6,25 @@ has its own [releases](https://github.com/EzeVillo/git-review-workflow/releases)
 This project follows [semantic versioning](https://semver.org/spec/v2.0.0.html)
 and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 
+## [0.1.1]
+
+Maintenance release: nothing about what the plugin does changes. It clears every
+warning the JetBrains Marketplace plugin verifier raised against 0.1.0.
+
+### Changed
+
+- The single-choice pickers (branch, origin, range, layout) are a plugin dialog
+  now that the platform deprecated `Messages.showChooseDialog`. Same shape and
+  the same prompts — one combo, cancel still cancels.
+- Panel buttons that route to a menu action go through the platform's
+  `ActionUtil.performAction` instead of calling `actionPerformed` themselves, so
+  they fire the IDE's action listeners like any other invocation does.
+- Kotlin no longer emits a delegating override for every default method of the
+  platform interfaces the plugin implements. The verifier read those compiler
+  artifacts as the plugin using deprecated and experimental API — `isApplicable`,
+  `isDoNotActivateOnStart`, `getAnchor`, `getIcon`, `manage` — that it neither
+  wrote nor calls.
+
 ## [0.1.0]
 
 First release. Requires IntelliJ IDEA **2026.1+** (build `261+`; later IDE

@@ -8,7 +8,7 @@ Guía de validación, no de implementación. El detalle de la disposición está
 
 ## Prerrequisitos
 
-- JDK 21 (el wrapper de Gradle vive en `intellij-plugin/`, no en la raíz; pin en `gradle.properties`).
+- JDK 21 (el wrapper de Gradle vive en `jetbrains-plugin/`, no en la raíz; pin en `gradle.properties`).
 - Node (para el verificador del canónico y para el preview de la extensión).
 - Shell: en Git Bash / POSIX usá `./gradlew`; en PowerShell `.\gradlew.bat`.
   No mezclar: en MINGW64 `.\gradlew.bat` falla con `command not found`.
@@ -18,7 +18,7 @@ Guía de validación, no de implementación. El detalle de la disposición está
 Es el gate de la feature: si esto pasa, la paridad estructural está afirmada.
 
 ```bash
-cd intellij-plugin && ./gradlew test
+cd jetbrains-plugin && ./gradlew test
 ```
 
 Cubre el layout completo:
@@ -48,7 +48,7 @@ orden de los controles dentro de cada situación. Verifica también que el bloqu
 nuevo no contradiga el `actions:` que ya estaba en el mismo archivo.
 
 ```bash
-cd intellij-plugin && ./gradlew check
+cd jetbrains-plugin && ./gradlew check
 ```
 
 Incluye `checkDomainNoIntellij`: el layout es dominio puro y no puede importar
@@ -69,7 +69,7 @@ ancho de sidebar y con selector de tema. Es el panel real: usa `panelHtml()` sin
 editar.
 
 ```bash
-cd intellij-plugin && ./gradlew runPanelPreview
+cd jetbrains-plugin && ./gradlew runPanelPreview
 ```
 
 Levanta el mismo conjunto de estados renderizados por el `PanelRenderer` real
@@ -99,7 +99,7 @@ git -C <sandbox>/work review start feature/checkout
 Entra en modo walk (el sandbox commitea un walkthrough).
 
 ```bash
-cd intellij-plugin && ./gradlew runIde
+cd jetbrains-plugin && ./gradlew runIde
 ```
 
 Abrí **solo** `<sandbox>/work` y, si hace falta, apuntá **Tools → git review →

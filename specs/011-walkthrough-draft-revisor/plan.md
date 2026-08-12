@@ -132,7 +132,7 @@ vscode-extension/
 ├── src/views/panelHtml.ts            # badge de "draft" (texto, sin bloque nuevo)
 └── test/                             # unit del flujo + integración del asistente
 
-intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/
+jetbrains-plugin/src/main/kotlin/com/ezevillo/gitreview/
 ├── domain/ConfigPorcelain.kt         # ids nuevos
 ├── domain/LayoutOffers.kt            # OFFER_META / OFFER_ORDER
 ├── domain/DraftFlow.kt               # (nuevo) misma máquina, dominio puro

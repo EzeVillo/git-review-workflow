@@ -7,7 +7,7 @@ contra specs previas. Referencias verificadas en esta sesión:
 `vscode-extension/src/views/panelHtml.ts`,
 `vscode-extension/src/views/walkthroughViewProvider.ts`,
 `vscode-extension/package.json` (`contributes.menus`),
-`intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/**`,
+`jetbrains-plugin/src/main/kotlin/com/ezevillo/gitreview/**`,
 `contracts/client-product-surface.yaml`,
 `scripts/check-client-product-surface.mjs`.
 

@@ -9,7 +9,7 @@ textos, mismas decisiones. El vehículo de interfaz es propio de cada plataforma
 
 En el paso **forma de lectura** del asistente, que ya existe y ya se arma con
 los registros `offer` ([layoutOffers.ts](../../../vscode-extension/src/review/layoutOffers.ts),
-[LayoutOffers.kt](../../../intellij-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/LayoutOffers.kt)).
+[LayoutOffers.kt](../../../jetbrains-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/LayoutOffers.kt)).
 No se agrega un paso nuevo ni se reordena el asistente.
 
 ### Metadatos de los ids nuevos

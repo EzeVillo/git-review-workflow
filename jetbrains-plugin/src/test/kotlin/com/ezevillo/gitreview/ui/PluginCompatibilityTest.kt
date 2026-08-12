@@ -83,7 +83,7 @@ class PluginCompatibilityTest {
     private fun pluginXml(): File {
         val root = System.getProperty("git.review.monorepo.root")
         assertNotNull(root, "git.review.monorepo.root is not set — see build.gradle.kts")
-        val xml = File(root, "intellij-plugin/src/main/resources/META-INF/plugin.xml")
+        val xml = File(root, "jetbrains-plugin/src/main/resources/META-INF/plugin.xml")
         assertTrue(xml.isFile, "plugin.xml missing at ${xml.absolutePath}")
         return xml
     }

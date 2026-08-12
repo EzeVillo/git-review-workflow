@@ -39,7 +39,7 @@ The Gradle wrapper lives **in this directory** (not at the monorepo root).
 On Windows **PowerShell** / cmd (not Git Bash):
 
 ```powershell
-cd intellij-plugin
+cd jetbrains-plugin
 .\gradlew.bat test
 .\gradlew.bat runIde
 ```
@@ -54,7 +54,7 @@ not find `.gradlew.bat`.
 ./tests/sandbox.sh
 git -C <sandbox>/work review start feature/checkout
 
-cd intellij-plugin && ./gradlew runIde
+cd jetbrains-plugin && ./gradlew runIde
 ```
 
 In the sandbox IDE: open only `<sandbox>/work`, set

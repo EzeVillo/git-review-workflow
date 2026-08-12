@@ -197,11 +197,11 @@ in the preview and fine in the editor. For behaviour, use F5.
 
 ## The JetBrains IDE plugin
 
-[`intellij-plugin/`](intellij-plugin/) is a separate Gradle module (Kotlin +
+[`jetbrains-plugin/`](jetbrains-plugin/) is a separate Gradle module (Kotlin +
 IntelliJ Platform Plugin). Same rule as the VS Code extension: the CLI is the
 source of truth; the plugin only invokes porcelain/argv and paints a
 `PanelModel`. Platform pin and versions live only in
-[`intellij-plugin/gradle.properties`](intellij-plugin/gradle.properties).
+[`jetbrains-plugin/gradle.properties`](jetbrains-plugin/gradle.properties).
 
 One zip, many IDEs: compatibility is declared in `plugin.xml` with
 `com.intellij.modules.platform` + `Git4Idea`, and Android Studio / Rider are
@@ -211,7 +211,7 @@ development host; smoke other products by installing
 `build/distributions/*.zip` from disk.
 
 ```sh
-cd intellij-plugin
+cd jetbrains-plugin
 ./gradlew test              # domain unit tests (no IDE)
 ./gradlew runPanelPreview   # Swing fixtures, no full IDE
 ./gradlew runIde            # sandbox IDEA host with the plugin loaded
@@ -220,13 +220,13 @@ cd intellij-plugin
 
 ### Shell: which wrapper?
 
-The Gradle wrapper lives **inside** `intellij-plugin/` (not at the monorepo
+The Gradle wrapper lives **inside** `jetbrains-plugin/` (not at the monorepo
 root). Use the form that matches your shell:
 
 | Shell | Command |
 |-------|---------|
-| Git Bash / WSL / Linux / macOS | `cd intellij-plugin && ./gradlew runIde` |
-| PowerShell / cmd | `cd intellij-plugin` then `.\gradlew.bat runIde` |
+| Git Bash / WSL / Linux / macOS | `cd jetbrains-plugin && ./gradlew runIde` |
+| PowerShell / cmd | `cd jetbrains-plugin` then `.\gradlew.bat runIde` |
 
 Do **not** run `.\gradlew.bat` from Git Bash (MINGW64) — bash looks for a
 command named `.gradlew.bat` and fails with `command not found`. Use
@@ -270,7 +270,7 @@ is checked by:
 # from the monorepo root
 node scripts/check-client-product-surface.mjs
 # IntelliJ structural layout parity (all OSes in CI):
-cd intellij-plugin && ./gradlew test
+cd jetbrains-plugin && ./gradlew test
 ```
 
 ### Side-by-side parity check (feature 010)
@@ -283,7 +283,7 @@ grouping as the VS Code panel (product parity, not pixels):
 cd vscode-extension && npm run preview
 
 # Terminal B — IntelliJ panel preview (real PanelRenderer)
-cd intellij-plugin && ./gradlew runPanelPreview
+cd jetbrains-plugin && ./gradlew runPanelPreview
 ```
 
 Walk the same situations in both windows. Any missing control, wrong order, or
@@ -292,7 +292,7 @@ relabelled button is a bug — fix `domain/PanelLayout.kt` or the canonical
 
 More validation detail:
 [`specs/010-panel-intellij-acciones/quickstart.md`](specs/010-panel-intellij-acciones/quickstart.md)
-and [`intellij-plugin/README.md`](intellij-plugin/README.md).
+and [`jetbrains-plugin/README.md`](jetbrains-plugin/README.md).
 
 ### UX vs the VS Code panel
 

@@ -70,8 +70,8 @@ if (landing && !/<link[^>]*\brel="icon"[^>]*\bhref="logo\.svg"|<link[^>]*\bhref=
 }
 
 for (const file of [
-  'intellij-plugin/src/main/resources/META-INF/pluginIcon.svg',
-  'intellij-plugin/src/main/resources/META-INF/pluginIcon_dark.svg',
+  'jetbrains-plugin/src/main/resources/META-INF/pluginIcon.svg',
+  'jetbrains-plugin/src/main/resources/META-INF/pluginIcon_dark.svg',
 ]) {
   const svg = readSvg(file);
   const attrs = rootTag(svg);
@@ -81,8 +81,8 @@ for (const file of [
 }
 
 for (const file of [
-  'intellij-plugin/src/main/resources/icons/gitReviewToolWindow.svg',
-  'intellij-plugin/src/main/resources/icons/gitReviewToolWindow_dark.svg',
+  'jetbrains-plugin/src/main/resources/icons/gitReviewToolWindow.svg',
+  'jetbrains-plugin/src/main/resources/icons/gitReviewToolWindow_dark.svg',
 ]) {
   const svg = readSvg(file);
   const attrs = rootTag(svg);

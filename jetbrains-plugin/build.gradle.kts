@@ -203,7 +203,7 @@ tasks.named<Test>("test") {
         "git.review.contracts.dir",
         rootProject.projectDir.parentFile.resolve("contracts").absolutePath,
     )
-    // When intellij-plugin is the Gradle root, parent is the monorepo root.
+    // When jetbrains-plugin is the Gradle root, parent is the monorepo root.
     val monorepoRoot = projectDir.parentFile
     systemProperty("git.review.monorepo.root", monorepoRoot.absolutePath)
 }

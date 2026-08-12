@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parents[1]
 ASSETS = REPO / "assets"
 DOCS = REPO / "docs"  # GitHub Pages publishes /docs only, so the site needs its own copy
-INTELLIJ_RESOURCES = REPO / "intellij-plugin" / "src" / "main" / "resources"
+INTELLIJ_RESOURCES = REPO / "jetbrains-plugin" / "src" / "main" / "resources"
 FACE = ROOT / "_face.png"  # optional; only needed to re-extract the glyph
 CODE_GLYPH_PNG = ROOT / "code-glyph.png"  # checked-in white </> from the logo
 

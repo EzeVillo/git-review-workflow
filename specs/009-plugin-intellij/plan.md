@@ -12,7 +12,7 @@ execution workflow.
 Segundo cliente de la CLI `git-review-workflow` dentro de **IntelliJ IDEA**:
 tool window nativo (Swing), paridad total de situaciones y acciones con la
 extensión VS Code, mismo contrato porcelain y mismas reglas de invocación.
-Código en `intellij-plugin/`; capa de dominio JVM pura + host JetBrains;
+Código en `jetbrains-plugin/`; capa de dominio JVM pura + host JetBrains;
 fuente canónica anti-drift multi-cliente; tests JUnit espejo de la capa unit
 de la extensión. Orden de entrega por capas hasta paridad, sin big-bang
 sin tests.
@@ -22,7 +22,7 @@ sin tests.
 **Language/Version**: Kotlin (JVM), JDK alineado a IntelliJ Platform **2026.2**
 (branch **262** — la numeración JetBrains es `20YY.N → (YY)(N)`: 2025.2 → 252,
 2026.1 → 261, 2026.2 → **262**). El **único lugar** donde ese par vive es
-`intellij-plugin/gradle.properties`; plan, research y quickstart lo citan pero
+`jetbrains-plugin/gradle.properties`; plan, research y quickstart lo citan pero
 no lo fijan. T001 verifica la línea estable y su JDK contra la tabla oficial de
 build ranges **del día de implementación**: si 2026.2 no está en runners ni en
 el canal estable, se pinnea la última línea estable publicada y se actualiza
@@ -122,7 +122,7 @@ specs/009-plugin-intellij/
 contracts/
 └── client-product-surface.yaml    # canónico anti-drift (nuevo)
 
-intellij-plugin/
+jetbrains-plugin/
 ├── build.gradle.kts
 ├── settings.gradle.kts
 ├── gradle.properties              # ÚNICA fuente del pin: 2026.2 / branch 262
@@ -144,7 +144,7 @@ vscode-extension/                  # tests anti-drift leen el YAML canónico
 .github/workflows/                 # job Gradle + check surface
 ```
 
-**Structure Decision**: módulo Gradle `intellij-plugin/` en monorepo;
+**Structure Decision**: módulo Gradle `jetbrains-plugin/` en monorepo;
 domain sin dependencias de platform en `compileOnly`/source set separado o
 paquete `domain` con regla de arquitectura (test que falle si importa
 `com.intellij`).

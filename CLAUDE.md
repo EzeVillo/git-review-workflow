@@ -336,7 +336,7 @@ repo, no en archivos del working tree:
 La CLI es la única fuente de verdad. Hay dos UIs de cliente en el monorepo:
 
 - **`vscode-extension/`** — extensión VS Code (TypeScript + esbuild).
-- **`intellij-plugin/`** — plugin JetBrains IDE / IntelliJ Platform (Kotlin +
+- **`jetbrains-plugin/`** — plugin JetBrains IDE / IntelliJ Platform (Kotlin +
   Gradle Platform Plugin). Un zip para IDEA, WebStorm, PhpStorm, PyCharm,
   GoLand, CLion, RubyMine, RustRover, DataGrip, etc.; **no** Android Studio ni
   Rider (`<incompatible-with>` en `plugin.xml`).
@@ -352,8 +352,8 @@ mismo YAML en cada `./gradlew test`.
 
 ### Plugin de JetBrains IDE (IntelliJ Platform)
 
-`intellij-plugin/` es un módulo Gradle aparte (JDK 21; pin de platform en
-`intellij-plugin/gradle.properties` — **única** fuente de since-build/versión;
+`jetbrains-plugin/` es un módulo Gradle aparte (JDK 21; pin de platform en
+`jetbrains-plugin/gradle.properties` — **única** fuente de since-build/versión;
 mínimo **2026.1** / branch **261**, sin techo de `until-build`). La
 compatibilidad multi-producto sale de `plugin.xml` (`platform` + `Git4Idea`,
 más `incompatible-with` para Android Studio y Rider), no de un enum de
@@ -362,7 +362,7 @@ productos en el Marketplace. Dominio puro en
 con `GeneralCommandLine` UTF-8.
 
 ```sh
-# Desde intellij-plugin/ (el wrapper Gradle vive ahí, no en la raíz del monorepo):
+# Desde jetbrains-plugin/ (el wrapper Gradle vive ahí, no en la raíz del monorepo):
 ./gradlew test              # unit domain (ubuntu/macos/windows en CI)
 ./gradlew platformTest      # headless (Linux CI; harness T030a)
 ./gradlew runIde            # sandbox IDE (equivalente a F5 de la extensión)

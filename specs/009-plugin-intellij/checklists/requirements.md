@@ -33,7 +33,7 @@
 
 - Decisiones de producto ya tomadas por el usuario y reflejadas en Assumptions
   / FR-018–FR-020: paridad total, panel nativo del IDE, solo IntelliJ IDEA
-  última línea, monorepo `intellij-plugin/`, multiplataforma, anti-drift.
+  última línea, monorepo `jetbrains-plugin/`, multiplataforma, anti-drift.
 - Detalle de stack (Kotlin, Swing, Gradle, JUnit, Git4Idea, GeneralCommandLine)
   queda deliberadamente fuera de `spec.md` y entra en `/speckit-plan`.
 - La “superficie consolidada” nombra situaciones y modos del producto

@@ -77,8 +77,8 @@ if (!installTs.includes(npmUpdate)) {
 }
 
 // IntelliJ domain constants (if present)
-const ijVersion = join(root, "intellij-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "domain", "Version.kt");
-const ijInstall = join(root, "intellij-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "domain", "InstallHint.kt");
+const ijVersion = join(root, "jetbrains-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "domain", "Version.kt");
+const ijInstall = join(root, "jetbrains-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "domain", "InstallHint.kt");
 if (existsSync(ijVersion)) {
   const v = readText(ijVersion, "utf8");
   if (!v.includes(`"${min}"`)) fail(`intellij Version.kt missing min ${min}`);
@@ -93,7 +93,7 @@ if (existsSync(ijInstall)) {
 const multi = "multi-root is not supported";
 const vsState = readText(join(root, "vscode-extension", "src", "review", "state.ts"), "utf8");
 if (!vsState.includes(multi)) fail("vscode state.ts missing multi_root_error fragment");
-const ijState = join(root, "intellij-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "host", "ReviewStateManager.kt");
+const ijState = join(root, "jetbrains-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "host", "ReviewStateManager.kt");
 if (existsSync(ijState)) {
   const s = readText(ijState, "utf8");
   if (!s.includes(multi)) fail("intellij ReviewStateManager missing multi_root_error fragment");
@@ -132,7 +132,7 @@ if (!providerSupport.includes(`bug: "${bugUrl}"`)) {
 }
 const ijSupport = join(
   root,
-  "intellij-plugin",
+  "jetbrains-plugin",
   "src",
   "main",
   "kotlin",

@@ -69,7 +69,7 @@ intellijPlatform {
         name = providers.gradleProperty("pluginName")
         version = providers.gradleProperty("pluginVersion")
         description.set(
-            "Review a git-review-workflow pull request as a native IntelliJ IDEA tool window.",
+            "Walk a PR in order, then edit and run it — not just read the diff",
         )
 
         ideaVersion {

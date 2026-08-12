@@ -5,7 +5,7 @@
     <vendor email="ezevi@users.noreply.github.com" url="https://github.com/EzeVillo/git-review-workflow">EzeVillo</vendor>
 
     <description><![CDATA[
-    Review a <b>git-review-workflow</b> pull request as a native IntelliJ IDEA tool window.
+    Walk a PR in order, then edit and run it — not just read the diff.
     Full parity with the VS Code extension: start, walk/step/whole, finish, save, abort,
     and housekeeping — all driven by the git-review CLI porcelain contract.
     ]]></description>

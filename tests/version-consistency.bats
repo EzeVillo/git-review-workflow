@@ -100,6 +100,8 @@ EOF
 
 @test "version: visualstudio-extension vsixmanifest matches csproj Version" {
 	pkg="$(sed -nE 's#.*<Version>([0-9]+\.[0-9]+\.[0-9]+)</Version>.*#\1#p' "$REPO/visualstudio-extension/src/GitReview.VS/GitReview.VS.csproj" | head -n1)"
-	man="$(sed -nE 's#.*Version="([0-9]+\.[0-9]+\.[0-9]+)".*#\1#p' "$REPO/visualstudio-extension/src/GitReview.VS/source.extension.vsixmanifest" | head -n1)"
+	# Anchored to <Identity>: the root <PackageManifest Version="2.0.0"> is the
+	# schema version and comes first, so an unanchored match never sees ours.
+	man="$(sed -nE 's#.*<Identity [^>]*Version="([0-9]+\.[0-9]+\.[0-9]+)".*#\1#p' "$REPO/visualstudio-extension/src/GitReview.VS/source.extension.vsixmanifest" | head -n1)"
 	[ "$man" = "$pkg" ]
 }

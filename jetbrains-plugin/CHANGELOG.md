@@ -9,6 +9,17 @@ and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 
 ## [Unreleased]
 
+## [0.1.3]
+
+### Fixed
+
+- **The pickers no longer cut their own options.** Every choice dialog (branch,
+  origin, range, how to read it, keys only) sized itself to the combo, which
+  asks for less than its items are wide: the longer labels showed up truncated
+  with an ellipsis. They now open wide enough for their longest option (capped,
+  with the full text on hover), stay resizable, and remember the size you give
+  them.
+
 ### Changed
 
 - **Multi-IDE product matrix.** The same zip targets every JetBrains IDE that

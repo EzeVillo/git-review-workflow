@@ -7,9 +7,12 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
+import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
+import java.awt.Dimension
 import javax.swing.Icon
+import javax.swing.JComboBox
 import javax.swing.JComponent
 import javax.swing.JLabel
 import javax.swing.JPanel
@@ -106,6 +109,42 @@ object UiMessages {
 internal fun escapeHtml(text: String): String =
     text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
+/**
+ * El cuerpo del picker, aparte del diálogo —y por eso `internal`— porque el
+ * ancho es lo único que este diálogo decide, y así un test headless lo mira sin
+ * levantar la plataforma.
+ *
+ * [DialogWrapper] empaqueta contra el tamaño preferido de este panel, y un
+ * combo no pide el ancho de sus ítems: las etiquetas del asistente ("Local —
+ * review the local branch without fetching…") salían cortadas con puntos
+ * suspensivos, y leerlas pedía agrandar la ventana a mano en cada paso. Se mide
+ * el ítem más largo y se pide ese ancho, con tope para que un nombre de rama
+ * desmedido no estire el diálogo a lo ancho de la pantalla — ahí queda el
+ * tooltip, y el diálogo se puede agrandar y recuerda el tamaño.
+ */
+internal fun choosePanel(message: String, combo: JComboBox<String>, icon: Icon): JComponent {
+    val fm = combo.getFontMetrics(combo.font)
+    val widest = (0 until combo.itemCount)
+        .maxOfOrNull { fm.stringWidth(combo.getItemAt(it) ?: "") } ?: 0
+    // El extra cubre la flecha y los bordes del combo. El mensaje va arriba y no
+    // manda, salvo que sea más largo que todas las opciones.
+    val target = maxOf(widest + JBUI.scale(56), fm.stringWidth(message))
+        .coerceIn(JBUI.scale(320), JBUI.scale(720))
+
+    val body = object : JPanel(BorderLayout(0, JBUI.scale(6))) {
+        override fun getPreferredSize(): Dimension =
+            Dimension(target, super.getPreferredSize().height)
+    }
+    body.add(JLabel(message), BorderLayout.NORTH)
+    body.add(combo, BorderLayout.CENTER)
+
+    val panel = JPanel(BorderLayout(JBUI.scale(10), 0))
+    panel.border = JBUI.Borders.empty(8)
+    panel.add(JLabel(icon), BorderLayout.WEST)
+    panel.add(body, BorderLayout.CENTER)
+    return panel
+}
+
 /** The combo dialog behind [UiMessages.choose]. */
 private class ChooseDialog(
     project: Project?,
@@ -120,25 +159,29 @@ private class ChooseDialog(
     init {
         title = dialogTitle
         combo.isEditable = false
+        // El texto entero, para el ítem que igual no entre en el tope de ancho.
+        combo.renderer = SimpleListCellRenderer.create<String> { label, value, _ ->
+            label.text = value
+            label.toolTipText = value
+        }
         if (options.isNotEmpty()) {
             combo.selectedIndex = options.indexOf(defaultOption).coerceAtLeast(0)
         }
+        combo.toolTipText = combo.selectedItem as? String
+        combo.addActionListener { combo.toolTipText = combo.selectedItem as? String }
+        isResizable = true
         init()
     }
 
     val selectedIndex: Int get() = combo.selectedIndex
 
+    /**
+     * Todos los pickers comparten clave a propósito: son el mismo diálogo con
+     * otra lista, así que agrandarlo una vez alcanza para los pasos que siguen.
+     */
+    override fun getDimensionServiceKey(): String = "GitReview.ChooseDialog"
+
     override fun getPreferredFocusedComponent(): JComponent = combo
 
-    override fun createCenterPanel(): JComponent {
-        val panel = JPanel(BorderLayout(JBUI.scale(10), 0))
-        panel.border = JBUI.Borders.empty(8)
-        panel.add(JLabel(icon), BorderLayout.WEST)
-
-        val body = JPanel(BorderLayout(0, JBUI.scale(6)))
-        body.add(JLabel(message), BorderLayout.NORTH)
-        body.add(combo, BorderLayout.CENTER)
-        panel.add(body, BorderLayout.CENTER)
-        return panel
-    }
+    override fun createCenterPanel(): JComponent = choosePanel(message, combo, icon)
 }

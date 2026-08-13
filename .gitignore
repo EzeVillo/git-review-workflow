@@ -23,3 +23,8 @@ node_modules/
 dist/
 .env*
 *.egg-info/
+
+# .NET / Visual Studio extension
+visualstudio-extension/**/bin/
+visualstudio-extension/**/obj/
+visualstudio-extension/.vs/

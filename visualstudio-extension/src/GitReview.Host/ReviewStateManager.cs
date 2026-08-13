@@ -1,0 +1,185 @@
+using GitReview.Domain;
+
+namespace GitReview.Host;
+
+/// <summary>
+/// Refresh pipeline: version probe → status --porcelain → list/config when needed.
+/// Sole source of ReviewState for the panel.
+/// </summary>
+public sealed class ReviewStateManager
+{
+    private readonly CliInvoker _cli;
+    private readonly Func<IReadOnlyList<string>> _repoRoots;
+    private readonly Func<string?> _gitReviewPath;
+    private ReviewState _state = new(Situation.CliMissing);
+    private readonly object _gate = new();
+    private int _refreshGen;
+
+    public event Action<ReviewState>? StateChanged;
+
+    public ReviewState Current
+    {
+        get { lock (_gate) return _state; }
+    }
+
+    public ReviewStateManager(
+        CliInvoker cli,
+        Func<IReadOnlyList<string>> repoRoots,
+        Func<string?>? gitReviewPath = null)
+    {
+        _cli = cli;
+        _repoRoots = repoRoots;
+        _gitReviewPath = gitReviewPath ?? (() => null);
+    }
+
+    public async Task<ReviewState> RefreshAsync(CancellationToken ct = default)
+    {
+        var gen = Interlocked.Increment(ref _refreshGen);
+        var roots = _repoRoots();
+        var sole = SoleTarget.PickSoleTarget(roots);
+
+        if (roots.Count > 1)
+        {
+            return Publish(new ReviewState(
+                Situation.Error,
+                Stderr: "Open a single-folder workspace that is a git repository. git review uses one root (like the CLI cwd); multi-root is not supported."), gen);
+        }
+
+        if (sole is null)
+        {
+            return Publish(new ReviewState(
+                Situation.Error,
+                Stderr: UserCopy.NoSoleRoot), gen);
+        }
+
+        // Version probe: `git review --version` (verb is the flag after "review").
+        var ver = await _cli.InvokeAsync("--version", Array.Empty<string>(), sole, cancellationToken: ct)
+            .ConfigureAwait(false);
+
+        if (IsMissing(ver))
+        {
+            return Publish(new ReviewState(
+                Situation.CliMissing,
+                Stderr: string.IsNullOrWhiteSpace(ver.Stderr) ? "not found" : ver.Stderr), gen);
+        }
+
+        var versionLine = CliMessage.FirstCliLine(ver.Stdout);
+        if (string.IsNullOrEmpty(versionLine))
+        {
+            // Some builds print version on stderr or fail only on status; continue.
+        }
+        else if (CliVersion.IsOutdated(versionLine))
+        {
+            return Publish(new ReviewState(Situation.CliOutdated, Stderr: versionLine), gen);
+        }
+
+        var status = await _cli.InvokeAsync(
+                "status", new[] { "--porcelain" }, sole, cancellationToken: ct)
+            .ConfigureAwait(false);
+
+        if (IsMissing(status))
+        {
+            return Publish(new ReviewState(
+                Situation.CliMissing,
+                Stderr: CliMessage.CliErrorText(status.Stderr, status.Stdout, "CLI not found")), gen);
+        }
+
+        if (status.TimedOut)
+        {
+            return Publish(new ReviewState(
+                Situation.Error,
+                Stderr: "status --porcelain timed out"), gen);
+        }
+
+        var exit = status.ExitCode;
+        ReviewState next;
+
+        if (exit == 0 || exit == 3)
+        {
+            try
+            {
+                var parsed = Porcelain.ParsePorcelain(status.Stdout);
+                var hasConflict = parsed.Finish is not null;
+                var situation = SituationIds.For(exit, hasConflict, hasFinishPending: false);
+                next = new ReviewState(
+                    Situation: situation,
+                    State: parsed.State,
+                    Entries: parsed.Entries,
+                    Files: parsed.FilesList,
+                    Subjects: parsed.Subjects,
+                    Authors: parsed.Authors,
+                    Base: parsed.Base,
+                    Finish: parsed.Finish,
+                    Readonly: parsed.Readonly,
+                    KeysOnly: parsed.KeysOnly,
+                    Draft: parsed.Draft,
+                    Stderr: exit == 3 ? status.Stderr : null);
+            }
+            catch (Exception e)
+            {
+                next = new ReviewState(Situation.Error, Stderr: e.Message);
+            }
+        }
+        else if (exit == 2)
+        {
+            // no-review: list + config
+            var listTask = _cli.InvokeAsync("list", new[] { "--porcelain" }, sole, cancellationToken: ct);
+            var configTask = _cli.InvokeAsync("config", new[] { "--porcelain" }, sole, cancellationToken: ct);
+            await Task.WhenAll(listTask, configTask).ConfigureAwait(false);
+            var list = await listTask.ConfigureAwait(false);
+            var config = await configTask.ConfigureAwait(false);
+
+            var branches = list.ExitCode == 0
+                ? Porcelain.ParseListPorcelain(list.Stdout)
+                : Array.Empty<BranchRecord>();
+            EffectiveConfig? eff = null;
+            IReadOnlyList<CandidateBranch>? candidates = null;
+            IReadOnlyList<CandidateRemote>? remotes = null;
+            if (config.ExitCode == 0)
+            {
+                try
+                {
+                    var cp = ConfigPorcelain.ParseConfigPorcelain(config.Stdout);
+                    eff = cp.Config;
+                    candidates = cp.Candidates;
+                    remotes = cp.Remotes;
+                }
+                catch { /* leave null */ }
+            }
+
+            var hasPending = branches.Any(b => b.Finish?.State == "pending");
+            var situation = SituationIds.For(2, hasFinishConflict: false, hasFinishPending: hasPending);
+            next = new ReviewState(
+                Situation: situation,
+                Branches: branches,
+                Config: eff,
+                Candidates: candidates,
+                Remotes: remotes);
+        }
+        else
+        {
+            next = new ReviewState(
+                Situation.Error,
+                Stderr: CliMessage.CliErrorText(
+                    status.Stderr, status.Stdout, "Something went wrong reading the review state."));
+        }
+
+        return Publish(next, gen);
+    }
+
+    private static bool IsMissing(InvokeResult r) =>
+        r.ErrorCode is not null
+        || (r.ExitCode is not null and not 0
+            && (r.Stderr.Contains("is not a git command", StringComparison.OrdinalIgnoreCase)
+                || r.Stderr.Contains("not found", StringComparison.OrdinalIgnoreCase)
+                || r.Stderr.Contains("ENOENT", StringComparison.OrdinalIgnoreCase)
+                || r.ErrorCode is "Win32Exception" or "FileNotFoundException"));
+
+    private ReviewState Publish(ReviewState state, int gen)
+    {
+        if (gen != Volatile.Read(ref _refreshGen)) return Current;
+        lock (_gate) _state = state;
+        StateChanged?.Invoke(state);
+        return state;
+    }
+}

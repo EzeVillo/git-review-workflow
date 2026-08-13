@@ -617,6 +617,70 @@ for (const id of titleActionIds) {
   if (!actionKeys.includes(id)) fail(`title_actions id ${id} not in actions`);
 }
 
+// ---------------------------------------------------------------------------
+// Visual Studio client (third tree) — same anti-drift scalars as VS Code / IJ
+// ---------------------------------------------------------------------------
+const vsVersion = join(
+  root,
+  "visualstudio-extension",
+  "src",
+  "GitReview.Domain",
+  "Version.cs",
+);
+const vsInstall = join(
+  root,
+  "visualstudio-extension",
+  "src",
+  "GitReview.Domain",
+  "InstallHint.cs",
+);
+const vsSupport = join(
+  root,
+  "visualstudio-extension",
+  "src",
+  "GitReview.Domain",
+  "SupportLinks.cs",
+);
+const vsReviewState = join(
+  root,
+  "visualstudio-extension",
+  "src",
+  "GitReview.Host",
+  "ReviewStateManager.cs",
+);
+const vsActions = join(
+  root,
+  "visualstudio-extension",
+  "src",
+  "GitReview.Domain",
+  "ActionArgv.cs",
+);
+
+if (existsSync(vsVersion)) {
+  const v = readText(vsVersion, "utf8");
+  if (!v.includes(`"${min}"`)) fail(`visualstudio Version.cs missing min ${min}`);
+}
+if (existsSync(vsInstall)) {
+  const i = readText(vsInstall, "utf8");
+  if (!i.includes(npmInstall)) fail(`visualstudio InstallHint.cs missing npm_install`);
+  if (!i.includes(npmUpdate)) fail(`visualstudio InstallHint.cs missing npm_update`);
+}
+if (existsSync(vsSupport)) {
+  const s = readText(vsSupport, "utf8");
+  if (!s.includes(starUrl)) fail(`visualstudio SupportLinks missing star_url ${starUrl}`);
+  if (!s.includes(bugUrl)) fail(`visualstudio SupportLinks missing bug_url ${bugUrl}`);
+}
+if (existsSync(vsReviewState)) {
+  const s = readText(vsReviewState, "utf8");
+  if (!s.includes(multi)) fail("visualstudio ReviewStateManager missing multi_root_error fragment");
+}
+if (existsSync(vsActions)) {
+  const a = readText(vsActions, "utf8");
+  for (const id of actionKeys) {
+    if (!a.includes(`"${id}"`)) fail(`visualstudio ActionArgv.cs missing product action ${id}`);
+  }
+}
+
 console.log(
-  `check-client-product-surface: ok (min=${min}, actions=${actionKeys.length}, panel_controls=${canonicalControls.length}, title_actions=${titleActionIds.length})`,
+  `check-client-product-surface: ok (min=${min}, actions=${actionKeys.length}, panel_controls=${canonicalControls.length}, title_actions=${titleActionIds.length}, vs=${existsSync(vsVersion) ? "yes" : "no"})`,
 );

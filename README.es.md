@@ -15,7 +15,7 @@
 
 [English](README.md) · **Español** · [Sitio web](https://ezevillo.github.io/git-review-workflow/)
 
-Clientes: [extensión VS Code](vscode-extension/README.md) · [plugin JetBrains IDE](jetbrains-plugin/README.md)
+Clientes: [extensión VS Code](vscode-extension/README.md) · [plugin JetBrains IDE](jetbrains-plugin/README.md) · [extensión Visual Studio](visualstudio-extension/README.md)
 
 [![Mirá la demo](trailer-poster.png)](https://youtu.be/LsSQtNFnjRQ)
 

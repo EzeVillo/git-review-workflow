@@ -88,3 +88,18 @@ EOF
 	v="$(sed -nE 's#^pluginVersion = (.*)#\1#p' "$REPO/jetbrains-plugin/gradle.properties")"
 	[[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
 }
+
+# --- Visual Studio extension (versioned independently of the CLI) -----------
+#
+# <Version> in GitReview.VS.csproj is stamped by visualstudio-extension/bump-version.sh.
+
+@test "version: visualstudio-extension csproj Version is a bare semver" {
+	v="$(sed -nE 's#.*<Version>([0-9]+\.[0-9]+\.[0-9]+)</Version>.*#\1#p' "$REPO/visualstudio-extension/src/GitReview.VS/GitReview.VS.csproj" | head -n1)"
+	[[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+}
+
+@test "version: visualstudio-extension vsixmanifest matches csproj Version" {
+	pkg="$(sed -nE 's#.*<Version>([0-9]+\.[0-9]+\.[0-9]+)</Version>.*#\1#p' "$REPO/visualstudio-extension/src/GitReview.VS/GitReview.VS.csproj" | head -n1)"
+	man="$(sed -nE 's#.*Version="([0-9]+\.[0-9]+\.[0-9]+)".*#\1#p' "$REPO/visualstudio-extension/src/GitReview.VS/source.extension.vsixmanifest" | head -n1)"
+	[ "$man" = "$pkg" ]
+}

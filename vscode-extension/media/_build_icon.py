@@ -16,6 +16,8 @@ REPO = ROOT.parents[1]
 ASSETS = REPO / "assets"
 DOCS = REPO / "docs"  # GitHub Pages publishes /docs only, so the site needs its own copy
 INTELLIJ_RESOURCES = REPO / "jetbrains-plugin" / "src" / "main" / "resources"
+VS_MEDIA = REPO / "visualstudio-extension" / "media"
+VS_RESOURCES = REPO / "visualstudio-extension" / "src" / "GitReview.VS" / "Resources"
 FACE = ROOT / "_face.png"  # optional; only needed to re-extract the glyph
 CODE_GLYPH_PNG = ROOT / "code-glyph.png"  # checked-in white </> from the logo
 
@@ -530,6 +532,27 @@ def main() -> None:
         height=16,
         mono="#CED0D6",
     )
+    # Visual Studio client: same color mark for VSIX / Marketplace listing.
+    if VS_MEDIA.parent.is_dir():
+        VS_MEDIA.mkdir(parents=True, exist_ok=True)
+        VS_RESOURCES.mkdir(parents=True, exist_ok=True)
+        write_svg(VS_MEDIA / "icon.svg", color=True)
+        write_svg(VS_RESOURCES / "Icon.svg", color=True)
+        color_path = VS_MEDIA / "icon.png"
+        color.save(color_path, optimize=True)
+        print("saved", color_path)
+        # VSIX Resources\Icon.png (canonical) + common Marketplace sizes.
+        for size, name in ((128, "Icon.png"), (90, "Icon-90.png"), (128, "Icon-128.png"), (256, "Icon-256.png")):
+            sized = color.resize((size, size), Image.Resampling.LANCZOS)
+            for dest_dir in (VS_RESOURCES, VS_MEDIA):
+                out = dest_dir / name
+                sized.save(out, optimize=True)
+                print("saved", out)
+        mono_vs = ROOT / "activity-bar.png"
+        if mono_vs.is_file():
+            (VS_MEDIA / "activity-bar.png").write_bytes(mono_vs.read_bytes())
+        write_svg(VS_MEDIA / "activity-bar.svg", color=False)
+        print("saved Visual Studio marketplace icons")
     print("saved SVGs")
 
     # Center check: for each node row, the opaque run around the node must

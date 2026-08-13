@@ -331,24 +331,27 @@ repo, no en archivos del working tree:
       `tests/test-names.bats` lo verifica sobre toda la suite, así que la regla
       se rompe en cualquier OS en un segundo y no recién en el runner de Windows.
 
-## Clientes del monorepo (VS Code + IntelliJ)
+## Clientes del monorepo (VS Code + IntelliJ + Visual Studio)
 
-La CLI es la única fuente de verdad. Hay dos UIs de cliente en el monorepo:
+La CLI es la única fuente de verdad. Hay tres UIs de cliente en el monorepo:
 
 - **`vscode-extension/`** — extensión VS Code (TypeScript + esbuild).
 - **`jetbrains-plugin/`** — plugin JetBrains IDE / IntelliJ Platform (Kotlin +
   Gradle Platform Plugin). Un zip para IDEA, WebStorm, PhpStorm, PyCharm,
   GoLand, CLion, RubyMine, RustRover, DataGrip, etc.; **no** Android Studio ni
   Rider (`<incompatible-with>` en `plugin.xml`).
+- **`visualstudio-extension/`** — extensión Visual Studio (C# / .NET 8, VSIX).
 
-Ambos leen solo porcelain/argv de la CLI; el canónico anti-drift multi-cliente
+Los tres leen solo porcelain/argv de la CLI; el canónico anti-drift multi-cliente
 vive en **`contracts/client-product-surface.yaml`** (raíz). Incluye la matriz de
 27 acciones y el bloque **`panel_layout:`** (disposición del panel por
 situación). CI lo verifica con `node scripts/check-client-product-surface.mjs`
 (min_cli_version, npm, strings críticos, 27 acciones vs `package.json` de la
-extensión, y las seis comprobaciones de layout vs `panelHtml.ts`). Del lado
-IntelliJ, `PanelLayoutContractTest` compara `panelLayout(fixture)` contra el
-mismo YAML en cada `./gradlew test`.
+extensión, las seis comprobaciones de layout vs `panelHtml.ts`, y los mismos
+escalares contra los archivos de dominio de `visualstudio-extension/`). Del
+lado IntelliJ, `PanelLayoutContractTest` compara `panelLayout(fixture)` contra
+el mismo YAML en cada `./gradlew test`; del lado Visual Studio,
+`PanelLayoutContractTests` (xUnit) hace lo mismo en cada `dotnet test`.
 
 ### Plugin de JetBrains IDE (IntelliJ Platform)
 
@@ -401,6 +404,32 @@ plataforma deriva sola el hermano `_dark`, y **si falta no falla nada: dibuja un
 placeholder**; por eso `ToolWindowIconTest` ata las tres puntas: lo que pide el
 `plugin.xml`, lo que hay en `resources/`, y la geometría contra el archivo de la
 extensión forma por forma.
+
+### Extensión de Visual Studio (C# / .NET)
+
+`visualstudio-extension/` es una solución .NET 8 aparte (`GitReview.sln`),
+mismo split de capas que JetBrains: **`GitReview.Domain`** (C# puro, sin
+referencias a `Microsoft.VisualStudio.*`, port mecánico del `domain/` de
+JetBrains), **`GitReview.Host`** (invocador de la CLI, refresh de estado, lock
+de mutación) y **`GitReview.VS`** (VSIX — WPF `PanelView` renderiza
+`PanelLayout` con el mismo orden y las mismas etiquetas en inglés que
+JetBrains/VS Code; solo los colores siguen el tema del host).
+
+```powershell
+cd visualstudio-extension
+dotnet build GitReview.sln
+dotnet test tests/GitReview.Domain.Tests
+dotnet run --project src/GitReview.VS -- --verify    # smoke de layout/constantes
+dotnet run --project src/GitReview.VS -- --preview   # todas las situaciones, navegable
+```
+
+`bin/`/`obj/` de los cuatro proyectos van al `.gitignore` raíz
+(`visualstudio-extension/**/bin/`, `**/obj/`) — nunca se commitean. Empaquetar
+el VSIX (`dotnet build src/GitReview.VS -p:GitReviewPackVsix=true`) necesita el
+workload de Visual Studio SDK. Versión propia, independiente de la CLI y de los
+otros clientes: `./visualstudio-extension/bump-version.sh X.Y.Z` estampa
+`GitReview.VS.csproj`, `source.extension.vsixmanifest` y
+`Directory.Build.props` a la vez (cubierto por `tests/version-consistency.bats`).
 
 ## Extensión de VS Code
 
@@ -507,7 +536,9 @@ MOCHA_GREP='abre el diff' ./vscode-extension/test/run-docker.sh
 **sin `width`/`height`**, para que escale a cualquier tamaño. Todo lo demás sale
 del mismo generador, `vscode-extension/media/_build_icon.py`, que en una corrida
 escribe los PNG y SVG de la extensión, el maestro, `docs/logo.svg` (el favicon de
-la landing) y los cuatro SVG del plugin de IntelliJ. **Ninguno se edita a mano:
+la landing), los cuatro SVG del plugin de IntelliJ y los PNG/SVG de
+`visualstudio-extension/media/` + `src/GitReview.VS/Resources/` (VSIX, tamaños
+90/128/256). **Ninguno se edita a mano:
 se cambia el generador y se regenera** (`python
 vscode-extension/media/_build_icon.py`) — los comentarios que le pongas a un SVG
 los borra la próxima corrida, y los `_preview-*.png` que deja al lado son hojas
@@ -558,7 +589,10 @@ un comando que estampa todos los sitios que deben coincidir:
   propias del paquete en `package-lock.json`
 - `./jetbrains-plugin/bump-version.sh X.Y.Z` — `pluginVersion` en
   `gradle.properties` (Gradle parchea `plugin.xml` al build)
+- `./visualstudio-extension/bump-version.sh X.Y.Z` — `<Version>` en
+  `GitReview.VS.csproj`, `Identity Version=` en `source.extension.vsixmanifest`
+  y `GitReviewClientVersion` en `Directory.Build.props`
 
 Los headings del CHANGELOG de cada cliente se escriben a mano. Un
-`tests/version-consistency.bats` protege contra el drift de la CLI y de los dos
-clientes.
+`tests/version-consistency.bats` protege contra el drift de la CLI y de los
+tres clientes.

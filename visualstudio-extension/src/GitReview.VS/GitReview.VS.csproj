@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>GitReview.VS</RootNamespace>
+    <AssemblyName>GitReview.VS</AssemblyName>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <StartupObject>GitReview.VS.Program</StartupObject>
+    <!--
+      VSIX packaging requires the Visual Studio SDK workload.
+      Domain/Host/tests build without it. When VSSDK is present, set
+      GitReviewPackVsix=true to produce a .vsix via Community.VisualStudio.Toolkit.
+    -->
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Version>0.1.0</Version>
+    <Description>git review workflow — Visual Studio tool window (parity with VS Code and JetBrains).</Description>
+    <Company>EzeVillo</Company>
+    <Product>git review workflow</Product>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GitReview.Domain\GitReview.Domain.csproj" />
+    <ProjectReference Include="..\GitReview.Host\GitReview.Host.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Community.VisualStudio.Toolkit.17" Version="17.0.533" Condition="'$(GitReviewPackVsix)'=='true'" />
+    <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.11.435" PrivateAssets="all" Condition="'$(GitReviewPackVsix)'=='true'" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Marketplace / VSIX mark (same product geometry as VS Code + JetBrains). -->
+    <Content Include="Resources\Icon.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
+    <Content Include="Resources\Icon-90.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
+    <Content Include="Resources\Icon-128.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
+    <Content Include="Resources\Icon-256.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
+    <Content Include="Resources\Icon.svg">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
+    <None Include="source.extension.vsixmanifest" Condition="Exists('source.extension.vsixmanifest')" />
+    <None Include="..\..\LICENSE" Link="LICENSE" Condition="Exists('..\..\LICENSE')" />
+    <None Include="..\..\README.md" Link="README.md" Condition="Exists('..\..\README.md')" />
+    <None Include="..\..\CHANGELOG.md" Link="CHANGELOG.md" Condition="Exists('..\..\CHANGELOG.md')" />
+  </ItemGroup>
+</Project>

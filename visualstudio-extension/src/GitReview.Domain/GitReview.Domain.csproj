@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>GitReview.Domain</RootNamespace>
+    <AssemblyName>GitReview.Domain</AssemblyName>
+    <Description>Portable git-review client domain (no Visual Studio APIs).</Description>
+  </PropertyGroup>
+</Project>

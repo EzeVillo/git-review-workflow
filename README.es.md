@@ -17,7 +17,7 @@
 
 Clientes: [extensión VS Code](vscode-extension/README.md) · [plugin JetBrains IDE](jetbrains-plugin/README.md) · [extensión Visual Studio](visualstudio-extension/README.md)
 
-[![Mirá la demo](trailer-poster.png)](https://youtu.be/LsSQtNFnjRQ)
+[![Mirá la demo](demo-poster.png)](https://youtu.be/LsSQtNFnjRQ)
 
 ---
 

@@ -563,7 +563,7 @@ abrilo directo en el navegador — no necesita servidor.
 - `docs/.nojekyll` evita que Pages lo pase por Jekyll.
 - `docs/logo.svg` es el favicon: copia generada del maestro (ver *Assets del
   logo*), nunca a mano.
-- `docs/og.png` es la preview de los links (copia de `trailer-poster.png`);
+- `docs/og.png` es la preview de los links (copia de `demo-poster.png`);
   las URLs de `og:image` y `canonical` están hardcodeadas a
   `ezevillo.github.io/git-review-workflow/` — si algún día se le pone dominio
   propio, hay que tocar esas líneas del `<head>` (y agregar un `docs/CNAME`).

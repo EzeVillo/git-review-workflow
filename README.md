@@ -16,7 +16,7 @@
 
 Clients: [VS Code extension](vscode-extension/README.md) · [JetBrains IDE plugin](jetbrains-plugin/README.md) · [Visual Studio extension](visualstudio-extension/README.md)
 
-[![Watch the demo](trailer-poster.png)](https://youtu.be/LsSQtNFnjRQ)
+[![Watch the demo](demo-poster.png)](https://youtu.be/LsSQtNFnjRQ)
 
 ---
 

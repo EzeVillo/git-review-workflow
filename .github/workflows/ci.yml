@@ -131,6 +131,12 @@ jobs:
           distribution: temurin
           # Platform 2026.1 requires Java 21 (see jetbrains-plugin/gradle.properties).
           java-version: 21
+          # Also what release-jetbrains.yml restores: Actions caches are scoped
+          # per branch and a tag is not the default branch, so the only cache a
+          # `jetbrains-v*` run can read is the one this job wrote on the last
+          # push to the default branch. Without it every release re-downloads
+          # one IDE build per verified product.
+          cache: gradle
       - name: Domain unit tests
         working-directory: jetbrains-plugin
         # bash so the POSIX gradlew wrapper runs on Windows runners too

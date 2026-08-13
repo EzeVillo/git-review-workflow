@@ -1,0 +1,147 @@
+name: release-jetbrains
+
+# Publish the JetBrains IDE plugin to the JetBrains Marketplace by pushing a
+# tag, e.g.:
+#   ./jetbrains-plugin/bump-version.sh 0.1.4
+#   # fill the CHANGELOG heading, then
+#   git commit -am "Release jetbrains-plugin 0.1.4"
+#   git tag jetbrains-v0.1.4 && git push origin HEAD --tags
+#
+# The plugin versions independently of the CLI, so it gets its own tag
+# namespace: `v*` releases the CLI (release.yml), `jetbrains-v*` releases this.
+# The trigger is a tag and not a push to the default branch because the
+# Marketplace refuses a version it already has — "the plugin changed" is only
+# publishable when `pluginVersion` changed, and the tag says exactly that.
+#
+# Requires one repository secret, JETBRAINS_MARKETPLACE_TOKEN: a Marketplace
+# permanent token (plugins.jetbrains.com -> Profile -> My Tokens) with rights
+# over this plugin. The *first* upload of a listing goes through JetBrains
+# review and has to be done by hand; every version after that goes over the API.
+on:
+  push:
+    tags:
+      - "jetbrains-v*"
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Both guards run before anything is downloaded: the steps below pull one
+      # IDE build per verified product, and failing on a missing secret or a
+      # mismatched tag after ten minutes of downloads helps nobody.
+      - name: Resolve the version and check it matches pluginVersion
+        id: ver
+        run: |
+          set -eu
+          version="${GITHUB_REF_NAME#jetbrains-v}"
+          # gradle.properties is the sole source of truth: Gradle patches
+          # plugin.xml and the zip name from it, so it is what gets published.
+          # Mirrors the VERSION check release.yml does for the CLI tarball.
+          stamped="$(sed -nE 's#^pluginVersion = (.*)$#\1#p' jetbrains-plugin/gradle.properties | tr -d '[:space:]')"
+          if [ "$version" != "$stamped" ]; then
+            echo "tag is ${GITHUB_REF_NAME} but gradle.properties has pluginVersion = ${stamped}." >&2
+            echo "Run ./jetbrains-plugin/bump-version.sh ${version} and tag that commit." >&2
+            exit 1
+          fi
+          echo "version=${version}" >>"$GITHUB_OUTPUT"
+
+      - name: Check the Marketplace token is configured
+        env:
+          PUBLISH_TOKEN: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
+        run: |
+          set -eu
+          if [ -z "${PUBLISH_TOKEN:-}" ]; then
+            echo "secret JETBRAINS_MARKETPLACE_TOKEN is not set." >&2
+            echo "Create a permanent token on plugins.jetbrains.com (Profile -> My Tokens)" >&2
+            echo "and add it under Settings -> Secrets and variables -> Actions." >&2
+            exit 1
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          # Platform 2026.1 requires Java 21 (see jetbrains-plugin/gradle.properties).
+          java-version: 21
+          # verifyPlugin resolves one IDE build per verified product as a Gradle
+          # dependency, so the Gradle cache is what keeps a release from
+          # re-downloading gigabytes. Caches are scoped per branch, and a tag is
+          # not the default branch — what this restores is the cache the ci.yml
+          # `jetbrains-plugin` job wrote on the last push to the default branch,
+          # which is why that job caches too.
+          cache: gradle
+
+      - name: Domain unit tests
+        working-directory: jetbrains-plugin
+        run: ./gradlew test --no-daemon
+
+      - name: Domain no-IntelliJ import rule
+        working-directory: jetbrains-plugin
+        run: ./gradlew checkDomainNoIntellij --no-daemon
+
+      - name: Platform tests
+        working-directory: jetbrains-plugin
+        run: ./gradlew platformTest --no-daemon
+
+      # The same verifier the Marketplace runs on the uploaded zip. Running it
+      # here means a rejection surfaces before the version is public — once a
+      # version number is uploaded it cannot be reused, so a bad publish costs
+      # a version bump, not a re-run.
+      - name: Plugin verifier
+        working-directory: jetbrains-plugin
+        run: ./gradlew verifyPlugin --no-daemon
+
+      # publishPlugin builds the zip itself (buildPlugin is a dependency), so
+      # this single step produces the artifact and uploads it.
+      - name: Publish to the JetBrains Marketplace
+        working-directory: jetbrains-plugin
+        env:
+          PUBLISH_TOKEN: ${{ secrets.JETBRAINS_MARKETPLACE_TOKEN }}
+        run: ./gradlew publishPlugin --no-daemon
+
+      # A GitHub Release for the same tag, with the zip attached: a download
+      # that works while the Marketplace is still processing the upload, and a
+      # home for the CHANGELOG section.
+      #
+      # --latest=false is not cosmetic. web-install.sh and web-install.ps1 pick
+      # the ref to install from the repo's `releases/latest`, so a plugin
+      # release marked latest would make the CLI installer check out a
+      # jetbrains-v* tag. Notes come from the plugin CHANGELOG, not
+      # --generate-notes, which would list every CLI commit since the previous
+      # tag in the shared history.
+      - name: Create the GitHub release with the zip attached
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -eu
+          zip="jetbrains-plugin/build/distributions/git-review-workflow-${VERSION}.zip"
+          if [ ! -f "$zip" ]; then
+            echo "expected the built plugin at ${zip}, but it is not there." >&2
+            ls -la jetbrains-plugin/build/distributions/ >&2 || true
+            exit 1
+          fi
+
+          notes="$(mktemp)"
+          awk -v v="## [${VERSION}]" '
+            $0 == v { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' jetbrains-plugin/CHANGELOG.md >"$notes"
+          if [ ! -s "$notes" ]; then
+            echo "See jetbrains-plugin/CHANGELOG.md" >"$notes"
+          fi
+
+          gh release create "$GITHUB_REF_NAME" "$zip" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "JetBrains IDE plugin ${VERSION}" \
+            --notes-file "$notes" \
+            --latest=false

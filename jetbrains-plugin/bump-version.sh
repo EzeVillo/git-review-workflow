@@ -46,4 +46,8 @@ bumped jetbrains-plugin to $V. Next:
   git diff jetbrains-plugin/gradle.properties
   # fill CHANGELOG.md (move Unreleased notes under ## [$V])
   git commit -am "Release jetbrains-plugin $V"
+  git tag jetbrains-v$V && git push origin HEAD --tags
+
+The jetbrains-v* tag is what publishes to the Marketplace
+(.github/workflows/release-jetbrains.yml); v* releases the CLI.
 EOF

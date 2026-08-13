@@ -96,6 +96,21 @@ intellijPlatform {
         }
     }
 
+    // Marketplace upload, driven by .github/workflows/release-jetbrains.yml.
+    // The token is a Marketplace permanent token (Profile -> My Tokens) with
+    // rights over this plugin; it only exists as a CI secret, so the provider is
+    // absent locally and *only* publishPlugin notices — build, verify, runIde and
+    // the tests are untouched by the empty value.
+    //
+    // Signing is deliberately not wired: the Marketplace accepts unsigned
+    // uploads (it signs them with its own certificate), which is how 0.1.x
+    // shipped. To sign with our own key instead, add a `signing { }` block here
+    // reading CERTIFICATE_CHAIN / PRIVATE_KEY / PRIVATE_KEY_PASSWORD from the
+    // environment — publishPlugin then uploads the signed archive on its own.
+    publishing {
+        token = providers.environmentVariable("PUBLISH_TOKEN")
+    }
+
     pluginVerification {
         ides {
             // Same platform line we compile against, one binary per product that
@@ -174,8 +189,8 @@ sourceSets {
     create("preview") {
         kotlin.srcDir("preview")
         compileClasspath += sourceSets["main"].output +
-            sourceSets["fixtures"].output +
-            configurations["compileClasspath"]
+                sourceSets["fixtures"].output +
+                configurations["compileClasspath"]
         runtimeClasspath += output + compileClasspath
     }
     named("test") {

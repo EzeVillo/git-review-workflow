@@ -2,15 +2,14 @@
 
 **Walk a PR in order, then edit and run it — not just read the diff.**
 
-Native Visual Studio client for [git-review-workflow](https://github.com/EzeVillo/git-review-workflow). Same product surface as the [VS Code extension](https://github.com/EzeVillo/git-review-workflow/tree/main/vscode-extension) and the [JetBrains plugin](https://github.com/EzeVillo/git-review-workflow/tree/main/jetbrains-plugin): start, walk / step / whole, finish, save, abort, and housekeeping — all driven by the `git review` CLI porcelain contract.
+[`git review`](https://github.com/EzeVillo/git-review-workflow) stages the entire pull request into your working tree as **uncommitted changes**. Reviewing it is then ordinary local work: go to a definition, find all references, run the tests, fix what you find. When you are done, **your fixes are extracted onto a branch of their own** — the author's commits stay exactly as they were.
 
 ## What you get
 
-- **Tool-window panel** with the same English labels and button order as the other clients (theme colors only differ).
-- **Reading order** when the PR ships a walkthrough (or when you draft one): file, position, `key` badges, and the author's *why*.
-- **Whole-range file list** when there is no walkthrough: open one diff or every change at once.
-- **Inventory** of other reviews in the repo when this branch has none: continue saved reviews, discard orphans.
-- **Finish / undo / clean** flows with the same confirmations as VS Code and JetBrains.
+- **A reading order, when the PR has one.** The author (often an AI coding agent) can commit a walkthrough beside the change: one file at a time, in the order that makes the change make sense, each with the reason it is there. The ones that carry the point are marked `key`. No walkthrough? Draft your own, or read the whole range.
+- **The whole range otherwise** — every file in the PR, one diff at a time or all at once.
+- **Your place is kept.** Pause a review and come back to it; switch branches without losing where you were, or what you edited.
+- **Nothing to clean up by hand.** Finishing extracts your edits and restores the branch; undo puts it back if you changed your mind.
 
 ## Requirements
 

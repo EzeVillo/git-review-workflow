@@ -9,6 +9,27 @@ and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 
 ## [Unreleased]
 
+### Changed
+
+- **The Marketplace listing says what the plugin does.** It used to open by
+  claiming parity with the other editors' clients and then spend its second
+  paragraph listing the JetBrains IDEs it runs on — one fact about how the
+  project is built, and one the Marketplace already prints above the
+  description. Neither told you what you get. It now describes the thing: the PR
+  is staged into your working tree as uncommitted changes, you review it by
+  going to definitions and running the tests, and your fixes come out on a
+  branch of their own. The required CLI is stated up front instead of being
+  discovered after installing.
+
+### Added
+
+- **Release notes on the listing.** This file is now what the Marketplace *What's
+  New* tab and the IDE's update dialog show: the section for the version being
+  published is rendered into the plugin descriptor at build time, the same
+  section the GitHub Release body already used. Up to and including 0.1.3 the
+  descriptor carried no change notes at all, so every version published looked
+  like it changed nothing.
+
 ## [0.1.3]
 
 ### Fixed

@@ -21,7 +21,8 @@
     "pull-request",
     "code-review",
     "walkthrough",
-    "scm"
+    "scm",
+    "diff"
   ],
   "engines": {
     "vscode": "^1.75.0"

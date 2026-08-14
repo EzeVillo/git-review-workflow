@@ -681,6 +681,108 @@ if (existsSync(vsActions)) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// listing: storefront copy that must read the same in all three marketplaces.
+// The listing *body* differs per marketplace by design (packaged README /
+// plugin.xml description / pasted overview.md) — only the tagline and the
+// search keywords are shared, so only those are checked.
+// ---------------------------------------------------------------------------
+function nestedScalar(parent, key) {
+  const block = text.split(new RegExp(`^${parent}:\\s*$`, "m"))[1];
+  if (!block) fail(`missing ${parent}: block`);
+  const m = block.split(/^[a-z_][a-z0-9_]*:/m)[0].match(new RegExp(`^ +${key}:\\s*"([^"]*)"`, "m"));
+  if (!m) fail(`missing ${parent}.${key}`);
+  return m[1];
+}
+
+function nestedList(parent, key) {
+  const block = text.split(new RegExp(`^${parent}:\\s*$`, "m"))[1];
+  if (!block) fail(`missing ${parent}: block`);
+  const m = block.split(/^[a-z_][a-z0-9_]*:/m)[0].match(new RegExp(`^ +${key}:\\s*\\[([^\\]]*)\\]`, "m"));
+  if (!m) fail(`missing ${parent}.${key}`);
+  return [...m[1].matchAll(/"([^"]*)"/g)].map((x) => x[1]);
+}
+
+// Same word, different house style per marketplace: "pull-request" (VS Code
+// package.json) and "pull request" (vsixmanifest Tags) are the same keyword.
+function normKeyword(k) {
+  return k.toLowerCase().replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function sameKeywordSet(a, b) {
+  const x = [...new Set(a.map(normKeyword))].sort();
+  const y = [...new Set(b.map(normKeyword))].sort();
+  return x.length === y.length && x.every((v, i) => v === y[i]);
+}
+
+// Contents of `header { ... }`, brace-balanced. Needed because "description" is
+// an ordinary Gradle task property elsewhere in build.gradle.kts — a file-wide
+// grep would flag `tasks.register(...) { description = ... }`.
+function braceBlock(src, header) {
+  const start = src.indexOf(header);
+  if (start === -1) return null;
+  let depth = 0;
+  for (let i = src.indexOf("{", start); i < src.length; i += 1) {
+    if (src[i] === "{") depth += 1;
+    else if (src[i] === "}") {
+      depth -= 1;
+      if (depth === 0) return src.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+const tagline = nestedScalar("listing", "tagline");
+const keywords = nestedList("listing", "keywords");
+
+// VS Code: the tagline *is* the description field (short by design).
+if (pkg.description !== tagline) {
+  fail(`vscode package.json description is not the canonical tagline\n  want: ${tagline}\n  got:  ${pkg.description}`);
+}
+if (!sameKeywordSet(pkg.keywords ?? [], keywords)) {
+  fail(`vscode package.json keywords drift from listing.keywords: ${(pkg.keywords ?? []).join(", ")}`);
+}
+
+// JetBrains: plugin.xml owns the listing body, and build.gradle.kts must not
+// set `description` — that would silently overwrite it at package time with a
+// copy no test asserts on.
+const ijXml = join(root, "jetbrains-plugin", "src", "main", "resources", "META-INF", "plugin.xml");
+if (existsSync(ijXml)) {
+  const x = readText(ijXml, "utf8");
+  if (!x.includes(tagline)) fail(`intellij plugin.xml <description> missing the tagline: ${tagline}`);
+}
+const ijGradle = join(root, "jetbrains-plugin", "build.gradle.kts");
+if (existsSync(ijGradle)) {
+  const g = readText(ijGradle, "utf8");
+  const cfg = braceBlock(g, "pluginConfiguration");
+  if (!cfg) fail("intellij build.gradle.kts has no pluginConfiguration block");
+  if (/^\s*description\s*(=|\.set\()/m.test(cfg)) {
+    fail("intellij build.gradle.kts sets pluginConfiguration.description — it overwrites plugin.xml; keep one copy, in plugin.xml");
+  }
+  // Without this the Marketplace "What's New" tab and the IDE update dialog
+  // ship empty, which is how 0.1.0 through 0.1.3 were published.
+  if (!/^\s*changeNotes\s*(=|\.set\()/m.test(cfg)) {
+    fail("intellij build.gradle.kts does not set pluginConfiguration.changeNotes — the listing would have no release notes");
+  }
+}
+
+// Visual Studio: the tagline opens both the packaged manifest description and
+// the overview pasted into the portal.
+const vsManifest = join(root, "visualstudio-extension", "src", "GitReview.VS", "source.extension.vsixmanifest");
+if (existsSync(vsManifest)) {
+  const m = readText(vsManifest, "utf8");
+  if (!m.includes(tagline)) fail(`visualstudio vsixmanifest <Description> missing the tagline: ${tagline}`);
+  const tags = m.match(/<Tags>([^<]*)<\/Tags>/)?.[1] ?? "";
+  if (!sameKeywordSet(tags.split(";").filter((t) => t.trim()), keywords)) {
+    fail(`visualstudio vsixmanifest Tags drift from listing.keywords: ${tags}`);
+  }
+}
+const vsOverview = join(root, "visualstudio-extension", "marketplace", "overview.md");
+if (existsSync(vsOverview)) {
+  const o = readText(vsOverview, "utf8");
+  if (!o.includes(tagline)) fail(`visualstudio marketplace/overview.md missing the tagline: ${tagline}`);
+}
+
 console.log(
   `check-client-product-surface: ok (min=${min}, actions=${actionKeys.length}, panel_controls=${canonicalControls.length}, title_actions=${titleActionIds.length}, vs=${existsSync(vsVersion) ? "yes" : "no"})`,
 );

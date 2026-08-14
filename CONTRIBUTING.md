@@ -383,6 +383,27 @@ Two things worth knowing about that workflow:
   push: "the plugin changed" is only publishable when
   `pluginVersion` changed.
 
+#### What the listing shows, and where it comes from
+
+Everything below travels **inside the zip** — publishing is the only way to change it:
+
+| Listing field | Source |
+|---|---|
+| Name | `pluginName` in `gradle.properties` |
+| Overview body | `<description>` in `plugin.xml` — the **only** copy; `build.gradle.kts` deliberately does not set `pluginConfiguration.description`, which would overwrite it |
+| *What's New* / update dialog | the section for this version in `jetbrains-plugin/CHANGELOG.md`, rendered to HTML by the `org.jetbrains.changelog` plugin |
+| Icon | `META-INF/pluginIcon.svg` (+ `_dark`), generated — see *Logo assets* |
+| Vendor | `<vendor>` in `plugin.xml` |
+| Compatible products / builds | `<depends>` + `<incompatible-with>`, and `pluginSinceBuild` |
+
+The **tagline** — the first sentence of that description — is shared with the VS Code and Visual
+Studio listings and checked by `scripts/check-client-product-surface.mjs` (`listing.tagline`);
+change it in `contracts/client-product-surface.yaml` and all three at once, never in one place.
+
+Everything else on the listing page — **screenshots**, category/tags, source-code and
+documentation links, license, pricing — is portal-side: edit it on plugins.jetbrains.com, no
+release needed.
+
 To build the zip locally without releasing anything:
 
 ```sh

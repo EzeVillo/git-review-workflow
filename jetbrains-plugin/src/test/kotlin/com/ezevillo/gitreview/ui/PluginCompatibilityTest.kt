@@ -43,16 +43,44 @@ class PluginCompatibilityTest {
         )
     }
 
+    /**
+     * The listing sells the product to someone who has never heard of it — it is
+     * not a summary of the monorepo. Two habits keep creeping back in and both
+     * cost the opening paragraph, which is the only part most readers see:
+     * naming the sibling clients (a fact about how this is built, not about what
+     * the reader gets), and restating the compatible-IDE list that Marketplace
+     * already prints above the description from <depends>.
+     */
     @Test
-    fun `description advertises multi-IDE and names the exclusions`() {
+    fun `description sells the product, not the monorepo`() {
         val description = textChildren("description").single()
-        assertTrue(
-            description.contains("WebStorm") && description.contains("PyCharm"),
-            "Marketplace description should name peer IDEs, got: $description",
+
+        for (sibling in listOf("VS Code", "Visual Studio", "VSCode")) {
+            assertFalse(
+                description.contains(sibling),
+                "the listing should not mention $sibling — the reader picked this IDE " +
+                    "and most likely does not know the other clients exist",
+            )
+        }
+
+        // Peer product names are the tell that the compatibility list came back.
+        // IntelliJ IDEA is not in this list: it is fine to name the platform.
+        val peerIdes = listOf(
+            "WebStorm", "PhpStorm", "PyCharm", "GoLand",
+            "CLion", "RubyMine", "RustRover", "DataGrip",
         )
+        for (ide in peerIdes) {
+            assertFalse(
+                description.contains(ide),
+                "the listing should not restate the compatible-IDE list ($ide) — " +
+                    "Marketplace derives and prints it from <depends>",
+            )
+        }
+
+        // The one hard requirement a reader must not discover after installing.
         assertTrue(
-            description.contains("Android Studio") && description.contains("Rider"),
-            "description should say Android Studio and Rider are unsupported",
+            description.contains("git review") && description.contains("git-review-workflow"),
+            "the listing must say the git review CLI is required and how to get it",
         )
     }
 

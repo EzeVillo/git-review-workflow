@@ -8,7 +8,7 @@ Use this when publishing `com.ezevillo.gitreview.vs` on
 | Asset | Path | Notes |
 |-------|------|--------|
 | Display name | `source.extension.vsixmanifest` → DisplayName | `git review workflow` |
-| Short description | same → Description | matches VS Code / JetBrains one-liner |
+| Short description | same → Description | opens with the shared tagline — `listing.tagline` in `contracts/client-product-surface.yaml`, checked in CI against all three clients. Change it there, not here |
 | Icon | `src/GitReview.VS/Resources/Icon.png` | product mark (same geometry as VS Code `media/icon.png`) |
 | Preview / gallery mark | `Resources/Icon-256.png` | larger mark for listing chrome |
 | License | `LICENSE` (MIT) | referenced from vsixmanifest |

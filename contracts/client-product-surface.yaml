@@ -10,6 +10,22 @@ support:
   star_url: "https://github.com/EzeVillo/git-review-workflow"
   # openSupport id "bug" — issue form lives at .github/ISSUE_TEMPLATE/bug_report.yml
   bug_url: "https://github.com/EzeVillo/git-review-workflow/issues/new?template=bug_report.yml"
+# Storefront copy. Only what has to read the same in all three marketplaces
+# lives here: the tagline (the one-liner under the plugin name in search results
+# and on the listing) and the search keywords. The listing *body* is not shared
+# — each marketplace takes a different artifact (VS Code renders the packaged
+# README.md, JetBrains the <description> in plugin.xml, Visual Studio the
+# overview.md pasted into the portal) — so it is reviewed by hand, not checked.
+listing:
+  # Byte-identical in all three. VS Code: package.json description (this exact
+  # string). JetBrains: first sentence of the plugin.xml <description>. Visual
+  # Studio: first sentence of vsixmanifest <Description> and of overview.md.
+  tagline: "Walk a PR in order, then edit and run it — not just read the diff"
+  # Compared as a set, case- and separator-insensitive: VS Code writes them
+  # hyphenated in package.json keywords, Visual Studio spaced in vsixmanifest
+  # Tags. JetBrains has no keyword field in the descriptor (Marketplace tags are
+  # set in the portal) — nothing to check there.
+  keywords: ["git", "review", "pull request", "code review", "walkthrough", "scm", "diff"]
 strings:
   # verified: panelHtml.ts ~911
   cli_missing_title: "The git-review CLI ({min} or newer) was not found."

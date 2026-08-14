@@ -4,13 +4,48 @@
     <name>git review workflow</name>
     <vendor email="ezevi@users.noreply.github.com" url="https://github.com/EzeVillo/git-review-workflow">EzeVillo</vendor>
 
+    <!--
+      This is the Marketplace listing body (HTML), and the only copy of it:
+      build.gradle.kts deliberately does not set `description`, which would
+      overwrite this one at package time. The first sentence is the shared
+      product tagline — byte-identical across the three clients, enforced by
+      scripts/check-client-product-surface.mjs (listing.tagline).
+
+      Write for someone who has never heard of this: what it does, why it is
+      different, what it needs. Two things do NOT belong here, and
+      PluginCompatibilityTest fails on both:
+        - the other clients. "Parity with the VS Code extension" is a fact about
+          the monorepo. A reader who is installing this one has already picked
+          their editor and most likely does not know the others exist.
+        - the list of compatible IDEs. Marketplace prints "Compatible with:
+          IntelliJ IDEA, WebStorm, …" above this text, derived from <depends>,
+          and hides the listing entirely on the incompatible-with products —
+          spending the opening paragraph restating that buys nothing.
+    -->
     <description><![CDATA[
-    Walk a PR in order, then edit and run it — not just read the diff.
-    Full parity with the VS Code extension: start, walk/step/whole, finish, save, abort,
-    and housekeeping — all driven by the git-review CLI porcelain contract.<br><br>
-    Built for JetBrains IDEs on the IntelliJ Platform (IntelliJ IDEA, WebStorm, PhpStorm,
-    PyCharm, GoLand, CLion, RubyMine, RustRover, DataGrip, …). Requires a local
-    <code>git review</code> CLI. Not supported on Android Studio or Rider.
+    <p>Walk a PR in order, then edit and run it — not just read the diff.</p>
+
+    <p><code>git review</code> stages the entire pull request into your working tree as
+    uncommitted changes. Reviewing it is then ordinary local work: jump to a
+    definition, follow a call, run the tests, fix what you find. When you are done,
+    <b>your fixes are extracted onto a branch of their own</b> — the author's commits
+    stay exactly as they were.</p>
+
+    <p>The tool window keeps your place in it:</p>
+    <ul>
+      <li><b>The reading order the author wrote</b>, one file at a time, each with the
+      reason that change is there — instead of an alphabetical list of files you have
+      to reassemble in your head.</li>
+      <li><b>The whole range</b> when there is no reading order: open one diff, or all
+      of them at once.</li>
+      <li><b>Pause and come back.</b> A review survives switching branches; your edits
+      are held until you finish it.</li>
+    </ul>
+
+    <p>Requires the <code>git review</code> command-line tool:
+    <code>npm install -g git-review-workflow</code>
+    (<a href="https://github.com/EzeVillo/git-review-workflow#installation">Homebrew, a Windows
+    installer and a no-Node one-liner</a>).</p>
     ]]></description>
 
     <!--

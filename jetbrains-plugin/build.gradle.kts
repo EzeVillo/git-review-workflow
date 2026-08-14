@@ -1,3 +1,4 @@
+import org.jetbrains.changelog.Changelog
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -7,6 +8,8 @@ plugins {
     // Match platform Kotlin metadata; target JVM 21 (2026.1 platform Java level).
     id("org.jetbrains.kotlin.jvm") version "2.3.20"
     id("org.jetbrains.intellij.platform") version "2.18.1"
+    // Renders CHANGELOG.md into the descriptor's <change-notes> (see below).
+    id("org.jetbrains.changelog") version "2.4.0"
 }
 
 group = providers.gradleProperty("pluginGroup").get()
@@ -61,6 +64,19 @@ java {
     }
 }
 
+// CHANGELOG.md is the single source of release notes for this client: the
+// Marketplace tab (changeNotes, below), the update dialog inside the IDE, and
+// the GitHub Release body all read this one file. Keep a Changelog format,
+// headings written by hand after bump-version.sh stamps the version.
+changelog {
+    path = file("CHANGELOG.md").canonicalPath
+    version = providers.gradleProperty("pluginVersion")
+    // patchChangelog is not part of the release path; the headings are edited by
+    // hand. These only shape what `renderItem` emits.
+    itemPrefix = "-"
+    repositoryUrl = "https://github.com/EzeVillo/git-review-workflow"
+}
+
 intellijPlatform {
     // instrumentCode needs a full JDK layout; some Windows JDKs (e.g. Microsoft)
     // omit Packages/ and break :instrumentCode. Domain tests do not need it.
@@ -69,21 +85,38 @@ intellijPlatform {
     pluginConfiguration {
         name = providers.gradleProperty("pluginName")
         version = providers.gradleProperty("pluginVersion")
-        // Marketplace listing body (HTML). Keep in sync with the source plugin.xml
-        // description intent: multi-IDE, not IDEA-only.
-        description.set(
-            """
-            Walk a PR in order, then edit and run it — not just read the diff.
-            Full parity with the VS Code extension: start, walk/step/whole, finish,
-            save, abort, and housekeeping — all driven by the git-review CLI porcelain
-            contract.<br><br>
-            Built for JetBrains IDEs on the IntelliJ Platform (IntelliJ IDEA, WebStorm,
-            PhpStorm, PyCharm, GoLand, CLion, RubyMine, RustRover, DataGrip, and other
-            products that ship <code>com.intellij.modules.platform</code> + Git).
-            Requires a local <code>git review</code> CLI.
-            Not supported on Android Studio or Rider.
-            """.trimIndent(),
-        )
+
+        // No `description` here on purpose. It is the Marketplace listing body,
+        // and setting it would overwrite the <description> in the source
+        // plugin.xml with a second copy nothing checks — PluginCompatibilityTest
+        // asserts on the descriptor, so the two used to drift silently (the
+        // Gradle copy still claimed parity with "the VS Code extension" alone
+        // after the Visual Studio client shipped). One copy, in plugin.xml.
+
+        // The Marketplace "What's New" tab, and the release notes the IDE shows
+        // before an update. Rendered from the same CHANGELOG.md section that
+        // release-jetbrains.yml turns into the GitHub Release body, so the two
+        // cannot disagree. No section for this version yet (bump-version.sh
+        // stamps the version, the heading is written by hand afterwards) →
+        // point at the file instead of publishing an empty tab.
+        changeNotes = providers.gradleProperty("pluginVersion").map { v ->
+            // Both lookups throw on a missing section, and the whole point of the
+            // fallback is that packaging never fails over prose: a build between
+            // the version bump and the CHANGELOG heading still has to produce a
+            // zip. runCatching, not get-or-throw.
+            val item = changelog.getOrNull(v)
+                ?: runCatching { changelog.getUnreleased() }.getOrNull()
+            val html = item?.let {
+                changelog.renderItem(
+                    it.withHeader(false).withEmptySections(false),
+                    Changelog.OutputType.HTML,
+                )
+            }.orEmpty()
+            html.ifBlank {
+                "See <a href=\"https://github.com/EzeVillo/git-review-workflow/blob/main/" +
+                    "jetbrains-plugin/CHANGELOG.md\">CHANGELOG.md</a>."
+            }
+        }
 
         ideaVersion {
             sinceBuild = providers.gradleProperty("pluginSinceBuild")

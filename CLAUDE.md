@@ -316,12 +316,28 @@ La CLI es la única fuente de verdad. Hay tres UIs de cliente en el monorepo:
 - **`visualstudio-extension/`** — extensión Visual Studio (C# / .NET 8, VSIX).
 
 Los tres leen solo porcelain/argv de la CLI; el canónico anti-drift multi-cliente vive en **
-`contracts/client-product-surface.yaml`** (raíz). Incluye la matriz de 27 acciones y el bloque **
-`panel_layout:`** (disposición del panel por situación). CI lo verifica con
+`contracts/client-product-surface.yaml`** (raíz). Incluye la matriz de 27 acciones, el bloque **
+`panel_layout:`** (disposición del panel por situación) y el bloque **`listing:`**
+(la copy de las tres tiendas). CI lo verifica con
 `node scripts/check-client-product-surface.mjs`
 (min_cli_version, npm, strings críticos, 27 acciones vs `package.json` de la extensión, las seis
 comprobaciones de layout vs `panelHtml.ts`, y los mismos escalares contra los archivos de dominio de
-`visualstudio-extension/`). Del lado IntelliJ, `PanelLayoutContractTest` compara
+`visualstudio-extension/`).
+
+**De la ficha de cada tienda se comparte la copy corta, no el cuerpo.** El
+`listing:` del contrato fija dos cosas y CI las verifica en las tres puntas: el **tagline** (la
+línea que va bajo el nombre en los resultados de búsqueda — byte por byte igual en
+`package.json` de VS Code, la primera oración del `<description>` de `plugin.xml` y la del
+`<Description>` del vsixmanifest más `marketplace/overview.md`) y los **keywords**, que se comparan
+como conjunto normalizado porque cada tienda los escribe distinto (`pull-request` en npm,
+`pull request` en el vsixmanifest). El **cuerpo** de la ficha no se comparte y no se verifica: cada
+tienda toma un artefacto distinto —VS Code renderiza el `README.md` empaquetado, JetBrains el
+`<description>` del descriptor, Visual Studio el `overview.md` que se pega a mano en el portal—, así
+que decir lo mismo ahí es trabajo de revisión, no de check. Del lado JetBrains hay además un guard
+concreto: `build.gradle.kts` **no** debe setear `pluginConfiguration.description`, porque pisa el
+`plugin.xml` al empaquetar con una copia que ningún test mira — así fue como la ficha publicada
+siguió diciendo «paridad con la extensión de VS Code» después de que existiera el cliente de Visual
+Studio. Del lado IntelliJ, `PanelLayoutContractTest` compara
 `panelLayout(fixture)` contra el mismo YAML en cada `./gradlew test`; del lado Visual Studio,
 `PanelLayoutContractTests` (xUnit) hace lo mismo en cada `dotnet test`.
 
@@ -551,6 +567,15 @@ estampa todos los sitios que deben coincidir:
 
 Los headings del CHANGELOG de cada cliente se escriben a mano. Un
 `tests/version-consistency.bats` protege contra el drift de la CLI y de los tres clientes.
+
+**El CHANGELOG del plugin de JetBrains no es sólo documentación: es lo que se publica.** La sección
+de la versión que se está sacando se renderiza a HTML y va al `<change-notes>` del descriptor
+(plugin `org.jetbrains.changelog` + `changeNotes` en `build.gradle.kts`), que es la pestaña *What's
+New* del Marketplace y el diálogo que el IDE muestra antes de actualizar — la misma sección que
+`release-jetbrains.yml` ya usaba para el cuerpo del GitHub Release. Es decir: el heading
+`## [X.Y.Z]` se escribe a mano **antes** de tagear, o el release publica notas vacías (cae a un link
+al CHANGELOG, que es un piso, no la intención). El check del contrato falla si `changeNotes`
+desaparece del `build.gradle.kts`.
 
 **El plugin de JetBrains tiene su propio namespace de tags y su propio workflow**
 (`release-jetbrains.yml`): un `jetbrains-v*` lo publica al Marketplace (`publishPlugin`, con el

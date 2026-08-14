@@ -28,6 +28,11 @@ way the CLI and the VS Code extension do — one argument, no hand edits:
 ./gradlew buildPlugin
 ```
 
+That CHANGELOG step is not bookkeeping: the `## [X.Y.Z]` section is rendered
+into `<change-notes>` in the packaged descriptor, which is the Marketplace
+*What's New* tab and the release notes the IDE shows before updating. Build
+without it and the listing falls back to a link to this file.
+
 Platform pin lives only in [`gradle.properties`](./gradle.properties). That file
 drives `since-build` / `until-build` in the packaged `plugin.xml`. **Which
 products** are compatible is not a separate Marketplace enum: it follows from

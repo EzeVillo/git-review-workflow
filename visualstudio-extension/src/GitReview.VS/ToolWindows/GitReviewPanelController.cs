@@ -23,6 +23,7 @@ public sealed class GitReviewPanelController : IDisposable
     private readonly DispatcherTimer _skeletonTimer;
     private readonly DispatcherTimer _whyCeilingTimer;
     private readonly IDisposable _busySub;
+    private readonly IDisposable _discardSub;
     private PanelWhy? _why;
     private string? _whyKey;
     private string? _lastOpened;
@@ -130,6 +131,21 @@ public sealed class GitReviewPanelController : IDisposable
 
         _state.StateChanged += OnStateChanged;
         _busySub = _mutations.Lock.OnDidChangeBusy(_ => Render());
+        // A discarded mutation is reported here and nowhere else, so it is reported
+        // whoever asked for it: the panel's own buttons go through a path that could
+        // say it, but Tools -> git review and the toolbar do not, and a navigation
+        // dropped because a finish was still running looked like a click that did
+        // nothing. Same ownership as the JetBrains service and the extension.
+        _discardSub = _mutations.Lock.OnDidDiscard(reason =>
+        {
+            if (_disposed) return;
+            if (!_dispatcher.CheckAccess())
+            {
+                _dispatcher.BeginInvoke((Action)(() => GitReviewDialogs.Info(reason)));
+                return;
+            }
+            GitReviewDialogs.Info(reason);
+        });
 
         _probeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(CliProbe.CliProbeIntervalMs) };
         _probeTimer.Tick += async (_, _) =>
@@ -326,6 +342,14 @@ public sealed class GitReviewPanelController : IDisposable
         }
         try
         {
+            if (!_state.HasResolved)
+            {
+                // Nothing has been read yet: no layout to publish, and therefore no
+                // title actions either -- a toolbar built from a placeholder would
+                // offer buttons for a situation nobody has established.
+                _view.RenderWaiting();
+                return;
+            }
             var model = PanelModelBuilder.BuildPanelModel(
                 _state.Current,
                 new PanelInputs(_mutations.IsBusy, Why: EffectiveWhy, LastOpened: _lastOpened));
@@ -435,6 +459,7 @@ public sealed class GitReviewPanelController : IDisposable
         _skeletonTimer.Stop();
         _whyCeilingTimer.Stop();
         _busySub.Dispose();
+        _discardSub.Dispose();
         _state.StateChanged -= OnStateChanged;
         _view.ActionRequested -= OnAction;
     }

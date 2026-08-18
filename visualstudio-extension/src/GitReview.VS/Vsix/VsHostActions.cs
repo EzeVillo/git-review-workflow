@@ -50,7 +50,72 @@ public sealed class VsHostActions
                 SavePath = SavePathAsync,
                 PreviewEdits = PreviewEditsAsync,
                 DefaultSource = () => GitReviewOptions.Current.DefaultSource,
+                Progress = ShowProgress,
             });
+
+    /// <summary>
+    /// A running mutation, in the shell's own status bar: the text plus the general
+    /// activity animation, cleared when the returned handle is disposed. The status bar
+    /// is where Visual Studio reports work that is not modal, which is what VS Code's
+    /// progress notification and IntelliJ's background task are for the same actions.
+    /// Every call is guarded: a shell that will not hand over its status bar must not
+    /// take the finish down with it.
+    /// </summary>
+    private IDisposable ShowProgress(string text)
+    {
+        IVsStatusbar? bar;
+        try
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            bar = _serviceProvider.GetService(typeof(SVsStatusbar)) as IVsStatusbar;
+        }
+        catch
+        {
+            bar = null;
+        }
+        if (bar is null) return new ProgressScope(null);
+
+        try
+        {
+            bar.FreezeOutput(0);
+            bar.SetText(text);
+            object icon = (short)Constants.SBAI_General;
+            bar.Animation(1, ref icon);
+        }
+        catch
+        {
+            return new ProgressScope(null);
+        }
+        return new ProgressScope(bar);
+    }
+
+    /// <summary>Ends one status-bar report. Disposing twice is a no-op.</summary>
+    private sealed class ProgressScope : IDisposable
+    {
+        private IVsStatusbar? _bar;
+
+        public ProgressScope(IVsStatusbar? bar) => _bar = bar;
+
+        public void Dispose()
+        {
+            var bar = _bar;
+            _bar = null;
+            if (bar is null) return;
+            try
+            {
+                ThreadHelper.ThrowIfNotOnUIThread();
+                object icon = (short)Constants.SBAI_General;
+                bar.Animation(0, ref icon);
+                bar.FreezeOutput(0);
+                bar.Clear();
+            }
+            catch
+            {
+                // The status bar is a report, not the operation: a shell that refuses
+                // to clear it must not turn a finished mutation into an error dialog.
+            }
+        }
+    }
 
     private string? Cwd() => SoleTarget.PickSoleTarget(_roots());
 

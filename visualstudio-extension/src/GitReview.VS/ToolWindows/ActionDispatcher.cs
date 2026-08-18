@@ -106,7 +106,8 @@ public sealed class ActionDispatcher
                 {
                     return;
                 }
-                await RunAsync("abortReview").ConfigureAwait(true);
+                await RunAsync("abortReview", progress: UserCopy.AbortingProgress(source))
+                    .ConfigureAwait(true);
                 return;
             }
 
@@ -119,7 +120,8 @@ public sealed class ActionDispatcher
                 {
                     return;
                 }
-                await RunAsync("saveReview").ConfigureAwait(true);
+                await RunAsync("saveReview", progress: UserCopy.SavingProgress(source))
+                    .ConfigureAwait(true);
                 return;
             }
 
@@ -136,7 +138,8 @@ public sealed class ActionDispatcher
                 // resume has to target what the interrupted finish targeted.
                 await RunAsync(
                     "resumeFinish",
-                    new ActionParams.ResumeFinish(State.Finish?.Onto == true)).ConfigureAwait(true);
+                    new ActionParams.ResumeFinish(State.Finish?.Onto == true),
+                    progress: UserCopy.ResumeProgress).ConfigureAwait(true);
                 return;
 
             case "continueReview":
@@ -328,7 +331,26 @@ public sealed class ActionDispatcher
             : PanelModelBuilder.CurrentEntry(state.EntriesList, state.State?.Position);
         if (entry is null) return;
         var display = DisplayOf(entry.Id);
-        await OpenDiffsAsync(new[] { RangeDiff(display) }).ConfigureAwait(true);
+
+        var cwd = Cwd;
+        if (cwd is null)
+        {
+            GitReviewDialogs.Error(UserCopy.NoSoleRoot);
+            return;
+        }
+        // Which sides this file actually has comes from git, not from the entry name:
+        // an entry the reviewer has since reverted has no diff left to show, and a file
+        // the pull request adds or deletes only exists on one side. Both are answers,
+        // and building the request from the path alone could state neither.
+        var changes = await RangeChanges.ForRangeAsync(_panel.Cli, cwd).ConfigureAwait(true);
+        var change = changes.FirstOrDefault(
+            c => c.Path == display || c.After == display || c.Before == display);
+        if (change is null)
+        {
+            GitReviewDialogs.Info(UserCopy.OpenNoChangesLeft(display));
+            return;
+        }
+        await OpenDiffsAsync(new[] { RangeDiff(change) }).ConfigureAwait(true);
         _panel.RememberOpened(display);
     }
 
@@ -336,7 +358,14 @@ public sealed class ActionDispatcher
     {
         var state = State;
         if (state.State?.Mode != ReviewMode.Whole) return;
-        var requests = state.EntriesList.Select(e => RangeDiff(DisplayOf(e.Id))).ToList();
+        var cwd = Cwd;
+        if (cwd is null)
+        {
+            GitReviewDialogs.Error(UserCopy.NoSoleRoot);
+            return;
+        }
+        var changes = await RangeChanges.ForRangeAsync(_panel.Cli, cwd).ConfigureAwait(true);
+        var requests = changes.Select(RangeDiff).ToList();
         if (requests.Count == 0)
         {
             GitReviewDialogs.Info(UserCopy.OpenRangeEmpty);
@@ -349,10 +378,10 @@ public sealed class ActionDispatcher
     /// The review range: HEAD sits at the lower bound with the pull request staged on top,
     /// so "before" is the blob at HEAD and "after" is what the reviewer is editing.
     /// </summary>
-    private static DiffRequest RangeDiff(string display) => new(
-        display,
-        new DiffSide("HEAD", display, "Base (HEAD)"),
-        new DiffSide(null, display, "Working tree"));
+    private static DiffRequest RangeDiff(CommitChange change) => new(
+        change.Path,
+        new DiffSide("HEAD", change.Before, "Base (HEAD)"),
+        new DiffSide(null, change.After, "Working tree"));
 
     private async Task OpenCommitDiffAsync(string? sha)
     {
@@ -451,7 +480,9 @@ public sealed class ActionDispatcher
         var ontoSource = idx == 1;
 
         var result = await RunAsync(
-            "finishReview", new ActionParams.FinishOnto(ontoSource)).ConfigureAwait(true);
+            "finishReview",
+            new ActionParams.FinishOnto(ontoSource),
+            progress: UserCopy.FinishingProgress(source)).ConfigureAwait(true);
         if (result is null || result.ExitCode is not 0 || result.TimedOut) return;
 
         // Derived from refreshed state, never from finish's human stdout.
@@ -473,7 +504,10 @@ public sealed class ActionDispatcher
         if (!GitReviewDialogs.Confirm(UserCopy.UndoTitle, detail, UserCopy.UndoButton)) return;
 
         var result = await RunAsync(
-            "undoFinish", new ActionParams.UndoFinish(false), showFailure: false).ConfigureAwait(true);
+            "undoFinish",
+            new ActionParams.UndoFinish(false),
+            showFailure: false,
+            progress: UserCopy.UndoingProgress).ConfigureAwait(true);
         if (result is null || (result.ExitCode == 0 && !result.TimedOut)) return;
 
         var text = CliMessage.FlattenCliMessage(result.Stderr);
@@ -488,7 +522,10 @@ public sealed class ActionDispatcher
             return;
         }
         if (!GitReviewDialogs.Confirm(text, UserCopy.UndoForceDetail, UserCopy.UndoForceButton)) return;
-        await RunAsync("undoFinish", new ActionParams.UndoFinish(true)).ConfigureAwait(true);
+        await RunAsync(
+            "undoFinish",
+            new ActionParams.UndoFinish(true),
+            progress: UserCopy.ForceUndoingProgress).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -529,7 +566,10 @@ public sealed class ActionDispatcher
         {
             return;
         }
-        await RunAsync("continueReview", new ActionParams.Continue(source)).ConfigureAwait(true);
+        await RunAsync(
+            "continueReview",
+            new ActionParams.Continue(source),
+            progress: UserCopy.ContinuingProgress(source)).ConfigureAwait(true);
     }
 
     // -- housekeeping -------------------------------------------------------
@@ -683,7 +723,12 @@ public sealed class ActionDispatcher
         var verb = HousekeepingLogic.VerbForHousekeeping(action) == "forget"
             ? "forgetReview"
             : "cleanReview";
-        await RunAsync(verb, new ActionParams.Housekeeping(action)).ConfigureAwait(true);
+        // The confirmation's own question, as a statement: same line the extension
+        // puts in its progress notification.
+        await RunAsync(
+            verb,
+            new ActionParams.Housekeeping(action),
+            progress: HousekeepingProgress(copy.Title)).ConfigureAwait(true);
     }
 
     // -- settings -----------------------------------------------------------
@@ -799,8 +844,11 @@ public sealed class ActionDispatcher
             ReviewLayout.Keys => new[] { "--keys" },
             _ => Array.Empty<string>(),
         };
-        await RunAsync("compareReview", new ActionParams.Compare(flags, lower, upper), network: true)
-            .ConfigureAwait(true);
+        await RunAsync(
+            "compareReview",
+            new ActionParams.Compare(flags, lower, upper),
+            network: true,
+            progress: UserCopy.ComparingProgress(lower, upper)).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -814,7 +862,8 @@ public sealed class ActionDispatcher
         var first = await RunAsync(
             "walkthroughInit",
             new ActionParams.WalkthroughInit(false),
-            showFailure: false).ConfigureAwait(true);
+            showFailure: false,
+            progress: UserCopy.WalkthroughInitProgress).ConfigureAwait(true);
         if (first is null) return;
         if (first.ExitCode == 0 && !first.TimedOut)
         {
@@ -836,8 +885,10 @@ public sealed class ActionDispatcher
         {
             return;
         }
-        var forced = await RunAsync("walkthroughInit", new ActionParams.WalkthroughInit(true))
-            .ConfigureAwait(true);
+        var forced = await RunAsync(
+            "walkthroughInit",
+            new ActionParams.WalkthroughInit(true),
+            progress: UserCopy.WalkthroughOverwriteProgress).ConfigureAwait(true);
         if (forced is not null && forced.ExitCode == 0 && !forced.TimedOut)
             await OpenWalkthroughAsync(cwd).ConfigureAwait(true);
     }
@@ -852,7 +903,8 @@ public sealed class ActionDispatcher
             return;
         }
         var cwd = Cwd;
-        var result = await RunAsync("walkthroughBuild").ConfigureAwait(true);
+        var result = await RunAsync(
+            "walkthroughBuild", progress: UserCopy.WalkthroughBuildProgress).ConfigureAwait(true);
         if (result is null || result.ExitCode is not 0 || result.TimedOut) return;
         GitReviewDialogs.Info(UserCopy.WalkthroughBuilt);
         await OpenWalkthroughAsync(cwd).ConfigureAwait(true);
@@ -877,12 +929,23 @@ public sealed class ActionDispatcher
     /// and refresh. Returns null when there was nothing to report on (busy, or stale) —
     /// those already told the reviewer what happened.
     /// </summary>
+    /// <summary>
+    /// One mutation: staleness re-check, the CLI call, the refresh that follows, and a
+    /// failure reported the way its counterpart reports it. <paramref name="progress"/>
+    /// is what the shell says while that runs -- the reviewer who started a finish from
+    /// the menu is not necessarily watching the panel's greyed-out buttons. It covers
+    /// the two refreshes as well as the verb: on Windows those are seconds of their own.
+    /// </summary>
     private async Task<InvokeResult?> RunAsync(
         string action,
         ActionParams? params_ = null,
         bool showFailure = true,
-        bool network = false)
+        bool network = false,
+        string? progress = null)
     {
+        using var reporting = progress is not null && _host.Progress is not null
+            ? _host.Progress(progress)
+            : null;
         var token = StaleGuard.CaptureToken(_panel.State.Current);
         await _panel.RefreshAsync().ConfigureAwait(true);
         if (!StaleGuard.TokenStillValid(token, _panel.State.Current))
@@ -894,11 +957,10 @@ public sealed class ActionDispatcher
         var result = await _panel.Mutations
             .RunActionAsync(action, params_, network: network)
             .ConfigureAwait(true);
-        if (result is null)
-        {
-            GitReviewDialogs.Info(UserCopy.DiscardBusy);
-            return null;
-        }
+        // Discarded because another mutation holds the lock. The notice belongs to
+        // the lock's own listener, which says it for every surface; saying it here
+        // as well would show it twice for a click in the panel.
+        if (result is null) return null;
         if ((result.ExitCode is not 0 || result.TimedOut) && showFailure)
         {
             GitReviewDialogs.CliError(
@@ -907,6 +969,12 @@ public sealed class ActionDispatcher
         await _panel.RefreshAsync().ConfigureAwait(true);
         return result;
     }
+
+    /// <summary>The confirmation title turned into a running-now line ("Clean up?" -> "Clean up...").</summary>
+    private static string HousekeepingProgress(string title) =>
+        title.EndsWith("?", StringComparison.Ordinal)
+            ? title.Substring(0, title.Length - 1) + "…"
+            : title;
 
     private static bool IsForce(ActionParams? params_) =>
         params_ is ActionParams.UndoFinish { Force: true };

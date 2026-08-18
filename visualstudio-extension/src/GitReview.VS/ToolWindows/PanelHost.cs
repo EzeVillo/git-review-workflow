@@ -53,4 +53,13 @@ public sealed class PanelHost
 
     /// <summary>The stored default for the wizard's origin step ("remote" when unset).</summary>
     public Func<string?>? DefaultSource { get; init; }
+
+    /// <summary>
+    /// Announces a mutation that is running, and returns the handle that ends it. The
+    /// panel greys its buttons out while the CLI works, but the reviewer who started a
+    /// finish from the menu is not necessarily looking at the panel -- VS Code raises a
+    /// notification and IntelliJ a background task for exactly that. Null in the
+    /// standalone build, where there is no shell to report into.
+    /// </summary>
+    public Func<string, IDisposable>? Progress { get; init; }
 }

@@ -22,6 +22,14 @@ public sealed class ReviewStateManager
         get { lock (_gate) return _state; }
     }
 
+    /// <summary>
+    /// False until a refresh has resolved a state. The seed above is a placeholder,
+    /// not an answer, and drawing it tells the reviewer the CLI is missing before
+    /// anyone has looked -- so the panel waits instead. Same rule as the JetBrains
+    /// service's hasResolvedState and the extension's empty webview.
+    /// </summary>
+    public bool HasResolved { get; private set; }
+
     public ReviewStateManager(
         CliInvoker cli,
         Func<IReadOnlyList<string>> repoRoots,
@@ -94,7 +102,17 @@ public sealed class ReviewStateManager
         var exit = status.ExitCode;
         ReviewState next;
 
-        if (exit == 0 || exit == 3)
+        if (exit == 3)
+        {
+            // Out of range: the walk cursor no longer meets the range, usually because
+            // the reviewer committed on top of the staged diff. The CLI writes that to
+            // stderr and prints no porcelain at all, so this must not be parsed -- it
+            // used to be, which made the entry that the reviewer can act on ("undo the
+            // commits with git reset --soft, or abort") come out of the panel as
+            // "porcelain output has no state record" under a generic error.
+            next = new ReviewState(Situation.OutOfRange, Stderr: status.Stderr);
+        }
+        else if (exit == 0)
         {
             try
             {
@@ -112,12 +130,16 @@ public sealed class ReviewStateManager
                     Finish: parsed.Finish,
                     Readonly: parsed.Readonly,
                     KeysOnly: parsed.KeysOnly,
-                    Draft: parsed.Draft,
-                    Stderr: exit == 3 ? status.Stderr : null);
+                    Draft: parsed.Draft);
             }
             catch (Exception e)
             {
-                next = new ReviewState(Situation.Error, Stderr: e.Message);
+                // What the CLI said beats what the parser says: porcelain it could not
+                // read is more often a CLI that already explained itself than a bug in
+                // the tokenizer, and the reviewer can act on the former.
+                next = new ReviewState(
+                    Situation.Error,
+                    Stderr: status.Stderr.Trim().Length > 0 ? status.Stderr : e.Message);
             }
         }
         else if (exit == 2)
@@ -178,6 +200,7 @@ public sealed class ReviewStateManager
     private ReviewState Publish(ReviewState state, int gen)
     {
         if (gen != Volatile.Read(ref _refreshGen)) return Current;
+        HasResolved = true;
         lock (_gate) _state = state;
         StateChanged?.Invoke(state);
         return state;

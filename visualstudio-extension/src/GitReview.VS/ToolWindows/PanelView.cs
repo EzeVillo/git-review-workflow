@@ -71,6 +71,32 @@ public sealed class PanelView : System.Windows.Controls.UserControl
     }
 
     /// <summary>
+    /// Before the first refresh has resolved anything. The state manager's seed is a
+    /// placeholder, so rendering it would announce a missing CLI -- with an Install
+    /// button -- for the couple of seconds the first status takes, every time the
+    /// window opens. The other two clients hold the same way: IntelliJ paints this
+    /// line and the VS Code webview stays empty until the first model arrives.
+    /// </summary>
+    public void RenderWaiting()
+    {
+        _titleBar.Children.Clear();
+        _titleBar.Visibility = Visibility.Collapsed;
+        _body.Children.Clear();
+        _footer.Children.Clear();
+        _body.Children.Add(new TextBlock
+        {
+            Text = WaitingText,
+            FontFamily = _chrome.Ui,
+            FontSize = 12,
+            Foreground = _chrome.MutedForeground,
+            TextWrapping = TextWrapping.Wrap,
+        });
+    }
+
+    /// <summary>Same words as the JetBrains panel's pre-first-refresh surface.</summary>
+    private const string WaitingText = "Reading the review state…";
+
+    /// <summary>
     /// Last-resort fallback when <see cref="Render"/> itself throws. The normal render
     /// path clears the panel before drawing the new content, so an exception partway
     /// through — a block variant this WPF renderer does not handle, for example —

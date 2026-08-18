@@ -9,6 +9,34 @@
   same as in VS Code and the JetBrains plugin: the refresh no longer waits on the why, the
   entry appears with it still loading, and the text fills in when the CLI answers. A why
   that belongs to the entry you just left is dropped rather than drawn under the new one.
+- **A cursor that fell out of range says so.** When HEAD moves off a review's base —
+  committing on top of the staged diff is the usual way — the CLI explains it on stderr
+  and prints no porcelain. The panel parsed it anyway and turned that into "Something
+  went wrong reading the review state: porcelain output has no state record", hiding the
+  one message that says how to get back (`git reset --soft`, or abort). It is the
+  out-of-range situation now, with the CLI's own words, like in the other two clients.
+- **The panel no longer claims the CLI is missing while it is still looking.** Opening
+  the tool window drew the seed state — a full "git-review was not found" pane, Install
+  button and all — for the couple of seconds the first `--version` plus
+  `status --porcelain` takes. It now holds on *Reading the review state…* until there is
+  an answer, the same way the IntelliJ panel waits and the VS Code webview stays empty.
+- **Diffs are built from what git reports, not from the entry's name.** The two
+  name-status calls now match the ones the other clients make. `git diff-tree` gets
+  `--root`, without which a commit with no parent lists nothing and the panel answered
+  "changes no files" for the commit that added the entire tree; and a file's Diff resolves
+  its two sides through `git diff --name-status HEAD`, so a file the review adds opens
+  against an empty base instead of against a blob looked up under its own name, and an
+  entry whose edit was reverted says there is nothing left to compare rather than opening
+  a window showing a file against itself.
+- **A mutation that is running says so.** Finish, start, abort, save, continue, compare,
+  undo, the walkthrough verbs and the housekeeping ones report into the status bar while
+  they work — the same lines VS Code puts in its progress notification and IntelliJ in
+  its background task. Greyed-out panel buttons were the only sign until now, and they
+  are no help to whoever started a finish from **Tools → git review** and looked away.
+- **A discarded action is reported wherever it came from.** A second mutation while one
+  is running is dropped, not queued; only the panel's own path said so, so the same
+  click from the toolbar or the menu — a Next during a finish, say — looked like a button
+  that did nothing. The notice belongs to the lock now, which every surface goes through.
 - **Start a review actually starts the review you asked for.** Every step of the wizard
   (branch, origin, range, reading order) is a real picker now. It used to print the
   options into a message box and then take the first one regardless — so the wizard was a

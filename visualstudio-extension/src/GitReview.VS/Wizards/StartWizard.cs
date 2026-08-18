@@ -280,6 +280,7 @@ public static class StartWizard
         bool build,
         CancellationToken ct)
     {
+        using var reporting = ctx.Host.Progress?.Invoke(UserCopy.DraftProgress(ctx.Branch, build));
         var result = await ctx.Mutations.RunArgvAsync(
             "walkthrough",
             ReviewIntentLogic.DraftArgs(ctx.Branch, ctx.Source, ctx.Range, build),
@@ -460,17 +461,17 @@ public static class StartWizard
             return false;
         }
 
+        // A start fetches, so it is the longest wait this client has -- and the wizard
+        // it was configured in is gone by now, leaving nothing on screen that says so.
+        using var reporting = ctx.Host.Progress?.Invoke(UserCopy.StartingProgress(ctx.Branch));
         var result = await ctx.Mutations.RunActionAsync(
             "startReview",
             new ActionParams.Start(intent, ctx.Branch),
             network: true,
             ct: ct).ConfigureAwait(true);
 
-        if (result is null)
-        {
-            GitReviewDialogs.Info(UserCopy.DiscardBusy);
-            return false;
-        }
+        // Discarded: the lock's own listener says so, for every surface at once.
+        if (result is null) return false;
         if (result.ExitCode == 0 && !result.TimedOut)
         {
             // A successful start still emits notes on stderr (FR-031).

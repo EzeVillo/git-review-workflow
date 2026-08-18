@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- **In walk mode the panel shows the why again.** It read the entry's prose with an
+  800 ms deadline on the CLI call itself, and on Windows a `status --why` costs a couple
+  of seconds — so every entry of every walk came back as "Could not read the why for this
+  entry", and *open in editor* opened nothing. The 800 ms is a drawing deadline now, the
+  same as in VS Code and the JetBrains plugin: the refresh no longer waits on the why, the
+  entry appears with it still loading, and the text fills in when the CLI answers. A why
+  that belongs to the entry you just left is dropped rather than drawn under the new one.
 - **Start a review actually starts the review you asked for.** Every step of the wizard
   (branch, origin, range, reading order) is a real picker now. It used to print the
   options into a message box and then take the first one regardless — so the wizard was a

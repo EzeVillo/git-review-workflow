@@ -21,10 +21,13 @@ public sealed class GitReviewPanelController : IDisposable
     private readonly Dispatcher _dispatcher;
     private readonly DispatcherTimer _probeTimer;
     private readonly DispatcherTimer _skeletonTimer;
+    private readonly DispatcherTimer _whyCeilingTimer;
     private readonly IDisposable _busySub;
     private PanelWhy? _why;
+    private string? _whyKey;
     private string? _lastOpened;
-    private bool _loading;
+    private bool _refreshing;
+    private bool _whyCeilingReached;
     private bool _panelVisible = true;
     private int _refreshSeq;
     private bool _disposed;
@@ -45,8 +48,49 @@ public sealed class GitReviewPanelController : IDisposable
     /// </summary>
     public string? Cwd => _cwd();
 
+    /// <summary>
+    /// The why of the current walk entry as the panel has it -- the same value the
+    /// rendered model carries. A host action that needs the text ("open in editor")
+    /// reads it from here rather than rebuilding the model, which is built without
+    /// the why and would therefore always look like one that is still loading.
+    /// </summary>
+    public PanelWhy? Why => EffectiveWhy;
+
+    /// <summary>
+    /// The why only while the entry it was read for is still the one on screen. The
+    /// state and the why arrive separately -- a navigation publishes the new entry as
+    /// soon as the verb returns, its prose a couple of seconds later -- so the loaded
+    /// text has to be dropped the moment it stops belonging to what is drawn, or the
+    /// new entry is briefly captioned with the previous entry's why. Same rule, and
+    /// the same key, as the extension's whyTarget/whyKey.
+    /// </summary>
+    private PanelWhy? EffectiveWhy => _whyKey == WhyKeyOf(_state.Current) ? _why : null;
+
+    /// <summary>The entry a why belongs to: the review branch plus the raw path.</summary>
+    private static string? WhyKeyOf(ReviewState state)
+    {
+        var review = state.State;
+        if (!SituationIds.IsReviewReadable(state.Situation) || review?.Mode != ReviewMode.Walk)
+            return null;
+        var entry = PanelModelBuilder.CurrentEntry(state.EntriesList, review.Position);
+        return entry?.Id is PathRef pr ? review.Branch + pr.Raw : null;
+    }
+
     /// <summary>Raise from host to open a file/diff/editor/dialog.</summary>
     public event Func<string, int?, string?, Task>? HostAction;
+
+    /// <summary>
+    /// Whether the panel draws the skeleton instead of the surface. True while a
+    /// refresh is in flight and -- up to <see cref="PanelLayoutTiming.WhyCeilingMs"/>
+    /// -- while the current entry's why is still loading: navigating is one wait for
+    /// the reviewer even though it arrives in two parts (the verb plus status
+    /// --porcelain, then the why), and drawing the model in between would show the
+    /// entry with a second loading state inside it. Past the ceiling the entry is
+    /// drawn anyway with the why loading in place, exactly as in VS Code and
+    /// IntelliJ: a slow why must not hold the entry back.
+    /// </summary>
+    private bool Loading =>
+        _refreshing || (EffectiveWhy?.State == WhyState.Loading && !_whyCeilingReached);
 
     /// <summary>
     /// The layout the panel is currently showing, for hosts that draw part of it
@@ -110,7 +154,19 @@ public sealed class GitReviewPanelController : IDisposable
         _skeletonTimer.Tick += (_, _) =>
         {
             _skeletonTimer.Stop();
-            if (_loading) Render();
+            if (Loading) Render();
+        };
+
+        _whyCeilingTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(PanelLayoutTiming.WhyCeilingMs),
+        };
+        _whyCeilingTimer.Tick += (_, _) =>
+        {
+            _whyCeilingTimer.Stop();
+            if (EffectiveWhy?.State != WhyState.Loading) return;
+            _whyCeilingReached = true;
+            Render();
         };
     }
 
@@ -123,7 +179,9 @@ public sealed class GitReviewPanelController : IDisposable
     public async Task RefreshAsync()
     {
         var seq = ++_refreshSeq;
-        _loading = true;
+        _refreshing = true;
+        _whyCeilingReached = false;
+        _whyCeilingTimer.Stop();
         _skeletonTimer.Stop();
         _skeletonTimer.Start();
         try
@@ -133,60 +191,114 @@ public sealed class GitReviewPanelController : IDisposable
             if (SituationIds.IsReviewReadable(_state.Current.Situation)
                 && _state.Current.State?.Mode == ReviewMode.Walk)
             {
-                await LoadWhyAsync().ConfigureAwait(true);
+                StartWhy(seq);
             }
             else
             {
                 _why = null;
+                _whyKey = null;
             }
         }
         finally
         {
             if (seq == _refreshSeq)
             {
-                _loading = false;
-                _skeletonTimer.Stop();
+                _refreshing = false;
+                if (!Loading) _skeletonTimer.Stop();
                 Render();
             }
         }
     }
 
-    private async Task LoadWhyAsync()
+    /// <summary>
+    /// Starts the current entry's why and returns: the refresh itself is over once
+    /// status --porcelain has answered. Awaiting the read here is what kept the whole
+    /// panel on the skeleton for as long as the CLI took to produce one entry's prose.
+    /// </summary>
+    private void StartWhy(int seq)
     {
         var st = _state.Current;
         var entry = PanelModelBuilder.CurrentEntry(st.EntriesList, st.State?.Position);
+        var cwd = _cwd();
+        _whyKey = WhyKeyOf(st);
         if (entry is null)
         {
             _why = new PanelWhy(WhyState.Absent);
             return;
         }
+        if (cwd is null)
+        {
+            // Same answer the read would give: nothing to invoke it in. Left on
+            // "loading" the entry would sit under a skeleton that never resolves.
+            _why = new PanelWhy(WhyState.Failed);
+            return;
+        }
         _why = new PanelWhy(WhyState.Loading);
-        Render();
-
-        var cwd = _cwd();
-        if (cwd is null) return;
+        _whyCeilingTimer.Stop();
+        _whyCeilingTimer.Start();
         var raw = entry.Id is PathRef pr ? pr.Raw : entry.Id.ToString() ?? "";
-        using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(PanelLayoutTiming.WhyCeilingMs));
+        _ = LoadWhyAsync(seq, raw, cwd);
+    }
+
+    /// <summary>
+    /// Reads one entry's why. Deliberately without a cancellation token of its own:
+    /// the invoker already caps a read at <see cref="TimeoutClass.ReadTimeoutMs"/>,
+    /// and cancelling at the 800 ms ceiling instead turned every call into a failure
+    /// -- on Windows a status --why costs a couple of seconds, so the panel answered
+    /// "Could not read the why for this entry" for every entry of every walk. The
+    /// ceiling is a drawing deadline (<see cref="Loading"/>), not a deadline on the
+    /// call: it shows the entry with the why still loading inside it, and this fills
+    /// it in whenever the CLI gets there.
+    /// </summary>
+    private async Task LoadWhyAsync(int seq, string raw, string cwd)
+    {
+        PanelWhy why;
         try
         {
-            var result = await _cli.InvokeAsync("status", new[] { "--why", raw }, cwd, cancellationToken: cts.Token)
+            var result = await _cli.InvokeAsync("status", new[] { "--why", raw }, cwd)
                 .ConfigureAwait(true);
-            if (result.ExitCode == 0)
+            if (result.ExitCode == 0 && !result.TimedOut)
             {
                 var text = result.Stdout.TrimEnd();
-                _why = string.IsNullOrEmpty(text)
+                why = string.IsNullOrEmpty(text)
                     ? new PanelWhy(WhyState.Absent)
                     : new PanelWhy(WhyState.Present, text);
             }
             else
             {
-                _why = new PanelWhy(WhyState.Failed);
+                why = new PanelWhy(WhyState.Failed);
             }
         }
         catch
         {
-            _why = new PanelWhy(WhyState.Failed);
+            why = new PanelWhy(WhyState.Failed);
         }
+
+        PublishWhy(seq, why);
+    }
+
+    /// <summary>
+    /// Hands the loaded why to the panel. On the dispatcher thread, like everything
+    /// that touches a DispatcherTimer: the read above is fire-and-forget, so its
+    /// continuation only lands back here when the refresh that started it was itself
+    /// on the UI thread -- and a timer stopped from anywhere else throws.
+    /// </summary>
+    private void PublishWhy(int seq, PanelWhy why)
+    {
+        if (_disposed) return;
+        if (!_dispatcher.CheckAccess())
+        {
+            _dispatcher.BeginInvoke((Action)(() => PublishWhy(seq, why)));
+            return;
+        }
+        // A refresh that started after this read owns the panel now: its entry is the
+        // one on screen, and publishing this text would caption it with the why of the
+        // entry the reviewer already left.
+        if (seq != _refreshSeq) return;
+        _why = why;
+        _whyCeilingTimer.Stop();
+        _skeletonTimer.Stop();
+        Render();
     }
 
     private void OnStateChanged(ReviewState _) => Render();
@@ -216,8 +328,8 @@ public sealed class GitReviewPanelController : IDisposable
         {
             var model = PanelModelBuilder.BuildPanelModel(
                 _state.Current,
-                new PanelInputs(_mutations.IsBusy, Why: _why, LastOpened: _lastOpened));
-            var layout = PanelLayoutBuilder.PanelLayout(model, loading: _loading && !_mutations.IsBusy);
+                new PanelInputs(_mutations.IsBusy, Why: EffectiveWhy, LastOpened: _lastOpened));
+            var layout = PanelLayoutBuilder.PanelLayout(model, loading: Loading && !_mutations.IsBusy);
             // Published before the draw: a host toolbar reading it must not depend on
             // this renderer having handled every block variant in the layout.
             LastLayout = layout;
@@ -321,6 +433,7 @@ public sealed class GitReviewPanelController : IDisposable
         _disposed = true;
         _probeTimer.Stop();
         _skeletonTimer.Stop();
+        _whyCeilingTimer.Stop();
         _busySub.Dispose();
         _state.StateChanged -= OnStateChanged;
         _view.ActionRequested -= OnAction;

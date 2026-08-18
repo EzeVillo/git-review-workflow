@@ -200,8 +200,10 @@ public sealed class ActionDispatcher
             case "showWhy":
             {
                 if (_host.OpenText is null) return;
-                var model = PanelModelBuilder.BuildPanelModel(State, new PanelInputs(false));
-                var why = model.Why?.Text;
+                // The panel's own why, not a model rebuilt here: BuildPanelModel takes
+                // the text as an input, so a model built without it reads as one whose
+                // why is still loading and this action would never open anything.
+                var why = _panel.Why?.Text;
                 if (string.IsNullOrEmpty(why)) return;
                 await _host.OpenText(why!).ConfigureAwait(true);
                 return;

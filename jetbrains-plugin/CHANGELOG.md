@@ -7,7 +7,16 @@ The CLI it drives has its own
 This project follows [semantic versioning](https://semver.org/spec/v2.0.0.html)
 and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 
-## [Unreleased]
+## [0.1.3]
+
+### Added
+
+- **Release notes on the listing.** This file is now what the Marketplace *What's
+  New* tab and the IDE's update dialog show: the section for the version being
+  published is rendered into the plugin descriptor at build time, the same
+  section the GitHub Release body already used. Up to and including 0.1.2 the
+  descriptor carried no change notes at all, so every version published looked
+  like it changed nothing.
 
 ### Changed
 
@@ -20,29 +29,6 @@ and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
   going to definitions and running the tests, and your fixes come out on a
   branch of their own. The required CLI is stated up front instead of being
   discovered after installing.
-
-### Added
-
-- **Release notes on the listing.** This file is now what the Marketplace *What's
-  New* tab and the IDE's update dialog show: the section for the version being
-  published is rendered into the plugin descriptor at build time, the same
-  section the GitHub Release body already used. Up to and including 0.1.3 the
-  descriptor carried no change notes at all, so every version published looked
-  like it changed nothing.
-
-## [0.1.3]
-
-### Fixed
-
-- **The pickers no longer cut their own options.** Every choice dialog (branch,
-  origin, range, how to read it, keys only) sized itself to the combo, which
-  asks for less than its items are wide: the longer labels showed up truncated
-  with an ellipsis. They now open wide enough for their longest option (capped,
-  with the full text on hover), stay resizable, and remember the size you give
-  them.
-
-### Changed
-
 - **Multi-IDE product matrix.** The same zip targets every JetBrains IDE that
   ships `com.intellij.modules.platform` and Git (`Git4Idea`) — IntelliJ IDEA,
   WebStorm, PhpStorm, PyCharm, GoLand, CLion, RubyMine, RustRover, DataGrip, and
@@ -52,6 +38,15 @@ and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
   verifier build for the pinned line (DataGrip is Marketplace-eligible via the
   same depends but is not in that binary index); `PluginCompatibilityTest`
   locks the descriptor contract.
+
+### Fixed
+
+- **The pickers no longer cut their own options.** Every choice dialog (branch,
+  origin, range, how to read it, keys only) sized itself to the combo, which
+  asks for less than its items are wide: the longer labels showed up truncated
+  with an ellipsis. They now open wide enough for their longest option (capped,
+  with the full text on hover), stay resizable, and remember the size you give
+  them.
 
 ## [0.1.1]
 

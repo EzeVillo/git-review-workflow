@@ -30,6 +30,13 @@ public sealed class PanelChrome
     public MediaBrush PrimaryBackground { get; init; } = new SolidColorBrush(Color.FromRgb(0x0E, 0x63, 0x9C));
     public MediaBrush PrimaryForeground { get; init; } = Brushes.White;
     public MediaBrush SecondaryBackground { get; init; } = new SolidColorBrush(Color.FromRgb(0x3A, 0x3D, 0x41));
+    // The four states WPF's stock button template paints on its own, from triggers
+    // inside the template that beat anything the panel assigns to the button. See
+    // PanelButtons: the panel owns the template, so these have to come from here.
+    public MediaBrush ButtonHover { get; init; } = new SolidColorBrush(Color.FromRgb(0x4A, 0x4E, 0x52));
+    public MediaBrush PrimaryHover { get; init; } = new SolidColorBrush(Color.FromRgb(0x11, 0x77, 0xBB));
+    public MediaBrush DisabledBackground { get; init; } = new SolidColorBrush(Color.FromRgb(0x2D, 0x2D, 0x30));
+    public MediaBrush DisabledForeground { get; init; } = new SolidColorBrush(Color.FromRgb(0x8A, 0x8A, 0x8A));
     public MediaBrush RowHover { get; init; } = new SolidColorBrush(Color.FromRgb(0x2A, 0x2D, 0x2E));
     public MediaBrush RowSelected { get; init; } = new SolidColorBrush(Color.FromRgb(0x09, 0x41, 0x71));
     public MediaBrush BadgeBackground { get; init; } = new SolidColorBrush(Color.FromRgb(0x4D, 0x4D, 0x4D));
@@ -54,6 +61,10 @@ public sealed class PanelChrome
         PrimaryBackground = new SolidColorBrush(Color.FromRgb(0x00, 0x78, 0xD4)),
         PrimaryForeground = Brushes.White,
         SecondaryBackground = new SolidColorBrush(Color.FromRgb(0xE5, 0xE5, 0xE5)),
+        ButtonHover = new SolidColorBrush(Color.FromRgb(0xD4, 0xD4, 0xD4)),
+        PrimaryHover = new SolidColorBrush(Color.FromRgb(0x10, 0x6E, 0xBE)),
+        DisabledBackground = new SolidColorBrush(Color.FromRgb(0xEF, 0xEF, 0xEF)),
+        DisabledForeground = new SolidColorBrush(Color.FromRgb(0x8A, 0x8A, 0x8A)),
         RowHover = new SolidColorBrush(Color.FromRgb(0xE8, 0xE8, 0xE8)),
         RowSelected = new SolidColorBrush(Color.FromRgb(0xCC, 0xE8, 0xFF)),
         BadgeBackground = new SolidColorBrush(Color.FromRgb(0xC4, 0xC4, 0xC4)),

@@ -453,6 +453,19 @@ los botones de la situación anterior. Las tres puntas las ata
 botón que perdió el `<Icon>` dibuja un hueco y un id que dejó de coincidir con su
 `IDSymbol` es un botón que no hace nada, y ninguna de las dos rompe el build.
 
+**Los botones del panel los dibuja `PanelButtons`, no WPF.** El `ControlTemplate` de fábrica pinta
+hover, pressed y disabled desde triggers que viven **adentro** del template y apuntan a su propio
+`Border`, así que le ganan a cualquier `Background` que el panel le asigne al botón: un *Continue*
+deshabilitado salía con el relleno de Windows (`#F4F4F4`) y una etiqueta `#838383` encima —o sea un
+bloque blanco ilegible sobre el tema oscuro— y un file row en hover destellaba el celeste del
+sistema en lugar del `RowHover` del chrome. Por eso el template es propio (un `Border` pintado desde
+el `Background` del botón) y los cuatro estados salen de `PanelChrome`. La regla que hace que eso
+funcione: un trigger de `Style` **pierde** contra un valor local, así que los botones `Primary` /
+`Secondary` no pueden asignar `Background`/`Foreground` en la instancia — los traen los setters del
+`Style`. `Bare` es el caso opuesto a propósito (file rows y toggles se pintan solos). El gate es
+`--verify`, que renderiza el panel de verdad y compara el fill y el texto de los botones
+deshabilitados contra el chrome; una asignación local vuelve a fallar `buttons:disabled-fill`.
+
 **Instalar el `.vsix` son tres pasos, no uno, y los tres los da el script.** `VSIXInstaller` deja la
 hive en un estado que parece bien y no lo está, de dos maneras que no avisan: instalar una versión
 que ya está es un **no-op silencioso** (sale 0 y no toca nada — y en desarrollo la versión es la

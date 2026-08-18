@@ -29,6 +29,11 @@
   onto the side the interrupted finish was aimed at (it always assumed the separate
   branch), and a successful finish says where the edits landed.
 - Dialogs follow the IDE theme and open centred on the IDE rather than behind it.
+- **A disabled button now reads as one.** WPF paints its own disabled and hover colors
+  from inside the stock button template, over anything the panel assigns, so a *Continue*
+  that cannot be resumed came out as a white block with an unreadable label in a dark
+  theme — and a hovered file row flashed Windows blue instead of the IDE's own highlight.
+  The panel draws its buttons itself now, in the host's colors, in every state.
 
 - The extension now loads into Visual Studio. The package is a real `AsyncPackage`:
   **View → Other Windows → git review** opens the tool window, and **Tools → Options →

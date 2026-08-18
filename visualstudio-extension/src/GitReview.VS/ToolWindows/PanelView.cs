@@ -15,6 +15,9 @@ namespace GitReview.VS.ToolWindows;
 public sealed class PanelView : System.Windows.Controls.UserControl
 {
     private readonly PanelChrome _chrome;
+    private readonly Style _primaryButton;
+    private readonly Style _secondaryButton;
+    private readonly Style _bareButton;
     private readonly Dictionary<string, bool> _sectionOpen = new();
     private readonly ScrollViewer _scroll;
     private readonly StackPanel _body;
@@ -37,6 +40,9 @@ public sealed class PanelView : System.Windows.Controls.UserControl
     public PanelView(PanelChrome? chrome = null)
     {
         _chrome = chrome ?? PanelChrome.DefaultDark;
+        _primaryButton = PanelButtons.Style(_chrome, PanelButtonKind.Primary);
+        _secondaryButton = PanelButtons.Style(_chrome, PanelButtonKind.Secondary);
+        _bareButton = PanelButtons.Style(_chrome, PanelButtonKind.Bare);
         Background = _chrome.Background;
 
         _titleBar = new StackPanel
@@ -377,6 +383,7 @@ public sealed class PanelView : System.Windows.Controls.UserControl
                 TextWrapping = TextWrapping.NoWrap,
                 TextTrimming = TextTrimming.CharacterEllipsis,
             },
+            Style = _bareButton,
             HorizontalContentAlignment = HorizontalAlignment.Left,
             Background = f.LastOpened ? _chrome.RowSelected : Brushes.Transparent,
             BorderThickness = f.LastOpened ? new Thickness(2, 0, 0, 0) : new Thickness(0),
@@ -445,9 +452,9 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         var toggle = new Button
         {
             Content = (open ? "▼ " : "▶ ") + section.Title,
+            Style = _bareButton,
             HorizontalContentAlignment = HorizontalAlignment.Left,
             Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
             Foreground = _chrome.MutedForeground,
             FontWeight = FontWeights.SemiBold,
             FontSize = 11,
@@ -460,6 +467,10 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             body.Children.Add(RenderBlock(b));
             body.Children.Add(new Border { Height = 4 });
         }
+        // Hover in the panel's own colors: the bare style has no trigger of its
+        // own, so a section header without this reads as dead text.
+        toggle.MouseEnter += (_, _) => toggle.Foreground = _chrome.Foreground;
+        toggle.MouseLeave += (_, _) => toggle.Foreground = _chrome.MutedForeground;
         toggle.Click += (_, _) =>
         {
             _sectionOpen[section.Title] = !_sectionOpen.GetValueOrDefault(section.Title, false);
@@ -514,12 +525,10 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         var btn = new Button
         {
             Content = c.Label ?? c.AccessibleName,
+            Style = _secondaryButton,
             Margin = new Thickness(0, 0, 4, 0),
             Padding = new Thickness(8, 3, 8, 3),
             IsEnabled = c.Enabled,
-            Background = _chrome.SecondaryBackground,
-            Foreground = _chrome.Foreground,
-            BorderThickness = new Thickness(0),
             FontSize = 11,
             ToolTip = c.Tooltip ?? c.AccessibleName,
         };
@@ -535,13 +544,11 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             var b = new Button
             {
                 Content = icon,
+                Style = _secondaryButton,
                 Width = 32,
                 Height = 28,
                 IsEnabled = c.Enabled,
                 ToolTip = c.AccessibleName,
-                Background = _chrome.SecondaryBackground,
-                Foreground = _chrome.Foreground,
-                BorderThickness = new Thickness(0),
             };
             b.Click += (_, _) => ActionRequested?.Invoke(c.Id.Wire(), c.Index, c.SupportLinkId);
             return b;
@@ -568,25 +575,14 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         var btn = new Button
         {
             Content = c.Label ?? c.AccessibleName,
+            Style = c.Emphasis == Emphasis.Primary ? _primaryButton : _secondaryButton,
             IsEnabled = c.Enabled,
             Padding = new Thickness(10, 5, 10, 5),
             FontSize = 12,
-            BorderThickness = new Thickness(0),
-            Cursor = Cursors.Hand,
             ToolTip = c.Tooltip,
             HorizontalAlignment = HorizontalAlignment.Stretch,
         };
-        if (c.Emphasis == Emphasis.Primary)
-        {
-            btn.Background = _chrome.PrimaryBackground;
-            btn.Foreground = _chrome.PrimaryForeground;
-            btn.FontWeight = FontWeights.SemiBold;
-        }
-        else
-        {
-            btn.Background = _chrome.SecondaryBackground;
-            btn.Foreground = _chrome.Foreground;
-        }
+        if (c.Emphasis == Emphasis.Primary) btn.FontWeight = FontWeights.SemiBold;
         btn.Click += (_, _) => ActionRequested?.Invoke(c.Id.Wire(), c.Index, c.SupportLinkId);
         return btn;
     }

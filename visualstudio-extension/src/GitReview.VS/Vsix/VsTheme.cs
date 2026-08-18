@@ -24,6 +24,11 @@ public static class VsTheme
         // dark and blue variants, plus whatever a theme extension installs.
         var basis = IsDark(background.Value) ? PanelChrome.DefaultDark : PanelChrome.DefaultLight;
 
+        // The button fill, needed as a color rather than a brush: three of the four
+        // button states below are mixed out of it.
+        var secondary = Themed(EnvironmentColors.CommandBarGradientBeginColorKey)
+            ?? ColorOf(basis.SecondaryBackground);
+
         return new PanelChrome
         {
             Background = new SolidColorBrush(background.Value),
@@ -36,7 +41,16 @@ public static class VsTheme
             LinkForeground = Brush(EnvironmentColors.PanelHyperlinkColorKey) ?? basis.LinkForeground,
             PrimaryBackground = basis.PrimaryBackground,
             PrimaryForeground = basis.PrimaryForeground,
-            SecondaryBackground = Brush(EnvironmentColors.CommandBarGradientBeginColorKey) ?? basis.SecondaryBackground,
+            SecondaryBackground = new SolidColorBrush(secondary),
+            // The states WPF's stock button template would otherwise paint from its
+            // own hardcoded light colors (see PanelButtons). Mixed out of the host's
+            // own three colors for the same reason the skeleton is: whatever a theme
+            // extension puts behind this panel, the hover has to stay a shade of the
+            // button and the disabled fill a shade of the panel.
+            ButtonHover = Blend(foreground.Value, secondary, 0.15),
+            PrimaryHover = basis.PrimaryHover,
+            DisabledBackground = Blend(secondary, background.Value, 0.35),
+            DisabledForeground = Blend(foreground.Value, background.Value, 0.45),
             RowHover = Brush(EnvironmentColors.CommandBarMenuItemMouseOverColorKey) ?? basis.RowHover,
             RowSelected = Brush(EnvironmentColors.SystemHighlightColorKey) ?? basis.RowSelected,
             // The badge pair stays out of the host's hands: it is the one fill that
@@ -73,6 +87,9 @@ public static class VsTheme
     }
 
     private static Color Convert(DrawingColor c) => Color.FromArgb(c.A, c.R, c.G, c.B);
+
+    private static Color ColorOf(System.Windows.Media.Brush b) =>
+        b is SolidColorBrush s ? s.Color : Colors.Gray;
 
     /// <summary>Lays <paramref name="over"/> on <paramref name="under"/> at the given weight.</summary>
     private static SolidColorBrush Blend(Color over, Color under, double weight) =>

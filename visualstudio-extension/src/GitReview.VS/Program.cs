@@ -102,6 +102,7 @@ public static class Program
 
         VerifyChrome("dark", PanelChrome.DefaultDark, Check);
         VerifyChrome("light", PanelChrome.DefaultLight, Check);
+        VerifyButtons(Check);
 
         Console.WriteLine(failures == 0
             ? $"verify: ok ({PanelFixtures.All().Count} fixtures)"
@@ -146,16 +147,89 @@ public static class Program
         Contrast("warning", chrome.WarningBackground, chrome.Foreground, 4.5);
         Contrast("primary", chrome.PrimaryBackground, chrome.PrimaryForeground, 4.5);
         Contrast("row-selected", chrome.RowSelected, chrome.Foreground, 3.0);
+        Contrast("secondary", chrome.SecondaryBackground, chrome.Foreground, 4.5);
+        // A disabled label is exempt from AA, but not from being read: this is the
+        // pair that used to come out of WPF's stock template as #838383 on #F4F4F4.
+        Contrast("disabled", chrome.DisabledBackground, chrome.DisabledForeground, 3.0);
 
         // Fills that carry no text still have to be visible against the panel.
         Contrast("skeleton", chrome.Background, chrome.Skeleton, 1.1);
         Contrast("border", chrome.Background, chrome.Border, 1.1);
         Contrast("row-hover", chrome.Background, chrome.RowHover, 1.02);
+        // Hover has to differ from rest, and a disabled button from the panel it sits on.
+        Contrast("button-hover", chrome.SecondaryBackground, chrome.ButtonHover, 1.1);
+        Contrast("primary-hover", chrome.PrimaryBackground, chrome.PrimaryHover, 1.1);
+        Contrast("disabled-fill", chrome.Background, chrome.DisabledBackground, 1.1);
 
         void Contrast(string name, Brush back, Brush front, double min)
         {
             var ratio = Ratio(Solid(back), Solid(front));
             check($"chrome:{variant}:{name}", ratio >= min, $"{ratio:0.00} < {min:0.00}");
+        }
+    }
+
+    /// <summary>
+    /// The panel's buttons have to keep taking their colors from the style in
+    /// <see cref="PanelButtons"/> and not from assignments on the instance. WPF's
+    /// stock template paints hover and disabled from inside the template, and a
+    /// local Background is exactly what stops a style trigger from overriding it —
+    /// which is how a disabled Continue came out as the Windows fill with a #838383
+    /// label on it, a white block over the dark theme. Renders for real (Main is
+    /// STA), because that is the only place where the triggers have run.
+    /// </summary>
+    private static void VerifyButtons(Action<string, bool, string> check)
+    {
+        // A repository whose saved reviews cannot all be resumed: one has an active
+        // review of the same branch, one has no metadata. Both keep Continue disabled.
+        var listPorcelain = string.Join("\n", new[]
+        {
+            "branch\treview/feature/i18n\t0\t0\t1",
+            "branch\treview-saved/feature/i18n\t1\t0\t0\twhole",
+            "branch\treview-saved/feature/search\t1\t0\t0\twalk\t2\t3",
+        });
+        var model = PanelModelBuilder.BuildPanelModel(
+            new ReviewState(
+                Situation.NoReview,
+                Config: new EffectiveConfig("main", "origin"),
+                Branches: Porcelain.ParseListPorcelain(listPorcelain)),
+            new PanelInputs(false));
+
+        var chrome = PanelChrome.DefaultDark;
+        var panel = new PanelView(chrome) { Width = 380, Height = 700 };
+        panel.Render(PanelLayoutBuilder.PanelLayout(model));
+        panel.Measure(new Size(380, 700));
+        panel.Arrange(new Rect(0, 0, 380, 700));
+        panel.UpdateLayout();
+
+        var buttons = Descendants(panel).OfType<System.Windows.Controls.Button>().ToList();
+        check("buttons:styled", buttons.Count > 0 && buttons.All(b => b.Style is not null),
+            $"{buttons.Count(b => b.Style is null)} of {buttons.Count} on the stock template");
+
+        var disabled = buttons.Where(b => !b.IsEnabled).ToList();
+        check("buttons:disabled-present", disabled.Count > 0, "fixture stopped producing one");
+        check("buttons:disabled-fill",
+            disabled.All(b => ReferenceEquals(b.Background, chrome.DisabledBackground)),
+            string.Join(", ", disabled
+                .Where(b => !ReferenceEquals(b.Background, chrome.DisabledBackground))
+                .Select(b => $"{b.Content}={Describe(b.Background)}")));
+        check("buttons:disabled-text",
+            disabled.All(b => ReferenceEquals(b.Foreground, chrome.DisabledForeground)),
+            string.Join(", ", disabled
+                .Where(b => !ReferenceEquals(b.Foreground, chrome.DisabledForeground))
+                .Select(b => $"{b.Content}={Describe(b.Foreground)}")));
+    }
+
+    private static string Describe(Brush? b) =>
+        b is SolidColorBrush s ? s.Color.ToString() : b?.ToString() ?? "null";
+
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject root)
+    {
+        var count = VisualTreeHelper.GetChildrenCount(root);
+        for (var i = 0; i < count; i++)
+        {
+            var child = VisualTreeHelper.GetChild(root, i);
+            yield return child;
+            foreach (var d in Descendants(child)) yield return d;
         }
     }
 

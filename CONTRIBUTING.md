@@ -19,7 +19,7 @@ on Windows to be worth avoiding (see
 installed:
 
 ```sh
-shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh tests/sandbox.sh
+shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh visualstudio-extension/bump-version.sh tests/sandbox.sh
 bats tests/
 ```
 
@@ -299,6 +299,18 @@ So it will *look* different from the VS Code sidebar even when every action exis
 keymap actions in IDEA — that is allowed by the surface contract (`surface: panel | action | both`).
 If a control is missing from both the panel and the menu for a situation the YAML enables, that is a
 product gap to fix, not a platform limitation.
+
+## The Visual Studio extension
+
+[`visualstudio-extension/`](visualstudio-extension/) is a separate .NET 8 solution with its own
+checks. It shells out to the `git review` on `PATH`, same rule as the other two clients — see
+[`visualstudio-extension/CONTRIBUTING.md`](visualstudio-extension/CONTRIBUTING.md) for building,
+running it in a real Visual Studio, and testing it.
+
+CI runs it on `windows-latest` alone: the VSIX targets net472 and is built by the MSBuild of a
+Visual Studio installation, which no other runner has. That last step is the gate — net472 is off
+by default (`GitReviewPackVsix`), so a break that only happens there survives every `dotnet build`
+and `dotnet test`.
 
 ## Releasing
 

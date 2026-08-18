@@ -1,5 +1,13 @@
 <Project>
   <PropertyGroup>
+    <!--
+      Opening GitReview.sln in a real Visual Studio (not `dotnet build`) sets
+      BuildingInsideVisualStudio=true — that is the signal to build the net472/VSIX
+      side of Domain, Host and GitReview.VS too, so F5 has something to deploy. CLI
+      builds (dotnet build/test, build-vsix.ps1) leave GitReviewPackVsix as they set
+      it, so this default never touches them.
+    -->
+    <GitReviewPackVsix Condition="'$(GitReviewPackVsix)'=='' AND '$(BuildingInsideVisualStudio)'=='true'">true</GitReviewPackVsix>
     <LangVersion>12.0</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -7,5 +15,22 @@
     <Deterministic>true</Deterministic>
     <!-- Keep in sync with contracts/client-product-surface.yaml and root VERSION clients. -->
     <GitReviewClientVersion>0.1.0</GitReviewClientVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)'=='net472'">
+    <!--
+      .NET Framework's reference assemblies carry no nullable annotations, so code
+      that is clean on net8.0 reports false positives here (string.Split returning
+      string?[] and friends). The net8.0 build is the one that polices nullability.
+    -->
+    <NoWarn>$(NoWarn);CS8600;CS8602;CS8603;CS8604;CS8619;CS8620</NoWarn>
+    <!--
+      vs-threading analyzers ship with the VSSDK and only see this target. The three
+      they flag in shared code are answered where they are raised: the panel lives on
+      the UI thread by construction (its Dispatcher is captured in the constructor),
+      and both async-void paths wrap their whole body in a catch, which is what those
+      rules exist to force. VSTHRD109 is still an error and is not suppressed.
+    -->
+    <NoWarn>$(NoWarn);VSTHRD001;VSTHRD100;VSTHRD101;VSTHRD110</NoWarn>
   </PropertyGroup>
 </Project>

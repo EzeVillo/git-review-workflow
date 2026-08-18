@@ -92,14 +92,14 @@ public sealed class ActionDispatcher
             {
                 var source = state.State?.Source ?? "this branch";
                 if (!Confirm(UserCopy.AbortTitle(source), UserCopy.AbortDetail, UserCopy.AbortButton)) return;
-                await RunChecked("abortReview").ConfigureAwait(true);
+                await RunCheckedAsync("abortReview").ConfigureAwait(true);
                 return;
             }
             case "saveReview":
             {
                 var source = state.State?.Source ?? "this branch";
                 if (!Confirm(UserCopy.SaveTitle(source), UserCopy.SaveDetail, UserCopy.SaveButton)) return;
-                await RunChecked("saveReview").ConfigureAwait(true);
+                await RunCheckedAsync("saveReview").ConfigureAwait(true);
                 return;
             }
             case "finishReview":
@@ -111,7 +111,7 @@ public sealed class ActionDispatcher
                 }
                 var onto = PickFinishOnto(state.State?.Source ?? "branch");
                 if (onto is null) return;
-                await RunChecked("finishReview", new ActionParams.FinishOnto(onto.Value)).ConfigureAwait(true);
+                await RunCheckedAsync("finishReview", new ActionParams.FinishOnto(onto.Value)).ConfigureAwait(true);
                 return;
             }
             case "undoFinish":
@@ -120,11 +120,11 @@ public sealed class ActionDispatcher
                     ? UserCopy.UndoDetailConflict
                     : UserCopy.UndoDetailPending;
                 if (!Confirm(UserCopy.UndoTitle, detail, UserCopy.UndoButton)) return;
-                await RunChecked("undoFinish", new ActionParams.UndoFinish(false)).ConfigureAwait(true);
+                await RunCheckedAsync("undoFinish", new ActionParams.UndoFinish(false)).ConfigureAwait(true);
                 return;
             }
             case "resumeFinish":
-                await RunChecked("resumeFinish", new ActionParams.ResumeFinish(false)).ConfigureAwait(true);
+                await RunCheckedAsync("resumeFinish", new ActionParams.ResumeFinish(false)).ConfigureAwait(true);
                 return;
             case "continueReview":
             {
@@ -137,7 +137,7 @@ public sealed class ActionDispatcher
                 }
                 if (!Confirm(UserCopy.ContinueTitle(source), UserCopy.ContinueDetail(source), UserCopy.ContinueButton))
                     return;
-                await RunChecked("continueReview", new ActionParams.Continue(source)).ConfigureAwait(true);
+                await RunCheckedAsync("continueReview", new ActionParams.Continue(source)).ConfigureAwait(true);
                 return;
             }
             case "discardInventory":
@@ -152,7 +152,7 @@ public sealed class ActionDispatcher
                     action = new HousekeepingAction(HousekeepingKind.CleanOne, src);
                 var copy = HousekeepingLogic.ConfirmCopyFor(action);
                 if (!Confirm(copy.Title, copy.Detail, copy.Button)) return;
-                await RunChecked(
+                await RunCheckedAsync(
                     branch.Saved ? "forgetReview" : "cleanReview",
                     new ActionParams.Housekeeping(action)).ConfigureAwait(true);
                 return;
@@ -166,7 +166,7 @@ public sealed class ActionDispatcher
                         HousekeepingKind.CleanKeepFixes, pending.Value.Source, pending.Value.Onto);
                     var copy = HousekeepingLogic.ConfirmCopyFor(action);
                     if (!Confirm(copy.Title, copy.Detail, copy.Button)) return;
-                    await RunChecked("cleanReview", new ActionParams.Housekeeping(action)).ConfigureAwait(true);
+                    await RunCheckedAsync("cleanReview", new ActionParams.Housekeeping(action)).ConfigureAwait(true);
                 }
                 else
                 {
@@ -250,7 +250,7 @@ public sealed class ActionDispatcher
         }
     }
 
-    private async Task RunChecked(string action, ActionParams? p = null)
+    private async Task RunCheckedAsync(string action, ActionParams? p = null)
     {
         var token = StaleGuard.CaptureToken(_panel.State.Current);
         // Re-check after confirm

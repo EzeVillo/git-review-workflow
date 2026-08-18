@@ -92,7 +92,7 @@ public static class ControlIdExt
     };
 
     public static ControlId? FromWire(string id) =>
-        Enum.GetValues<ControlId>().Cast<ControlId?>().FirstOrDefault(c => c!.Value.Wire() == id);
+        Enum.GetValues(typeof(ControlId)).Cast<ControlId?>().FirstOrDefault(c => c!.Value.Wire() == id);
 }
 
 public sealed record Control(
@@ -283,7 +283,8 @@ public static class PanelLayoutBuilder
         return new Control(id, label, name, emphasis, enabled, tooltip, index, supportLinkId);
     }
 
-    private static string? TipShort(string? tip) => tip is null ? null : tip.Length <= 7 ? tip : tip[..7];
+    private static string? TipShort(string? tip) =>
+        tip is null ? null : tip.Length <= 7 ? tip : tip.Substring(0, 7);
 
     private static string? EntryBadge(PanelEntry entry, ReviewMode? mode)
     {

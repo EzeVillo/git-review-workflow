@@ -17,12 +17,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      # bin/ y el wrapper de Gradle: un checkout de Windows no lleva el bit de
-      # ejecución, así que un archivo agregado desde ahí llega a 100644 y sólo
-      # muere en los runners POSIX (`./gradlew: Permission denied`).
+      # bin/, el wrapper de Gradle y todo *.sh propio: un checkout de Windows no
+      # lleva el bit de ejecución, así que un archivo agregado desde ahí llega a
+      # 100644 y sólo muere en los runners POSIX (`./gradlew: Permission
+      # denied`) — así entró visualstudio-extension/bump-version.sh, que
+      # CONTRIBUTING.md manda correr como `./visualstudio-extension/...`.
+      # .specify/ queda afuera: es vendoreado, no nuestro.
       - name: Check bin scripts are executable
         run: |
-          missing=$(git ls-files -s bin/ jetbrains-plugin/gradlew | awk '$1 != "100755" && $4 !~ /\/\.gitkeep$/ {print $4}')
+          missing=$(git ls-files -s bin/ jetbrains-plugin/gradlew '*.sh' ':(exclude).specify/**' | awk '$1 != "100755" && $4 !~ /\/\.gitkeep$/ {print $4}')
           if [ -n "$missing" ]; then
             echo "These files are missing the executable bit (100755):" >&2
             echo "$missing" >&2
@@ -39,7 +42,7 @@ jobs:
       - name: shellcheck
         # find recorre bin/ (incl. bin/git-review-verbs/, fuera del glob bin/*) y
         # excluye .gitkeep; cubre el dispatcher y todos los verbos.
-        run: shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh tests/sandbox.sh
+        run: shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh visualstudio-extension/bump-version.sh tests/sandbox.sh
 
   test:
     strategy:
@@ -151,3 +154,36 @@ jobs:
         working-directory: jetbrains-plugin
         shell: bash
         run: ./gradlew platformTest --no-daemon
+
+  visualstudio-extension:
+    # Windows only, and not out of convenience: the client is a Visual Studio
+    # extension. The default build is net8.0 / net8.0-windows (portable domain
+    # plus the WPF panel), and the VSIX is net472, built by the MSBuild of a
+    # Visual Studio installation because the VSSDK tasks are .NET Framework
+    # tasks. No other runner has either half.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Build
+        working-directory: visualstudio-extension
+        run: dotnet build GitReview.sln -v minimal
+      # PanelLayoutContractTests compares the panel layout against
+      # contracts/client-product-surface.yaml, the same anti-drift gate the
+      # JetBrains `./gradlew test` carries.
+      - name: Domain unit tests
+        working-directory: visualstudio-extension
+        run: dotnet test tests/GitReview.Domain.Tests --no-build -v minimal
+      - name: Layout smoke
+        working-directory: visualstudio-extension
+        run: dotnet run --project src/GitReview.VS --no-build -- --verify
+      # net472 is off by default (GitReviewPackVsix), so whatever only breaks
+      # there — the Compat shims, the VSSDK wiring, the vsixmanifest — is
+      # invisible to every step above. This is the gate for it, and the only
+      # check that the artifact users install still packs at all.
+      - name: Build the VSIX (net472)
+        working-directory: visualstudio-extension
+        shell: pwsh
+        run: ./build-vsix.ps1

@@ -93,11 +93,16 @@ node ../scripts/check-client-product-surface.mjs   # three client trees
 
 ### VSIX packaging
 
-Needs the Visual Studio SDK workload:
+Builds the extension itself (net472, the framework devenv loads in-proc) with
+MSBuild from your Visual Studio install — no SDK workload required, the VSSDK
+comes from NuGet:
 
 ```powershell
-dotnet build src/GitReview.VS -p:GitReviewPackVsix=true
+./build-vsix.ps1                          # src/GitReview.VS/bin/Release/net472/*.vsix
+./build-vsix.ps1 -Install -Experimental   # then: devenv /rootsuffix Exp
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for running it inside Visual Studio.
 
 ## Visual parity (labels)
 

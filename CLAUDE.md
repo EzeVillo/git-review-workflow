@@ -406,12 +406,47 @@ dotnet build GitReview.sln
 dotnet test tests/GitReview.Domain.Tests
 dotnet run --project src/GitReview.VS -- --verify    # smoke de layout/constantes
 dotnet run --project src/GitReview.VS -- --preview   # todas las situaciones, navegable
+
+./build-vsix.ps1                          # arma el .vsix (Release, net472)
+./build-vsix.ps1 -Install -Experimental   # lo instala en la hive Exp
+devenv /rootsuffix Exp                    # y lo levanta ahí
 ```
 
+**El VSIX es net472 y lo arma MSBuild, no `dotnet build`.** `devenv.exe.config` declara
+`supportedRuntime sku=".NETFramework,Version=v4.7.2"`: Visual Studio es un proceso .NET Framework y
+una extensión que carga in-proc —y todo assembly que esa extensión arrastre— tiene que serlo
+también. Por eso `-p:GitReviewPackVsix=true` **agrega** net472 al lado de net8.0 en Domain, Host y
+GitReview.VS; sin el flag los tres quedan single-target y `dotnet build`/`test`/`run` no necesitan
+`-f`. Las tareas del VSSDK son tareas de .NET Framework, así que el build del VSIX va por el
+MSBuild de la instalación de Visual Studio (`build-vsix.ps1` lo encuentra con `vswhere`); el SDK en
+sí sale de NuGet, no hace falta el workload. Lo que el BCL viejo no tiene se rellena en
+`src/Compat/` (`IsExternalInit`, `Index`/`Range`) y en un `StringCompat`/`DictionaryCompat` por
+assembly, declarados en el namespace que los usa para que ningún llamador necesite un `using`
+nuevo; las APIs de proceso que sólo existen en .NET Core pasan por `ProcessCompat`, **el único
+archivo con `#if` del árbol** — si aparece otra incompatibilidad, va un shim ahí, no un `#if` en el
+dominio. Y como net472 está apagado por defecto, lo que sólo rompe ahí no rompe `dotnet build`:
+`./build-vsix.ps1` es el gate, y lo corre el job `visualstudio-extension` de CI — en
+`windows-latest` y sólo ahí, porque es el único runner con el MSBuild de Visual Studio; los otros
+tres pasos del job son `dotnet build` / `dotnet test` / `--verify`. La **instancia experimental**
+(`/rootsuffix Exp`, una hive de registro aparte) es el equivalente del Extension Development Host
+de VS Code y del `runIde` de Gradle; sin `-Experimental` se instala en la real, que es el mismo
+camino que hace un usuario con un `.vsix` de disco.
+
+**Instalar el `.vsix` son tres pasos, no uno, y los tres los da el script.** `VSIXInstaller` deja la
+hive en un estado que parece bien y no lo está, de dos maneras que no avisan: instalar una versión
+que ya está es un **no-op silencioso** (sale 0 y no toca nada — y en desarrollo la versión es la
+misma en cada build, así que la hive sigue sirviendo el assembly anterior y el panel muestra código
+viejo sin una sola señal), y cada reinstalación **desempaqueta en una carpeta nueva** mientras la
+configuración mergeada de la hive sigue apuntando a la anterior — que el uninstall acaba de
+borrar — con lo que Visual Studio ya no falla en silencio sino que **no carga el paquete**
+(diálogo *GitReviewPackage no se cargó correctamente*, `FileNotFoundException` en
+`ActivityLog.xml`). Por eso `-Install` desinstala primero, corre
+`devenv /updateconfiguration` después, y al final **verifica contra el disco** que todo
+`GitReview.VS.dll` de la hive sea el recién compilado. F5 desde la IDE no tiene nada de esto: es el
+loop corto.
+
 `bin/`/`obj/` de los cuatro proyectos van al `.gitignore` raíz (`visualstudio-extension/**/bin/`,
-`**/obj/`) — nunca se commitean. Empaquetar el VSIX
-(`dotnet build src/GitReview.VS -p:GitReviewPackVsix=true`) necesita el workload de Visual Studio
-SDK. Versión propia, independiente de la CLI y de los otros clientes:
+`**/obj/`) — nunca se commitean. Versión propia, independiente de la CLI y de los otros clientes:
 `./visualstudio-extension/bump-version.sh X.Y.Z` estampa
 `GitReview.VS.csproj`, `source.extension.vsixmanifest` y
 `Directory.Build.props` a la vez (cubierto por `tests/version-consistency.bats`).

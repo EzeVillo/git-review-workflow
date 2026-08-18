@@ -1,11 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- net472 only while packing the VSIX; see GitReview.Domain.csproj. -->
+    <TargetFramework Condition="'$(GitReviewPackVsix)'!='true'">net8.0</TargetFramework>
+    <TargetFrameworks Condition="'$(GitReviewPackVsix)'=='true'">net8.0;net472</TargetFrameworks>
     <RootNamespace>GitReview.Host</RootNamespace>
     <AssemblyName>GitReview.Host</AssemblyName>
     <Description>Portable host: CLI invocation, review state refresh, mutation orchestration (no VS APIs).</Description>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\GitReview.Domain\GitReview.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)'=='net472'">
+    <Compile Include="..\Compat\IsExternalInit.cs" Link="Compat\IsExternalInit.cs" />
+    <Compile Include="..\Compat\IndexRange.cs" Link="Compat\IndexRange.cs" />
+    <Reference Include="System.Net.Http" />
   </ItemGroup>
 </Project>

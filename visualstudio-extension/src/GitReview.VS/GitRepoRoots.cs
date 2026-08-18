@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using GitReview.Host;
 
 namespace GitReview.VS;
 
@@ -38,8 +39,7 @@ public static class GitRepoRoots
                 CreateNoWindow = true,
                 StandardOutputEncoding = Encoding.UTF8,
             };
-            psi.ArgumentList.Add("rev-parse");
-            psi.ArgumentList.Add("--show-toplevel");
+            ProcessCompat.AddArgs(psi, "rev-parse", "--show-toplevel");
             using var p = Process.Start(psi);
             if (p is null) return null;
             var output = p.StandardOutput.ReadToEnd().Trim();

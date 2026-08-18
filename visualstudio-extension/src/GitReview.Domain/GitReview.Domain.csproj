@@ -1,8 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!--
+      net472 joins only while packing the VSIX (-p:GitReviewPackVsix=true): devenv is
+      a .NET Framework 4.7.2 process, so an in-proc extension and everything it loads
+      has to be Framework too. Default builds stay single-target so `dotnet run` and
+      `dotnet test` need no -f. See Compat/ for what Framework's BCL is missing.
+    -->
+    <TargetFramework Condition="'$(GitReviewPackVsix)'!='true'">net8.0</TargetFramework>
+    <TargetFrameworks Condition="'$(GitReviewPackVsix)'=='true'">net8.0;net472</TargetFrameworks>
     <RootNamespace>GitReview.Domain</RootNamespace>
     <AssemblyName>GitReview.Domain</AssemblyName>
     <Description>Portable git-review client domain (no Visual Studio APIs).</Description>
   </PropertyGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)'=='net472'">
+    <Compile Include="..\Compat\IsExternalInit.cs" Link="Compat\IsExternalInit.cs" />
+    <Compile Include="..\Compat\IndexRange.cs" Link="Compat\IndexRange.cs" />
+  </ItemGroup>
 </Project>

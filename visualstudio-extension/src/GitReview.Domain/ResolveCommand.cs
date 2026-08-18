@@ -20,7 +20,7 @@ public static class ResolveCommand
         string? gitReviewPath,
         string? platform = null)
     {
-        platform ??= OperatingSystem.IsWindows() ? "win32" : "posix";
+        platform ??= RuntimeInfo.IsWindows ? "win32" : "posix";
         if (string.IsNullOrWhiteSpace(gitReviewPath))
             return new ResolvedCommand("git", new[] { "review", verb }.Concat(args).ToList());
         if (platform == "win32" && !WindowsNativeExecutable.IsMatch(gitReviewPath))

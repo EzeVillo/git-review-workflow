@@ -38,7 +38,7 @@ public static class CliLog
         var err = result.Stderr.TrimEnd();
         if (err.Length == 0) return lines;
         var body = err.Length > StderrMax
-            ? err[..StderrMax] + "\n… (truncated)"
+            ? err.Substring(0, StderrMax) + "\n… (truncated)"
             : err;
         foreach (var part in body.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
             lines.Add($"  {part}");

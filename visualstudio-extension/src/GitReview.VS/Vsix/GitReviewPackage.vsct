@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  One command: View > Other Windows > git review, which opens the tool window.
+  Compiled into Menus.ctmenu by the VSSDK build and referenced from the
+  ProvideMenuResource attribute on GitReviewPackage.
+-->
+<CommandTable xmlns="http://schemas.microsoft.com/VisualStudio/2005-10-18/CommandTable" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <Extern href="stdidcmd.h" />
+  <Extern href="vsshlids.h" />
+
+  <Commands package="guidGitReviewPackage">
+    <Buttons>
+      <Button guid="guidGitReviewCmdSet" id="cmdidShowToolWindow" priority="0x0100" type="Button">
+        <Parent guid="guidSHLMainMenu" id="IDG_VS_WNDO_OTRWNDWS1" />
+        <Strings>
+          <ButtonText>git review</ButtonText>
+        </Strings>
+      </Button>
+    </Buttons>
+  </Commands>
+
+  <Symbols>
+    <GuidSymbol name="guidGitReviewPackage" value="{a3f8c2e1-7b4d-4e9a-9c1f-2d5e6a8b0c3d}" />
+    <GuidSymbol name="guidGitReviewCmdSet" value="{c7d4e8a5-1f36-4b92-8a70-6d5e4c3b2a19}">
+      <IDSymbol name="cmdidShowToolWindow" value="0x0100" />
+    </GuidSymbol>
+  </Symbols>
+</CommandTable>

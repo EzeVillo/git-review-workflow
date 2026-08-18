@@ -52,7 +52,7 @@ public sealed class CliInvoker
         long timeoutMs,
         CancellationToken cancellationToken = default)
     {
-        var start = Environment.TickCount64;
+        var clock = Stopwatch.StartNew();
         var line = CliLog.FormatCommandLine(resolved.Command, resolved.Args);
         Log($"→ {line}  (cwd={cwd})");
         CliLogSink.Append($"→ {line}  (cwd={cwd})");
@@ -71,8 +71,7 @@ public sealed class CliInvoker
                 StandardOutputEncoding = Encoding.UTF8,
                 StandardErrorEncoding = Encoding.UTF8,
             };
-            foreach (var a in resolved.Args)
-                psi.ArgumentList.Add(a);
+            ProcessCompat.AddArgs(psi, resolved.Args);
 
             if (network)
             {
@@ -97,7 +96,7 @@ public sealed class CliInvoker
             if (!process.Start())
             {
                 var fail = new InvokeResult("", "failed to start process", null, "StartFailed");
-                LogEnd(fail, Environment.TickCount64 - start);
+                LogEnd(fail, clock.ElapsedMilliseconds);
                 return fail;
             }
 
@@ -109,17 +108,17 @@ public sealed class CliInvoker
 
             try
             {
-                await process.WaitForExitAsync(timeoutCts.Token).ConfigureAwait(false);
+                await ProcessCompat.WaitForExitAsync(process, timeoutCts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
                 try
                 {
-                    if (!process.HasExited) process.Kill(entireProcessTree: true);
+                    if (!process.HasExited) ProcessCompat.KillTree(process);
                 }
                 catch { /* best-effort */ }
                 var timed = new InvokeResult(stdout.ToString(), stderr.ToString(), null, TimedOut: true);
-                LogEnd(timed, Environment.TickCount64 - start);
+                LogEnd(timed, clock.ElapsedMilliseconds);
                 return timed;
             }
 
@@ -127,7 +126,7 @@ public sealed class CliInvoker
             await Task.Delay(20, CancellationToken.None).ConfigureAwait(false);
 
             var result = new InvokeResult(stdout.ToString(), stderr.ToString(), process.ExitCode);
-            LogEnd(result, Environment.TickCount64 - start);
+            LogEnd(result, clock.ElapsedMilliseconds);
             return result;
         }
         catch (Exception e)
@@ -137,7 +136,7 @@ public sealed class CliInvoker
                 e.Message,
                 null,
                 ErrorCode: e.GetType().Name);
-            LogEnd(result, Environment.TickCount64 - start);
+            LogEnd(result, clock.ElapsedMilliseconds);
             return result;
         }
     }
@@ -188,7 +187,7 @@ public sealed class CliInvoker
 
     public static string ResolveAskpassCommand()
     {
-        var isWin = OperatingSystem.IsWindows();
+        var isWin = RuntimeInfo.IsWindows;
         var dir = Path.Combine(Path.GetTempPath(), "git-review-askpass");
         Directory.CreateDirectory(dir);
         if (isWin)
@@ -204,8 +203,7 @@ public sealed class CliInvoker
             if (!File.Exists(file))
             {
                 File.WriteAllText(file, "#!/bin/sh\nexit 0\n", Encoding.UTF8);
-                try { File.SetUnixFileMode(file, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute); }
-                catch { /* ignore */ }
+                ProcessCompat.MakeExecutable(file);
             }
             return file;
         }

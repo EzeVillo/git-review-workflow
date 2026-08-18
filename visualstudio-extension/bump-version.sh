@@ -19,6 +19,7 @@ case "$V" in
 		;;
 esac
 
+# shellcheck disable=SC1007  # CDPATH= empties CDPATH for this cd, not an assignment
 dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 
 sed_i() {

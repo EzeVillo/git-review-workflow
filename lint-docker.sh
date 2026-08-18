@@ -35,6 +35,7 @@ if [ "$#" -eq 0 ]; then
 	set -- $(find bin -type f ! -name '.gitkeep') \
 		install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh \
 		vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh \
+		visualstudio-extension/bump-version.sh \
 		tests/sandbox.sh
 fi
 

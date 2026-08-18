@@ -21,6 +21,7 @@ public sealed class GitReviewPanelController : IDisposable
     private readonly Dispatcher _dispatcher;
     private readonly DispatcherTimer _probeTimer;
     private readonly DispatcherTimer _skeletonTimer;
+    private readonly IDisposable _busySub;
     private PanelWhy? _why;
     private string? _lastOpened;
     private bool _loading;
@@ -31,6 +32,10 @@ public sealed class GitReviewPanelController : IDisposable
     public PanelView View => _view;
     public ReviewStateManager State => _state;
     public MutationRunner Mutations => _mutations;
+
+    /// <summary>The invoker the panel already uses, for hosts that need a raw call
+    /// (the start wizard, and reading a file's base side for a diff).</summary>
+    public CliInvoker Cli => _cli;
 
     /// <summary>Raise from host to open a file/diff/editor/dialog.</summary>
     public event Func<string, int?, string?, Task>? HostAction;
@@ -51,13 +56,21 @@ public sealed class GitReviewPanelController : IDisposable
         _dispatcher = Dispatcher.CurrentDispatcher;
 
         _state.StateChanged += OnStateChanged;
-        _mutations.Lock.OnDidChangeBusy(_ => Render());
+        _busySub = _mutations.Lock.OnDidChangeBusy(_ => Render());
 
         _probeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(CliProbe.CliProbeIntervalMs) };
         _probeTimer.Tick += async (_, _) =>
         {
-            if (CliProbe.ShouldProbeCli(_state.Current.Situation, _panelVisible))
-                await RefreshAsync().ConfigureAwait(true);
+            try
+            {
+                if (CliProbe.ShouldProbeCli(_state.Current.Situation, _panelVisible))
+                    await RefreshAsync().ConfigureAwait(true);
+            }
+            catch
+            {
+                // A background probe that throws must not take the host down with it
+                // (in Visual Studio this runs in devenv): the next tick retries.
+            }
         };
         _probeTimer.Start();
 
@@ -147,16 +160,45 @@ public sealed class GitReviewPanelController : IDisposable
         }
     }
 
-    private void OnStateChanged(ReviewState _) =>
-        _dispatcher.BeginInvoke(Render);
+    private void OnStateChanged(ReviewState _) => Render();
 
+    /// <summary>
+    /// Draws the panel. Safe to call from any thread: everything it touches is WPF,
+    /// so an off-thread call is marshalled to the dispatcher instead of throwing.
+    /// Two of the callers are genuinely off-thread. <see cref="ReviewStateManager"/>
+    /// raises StateChanged from wherever the refresh finished, and MutationLock
+    /// notifies its busy listeners from wherever the mutation finished -- the CLI
+    /// await inside RunAsync is ConfigureAwait(false), so releasing the lock lands on
+    /// a thread-pool thread. Rendering from there throws "The calling thread cannot
+    /// access this object because a different thread owns it", and because the catch
+    /// below touches the view as well, the second throw escapes to OnAction and
+    /// becomes a MessageBox: every CLI action would do its job and still end in an
+    /// error dialog.
+    /// </summary>
     private void Render()
     {
-        var model = PanelModelBuilder.BuildPanelModel(
-            _state.Current,
-            new PanelInputs(_mutations.IsBusy, Why: _why, LastOpened: _lastOpened));
-        var layout = PanelLayoutBuilder.PanelLayout(model, loading: _loading && !_mutations.IsBusy);
-        _view.Render(layout);
+        if (_disposed) return;
+        if (!_dispatcher.CheckAccess())
+        {
+            _dispatcher.BeginInvoke((Action)Render);
+            return;
+        }
+        try
+        {
+            var model = PanelModelBuilder.BuildPanelModel(
+                _state.Current,
+                new PanelInputs(_mutations.IsBusy, Why: _why, LastOpened: _lastOpened));
+            var layout = PanelLayoutBuilder.PanelLayout(model, loading: _loading && !_mutations.IsBusy);
+            _view.Render(layout);
+        }
+        catch (Exception ex)
+        {
+            // None of the callers (skeleton timer tick, RefreshAsync's finally,
+            // OnStateChanged, the busy listener) guard against this, and PanelView
+            // clears itself before drawing: left unguarded, a throw here is a
+            // permanently blank tool window with nothing in the debug output.
+            _view.RenderFatal(ex);
+        }
     }
 
     private async void OnAction(string wire, int? index, string? supportLinkId)
@@ -228,6 +270,8 @@ public sealed class GitReviewPanelController : IDisposable
         _disposed = true;
         _probeTimer.Stop();
         _skeletonTimer.Stop();
+        _busySub.Dispose();
+        _state.StateChanged -= OnStateChanged;
         _view.ActionRequested -= OnAction;
     }
 }

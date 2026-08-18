@@ -55,6 +55,29 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         Content = _root;
     }
 
+    /// <summary>
+    /// Last-resort fallback when <see cref="Render"/> itself throws. The normal render
+    /// path clears the panel before drawing the new content, so an exception partway
+    /// through — a block variant this WPF renderer does not handle, for example —
+    /// otherwise leaves the tool window permanently blank with no visible trace: the
+    /// domain-side --verify fixtures only exercise PanelLayoutBuilder, never this
+    /// renderer, so a gap here would not show up there.
+    /// </summary>
+    public void RenderFatal(Exception ex)
+    {
+        _titleBar.Children.Clear();
+        _body.Children.Clear();
+        _footer.Children.Clear();
+        _body.Children.Add(new TextBlock
+        {
+            Text = "git review panel failed to render:\n" + ex,
+            TextWrapping = TextWrapping.Wrap,
+            FontFamily = _chrome.Mono,
+            FontSize = 11,
+            Foreground = _chrome.Foreground,
+        });
+    }
+
     public void Render(PanelLayout layout)
     {
         _titleBar.Children.Clear();

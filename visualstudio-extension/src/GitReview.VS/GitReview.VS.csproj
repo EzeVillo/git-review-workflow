@@ -1,18 +1,37 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<!--
+  Two shapes of the same code:
+
+    net8.0-windows  the standalone preview / verify app (default build)
+    net472          the in-proc Visual Studio extension, built only with
+                    -p:GitReviewPackVsix=true (see build-vsix.ps1) — and the only
+                    target framework at all when opened inside a real Visual Studio
+                    (BuildingInsideVisualStudio=true), so F5 has nothing else to pick
+                    and can't launch the wrong one
+
+  devenv is a .NET Framework 4.7.2 process, so an extension it loads in-proc — and
+  every assembly that extension pulls in — must be Framework. The SDK-style Sdk.props
+  / Sdk.targets are imported by hand because the VSSDK targets have to come after
+  them, and they only exist for the net472 inner build.
+-->
+<Project>
+  <Import Project="Sdk.props" Sdk="Microsoft.NET.Sdk" />
+
   <PropertyGroup>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <OutputType>Exe</OutputType>
+    <TargetFramework Condition="'$(GitReviewPackVsix)'!='true'">net8.0-windows</TargetFramework>
+    <!--
+      Two targets when packaging from the CLI (build-vsix.ps1 needs the net472 .vsix;
+      building net8.0-windows alongside it is harmless). Inside real Visual Studio,
+      only net472: with both present VS's F5 target-framework picker can default to
+      net8.0-windows, which has no package wiring and just runs Program.Main's banner
+      — silently the wrong build, not an error, so it isn't something to leave to a
+      dropdown.
+    -->
+    <TargetFrameworks Condition="'$(GitReviewPackVsix)'=='true' AND '$(BuildingInsideVisualStudio)'!='true'">net8.0-windows;net472</TargetFrameworks>
+    <TargetFramework Condition="'$(GitReviewPackVsix)'=='true' AND '$(BuildingInsideVisualStudio)'=='true'">net472</TargetFramework>
     <RootNamespace>GitReview.VS</RootNamespace>
     <AssemblyName>GitReview.VS</AssemblyName>
-    <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <StartupObject>GitReview.VS.Program</StartupObject>
-    <!--
-      VSIX packaging requires the Visual Studio SDK workload.
-      Domain/Host/tests build without it. When VSSDK is present, set
-      GitReviewPackVsix=true to produce a .vsix via Community.VisualStudio.Toolkit.
-    -->
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <Version>0.1.0</Version>
     <Description>git review workflow — Visual Studio tool window (parity with VS Code and JetBrains).</Description>
@@ -20,14 +39,82 @@
     <Product>git review workflow</Product>
   </PropertyGroup>
 
+  <!-- Standalone app: Program.Main drives the fixture gallery and the smoke checks. -->
+  <PropertyGroup Condition="'$(TargetFramework)'=='net8.0-windows'">
+    <OutputType>Exe</OutputType>
+    <UseWPF>true</UseWPF>
+    <StartupObject>GitReview.VS.Program</StartupObject>
+  </PropertyGroup>
+
+  <!--
+    VSIX: a class library Visual Studio loads. The pkgdef generated from the
+    attributes on GitReviewPackage is what registers the package, its menus and the
+    tool window.
+
+    Two different ways this gets into the Exp hive, for two different purposes:
+
+      - F5 inside a real Visual Studio (BuildingInsideVisualStudio=true): the VSSDK's
+        own Deploy target writes straight to the hive and touches the registration
+        marker itself. This is the reproducible loop — rebuild, F5 again, the panel
+        reflects the change. No installer, no cache to go stale.
+      - build-vsix.ps1 -Install, any other time: goes through VSIXInstaller, the same
+        path a user takes with a downloaded .vsix. That is the point of it — it is
+        validating the shipped artifact, not a dev loop. Reinstalling the same version
+        is a no-op for the installer and every reinstall moves the assembly to a new
+        folder, so the script uninstalls first and re-merges the hive with
+        devenv /updateconfiguration afterwards; see CONTRIBUTING.md for what each of
+        those is preventing.
+  -->
+  <PropertyGroup Condition="'$(TargetFramework)'=='net472'">
+    <OutputType>Library</OutputType>
+    <UseCodebase>true</UseCodebase>
+    <GeneratePkgDefFile>true</GeneratePkgDefFile>
+    <CreateVsixContainer>true</CreateVsixContainer>
+    <IncludeAssemblyInVSIXContainer>true</IncludeAssemblyInVSIXContainer>
+    <IncludeDebugSymbolsInVSIXContainer>false</IncludeDebugSymbolsInVSIXContainer>
+    <DeployExtension Condition="'$(BuildingInsideVisualStudio)'=='true'">true</DeployExtension>
+    <DeployExtension Condition="'$(DeployExtension)'==''">false</DeployExtension>
+    <StartAction>Program</StartAction>
+    <StartProgram>$(DevEnvDir)devenv.exe</StartProgram>
+    <StartArguments>/rootsuffix Exp</StartArguments>
+    <!-- WPF for .NET Framework is referenced by hand: UseWPF is .NET Core 3.0+. -->
+    <ImportFrameworkWinFXTargets>true</ImportFrameworkWinFXTargets>
+    <!-- Ship assemblies, not symbols: without this the referenced projects' .pdb are
+         copied next to the output and end up inside the .vsix. -->
+    <AllowedReferenceRelatedFileExtensions>.xml</AllowedReferenceRelatedFileExtensions>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\GitReview.Domain\GitReview.Domain.csproj" />
     <ProjectReference Include="..\GitReview.Host\GitReview.Host.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Community.VisualStudio.Toolkit.17" Version="17.0.533" Condition="'$(GitReviewPackVsix)'=='true'" />
-    <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.11.435" PrivateAssets="all" Condition="'$(GitReviewPackVsix)'=='true'" />
+  <!-- The package/tool window only compile against the VSSDK; the preview app has no VS. -->
+  <ItemGroup Condition="'$(TargetFramework)'!='net472'">
+    <Compile Remove="Vsix\**" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)'=='net472'">
+    <Compile Remove="Program.cs" />
+    <Compile Remove="Preview\**" />
+    <Compile Include="..\Compat\IsExternalInit.cs" Link="Compat\IsExternalInit.cs" />
+    <Compile Include="..\Compat\IndexRange.cs" Link="Compat\IndexRange.cs" />
+
+    <PackageReference Include="Microsoft.VisualStudio.Shell.15.0" Version="17.14.40264" />
+    <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="17.14.2142" PrivateAssets="all" GeneratePathProperty="true" />
+
+    <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="WindowsBase" />
+    <Reference Include="System.Xaml" />
+    <Reference Include="System.Net.Http" />
+
+    <None Include="source.extension.vsixmanifest">
+      <SubType>Designer</SubType>
+    </None>
+    <VSCTCompile Include="Vsix\GitReviewPackage.vsct">
+      <ResourceName>Menus.ctmenu</ResourceName>
+    </VSCTCompile>
   </ItemGroup>
 
   <ItemGroup>
@@ -52,9 +139,22 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
-    <None Include="source.extension.vsixmanifest" Condition="Exists('source.extension.vsixmanifest')" />
-    <None Include="..\..\LICENSE" Link="LICENSE" Condition="Exists('..\..\LICENSE')" />
-    <None Include="..\..\README.md" Link="README.md" Condition="Exists('..\..\README.md')" />
-    <None Include="..\..\CHANGELOG.md" Link="CHANGELOG.md" Condition="Exists('..\..\CHANGELOG.md')" />
+    <!--
+      These three are read by the gallery from inside the package, so they travel as
+      flat files at its root and the vsixmanifest points at those names.
+    -->
+    <Content Include="..\..\LICENSE" Link="LICENSE" Condition="Exists('..\..\LICENSE')">
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
+    <Content Include="..\..\README.md" Link="README.md" Condition="Exists('..\..\README.md')">
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
+    <Content Include="..\..\CHANGELOG.md" Link="CHANGELOG.md" Condition="Exists('..\..\CHANGELOG.md')">
+      <IncludeInVSIX>true</IncludeInVSIX>
+    </Content>
   </ItemGroup>
+
+  <Import Project="Sdk.targets" Sdk="Microsoft.NET.Sdk" />
+  <Import Project="$(PkgMicrosoft_VSSDK_BuildTools)\tools\VSSDK\Microsoft.VsSDK.targets"
+          Condition="'$(TargetFramework)'=='net472' And '$(PkgMicrosoft_VSSDK_BuildTools)'!=''" />
 </Project>

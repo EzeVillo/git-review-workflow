@@ -1,19 +1,20 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
-using System.Windows;
 using GitReview.Domain;
+using GitReview.VS.Settings;
 using GitReview.VS.ToolWindows;
-using GitReview.VS.Wizards;
+using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 
 namespace GitReview.VS.Vsix;
 
 /// <summary>
-/// The half of the action matrix only a real IDE can do: open a file, open a diff,
-/// show the why, run the start wizard. Everything else — confirmations, staleness,
-/// which CLI verb an action maps to — stays in <see cref="ActionDispatcher"/>, shared
-/// with the standalone build.
+/// The half of the action matrix only a real IDE can do: open a file, open a comparison
+/// window, show text as a document, flush an unsaved buffer. Everything else —
+/// confirmations, pickers, staleness, which CLI verb an action maps to — stays in
+/// <see cref="ActionDispatcher"/>, shared with the standalone build.
 /// </summary>
 public sealed class VsHostActions
 {
@@ -39,12 +40,17 @@ public sealed class VsHostActions
     public ActionDispatcher Attach() =>
         new(
             _panel,
-            OpenFileAsync,
-            OpenDiffAsync,
-            OpenAllDiffsAsync,
-            OpenTextAsync,
-            RunStartWizardAsync,
-            PreviewEditsAsync);
+            new PanelHost
+            {
+                Cwd = Cwd,
+                OpenEntryFile = OpenEntryFileAsync,
+                OpenDiffs = OpenDiffsAsync,
+                OpenText = OpenTextAsync,
+                OpenPath = OpenPathAsync,
+                SavePath = SavePathAsync,
+                PreviewEdits = PreviewEditsAsync,
+                DefaultSource = () => GitReviewOptions.Current.DefaultSource,
+            });
 
     private string? Cwd() => SoleTarget.PickSoleTarget(_roots());
 
@@ -55,64 +61,186 @@ public sealed class VsHostActions
         return Path.GetFullPath(Path.Combine(cwd, display.Replace('/', Path.DirectorySeparatorChar)));
     }
 
-    private async Task OpenFileAsync(string display)
+    private async Task OpenEntryFileAsync(string display)
     {
         await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
         var full = FullPath(display);
         if (full is null)
         {
-            MessageBox.Show(UserCopy.NoSoleRoot, UserCopy.ProductTitle);
+            GitReviewDialogs.Error(UserCopy.NoSoleRoot);
             return;
         }
         if (!File.Exists(full))
         {
             // Deleted by the pull request under review: there is no file to open.
-            MessageBox.Show($"{display} is not in the working tree.", UserCopy.ProductTitle);
+            GitReviewDialogs.Info($"{display} is not in the working tree.");
             return;
         }
 
         VsShellUtilities.OpenDocument(_serviceProvider, full);
     }
 
-    private async Task OpenDiffAsync(string display, string? before, string? after)
+    /// <summary>
+    /// Opens an absolute path (the walkthrough sidecar, the reviewer's draft). False when
+    /// it could not be shown — the draft flow reports that rather than swallowing it, so
+    /// the reviewer still learns where the file is.
+    /// </summary>
+    private async Task<bool> OpenPathAsync(string path)
+    {
+        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+        try
+        {
+            if (!File.Exists(path)) return false;
+            VsShellUtilities.OpenDocument(_serviceProvider, path);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Saves one document if the editor is holding it unsaved — this one, never
+    /// "save all": the wizard asked the reviewer to edit a single file.
+    /// </summary>
+    private async Task SavePathAsync(string path)
+    {
+        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+        if (_serviceProvider.GetService(typeof(SVsRunningDocumentTable)) is not IVsRunningDocumentTable rdt)
+            return;
+        var hr = rdt.FindAndLockDocument(
+            (uint)_VSRDTFLAGS.RDT_NoLock,
+            path,
+            out _,
+            out _,
+            out var docData,
+            out var cookie);
+        // FindAndLockDocument AddRefs the doc data even with RDT_NoLock; not releasing it
+        // is a document the editor can never close.
+        if (docData != IntPtr.Zero) Marshal.Release(docData);
+        if (ErrorHandler.Failed(hr) || cookie == 0) return;
+        // The file is not open here at all when there is no cookie — nothing to flush,
+        // and the CLI will read what is on disk, which is what the reviewer wrote.
+        rdt.SaveDocuments(
+            (uint)__VSRDTSAVEOPTIONS.RDTSAVEOPT_SaveIfDirty,
+            null,
+            (uint)VSConstants.VSITEMID.Nil,
+            cookie);
+    }
+
+    /// <summary>
+    /// One comparison window per file. Each side is resolved first: a blob at a ref
+    /// becomes a scratch file, the working tree is used in place so the reviewer can edit
+    /// inside the diff, and a side the change does not have at all becomes an empty pane.
+    /// </summary>
+    private async Task OpenDiffsAsync(IReadOnlyList<DiffRequest> requests)
     {
         await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
         var cwd = Cwd();
-        var full = FullPath(display);
-        if (cwd is null || full is null)
+        if (cwd is null)
         {
-            MessageBox.Show(UserCopy.NoSoleRoot, UserCopy.ProductTitle);
+            GitReviewDialogs.Error(UserCopy.NoSoleRoot);
             return;
         }
-
-        var right = File.Exists(full) ? full : await EmptyFileAsync(display).ConfigureAwait(true);
-        var left = await BaseCopyAsync(cwd, display, File.Exists(full) ? full : null).ConfigureAwait(true);
-        if (left is null) return;
-
         if (_serviceProvider.GetService(typeof(SVsDifferenceService)) is not IVsDifferenceService diff)
         {
-            // No differencing service (shouldn't happen in a real VS): open the file.
-            await OpenFileAsync(display).ConfigureAwait(true);
+            // No differencing service (shouldn't happen in a real VS): open the files.
+            foreach (var request in requests)
+                if (request.Right.Path is not null)
+                    await OpenEntryFileAsync(request.Right.Path).ConfigureAwait(true);
             return;
         }
 
-        var name = Path.GetFileName(display);
-        diff.OpenComparisonWindow2(
-            left,
-            right,
-            $"{name} — review",
-            display,
-            "Base (HEAD)",
-            "Working tree",
-            display,
-            null,
-            (uint)__VSDIFFSERVICEOPTIONS.VSDIFFOPT_LeftFileIsTemporary);
+        foreach (var request in requests)
+        {
+            var workingTree = request.Left.Ref is null || request.Right.Ref is null;
+            var left = await ResolveSideAsync(cwd, request.Left, "left", workingTree).ConfigureAwait(true);
+            var right = await ResolveSideAsync(cwd, request.Right, "right", workingTree).ConfigureAwait(true);
+            // Temporary is what keeps the shell from treating a scratch copy as a file the
+            // reviewer opened: it does not offer to save it, and it cleans it up.
+            uint options = 0;
+            if (left.Temporary) options |= (uint)__VSDIFFSERVICEOPTIONS.VSDIFFOPT_LeftFileIsTemporary;
+            if (right.Temporary) options |= (uint)__VSDIFFSERVICEOPTIONS.VSDIFFOPT_RightFileIsTemporary;
+            var name = Path.GetFileName(request.Title);
+            diff.OpenComparisonWindow2(
+                left.Path,
+                right.Path,
+                $"{name} — review",
+                request.Title,
+                request.Left.Label,
+                request.Right.Label,
+                request.Title,
+                null,
+                options);
+        }
     }
 
-    private async Task OpenAllDiffsAsync(IReadOnlyList<(string Path, string? Before, string? After)> files)
+    private sealed record ResolvedSide(string Path, bool Temporary);
+
+    /// <summary>
+    /// A side as a path on disk. <c>Ref</c> null is the working-tree file itself (not a
+    /// copy — editing inside the diff is the point of a review); a ref is read with
+    /// <c>git show</c>; no path at all is an empty file.
+    /// </summary>
+    private async Task<ResolvedSide> ResolveSideAsync(
+        string cwd,
+        DiffSide side,
+        string slot,
+        bool againstWorkingTree)
     {
-        foreach (var file in files)
-            await OpenDiffAsync(file.Path, file.Before, file.After).ConfigureAwait(true);
+        if (side.Path is null)
+            return new ResolvedSide(WriteScratch(Path.Combine(_scratch, slot, "empty"), ""), true);
+
+        if (side.Ref is null)
+        {
+            var full = FullPath(side.Path);
+            if (full is not null && File.Exists(full)) return new ResolvedSide(full, false);
+            return new ResolvedSide(
+                WriteScratch(ScratchFor("deleted", side.Path), ""),
+                true);
+        }
+
+        var gitPath = side.Path.Replace('\\', '/');
+        var result = await _panel.Cli.InvokeResolvedAsync(
+            new ResolvedCommand("git", new[] { "show", $"{side.Ref}:{gitPath}" }),
+            cwd,
+            network: false,
+            timeoutMs: TimeoutClass.SupportGitTimeoutMs).ConfigureAwait(true);
+
+        // Exit != 0 means the path is not in that ref at all: an empty side is the
+        // honest diff.
+        var text = result.ExitCode == 0 ? result.Stdout : "";
+        // Line endings are matched to the working-tree file only when the other side IS
+        // the working tree; two blobs from git already agree with each other.
+        var body = againstWorkingTree ? MatchLineEndings(text, FullPathIfExists(side.Path)) : text;
+        var scratch = ScratchFor(SafeRefFolder(side.Ref), gitPath);
+        return new ResolvedSide(WriteScratch(scratch, body), true);
+    }
+
+    private string? FullPathIfExists(string display)
+    {
+        var full = FullPath(display);
+        return full is not null && File.Exists(full) ? full : null;
+    }
+
+    private string ScratchFor(string folder, string gitPath) => Path.Combine(
+        _scratch,
+        folder,
+        gitPath.Replace('/', Path.DirectorySeparatorChar));
+
+    /// <summary>
+    /// A ref is not a folder name: <c>abc1234^</c> and <c>origin/main</c> both have to
+    /// become one, and two different refs must not collapse into the same scratch file or
+    /// a commit diff would show a file against itself.
+    /// </summary>
+    private static string SafeRefFolder(string reference)
+    {
+        var chars = reference.ToCharArray();
+        for (var i = 0; i < chars.Length; i++)
+            if (Path.GetInvalidFileNameChars().Contains(chars[i]))
+                chars[i] = '_';
+        return "ref-" + new string(chars);
     }
 
     private async Task OpenTextAsync(string text)
@@ -121,24 +249,6 @@ public sealed class VsHostActions
         var path = Path.Combine(_scratch, "why.md");
         WriteScratch(path, text.EndsWith("\n", StringComparison.Ordinal) ? text : text + "\n");
         VsShellUtilities.OpenDocument(_serviceProvider, path);
-    }
-
-    private async Task RunStartWizardAsync()
-    {
-        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-        var cwd = Cwd();
-        if (cwd is null)
-        {
-            MessageBox.Show(UserCopy.NoSoleRoot, UserCopy.ProductTitle);
-            return;
-        }
-
-        var started = await StartWizard.RunAsync(
-            _panel.Cli,
-            _panel.Mutations,
-            cwd,
-            _panel.State.Current).ConfigureAwait(true);
-        if (started) await _panel.RefreshAsync().ConfigureAwait(true);
     }
 
     /// <summary>
@@ -152,14 +262,14 @@ public sealed class VsHostActions
         var state = _panel.State.Current;
         if (!SituationIds.IsReviewReadable(state.Situation) || state.State is null)
         {
-            MessageBox.Show(UserCopy.NoActivePreview, UserCopy.ProductTitle);
+            GitReviewDialogs.Info(UserCopy.NoActivePreview);
             return;
         }
 
         var cwd = Cwd();
         if (cwd is null)
         {
-            MessageBox.Show(UserCopy.NoSoleRoot, UserCopy.ProductTitle);
+            GitReviewDialogs.Error(UserCopy.NoSoleRoot);
             return;
         }
 
@@ -167,54 +277,18 @@ public sealed class VsHostActions
         var result = await _panel.Cli.InvokeAsync("preview", args, cwd).ConfigureAwait(true);
         if (result.ExitCode != 0)
         {
-            MessageBox.Show(
-                CliMessage.CliErrorText(result.Stderr, result.Stdout, UserCopy.PreviewFailed),
-                UserCopy.ProductTitle,
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            GitReviewDialogs.CliError(result.Stderr, UserCopy.PreviewFailed, result.Stdout);
             return;
         }
 
         // Warnings on success (skipped edits in step mode, say) are notes, not state.
         var note = result.Stderr.Trim();
-        if (note.Length > 0) MessageBox.Show(CliMessage.FirstCliLine(note), UserCopy.ProductTitle);
+        if (note.Length > 0) GitReviewDialogs.Info(CliMessage.FirstCliLine(note));
 
         var body = result.Stdout.Length > 0 ? result.Stdout : UserCopy.PreviewEmpty + "\n";
         var path = Path.Combine(_scratch, stat ? "preview-stat.txt" : "preview.diff");
         WriteScratch(path, body);
         VsShellUtilities.OpenDocument(_serviceProvider, path);
-    }
-
-    /// <summary>
-    /// The left side of a diff: the file as the base commit has it. In a review the
-    /// pull request lives in the working tree as uncommitted changes and HEAD sits at
-    /// the merge-base, so `git show HEAD:path` is exactly the "before".
-    /// </summary>
-    private async Task<string?> BaseCopyAsync(string cwd, string display, string? workingTreePath)
-    {
-        var gitPath = display.Replace('\\', '/');
-        var result = await _panel.Cli.InvokeResolvedAsync(
-            new ResolvedCommand("git", new[] { "show", $"HEAD:{gitPath}" }),
-            cwd,
-            network: false,
-            timeoutMs: TimeoutClass.SupportGitTimeoutMs).ConfigureAwait(true);
-
-        // Exit != 0 means the path is not in the base commit at all: the review adds
-        // it, and an empty left side is the honest diff.
-        var text = result.ExitCode == 0 ? result.Stdout : "";
-        var path = Path.Combine(_scratch, "base", gitPath.Replace('/', Path.DirectorySeparatorChar));
-        WriteScratch(path, MatchLineEndings(text, workingTreePath));
-        return path;
-    }
-
-    private async Task<string> EmptyFileAsync(string display)
-    {
-        var path = Path.Combine(
-            _scratch,
-            "deleted",
-            display.Replace('/', Path.DirectorySeparatorChar));
-        WriteScratch(path, "");
-        return await Task.FromResult(path).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -249,10 +323,11 @@ public sealed class VsHostActions
         return false;
     }
 
-    private static void WriteScratch(string path, string content)
+    private static string WriteScratch(string path, string content)
     {
         var directory = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(directory)) Directory.CreateDirectory(directory);
         File.WriteAllText(path, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        return path;
     }
 }

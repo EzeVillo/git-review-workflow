@@ -53,6 +53,65 @@ public sealed class GitReviewPackage : AsyncPackage
     };
 
     /// <summary>
+    /// Tools → git review: the 27 product actions of
+    /// <c>contracts/client-product-surface.yaml</c>, in the order the .vsct declares
+    /// them. This is the Visual Studio equivalent of the VS Code command palette and of
+    /// the JetBrains Tools menu, and it is the *only* surface for the four actions the
+    /// contract marks panel_excluded — an action reachable from neither is an action this
+    /// client does not really have.
+    ///
+    /// Ids match the IDSymbols in the .vsct; the wire string is what the panel's own
+    /// action path takes, so a menu entry runs the same code as the button of the same
+    /// name and nothing about an action is implemented twice.
+    /// </summary>
+    private static readonly (int Id, string Wire)[] MenuCommands =
+    {
+        (0x0201, "refresh"),
+        (0x0202, "startReview"),
+        (0x0203, "continueReview"),
+        (0x0204, "finishReview"),
+        (0x0205, "saveReview"),
+        (0x0206, "abortReview"),
+        (0x0207, "undoFinish"),
+        (0x0208, "resumeFinish"),
+        (0x0209, "next"),
+        (0x020A, "prev"),
+        (0x020B, "goToEntry"),
+        (0x020C, "openEntry"),
+        (0x020D, "openChange"),
+        (0x020E, "openAllChanges"),
+        (0x020F, "showWhy"),
+        (0x0210, "setBase"),
+        (0x0211, "setRemote"),
+        (0x0212, "cleanReview"),
+        (0x0213, "forgetReview"),
+        (0x0214, "discardInventory"),
+        (0x0215, "previewEdits"),
+        (0x0216, "previewEditsStat"),
+        (0x0217, "compareReview"),
+        (0x0218, "walkthroughInit"),
+        (0x0219, "walkthroughBuild"),
+        (0x021A, "installCli"),
+        (0x021B, "showCliLog"),
+    };
+
+    /// <summary>
+    /// The menu entries whose enablement follows the situation, and the control each one
+    /// reads. Exactly the four the JetBrains plugin gates in <c>AnAction.update</c>, from
+    /// the same projection the tool-window toolbar uses — reimplementing the conditions
+    /// here would be a second copy of the matrix. The rest stay enabled and answer for
+    /// themselves: several are meaningful in every situation, and the ones that are not
+    /// say so in the words the CLI used.
+    /// </summary>
+    private static readonly Dictionary<string, ControlId> GatedMenuCommands = new()
+    {
+        ["finishReview"] = ControlId.FinishReview,
+        ["saveReview"] = ControlId.SaveReview,
+        ["abortReview"] = ControlId.AbortReview,
+        ["previewEdits"] = ControlId.PreviewEdits,
+    };
+
+    /// <summary>
     /// Path to the git-review dispatcher as the options page has it. Read on every
     /// invocation rather than captured, so changing the setting takes effect without
     /// reopening the tool window.
@@ -82,6 +141,15 @@ public sealed class GitReviewPackage : AsyncPackage
                     (sender, _) => InvokeTitleAction(sender),
                     new CommandID(CommandSet, id));
                 command.BeforeQueryStatus += UpdateTitleAction;
+                commands.AddCommand(command);
+            }
+
+            foreach (var (id, wire) in MenuCommands)
+            {
+                var command = new OleMenuCommand(
+                    (sender, _) => InvokeMenuAction(sender),
+                    new CommandID(CommandSet, id));
+                command.BeforeQueryStatus += UpdateMenuAction;
                 commands.AddCommand(command);
             }
         }
@@ -138,6 +206,66 @@ public sealed class GitReviewPackage : AsyncPackage
         var control = ControlFor(command.CommandID.ID);
         if (control is null) return;
         Panel()?.InvokeAction(control.Value.Wire());
+    }
+
+    private static string? WireFor(int commandId)
+    {
+        foreach (var (id, wire) in MenuCommands)
+            if (id == commandId)
+                return wire;
+        return null;
+    }
+
+    /// <summary>
+    /// A menu entry is gated only if the toolbar gates it too, and off the same layout.
+    /// The panel not having rendered yet is not a reason to grey the menu out: opening
+    /// the window is part of running the command, and until then there is no situation to
+    /// gate against.
+    /// </summary>
+    private void UpdateMenuAction(object sender, EventArgs e)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        if (sender is not OleMenuCommand command) return;
+        var wire = WireFor(command.CommandID.ID);
+        if (wire is null) return;
+
+        command.Visible = true;
+        if (!GatedMenuCommands.TryGetValue(wire, out var control))
+        {
+            command.Enabled = true;
+            return;
+        }
+        var actions = Panel()?.TitleActions;
+        if (actions is null)
+        {
+            command.Enabled = true;
+            return;
+        }
+        var match = actions.FirstOrDefault(c => c.Id == control);
+        command.Enabled = match?.Enabled == true;
+    }
+
+    /// <summary>
+    /// Runs a menu entry through the panel's action path, opening the tool window first if
+    /// it is not there yet — the actions read the review state the panel holds, so the
+    /// menu cannot be a second way of reaching a panel that does not exist. The refresh
+    /// before the action is what makes a picker (which branches? which saved review?) list
+    /// what the repository has now rather than what it had when the window was last looked
+    /// at.
+    /// </summary>
+    private void InvokeMenuAction(object sender)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        if (sender is not OleMenuCommand command) return;
+        var wire = WireFor(command.CommandID.ID);
+        if (wire is null) return;
+        JoinableTaskFactory.RunAsync(async () =>
+        {
+            await ShowToolWindowAsync();
+            var panel = Panel();
+            if (panel is null) return;
+            await panel.InvokeActionAsync(wire);
+        }).FileAndForget("gitreview/menuaction");
     }
 
     private async Task ShowToolWindowAsync()

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Two things live here:
+  Three things live here:
 
     - View > Other Windows > git review, which opens the tool window.
     - The tool window's own toolbar: Refresh / Finish / Save / Cancel / Preview
@@ -12,6 +12,14 @@
       are DefaultInvisible + DynamicVisibility and GitReviewPackage answers
       QueryStatus from PanelLayout.TitleActions, so the CLI's situation drives them
       exactly as it drives the panel body.
+    - Tools > git review: all 27 product actions, in the same order and with the
+      same names as the JetBrains Tools menu and the VS Code command palette. The
+      panel is not the only way in for any of them — several exist *only* here
+      (goToEntry, forgetReview, previewEditsStat, showCliLog are panel_excluded in
+      the contract), which is why every one of the 27 has to be present: an action
+      with no surface is an action a reviewer cannot run. Each button routes to the
+      panel's own action path (GitReviewPackage.InvokeMenuAction), so a menu entry
+      and the button that shares its name run the same code.
 
   Icons are Image Catalog monikers (IconIsMoniker) rather than a bitmap strip, so
   they follow the host theme and the HiDPI scaling the shell already does.
@@ -37,11 +45,33 @@
           <ButtonText>git review</ButtonText>
         </Strings>
       </Menu>
+
+      <!-- Tools > git review. A submenu rather than a flat block of 27 entries in the
+           Tools menu, which is where the JetBrains plugin puts the same group. -->
+      <Menu guid="guidGitReviewCmdSet" id="ToolsMenu" priority="0x0700" type="Menu">
+        <Parent guid="guidSHLMainMenu" id="IDG_VS_TOOLS_EXT_TOOLS" />
+        <Strings>
+          <ButtonText>git review</ButtonText>
+          <CommandName>git review</CommandName>
+        </Strings>
+      </Menu>
     </Menus>
 
     <Groups>
       <Group guid="guidGitReviewCmdSet" id="ToolWindowToolbarGroup" priority="0x0000">
         <Parent guid="guidGitReviewCmdSet" id="ToolWindowToolbar" />
+      </Group>
+
+      <!-- Three groups so the shell draws the separators the JetBrains menu has:
+           the review's own lifecycle, then reading it, then everything around it. -->
+      <Group guid="guidGitReviewCmdSet" id="ToolsMenuGroupReview" priority="0x0100">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenu" />
+      </Group>
+      <Group guid="guidGitReviewCmdSet" id="ToolsMenuGroupRead" priority="0x0200">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenu" />
+      </Group>
+      <Group guid="guidGitReviewCmdSet" id="ToolsMenuGroupTools" priority="0x0300">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenu" />
       </Group>
     </Groups>
 
@@ -109,6 +139,184 @@
           <ToolTipText>Preview banked edits</ToolTipText>
         </Strings>
       </Button>
+
+      <!--
+        Tools > git review. Names match the JetBrains menu and the VS Code palette
+        word for word; the order is the JetBrains one, and the three groups above put
+        the separators in the same two places. Kept in sync with
+        GitReviewPackage.MenuCommands and with contracts/client-product-surface.yaml
+        by scripts/check-client-product-surface.mjs.
+      -->
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuRefresh" priority="0x0100" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupReview" />
+        <Strings>
+          <ButtonText>Refresh</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuStartReview" priority="0x0200" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupReview" />
+        <Strings>
+          <ButtonText>Start a Review</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuContinueReview" priority="0x0300" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupReview" />
+        <Strings>
+          <ButtonText>Continue Saved Review</ButtonText>
+        </Strings>
+      </Button>
+      <!--
+        Finish / Save / Cancel / Preview Edits are the four entries whose enablement
+        follows the situation (GitReviewPackage.GatedMenuCommands). No DynamicVisibility:
+        they stay listed and go grey, which is what the JetBrains menu does — a menu that
+        loses entries as the review moves is harder to learn than one that greys them.
+      -->
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuFinishReview" priority="0x0400" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupReview" />
+        <Strings>
+          <ButtonText>Finish Review</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuSaveReview" priority="0x0500" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupReview" />
+        <Strings>
+          <ButtonText>Save Review for Later</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuAbortReview" priority="0x0600" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupReview" />
+        <Strings>
+          <ButtonText>Cancel Review</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuUndoFinish" priority="0x0700" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupReview" />
+        <Strings>
+          <ButtonText>Undo Finish</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuResumeFinish" priority="0x0800" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupReview" />
+        <Strings>
+          <ButtonText>Resume Finish</ButtonText>
+        </Strings>
+      </Button>
+
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuNext" priority="0x0100" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupRead" />
+        <Strings>
+          <ButtonText>Next Entry</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuPrev" priority="0x0200" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupRead" />
+        <Strings>
+          <ButtonText>Previous Entry</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuGoToEntry" priority="0x0300" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupRead" />
+        <Strings>
+          <ButtonText>Go to Entry</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuOpenEntry" priority="0x0400" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupRead" />
+        <Strings>
+          <ButtonText>Open Entry</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuOpenChange" priority="0x0500" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupRead" />
+        <Strings>
+          <ButtonText>Open Changes</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuOpenAllChanges" priority="0x0600" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupRead" />
+        <Strings>
+          <ButtonText>Open All Changes</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuShowWhy" priority="0x0700" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupRead" />
+        <Strings>
+          <ButtonText>Show Why</ButtonText>
+        </Strings>
+      </Button>
+
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuSetBase" priority="0x0100" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupTools" />
+        <Strings>
+          <ButtonText>Set the Base Branch</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuSetRemote" priority="0x0200" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupTools" />
+        <Strings>
+          <ButtonText>Set the Remote</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuCleanReview" priority="0x0300" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupTools" />
+        <Strings>
+          <ButtonText>Clean</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuForgetReview" priority="0x0400" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupTools" />
+        <Strings>
+          <ButtonText>Forget Saved Review or Delta Marker</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuDiscardInventory" priority="0x0500" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupTools" />
+        <Strings>
+          <ButtonText>Discard Inventory Review</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuPreviewEdits" priority="0x0600" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupTools" />
+        <Strings>
+          <ButtonText>Preview Edits</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuPreviewEditsStat" priority="0x0700" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupTools" />
+        <Strings>
+          <ButtonText>Preview Edits (stat)</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuCompareReview" priority="0x0800" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupTools" />
+        <Strings>
+          <ButtonText>Compare Revisions</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuWalkthroughInit" priority="0x0900" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupTools" />
+        <Strings>
+          <ButtonText>Walkthrough: Init</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuWalkthroughBuild" priority="0x0A00" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupTools" />
+        <Strings>
+          <ButtonText>Walkthrough: Build</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuInstallCli" priority="0x0B00" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupTools" />
+        <Strings>
+          <ButtonText>How to Install the CLI</ButtonText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuShowCliLog" priority="0x0C00" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupTools" />
+        <Strings>
+          <ButtonText>Show CLI Log</ButtonText>
+        </Strings>
+      </Button>
     </Buttons>
   </Commands>
 
@@ -122,8 +330,42 @@
       <IDSymbol name="cmdidTitleSave" value="0x0103" />
       <IDSymbol name="cmdidTitleCancel" value="0x0104" />
       <IDSymbol name="cmdidTitlePreviewEdits" value="0x0105" />
+
+      <!-- Tools > git review: keep these 27 in sync with GitReviewPackage.MenuCommands. -->
+      <IDSymbol name="cmdidMenuRefresh" value="0x0201" />
+      <IDSymbol name="cmdidMenuStartReview" value="0x0202" />
+      <IDSymbol name="cmdidMenuContinueReview" value="0x0203" />
+      <IDSymbol name="cmdidMenuFinishReview" value="0x0204" />
+      <IDSymbol name="cmdidMenuSaveReview" value="0x0205" />
+      <IDSymbol name="cmdidMenuAbortReview" value="0x0206" />
+      <IDSymbol name="cmdidMenuUndoFinish" value="0x0207" />
+      <IDSymbol name="cmdidMenuResumeFinish" value="0x0208" />
+      <IDSymbol name="cmdidMenuNext" value="0x0209" />
+      <IDSymbol name="cmdidMenuPrev" value="0x020A" />
+      <IDSymbol name="cmdidMenuGoToEntry" value="0x020B" />
+      <IDSymbol name="cmdidMenuOpenEntry" value="0x020C" />
+      <IDSymbol name="cmdidMenuOpenChange" value="0x020D" />
+      <IDSymbol name="cmdidMenuOpenAllChanges" value="0x020E" />
+      <IDSymbol name="cmdidMenuShowWhy" value="0x020F" />
+      <IDSymbol name="cmdidMenuSetBase" value="0x0210" />
+      <IDSymbol name="cmdidMenuSetRemote" value="0x0211" />
+      <IDSymbol name="cmdidMenuCleanReview" value="0x0212" />
+      <IDSymbol name="cmdidMenuForgetReview" value="0x0213" />
+      <IDSymbol name="cmdidMenuDiscardInventory" value="0x0214" />
+      <IDSymbol name="cmdidMenuPreviewEdits" value="0x0215" />
+      <IDSymbol name="cmdidMenuPreviewEditsStat" value="0x0216" />
+      <IDSymbol name="cmdidMenuCompareReview" value="0x0217" />
+      <IDSymbol name="cmdidMenuWalkthroughInit" value="0x0218" />
+      <IDSymbol name="cmdidMenuWalkthroughBuild" value="0x0219" />
+      <IDSymbol name="cmdidMenuInstallCli" value="0x021A" />
+      <IDSymbol name="cmdidMenuShowCliLog" value="0x021B" />
+
       <IDSymbol name="ToolWindowToolbar" value="0x1000" />
       <IDSymbol name="ToolWindowToolbarGroup" value="0x1050" />
+      <IDSymbol name="ToolsMenu" value="0x1100" />
+      <IDSymbol name="ToolsMenuGroupReview" value="0x1150" />
+      <IDSymbol name="ToolsMenuGroupRead" value="0x1151" />
+      <IDSymbol name="ToolsMenuGroupTools" value="0x1152" />
     </GuidSymbol>
   </Symbols>
 </CommandTable>

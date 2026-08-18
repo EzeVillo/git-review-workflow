@@ -1,328 +1,916 @@
 using System.Diagnostics;
-using System.Windows;
+using System.IO;
 using GitReview.Domain;
 using GitReview.Host;
+using GitReview.VS.Diff;
+using GitReview.VS.Wizards;
 
 namespace GitReview.VS.ToolWindows;
 
 /// <summary>
-/// Full action matrix for the 27 product actions + panel-only controls.
-/// Confirmations and copy match UserCopy / HousekeepingLogic (byte-for-byte with other clients).
+/// The full action matrix: the 27 product actions plus the panel-only controls, each
+/// with the confirmation, picker and staleness re-check its counterpart has in VS Code
+/// and IntelliJ. Confirmation and error copy come from <see cref="UserCopy"/> and
+/// <see cref="HousekeepingLogic"/>, so all three clients say the same words.
+///
+/// Every action is answered here whether it was clicked in the panel or picked from
+/// Tools → git review: the menu routes through the panel's own action path, so there is
+/// one implementation per action rather than one per surface.
 /// </summary>
 public sealed class ActionDispatcher
 {
     private readonly GitReviewPanelController _panel;
-    private readonly Func<string, Task>? _openFile;
-    private readonly Func<string, string?, string?, Task>? _openDiff;
-    private readonly Func<IReadOnlyList<(string Path, string? Before, string? After)>, Task>? _openAllDiffs;
-    private readonly Func<string, Task>? _openTextDocument;
-    private readonly Func<Task>? _runStartWizard;
-    private readonly Func<bool, Task>? _previewEdits;
+    private readonly PanelHost _host;
 
-    public ActionDispatcher(
-        GitReviewPanelController panel,
-        Func<string, Task>? openFile = null,
-        Func<string, string?, string?, Task>? openDiff = null,
-        Func<IReadOnlyList<(string Path, string? Before, string? After)>, Task>? openAllDiffs = null,
-        Func<string, Task>? openTextDocument = null,
-        Func<Task>? runStartWizard = null,
-        Func<bool, Task>? previewEdits = null)
+    /// <summary>The walkthrough the author commits, relative to the repository root.</summary>
+    private const string WalkthroughPath = ".review/walkthrough.md";
+
+    /// <summary>
+    /// Cap on the files a single commit's Diff opens at once, same as the JetBrains
+    /// client: Visual Studio gives each one its own comparison window, and a commit that
+    /// touches two hundred files should not open two hundred of them.
+    /// </summary>
+    private const int CommitDiffFileCap = 20;
+
+    public ActionDispatcher(GitReviewPanelController panel, PanelHost? host = null)
     {
         _panel = panel;
-        _openFile = openFile;
-        _openDiff = openDiff;
-        _openAllDiffs = openAllDiffs;
-        _openTextDocument = openTextDocument;
-        _runStartWizard = runStartWizard;
-        _previewEdits = previewEdits;
+        _host = host ?? new PanelHost();
         panel.HostAction += HandleAsync;
     }
 
+    private ReviewState State => _panel.State.Current;
+    private string? Cwd => _host.Cwd?.Invoke();
+
     public async Task HandleAsync(string wire, int? index, string? supportLinkId)
     {
-        var state = _panel.State.Current;
-        var cwd = SoleTarget.PickSoleTarget(
-            // roots via state manager's last refresh context — use mutation cwd
-            new[] { GetCwd() }.Where(x => x is not null).Cast<string>().ToList());
-
         switch (wire)
         {
             case "refresh":
                 await _panel.RefreshAsync().ConfigureAwait(true);
                 return;
+
             case "next":
             case "prev":
-            {
-                var before = state.State?.Position;
-                var r = await _panel.Mutations.RunActionAsync(wire).ConfigureAwait(true);
-                await _panel.RefreshAsync().ConfigureAwait(true);
-                var after = _panel.State.Current.State?.Position;
-                if (r is not null && r.ExitCode == 0 && before == after && !string.IsNullOrWhiteSpace(r.Stdout))
-                    MessageBox.Show(CliMessage.FirstCliLine(r.Stdout), UserCopy.ProductTitle);
+                await NavigateAsync(wire).ConfigureAwait(true);
                 return;
-            }
+
             case "copyCliInstall":
             {
-                var cmd = state.Situation == Situation.CliOutdated
+                var cmd = State.Situation == Situation.CliOutdated
                     ? InstallHint.NpmUpdateCmd
                     : InstallHint.NpmInstallCmd;
-                Clipboard.SetText(cmd);
+                System.Windows.Clipboard.SetText(cmd);
                 return;
             }
+
             case "installCli":
                 OpenUrl(UserCopy.InstallDocsUrl);
                 return;
+
             case "openSupport":
             {
-                var url = SupportLinks.UrlFor(supportLinkId);
-                if (url is not null) OpenUrl(url);
+                var url = SupportLinks.UrlFor(supportLinkId) ?? SupportLinks.StarUrl;
+                OpenUrl(url);
                 return;
             }
+
             case "outOfRangeHelp":
-                MessageBox.Show(UserCopy.OutOfRangeFallback, UserCopy.ProductTitle);
+            {
+                var stderr = State.Stderr?.Trim() ?? "";
+                GitReviewDialogs.Warning(
+                    stderr.Length > 0 ? stderr : UserCopy.OutOfRangeFallback,
+                    "How to fix it");
                 return;
+            }
+
             case "showCliLog":
             {
                 var log = string.Join("\n", CliInvoker.CliLogSink.Snapshot());
-                MessageBox.Show(string.IsNullOrEmpty(log) ? "(empty)" : log, "git review CLI log");
+                var text = string.IsNullOrEmpty(log) ? "(empty)" : log;
+                if (_host.OpenText is not null) await _host.OpenText(text).ConfigureAwait(true);
+                else GitReviewDialogs.Info(text, "git review CLI log");
                 return;
             }
+
             case "startReview":
-                if (_runStartWizard is not null) await _runStartWizard().ConfigureAwait(true);
-                else MessageBox.Show("Start wizard is only available inside Visual Studio.", UserCopy.ProductTitle);
+                await StartReviewAsync().ConfigureAwait(true);
                 return;
+
             case "abortReview":
             {
-                var source = state.State?.Source ?? "this branch";
-                if (!Confirm(UserCopy.AbortTitle(source), UserCopy.AbortDetail, UserCopy.AbortButton)) return;
-                await RunCheckedAsync("abortReview").ConfigureAwait(true);
+                var source = State.State?.Source;
+                if (source is null) return;
+                if (!GitReviewDialogs.Confirm(
+                        UserCopy.AbortTitle(source), UserCopy.AbortDetail, UserCopy.AbortButton))
+                {
+                    return;
+                }
+                await RunAsync("abortReview").ConfigureAwait(true);
                 return;
             }
+
             case "saveReview":
             {
-                var source = state.State?.Source ?? "this branch";
-                if (!Confirm(UserCopy.SaveTitle(source), UserCopy.SaveDetail, UserCopy.SaveButton)) return;
-                await RunCheckedAsync("saveReview").ConfigureAwait(true);
+                var source = State.State?.Source;
+                if (source is null) return;
+                if (!GitReviewDialogs.Confirm(
+                        UserCopy.SaveTitle(source), UserCopy.SaveDetail, UserCopy.SaveButton))
+                {
+                    return;
+                }
+                await RunAsync("saveReview").ConfigureAwait(true);
                 return;
             }
+
             case "finishReview":
-            {
-                if (state.Readonly == true)
-                {
-                    MessageBox.Show(UserCopy.ReadonlyFinish, UserCopy.ProductTitle);
-                    return;
-                }
-                var onto = PickFinishOnto(state.State?.Source ?? "branch");
-                if (onto is null) return;
-                await RunCheckedAsync("finishReview", new ActionParams.FinishOnto(onto.Value)).ConfigureAwait(true);
+                await FinishAsync().ConfigureAwait(true);
                 return;
-            }
+
             case "undoFinish":
-            {
-                var detail = state.Situation == Situation.FinishConflict
-                    ? UserCopy.UndoDetailConflict
-                    : UserCopy.UndoDetailPending;
-                if (!Confirm(UserCopy.UndoTitle, detail, UserCopy.UndoButton)) return;
-                await RunCheckedAsync("undoFinish", new ActionParams.UndoFinish(false)).ConfigureAwait(true);
+                await UndoFinishAsync().ConfigureAwait(true);
                 return;
-            }
+
             case "resumeFinish":
-                await RunCheckedAsync("resumeFinish", new ActionParams.ResumeFinish(false)).ConfigureAwait(true);
+                // Which side the finish was aimed at is state, not a new decision: the
+                // resume has to target what the interrupted finish targeted.
+                await RunAsync(
+                    "resumeFinish",
+                    new ActionParams.ResumeFinish(State.Finish?.Onto == true)).ConfigureAwait(true);
                 return;
+
             case "continueReview":
-            {
-                if (index is null) return;
-                var source = PanelModelBuilder.ResumableSourceAt(state.BranchesList, index.Value);
-                if (source is null)
-                {
-                    MessageBox.Show(UserCopy.NotResumable, UserCopy.ProductTitle);
-                    return;
-                }
-                if (!Confirm(UserCopy.ContinueTitle(source), UserCopy.ContinueDetail(source), UserCopy.ContinueButton))
-                    return;
-                await RunCheckedAsync("continueReview", new ActionParams.Continue(source)).ConfigureAwait(true);
+                await ContinueAsync(index).ConfigureAwait(true);
                 return;
-            }
+
             case "discardInventory":
-            {
-                if (index is null || index < 0 || index >= state.BranchesList.Count) return;
-                var branch = state.BranchesList[index.Value];
-                var src = Porcelain.SourceOf(branch);
-                HousekeepingAction action;
-                if (branch.Saved)
-                    action = new HousekeepingAction(HousekeepingKind.ForgetSavedOne, src);
-                else
-                    action = new HousekeepingAction(HousekeepingKind.CleanOne, src);
-                var copy = HousekeepingLogic.ConfirmCopyFor(action);
-                if (!Confirm(copy.Title, copy.Detail, copy.Button)) return;
-                await RunCheckedAsync(
-                    branch.Saved ? "forgetReview" : "cleanReview",
-                    new ActionParams.Housekeeping(action)).ConfigureAwait(true);
+                await DiscardInventoryAsync(index).ConfigureAwait(true);
                 return;
-            }
+
             case "cleanReview":
-            {
-                var pending = HousekeepingLogic.PendingFinishInfo(state);
-                if (pending is not null)
-                {
-                    var action = new HousekeepingAction(
-                        HousekeepingKind.CleanKeepFixes, pending.Value.Source, pending.Value.Onto);
-                    var copy = HousekeepingLogic.ConfirmCopyFor(action);
-                    if (!Confirm(copy.Title, copy.Detail, copy.Button)) return;
-                    await RunCheckedAsync("cleanReview", new ActionParams.Housekeeping(action)).ConfigureAwait(true);
-                }
-                else
-                {
-                    MessageBox.Show(
-                        "Use Tools → git review → Clean for full housekeeping options.",
-                        UserCopy.ProductTitle);
-                }
+                await CleanAsync().ConfigureAwait(true);
                 return;
-            }
+
+            case "forgetReview":
+                await ForgetAsync().ConfigureAwait(true);
+                return;
+
+            case "setBase":
+                await SetConfigAsync(baseBranch: true).ConfigureAwait(true);
+                return;
+
+            case "setRemote":
+                await SetConfigAsync(baseBranch: false).ConfigureAwait(true);
+                return;
+
+            case "compareReview":
+                await CompareAsync().ConfigureAwait(true);
+                return;
+
+            case "walkthroughInit":
+                await WalkthroughInitAsync().ConfigureAwait(true);
+                return;
+
+            case "walkthroughBuild":
+                await WalkthroughBuildAsync().ConfigureAwait(true);
+                return;
+
             case "previewEdits":
             case "previewEditsStat":
-                // A title-bar action in every client, so it has a host that shows the
-                // diff rather than the "use the menu" note the rest fall back to.
-                if (_previewEdits is not null)
-                    await _previewEdits(wire == "previewEditsStat").ConfigureAwait(true);
-                else
-                    MessageBox.Show(
-                        $"Action '{wire}' is only available inside Visual Studio.",
-                        UserCopy.ProductTitle);
+                if (_host.PreviewEdits is not null)
+                    await _host.PreviewEdits(wire == "previewEditsStat").ConfigureAwait(true);
                 return;
-            case "compareReview":
-            case "walkthroughInit":
-            case "walkthroughBuild":
-            case "setBase":
-            case "setRemote":
-            case "forgetReview":
+
             case "goToEntry":
-                MessageBox.Show(
-                    $"Action '{wire}' is available from the git review menu when running inside Visual Studio.",
-                    UserCopy.ProductTitle);
+                await GoToEntryAsync().ConfigureAwait(true);
                 return;
+
             case "openEntry":
-            {
-                var entry = PanelModelBuilder.CurrentEntry(state.EntriesList, state.State?.Position);
-                if (entry is null) return;
-                var display = entry.Id is PathRef pr ? pr.Display : entry.Id.ToString() ?? "";
-                if (_openFile is not null)
-                {
-                    await _openFile(display).ConfigureAwait(true);
-                    _panel.RememberOpened(display);
-                }
+                await OpenEntryAsync().ConfigureAwait(true);
                 return;
-            }
+
             case "openChange":
-            {
-                if (_openDiff is null) return;
-                // index targets a file row (step/whole); otherwise current entry
-                string display;
-                if (index is not null)
-                {
-                    var file = state.FilesList.FirstOrDefault(f => f.Position == index)
-                               ?? state.EntriesList.FirstOrDefault(e => e.Position == index);
-                    if (file is null) return;
-                    display = file.Id is PathRef p ? p.Display : file.Id.ToString() ?? "";
-                }
-                else
-                {
-                    var entry = PanelModelBuilder.CurrentEntry(state.EntriesList, state.State?.Position);
-                    if (entry is null) return;
-                    display = entry.Id is PathRef p ? p.Display : entry.Id.ToString() ?? "";
-                }
-                await _openDiff(display, null, null).ConfigureAwait(true);
-                _panel.RememberOpened(display);
+                await OpenChangeAsync(index).ConfigureAwait(true);
                 return;
-            }
+
             case "openAllChanges":
-            {
-                if (_openAllDiffs is null) return;
-                var files = state.EntriesList
-                    .Select(e => (Path: e.Id is PathRef p ? p.Display : e.Id.ToString() ?? "", Before: (string?)null, After: (string?)null))
-                    .ToList();
-                if (files.Count == 0)
-                {
-                    MessageBox.Show(UserCopy.OpenRangeEmpty, UserCopy.ProductTitle);
-                    return;
-                }
-                await _openAllDiffs(files).ConfigureAwait(true);
+                await OpenAllChangesAsync().ConfigureAwait(true);
                 return;
-            }
+
             case "showWhy":
             {
-                if (_openTextDocument is null) return;
-                var model = PanelModelBuilder.BuildPanelModel(
-                    state, new PanelInputs(false));
+                if (_host.OpenText is null) return;
+                var model = PanelModelBuilder.BuildPanelModel(State, new PanelInputs(false));
                 var why = model.Why?.Text;
                 if (string.IsNullOrEmpty(why)) return;
-                await _openTextDocument(why).ConfigureAwait(true);
+                await _host.OpenText(why!).ConfigureAwait(true);
                 return;
             }
         }
     }
 
-    private async Task RunCheckedAsync(string action, ActionParams? p = null)
+    // -- reading ------------------------------------------------------------
+
+    /// <summary>
+    /// Next / prev. A navigation that lands on the same position is not a failure: the
+    /// CLI says why on stdout (first or last entry), and that line is the answer.
+    /// </summary>
+    private async Task NavigateAsync(string wire)
+    {
+        if (State.Situation != Situation.Review) return;
+        var before = State.State?.Position;
+        var result = await _panel.Mutations.RunActionAsync(wire).ConfigureAwait(true);
+        await _panel.RefreshAsync().ConfigureAwait(true);
+        if (result is null) return;
+        if (result.ExitCode is not 0 || result.TimedOut)
+        {
+            // Information, not error — same as VS Code for a refused navigation.
+            GitReviewDialogs.Info(
+                CliMessage.CliErrorText(result.Stderr, result.Stdout, UserCopy.NavigateFailed(wire)));
+            return;
+        }
+        var after = _panel.State.Current.State?.Position;
+        if (before != after) return;
+        var message = CliMessage.FirstCliLine(result.Stdout);
+        if (message.Length > 0) GitReviewDialogs.Info(message);
+    }
+
+    /// <summary>
+    /// The whole entry sequence, in the CLI's order. Opens what is picked; it does not
+    /// move the cursor — the CLI has no verb for jumping to an arbitrary position, and
+    /// synthesising one out of next/prev would be behaviour this client invented.
+    /// </summary>
+    private async Task GoToEntryAsync()
+    {
+        var state = State;
+        if (!SituationIds.IsReviewReadable(state.Situation) || state.EntriesList.Count == 0) return;
+        var labels = state.EntriesList
+            .Select(e =>
+            {
+                var pick = PanelModelBuilder.EntryPickLabel(
+                    e, state.State?.Position, Subject(state, e.Position));
+                return pick.Description.Length > 0
+                    ? $"{pick.Label}  ({pick.Description})"
+                    : pick.Label;
+            })
+            .ToList();
+        var current = state.EntriesList
+            .Select((e, i) => (Entry: e, Index: i))
+            .FirstOrDefault(x => x.Entry.Position == state.State?.Position);
+        var idx = GitReviewDialogs.Choose(
+            UserCopy.ProductTitle, "Go to entry", labels, current.Index);
+        if (idx < 0) return;
+        await OpenEntryRecordAsync(state, state.EntriesList[idx]).ConfigureAwait(true);
+    }
+
+    private static string? Subject(ReviewState state, int position) =>
+        state.Subjects is not null && state.Subjects.TryGetValue(position, out var s) ? s : null;
+
+    private Task OpenEntryAsync()
+    {
+        var state = State;
+        var entry = PanelModelBuilder.CurrentEntry(state.EntriesList, state.State?.Position);
+        return entry is null ? Task.CompletedTask : OpenEntryRecordAsync(state, entry);
+    }
+
+    /// <summary>
+    /// "File" for an entry. In walk and whole an entry is a path, so this is the
+    /// working-tree file. In step an entry is a commit, and the only honest thing to open
+    /// for a commit is its diff.
+    /// </summary>
+    private async Task OpenEntryRecordAsync(ReviewState state, EntryRecord entry)
+    {
+        var mode = state.State?.Mode;
+        if (mode is null) return;
+        if (mode == ReviewMode.Step)
+        {
+            await OpenCommitDiffAsync(entry.Id as string).ConfigureAwait(true);
+            return;
+        }
+        if (_host.OpenEntryFile is null) return;
+        var display = DisplayOf(entry.Id);
+        await _host.OpenEntryFile(display).ConfigureAwait(true);
+        _panel.RememberOpened(display);
+    }
+
+    /// <summary>
+    /// "Diff". Walk and whole diff the base blob against the working tree, which is where
+    /// the pull request lives during a review. Step is a commit: with an index it is one
+    /// file of it (parent blob vs commit blob, neither side the working tree), without one
+    /// it is the whole commit.
+    /// </summary>
+    private async Task OpenChangeAsync(int? index)
+    {
+        var state = State;
+        var mode = state.State?.Mode;
+        if (mode is null) return;
+
+        if (mode == ReviewMode.Step)
+        {
+            if (index is null)
+            {
+                var commit = PanelModelBuilder.CurrentEntry(state.EntriesList, state.State?.Position);
+                await OpenCommitDiffAsync(commit?.Id as string).ConfigureAwait(true);
+                return;
+            }
+            var file = state.FilesList.FirstOrDefault(f => f.Position == index);
+            if (file is null || state.State?.Current is not string sha) return;
+            var path = DisplayOf(file.Id);
+            await OpenCommitFileDiffAsync(sha, path).ConfigureAwait(true);
+            _panel.RememberOpened(path);
+            return;
+        }
+
+        var entry = index is not null
+            ? state.EntriesList.FirstOrDefault(e => e.Position == index)
+            : PanelModelBuilder.CurrentEntry(state.EntriesList, state.State?.Position);
+        if (entry is null) return;
+        var display = DisplayOf(entry.Id);
+        await OpenDiffsAsync(new[] { RangeDiff(display) }).ConfigureAwait(true);
+        _panel.RememberOpened(display);
+    }
+
+    private async Task OpenAllChangesAsync()
+    {
+        var state = State;
+        if (state.State?.Mode != ReviewMode.Whole) return;
+        var requests = state.EntriesList.Select(e => RangeDiff(DisplayOf(e.Id))).ToList();
+        if (requests.Count == 0)
+        {
+            GitReviewDialogs.Info(UserCopy.OpenRangeEmpty);
+            return;
+        }
+        await OpenDiffsAsync(requests).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// The review range: HEAD sits at the lower bound with the pull request staged on top,
+    /// so "before" is the blob at HEAD and "after" is what the reviewer is editing.
+    /// </summary>
+    private static DiffRequest RangeDiff(string display) => new(
+        display,
+        new DiffSide("HEAD", display, "Base (HEAD)"),
+        new DiffSide(null, display, "Working tree"));
+
+    private async Task OpenCommitDiffAsync(string? sha)
+    {
+        if (sha is null) return;
+        var cwd = Cwd;
+        if (cwd is null)
+        {
+            GitReviewDialogs.Error(UserCopy.NoSoleRoot);
+            return;
+        }
+        var changes = await RangeChanges.ForCommitAsync(_panel.Cli, cwd, sha).ConfigureAwait(true);
+        if (changes.Count == 0)
+        {
+            GitReviewDialogs.Info(UserCopy.OpenCommitEmpty(sha));
+            return;
+        }
+        var requests = changes.Take(CommitDiffFileCap).Select(c => CommitDiff(sha, c)).ToList();
+        await OpenDiffsAsync(requests).ConfigureAwait(true);
+    }
+
+    private async Task OpenCommitFileDiffAsync(string sha, string path)
+    {
+        var cwd = Cwd;
+        if (cwd is null)
+        {
+            GitReviewDialogs.Error(UserCopy.NoSoleRoot);
+            return;
+        }
+        var changes = await RangeChanges.ForCommitAsync(_panel.Cli, cwd, sha).ConfigureAwait(true);
+        var change = changes.FirstOrDefault(c => c.Path == path || c.After == path || c.Before == path);
+        if (change is null)
+        {
+            GitReviewDialogs.Info(UserCopy.OpenNoChangesLeft(path));
+            return;
+        }
+        await OpenDiffsAsync(new[] { CommitDiff(sha, change) }).ConfigureAwait(true);
+    }
+
+    /// <summary>A commit against its parent — neither side is the working tree.</summary>
+    private static DiffRequest CommitDiff(string sha, CommitChange change)
+    {
+        var shortSha = sha.Length > 7 ? sha.Substring(0, 7) : sha;
+        return new DiffRequest(
+            change.Path,
+            new DiffSide($"{sha}^", change.Before, $"{shortSha}^"),
+            new DiffSide(sha, change.After, shortSha));
+    }
+
+    private async Task OpenDiffsAsync(IReadOnlyList<DiffRequest> requests)
+    {
+        if (_host.OpenDiffs is null || requests.Count == 0) return;
+        await _host.OpenDiffs(requests).ConfigureAwait(true);
+    }
+
+    // -- lifecycle ----------------------------------------------------------
+
+    private async Task StartReviewAsync()
+    {
+        var cwd = Cwd;
+        if (cwd is null)
+        {
+            GitReviewDialogs.Error(UserCopy.NoSoleRoot);
+            return;
+        }
+        var started = await StartWizard.RunAsync(
+            _panel.Cli,
+            _panel.Mutations,
+            _panel.State,
+            cwd,
+            _host).ConfigureAwait(true);
+        if (started) await _panel.RefreshAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Finish. Where the edits land is the one decision, and it is a pick rather than a
+    /// yes/no: the two options are sentences, and a message box would have hidden them
+    /// behind "Yes" and "No".
+    /// </summary>
+    private async Task FinishAsync()
+    {
+        var state = State;
+        if (state.Readonly == true)
+        {
+            GitReviewDialogs.Info(UserCopy.ReadonlyFinish);
+            return;
+        }
+        if (state.State is null) return;
+        var source = state.State.Source;
+        var reviewBranch = state.State.Branch;
+
+        var idx = GitReviewDialogs.Choose(
+            UserCopy.FinishLocationTitle(source),
+            UserCopy.FinishLocationPlaceholder,
+            new[] { UserCopy.FinishLocationSeparate, UserCopy.FinishLocationOnto });
+        if (idx < 0) return;
+        var ontoSource = idx == 1;
+
+        var result = await RunAsync(
+            "finishReview", new ActionParams.FinishOnto(ontoSource)).ConfigureAwait(true);
+        if (result is null || result.ExitCode is not 0 || result.TimedOut) return;
+
+        // Derived from refreshed state, never from finish's human stdout.
+        var destination = UserCopy.FinishDestination(ontoSource, source);
+        var outcome = FinishOutcomeLogic.FinishOutcome(_panel.State.Current, reviewBranch);
+        GitReviewDialogs.Info(UserCopy.FinishSuccess(destination, outcome));
+    }
+
+    /// <summary>
+    /// Undo. When the CLI refuses because the undo would drop work, it names
+    /// <c>--force</c> as the escape — and only then is the second, louder confirmation
+    /// offered. Any other failure is just reported.
+    /// </summary>
+    private async Task UndoFinishAsync()
+    {
+        var detail = State.Situation == Situation.FinishConflict
+            ? UserCopy.UndoDetailConflict
+            : UserCopy.UndoDetailPending;
+        if (!GitReviewDialogs.Confirm(UserCopy.UndoTitle, detail, UserCopy.UndoButton)) return;
+
+        var result = await RunAsync(
+            "undoFinish", new ActionParams.UndoFinish(false), showFailure: false).ConfigureAwait(true);
+        if (result is null || (result.ExitCode == 0 && !result.TimedOut)) return;
+
+        var text = CliMessage.FlattenCliMessage(result.Stderr);
+        if (text.Length == 0)
+        {
+            GitReviewDialogs.Error(UserCopy.UndoAbortFailed);
+            return;
+        }
+        if (!text.Contains("--force", StringComparison.Ordinal))
+        {
+            GitReviewDialogs.Error(text);
+            return;
+        }
+        if (!GitReviewDialogs.Confirm(text, UserCopy.UndoForceDetail, UserCopy.UndoForceButton)) return;
+        await RunAsync("undoFinish", new ActionParams.UndoFinish(true)).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Continue. From an inventory row the review is already known; from the menu it is
+    /// picked, and a row that cannot be resumed says so instead of failing in the CLI.
+    /// </summary>
+    private async Task ContinueAsync(int? index)
+    {
+        var branches = State.BranchesList;
+        if (index is null)
+        {
+            if (branches.Count == 0)
+            {
+                GitReviewDialogs.Info(UserCopy.NoSavedReviews);
+                return;
+            }
+            var labels = branches
+                .Select((b, i) => PanelModelBuilder.ResumableSourceAt(branches, i) is not null
+                    ? $"{b.Name}  (resumable)"
+                    : b.Name)
+                .ToList();
+            var picked = GitReviewDialogs.Choose(
+                UserCopy.ProductTitle, "Continue which saved review?", labels);
+            if (picked < 0) return;
+            index = picked;
+        }
+
+        var source = PanelModelBuilder.ResumableSourceAt(branches, index.Value);
+        if (source is null)
+        {
+            GitReviewDialogs.Error(UserCopy.NotResumable);
+            return;
+        }
+        if (!GitReviewDialogs.Confirm(
+                UserCopy.ContinueTitle(source),
+                UserCopy.ContinueDetail(source),
+                UserCopy.ContinueButton))
+        {
+            return;
+        }
+        await RunAsync("continueReview", new ActionParams.Continue(source)).ConfigureAwait(true);
+    }
+
+    // -- housekeeping -------------------------------------------------------
+
+    /// <summary>
+    /// Discard one review. From an inventory row the name is known; from the menu it is
+    /// typed, because the reviews the menu can reach are not necessarily the ones this
+    /// branch's inventory lists.
+    /// </summary>
+    private async Task DiscardInventoryAsync(int? index)
+    {
+        string name;
+        if (index is null)
+        {
+            var typed = GitReviewDialogs.Input(
+                "Discard", "Review branch name to discard (e.g. review-saved/feature/x):");
+            if (typed is null) return;
+            name = typed;
+        }
+        else
+        {
+            var branches = State.BranchesList;
+            if (index < 0 || index >= branches.Count) return;
+            name = branches[index.Value].Name;
+        }
+
+        var src = HousekeepingLogic.SourceFromReviewName(name);
+        var action = name.StartsWith("review-saved/", StringComparison.Ordinal)
+            ? new HousekeepingAction(HousekeepingKind.ForgetSavedOne, src)
+            : new HousekeepingAction(HousekeepingKind.CleanOne, src);
+        await ConfirmAndRunHousekeepingAsync(action).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Clean. A pending finish is the one case with a single sensible answer — keep the
+    /// fixes, drop the rest — so it is offered directly instead of asked about.
+    /// </summary>
+    private async Task CleanAsync()
+    {
+        var pending = HousekeepingLogic.PendingFinishInfo(State);
+        if (pending is not null)
+        {
+            await ConfirmAndRunHousekeepingAsync(new HousekeepingAction(
+                HousekeepingKind.CleanKeepFixes,
+                pending.Value.Source,
+                pending.Value.Onto)).ConfigureAwait(true);
+            return;
+        }
+
+        var idx = GitReviewDialogs.Choose(
+            UserCopy.CleanPickTitle,
+            "What to delete",
+            new[] { UserCopy.CleanOneLabel, UserCopy.CleanAllLabel });
+        if (idx < 0) return;
+        HousekeepingAction action;
+        if (idx == 0)
+        {
+            var src = PickSourceName(savedOnly: false, forClean: true);
+            if (src is null) return;
+            action = new HousekeepingAction(HousekeepingKind.CleanOne, src);
+        }
+        else
+        {
+            action = new HousekeepingAction(HousekeepingKind.CleanAll);
+        }
+        await ConfirmAndRunHousekeepingAsync(action).ConfigureAwait(true);
+    }
+
+    private async Task ForgetAsync()
+    {
+        var idx = GitReviewDialogs.Choose(
+            UserCopy.ForgetPickTitle,
+            "What to discard",
+            new[]
+            {
+                UserCopy.ForgetSavedOneLabel,
+                UserCopy.ForgetSavedAllLabel,
+                UserCopy.ForgetDeltaOneLabel,
+                UserCopy.ForgetDeltaAllLabel,
+                UserCopy.ForgetDeltaStaleLabel,
+            });
+        if (idx < 0) return;
+
+        HousekeepingAction action;
+        switch (idx)
+        {
+            case 0:
+            {
+                var src = PickSourceName(savedOnly: true, forClean: false);
+                if (src is null) return;
+                action = new HousekeepingAction(HousekeepingKind.ForgetSavedOne, src);
+                break;
+            }
+            case 1:
+                action = new HousekeepingAction(HousekeepingKind.ForgetSavedAll);
+                break;
+            case 2:
+            {
+                var src = PickSourceName(savedOnly: false, forClean: false);
+                if (src is null) return;
+                action = new HousekeepingAction(HousekeepingKind.ForgetDeltaOne, src);
+                break;
+            }
+            case 3:
+                action = new HousekeepingAction(HousekeepingKind.ForgetDeltaAll);
+                break;
+            default:
+                action = new HousekeepingAction(HousekeepingKind.ForgetDeltaStale);
+                break;
+        }
+        await ConfirmAndRunHousekeepingAsync(action).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Which branch a housekeeping verb applies to. The reviews this client knows about
+    /// are offered as a list, plus a way out for the ones it does not: a delta marker can
+    /// outlive every review branch that would have named it.
+    /// </summary>
+    private string? PickSourceName(bool savedOnly, bool forClean)
+    {
+        var branches = State.BranchesList;
+        var filtered = savedOnly
+            ? branches.Where(b => b.Saved || b.Name.StartsWith("review-saved/", StringComparison.Ordinal))
+            : branches;
+        var names = filtered
+            .Select(b => HousekeepingLogic.SourceFromReviewName(b.Name))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        var title = forClean
+            ? UserCopy.CleanBranchTitle
+            : savedOnly ? UserCopy.ForgetSavedSourceTitle : UserCopy.ForgetDeltaSourceTitle;
+
+        if (names.Count > 0)
+        {
+            var options = names.Append(UserCopy.EnterBranchName).ToList();
+            var idx = GitReviewDialogs.Choose(title, "Source branch name", options);
+            if (idx < 0) return null;
+            if (options[idx] != UserCopy.EnterBranchName) return options[idx];
+        }
+
+        var prompt = forClean ? UserCopy.CleanBranchPrompt : UserCopy.ForgetSourcePrompt;
+        return GitReviewDialogs.Input(title, prompt);
+    }
+
+    private async Task ConfirmAndRunHousekeepingAsync(HousekeepingAction action)
+    {
+        var copy = HousekeepingLogic.ConfirmCopyFor(action);
+        if (!GitReviewDialogs.Confirm(copy.Title, copy.Detail, copy.Button)) return;
+        // One verb per kind (clean / forget), resolved in the domain.
+        var verb = HousekeepingLogic.VerbForHousekeeping(action) == "forget"
+            ? "forgetReview"
+            : "cleanReview";
+        await RunAsync(verb, new ActionParams.Housekeeping(action)).ConfigureAwait(true);
+    }
+
+    // -- settings -----------------------------------------------------------
+
+    /// <summary>
+    /// Base branch / remote. The candidates come from a fresh <c>config --porcelain</c>
+    /// rather than the panel's state: the panel only carries them in the no-review
+    /// situation, and both of these are reachable in every situation.
+    /// </summary>
+    private async Task SetConfigAsync(bool baseBranch)
+    {
+        var cwd = Cwd;
+        if (cwd is null)
+        {
+            GitReviewDialogs.Error(UserCopy.NoSoleRoot);
+            return;
+        }
+        var result = await _panel.Cli.InvokeAsync("config", new[] { "--porcelain" }, cwd)
+            .ConfigureAwait(true);
+        if (result.ExitCode != 0)
+        {
+            GitReviewDialogs.CliError(result.Stderr, UserCopy.CouldNotReadConfig, result.Stdout);
+            return;
+        }
+        ConfigPorcelainResult parsed;
+        try
+        {
+            parsed = ConfigPorcelain.ParseConfigPorcelain(result.Stdout);
+        }
+        catch
+        {
+            GitReviewDialogs.Error(UserCopy.CouldNotParseConfig);
+            return;
+        }
+
+        if (baseBranch)
+        {
+            var candidates = parsed.Candidates
+                .OrderByDescending(c => c.Current)
+                .ThenBy(c => c.Name, StringComparer.Ordinal)
+                .ToList();
+            if (candidates.Count == 0)
+            {
+                GitReviewDialogs.Error(UserCopy.NoBranchesForBase);
+                return;
+            }
+            var idx = GitReviewDialogs.Choose(
+                UserCopy.SetBaseTitle,
+                UserCopy.SetBasePrompt,
+                candidates.Select(ConfigPorcelain.BranchPickerLabel).ToList());
+            if (idx < 0) return;
+            await RunAsync("setBase", new ActionParams.SetConfig("base", candidates[idx].Name))
+                .ConfigureAwait(true);
+            return;
+        }
+
+        var remotes = parsed.Remotes
+            .OrderByDescending(r => r.Current)
+            .ThenBy(r => r.Name, StringComparer.Ordinal)
+            .ToList();
+        if (remotes.Count == 0)
+        {
+            GitReviewDialogs.Error(UserCopy.NoRemotes);
+            return;
+        }
+        var pick = GitReviewDialogs.Choose(
+            UserCopy.SetRemoteTitle,
+            UserCopy.SetRemotePrompt,
+            remotes.Select(r => r.Current ? $"{r.Name}  (current)" : r.Name).ToList());
+        if (pick < 0) return;
+        await RunAsync("setRemote", new ActionParams.SetConfig("remote", remotes[pick].Name))
+            .ConfigureAwait(true);
+    }
+
+    // -- compare / walkthrough ---------------------------------------------
+
+    private async Task CompareAsync()
+    {
+        var lower = GitReviewDialogs.Input(UserCopy.CompareLowerTitle, "Branch, tag or commit");
+        if (lower is null) return;
+        var upper = GitReviewDialogs.Input(UserCopy.CompareUpperTitle, "Branch, tag or commit");
+        if (upper is null) return;
+
+        var idx = GitReviewDialogs.Choose(
+            UserCopy.CompareLayoutTitle,
+            UserCopy.CompareLayoutPlaceholder,
+            new[]
+            {
+                "Walkthrough — curated reading order if the upper tip has a walkthrough",
+                "Walkthrough — keys only — only entries marked key (--keys)",
+                "Commit by commit — one commit at a time (--step)",
+                "Whole diff — entire diff at once (--no-walk)",
+            });
+        if (idx < 0) return;
+        var layout = idx switch
+        {
+            0 => ReviewLayout.Walk,
+            1 => ReviewLayout.Keys,
+            2 => ReviewLayout.Step,
+            _ => ReviewLayout.Whole,
+        };
+        if (!GitReviewDialogs.Confirm(
+                UserCopy.CompareConfirmTitle(lower, upper, layout),
+                UserCopy.CompareConfirmDetail,
+                UserCopy.CompareButton))
+        {
+            return;
+        }
+        var flags = layout switch
+        {
+            ReviewLayout.Step => new[] { "--step" },
+            ReviewLayout.Whole => new[] { "--no-walk" },
+            ReviewLayout.Keys => new[] { "--keys" },
+            _ => Array.Empty<string>(),
+        };
+        await RunAsync("compareReview", new ActionParams.Compare(flags, lower, upper), network: true)
+            .ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Walkthrough init. A refusal because one already exists is the only failure that
+    /// turns into a question, and it is distinguished by the file being there — not by
+    /// matching the CLI's wording.
+    /// </summary>
+    private async Task WalkthroughInitAsync()
+    {
+        var cwd = Cwd;
+        var first = await RunAsync(
+            "walkthroughInit",
+            new ActionParams.WalkthroughInit(false),
+            showFailure: false).ConfigureAwait(true);
+        if (first is null) return;
+        if (first.ExitCode == 0 && !first.TimedOut)
+        {
+            await OpenWalkthroughAsync(cwd).ConfigureAwait(true);
+            return;
+        }
+
+        var walkthrough = WalkthroughFile(cwd);
+        var exists = walkthrough is not null && File.Exists(walkthrough);
+        if (!exists)
+        {
+            GitReviewDialogs.CliError(first.Stderr, UserCopy.WalkthroughInitFailed, first.Stdout);
+            return;
+        }
+        if (!GitReviewDialogs.Confirm(
+                UserCopy.WalkthroughExistsTitle,
+                UserCopy.WalkthroughExistsDetail,
+                UserCopy.WalkthroughOverwriteButton))
+        {
+            return;
+        }
+        var forced = await RunAsync("walkthroughInit", new ActionParams.WalkthroughInit(true))
+            .ConfigureAwait(true);
+        if (forced is not null && forced.ExitCode == 0 && !forced.TimedOut)
+            await OpenWalkthroughAsync(cwd).ConfigureAwait(true);
+    }
+
+    private async Task WalkthroughBuildAsync()
+    {
+        if (!GitReviewDialogs.Confirm(
+                UserCopy.WalkthroughBuildTitle,
+                UserCopy.WalkthroughBuildDetail,
+                UserCopy.WalkthroughBuildButton))
+        {
+            return;
+        }
+        var cwd = Cwd;
+        var result = await RunAsync("walkthroughBuild").ConfigureAwait(true);
+        if (result is null || result.ExitCode is not 0 || result.TimedOut) return;
+        GitReviewDialogs.Info(UserCopy.WalkthroughBuilt);
+        await OpenWalkthroughAsync(cwd).ConfigureAwait(true);
+    }
+
+    private static string? WalkthroughFile(string? cwd) => cwd is null
+        ? null
+        : Path.Combine(cwd, WalkthroughPath.Replace('/', Path.DirectorySeparatorChar));
+
+    private async Task OpenWalkthroughAsync(string? cwd)
+    {
+        var path = WalkthroughFile(cwd);
+        if (path is null || _host.OpenPath is null || !File.Exists(path)) return;
+        await _host.OpenPath(path).ConfigureAwait(true);
+    }
+
+    // -- running ------------------------------------------------------------
+
+    /// <summary>
+    /// Every mutation goes through here: re-read the state after the confirmation, refuse
+    /// if the repository moved while the dialog was open, then run under the mutation lock
+    /// and refresh. Returns null when there was nothing to report on (busy, or stale) —
+    /// those already told the reviewer what happened.
+    /// </summary>
+    private async Task<InvokeResult?> RunAsync(
+        string action,
+        ActionParams? params_ = null,
+        bool showFailure = true,
+        bool network = false)
     {
         var token = StaleGuard.CaptureToken(_panel.State.Current);
-        // Re-check after confirm
         await _panel.RefreshAsync().ConfigureAwait(true);
         if (!StaleGuard.TokenStillValid(token, _panel.State.Current))
         {
-            MessageBox.Show(UserCopy.StaleMessage(action), UserCopy.ProductTitle);
-            return;
+            GitReviewDialogs.Info(UserCopy.StaleMessage(action, IsForce(params_)));
+            return null;
         }
-        var r = await _panel.Mutations.RunActionAsync(action, p).ConfigureAwait(true);
-        if (r is null)
+
+        var result = await _panel.Mutations
+            .RunActionAsync(action, params_, network: network)
+            .ConfigureAwait(true);
+        if (result is null)
         {
-            MessageBox.Show(UserCopy.DiscardBusy, UserCopy.ProductTitle);
-            return;
+            GitReviewDialogs.Info(UserCopy.DiscardBusy);
+            return null;
         }
-        if (r.ExitCode is not null and not 0)
+        if ((result.ExitCode is not 0 || result.TimedOut) && showFailure)
         {
-            MessageBox.Show(
-                CliMessage.CliErrorText(r.Stderr, r.Stdout, UserCopy.FailureFallback(action, p)),
-                UserCopy.ProductTitle,
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
+            GitReviewDialogs.CliError(
+                result.Stderr, UserCopy.FailureFallback(action, params_), result.Stdout);
         }
         await _panel.RefreshAsync().ConfigureAwait(true);
+        return result;
     }
 
-    private static bool Confirm(string title, string detail, string button)
-    {
-        var result = MessageBox.Show(
-            detail,
-            title,
-            MessageBoxButton.OKCancel,
-            MessageBoxImage.Question);
-        return result == MessageBoxResult.OK;
-    }
+    private static bool IsForce(ActionParams? params_) =>
+        params_ is ActionParams.UndoFinish { Force: true };
 
-    private static bool? PickFinishOnto(string source)
-    {
-        var r = MessageBox.Show(
-            UserCopy.FinishLocationSeparate + "\n\n" +
-            "Yes = separate branch (review-fixes/…)\n" +
-            "No = onto the PR branch\n" +
-            "Cancel = abort",
-            UserCopy.FinishLocationTitle(source),
-            MessageBoxButton.YesNoCancel,
-            MessageBoxImage.Question);
-        return r switch
-        {
-            MessageBoxResult.Yes => false,
-            MessageBoxResult.No => true,
-            _ => null,
-        };
-    }
-
-    private string? GetCwd()
-    {
-        // Best-effort: read from service via panel refresh roots is private.
-        // MutationRunner already enforces sole cwd.
-        return null;
-    }
+    private static string DisplayOf(object id) =>
+        id is PathRef pathRef ? pathRef.Display : id.ToString() ?? "";
 
     private static void OpenUrl(string url) =>
         Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });

@@ -38,6 +38,13 @@ public sealed class GitReviewPanelController : IDisposable
     /// (the start wizard, and reading a file's base side for a diff).</summary>
     public CliInvoker Cli => _cli;
 
+    /// <summary>
+    /// The single git root this panel is showing, or null when there isn't exactly one.
+    /// Resolved through the same <see cref="SoleTarget"/> rule the mutations use, so a
+    /// host action and the CLI call it leads to can never end up in different repositories.
+    /// </summary>
+    public string? Cwd => _cwd();
+
     /// <summary>Raise from host to open a file/diff/editor/dialog.</summary>
     public event Func<string, int?, string?, Task>? HostAction;
 
@@ -70,6 +77,10 @@ public sealed class GitReviewPanelController : IDisposable
         _state = new ReviewStateManager(_cli, roots, gitReviewPath);
         _mutations = new MutationRunner(_cli, _state, _cwd);
         _view = new PanelView(chrome);
+        // The dialogs the action matrix opens are plain WPF windows with no host theme of
+        // their own: they take the panel's, so a picker opened from a dark IDE is not a
+        // white flash. Set here because the host resolves the chrome once, per build.
+        if (chrome is not null) GitReviewDialogs.Chrome = chrome;
         _view.ActionRequested += OnAction;
         _dispatcher = Dispatcher.CurrentDispatcher;
 

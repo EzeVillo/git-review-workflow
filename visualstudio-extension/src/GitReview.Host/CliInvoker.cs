@@ -31,6 +31,13 @@ public sealed class CliInvoker
         _log = log;
     }
 
+    /// <summary>
+    /// The dispatcher path this invoker resolves against, as the options page has it.
+    /// Read for the command line offered when a network start fails: that has to be the
+    /// same invocation this would have made, not a guess at it.
+    /// </summary>
+    public string? GitReviewPath => _gitReviewPath();
+
     public async Task<InvokeResult> InvokeAsync(
         string verb,
         IReadOnlyList<string> args,

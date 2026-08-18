@@ -754,6 +754,51 @@ if (existsSync(vsVsct) && existsSync(vsPackage)) {
     }
   });
 
+  // Tools > git review is the Visual Studio counterpart of the VS Code command
+  // palette (27 commands in package.json, checked above) and of the JetBrains Tools
+  // menu. It is checked the same way and for the same reason: four of the actions are
+  // panel_excluded, so the menu is their only surface, and an entry that lost its
+  // IDSymbol or its parent group is an action that silently cannot be run — neither
+  // breaks the build.
+  const menuBlock = pkg.split(/MenuCommands\s*=\s*\{/)[1]?.split("};")[0] ?? "";
+  const menuMapped = [...menuBlock.matchAll(/\((0x[0-9A-Fa-f]+),\s*"([A-Za-z]+)"\)/g)]
+    .map((m) => ({ id: m[1].toLowerCase(), wire: m[2] }));
+  if (menuMapped.length !== actionKeys.length) {
+    fail(
+      `visualstudio GitReviewPackage.MenuCommands has ${menuMapped.length} entries, ` +
+        `actions has ${actionKeys.length}`,
+    );
+  }
+  for (const { wire } of menuMapped) {
+    if (!actionKeys.includes(wire)) fail(`visualstudio menu command ${wire} is not a YAML action`);
+  }
+  for (const id of actionKeys) {
+    if (!menuMapped.some((m) => m.wire === id)) {
+      fail(`visualstudio Tools menu has no command for action ${id}`);
+    }
+  }
+  for (const { id, wire } of menuMapped) {
+    const symbol = symbols.get(id);
+    if (!symbol) {
+      fail(`visualstudio .vsct has no IDSymbol for menu command ${wire} (${id})`);
+      continue;
+    }
+    const button = buttons.get(symbol);
+    if (!button) {
+      fail(`visualstudio .vsct has no <Button id="${symbol}"> for menu command ${wire}`);
+      continue;
+    }
+    if (!/<Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroup[A-Za-z]+"/.test(button)) {
+      fail(`visualstudio .vsct button ${symbol} is not in a Tools > git review group`);
+    }
+  }
+  if (!/<Menu [^>]*id="ToolsMenu" priority="[^"]*" type="Menu"/.test(vsct)) {
+    fail("visualstudio .vsct has no Tools > git review submenu (ToolsMenu)");
+  }
+  if (!/<Menu [^>]*id="ToolsMenu"[\s\S]*?<Parent guid="guidSHLMainMenu" id="IDG_VS_TOOLS_EXT_TOOLS"/.test(vsct)) {
+    fail("visualstudio .vsct ToolsMenu is not parented to the Tools menu");
+  }
+
   const toolbarId = pkg.match(/ToolbarId\s*=\s*(0x[0-9A-Fa-f]+)/)?.[1]?.toLowerCase();
   const toolbarSymbol = toolbarId ? symbols.get(toolbarId) : undefined;
   if (!toolbarSymbol) {

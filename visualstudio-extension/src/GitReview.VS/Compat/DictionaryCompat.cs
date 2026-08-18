@@ -15,4 +15,14 @@ internal static class DictionaryCompat
         where TKey : notnull =>
         source.TryGetValue(key, out var value) ? value : defaultValue;
 }
+
+/// <summary>
+/// Same idea for the string overloads .NET Core grew: extension methods do not cross
+/// assemblies, so the domain's shim does not serve this one.
+/// </summary>
+internal static class StringCompat
+{
+    public static bool Contains(this string s, string value, StringComparison comparison) =>
+        s.IndexOf(value, comparison) >= 0;
+}
 #endif

@@ -76,6 +76,20 @@ public sealed class GitReviewToolWindow : ToolWindowPane
     /// <summary>Runs a toolbar button through the panel's own action path.</summary>
     internal void InvokeAction(string wire) => _controller?.InvokeAction(wire);
 
+    /// <summary>
+    /// Same path, for a menu entry: the state is refreshed first. A toolbar button is
+    /// clicked on a panel the reviewer is looking at, but Tools → git review can be used
+    /// with the window freshly created — or minutes old — and the pickers behind several
+    /// of those actions are only as good as the state they read.
+    /// </summary>
+    internal async Task InvokeActionAsync(string wire)
+    {
+        var controller = _controller;
+        if (controller is null) return;
+        await controller.RefreshAsync();
+        controller.InvokeAction(wire);
+    }
+
     /// <summary>The only way this class puts anything on screen.</summary>
     private void SetPaneContent(UIElement element)
     {

@@ -118,6 +118,24 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for running it inside Visual Studio.
 
 Tool window toolbar: **Refresh**, **Finish**, **Save**, **Cancel**, **Preview edits** — the same five title actions, in the same order, as the VS Code view title and the IntelliJ tool-window title bar. Each appears only in the situations the contract gives it.
 
+## Commands
+
+**Tools → git review** holds all 27 product actions, with the same names as the VS Code
+command palette and the JetBrains Tools menu: the review lifecycle (Start, Continue,
+Finish, Save, Cancel, Undo/Resume Finish), reading it (Next/Previous Entry, Go to Entry,
+Open Entry/Changes/All Changes, Show Why) and everything around it (Set the Base Branch,
+Set the Remote, Clean, Forget, Discard, Preview Edits and *(stat)*, Compare Revisions,
+Walkthrough Init/Build, How to Install the CLI, Show CLI Log). Four of them — Go to Entry,
+Forget, Preview Edits (stat), Show CLI Log — are menu-only in every client, by contract.
+
+A menu entry and the panel button of the same name run the same code, so they ask the same
+questions. Anything that needs a decision asks for it in a picker: which branch, which
+origin, which reading order, where the finish should land, which saved review to continue.
+Cancelling a picker cancels the action — nothing is chosen on your behalf.
+
+**Tools → Options → git review** has the path to the `git-review` dispatcher and the
+default start origin (remote / local / offline), the same two settings as the other clients.
+
 ## Windows latency
 
 `git review status --porcelain` is multi-process on Windows (~960 ms in monorepo

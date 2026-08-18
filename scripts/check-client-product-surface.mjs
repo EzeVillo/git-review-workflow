@@ -48,6 +48,30 @@ if (actionKeys.length !== 27) {
   fail(`expected 27 actions, found ${actionKeys.length}: ${actionKeys.join(", ")}`);
 }
 
+/**
+ * `not_in:` — las acciones que un cliente deliberadamente no ofrece. Se verifica en
+ * las dos direcciones: el cliente listado no la declara en ninguna superficie (si
+ * reapareciera, el contrato tendria que decirlo primero) y los demas la siguen
+ * teniendo, que es lo que sigue haciendo el resto de este archivo con actionKeys.
+ */
+function actionsNotIn(client) {
+  const excluded = new Set();
+  let current = null;
+  for (const line of actionsBlock.split(/\r?\n/)) {
+    const head = line.match(/^ {2}([A-Za-z][A-Za-z0-9]*):\s*$/);
+    if (head) {
+      current = head[1];
+      continue;
+    }
+    const notIn = line.match(/^ {4}not_in:\s*\[([^\]]*)\]/);
+    if (notIn && current) {
+      const clients = notIn[1].split(",").map((x) => x.trim());
+      if (clients.includes(client)) excluded.add(current);
+    }
+  }
+  return excluded;
+}
+
 // VS Code package.json commands
 const pkgPath = join(root, "vscode-extension", "package.json");
 const pkg = JSON.parse(readText(pkgPath, "utf8"));
@@ -674,10 +698,23 @@ if (existsSync(vsReviewState)) {
   const s = readText(vsReviewState, "utf8");
   if (!s.includes(multi)) fail("visualstudio ReviewStateManager missing multi_root_error fragment");
 }
+// Lo que este cliente ofrece: todas las acciones menos las que el contrato marca
+// not_in: [visualstudio]. La lista completa sigue siendo la de VS Code.
+const vsNotIn = actionsNotIn("visualstudio");
+const vsActionKeys = actionKeys.filter((id) => !vsNotIn.has(id));
+
 if (existsSync(vsActions)) {
   const a = readText(vsActions, "utf8");
-  for (const id of actionKeys) {
+  for (const id of vsActionKeys) {
     if (!a.includes(`"${id}"`)) fail(`visualstudio ActionArgv.cs missing product action ${id}`);
+  }
+  for (const id of vsNotIn) {
+    if (a.includes(`"${id}"`)) {
+      fail(
+        `visualstudio ActionArgv.cs declares ${id}, which the contract marks ` +
+          `not_in: [visualstudio] — reponerla es editar el contrato primero`,
+      );
+    }
   }
 }
 
@@ -763,16 +800,23 @@ if (existsSync(vsVsct) && existsSync(vsPackage)) {
   const menuBlock = pkg.split(/MenuCommands\s*=\s*\{/)[1]?.split("};")[0] ?? "";
   const menuMapped = [...menuBlock.matchAll(/\((0x[0-9A-Fa-f]+),\s*"([A-Za-z]+)"\)/g)]
     .map((m) => ({ id: m[1].toLowerCase(), wire: m[2] }));
-  if (menuMapped.length !== actionKeys.length) {
+  if (menuMapped.length !== vsActionKeys.length) {
     fail(
       `visualstudio GitReviewPackage.MenuCommands has ${menuMapped.length} entries, ` +
-        `actions has ${actionKeys.length}`,
+        `actions has ${vsActionKeys.length}`,
     );
   }
   for (const { wire } of menuMapped) {
+    if (vsNotIn.has(wire)) {
+      fail(
+        `visualstudio Tools menu offers ${wire}, which the contract marks ` +
+          `not_in: [visualstudio]`,
+      );
+      continue;
+    }
     if (!actionKeys.includes(wire)) fail(`visualstudio menu command ${wire} is not a YAML action`);
   }
-  for (const id of actionKeys) {
+  for (const id of vsActionKeys) {
     if (!menuMapped.some((m) => m.wire === id)) {
       fail(`visualstudio Tools menu has no command for action ${id}`);
     }

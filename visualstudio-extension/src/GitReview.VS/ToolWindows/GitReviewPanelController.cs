@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Threading;
 using GitReview.Domain;
 using GitReview.Host;
+using DomainControl = GitReview.Domain.Control;
 
 namespace GitReview.VS.ToolWindows;
 
@@ -17,6 +18,7 @@ public sealed class GitReviewPanelController : IDisposable
     private readonly MutationRunner _mutations;
     private readonly CliInvoker _cli;
     private readonly Func<IReadOnlyList<string>> _roots;
+    private readonly Func<bool> _workspacePending;
     private readonly Func<string?> _cwd;
     private readonly Dispatcher _dispatcher;
     private readonly DispatcherTimer _probeTimer;
@@ -110,13 +112,24 @@ public sealed class GitReviewPanelController : IDisposable
     /// </summary>
     public event Action? TitleActionsChanged;
 
+    /// <param name="workspacePending">
+    /// Whether the host still cannot say where the workspace is. Empty roots are two
+    /// different situations and only the host can tell them apart: a folder that is
+    /// not a git repository (a real answer, and the panel says so), or a shell that
+    /// has not finished opening the solution yet (no answer at all). While this says
+    /// the second, the panel waits instead of refreshing -- the state manager reads
+    /// empty roots as "need a single git repository root", which is what every
+    /// Visual Studio start showed for its first seconds with the window docked.
+    /// </param>
     public GitReviewPanelController(
         Func<IReadOnlyList<string>> roots,
         Func<string?>? gitReviewPath = null,
         PanelChrome? chrome = null,
-        Action<string>? log = null)
+        Action<string>? log = null,
+        Func<bool>? workspacePending = null)
     {
         _roots = roots;
+        _workspacePending = workspacePending ?? (static () => false);
         _cwd = () => SoleTarget.PickSoleTarget(roots());
         _cli = new CliInvoker(gitReviewPath, log: log);
         _state = new ReviewStateManager(_cli, roots, gitReviewPath);
@@ -194,6 +207,14 @@ public sealed class GitReviewPanelController : IDisposable
 
     public async Task RefreshAsync()
     {
+        if (_workspacePending())
+        {
+            // Nothing to read yet, and nothing to report either: reading now would
+            // publish the host's silence as a state. Draws the waiting surface -- the
+            // host calls again as soon as the workspace answers.
+            Render();
+            return;
+        }
         var seq = ++_refreshSeq;
         _refreshing = true;
         _whyCeilingReached = false;
@@ -342,11 +363,16 @@ public sealed class GitReviewPanelController : IDisposable
         }
         try
         {
-            if (!_state.HasResolved)
+            if (!_state.HasResolved || _workspacePending())
             {
-                // Nothing has been read yet: no layout to publish, and therefore no
-                // title actions either -- a toolbar built from a placeholder would
-                // offer buttons for a situation nobody has established.
+                // Nothing has been read yet -- or the workspace the last read belonged
+                // to is being replaced and the host cannot say where the new one is.
+                // No layout to publish, and therefore no title actions either: a
+                // toolbar built from a placeholder would offer buttons for a situation
+                // nobody has established, and one left on the previous layout would
+                // offer them for a repository the panel is no longer pointed at.
+                LastLayout = null;
+                NotifyTitleActions(Array.Empty<DomainControl>());
                 _view.RenderWaiting();
                 return;
             }
@@ -357,7 +383,7 @@ public sealed class GitReviewPanelController : IDisposable
             // Published before the draw: a host toolbar reading it must not depend on
             // this renderer having handled every block variant in the layout.
             LastLayout = layout;
-            NotifyTitleActions(layout);
+            NotifyTitleActions(layout.TitleActions);
             _view.Render(layout);
         }
         catch (Exception ex)
@@ -370,11 +396,11 @@ public sealed class GitReviewPanelController : IDisposable
         }
     }
 
-    private void NotifyTitleActions(PanelLayout layout)
+    private void NotifyTitleActions(IReadOnlyList<DomainControl> actions)
     {
         var signature = string.Join(
             "|",
-            layout.TitleActions.Select(c => c.Id.Wire() + (c.Enabled ? "+" : "-")));
+            actions.Select(c => c.Id.Wire() + (c.Enabled ? "+" : "-")));
         if (signature == _titleSignature) return;
         _titleSignature = signature;
         TitleActionsChanged?.Invoke();

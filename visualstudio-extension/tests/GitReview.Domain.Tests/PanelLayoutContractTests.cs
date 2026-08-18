@@ -63,11 +63,20 @@ public class PanelLayoutContractTests
         AssertLayoutAgainstCanonical("cli-missing", PanelLayoutBuilder.PanelLayout(Fixtures.CliMissing()));
     }
 
+    /// <summary>
+    /// Whole has no "open every change at once" control in this client, and that is the
+    /// point of the test: the other two open one multi-diff window, while
+    /// IVsDifferenceService opens a comparison window per pair of files, so the same
+    /// button would spray a window per changed file. Recorded as
+    /// <c>not_in: [visualstudio]</c> in the canonical contract.
+    /// </summary>
     [Fact]
-    public void Whole_openAllChanges_present()
+    public void Whole_has_no_open_all_changes()
     {
         var layout = PanelLayoutBuilder.PanelLayout(Fixtures.ReviewWhole());
-        Assert.Contains(layout.CollectControls(), c => c.Id == ControlId.OpenAllChanges && c.Label == "Diff");
+        Assert.DoesNotContain(layout.CollectControls(), c => c.Label == "Diff");
+        Assert.DoesNotContain("openAllChanges", ActionArgvMap.ProductActions);
+        Assert.Contains(layout.Blocks, b => b is Block.FileRows);
     }
 
     [Fact]
@@ -87,10 +96,13 @@ public class PanelLayoutContractTests
         Assert.Contains("The installed git-review CLI is older than", para.Text);
     }
 
+    /// <summary>
+    /// 26, not the contract's 27: <c>openAllChanges</c> is <c>not_in: [visualstudio]</c>.
+    /// </summary>
     [Fact]
-    public void Product_actions_count_is_27()
+    public void Product_actions_count_is_26()
     {
-        Assert.Equal(27, ActionArgvMap.ProductActions.Count);
+        Assert.Equal(26, ActionArgvMap.ProductActions.Count);
     }
 
     [Fact]

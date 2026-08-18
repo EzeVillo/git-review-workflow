@@ -99,18 +99,24 @@ public static class ActionArgvMap
                     ? new[] { "init", "--force" }
                     : new[] { "init" }),
             "walkthroughBuild" => new ActionArgv("walkthrough", new[] { "build" }),
-            "openEntry" or "openChange" or "openAllChanges" or "showWhy"
+            "openEntry" or "openChange" or "showWhy"
                 or "goToEntry" or "refresh" or "installCli" or "showCliLog"
                 => new ActionArgv("", Array.Empty<string>()),
             _ => throw new ArgumentException($"unknown action: {action}"),
         };
     }
 
+    /// <summary>
+    /// The product actions this client offers: the 27 of
+    /// <c>contracts/client-product-surface.yaml</c> minus <c>openAllChanges</c>, which
+    /// the contract marks <c>not_in: [visualstudio]</c> — see <c>WholeBlocks</c> in
+    /// <c>PanelLayout</c> for why this host cannot open a whole range at once without
+    /// spraying a window per file.
+    /// </summary>
     public static readonly IReadOnlyList<string> ProductActions = new[]
     {
         "openEntry",
         "openChange",
-        "openAllChanges",
         "showWhy",
         "next",
         "prev",

@@ -53,7 +53,7 @@ public sealed class GitReviewPackage : AsyncPackage
     };
 
     /// <summary>
-    /// Tools → git review: the 27 product actions of
+    /// Tools → git review: the product actions of
     /// <c>contracts/client-product-surface.yaml</c>, in the order the .vsct declares
     /// them. This is the Visual Studio equivalent of the VS Code command palette and of
     /// the JetBrains Tools menu, and it is the *only* surface for the four actions the
@@ -79,7 +79,6 @@ public sealed class GitReviewPackage : AsyncPackage
         (0x020B, "goToEntry"),
         (0x020C, "openEntry"),
         (0x020D, "openChange"),
-        (0x020E, "openAllChanges"),
         (0x020F, "showWhy"),
         (0x0210, "setBase"),
         (0x0211, "setRemote"),

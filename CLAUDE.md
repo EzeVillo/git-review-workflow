@@ -324,6 +324,18 @@ Los tres leen solo porcelain/argv de la CLI; el canónico anti-drift multi-clien
 comprobaciones de layout vs `panelHtml.ts`, y los mismos escalares contra los archivos de dominio de
 `visualstudio-extension/`).
 
+**Una divergencia deliberada se declara en el contrato, no en el cliente.** `not_in:
+[<cliente>]` en una acción dice que ese cliente no la ofrece, y el check lo verifica en las **dos**
+direcciones: el cliente listado no puede declararla en ninguna de sus superficies (panel, menú,
+`ActionArgv`) y los demás la siguen teniendo. Hoy hay una sola: **`openAllChanges` no existe en
+Visual Studio.** Ese host difiere con `IVsDifferenceService`, que abre una ventana de comparación
+por *par de archivos* y no tiene equivalente del multi-diff de VS Code (`vscode.changes`) ni de la
+`DiffRequestChain` de IntelliJ, así que el mismo botón abría una ventana por archivo cambiado — y
+un tope sobre eso sigue siendo una avalancha. El inventario de archivos del panel abre cada diff de
+a uno, que es el mismo rango en la única forma que ese host puede darlo bien. Reponer la acción sin
+tocar el contrato falla CI, que es exactamente lo que se quiere: la ausencia no se lee como drift,
+y volver atrás obliga a discutir el motivo primero.
+
 **De la ficha de cada tienda se comparte la copy corta, no el cuerpo.** El
 `listing:` del contrato fija dos cosas y CI las verifica en las tres puntas: el **tagline** (la
 línea que va bajo el nombre en los resultados de búsqueda — byte por byte igual en

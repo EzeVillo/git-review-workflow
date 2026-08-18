@@ -27,12 +27,11 @@ public static class EmphasisExt
     };
 }
 
-/// <summary>Closed set of 26 control ids: 21 body + 5 title bar.</summary>
+/// <summary>Closed set of 25 control ids: 20 body + 5 title bar.</summary>
 public enum ControlId
 {
     OpenEntry,
     OpenChange,
-    OpenAllChanges,
     ShowWhy,
     Next,
     Prev,
@@ -64,7 +63,6 @@ public static class ControlIdExt
     {
         ControlId.OpenEntry => "openEntry",
         ControlId.OpenChange => "openChange",
-        ControlId.OpenAllChanges => "openAllChanges",
         ControlId.ShowWhy => "showWhy",
         ControlId.Next => "next",
         ControlId.Prev => "prev",
@@ -422,20 +420,30 @@ public static class PanelLayoutBuilder
 
         outList.Add(OpenRow(model, enabled));
         if (model.Mode == ReviewMode.Step)
-            outList.AddRange(FileInventoryBlocks(model, enabled, "commit", includeOpenAll: false));
+            outList.AddRange(FileInventoryBlocks(model, enabled, "commit"));
         if (includeNav && !model.NavigationLocked)
             outList.Add(NavRow(model, enabled));
         return outList;
     }
 
+    /// <summary>
+    /// Whole is the file inventory, and nothing else. The other two clients put an
+    /// "open every change at once" button here — VS Code has a multi-diff editor
+    /// (<c>vscode.changes</c>) and IntelliJ a <c>DiffRequestChain</c>, so in both it is
+    /// one window. Visual Studio's <c>IVsDifferenceService</c> only opens one comparison
+    /// window per pair of files, so the same button would open a window per changed file;
+    /// a cap on that is still an avalanche. The file rows below open each diff on demand,
+    /// which is the same information in the only shape this host can give it well.
+    /// Deliberate, and recorded as <c>not_in: [visualstudio]</c> in
+    /// <c>contracts/client-product-surface.yaml</c> — reponerlo es editar el contrato.
+    /// </summary>
     private static List<Block> WholeBlocks(PanelModel model, bool enabled) =>
-        FileInventoryBlocks(model, enabled, "review", includeOpenAll: true);
+        FileInventoryBlocks(model, enabled, "review");
 
     private static List<Block> FileInventoryBlocks(
         PanelModel model,
         bool enabled,
-        string unit,
-        bool includeOpenAll)
+        string unit)
     {
         if (model.FilesList.Count == 0)
         {
@@ -448,14 +456,6 @@ public static class PanelLayoutBuilder
         var n = model.FilesList.Count;
         var heading = n == 1 ? $"1 file in this {unit}" : $"{n} files in this {unit}";
         var outList = new List<Block> { new Block.Heading(heading) };
-        if (includeOpenAll)
-        {
-            outList.Add(new Block.Row(new[]
-            {
-                Ctrl(ControlId.OpenAllChanges, "Diff", Emphasis.Secondary, enabled,
-                    tooltip: "Open every change in this review at once"),
-            }));
-        }
         outList.Add(new Block.FileRows(
             model.FilesList.Select(f => new FileRow(f.Display, f.Position, f.Display == model.LastOpened)).ToList()));
         return outList;
@@ -669,7 +669,7 @@ public static class PanelLayoutBuilder
             outList.Add(new Block.Why(WhyState.Loading));
         outList.Add(OpenRow(model, enabled: false));
         if (model.Mode == ReviewMode.Step)
-            outList.AddRange(FileInventoryBlocks(model, enabled: false, "commit", includeOpenAll: false));
+            outList.AddRange(FileInventoryBlocks(model, enabled: false, "commit"));
         if (!model.NavigationLocked)
             outList.Add(NavRow(model, enabled: false));
         return outList;

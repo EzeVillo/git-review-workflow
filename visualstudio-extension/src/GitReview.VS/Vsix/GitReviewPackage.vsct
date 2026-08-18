@@ -12,14 +12,18 @@
       are DefaultInvisible + DynamicVisibility and GitReviewPackage answers
       QueryStatus from PanelLayout.TitleActions, so the CLI's situation drives them
       exactly as it drives the panel body.
-    - Tools > git review: all 27 product actions, in the same order and with the
-      same names as the JetBrains Tools menu and the VS Code command palette. The
-      panel is not the only way in for any of them — several exist *only* here
-      (goToEntry, forgetReview, previewEditsStat, showCliLog are panel_excluded in
-      the contract), which is why every one of the 27 has to be present: an action
-      with no surface is an action a reviewer cannot run. Each button routes to the
-      panel's own action path (GitReviewPackage.InvokeMenuAction), so a menu entry
-      and the button that shares its name run the same code.
+    - Tools > git review: every product action this client offers, in the same order
+      and with the same names as the JetBrains Tools menu and the VS Code command
+      palette. That is the contract's 27 minus openAllChanges, which is marked
+      not_in: [visualstudio] there — opening a whole range at once would be one
+      comparison window per file in this host, so the action does not exist here at
+      all rather than existing badly in a second place. The panel is not the only way
+      in for the rest — several exist *only* here (goToEntry, forgetReview,
+      previewEditsStat, showCliLog are panel_excluded in the contract), which is why
+      each one has to be present: an action with no surface is an action a reviewer
+      cannot run. Each button routes to the panel's own action path
+      (GitReviewPackage.InvokeMenuAction), so a menu entry and the button that shares
+      its name run the same code.
 
   Icons are Image Catalog monikers (IconIsMoniker) rather than a bitmap strip, so
   they follow the host theme and the HiDPI scaling the shell already does.
@@ -232,12 +236,6 @@
           <ButtonText>Open Changes</ButtonText>
         </Strings>
       </Button>
-      <Button guid="guidGitReviewCmdSet" id="cmdidMenuOpenAllChanges" priority="0x0600" type="Button">
-        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupRead" />
-        <Strings>
-          <ButtonText>Open All Changes</ButtonText>
-        </Strings>
-      </Button>
       <Button guid="guidGitReviewCmdSet" id="cmdidMenuShowWhy" priority="0x0700" type="Button">
         <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupRead" />
         <Strings>
@@ -345,7 +343,8 @@
       <IDSymbol name="cmdidMenuGoToEntry" value="0x020B" />
       <IDSymbol name="cmdidMenuOpenEntry" value="0x020C" />
       <IDSymbol name="cmdidMenuOpenChange" value="0x020D" />
-      <IDSymbol name="cmdidMenuOpenAllChanges" value="0x020E" />
+      <!-- 0x020E was Open All Changes: not_in: [visualstudio] in the product-surface
+           contract. The value stays retired so the ids below keep their meaning. -->
       <IDSymbol name="cmdidMenuShowWhy" value="0x020F" />
       <IDSymbol name="cmdidMenuSetBase" value="0x0210" />
       <IDSymbol name="cmdidMenuSetRemote" value="0x0211" />

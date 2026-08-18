@@ -250,7 +250,6 @@ public static class UserCopy
     public const string OpenRangeFailed = "Could not read the files of this review's range.";
     public static string OpenNoChangesLeft(string display) =>
         $"{display} has no changes left in this review.";
-    public const string OpenRangeEmpty = "This review's range does not touch any files.";
     public static string OpenCommitFailed(string sha) => $"Could not read the files of commit {sha}.";
     public static string OpenCommitEmpty(string sha) => $"Commit {sha} changes no files.";
 

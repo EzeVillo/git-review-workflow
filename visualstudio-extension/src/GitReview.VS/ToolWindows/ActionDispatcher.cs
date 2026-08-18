@@ -196,10 +196,6 @@ public sealed class ActionDispatcher
                 await OpenChangeAsync(index).ConfigureAwait(true);
                 return;
 
-            case "openAllChanges":
-                await OpenAllChangesAsync().ConfigureAwait(true);
-                return;
-
             case "showWhy":
             {
                 if (_host.OpenText is null) return;
@@ -352,26 +348,6 @@ public sealed class ActionDispatcher
         }
         await OpenDiffsAsync(new[] { RangeDiff(change) }).ConfigureAwait(true);
         _panel.RememberOpened(display);
-    }
-
-    private async Task OpenAllChangesAsync()
-    {
-        var state = State;
-        if (state.State?.Mode != ReviewMode.Whole) return;
-        var cwd = Cwd;
-        if (cwd is null)
-        {
-            GitReviewDialogs.Error(UserCopy.NoSoleRoot);
-            return;
-        }
-        var changes = await RangeChanges.ForRangeAsync(_panel.Cli, cwd).ConfigureAwait(true);
-        var requests = changes.Select(RangeDiff).ToList();
-        if (requests.Count == 0)
-        {
-            GitReviewDialogs.Info(UserCopy.OpenRangeEmpty);
-            return;
-        }
-        await OpenDiffsAsync(requests).ConfigureAwait(true);
     }
 
     /// <summary>

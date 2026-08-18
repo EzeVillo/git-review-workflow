@@ -54,7 +54,8 @@ public static class Program
         }
 
         Check("min_cli_version", CliVersion.MinCliVersion == "0.6.0");
-        Check("product_actions_27", ActionArgvMap.ProductActions.Count == 27);
+        // 26, not the contract's 27: openAllChanges is not_in: [visualstudio].
+        Check("product_actions_26", ActionArgvMap.ProductActions.Count == 26);
         Check("npm_install", InstallHint.NpmInstallCmd.Contains("git-review-workflow"));
         Check("support_star", SupportLinks.StarUrl.Contains("git-review-workflow"));
 
@@ -97,8 +98,10 @@ public static class Program
         Check("cli-outdated:installed", ot.Contains("The installed git-review CLI is older than"));
 
         var whole = PanelLayoutBuilder.PanelLayout(PanelFixtures.ReviewWhole());
-        Check("whole:openAllChanges",
-            whole.CollectControls().Any(c => c.Id == ControlId.OpenAllChanges && c.Label == "Diff"));
+        // No "open every change at once" here: this host would open one comparison
+        // window per file. Contract: not_in: [visualstudio].
+        Check("whole:no-open-all",
+            whole.CollectControls().All(c => c.Label != "Diff"));
 
         VerifyChrome("dark", PanelChrome.DefaultDark, Check);
         VerifyChrome("light", PanelChrome.DefaultLight, Check);

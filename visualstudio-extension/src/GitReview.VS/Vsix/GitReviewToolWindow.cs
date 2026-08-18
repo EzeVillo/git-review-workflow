@@ -26,6 +26,16 @@ public sealed class GitReviewToolWindow : ToolWindowPane
     private IReadOnlyList<string> _roots = Array.Empty<string>();
 
     /// <summary>
+    /// Whether the shell named a workspace directory the last time it was asked --
+    /// which is what separates "this folder is not a git repository" from "the shell
+    /// has not said where the folder is yet". See <see cref="VsWorkspace.WorkspaceProbe"/>.
+    /// </summary>
+    private bool _workspaceLocated;
+
+    /// <summary>True while the retry below is still waiting for that answer.</summary>
+    private bool _workspacePending;
+
+    /// <summary>
     /// The one object the shell ever sees as this pane's content. <c>WindowPane.Content</c>
     /// is an ordinary auto-property that the shell reads exactly once, in
     /// <c>IVsUIElementPane.CreateUIElementPane</c>, which runs while the frame is being
@@ -49,6 +59,13 @@ public sealed class GitReviewToolWindow : ToolWindowPane
     /// cli-outdated, never for the "need a single git repository root" this produces.
     /// Left out, opening Visual Studio with the panel docked gives a panel that is
     /// wrong until someone presses Refresh by hand.
+    ///
+    /// While it runs the panel is held on its waiting surface rather than refreshed:
+    /// the wait is the whole point, and refreshing in the middle of it publishes the
+    /// shell's silence as "Something went wrong reading the review state." for as long
+    /// as the solution takes to load. It only ever runs when the shell has named no
+    /// directory at all, so a folder that really is not a repository is still answered
+    /// at once.
     /// </summary>
     private DispatcherTimer? _rootsTimer;
 
@@ -105,8 +122,8 @@ public sealed class GitReviewToolWindow : ToolWindowPane
         if (!_listening)
         {
             VSColorTheme.ThemeChanged += OnThemeChanged;
-            SolutionEvents.OnAfterOpenSolution += OnSolutionChanged;
-            SolutionEvents.OnAfterCloseSolution += OnSolutionChanged;
+            SolutionEvents.OnAfterOpenSolution += OnSolutionOpened;
+            SolutionEvents.OnAfterCloseSolution += OnSolutionClosed;
             _listening = true;
         }
 
@@ -121,8 +138,17 @@ public sealed class GitReviewToolWindow : ToolWindowPane
     private void RefreshRoots()
     {
         ThreadHelper.ThrowIfNotOnUIThread();
-        _roots = VsWorkspace.GitRoots(ServiceProvider());
+        var probe = VsWorkspace.Probe(ServiceProvider());
+        _roots = probe.Roots;
+        _workspaceLocated = probe.Located;
     }
+
+    /// <summary>
+    /// The shell has not told us where the workspace is -- as opposed to having told us
+    /// about a folder that git does not call a repository, which is an answer, and one
+    /// the panel is meant to show right away.
+    /// </summary>
+    private bool WorkspaceUnknown() => _roots.Count == 0 && !_workspaceLocated;
 
     private void Build()
     {
@@ -164,7 +190,8 @@ public sealed class GitReviewToolWindow : ToolWindowPane
             () => _roots,
             () => package.GitReviewPath,
             chrome,
-            log: static line => System.Diagnostics.Debug.WriteLine("[git review] " + line));
+            log: static line => System.Diagnostics.Debug.WriteLine("[git review] " + line),
+            workspacePending: () => _workspacePending);
         // The shell draws the five title actions; drawing them inside the pane as
         // well would be the same five buttons twice.
         _controller.View.ShowTitleActions = false;
@@ -172,31 +199,38 @@ public sealed class GitReviewToolWindow : ToolWindowPane
         Actions = new VsHostActions(ServiceProvider(), _controller, () => _roots).Attach();
 
         SetPaneContent(_controller.View);
+        // Started before the refresh, not after: it is what tells the refresh that
+        // there is nothing to read yet.
+        if (WorkspaceUnknown()) StartRootsRetry();
         _ = _controller.RefreshAsync();
-        if (_roots.Count == 0) StartRootsRetry();
     }
 
     private void StartRootsRetry()
     {
         ThreadHelper.ThrowIfNotOnUIThread();
         StopRootsRetry();
-        // Bounded on purpose: a folder that is not a git repository is a real answer,
-        // and the panel already says so. This is only here to outlast the load.
+        _workspacePending = true;
+        // Bounded on purpose: a workspace that never arrives still has to end up saying
+        // so rather than waiting forever. This is only here to outlast the load.
         var attempts = 0;
         _rootsTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _rootsTimer.Tick += (_, _) =>
         {
             ThreadHelper.ThrowIfNotOnUIThread();
             RefreshRoots();
-            if (_roots.Count == 0 && ++attempts < 30) return;
+            if (WorkspaceUnknown() && ++attempts < 30) return;
             StopRootsRetry();
-            if (_roots.Count > 0 && _controller is not null) _ = _controller.RefreshAsync();
+            // Unconditional: the refresh at build time was held back by the flag this
+            // just cleared, so whatever the answer turns out to be -- a review, or the
+            // missing root after all -- this is the call that produces it.
+            if (_controller is not null) _ = _controller.RefreshAsync();
         };
         _rootsTimer.Start();
     }
 
     private void StopRootsRetry()
     {
+        _workspacePending = false;
         _rootsTimer?.Stop();
         _rootsTimer = null;
     }
@@ -241,11 +275,34 @@ public sealed class GitReviewToolWindow : ToolWindowPane
             Build();
         });
 
-    private void OnSolutionChanged(object sender, EventArgs e)
+    /// <summary>
+    /// A solution or folder was opened. Same shape as the tail of <see cref="BuildCore"/>
+    /// and for the same reason: this fires before the shell will say where the folder is,
+    /// so refreshing unconditionally here is the startup flash again, one solution switch
+    /// at a time.
+    /// </summary>
+    private void OnSolutionOpened(object sender, EventArgs e)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        WorkspaceChanged(canWait: true);
+    }
+
+    /// <summary>
+    /// A solution or folder was closed. Nothing is arriving, so there is nothing to wait
+    /// for: no root is the right answer and the panel should say so now.
+    /// </summary>
+    private void OnSolutionClosed(object sender, EventArgs e)
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        WorkspaceChanged(canWait: false);
+    }
+
+    private void WorkspaceChanged(bool canWait)
     {
         ThreadHelper.ThrowIfNotOnUIThread();
         StopRootsRetry();
         RefreshRoots();
+        if (canWait && WorkspaceUnknown()) StartRootsRetry();
         if (_controller is not null) _ = _controller.RefreshAsync();
     }
 
@@ -254,8 +311,8 @@ public sealed class GitReviewToolWindow : ToolWindowPane
         if (_listening)
         {
             VSColorTheme.ThemeChanged -= OnThemeChanged;
-            SolutionEvents.OnAfterOpenSolution -= OnSolutionChanged;
-            SolutionEvents.OnAfterCloseSolution -= OnSolutionChanged;
+            SolutionEvents.OnAfterOpenSolution -= OnSolutionOpened;
+            SolutionEvents.OnAfterCloseSolution -= OnSolutionClosed;
             _listening = false;
         }
         StopRootsRetry();

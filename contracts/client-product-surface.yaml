@@ -51,6 +51,10 @@ situations:
 # 27 actions from vscode-extension package.json contributes.commands
 # surface: panel | action | both
 # situations: list of situation ids where enabled (plus busy/readonly notes)
+# not_in: los clientes que deliberadamente NO ofrecen la accion, con el motivo al
+#   lado. Se verifica en las dos direcciones — el cliente listado no la declara en
+#   ninguna de sus superficies, y los demas si la siguen teniendo —, para que la
+#   ausencia no se lea como drift y para que reaparecer cueste editar el contrato.
 actions:
   openEntry:
     surface: both
@@ -62,6 +66,13 @@ actions:
     surface: both
     situations: [review, finish-conflict]
     mode: whole
+    # Visual Studio no la ofrece. Su servicio de diff (IVsDifferenceService) abre una
+    # ventana de comparacion por par de archivos y no tiene equivalente del multi-diff
+    # de VS Code (vscode.changes) ni de la DiffRequestChain de IntelliJ: "abrir todo"
+    # ahi serian N ventanas de golpe, y una avalancha con tope sigue siendo una
+    # avalancha. Las filas del inventario abren cada diff de a uno — la misma
+    # informacion, en la unica forma que ese host puede darla bien.
+    not_in: [visualstudio]
   showWhy:
     surface: both
     situations: [review, finish-conflict]
@@ -262,7 +273,8 @@ panel_layout:
       - {block: identity_bar}
       - {block: notes}
       - {block: heading, text: "{n} file(s) in this review"}
-      - {block: row, controls: [{id: openAllChanges, label: "Diff", emphasis: secondary, confirms: false, tooltip: "Open every change in this review at once"}]}
+      # ausente en visualstudio: ver not_in en la accion
+      - {block: row, controls: [{id: openAllChanges, label: "Diff", emphasis: secondary, confirms: false, tooltip: "Open every change in this review at once"}], not_in: [visualstudio]}
       - {block: file_rows}
   finish-conflict:
     source_fns: [renderFinishConflictBanner, renderEntry, renderOpenRow, renderFiles]

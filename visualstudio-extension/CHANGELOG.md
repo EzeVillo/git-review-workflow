@@ -20,6 +20,14 @@
   button and all — for the couple of seconds the first `--version` plus
   `status --porcelain` takes. It now holds on *Reading the review state…* until there is
   an answer, the same way the IntelliJ panel waits and the VS Code webview stays empty.
+- **Nor that the workspace is not a git repository while it is still opening.** Visual
+  Studio restores a docked tool window before the solution or folder can say where it is,
+  and the panel read that silence as an answer: every start began with "Something went
+  wrong reading the review state — Need a single git repository root." until the roots
+  arrived and a refresh replaced it. It now waits on *Reading the review state…* while the
+  shell has named no directory at all — across a solution switch too — and a folder the
+  shell *has* named and git does not call a repository is still answered immediately, as
+  before.
 - **Diffs are built from what git reports, not from the entry's name.** The two
   name-status calls now match the ones the other clients make. `git diff-tree` gets
   `--root`, without which a commit with no parent lists nothing and the panel answered
@@ -28,6 +36,14 @@
   against an empty base instead of against a blob looked up under its own name, and an
   entry whose edit was reverted says there is nothing left to compare rather than opening
   a window showing a file against itself.
+- **Whole mode no longer offers a button that opens every file at once.** VS Code shows a
+  whole range in a single multi-diff editor and IntelliJ in one window with Prev/Next
+  between files; Visual Studio's differencing service opens one comparison window per pair
+  of files and has no equivalent, so the same button sprayed a window per changed file —
+  forty files, forty windows — and capping that would still be an avalanche. The file
+  inventory below it opens each diff on demand, which is the same range in the only shape
+  this host can give it well. *Open All Changes* is gone from **Tools → git review** for
+  the same reason, rather than staying as a second way to trigger it.
 - **A mutation that is running says so.** Finish, start, abort, save, continue, compare,
   undo, the walkthrough verbs and the housekeeping ones report into the status bar while
   they work — the same lines VS Code puts in its progress notification and IntelliJ in

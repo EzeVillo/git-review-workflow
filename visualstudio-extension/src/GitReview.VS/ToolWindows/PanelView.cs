@@ -594,20 +594,40 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         VerticalAlignment = VerticalAlignment.Center,
     };
 
-    private Border Chip(string text) => new()
+    /// <summary>
+    /// A mark on an entry or an inventory row, in the extension's three weights:
+    /// <c>key</c> is what the walkthrough author called essential and goes solid,
+    /// in the badge pair, which is the one fill here whose contrast is fixed by
+    /// the chrome rather than by the host; <c>uncovered</c> and the help mark are
+    /// warnings of ours and go bare; everything else — <c>edits</c>,
+    /// <c>current</c>, <c>orphan</c> — is a state and goes in outline. Which is
+    /// which is read off the text, exactly as JetBrains and the extension read it
+    /// off the class. The border is always drawn, transparent when there is no
+    /// outline, so all three weights lay out to the same size.
+    /// </summary>
+    private Border Chip(string text)
     {
-        Background = _chrome.ChipBackground,
-        CornerRadius = new CornerRadius(3),
-        Padding = new Thickness(5, 1, 5, 1),
-        Margin = new Thickness(4, 0, 0, 0),
-        Child = new TextBlock
+        var solid = text == "key";
+        var bare = text is "uncovered" or "?";
+        return new Border
         {
-            Text = text,
-            FontSize = 10,
-            Foreground = _chrome.MutedForeground,
-            FontFamily = _chrome.Mono,
-        },
-    };
+            Background = solid ? _chrome.BadgeBackground : Brushes.Transparent,
+            BorderBrush = solid || bare ? Brushes.Transparent : _chrome.Border,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(3),
+            Padding = new Thickness(4, 0, 4, 0),
+            Margin = new Thickness(4, 0, 0, 0),
+            Child = new TextBlock
+            {
+                Text = text,
+                FontSize = 10,
+                Foreground = solid
+                    ? _chrome.BadgeForeground
+                    : bare ? _chrome.MutedForeground : _chrome.Foreground,
+                FontFamily = _chrome.Mono,
+            },
+        };
+    }
 
     private Border SkeletonBar(double fraction, double height = 12) => new()
     {

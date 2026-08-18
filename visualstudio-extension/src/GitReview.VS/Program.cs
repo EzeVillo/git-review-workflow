@@ -1,5 +1,8 @@
+using System.Windows;
+using System.Windows.Media;
 using GitReview.Domain;
 using GitReview.VS.Preview;
+using GitReview.VS.ToolWindows;
 
 namespace GitReview.VS;
 
@@ -97,9 +100,80 @@ public static class Program
         Check("whole:openAllChanges",
             whole.CollectControls().Any(c => c.Id == ControlId.OpenAllChanges && c.Label == "Diff"));
 
+        VerifyChrome("dark", PanelChrome.DefaultDark, Check);
+        VerifyChrome("light", PanelChrome.DefaultLight, Check);
+
         Console.WriteLine(failures == 0
             ? $"verify: ok ({PanelFixtures.All().Count} fixtures)"
             : $"verify: {failures} failure(s)");
         return failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// Both chrome variants have to stand on their own: <see cref="VsTheme"/> takes
+    /// the host's colors where an environment key owns one, but every brush with no
+    /// key behind it is served from here, and the fallback serves all of them. Two
+    /// ways that went wrong before, both invisible until someone opened the panel in
+    /// the other theme: a brush defaulting to <c>SystemColors</c>, which follows
+    /// Windows rather than the IDE, and a fill picked for one variant sitting under
+    /// text picked for the other.
+    /// </summary>
+    private static void VerifyChrome(string variant, PanelChrome chrome, Action<string, bool, string> check)
+    {
+        var system = typeof(SystemColors).GetProperties()
+            .Where(p => typeof(Brush).IsAssignableFrom(p.PropertyType))
+            .Select(p => p.GetValue(null))
+            .OfType<Brush>()
+            .ToList();
+
+        var brushes = typeof(PanelChrome).GetProperties()
+            .Where(p => p.PropertyType == typeof(Brush))
+            .Select(p => (p.Name, Brush: (Brush)p.GetValue(chrome)!))
+            .ToList();
+
+        var borrowed = brushes.Where(b => system.Any(sc => ReferenceEquals(sc, b.Brush))).ToList();
+        check($"chrome:{variant}:no-system-colors", borrowed.Count == 0,
+            string.Join(", ", borrowed.Select(b => b.Name)));
+
+        // Text over its own fill. The thresholds are WCAG AA: 4.5 for body text,
+        // 3 for the muted and link weights, which the other two clients get from
+        // the host's own tokens rather than from a ratio.
+        Contrast("foreground", chrome.Background, chrome.Foreground, 4.5);
+        Contrast("muted", chrome.Background, chrome.MutedForeground, 3.0);
+        Contrast("link", chrome.Background, chrome.LinkForeground, 3.0);
+        Contrast("badge", chrome.BadgeBackground, chrome.BadgeForeground, 4.5);
+        Contrast("code", chrome.CodeBackground, chrome.Foreground, 4.5);
+        Contrast("warning", chrome.WarningBackground, chrome.Foreground, 4.5);
+        Contrast("primary", chrome.PrimaryBackground, chrome.PrimaryForeground, 4.5);
+        Contrast("row-selected", chrome.RowSelected, chrome.Foreground, 3.0);
+
+        // Fills that carry no text still have to be visible against the panel.
+        Contrast("skeleton", chrome.Background, chrome.Skeleton, 1.1);
+        Contrast("border", chrome.Background, chrome.Border, 1.1);
+        Contrast("row-hover", chrome.Background, chrome.RowHover, 1.02);
+
+        void Contrast(string name, Brush back, Brush front, double min)
+        {
+            var ratio = Ratio(Solid(back), Solid(front));
+            check($"chrome:{variant}:{name}", ratio >= min, $"{ratio:0.00} < {min:0.00}");
+        }
+    }
+
+    private static Color Solid(Brush b) => ((SolidColorBrush)b).Color;
+
+    private static double Ratio(Color a, Color b)
+    {
+        var (la, lb) = (Luminance(a), Luminance(b));
+        var (hi, lo) = la > lb ? (la, lb) : (lb, la);
+        return (hi + 0.05) / (lo + 0.05);
+    }
+
+    private static double Luminance(Color c) =>
+        0.2126 * Channel(c.R) + 0.7152 * Channel(c.G) + 0.0722 * Channel(c.B);
+
+    private static double Channel(byte v)
+    {
+        var s = v / 255.0;
+        return s <= 0.03928 ? s / 12.92 : Math.Pow((s + 0.055) / 1.055, 2.4);
     }
 }

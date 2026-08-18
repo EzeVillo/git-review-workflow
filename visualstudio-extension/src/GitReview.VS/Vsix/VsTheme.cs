@@ -39,8 +39,15 @@ public static class VsTheme
             SecondaryBackground = Brush(EnvironmentColors.CommandBarGradientBeginColorKey) ?? basis.SecondaryBackground,
             RowHover = Brush(EnvironmentColors.CommandBarMenuItemMouseOverColorKey) ?? basis.RowHover,
             RowSelected = Brush(EnvironmentColors.SystemHighlightColorKey) ?? basis.RowSelected,
-            ChipBackground = basis.ChipBackground,
-            Skeleton = basis.Skeleton,
+            // The badge pair stays out of the host's hands: it is the one fill that
+            // has to keep its own text legible, and no environment key owns both
+            // halves of it. The skeleton has no key behind it either, but it holds
+            // no text, so it is mixed out of the panel's own two colors — a theme
+            // extension can put any background here, and a fill picked for the
+            // stock dark theme reads as a foreign rectangle over it.
+            BadgeBackground = basis.BadgeBackground,
+            BadgeForeground = basis.BadgeForeground,
+            Skeleton = Blend(foreground.Value, background.Value, 0.22),
             Mono = basis.Mono,
             Ui = basis.Ui,
         };
@@ -66,6 +73,13 @@ public static class VsTheme
     }
 
     private static Color Convert(DrawingColor c) => Color.FromArgb(c.A, c.R, c.G, c.B);
+
+    /// <summary>Lays <paramref name="over"/> on <paramref name="under"/> at the given weight.</summary>
+    private static SolidColorBrush Blend(Color over, Color under, double weight) =>
+        new(Color.FromRgb(
+            (byte)(over.R * weight + under.R * (1 - weight)),
+            (byte)(over.G * weight + under.G * (1 - weight)),
+            (byte)(over.B * weight + under.B * (1 - weight))));
 
     private static bool IsDark(Color c) =>
         (0.299 * c.R + 0.587 * c.G + 0.114 * c.B) < 128.0;

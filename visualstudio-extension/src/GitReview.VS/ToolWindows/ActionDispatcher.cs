@@ -17,6 +17,7 @@ public sealed class ActionDispatcher
     private readonly Func<IReadOnlyList<(string Path, string? Before, string? After)>, Task>? _openAllDiffs;
     private readonly Func<string, Task>? _openTextDocument;
     private readonly Func<Task>? _runStartWizard;
+    private readonly Func<bool, Task>? _previewEdits;
 
     public ActionDispatcher(
         GitReviewPanelController panel,
@@ -24,7 +25,8 @@ public sealed class ActionDispatcher
         Func<string, string?, string?, Task>? openDiff = null,
         Func<IReadOnlyList<(string Path, string? Before, string? After)>, Task>? openAllDiffs = null,
         Func<string, Task>? openTextDocument = null,
-        Func<Task>? runStartWizard = null)
+        Func<Task>? runStartWizard = null,
+        Func<bool, Task>? previewEdits = null)
     {
         _panel = panel;
         _openFile = openFile;
@@ -32,6 +34,7 @@ public sealed class ActionDispatcher
         _openAllDiffs = openAllDiffs;
         _openTextDocument = openTextDocument;
         _runStartWizard = runStartWizard;
+        _previewEdits = previewEdits;
         panel.HostAction += HandleAsync;
     }
 
@@ -176,14 +179,23 @@ public sealed class ActionDispatcher
                 }
                 return;
             }
+            case "previewEdits":
+            case "previewEditsStat":
+                // A title-bar action in every client, so it has a host that shows the
+                // diff rather than the "use the menu" note the rest fall back to.
+                if (_previewEdits is not null)
+                    await _previewEdits(wire == "previewEditsStat").ConfigureAwait(true);
+                else
+                    MessageBox.Show(
+                        $"Action '{wire}' is only available inside Visual Studio.",
+                        UserCopy.ProductTitle);
+                return;
             case "compareReview":
             case "walkthroughInit":
             case "walkthroughBuild":
             case "setBase":
             case "setRemote":
             case "forgetReview":
-            case "previewEdits":
-            case "previewEditsStat":
             case "goToEntry":
                 MessageBox.Show(
                     $"Action '{wire}' is available from the git review menu when running inside Visual Studio.",

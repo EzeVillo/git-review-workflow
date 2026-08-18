@@ -116,7 +116,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for running it inside Visual Studio.
 | review whole | **Diff** (open all) + file rows |
 | finish-conflict | **Undo** / **Continue** (no nav) |
 
-Title bar: **Refresh**, **Finish**, **Save**, **Cancel**, **Preview edits**.
+Tool window toolbar: **Refresh**, **Finish**, **Save**, **Cancel**, **Preview edits** — the same five title actions, in the same order, as the VS Code view title and the IntelliJ tool-window title bar. Each appears only in the situations the contract gives it.
 
 ## Windows latency
 

@@ -1,3 +1,4 @@
+using System.ComponentModel.Design;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -6,6 +7,8 @@ using GitReview.Domain;
 using GitReview.VS.ToolWindows;
 using Microsoft.VisualStudio.PlatformUI;
 using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Shell.Interop;
+using DomainControl = GitReview.Domain.Control;
 using SolutionEvents = Microsoft.VisualStudio.Shell.Events.SolutionEvents;
 
 namespace GitReview.VS.Vsix;
@@ -52,10 +55,26 @@ public sealed class GitReviewToolWindow : ToolWindowPane
     public GitReviewToolWindow() : base(null)
     {
         Caption = UserCopy.ProductTitle;
+        // Refresh / Finish / Save / Cancel / Preview edits, as the window's own
+        // toolbar — the Visual Studio equivalent of the VS Code view title and of
+        // the IntelliJ tool-window title actions. The shell reads this while it is
+        // creating the frame, so it belongs here next to Content; the buttons are
+        // declared in GitReviewPackage.vsct and answered for by GitReviewPackage.
+        ToolBar = new CommandID(new Guid(GitReviewPackage.CommandSetGuidString), GitReviewPackage.ToolbarId);
+        ToolBarLocation = (int)VSTWT_LOCATION.VSTWT_TOP;
         // Set here and never again — see _host. The panel itself is filled in from
         // OnToolWindowCreated, once there is a package to read the settings from.
         Content = _host;
     }
+
+    /// <summary>
+    /// The title actions of the layout currently on screen, for the toolbar's
+    /// QueryStatus. Null until the panel has rendered once.
+    /// </summary>
+    internal IReadOnlyList<DomainControl>? TitleActions => _controller?.LastLayout?.TitleActions;
+
+    /// <summary>Runs a toolbar button through the panel's own action path.</summary>
+    internal void InvokeAction(string wire) => _controller?.InvokeAction(wire);
 
     /// <summary>The only way this class puts anything on screen.</summary>
     private void SetPaneContent(UIElement element)
@@ -122,7 +141,7 @@ public sealed class GitReviewToolWindow : ToolWindowPane
     private void BuildCore()
     {
         ThreadHelper.ThrowIfNotOnUIThread();
-        _controller?.Dispose();
+        DisposeController();
 
         RefreshRoots();
         var package = (GitReviewPackage)Package;
@@ -132,6 +151,10 @@ public sealed class GitReviewToolWindow : ToolWindowPane
             () => package.GitReviewPath,
             chrome,
             log: static line => System.Diagnostics.Debug.WriteLine("[git review] " + line));
+        // The shell draws the five title actions; drawing them inside the pane as
+        // well would be the same five buttons twice.
+        _controller.View.ShowTitleActions = false;
+        _controller.TitleActionsChanged += OnTitleActionsChanged;
         Actions = new VsHostActions(ServiceProvider(), _controller, () => _roots).Attach();
 
         SetPaneContent(_controller.View);
@@ -166,6 +189,35 @@ public sealed class GitReviewToolWindow : ToolWindowPane
 
     private IServiceProvider ServiceProvider() => (IServiceProvider)Package;
 
+    /// <summary>
+    /// Tells the shell to re-run QueryStatus on the toolbar. Command bars are only
+    /// re-queried when something asks them to, so without this a review that has just
+    /// started keeps showing the buttons of the situation before it.
+    /// </summary>
+    private void OnTitleActionsChanged()
+    {
+        // Posted rather than awaited: this is raised from inside the panel's render,
+        // whose try/catch reads any throw as "the renderer is broken" and replaces
+        // the whole pane with the fatal text. The render marshals itself onto this
+        // dispatcher first, so the off-thread branch is belt and braces.
+        if (!_host.Dispatcher.CheckAccess())
+        {
+            _ = _host.Dispatcher.BeginInvoke((Action)OnTitleActionsChanged);
+            return;
+        }
+        ThreadHelper.ThrowIfNotOnUIThread();
+        if (ServiceProvider().GetService(typeof(SVsUIShell)) is IVsUIShell shell)
+            shell.UpdateCommandUI(0);
+    }
+
+    private void DisposeController()
+    {
+        if (_controller is null) return;
+        _controller.TitleActionsChanged -= OnTitleActionsChanged;
+        _controller.Dispose();
+        _controller = null;
+    }
+
     private void OnThemeChanged(ThemeChangedEventArgs e) =>
         ThreadHelper.JoinableTaskFactory.Run(async () =>
         {
@@ -193,8 +245,7 @@ public sealed class GitReviewToolWindow : ToolWindowPane
             _listening = false;
         }
         StopRootsRetry();
-        _controller?.Dispose();
-        _controller = null;
+        DisposeController();
         Actions = null;
         base.OnClose();
     }

@@ -432,6 +432,27 @@ tres pasos del job son `dotnet build` / `dotnet test` / `--verify`. La **instanc
 de VS Code y del `runIde` de Gradle; sin `-Experimental` se instala en la real, que es el mismo
 camino que hace un usuario con un `.vsix` de disco.
 
+**Las cinco acciones de la barra de título no las dibuja el panel: las dibuja el shell.**
+En VS Code son `menus/view/title` y en IntelliJ `setTitleActions`; el equivalente de
+Visual Studio es una **`ToolWindowToolbar`**, o sea que viven en el `.vsct` y no en
+WPF, y eso las reparte en tres archivos que tienen que coincidir: el `.vsct` declara
+los botones (con `IconIsMoniker` y un moniker del Image Catalog, para que el icono
+siga el tema y el escalado del host), `GitReviewPackage` mapea cada command id al
+`ControlId` y contesta el `QueryStatus`, y `GitReviewToolWindow` nombra la toolbar en
+`ToolBar` **desde el constructor** (el shell la lee al crear el frame, igual que
+`Content`). Cuál de las cinco se ve en cada momento no se decide ahí: los botones son
+`DefaultInvisible` + `DynamicVisibility` y el `QueryStatus` lee
+`PanelLayout.TitleActions`, la misma proyección del dominio que arma el cuerpo del
+panel — reimplementar las condiciones en el host sería la segunda copia de la matriz.
+Dos cosas que no avisan si faltan: `PanelView.ShowTitleActions = false` (si no, los
+mismos cinco botones aparecen dos veces, arriba como iconos y adentro como texto), y
+el `IVsUIShell.UpdateCommandUI` que dispara `TitleActionsChanged` — una command bar
+sólo se re-consulta cuando alguien se lo pide, así que sin eso la toolbar se queda con
+los botones de la situación anterior. Las tres puntas las ata
+`scripts/check-client-product-surface.mjs` contra el `title_actions:` del contrato: un
+botón que perdió el `<Icon>` dibuja un hueco y un id que dejó de coincidir con su
+`IDSymbol` es un botón que no hace nada, y ninguna de las dos rompe el build.
+
 **Instalar el `.vsix` son tres pasos, no uno, y los tres los da el script.** `VSIXInstaller` deja la
 hive en un estado que parece bien y no lo está, de dos maneras que no avisan: instalar una versión
 que ya está es un **no-op silencioso** (sale 0 y no toca nada — y en desarrollo la versión es la

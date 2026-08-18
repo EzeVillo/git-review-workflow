@@ -28,6 +28,7 @@ public sealed class GitReviewPanelController : IDisposable
     private bool _panelVisible = true;
     private int _refreshSeq;
     private bool _disposed;
+    private string _titleSignature = "";
 
     public PanelView View => _view;
     public ReviewStateManager State => _state;
@@ -39,6 +40,23 @@ public sealed class GitReviewPanelController : IDisposable
 
     /// <summary>Raise from host to open a file/diff/editor/dialog.</summary>
     public event Func<string, int?, string?, Task>? HostAction;
+
+    /// <summary>
+    /// The layout the panel is currently showing, for hosts that draw part of it
+    /// themselves. In Visual Studio the five title actions are a tool-window toolbar
+    /// rather than buttons inside the pane, and its QueryStatus reads them from here:
+    /// which of them exists and whether it is enabled stays a projection of the CLI
+    /// situation computed in the domain, not a second set of conditions in the host.
+    /// </summary>
+    public PanelLayout? LastLayout { get; private set; }
+
+    /// <summary>
+    /// Raised when the set of title actions -- or any of their enabled states --
+    /// changes. A host command bar has to be told to re-query; without this the
+    /// toolbar keeps last render's buttons until something else makes the shell
+    /// refresh its command UI.
+    /// </summary>
+    public event Action? TitleActionsChanged;
 
     public GitReviewPanelController(
         Func<IReadOnlyList<string>> roots,
@@ -189,6 +207,10 @@ public sealed class GitReviewPanelController : IDisposable
                 _state.Current,
                 new PanelInputs(_mutations.IsBusy, Why: _why, LastOpened: _lastOpened));
             var layout = PanelLayoutBuilder.PanelLayout(model, loading: _loading && !_mutations.IsBusy);
+            // Published before the draw: a host toolbar reading it must not depend on
+            // this renderer having handled every block variant in the layout.
+            LastLayout = layout;
+            NotifyTitleActions(layout);
             _view.Render(layout);
         }
         catch (Exception ex)
@@ -200,6 +222,24 @@ public sealed class GitReviewPanelController : IDisposable
             _view.RenderFatal(ex);
         }
     }
+
+    private void NotifyTitleActions(PanelLayout layout)
+    {
+        var signature = string.Join(
+            "|",
+            layout.TitleActions.Select(c => c.Id.Wire() + (c.Enabled ? "+" : "-")));
+        if (signature == _titleSignature) return;
+        _titleSignature = signature;
+        TitleActionsChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// Runs a control as if it had been clicked in the panel, so a host-drawn
+    /// surface takes exactly the same path (host action matrix, confirmations,
+    /// staleness re-check) as the button it replaces.
+    /// </summary>
+    public void InvokeAction(string wire, int? index = null, string? supportLinkId = null) =>
+        OnAction(wire, index, supportLinkId);
 
     private async void OnAction(string wire, int? index, string? supportLinkId)
     {

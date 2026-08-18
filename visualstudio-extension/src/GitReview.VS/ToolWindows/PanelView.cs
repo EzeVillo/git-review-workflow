@@ -25,6 +25,15 @@ public sealed class PanelView : System.Windows.Controls.UserControl
     /// <summary>ControlId wire, optional inventory/file index, optional support link id.</summary>
     public event Action<string, int?, string?>? ActionRequested;
 
+    /// <summary>
+    /// Whether the five title actions are drawn as a row inside the pane. False in
+    /// the Visual Studio tool window, where the shell draws them as the window's own
+    /// toolbar (the same place VS Code and IntelliJ put them) and drawing them here
+    /// as well would show every one of them twice. The standalone preview has no
+    /// window frame to hang a toolbar on, so it keeps them.
+    /// </summary>
+    public bool ShowTitleActions { get; set; } = true;
+
     public PanelView(PanelChrome? chrome = null)
     {
         _chrome = chrome ?? PanelChrome.DefaultDark;
@@ -66,6 +75,7 @@ public sealed class PanelView : System.Windows.Controls.UserControl
     public void RenderFatal(Exception ex)
     {
         _titleBar.Children.Clear();
+        _titleBar.Visibility = Visibility.Collapsed;
         _body.Children.Clear();
         _footer.Children.Clear();
         _body.Children.Add(new TextBlock
@@ -84,8 +94,15 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         _body.Children.Clear();
         _footer.Children.Clear();
 
-        foreach (var c in layout.TitleActions)
-            _titleBar.Children.Add(RenderTitleControl(c));
+        if (ShowTitleActions)
+        {
+            foreach (var c in layout.TitleActions)
+                _titleBar.Children.Add(RenderTitleControl(c));
+        }
+
+        // Collapsed rather than empty: an empty StackPanel still spends its margin,
+        // which would leave a strip of padding above the panel in the tool window.
+        _titleBar.Visibility = _titleBar.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
 
         var bodyBlocks = new List<Block>();
         var footerBlocks = new List<Block>();

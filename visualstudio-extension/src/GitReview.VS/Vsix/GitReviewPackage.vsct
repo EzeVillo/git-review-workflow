@@ -1,19 +1,112 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  One command: View > Other Windows > git review, which opens the tool window.
+  Two things live here:
+
+    - View > Other Windows > git review, which opens the tool window.
+    - The tool window's own toolbar: Refresh / Finish / Save / Cancel / Preview
+      edits, the five title_actions of contracts/client-product-surface.yaml. This
+      is where the other two clients put them (VS Code: menus/view/title; IntelliJ:
+      ToolWindow.setTitleActions), and a tool-window toolbar is the same place in
+      Visual Studio — the shell draws it inside the window frame, under the caption.
+      Which of the five is showing at any moment is not decided here: the buttons
+      are DefaultInvisible + DynamicVisibility and GitReviewPackage answers
+      QueryStatus from PanelLayout.TitleActions, so the CLI's situation drives them
+      exactly as it drives the panel body.
+
+  Icons are Image Catalog monikers (IconIsMoniker) rather than a bitmap strip, so
+  they follow the host theme and the HiDPI scaling the shell already does.
+
   Compiled into Menus.ctmenu by the VSSDK build and referenced from the
   ProvideMenuResource attribute on GitReviewPackage.
 -->
 <CommandTable xmlns="http://schemas.microsoft.com/VisualStudio/2005-10-18/CommandTable" xmlns:xs="http://www.w3.org/2001/XMLSchema">
   <Extern href="stdidcmd.h" />
   <Extern href="vsshlids.h" />
+  <!-- ImageCatalogGuid + the moniker ids used below; ships with the VSSDK build tools. -->
+  <Include href="KnownImageIds.vsct" />
 
   <Commands package="guidGitReviewPackage">
+    <Menus>
+      <!--
+        No <Parent>: a ToolWindowToolbar is parented at runtime by the pane that
+        names it in ToolWindowPane.ToolBar, not from the command table.
+      -->
+      <Menu guid="guidGitReviewCmdSet" id="ToolWindowToolbar" type="ToolWindowToolbar">
+        <CommandFlag>DefaultDocked</CommandFlag>
+        <Strings>
+          <ButtonText>git review</ButtonText>
+        </Strings>
+      </Menu>
+    </Menus>
+
+    <Groups>
+      <Group guid="guidGitReviewCmdSet" id="ToolWindowToolbarGroup" priority="0x0000">
+        <Parent guid="guidGitReviewCmdSet" id="ToolWindowToolbar" />
+      </Group>
+    </Groups>
+
     <Buttons>
       <Button guid="guidGitReviewCmdSet" id="cmdidShowToolWindow" priority="0x0100" type="Button">
         <Parent guid="guidSHLMainMenu" id="IDG_VS_WNDO_OTRWNDWS1" />
         <Strings>
           <ButtonText>git review</ButtonText>
+        </Strings>
+      </Button>
+
+      <!-- Order matches title_actions in the contract, and the other two clients. -->
+      <Button guid="guidGitReviewCmdSet" id="cmdidTitleRefresh" priority="0x0100" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolWindowToolbarGroup" />
+        <Icon guid="ImageCatalogGuid" id="Refresh" />
+        <CommandFlag>IconIsMoniker</CommandFlag>
+        <CommandFlag>DefaultInvisible</CommandFlag>
+        <CommandFlag>DynamicVisibility</CommandFlag>
+        <Strings>
+          <ButtonText>Refresh</ButtonText>
+          <ToolTipText>Refresh the git review panel</ToolTipText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidTitleFinish" priority="0x0200" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolWindowToolbarGroup" />
+        <Icon guid="ImageCatalogGuid" id="Checkmark" />
+        <CommandFlag>IconIsMoniker</CommandFlag>
+        <CommandFlag>DefaultInvisible</CommandFlag>
+        <CommandFlag>DynamicVisibility</CommandFlag>
+        <Strings>
+          <ButtonText>Finish</ButtonText>
+          <ToolTipText>Finish the active review</ToolTipText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidTitleSave" priority="0x0300" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolWindowToolbarGroup" />
+        <Icon guid="ImageCatalogGuid" id="Save" />
+        <CommandFlag>IconIsMoniker</CommandFlag>
+        <CommandFlag>DefaultInvisible</CommandFlag>
+        <CommandFlag>DynamicVisibility</CommandFlag>
+        <Strings>
+          <ButtonText>Save</ButtonText>
+          <ToolTipText>Save the review for later</ToolTipText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidTitleCancel" priority="0x0400" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolWindowToolbarGroup" />
+        <Icon guid="ImageCatalogGuid" id="Cancel" />
+        <CommandFlag>IconIsMoniker</CommandFlag>
+        <CommandFlag>DefaultInvisible</CommandFlag>
+        <CommandFlag>DynamicVisibility</CommandFlag>
+        <Strings>
+          <ButtonText>Cancel</ButtonText>
+          <ToolTipText>Cancel the active review</ToolTipText>
+        </Strings>
+      </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidTitlePreviewEdits" priority="0x0500" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolWindowToolbarGroup" />
+        <Icon guid="ImageCatalogGuid" id="CompareFiles" />
+        <CommandFlag>IconIsMoniker</CommandFlag>
+        <CommandFlag>DefaultInvisible</CommandFlag>
+        <CommandFlag>DynamicVisibility</CommandFlag>
+        <Strings>
+          <ButtonText>Preview edits</ButtonText>
+          <ToolTipText>Preview banked edits</ToolTipText>
         </Strings>
       </Button>
     </Buttons>
@@ -23,6 +116,14 @@
     <GuidSymbol name="guidGitReviewPackage" value="{a3f8c2e1-7b4d-4e9a-9c1f-2d5e6a8b0c3d}" />
     <GuidSymbol name="guidGitReviewCmdSet" value="{c7d4e8a5-1f36-4b92-8a70-6d5e4c3b2a19}">
       <IDSymbol name="cmdidShowToolWindow" value="0x0100" />
+      <!-- Keep these five in sync with GitReviewPackage.TitleBarCommands. -->
+      <IDSymbol name="cmdidTitleRefresh" value="0x0101" />
+      <IDSymbol name="cmdidTitleFinish" value="0x0102" />
+      <IDSymbol name="cmdidTitleSave" value="0x0103" />
+      <IDSymbol name="cmdidTitleCancel" value="0x0104" />
+      <IDSymbol name="cmdidTitlePreviewEdits" value="0x0105" />
+      <IDSymbol name="ToolWindowToolbar" value="0x1000" />
+      <IDSymbol name="ToolWindowToolbarGroup" value="0x1050" />
     </GuidSymbol>
   </Symbols>
 </CommandTable>

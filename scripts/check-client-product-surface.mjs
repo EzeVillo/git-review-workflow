@@ -681,6 +681,88 @@ if (existsSync(vsActions)) {
   }
 }
 
+// The five title_actions are a tool-window toolbar in Visual Studio, and that takes
+// three files agreeing: the .vsct declares the buttons, GitReviewPackage maps each
+// command id to the ControlId it answers for, and the tool window names the toolbar.
+// Two of the ways they drift are silent in a build — a button that lost its <Icon>
+// draws as an empty slot, and a command id that no longer matches its IDSymbol is a
+// button that does nothing — so they are checked here rather than left to a reviewer.
+const vsVsct = join(
+  root,
+  "visualstudio-extension",
+  "src",
+  "GitReview.VS",
+  "Vsix",
+  "GitReviewPackage.vsct",
+);
+const vsPackage = join(
+  root,
+  "visualstudio-extension",
+  "src",
+  "GitReview.VS",
+  "Vsix",
+  "GitReviewPackage.cs",
+);
+if (existsSync(vsVsct) && existsSync(vsPackage)) {
+  const vsct = readText(vsVsct, "utf8");
+  const pkg = readText(vsPackage, "utf8");
+
+  const mapBlock = pkg.split(/TitleBarCommands\s*=\s*\{/)[1]?.split("};")[0] ?? "";
+  const mapped = [...mapBlock.matchAll(/\((0x[0-9A-Fa-f]+),\s*ControlId\.([A-Za-z]+)\)/g)]
+    .map((m) => ({ id: m[1].toLowerCase(), control: m[2] }));
+  if (mapped.length !== titleActionIds.length) {
+    fail(
+      `visualstudio GitReviewPackage.TitleBarCommands has ${mapped.length} entries, ` +
+        `title_actions has ${titleActionIds.length}`,
+    );
+  }
+
+  const symbols = new Map(
+    [...vsct.matchAll(/<IDSymbol name="([A-Za-z0-9_]+)" value="(0x[0-9A-Fa-f]+)"/g)]
+      .map((m) => [m[2].toLowerCase(), m[1]]),
+  );
+  const buttons = new Map(
+    [...vsct.matchAll(/<Button [^>]*id="([A-Za-z0-9_]+)"[\s\S]*?<\/Button>/g)]
+      .map((m) => [m[1], m[0]]),
+  );
+
+  titleActionIds.forEach((wire, i) => {
+    const entry = mapped[i];
+    if (!entry) return;
+    const expected = wire[0].toUpperCase() + wire.slice(1);
+    if (entry.control !== expected) {
+      fail(
+        `visualstudio TitleBarCommands[${i}] is ControlId.${entry.control}, ` +
+          `title_actions[${i}] is ${wire}`,
+      );
+    }
+    const symbol = symbols.get(entry.id);
+    if (!symbol) {
+      fail(`visualstudio .vsct has no IDSymbol for title action ${wire} (${entry.id})`);
+      return;
+    }
+    const button = buttons.get(symbol);
+    if (!button) {
+      fail(`visualstudio .vsct has no <Button id="${symbol}"> for title action ${wire}`);
+      return;
+    }
+    if (!/<Icon guid="ImageCatalogGuid" id="[A-Za-z0-9_]+"/.test(button)) {
+      fail(`visualstudio .vsct button ${symbol} has no image-catalog <Icon>`);
+    }
+    if (!button.includes("<CommandFlag>IconIsMoniker</CommandFlag>")) {
+      fail(`visualstudio .vsct button ${symbol} misses IconIsMoniker (icon would not draw)`);
+    }
+  });
+
+  const toolbarId = pkg.match(/ToolbarId\s*=\s*(0x[0-9A-Fa-f]+)/)?.[1]?.toLowerCase();
+  const toolbarSymbol = toolbarId ? symbols.get(toolbarId) : undefined;
+  if (!toolbarSymbol) {
+    fail(`visualstudio GitReviewPackage.ToolbarId ${toolbarId} has no IDSymbol in the .vsct`);
+  } else if (!new RegExp(`<Menu [^>]*id="${toolbarSymbol}" type="ToolWindowToolbar"`).test(vsct)) {
+    fail(`visualstudio .vsct ${toolbarSymbol} is not a ToolWindowToolbar menu`);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // listing: storefront copy that must read the same in all three marketplaces.
 // The listing *body* differs per marketplace by design (packaged README /

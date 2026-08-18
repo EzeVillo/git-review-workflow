@@ -37,7 +37,14 @@ public sealed class VsHostActions
     }
 
     public ActionDispatcher Attach() =>
-        new(_panel, OpenFileAsync, OpenDiffAsync, OpenAllDiffsAsync, OpenTextAsync, RunStartWizardAsync);
+        new(
+            _panel,
+            OpenFileAsync,
+            OpenDiffAsync,
+            OpenAllDiffsAsync,
+            OpenTextAsync,
+            RunStartWizardAsync,
+            PreviewEditsAsync);
 
     private string? Cwd() => SoleTarget.PickSoleTarget(_roots());
 
@@ -132,6 +139,50 @@ public sealed class VsHostActions
             cwd,
             _panel.State.Current).ConfigureAwait(true);
         if (started) await _panel.RefreshAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// `git review preview [--stat]` as a read-only document, the same as the other
+    /// two clients show it. It reads the banked edits and mutates nothing, so it goes
+    /// straight to the invoker rather than through the mutation lock.
+    /// </summary>
+    private async Task PreviewEditsAsync(bool stat)
+    {
+        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+        var state = _panel.State.Current;
+        if (!SituationIds.IsReviewReadable(state.Situation) || state.State is null)
+        {
+            MessageBox.Show(UserCopy.NoActivePreview, UserCopy.ProductTitle);
+            return;
+        }
+
+        var cwd = Cwd();
+        if (cwd is null)
+        {
+            MessageBox.Show(UserCopy.NoSoleRoot, UserCopy.ProductTitle);
+            return;
+        }
+
+        var args = stat ? new[] { "--stat" } : Array.Empty<string>();
+        var result = await _panel.Cli.InvokeAsync("preview", args, cwd).ConfigureAwait(true);
+        if (result.ExitCode != 0)
+        {
+            MessageBox.Show(
+                CliMessage.CliErrorText(result.Stderr, result.Stdout, UserCopy.PreviewFailed),
+                UserCopy.ProductTitle,
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        // Warnings on success (skipped edits in step mode, say) are notes, not state.
+        var note = result.Stderr.Trim();
+        if (note.Length > 0) MessageBox.Show(CliMessage.FirstCliLine(note), UserCopy.ProductTitle);
+
+        var body = result.Stdout.Length > 0 ? result.Stdout : UserCopy.PreviewEmpty + "\n";
+        var path = Path.Combine(_scratch, stat ? "preview-stat.txt" : "preview.diff");
+        WriteScratch(path, body);
+        VsShellUtilities.OpenDocument(_serviceProvider, path);
     }
 
     /// <summary>

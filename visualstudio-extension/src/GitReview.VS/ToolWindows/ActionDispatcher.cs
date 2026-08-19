@@ -337,8 +337,16 @@ public sealed class ActionDispatcher
         // Which sides this file actually has comes from git, not from the entry name:
         // an entry the reviewer has since reverted has no diff left to show, and a file
         // the pull request adds or deletes only exists on one side. Both are answers,
-        // and building the request from the path alone could state neither.
+        // and building the request from the path alone could state neither. Not being able
+        // to ask git is a third answer, and not one about the review: reporting it as "no
+        // changes left" would state, of a file the walkthrough just pointed at, something
+        // this host never checked.
         var changes = await RangeChanges.ForRangeAsync(_panel.Cli, cwd).ConfigureAwait(true);
+        if (changes is null)
+        {
+            GitReviewDialogs.Error(UserCopy.OpenRangeFailed);
+            return;
+        }
         var change = changes.FirstOrDefault(
             c => c.Path == display || c.After == display || c.Before == display);
         if (change is null)
@@ -369,6 +377,11 @@ public sealed class ActionDispatcher
             return;
         }
         var changes = await RangeChanges.ForCommitAsync(_panel.Cli, cwd, sha).ConfigureAwait(true);
+        if (changes is null)
+        {
+            GitReviewDialogs.Error(UserCopy.OpenCommitFailed(sha));
+            return;
+        }
         if (changes.Count == 0)
         {
             GitReviewDialogs.Info(UserCopy.OpenCommitEmpty(sha));
@@ -387,6 +400,11 @@ public sealed class ActionDispatcher
             return;
         }
         var changes = await RangeChanges.ForCommitAsync(_panel.Cli, cwd, sha).ConfigureAwait(true);
+        if (changes is null)
+        {
+            GitReviewDialogs.Error(UserCopy.OpenCommitFailed(sha));
+            return;
+        }
         var change = changes.FirstOrDefault(c => c.Path == path || c.After == path || c.Before == path);
         if (change is null)
         {

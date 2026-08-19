@@ -30,8 +30,12 @@ public static class LayoutOffers
     {
         [OfferId.Walk] = new("Walkthrough", "curated reading order from the PR", ReviewLayout.Walk),
         [OfferId.Keys] = new("Walkthrough — keys only", "only entries marked key", ReviewLayout.Keys),
-        [OfferId.Draft] = new("Walkthrough — draft one", "no reading order yet; write one", ReviewLayout.Walk, DraftStep.Create),
-        [OfferId.DraftResume] = new("Walkthrough — continue draft", "finish the reading order you started", ReviewLayout.Walk, DraftStep.Resume),
+        // Without the word "walkthrough" as if it were a known term: these two
+        // are the only offers that do not pick a way to read but build the one
+        // the PR does not carry, and whoever reads them does not know yet what a
+        // walkthrough is. Byte for byte identical in the three clients.
+        [OfferId.Draft] = new("Build a reading order first", "nobody wrote one for this PR; otherwise you read the whole diff", ReviewLayout.Walk, DraftStep.Create),
+        [OfferId.DraftResume] = new("Finish the reading order you started", "pick up the one you left half-written", ReviewLayout.Walk, DraftStep.Resume),
         [OfferId.Step] = new("Commit by commit", "one commit at a time (--step)", ReviewLayout.Step),
         [OfferId.Whole] = new("Whole diff", "entire diff at once", ReviewLayout.Whole),
     };

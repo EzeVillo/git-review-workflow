@@ -132,6 +132,49 @@ if (!setBase.includes("No branches to pick a base from were found.")) {
   fail("setBase.ts missing no_base_candidates");
 }
 
+// draft_agent_prompt — lo que copyDraftPrompt pone en el portapapeles, byte por
+// byte igual en los tres clientes. Vive en una constante por cliente y no suelto
+// en el archivo de comandos, justamente para que este check compare contra una
+// constante y no contra codigo: la fragilidad de lo segundo aparece cuando el
+// texto cambia, que es lo unico que este check existe para detectar.
+// El escalar es un bloque plegado (>-), asi que en el YAML vive cortado en
+// varias lineas y en los clientes en una sola: se pliega aca y se compara contra
+// el texto del cliente con los espacios normalizados, que es la unica forma de
+// que "byte por byte igual" signifique lo mismo de los dos lados.
+const draftPromptBlock = text.match(/^ {2}draft_agent_prompt: >-\n((?: {4}.*\n)+)/m);
+if (!draftPromptBlock) fail("YAML missing draft_agent_prompt string");
+const draftPrompt = (draftPromptBlock?.[1] ?? "")
+  .split(/\r?\n/)
+  .map((l) => l.trim())
+  .filter(Boolean)
+  .join(" ");
+if (!draftPrompt.startsWith("Fill in the reading order at {path}.")) {
+  fail(`draft_agent_prompt must name the row's path: ${draftPrompt}`);
+}
+// Los tres clientes parten la cadena en dos literales para no pasarse del ancho
+// de linea, y cada lenguaje lo escribe distinto. Sacar comillas, backticks y el
+// operador de concatenacion deja el texto comparable sin obligar a los tres a
+// cortarlo en el mismo lugar -- que es formato, no copy.
+const squash = (s) => s.replace(/["`+]/g, " ").replace(/\s+/g, " ");
+for (const [label, rel] of [
+  ["vscode", ["vscode-extension", "src", "review", "userCopy.ts"]],
+  ["intellij", ["jetbrains-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "domain", "UserCopy.kt"]],
+  ["visualstudio", ["visualstudio-extension", "src", "GitReview.Domain", "UserCopy.cs"]],
+]) {
+  const p = join(root, ...rel);
+  if (!existsSync(p)) {
+    fail(`${label} UserCopy module missing at ${rel.join("/")}`);
+    continue;
+  }
+  const s = readText(p, "utf8");
+  // {path} es el placeholder del canonico; cada cliente lo interpola a su
+  // manera, asi que se compara lo que lo rodea, que es donde vive la copy.
+  const [before, after] = draftPrompt.split("{path}");
+  if (!squash(s).includes(squash(before)) || !squash(s).includes(squash(after))) {
+    fail(`${label} UserCopy missing draft_agent_prompt text`);
+  }
+}
+
 // cli_outdated must keep "installed"
 if (!text.includes("The installed git-review CLI is older than")) {
   fail('cli_outdated_title must include "installed"');
@@ -281,6 +324,24 @@ function collectCanonicalControls() {
         confirms: true,
       });
     }
+  }
+  // draft_controls — los cuatro controles de una fila del bloque de borradores,
+  // leidos del mapa propio igual que inventory_controls: son por fila, asi que
+  // no pueden declararse como un {block: row} del layout. NO son acciones: el
+  // conteo fijo de 27 de arriba no los cuenta y no se toca.
+  const draftBlock = text.split(/^draft_controls:\s*$/m)[1]?.split(/^[a-z_][a-z0-9_]*:/m)[0] ?? "";
+  const draftRe =
+    /^ {2}([A-Za-z][A-Za-z0-9]*):\s*\{label:\s*"([^"]*)"\s*,\s*emphasis:\s*(primary|secondary|link|icon)\s*,\s*confirms:\s*(true|false)\}/gm;
+  let dm;
+  while ((dm = draftRe.exec(draftBlock)) !== null) {
+    controls.push({
+      id: dm[1],
+      label: dm[2],
+      accessible: null,
+      emphasis: dm[3],
+      raw: false,
+      confirms: dm[4] === "true",
+    });
   }
   return controls;
 }

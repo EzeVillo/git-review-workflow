@@ -43,6 +43,13 @@ enum class ControlId {
     UNDO_FINISH,
     RESUME_FINISH,
     DISCARD_INVENTORY,
+    // Draft block (012): four BODY controls, not product actions. They are not
+    // in the action matrix, not in the Tools menu, and the canonical's fixed
+    // count of 27 does not move.
+    OPEN_DRAFT,
+    COPY_DRAFT_PROMPT,
+    START_FROM_DRAFT,
+    DISCARD_DRAFT,
     CLEAN_REVIEW,
     COMPARE_REVIEW,
     WALKTHROUGH_INIT,
@@ -74,6 +81,10 @@ enum class ControlId {
             UNDO_FINISH -> "undoFinish"
             RESUME_FINISH -> "resumeFinish"
             DISCARD_INVENTORY -> "discardInventory"
+            OPEN_DRAFT -> "openDraft"
+            COPY_DRAFT_PROMPT -> "copyDraftPrompt"
+            START_FROM_DRAFT -> "startFromDraft"
+            DISCARD_DRAFT -> "discardDraft"
             CLEAN_REVIEW -> "cleanReview"
             COMPARE_REVIEW -> "compareReview"
             WALKTHROUGH_INIT -> "walkthroughInit"
@@ -96,6 +107,8 @@ private val CONFIRMING_IDS: Set<ControlId> = setOf(
     ControlId.START_REVIEW,
     ControlId.CONTINUE_REVIEW,
     ControlId.DISCARD_INVENTORY,
+    ControlId.START_FROM_DRAFT,
+    ControlId.DISCARD_DRAFT,
     ControlId.CLEAN_REVIEW,
     ControlId.UNDO_FINISH,
     ControlId.COMPARE_REVIEW,
@@ -137,6 +150,24 @@ data class FileRow(
     val index: Int,
     val lastOpened: Boolean,
 )
+
+/**
+ * A row of the draft block: the branch, the progress exactly as the CLI reports
+ * it, and the controls that act on THAT row.
+ */
+data class DraftRow(
+    val name: String,
+    val meta: String,
+    val controls: List<Control>,
+) {
+    init {
+        for (c in controls) {
+            require(c.index != null) {
+                "Draft control ${c.id.wire} must carry an index"
+            }
+        }
+    }
+}
 
 data class InventoryRow(
     val name: String,
@@ -231,6 +262,7 @@ sealed class Block {
 
     data class FileRows(val rows: List<FileRow>) : Block()
     data class InventoryRows(val rows: List<InventoryRow>) : Block()
+    data class DraftRows(val rows: List<DraftRow>) : Block()
 
     data class ToolsSection(
         val title: String,
@@ -262,7 +294,12 @@ data class PanelLayout(
 ) {
     init {
         val controls = collectControls()
-        val primaries = controls.count { it.emphasis == Emphasis.PRIMARY }
+        // One PRIMARY per situation, counted over the controls that are NOT row
+        // controls. A row control is a per-row affordance repeated as many times
+        // as there are rows — "the obvious thing to do with THIS draft" — so
+        // counting them here would make the rule depend on how many drafts the
+        // reviewer happens to have, which is not a property of the layout.
+        val primaries = controls.count { it.emphasis == Emphasis.PRIMARY && it.index == null }
         require(primaries <= 1) {
             "At most one PRIMARY control per situation, found $primaries"
         }
@@ -287,6 +324,7 @@ data class PanelLayout(
                     is Block.CodeCommand -> out.add(b.copy)
                     is Block.EmptyMessage -> b.control?.let { out.add(it) }
                     is Block.InventoryRows -> b.rows.forEach { out.addAll(it.controls) }
+                    is Block.DraftRows -> b.rows.forEach { out.addAll(it.controls) }
                     is Block.ToolsSection -> walk(b.blocks)
                     else -> Unit
                 }
@@ -302,6 +340,7 @@ data class PanelLayout(
 private fun hostedByInventory(blocks: List<Block>, c: Control): Boolean = blocks.any { b ->
     when (b) {
         is Block.InventoryRows -> b.rows.any { r -> r.controls.any { it === c } }
+        is Block.DraftRows -> b.rows.any { r -> r.controls.any { it === c } }
         is Block.ToolsSection -> hostedByInventory(b.blocks, c)
         else -> false
     }
@@ -708,9 +747,74 @@ private fun inventoryRows(model: PanelModel): Block.InventoryRows {
     return Block.InventoryRows(rows)
 }
 
+/**
+ * The draft block: reading orders the reviewer started and has not paused, each
+ * with its four controls. First block of the empty state, with the usual body
+ * whole underneath — it is not a sub-layout that replaces, the way the setup
+ * gate is: with no base configured there is nothing else to do in this panel,
+ * with a half-written reading order there is.
+ */
+private fun draftRows(model: PanelModel): Block.DraftRows {
+    val enabled = !model.busy
+    val rows = model.drafts.mapIndexed { index, d ->
+        val controls = ArrayList<Control>()
+        controls.add(
+            ctrl(
+                ControlId.OPEN_DRAFT,
+                "Open",
+                Emphasis.SECONDARY,
+                enabled = true,
+                tooltip = "Open the reading order for editing",
+                index = index,
+            ),
+        )
+        controls.add(
+            ctrl(
+                ControlId.COPY_DRAFT_PROMPT,
+                "Copy for agent",
+                Emphasis.SECONDARY,
+                enabled = true,
+                tooltip = "Copy an instruction naming this file",
+                index = index,
+            ),
+        )
+        // Absent when the CLI does not know the origin and range the draft was
+        // generated with: invoking with the defaults would fail with a drift
+        // error every time, and one control fewer beats one that guesses.
+        if (d.startable) {
+            controls.add(
+                ctrl(
+                    ControlId.START_FROM_DRAFT,
+                    "Validate and start",
+                    Emphasis.PRIMARY,
+                    enabled = enabled,
+                    tooltip = "git review walkthrough draft --build, then start",
+                    index = index,
+                ),
+            )
+        }
+        controls.add(
+            ctrl(
+                ControlId.DISCARD_DRAFT,
+                "Discard",
+                Emphasis.SECONDARY,
+                enabled = enabled,
+                tooltip = "git review forget --draft (with confirmation)",
+                index = index,
+            ),
+        )
+        DraftRow(name = d.branch, meta = "${d.annotated}/${d.total}", controls = controls)
+    }
+    return Block.DraftRows(rows)
+}
+
 private fun noReviewReadyBlocks(model: PanelModel): List<Block> {
     val enabled = !model.busy
     val out = ArrayList<Block>()
+    if (model.drafts.isNotEmpty()) {
+        out.add(Block.Heading("Reading orders you started"))
+        out.add(draftRows(model))
+    }
     if (model.reviews.isNotEmpty()) {
         out.add(Block.Heading("Reviews in this repository"))
         out.add(inventoryRows(model))
@@ -718,7 +822,7 @@ private fun noReviewReadyBlocks(model: PanelModel): List<Block> {
     out.add(
         Block.Paragraph(
             "No active review on this branch.",
-            separated = model.reviews.isNotEmpty(),
+            separated = model.reviews.isNotEmpty() || model.drafts.isNotEmpty(),
         ),
     )
     out.add(

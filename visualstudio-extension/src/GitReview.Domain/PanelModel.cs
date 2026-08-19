@@ -42,11 +42,35 @@ public sealed record PanelReview(
     bool Resumable,
     BranchFinish? Finish = null);
 
+/// <summary>
+/// A row of the empty state's draft block: a reading order the reviewer started
+/// and has not paused. Flat projection, with nothing derived — the progress is
+/// counted by the CLI and the path is resolved by the CLI.
+///
+/// Startable says whether "Validate and start" can be offered: only when the
+/// CLI knows the origin and range the draft was generated with. With Unknown
+/// (the instruction block was deleted by hand) invoking with the defaults would
+/// fail with a drift error every time, so one control fewer beats one that
+/// guesses.
+/// </summary>
+public sealed record PanelDraft(
+    string Branch,
+    string Path,
+    int Annotated,
+    int Total,
+    bool Startable);
+
 public sealed record PanelModel(
     Situation Situation,
     bool Busy,
     string? RepoLabel = null,
     IReadOnlyList<PanelReview>? Reviews = null,
+    /// <summary>
+    /// Same rule as Reviews: only with NoReview, empty in any other situation.
+    /// A review in progress is always the most important thing the panel has to
+    /// say, and another branch's draft does not compete for the body.
+    /// </summary>
+    IReadOnlyList<PanelDraft>? Drafts = null,
     PendingFinish? PendingFinish = null,
     bool NoBaseConfigured = false,
     string? ConfiguredBase = null,
@@ -74,6 +98,7 @@ public sealed record PanelModel(
     string? Stderr = null)
 {
     public IReadOnlyList<PanelReview> ReviewsList => Reviews ?? Array.Empty<PanelReview>();
+    public IReadOnlyList<PanelDraft> DraftsList => Drafts ?? Array.Empty<PanelDraft>();
     public IReadOnlyList<PanelEntry> FilesList => Files ?? Array.Empty<PanelEntry>();
 }
 
@@ -147,6 +172,37 @@ public static class PanelModelBuilder
             Finish: branch.Finish)).ToList();
     }
 
+    /// <summary>
+    /// Projects the `draft` records of `config --porcelain`, one to one and in
+    /// the CLI's order. A paused review's draft never gets here — the CLI does
+    /// not report it, because save moved its file to the archived namespace.
+    /// </summary>
+    public static IReadOnlyList<PanelDraft> ToPanelDrafts(IReadOnlyList<DraftRecord> drafts)
+    {
+        var out_ = new List<PanelDraft>(drafts.Count);
+        foreach (var d in drafts)
+        {
+            out_.Add(new PanelDraft(
+                Branch: d.Src,
+                Path: d.Path,
+                Annotated: d.Annotated,
+                Total: d.Total,
+                Startable: d.Source != DraftSource.Unknown && d.Range != DraftRange.Unknown));
+        }
+        return out_;
+    }
+
+    /// <summary>
+    /// The draft row at index, resolved against the HOST's state. Same role as
+    /// ResumableSourceAt: what ends up in the CLI does not come from the panel.
+    /// </summary>
+    public static DraftRecord? DraftAt(IReadOnlyList<DraftRecord> drafts, object? index)
+    {
+        if (index is not int i) return null;
+        if (i < 0 || i >= drafts.Count) return null;
+        return drafts[i];
+    }
+
     public static string? ResumableSourceAt(IReadOnlyList<BranchRecord> branches, object? index)
     {
         if (index is not int i) return null;
@@ -166,6 +222,9 @@ public static class PanelModelBuilder
             Reviews: state.Situation == Situation.NoReview
                 ? ToPanelReviews(state.BranchesList)
                 : Array.Empty<PanelReview>(),
+            Drafts: state.Situation == Situation.NoReview
+                ? ToPanelDrafts(state.DraftsList)
+                : Array.Empty<PanelDraft>(),
             NoBaseConfigured: state.Situation == Situation.NoReview
                 && state.Config is not null
                 && state.Config.Base is null,

@@ -697,6 +697,58 @@ export function panelHtml(nonce: string): string {
     return box;
   }
 
+  /**
+   * Una fila del bloque de borradores: la rama, el avance tal como lo reporta
+   * la CLI, y los cuatro controles sobre ESA fila. El progreso no se deriva ni
+   * se reinterpreta acá — annotated/total llegan contados.
+   *
+   * Validate and start falta cuando la CLI no sabe con qué origen y rango se
+   * generó el borrador: invocarlo con los defaults fallaría siempre por deriva,
+   * y un control menos es mejor que uno que adivina.
+   */
+  function renderDraft(model, draft, index) {
+    const box = el("div", "rev");
+
+    const head = el("div", "rev-head");
+    head.appendChild(el("span", "rev-name", draft.branch));
+    box.appendChild(head);
+
+    box.appendChild(el("div", "rev-meta", draft.annotated + "/" + draft.total));
+
+    const actions = el("div", "rev-actions");
+    const open = button("Open", "openDraft", null, null, index);
+    open.title = "Open the reading order for editing";
+    actions.appendChild(open);
+
+    const copy = button("Copy for agent", "copyDraftPrompt", null, null, index);
+    copy.title = "Copy an instruction naming this file";
+    actions.appendChild(copy);
+
+    if (draft.startable) {
+      const go = button("Validate and start", "startFromDraft", "primary", null, index);
+      go.disabled = model.busy;
+      go.title = "git review walkthrough draft --build, then start";
+      actions.appendChild(go);
+    }
+
+    const discard = button("Discard", "discardDraft", null, null, index);
+    discard.disabled = model.busy;
+    discard.title = "git review forget --draft (with confirmation)";
+    actions.appendChild(discard);
+
+    box.appendChild(actions);
+    return box;
+  }
+
+  function renderDrafts(model, drafts) {
+    const box = el("div", "inv");
+    box.appendChild(el("h2", null, "Reading orders you started"));
+    drafts.forEach(function (draft, index) {
+      box.appendChild(renderDraft(model, draft, index));
+    });
+    return box;
+  }
+
   function renderInventory(model, reviews) {
     const box = el("div", "inv");
     box.appendChild(el("h2", null, "Reviews in this repository"));
@@ -847,15 +899,22 @@ export function panelHtml(nonce: string): string {
         // guardó con setState, que puede venir de una versión sin este campo.
         // pane-main = body scrolleable + footer anclado (fills lo pone render).
         const reviews = model.reviews || [];
+        const drafts = model.drafts || [];
         const body = el("div", "pane-body");
+        // Los borradores empezados van primero y el cuerpo de siempre sigue
+        // entero debajo: un orden de lectura a medio escribir es lo que el
+        // revisor dejó abierto, pero no reemplaza el inventario ni Start.
+        if (drafts.length > 0) {
+          body.appendChild(renderDrafts(model, drafts));
+        }
         if (reviews.length > 0) {
           body.appendChild(renderInventory(model, reviews));
-          const start = renderEmptyStartBlock(model);
-          start.className = "empty after-inv";
-          body.appendChild(start);
-        } else {
-          body.appendChild(renderEmptyStartBlock(model));
         }
+        const start = renderEmptyStartBlock(model);
+        if (drafts.length > 0 || reviews.length > 0) {
+          start.className = "empty after-inv";
+        }
+        body.appendChild(start);
         const wrap = el("div", "pane-main");
         wrap.appendChild(body);
         wrap.appendChild(renderPaneFooter(model));

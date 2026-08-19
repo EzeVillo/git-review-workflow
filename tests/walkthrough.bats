@@ -40,6 +40,25 @@ teardown() {
 	rm -rf "$TMP"
 }
 
+# The built file with the instruction block taken out: exactly the bytes every
+# expectation below was written against before the block existed. The block is
+# emitted between the "# Walkthrough" heading and the preamble, and its two
+# endpoints are object SHAs, so it cannot be spelled out in an expected string
+# here; its own content is asserted in tests/walkthrough-prompt-block.bats.
+# The blank line that follows the closing marker goes with it, so what is left is
+# the heading, a blank line and the preamble -- the old shape exactly.
+built_body() {
+	awk '
+		index($0, "<!-- git-review-range:") == 1 { skip = 1; next }
+		skip {
+			if (index($0, "-->")) { skip = 0; drop = 1 }
+			next
+		}
+		drop && $0 == "" { drop = 0; next }
+		{ drop = 0; print }
+	' "${1:-.review/walkthrough.md}"
+}
+
 # ── init ──────────────────────────────────────────────────────────────────────
 
 @test "init lists exactly the changed files, as ?. skeleton entries" {
@@ -164,7 +183,7 @@ EOF
 	# entries in author-number order, renumbered 1..N, each why body trimmed with a
 	# single trailing blank line.
 	expected="$(printf '# Walkthrough\n\n## Heads-up\n\nthe token lifetime changed\n\n## 1. src/c.txt\nwhy c\n\n## 2. a.txt\nwhy a\n\n## 3. b.txt\nwhy b\n\n')"
-	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+	[ "$(built_body)" = "$expected" ]
 }
 
 @test "build succeeds on a real init skeleton filled in place (intro does not trip validation)" {
@@ -188,7 +207,7 @@ EOF
 	[ "$status" -eq 0 ]
 	# build strips the intro and produces the canonical ordered file.
 	expected="$(printf '# Walkthrough\n\n## 1. src/c.txt\nlooks fine\n\n## 2. a.txt\nlooks fine\n\n## 3. b.txt\nlooks fine\n\n')"
-	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+	[ "$(built_body)" = "$expected" ]
 	! grep -q 'PLACEHOLDERS' .review/walkthrough.md
 }
 
@@ -221,7 +240,7 @@ EOF
 	run git review walkthrough build
 	[ "$status" -eq 0 ]
 	expected="$(printf '# Walkthrough\n\n## Heads-up\n\nsession tokens now expire; anything caching them is suspect\n\n## 1. a.txt\nlooks fine\n\n## 2. b.txt\nlooks fine\n\n## 3. src/c.txt\nlooks fine\n\n')"
-	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+	[ "$(built_body)" = "$expected" ]
 }
 
 @test "build fails on a leftover heads-up placeholder without modifying the file" {
@@ -243,11 +262,11 @@ EOF
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"3 entries, ordered and renumbered"* ]]
 	expected="$(printf '# Walkthrough\n\n## Heads-up\n\nthe guards are greps; watch the anchoring\n\n## 1. a.txt\nthe build guard for the `<!-- heads-up: ... -->` placeholder\n\n## 2. b.txt\nand the one for `<!-- why: -->`, same shape\n\n## 3. src/c.txt\nz\n\n')"
-	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+	[ "$(built_body)" = "$expected" ]
 	# The quoted literals are now committed prose: rebuilding must not trip either.
 	run git review walkthrough build
 	[ "$status" -eq 0 ]
-	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+	[ "$(built_body)" = "$expected" ]
 }
 
 @test "build still fails when a placeholder literal opens a line inside a why" {
@@ -270,7 +289,7 @@ EOF
 	run git review walkthrough build
 	[ "$status" -eq 0 ]
 	expected="$(printf '# Walkthrough\n\n## 1. a.txt\nx\n\n## 2. b.txt\ny\n\n## 3. src/c.txt\nz\n\n')"
-	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+	[ "$(built_body)" = "$expected" ]
 }
 
 # ── the "> key" marker ────────────────────────────────────────────────────────
@@ -301,7 +320,7 @@ EOF
 	[[ "$output" == *"3 entries (2 key)"* ]]
 	# Canonical output: the marker always leads the body, wherever it was written.
 	expected="$(printf '# Walkthrough\n\n## 1. a.txt\n> key\nthe core change\n\n## 2. b.txt\nmechanical rename\n\n## 3. src/c.txt\n> key\nnew helper\n\n')"
-	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+	[ "$(built_body)" = "$expected" ]
 }
 
 @test "build --check reports the key count and writes nothing" {
@@ -342,7 +361,7 @@ EOF
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"3 entries (2 key)"* ]]
 	expected="$(printf '# Walkthrough\n\n## 1. a.txt\n> key\nthe core change\n\n## 2. b.txt\nmechanical rename\n\n## 3. src/c.txt\n> key\nnew helper\n\n')"
-	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+	[ "$(built_body)" = "$expected" ]
 	# The marker reaches the reviewer only in its canonical spelling: no variant
 	# survives anywhere in the built file.
 	run grep -c '^> key$' .review/walkthrough.md
@@ -370,7 +389,7 @@ EOF
 	[ "$status" -eq 0 ]
 	[[ "$output" != *"key)"* ]]
 	expected="$(printf '# Walkthrough\n\n## 1. a.txt\n> keyword lookups are cached now\n\n## 2. b.txt\ny\n\n## 3. src/c.txt\nz\n\n')"
-	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+	[ "$(built_body)" = "$expected" ]
 }
 
 @test "build notes that marking every entry defeats the marker but still builds" {
@@ -380,7 +399,7 @@ EOF
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"every entry is marked"* ]]
 	expected="$(printf '# Walkthrough\n\n## 1. a.txt\n> key\nx\n\n## 2. b.txt\n> key\ny\n\n## 3. src/c.txt\n> key\nz\n\n')"
-	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+	[ "$(built_body)" = "$expected" ]
 }
 
 @test "build suggests marking something on a large walkthrough with no key entry" {
@@ -543,7 +562,7 @@ EOF
 	# A surviving CR would show up inside this string comparison ($(cat) strips
 	# trailing newlines, never carriage returns), so equality proves LF endings.
 	expected="$(printf '# Walkthrough\n\n## Heads-up\n\nthe token lifetime changed\n\n## 1. src/c.txt\nwhy c\n\n## 2. a.txt\n> key\nwhy a\n\n## 3. b.txt\nwhy b\n\n')"
-	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+	[ "$(built_body)" = "$expected" ]
 }
 
 @test "build --check passes on a CRLF walkthrough and leaves it untouched" {
@@ -656,7 +675,7 @@ EOF
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"uncommitted changes"* ]]
 	expected="$(printf '# Walkthrough\n\n## Heads-up\n\nthe token lifetime changed\n\n## 1. src/c.txt\nwhy c\n\n## 2. a.txt\nwhy a\n\n## 3. b.txt\nwhy b\n\n')"
-	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+	[ "$(built_body)" = "$expected" ]
 }
 
 @test "editing only the sidecar does not count as an uncommitted change" {
@@ -756,7 +775,7 @@ EOF
 	[[ "$output" != *"not changed in the PR"* ]]
 	# The rewrite keeps the path literal and its marker attached.
 	expected="$(printf '# Walkthrough\n\n## 1. a.txt\nwhy a\n\n## 2. b.txt\nwhy b\n\n## 3. src/c.txt\nwhy c\n\n## 4. %s\n> key\nwhy u\n\n' "$NONASCII")"
-	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+	[ "$(built_body)" = "$expected" ]
 }
 
 @test "build still reports real drift on a PR holding a non-ASCII path" {
@@ -833,13 +852,13 @@ EOF
 	# A surviving BOM would break this comparison too ($(cat) strips trailing
 	# newlines, never a leading BOM), so equality proves both.
 	expected="$(printf '# Walkthrough\n\n## Heads-up\n\nthe token lifetime changed\n\n## 1. a.txt\nwhy a\n\n## 2. b.txt\nwhy b\n\n## 3. src/c.txt\nwhy c\n\n')"
-	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+	[ "$(built_body)" = "$expected" ]
 	run grep -c '^# Walkthrough$' .review/walkthrough.md
 	[ "$output" = "1" ]
 	# Building again is a no-op, so nothing was baked in to resurface later.
 	run git review walkthrough build
 	[ "$status" -eq 0 ]
-	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+	[ "$(built_body)" = "$expected" ]
 }
 
 @test "build strips a BOM from a walkthrough that opens with an entry" {
@@ -860,7 +879,7 @@ EOF
 	[[ "$output" == *"3 entries, ordered and renumbered"* ]]
 	[[ "$output" != *"missing from the walkthrough"* ]]
 	expected="$(printf '# Walkthrough\n\n## 1. a.txt\nwhy a\n\n## 2. b.txt\nwhy b\n\n## 3. src/c.txt\nwhy c\n\n')"
-	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+	[ "$(built_body)" = "$expected" ]
 }
 
 # ── stray whitespace on an entry heading ──────────────────────────────────────
@@ -884,7 +903,7 @@ EOF
 	# The rewrite drops the stray whitespace, so the author's build heals the
 	# sidecar for every reviewer.
 	expected="$(printf '# Walkthrough\n\n## 1. a.txt\nwhy a\n\n## 2. b.txt\nwhy b\n\n## 3. src/c.txt\nwhy c\n\n')"
-	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+	[ "$(built_body)" = "$expected" ]
 }
 
 @test "build keeps the key marker on an entry whose heading has trailing space" {
@@ -900,7 +919,7 @@ EOF
 	# The body is looked up by path, so an untrimmed heading lost the body with it.
 	[[ "$output" == *"3 entries (1 key), ordered and renumbered"* ]]
 	expected="$(printf '# Walkthrough\n\n## 1. a.txt\n> key\nwhy a\n\n## 2. b.txt\nwhy b\n\n## 3. src/c.txt\nwhy c\n\n')"
-	[ "$(cat .review/walkthrough.md)" = "$expected" ]
+	[ "$(built_body)" = "$expected" ]
 }
 
 @test "build refuses an entry heading that is not in the canonical form" {

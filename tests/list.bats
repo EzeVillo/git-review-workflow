@@ -154,3 +154,113 @@ teardown() {
 	[ "$status" -eq 0 ]
 	[ -z "$output" ]
 }
+
+# ── branch-draft: who carries a reading order of their own ────────────────────
+
+# Install a valid reviewer's draft for <branch> without going through the
+# skeleton: the shape of the file is not what these tests are about.
+put_draft() {
+	run git review walkthrough draft --build --from - "$1" <<'ORDER'
+# Walkthrough
+
+## 1. app.txt
+mine, not the author's
+ORDER
+	[ "$status" -eq 0 ]
+}
+
+branch_drafts() {
+	git review list --porcelain | awk -F'\t' '$1 == "branch-draft" { print $2 }'
+}
+
+@test "list --porcelain marks a review that carries a draft, right after its branch row" {
+	put_draft feature/x
+	git review start feature/x >/dev/null
+	git switch --quiet develop
+
+	run git review list --porcelain
+	[ "$status" -eq 0 ]
+	[ "$(printf '%s\n' "$output" | awk -F'\t' '$1 == "branch-draft" { print $2 }')" = "review/feature/x" ]
+	# Position is normative: porcelain-bytes.bats compares this output byte for
+	# byte, so "somewhere in the output" would leave two equally correct
+	# implementations producing two different suites.
+	prev="$(printf '%s\n' "$output" | grep -n '^branch-draft' | cut -d: -f1)"
+	[ -n "$prev" ]
+	before="$(printf '%s\n' "$output" | sed -n "$((prev - 1))p" | cut -f1-2)"
+	[ "$before" = "$(printf 'branch\treview/feature/x')" ]
+}
+
+@test "list --porcelain emits no branch-draft when nothing carries one" {
+	before="$(git review list --porcelain)"
+	git review start feature/x >/dev/null
+	git switch --quiet develop
+	run git review list --porcelain
+	[ "$status" -eq 0 ]
+	[ -z "$(printf '%s\n' "$output" | awk -F'\t' '$1 == "branch-draft"')" ]
+	# The empty-inventory output is untouched too.
+	git switch --quiet review/feature/x
+	git review abort >/dev/null
+	[ "$(git review list --porcelain)" = "$before" ]
+}
+
+@test "list --porcelain marks a draft in whole and in step, not only in walk" {
+	# The draft travels with the review in every mode -- save files it, and
+	# forget --saved discards it -- so a badge only on walk rows would hand a file
+	# to forget --saved that no surface ever showed.
+	put_draft feature/x
+	git review start feature/x --no-walk >/dev/null
+	git switch --quiet develop
+	[ "$(branch_drafts)" = "review/feature/x" ]
+	git switch --quiet review/feature/x
+	git review abort >/dev/null
+
+	git review start feature/x --step >/dev/null
+	git switch --quiet develop
+	[ "$(branch_drafts)" = "review/feature/x" ]
+}
+
+@test "a paused review that filed its draft keeps the mark, and one that filed none does not" {
+	put_draft feature/x
+	git review start feature/x >/dev/null
+	run git review save
+	[ "$status" -eq 0 ]
+	[ "$(branch_drafts)" = "review-saved/feature/x" ]
+
+	# A second paused review of the SAME branch, with no draft of its own: a
+	# comparison names its review branch after the ref it was given, so the two
+	# coexist, but the archived file is named after the branch and both would
+	# claim it by name. Only the one that actually filed it may.
+	run git review compare develop origin/feature/x
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/origin/feature/x.reviewdraft)" = "feature/x" ]
+	run git review save
+	[ "$status" -eq 0 ]
+
+	run git review list --porcelain
+	[ "$status" -eq 0 ]
+	marked="$(printf '%s\n' "$output" | awk -F'\t' '$1 == "branch-draft" { print $2 }')"
+	[ "$marked" = "review-saved/feature/x" ]
+}
+
+@test "every (draft) row in the readable listing has its branch-draft record, and the reverse" {
+	# One paused review carrying its filed draft, one active review carrying its
+	# own: the two shapes the badge has to cover.
+	put_draft feature/x
+	git review start feature/x >/dev/null
+	run git review save
+	[ "$status" -eq 0 ]
+	put_draft feature/y
+	git review start feature/y >/dev/null
+
+	readable="$(git review list | grep -c '(draft)')"
+	porcelain="$(branch_drafts | grep -c .)"
+	[ "$readable" = "2" ]
+	[ "$readable" = "$porcelain" ]
+
+	# And the reverse direction: discard one draft and both surfaces lose a row.
+	run git review forget --draft feature/y
+	[ "$status" -eq 0 ]
+	[ "$(git review list | grep -c '(draft)')" = "1" ]
+	[ "$(branch_drafts | grep -c .)" = "1" ]
+	[ "$(branch_drafts)" = "review-saved/feature/x" ]
+}

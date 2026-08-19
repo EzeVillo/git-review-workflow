@@ -1,106 +1,85 @@
 namespace GitReview.Domain;
 
+/// <summary>
+/// What is left of the draft path inside the wizard (012,
+/// contracts/client-draft-panel.md § 3): create, and finish.
+///
+/// There used to be a loop: create → open → <b>wait</b> → validate → reload
+/// offers → pick keys. The wait was a dialog that stayed open while the reviewer
+/// wrote their reading order, and everything after it depended on that dialog
+/// still being there. What Build, Reload and PickKeys did now lives in
+/// "Validate and start", a panel control, over a state that outlives closing the
+/// IDE. The wizard waits for nothing.
+///
+/// It does not open the draft either, and so it no longer needs its path: in the
+/// instant after creating it there is no `draft` record yet to carry one, so
+/// opening there would need either an extra invocation or building the path
+/// again — exactly what this feature removes.
+/// </summary>
 public abstract record DraftFlowState
 {
+    /// <summary>Invoke `walkthrough draft` (only when the reviewer chose Draft).</summary>
     public sealed record Create : DraftFlowState
     {
         public static readonly Create Instance = new();
     }
-    public sealed record Open : DraftFlowState
+
+    /// <summary>
+    /// The wizard is finished. No review was started and no notice is left open:
+    /// the draft is in the panel, with its four controls.
+    /// </summary>
+    public sealed record Done : DraftFlowState
     {
-        public static readonly Open Instance = new();
+        public static readonly Done Instance = new();
     }
-    public sealed record Wait(string? Error = null) : DraftFlowState;
-    public sealed record Build : DraftFlowState
-    {
-        public static readonly Build Instance = new();
-    }
-    public sealed record Reload : DraftFlowState
-    {
-        public static readonly Reload Instance = new();
-    }
-    public sealed record PickKeys : DraftFlowState
-    {
-        public static readonly PickKeys Instance = new();
-    }
-    public sealed record Done(ReviewLayout Layout) : DraftFlowState;
+
+    /// <summary>
+    /// Back to the reading-shape step, without redoing the branch choice. The
+    /// draft is NOT deleted: the next pass offers it as DraftResume. Error only
+    /// when going back because of a failure.
+    /// </summary>
     public sealed record Back(string? Error = null) : DraftFlowState;
 }
 
 public abstract record DraftFlowEvent
 {
+    /// <summary>Result of `walkthrough draft`.</summary>
     public sealed record Created(bool Ok, string? Error = null) : DraftFlowEvent;
-    public sealed record Opened : DraftFlowEvent
-    {
-        public static readonly Opened Instance = new();
-    }
-    public sealed record Continue : DraftFlowEvent
-    {
-        public static readonly Continue Instance = new();
-    }
-    public sealed record Cancel : DraftFlowEvent
-    {
-        public static readonly Cancel Instance = new();
-    }
-    public sealed record Built(bool Ok, string? Error = null) : DraftFlowEvent;
-    public sealed record Offers(IReadOnlyList<ReadingOffer>? Value) : DraftFlowEvent;
-    public sealed record KeysPicked(bool? KeysOnly) : DraftFlowEvent;
 }
 
 public static class DraftFlow
 {
+    /// <summary>
+    /// Where it starts: Resume creates nothing — the file exists and recreating
+    /// it would overwrite what the reviewer wrote, which is what `--force` is
+    /// there to ask for by hand. With nothing to create, the wizard is done.
+    /// </summary>
     public static DraftFlowState InitialDraftFlowState(LayoutOffers.DraftStep step) =>
         step == LayoutOffers.DraftStep.Create
             ? DraftFlowState.Create.Instance
-            : DraftFlowState.Open.Instance;
+            : DraftFlowState.Done.Instance;
 
+    /// <summary>
+    /// Transition. An event that does not belong to the current state leaves it
+    /// untouched: the machine invents no paths, and the host cannot skip a step
+    /// by sending the wrong event.
+    /// </summary>
     public static DraftFlowState AdvanceDraftFlow(DraftFlowState state, DraftFlowEvent ev) => state switch
     {
+        // With no draft there is nothing to show in the panel: the failure is
+        // the CLI's and the reviewer goes back to the reading-shape step.
         DraftFlowState.Create => ev is DraftFlowEvent.Created c
-            ? c.Ok ? DraftFlowState.Open.Instance : new DraftFlowState.Back(c.Error)
-            : state,
-        DraftFlowState.Open => ev is DraftFlowEvent.Opened
-            ? new DraftFlowState.Wait()
-            : state,
-        DraftFlowState.Wait => ev switch
-        {
-            DraftFlowEvent.Continue => DraftFlowState.Build.Instance,
-            DraftFlowEvent.Cancel => new DraftFlowState.Back(),
-            _ => state,
-        },
-        DraftFlowState.Build => ev is DraftFlowEvent.Built b
-            ? b.Ok ? DraftFlowState.Reload.Instance : new DraftFlowState.Wait(b.Error)
-            : state,
-        DraftFlowState.Reload => ev is DraftFlowEvent.Offers o
-            ? OffersIncludeKeys(o.Value)
-                ? DraftFlowState.PickKeys.Instance
-                : new DraftFlowState.Done(ReviewLayout.Walk)
-            : state,
-        DraftFlowState.PickKeys => ev is DraftFlowEvent.KeysPicked k
-            ? k.KeysOnly switch
-            {
-                null => new DraftFlowState.Back(),
-                true => new DraftFlowState.Done(ReviewLayout.Keys),
-                false => new DraftFlowState.Done(ReviewLayout.Walk),
-            }
+            ? c.Ok ? DraftFlowState.Done.Instance : new DraftFlowState.Back(c.Error)
             : state,
         DraftFlowState.Done or DraftFlowState.Back => state,
         _ => state,
     };
 
+    /// <summary>
+    /// Whether the CLI offers `keys` over an already-validated draft — that is,
+    /// whether it carries entries marked essential and there are two readings to
+    /// offer. "Validate and start" consumes it, since that is what asks now.
+    /// </summary>
     public static bool OffersIncludeKeys(IReadOnlyList<ReadingOffer>? offers) =>
         offers is not null && offers.Any(o => o.Id == OfferId.Keys);
-
-    /// <summary>
-    /// Resolves gitdir from a .git file (worktree / submodule): line <c>gitdir: &lt;path&gt;</c>.
-    /// </summary>
-    public static string? GitdirFromLink(string content)
-    {
-        var match = System.Text.RegularExpressions.Regex.Match(
-            content, @"^gitdir:[ \t]*(.+?)[ \t\r]*$",
-            System.Text.RegularExpressions.RegexOptions.Multiline);
-        if (!match.Success) return null;
-        var path = match.Groups[1].Value;
-        return string.IsNullOrEmpty(path) ? null : path;
-    }
 }

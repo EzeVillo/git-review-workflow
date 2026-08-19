@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import {
     CandidateBranch,
     CandidateRemote,
+    DraftRecord,
     EffectiveConfig,
     parseConfigPorcelain,
 } from "../cli/configPorcelain";
@@ -50,6 +51,13 @@ export interface ReviewState {
      */
     remotes?: CandidateRemote[];
     /**
+     * Borradores de walkthrough sueltos del working tree (registro `draft` de
+     * `config --porcelain`, 012). Se pueblan en el mismo reporte que `config`,
+     * sin invocaciones nuevas. Ausente cuando ese reporte no llegó; `[]` si
+     * llegó y no hay ninguno.
+     */
+    drafts?: DraftRecord[];
+    /**
      * Asunto y autor de cada commit de la secuencia, por `position`. Sólo en
      * modo step, y sólo con una CLI que los reporte: ausentes significa "esta
      * CLI no los provee", no "esta review no los tiene" (FR-003/FR-004).
@@ -90,6 +98,12 @@ export interface ReviewState {
      * registro `draft`, 011). Ausente cuando la CLI no lo emitió.
      */
     draft?: true;
+    /**
+     * Ruta absoluta de ese borrador, tal como la reportó la CLI (012). Aparte
+     * del booleano: la presencia es la presencia, y el cliente abre esta ruta
+     * en vez de armarla.
+     */
+    draftPath?: string;
     /** stderr crudo de la CLI; presente en error/out-of-range/cli-missing/cli-outdated. */
     stderr?: string;
 }
@@ -145,16 +159,18 @@ async function loadConfigReport(
     config?: EffectiveConfig;
     candidates: CandidateBranch[];
     remotes: CandidateRemote[];
+    drafts: DraftRecord[];
 }> {
     const result = await invokeGitReview("config", ["--porcelain"], options);
     if (result.errorCode || result.exitCode !== 0) {
-        return {candidates: [], remotes: []};
+        return {candidates: [], remotes: [], drafts: []};
     }
     const parsed = parseConfigPorcelain(result.stdout);
     return {
         config: parsed.config,
         candidates: parsed.candidates,
         remotes: parsed.remotes,
+        drafts: parsed.drafts,
     };
 }
 
@@ -309,6 +325,7 @@ export class ReviewStateManager {
                     next.config = report.config;
                     next.candidates = report.candidates;
                     next.remotes = report.remotes;
+                    next.drafts = report.drafts;
                 }
             }
             return this.setState(next);
@@ -356,6 +373,9 @@ export class ReviewStateManager {
         }
         if (parsed.draft) {
             next.draft = true;
+        }
+        if (parsed.draftPath !== undefined) {
+            next.draftPath = parsed.draftPath;
         }
         return this.setState(next);
     }

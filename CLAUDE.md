@@ -223,6 +223,44 @@ working tree:
   review activa) y a mano por los cuatro que arman un path sin fijar contexto — `list`, `save`,
   `continue` y
   `forget` —, porque un `$(...)` no puede cachear nada.
+- **Bloque de instrucciones** (`<!-- git-review-range: … -->`): la pieza que hace que el borrador se
+  pueda completar sin mirar el PR. La escribe el generador de esqueleto —el mismo para `init` y para
+  `draft`, `walk_emit_prompt_block`— justo debajo de `# Walkthrough`, y nombra el rango en **objetos
+  resueltos** (SHA del tip; OID del lower bound con su tipo, `commit` o `tree`), la situación del
+  árbol de trabajo, los flags con los que se generó y cuatro comandos para ver el contenido real. Se
+  **regenera** en cada reescritura, con el rango que esa corrida acaba de validar (`walk_prompt_block`
+  se come el entrante para que no se duplique ni se cuele al preámbulo): un bloque arrastrado
+  sobrevive al cambio del rango y la deriva no lo ve si el conjunto de paths no cambió. Se filtra al
+  leer sin código nuevo —`walk_preamble` ya descarta todo comentario— y es **neutro** para las ocho
+  reglas de validación, así que borrarlo a mano es legal. **Dos prohibiciones duras en su contenido,
+  las dos medidas**: nunca `<lower>..<tip>` como un solo argumento (en Windows con cwd profundo `git
+  diff` hace `stat()` del argumento y muere con `Filename too long`, con extremos de cualquier tipo)
+  y nunca `git log` / `rev-list` / `shortlog` / `range-diff` (con un `lower` de tipo tree imprimen la
+  historia entera del repo con exit 0, en silencio). La línea `Generated with:` es la **única casa**
+  de los flags de origen y rango: de ahí los lee el registro `draft` de `config --porcelain` y con
+  ellos el panel replica el `--build` y el `start` — con los defaults, cualquier borrador hecho con
+  `--delta`, `--local` u `--offline` fallaría **siempre** por deriva.
+- **El circuito con un agente** (`--stdout` / `--build --from`): las dos puntas que dejan que algo
+  que no es el revisor complete el orden de lectura **sin escribir en el gitdir**. `--stdout` emite
+  el esqueleto por la salida estándar y no toca nada —ni `mkdir`, ni temporal, ni traps, ni `mv`—,
+  manda todas las notas a stderr, y conmuta la línea de cierre del andamiaje para que nombre
+  `--build --from <file>`: sin esa conmutación el esqueleto le indica al agente un comando que, si
+  esa rama ya tenía borrador, **valida y reescribe ese otro archivo** con exit 0 y mensaje de éxito.
+  `--build --from <file>|-` lee el contenido de afuera (por `walk_normalize`, que un agente en
+  PowerShell produce CRLF y BOM), lo valida con las **mismas ocho reglas** y lo instala. El orden de
+  las guardas es normativo: la existencia del borrador previo se decide **antes** de leer la fuente,
+  porque negarse después de consumir stdin deja al llamador sin forma de reintentar; y la única
+  escritura sigue siendo el `mv` final, así que todo rechazo deja el borrador anterior byte por byte.
+- **Los tres registros porcelain del borrador:** `config --porcelain` emite un `draft<TAB><src><TAB>
+  <path><TAB><annotated><TAB><total><TAB><source><TAB><range>` por cada borrador del namespace
+  **activo**, con y sin argumento de rama (un borrador es un hecho del working tree, no de la rama
+  consultada); `status --porcelain` le suma la ruta absoluta a su registro `draft` de presencia; y
+  `list --porcelain` gana `branch-draft<TAB><branch>` detrás de cada fila `branch` que carga uno, con
+  la misma condición de custodia que el `(draft)` legible y por un único helper para que las dos no
+  puedan divergir. El progreso lo cuenta `walk_draft_progress` con **un solo `awk`** sobre todos los
+  archivos a la vez; con cero borradores `emit_draft_records` corta **antes** de invocarlo, porque
+  `awk` sin argumentos de archivo lee la entrada estándar y se cuelga — y este verbo corre en cada
+  refresco del panel.
 - **Refs de ediciones:** `refs/review-edits/<src>/<step>` bancan las ediciones de cada commit en
   `--step` como objetos commit-tree; `git review save` los mueve a `refs/review-saved-edits/` para
   que `git review clean` (que poda

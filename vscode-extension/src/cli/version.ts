@@ -1,5 +1,5 @@
 /** Versión mínima de la CLI que trae el contrato porcelain (research.md Decisión 1). */
-export const MIN_CLI_VERSION = "0.6.0";
+export const MIN_CLI_VERSION = "0.7.0";
 
 function parseVersion(version: string): [number, number, number] | undefined {
     const parts = version.trim().split(".");

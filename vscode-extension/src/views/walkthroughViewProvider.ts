@@ -38,6 +38,14 @@ export const PANEL_MESSAGES = [
     "compareReview",
     "walkthroughInit",
     "walkthroughBuild",
+    // Bloque de borradores (012): fila del bloque → índice, igual que
+    // continueReview / discardInventory. Los cuatro son controles del CUERPO
+    // del panel, no acciones: no están en contributes.commands ni en la paleta,
+    // así que el conteo de 27 del canónico sigue igual.
+    "openDraft",
+    "copyDraftPrompt",
+    "startFromDraft",
+    "discardDraft",
     // Support (links externos): el webview manda un id; el host resuelve la
     // URL contra un allowlist y abre con openExternal. No es un comando de
     // la paleta ni de la CLI.

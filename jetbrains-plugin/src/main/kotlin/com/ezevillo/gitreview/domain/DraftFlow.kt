@@ -1,52 +1,41 @@
 package com.ezevillo.gitreview.domain
 
 /**
- * El bucle del borrador del revisor (011, contracts/client-draft-flow.md):
- * crear → abrir → esperar → validar → recargar ofertas → elegir → confirmar.
+ * Lo que queda del camino del borrador dentro del asistente (012,
+ * contracts/client-draft-panel.md § 3): crear, y terminar.
+ *
+ * Antes había un bucle: crear → abrir → **esperar** → validar → recargar
+ * ofertas → elegir esenciales. La espera era un diálogo que se quedaba abierto
+ * mientras el revisor escribía su orden de lectura, y todo lo que venía después
+ * dependía de que ese diálogo siguiera ahí. Lo que hacían `Build`, `Reload` y
+ * `PickKeys` vive ahora en *Validate and start*, un control del panel, sobre un
+ * estado que sobrevive a cerrar el IDE. El asistente no espera nada.
+ *
+ * Tampoco abre el borrador, y por eso ya no necesita su ruta: en el instante
+ * posterior a crearlo todavía no hay registro `draft` que la traiga, así que
+ * abrir ahí exigiría o una invocación extra o volver a armar la ruta — que es
+ * exactamente lo que esta feature retira. El refresco post-mutación que ya
+ * existe trae la fila con su `<path>` un instante después.
  *
  * Dominio puro, sin la plataforma IntelliJ, y los mismos estados y transiciones
- * que `draftFlow.ts` en la extensión: la paridad de producto entre los dos
- * clientes se sostiene si las transiciones viven en un solo lugar por cliente y
- * se prueban igual, no si cada host las reinventa entre sus diálogos.
- *
- * Con **un** evento de menos, a propósito: no hay `Dismiss`. En VS Code
- * descartar la notificación no es Cancel —se cierra sola con un *Clear All
- * Notifications*, que es fácil de apretar sin querer mientras se edita el
- * archivo que el aviso pide editar— y por eso allá el aviso se vuelve a mostrar.
- * Acá el vehículo es un `DialogWrapper`: nada lo cierra en masa, cerrarlo es un
- * acto sobre ese diálogo, y Swing entrega la cruz y el botón por el mismo
- * `doCancelAction`. Un `Dismiss` sería un estado que ningún host puede producir.
- * La divergencia está admitida en el contrato, junto a la del flujo síncrono.
+ * que `draftFlow.ts` en la extensión y `DraftFlow.cs` en Visual Studio: la
+ * paridad de producto se sostiene si las transiciones viven en un solo lugar
+ * por cliente y se prueban igual, no si cada host las reinventa.
  */
 sealed class DraftFlowState {
     /** Invocar `walkthrough draft` (sólo cuando el revisor eligió DRAFT). */
     data object Create : DraftFlowState()
 
-    /** Abrir el borrador en el editor; el archivo ya existe. */
-    data object Open : DraftFlowState()
-
     /**
-     * El aviso no bloqueante. [error] es el stderr del `--build` que acaba de
-     * fallar: se muestra junto al aviso y el revisor reintenta sin límite.
+     * El asistente terminó. No hay review empezada y no queda ningún aviso
+     * abierto: el borrador está en el panel, con sus cuatro controles.
      */
-    data class Wait(val error: String? = null) : DraftFlowState()
-
-    /** Invocar `walkthrough draft --build`. */
-    data object Build : DraftFlowState()
-
-    /** Releer `config --porcelain` para saber si el borrador trae esenciales. */
-    data object Reload : DraftFlowState()
-
-    /** Preguntar recorrido completo vs sólo esenciales. */
-    data object PickKeys : DraftFlowState()
-
-    /** Seguir con el asistente normal (confirmación + start) con este layout. */
-    data class Done(val layout: ReviewLayout) : DraftFlowState()
+    data object Done : DraftFlowState()
 
     /**
-     * Volver al paso de forma de lectura. El borrador **no** se borra: la
-     * siguiente vuelta lo ofrece como DRAFT_RESUME. [error] sólo cuando se
-     * vuelve por un fallo, nunca al cancelar.
+     * Volver al paso de forma de lectura, sin rehacer la elección de rama. El
+     * borrador **no** se borra: la siguiente vuelta lo ofrece como
+     * DRAFT_RESUME. [error] sólo cuando se vuelve por un fallo.
      */
     data class Back(val error: String? = null) : DraftFlowState()
 }
@@ -54,33 +43,15 @@ sealed class DraftFlowState {
 sealed class DraftFlowEvent {
     /** Resultado de `walkthrough draft`. */
     data class Created(val ok: Boolean, val error: String? = null) : DraftFlowEvent()
-
-    /** El borrador quedó a la vista (o no se pudo abrir: el bucle sigue igual). */
-    data object Opened : DraftFlowEvent()
-
-    /** El revisor apretó Continue en el aviso. */
-    data object Continue : DraftFlowEvent()
-
-    /** El revisor apretó Cancel, o cerró el aviso. */
-    data object Cancel : DraftFlowEvent()
-
-    /** Resultado de `walkthrough draft --build`. */
-    data class Built(val ok: Boolean, val error: String? = null) : DraftFlowEvent()
-
-    /** Ofertas recargadas tras un `--build` en verde. */
-    data class Offers(val offers: List<ReadingOffer>?) : DraftFlowEvent()
-
-    /** `null` = el revisor cerró el selector de esenciales. */
-    data class KeysPicked(val keysOnly: Boolean?) : DraftFlowEvent()
 }
 
 /**
- * Dónde arranca el bucle: RESUME salta la creación porque el borrador ya
- * existe — volver a crearlo pisaría lo que el revisor ya escribió, que es
- * justamente lo que `--force` existe para pedir a mano.
+ * Dónde arranca: RESUME no crea nada — el archivo ya existe y volver a crearlo
+ * pisaría lo que el revisor escribió, que es justamente lo que `--force` existe
+ * para pedir a mano. Sin nada que crear, el asistente ya terminó.
  */
 fun initialDraftFlowState(step: DraftStep): DraftFlowState =
-    if (step == DraftStep.CREATE) DraftFlowState.Create else DraftFlowState.Open
+    if (step == DraftStep.CREATE) DraftFlowState.Create else DraftFlowState.Done
 
 /**
  * Transición. Un evento que no corresponde al estado actual lo deja intacto:
@@ -90,52 +61,9 @@ fun initialDraftFlowState(step: DraftStep): DraftFlowState =
 fun advanceDraftFlow(state: DraftFlowState, event: DraftFlowEvent): DraftFlowState = when (state) {
     is DraftFlowState.Create ->
         if (event is DraftFlowEvent.Created) {
-            // Sin borrador no hay nada que esperar ni que reintentar: el fallo
-            // es de la CLI y se resuelve fuera del asistente.
-            if (event.ok) DraftFlowState.Open else DraftFlowState.Back(event.error)
-        } else {
-            state
-        }
-
-    is DraftFlowState.Open ->
-        if (event is DraftFlowEvent.Opened) DraftFlowState.Wait() else state
-
-    is DraftFlowState.Wait -> when (event) {
-        is DraftFlowEvent.Continue -> DraftFlowState.Build
-        is DraftFlowEvent.Cancel -> DraftFlowState.Back()
-        else -> state
-    }
-
-    is DraftFlowState.Build ->
-        if (event is DraftFlowEvent.Built) {
-            // El motivo del rechazo vuelve al aviso, que queda disponible de
-            // nuevo: el revisor corrige el borrador —que sigue byte por byte
-            // como lo dejó— y reintenta.
-            if (event.ok) DraftFlowState.Reload else DraftFlowState.Wait(event.error)
-        } else {
-            state
-        }
-
-    is DraftFlowState.Reload ->
-        if (event is DraftFlowEvent.Offers) {
-            // Sólo se pregunta si hay algo que elegir: un borrador sin ninguna
-            // entrada marcada key no tiene dos recorridos.
-            if (offersIncludeKeys(event.offers)) {
-                DraftFlowState.PickKeys
-            } else {
-                DraftFlowState.Done(ReviewLayout.WALK)
-            }
-        } else {
-            state
-        }
-
-    is DraftFlowState.PickKeys ->
-        if (event is DraftFlowEvent.KeysPicked) {
-            when (event.keysOnly) {
-                null -> DraftFlowState.Back()
-                true -> DraftFlowState.Done(ReviewLayout.KEYS)
-                false -> DraftFlowState.Done(ReviewLayout.WALK)
-            }
+            // Sin borrador no hay nada que mostrar en el panel: el fallo es de
+            // la CLI y el revisor vuelve al paso de forma de lectura.
+            if (event.ok) DraftFlowState.Done else DraftFlowState.Back(event.error)
         } else {
             state
         }
@@ -144,19 +72,10 @@ fun advanceDraftFlow(state: DraftFlowState, event: DraftFlowEvent): DraftFlowSta
     is DraftFlowState.Back -> state
 }
 
-/** Si la CLI volvió a ofrecer `keys` sobre el borrador ya validado. */
+/**
+ * Si la CLI ofrece `keys` sobre un borrador ya validado — o sea si trae
+ * entradas marcadas esenciales y hay dos recorridos que ofrecer. Lo consume
+ * *Validate and start*, que es quien pregunta ahora.
+ */
 fun offersIncludeKeys(offers: List<ReadingOffer>?): Boolean =
     offers != null && offers.any { it.id == OfferId.KEYS }
-
-/**
- * El gitdir apuntado por un `.git` que es un **archivo** y no un directorio:
- * el caso de `git worktree` y de los submódulos. Formato de git: una única
- * línea `gitdir: <path>`, absoluta o relativa al directorio que la contiene.
- *
- * Se resuelve acá y no invocando `git rev-parse --git-dir` para no agregar un
- * proceso al asistente por un dato que el propio repositorio deja escrito.
- */
-fun gitdirFromLink(content: String): String? {
-    val match = Regex("""^gitdir:[ \t]*(.+?)[ \t\r]*$""", RegexOption.MULTILINE).find(content)
-    return match?.groupValues?.get(1)?.takeIf { it.isNotEmpty() }
-}

@@ -7,6 +7,12 @@ import {abortReview} from "./commands/abortReview";
 import {cleanReview} from "./commands/cleanReview";
 import {compareReview} from "./commands/compareReview";
 import {continueReview} from "./commands/continueReview";
+import {
+    copyDraftPrompt,
+    discardDraft,
+    openDraft,
+    startFromDraft,
+} from "./commands/draftActions";
 import {discardInventoryReview, forgetReview} from "./commands/forgetReview";
 import {finishReview, resumeFinish, undoFinish} from "./commands/finishReview";
 import {saveReview} from "./commands/saveReview";
@@ -98,6 +104,17 @@ export interface GitReviewTestApi {
 
     /** Fuerza el re-chequeo de `--version` en el próximo refresh (ver ReviewStateManager). */
     invalidateVersionCheck(): void;
+
+    /**
+     * Manda un mensaje del panel por el mismo despacho que usa el webview.
+     *
+     * Existe porque los controles del CUERPO del panel —los cuatro del bloque
+     * de borradores, `copyCliInstall`, `openSupport`— no son comandos de la
+     * paleta y no se pueden disparar con `executeCommand`. Probarlos llamando
+     * a la función exportada saltearía justamente el despacho, que es donde se
+     * valida el índice contra el estado del host.
+     */
+    sendPanelMessage(message: PanelMessage, extra?: unknown): void;
 }
 
 export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
@@ -260,7 +277,38 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
             void copyCliInstallCommand(extra);
             return;
         }
-        const commands: Record<Exclude<PanelMessage, "openSupport" | "copyCliInstall">, string> = {
+        // Bloque de borradores (012): controles del cuerpo del panel, no
+        // acciones. No están en contributes.commands ni en la paleta —el
+        // canónico sigue teniendo 27 acciones— así que se despachan acá
+        // directamente, como copyCliInstall, y no por executeCommand.
+        if (message === "openDraft") {
+            void openDraft(extra, stateManager);
+            return;
+        }
+        if (message === "copyDraftPrompt") {
+            void copyDraftPrompt(extra, stateManager);
+            return;
+        }
+        if (message === "startFromDraft") {
+            void startFromDraft(extra, lock, stateManager, getInvokeOptions);
+            return;
+        }
+        if (message === "discardDraft") {
+            void discardDraft(extra, lock, stateManager, getInvokeOptions);
+            return;
+        }
+        const commands: Record<
+            Exclude<
+                PanelMessage,
+                | "openSupport"
+                | "copyCliInstall"
+                | "openDraft"
+                | "copyDraftPrompt"
+                | "startFromDraft"
+                | "discardDraft"
+            >,
+            string
+        > = {
             openEntry: "gitReview.openEntry",
             openChange: "gitReview.openChange",
             openAllChanges: "gitReview.openAllChanges",
@@ -569,6 +617,7 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
             return buildModel();
         },
         invalidateVersionCheck: () => stateManager.invalidateVersionCheck(),
+        sendPanelMessage: handlePanelMessage,
     };
 }
 

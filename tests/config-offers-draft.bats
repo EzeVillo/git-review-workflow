@@ -1,12 +1,13 @@
 #!/usr/bin/env bats
 #
-# The draft / draft-resume reading offers in git review config --porcelain.
+# Tests for the draft records of git review config --porcelain: the one surface
+# a client can ask "what reading orders has this reviewer started?" without an
+# active review and without naming a branch.
 #
-# These are what let the start assistant offer writing a reading order at the one
-# moment the reviewer is asking how to read the PR. The clients never inspect a
-# draft themselves, so what is asserted here is the whole of what they know.
-#
-# feature/plain has no walkthrough; feature/annotated has one from its author.
+# status --porcelain cannot answer it: outside a review/* branch it exits 2 with
+# an empty stdout, which is exactly how the three clients derive the no-review
+# situation. config --porcelain is already consulted in the same refresh, so the
+# records cost no extra invocation.
 
 setup() {
 	TMP="$(mktemp -d)"
@@ -33,154 +34,238 @@ setup() {
 	git branch -M develop
 	git push --quiet -u origin develop
 
-	git switch --quiet -c feature/plain
+	# Two PRs, one of them under a namespaced branch name so the '/' shows up in
+	# both the record and the path.
+	git switch --quiet -c feature/checkout
 	printf 'a1\na2\n' >a.txt
-	printf 'hello\n' >c.txt
+	mkdir -p src
+	printf 'hello\n' >src/c.txt
 	git add -A
-	git commit --quiet -m work
-	git push --quiet -u origin feature/plain
+	git commit --quiet -m checkout
+	PREV="$(git rev-parse HEAD)"
+	printf 'a1\na2\na3\n' >a.txt
+	git add -A
+	git commit --quiet -m more
+	git push --quiet -u origin feature/checkout
 
 	git switch --quiet develop
-	git switch --quiet -c feature/annotated
-	printf 'b1\n' >b.txt
-	mkdir -p .review
-	cat >.review/walkthrough.md <<'EOF'
-# Walkthrough
-
-## 1. b.txt
-> key
-the author's order
-EOF
+	git switch --quiet -c telemetry
+	printf 't\n' >t.txt
 	git add -A
-	git commit --quiet -m work
-	git push --quiet -u origin feature/annotated
+	git commit --quiet -m telemetry
+	git push --quiet -u origin telemetry
 
 	git switch --quiet develop
-	DRAFT="$(git rev-parse --git-dir)/review-walkthrough/feature/plain.md"
+	git config "reviewworkflow.feature/checkout.reviewed" "$PREV"
+	git config "reviewworkflowlocal.feature/checkout.reviewed" "$PREV"
+
+	GITDIR="$(git rev-parse --git-dir)"
+	NS="$GITDIR/review-walkthrough"
 }
 
 teardown() {
 	rm -rf "$TMP"
 }
 
-# The offer ids emitted for <branch>, in order, one per line.
-#
-# The CLI is run on its own and its status propagated deliberately: as a pipeline
-# `run` would report awk's exit status, which is 0 however badly git review had
-# failed, so every "$status" assertion below would have been decorative.
-offers_for() {
-	out="$(git review config --porcelain -- "$1")" || return $?
-	printf '%s\n' "$out" | awk -F'\t' '$1 == "offer" { print $2 }'
+draft_records() {
+	git review config --porcelain "$@" | awk -F'\t' '$1 == "draft"'
 }
 
-@test "offers_for reports the CLIs failure and not awks success" {
-	# The helper the rest of this file leans on, checked once: without this every
-	# status assertion below would pass on a CLI that never ran.
-	run offers_for no/such/branch
-	[ "$status" -ne 0 ]
+field_of() {
+	draft_records | awk -F'\t' -v want="$1" -v col="$2" '$2 == want { print $col; exit }'
 }
 
-@test "a PR with no walkthrough offers draft, step and whole" {
-	run offers_for feature/plain
+# ── nothing to report ─────────────────────────────────────────────────────────
+
+@test "with no drafts the output is exactly what it was, and the command returns" {
+	# The "returns" half is not padding. awk with no file arguments reads standard
+	# input and blocks forever, and this verb runs on every panel refresh in a
+	# repository that usually has no drafts at all -- the failure would be a hung
+	# panel, not a red test, so it is pinned with a timeout.
+	before="$(git review config --porcelain)"
+
+	run timeout 20 git review config --porcelain
 	[ "$status" -eq 0 ]
-	[ "${lines[0]}" = "draft" ]
-	[ "${lines[1]}" = "step" ]
-	[ "${lines[2]}" = "whole" ]
-	[ "${#lines[@]}" -eq 3 ]
-}
+	[ -z "$(printf '%s\n' "$output" | awk -F'\t' '$1 == "draft"')" ]
 
-@test "a PR with the author's walkthrough is never offered draft" {
-	run offers_for feature/annotated
+	run timeout 20 git review config --porcelain feature/checkout
 	[ "$status" -eq 0 ]
-	[ "${lines[0]}" = "walk" ]
-	[ "${lines[1]}" = "keys" ]
-	[ "${lines[2]}" = "step" ]
-	[ "${lines[3]}" = "whole" ]
-	[ "${#lines[@]}" -eq 4 ]
+	[ -z "$(printf '%s\n' "$output" | awk -F'\t' '$1 == "draft"')" ]
+
+	# And byte for byte the same output as before the records existed, which for a
+	# repository with no drafts is the whole compatibility promise.
+	[ "$(git review config --porcelain)" = "$before" ]
 }
 
-@test "once a draft exists the offer becomes draft-resume, alongside walk" {
-	git review walkthrough draft feature/plain
-	cat >"$DRAFT" <<'EOF'
+# ── one draft ─────────────────────────────────────────────────────────────────
+
+@test "a freshly generated draft is reported with an absolute path and zero of N" {
+	run git review walkthrough draft feature/checkout
+	[ "$status" -eq 0 ]
+
+	run draft_records
+	[ "$status" -eq 0 ]
+	[ "$(printf '%s\n' "$output" | grep -c .)" = "1" ]
+
+	[ "$(field_of feature/checkout 2)" = "feature/checkout" ]
+	dpath="$(field_of feature/checkout 3)"
+	case "$dpath" in
+	/* | [A-Za-z]:[/\\]*) ;;
+	*)
+		echo "not an absolute path: $dpath"
+		false
+		;;
+	esac
+	[ -f "$dpath" ]
+	# The '/' in the branch name is a subdirectory here, exactly as it is under
+	# refs/, and the record spells the name with the slash.
+	case "$dpath" in
+	*/review-walkthrough/feature/checkout.md) ;;
+	*)
+		echo "path does not point into the namespace: $dpath"
+		false
+		;;
+	esac
+	[ "$(field_of feature/checkout 4)" = "0" ]
+	[ "$(field_of feature/checkout 5)" = "2" ]
+}
+
+@test "the same records come out with and without a branch argument" {
+	run git review walkthrough draft feature/checkout
+	[ "$status" -eq 0 ]
+	# Not because the verb's output is symmetric -- delta and offer exist only
+	# with a branch -- but because a draft is a fact about the working tree.
+	[ "$(draft_records)" = "$(draft_records feature/checkout)" ]
+	[ "$(draft_records)" = "$(draft_records telemetry)" ]
+}
+
+@test "a draft of zero bytes is still reported, as zero of zero" {
+	run git review walkthrough draft feature/checkout
+	[ "$status" -eq 0 ]
+	: >"$NS/feature/checkout.md"
+
+	# awk runs no rule for an empty file and never assigns it a FILENAME, so this
+	# is the record that disappears if the enumeration stops being what decides.
+	# It is also the state a draft created and not yet written is in -- the one
+	# that most needs listing, so it can be opened or discarded.
+	[ "$(printf '%s\n' "$(draft_records)" | grep -c .)" = "1" ]
+	[ "$(field_of feature/checkout 4)" = "0" ]
+	[ "$(field_of feature/checkout 5)" = "0" ]
+	[ -f "$(field_of feature/checkout 3)" ]
+}
+
+@test "two drafts are two records, in a stable order, neither hiding the other" {
+	run git review walkthrough draft feature/checkout
+	[ "$status" -eq 0 ]
+	run git review walkthrough draft telemetry
+	[ "$status" -eq 0 ]
+
+	run draft_records
+	[ "$status" -eq 0 ]
+	[ "$(printf '%s\n' "$output" | grep -c .)" = "2" ]
+	[ -n "$(field_of feature/checkout 3)" ]
+	[ -n "$(field_of telemetry 3)" ]
+	# Stable, and never reordered by locale.
+	first="$(draft_records)"
+	[ "$(draft_records)" = "$first" ]
+	[ "$(LC_ALL=C draft_records)" = "$first" ]
+}
+
+# ── the flags the draft was generated with ────────────────────────────────────
+
+@test "source and range come back out of the instruction block, in all five origins" {
+	assert_flags() {
+		rm -rf "$NS"
+		# shellcheck disable=SC2086
+		run git review walkthrough draft $1 feature/checkout
+		[ "$status" -eq 0 ]
+		[ "$(field_of feature/checkout 6)" = "$2" ]
+		[ "$(field_of feature/checkout 7)" = "$3" ]
+	}
+
+	assert_flags "" remote full
+	assert_flags "--local" local full
+	assert_flags "--offline" offline full
+	assert_flags "--delta" remote delta
+	assert_flags "--local --delta" local delta
+}
+
+@test "a draft whose block was deleted by hand reports unknown, and nothing else changes" {
+	run git review walkthrough draft feature/checkout
+	[ "$status" -eq 0 ]
+	total_before="$(field_of feature/checkout 5)"
+
+	# Deleting the block is legal: what is lost is the ability to re-annotate
+	# without asking for the skeleton again, not the draft itself.
+	awk '
+		index($0, "<!-- git-review-range:") == 1 { skip = 1; next }
+		skip { if (index($0, "-->")) skip = 0; next }
+		{ print }
+	' "$NS/feature/checkout.md" >"$TMP/x.md"
+	mv "$TMP/x.md" "$NS/feature/checkout.md"
+	! grep -q 'git-review-range' "$NS/feature/checkout.md"
+
+	[ "$(field_of feature/checkout 6)" = "unknown" ]
+	[ "$(field_of feature/checkout 7)" = "unknown" ]
+	[ "$(field_of feature/checkout 5)" = "$total_before" ]
+	[ -f "$(field_of feature/checkout 3)" ]
+}
+
+# ── paused reviews ────────────────────────────────────────────────────────────
+
+@test "a paused review takes its draft out of the report and continue brings it back" {
+	run git review walkthrough draft feature/checkout
+	[ "$status" -eq 0 ]
+	cat >"$NS/feature/checkout.md" <<'EOF'
 # Walkthrough
 
-## 1. c.txt
-start here
+## 1. a.txt
+why a
 
-## 2. a.txt
-then a
+## 2. src/c.txt
+why c
 EOF
-	run offers_for feature/plain
+	run git review walkthrough draft --build feature/checkout
 	[ "$status" -eq 0 ]
-	# walk, because the draft is already readable; draft-resume, because it can
-	# still be worked on. Both, and in the contract's order.
-	[ "${lines[0]}" = "walk" ]
-	[ "${lines[1]}" = "draft-resume" ]
-	[ "${lines[2]}" = "step" ]
-	[ "${lines[3]}" = "whole" ]
-	[ "${#lines[@]}" -eq 4 ]
+	run git review start feature/checkout
+	[ "$status" -eq 0 ]
+	[ "$(printf '%s\n' "$(draft_records)" | grep -c .)" = "1" ]
+
+	run git review save
+	[ "$status" -eq 0 ]
+	# Not filtered anywhere: save moved the file to the archived namespace, which
+	# walk_draft_list does not walk. The separation does the work.
+	[ -z "$(draft_records)" ]
+	[ ! -e "$NS/feature/checkout.md" ]
+
+	run git review continue feature/checkout
+	[ "$status" -eq 0 ]
+	[ "$(printf '%s\n' "$(draft_records)" | grep -c .)" = "1" ]
+	[ "$(field_of feature/checkout 2)" = "feature/checkout" ]
 }
 
-@test "an unfilled draft still offers draft-resume and never draft" {
-	git review walkthrough draft feature/plain
-	run offers_for feature/plain
+@test "the draft of an active review is reported like any other" {
+	run git review walkthrough draft feature/checkout
 	[ "$status" -eq 0 ]
-	# No walk: a skeleton has no numbered entries, so nothing intersects the range.
-	[ "${lines[0]}" = "draft-resume" ]
-	[ "${lines[1]}" = "step" ]
-	[ "${lines[2]}" = "whole" ]
-	[ "${#lines[@]}" -eq 3 ]
-}
-
-@test "a draft on an annotated PR replaces walk's source and offers draft-resume" {
-	git review walkthrough draft feature/annotated 2>/dev/null
-	d="$(git rev-parse --git-dir)/review-walkthrough/feature/annotated.md"
-	cat >"$d" <<'EOF'
+	cat >"$NS/feature/checkout.md" <<'EOF'
 # Walkthrough
 
-## 1. b.txt
-the reviewer's order, no key at all
+## 1. a.txt
+why a
 
-## 2. .review/walkthrough.md
-the author's own file
+## 2. src/c.txt
+why c
 EOF
-	run offers_for feature/annotated
+	run git review walkthrough draft --build feature/checkout
 	[ "$status" -eq 0 ]
-	[ "${lines[0]}" = "walk" ]
-	# keys is gone: the reviewer's draft marks none, and viability is read off the
-	# walkthrough in force, not off the author's.
-	[ "${lines[1]}" = "draft-resume" ]
-	[ "${lines[2]}" = "step" ]
-	[ "${lines[3]}" = "whole" ]
-	[ "${#lines[@]}" -eq 4 ]
-}
-
-@test "a draft for one branch does not affect another branch's offers" {
-	git review walkthrough draft feature/plain
-	run offers_for feature/annotated
+	run git review start feature/checkout
 	[ "$status" -eq 0 ]
-	[ "${lines[0]}" = "walk" ]
-	[ "${lines[1]}" = "keys" ]
-	[ "${lines[2]}" = "step" ]
-	[ "${lines[3]}" = "whole" ]
-	[ "${#lines[@]}" -eq 4 ]
-}
 
-@test "a stale author walkthrough is offered draft, not walk" {
-	# The author wrote one, but nothing it names is in range any more. There is no
-	# walk to offer, and that is exactly the moment writing an order of your own
-	# is the useful answer — the same situation as a PR with no walkthrough at all.
-	git switch --quiet feature/annotated
-	printf '# Walkthrough\n\n## 1. nothing/here.txt\nstale entry\n' >.review/walkthrough.md
-	git add -A
-	git commit --quiet -m stale
-	git push --quiet origin feature/annotated
-	git switch --quiet develop
-
-	run offers_for feature/annotated
-	[ "$status" -eq 0 ]
-	[ "${lines[0]}" = "draft" ]
-	[ "${lines[1]}" = "step" ]
-	[ "${lines[2]}" = "whole" ]
-	[ "${#lines[@]}" -eq 3 ]
+	# The record does not say whether a live review is reading it. Answering that
+	# costs a for-each-ref plus a git config per review on a path that runs in
+	# every refresh, and nothing needs the answer: the panel draws the block only
+	# when there is no review at all.
+	[ "$(field_of feature/checkout 2)" = "feature/checkout" ]
+	[ "$(field_of feature/checkout 4)" = "2" ]
+	[ "$(field_of feature/checkout 5)" = "2" ]
 }

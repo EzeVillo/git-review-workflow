@@ -57,6 +57,37 @@ export interface ReadingOffer {
     rank: OfferRank;
 }
 
+/**
+ * Un borrador de walkthrough suelto: existe en el namespace activo del gitdir,
+ * o sea que el revisor lo empezó y no pausó su review (registro `draft` de
+ * `config --porcelain`, contracts/config-porcelain-drafts.md).
+ *
+ * Nada de esto se deriva acá: cada campo viene tal cual de la CLI. En
+ * particular `path`, que el cliente **abre y nunca arma** — derivar el gitdir
+ * para reconstruirla es justo lo que 012 retira.
+ */
+export interface DraftRecord {
+    /** La rama a la que pertenece, verbatim (puede traer `/`). */
+    src: string;
+    /** Ruta absoluta, ya resuelta por la CLI. */
+    path: string;
+    /** Entradas con posición **y** why resueltos. */
+    annotated: number;
+    /** Entradas que el archivo declara (numeradas y `## ?.`). */
+    total: number;
+    /**
+     * Con qué origen y rango se generó, leídos del bloque de instrucciones del
+     * propio archivo. `unknown` cuando ese bloque se borró a mano, que es legal:
+     * entonces no se ofrece *Validate and start*, porque invocar con los flags
+     * por defecto fallaría siempre por deriva.
+     */
+    source: DraftSource;
+    range: DraftRange;
+}
+
+export type DraftSource = "remote" | "local" | "offline" | "unknown";
+export type DraftRange = "full" | "delta" | "unknown";
+
 export interface ConfigPorcelainResult {
     config: EffectiveConfig;
     /** En el orden de `git for-each-ref` (lexicográfico); duplicados (misma rama, dos orígenes) esperados, nunca fusionados. */
@@ -77,6 +108,13 @@ export interface ConfigPorcelainResult {
      * no resoluble en soft-skip).
      */
     offers?: ReadingOffer[];
+    /**
+     * Borradores sueltos del working tree, en el orden estable de la CLI. Se
+     * emiten con y sin argumento de rama: un borrador es un hecho del working
+     * tree, no de la rama consultada. Siempre array; vacío cuando no hay
+     * ninguno, que es también lo que reporta una CLI que no conoce el registro.
+     */
+    drafts: DraftRecord[];
 }
 
 function toBool(field: string | undefined): boolean {
@@ -97,6 +135,31 @@ function parseOfferId(raw: string | undefined): OfferId | undefined {
     return undefined;
 }
 
+function parseDraftSource(raw: string | undefined): DraftSource {
+    if (raw === "remote" || raw === "local" || raw === "offline") {
+        return raw;
+    }
+    // Incluye el `unknown` que la CLI emite cuando el bloque no está, y
+    // cualquier valor que una CLI más nueva agregue: en los dos casos el cliente
+    // no puede replicar los flags, que es exactamente lo que `unknown` significa.
+    return "unknown";
+}
+
+function parseDraftRange(raw: string | undefined): DraftRange {
+    if (raw === "full" || raw === "delta") {
+        return raw;
+    }
+    return "unknown";
+}
+
+/** Entero no negativo, o undefined: un campo malformado invalida el registro. */
+function parseCount(raw: string | undefined): number | undefined {
+    if (raw === undefined || !/^\d+$/.test(raw)) {
+        return undefined;
+    }
+    return Number(raw);
+}
+
 function parseOfferRank(raw: string | undefined): OfferRank | undefined {
     if (raw === "recommended" || raw === "available") {
         return raw;
@@ -115,6 +178,7 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
     const remotes: CandidateRemote[] = [];
     const deltas: DeltaRecord[] = [];
     const offers: ReadingOffer[] = [];
+    const drafts: DraftRecord[] = [];
 
     for (const line of stdout.split(/\r?\n/)) {
         if (line.length === 0) {
@@ -165,6 +229,33 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
                 }
                 break;
             }
+            case "draft": {
+                const src = fields[1];
+                const path = fields[2];
+                const annotated = parseCount(fields[3]);
+                const total = parseCount(fields[4]);
+                // Un registro malformado se ignora entero, como cualquier otro
+                // desconocido: media fila de progreso sería peor que ninguna.
+                if (
+                    src === undefined ||
+                    src.length === 0 ||
+                    path === undefined ||
+                    path.length === 0 ||
+                    annotated === undefined ||
+                    total === undefined
+                ) {
+                    break;
+                }
+                drafts.push({
+                    src,
+                    path,
+                    annotated,
+                    total,
+                    source: parseDraftSource(fields[5]),
+                    range: parseDraftRange(fields[6]),
+                });
+                break;
+            }
             case "offer": {
                 const id = parseOfferId(fields[1]);
                 const rank = parseOfferRank(fields[2]);
@@ -183,7 +274,7 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
     if (base !== undefined) {
         config.base = base;
     }
-    const result: ConfigPorcelainResult = {config, candidates, remotes};
+    const result: ConfigPorcelainResult = {config, candidates, remotes, drafts};
     if (deltas.length > 0) {
         result.deltas = deltas;
     }

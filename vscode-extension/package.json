@@ -2,7 +2,7 @@
   "name": "git-review-workflow",
   "displayName": "git review workflow",
   "description": "Walk a PR in order, then edit and run it — not just read the diff",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "publisher": "EzeVillo",
   "license": "MIT",
   "icon": "media/icon.png",

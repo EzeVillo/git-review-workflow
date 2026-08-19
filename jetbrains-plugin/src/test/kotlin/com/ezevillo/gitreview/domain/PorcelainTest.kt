@@ -112,4 +112,32 @@ class PorcelainTest {
     fun emptyListIsValid() {
         assertTrue(parseListPorcelain("").isEmpty())
     }
+
+    // --- el campo de ruta del registro draft (012) -------------------------------
+
+    @Test
+    fun theDraftRecordCarriesTheAbsolutePathOfTheDraftInForce() {
+        val out = """
+            state	review/feature	feature	deadbeef	walk	applied	1	1	1	src/a.kt	0
+            entry	1	src/a.kt	0	1
+            draft	/repo/.git/review-walkthrough/feature.md
+        """.trimIndent()
+        val r = parsePorcelain(out)
+        assertEquals(true, r.draft)
+        assertEquals("/repo/.git/review-walkthrough/feature.md", r.draftPath)
+    }
+
+    @Test
+    fun aDraftRecordWithoutItsFieldStillMarksTheDraft() {
+        // Una CLI anterior a 012 emite el registro pelado, y eso no puede apagar
+        // la marca: la presencia es la presencia.
+        val out = """
+            state	review/feature	feature	deadbeef	walk	applied	1	1	1	src/a.kt	0
+            entry	1	src/a.kt	0	1
+            draft
+        """.trimIndent()
+        val r = parsePorcelain(out)
+        assertEquals(true, r.draft)
+        assertNull(r.draftPath)
+    }
 }

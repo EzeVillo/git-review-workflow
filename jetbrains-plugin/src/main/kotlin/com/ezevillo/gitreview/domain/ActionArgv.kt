@@ -22,6 +22,8 @@ sealed class ActionParams {
     data class Housekeeping(val action: HousekeepingAction) : ActionParams()
     data class SetConfig(val key: String, val name: String) : ActionParams()
     data class WalkthroughInit(val force: Boolean) : ActionParams()
+    /** 012: descartar el borrador de UNA rama desde el bloque del panel. */
+    data class ForgetDraft(val source: String) : ActionParams()
     data object WalkthroughBuild : ActionParams()
     data object Version : ActionParams()
     data object StatusPorcelain : ActionParams()
@@ -43,6 +45,11 @@ fun actionToArgv(action: String, params: ActionParams = ActionParams.Empty): Act
         "continueReview" -> {
             val p = params as ActionParams.Continue
             ActionArgv("continue", listOf(p.source))
+        }
+        // Nunca --all ni --saved: una acción sobre una fila no toca las demás.
+        "forgetDraft" -> {
+            val p = params as ActionParams.ForgetDraft
+            ActionArgv("forget", forgetDraftArgs(p.source))
         }
         "saveReview" -> ActionArgv("save", emptyList())
         "abortReview" -> ActionArgv("abort", emptyList())

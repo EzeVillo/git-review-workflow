@@ -66,6 +66,47 @@ if [ -z "$branches" ] && [ -z "$saved" ]; then
 	exit 0
 fi
 
+# row_has_draft <branch>: whether this review row carries a walkthrough draft.
+#
+# Whose reading order it is: the inventory is where a reviewer looks days later
+# to decide what to resume, which is exactly when "was this order mine or the
+# author's?" stops being obvious. A paused review's draft lives in the saved
+# namespace, so look where this row's review is.
+#
+# walk_review_draft_src is what names the file: the review's source is not it
+# for a compare of a remote-tracking branch, and this row is the surface that
+# hands that file to forget --saved.
+#
+# In every mode, not only walk, because save moves the draft in every mode too: a
+# whole or step review of a branch you had drafted for carries that draft into
+# the saved namespace when you pause it, and forget --saved discards it along
+# with the review. Marking only walk rows meant the one surface that could have
+# shown the reviewer their prose was in there did not, and it left with the
+# review without ever having been listed.
+#
+# CUSTODY, not "what is being read": the file exists, empty or not
+# (walk_has_draft_file's question, not walk_is_draft's).
+#
+# One function, called by both describe() and describe_porcelain(), because they
+# are two renderings of one decision. The condition has three parts and a copy
+# that forgets the third passes the eye and not the case; a parity test over two
+# copies is exactly the pattern the rest of the walk code avoids.
+row_has_draft() {
+	_rhd_src="$(walk_review_draft_src "$1")"
+	[ -n "$_rhd_src" ] || return 1
+	case "$1" in
+	review-saved/*)
+		# And only if this row's review is the one that filed it: two paused
+		# reviews of a branch share the name, so the badge used to promise a
+		# reading order to a review that will not come back with one.
+		walk_saved_draft_filed "$1" || return 1
+		_rhd_path="$(walk_saved_draft_path "$_rhd_src")"
+		;;
+	*) _rhd_path="$(walk_draft_path "$_rhd_src")" ;;
+	esac
+	[ -f "$_rhd_path" ]
+}
+
 # describe <branch> <marker>: print one line for a review branch, reading its
 # mode and position from the branch config. Used for both active and saved reviews.
 describe() {
@@ -111,22 +152,9 @@ describe() {
 	# the review. Marking only walk rows meant the one surface that could have shown
 	# the reviewer their prose was in there did not, and it left with the review
 	# without ever having been listed.
-	dsrc="$(walk_review_draft_src "$b")"
 	draft_note=""
-	if [ -n "$dsrc" ]; then
-		case "$b" in
-		review-saved/*)
-			dpath="$(walk_saved_draft_path "$dsrc")"
-			# And only if this row's review is the one that filed it: two paused
-			# reviews of a branch share the name, so the badge used to promise a
-			# reading order to a review that will not come back with one.
-			walk_saved_draft_filed "$b" || dpath=""
-			;;
-		*) dpath="$(walk_draft_path "$dsrc")" ;;
-		esac
-		if [ -f "$dpath" ]; then
-			draft_note=" (draft)"
-		fi
+	if row_has_draft "$b"; then
+		draft_note=" (draft)"
 	fi
 
 	if [ "$mode" = "step" ]; then
@@ -174,6 +202,16 @@ describe_porcelain() {
 		else
 			porcelain_row branch "$pb" "$2" "$pcurrent" 0 "$pmode"
 		fi
+	fi
+
+	# The same custody question the readable row answers with "(draft)", through
+	# the same function so the two cannot disagree. Its own record rather than a
+	# field, because the branch record ends in two optional fields that are
+	# omitted together — a sixth field could not be told apart from `position`.
+	# Position is fixed at "right after its branch row, before any finish record"
+	# so tests/porcelain-bytes.bats compares against one determinate output.
+	if row_has_draft "$pb"; then
+		porcelain_row branch-draft "$pb"
 	fi
 
 	# finish (contracts/finish-state.md): a finish's undo point lives on the

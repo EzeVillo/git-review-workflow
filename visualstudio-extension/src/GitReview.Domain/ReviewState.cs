@@ -13,6 +13,12 @@ public sealed record ReviewState(
     EffectiveConfig? Config = null,
     IReadOnlyList<CandidateBranch>? Candidates = null,
     IReadOnlyList<CandidateRemote>? Remotes = null,
+    /// <summary>
+    /// 012: loose walkthrough drafts of the working tree, from the same
+    /// `config --porcelain` report that brings Config — no extra invocation.
+    /// Null when that report did not arrive; empty if it did with none.
+    /// </summary>
+    IReadOnlyList<DraftRecord>? Drafts = null,
     IReadOnlyDictionary<int, string>? Subjects = null,
     IReadOnlyDictionary<int, string>? Authors = null,
     string? Base = null,
@@ -20,9 +26,12 @@ public sealed record ReviewState(
     bool? Readonly = null,
     bool? KeysOnly = null,
     bool? Draft = null,
+    /// <summary>012: absolute path of the draft in force, reported by the CLI.</summary>
+    string? DraftPath = null,
     string? Stderr = null)
 {
     public IReadOnlyList<EntryRecord> EntriesList => Entries ?? Array.Empty<EntryRecord>();
     public IReadOnlyList<EntryRecord> FilesList => Files ?? Array.Empty<EntryRecord>();
     public IReadOnlyList<BranchRecord> BranchesList => Branches ?? Array.Empty<BranchRecord>();
+    public IReadOnlyList<DraftRecord> DraftsList => Drafts ?? Array.Empty<DraftRecord>();
 }

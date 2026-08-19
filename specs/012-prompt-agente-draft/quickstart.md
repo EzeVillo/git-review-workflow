@@ -74,7 +74,17 @@ Comprobar en el bloque `<!-- git-review-range:`:
 
 ```sh
 git review start feature/telemetry && git review finish      # deja marcador --delta
+git switch develop                                           # finish deja HEAD en review-fixes/*
 git review clean                                             # cierra el finish pendiente
+
+# El marcador registra el tip revisado, así que --delta necesita que la rama se
+# haya movido desde entonces; si no, se niega con "no new commits since your last
+# review" — que es correcto, y deja este escenario sin nada que mostrar.
+git switch feature/telemetry
+echo later >src/later.js && git add -A && git commit -m later
+git push origin feature/telemetry
+git switch develop
+
 git review walkthrough draft --delta --force feature/telemetry
 ```
 
@@ -244,7 +254,15 @@ git review config --porcelain | grep '^draft'
 | Tras `git review save` de una review con borrador | Ese borrador **desaparece** de los registros |
 | Tras `git review continue` | Vuelve |
 
+Un esqueleto todavía **no** es un orden de lectura: todas sus entradas son
+`## ?.`, walk no tiene nada que caminar y `start` degrada a whole — sin registro
+`draft`, porque ese registro habla de la review que se está leyendo. Llenar y
+construir primero es lo que haría el revisor:
+
 ```sh
+$EDITOR .git/review-walkthrough/feature/telemetry.md   # numerar y escribir los whys
+git review walkthrough draft --build feature/telemetry
+
 git review start feature/telemetry
 git review status --porcelain | grep '^draft'   # → draft<TAB><ruta absoluta>
 git review list --porcelain | grep 'draft'      # → branch-draft<TAB>review/feature/telemetry

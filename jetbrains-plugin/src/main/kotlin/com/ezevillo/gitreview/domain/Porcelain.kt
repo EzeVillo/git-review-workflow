@@ -85,6 +85,12 @@ data class PorcelainResult(
      * del autor. Sólo se da en walk; nunca se infiere, llega por el registro.
      */
     val draft: Boolean? = null,
+    /**
+     * 012: la ruta absoluta de ese borrador, tal como la reportó la CLI en el
+     * campo del registro. Aparte del booleano: la presencia sigue siendo la
+     * presencia, y un registro sin campo (una CLI anterior) no la apaga.
+     */
+    val draftPath: String? = null,
     val subjects: Map<Int, String>? = null,
     val authors: Map<Int, String>? = null,
     val base: String? = null,
@@ -148,6 +154,7 @@ fun parsePorcelain(stdout: String): PorcelainResult {
     var isReadonly: Boolean? = null
     var isKeysOnly: Boolean? = null
     var isDraft: Boolean? = null
+    var draftPath: String? = null
 
     for (line in lines) {
         val fields = line.split("\t")
@@ -238,7 +245,10 @@ fun parsePorcelain(stdout: String): PorcelainResult {
             }
             "readonly" -> isReadonly = true
             "keys" -> isKeysOnly = true
-            "draft" -> isDraft = true
+            "draft" -> {
+                isDraft = true
+                fields.getOrNull(1)?.takeIf { it.isNotEmpty() }?.let { draftPath = it }
+            }
             else -> { /* unknown tag: ignore (FR-003) */ }
         }
     }
@@ -252,6 +262,7 @@ fun parsePorcelain(stdout: String): PorcelainResult {
         readonly = isReadonly,
         keysOnly = isKeysOnly,
         draft = isDraft,
+        draftPath = draftPath,
         subjects = subjects,
         authors = authors,
         base = base,

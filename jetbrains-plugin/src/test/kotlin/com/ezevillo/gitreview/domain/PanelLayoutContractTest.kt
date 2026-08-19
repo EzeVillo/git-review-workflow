@@ -74,6 +74,89 @@ class PanelLayoutContractTest {
         assertTrue(layout.collectControls().any { it.id == ControlId.OPEN_ALL_CHANGES && it.label == "Diff" })
     }
 
+    @Test
+    fun `the draft block is the first block of no-review and the body follows whole`() {
+        val layout = panelLayout(PanelFixtures.noReviewDrafts())
+        val blocks = layout.blocks
+        // Primer bloque el encabezado, segundo las filas: no es una
+        // sub-disposición que reemplace — el cuerpo de siempre sigue debajo.
+        assertEquals("Reading orders you started", (blocks[0] as Block.Heading).text)
+        assertTrue(blocks[1] is Block.DraftRows, "second block: ${blocks[1]}")
+        assertTrue(
+            blocks.any { it is Block.InventoryRows },
+            "the inventory still follows the draft block",
+        )
+        assertTrue(
+            layout.collectControls().any { it.id == ControlId.START_REVIEW },
+            "Start a review still follows the draft block",
+        )
+    }
+
+    @Test
+    fun `draft rows carry the four canonical controls, with their labels and emphasis`() {
+        val yaml = loadCanonical()
+        @Suppress("UNCHECKED_CAST")
+        val canonical = yaml["draft_controls"] as? Map<String, Any?>
+            ?: error("canonical missing draft_controls")
+        assertEquals(
+            setOf("openDraft", "copyDraftPrompt", "startFromDraft", "discardDraft"),
+            canonical.keys,
+        )
+
+        val rows = (panelLayout(PanelFixtures.noReviewDrafts()).blocks
+            .first { it is Block.DraftRows } as Block.DraftRows).rows
+        assertEquals(2, rows.size)
+
+        // La primera fila trae los cuatro; la segunda, todos menos
+        // startFromDraft — su bloque de instrucciones se borró a mano, así que
+        // la CLI no sabe con qué flags se generó y adivinarlos haría fallar el
+        // build por deriva sobre un borrador válido.
+        assertEquals(
+            listOf("openDraft", "copyDraftPrompt", "startFromDraft", "discardDraft"),
+            rows[0].controls.map { it.id.wire },
+        )
+        assertEquals(
+            listOf("openDraft", "copyDraftPrompt", "discardDraft"),
+            rows[1].controls.map { it.id.wire },
+        )
+
+        for (control in rows[0].controls) {
+            @Suppress("UNCHECKED_CAST")
+            val spec = canonical[control.id.wire] as Map<String, Any?>
+            assertEquals(spec["label"], control.label, "label of ${control.id.wire}")
+            assertEquals(spec["emphasis"], control.emphasis.id, "emphasis of ${control.id.wire}")
+            assertEquals(
+                spec["confirms"] as? Boolean ?: false,
+                requiresConfirmation(control.id),
+                "confirms of ${control.id.wire}",
+            )
+            // Cada control lleva el índice de SU fila: una acción sobre una fila
+            // no puede tocar las demás.
+            assertEquals(0, control.index, "index of ${control.id.wire}")
+        }
+        assertTrue(rows[1].controls.all { it.index == 1 }, "second row carries index 1")
+    }
+
+    @Test
+    fun `the progress is what the CLI reported, never re-derived`() {
+        val rows = (panelLayout(PanelFixtures.noReviewDrafts()).blocks
+            .first { it is Block.DraftRows } as Block.DraftRows).rows
+        assertEquals("feature/telemetry", rows[0].name)
+        assertEquals("3/9", rows[0].meta)
+        assertEquals("feature/pagos", rows[1].name)
+        assertEquals("0/5", rows[1].meta)
+    }
+
+    @Test
+    fun `no drafts means no block at all`() {
+        val blocks = panelLayout(PanelFixtures.noReviewReady()).blocks
+        assertTrue(blocks.none { it is Block.DraftRows }, "no DraftRows without drafts")
+        assertTrue(
+            blocks.none { it is Block.Heading && it.text == "Reading orders you started" },
+            "no heading without drafts",
+        )
+    }
+
     private fun assertLayoutAgainstCanonical(key: String, layout: PanelLayout) {
         val yaml = loadCanonical()
         @Suppress("UNCHECKED_CAST")

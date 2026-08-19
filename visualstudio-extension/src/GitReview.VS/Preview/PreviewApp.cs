@@ -91,6 +91,7 @@ public static class PanelFixtures
         ("cli-outdated", CliOutdated()),
         ("no-review setup", NoReviewSetup()),
         ("no-review ready", NoReviewReady()),
+        ("no-review drafts", NoReviewDrafts()),
         ("finish-pending", FinishPending()),
         ("out-of-range", OutOfRange()),
         ("error", Error()),
@@ -123,6 +124,25 @@ public static class PanelFixtures
                 Situation.NoReview,
                 Config: new EffectiveConfig("main", "origin"),
                 Branches: Porcelain.ParseListPorcelain(listPorcelain)),
+            new PanelInputs(false));
+    }
+
+    /// <summary>
+    /// Two reading orders started and not paused, plus the inventory below. The second
+    /// row does NOT offer "Validate and start": its instruction block was deleted by
+    /// hand, so the CLI reports `unknown` and the flags cannot be replicated.
+    /// </summary>
+    public static PanelModel NoReviewDrafts()
+    {
+        var cfg =
+            "draft\tfeature/telemetry\t/repo/.git/review-walkthrough/feature/telemetry.md\t3\t9\tlocal\tdelta\n" +
+            "draft\tfeature/pagos\t/repo/.git/review-walkthrough/feature/pagos.md\t0\t5\tunknown\tunknown\n";
+        return PanelModelBuilder.BuildPanelModel(
+            new ReviewState(
+                Situation.NoReview,
+                Config: new EffectiveConfig("main", "origin"),
+                Branches: Porcelain.ParseListPorcelain("branch\treview-saved/feature\t1\t0\t0\twalk\t2\t5"),
+                Drafts: ConfigPorcelain.ParseConfigPorcelain(cfg).Drafts),
             new PanelInputs(false));
     }
 

@@ -910,7 +910,21 @@ EOF
 	git review start feature/x
 	run git review status --porcelain
 	[ "$status" -eq 0 ]
-	printf '%s\n' "$output" | grep -Fxq 'draft'
+	# The record carries the absolute path of the draft in force. A client has to
+	# be handed that path, never left to build one out of a gitdir it resolved
+	# itself, so it is asserted as a real file and not just as a non-empty field.
+	dpath="$(printf '%s\n' "$output" | awk -F'\t' '$1 == "draft" { print $2; exit }')"
+	[ -n "$dpath" ]
+	case "$dpath" in
+	/*) ;;
+	[A-Za-z]:[/\\]*) ;;
+	*)
+		echo "draft path is not absolute: $dpath"
+		false
+		;;
+	esac
+	[ -f "$dpath" ]
+	[ "$(cat "$dpath")" = "$(cat "$DRAFT")" ]
 }
 
 @test "a review on the author's walkthrough emits no draft record" {

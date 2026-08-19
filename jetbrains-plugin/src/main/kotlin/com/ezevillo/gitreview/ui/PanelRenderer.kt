@@ -170,6 +170,7 @@ class PanelRenderer(
             is Block.Row -> renderRow(block.controls)
             is Block.FileRows -> renderFileRows(block)
             is Block.InventoryRows -> renderInventory(block)
+            is Block.DraftRows -> renderDrafts(block)
             is Block.ToolsSection -> renderToolsSection(block)
             is Block.Stderr -> renderStderr(block.text)
             is Block.EmptyMessage -> {
@@ -573,6 +574,38 @@ class PanelRenderer(
                 }
                 box.add(stacked(actions))
             }
+            box.add(Box.createVerticalStrut(6))
+        }
+        return box
+    }
+
+    /**
+     * The draft block. Same shape as an inventory row — name, meta, actions —
+     * because it is the same kind of thing: a row of the empty state you act on.
+     * Product parity, not pixel parity: what has to match VS Code is the order,
+     * the labels and which controls a row offers.
+     */
+    private fun renderDrafts(block: Block.DraftRows): JComponent {
+        val box = JPanel()
+        box.layout = BoxLayout(box, BoxLayout.Y_AXIS)
+        box.background = chrome.background()
+        box.alignmentX = Component.LEFT_ALIGNMENT
+        for (r in block.rows) {
+            box.add(stacked(headerRow(listOf(monoLabel(r.name, muted = false)), emptyList())))
+            box.add(
+                stacked(
+                    monoLabel(r.meta).apply {
+                        border = EmptyBorder(0, 0, 2, 0)
+                    },
+                ),
+            )
+            val actions = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0))
+            actions.background = chrome.background()
+            actions.alignmentX = Component.LEFT_ALIGNMENT
+            for (c in r.controls) {
+                actions.add(renderControl(c))
+            }
+            box.add(stacked(actions))
             box.add(Box.createVerticalStrut(6))
         }
         return box

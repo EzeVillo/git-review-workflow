@@ -2,7 +2,7 @@
 # Source of bootstrap strings: vscode-extension code as of 2026-08-08.
 # Normative for CI: scripts/check-client-product-surface.mjs
 schema_version: 1
-min_cli_version: "0.6.0" # verified: vscode-extension/src/cli/version.ts
+min_cli_version: "0.7.0" # verified: vscode-extension/src/cli/version.ts
 npm_install: "npm install -g git-review-workflow" # verified: src/cli/installHint.ts
 npm_update: "npm install -g git-review-workflow@latest" # verified: src/cli/installHint.ts
 docs_readme_url: "https://github.com/EzeVillo/git-review-workflow#readme"
@@ -39,6 +39,16 @@ strings:
   multi_root_error: >-
     Open a single-folder workspace that is a git repository. git review uses
     one root (like the CLI cwd); multi-root is not supported.
+  # Lo que copyDraftPrompt pone en el portapapeles. Es un PUNTERO, no un prompt:
+  # la consigna vive dentro del archivo, en el comentario de arriba de todo.
+  # Byte por byte igual en los tres clientes; verificado contra
+  # vscode-extension/src/review/userCopy.ts,
+  # jetbrains-plugin/.../domain/UserCopy.kt y
+  # visualstudio-extension/src/GitReview.Domain/UserCopy.cs
+  draft_agent_prompt: >-
+    Fill in the reading order at {path}. The instructions are inside the file,
+    in the comment at the top. Do not change the file list or the numbering
+    rules.
 situations:
   - cli-missing
   - cli-outdated
@@ -199,9 +209,16 @@ panel_layout:
       - {block: paragraph, text: "Remote: {remote} (optional)."}
       - {block: row, controls: [{id: setRemote, label: "Change remote", emphasis: secondary, confirms: false}]}
   no-review:
-    source_fns: [renderReview, renderEmptyStartBlock, renderOtherActions, renderSettings, renderSupport]
+    source_fns: [renderDrafts, renderReview, renderEmptyStartBlock, renderOtherActions, renderSettings, renderSupport]
     fills_height: true
     blocks:
+      # Los borradores empezados van PRIMERO y el cuerpo de siempre sigue entero
+      # debajo: no es una sub-disposición que reemplace, como no-review-setup.
+      # Sin base configurada no hay nada más que hacer en el panel; con un
+      # borrador a medio escribir sí. Por eso es un bloque condicional dentro de
+      # no-review y no una situación nueva -- que además obligaría a duplicar
+      # toda esta lista de bloques.
+      - {block: draft_block, when: has_drafts}
       - {block: heading, text: "Reviews in this repository", when: has_reviews}
       - {block: inventory_rows}
       - {block: paragraph, text: "No active review on this branch."}
@@ -320,3 +337,18 @@ inventory_controls:
   discardInventory:
     labels: ["Discard", "Discard orphan"]
     confirms: true
+
+# Los cuatro controles de una fila del bloque de borradores. Son controles del
+# CUERPO del panel, como copyCliInstall, outOfRangeHelp y openSupport: sin la
+# fila que los dibuja no tienen sujeto. NO son acciones del producto, así que el
+# conteo fijo de 27 en actions: y en contributes.commands NO se toca, ni el menú
+# Tools -> git review de JetBrains, ni el .vsct de Visual Studio.
+#
+# startFromDraft no se ofrece cuando <source> o <range> del registro `draft`
+# valen unknown (el bloque de instrucciones se borró a mano): mejor un control
+# menos que uno que adivina los flags y falla siempre por deriva.
+draft_controls:
+  openDraft: {label: "Open", emphasis: secondary, confirms: false}
+  copyDraftPrompt: {label: "Copy for agent", emphasis: secondary, confirms: false}
+  startFromDraft: {label: "Validate and start", emphasis: primary, confirms: true}
+  discardDraft: {label: "Discard", emphasis: secondary, confirms: true}

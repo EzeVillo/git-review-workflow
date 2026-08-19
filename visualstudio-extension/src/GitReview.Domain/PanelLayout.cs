@@ -45,6 +45,13 @@ public enum ControlId
     UndoFinish,
     ResumeFinish,
     DiscardInventory,
+    // Draft block (012): four BODY controls, not product actions. They are not
+    // in the action matrix, not in the Tools menu, not in the .vsct, and the
+    // canonical's fixed count of 27 does not move.
+    OpenDraft,
+    CopyDraftPrompt,
+    StartFromDraft,
+    DiscardDraft,
     CleanReview,
     CompareReview,
     WalkthroughInit,
@@ -76,6 +83,10 @@ public static class ControlIdExt
         ControlId.UndoFinish => "undoFinish",
         ControlId.ResumeFinish => "resumeFinish",
         ControlId.DiscardInventory => "discardInventory",
+        ControlId.OpenDraft => "openDraft",
+        ControlId.CopyDraftPrompt => "copyDraftPrompt",
+        ControlId.StartFromDraft => "startFromDraft",
+        ControlId.DiscardDraft => "discardDraft",
         ControlId.CleanReview => "cleanReview",
         ControlId.CompareReview => "compareReview",
         ControlId.WalkthroughInit => "walkthroughInit",
@@ -104,6 +115,15 @@ public sealed record Control(
     string? SupportLinkId = null);
 
 public sealed record FileRow(string Display, int Index, bool LastOpened);
+
+/// <summary>
+/// A row of the draft block: the branch, the progress exactly as the CLI
+/// reports it, and the controls that act on THAT row.
+/// </summary>
+public sealed record DraftRow(
+    string Name,
+    string Meta,
+    IReadOnlyList<Control> Controls);
 
 public sealed record InventoryRow(
     string Name,
@@ -168,6 +188,7 @@ public abstract record Block
     public sealed record FileRows(IReadOnlyList<FileRow> Rows) : Block;
 
     public sealed record InventoryRows(IReadOnlyList<InventoryRow> Rows) : Block;
+    public sealed record DraftRows(IReadOnlyList<DraftRow> Rows) : Block;
 
     public sealed record ToolsSection(string Title, IReadOnlyList<Block> NestedBlocks) : Block;
 
@@ -197,7 +218,12 @@ public sealed class PanelLayout
         FillsHeight = fillsHeight;
 
         var controls = CollectControls();
-        var primaries = controls.Count(c => c.Emphasis == Emphasis.Primary);
+        // One PRIMARY per situation, counted over the controls that are NOT row
+        // controls. A row control is a per-row affordance repeated as many times
+        // as there are rows — "the obvious thing to do with THIS draft" — so
+        // counting them here would make the rule depend on how many drafts the
+        // reviewer happens to have, which is not a property of the layout.
+        var primaries = controls.Count(c => c.Emphasis == Emphasis.Primary && c.Index is null);
         if (primaries > 1)
             throw new ArgumentException($"At most one PRIMARY control per situation, found {primaries}");
         foreach (var c in controls)
@@ -228,6 +254,9 @@ public sealed class PanelLayout
                 case Block.InventoryRows ir:
                     foreach (var row in ir.Rows) outList.AddRange(row.Controls);
                     break;
+                case Block.DraftRows dr:
+                    foreach (var row in dr.Rows) outList.AddRange(row.Controls);
+                    break;
                 case Block.ToolsSection ts: Walk(ts.NestedBlocks, outList); break;
             }
         }
@@ -237,6 +266,7 @@ public sealed class PanelLayout
         blocks.Any(b => b switch
         {
             Block.InventoryRows ir => ir.Rows.Any(r => r.Controls.Any(x => ReferenceEquals(x, c) || x == c)),
+            Block.DraftRows dr => dr.Rows.Any(r => r.Controls.Any(x => ReferenceEquals(x, c) || x == c)),
             Block.ToolsSection ts => HostedByInventory(ts.NestedBlocks, c),
             _ => false,
         });
@@ -249,6 +279,8 @@ public static class PanelLayoutBuilder
         ControlId.StartReview,
         ControlId.ContinueReview,
         ControlId.DiscardInventory,
+        ControlId.StartFromDraft,
+        ControlId.DiscardDraft,
         ControlId.CleanReview,
         ControlId.UndoFinish,
         ControlId.CompareReview,
@@ -584,10 +616,57 @@ public static class PanelLayoutBuilder
         return new Block.InventoryRows(rows);
     }
 
+    /// <summary>
+    /// The draft block: reading orders the reviewer started and has not paused,
+    /// each with its four controls. First block of the empty state, with the
+    /// usual body whole underneath — it is not a sub-layout that replaces, the
+    /// way the setup gate is: with no base configured there is nothing else to
+    /// do in this panel, with a half-written reading order there is.
+    /// </summary>
+    private static Block.DraftRows DraftRows(PanelModel model)
+    {
+        var enabled = !model.Busy;
+        var rows = model.DraftsList.Select((d, index) =>
+        {
+            var controls = new List<Control>
+            {
+                Ctrl(
+                    ControlId.OpenDraft, "Open", Emphasis.Secondary,
+                    enabled: true, tooltip: "Open the reading order for editing", index: index),
+                Ctrl(
+                    ControlId.CopyDraftPrompt, "Copy for agent", Emphasis.Secondary,
+                    enabled: true, tooltip: "Copy an instruction naming this file", index: index),
+            };
+            // Absent when the CLI does not know the origin and range the draft
+            // was generated with: invoking with the defaults would fail with a
+            // drift error every time, and one control fewer beats one that guesses.
+            if (d.Startable)
+            {
+                controls.Add(Ctrl(
+                    ControlId.StartFromDraft, "Validate and start", Emphasis.Primary,
+                    enabled: enabled,
+                    tooltip: "git review walkthrough draft --build, then start",
+                    index: index));
+            }
+            controls.Add(Ctrl(
+                ControlId.DiscardDraft, "Discard", Emphasis.Secondary,
+                enabled: enabled,
+                tooltip: "git review forget --draft (with confirmation)",
+                index: index));
+            return new DraftRow(d.Branch, $"{d.Annotated}/{d.Total}", controls);
+        }).ToList();
+        return new Block.DraftRows(rows);
+    }
+
     private static List<Block> NoReviewReadyBlocks(PanelModel model)
     {
         var enabled = !model.Busy;
         var outList = new List<Block>();
+        if (model.DraftsList.Count > 0)
+        {
+            outList.Add(new Block.Heading("Reading orders you started"));
+            outList.Add(DraftRows(model));
+        }
         if (model.ReviewsList.Count > 0)
         {
             outList.Add(new Block.Heading("Reviews in this repository"));
@@ -595,7 +674,7 @@ public static class PanelLayoutBuilder
         }
         outList.Add(new Block.Paragraph(
             "No active review on this branch.",
-            Separated: model.ReviewsList.Count > 0));
+            Separated: model.ReviewsList.Count > 0 || model.DraftsList.Count > 0));
         outList.Add(new Block.Row(new[]
         {
             Ctrl(ControlId.StartReview, "Start a review", Emphasis.Primary, enabled),

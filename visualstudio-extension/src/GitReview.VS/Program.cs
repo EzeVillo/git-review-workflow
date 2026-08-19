@@ -53,7 +53,7 @@ public static class Program
             }
         }
 
-        Check("min_cli_version", CliVersion.MinCliVersion == "0.6.0");
+        Check("min_cli_version", CliVersion.MinCliVersion == "0.7.0");
         // 26, not the contract's 27: openAllChanges is not_in: [visualstudio].
         Check("product_actions_26", ActionArgvMap.ProductActions.Count == 26);
         Check("npm_install", InstallHint.NpmInstallCmd.Contains("git-review-workflow"));

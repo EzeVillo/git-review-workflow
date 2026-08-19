@@ -248,6 +248,17 @@ porcelain)
 	candidate_remotes "$remote_val"
 	candidate_branches "$remote_val"
 
+	# Loose walkthrough drafts, with and without a branch argument alike. Not
+	# because this verb's output is symmetric — it is not: delta and offer exist
+	# only with a branch — but because a draft is a fact about the WORKING TREE,
+	# not about the branch you asked after. Conditioning it on the argument would
+	# make the same repository report different drafts depending on what was
+	# asked, and that relationship does not exist.
+	#
+	# Zero drafts emits nothing and, importantly, spends nothing: see the guard
+	# in emit_draft_records.
+	emit_draft_records
+
 	if [ -n "$branch" ]; then
 		# Same pair of keys start reads for --delta (bin/git-review-verbs/start):
 		# a remote review stores reviewworkflow.<branch>.reviewed; a

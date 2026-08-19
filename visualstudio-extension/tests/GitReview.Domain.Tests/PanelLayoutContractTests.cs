@@ -180,7 +180,7 @@ public class PanelLayoutContractTests
     [Fact]
     public void Min_cli_version_constant()
     {
-        Assert.Equal("0.6.0", CliVersion.MinCliVersion);
+        Assert.Equal("0.7.0", CliVersion.MinCliVersion);
         Assert.Equal(CliVersion.MinCliVersion, CanonicalScalar("min_cli_version"));
     }
 
@@ -189,6 +189,94 @@ public class PanelLayoutContractTests
     {
         Assert.Equal("https://github.com/EzeVillo/git-review-workflow", SupportLinks.StarUrl);
         Assert.Contains("bug_report.yml", SupportLinks.BugUrl);
+    }
+
+    [Fact]
+    public void The_draft_block_is_the_first_block_of_no_review_and_the_body_follows_whole()
+    {
+        var layout = PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewDrafts());
+        var blocks = layout.Blocks;
+        // First block the heading, second the rows: it is not a sub-layout that
+        // replaces — the usual body follows underneath.
+        Assert.Equal("Reading orders you started", Assert.IsType<Block.Heading>(blocks[0]).Text);
+        Assert.IsType<Block.DraftRows>(blocks[1]);
+        Assert.Contains(blocks, b => b is Block.InventoryRows);
+        Assert.Contains(layout.CollectControls(), c => c.Id == ControlId.StartReview);
+    }
+
+    [Fact]
+    public void Draft_rows_carry_the_four_canonical_controls()
+    {
+        var canonical = DraftControlSpecs();
+        Assert.Equal(
+            new[] { "copyDraftPrompt", "discardDraft", "openDraft", "startFromDraft" },
+            canonical.Keys.OrderBy(k => k, StringComparer.Ordinal).ToArray());
+
+        var rows = layoutDraftRows();
+        Assert.Equal(2, rows.Count);
+
+        // The first row carries the four; the second, all but startFromDraft — its
+        // instruction block was deleted by hand, so the CLI does not know which flags
+        // it was generated with and guessing them would make --build die on drift.
+        Assert.Equal(
+            new[] { "openDraft", "copyDraftPrompt", "startFromDraft", "discardDraft" },
+            rows[0].Controls.Select(c => c.Id.Wire()).ToArray());
+        Assert.Equal(
+            new[] { "openDraft", "copyDraftPrompt", "discardDraft" },
+            rows[1].Controls.Select(c => c.Id.Wire()).ToArray());
+
+        foreach (var control in rows[0].Controls)
+        {
+            var spec = canonical[control.Id.Wire()];
+            Assert.Equal(spec.Label, control.Label);
+            Assert.Equal(spec.Emphasis, control.Emphasis.Id());
+            Assert.Equal(spec.Confirms, PanelLayoutBuilder.RequiresConfirmation(control.Id));
+            // Each control carries ITS row's index: an action on one row cannot
+            // touch the others.
+            Assert.Equal(0, control.Index);
+        }
+        Assert.All(rows[1].Controls, c => Assert.Equal(1, c.Index));
+    }
+
+    [Fact]
+    public void The_progress_is_what_the_cli_reported()
+    {
+        var rows = layoutDraftRows();
+        Assert.Equal("feature/telemetry", rows[0].Name);
+        Assert.Equal("3/9", rows[0].Meta);
+        Assert.Equal("feature/pagos", rows[1].Name);
+        Assert.Equal("0/5", rows[1].Meta);
+    }
+
+    [Fact]
+    public void No_drafts_means_no_block_at_all()
+    {
+        var blocks = PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewReady()).Blocks;
+        Assert.DoesNotContain(blocks, b => b is Block.DraftRows);
+        Assert.DoesNotContain(
+            blocks,
+            b => b is Block.Heading h && h.Text == "Reading orders you started");
+    }
+
+    private static IReadOnlyList<DraftRow> layoutDraftRows() =>
+        PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewDrafts())
+            .Blocks.OfType<Block.DraftRows>().Single().Rows;
+
+    private static Dictionary<string, (string Label, string Emphasis, bool Confirms)> DraftControlSpecs()
+    {
+        var root = (YamlMappingNode)LoadCanonical().Documents[0].RootNode;
+        var map = (YamlMappingNode)root.Children[new YamlScalarNode("draft_controls")];
+        var specs = new Dictionary<string, (string, string, bool)>(StringComparer.Ordinal);
+        foreach (var pair in map.Children)
+        {
+            var id = ((YamlScalarNode)pair.Key).Value!;
+            var node = (YamlMappingNode)pair.Value;
+            specs[id] = (
+                ((YamlScalarNode)node.Children[new YamlScalarNode("label")]).Value!,
+                ((YamlScalarNode)node.Children[new YamlScalarNode("emphasis")]).Value!,
+                ((YamlScalarNode)node.Children[new YamlScalarNode("confirms")]).Value == "true");
+        }
+        return specs;
     }
 
     [Fact]
@@ -290,7 +378,15 @@ public class PanelLayoutContractTests
         var ids = ExtractFromBlocks(blocks, skipNotIn: false).Select(s => s.Id).ToHashSet(StringComparer.Ordinal);
         if (MentionsBlock(blocks, "inventory_rows"))
         {
-            foreach (var id in InventoryControlIds()) ids.Add(id);
+            foreach (var id in RowControlIds("inventory_controls")) ids.Add(id);
+        }
+        // Same shape for the draft block: its four controls are per-row, so they
+        // cannot be declared inside panel_layout — their subject is the row, not
+        // the situation — and they live in a map of their own, like the
+        // inventory's.
+        if (MentionsBlock(blocks, "draft_block"))
+        {
+            foreach (var id in RowControlIds("draft_controls")) ids.Add(id);
         }
         return ids;
     }
@@ -317,10 +413,16 @@ public class PanelLayoutContractTests
         return false;
     }
 
-    private static IEnumerable<string> InventoryControlIds()
+    /// <summary>
+    /// The ids of a per-row control map (<c>inventory_controls</c>,
+    /// <c>draft_controls</c>). Those controls belong to a row, not to a
+    /// situation, which is why the canonical keeps them outside
+    /// <c>panel_layout</c> and why the matcher has to be told about them.
+    /// </summary>
+    private static IEnumerable<string> RowControlIds(string key)
     {
         var root = (YamlMappingNode)LoadCanonical().Documents[0].RootNode;
-        if (!root.Children.TryGetValue(new YamlScalarNode("inventory_controls"), out var node)
+        if (!root.Children.TryGetValue(new YamlScalarNode(key), out var node)
             || node is not YamlMappingNode map)
             return Array.Empty<string>();
         return map.Children.Keys.OfType<YamlScalarNode>().Select(k => k.Value!).ToList();

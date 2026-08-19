@@ -1,3 +1,4 @@
+import type {DraftRecord} from "../cli/configPorcelain";
 import {BranchRecord, EntryRecord, ReviewMode, sourceOf} from "../cli/porcelain";
 import type {PathRef} from "../cli/unquote";
 import type {Situation} from "../review/situation";
@@ -72,6 +73,32 @@ export interface PanelReview {
 }
 
 /**
+ * Una fila del bloque de borradores del estado vacío: un orden de lectura que
+ * el revisor empezó y no pausó (registro `draft` de `config --porcelain`).
+ *
+ * Proyección plana, sin una sola derivación: el progreso lo cuenta la CLI y la
+ * ruta la resuelve la CLI. `path` cruza al webview porque las cuatro acciones
+ * salen de la fila, pero lo que vuelve del panel es el índice, como en
+ * `PanelReview` — el host re-resuelve la fila antes de invocar nada.
+ */
+export interface PanelDraft {
+    /** La rama del borrador, verbatim (`feature/checkout`). */
+    branch: string;
+    /** Ruta absoluta reportada por la CLI. El cliente la abre; nunca la arma. */
+    path: string;
+    annotated: number;
+    total: number;
+    /**
+     * Si se puede ofrecer *Validate and start* para esta fila: sólo cuando la
+     * CLI sabe con qué origen y rango se generó el borrador. Con `unknown`
+     * (bloque de instrucciones borrado a mano) invocar con los defaults
+     * fallaría siempre por deriva, así que se ofrece un control menos en vez de
+     * uno que adivina.
+     */
+    startable: boolean;
+}
+
+/**
  * `PanelModel` (data-model.md) — la proyección plana y serializable que es lo
  * único que cruza hacia el webview, y el punto donde afirman los tests.
  *
@@ -92,6 +119,13 @@ export interface PanelModel {
      * En cualquier otra situación es un array vacío.
      */
     reviews: PanelReview[];
+    /**
+     * Órdenes de lectura empezados y no pausados, en el orden de la CLI. Misma
+     * regla que `reviews`: sólo con `situation === "no-review"`, array vacío en
+     * cualquier otra. Una review en curso es siempre lo más importante que el
+     * panel tiene para decir, y el borrador de otra rama no le compite el cuerpo.
+     */
+    drafts: PanelDraft[];
     /**
      * Cierre completo con undo vivo, sólo con `situation === "finish-pending"`
      * (contracts/finish-state.md): la fila `finish … pending` que hizo que el
@@ -343,6 +377,34 @@ function toPanelReviews(branches: BranchRecord[]): PanelReview[] {
 }
 
 /**
+ * Proyecta los registros `draft` de `config --porcelain`. Uno a uno, sin
+ * reordenar ni filtrar: el orden es el de la CLI, y un borrador de una review
+ * pausada no llega hasta acá porque la CLI no lo reporta (su archivo está en el
+ * namespace archivado) — SC-012 se cumple aguas arriba, sin regla en el cliente.
+ */
+function toPanelDrafts(drafts: readonly DraftRecord[]): PanelDraft[] {
+    return drafts.map((draft) => ({
+        branch: draft.src,
+        path: draft.path,
+        annotated: draft.annotated,
+        total: draft.total,
+        startable: draft.source !== "unknown" && draft.range !== "unknown",
+    }));
+}
+
+/**
+ * La fila `index` del bloque de borradores, o `undefined`. Mismo papel que
+ * `resumableSourceAt`: es donde el índice que llega del webview se valida
+ * contra el estado del host, así que lo que termina en la CLI no sale del panel.
+ */
+export function draftAt(drafts: readonly DraftRecord[], index: unknown): DraftRecord | undefined {
+    if (typeof index !== "number" || !Number.isInteger(index)) {
+        return undefined;
+    }
+    return drafts[index];
+}
+
+/**
  * El *source* de la fila `index` del inventario, sólo si esa fila puede
  * resumirse. Es el punto donde el índice que llega del webview se convierte en
  * el argumento de `continue`: valida que sea un entero en rango contra el
@@ -369,6 +431,10 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
         // Inventario sólo en no-review: finish-pending es pantalla de
         // post-cierre (Undo / Clean), no el empty state con Start.
         reviews: state.situation === "no-review" ? toPanelReviews(state.branches) : [],
+        drafts:
+            state.situation === "no-review" && state.drafts !== undefined
+                ? toPanelDrafts(state.drafts)
+                : [],
         // Ausencia de dato (config nunca llegó) y "config llegó sin base" son
         // distintos, pero ambos se dibujan igual acá: nada que avisar. Sólo
         // "config llegó, y base está ausente" prende el aviso — y sólo en el

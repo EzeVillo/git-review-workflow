@@ -12,8 +12,8 @@
 class GitReviewWorkflow < Formula
   desc "Git commands to review a pull request branch locally as one staged diff"
   homepage "https://github.com/EzeVillo/git-review-workflow"
-  version "0.6.0"
-  url "https://github.com/EzeVillo/git-review-workflow/archive/refs/tags/v0.6.0.tar.gz"
+  version "0.7.0"
+  url "https://github.com/EzeVillo/git-review-workflow/archive/refs/tags/v0.7.0.tar.gz"
   sha256 "922a8439537c7c2b532f228c2a79204cffdf194368e642dfe0eb9b32c34ca7ad"
   license "MIT"
   head "https://github.com/EzeVillo/git-review-workflow.git"

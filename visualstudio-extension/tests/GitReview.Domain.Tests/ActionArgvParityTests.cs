@@ -214,4 +214,34 @@ public class ActionArgvParityTests
         "setBase" or "setRemote" => new ActionParams.SetConfig("base", "main"),
         _ => null,
     };
+
+    [Fact]
+    public void The_three_steps_of_validate_and_start_carry_the_same_flags()
+    {
+        // They come from the source/range fields of the `draft` record, not from
+        // the defaults: with the defaults a draft made with --delta or --local
+        // covers a different set of paths and --build dies on drift, every time.
+        Assert.Equal(
+            new[] { "draft", "--build", "--local", "--delta", "--", "feature/x" },
+            ReviewIntentLogic.DraftArgs("feature/x", ReviewSource.Local, ReviewRange.Delta, build: true));
+        Assert.Equal(
+            new[] { "--porcelain", "--local", "--delta", "--", "feature/x" },
+            ReviewIntentLogic.DraftConfigArgs("feature/x", ReviewSource.Local, ReviewRange.Delta));
+        Assert.Equal(
+            new[] { "--delta", "--local", "--", "feature/x" },
+            ReviewIntentLogic.IntentToArgs(
+                new ReviewIntent("feature/x", ReviewLayout.Walk, ReviewRange.Delta, ReviewSource.Local),
+                "feature/x"));
+    }
+
+    [Fact]
+    public void Discard_names_one_branch_and_never_all_or_saved()
+    {
+        Assert.Equal(new[] { "--draft", "--", "feature/x" }, ReviewIntentLogic.ForgetDraftArgs("feature/x"));
+        var argv = ActionArgvMap.ActionToArgv("forgetDraft", new ActionParams.ForgetDraft("feature/x"));
+        Assert.Equal("forget", argv.Verb);
+        Assert.Equal(new[] { "--draft", "--", "feature/x" }, argv.Args);
+        Assert.DoesNotContain("--all", argv.Args);
+        Assert.DoesNotContain("--saved", argv.Args);
+    }
 }

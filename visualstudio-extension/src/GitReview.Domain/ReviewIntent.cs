@@ -128,6 +128,22 @@ public static class ReviewIntentLogic
     {
         var args = new List<string> { "draft" };
         if (build) args.Add("--build");
+        args.AddRange(OriginAndRangeFlags(source, range));
+        args.Add("--");
+        args.Add(branch);
+        return args;
+    }
+
+    /// <summary>
+    /// The origin and range flags, in the order the CLI documents. One place,
+    /// because the three steps of "Validate and start" — draft --build, the
+    /// config --porcelain that follows and the final start — have to carry
+    /// exactly the same ones: if they differ, the three speak about different
+    /// ranges.
+    /// </summary>
+    private static List<string> OriginAndRangeFlags(ReviewSource source, ReviewRange range)
+    {
+        var args = new List<string>();
         switch (source)
         {
             case ReviewSource.Local: args.Add("--local"); break;
@@ -135,8 +151,35 @@ public static class ReviewIntentLogic
             case ReviewSource.Remote: break;
         }
         if (range == ReviewRange.Delta) args.Add("--delta");
+        return args;
+    }
+
+    /// <summary>
+    /// <c>git review config --porcelain &lt;flags&gt; -- &lt;branch&gt;</c> for a draft row:
+    /// invoked after a green --build from the panel, only to learn whether that draft
+    /// carries essential entries (`offer keys`).
+    ///
+    /// The flags are not the defaults: they come from the source/range fields of the
+    /// `draft` record, which are the ones the CLI wrote into the instruction block when
+    /// it generated the skeleton.
+    /// </summary>
+    public static IReadOnlyList<string> DraftConfigArgs(
+        string branch,
+        ReviewSource source,
+        ReviewRange range)
+    {
+        var args = new List<string> { "--porcelain" };
+        args.AddRange(OriginAndRangeFlags(source, range));
         args.Add("--");
         args.Add(branch);
         return args;
     }
+
+    /// <summary>
+    /// <c>git review forget --draft -- &lt;branch&gt;</c>: discard the draft of ONE row.
+    /// Never --all (it would sweep the other rows, and archived ones nobody is looking
+    /// at) nor --saved (that is a paused review's prose), and never without the branch.
+    /// </summary>
+    public static IReadOnlyList<string> ForgetDraftArgs(string branch) =>
+        new List<string> { "--draft", "--", branch };
 }

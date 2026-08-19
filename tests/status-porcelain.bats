@@ -940,3 +940,90 @@ EOF
 	stateline="$(printf '%s\n' "$out" | grep '^state' | sed -n '1p')"
 	[ "$(printf '%s\n' "$stateline" | cut -f1)" = "state" ]
 }
+
+# ── the draft record's path field ─────────────────────────────────────────────
+
+# A reviewer's own reading order for feature/x, installed and built.
+install_draft() {
+	run git review walkthrough draft --build --from - feature/x <<'ORDER'
+# Walkthrough
+
+## 1. src/c.txt
+mine, not the author's
+
+## 2. a.txt
+why a
+
+## 3. b.txt
+why b
+ORDER
+	[ "$status" -eq 0 ]
+}
+
+@test "the draft record carries the absolute path of the draft in force" {
+	install_draft
+	git review start feature/x >/dev/null
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	dpath="$(printf '%s\n' "$output" | awk -F'\t' '$1 == "draft" { print $2; exit }')"
+	[ -n "$dpath" ]
+	case "$dpath" in
+	/* | [A-Za-z]:[/\\]*) ;;
+	*)
+		echo "not absolute: $dpath"
+		false
+		;;
+	esac
+	[ -f "$dpath" ]
+	grep -q "mine, not the author" "$dpath"
+}
+
+@test "a review on the author's walkthrough emits no draft record at all" {
+	recommit_walkthrough <<'ORDER'
+# Walkthrough
+
+## 1. src/c.txt
+the author's own
+
+## 2. a.txt
+covered
+
+## 3. b.txt
+covered
+ORDER
+	git review start feature/x >/dev/null
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	[ -z "$(printf '%s\n' "$output" | awk -F'\t' '$1 == "draft"')" ]
+}
+
+@test "whole and step emit no draft record even while holding a draft in custody" {
+	# The condition did not change with the field: the record is about what this
+	# review is READING, and neither of these modes reads a walkthrough. Custody
+	# is reported elsewhere -- list marks the row, config lists the file.
+	install_draft
+	git review start feature/x --no-walk >/dev/null
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	[ "$(printf '%s\n' "$output" | awk -F'\t' '$1 == "state" { print $5 }')" = "whole" ]
+	[ -z "$(printf '%s\n' "$output" | awk -F'\t' '$1 == "draft"')" ]
+	git review abort >/dev/null
+
+	git review start feature/x --step >/dev/null
+	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	[ "$(printf '%s\n' "$output" | awk -F'\t' '$1 == "state" { print $5 }')" = "step" ]
+	[ -z "$(printf '%s\n' "$output" | awk -F'\t' '$1 == "draft"')" ]
+}
+
+@test "the human-readable status line is unchanged by the new field" {
+	install_draft
+	git review start feature/x >/dev/null
+	run git review status
+	[ "$status" -eq 0 ]
+	# The mode line still says what it always said, and says nothing about a path:
+	# a person already knows where their draft is, the verb that made it told them.
+	[[ "$output" == *"walk (draft)"* ]]
+	[[ "$output" == *"[1/3] on src/c.txt"* ]]
+	! [[ "$output" == *"review-walkthrough"* ]]
+}

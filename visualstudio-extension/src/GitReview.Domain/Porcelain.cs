@@ -85,6 +85,12 @@ public sealed record PorcelainResult(
     bool? Readonly = null,
     bool? KeysOnly = null,
     bool? Draft = null,
+    /// <summary>
+    /// 012: the absolute path of that draft, as the CLI reported it in the
+    /// record's field. Separate from the flag: presence is presence, and a
+    /// record without the field (an older CLI) does not turn the mark off.
+    /// </summary>
+    string? DraftPath = null,
     IReadOnlyDictionary<int, string>? Subjects = null,
     IReadOnlyDictionary<int, string>? Authors = null,
     string? Base = null)
@@ -153,6 +159,7 @@ public static class Porcelain
         bool? isReadonly = null;
         bool? isKeysOnly = null;
         bool? isDraft = null;
+        string? draftPath = null;
 
         foreach (var line in lines)
         {
@@ -263,6 +270,7 @@ public static class Porcelain
                     break;
                 case "draft":
                     isDraft = true;
+                    if (!string.IsNullOrEmpty(Get(fields, 1))) draftPath = Get(fields, 1);
                     break;
                 // unknown tag: ignore (FR-003)
             }
@@ -277,6 +285,7 @@ public static class Porcelain
             Readonly: isReadonly,
             KeysOnly: isKeysOnly,
             Draft: isDraft,
+            DraftPath: draftPath,
             Subjects: subjects,
             Authors: authors,
             Base: bas);

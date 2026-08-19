@@ -44,9 +44,12 @@ public class ConfirmationContractTests
         Walk(Get(root, "panel_layout"));
         Walk(Get(root, "title_actions"));
 
-        if (Get(root, "inventory_controls") is YamlMappingNode inventory)
+        // The two per-row control maps. They cannot be declared inside
+        // panel_layout because their subject is the row, not the situation.
+        foreach (var key in new[] { "inventory_controls", "draft_controls" })
         {
-            foreach (var (k, v) in inventory.Children)
+            if (Get(root, key) is not YamlMappingNode rowControls) continue;
+            foreach (var (k, v) in rowControls.Children)
             {
                 var id = ((YamlScalarNode)k).Value!;
                 var confirms = v is YamlMappingNode m && Bool(m, "confirms");

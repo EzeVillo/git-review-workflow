@@ -64,8 +64,8 @@ describe("buildLayoutItems", () => {
             ["walk", "step", "whole"]
         );
         assert.strictEqual(items[0].draft, "create");
-        assert.strictEqual(items[0].label, "Walkthrough — draft one");
-        assert.strictEqual(items[0].description, "no reading order yet; write one");
+        assert.strictEqual(items[0].label, "Build a reading order first");
+        assert.strictEqual(items[0].description, "nobody wrote one for this PR; otherwise you read the whole diff");
         // Los demas no llevan la marca: elegirlos va derecho a start.
         assert.strictEqual(items[1].draft, undefined);
         assert.strictEqual(items[2].draft, undefined);
@@ -79,7 +79,7 @@ describe("buildLayoutItems", () => {
         ]);
         assert.deepStrictEqual(
             items.map((i) => i.label),
-            ["Walkthrough (recommended)", "Walkthrough — continue draft", "Commit by commit"]
+            ["Walkthrough (recommended)", "Finish the reading order you started", "Commit by commit"]
         );
         assert.strictEqual(items[0].draft, undefined, "walk se lee, no se arma");
         assert.strictEqual(items[1].draft, "resume");

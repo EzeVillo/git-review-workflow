@@ -30,7 +30,9 @@ usage() {
 	cat <<EOF
 usage: $prog init [--base <base>] [--force]
        $prog build [--check]
-       $prog draft [--build] [--local | --offline] [--delta] [--force] [--] [<branch>]
+       $prog draft [--local | --offline] [--delta] [--force] [--stdout] [--] [<branch>]
+       $prog draft --build [--from <file> | --from -] [--local | --offline]
+                   [--delta] [--force] [--] [<branch>]
 
 Author a reading walkthrough for the current branch's PR, committed as
 .review/walkthrough.md.
@@ -48,10 +50,14 @@ Review someone else's PR in a reading order of your own, without committing:
                     outside the working tree; git review start then
                     reads it instead of the PR's own walkthrough
     --build         validate and renumber the draft, as build does for the PR's
+    --from <file>   with --build: read the draft from <file> instead of the
+                    stored one, and install it ("-" reads standard input)
     --local         draft against your local <branch>, not origin's copy
     --offline       like --local, and resolve the base locally too
     --delta         cover only the commits added since your last review
     --force         overwrite an existing draft
+    --stdout        print the skeleton instead of writing it; nothing is
+                    created anywhere
 EOF
 }
 
@@ -70,6 +76,9 @@ build_draft=0
 local_only=0
 offline=0
 delta_mode=0
+to_stdout=0
+from_src=""
+from_given=0
 # Positional arguments in order: the subcommand, then (draft only) the branch.
 # Kept in one helper so "--" and the bare form agree on the shape.
 take_positional() {
@@ -104,6 +113,27 @@ while [ $# -gt 0 ]; do
 	--local) local_only=1 ;;
 	--offline) offline=1 ;;
 	--delta) delta_mode=1 ;;
+	--stdout) to_stdout=1 ;;
+	--from)
+		# Repetition is an error rather than last-one-wins: two sources for one
+		# draft is a mistake in the caller, and silently picking one of them is
+		# how the wrong prose gets installed.
+		if [ "$from_given" -eq 1 ]; then die "--from given more than once"; fi
+		shift
+		if [ $# -eq 0 ] || [ -z "$1" ]; then
+			die "--from requires a file (or - for standard input)"
+		fi
+		from_src="$1"
+		from_given=1
+		;;
+	--from=*)
+		if [ "$from_given" -eq 1 ]; then die "--from given more than once"; fi
+		from_src="${1#--from=}"
+		if [ -z "$from_src" ]; then
+			die "--from requires a file (or - for standard input)"
+		fi
+		from_given=1
+		;;
 	--)
 		shift
 		while [ $# -gt 0 ]; do
@@ -144,12 +174,30 @@ fi
 if [ "$sub" != draft ] && { [ "$build_draft" -eq 1 ] || [ "$local_only" -eq 1 ] || [ "$offline" -eq 1 ] || [ "$delta_mode" -eq 1 ]; }; then
 	die "--build, --local, --offline and --delta apply only to git review walkthrough draft"
 fi
+if [ "$sub" != draft ] && { [ "$to_stdout" -eq 1 ] || [ "$from_given" -eq 1 ]; }; then
+	die "--stdout and --from apply only to git review walkthrough draft"
+fi
 if [ "$sub" != draft ] && [ -n "$branch" ]; then
 	die "only git review walkthrough draft takes a branch; init and build work on the branch you are on"
 fi
 if [ "$sub" = draft ]; then
 	if [ "$check" -eq 1 ]; then
 		die "--check applies only to git review walkthrough build; draft --build validates the draft"
+	fi
+	# The two new flags sit on opposite ends of the same circuit — one hands the
+	# skeleton out, the other takes the filled-in copy back — so every way of
+	# asking for both at once is a mistake, and each gets its own sentence rather
+	# than one generic "incompatible flags".
+	if [ "$to_stdout" -eq 1 ] && [ "$build_draft" -eq 1 ]; then
+		die "--stdout writes the skeleton; --build validates one. Use one or the other"
+	fi
+	if [ "$to_stdout" -eq 1 ] && [ "$force" -eq 1 ]; then
+		die "--stdout writes no file, so there is nothing to force"
+	fi
+	# Covers --stdout --from too: --stdout is never --build, so this is the
+	# sentence that combination gets, which is the one that names the fix.
+	if [ "$from_given" -eq 1 ] && [ "$build_draft" -eq 0 ]; then
+		die "--from applies only to git review walkthrough draft --build"
 	fi
 	if [ "$base_explicit" -eq 1 ]; then
 		die "--base applies only to git review walkthrough init; draft uses reviewworkflow.base, like git review start"
@@ -159,7 +207,9 @@ if [ "$sub" = draft ]; then
 	fi
 	# Asymmetric risk, as everywhere else in this suite: --force destroys work
 	# the reviewer typed, so it only means anything where something gets written.
-	if [ "$build_draft" -eq 1 ] && [ "$force" -eq 1 ]; then
+	# With --from there IS something to destroy — the stored draft is replaced by
+	# prose from somewhere else — so there it is not only legal but required.
+	if [ "$build_draft" -eq 1 ] && [ "$force" -eq 1 ] && [ "$from_given" -eq 0 ]; then
 		die "--force applies only when creating a draft, not to --build"
 	fi
 fi
@@ -195,6 +245,18 @@ warn_dirty() {
 	has_uncommitted || return 0
 	echo "note: you have uncommitted changes; init and build cover committed history (base..HEAD), so uncommitted edits are invisible here. Commit the PR first; never push automatically." >&2
 }
+
+# Whether HEAD is a review branch, asked once, of git, before anything below
+# derives a branch name. It is what decides which of the three situation phrases
+# the instruction block carries, and it is deliberately NOT from_review: that one
+# is 1 only when the reviewer omitted the branch (see below), so
+# "git review walkthrough draft feature/x" run from inside review/feature/x would
+# get the base-branch phrase while standing in a review -- the disagreement the
+# spec forbids. from_review stays exactly as it is, for deriving the name.
+head_in_review=0
+case "$(git symbolic-ref --quiet --short HEAD || true)" in
+review/*) head_in_review=1 ;;
+esac
 
 # ── Range resolution ──────────────────────────────────────────────────────────
 #
@@ -315,6 +377,33 @@ if [ "$sub" = draft ]; then
 	if [ "$delta_mode" -eq 1 ]; then
 		draftflags="$draftflags --delta"
 	fi
+
+	# The same flags again, normalised into the shape the instruction block
+	# records and config --porcelain reads back out of it: no leading space, a
+	# fixed order, and a literal for "none of them". Separate from draftflags on
+	# purpose — that one is glued into command suggestions and has to keep its
+	# leading space, while this one is a value.
+	genflags=""
+	if [ "$offline" -eq 1 ]; then
+		genflags="--offline"
+	elif [ "$local_only" -eq 1 ]; then
+		genflags="--local"
+	fi
+	if [ "$delta_mode" -eq 1 ]; then
+		if [ -n "$genflags" ]; then
+			genflags="$genflags --delta"
+		else
+			genflags="--delta"
+		fi
+	fi
+	[ -n "$genflags" ] || genflags="(defaults)"
+
+	# Named in the block's incremental sentence, and empty when the range is the
+	# whole PR, which is how walk_emit_prompt_block decides whether to write it.
+	deltabranch=""
+	if [ "$delta_mode" -eq 1 ]; then
+		deltabranch="$branch"
+	fi
 fi
 
 # Resolve the review range exactly as a reviewer's git review start would: HEAD is
@@ -354,6 +443,10 @@ if [ "$mb" = "$tip" ]; then
 	die "no changes vs $base; nothing to walk through"
 fi
 lower="$(fold_lower "$mb" "$baseref" "$tip")"
+# init and build take no origin or range flags at all, so the block's record of
+# them is the literal. --base picks a different base, not a different origin.
+genflags="(defaults)"
+deltabranch=""
 fi
 
 toplevel="$(git rev-parse --show-toplevel)"
@@ -390,38 +483,45 @@ annotatable_files() {
 # read the wrong one — so the two lines that genuinely differ are switched inline
 # (see below) instead of forking the block.
 if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; then
-	if [ -e "$targetpath" ] && [ "$force" -eq 0 ]; then
+	# --stdout prints what the file would hold and touches nothing. The
+	# "already exists" guard does not apply to it: printing cannot destroy
+	# anything, and the protection belongs to whoever writes, not to whoever
+	# shows. Everything that can still fail here — no base, no such branch, no
+	# changes, no marker — has already run above, so stdout stays empty on every
+	# one of those; an empty skeleton is never printed.
+	if [ "$to_stdout" -eq 0 ] && [ -e "$targetpath" ] && [ "$force" -eq 0 ]; then
 		die "$targetrel already exists; pass --force to overwrite"
 	fi
 	files="$(annotatable_files)"
 	[ -n "$files" ] || die "no changed files vs $base to list"
 
-	mkdir -p "$(dirname "$targetpath")"
-	tmp="$targetpath.tmp.$$"
-	# Removed on any exit, not just the happy one. Without this a die between here
-	# and the mv below — or a Ctrl-C — left a .tmp.NNN beside the drafts forever:
-	# walk_draft_list only matches *.md so nothing mistook it for a draft, but
-	# nothing collected it either, since clean is deliberately hands-off in there
-	# and forget --draft only knows about names it can spell.
-	trap 'rm -f "$tmp"' EXIT
-	# Cleaning up is not the same as stopping. A POSIX shell resumes the script
-	# where the signal hit once the handler returns, so a Ctrl-C that only ran the
-	# rm above deleted the temp file and then let the rest of the command write it
-	# again and move it into place — the interrupt did nothing. Exiting from the
-	# handler is what makes it an interrupt; the EXIT trap runs on the way out and
-	# does the removing, once, for both paths. 128+signal, the way a shell reports
-	# a signalled child.
-	trap 'exit 130' INT
-	trap 'exit 143' TERM
-	# Fail on the file, not on the redirect. A branch name is a file name here, and
-	# some legal branch names are not legal files: "nul", "aux" and "com1" are
-	# reserved device names on Windows, and a bare shell redirection error would
-	# report a path with no hint of why that one is special.
-	if ! : >"$tmp" 2>/dev/null; then
-		die "could not write $targetrel; the branch name may not be usable as a file name on this system"
+	# The lower bound's object type, one process, and only on a path that is about
+	# to produce a skeleton. It goes in the block because it is why the commands
+	# there are shaped the way they are: with the base merged into the PR the bound
+	# is a tree, and a tree is what makes the history commands lie instead of fail.
+	lower_kind="$(git cat-file -t "$lower" 2>/dev/null || echo unknown)"
+	# Which working tree this skeleton is being written from. Decided by HEAD, not
+	# by from_review — see the note where head_in_review is set.
+	if [ "$sub" != draft ]; then
+		situation="init"
+		tiplabel="HEAD"
+	elif [ "$head_in_review" -eq 1 ]; then
+		situation="review"
+		tiplabel="$srclabel"
+	else
+		situation="base"
+		tiplabel="$srclabel"
 	fi
-	{
+
+	# A function rather than a brace group with a redirection glued to it, because
+	# it now has two destinations: the temp file on the way to $targetpath, and
+	# standard output under --stdout. Same bytes either way, bar the closing line
+	# below, which has to name a different command when no file was written.
+	emit_skeleton() {
 		printf '# Walkthrough\n\n'
+		walk_emit_prompt_block "$tip" "$lower" "$tiplabel" "$lower_kind" \
+			"$situation" "$genflags" "$deltabranch"
+		printf '\n'
 		printf '<!-- Author the reading order for this PR. The entries below are\n'
 		printf '     PLACEHOLDERS. Edit them in place: do not add, remove, or reorder\n'
 		printf '     entries, and do not move any line -- keep every file exactly where\n'
@@ -458,15 +558,29 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		# reviewer has open.
 		if [ "$sub" = draft ]; then
 			printf '     Note: this walkthrough is built from the committed history of\n'
-			printf '     %s (base..tip), never from your working tree -- the edits\n' "$srclabel"
-			printf '     you make while reviewing are invisible here, and nothing you\n'
-			printf '     write in this file is ever staged or committed.\n\n'
-			printf '     Then validate and write with:  git review walkthrough draft --build%s %s -->\n\n' "$draftflags" "$branch"
+			printf '     %s, over the range named at the top of this file and\n' "$srclabel"
+			printf '     never from your working tree -- the edits you make while reviewing\n'
+			printf '     are invisible here, and nothing you write in this file is\n'
+			printf '     ever staged or committed.\n\n'
+			# Under --stdout no file was written, so the ordinary closing line is
+			# not merely unhelpful, it is dangerous: --build without --from either
+			# dies with "no draft for <branch>", or -- if that branch happens to
+			# have a draft from before -- validates and rewrites THAT file, with
+			# exit 0 and a success message, discarding what the agent just wrote.
+			# That is precisely the silent failure this circuit exists to remove.
+			if [ "$to_stdout" -eq 1 ]; then
+				printf '     Then validate and install what you wrote with:\n'
+				printf '       git review walkthrough draft --build --from <file>%s %s\n' "$draftflags" "$branch"
+				printf '     (or --from - to read it from standard input) -->\n\n'
+			else
+				printf '     Then validate and write with:  git review walkthrough draft --build%s %s -->\n\n' "$draftflags" "$branch"
+			fi
 		else
-			printf '     Note: this walkthrough is built from committed history (base..HEAD).\n'
-			printf '     Commit the PR before authoring it -- with uncommitted changes you\n'
-			printf '     may be annotating incomplete work, and build will not see those\n'
-			printf '     files. Commit them first; never push automatically.\n\n'
+			printf '     Note: this walkthrough is built from committed history, over the range\n'
+			printf '     named at the top of this file. Commit the PR before authoring it --\n'
+			printf '     with uncommitted changes you may be annotating incomplete work, and\n'
+			printf '     build will not see those files. Commit them first; never push\n'
+			printf '     automatically.\n\n'
 			printf '     Then validate and write with:  git review walkthrough build -->\n\n'
 		fi
 		printf '## Heads-up\n\n'
@@ -483,13 +597,52 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 			printf '## ?. %s\n' "$f"
 			printf '<!-- why: -->\n\n'
 		done
-	} >"$tmp"
-	mv "$tmp" "$targetpath"
-	trap - EXIT INT TERM
+	}
+
+	if [ "$to_stdout" -eq 1 ]; then
+		# Nothing else touches the filesystem on this path: no mkdir, no temp
+		# file, no traps, no mv. That is the invariant --stdout sells, and it is
+		# what makes "draft --stdout <branch> > order.md" a thing an agent can be
+		# handed without it writing into anybody's gitdir.
+		emit_skeleton
+	else
+		mkdir -p "$(dirname "$targetpath")"
+		tmp="$targetpath.tmp.$$"
+		# Removed on any exit, not just the happy one. Without this a die between
+		# here and the mv below — or a Ctrl-C — left a .tmp.NNN beside the drafts
+		# forever: walk_draft_list only matches *.md so nothing mistook it for a
+		# draft, but nothing collected it either, since clean is deliberately
+		# hands-off in there and forget --draft only knows names it can spell.
+		trap 'rm -f "$tmp"' EXIT
+		# Cleaning up is not the same as stopping. A POSIX shell resumes the script
+		# where the signal hit once the handler returns, so a Ctrl-C that only ran
+		# the rm above deleted the temp file and then let the rest of the command
+		# write it again and move it into place — the interrupt did nothing.
+		# Exiting from the handler is what makes it an interrupt; the EXIT trap
+		# runs on the way out and does the removing, once, for both paths.
+		# 128+signal, the way a shell reports a signalled child.
+		trap 'exit 130' INT
+		trap 'exit 143' TERM
+		# Fail on the file, not on the redirect. A branch name is a file name here,
+		# and some legal branch names are not legal files: "nul", "aux" and "com1"
+		# are reserved device names on Windows, and a bare shell redirection error
+		# would report a path with no hint of why that one is special.
+		if ! : >"$tmp" 2>/dev/null; then
+			die "could not write $targetrel; the branch name may not be usable as a file name on this system"
+		fi
+		emit_skeleton >"$tmp"
+		mv "$tmp" "$targetpath"
+		trap - EXIT INT TERM
+	fi
 
 	n="$(printf '%s\n' "$files" | grep -c .)"
 	if [ "$sub" = draft ]; then
-		echo "wrote $targetrel with $n file(s) from $srclabel; fill in the order and why, then run git review walkthrough draft --build$draftflags $branch"
+		# Suppressed under --stdout, and only this one: stdout has to be the
+		# skeleton and nothing else, so that redirecting it produces a valid file.
+		# Every note below already goes to stderr and stays there.
+		if [ "$to_stdout" -eq 0 ]; then
+			echo "wrote $targetrel with $n file(s) from $srclabel; fill in the order and why, then run git review walkthrough draft --build$draftflags $branch"
+		fi
 		# The reviewer's draft wins over the PR's own walkthrough for as long as it
 		# exists (see walk_read). Silently shadowing an author's reading order would
 		# be the kind of surprise this project spends its error messages avoiding —
@@ -542,9 +695,25 @@ fi
 # a value, duplicate paths, drift against the range — is one body of validation
 # serving both, so a draft is held to exactly the standard a committed
 # walkthrough is, and neither can gain a rule the other lacks.
+#
+# Guard order is fixed, and two requirements hang off it: existence of the target
+# is settled BEFORE the source is read, because refusing after consuming standard
+# input leaves the caller with no way to retry; and the single write is the mv at
+# the very end, so every refusal below leaves whatever was there byte for byte
+# untouched.
 if [ "$sub" = draft ]; then
-	[ -e "$targetpath" ] ||
-		die "no draft for $branch; run git review walkthrough draft$draftflags $branch first"
+	if [ "$from_given" -eq 1 ]; then
+		# With --from the absence of a previous draft is the ordinary case — the
+		# content is arriving from outside and is about to be installed fresh —
+		# and it is the PRESENCE that needs consent, because prose written by
+		# hand is about to be replaced by prose from somewhere else.
+		if [ -e "$targetpath" ] && [ "$force" -eq 0 ]; then
+			die "$targetrel already exists; pass --force to overwrite"
+		fi
+	else
+		[ -e "$targetpath" ] ||
+			die "no draft for $branch; run git review walkthrough draft$draftflags $branch first"
+	fi
 else
 	[ -e "$targetpath" ] || die "$targetrel not found; run git review walkthrough init first"
 fi
@@ -555,7 +724,39 @@ fi
 # unmarked), and one that prepended a BOM would hide the "# Walkthrough" heading.
 # Since build rewrites the file from this content, such a walkthrough also comes
 # out normalised — the author's rebuild heals it for every reviewer.
-content="$(walk_normalize <"$targetpath")"
+#
+# An external source goes through exactly the same normalisation, and needs it
+# more: an agent writing from PowerShell produces both a BOM and CRLF endings,
+# and without this the drift check would name the same file on both sides.
+if [ "$from_given" -eq 1 ]; then
+	if [ "$from_src" = "-" ]; then
+		# Builtin and POSIX, so no process of its own. Without it, a --from -
+		# typed by hand at a prompt simply hangs with no output, which reads as
+		# the command having frozen.
+		if [ -t 0 ]; then
+			die "--from - reads the draft from standard input; redirect a file into it (git review walkthrough draft --build --from - $branch < order.md) or pass --from <file>"
+		fi
+		fromlabel="standard input"
+		content="$(walk_normalize)"
+	else
+		# Readability is checked first so the message can name the file. A bare
+		# redirection failure would report the shell's own wording, without it.
+		if [ ! -r "$from_src" ] || [ -d "$from_src" ]; then
+			die "could not read $from_src"
+		fi
+		fromlabel="$from_src"
+		content="$(walk_normalize <"$from_src")"
+	fi
+	# Nothing to install is a mistake, not an empty reading order: an agent that
+	# produced nothing, a redirect that captured nothing, a file that was never
+	# written. Named by origin so the caller knows which end to look at.
+	case "$content" in
+	*[![:space:]]*) ;;
+	*) die "$fromlabel is empty; a reading order needs at least one entry" ;;
+	esac
+else
+	content="$(walk_normalize <"$targetpath")"
+fi
 
 # Skeleton placeholders must all be filled: an unnumbered "## ?." entry or a
 # leftover "<!-- why" comment means the author did not finish. Both comment
@@ -695,11 +896,47 @@ fi
 # to the top and its blank lines trimmed so the output is deterministic —
 # byte-for-byte stable across the author's spacing habits. Written via a temp file (the sed_i
 # pattern) so a failure never leaves a half-written walkthrough.
-preamble="$(printf '%s\n' "$content" | walk_preamble)"
+#
+# The instruction block is REGENERATED here, from the tip and lower bound this
+# very run resolved for the drift check above — never carried over from the
+# incoming file. A carried block outlives the range it describes: drift only
+# fires when the set of paths changed, so commits landing on the same files leave
+# a block saying "the range is X" inside a file validated against Y, and nothing
+# says so. Regenerating is also less code than extracting and re-injecting.
+# walk_prompt_block swallows the incoming one so it cannot be duplicated; the
+# preamble never sees it either way, since walk_preamble drops every comment.
+# Nothing is emitted under --check, which returned above: --check does not write.
+preamble="$(printf '%s\n' "$content" | walk_prompt_block | walk_preamble)"
 sorted_paths="$(printf '%s\n' "$entries" | LC_ALL=C sort -k1,1n | cut -f2-)"
+lower_kind="$(git cat-file -t "$lower" 2>/dev/null || echo unknown)"
+if [ "$sub" != draft ]; then
+	situation="init"
+	tiplabel="HEAD"
+elif [ "$head_in_review" -eq 1 ]; then
+	situation="review"
+	tiplabel="$srclabel"
+else
+	situation="base"
+	tiplabel="$srclabel"
+fi
+# The three things this step used to be able to take for granted, because until
+# --from arrived the file it rewrites always already existed. With --from it may
+# not: the namespace directory can be missing, a branch name holding '/' is a
+# subdirectory of it, and a branch called "nul" is not a legal file name on
+# Windows. The traps are already installed above (they own ${tmp:-} too), so a
+# Ctrl-C between here and the mv cannot leave a .tmp.NNN nothing collects.
+mkdir -p "$(dirname "$targetpath")"
 tmp="$targetpath.tmp.$$"
+# Fail on the file, not on the redirect — same message the skeleton path gives,
+# for the same reason: a bare redirection error names a path and no cause.
+if ! : >"$tmp" 2>/dev/null; then
+	die "could not write $targetrel; the branch name may not be usable as a file name on this system"
+fi
 {
 	printf '# Walkthrough\n\n'
+	walk_emit_prompt_block "$tip" "$lower" "$tiplabel" "$lower_kind" \
+		"$situation" "$genflags" "$deltabranch"
+	printf '\n'
 	if [ -n "$preamble" ]; then
 		printf '%s\n\n' "$preamble"
 	fi

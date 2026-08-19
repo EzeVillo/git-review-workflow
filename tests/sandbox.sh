@@ -409,6 +409,60 @@ git add src/conciliacion.js
 git commit --quiet --allow-empty-message -m ""
 publish feature/pagos
 
+# A pull request that merged the base into itself, plus the marker a previous
+# review would have left: the one shape whose review lower bound is a TREE OID
+# and not a commit. resolve_lower_bound only folds when the range start is older
+# than the merge-base with the base, which is to say only under --delta -- a
+# plain draft of this branch still resolves to a commit, so the command that
+# shows the tree is the one below and not the bare one.
+#
+# It has a branch of its own because it is the case this project diagnosed wrong
+# three times running: with a tree lower bound, git log/rev-list/shortlog print
+# the whole repository with exit 0 instead of failing, so the walkthrough's
+# instruction block may never name them. Being able to look at it by hand is the
+# difference between reasoning about that and measuring it.
+pr feature/merged-base
+
+cat >src/inventario.js <<'EOF'
+export function stock(sku, almacenes) {
+	return almacenes.reduce((n, a) => n + (a[sku] || 0), 0);
+}
+EOF
+git add src/inventario.js
+git commit --quiet -m "feat: stock agregado por almacen"
+# The tip a previous review would have stopped at: everything after this is what
+# --delta covers, and it is older than the base merge below, which is exactly the
+# condition that makes the fold produce a tree.
+merged_base_prev="$(git rev-parse HEAD)"
+
+# The base moves, and the author merges it in rather than rebasing.
+git switch --quiet develop
+cat >>README.md <<'EOF'
+
+El inventario se calcula por almacen, no por deposito central.
+EOF
+git add README.md
+git commit --quiet -m "docs: nota de inventario en el README"
+# Pushed, because the fold is decided against the base ref the verbs resolve --
+# origin/develop, not the local one. Left behind, the merge-base with the tip is
+# the older develop, that older develop IS an ancestor of the marker below, and
+# nothing folds: the branch would look exactly like every other one.
+git push --quiet origin develop
+git switch --quiet feature/merged-base
+git merge --quiet --no-edit develop
+
+cat >src/almacenes.js <<'EOF'
+// Added after the base merge: this is what a --delta review of this branch sees.
+export const ALMACENES = ["norte", "sur", "centro"];
+EOF
+git add src/almacenes.js
+git commit --quiet -m "feat: listado de almacenes"
+publish feature/merged-base
+# The marker git review start would have written, set by hand so the branch is
+# reviewable with --delta straight out of the box.
+git config "reviewworkflow.feature/merged-base.reviewed" "$merged_base_prev"
+git switch --quiet develop
+
 # A pull request whose walkthrough went stale: every path it names was renamed
 # away, so it covers nothing in the range and the review degrades to whole with a
 # note. This is the failure mode that must never fail a review, only degrade it.
@@ -719,6 +773,8 @@ The other branches, one per state that feature/checkout cannot show:
   feature/shipping        finished with edits left unresolved (see below)
   feature/conflict        finish stopped mid-conflict (see below)
   feature/pagos           hostile subject/author bytes; review with --step
+  feature/merged-base     the base merged in, plus a --delta marker: the only
+                          shape whose review lower bound is a tree OID
 
 And, on develop, the inventory that \`git review list\` (and the extension's empty
 state) reads — three saved reviews, one resumable and two not:
@@ -739,6 +795,7 @@ Try it:
   git review start feature/checkout --step   # commit by commit
   git review start feature/checkout --no-walk  # the plain full diff, walkthrough ignored
   git review start feature/notifications     # then: git review status --porcelain
+  git review walkthrough draft --delta feature/merged-base   # lower bound = tree OID
   git review status / list / next / prev
 $saved_note
   git review list --porcelain                # finish pending/conflict rows above

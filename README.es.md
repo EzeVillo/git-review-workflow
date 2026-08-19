@@ -312,7 +312,7 @@ lista, o `git review <verbo> -h` para el detalle de un verbo.
 | `git review start [<rama>] [<base> \| --base <base> \| --delta \| --from <commit>] [--step \| --no-walk \| --keys] [--local \| --offline]` | Hace fetch de `origin` y deja el diff del PR staged en una nueva rama `review/<rama>` (omití `<rama>` para revisar la rama actual; entra en modo walk si el PR trae un walkthrough; `--keys` restringe el walk a las entradas marcadas `> key`; `--local` revisa tu rama local pero sigue comparando contra la base de origin; `--offline` además salta el fetch y usa tu base local). |
 | `git review compare <a> <b> [--step \| --no-walk \| --keys]`                                                                               | Deja staged el diff entre dos commit-ish (tags, commits, ramas) en modo lectura, para leerlo o recorrerlo. `git review finish` se niega — no hay a dónde escribir.                                                                                                                                                                                                                     |
 | `git review walkthrough (init [--base <base>] [--force] \| build [--check])`                                                               | Escribe un walkthrough de lectura para el PR de la rama actual — un orden curado de los archivos cambiados con una nota en cada uno, committeado como `.review/walkthrough.md`.                                                                                                                                                                                                        |
-| `git review walkthrough draft [--build] [--local \| --offline] [--delta] [--force] [<rama>]`                                               | Escribí tu propio orden de lectura para el PR de otra persona, fuera del working tree — no se stagea, commitea ni deshace nada. `git review start` lo lee en lugar del walkthrough del PR. `--build` lo valida y renumera.                                                                                                                                                             |
+| `git review walkthrough draft [--local \| --offline] [--delta] [--force] [--stdout] [<rama>]`<br>`git review walkthrough draft --build [--from <archivo> \| --from -] [--local \| --offline] [--delta] [--force] [<rama>]`                                               | Escribí tu propio orden de lectura para el PR de otra persona, fuera del working tree — no se stagea, commitea ni deshace nada. `git review start` lo lee en lugar del walkthrough del PR. `--build` lo valida y renumera. `--stdout` imprime el esqueleto en vez de escribirlo (no crea nada en ninguna parte) y `--build --from` instala uno ya completado desde un archivo o la entrada estándar, para que un agente pueda escribir el orden de lectura sin tocar tu gitdir.                                                                                                                                                             |
 | `git review next` / `git review prev`                                                                                                      | Mueve una review `--step` o walkthrough a la entrada siguiente / anterior.                                                                                                                                                                                                                                                                                                             |
 | `git review status [--porcelain \| --why <path>]`                                                                                          | Muestra el estado de la review en la rama actual (`--porcelain` para salida legible por programas, incluido un registro `finish` cuando un cierre quedó trabado por conflicto; `--why <path>` para el porqué de una entrada del walkthrough).                                                                                                                                          |
 | `git review list [--porcelain]`                                                                                                            | Lista todas las reviews en curso y las guardadas (la rama actual marcada con `*`; `--porcelain` también reporta cierres sin resolver como `pending` o `conflict`).                                                                                                                                                                                                                     |
@@ -570,6 +570,44 @@ git review start feature/checkout                      # entra en walk con tu or
   para archivar y otra review pausada ya tiene uno archivado con ese nombre — y
   avisa cuando el que reemplaza no lo puede reclamar ninguna review.
 
+#### Pasarle el borrador a un agente
+
+`--stdout` y `--build --from` son las dos puntas de un mismo circuito: dejan que
+alguien que no sos vos complete el orden de lectura **sin escribir nunca en tu
+gitdir**.
+
+```sh
+git review walkthrough draft --stdout feature/checkout > order.md   # no crea nada
+# ...un agente completa order.md, donde le quede cómodo...
+git review walkthrough draft --build --from order.md feature/checkout
+# o leyéndolo de la entrada estándar:
+git review walkthrough draft --build --from - feature/checkout < order.md
+```
+
+- **`--stdout`** imprime exactamente lo que el archivo hubiera tenido y no crea
+  nada — ni borrador, ni directorio, ni siquiera un temporal; `git status` es
+  idéntico antes y después. Todas las notas van a stderr, así que redirigir
+  stdout te deja un archivo válido y nada más. También imprime sobre un borrador
+  existente, y lo deja intacto: imprimir no destruye nada. Lo único que difiere
+  de la forma escrita es la línea de cierre, que bajo `--stdout` nombra
+  `--build --from` — el comando que instala *lo que te acaban de dar*, en vez de
+  uno que reconstruiría en silencio otro archivo.
+- **`--build --from <archivo>`** (o `-` para la entrada estándar) valida ese
+  contenido con **las mismas ocho reglas** que cualquier otro borrador, contra el
+  mismo rango resuelto por los mismos `--local` / `--offline` / `--delta`, y lo
+  instala en la ubicación canónica. De ahí en más es un borrador como cualquier
+  otro: `status` dice `walk (draft)`, `save` lo archiva con la review pausada y
+  `forget --draft` lo descarta. Los finales CRLF y el BOM UTF-8 —lo que produce
+  un agente que escribe desde PowerShell— se normalizan, no se toman como deriva.
+- **No se escribe nada salvo que haya pasado todo.** Si ya existe un borrador se
+  decide *antes* de leer la fuente, así que un rechazo nunca te cuesta lo que
+  pipeaste; y un archivo ilegible, una entrada vacía o cualquier regla de
+  validación dejan el borrador que ya tenías byte por byte como estaba.
+- `--force` es lo que le permite a `--build --from` reemplazar un borrador que ya
+  habías escrito. Las combinaciones que no pueden significar nada (`--stdout` con
+  `--build` o `--force`, `--from` sin `--build`, `--from` dos veces) se rechazan
+  de entrada, antes de tocar nada.
+
 **git review nunca escribe el walkthrough por vos y nunca habla con ningún
 servicio.** Te da el esqueleto con la consigna ya escrita adentro, y valida lo
 que vuelve. Quién lo completa —vos, un agente, lo que prefieras— es enteramente
@@ -606,6 +644,30 @@ opcionalmente encabezada por el marcador reservado `> key`. Todo lo que
 está arriba de la primera entrada es el preámbulo (la sección `## Heads-up`); el
 parser lo ignora y `build` lo preserva tal cual, menos los comentarios HTML. La
 granularidad es por archivo en v1.
+
+**El bloque de instrucciones.** Los dos esqueletos —el del autor y el del
+revisor— abren con un comentario HTML cuya primera línea empieza con
+`<!-- git-review-range:`. Nombra el rango en **objetos resueltos** (el SHA del
+tip, el OID del límite inferior y su tipo, `commit` o `tree`), registra los flags
+de origen y de rango con los que se generó el esqueleto, dice desde qué working
+tree se generó, y lista los cuatro comandos `git` que muestran, para cualquier
+archivo de la lista, qué le hace el PR y cómo se ve de cada lado.
+
+Está ahí porque quien completa un esqueleto —muchas veces un agente— está parado
+en un working tree que tiene los bytes equivocados para la tarea: desde la rama
+base los archivos listados siguen con su contenido anterior al PR, así que leerlos
+ahí produce prosa segura sobre el código viejo, sin que nada falle para avisarlo.
+
+- Se **regenera** en cada `build` / `draft --build`, con el rango que esa corrida
+  acaba de validar, así que nunca describe un rango que ya se movió.
+- **Nunca se le muestra al revisor**: `git review start` y
+  `git review status --why` no lo imprimen, y no se renderiza en el PR — es un
+  comentario HTML.
+- Es **neutro para la validación**: ninguna de las reglas de arriba lo mira, y
+  borrarlo a mano deja un walkthrough perfectamente válido (sólo perdés el
+  registro del rango la próxima vez que lo reanotes).
+- **No se ejecuta nada.** Son comandos para que los corra quien anota; git review
+  no los ejecuta, ni antes ni después, y no se comunica con ningún servicio.
 
 </details>
 
@@ -658,6 +720,7 @@ reconozca: el formato sólo crece.
 ```
 state	<branch>	<source>	<tip>	<mode>	<walkthrough>[	<position>	<total>	<recorded>	<current>[	<essential>]]
 finish	conflict	<onto>
+draft	<path>
 entry	<position>	<id>[	<essential>	<annotated>|<banked>]
 subject	<position>	<asunto>
 author	<position>	<autor>
@@ -678,6 +741,12 @@ base	<base>
   eso). `onto` es `1` si el finish usó `--onto-source`, `0` si no. Se omite el
   registro entero cuando no hay ningún cierre en curso. Con este registro
   presente, el consumidor no debe ofrecer navegación por la secuencia.
+- `draft` — cero o uno: está exactamente cuando esta review lee **tu propio**
+  borrador de walkthrough y no el del autor del PR, que es la misma condición que
+  marca el `walk (draft)` legible. `<path>` es la ruta absoluta de ese borrador,
+  ya resuelta — el cliente la abre y nunca arma una. Los borradores sueltos, sin
+  review propia, no se reportan acá: eso es
+  [`config --porcelain`](#git-review-config).
 - `entry` — cero o más. En step/walk, uno por posición en el orden de lectura
   (paths de walk o commits de step, el mismo orden que recorren `next`/`prev`),
   incluida una entrada de walk que el walkthrough no anota — se agrega al final
@@ -743,8 +812,17 @@ se marca con un `*`.
 
   ```
   branch	<name>	<saved>	<current>	<orphan>[	<mode>[	<position>	<total>]]
+  branch-draft	<name>
   finish	<branch>	pending|conflict	<onto>
   ```
+
+  `branch-draft` va detrás de su fila `branch`, cero o una vez por fila, cuando esa
+  review carga un borrador de walkthrough — la misma condición que el sufijo
+  `(draft)` de la salida legible, en **todos** los modos y no sólo en walk, y
+  sobre custodia (el archivo existe) y no sobre qué se está leyendo. Es un
+  registro propio y no un campo porque `branch` termina en dos campos opcionales
+  que se omiten juntos, así que un sexto campo no se podría distinguir de
+  `position`.
 
   `saved`, `current` y `orphan` son `1`/`0` (`orphan` significa que la rama no
   tiene metadata de review — hecha a mano, o dejada por un comando que murió
@@ -823,6 +901,7 @@ git review config --porcelain [<rama>]    # legible por máquina + candidatas
   ```
   config	<clave>	<valor>
   candidate	<name>	remote|local	<current>
+  draft	<src>	<path>	<annotated>	<total>	<source>	<range>
   delta	<rama>	<tip>	remote|local
   ```
 
@@ -833,6 +912,17 @@ git review config --porcelain [<rama>]    # legible por máquina + candidatas
   marcador `--delta` previo — cero, una o dos: las reviews remotas y locales
   guardan markers separados, y cada eje presente emite su fila (`origin` es
   `remote` o `local`).
+  `draft` lista todos los borradores de walkthrough que empezaste y no pausaste,
+  un registro por cada uno, **con y sin argumento de rama** — un borrador es un
+  hecho del working tree, no de la rama que consultaste. `<path>` es absoluta y
+  ya resuelta, así que el cliente la abre y nunca la arma;
+  `<annotated>`/`<total>` es el avance contado sobre el archivo (un esqueleto
+  recién generado es `0/N`, y `<annotated> == <total>` no promete que `--build`
+  vaya a pasar); `<source>` (`remote` \| `local` \| `offline`) y `<range>`
+  (`full` \| `delta`) son los flags con los que se generó el borrador, leídos de
+  su bloque de instrucciones, y valen `unknown` si ese bloque se borró a mano. El
+  borrador de una review pausada no aparece — no por una regla, sino porque
+  `git review save` movió el archivo al namespace archivado.
 - `--` termina el parseo de opciones, así un valor que empieza con `-` (un
   nombre de rama legal) no se toma como flag: `git review config base -- -foo`.
 

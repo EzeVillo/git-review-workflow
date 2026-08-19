@@ -94,12 +94,67 @@ data class ReadingOffer(
     val rank: OfferRank,
 )
 
+/**
+ * With which origin and range a draft was generated, read back out of the
+ * instruction block inside the file itself. `UNKNOWN` when that block was
+ * deleted by hand, which is allowed: the flags cannot be replicated then, so
+ * the row does not offer *Validate and start* rather than guessing them.
+ */
+enum class DraftSource {
+    REMOTE,
+    LOCAL,
+    OFFLINE,
+    UNKNOWN,
+    ;
+
+    companion object {
+        fun parse(raw: String?): DraftSource = when (raw) {
+            "remote" -> REMOTE
+            "local" -> LOCAL
+            "offline" -> OFFLINE
+            else -> UNKNOWN
+        }
+    }
+}
+
+enum class DraftRange {
+    FULL,
+    DELTA,
+    UNKNOWN,
+    ;
+
+    companion object {
+        fun parse(raw: String?): DraftRange = when (raw) {
+            "full" -> FULL
+            "delta" -> DELTA
+            else -> UNKNOWN
+        }
+    }
+}
+
+/**
+ * A loose walkthrough draft: it exists in the gitdir's ACTIVE namespace, which
+ * is to say the reviewer started it and has not paused its review.
+ *
+ * Nothing here is derived: every field comes straight from the CLI. [path] in
+ * particular — the client opens it and never builds one.
+ */
+data class DraftRecord(
+    val src: String,
+    val path: String,
+    val annotated: Int,
+    val total: Int,
+    val source: DraftSource,
+    val range: DraftRange,
+)
+
 data class ConfigPorcelainResult(
     val config: EffectiveConfig,
     val candidates: List<CandidateBranch>,
     val remotes: List<CandidateRemote>,
     val deltas: List<DeltaRecord>? = null,
     val offers: List<ReadingOffer>? = null,
+    val drafts: List<DraftRecord> = emptyList(),
 )
 
 private fun toBool(field: String?): Boolean = field == "1"
@@ -111,6 +166,7 @@ fun parseConfigPorcelain(stdout: String): ConfigPorcelainResult {
     val remotes = ArrayList<CandidateRemote>()
     val deltas = ArrayList<DeltaRecord>()
     val offers = ArrayList<ReadingOffer>()
+    val drafts = ArrayList<DraftRecord>()
 
     for (line in stdout.split(Regex("\r?\n"))) {
         if (line.isEmpty()) continue
@@ -145,6 +201,26 @@ fun parseConfigPorcelain(stdout: String): ConfigPorcelainResult {
                     deltas.add(DeltaRecord(name = name, tip = tip, origin = origin))
                 }
             }
+            "draft" -> {
+                val src = fields.getOrNull(1)
+                val path = fields.getOrNull(2)
+                val annotated = fields.getOrNull(3)?.toIntOrNull()
+                val total = fields.getOrNull(4)?.toIntOrNull()
+                // A malformed record is ignored whole, like any unknown one:
+                // half a progress pair would be worse than none.
+                if (!src.isNullOrEmpty() && !path.isNullOrEmpty() && annotated != null && total != null) {
+                    drafts.add(
+                        DraftRecord(
+                            src = src,
+                            path = path,
+                            annotated = annotated,
+                            total = total,
+                            source = DraftSource.parse(fields.getOrNull(5)),
+                            range = DraftRange.parse(fields.getOrNull(6)),
+                        ),
+                    )
+                }
+            }
             "offer" -> {
                 val id = OfferId.parse(fields.getOrNull(1))
                 val rank = OfferRank.parse(fields.getOrNull(2))
@@ -163,6 +239,7 @@ fun parseConfigPorcelain(stdout: String): ConfigPorcelainResult {
         remotes = remotes,
         deltas = deltas.takeIf { it.isNotEmpty() },
         offers = offers.takeIf { it.isNotEmpty() },
+        drafts = drafts,
     )
 }
 

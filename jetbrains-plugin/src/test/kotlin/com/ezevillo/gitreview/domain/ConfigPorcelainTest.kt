@@ -43,7 +43,7 @@ class ConfigPorcelainTest {
             r.offers?.map { it.id },
         )
         val items = buildLayoutItems(r.offers)
-        assertEquals(listOf("Walkthrough — draft one", "Commit by commit", "Whole diff"), items.map { it.label })
+        assertEquals(listOf("Build a reading order first", "Commit by commit", "Whole diff"), items.map { it.label })
         assertEquals(DraftStep.CREATE, items[0].draft)
         assertEquals(ReviewLayout.WALK, items[0].layout)
         assertNull(items[1].draft)
@@ -59,12 +59,12 @@ class ConfigPorcelainTest {
         """.trimIndent()
         val items = buildLayoutItems(parseConfigPorcelain(out).offers)
         assertEquals(
-            listOf("Walkthrough (recommended)", "Walkthrough — continue draft", "Commit by commit"),
+            listOf("Walkthrough (recommended)", "Finish the reading order you started", "Commit by commit"),
             items.map { it.label },
         )
         assertNull(items[0].draft)
         assertEquals(DraftStep.RESUME, items[1].draft)
-        assertEquals("finish the reading order you started", items[1].description)
+        assertEquals("pick up the one you left half-written", items[1].description)
     }
 
     @Test
@@ -108,5 +108,69 @@ class ConfigPorcelainTest {
     @Test
     fun branchPickerEmptyWhenNoCandidates() {
         assertEquals(emptyList<CandidateBranch>(), branchPickerItems(emptyList()))
+    }
+
+    // --- registros draft (012) --------------------------------------------------
+
+    @Test
+    fun draftRecordsParseTheirSevenFields() {
+        val out = """
+            config	remote	origin
+            draft	feature/checkout	/repo/.git/review-walkthrough/feature/checkout.md	3	9	local	delta
+        """.trimIndent()
+        assertEquals(
+            listOf(
+                DraftRecord(
+                    src = "feature/checkout",
+                    path = "/repo/.git/review-walkthrough/feature/checkout.md",
+                    annotated = 3,
+                    total = 9,
+                    source = DraftSource.LOCAL,
+                    range = DraftRange.DELTA,
+                ),
+            ),
+            parseConfigPorcelain(out).drafts,
+        )
+    }
+
+    @Test
+    fun withoutDraftRecordsTheListIsEmptyNeverNull() {
+        assertEquals(emptyList<DraftRecord>(), parseConfigPorcelain("config\tremote\torigin\n").drafts)
+    }
+
+    @Test
+    fun draftRecordsKeepTheCliOrder() {
+        val out = """
+            draft	feature/telemetry	/repo/.git/review-walkthrough/feature/telemetry.md	0	5	remote	full
+            draft	feature/checkout	/repo/.git/review-walkthrough/feature/checkout.md	3	9	local	delta
+        """.trimIndent()
+        assertEquals(
+            listOf("feature/telemetry", "feature/checkout"),
+            parseConfigPorcelain(out).drafts.map { it.src },
+        )
+    }
+
+    @Test
+    fun anUnknownSourceOrRangeReadsAsUnknown() {
+        // Es lo que la CLI emite cuando el bloque de instrucciones se borró a
+        // mano, y también lo único honesto para un valor que agregue una CLI más
+        // nueva: en los dos casos este cliente no puede replicar los flags.
+        val out = "draft\tfeature/x\t/repo/.git/review-walkthrough/feature/x.md\t0\t2\tunknown\tunknown"
+        val draft = parseConfigPorcelain(out).drafts.single()
+        assertEquals(DraftSource.UNKNOWN, draft.source)
+        assertEquals(DraftRange.UNKNOWN, draft.range)
+    }
+
+    @Test
+    fun aMalformedDraftRecordIsIgnoredWhole() {
+        // Media fila de progreso sería peor que ninguna: un total que no es un
+        // entero no se puede dibujar como "3/N" sin inventar el N.
+        val out = """
+            draft	feature/x	/repo/.git/review-walkthrough/feature/x.md	many	2	remote	full
+            draft		/repo/.git/review-walkthrough/feature/y.md	0	2	remote	full
+            draft	feature/z
+            draft	feature/ok	/repo/.git/review-walkthrough/feature/ok.md	1	2	remote	full
+        """.trimIndent()
+        assertEquals(listOf("feature/ok"), parseConfigPorcelain(out).drafts.map { it.src })
     }
 }

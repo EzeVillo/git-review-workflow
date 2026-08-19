@@ -92,7 +92,7 @@ public class ConfigPorcelainTests
             r.Offers!.Select(o => o.Id));
         var items = LayoutOffers.BuildLayoutItems(r.Offers);
         Assert.Equal(
-            new[] { "Walkthrough — draft one", "Commit by commit", "Whole diff" },
+            new[] { "Build a reading order first", "Commit by commit", "Whole diff" },
             items.Select(i => i.Label));
         Assert.Equal(LayoutOffers.DraftStep.Create, items[0].Draft);
         Assert.Equal(ReviewLayout.Walk, items[0].Layout);
@@ -109,11 +109,11 @@ public class ConfigPorcelainTests
             "offer\tstep\tavailable");
         var items = LayoutOffers.BuildLayoutItems(ConfigPorcelain.ParseConfigPorcelain(text).Offers);
         Assert.Equal(
-            new[] { "Walkthrough (recommended)", "Walkthrough — continue draft", "Commit by commit" },
+            new[] { "Walkthrough (recommended)", "Finish the reading order you started", "Commit by commit" },
             items.Select(i => i.Label));
         Assert.Null(items[0].Draft);
         Assert.Equal(LayoutOffers.DraftStep.Resume, items[1].Draft);
-        Assert.Equal("finish the reading order you started", items[1].Description);
+        Assert.Equal("pick up the one you left half-written", items[1].Description);
     }
 
     /// <summary>
@@ -264,5 +264,46 @@ public class ConfigPorcelainTests
         Assert.Equal(
             new[] { "--local", "--delta" },
             LayoutOffers.OfferConfigFlags(ReviewSource.Local, ReviewRange.Delta));
+    }
+
+    [Fact]
+    public void Draft_records_parse_their_seven_fields()
+    {
+        var stdout =
+            "config\tremote\torigin\n" +
+            "draft\tfeature/checkout\t/repo/.git/review-walkthrough/feature/checkout.md\t3\t9\tlocal\tdelta\n";
+        var draft = Assert.Single(ConfigPorcelain.ParseConfigPorcelain(stdout).Drafts!);
+        Assert.Equal("feature/checkout", draft.Src);
+        Assert.Equal("/repo/.git/review-walkthrough/feature/checkout.md", draft.Path);
+        Assert.Equal(3, draft.Annotated);
+        Assert.Equal(9, draft.Total);
+        Assert.Equal(DraftSource.Local, draft.Source);
+        Assert.Equal(DraftRange.Delta, draft.Range);
+    }
+
+    [Fact]
+    public void An_unknown_source_or_range_reads_as_unknown()
+    {
+        // What the CLI emits when the instruction block was deleted by hand, and
+        // the only honest reading of a value a newer CLI might add: in both cases
+        // this client cannot replicate the flags.
+        var stdout = "draft\tfeature/x\t/repo/.git/review-walkthrough/feature/x.md\t0\t2\tunknown\tunknown\n";
+        var draft = Assert.Single(ConfigPorcelain.ParseConfigPorcelain(stdout).Drafts!);
+        Assert.Equal(DraftSource.Unknown, draft.Source);
+        Assert.Equal(DraftRange.Unknown, draft.Range);
+    }
+
+    [Fact]
+    public void A_malformed_draft_record_is_ignored_whole()
+    {
+        // Half a progress pair would be worse than none: a total that is not an
+        // integer cannot be drawn as "3/N" without inventing the N.
+        var stdout =
+            "draft\tfeature/x\t/repo/.git/review-walkthrough/feature/x.md\tmany\t2\tremote\tfull\n" +
+            "draft\t\t/repo/.git/review-walkthrough/feature/y.md\t0\t2\tremote\tfull\n" +
+            "draft\tfeature/z\n" +
+            "draft\tfeature/ok\t/repo/.git/review-walkthrough/feature/ok.md\t1\t2\tremote\tfull\n";
+        var draft = Assert.Single(ConfigPorcelain.ParseConfigPorcelain(stdout).Drafts!);
+        Assert.Equal("feature/ok", draft.Src);
     }
 }

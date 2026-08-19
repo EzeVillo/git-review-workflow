@@ -19,7 +19,9 @@ internal sealed class FakeCliInvoker : CliInvoker
     public FakeCliInvoker()
     {
         // A CLI that is present and current, unless a test says otherwise.
-        Answer("--version", "0.6.0\n");
+        // The minimum itself, not a literal: a bump of MinCliVersion would
+        // otherwise turn every state test into a cli-outdated panel.
+        Answer("--version", CliVersion.MinCliVersion + "\n");
     }
 
     public FakeCliInvoker Answer(string verb, InvokeResult result)

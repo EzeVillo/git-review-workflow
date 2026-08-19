@@ -10,6 +10,7 @@
  *
  * Lo único que se mantiene a mano es *qué* estados vale la pena mirar.
  */
+import {parseConfigPorcelain} from "../src/cli/configPorcelain";
 import {parseListPorcelain, parsePorcelain} from "../src/cli/porcelain";
 import {buildPanelModel, PanelInputs, PanelModel} from "../src/views/panelModel";
 import type {Situation} from "../src/review/situation";
@@ -72,6 +73,27 @@ function inventory(rows: string[][]): PanelModel {
         entries: [],
         files: [],
         branches: parseListPorcelain(porcelain(rows)),
+    };
+    return buildPanelModel(state, {busy: false});
+}
+
+/**
+ * `no-review` con borradores empezados: las filas salen de los registros
+ * `draft` de `config --porcelain`, por el parser real, como todo lo demás acá.
+ * `rows` de inventario opcional, porque el bloque no reemplaza el cuerpo: se
+ * dibuja arriba y el resto sigue entero debajo.
+ */
+function drafts(draftRows: string[][], inventoryRows: string[][] = []): PanelModel {
+    const parsed = parseConfigPorcelain(porcelain(draftRows));
+    const state: ReviewState = {
+        situation: "no-review",
+        entries: [],
+        files: [],
+        branches: parseListPorcelain(porcelain(inventoryRows)),
+        config: parsed.config,
+        candidates: parsed.candidates,
+        remotes: parsed.remotes,
+        drafts: parsed.drafts,
     };
     return buildPanelModel(state, {busy: false});
 }
@@ -364,6 +386,35 @@ export const PREVIEW_PANES: PreviewPane[] = [
             ["branch", "review-saved/perf/index", "1", "0", "0", "step", "2", "4"],
             ["branch", "review-saved/fix/quoting", "1", "0", "0", "walk", "1", "6"],
         ]),
+    },
+    {
+        // Un solo borrador empezado, sin inventario: el bloque arriba y el
+        // "Start a review" de siempre debajo.
+        name: "no-review-draft",
+        caption: "no-review — un orden de lectura empezado (0/5)",
+        model: drafts([
+            ["config", "base", "develop"],
+            ["config", "remote", "origin"],
+            ["draft", "feature/pagos", "/repo/.git/review-walkthrough/feature/pagos.md", "0", "5", "remote", "full"],
+        ]),
+    },
+    {
+        // Dos borradores con avances distintos, más el inventario debajo: es
+        // el estado donde se ve que el bloque NO reemplaza el cuerpo. La
+        // segunda fila no ofrece "Validate and start" — su bloque de
+        // instrucciones se borró a mano y la CLI reporta unknown, así que los
+        // flags no se pueden replicar.
+        name: "no-review-drafts",
+        caption: "no-review — dos borradores (uno sin flags conocidos) + inventario",
+        model: drafts(
+            [
+                ["config", "base", "develop"],
+                ["config", "remote", "origin"],
+                ["draft", "feature/telemetry", "/repo/.git/review-walkthrough/feature/telemetry.md", "3", "9", "local", "delta"],
+                ["draft", "feature/pagos", "/repo/.git/review-walkthrough/feature/pagos.md", "0", "5", "unknown", "unknown"],
+            ],
+            [["branch", "review-saved/perf/index", "1", "0", "0", "step", "2", "4"]]
+        ),
     },
     {
         // list --porcelain con finish … pending: pantalla de post-cierre

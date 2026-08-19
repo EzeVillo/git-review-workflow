@@ -236,4 +236,22 @@ public class UserCopyTests
             title);
         Assert.Equal("Comparing a..b…", UserCopy.ComparingProgress("a", "b"));
     }
+
+    [Fact]
+    public void The_agent_prompt_is_the_canonical_text_with_this_rows_path()
+    {
+        Assert.Equal(
+            "Fill in the reading order at /repo/.git/review-walkthrough/feature/x.md. " +
+            "The instructions are inside the file, in the comment at the top. " +
+            "Do not change the file list or the numbering rules.",
+            UserCopy.DraftAgentPrompt("/repo/.git/review-walkthrough/feature/x.md"));
+    }
+
+    [Fact]
+    public void The_agent_prompt_names_no_model_service_or_assistant()
+    {
+        var text = UserCopy.DraftAgentPrompt("/x.md").ToLowerInvariant();
+        foreach (var word in new[] { "copilot", "openai", "claude", "chatgpt", "http" })
+            Assert.DoesNotContain(word, text);
+    }
 }

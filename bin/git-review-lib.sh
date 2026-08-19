@@ -520,6 +520,171 @@ walk_gitdir_init() {
 	[ -n "${_walk_gitdir:-}" ] || _walk_gitdir="$(git rev-parse --git-dir)"
 }
 
+# walk_gitdir_abs_init
+# The gitdir again, this time ABSOLUTE, resolved once for the life of the
+# process into _walk_gitdir_abs. Same shape and same reason as
+# walk_gitdir_init: it has to be assigned in the caller's own shell, because an
+# assignment made inside a "$(...)" dies with its subshell and the cache would
+# never be read.
+#
+# Separate from _walk_gitdir rather than replacing it: that one may legitimately
+# be relative (".git" from the top level) and every draft path built from it is
+# used for opening files by this process, where relative is fine and cheaper.
+# This one exists for the one job that needs more — handing a path to a client
+# that will open it from somewhere else entirely — so it is only resolved when
+# there is at least one draft to report.
+walk_gitdir_abs_init() {
+	[ -n "${_walk_gitdir_abs:-}" ] || _walk_gitdir_abs="$(git rev-parse --absolute-git-dir)"
+}
+
+# walk_draft_progress <path>...
+# Emit "<path><TAB><annotated><TAB><total><TAB><source><TAB><range>" for EVERY
+# path given, in the order given.
+#
+# ONE awk for all of them, never one per draft: this runs inside
+# config --porcelain, which the panel invokes on every refresh, and the process
+# count of that path is what the panel's latency is measured in (the same rule
+# that produced walk_entry_fields).
+#
+# Definitions, from data-model.md:
+#   total      every entry heading the file declares, numbered and "## ?." alike
+#   annotated  an entry that has BOTH a numeric position and a resolved why --
+#              at least one non-blank body line that is not "> key" or "> at: ",
+#              and no line opening with "<!-- why"
+#   source     remote | local | offline, and range full | delta, read off the
+#              "Generated with:" line of the instruction block, which is the
+#              only place that datum lives. Both are "unknown" when the block is
+#              not there, which is legal: deleting it by hand is allowed.
+#
+# The count is over the FILE, never crossed with the range: a draft that has
+# drifted still reports its progress, and annotated == total promises nothing
+# about whether --build will pass.
+#
+# Two shapes worth knowing about, both deliberate:
+#
+#   * per-file closing is FNR == 1 plus the END block, never ENDFILE, which is a
+#     gawk extension -- CI runs mawk and BSD awk as well.
+#   * the END block walks ARGV rather than printing as it goes, so a file of
+#     ZERO BYTES still gets a line. awk runs no rule at all for an empty file and
+#     never assigns it a FILENAME, so a draft that was created and not yet
+#     written would otherwise vanish from the report -- and that is precisely the
+#     state a fresh one is in, the one that most needs to be listed so it can be
+#     opened or discarded.
+walk_draft_progress() {
+	awk -v bom="$(printf '\357\273\277')" '
+		function close_entry() {
+			if (inentry && numbered && prose && !whyc) ann[cur]++
+			inentry = 0
+		}
+		FNR == 1 {
+			close_entry()
+			cur = FILENAME
+			seen[cur] = 1
+			ann[cur] = 0
+			tot[cur] = 0
+			src[cur] = "unknown"
+			rng[cur] = "unknown"
+			inblock = 0
+			if (index($0, bom) == 1) $0 = substr($0, length(bom) + 1)
+		}
+		{ sub(/\r$/, "") }
+		# The "Generated with:" line is read only from inside the instruction
+		# block. Anchoring on the block rather than on the text keeps a why that
+		# happens to quote the line from being mistaken for it.
+		index($0, "<!-- git-review-range:") == 1 { inblock = 1 }
+		inblock && index($0, "-->") { inblock = 0 }
+		inblock && $0 ~ /^[ \t]*Generated with: / {
+			flags = $0
+			sub(/^[ \t]*Generated with: /, "", flags)
+			if (index(flags, "--offline")) src[cur] = "offline"
+			else if (index(flags, "--local")) src[cur] = "local"
+			else src[cur] = "remote"
+			if (index(flags, "--delta")) rng[cur] = "delta"
+			else rng[cur] = "full"
+			next
+		}
+		/^## / {
+			close_entry()
+			line = substr($0, 4)
+			if (match(line, /^[0-9]+\. /)) {
+				tot[cur]++
+				inentry = 1
+				numbered = 1
+				prose = 0
+				whyc = 0
+			} else if (match(line, /^\?\. /)) {
+				tot[cur]++
+				inentry = 1
+				numbered = 0
+				prose = 0
+				whyc = 0
+			}
+			next
+		}
+		inentry {
+			if (index($0, "<!-- why") == 1) { whyc = 1; next }
+			if ($0 ~ /^>[ \t]*key[ \t]*$/) next
+			if (index($0, "> at: ") == 1) next
+			if ($0 ~ /[^ \t]/) prose = 1
+		}
+		END {
+			close_entry()
+			for (i = 1; i < ARGC; i++) {
+				f = ARGV[i]
+				if (f in seen)
+					printf "%s\t%d\t%d\t%s\t%s\n", f, ann[f], tot[f], src[f], rng[f]
+				else
+					printf "%s\t0\t0\tunknown\tunknown\n", f
+			}
+		}
+	' "$@"
+}
+
+# emit_draft_records
+# One porcelain "draft" record per loose draft -- every file in the ACTIVE
+# namespace, which is to say every reading order the reviewer started and has
+# not paused. A draft that travelled with a paused review is not reported here,
+# and not by a rule either: git review save moved its file to
+# review-saved-walkthrough/, which walk_draft_list does not walk.
+#
+# Cost, because this runs on every panel refresh without a review:
+#   walk_draft_list        0 processes (glob recursion, all builtin)
+#   walk_gitdir_abs_init   1, and only when there is something to report
+#   walk_draft_progress    1, and only when there is something to report
+#
+# The empty case has to return BEFORE both. It is not an optimisation: awk with
+# no file arguments reads standard input and blocks forever, and a repository
+# with no drafts is the commonest case there is -- for a verb that runs in every
+# panel refresh and by hand in a terminal, that would be an indefinite hang.
+emit_draft_records() {
+	_edr_srcs="$(walk_draft_list)"
+	[ -n "$_edr_srcs" ] || return 0
+
+	walk_gitdir_abs_init
+	# Positional parameters as the argument vector: a branch name cannot hold a
+	# space (git forbids it), but the gitdir path can, so the paths are never
+	# passed through word splitting.
+	set --
+	while IFS= read -r _edr_src; do
+		[ -n "$_edr_src" ] || continue
+		set -- "$@" "$_walk_gitdir_abs/review-walkthrough/$_edr_src.md"
+	done <<EOF
+$_edr_srcs
+EOF
+	[ "$#" -gt 0 ] || return 0
+
+	# <src> comes back off the path with two parameter expansions rather than out
+	# of awk: peeling the gitdir prefix and the .md inside awk would mean doing it
+	# for a <src> that can hold '/', where here it is free and exact -- this is
+	# the very prefix the loop above glued on.
+	walk_draft_progress "$@" | while IFS="$(printf '\t')" read -r _edr_path _edr_ann _edr_tot _edr_source _edr_range; do
+		[ -n "$_edr_path" ] || continue
+		_edr_name="${_edr_path#"$_walk_gitdir_abs/review-walkthrough/"}"
+		_edr_name="${_edr_name%.md}"
+		porcelain_row draft "$_edr_name" "$_edr_path" "$_edr_ann" "$_edr_tot" "$_edr_source" "$_edr_range"
+	done
+}
+
 # walk_draft_path <src>
 # Where the reviewer's own walkthrough for <src> lives while it is in play.
 #
@@ -851,6 +1016,147 @@ walk_preamble() {
 			e = n; while (e >= s && buf[e] ~ /^[ \t]*$/) e--
 			for (k = s; k <= e; k++) print buf[k]
 		}
+	'
+}
+
+# ── The instruction block ─────────────────────────────────────────────────────
+#
+# A walkthrough's skeleton is filled in by somebody who is not looking at the PR
+# — usually an agent, from a working tree that holds the wrong content for the
+# job. The block below is the one place that says, in objects rather than in
+# words, which range the reading order is about and how to see it.
+#
+# Two functions because generating and consuming are different jobs: init, draft
+# and the canonical rewrite emit one (walk_emit_prompt_block), and the rewrite
+# also has to swallow the incoming one (walk_prompt_block) so it is regenerated
+# rather than carried forward.
+
+# walk_emit_prompt_block <tip> <lower> <tip-label> <lower-kind> <situation> <flags> [<delta-branch>]
+# Print the instruction block for a walkthrough skeleton. The ONE generator: the
+# author's sidecar and the reviewer's draft get the same bytes, with exactly two
+# passages switched inline (the situation phrase, and — outside this function —
+# the scaffolding's closing command). Two copies of this text would drift, and
+# the drift would be invisible until somebody read the wrong one.
+#
+# <situation> is init | base | review, meaning the working tree the block is
+# being written from: the PR branch, the base branch, or a review/* branch.
+# <flags> is the normalised origin/range flag string ("--local --delta",
+# "(defaults)"), which is the only home of that datum — config --porcelain reads
+# it back out of the file. <delta-branch>, when non-empty, adds the sentence
+# saying the range is incremental and names the branch it is incremental over.
+#
+# Two hard rules on the content, both measured (research § Hallazgo 0):
+#
+#   * the two endpoints are NEVER written as one two-dot argument. git diff with
+#     that shape and no "--" stats it as a possible pathspec, and on Windows
+#     with a deep cwd that stat blows past MAX_PATH: "fatal: failed to stat
+#     ...: Filename too long", exit 128. It does not depend on the type of
+#     either endpoint, so the rule holds for the author's side too.
+#   * no git log / rev-list / shortlog / range-diff, ever. <lower> is a tree OID
+#     whenever the base was merged into the PR, and those commands take a tree
+#     as "everything": they print the whole repository's history with exit 0,
+#     silently, and whoever is annotating believes they are reading the PR.
+#
+# What does work with a lower bound of either type, and is what the block uses:
+# "git diff <lower> <tip>" as two arguments, and "git show <rev>:<path>".
+walk_emit_prompt_block() {
+	_wepb_tip="$1"
+	_wepb_lower="$2"
+	_wepb_label="$3"
+	_wepb_kind="$4"
+	_wepb_situation="$5"
+	_wepb_flags="$6"
+	_wepb_delta="${7:-}"
+
+	printf '<!-- git-review-range: what this reading order covers, and how to see it.\n'
+	printf '     This block is for whoever fills the walkthrough in (usually an agent).\n'
+	printf '     It is kept when the file is rebuilt, it is never shown to the reviewer,\n'
+	printf '     and it does not render on the PR. Nothing here is run for you.\n\n'
+
+	printf '     Range under review, resolved when this skeleton was written:\n'
+	printf '       tip   %s  (%s)\n' "$_wepb_tip" "$_wepb_label"
+	printf '       base  %s  (%s)\n\n' "$_wepb_lower" "$_wepb_kind"
+
+	printf '     Generated with: %s\n\n' "$_wepb_flags"
+
+	if [ -n "$_wepb_delta" ]; then
+		printf '     This is an incremental range: it covers only what was added since your\n'
+		printf '     previous review of %s, not the whole PR.\n\n' "$_wepb_delta"
+	fi
+
+	# Exactly one of the three, decided by where the skeleton is being written
+	# from. The review one deliberately does not promise the tree holds the whole
+	# PR: in step mode it holds it only up to the cursor. It names the situation
+	# and sends you to the commands, which are right in all three modes.
+	case "$_wepb_situation" in
+	init)
+		printf '     You are standing on the PR branch: your working tree has the PR, plus\n'
+		printf '     anything you have not committed. This walkthrough covers committed\n'
+		printf '     history only.\n\n'
+		;;
+	review)
+		printf '     You are inside an active review: your working tree carries PR content\n'
+		printf '     plus the reviewer'\''s own edits, and how much of the PR depends on the\n'
+		printf '     review mode.\n\n'
+		;;
+	*)
+		printf '     You are standing on the base branch: the files listed below exist in\n'
+		printf '     your working tree with their PRE-PR content. Reading them there gives\n'
+		printf '     you the old code.\n\n'
+		;;
+	esac
+
+	printf '     Write the reading order over the range above, not over what your working\n'
+	printf '     tree happens to contain. Use the commands below to see the real content.\n\n'
+
+	printf '     For any file <path> listed below:\n'
+	printf '       the change the PR makes to it\n'
+	printf '         git diff %s %s -- <path>\n' "$_wepb_lower" "$_wepb_tip"
+	printf '       its content after the PR\n'
+	printf '         git show %s:<path>\n' "$_wepb_tip"
+	printf '       its content before the PR\n'
+	printf '         git show %s:<path>\n' "$_wepb_lower"
+	printf '       every file in the range, again\n'
+	printf '         git diff --name-only %s %s\n' "$_wepb_lower" "$_wepb_tip"
+	printf '     A file the PR deletes has no "after" content: git show will fail on it,\n'
+	printf '     and that failure is the answer.\n'
+	printf -- '-->\n'
+}
+
+# walk_prompt_block  (stdin: walkthrough content; stdout: the same, minus the block)
+# Swallow the incoming instruction block so the canonical rewrite regenerates it
+# instead of carrying it forward. Recognition is a prefix comparison, not a
+# regex: the opening line has to START with the sentinel. Only the first block is
+# consumed, and only while still in the preamble — past the first entry heading
+# the text is somebody's why, and a why is never rewritten.
+#
+# This is NOT the "filtered when read" half of the format contract. That half is
+# walk_preamble's, and walk_preamble does not change: it already drops every
+# HTML comment for its three callers, which are this rewrite and start/compare —
+# the two that print the heads-up to the reviewer. (status --why never goes
+# through walk_preamble at all, because it never shows the preamble; the block
+# is invisible there too, but for a different reason, so nothing about that path
+# is covered by the filter.) What this function adds is the rewrite's own need:
+# with the block gone from the content, emitting a fresh one cannot duplicate it.
+walk_prompt_block() {
+	awk '
+		# The preamble ends at the first entry heading; past it, pass everything.
+		!donepre && /^## / {
+			line = $0
+			sub(/^## /, "", line)
+			if (line ~ /^([0-9]+|\?)\. /) donepre = 1
+		}
+		skip {
+			if (index($0, "-->")) skip = 0
+			next
+		}
+		!donepre && !seen && index($0, "<!-- git-review-range:") == 1 {
+			seen = 1
+			# A one-line block closes on the same line it opened.
+			if (index($0, "-->") == 0) skip = 1
+			next
+		}
+		{ print }
 	'
 }
 

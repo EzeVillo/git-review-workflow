@@ -117,16 +117,55 @@ export function draftArgs(
         args.push("--build");
     }
 
+    args.push(...originAndRangeFlags(source, range));
+    args.push("--", branch);
+    return args;
+}
+
+/**
+ * Los flags de origen y rango, en el orden que la CLI documenta. Un solo lugar
+ * porque los tres pasos de *Validate and start* —`draft --build`, el
+ * `config --porcelain` que sigue y el `start` final— tienen que llevar
+ * exactamente los mismos: si difieren, los tres hablan de rangos distintos.
+ */
+function originAndRangeFlags(source: ReviewSource, range: ReviewRange): string[] {
+    const args: string[] = [];
     if (source === "local") {
         args.push("--local");
     } else if (source === "offline") {
         args.push("--offline");
     }
-
     if (range === "delta") {
         args.push("--delta");
     }
-
-    args.push("--", branch);
     return args;
+}
+
+/**
+ * `git review config --porcelain <flags> -- <branch>` para una fila del bloque
+ * de borradores: se invoca después de un `--build` en verde, sólo para saber si
+ * ese borrador trae entradas esenciales (`offer keys`).
+ *
+ * Los flags no son los default: salen de los campos `<source>`/`<range>` del
+ * registro `draft`, que son los que la CLI grabó en el bloque de instrucciones
+ * al generarlo. Con otros, los pasos siguientes cubrirían otro conjunto de
+ * paths y el botón fallaría siempre por deriva sobre un borrador válido.
+ */
+export function draftConfigArgs(
+    branch: string,
+    source: ReviewSource,
+    range: ReviewRange
+): string[] {
+    return ["--porcelain", ...originAndRangeFlags(source, range), "--", branch];
+}
+
+/**
+ * `git review forget --draft -- <branch>`: descartar el borrador de UNA fila.
+ *
+ * Nunca `--all` (barrería los de las otras filas, y los archivados que nadie
+ * está mirando) ni `--saved` (esa es prosa de una review pausada), y nunca sin
+ * `<branch>`.
+ */
+export function forgetDraftArgs(branch: string): string[] {
+    return ["--draft", "--", branch];
 }

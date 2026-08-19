@@ -130,7 +130,8 @@ public sealed class ReviewStateManager
                     Finish: parsed.Finish,
                     Readonly: parsed.Readonly,
                     KeysOnly: parsed.KeysOnly,
-                    Draft: parsed.Draft);
+                    Draft: parsed.Draft,
+                    DraftPath: parsed.DraftPath);
             }
             catch (Exception e)
             {
@@ -157,6 +158,7 @@ public sealed class ReviewStateManager
             EffectiveConfig? eff = null;
             IReadOnlyList<CandidateBranch>? candidates = null;
             IReadOnlyList<CandidateRemote>? remotes = null;
+            IReadOnlyList<DraftRecord>? drafts = null;
             if (config.ExitCode == 0)
             {
                 try
@@ -165,6 +167,7 @@ public sealed class ReviewStateManager
                     eff = cp.Config;
                     candidates = cp.Candidates;
                     remotes = cp.Remotes;
+                    drafts = cp.Drafts;
                 }
                 catch { /* leave null */ }
             }
@@ -176,7 +179,8 @@ public sealed class ReviewStateManager
                 Branches: branches,
                 Config: eff,
                 Candidates: candidates,
-                Remotes: remotes);
+                Remotes: remotes,
+                Drafts: drafts);
         }
         else
         {

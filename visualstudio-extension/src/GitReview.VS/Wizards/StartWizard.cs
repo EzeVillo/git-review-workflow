@@ -163,10 +163,12 @@ public static class StartWizard
     }
 
     /// <summary>
-    /// The draft loop (011). The decisions live in <see cref="DraftFlow"/>; this is only
-    /// the vehicle for each state. Unlike the JetBrains wizard this can be a plain loop:
-    /// the wait dialog here is modal and awaited, so the flow never has to be resumed
-    /// from a callback.
+    /// What is left of the draft path (012). The decisions live in <see cref="DraftFlow"/>;
+    /// this is only the vehicle: one invocation, and the wizard closes.
+    ///
+    /// It does not open the draft and leaves no dialog waiting. The continuation —
+    /// filling it in, validating it, starting the review — lives in the panel's draft
+    /// block, over a state that outlives closing the IDE.
     /// </summary>
     private static async Task<bool> RunDraftFlowAsync(
         WizardContext ctx,
@@ -174,9 +176,6 @@ public static class StartWizard
         CancellationToken ct)
     {
         var state = start;
-        // Travels with the loop rather than in a local of one iteration: every Wait
-        // re-states where the file is, and that is exactly when the reviewer needs it.
-        UnopenedDraft? notShown = null;
 
         while (true)
         {
@@ -198,60 +197,10 @@ public static class StartWizard
                     break;
                 }
 
-                case DraftFlowState.Open open:
-                    notShown = await OpenDraftAsync(ctx).ConfigureAwait(true);
-                    state = DraftFlow.AdvanceDraftFlow(open, DraftFlowEvent.Opened.Instance);
-                    break;
-
-                case DraftFlowState.Wait wait:
-                {
-                    var proceed = GitReviewDialogs.Confirm(
-                        UserCopy.DraftWaitTitle,
-                        UserCopy.DraftWaitMessage(ctx.Branch, wait.Error, notShown),
-                        UserCopy.DraftContinueButton);
-                    state = DraftFlow.AdvanceDraftFlow(
-                        wait,
-                        proceed ? DraftFlowEvent.Continue.Instance : DraftFlowEvent.Cancel.Instance);
-                    break;
-                }
-
-                case DraftFlowState.Build build:
-                {
-                    await SaveDraftAsync(ctx).ConfigureAwait(true);
-                    var outcome = await InvokeDraftAsync(ctx, build: true, ct).ConfigureAwait(true);
-                    state = DraftFlow.AdvanceDraftFlow(
-                        build,
-                        new DraftFlowEvent.Built(
-                            outcome.Ok,
-                            outcome.Ok
-                                ? null
-                                : outcome.Text.Length > 0 ? outcome.Text : UserCopy.DraftBuildFailed));
-                    break;
-                }
-
-                case DraftFlowState.Reload reload:
-                {
-                    // The draft is readable by now; what is re-read is whether it marked
-                    // key entries, and only the CLI knows that.
-                    var offers = await LoadOffersAsync(
-                        ctx.Cli, ctx.Cwd, ctx.Branch, ctx.Source, ctx.Range, ct).ConfigureAwait(true);
-                    state = DraftFlow.AdvanceDraftFlow(reload, new DraftFlowEvent.Offers(offers.Offers));
-                    break;
-                }
-
-                case DraftFlowState.PickKeys pickKeys:
-                {
-                    var idx = GitReviewDialogs.Choose(
-                        UserCopy.StartLayoutTitle,
-                        UserCopy.DraftKeysPlaceholder,
-                        UserCopy.DraftKeysLabels.Select(k => k.Label).ToList());
-                    bool? keysOnly = idx < 0 ? null : UserCopy.DraftKeysLabels[idx].KeysOnly;
-                    state = DraftFlow.AdvanceDraftFlow(pickKeys, new DraftFlowEvent.KeysPicked(keysOnly));
-                    break;
-                }
-
-                case DraftFlowState.Done done:
-                    return await ConfirmAndStartAsync(ctx, done.Layout, ct).ConfigureAwait(true);
+                case DraftFlowState.Done:
+                    // The post-mutation refresh brings the draft's row to the panel,
+                    // with its path. Nothing else to do here.
+                    return true;
 
                 case DraftFlowState.Back back:
                 {
@@ -355,68 +304,117 @@ public static class StartWizard
     }
 
     /// <summary>
-    /// Where this branch's draft lives: <c>&lt;gitdir&gt;/review-walkthrough/&lt;branch&gt;.md</c>.
-    /// <c>.git</c> is a directory except in worktrees and submodules, where it is a file
-    /// pointing at the real one. Shared by whoever opens it and whoever saves it — two
-    /// ways of building the same path is one way for them to disagree.
+    /// "Validate and start" on a row of the panel's draft block (012): the same four
+    /// steps as the extension, with THAT row's flags.
+    ///
+    /// It lives here and not in the dispatcher because step 4 is the usual start, with
+    /// its confirmation, its staleness guard and its error handling: a second copy of
+    /// that would be a second way to start a review.
     /// </summary>
-    private static string? DraftFile(WizardContext ctx)
+    public static async Task<bool> StartFromDraftAsync(
+        CliInvoker cli,
+        MutationRunner mutations,
+        ReviewStateManager stateManager,
+        string cwd,
+        PanelHost host,
+        DraftRecord draft,
+        CancellationToken ct = default)
     {
-        try
+        // Without the flags it was generated with there is nothing to replicate, and
+        // guessing them would make --build die on drift over a valid draft. The panel
+        // already omits the control; this is the host's own guard.
+        if (draft.Source == DraftSource.Unknown || draft.Range == DraftRange.Unknown) return false;
+
+        var source = draft.Source switch
         {
-            var dotGit = Path.Combine(ctx.Cwd, ".git");
-            string gitdir;
-            if (Directory.Exists(dotGit))
-            {
-                gitdir = dotGit;
-            }
-            else
-            {
-                var target = DraftFlow.GitdirFromLink(File.ReadAllText(dotGit));
-                if (target is null) return null;
-                gitdir = Path.IsPathRooted(target) ? target : Path.Combine(ctx.Cwd, target);
-            }
-            return Path.Combine(gitdir, "review-walkthrough", ctx.Branch + ".md");
-        }
-        catch
+            DraftSource.Local => ReviewSource.Local,
+            DraftSource.Offline => ReviewSource.Offline,
+            _ => ReviewSource.Remote,
+        };
+        var range = draft.Range == DraftRange.Delta ? ReviewRange.Delta : ReviewRange.Full;
+
+        await SaveDraftAsync(host, draft.Path).ConfigureAwait(true);
+
+        var built = await mutations.RunArgvAsync(
+            "walkthrough",
+            ReviewIntentLogic.DraftArgs(draft.Src, source, range, build: true),
+            network: false,
+            ct: ct).ConfigureAwait(true);
+        if (built is null)
         {
-            return null;
+            GitReviewDialogs.Info(UserCopy.DiscardBusy);
+            return false;
         }
+        if (built.ExitCode != 0)
+        {
+            // The reason for the rejection was written by the CLI: rewording it would be
+            // inventing a second validation vocabulary. The panel and the draft are left
+            // exactly as they were.
+            GitReviewDialogs.CliError(built.Stderr, UserCopy.DraftBuildFailed, built.Stdout);
+            return false;
+        }
+
+        // The draft is readable by now; what is re-read is whether it marked key entries,
+        // and only the CLI knows that. With the SAME flags — and the `delta` records come
+        // back in the same report, which is what validates an incremental range.
+        var layout = ReviewLayout.Walk;
+        IReadOnlyList<DeltaRecord>? deltas = null;
+        var report = await cli.InvokeAsync(
+            "config",
+            ReviewIntentLogic.DraftConfigArgs(draft.Src, source, range),
+            cwd,
+            network: false,
+            cancellationToken: ct).ConfigureAwait(true);
+        if (report.ExitCode == 0)
+        {
+            ConfigPorcelainResult? parsed = null;
+            try
+            {
+                parsed = ConfigPorcelain.ParseConfigPorcelain(report.Stdout);
+            }
+            catch
+            {
+                parsed = null;
+            }
+            deltas = parsed?.Deltas;
+            if (DraftFlow.OffersIncludeKeys(parsed?.Offers))
+            {
+                var idx = GitReviewDialogs.Choose(
+                    UserCopy.StartLayoutTitle,
+                    UserCopy.DraftKeysPlaceholder,
+                    UserCopy.DraftKeysLabels.Select(k => k.Label).ToList());
+                if (idx < 0) return false;
+                layout = UserCopy.DraftKeysLabels[idx].KeysOnly ? ReviewLayout.Keys : ReviewLayout.Walk;
+            }
+        }
+
+        var ctx = new WizardContext(
+            cli,
+            mutations,
+            stateManager,
+            cwd,
+            host,
+            draft.Src,
+            source,
+            range,
+            stateManager.Current.Config?.Base,
+            deltas);
+        return await ConfirmAndStartAsync(ctx, layout, ct).ConfigureAwait(true);
     }
 
     /// <summary>
-    /// Shows the draft. Null means it is on screen; anything else is reported by the wait
-    /// dialog, because the CLI prints the path on stdout and only stderr is surfaced —
-    /// without this the reviewer would be asked to fill in a file they cannot find.
+    /// Saves the draft document if it is open and dirty, and only that one.
+    /// <c>walkthrough draft --build</c> reads the file off disk, and the editor may hold
+    /// the filled-in order unsaved: then the CLI validates the empty skeleton and answers
+    /// "unfilled entries remain" with the text in plain sight. The path comes from the
+    /// CLI — never one this client built.
     /// </summary>
-    private static async Task<UnopenedDraft?> OpenDraftAsync(WizardContext ctx)
+    private static async Task SaveDraftAsync(PanelHost host, string path)
     {
-        var draft = DraftFile(ctx);
-        if (draft is null) return new UnopenedDraft(null);
-        if (ctx.Host.OpenPath is null || !File.Exists(draft)) return new UnopenedDraft(draft);
+        if (host.SavePath is null) return;
         try
         {
-            return await ctx.Host.OpenPath(draft).ConfigureAwait(true) ? null : new UnopenedDraft(draft);
-        }
-        catch
-        {
-            return new UnopenedDraft(draft);
-        }
-    }
-
-    /// <summary>
-    /// Saves the draft before it is validated. <c>walkthrough draft --build</c> reads the
-    /// file off disk, and the editor may hold the filled-in order unsaved: then the CLI
-    /// validates the empty skeleton and answers "unfilled entries remain" with the text
-    /// in plain sight.
-    /// </summary>
-    private static async Task SaveDraftAsync(WizardContext ctx)
-    {
-        var draft = DraftFile(ctx);
-        if (draft is null || ctx.Host.SavePath is null) return;
-        try
-        {
-            await ctx.Host.SavePath(draft).ConfigureAwait(true);
+            await host.SavePath(path).ConfigureAwait(true);
         }
         catch
         {
@@ -424,6 +422,7 @@ public static class StartWizard
             // say what is still missing from the file it can see.
         }
     }
+
 
     private static async Task<bool> ConfirmAndStartAsync(
         WizardContext ctx,

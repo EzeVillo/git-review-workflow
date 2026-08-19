@@ -18,6 +18,8 @@ public abstract record ActionParams
     public sealed record Housekeeping(HousekeepingAction Action) : ActionParams;
     public sealed record SetConfig(string Key, string Name) : ActionParams;
     public sealed record WalkthroughInit(bool Force) : ActionParams;
+    /// <summary>012: discard ONE branch's draft, from the panel's draft block.</summary>
+    public sealed record ForgetDraft(string Source) : ActionParams;
     public sealed record WalkthroughBuild : ActionParams
     {
         public static readonly WalkthroughBuild Instance = new();
@@ -57,6 +59,10 @@ public static class ActionArgvMap
             "continueReview" => params_ is ActionParams.Continue c
                 ? new ActionArgv("continue", new[] { c.Source })
                 : throw new ArgumentException("continueReview requires Continue params"),
+            // Never --all nor --saved: an action on one row does not touch the others.
+            "forgetDraft" => new ActionArgv(
+                "forget",
+                ReviewIntentLogic.ForgetDraftArgs(((ActionParams.ForgetDraft)params_!).Source)),
             "saveReview" => new ActionArgv("save", Array.Empty<string>()),
             "abortReview" => new ActionArgv("abort", Array.Empty<string>()),
             "finishReview" => new ActionArgv(

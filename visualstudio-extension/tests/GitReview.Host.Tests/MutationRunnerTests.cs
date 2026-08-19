@@ -157,7 +157,7 @@ public class MutationRunnerTests
             if (verb is "next") await _gate.ConfigureAwait(false);
             return verb switch
             {
-                "--version" => new InvokeResult("0.6.0\n", "", 0),
+                "--version" => new InvokeResult(CliVersion.MinCliVersion + "\n", "", 0),
                 "status" => new InvokeResult(WalkStatus, "", 0),
                 _ => new InvokeResult("", "", 0),
             };

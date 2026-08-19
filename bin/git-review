@@ -12,7 +12,7 @@
 set -eu
 
 prog="git review"
-VERSION="0.6.0"
+VERSION="0.7.0"
 
 usage() {
 	cat <<EOF

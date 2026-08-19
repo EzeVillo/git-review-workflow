@@ -307,7 +307,7 @@ Every command is a verb under `git review`. Run `git review -h` for the list, or
 | `git review start [<branch>] [<base> \| --base <base> \| --delta \| --from <commit>] [--step \| --no-walk \| --keys] [--local \| --offline]` | Fetch `origin`, then stage the PR diff on a new `review/<branch>` branch (omit `<branch>` to review the current branch; enters walk mode if the PR carries a walkthrough; `--keys` restricts walk to entries marked `> key`; `--local` reviews your local branch but still diffs against origin's base; `--offline` also skips fetching and uses your local base). |
 | `git review compare <a> <b> [--step \| --no-walk \| --keys]`                                                                                 | Stage the diff between two commit-ish (tags, commits, branches) read-only, to read or walk it. `git review finish` refuses — there is nothing to write back.                                                                                                                                                                                                       |
 | `git review walkthrough (init [--base <base>] [--force] \| build [--check])`                                                                 | Author a reading walkthrough for the current branch's PR — a curated order of the changed files with a note on each, committed as `.review/walkthrough.md`.                                                                                                                                                                                                        |
-| `git review walkthrough draft [--build] [--local \| --offline] [--delta] [--force] [<branch>]`                                               | Write your own reading order for someone else's PR, kept out of the working tree — nothing is staged, committed or undone. `git review start` then reads it instead of the PR's walkthrough. `--build` validates and renumbers it.                                                                                                                                 |
+| `git review walkthrough draft [--local \| --offline] [--delta] [--force] [--stdout] [<branch>]`<br>`git review walkthrough draft --build [--from <file> \| --from -] [--local \| --offline] [--delta] [--force] [<branch>]`                                               | Write your own reading order for someone else's PR, kept out of the working tree — nothing is staged, committed or undone. `git review start` then reads it instead of the PR's walkthrough. `--build` validates and renumbers it. `--stdout` prints the skeleton instead of writing it (nothing is created anywhere) and `--build --from` installs a filled-in one from a file or standard input, so an agent can write the reading order without touching your gitdir.                                                                                                                                 |
 | `git review next` / `git review prev`                                                                                                        | Move a `--step` or walkthrough review to the next / previous entry.                                                                                                                                                                                                                                                                                                |
 | `git review status [--porcelain \| --why <path>]`                                                                                            | Show the state of the review on the current branch (`--porcelain` for machine-readable output, including a `finish` record when a closure is mid-conflict; `--why <path>` for a walkthrough entry's explanation).                                                                                                                                                  |
 | `git review list [--porcelain]`                                                                                                              | List every review in progress and every saved one (current branch marked `*`; `--porcelain` also reports unresolved finishes as `pending` or `conflict`).                                                                                                                                                                                                          |
@@ -556,6 +556,44 @@ git review start feature/checkout                      # enters walk mode on you
   name — and says so when the one it replaces is an archived draft no review can
   reclaim.
 
+#### Handing the draft to an agent
+
+`--stdout` and `--build --from` are the two ends of one circuit: they let
+something other than you fill the reading order in **without ever writing into
+your gitdir**.
+
+```sh
+git review walkthrough draft --stdout feature/checkout > order.md   # creates nothing
+# ...an agent fills order.md in, wherever it likes...
+git review walkthrough draft --build --from order.md feature/checkout
+# or read it from standard input:
+git review walkthrough draft --build --from - feature/checkout < order.md
+```
+
+- **`--stdout`** prints exactly what the file would have held and creates
+  nothing — no draft, no directory, not even a temp file; `git status` is
+  identical before and after. Every note goes to stderr, so redirecting stdout
+  gives you a valid file with nothing else in it. It prints over an existing
+  draft too, and leaves that draft untouched: printing cannot destroy anything.
+  The one passage that differs from the written form is the closing line, which
+  under `--stdout` names `--build --from` — the command that installs *what you
+  were just handed*, rather than one that would quietly rebuild some other file.
+- **`--build --from <file>`** (or `-` for standard input) validates that content
+  with the **same eight rules** as any other draft, against the same range
+  resolved by the same `--local` / `--offline` / `--delta` flags, and installs it
+  in the canonical place. From there it is a draft like any other: `status` says
+  `walk (draft)`, `save` files it with a paused review, `forget --draft`
+  discards it. CRLF endings and a UTF-8 BOM — what an agent writing from
+  PowerShell produces — are normalised, not treated as drift.
+- **Nothing is written unless everything passed.** Whether a stored draft exists
+  is settled *before* the source is read, so a refusal never costs you the input
+  you piped in; and an unreadable file, empty input or any validation rule
+  leaves the draft you already had byte for byte as it was.
+- `--force` is what lets `--build --from` replace a draft you already wrote.
+  The combinations that cannot mean anything (`--stdout` with `--build` or
+  `--force`, `--from` without `--build`, `--from` twice) are refused up front,
+  before anything is touched.
+
 **git review never writes the walkthrough for you and never talks to any
 service.** It gives you the skeleton with the brief already written into it, and
 validates what comes back. Who fills it in — you, an agent, whatever you like —
@@ -591,6 +629,31 @@ followed by its free-text *why*, up to the next entry, optionally led by the
 reserved `> key` marker. Everything above the first entry is the preamble
 (the `## Heads-up` section); the parser ignores it and `build` preserves it
 verbatim, minus HTML comments. Granularity is per file in v1.
+
+**The instruction block.** Both skeletons — the author's and the reviewer's —
+open with an HTML comment whose first line starts `<!-- git-review-range:`. It
+names the range in **resolved objects** (the tip's SHA, the lower bound's OID and
+its type, `commit` or `tree`), records the origin and range flags the skeleton
+was generated with, says which working tree it was generated from, and lists the
+four `git` commands that show, for any file in the list, what the PR does to it
+and what it looks like on either side.
+
+It is there because whoever fills a skeleton in — often an agent — is standing in
+a working tree that holds the wrong bytes for the job: from the base branch the
+listed files are still at their pre-PR content, so reading them there produces
+confident prose about the old code, with nothing failing to say so.
+
+- It is **regenerated** by every `build` / `draft --build`, from the range that
+  run just validated, so it never describes a range that has moved on.
+- It is **never shown to the reviewer**: `git review start` and
+  `git review status --why` do not print it, and it does not render on the PR —
+  it is an HTML comment.
+- It is **neutral for validation**: none of the rules above look at it, and
+  deleting it by hand leaves a perfectly valid walkthrough (you just lose the
+  range record next time you re-annotate).
+- **Nothing in it is run for you.** Those are commands for whoever is annotating
+  to run; git review does not execute them, before or after, and does not talk
+  to any service.
 
 </details>
 
@@ -641,6 +704,7 @@ and any line whose type it does not recognize: the format only ever grows.
 ```
 state	<branch>	<source>	<tip>	<mode>	<walkthrough>[	<position>	<total>	<recorded>	<current>[	<essential>]]
 finish	conflict	<onto>
+draft	<path>
 entry	<position>	<id>[	<essential>	<annotated>|<banked>]
 subject	<position>	<subject>
 author	<position>	<author>
@@ -661,6 +725,12 @@ base	<base>
   `onto` is `1` if the finish used `--onto-source`, `0` otherwise. The whole
   record is omitted when no closure is in progress. Consumers must not offer
   sequence navigation while this record is present.
+- `draft` — zero or one: present exactly when this review is reading **your own**
+  walkthrough draft rather than the PR author's, which is the same condition the
+  human-readable `walk (draft)` marks. `<path>` is the absolute path of that
+  draft, already resolved — a client opens it and never builds one. Loose drafts
+  with no review of their own are not reported here; that is
+  [`config --porcelain`](#git-review-config).
 - `entry` — zero or more. In `step`/`walk`, one per position in the reading
   order (walk paths or step commits, the same order `next`/`prev` move
   through), including a walk entry the walkthrough does not annotate —
@@ -724,8 +794,16 @@ is marked with a `*`.
 
   ```
   branch	<name>	<saved>	<current>	<orphan>[	<mode>[	<position>	<total>]]
+  branch-draft	<name>
   finish	<branch>	pending|conflict	<onto>
   ```
+
+  `branch-draft` follows its own `branch` row, zero or one per row, whenever that
+  review carries a walkthrough draft — the same condition as the `(draft)` suffix
+  in the readable listing, in **every** mode and not only walk, and about custody
+  (the file exists) rather than about what is being read. It is a record of its
+  own rather than a field because `branch` ends in two optional fields that are
+  omitted together, so a sixth field could not be told apart from `position`.
 
   `saved`, `current` and `orphan` are `1`/`0` (`orphan` means the branch has no
   review metadata — hand-made, or left by a command that died early). When
@@ -799,6 +877,7 @@ git review config --porcelain [<branch>]  # machine-readable + candidate branche
   ```
   config	<key>	<value>
   candidate	<name>	remote|local	<current>
+  draft	<src>	<path>	<annotated>	<total>	<source>	<range>
   delta	<branch>	<tip>	remote|local
   ```
 
@@ -808,6 +887,18 @@ git review config --porcelain [<branch>]  # machine-readable + candidate branche
   to also emit `delta` rows when that branch has a prior `--delta` marker —
   zero, one or two: remote and local reviews keep separate markers, so each
   present axis gets its own row (`origin` is `remote` or `local`).
+  `draft` lists every walkthrough draft you have started and not paused, one
+  record each, **with or without a `<branch>` argument** — a draft is a fact
+  about the working tree, not about the branch you asked after. `<path>` is
+  absolute and already resolved, so a client opens it and never builds it;
+  `<annotated>`/`<total>` are the progress counted over the file (a fresh
+  skeleton is `0/N`, and `<annotated> == <total>` is not a promise that
+  `--build` will pass); `<source>` (`remote` \| `local` \| `offline`) and
+  `<range>` (`full` \| `delta`) are the flags the draft was generated with, read
+  back out of its instruction block, and are both `unknown` when that block was
+  deleted by hand. A draft that travelled with a paused review is not listed —
+  not by a rule, but because `git review save` moved its file to the archived
+  namespace.
 - `--` ends option parsing, so a value that starts with `-` (a legal branch name)
   is not taken as a flag: `git review config base -- -foo`.
 

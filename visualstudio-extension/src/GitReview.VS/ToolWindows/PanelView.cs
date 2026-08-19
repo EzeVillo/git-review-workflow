@@ -196,6 +196,7 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         Block.Row r => RenderRow(r.Controls),
         Block.FileRows f => RenderFileRows(f),
         Block.InventoryRows inv => RenderInventory(inv),
+        Block.DraftRows drafts => RenderDrafts(drafts),
         Block.ToolsSection ts => RenderToolsSection(ts),
         Block.Stderr s => RenderStderr(s.Text),
         Block.EmptyMessage em => RenderEmpty(em),
@@ -463,6 +464,35 @@ public sealed class PanelView : System.Windows.Controls.UserControl
                 }
                 stack.Children.Add(actions);
             }
+            stack.Children.Add(new Border { Height = 6 });
+        }
+        return stack;
+    }
+
+    /// <summary>
+    /// The draft block. Same shape as an inventory row — name, meta, actions — because it
+    /// is the same kind of thing: a row of the empty state you act on. Product parity,
+    /// not pixel parity: what has to match the other clients is the order, the labels and
+    /// which controls a row offers.
+    /// </summary>
+    private UIElement RenderDrafts(Block.DraftRows block)
+    {
+        var stack = new StackPanel();
+        foreach (var r in block.Rows)
+        {
+            stack.Children.Add(MonoLabel(r.Name));
+            stack.Children.Add(MonoLabel(r.Meta, muted: true));
+            var actions = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Margin = new Thickness(0, 2, 0, 0),
+            };
+            foreach (var c in r.Controls)
+            {
+                actions.Children.Add(RenderControl(c));
+                actions.Children.Add(new Border { Width = 4 });
+            }
+            stack.Children.Add(actions);
             stack.Children.Add(new Border { Height = 6 });
         }
         return stack;

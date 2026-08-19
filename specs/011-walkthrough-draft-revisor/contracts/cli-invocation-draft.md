@@ -2,6 +2,16 @@
 
 **Feature**: `011-walkthrough-draft-revisor`
 
+> **Enmendado.** La lista vigente es
+> [`012-prompt-agente-draft/contracts/cli-invocation-draft-panel.md`](../../012-prompt-agente-draft/contracts/cli-invocation-draft-panel.md).
+> Lo que cambió: `walkthrough draft --build` y `config --porcelain` tienen un
+> llamador nuevo —*Validate and start*, en el bloque de borradores del panel— y
+> llevan los flags de origen y rango que reporta el registro `draft`, no los
+> default; `forget --draft -- <src>` se suma como invocación del panel; el
+> botón *Continue* del aviso de espera, que era el llamador de `--build` acá,
+> desaparece con el aviso. Este documento queda como historia: no pueden
+> convivir dos listas vigentes que se contradigan.
+
 Enmienda aditiva a la lista cerrada de invocaciones de los clientes, cuya
 versión vigente es
 [`006-superficie-panel-completa/contracts/cli-invocation.md`](../../006-superficie-panel-completa/contracts/cli-invocation.md)

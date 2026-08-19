@@ -150,6 +150,32 @@ public sealed class ActionDispatcher
                 await DiscardInventoryAsync(index).ConfigureAwait(true);
                 return;
 
+            // Draft block (012): four BODY controls. No .vsct entry, no command id,
+            // no Tools menu item — the canonical's count of 27 does not move.
+            case "openDraft":
+            {
+                var draft = DraftRowAt(index);
+                if (draft is null || _host.OpenPath is null) return;
+                await _host.OpenPath(draft.Path).ConfigureAwait(true);
+                return;
+            }
+
+            case "copyDraftPrompt":
+            {
+                var draft = DraftRowAt(index);
+                if (draft is null) return;
+                System.Windows.Clipboard.SetText(UserCopy.DraftAgentPrompt(draft.Path));
+                return;
+            }
+
+            case "startFromDraft":
+                await StartFromDraftAsync(index).ConfigureAwait(true);
+                return;
+
+            case "discardDraft":
+                await DiscardDraftAsync(index).ConfigureAwait(true);
+                return;
+
             case "cleanReview":
                 await CleanAsync().ConfigureAwait(true);
                 return;
@@ -595,6 +621,59 @@ public sealed class ActionDispatcher
             ? new HousekeepingAction(HousekeepingKind.ForgetSavedOne, src)
             : new HousekeepingAction(HousekeepingKind.CleanOne, src);
         await ConfirmAndRunHousekeepingAsync(action).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// The draft row at <paramref name="index"/>, resolved against the HOST's state. The
+    /// index is the only thing a row control carries, and it is never trusted: what ends
+    /// up in the CLI comes from here.
+    /// </summary>
+    private DraftRecord? DraftRowAt(int? index) =>
+        PanelModelBuilder.DraftAt(State.DraftsList, index);
+
+    /// <summary>
+    /// "Validate and start" on a draft row. The four steps live in the wizard, because
+    /// step 4 is the usual start with its confirmation and staleness guard.
+    /// </summary>
+    private async Task StartFromDraftAsync(int? index)
+    {
+        var draft = DraftRowAt(index);
+        if (draft is null) return;
+        var cwd = Cwd;
+        if (cwd is null)
+        {
+            GitReviewDialogs.Error(UserCopy.NoSoleRoot);
+            return;
+        }
+        var started = await StartWizard.StartFromDraftAsync(
+            _panel.Cli,
+            _panel.Mutations,
+            _panel.State,
+            cwd,
+            _host,
+            draft).ConfigureAwait(true);
+        if (started) await _panel.RefreshAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Discard THIS row's draft, with a confirmation first: it is prose written by hand.
+    /// Never --all — an action on one row does not touch the others.
+    /// </summary>
+    private async Task DiscardDraftAsync(int? index)
+    {
+        var draft = DraftRowAt(index);
+        if (draft is null) return;
+        if (!GitReviewDialogs.Confirm(
+                UserCopy.DiscardDraftTitle(draft.Src),
+                UserCopy.DiscardDraftDetail(draft.Src, draft.Path),
+                UserCopy.DiscardDraftButton))
+        {
+            return;
+        }
+        await RunAsync(
+            "forgetDraft",
+            new ActionParams.ForgetDraft(draft.Src),
+            progress: UserCopy.DiscardDraftProgress(draft.Src)).ConfigureAwait(true);
     }
 
     /// <summary>

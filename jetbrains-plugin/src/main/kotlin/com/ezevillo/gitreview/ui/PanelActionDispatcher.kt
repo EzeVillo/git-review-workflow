@@ -3,6 +3,7 @@ package com.ezevillo.gitreview.ui
 import com.ezevillo.gitreview.diff.OpenEntryActions
 import com.ezevillo.gitreview.domain.ActionParams
 import com.ezevillo.gitreview.domain.ControlId
+import com.ezevillo.gitreview.domain.DraftRecord
 import com.ezevillo.gitreview.domain.HousekeepingAction
 import com.ezevillo.gitreview.domain.HousekeepingKind
 import com.ezevillo.gitreview.domain.NPM_INSTALL_CMD
@@ -14,6 +15,7 @@ import com.ezevillo.gitreview.domain.SupportLinks
 import com.ezevillo.gitreview.domain.UserCopy
 import com.ezevillo.gitreview.domain.confirmCopyFor
 import com.ezevillo.gitreview.domain.currentEntry
+import com.ezevillo.gitreview.domain.draftAt
 import com.ezevillo.gitreview.domain.pendingFinishInfo
 import com.ezevillo.gitreview.domain.requiresConfirmation
 import com.ezevillo.gitreview.domain.resumableSourceAt
@@ -29,8 +31,10 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.ex.ActionUtil
 import com.intellij.openapi.actionSystem.impl.SimpleDataContext
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.vfs.LocalFileSystem
 import java.awt.datatransfer.StringSelection
 
 /**
@@ -90,6 +94,28 @@ class PanelActionDispatcher(
             }
             ControlId.DISCARD_INVENTORY -> {
                 discardAt(index)
+                false
+            }
+            // Bloque de borradores (012). Cuatro controles del CUERPO del panel:
+            // no hay acción registrada para ninguno, no están en el menú
+            // Tools -> git review, y el conteo del canónico no se mueve.
+            ControlId.OPEN_DRAFT -> {
+                openDraftAt(index)
+                false
+            }
+            ControlId.COPY_DRAFT_PROMPT -> {
+                val draft = draftRowAt(index) ?: return false
+                CopyPasteManager.getInstance()
+                    .setContents(StringSelection(UserCopy.draftAgentPrompt(draft.path)))
+                true
+            }
+            ControlId.START_FROM_DRAFT -> {
+                val draft = draftRowAt(index) ?: return false
+                StartWizard.startFromDraft(project, draft)
+                false
+            }
+            ControlId.DISCARD_DRAFT -> {
+                discardDraftAt(index)
                 false
             }
             ControlId.SET_BASE -> {
@@ -240,6 +266,46 @@ class PanelActionDispatcher(
         val copy = confirmCopyFor(action)
         if (!UiMessages.confirm(project, copy.title, copy.detail, copy.button)) return
         mutations.runHousekeeping(action)
+    }
+
+    /**
+     * La fila `index` del bloque de borradores, resuelta contra el estado del
+     * HOST. El índice es lo único que un control de fila lleva, y no se le cree:
+     * lo que termina en la CLI sale de acá.
+     */
+    private fun draftRowAt(index: Int?): DraftRecord? =
+        draftAt(service.currentState().drafts ?: emptyList(), index)
+
+    /**
+     * Abre el borrador en la ruta que reportó la CLI. Mostrarlo no es leerlo: el
+     * plugin no interpreta un byte de su contenido.
+     */
+    private fun openDraftAt(index: Int?) {
+        val draft = draftRowAt(index) ?: return
+        val vf = LocalFileSystem.getInstance().refreshAndFindFileByPath(draft.path) ?: return
+        FileEditorManager.getInstance(project).openFile(vf, true)
+    }
+
+    /**
+     * Descarta el borrador de ESA fila, con confirmación previa: es prosa escrita
+     * a mano. Nunca `--all` — una acción sobre una fila no toca las demás.
+     */
+    private fun discardDraftAt(index: Int?) {
+        val draft = draftRowAt(index) ?: return
+        if (!UiMessages.confirm(
+                project,
+                UserCopy.discardDraftTitle(draft.src),
+                UserCopy.discardDraftDetail(draft.src, draft.path),
+                UserCopy.DISCARD_DRAFT_BUTTON,
+            )
+        ) {
+            return
+        }
+        mutations.runSimple(
+            "forgetDraft",
+            ActionParams.ForgetDraft(draft.src),
+            progressTitle = UserCopy.discardDraftProgress(draft.src),
+        )
     }
 
     private fun cleanPending(model: PanelModel) {

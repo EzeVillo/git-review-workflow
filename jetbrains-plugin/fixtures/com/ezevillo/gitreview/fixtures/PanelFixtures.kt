@@ -15,6 +15,7 @@ import com.ezevillo.gitreview.domain.StateRecord
 import com.ezevillo.gitreview.domain.WalkthroughStatus
 import com.ezevillo.gitreview.domain.WhyState
 import com.ezevillo.gitreview.domain.buildPanelModel
+import com.ezevillo.gitreview.domain.parseConfigPorcelain
 import com.ezevillo.gitreview.domain.parseListPorcelain
 import com.ezevillo.gitreview.domain.parsePorcelain
 import com.ezevillo.gitreview.domain.toPathRef
@@ -29,6 +30,8 @@ object PanelFixtures {
         "cli-outdated" to cliOutdated(),
         "no-review setup" to noReviewSetup(),
         "no-review ready" to noReviewReady(),
+        "no-review one draft" to noReviewOneDraft(),
+        "no-review drafts" to noReviewDrafts(),
         "finish-pending" to finishPending(),
         "out-of-range" to outOfRange(),
         "error" to error(),
@@ -70,6 +73,42 @@ object PanelFixtures {
                 situation = Situation.NO_REVIEW,
                 config = EffectiveConfig(base = "main", remote = "origin"),
                 branches = parseListPorcelain(listPorcelain),
+            ),
+            PanelInputs(busy = false),
+        )
+    }
+
+    /**
+     * One reading order started and not paused: the block on top, the usual
+     * empty-state body whole underneath.
+     */
+    fun noReviewOneDraft(): PanelModel = buildPanelModel(
+        ReviewState(
+            situation = Situation.NO_REVIEW,
+            config = EffectiveConfig(base = "main", remote = "origin"),
+            drafts = parseConfigPorcelain(
+                "draft	feature/pagos	/repo/.git/review-walkthrough/feature/pagos.md	0	5	remote	full",
+            ).drafts,
+        ),
+        PanelInputs(busy = false),
+    )
+
+    /**
+     * Two drafts with different progress, plus the inventory below. The second
+     * row does NOT offer *Validate and start*: its instruction block was deleted
+     * by hand, so the CLI reports `unknown` and the flags cannot be replicated.
+     */
+    fun noReviewDrafts(): PanelModel {
+        val cfg = """
+            draft	feature/telemetry	/repo/.git/review-walkthrough/feature/telemetry.md	3	9	local	delta
+            draft	feature/pagos	/repo/.git/review-walkthrough/feature/pagos.md	0	5	unknown	unknown
+        """.trimIndent()
+        return buildPanelModel(
+            ReviewState(
+                situation = Situation.NO_REVIEW,
+                config = EffectiveConfig(base = "main", remote = "origin"),
+                branches = parseListPorcelain("branch	review-saved/feature	1	0	0	walk	2	5"),
+                drafts = parseConfigPorcelain(cfg).drafts,
             ),
             PanelInputs(busy = false),
         )

@@ -54,7 +54,7 @@ public static class Program
             }
         }
 
-        Check("min_cli_version", CliVersion.MinCliVersion == "0.6.0");
+        Check("min_cli_version", CliVersion.MinCliVersion == "0.7.0");
         // 26, not the contract's 27: openAllChanges is not_in: [visualstudio].
         Check("product_actions_26", ActionArgvMap.ProductActions.Count == 26);
         Check("npm_install", InstallHint.NpmInstallCmd.Contains("git-review-workflow"));
@@ -144,7 +144,11 @@ public static class Program
             if (c.Label is null && c.Emphasis != Emphasis.Icon)
                 problems.Add($"{c.Id.Wire()} has no label and is not an icon");
         }
-        if (controls.Count(c => c.Emphasis == Emphasis.Primary) > 1)
+        // Row controls are exempt, for the same reason PanelLayout's own invariant
+        // exempts them: a row control is a per-row affordance repeated once per
+        // row, so counting them would make the rule depend on how many drafts or
+        // reviews the reviewer happens to have.
+        if (controls.Count(c => c.Emphasis == Emphasis.Primary && c.Index is null) > 1)
             problems.Add("more than one primary");
 
         foreach (var block in Flatten(layout.Blocks))

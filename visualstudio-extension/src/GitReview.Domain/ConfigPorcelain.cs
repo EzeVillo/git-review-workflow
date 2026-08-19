@@ -94,12 +94,59 @@ public static class OfferRankExt
 
 public sealed record ReadingOffer(OfferId Id, OfferRank Rank);
 
+/// <summary>
+/// With which origin and range a draft was generated, read back out of the
+/// instruction block inside the file itself. <c>Unknown</c> when that block was
+/// deleted by hand, which is allowed: the flags cannot be replicated then, so
+/// the row does not offer "Validate and start" rather than guessing them.
+/// </summary>
+public enum DraftSource { Remote, Local, Offline, Unknown }
+
+public enum DraftRange { Full, Delta, Unknown }
+
+public static class DraftSourceExt
+{
+    public static DraftSource Parse(string? raw) => raw switch
+    {
+        "remote" => DraftSource.Remote,
+        "local" => DraftSource.Local,
+        "offline" => DraftSource.Offline,
+        _ => DraftSource.Unknown,
+    };
+}
+
+public static class DraftRangeExt
+{
+    public static DraftRange Parse(string? raw) => raw switch
+    {
+        "full" => DraftRange.Full,
+        "delta" => DraftRange.Delta,
+        _ => DraftRange.Unknown,
+    };
+}
+
+/// <summary>
+/// A loose walkthrough draft: it exists in the gitdir's ACTIVE namespace, which
+/// is to say the reviewer started it and has not paused its review.
+///
+/// Nothing here is derived: every field comes straight from the CLI. Path in
+/// particular — the client opens it and never builds one.
+/// </summary>
+public sealed record DraftRecord(
+    string Src,
+    string Path,
+    int Annotated,
+    int Total,
+    DraftSource Source,
+    DraftRange Range);
+
 public sealed record ConfigPorcelainResult(
     EffectiveConfig Config,
     IReadOnlyList<CandidateBranch> Candidates,
     IReadOnlyList<CandidateRemote> Remotes,
     IReadOnlyList<DeltaRecord>? Deltas = null,
-    IReadOnlyList<ReadingOffer>? Offers = null);
+    IReadOnlyList<ReadingOffer>? Offers = null,
+    IReadOnlyList<DraftRecord>? Drafts = null);
 
 public static class ConfigPorcelain
 {
@@ -113,6 +160,7 @@ public static class ConfigPorcelain
         var remotes = new List<CandidateRemote>();
         var deltas = new List<DeltaRecord>();
         var offers = new List<ReadingOffer>();
+        var drafts = new List<DraftRecord>();
 
         foreach (var line in stdout.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
         {
@@ -153,6 +201,24 @@ public static class ConfigPorcelain
                         deltas.Add(new DeltaRecord(name, tip, origin.Value));
                     break;
                 }
+                case "draft":
+                {
+                    var src = Get(fields, 1);
+                    var path = Get(fields, 2);
+                    // A malformed record is ignored whole, like any unknown one:
+                    // half a progress pair would be worse than none.
+                    if (string.IsNullOrEmpty(src) || string.IsNullOrEmpty(path)) continue;
+                    if (!int.TryParse(Get(fields, 3), out var annotated)) continue;
+                    if (!int.TryParse(Get(fields, 4), out var total)) continue;
+                    drafts.Add(new DraftRecord(
+                        src!,
+                        path!,
+                        annotated,
+                        total,
+                        DraftSourceExt.Parse(Get(fields, 5)),
+                        DraftRangeExt.Parse(Get(fields, 6))));
+                    break;
+                }
                 case "offer":
                 {
                     var id = OfferIdExt.Parse(Get(fields, 1));
@@ -170,7 +236,8 @@ public static class ConfigPorcelain
             candidates,
             remotes,
             deltas.Count > 0 ? deltas : null,
-            offers.Count > 0 ? offers : null);
+            offers.Count > 0 ? offers : null,
+            drafts);
     }
 
     /// <summary>

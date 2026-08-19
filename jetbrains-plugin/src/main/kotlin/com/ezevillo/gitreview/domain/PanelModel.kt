@@ -39,11 +39,37 @@ data class PanelReview(
     val finish: BranchFinish? = null,
 )
 
+/**
+ * A row of the empty state's draft block: a reading order the reviewer started
+ * and has not paused. Flat projection, with nothing derived — the progress is
+ * counted by the CLI and the path is resolved by the CLI.
+ */
+data class PanelDraft(
+    val branch: String,
+    val path: String,
+    val annotated: Int,
+    val total: Int,
+    /**
+     * Whether *Validate and start* can be offered: only when the CLI knows the
+     * origin and range the draft was generated with. With `UNKNOWN` (the
+     * instruction block was deleted by hand) invoking with the defaults would
+     * fail with a drift error every time, so one control fewer beats one that
+     * guesses.
+     */
+    val startable: Boolean,
+)
+
 data class PanelModel(
     val situation: Situation,
     val busy: Boolean,
     val repoLabel: String? = null,
     val reviews: List<PanelReview> = emptyList(),
+    /**
+     * Same rule as [reviews]: only with `NO_REVIEW`, empty in any other
+     * situation. A review in progress is always the most important thing the
+     * panel has to say, and another branch's draft does not compete for the body.
+     */
+    val drafts: List<PanelDraft> = emptyList(),
     val pendingFinish: PendingFinish? = null,
     val noBaseConfigured: Boolean = false,
     val configuredBase: String? = null,
@@ -152,6 +178,31 @@ private fun toPanelReviews(branches: List<BranchRecord>): List<PanelReview> {
     }
 }
 
+/**
+ * Projects the `draft` records of `config --porcelain`, one to one and in the
+ * CLI's order. A paused review's draft never gets here — the CLI does not
+ * report it, because save moved its file to the archived namespace.
+ */
+fun toPanelDrafts(drafts: List<DraftRecord>): List<PanelDraft> =
+    drafts.map { draft ->
+        PanelDraft(
+            branch = draft.src,
+            path = draft.path,
+            annotated = draft.annotated,
+            total = draft.total,
+            startable = draft.source != DraftSource.UNKNOWN && draft.range != DraftRange.UNKNOWN,
+        )
+    }
+
+/**
+ * The draft row at [index], resolved against the HOST's state. Same role as
+ * [resumableSourceAt]: what ends up in the CLI does not come from the panel.
+ */
+fun draftAt(drafts: List<DraftRecord>, index: Any?): DraftRecord? {
+    if (index !is Int) return null
+    return drafts.getOrNull(index)
+}
+
 fun resumableSourceAt(branches: List<BranchRecord>, index: Any?): String? {
     if (index !is Int) return null
     val branch = branches.getOrNull(index) ?: return null
@@ -165,6 +216,7 @@ fun buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelModel {
         situation = state.situation,
         busy = inputs.busy,
         reviews = if (state.situation == Situation.NO_REVIEW) toPanelReviews(state.branches) else emptyList(),
+        drafts = if (state.situation == Situation.NO_REVIEW) toPanelDrafts(state.drafts ?: emptyList()) else emptyList(),
         noBaseConfigured = state.situation == Situation.NO_REVIEW &&
             state.config != null &&
             state.config.base == null,

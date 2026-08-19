@@ -92,7 +92,7 @@ describe("US2: el asistente ofrece armar el orden de lectura", function () {
         const offered = layoutSteps[0];
         const draftItem = offered.find((item) => item.draft === "create");
         assert.ok(draftItem, `no se ofrecio armar el borrador: ${offered.map((i) => i.label).join(", ")}`);
-        assert.strictEqual(draftItem?.label, "Walkthrough — draft one");
+        assert.strictEqual(draftItem?.label, "Build a reading order first");
         assert.ok(
             !offered.some((item) => item.draft === "resume"),
             "sin borrador empezado no hay nada que continuar"
@@ -145,32 +145,26 @@ describe("US2: el asistente ofrece armar el orden de lectura", function () {
         );
     });
 
-    it("Continue con el borrador lleno arranca la review sobre ese orden", async () => {
-        // El camino feliz entero, que hasta acá sólo estaba cubierto por partes:
-        // crear → llenar → Continue → --build en verde → recorrido → start. Lo
-        // que se afirma al final es la review que quedó viva y lo que el panel
-        // muestra de ella, no un paso intermedio.
-        //
-        // El borrador se llena **por el buffer del editor y sin guardar**, que es
-        // lo que hace el revisor: VS Code no autoguarda por defecto. Escribirlo
-        // con fs.writeFileSync esquivaba el único paso que puede fallar acá —el
-        // `--build` lee del disco— y dejaba en verde un camino que en el editor
-        // real terminaba en "unfilled entries remain" con el texto a la vista.
-        const branch = "us2-draft-happy";
+    it("elegir armar el orden lo crea y CIERRA el asistente, sin dejar ningun aviso", async () => {
+        // US4 / SC-010. Lo que reemplaza al bucle de espera de 011: el
+        // asistente crea el borrador y termina. No abre el archivo (en ese
+        // instante todavia no hay registro `draft` que traiga su ruta, y
+        // armarla es justo lo que esta feature retira), no arranca ninguna
+        // review, y no deja una notificacion esperando a que alguien la
+        // conteste. La continuacion vive en el panel.
+        const branch = "us4-wizard-ends";
         createBranchWithChanges(repo, branch, {"src/a.ts": "a\n", "src/b.ts": "b\n"});
         git(["checkout", branch], repo.dir);
 
         const api = await getTestApi();
         assert.strictEqual((await api.refresh()).situation, "no-review");
 
-        const draft = draftPath(repo.dir, branch);
-        let waitPrompts = 0;
+        const cleanBefore = git(["status", "--porcelain"], repo.dir);
+        const layoutSteps: WizardItem[][] = [];
+        // Cualquier mensaje CON acciones es un aviso que espera una respuesta:
+        // es exactamente lo que ya no puede haber.
+        let promptsWithActions = 0;
         let keysAsked = 0;
-        // El estado del borrador en el momento de apretar Continue: sin guardar en
-        // el editor, y con el esqueleto todavía en disco. Es lo que hace que este
-        // test pruebe el guardado y no lo suponga.
-        let dirtyAtContinue: boolean | undefined;
-        let onDiskAtContinue = "";
 
         const originalQuickPick = vscode.window.showQuickPick;
         const originalInfo = vscode.window.showInformationMessage;
@@ -178,13 +172,12 @@ describe("US2: el asistente ofrece armar el orden de lectura", function () {
         (vscode.window as unknown as { showQuickPick: unknown }).showQuickPick = async (
             items: readonly (WizardItem & { keysOnly?: boolean })[]
         ) => {
-            // El paso de recorrido completo vs sólo esenciales: sólo aparece
-            // porque el borrador de abajo marca una entrada con "> key".
             if (items[0]?.keysOnly !== undefined) {
                 keysAsked++;
                 return items.find((item) => item.keysOnly === false);
             }
             if (isLayoutStep(items)) {
+                layoutSteps.push([...items]);
                 return items.find((item) => item.draft === "create");
             }
             if (items[0]?.source !== undefined) {
@@ -194,140 +187,19 @@ describe("US2: el asistente ofrece armar el orden de lectura", function () {
         };
         (vscode.window as unknown as {
             showInformationMessage: unknown
-        }).showInformationMessage = async (
-            _message: string,
-            ...actions: string[]
-        ) => {
-            if (!actions.includes("Continue")) {
-                return undefined;
+        }).showInformationMessage = async (_message: string, ...actions: string[]) => {
+            if (actions.length > 0) {
+                promptsWithActions++;
             }
-            waitPrompts++;
-            // Lo que hace el revisor mientras el aviso está a la vista: llenar el
-            // borrador que la CLI acaba de escribir, en un orden propio — acá el
-            // inverso del diff, para que cuál de los dos manda sea observable.
-            // El documento ya está abierto (el asistente lo abrió): esto edita ese
-            // buffer y lo deja sucio, sin tocar el disco.
-            const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(draft));
-            const whole = new vscode.Range(
-                new vscode.Position(0, 0),
-                doc.lineAt(doc.lineCount - 1).range.end
-            );
-            const edit = new vscode.WorkspaceEdit();
-            edit.replace(
-                doc.uri,
-                whole,
-                "# Walkthrough\n\n## 2. src/a.ts\nthen a\n\n## 1. src/b.ts\n> key\nstart here\n"
-            );
-            assert.ok(await vscode.workspace.applyEdit(edit), "no se pudo editar el borrador");
-            dirtyAtContinue = doc.isDirty;
-            onDiskAtContinue = fs.readFileSync(draft, "utf8");
-            return "Continue";
+            return undefined;
         };
         (vscode.window as unknown as {
             showWarningMessage: unknown
-        }).showWarningMessage = async () =>
-            "Start the review";
-        try {
-            await vscode.commands.executeCommand("gitReview.startReview");
-        } finally {
-            (vscode.window as unknown as {
-                showQuickPick: unknown
-            }).showQuickPick = originalQuickPick;
-            (vscode.window as unknown as {
-                showInformationMessage: unknown
-            }).showInformationMessage =
-                originalInfo;
-            (vscode.window as unknown as { showWarningMessage: unknown }).showWarningMessage =
-                originalWarning;
-        }
-
-        assert.strictEqual(waitPrompts, 1, "el aviso de espera se mostro una vez");
-        assert.strictEqual(keysAsked, 1, "el borrador marca una entrada key: se pregunta el recorrido");
-        // Las dos mitades de la premisa: al apretar Continue el orden estaba
-        // escrito sólo en el buffer, y en disco seguía el esqueleto sin llenar.
-        // Sin esto, el test volvería a pasar por el camino que no es el del
-        // revisor en cuanto alguien cambie cómo se llena el borrador.
-        assert.strictEqual(dirtyAtContinue, true, "el borrador tenia que quedar sin guardar");
-        assert.ok(
-            onDiskAtContinue.includes("## ?. src/a.ts"),
-            `en disco tenia que seguir el esqueleto: ${onDiskAtContinue}`
-        );
-
-        const state = await api.refresh();
-        assert.strictEqual(state.situation, "review");
-        assert.strictEqual(state.state?.mode, "walk");
-        assert.strictEqual(state.draft, true, "la review lee el borrador, no el PR");
-        assert.strictEqual(
-            git(["symbolic-ref", "--quiet", "--short", "HEAD"], repo.dir).trim(),
-            `review/${branch}`
-        );
-
-        // El panel: la primera entrada es la que el revisor puso primera, y el
-        // badge de borrador está puesto.
-        const model = await api.getPanelModel();
-        assert.strictEqual(model.draft, true);
-        assert.strictEqual(model.position, 1);
-        assert.strictEqual(model.total, 2);
-        assert.strictEqual(model.current?.display, "src/b.ts");
-        assert.strictEqual(model.current?.essential, true);
-
-        // --build reescribió el borrador renumerando 1..N.
-        assert.ok(
-            fs.readFileSync(draft, "utf8").includes("## 1. src/b.ts"),
-            "el borrador quedo validado y renumerado"
-        );
-        // Y lo que la review dejó staged es el diff del PR y nada más: el
-        // borrador vive fuera del working tree, así que no puede colarse entre
-        // los cambios que después extrae finish.
-        const staged = git(["diff", "--cached", "--name-only"], repo.dir).trim().split("\n").sort();
-        assert.deepStrictEqual(staged, ["src/a.ts", "src/b.ts"]);
-
-        fs.rmSync(draft, {force: true});
-    });
-
-    it("descartar el aviso no cancela; Cancel vuelve atras y conserva el borrador", async () => {
-        const branch = "us2-draft-cancel";
-        createBranchWithChanges(repo, branch, {"src/a.ts": "a\n"});
-        git(["checkout", branch], repo.dir);
-
-        const api = await getTestApi();
-        assert.strictEqual((await api.refresh()).situation, "no-review");
-
-        const cleanBefore = git(["status", "--porcelain"], repo.dir);
-        const layoutSteps: WizardItem[][] = [];
-        let waitPrompts = 0;
-
-        const originalQuickPick = vscode.window.showQuickPick;
-        const originalInfo = vscode.window.showInformationMessage;
-        (vscode.window as unknown as { showQuickPick: unknown }).showQuickPick = async (
-            items: readonly WizardItem[]
-        ) => {
-            if (isLayoutStep(items)) {
-                layoutSteps.push([...items]);
-                // Primera vuelta: armarlo. Segunda: cortar el asistente.
-                return layoutSteps.length === 1
-                    ? items.find((item) => item.draft === "create")
-                    : undefined;
-            }
-            if (items[0]?.source !== undefined) {
-                return items.find((item) => item.label === "Remote");
-            }
-            return pickCurrent(items);
-        };
-        (vscode.window as unknown as {
-            showInformationMessage: unknown
-        }).showInformationMessage = async (
-            _message: string,
-            ...actions: string[]
-        ) => {
-            // Sólo el aviso de espera lleva acciones; las notas de la CLI no.
-            if (actions.includes("Continue")) {
-                waitPrompts++;
-                // La primera vez se descarta la notificación (la X, o "clear all
-                // notifications") sin elegir nada: eso NO es Cancel — es lo más
-                // fácil de hacer sin querer mientras se edita el borrador, que es
-                // justo lo que el aviso pide hacer. El aviso tiene que volver.
-                return waitPrompts === 1 ? undefined : "Cancel";
+        }).showWarningMessage = async (_message: string, ...rest: unknown[]) => {
+            // Un modal de confirmacion tambien seria una espera: el asistente ya
+            // no llega a confirmar nada.
+            if (rest.length > 0) {
+                promptsWithActions++;
             }
             return undefined;
         };
@@ -339,38 +211,161 @@ describe("US2: el asistente ofrece armar el orden de lectura", function () {
             }).showQuickPick = originalQuickPick;
             (vscode.window as unknown as {
                 showInformationMessage: unknown
-            }).showInformationMessage =
-                originalInfo;
+            }).showInformationMessage = originalInfo;
+            (vscode.window as unknown as {
+                showWarningMessage: unknown
+            }).showWarningMessage = originalWarning;
         }
 
-        assert.strictEqual(
-            waitPrompts,
-            2,
-            "descartar el aviso lo vuelve a mostrar; solo Cancel sale del bucle"
-        );
+        // El asistente paso una sola vez por la forma de lectura y no volvio.
+        assert.strictEqual(layoutSteps.length, 1);
+        assert.strictEqual(promptsWithActions, 0, "no puede quedar ningun aviso esperando");
+        assert.strictEqual(keysAsked, 0, "el recorrido se elige en el panel, no aca");
+
+        // El borrador quedo escrito, fuera del working tree.
         const draft = draftPath(repo.dir, branch);
         assert.ok(fs.existsSync(draft), `el borrador no quedo en ${draft}`);
-        assert.ok(
-            fs.readFileSync(draft, "utf8").includes("src/a.ts"),
-            "el esqueleto lista los archivos del rango"
-        );
-        // FR-003: el borrador no toca el working tree.
+        assert.ok(fs.readFileSync(draft, "utf8").includes("src/a.ts"));
         assert.strictEqual(git(["status", "--porcelain"], repo.dir), cleanBefore);
-        // FR-018a: Cancel devuelve al paso de forma de lectura, con el borrador
-        // vivo y la oferta convertida en continuarlo.
-        assert.strictEqual(layoutSteps.length, 2, "volvio al paso de forma de lectura");
-        const second = layoutSteps[1];
+
+        // Y no se arranco ninguna review.
+        const state = await api.refresh();
+        assert.strictEqual(state.situation, "no-review");
+        assert.strictEqual(
+            git(["symbolic-ref", "--quiet", "--short", "HEAD"], repo.dir).trim(),
+            branch
+        );
+
+        // El asistente tampoco lo abrio: la ruta llega por el refresco, y el
+        // revisor abre desde el panel con Open.
         assert.ok(
-            second.some((item) => item.draft === "resume"),
-            `la segunda vuelta debe ofrecer continuarlo: ${second.map((i) => i.label).join(", ")}`
+            !vscode.window.visibleTextEditors.some((editor) =>
+                editor.document.uri.fsPath.includes("review-walkthrough")
+            ),
+            "el asistente no abre el borrador"
+        );
+
+        fs.rmSync(draft, {force: true});
+    });
+
+    it("con el borrador ya empezado, draft-resume no lo recrea ni pisa nada", async () => {
+        // FR-018a: volver al asistente con un borrador a medio escribir ofrece
+        // continuarlo, y elegir esa oferta no vuelve a crear el archivo — eso
+        // borraria lo escrito, que es lo que --force existe para pedir a mano.
+        const branch = "us4-draft-resume";
+        createBranchWithChanges(repo, branch, {"src/a.ts": "a\n"});
+        git(["checkout", branch], repo.dir);
+
+        const api = await getTestApi();
+        assert.strictEqual((await api.refresh()).situation, "no-review");
+
+        const draft = draftPath(repo.dir, branch);
+        const layoutSteps: WizardItem[][] = [];
+        const originalQuickPick = vscode.window.showQuickPick;
+        (vscode.window as unknown as { showQuickPick: unknown }).showQuickPick = async (
+            items: readonly WizardItem[]
+        ) => {
+            if (isLayoutStep(items)) {
+                layoutSteps.push([...items]);
+                const wanted = layoutSteps.length === 1 ? "create" : "resume";
+                return items.find((item) => item.draft === wanted);
+            }
+            if (items[0]?.source !== undefined) {
+                return items.find((item) => item.label === "Remote");
+            }
+            return pickCurrent(items);
+        };
+        try {
+            await vscode.commands.executeCommand("gitReview.startReview");
+            assert.ok(fs.existsSync(draft));
+            // Lo que el revisor escribio, que la segunda vuelta no puede tocar.
+            fs.writeFileSync(draft, "# Walkthrough\n\n## 1. src/a.ts\nmine\n", "utf8");
+            await api.refresh();
+            await vscode.commands.executeCommand("gitReview.startReview");
+        } finally {
+            (vscode.window as unknown as {
+                showQuickPick: unknown
+            }).showQuickPick = originalQuickPick;
+        }
+
+        assert.strictEqual(layoutSteps.length, 2);
+        assert.ok(
+            layoutSteps[1].some((item) => item.draft === "resume"),
+            `la segunda vuelta ofrece continuarlo: ${layoutSteps[1].map((i) => i.label).join(", ")}`
         );
         assert.ok(
-            !second.some((item) => item.draft === "create"),
+            !layoutSteps[1].some((item) => item.draft === "create"),
             "con borrador empezado no se ofrece armar otro"
         );
-        // El asistente se cancelo: sin review.
+        assert.strictEqual(
+            fs.readFileSync(draft, "utf8"),
+            "# Walkthrough\n\n## 1. src/a.ts\nmine\n",
+            "resume no puede recrear el borrador"
+        );
         assert.strictEqual((await api.refresh()).situation, "no-review");
 
         fs.rmSync(draft, {force: true});
+    });
+
+    it("si la creacion falla vuelve al paso de forma de lectura, sin rehacer la rama", async () => {
+        // US4 escenario 3. El fallo se fuerza dejando el nombre del borrador
+        // ocupado por un DIRECTORIO: la CLI no puede escribir el archivo ahi, y
+        // el asistente tiene que decir por que y volver, no cortarse.
+        const branch = "us4-create-fails";
+        createBranchWithChanges(repo, branch, {"src/a.ts": "a\n"});
+        git(["checkout", branch], repo.dir);
+
+        const api = await getTestApi();
+        assert.strictEqual((await api.refresh()).situation, "no-review");
+
+        const draft = draftPath(repo.dir, branch);
+        fs.mkdirSync(draft, {recursive: true});
+
+        const layoutSteps: WizardItem[][] = [];
+        const branchSteps: WizardItem[][] = [];
+        const errors: string[] = [];
+        const originalQuickPick = vscode.window.showQuickPick;
+        const originalError = vscode.window.showErrorMessage;
+        (vscode.window as unknown as { showQuickPick: unknown }).showQuickPick = async (
+            items: readonly WizardItem[]
+        ) => {
+            if (isLayoutStep(items)) {
+                layoutSteps.push([...items]);
+                // Primera vuelta: intentar armarlo. Segunda: salir.
+                return layoutSteps.length === 1
+                    ? items.find((item) => item.draft === "create")
+                    : undefined;
+            }
+            if (items[0]?.source !== undefined) {
+                return items.find((item) => item.label === "Remote");
+            }
+            branchSteps.push([...items]);
+            return pickCurrent(items);
+        };
+        (vscode.window as unknown as { showErrorMessage: unknown }).showErrorMessage = async (
+            message: string
+        ) => {
+            errors.push(message);
+            return undefined;
+        };
+        try {
+            await vscode.commands.executeCommand("gitReview.startReview");
+        } finally {
+            (vscode.window as unknown as {
+                showQuickPick: unknown
+            }).showQuickPick = originalQuickPick;
+            (vscode.window as unknown as {
+                showErrorMessage: unknown
+            }).showErrorMessage = originalError;
+        }
+
+        assert.strictEqual(errors.length, 1, `un error, con el motivo de la CLI: ${errors.join(" | ")}`);
+        assert.ok(errors[0].length > 0);
+        // Volvio a la forma de lectura, no al principio: la rama se eligio una vez.
+        assert.strictEqual(layoutSteps.length, 2, "volvio al paso de forma de lectura");
+        assert.strictEqual(branchSteps.length, 1, "la eleccion de rama no se rehizo");
+        assert.strictEqual((await api.refresh()).situation, "no-review");
+
+        fs.rmSync(draft, {recursive: true, force: true});
     });
 });

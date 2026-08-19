@@ -74,6 +74,14 @@ export interface PorcelainResult {
      */
     draft?: true;
     /**
+     * Ruta absoluta del borrador en vigor, tal como la reportó la CLI en el
+     * campo del registro `draft` (012). Va aparte del booleano a propósito: la
+     * presencia sigue siendo la presencia, y un campo faltante (una CLI vieja,
+     * o un registro recortado) no puede apagar la marca. El cliente **abre**
+     * esta ruta y nunca arma una.
+     */
+    draftPath?: string;
+    /**
      * Asunto de cada commit de la secuencia, por `position` — sólo en modo step
      * (contracts/status-porcelain.md).
      *
@@ -213,6 +221,7 @@ export function parsePorcelain(stdout: string): PorcelainResult {
     let isReadonly: true | undefined;
     let isKeysOnly: true | undefined;
     let isDraft: true | undefined;
+    let draftPath: string | undefined;
 
     for (const line of lines) {
         const fields = line.split("\t");
@@ -330,9 +339,14 @@ export function parsePorcelain(stdout: string): PorcelainResult {
                 isKeysOnly = true;
                 break;
             }
-            // Reviewer's own draft walkthrough: tag alone. Presence = true.
+            // Reviewer's own draft walkthrough. La presencia del registro es la
+            // marca; el campo (012) es la ruta absoluta, y se lee aparte para
+            // que un registro sin él siga marcando el borrador igual.
             case "draft": {
                 isDraft = true;
+                if (fields[1] !== undefined && fields[1].length > 0) {
+                    draftPath = fields[1];
+                }
                 break;
             }
             default:
@@ -366,6 +380,9 @@ export function parsePorcelain(stdout: string): PorcelainResult {
     }
     if (isDraft) {
         result.draft = true;
+    }
+    if (draftPath !== undefined) {
+        result.draftPath = draftPath;
     }
     return result;
 }

@@ -14,6 +14,12 @@ data class ReviewState(
     val config: EffectiveConfig? = null,
     val candidates: List<CandidateBranch>? = null,
     val remotes: List<CandidateRemote>? = null,
+    /**
+     * 012: borradores de walkthrough sueltos del working tree, del mismo
+     * reporte de `config --porcelain` que trae `config` — sin invocaciones
+     * nuevas. `null` cuando ese reporte no llegó; vacío si llegó sin ninguno.
+     */
+    val drafts: List<DraftRecord>? = null,
     val subjects: Map<Int, String>? = null,
     val authors: Map<Int, String>? = null,
     val base: String? = null,
@@ -21,5 +27,7 @@ data class ReviewState(
     val readonly: Boolean? = null,
     val keysOnly: Boolean? = null,
     val draft: Boolean? = null,
+    /** 012: ruta absoluta del borrador en vigor, reportada por la CLI. */
+    val draftPath: String? = null,
     val stderr: String? = null,
 )

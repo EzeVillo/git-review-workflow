@@ -897,7 +897,18 @@ EOF
 	[[ "$output" == *"b.txt"* ]]
 	run git review status --porcelain
 	[ "$status" -eq 0 ]
-	printf '%s\n' "$output" | grep -Fxq 'draft'
+	# And it points at the draft of the BRANCH, not of the ref the comparison was
+	# named with: a compare of origin/feature/x reads feature/x's draft.
+	dpath="$(printf '%s\n' "$output" | awk -F'\t' '$1 == "draft" { print $2; exit }')"
+	[ -n "$dpath" ]
+	[ -f "$dpath" ]
+	case "$dpath" in
+	*/review-walkthrough/feature/x.md) ;;
+	*)
+		echo "draft record points at $dpath"
+		false
+		;;
+	esac
 	run git review list
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"walk (draft)"* ]]

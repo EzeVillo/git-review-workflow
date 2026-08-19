@@ -1,4 +1,3 @@
-import * as path from "node:path";
 import * as vscode from "vscode";
 import {
     CandidateBranch,
@@ -8,15 +7,7 @@ import {
     ReadingOffer,
 } from "../cli/configPorcelain";
 import {invokeGitReview, InvokeOptions, resolveCommand} from "../cli/invoke";
-import {
-    advanceDraftFlow,
-    DraftFlowEvent,
-    DraftFlowState,
-    draftWaitMessage,
-    gitdirFromLink,
-    initialDraftFlowState,
-    sameDraftFile,
-} from "../review/draftFlow";
+import {advanceDraftFlow, DraftFlowState, initialDraftFlowState} from "../review/draftFlow";
 import {MutationLock} from "../review/mutationLock";
 import {
     buildLayoutItems,
@@ -157,33 +148,6 @@ async function pickLayout(offers: readonly ReadingOffer[] | undefined): Promise<
 }
 
 /**
- * Recorrido completo vs sólo esenciales, tras validar un borrador que marcó
- * entradas con `key`. Sólo se pregunta cuando la CLI volvió a ofrecer `keys`
- * (FR-019): sin entradas esenciales no hay dos recorridos que elegir.
- */
-async function pickDraftKeys(): Promise<boolean | undefined> {
-    const picked = await vscode.window.showQuickPick(
-        [
-            {
-                label: "Walkthrough",
-                description: "the whole reading order you wrote",
-                keysOnly: false
-            },
-            {
-                label: "Walkthrough — keys only",
-                description: "only the entries you marked key",
-                keysOnly: true
-            },
-        ],
-        {
-            title: "Start a review — how to read it",
-            placeHolder: "Your draft marks key entries: read all of them, or only those",
-        }
-    );
-    return picked?.keysOnly;
-}
-
-/**
  * Origen: el ítem de `defaultSource` va primero para preseleccionarlo (el
  * QuickPick activa el primer ítem al abrir). El valor que llega a la CLI es
  * el que el usuario confirma acá o en el modal final, no el ajuste solo
@@ -247,98 +211,25 @@ async function loadBranchContext(
 }
 
 /**
- * Abre el borrador en el editor. La ruta se arma, no se lee de la salida de la
- * CLI (que la imprime para el humano, no para parsearla): el borrador vive en
- * `<gitdir>/review-walkthrough/<branch>.md`, y `<gitdir>` es `<root>/.git`
- * salvo en worktrees y submódulos, donde `.git` es un archivo que apunta al de
- * verdad.
- *
- * Abrirlo es mostrarlo, no leerlo: la extensión no interpreta un byte de su
- * contenido, igual que ya hace con `.review/walkthrough.md` tras un
- * `walkthrough init`.
+ * La creación del borrador, con su progreso y bajo el lock. Sólo la creación:
+ * validarlo es cosa del panel desde 012, con los flags que la CLI grabó en el
+ * archivo y devuelve por el registro `draft`.
  */
-async function openDraft(cwd: string, branch: string): Promise<{ opened: boolean; file?: string }> {
-    if (!cwd) {
-        return {opened: false};
-    }
-    let file: string | undefined;
-    try {
-        const dotGit = vscode.Uri.file(path.join(cwd, ".git"));
-        const stat = await vscode.workspace.fs.stat(dotGit);
-        let gitdir = dotGit.fsPath;
-        if (stat.type !== vscode.FileType.Directory) {
-            const raw = await vscode.workspace.fs.readFile(dotGit);
-            const target = gitdirFromLink(Buffer.from(raw).toString("utf8"));
-            if (target === undefined) {
-                return {opened: false};
-            }
-            gitdir = path.isAbsolute(target) ? target : path.join(cwd, target);
-        }
-        file = path.join(gitdir, "review-walkthrough", `${branch}.md`);
-        const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
-        await vscode.window.showTextDocument(doc, {preview: false});
-        return {opened: true, file};
-    } catch {
-        // No se pudo abrir: el bucle sigue igual — un borrador que existe y no se
-        // mostró es menos malo que un asistente que se corta por no poder
-        // mostrarlo. Pero el aviso que sigue pide llenarlo, así que la ruta se
-        // devuelve para que la diga: la CLI la imprime por **stdout** y acá sólo
-        // se muestra stderr, de modo que sin esto el revisor no tiene por dónde
-        // encontrar el archivo.
-        return {opened: false, file};
-    }
-}
-
-/**
- * Guarda el borrador antes de validarlo. `walkthrough draft --build` lee el
- * archivo del disco, y VS Code **no autoguarda por defecto**: sin esto el
- * camino normal del asistente —abrir el borrador, escribir el orden en el
- * editor, apretar Continue— validaba el esqueleto vacío que seguía en disco y
- * respondía "unfilled entries remain" con el texto a la vista, sin nombrar la
- * única causa. El bucle devolvía al mismo aviso, indefinidamente.
- *
- * Sólo este archivo, nunca `saveAll`: el asistente pidió editar uno, y guardar
- * de paso todo lo demás que el revisor tuviera abierto no es algo que haya
- * pedido nadie.
- */
-async function saveDraft(file: string | undefined): Promise<void> {
-    if (file === undefined) {
-        return;
-    }
-    const doc = vscode.workspace.textDocuments.find((candidate) =>
-        sameDraftFile(candidate.uri.fsPath, file)
-    );
-    if (doc === undefined || !doc.isDirty) {
-        return;
-    }
-    // Un guardado fallido no corta el bucle: el `--build` que sigue lee lo que
-    // haya en disco y su error es el que el revisor tiene que ver, con la ruta
-    // adentro. Cortar acá cambiaría un mensaje de la CLI por uno del editor
-    // sobre un archivo que el revisor no eligió abrir.
-    try {
-        await doc.save();
-    } catch {
-        // Deliberadamente sin ruido: lo dice el --build de la línea siguiente.
-    }
-}
-
-/** Una invocación de `walkthrough draft`, con su progreso y bajo el lock. */
 async function invokeDraft(
     lock: MutationLock,
     branch: string,
     source: ReviewSource,
     range: ReviewRange,
-    build: boolean,
     options: InvokeOptions
 ): Promise<{ ok: boolean; text: string }> {
     const result = await lock.run(async () =>
         vscode.window.withProgress(
             {
                 location: vscode.ProgressLocation.Notification,
-                title: build ? `Validating your draft for ${branch}…` : `Drafting a walkthrough for ${branch}…`,
+                title: `Drafting a walkthrough for ${branch}…`,
             },
             async () =>
-                invokeGitReview("walkthrough", draftArgs(branch, source, range, build), {
+                invokeGitReview("walkthrough", draftArgs(branch, source, range, false), {
                     ...options,
                     network: false,
                 })
@@ -349,12 +240,13 @@ async function invokeDraft(
 }
 
 /**
- * El bucle del borrador (011, contracts/client-draft-flow.md). Las decisiones
- * viven en `draftFlow`; acá sólo está el vehículo de cada paso.
+ * Lo que queda del camino del borrador dentro del asistente (012,
+ * contracts/client-draft-panel.md § 3). Las decisiones viven en `draftFlow`;
+ * acá sólo está el vehículo: una invocación, y el asistente termina.
  *
- * El aviso de espera es una notificación **con acciones** y nunca un modal: el
- * revisor tiene que poder editar el borrador mientras está a la vista, que es
- * literalmente lo que se le está pidiendo que haga.
+ * No abre el borrador y no deja ningún aviso esperando. La continuación —
+ * llenarlo, validarlo, arrancar la review— vive en el bloque de borradores del
+ * panel, sobre un estado que sobrevive a cerrar el editor.
  */
 async function runDraftFlow(
     step: DraftStep,
@@ -363,21 +255,13 @@ async function runDraftFlow(
     range: ReviewRange,
     lock: MutationLock,
     options: InvokeOptions
-): Promise<{ kind: "done"; layout: ReviewLayout } | { kind: "back"; error?: string }> {
+): Promise<{ kind: "done" } | { kind: "back"; error?: string }> {
     let state: DraftFlowState = initialDraftFlowState(step);
-    // Sólo definido mientras el borrador NO esté a la vista: es lo que hace que
-    // el aviso diga dónde quedó el archivo en vez de pedir que se llene algo
-    // invisible. Se recalcula en cada paso `open`.
-    let unopened: { file?: string } | undefined;
-    // La ruta del borrador, haya podido abrirse o no: es con lo que se busca el
-    // documento a guardar antes de cada `--build`. Se resuelve en el paso
-    // `open`, por el que pasan los dos arranques del bucle (create y resume).
-    let draftFile: string | undefined;
 
     for (; ;) {
         switch (state.kind) {
             case "create": {
-                const outcome = await invokeDraft(lock, branch.name, source, range, false, options);
+                const outcome = await invokeDraft(lock, branch.name, source, range, options);
                 if (outcome.ok && outcome.text.length > 0) {
                     // Nota de un verbo exitoso (el borrador tapa el walkthrough
                     // del autor): se muestra, como las de start.
@@ -395,65 +279,8 @@ async function runDraftFlow(
                 break;
             }
 
-            case "open": {
-                const shown = await openDraft(options.cwd, branch.name);
-                unopened = shown.opened ? undefined : {file: shown.file};
-                draftFile = shown.file;
-                state = advanceDraftFlow(state, {kind: "opened"});
-                break;
-            }
-
-            case "wait": {
-                const message = draftWaitMessage(branch.name, state.error, unopened);
-                const answer =
-                    state.error !== undefined
-                        ? await vscode.window.showWarningMessage(message, "Continue", "Cancel")
-                        : await vscode.window.showInformationMessage(message, "Continue", "Cancel");
-                // `undefined` es la notificación descartada, no Cancel: se cierra
-                // sola con la X o con "clear all notifications", que es fácil de
-                // hacer sin querer mientras se edita el borrador — justo lo que
-                // el aviso pide hacer. Se vuelve a mostrar; sólo Cancel sale.
-                let event: DraftFlowEvent = {kind: "dismiss"};
-                if (answer === "Continue") {
-                    event = {kind: "continue"};
-                } else if (answer === "Cancel") {
-                    event = {kind: "cancel"};
-                }
-                state = advanceDraftFlow(state, event);
-                break;
-            }
-
-            case "build": {
-                await saveDraft(draftFile);
-                const outcome = await invokeDraft(lock, branch.name, source, range, true, options);
-                state = advanceDraftFlow(state, {
-                    kind: "built",
-                    ok: outcome.ok,
-                    error: outcome.ok
-                        ? undefined
-                        : outcome.text.length > 0
-                            ? outcome.text
-                            : "git review walkthrough draft --build failed.",
-                });
-                break;
-            }
-
-            case "reload": {
-                // El borrador ya es legible: lo que se relee es si marcó
-                // entradas esenciales, y eso sólo lo sabe la CLI.
-                const ctx = await loadBranchContext(branch, source, range, options);
-                state = advanceDraftFlow(state, {kind: "offers", offers: ctx.offers});
-                break;
-            }
-
-            case "pickKeys": {
-                const keysOnly = await pickDraftKeys();
-                state = advanceDraftFlow(state, {kind: "keysPicked", keysOnly});
-                break;
-            }
-
             case "done":
-                return {kind: "done", layout: state.layout};
+                return {kind: "done"};
 
             case "back":
                 return state.error !== undefined ? {
@@ -604,9 +431,14 @@ export async function startReview(
 
         const outcome = await runDraftFlow(picked.draft, branch, source, range, lock, options);
         if (outcome.kind === "done") {
-            layout = outcome.layout;
-            break;
+            // El asistente termina acá: no arranca ninguna review y no deja
+            // ningún aviso abierto. El refresco que sigue a la mutación trae la
+            // fila del borrador al panel, con su ruta, y la continuación vive
+            // ahí (Open / Validate and start).
+            return;
         }
+        // Falló la creación: se dice por qué y se vuelve a ESTE paso, sin
+        // rehacer la elección de rama, con las ofertas al día.
         if (outcome.error !== undefined) {
             void vscode.window.showErrorMessage(outcome.error);
         }

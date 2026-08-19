@@ -28,6 +28,34 @@ public static class UserCopy
     public const string OutOfRangeFallback =
         "Run 'git review status' in a terminal for the diagnosis and recovery command.";
 
+    // --- Panel draft block (012) ------------------------------------------------
+
+    public const string DiscardDraftButton = "Discard";
+
+    public static string DiscardDraftTitle(string branch) =>
+        $"Discard the reading order you wrote for {branch}?";
+
+    public static string DiscardDraftDetail(string branch, string path) =>
+        $"git review forget --draft {branch}\n\nThis deletes {path}. It cannot be undone.";
+
+    public static string DiscardDraftProgress(string branch) =>
+        $"Discarding the reading order for {branch}…";
+
+
+    /// <summary>
+    /// What "Copy for agent" puts on the clipboard for one draft row.
+    ///
+    /// A pointer, not a prompt: the brief lives inside the file, in the
+    /// instruction block at the top, and repeating it here would give an agent
+    /// two sources for the same rules. <paramref name="path"/> is the absolute
+    /// path the CLI reported for that row — never one this client built.
+    ///
+    /// Byte for byte identical to userCopy.ts and UserCopy.kt.
+    /// </summary>
+    public static string DraftAgentPrompt(string path) =>
+        $"Fill in the reading order at {path}. The instructions are inside the file, "
+        + "in the comment at the top. Do not change the file list or the numbering rules.";
+
     public const string SetBaseTitle = "Set the base branch";
     public const string SetBasePrompt =
         "Where PRs land (main, develop, …) — full reviews compare against it";

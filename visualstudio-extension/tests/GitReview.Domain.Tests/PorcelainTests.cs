@@ -281,4 +281,24 @@ public class PorcelainTests
         Assert.Null(ReviewModeExt.Parse("nope"));
         Assert.Null(WalkthroughStatusExt.Parse(null));
     }
+
+    [Fact]
+    public void The_draft_record_of_status_carries_the_path_without_touching_the_flag()
+    {
+        var stdout =
+            "state\treview/feature\tfeature\tdeadbeef\twalk\tapplied\t1\t1\t1\tsrc/a.cs\t0\n" +
+            "entry\t1\tsrc/a.cs\t0\t1\n" +
+            "draft\t/repo/.git/review-walkthrough/feature.md\n";
+        var parsed = Porcelain.ParsePorcelain(stdout);
+        Assert.True(parsed.Draft);
+        Assert.Equal("/repo/.git/review-walkthrough/feature.md", parsed.DraftPath);
+
+        // An older CLI emits the bare record, and that cannot turn the mark off.
+        var bare = Porcelain.ParsePorcelain(
+            "state\treview/feature\tfeature\tdeadbeef\twalk\tapplied\t1\t1\t1\tsrc/a.cs\t0\n" +
+            "entry\t1\tsrc/a.cs\t0\t1\n" +
+            "draft\n");
+        Assert.True(bare.Draft);
+        Assert.Null(bare.DraftPath);
+    }
 }

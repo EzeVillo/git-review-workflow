@@ -2,145 +2,80 @@ package com.ezevillo.gitreview.domain
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
-import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
- * US3 (011): la máquina del bucle del borrador, y su paridad con la de la
- * extensión (`vscode-extension/test/unit/draftFlow.spec.ts`). Los casos son
- * deliberadamente los mismos: si una de las dos se desvía, se ve acá.
+ * US4 (012): lo que queda del camino del borrador dentro del asistente, y su
+ * paridad con la de la extensión (`vscode-extension/test/unit/draftFlow.spec.ts`).
+ * Los casos son deliberadamente los mismos: si una de las dos se desvía, se ve
+ * acá.
  */
 class DraftFlowTest {
-
-    private fun run(start: DraftFlowState, events: List<DraftFlowEvent>): DraftFlowState =
-        events.fold(start, ::advanceDraftFlow)
 
     @Test
     fun initialStateSkipsCreationWhenResuming() {
         assertEquals(DraftFlowState.Create, initialDraftFlowState(DraftStep.CREATE))
-        assertEquals(DraftFlowState.Open, initialDraftFlowState(DraftStep.RESUME))
+        // RESUME no recrea nada: el archivo existe y volver a crearlo pisaría lo
+        // escrito. Sin creación no queda ningún paso.
+        assertEquals(DraftFlowState.Done, initialDraftFlowState(DraftStep.RESUME))
     }
 
     @Test
-    fun happyPathWithoutKeysEndsInWalk() {
-        val end = run(
-            initialDraftFlowState(DraftStep.CREATE),
-            listOf(
-                DraftFlowEvent.Created(ok = true),
-                DraftFlowEvent.Opened,
-                DraftFlowEvent.Continue,
-                DraftFlowEvent.Built(ok = true),
-                DraftFlowEvent.Offers(
-                    listOf(
-                        ReadingOffer(OfferId.WALK, OfferRank.RECOMMENDED),
-                        ReadingOffer(OfferId.STEP, OfferRank.AVAILABLE),
-                    ),
-                ),
-            ),
+    fun creatingGreenEndsTheWizard() {
+        assertEquals(
+            DraftFlowState.Done,
+            advanceDraftFlow(DraftFlowState.Create, DraftFlowEvent.Created(ok = true)),
         )
-        assertEquals(DraftFlowState.Done(ReviewLayout.WALK), end)
     }
 
     @Test
-    fun keysOfferAsksBeforeDeciding() {
-        val asked = run(
-            initialDraftFlowState(DraftStep.RESUME),
-            listOf(
-                DraftFlowEvent.Opened,
-                DraftFlowEvent.Continue,
-                DraftFlowEvent.Built(ok = true),
-                DraftFlowEvent.Offers(
-                    listOf(
-                        ReadingOffer(OfferId.WALK, OfferRank.RECOMMENDED),
-                        ReadingOffer(OfferId.KEYS, OfferRank.AVAILABLE),
-                    ),
-                ),
+    fun theMachineHasThreeStatesAndNoneWaits() {
+        // El bucle de 011 (Open / Wait / Build / Reload / PickKeys) se retiró
+        // entero: lo que hacía vive en el panel, sobre un estado que sobrevive a
+        // cerrar el IDE. Si alguno volviera, este test lo dice.
+        val kinds = setOf(
+            initialDraftFlowState(DraftStep.CREATE)::class.simpleName,
+            initialDraftFlowState(DraftStep.RESUME)::class.simpleName,
+            advanceDraftFlow(DraftFlowState.Create, DraftFlowEvent.Created(ok = true))::class.simpleName,
+            advanceDraftFlow(DraftFlowState.Create, DraftFlowEvent.Created(ok = false))::class.simpleName,
+        )
+        assertEquals(setOf("Create", "Done", "Back"), kinds)
+    }
+
+    @Test
+    fun aFailedCreationGoesBackWithTheReason() {
+        assertEquals(
+            DraftFlowState.Back("a draft already exists; use --force"),
+            advanceDraftFlow(
+                DraftFlowState.Create,
+                DraftFlowEvent.Created(ok = false, error = "a draft already exists; use --force"),
             ),
         )
-        assertEquals(DraftFlowState.PickKeys, asked)
-        assertEquals(
-            DraftFlowState.Done(ReviewLayout.KEYS),
-            advanceDraftFlow(asked, DraftFlowEvent.KeysPicked(true)),
-        )
-        assertEquals(
-            DraftFlowState.Done(ReviewLayout.WALK),
-            advanceDraftFlow(asked, DraftFlowEvent.KeysPicked(false)),
-        )
-        // Cerrar el selector vuelve atrás, sin error y sin borrar nada.
+    }
+
+    @Test
+    fun aFailureWithoutStderrGoesBackWithoutInventingAReason() {
         assertEquals(
             DraftFlowState.Back(),
-            advanceDraftFlow(asked, DraftFlowEvent.KeysPicked(null)),
-        )
-    }
-
-    @Test
-    fun failedBuildRetriesWithoutLimit() {
-        var state = run(
-            initialDraftFlowState(DraftStep.RESUME),
-            listOf(
-                DraftFlowEvent.Opened,
-                DraftFlowEvent.Continue,
-                DraftFlowEvent.Built(ok = false, error = "entry 3 still has the placeholder why"),
-            ),
-        )
-        assertEquals(DraftFlowState.Wait("entry 3 still has the placeholder why"), state)
-
-        state = run(
-            state,
-            listOf(DraftFlowEvent.Continue, DraftFlowEvent.Built(ok = false, error = "duplicate entry")),
-        )
-        assertEquals(DraftFlowState.Wait("duplicate entry"), state)
-
-        state = run(state, listOf(DraftFlowEvent.Continue, DraftFlowEvent.Built(ok = true)))
-        assertEquals(DraftFlowState.Reload, state)
-    }
-
-    @Test
-    fun cancelKeepsTheDraftAndReportsNoError() {
-        val state = run(
-            initialDraftFlowState(DraftStep.RESUME),
-            listOf(DraftFlowEvent.Opened, DraftFlowEvent.Cancel),
-        )
-        assertEquals(DraftFlowState.Back(), state)
-        assertNull((state as DraftFlowState.Back).error)
-    }
-
-    @Test
-    fun failedCreationGoesBackWithTheReason() {
-        val state = advanceDraftFlow(
-            DraftFlowState.Create,
-            DraftFlowEvent.Created(ok = false, error = "a draft already exists; use --force"),
-        )
-        assertEquals(DraftFlowState.Back("a draft already exists; use --force"), state)
-    }
-
-    @Test
-    fun eventsThatDoNotApplyLeaveTheStateAlone() {
-        assertEquals(
-            DraftFlowState.Wait(),
-            advanceDraftFlow(DraftFlowState.Wait(), DraftFlowEvent.Built(ok = true)),
-        )
-        assertEquals(
-            DraftFlowState.Create,
-            advanceDraftFlow(DraftFlowState.Create, DraftFlowEvent.Continue),
-        )
-        assertEquals(
-            DraftFlowState.Open,
-            advanceDraftFlow(DraftFlowState.Open, DraftFlowEvent.Cancel),
+            advanceDraftFlow(DraftFlowState.Create, DraftFlowEvent.Created(ok = false)),
         )
     }
 
     @Test
     fun doneAndBackAreTerminal() {
-        val done = DraftFlowState.Done(ReviewLayout.WALK)
-        assertEquals(done, advanceDraftFlow(done, DraftFlowEvent.Cancel))
+        assertEquals(
+            DraftFlowState.Done,
+            advanceDraftFlow(DraftFlowState.Done, DraftFlowEvent.Created(ok = true)),
+        )
         val back = DraftFlowState.Back("boom")
-        assertEquals(back, advanceDraftFlow(back, DraftFlowEvent.Continue))
+        assertEquals(back, advanceDraftFlow(back, DraftFlowEvent.Created(ok = true)))
     }
 
+    // --- ofertas ----------------------------------------------------------------
+
     @Test
-    fun offersIncludeKeysOnlyWhenReported() {
+    fun keysAreOnlyOfferedWhenTheCliReportsThem() {
         assertFalse(offersIncludeKeys(null))
         assertFalse(offersIncludeKeys(emptyList()))
         assertFalse(offersIncludeKeys(listOf(ReadingOffer(OfferId.WALK, OfferRank.RECOMMENDED))))
@@ -152,19 +87,6 @@ class DraftFlowTest {
                 ),
             ),
         )
-    }
-
-    @Test
-    fun gitdirLinkIsReadForWorktreesAndSubmodules() {
-        assertEquals("/repo/.git/worktrees/wt1", gitdirFromLink("gitdir: /repo/.git/worktrees/wt1\n"))
-        assertEquals("../.git/modules/sub", gitdirFromLink("gitdir: ../.git/modules/sub"))
-        assertEquals(
-            "C:/repo/.git/worktrees/wt1",
-            gitdirFromLink("gitdir:   C:/repo/.git/worktrees/wt1  \r\n"),
-        )
-        assertNull(gitdirFromLink(""))
-        assertNull(gitdirFromLink("ref: refs/heads/main\n"))
-        assertNull(gitdirFromLink("gitdir:\n"))
     }
 
     // --- argv (paridad con reviewIntent.ts) -------------------------------------
@@ -183,59 +105,67 @@ class DraftFlowTest {
             listOf("draft", "--offline", "--", "feature/x"),
             draftArgs("feature/x", ReviewSource.OFFLINE, ReviewRange.FULL, build = false),
         )
-        // Nunca --force desde un cliente.
-        assertFalse(
-            draftArgs("feature/x", ReviewSource.REMOTE, ReviewRange.FULL, build = false)
-                .contains("--force"),
-        )
-    }
-
-    // --- aviso de espera (paridad con draftWaitMessage en draftFlow.ts) ----------
-
-    @Test
-    fun waitMessageAsksToFillTheDraftWhenItIsOnScreen() {
-        assertEquals(
-            "Fill in the reading order for feature/x, then continue.",
-            UserCopy.draftWaitMessage("feature/x", null, null),
-        )
-        assertEquals(
-            "The draft is not valid yet: no entries found",
-            UserCopy.draftWaitMessage("feature/x", "no entries found", null),
-        )
+        // Nunca --force, --from ni --stdout desde un cliente.
+        val args = draftArgs("feature/x", ReviewSource.REMOTE, ReviewRange.FULL, build = true)
+        assertFalse(args.contains("--force"))
+        assertFalse(args.contains("--from"))
+        assertFalse(args.contains("--stdout"))
     }
 
     @Test
-    fun waitMessageSaysWhereTheDraftIsWhenItCouldNotBeOpened() {
-        // El caso real: el proyecto abierto es una subcarpeta del repo, <cwd>/.git
-        // no existe, el borrador se escribio igual y la ruta solo va por el stdout
-        // de la CLI, que ningun cliente muestra.
+    fun theThreeStepsOfValidateAndStartCarryTheSameFlags() {
+        // Salen de los campos source/range del registro `draft`, no de los
+        // defaults: con los defaults, un borrador hecho con --delta o --local
+        // cubre otro conjunto de paths y --build muere por deriva, siempre.
         assertEquals(
-            "Fill in the reading order for feature/x, then continue. It could not be opened here" +
-                " — the draft is at /repo/.git/review-walkthrough/feature/x.md.",
-            UserCopy.draftWaitMessage(
-                "feature/x",
-                null,
-                UnopenedDraft("/repo/.git/review-walkthrough/feature/x.md"),
-            ),
+            listOf("draft", "--build", "--local", "--delta", "--", "feature/x"),
+            draftArgs("feature/x", ReviewSource.LOCAL, ReviewRange.DELTA, build = true),
         )
-        // Y sigue diciendolo cuando el aviso vuelve con el motivo de un rechazo.
         assertEquals(
-            "The draft is not valid yet: no entries found It could not be opened here" +
-                " — the draft is at /repo/.git/review-walkthrough/feature/x.md.",
-            UserCopy.draftWaitMessage(
+            listOf("--porcelain", "--local", "--delta", "--", "feature/x"),
+            draftConfigArgs("feature/x", ReviewSource.LOCAL, ReviewRange.DELTA),
+        )
+        assertEquals(
+            listOf("--delta", "--local", "--", "feature/x"),
+            intentToArgs(
+                ReviewIntent(
+                    branch = "feature/x",
+                    layout = ReviewLayout.WALK,
+                    range = ReviewRange.DELTA,
+                    source = ReviewSource.LOCAL,
+                ),
                 "feature/x",
-                "no entries found",
-                UnopenedDraft("/repo/.git/review-walkthrough/feature/x.md"),
             ),
         )
     }
 
     @Test
-    fun waitMessageNamesTheRelativeFileWhenThePathCouldNotBeBuilt() {
+    fun discardNamesOneBranchAndNeverAllOrSaved() {
+        assertEquals(listOf("--draft", "--", "feature/x"), forgetDraftArgs("feature/x"))
+        val argv = actionToArgv("forgetDraft", ActionParams.ForgetDraft("feature/x"))
+        assertEquals("forget", argv.verb)
+        assertEquals(listOf("--draft", "--", "feature/x"), argv.args)
+        assertFalse(argv.args.contains("--all"))
+        assertFalse(argv.args.contains("--saved"))
+    }
+
+    // --- el texto del portapapeles ----------------------------------------------
+
+    @Test
+    fun theAgentPromptIsTheCanonicalTextWithThisRowsPath() {
         assertEquals(
-            "Fill in the reading order for feature/x, then continue. It could not be opened here" +
-                " — look for review-walkthrough/feature/x.md inside this repository's git directory.",
-            UserCopy.draftWaitMessage("feature/x", null, UnopenedDraft(null)),
+            "Fill in the reading order at /repo/.git/review-walkthrough/feature/x.md. " +
+                "The instructions are inside the file, in the comment at the top. " +
+                "Do not change the file list or the numbering rules.",
+            UserCopy.draftAgentPrompt("/repo/.git/review-walkthrough/feature/x.md"),
         )
+    }
+
+    @Test
+    fun theAgentPromptNamesNoModelServiceOrAssistant() {
+        val text = UserCopy.draftAgentPrompt("/x.md").lowercase()
+        for (word in listOf("copilot", "openai", "claude", "chatgpt", "http")) {
+            assertFalse(text.contains(word), word)
+        }
     }
 }

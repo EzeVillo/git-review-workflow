@@ -260,8 +260,16 @@ if [ "$porcelain" -eq 1 ]; then
 	# walk_draft_src, not $src: load_walk_review_meta resolved which draft this
 	# review reads (they differ for a compare of a remote-tracking branch), and it
 	# is set only on the walk path — which is the same condition as the mode test.
+	# It carries the absolute path now: a client that wants to open the draft has
+	# to be given it, never left to build it out of a gitdir it resolved itself.
+	# The field goes LAST, which is the contract's rule for free text — it is the
+	# only field here that could contain a tab — and it is a field rather than a
+	# new record because all three published clients parse this one by label and
+	# ignore extra trailing fields, which is exactly what `state` does not do.
+	# The condition is untouched, and so is the human-readable line.
 	if [ "$mode" = walk ] && walk_is_draft "${walk_draft_src:-$src}"; then
-		porcelain_row draft
+		walk_gitdir_abs_init
+		porcelain_row draft "$_walk_gitdir_abs/review-walkthrough/${walk_draft_src:-$src}.md"
 	fi
 	exit 0
 fi

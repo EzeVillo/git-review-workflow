@@ -31,14 +31,27 @@ The last row you opened stays marked, so a list you are halfway through still
 says where you were after closing the editor.
 
 **Or the reading order you write yourself.** When the PR ships without one, the
-start assistant offers *Walkthrough — draft one*: it writes a skeleton listing
-every file in the range, opens it, and waits — you can keep editing while the
-notice is up, and closing the notice brings it back rather than ending the flow —
-until you say the order and the *why* are in. Validation runs on the CLI, so a
-rejection tells you exactly what to fix and you retry as often as you need. The draft is **yours and local**: it lives outside the working tree,
-never gets committed or staged, and `git status` does not change at any point.
-Nothing about it is written for you and no service is contacted; it is a file
-you fill in. Once it is in, the review reads it exactly like an author's
+start assistant offers *Build a reading order first*: it writes a skeleton
+listing every file in the range, and the assistant closes. Nothing waits on you.
+
+The half-written order shows up in the panel, under **Reading orders you
+started**, with how far along it is (`3/9`, counted by the CLI) and four
+buttons on its row:
+
+- **Open** — the file, at the path the CLI reported.
+- **Copy for agent** — puts a one-line instruction naming that file on the
+  clipboard, for whatever you want to hand it to. Copying is copying: no
+  service is contacted and no assistant is invoked.
+- **Validate and start** — validates it (on the CLI, so a rejection tells you
+  exactly what to fix, in the CLI's own words) and, when it passes, starts the
+  review on your order.
+- **Discard** — deletes it, after a confirmation that names the command.
+
+It survives closing the editor, so a reading order you started on Friday is the
+first thing the panel says on Monday. The draft is **yours and local**: it lives
+outside the working tree, never gets committed or staged, and `git status` does
+not change at any point. Nothing about it is written for you; it is a file you
+fill in. Once it is in, the review reads it exactly like an author's
 walkthrough, and the panel marks the mode `(draft)` so it is clear whose reading
 order you are on.
 
@@ -100,7 +113,8 @@ invents a second way to change review state.
 | **Discard / Forget**         | Inventory row, or the palette for saved reviews and `--delta` markers                        | `git review forget --saved` / `--delta`, `git review clean`  |
 | **Compare revisions**        | Empty state, under Start; also the palette. The result is **read-only** — no writeback       | `git review compare <a> <b>`                                 |
 | **Walkthrough: Init / Build**| Empty state, under Start (this is the *author* flow); also the palette                       | `git review walkthrough init` / `build`                      |
-| **Walkthrough — draft one**  | Inside *Start a review*, at the reading-order step, when the PR has none (the *reviewer* flow) | `git review walkthrough draft [--build]`                     |
+| **Build a reading order first** | Inside *Start a review*, at the reading-order step, when the PR has none (the *reviewer* flow) | `git review walkthrough draft`                            |
+| **Open / Copy for agent / Validate and start / Discard** | A row of *Reading orders you started*, in the empty state | `git review walkthrough draft --build`, `git review start`, `git review forget --draft` |
 
 Mutations (the lifecycle actions, clean, forget, compare and writing a
 walkthrough) ask for a confirmation that names what will happen. Preview is

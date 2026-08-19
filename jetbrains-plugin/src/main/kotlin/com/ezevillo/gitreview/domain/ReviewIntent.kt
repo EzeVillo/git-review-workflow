@@ -106,13 +106,52 @@ fun draftArgs(
     val args = ArrayList<String>()
     args.add("draft")
     if (build) args.add("--build")
+    args.addAll(originAndRangeFlags(source, range))
+    args.add("--")
+    args.add(branch)
+    return args
+}
+
+/**
+ * The origin and range flags, in the order the CLI documents. One place,
+ * because the three steps of *Validate and start* — `draft --build`, the
+ * `config --porcelain` that follows and the final `start` — have to carry
+ * exactly the same ones: if they differ, the three speak about different ranges.
+ */
+private fun originAndRangeFlags(source: ReviewSource, range: ReviewRange): List<String> {
+    val args = ArrayList<String>()
     when (source) {
         ReviewSource.LOCAL -> args.add("--local")
         ReviewSource.OFFLINE -> args.add("--offline")
         ReviewSource.REMOTE -> { /* default */ }
     }
     if (range == ReviewRange.DELTA) args.add("--delta")
+    return args
+}
+
+/**
+ * `git review config --porcelain <flags> -- <branch>` for a draft row: invoked
+ * after a green `--build` from the panel, only to learn whether that draft
+ * carries essential entries (`offer keys`).
+ *
+ * The flags are not the defaults: they come from the `<source>`/`<range>`
+ * fields of the `draft` record, which are the ones the CLI wrote into the
+ * instruction block when it generated the skeleton.
+ */
+fun draftConfigArgs(branch: String, source: ReviewSource, range: ReviewRange): List<String> {
+    val args = ArrayList<String>()
+    args.add("--porcelain")
+    args.addAll(originAndRangeFlags(source, range))
     args.add("--")
     args.add(branch)
     return args
 }
+
+/**
+ * `git review forget --draft -- <branch>`: discard the draft of ONE row.
+ *
+ * Never `--all` (it would sweep the other rows, and archived ones nobody is
+ * looking at) nor `--saved` (that is a paused review's prose), and never
+ * without the branch.
+ */
+fun forgetDraftArgs(branch: String): List<String> = listOf("--draft", "--", branch)

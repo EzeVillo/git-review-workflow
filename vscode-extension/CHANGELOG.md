@@ -8,6 +8,44 @@ and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 
 ## [Unreleased]
 
+## [0.2.0]
+
+Requires `git review` **0.7.0** or newer.
+
+### Added
+
+- **Reading orders you started, in the panel.** A walkthrough draft you began and have not
+  finished now has a place: with no review on this branch, the panel lists every one of them with
+  how far along it is (`3/9`, counted by the CLI) and four buttons on its row — *Open* (the file,
+  at the path the CLI reported), *Copy for agent* (a one-line instruction naming that file, on the
+  clipboard), *Validate and start* (validates it and, when it passes, starts the review on your
+  order) and *Discard*. It survives closing the editor, so an order you started on Friday is the
+  first thing the panel says on Monday. The rest of the empty state — your other reviews, *Start a
+  review*, the settings — stays right below it.
+- Copying is copying: no service is contacted, no assistant is invoked, and nothing about the
+  draft is written for you.
+
+### Changed
+
+- **The start assistant no longer waits.** Choosing to build a reading order writes the skeleton
+  and closes the assistant: no notice left open, nothing to keep alive while you type. Everything
+  the notice used to do — validating, asking whether to read the whole order or only the entries
+  you marked `> key`, starting the review — is now on the draft's row in the panel, over a state
+  that outlives the editor window.
+- The two offers say what you get instead of naming an internal term: *Build a reading order
+  first* ("nobody wrote one for this PR; otherwise you read the whole diff") and *Finish the
+  reading order you started*.
+- *Validate and start* invokes the CLI with the **same origin and range flags the draft was
+  generated with**, reported by the CLI itself. A draft made with `--delta`, `--local` or
+  `--offline` covers a different set of paths than the defaults, so with the defaults that button
+  would have failed with a drift error every time, on a perfectly valid draft.
+
+### Fixed
+
+- The extension no longer builds the draft's path out of a gitdir it resolved itself — the CLI
+  reports it, and the panel opens what it was given. The old derivation missed the case where the
+  folder you opened is below the repository root.
+
 ## [0.1.3] — 2026-08-11
 
 Requires `git review` **0.6.0** or newer.

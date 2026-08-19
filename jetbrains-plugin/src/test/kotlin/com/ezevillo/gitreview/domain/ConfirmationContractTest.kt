@@ -37,10 +37,13 @@ class ConfirmationContractTest {
         walk(yaml["panel_layout"])
         walk(yaml["title_actions"])
 
-        @Suppress("UNCHECKED_CAST")
-        val inventory = yaml["inventory_controls"] as? Map<String, Any?>
-        if (inventory != null) {
-            for ((id, node) in inventory) {
+        // inventory_controls y draft_controls: los dos mapas de controles por
+        // fila, que no pueden declararse dentro de panel_layout porque su
+        // sujeto es la fila y no la situación.
+        for (key in listOf("inventory_controls", "draft_controls")) {
+            @Suppress("UNCHECKED_CAST")
+            val rowControls = yaml[key] as? Map<String, Any?> ?: continue
+            for ((id, node) in rowControls) {
                 val map = node as? Map<*, *>
                 val confirms = map?.get("confirms") as? Boolean ?: false
                 expected[id] = expected[id] == true || confirms

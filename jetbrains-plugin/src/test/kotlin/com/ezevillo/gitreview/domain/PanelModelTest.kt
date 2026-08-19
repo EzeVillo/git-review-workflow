@@ -88,4 +88,59 @@ class PanelModelTest {
         assertNull(resumableSourceAt(branches, 0)) // active same source
         assertNull(resumableSourceAt(branches, "x"))
     }
+
+    // --- PanelDraft (012) --------------------------------------------------------
+
+    private fun stateWithDrafts(situation: Situation, stdout: String): ReviewState = ReviewState(
+        situation = situation,
+        config = EffectiveConfig(base = "main", remote = "origin"),
+        drafts = parseConfigPorcelain(stdout).drafts,
+    )
+
+    @Test
+    fun draftsArePopulatedOnlyInNoReview() {
+        val out =
+            "draft\tfeature/checkout\t/repo/.git/review-walkthrough/feature/checkout.md\t3\t9\tlocal\tdelta"
+        val shown = buildPanelModel(stateWithDrafts(Situation.NO_REVIEW, out), PanelInputs(busy = false))
+        assertEquals(
+            listOf(
+                PanelDraft(
+                    branch = "feature/checkout",
+                    path = "/repo/.git/review-walkthrough/feature/checkout.md",
+                    annotated = 3,
+                    total = 9,
+                    startable = true,
+                ),
+            ),
+            shown.drafts,
+        )
+
+        // Una review en curso es siempre lo más importante que el panel tiene
+        // para decir; el borrador de otra rama no le compite el cuerpo.
+        for (situation in listOf(Situation.FINISH_PENDING, Situation.ERROR, Situation.OUT_OF_RANGE)) {
+            assertTrue(
+                buildPanelModel(stateWithDrafts(situation, out), PanelInputs(busy = false)).drafts.isEmpty(),
+                situation.name,
+            )
+        }
+    }
+
+    @Test
+    fun aRowWithUnknownFlagsIsNotStartable() {
+        val out = "draft\tfeature/x\t/repo/.git/review-walkthrough/feature/x.md\t0\t2\tunknown\tunknown"
+        val model = buildPanelModel(stateWithDrafts(Situation.NO_REVIEW, out), PanelInputs(busy = false))
+        assertFalse(model.drafts.single().startable)
+    }
+
+    @Test
+    fun draftAtValidatesTheIndexThatComesFromThePanel() {
+        val drafts = parseConfigPorcelain(
+            "draft\tfeature/x\t/repo/.git/review-walkthrough/feature/x.md\t0\t2\tremote\tfull",
+        ).drafts
+        assertEquals("feature/x", draftAt(drafts, 0)?.src)
+        assertNull(draftAt(drafts, 1))
+        assertNull(draftAt(drafts, -1))
+        assertNull(draftAt(drafts, "0"))
+        assertNull(draftAt(drafts, null))
+    }
 }

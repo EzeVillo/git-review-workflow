@@ -42,15 +42,20 @@ const OFFER_META: Record<
         description: "only entries marked key",
         layout: "keys",
     },
+    // Sin la palabra "walkthrough" como si fuera un término conocido: estas dos
+    // son las únicas ofertas que no eligen una forma de leer sino que arman la
+    // que el PR no trae, y quien las lee todavía no sabe qué es un walkthrough.
+    // Dicen qué se obtiene y cuál es la alternativa. Byte por byte iguales en
+    // los tres clientes (contracts/client-draft-panel.md § La copy de la oferta).
     draft: {
-        label: "Walkthrough — draft one",
-        description: "no reading order yet; write one",
+        label: "Build a reading order first",
+        description: "nobody wrote one for this PR; otherwise you read the whole diff",
         layout: "walk",
         draft: "create",
     },
     "draft-resume": {
-        label: "Walkthrough — continue draft",
-        description: "finish the reading order you started",
+        label: "Finish the reading order you started",
+        description: "pick up the one you left half-written",
         layout: "walk",
         draft: "resume",
     },

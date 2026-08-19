@@ -623,7 +623,14 @@ walk_draft_progress() {
 		}
 		inentry {
 			if (index($0, "<!-- why") == 1) { whyc = 1; next }
-			if ($0 ~ /^>[ \t]*key[ \t]*$/) next
+			# As lenient about spelling as the build-time key_re, and for the
+			# opposite reason from walk_is_key: that one reads a BUILT
+			# walkthrough, where build has already canonicalised the marker, so
+			# it can insist on "> key". This counts DRAFTS, which nobody has
+			# built yet, so "> Key" is still there in the spelling its author
+			# used -- and matching only the lower-case form reported an entry
+			# whose whole body is the marker as annotated.
+			if ($0 ~ /^>[ \t]*[Kk][Ee][Yy][ \t]*$/) next
 			if (index($0, "> at: ") == 1) next
 			if ($0 ~ /[^ \t]/) prose = 1
 		}

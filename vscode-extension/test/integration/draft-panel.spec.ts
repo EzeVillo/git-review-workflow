@@ -388,6 +388,7 @@ describe("US3: el bloque de borradores del panel", function () {
         assert.strictEqual(row.startable, false);
 
         // Y el host tampoco lo dispara si le llega el mensaje igual.
+        const before = fs.readFileSync(file, "utf8");
         const errors: string[] = [];
         const originalError = vscode.window.showErrorMessage;
         (vscode.window as unknown as { showErrorMessage: unknown }).showErrorMessage = async (
@@ -398,7 +399,10 @@ describe("US3: el bloque de borradores del panel", function () {
         };
         try {
             api.sendPanelMessage("startFromDraft", model.drafts.indexOf(row));
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            // `settle` y no un sleep suelto: lo que se afirma es que NO pasa
+            // nada, y eso no tiene señal que esperar, así que el único margen es
+            // el tiempo. El de settle es cuatro veces el que había.
+            await settle(api);
         } finally {
             (vscode.window as unknown as {
                 showErrorMessage: unknown
@@ -406,6 +410,12 @@ describe("US3: el bloque de borradores del panel", function () {
         }
         assert.deepStrictEqual(errors, []);
         assert.strictEqual((await api.refresh()).situation, "no-review");
+        // El otro rastro que dejaría un --build disparado con los flags por
+        // defecto: sale verde o rojo, pero si sale verde reescribe el borrador
+        // canónicamente y le REGENERA el bloque de instrucciones. El archivo
+        // intacto es lo que dice que la CLI no llegó a correr sobre él.
+        assert.strictEqual(fs.readFileSync(file, "utf8"), before);
+        assert.ok(!before.includes("git-review-range"));
     });
 
     it("Discard pide confirmacion y borra solo esa fila", async () => {

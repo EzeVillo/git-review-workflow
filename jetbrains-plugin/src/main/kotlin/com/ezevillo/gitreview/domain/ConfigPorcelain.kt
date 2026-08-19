@@ -159,6 +159,21 @@ data class ConfigPorcelainResult(
 
 private fun toBool(field: String?): Boolean = field == "1"
 
+/**
+ * A non-negative count, or null: a malformed field invalidates the record.
+ *
+ * Not a bare [String.toIntOrNull], which accepts "-3" and "+3". The CLI emits
+ * neither, so a field of that shape is a record this client did not understand,
+ * and the three clients have to agree on that -- otherwise the same porcelain
+ * line draws a row in two of them and is dropped by the third. toIntOrNull is
+ * still what rejects a count too large for an Int.
+ */
+private fun parseCount(raw: String?): Int? {
+    if (raw.isNullOrEmpty()) return null
+    if (raw.any { it < '0' || it > '9' }) return null
+    return raw.toIntOrNull()
+}
+
 fun parseConfigPorcelain(stdout: String): ConfigPorcelainResult {
     var base: String? = null
     var remote: String? = null
@@ -204,8 +219,8 @@ fun parseConfigPorcelain(stdout: String): ConfigPorcelainResult {
             "draft" -> {
                 val src = fields.getOrNull(1)
                 val path = fields.getOrNull(2)
-                val annotated = fields.getOrNull(3)?.toIntOrNull()
-                val total = fields.getOrNull(4)?.toIntOrNull()
+                val annotated = parseCount(fields.getOrNull(3))
+                val total = parseCount(fields.getOrNull(4))
                 // A malformed record is ignored whole, like any unknown one:
                 // half a progress pair would be worse than none.
                 if (!src.isNullOrEmpty() && !path.isNullOrEmpty() && annotated != null && total != null) {

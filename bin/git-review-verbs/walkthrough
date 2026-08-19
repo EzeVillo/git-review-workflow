@@ -815,6 +815,15 @@ entries="$(printf '%s\n' "$content" | walk_parse)"
 # working tree of whatever branch they are standing on: the one thing this verb
 # exists to never do.
 if [ -z "$entries" ]; then
+	# With --from the file without entries is the SOURCE, and it is the only rule
+	# below that has a file to name -- so it names the one that is actually wrong,
+	# the way the "is empty" refusal above already does. Blaming $targetrel here
+	# accused a stored draft that is intact (this refusal writes nothing), and the
+	# way out it offered -- rewrite that skeleton with --force -- would have
+	# destroyed the one file the failure never touched.
+	if [ "$from_given" -eq 1 ]; then
+		die "no entries found in $fromlabel; a reading order needs at least one '## N. <path>' entry"
+	fi
 	if [ "$sub" = draft ]; then
 		die "no entries found in $targetrel; write the skeleton again with git review walkthrough draft --force$draftflags $branch, then fill it in"
 	fi

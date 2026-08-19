@@ -306,4 +306,27 @@ public class ConfigPorcelainTests
         var draft = Assert.Single(ConfigPorcelain.ParseConfigPorcelain(stdout).Drafts!);
         Assert.Equal("feature/ok", draft.Src);
     }
+
+    [Theory]
+    [InlineData("-3")]
+    [InlineData("+3")]
+    [InlineData(" 3")]
+    [InlineData("3 ")]
+    [InlineData("3.0")]
+    [InlineData("")]
+    [InlineData("0x2")]
+    public void A_progress_that_is_not_a_non_negative_integer_invalidates_the_record(string bad)
+    {
+        // The rule has to be the same in all three clients: the CLI counts with awk
+        // and only ever emits digits, so a sign or a space is a record this client
+        // did not understand. int.TryParse on its own accepted "-3", "+3" and " 3 ",
+        // so the same porcelain line drew a row here and was dropped by VS Code.
+        const string path = "/repo/.git/review-walkthrough/feature/x.md";
+        Assert.Empty(
+            ConfigPorcelain.ParseConfigPorcelain($"draft\tfeature/x\t{path}\t{bad}\t9\tremote\tfull\n")
+                .Drafts!);
+        Assert.Empty(
+            ConfigPorcelain.ParseConfigPorcelain($"draft\tfeature/x\t{path}\t0\t{bad}\tremote\tfull\n")
+                .Drafts!);
+    }
 }

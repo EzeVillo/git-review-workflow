@@ -152,6 +152,29 @@ public static class ConfigPorcelain
 {
     private static bool ToBool(string? field) => field == "1";
 
+    /// <summary>
+    /// A non-negative count, or null: a malformed field invalidates the record.
+    /// </summary>
+    /// <remarks>
+    /// Not a bare int.TryParse. That one is NumberStyles.Integer, which allows a
+    /// leading sign and surrounding whitespace, so "-3", "+3" and " 3 " all became
+    /// progress pairs -- and the CLI emits none of those, so anything of that shape
+    /// is a record this client did not understand. The three clients have to agree
+    /// on that or the same porcelain line draws a row in two of them and is dropped
+    /// by the third.
+    /// </remarks>
+    private static int? ParseCount(string? raw)
+    {
+        if (string.IsNullOrEmpty(raw)) return null;
+        foreach (var c in raw!)
+        {
+            if (c < '0' || c > '9') return null;
+        }
+        // Digits only by now, so no culture and no NumberStyles can change the
+        // reading; TryParse is still what rejects a count too large for an int.
+        return int.TryParse(raw, out var n) ? n : (int?)null;
+    }
+
     public static ConfigPorcelainResult ParseConfigPorcelain(string stdout)
     {
         string? bas = null;
@@ -208,13 +231,14 @@ public static class ConfigPorcelain
                     // A malformed record is ignored whole, like any unknown one:
                     // half a progress pair would be worse than none.
                     if (string.IsNullOrEmpty(src) || string.IsNullOrEmpty(path)) continue;
-                    if (!int.TryParse(Get(fields, 3), out var annotated)) continue;
-                    if (!int.TryParse(Get(fields, 4), out var total)) continue;
+                    var annotated = ParseCount(Get(fields, 3));
+                    var total = ParseCount(Get(fields, 4));
+                    if (annotated is null || total is null) continue;
                     drafts.Add(new DraftRecord(
                         src!,
                         path!,
-                        annotated,
-                        total,
+                        annotated.Value,
+                        total.Value,
                         DraftSourceExt.Parse(Get(fields, 5)),
                         DraftRangeExt.Parse(Get(fields, 6))));
                     break;

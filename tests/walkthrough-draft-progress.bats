@@ -117,6 +117,24 @@ EOF
 	[ "$(progress_of feature/x)" = "1/2" ]
 }
 
+@test "the key marker spelled any other way is not a why either" {
+	write_draft <<'EOF'
+# Walkthrough
+
+## 1. a.txt
+> Key
+
+## 2. src/c.txt
+>KEY
+EOF
+	# build accepts every one of these spellings and canonicalises them, so a
+	# draft is full of them long before anything rewrites it. Counting only the
+	# lower-case form reported both of these entries as annotated -- the pair the
+	# panel draws then said the reading order was finished when neither entry
+	# carries a single word of why.
+	[ "$(progress_of feature/x)" = "0/2" ]
+}
+
 @test "reserved markers other than key do not count as a why either" {
 	write_draft <<'EOF'
 # Walkthrough

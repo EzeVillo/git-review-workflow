@@ -95,6 +95,33 @@ without_closing() {
 	' "$1"
 }
 
+# git review, with MSYS's argument path conversion switched off.
+#
+# Only for the assertions that quote the path back. Git for Windows' git.exe is
+# a native Windows program, so under Git Bash MSYS rewrites every argument that
+# looks like an absolute POSIX path before git.exe is spawned: a --from of
+# "/tmp/tmp.XXXX/order.md" arrives as
+# "C:/Users/EZEVI_~1/AppData/Local/Temp/tmp.XXXX/order.md". The verb then names
+# that string back -- correctly, it is what it was handed -- and an assertion
+# written against the path the test typed fails on the Windows runner and
+# nowhere else. Off Windows the variable is unset and nothing reads it, so the
+# three runners assert the same sentence about the same string.
+review_verbatim_paths() {
+	MSYS_NO_PATHCONV=1 git review "$@"
+}
+
+# Every temp file anywhere under the gitdir, as a newline-separated list. A glob
+# and not find(1), for the reason walkthrough-draft.bats spells out at its own
+# draft_temps: under Git Bash a stray PATH resolves find to Windows' own
+# find.exe, whose -name means nothing to it, and CI runs this suite on a real
+# Windows runner -- where the assertion would then pass or fail for reasons that
+# have nothing to do with --stdout. globstar and nullglob are bashisms, and this
+# is a bats file, not a POSIX verb.
+gitdir_temps() (
+	shopt -s nullglob globstar
+	printf '%s\n' "$GITDIR"/**/*.tmp.*
+)
+
 # ── --stdout writes nothing ───────────────────────────────────────────────────
 
 @test "--stdout prints the skeleton and creates nothing at all" {
@@ -109,7 +136,7 @@ without_closing() {
 	# Not "no draft was created": nothing at all, temp files included.
 	[ ! -d "$NS" ]
 	[ "$(git status --porcelain)" = "$before" ]
-	run find "$GITDIR" -name '*.tmp.*'
+	run gitdir_temps
 	[ "$status" -eq 0 ]
 	[ -z "$output" ]
 }
@@ -175,20 +202,40 @@ without_closing() {
 	[ "$status" -eq 0 ]
 }
 
-@test "--stdout works for a branch name that is not a legal file name" {
-	git switch --quiet develop
-	git switch --quiet -c nul
-	printf 'n\n' >n.txt
-	git add -A
-	git commit --quiet -m nul-work
-	git push --quiet -u origin nul
-	git switch --quiet develop
+@test "--stdout works where the draft file could not be written at all" {
+	# The property is that --stdout does not write, so it is unaffected by
+	# anything that would stop a write. Deliberately NOT tested through a branch
+	# called "nul": a reserved device name is illegal as a file name on Windows
+	# and nowhere else, and on Windows git cannot create that branch either --
+	# a loose ref IS a file, so "git switch -c nul" dies with "Unable to create
+	# refs/heads/nul.lock: Invalid argument" and the test aborts on its second
+	# line. The case is unreachable on the only platform that has it, and on
+	# Linux and macOS "nul" is an ordinary name that proves nothing.
+	#
+	# What is reachable on all three is a namespace that cannot hold this
+	# branch's path, with a plain file sitting where the subdirectory has to go.
+	mkdir -p "$NS"
+	printf 'in the way\n' >"$NS/feature"
 
-	run git review walkthrough draft --stdout nul
+	# The written form needs that directory and cannot have it.
+	run git review walkthrough draft feature/plain
+	[ "$status" -ne 0 ]
+	[ ! -e "$DRAFT" ]
+
+	# Printing the same skeleton does not care.
+	run git review walkthrough draft --stdout feature/plain
 	[ "$status" -eq 0 ]
-	printf '%s\n' "$output" | grep -q '^## ?\. n.txt$'
-	# The restriction is about writing, and nothing was written.
-	[ ! -d "$NS" ]
+	printf '%s\n' "$output" | grep -q '^## ?\. a.txt$'
+	printf '%s\n' "$output" | grep -q '^## ?\. src/cafe con espacio.js$'
+
+	# And it wrote nothing on the way past: the blocker is untouched, no draft
+	# appeared, and no temp file was left anywhere in the gitdir.
+	[ -f "$NS/feature" ]
+	[ "$(cat "$NS/feature")" = "in the way" ]
+	[ ! -e "$DRAFT" ]
+	run gitdir_temps
+	[ "$status" -eq 0 ]
+	[ -z "$output" ]
 }
 
 @test "--stdout keeps stdout empty on every refusal" {
@@ -317,8 +364,11 @@ without_closing() {
 	[ "$status" -eq 0 ]
 	[ -f "$DRAFT" ]
 	! grep -q $'\r' "$DRAFT"
-	head -c 3 "$DRAFT" | grep -qv $'\357\273\277' || true
+	# The BOM is asserted by the equality below and not by a grep of its own: a
+	# leading BOM would leave the first line as "\357\273\277# Walkthrough", which
+	# is not "# Walkthrough".
 	run head -n1 "$DRAFT"
+	[ "$status" -eq 0 ]
 	[ "$output" = "# Walkthrough" ]
 
 	# And the result is the same file the LF source produces.
@@ -362,7 +412,7 @@ without_closing() {
 	[[ "$output" == *"is empty; a reading order needs at least one entry"* ]]
 	assert_refused
 
-	run git review walkthrough draft --build --force --from "$TMP/nothing-here.md" feature/plain
+	run review_verbatim_paths walkthrough draft --build --force --from "$TMP/nothing-here.md" feature/plain
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"could not read $TMP/nothing-here.md"* ]]
 	assert_refused
@@ -397,20 +447,55 @@ without_closing() {
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"in the walkthrough but not changed in the PR: gone.txt"* ]]
 	assert_refused
+
+	# Content with no entry heading at all. It is not the empty case above (there
+	# is prose here), and it is the one rule with a file to name: it has to name
+	# the SOURCE. Naming the stored draft accused a file this refusal never
+	# touched, and the way out it offered -- rewrite that skeleton with --force --
+	# would have destroyed it.
+	printf 'just some prose, no order\n' >"$TMP/prose.md"
+	run review_verbatim_paths walkthrough draft --build --force --from "$TMP/prose.md" feature/plain
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"no entries found in $TMP/prose.md"* ]]
+	[[ "$output" != *"review-walkthrough"* ]]
+	[[ "$output" != *"--force"* ]]
+	assert_refused
+
+	# Same content down the pipe: the origin it names is standard input.
+	run bash -c "git review walkthrough draft --build --force --from - feature/plain < '$TMP/prose.md'"
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"no entries found in standard input"* ]]
+	assert_refused
 }
 
-@test "an unreadable source is refused by name" {
-	if [ "$(id -u)" = "0" ]; then
-		skip "root reads anything; permissions prove nothing here"
-	fi
+@test "a source that cannot be read as a file is refused by name" {
 	write_order "$TMP/filled.md"
 	run git review walkthrough draft --build --from "$TMP/filled.md" feature/plain
 	[ "$status" -eq 0 ]
 	cp "$DRAFT" "$TMP/before.md"
 
+	# A directory, which is the half of the guard that behaves the same on every
+	# runner: it exists, it is readable, and it is still not a reading order.
+	mkdir "$TMP/adir"
+	run review_verbatim_paths walkthrough draft --build --force --from "$TMP/adir" feature/plain
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"could not read $TMP/adir"* ]]
+	run cmp -s "$TMP/before.md" "$DRAFT"
+	[ "$status" -eq 0 ]
+
+	# The other half, permissions, only exists where the filesystem enforces
+	# them. Under Git Bash on Windows "chmod 000" leaves the file at -r--r--r--
+	# and readable, and root reads anything anywhere; either way the guard the
+	# assertion is about would not fire, so there is nothing here to test. The
+	# probe is the CLI's own condition, [ -r ], rather than a guess at which
+	# runner this is.
 	printf 'x\n' >"$TMP/locked.md"
 	chmod 000 "$TMP/locked.md"
-	run git review walkthrough draft --build --force --from "$TMP/locked.md" feature/plain
+	if [ -r "$TMP/locked.md" ]; then
+		chmod 644 "$TMP/locked.md"
+		skip "chmod 000 leaves this file readable here; the guard cannot fire"
+	fi
+	run review_verbatim_paths walkthrough draft --build --force --from "$TMP/locked.md" feature/plain
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"could not read $TMP/locked.md"* ]]
 	run cmp -s "$TMP/before.md" "$DRAFT"

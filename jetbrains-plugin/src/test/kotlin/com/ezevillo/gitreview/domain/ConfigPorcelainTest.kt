@@ -173,4 +173,25 @@ class ConfigPorcelainTest {
         """.trimIndent()
         assertEquals(listOf("feature/ok"), parseConfigPorcelain(out).drafts.map { it.src })
     }
+
+    @Test
+    fun aProgressThatIsNotANonNegativeIntegerInvalidatesTheRecord() {
+        // La regla tiene que ser la misma en los tres clientes: la CLI cuenta con
+        // awk y emite siempre dígitos, así que un signo o un espacio es un registro
+        // que este cliente no entendió. Aceptarlo acá y no en la extensión hacía
+        // que la misma línea dibujara fila en dos paneles y en el tercero no.
+        for (bad in listOf("-3", "+3", " 3", "3 ", "3.0", "", "0x2")) {
+            val path = "/repo/.git/review-walkthrough/feature/x.md"
+            assertEquals(
+                emptyList<DraftRecord>(),
+                parseConfigPorcelain("draft\tfeature/x\t$path\t$bad\t9\tremote\tfull").drafts,
+                "annotated=<$bad>",
+            )
+            assertEquals(
+                emptyList<DraftRecord>(),
+                parseConfigPorcelain("draft\tfeature/x\t$path\t0\t$bad\tremote\tfull").drafts,
+                "total=<$bad>",
+            )
+        }
+    }
 }

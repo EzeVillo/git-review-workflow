@@ -78,6 +78,27 @@ describe("parseConfigPorcelain — registros draft", () => {
             ["feature/checkout"]
         );
     });
+
+    it("un progreso que no es un entero no negativo invalida el registro", () => {
+        // La regla tiene que ser la misma en los tres clientes: la CLI cuenta
+        // con awk y emite siempre digitos, asi que un signo o un espacio es un
+        // registro que este cliente no entendio. Aceptarlo en uno y no en otro
+        // hace que la misma linea dibuje fila en dos paneles y en el tercero no.
+        for (const bad of ["-3", "+3", " 3", "3 ", "3.0", "", "0x2"]) {
+            const line = `draft\tfeature/x\t/repo/.git/review-walkthrough/feature/x.md\t${bad}\t9\tremote\tfull`;
+            assert.deepStrictEqual(
+                parseConfigPorcelain(`${line}\n`).drafts,
+                [],
+                `annotated=${JSON.stringify(bad)}`
+            );
+            const other = `draft\tfeature/x\t/repo/.git/review-walkthrough/feature/x.md\t0\t${bad}\tremote\tfull`;
+            assert.deepStrictEqual(
+                parseConfigPorcelain(`${other}\n`).drafts,
+                [],
+                `total=${JSON.stringify(bad)}`
+            );
+        }
+    });
 });
 
 describe("parsePorcelain — el campo de ruta del registro draft", () => {

@@ -176,6 +176,12 @@ jobs:
       - name: Domain unit tests
         working-directory: visualstudio-extension
         run: dotnet test tests/GitReview.Domain.Tests --no-build -v minimal
+      # The host layer: the refresh pipeline against a scripted CLI, plus the few
+      # cases that need a real process (UTF-8 capture, the cwd, a missing
+      # executable). Those spawn git, which every runner already has.
+      - name: Host tests
+        working-directory: visualstudio-extension
+        run: dotnet test tests/GitReview.Host.Tests --no-build -v minimal
       - name: Layout smoke
         working-directory: visualstudio-extension
         run: dotnet run --project src/GitReview.VS --no-build -- --verify

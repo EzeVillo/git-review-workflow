@@ -93,24 +93,88 @@ public static class ControlIdExt
         Enum.GetValues(typeof(ControlId)).Cast<ControlId?>().FirstOrDefault(c => c!.Value.Wire() == id);
 }
 
-public sealed record Control(
-    ControlId Id,
-    string? Label,
-    string AccessibleName,
-    Emphasis Emphasis,
-    bool Enabled = true,
-    string? Tooltip = null,
-    int? Index = null,
-    string? SupportLinkId = null);
+public sealed record Control
+{
+    /// <summary>
+    /// The two rules a control cannot break, checked here and not in the factory:
+    /// a label-less control is an icon button and an icon button is unreachable
+    /// without a name to read out. Callers inside the builder go through
+    /// <c>Ctrl</c>, but the record is what the panel renders, so this is where
+    /// the rule has to hold — same as the <c>init</c> block on the Kotlin side.
+    /// </summary>
+    public Control(
+        ControlId id,
+        string? label,
+        string accessibleName,
+        Emphasis emphasis,
+        bool enabled = true,
+        string? tooltip = null,
+        int? index = null,
+        string? supportLinkId = null)
+    {
+        if (label is null)
+        {
+            if (emphasis != Emphasis.Icon)
+                throw new ArgumentException($"Control {id.Wire()}: null label requires ICON emphasis");
+            if (string.IsNullOrEmpty(accessibleName))
+                throw new ArgumentException($"Control {id.Wire()}: icon controls need a non-empty accessibleName");
+        }
+        Id = id;
+        Label = label;
+        AccessibleName = accessibleName;
+        Emphasis = emphasis;
+        Enabled = enabled;
+        Tooltip = tooltip;
+        Index = index;
+        SupportLinkId = supportLinkId;
+    }
+
+    public ControlId Id { get; init; }
+    public string? Label { get; init; }
+    public string AccessibleName { get; init; }
+    public Emphasis Emphasis { get; init; }
+    public bool Enabled { get; init; }
+    public string? Tooltip { get; init; }
+    public int? Index { get; init; }
+    public string? SupportLinkId { get; init; }
+}
 
 public sealed record FileRow(string Display, int Index, bool LastOpened);
 
-public sealed record InventoryRow(
-    string Name,
-    IReadOnlyList<string> Badges,
-    string Meta,
-    IReadOnlyList<Control> Controls,
-    string? HelpTooltip = null);
+public sealed record InventoryRow
+{
+    /// <summary>
+    /// An inventory control is routed back to its row by index, so a control
+    /// without one is a button that acts on nothing in particular — the panel
+    /// falls back to asking which review, which is not what the reviewer clicked.
+    /// <see cref="PanelLayout"/> checks the other direction (an index is only
+    /// legal here); this is the forward one.
+    /// </summary>
+    public InventoryRow(
+        string name,
+        IReadOnlyList<string> badges,
+        string meta,
+        IReadOnlyList<Control> controls,
+        string? helpTooltip = null)
+    {
+        foreach (var c in controls)
+        {
+            if (c.Index is null)
+                throw new ArgumentException($"Inventory control {c.Id.Wire()} must carry an index");
+        }
+        Name = name;
+        Badges = badges;
+        Meta = meta;
+        Controls = controls;
+        HelpTooltip = helpTooltip;
+    }
+
+    public string Name { get; init; }
+    public IReadOnlyList<string> Badges { get; init; }
+    public string Meta { get; init; }
+    public IReadOnlyList<Control> Controls { get; init; }
+    public string? HelpTooltip { get; init; }
+}
 
 public enum SkeletonShape
 {
@@ -169,7 +233,24 @@ public abstract record Block
 
     public sealed record InventoryRows(IReadOnlyList<InventoryRow> Rows) : Block;
 
-    public sealed record ToolsSection(string Title, IReadOnlyList<Block> NestedBlocks) : Block;
+    public sealed record ToolsSection : Block
+    {
+        public string Title { get; init; }
+        public IReadOnlyList<Block> NestedBlocks { get; init; }
+
+        /// <summary>
+        /// A section is a flat group of rows under a title. Nesting another one
+        /// (or a banner) inside would render a heading no client draws and give
+        /// the same control two homes in <c>CollectControls</c>.
+        /// </summary>
+        public ToolsSection(string title, IReadOnlyList<Block> nestedBlocks)
+        {
+            if (nestedBlocks.Any(b => b is ToolsSection or Banner))
+                throw new ArgumentException("ToolsSection cannot nest Banner/ToolsSection");
+            Title = title;
+            NestedBlocks = nestedBlocks;
+        }
+    }
 
     public sealed record Stderr(string Text) : Block;
 
@@ -270,14 +351,9 @@ public static class PanelLayoutBuilder
         int? index = null,
         string? supportLinkId = null)
     {
+        // The two rules live on the record itself; this only fills in the name a
+        // labelled control gets for free.
         var name = accessibleName ?? label ?? id.Wire();
-        if (label is null)
-        {
-            if (emphasis != Emphasis.Icon)
-                throw new ArgumentException($"Control {id.Wire()}: null label requires ICON emphasis");
-            if (string.IsNullOrEmpty(name))
-                throw new ArgumentException($"Control {id.Wire()}: icon controls need a non-empty accessibleName");
-        }
         return new Control(id, label, name, emphasis, enabled, tooltip, index, supportLinkId);
     }
 

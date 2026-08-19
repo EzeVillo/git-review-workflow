@@ -15,7 +15,13 @@ public sealed record InvokeResult(
 /// Spawns git-review with forced UTF-8 capture, shell:false, cwd = repo root.
 /// Domain-facing: no UI. Windows: PATH search for git; optional dispatcher via sh.
 /// </summary>
-public sealed class CliInvoker
+/// <remarks>
+/// The two entry points are virtual so the refresh pipeline can be tested against a
+/// scripted CLI instead of a real one. Spawning a process per case would make the
+/// suite slow and, on the interesting cases (a timeout, a CLI that is not there), it
+/// would be testing the machine rather than <see cref="ReviewStateManager"/>.
+/// </remarks>
+public class CliInvoker
 {
     private readonly Func<string?> _gitReviewPath;
     private readonly Func<string> _askpassCommand;
@@ -38,7 +44,7 @@ public sealed class CliInvoker
     /// </summary>
     public string? GitReviewPath => _gitReviewPath();
 
-    public async Task<InvokeResult> InvokeAsync(
+    public virtual async Task<InvokeResult> InvokeAsync(
         string verb,
         IReadOnlyList<string> args,
         string cwd,
@@ -52,7 +58,7 @@ public sealed class CliInvoker
             .ConfigureAwait(false);
     }
 
-    public async Task<InvokeResult> InvokeResolvedAsync(
+    public virtual async Task<InvokeResult> InvokeResolvedAsync(
         ResolvedCommand resolved,
         string cwd,
         bool network,

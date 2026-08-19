@@ -415,7 +415,9 @@ colores siguen el tema del host).
 ```powershell
 cd visualstudio-extension
 dotnet build GitReview.sln
-dotnet test tests/GitReview.Domain.Tests
+dotnet test GitReview.sln                            # las dos suites
+dotnet test tests/GitReview.Domain.Tests             # dominio: porcelain → modelo → layout
+dotnet test tests/GitReview.Host.Tests               # refresh pipeline + invoker
 dotnet run --project src/GitReview.VS -- --verify    # smoke de layout/constantes
 dotnet run --project src/GitReview.VS -- --preview   # todas las situaciones, navegable
 
@@ -490,6 +492,32 @@ borrar — con lo que Visual Studio ya no falla en silencio sino que **no carga 
 `devenv /updateconfiguration` después, y al final **verifica contra el disco** que todo
 `GitReview.VS.dll` de la hive sea el recién compilado. F5 desde la IDE no tiene nada de esto: es el
 loop corto.
+
+**Dos suites, y cubren mitades distintas.** `tests/GitReview.Domain.Tests` es la proyección pura
+(porcelain → `PanelModel` → `PanelLayout`, más la tabla de argv y la copy) y lleva los dos gates
+anti-drift contra el contrato — `PanelLayoutContractTests` y `ConfirmationContractTests` — más
+`PanelLayoutInvariantsTests`, que es lo único que pide las reglas que el layout chequea al
+construirse: una violación ahí es una excepción en el camino del render, no un test rojo, salvo que
+algo arme la forma mala a propósito. `tests/GitReview.Host.Tests` es la capa que habla con la CLI: el
+pipeline de refresh contra un invoker guionado (`FakeCliInvoker` — por eso `CliInvoker` no es
+`sealed`) y el puñado de casos que necesitan un proceso real, que lanzan `git` en vez de fingirlo.
+
+**Las fixtures del panel viven en `visualstudio-extension/fixtures/` y se compilan en los dos
+proyectos** (el de test y `GitReview.VS`) con `Compile Include`, igual que
+`jetbrains-plugin/fixtures/` se comparte entre los tests y el preview de ese cliente. Estuvieron
+duplicadas: una copia privada en el proyecto de test y otra en `PreviewApp.cs`, y las situaciones que
+sólo tenía la galería —finish-conflict, out-of-range, error, whole con 300 archivos— eran justo las
+que ningún test afirmaba. Agregar una situación es agregarla a `All()`, y con eso entra a la
+galería, al `--verify` y al alcance del test de contrato de una.
+
+**Una acción `not_in: [visualstudio]` se afirma por id, nunca por label.** El enum no tiene
+`OpenAllChanges`, así que un chequeo por el texto `"Diff"` de la única acción que este cliente omite
+no podía fallar nunca. `PanelLayoutContractTests` lee el `not_in` del YAML y verifica las dos
+direcciones, y además **rechaza cualquier control que la situación no declare**: sin esa parte el
+matcher sólo probaba que los controles esperados estuvieran, y en orden — un botón de más en
+cualquier lugar del panel pasaba entero (una mutación con un *Clean all* primary inyectado en toda
+review lo confirmó). El mismo agujero estaba en `PanelLayoutContractTest` de JetBrains y se cerró
+igual, en los dos a la vez.
 
 `bin/`/`obj/` de los cuatro proyectos van al `.gitignore` raíz (`visualstudio-extension/**/bin/`,
 `**/obj/`) — nunca se commitean. Versión propia, independiente de la CLI y de los otros clientes:

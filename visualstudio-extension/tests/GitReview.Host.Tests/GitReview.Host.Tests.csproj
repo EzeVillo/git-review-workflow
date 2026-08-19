@@ -2,7 +2,7 @@
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <IsPackable>false</IsPackable>
-    <RootNamespace>GitReview.Domain.Tests</RootNamespace>
+    <RootNamespace>GitReview.Host.Tests</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
@@ -11,17 +11,9 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="YamlDotNet" Version="16.2.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\GitReview.Domain\GitReview.Domain.csproj" />
-  </ItemGroup>
-  <ItemGroup>
-    <!--
-      The same fixtures the preview gallery and the layout smoke draw, linked instead
-      of copied: a second set is how the situations only one side had (finish-conflict,
-      out-of-range, whole with 300 files) ended up asserted by nobody.
-    -->
-    <Compile Include="..\..\fixtures\PanelFixtures.cs" Link="PanelFixtures.cs" />
+    <ProjectReference Include="..\..\src\GitReview.Host\GitReview.Host.csproj" />
   </ItemGroup>
 </Project>

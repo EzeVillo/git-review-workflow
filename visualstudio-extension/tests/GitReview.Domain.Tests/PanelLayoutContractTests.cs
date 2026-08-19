@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+using GitReview.Fixtures;
 using Xunit;
 using YamlDotNet.Core;
 using YamlDotNet.RepresentationModel;
@@ -20,6 +20,9 @@ public class PanelLayoutContractTests
         ControlId.PreviewEdits,
     };
 
+    /// <summary>This client's name in the contract's <c>not_in:</c> lists.</summary>
+    private const string ThisClient = "visualstudio";
+
     [Fact]
     public void Canonical_file_is_present()
     {
@@ -30,37 +33,78 @@ public class PanelLayoutContractTests
     [Fact]
     public void Walk_control_sequence_matches_canonical_ids_and_labels()
     {
-        AssertLayoutAgainstCanonical("review-walk", PanelLayoutBuilder.PanelLayout(Fixtures.ReviewWalk()));
+        AssertLayoutAgainstCanonical("review-walk", PanelLayoutBuilder.PanelLayout(PanelFixtures.ReviewWalk()), mode: "walk");
     }
 
     [Fact]
     public void Draft_walk_keeps_same_control_sequence_as_any_walk()
     {
-        AssertLayoutAgainstCanonical("review-walk", PanelLayoutBuilder.PanelLayout(Fixtures.ReviewWalkDraft()));
+        AssertLayoutAgainstCanonical("review-walk", PanelLayoutBuilder.PanelLayout(PanelFixtures.ReviewWalkDraft()), mode: "walk");
     }
 
     [Fact]
     public void Step_control_sequence_matches_canonical()
     {
-        AssertLayoutAgainstCanonical("review-step", PanelLayoutBuilder.PanelLayout(Fixtures.ReviewStep()));
+        AssertLayoutAgainstCanonical("review-step", PanelLayoutBuilder.PanelLayout(PanelFixtures.ReviewStep()), mode: "step");
+    }
+
+    [Fact]
+    public void Whole_control_sequence_matches_canonical()
+    {
+        AssertLayoutAgainstCanonical("review-whole", PanelLayoutBuilder.PanelLayout(PanelFixtures.ReviewWhole()), mode: "whole");
+    }
+
+    [Fact]
+    public void Finish_conflict_control_sequence_matches_canonical()
+    {
+        AssertLayoutAgainstCanonical("finish-conflict", PanelLayoutBuilder.PanelLayout(PanelFixtures.FinishConflict()), mode: "walk");
     }
 
     [Fact]
     public void Setup_control_sequence_matches_canonical()
     {
-        AssertLayoutAgainstCanonical("no-review-setup", PanelLayoutBuilder.PanelLayout(Fixtures.NoReviewSetup()));
+        AssertLayoutAgainstCanonical("no-review-setup", PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewSetup()));
+    }
+
+    /// <summary>
+    /// The biggest situation in the contract (eight controls) and the one that
+    /// offers the destructive ones — it went unasserted while the five smaller
+    /// ones were covered.
+    /// </summary>
+    [Fact]
+    public void No_review_ready_control_sequence_matches_canonical()
+    {
+        AssertLayoutAgainstCanonical("no-review", PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewReady()));
     }
 
     [Fact]
     public void Finish_pending_controls_match_canonical()
     {
-        AssertLayoutAgainstCanonical("finish-pending", PanelLayoutBuilder.PanelLayout(Fixtures.FinishPending()));
+        AssertLayoutAgainstCanonical("finish-pending", PanelLayoutBuilder.PanelLayout(PanelFixtures.FinishPending()));
     }
 
     [Fact]
     public void Cli_missing_controls_match_canonical()
     {
-        AssertLayoutAgainstCanonical("cli-missing", PanelLayoutBuilder.PanelLayout(Fixtures.CliMissing()));
+        AssertLayoutAgainstCanonical("cli-missing", PanelLayoutBuilder.PanelLayout(PanelFixtures.CliMissing()));
+    }
+
+    [Fact]
+    public void Cli_outdated_controls_match_canonical()
+    {
+        AssertLayoutAgainstCanonical("cli-outdated", PanelLayoutBuilder.PanelLayout(PanelFixtures.CliOutdated()));
+    }
+
+    [Fact]
+    public void Out_of_range_controls_match_canonical()
+    {
+        AssertLayoutAgainstCanonical("out-of-range", PanelLayoutBuilder.PanelLayout(PanelFixtures.OutOfRange()));
+    }
+
+    [Fact]
+    public void Error_controls_match_canonical()
+    {
+        AssertLayoutAgainstCanonical("error", PanelLayoutBuilder.PanelLayout(PanelFixtures.Error()));
     }
 
     /// <summary>
@@ -68,21 +112,24 @@ public class PanelLayoutContractTests
     /// point of the test: the other two open one multi-diff window, while
     /// IVsDifferenceService opens a comparison window per pair of files, so the same
     /// button would spray a window per changed file. Recorded as
-    /// <c>not_in: [visualstudio]</c> in the canonical contract.
+    /// <c>not_in: [visualstudio]</c> in the canonical contract, which is where
+    /// <see cref="AssertLayoutAgainstCanonical"/> reads it from — asserting by id, since
+    /// the enum has no <c>OpenAllChanges</c> member and a label check could never fail.
     /// </summary>
     [Fact]
     public void Whole_has_no_open_all_changes()
     {
-        var layout = PanelLayoutBuilder.PanelLayout(Fixtures.ReviewWhole());
-        Assert.DoesNotContain(layout.CollectControls(), c => c.Label == "Diff");
+        var layout = PanelLayoutBuilder.PanelLayout(PanelFixtures.ReviewWhole());
+        Assert.Contains("openAllChanges", ForbiddenIds("review-whole"));
         Assert.DoesNotContain("openAllChanges", ActionArgvMap.ProductActions);
+        Assert.DoesNotContain(layout.CollectControls(), c => c.Id.Wire() == "openAllChanges");
         Assert.Contains(layout.Blocks, b => b is Block.FileRows);
     }
 
     [Fact]
     public void Cli_missing_title_contains_min_version()
     {
-        var layout = PanelLayoutBuilder.PanelLayout(Fixtures.CliMissing());
+        var layout = PanelLayoutBuilder.PanelLayout(PanelFixtures.CliMissing());
         var para = layout.Blocks.OfType<Block.Paragraph>().First();
         Assert.Contains(CliVersion.MinCliVersion, para.Text);
         Assert.Contains("was not found", para.Text);
@@ -91,24 +138,50 @@ public class PanelLayoutContractTests
     [Fact]
     public void Cli_outdated_title_keeps_installed_word()
     {
-        var layout = PanelLayoutBuilder.PanelLayout(Fixtures.CliOutdated());
+        var layout = PanelLayoutBuilder.PanelLayout(PanelFixtures.CliOutdated());
         var para = layout.Blocks.OfType<Block.Paragraph>().First();
         Assert.Contains("The installed git-review CLI is older than", para.Text);
     }
 
     /// <summary>
-    /// 26, not the contract's 27: <c>openAllChanges</c> is <c>not_in: [visualstudio]</c>.
+    /// The contract's action list minus what it marks <c>not_in: [visualstudio]</c>,
+    /// compared as a set: a bare count passes a rename plus an addition, which is
+    /// exactly the pair that drifts.
     /// </summary>
     [Fact]
-    public void Product_actions_count_is_26()
+    public void Product_actions_are_the_contract_minus_not_in()
     {
+        var expected = CanonicalActions()
+            .Where(kv => !kv.Value.Contains(ThisClient))
+            .Select(kv => kv.Key)
+            .OrderBy(x => x, StringComparer.Ordinal)
+            .ToList();
+        var actual = ActionArgvMap.ProductActions
+            .OrderBy(x => x, StringComparer.Ordinal)
+            .ToList();
+        Assert.Equal(expected, actual);
+        // The count the absence is documented by, kept as a tripwire on the pair above.
         Assert.Equal(26, ActionArgvMap.ProductActions.Count);
+        Assert.Equal(27, CanonicalActions().Count);
+    }
+
+    /// <summary>Every action the map claims to offer has to produce an argv (or a no-op verb).</summary>
+    [Fact]
+    public void Every_product_action_is_routable()
+    {
+        foreach (var action in ActionArgvMap.ProductActions)
+        {
+            var ex = Record.Exception(() => ActionArgvMap.ActionToArgv(action, ParamsFor(action)));
+            Assert.True(ex is null, $"{action} is listed as a product action but does not route: {ex?.Message}");
+        }
+        Assert.Throws<ArgumentException>(() => ActionArgvMap.ActionToArgv("notAnAction"));
     }
 
     [Fact]
     public void Min_cli_version_constant()
     {
         Assert.Equal("0.6.0", CliVersion.MinCliVersion);
+        Assert.Equal(CliVersion.MinCliVersion, CanonicalScalar("min_cli_version"));
     }
 
     [Fact]
@@ -118,50 +191,166 @@ public class PanelLayoutContractTests
         Assert.Contains("bug_report.yml", SupportLinks.BugUrl);
     }
 
-    private static void AssertLayoutAgainstCanonical(string key, PanelLayout layout)
+    [Fact]
+    public void Install_hints_match_canonical_contract()
     {
-        var expected = ExtractControlSpecs(key);
+        Assert.Equal(InstallHint.NpmInstallCmd, CanonicalScalar("npm_install"));
+        Assert.Equal(InstallHint.NpmUpdateCmd, CanonicalScalar("npm_update"));
+    }
+
+    private static ActionParams? ParamsFor(string action) => action switch
+    {
+        "startReview" => new ActionParams.Start(
+            new ReviewIntent("f", ReviewLayout.Walk, ReviewRange.Full, ReviewSource.Remote), "main"),
+        "continueReview" => new ActionParams.Continue("f"),
+        "compareReview" => new ActionParams.Compare(Array.Empty<string>(), "a", "b"),
+        "cleanReview" or "discardInventory" or "forgetReview" =>
+            new ActionParams.Housekeeping(new HousekeepingAction(HousekeepingKind.CleanAll)),
+        "setBase" or "setRemote" => new ActionParams.SetConfig("base", "main"),
+        _ => null,
+    };
+
+    /// <param name="mode">
+    /// The fixture's review mode, when the situation declares mode-gated blocks
+    /// (<c>when: walk</c> / <c>step</c> / <c>whole</c>). Those branches are mutually
+    /// exclusive, so flattening them all into one expected sequence asks a walk panel
+    /// for the step row too.
+    /// </param>
+    private static void AssertLayoutAgainstCanonical(string key, PanelLayout layout, string? mode = null)
+    {
+        var expected = ExtractControlSpecs(key, mode);
         var actual = layout.CollectControls()
             .Where(c => !TitleOnly.Contains(c.Id))
-            .Select(c => (c.Id.Wire(), c.Label, c.Emphasis.Id()))
+            .Select(c => (Id: c.Id.Wire(), c.Label, Emphasis: c.Emphasis.Id()))
             .ToList();
 
+        // 1. Nothing the canonical does not declare for this situation. Without this
+        //    the matcher below only proves the expected controls are present, in
+        //    order — a spurious button anywhere in the panel slid straight past it,
+        //    which a mutation (an extra primary "Clean all" row in every review)
+        //    confirmed. `when:`-gated blocks may be absent, never extra, so the
+        //    containment only runs in this direction.
+        var allowed = AllowedIds(key);
+        var stray = actual.Where(a => !allowed.Contains(a.Id)).Select(a => a.Id).Distinct().ToList();
+        Assert.True(stray.Count == 0,
+            $"situation {key}: controls the canonical does not declare: [{string.Join(", ", stray)}]. " +
+            $"allowed=[{string.Join(", ", allowed.OrderBy(x => x, StringComparer.Ordinal))}]");
+
+        // 2. And nothing the canonical marks as not_in for this client.
+        var forbidden = ForbiddenIds(key);
+        var offered = actual.Where(a => forbidden.Contains(a.Id)).Select(a => a.Id).Distinct().ToList();
+        Assert.True(offered.Count == 0,
+            $"situation {key}: offers [{string.Join(", ", offered)}], which the contract marks " +
+            $"not_in: [{ThisClient}] — reponerla es editar el contrato primero");
+
+        // 3. The declared ones, in order, with their label and emphasis.
         var j = 0;
         foreach (var a in actual)
         {
-            if (j < expected.Count && a.Item1 == expected[j].Id)
+            if (j < expected.Count && a.Id == expected[j].Id)
             {
                 if (expected[j].Label is not null)
-                    Assert.Equal(expected[j].Label, a.Item2);
+                    Assert.Equal(expected[j].Label, a.Label);
                 if (expected[j].Emphasis is not null)
-                    Assert.Equal(expected[j].Emphasis, a.Item3);
+                    Assert.Equal(expected[j].Emphasis, a.Emphasis);
                 j++;
             }
         }
         Assert.True(j == expected.Count,
-            $"situation {key}: matched {j}/{expected.Count} expected controls. actual=[{string.Join(", ", actual.Select(x => x.Item1))}] expected=[{string.Join(", ", expected.Select(x => x.Id))}]");
+            $"situation {key}: matched {j}/{expected.Count} expected controls. actual=[{string.Join(", ", actual.Select(x => x.Id))}] expected=[{string.Join(", ", expected.Select(x => x.Id))}]");
     }
 
     private sealed record Spec(string Id, string? Label, string? Emphasis);
 
-    private static List<Spec> ExtractControlSpecs(string situationKey)
+    private static YamlMappingNode SituationNode(string situationKey)
     {
         var yaml = LoadCanonical();
         var root = (YamlMappingNode)yaml.Documents[0].RootNode;
         var panelLayout = (YamlMappingNode)root.Children[new YamlScalarNode("panel_layout")];
         if (!panelLayout.Children.TryGetValue(new YamlScalarNode(situationKey), out var sitNode))
             throw new InvalidOperationException($"panel_layout missing situation {situationKey}");
-        var sit = (YamlMappingNode)sitNode;
-        var blocks = (YamlSequenceNode)sit.Children[new YamlScalarNode("blocks")];
-        return ExtractFromBlocks(blocks);
+        return (YamlMappingNode)sitNode;
     }
 
-    private static List<Spec> ExtractFromBlocks(YamlSequenceNode blocks)
+    private static YamlSequenceNode BlocksOf(YamlMappingNode situation) =>
+        (YamlSequenceNode)situation.Children[new YamlScalarNode("blocks")];
+
+    private static List<Spec> ExtractControlSpecs(string situationKey, string? mode = null) =>
+        ExtractFromBlocks(BlocksOf(SituationNode(situationKey)), skipNotIn: true, mode: mode);
+
+    /// <summary>
+    /// Every id this situation may render: what it declares, plus the inventory
+    /// controls when it hosts an <c>inventory_rows</c> block (those are declared once
+    /// under the canonical's own <c>inventory_controls:</c> key, not per situation).
+    /// </summary>
+    private static HashSet<string> AllowedIds(string situationKey)
+    {
+        var situation = SituationNode(situationKey);
+        var blocks = BlocksOf(situation);
+        var ids = ExtractFromBlocks(blocks, skipNotIn: false).Select(s => s.Id).ToHashSet(StringComparer.Ordinal);
+        if (MentionsBlock(blocks, "inventory_rows"))
+        {
+            foreach (var id in InventoryControlIds()) ids.Add(id);
+        }
+        return ids;
+    }
+
+    private static HashSet<string> ForbiddenIds(string situationKey)
+    {
+        var blocks = BlocksOf(SituationNode(situationKey));
+        var all = ExtractFromBlocks(blocks, skipNotIn: false).Select(s => s.Id).ToHashSet(StringComparer.Ordinal);
+        var kept = ExtractFromBlocks(blocks, skipNotIn: true).Select(s => s.Id).ToHashSet(StringComparer.Ordinal);
+        all.ExceptWith(kept);
+        return all;
+    }
+
+    private static bool MentionsBlock(YamlSequenceNode blocks, string blockType)
+    {
+        foreach (var b in blocks)
+        {
+            if (b is not YamlMappingNode map) continue;
+            if (Scalar(map, "block") == blockType) return true;
+            if (map.Children.TryGetValue(new YamlScalarNode("blocks"), out var nested)
+                && nested is YamlSequenceNode ns
+                && MentionsBlock(ns, blockType)) return true;
+        }
+        return false;
+    }
+
+    private static IEnumerable<string> InventoryControlIds()
+    {
+        var root = (YamlMappingNode)LoadCanonical().Documents[0].RootNode;
+        if (!root.Children.TryGetValue(new YamlScalarNode("inventory_controls"), out var node)
+            || node is not YamlMappingNode map)
+            return Array.Empty<string>();
+        return map.Children.Keys.OfType<YamlScalarNode>().Select(k => k.Value!).ToList();
+    }
+
+    private static bool NotInThisClient(YamlMappingNode map)
+    {
+        if (!map.Children.TryGetValue(new YamlScalarNode("not_in"), out var node)) return false;
+        return node is YamlSequenceNode seq
+               && seq.OfType<YamlScalarNode>().Any(s => s.Value == ThisClient);
+    }
+
+    private static readonly string[] ModeGates = { "walk", "step", "whole" };
+
+    /// <summary>A block gated on a mode other than the fixture's does not render.</summary>
+    private static bool GatedOut(YamlMappingNode map, string? mode)
+    {
+        if (mode is null) return false;
+        var when = Scalar(map, "when");
+        return when is not null && ModeGates.Contains(when) && when != mode;
+    }
+
+    private static List<Spec> ExtractFromBlocks(YamlSequenceNode blocks, bool skipNotIn, string? mode = null)
     {
         var specs = new List<Spec>();
         foreach (var b in blocks)
         {
             if (b is not YamlMappingNode map) continue;
+            if (skipNotIn && NotInThisClient(map)) continue;
+            if (GatedOut(map, mode)) continue;
             var blockType = Scalar(map, "block");
             if (blockType == "row" || blockType is null && map.Children.ContainsKey(new YamlScalarNode("controls")))
             {
@@ -170,7 +359,7 @@ public class PanelLayoutContractTests
                 {
                     foreach (var c in controls)
                     {
-                        if (c is YamlMappingNode cm)
+                        if (c is YamlMappingNode cm && !(skipNotIn && NotInThisClient(cm)))
                             specs.Add(new Spec(Scalar(cm, "id")!, Scalar(cm, "label"), Scalar(cm, "emphasis")));
                     }
                 }
@@ -191,7 +380,7 @@ public class PanelLayoutContractTests
                 {
                     foreach (var c in rcs)
                     {
-                        if (c is YamlMappingNode cm)
+                        if (c is YamlMappingNode cm && !(skipNotIn && NotInThisClient(cm)))
                             specs.Add(new Spec(Scalar(cm, "id")!, Scalar(cm, "label"), Scalar(cm, "emphasis")));
                     }
                 }
@@ -200,10 +389,37 @@ public class PanelLayoutContractTests
             {
                 if (map.Children.TryGetValue(new YamlScalarNode("blocks"), out var nested)
                     && nested is YamlSequenceNode ns)
-                    specs.AddRange(ExtractFromBlocks(ns));
+                    specs.AddRange(ExtractFromBlocks(ns, skipNotIn, mode));
             }
         }
         return specs;
+    }
+
+    /// <summary>action id → the clients its <c>not_in:</c> lists (empty when it has none).</summary>
+    private static Dictionary<string, IReadOnlyList<string>> CanonicalActions()
+    {
+        var root = (YamlMappingNode)LoadCanonical().Documents[0].RootNode;
+        var actions = (YamlMappingNode)root.Children[new YamlScalarNode("actions")];
+        var result = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        foreach (var (k, v) in actions.Children)
+        {
+            var id = ((YamlScalarNode)k).Value!;
+            var notIn = new List<string>();
+            if (v is YamlMappingNode m
+                && m.Children.TryGetValue(new YamlScalarNode("not_in"), out var n)
+                && n is YamlSequenceNode seq)
+            {
+                notIn.AddRange(seq.OfType<YamlScalarNode>().Select(s => s.Value!));
+            }
+            result[id] = notIn;
+        }
+        return result;
+    }
+
+    private static string CanonicalScalar(string key)
+    {
+        var root = (YamlMappingNode)LoadCanonical().Documents[0].RootNode;
+        return ((YamlScalarNode)root.Children[new YamlScalarNode(key)]).Value!;
     }
 
     private static string? Scalar(YamlMappingNode map, string key)
@@ -243,94 +459,5 @@ public class PanelLayoutContractTests
             Directory.GetCurrentDirectory(),
             "..", "..", "..", "..", "contracts", "client-product-surface.yaml"));
         return fromCwd;
-    }
-}
-
-internal static class Fixtures
-{
-    public static PanelModel CliMissing() => PanelModelBuilder.BuildPanelModel(
-        new ReviewState(Situation.CliMissing, Stderr: "not found"),
-        new PanelInputs(false));
-
-    public static PanelModel CliOutdated() => PanelModelBuilder.BuildPanelModel(
-        new ReviewState(Situation.CliOutdated, Stderr: "0.3.0"),
-        new PanelInputs(false));
-
-    public static PanelModel NoReviewSetup() => PanelModelBuilder.BuildPanelModel(
-        new ReviewState(Situation.NoReview, Config: new EffectiveConfig(null, "origin")),
-        new PanelInputs(false));
-
-    public static PanelModel FinishPending()
-    {
-        var branches = new[]
-        {
-            new BranchRecord("review/feature", false, true, false,
-                Finish: new BranchFinish("pending", false)),
-        };
-        return PanelModelBuilder.BuildPanelModel(
-            new ReviewState(Situation.FinishPending, Branches: branches),
-            new PanelInputs(false));
-    }
-
-    public static PanelModel ReviewWalk()
-    {
-        var walkPorcelain =
-            "state\treview/feature\tfeature\tdeadbeefcafebabe\twalk\tapplied\t1\t3\t3\t\"src/a.kt\"\t1\n" +
-            "entry\t1\tsrc/a.kt\t1\t1\nentry\t2\tsrc/b.kt\t0\t1\nentry\t3\tsrc/c.kt\t0\t0";
-        var walkParsed = Porcelain.ParsePorcelain(walkPorcelain);
-        var model = PanelModelBuilder.BuildPanelModel(
-            new ReviewState(Situation.Review, State: walkParsed.State, Entries: walkParsed.Entries),
-            new PanelInputs(false, Why: new PanelWhy(WhyState.Present, "Because it matters.")));
-        return model with { AtFirst = true, AtLast = false };
-    }
-
-    public static PanelModel ReviewWalkDraft()
-    {
-        var porcelain =
-            "state\treview/feature\tfeature\tdeadbeefcafebabe\twalk\tapplied\t1\t3\t3\t\"src/a.kt\"\t0\n" +
-            "entry\t1\tsrc/a.kt\t0\t1\nentry\t2\tsrc/b.kt\t0\t1\nentry\t3\tsrc/c.kt\t0\t0\ndraft";
-        var parsed = Porcelain.ParsePorcelain(porcelain);
-        var model = PanelModelBuilder.BuildPanelModel(
-            new ReviewState(Situation.Review, State: parsed.State, Entries: parsed.Entries, Draft: parsed.Draft),
-            new PanelInputs(false, Why: new PanelWhy(WhyState.Present, "Because I read it first.")));
-        return model with { AtFirst = true, AtLast = false };
-    }
-
-    public static PanelModel ReviewStep() => PanelModelBuilder.BuildPanelModel(
-        new ReviewState(
-            Situation.Review,
-            State: new StateRecord(
-                "review/f", "f", "tipsha01", ReviewMode.Step, WalkthroughStatus.None,
-                Position: 2, Total: 4, Recorded: 4, Current: "abc1234"),
-            Entries: new[]
-            {
-                new EntryRecord(1, "aaa1111", Banked: false),
-                new EntryRecord(2, "abc1234", Banked: true),
-                new EntryRecord(3, "ccc3333", Banked: false),
-                new EntryRecord(4, "ddd4444", Banked: false),
-            },
-            Files: new[]
-            {
-                new EntryRecord(1, Unquote.ToPathRef("src/a.kt")),
-                new EntryRecord(2, Unquote.ToPathRef("src/b.kt")),
-            },
-            Subjects: new Dictionary<int, string> { [2] = "Fix the thing" },
-            Authors: new Dictionary<int, string> { [2] = "Ada" }),
-        new PanelInputs(false, LastOpened: "src/a.kt"));
-
-    public static PanelModel ReviewWhole()
-    {
-        var entries = new[]
-        {
-            new EntryRecord(1, Unquote.ToPathRef("file1.kt")),
-            new EntryRecord(2, Unquote.ToPathRef("file2.kt")),
-        };
-        return PanelModelBuilder.BuildPanelModel(
-            new ReviewState(
-                Situation.Review,
-                State: new StateRecord("review/f", "f", "tipsha01", ReviewMode.Whole, WalkthroughStatus.None),
-                Entries: entries,
-                Base: "main"),
-            new PanelInputs(false, LastOpened: "file1.kt"));
     }
 }

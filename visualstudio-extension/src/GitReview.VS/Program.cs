@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Media;
 using GitReview.Domain;
+using GitReview.Fixtures;
 using GitReview.VS.Preview;
 using GitReview.VS.ToolWindows;
 
@@ -59,13 +60,19 @@ public static class Program
         Check("npm_install", InstallHint.NpmInstallCmd.Contains("git-review-workflow"));
         Check("support_star", SupportLinks.StarUrl.Contains("git-review-workflow"));
 
+        // Every fixture has to produce a layout the panel can actually draw, in both
+        // the resolved and the loading pass. "at least one control" passed for almost
+        // anything, which made this the weakest gate in the suite for eight of the
+        // fixtures; the shape checks below are what the WPF renderer needs to be true.
         foreach (var (name, model) in PanelFixtures.All())
         {
             try
             {
                 var layout = PanelLayoutBuilder.PanelLayout(model);
-                var controls = layout.CollectControls();
-                Check($"fixture:{name}", controls.Count >= 1, $"controls={controls.Count}");
+                var problems = LayoutProblems(layout);
+                var loading = PanelLayoutBuilder.PanelLayout(model, loading: true);
+                problems.AddRange(LayoutProblems(loading).Select(p => $"loading: {p}"));
+                Check($"fixture:{name}", problems.Count == 0, string.Join("; ", problems));
             }
             catch (Exception ex)
             {
@@ -99,9 +106,13 @@ public static class Program
 
         var whole = PanelLayoutBuilder.PanelLayout(PanelFixtures.ReviewWhole());
         // No "open every change at once" here: this host would open one comparison
-        // window per file. Contract: not_in: [visualstudio].
+        // window per file. Contract: not_in: [visualstudio]. Checked by id and
+        // against the action list — the enum has no OpenAllChanges member, so a
+        // label check could never have failed.
         Check("whole:no-open-all",
-            whole.CollectControls().All(c => c.Label != "Diff"));
+            whole.CollectControls().All(c => c.Id.Wire() != "openAllChanges")
+            && !ActionArgvMap.ProductActions.Contains("openAllChanges"));
+        Check("whole:file-rows", whole.Blocks.Any(b => b is Block.FileRows));
 
         VerifyChrome("dark", PanelChrome.DefaultDark, Check);
         VerifyChrome("light", PanelChrome.DefaultLight, Check);
@@ -111,6 +122,65 @@ public static class Program
             ? $"verify: ok ({PanelFixtures.All().Count} fixtures)"
             : $"verify: {failures} failure(s)");
         return failures == 0 ? 0 : 1;
+    }
+
+    /// <summary>
+    /// What the WPF renderer needs of a layout, checked on every fixture: a screen
+    /// with nothing on it, a control with no accessible name, or a row the panel
+    /// cannot lay out are all things that draw as a blank pane rather than throw.
+    /// </summary>
+    private static List<string> LayoutProblems(PanelLayout layout)
+    {
+        var problems = new List<string>();
+        if (layout.Blocks.Count == 0) problems.Add("no blocks");
+
+        var controls = layout.CollectControls();
+        if (!controls.Any(c => c.Id == ControlId.Refresh))
+            problems.Add("no refresh in the title bar");
+        foreach (var c in controls)
+        {
+            if (string.IsNullOrWhiteSpace(c.AccessibleName))
+                problems.Add($"{c.Id.Wire()} has no accessible name");
+            if (c.Label is null && c.Emphasis != Emphasis.Icon)
+                problems.Add($"{c.Id.Wire()} has no label and is not an icon");
+        }
+        if (controls.Count(c => c.Emphasis == Emphasis.Primary) > 1)
+            problems.Add("more than one primary");
+
+        foreach (var block in Flatten(layout.Blocks))
+        {
+            switch (block)
+            {
+                case Block.Row row when row.Controls.Count is < 1 or > 2:
+                    problems.Add($"row with {row.Controls.Count} controls");
+                    break;
+                case Block.Paragraph p when string.IsNullOrWhiteSpace(p.Text):
+                    problems.Add("empty paragraph");
+                    break;
+                case Block.Heading h when string.IsNullOrWhiteSpace(h.Text):
+                    problems.Add("empty heading");
+                    break;
+                case Block.InventoryRows inv:
+                    foreach (var row in inv.Rows)
+                    {
+                        if (string.IsNullOrWhiteSpace(row.Name)) problems.Add("inventory row with no name");
+                        if (row.Controls.Count == 0 && string.IsNullOrWhiteSpace(row.HelpTooltip))
+                            problems.Add($"inventory row {row.Name} has neither controls nor a tooltip");
+                    }
+                    break;
+            }
+        }
+        return problems;
+    }
+
+    private static IEnumerable<Block> Flatten(IEnumerable<Block> blocks)
+    {
+        foreach (var b in blocks)
+        {
+            yield return b;
+            if (b is Block.ToolsSection ts)
+                foreach (var nested in Flatten(ts.NestedBlocks)) yield return nested;
+        }
     }
 
     /// <summary>

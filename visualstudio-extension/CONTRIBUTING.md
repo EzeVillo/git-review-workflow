@@ -24,7 +24,9 @@ contract for all three clients:
 ```sh
 cd visualstudio-extension
 dotnet build GitReview.sln
-dotnet test tests/GitReview.Domain.Tests    # domain unit tests, no Visual Studio
+dotnet test GitReview.sln                   # both suites, no Visual Studio
+dotnet test tests/GitReview.Domain.Tests    # domain only, while you iterate
+dotnet test tests/GitReview.Host.Tests      # the refresh pipeline and the invoker
 ```
 
 ```sh
@@ -160,6 +162,7 @@ excluded from the net8.0 build:
 
 ```sh
 dotnet test tests/GitReview.Domain.Tests
+dotnet test tests/GitReview.Host.Tests
 node ../scripts/check-client-product-surface.mjs   # checks all three client trees at once
 ```
 
@@ -167,7 +170,34 @@ node ../scripts/check-client-product-surface.mjs   # checks all three client tre
 ./build-vsix.ps1        # the net472 gate: nothing else compiles that target framework
 ```
 
-CI runs those same four commands on `windows-latest` — the `visualstudio-extension` job in
+**Two suites, and they cover different halves.** `GitReview.Domain.Tests` is the pure projection:
+porcelain in, `PanelModel`/`PanelLayout` out, plus the argv table and the copy. It carries the two
+anti-drift gates against
+[`../contracts/client-product-surface.yaml`](../contracts/client-product-surface.yaml) —
+`PanelLayoutContractTests` (each situation's controls, their labels and their emphasis) and
+`ConfirmationContractTests` (which ids confirm) — and `PanelLayoutInvariantsTests`, which is the
+only thing that asks for rules the layout checks on the way in: a violation there is an exception on
+the render path, not a red test, unless something constructs the bad shape on purpose.
+`GitReview.Host.Tests` is the layer that talks to the CLI: the refresh pipeline against a scripted
+invoker (`FakeCliInvoker` — that is why `CliInvoker` is not sealed), and the handful of cases that
+need a real process, which spawn git rather than fake it.
+
+**Fixtures live in [`fixtures/`](fixtures/PanelFixtures.cs) and are compiled into both the test
+project and `GitReview.VS`** via `Compile Include`, the same way `jetbrains-plugin/fixtures/` is
+shared between that client's tests and its preview. They were duplicated once — a private copy in
+the test project and another in `PreviewApp.cs` — and the situations only the gallery had
+(finish-conflict, out-of-range, error, whole with 300 files) were the ones no test ever asserted on.
+Adding a situation means adding it to `All()`, which puts it in the gallery, in `--verify` and
+within reach of the contract test at once.
+
+**When the canonical contract says a control is `not_in: [visualstudio]`, assert it by id.** The
+enum has no `OpenAllChanges` member, so a label check for the one action this client omits could
+never fail; `PanelLayoutContractTests` reads the `not_in` out of the YAML and checks both
+directions, and it also rejects any control the situation does not declare — without that last part
+the matcher only proved the expected controls were present, and an extra button anywhere in the
+panel went unnoticed.
+
+CI runs those same commands on `windows-latest` — the `visualstudio-extension` job in
 [`../.github/workflows/ci.yml`](../.github/workflows/ci.yml). Windows-only, and not for
 convenience: the VSIX is built by the MSBuild of a Visual Studio installation, so no other runner
 can carry the net472 gate. And because `GitReviewPackVsix` is off by default, that last step is the
@@ -176,9 +206,11 @@ and never sees it.
 
 There is no dockerized integration suite here yet — unlike the VS Code extension, which drives a
 real editor in a Linux container because a `git review` process costs ~50ms on Windows against
-~1ms on Linux. `GitReview.Domain.Tests` runs natively and fast because it never shells out to git or
-touches a real Visual Studio; `--verify` (above) is the layout/constant smoke test that stands in
-for what a headless IDE integration suite would otherwise cover.
+~1ms on Linux. Both suites run natively and fast: the domain one never shells out at all, and the
+host one only spawns git for the few cases that cannot be faked without testing the fake (UTF-8
+capture, the cwd, an executable that is not on PATH). `--verify` (above) is the layout/constant
+smoke test that stands in for what a headless IDE integration suite would otherwise cover; it
+renders the real WPF panel, so it also holds the button-chrome checks that no unit test can.
 
 ## Packaging
 

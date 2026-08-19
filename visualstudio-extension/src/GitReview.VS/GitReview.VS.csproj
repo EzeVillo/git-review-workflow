@@ -92,6 +92,12 @@
   <!-- The package/tool window only compile against the VSSDK; the preview app has no VS. -->
   <ItemGroup Condition="'$(TargetFramework)'!='net472'">
     <Compile Remove="Vsix\**" />
+    <!--
+      One fixture set for the gallery, the smoke gate and the xUnit suite — the test
+      project links the same file. It follows Program.cs/Preview\**: the VSIX ships
+      neither, so neither does it.
+    -->
+    <Compile Include="..\..\fixtures\PanelFixtures.cs" Link="Preview\PanelFixtures.cs" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)'=='net472'">

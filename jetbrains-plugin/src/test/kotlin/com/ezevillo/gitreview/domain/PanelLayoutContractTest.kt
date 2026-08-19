@@ -22,6 +22,7 @@ class PanelLayoutContractTest {
         assertLayoutAgainstCanonical(
             key = "review-walk",
             layout = panelLayout(PanelFixtures.reviewWalk()),
+            mode = "walk",
         )
     }
 
@@ -33,6 +34,7 @@ class PanelLayoutContractTest {
         assertLayoutAgainstCanonical(
             key = "review-walk",
             layout = panelLayout(PanelFixtures.reviewWalkDraft()),
+            mode = "walk",
         )
     }
 
@@ -41,6 +43,25 @@ class PanelLayoutContractTest {
         assertLayoutAgainstCanonical(
             key = "review-step",
             layout = panelLayout(PanelFixtures.reviewStep()),
+            mode = "step",
+        )
+    }
+
+    @Test
+    fun `whole control sequence matches canonical`() {
+        assertLayoutAgainstCanonical(
+            key = "review-whole",
+            layout = panelLayout(PanelFixtures.reviewWhole()),
+            mode = "whole",
+        )
+    }
+
+    @Test
+    fun `finish-conflict control sequence matches canonical`() {
+        assertLayoutAgainstCanonical(
+            key = "finish-conflict",
+            layout = panelLayout(PanelFixtures.finishConflict()),
+            mode = "walk",
         )
     }
 
@@ -49,6 +70,16 @@ class PanelLayoutContractTest {
         assertLayoutAgainstCanonical(
             key = "no-review-setup",
             layout = panelLayout(PanelFixtures.noReviewSetup()),
+        )
+    }
+
+    // La situacion mas grande del contrato (ocho controles) y la que ofrece las
+    // destructivas: quedaba sin comparar mientras las cinco chicas si estaban.
+    @Test
+    fun `no-review ready control sequence matches canonical`() {
+        assertLayoutAgainstCanonical(
+            key = "no-review",
+            layout = panelLayout(PanelFixtures.noReviewReady()),
         )
     }
 
@@ -69,23 +100,79 @@ class PanelLayoutContractTest {
     }
 
     @Test
+    fun `cli-outdated controls match canonical`() {
+        assertLayoutAgainstCanonical(
+            key = "cli-outdated",
+            layout = panelLayout(PanelFixtures.cliOutdated()),
+        )
+    }
+
+    @Test
+    fun `out-of-range controls match canonical`() {
+        assertLayoutAgainstCanonical(
+            key = "out-of-range",
+            layout = panelLayout(PanelFixtures.outOfRange()),
+        )
+    }
+
+    @Test
+    fun `error controls match canonical`() {
+        assertLayoutAgainstCanonical(
+            key = "error",
+            layout = panelLayout(PanelFixtures.error()),
+        )
+    }
+
+    @Test
     fun `whole openAllChanges present`() {
         val layout = panelLayout(PanelFixtures.reviewWhole())
         assertTrue(layout.collectControls().any { it.id == ControlId.OPEN_ALL_CHANGES && it.label == "Diff" })
     }
 
-    private fun assertLayoutAgainstCanonical(key: String, layout: PanelLayout) {
+    /**
+     * @param mode el modo de la fixture, cuando la situacion declara bloques con
+     *   `when: walk` / `step` / `whole`. Esas ramas son excluyentes, asi que
+     *   aplanarlas todas en una sola secuencia esperada le pide a un panel walk
+     *   tambien la fila de step.
+     */
+    private fun assertLayoutAgainstCanonical(key: String, layout: PanelLayout, mode: String? = null) {
         val yaml = loadCanonical()
         @Suppress("UNCHECKED_CAST")
         val panelLayout = yaml["panel_layout"] as Map<String, Any?>
         val sit = panelLayout[key] as? Map<*, *>
             ?: error("panel_layout missing situation $key")
-        val expected = extractControlSpecs(sit["blocks"])
+        val expected = extractControlSpecs(sit["blocks"], mode)
         val actual = layout.collectControls()
             .filter { it.id !in titleOnly }
             .map { Triple(it.id.wire, it.label, it.emphasis.id) }
 
-        // Subsequence: actual body controls must include expected in order (when-filtered fixtures may omit some)
+        // 1. Nada que el canonico no declare para esta situacion. Sin esto el matcher
+        //    de abajo solo prueba que los controles esperados estan, y en orden: un
+        //    boton de mas en cualquier parte del panel le pasaba por al lado. Los
+        //    bloques con `when:` pueden faltar, nunca sobrar, asi que la contencion
+        //    corre en una sola direccion.
+        val declared = extractControlSpecs(sit["blocks"]).map { it.id }.toSet()
+        val allowed = declared.toMutableSet()
+        if (mentionsBlock(sit["blocks"], "inventory_rows")) {
+            @Suppress("UNCHECKED_CAST")
+            val inventory = yaml["inventory_controls"] as? Map<String, Any?>
+            if (inventory != null) allowed += inventory.keys
+        }
+        val stray = actual.map { it.first }.filter { it !in allowed }.distinct()
+        assertTrue(
+            stray.isEmpty(),
+            "situation $key: controles que el canonico no declara: $stray (permitidos: ${allowed.sorted()})",
+        )
+
+        // 2. Y nada que el canonico marque not_in para este cliente.
+        val forbidden = declared - extractControlSpecs(sit["blocks"], skipNotIn = true).map { it.id }.toSet()
+        val offered = actual.map { it.first }.filter { it in forbidden }.distinct()
+        assertTrue(
+            offered.isEmpty(),
+            "situation $key: ofrece $offered, que el contrato marca not_in: [$THIS_CLIENT]",
+        )
+
+        // 3. Los declarados, en orden, con su label y su emphasis.
         var j = 0
         for (a in actual) {
             if (j < expected.size && a.first == expected[j].id) {
@@ -115,11 +202,33 @@ class PanelLayoutContractTest {
 
     private data class Spec(val id: String, val label: String?, val emphasis: String?)
 
-    private fun extractControlSpecs(blocks: Any?): List<Spec> {
+    private fun mentionsBlock(node: Any?, blockType: String): Boolean = when (node) {
+        is Map<*, *> -> node["block"] == blockType || node.values.any { mentionsBlock(it, blockType) }
+        is List<*> -> node.any { mentionsBlock(it, blockType) }
+        else -> false
+    }
+
+    /** Un bloque atado a un modo distinto del de la fixture no se dibuja. */
+    private fun gatedOut(node: Map<*, *>, mode: String?): Boolean {
+        if (mode == null) return false
+        val whenTag = node["when"] as? String ?: return false
+        return whenTag in MODE_GATES && whenTag != mode
+    }
+
+    private fun notInThisClient(node: Map<*, *>): Boolean =
+        (node["not_in"] as? List<*>)?.any { it == THIS_CLIENT } == true
+
+    private fun extractControlSpecs(
+        blocks: Any?,
+        mode: String? = null,
+        skipNotIn: Boolean = false,
+    ): List<Spec> {
         val out = ArrayList<Spec>()
         fun walk(node: Any?) {
             when (node) {
                 is Map<*, *> -> {
+                    if (gatedOut(node, mode)) return
+                    if (skipNotIn && notInThisClient(node)) return
                     val id = node["id"] as? String
                     if (id != null) {
                         val label = when (val l = node["label"]) {
@@ -148,6 +257,12 @@ class PanelLayoutContractTest {
         }
         walk(blocks)
         return out
+    }
+
+    private companion object {
+        /** El nombre de este cliente en las listas `not_in:` del contrato. */
+        const val THIS_CLIENT = "jetbrains"
+        val MODE_GATES = setOf("walk", "step", "whole")
     }
 
     private val titleOnly = setOf(

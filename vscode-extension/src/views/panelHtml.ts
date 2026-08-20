@@ -312,6 +312,10 @@ export function panelHtml(nonce: string): string {
     max-width: 100%;
     white-space: nowrap;
   }
+  /* El único control irreversible de una fila no comparte vecindad con el de
+     compromiso: un hueco mayor que el gap rompe la adyacencia sin sacarlo de
+     su fila. El canónico lo declara con separated: true. */
+  .rev-actions button.sep { margin-left: .8em; }
   /* Badge "?" a la altura de current/orphan: el mensaje va solo en title. */
   .badge.help {
     display: inline-flex;
@@ -557,8 +561,8 @@ export function panelHtml(nonce: string): string {
    * Un control sin texto visible sigue necesitando nombre: el aria-label es
    * el que lee un lector de pantalla y el title el que aparece en hover.
    */
-  function iconButton(iconName, message, label) {
-    const node = button(null, message, null, iconName);
+  function iconButton(iconName, message, label, index) {
+    const node = button(null, message, null, iconName, index);
     node.setAttribute("aria-label", label);
     node.title = label;
     return node;
@@ -700,7 +704,9 @@ export function panelHtml(nonce: string): string {
   /**
    * Una fila del bloque de borradores: la rama, el avance tal como lo reporta
    * la CLI, y los cuatro controles sobre ESA fila. El progreso no se deriva ni
-   * se reinterpreta acá — annotated/total llegan contados.
+   * se reinterpreta acá — annotated/total llegan contados; lo único que se
+   * decide con ellos es cuál de los controles lleva el énfasis, nunca cuál se
+   * ofrece ni en qué orden.
    *
    * Validate and start falta cuando la CLI no sabe con qué origen y rango se
    * generó el borrador: invocarlo con los defaults fallaría siempre por deriva,
@@ -716,22 +722,34 @@ export function panelHtml(nonce: string): string {
     box.appendChild(el("div", "rev-meta", draft.annotated + "/" + draft.total));
 
     const actions = el("div", "rev-actions");
-    const open = button("Open", "openDraft", null, null, index);
-    open.title = "Open the reading order for editing";
-    actions.appendChild(open);
+    // Un solo control enfático por fila, y el progreso decide cuál: mientras
+    // falten entradas el paso siguiente es llenar el borrador, y recién con el
+    // orden completo lo es arrancar la review. El ORDEN es fijo — mover el
+    // objetivo del clic según el estado lo corre bajo el cursor.
+    const filled = draft.annotated >= draft.total;
 
-    const copy = button("Copy for agent", "copyDraftPrompt", null, null, index);
+    const copy = button("Copy for agent", "copyDraftPrompt", filled ? null : "primary", null, index);
     copy.title = "Copy an instruction naming this file";
     actions.appendChild(copy);
 
     if (draft.startable) {
-      const go = button("Validate and start", "startFromDraft", "primary", null, index);
+      // Nunca disabled por progreso: el conteo sale del disco y el borrador
+      // puede estar abierto con cambios sin guardar (saveOpenDraft los guarda
+      // antes de validar), así que grisarlo mentiría al terminar de escribir.
+      const go = button("Validate and start", "startFromDraft", filled ? "primary" : null, null, index);
       go.disabled = model.busy;
       go.title = "git review walkthrough draft --build, then start";
       actions.appendChild(go);
     }
 
-    const discard = button("Discard", "discardDraft", null, null, index);
+    // Ícono: el archivo vive en el gitdir, fuera del árbol versionado, y éste
+    // es el único control de toda la extensión que lo abre. Su etiqueta era la
+    // que forzaba el wrap de la fila; la acción no sobra.
+    const open = iconButton("file", "openDraft", "Open the reading order", index);
+    open.title = "Open the reading order for editing";
+    actions.appendChild(open);
+
+    const discard = button("Discard", "discardDraft", "sep", null, index);
     discard.disabled = model.busy;
     discard.title = "git review forget --draft (with confirmation)";
     actions.appendChild(discard);

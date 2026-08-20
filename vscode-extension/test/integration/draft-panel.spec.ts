@@ -2,6 +2,7 @@ import * as assert from "node:assert";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import {sameDraftFile} from "../../src/review/draftFlow";
 import {getTestApi} from "./helpers/extensionApi";
 import {
     abortReview,
@@ -65,11 +66,31 @@ function clearDrafts(repoDir: string): void {
     }
 }
 
-/** Espera a que el estado converja: los controles refrescan en background. */
-async function settle(api: Awaited<ReturnType<typeof getTestApi>>): Promise<void> {
+/**
+ * Espera a que el estado converja: los controles refrescan en background.
+ *
+ * Con `until` corta apenas se cumple; sin él son las cuarenta pasadas enteras,
+ * que es lo que hace falta cuando lo que se afirma es que NO pasa nada — eso no
+ * tiene señal que esperar y el único margen es el tiempo.
+ *
+ * La diferencia no es cosmética en Windows: cada `refresh` es un
+ * `status --porcelain` de verdad, nueve procesos git, y ahí crear un proceso
+ * cuesta ~50 ms contra ~1 ms en Linux. Cuarenta pasadas fijas son ~40 s por
+ * llamada, y dos llamadas en un mismo test ya se comen el timeout de dos
+ * minutos de la suite (que es exactamente como se caían los dos tests de
+ * `startFromDraft` en el runner de Windows, verdes en Linux). Con la condición,
+ * el caso normal sale en la primera vuelta.
+ */
+async function settle(
+    api: Awaited<ReturnType<typeof getTestApi>>,
+    until?: (state: Awaited<ReturnType<typeof api.refresh>>) => boolean
+): Promise<void> {
     for (let i = 0; i < 40; i++) {
         await new Promise((resolve) => setTimeout(resolve, 50));
-        await api.refresh();
+        const state = await api.refresh();
+        if (until?.(state)) {
+            return;
+        }
     }
 }
 
@@ -169,27 +190,36 @@ describe("US3: el bloque de borradores del panel", function () {
     it("Open abre el archivo en la ruta que reportó la CLI", async () => {
         const branch = "us3-panel-open";
         createBranchWithChanges(repo, branch, {"src/a.ts": "a\n"});
-        const file = makeDraft(branch);
+        makeDraft(branch);
 
         const api = await getTestApi();
         await api.refresh();
+        // La ruta que se afirma es la QUE REPORTO LA CLI, no una rearmada acá:
+        // es la regla del feature, y también la única que resiste el runner de
+        // Windows. Ahí `%TEMP%` viene en forma 8.3 (`C:\Users\RUNNER~1\...`),
+        // que es lo que el fixture usa para armar rutas, mientras que la CLI
+        // resuelve con `git rev-parse --absolute-git-dir` y contesta el nombre
+        // largo con barras normales (`C:/Users/runneradmin/...`). Son el mismo
+        // archivo y ninguna comparación de texto los iguala.
+        const reported = (await api.getPanelModel()).drafts.find(
+            (d) => d.branch === branch
+        )?.path;
+        assert.ok(reported, "la CLI reportó una fila para esta rama");
         api.sendPanelMessage("openDraft", 0);
 
-        for (let i = 0; i < 60; i++) {
-            if (
-                vscode.window.visibleTextEditors.some(
-                    (editor) => editor.document.uri.fsPath === file
-                )
-            ) {
-                break;
-            }
+        // sameDraftFile y no `===`: es la misma comparación que hace el producto
+        // para encontrar el documento abierto, separadores y mayúsculas
+        // incluidos.
+        const opened = (): boolean =>
+            vscode.window.visibleTextEditors.some((editor) =>
+                sameDraftFile(editor.document.uri.fsPath, reported)
+            );
+        for (let i = 0; i < 60 && !opened(); i++) {
             await new Promise((resolve) => setTimeout(resolve, 50));
         }
         assert.ok(
-            vscode.window.visibleTextEditors.some(
-                (editor) => editor.document.uri.fsPath === file
-            ),
-            `no se abrió ${file}: ${vscode.window.visibleTextEditors
+            opened(),
+            `no se abrió ${reported}: ${vscode.window.visibleTextEditors
                 .map((e) => e.document.uri.fsPath)
                 .join(", ")}`
         );
@@ -198,10 +228,16 @@ describe("US3: el bloque de borradores del panel", function () {
     it("Copy for agent deja el texto canonico con la ruta de esa fila", async () => {
         const branch = "us3-panel-copy";
         createBranchWithChanges(repo, branch, {"src/a.ts": "a\n"});
-        const file = makeDraft(branch);
+        makeDraft(branch);
 
         const api = await getTestApi();
         await api.refresh();
+        // La ruta sale del reporte de la CLI y no se rearma acá: es lo que el
+        // texto copiado tiene que llevar verbatim, y en el runner de Windows una
+        // rearmada trae la forma 8.3 de %TEMP% (`RUNNER~1`) contra el nombre
+        // largo que resuelve git. La oración sí se afirma literal.
+        const file = (await api.getPanelModel()).drafts.find((d) => d.branch === branch)?.path;
+        assert.ok(file, "la CLI reportó una fila para esta rama");
         await vscode.env.clipboard.writeText("");
         api.sendPanelMessage("copyDraftPrompt", 0);
 
@@ -303,7 +339,7 @@ describe("US3: el bloque de borradores del panel", function () {
                 for (let i = 0; i < 200 && !started; i++) {
                     await new Promise((resolve) => setTimeout(resolve, 50));
                 }
-                await settle(api);
+                await settle(api, (state) => state.situation === "review");
             } finally {
                 (vscode.window as unknown as {
                     showQuickPick: unknown
@@ -366,7 +402,7 @@ describe("US3: el bloque de borradores del panel", function () {
             for (let i = 0; i < 200 && !started && errors.length === 0; i++) {
                 await new Promise((resolve) => setTimeout(resolve, 50));
             }
-            await settle(api);
+            await settle(api, (state) => state.situation === "review");
         } finally {
             (vscode.window as unknown as {
                 showWarningMessage: unknown

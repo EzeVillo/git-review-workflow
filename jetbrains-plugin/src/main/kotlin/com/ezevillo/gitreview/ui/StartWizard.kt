@@ -37,7 +37,7 @@ import com.ezevillo.gitreview.host.MutationActions
 import com.ezevillo.gitreview.host.StartRunResult
 import com.ezevillo.gitreview.settings.GitReviewSettings
 import com.ezevillo.gitreview.vcs.pickSoleGitRoot
-import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.WriteIntentReadAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.project.Project
@@ -416,11 +416,18 @@ object StartWizard {
      * perder el foco — que es justo lo que no pasa mientras el panel conduce.
      */
     private fun saveDraftDocument(project: Project, path: String) {
+        // El refresh sincrónico del VFS va FUERA del lock a propósito: la
+        // plataforma lo rechaza bajo read lock, y acá ya estamos en el EDT.
         val vf = LocalFileSystem.getInstance().refreshAndFindFileByPath(path) ?: return
-        val fdm = FileDocumentManager.getInstance()
-        val doc = fdm.getDocument(vf) ?: return
-        if (!fdm.isDocumentUnsaved(doc)) return
-        ApplicationManager.getApplication().invokeAndWait { fdm.saveDocument(doc) }
+        // Desde 2024.1 el EDT no trae read access implícito: este handler entra
+        // por un JButton del panel, no por una AnAction que la plataforma
+        // envuelva, así que el lock lo pide el llamador. Un solo write-intent
+        // cubre las dos mitades: leer el documento y guardarlo.
+        WriteIntentReadAction.run {
+            val fdm = FileDocumentManager.getInstance()
+            val doc = fdm.getDocument(vf) ?: return@run
+            if (fdm.isDocumentUnsaved(doc)) fdm.saveDocument(doc)
+        }
     }
 
     private fun confirmAndStart(ctx: WizardContext, layout: ReviewLayout) {

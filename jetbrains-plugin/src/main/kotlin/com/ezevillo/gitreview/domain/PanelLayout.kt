@@ -10,12 +10,14 @@ const val SKELETON_DELAY_MS: Long = 120
 const val WHY_CEILING_MS: Long = 800
 
 enum class Emphasis {
-    PRIMARY, SECONDARY, LINK, ICON;
+    /** No fill of its own, in the color of the meta: a step below SECONDARY. */
+    PRIMARY, SECONDARY, QUIET, LINK, ICON;
 
     val id: String
         get() = when (this) {
             PRIMARY -> "primary"
             SECONDARY -> "secondary"
+            QUIET -> "quiet"
             LINK -> "link"
             ICON -> "icon"
         }
@@ -130,13 +132,6 @@ data class Control(
     val index: Int? = null,
     /** openSupport allowlist id (`star`, `bug`); null for every other control. */
     val supportLinkId: String? = null,
-    /**
-     * A gap wider than the one between controls, before this one. The only
-     * irreversible control of a row carries it so that it does not share an
-     * edge with the one that commits; the canonical declares it as
-     * `separated: true`.
-     */
-    val separated: Boolean = false,
 ) {
     init {
         // 1. icon ⟹ accessible name
@@ -362,7 +357,6 @@ private fun ctrl(
     tooltip: String? = null,
     index: Int? = null,
     supportLinkId: String? = null,
-    separated: Boolean = false,
 ): Control {
     val name = accessibleName
         ?: label
@@ -376,7 +370,6 @@ private fun ctrl(
         tooltip = tooltip,
         index = index,
         supportLinkId = supportLinkId,
-        separated = separated,
     )
 }
 
@@ -803,29 +796,34 @@ private fun draftRows(model: PanelModel): Block.DraftRows {
                 index = index,
             ),
         )
-        // An icon: the draft lives outside the versioned tree and this control
-        // is the one surface that opens it, but its label was what forced the
-        // row to wrap.
+        // The draft lives outside the versioned tree and this control is the
+        // one surface that opens it. It carries a label and not a glyph: in a
+        // cell of even width the label no longer forces the wrap the icon was
+        // there to avoid, and an icon among three labels does not say what it
+        // opens. What is read out is the sentence — "Open" on its own repeats
+        // once per row and names none of them.
         controls.add(
             ctrl(
                 ControlId.OPEN_DRAFT,
-                null,
-                Emphasis.ICON,
+                "Open",
+                Emphasis.SECONDARY,
                 enabled = true,
                 accessibleName = "Open the reading order",
                 tooltip = "Open the reading order for editing",
                 index = index,
             ),
         )
+        // The one irreversible control of the row: with no fill it drops a step
+        // without leaving its cell, and a click in passing no longer lands on
+        // something shaped like a button.
         controls.add(
             ctrl(
                 ControlId.DISCARD_DRAFT,
                 "Discard",
-                Emphasis.SECONDARY,
+                Emphasis.QUIET,
                 enabled = enabled,
                 tooltip = "git review forget --draft (with confirmation)",
                 index = index,
-                separated = true,
             ),
         )
         DraftRow(name = d.branch, meta = "${d.annotated}/${d.total}", controls = controls)

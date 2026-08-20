@@ -353,7 +353,8 @@ inventory_controls:
 # (sigue sin poder invocarse) y encima dice por qué, que un control que no está
 # no puede decir.
 draft_controls:
-  # El énfasis sigue al progreso y el ORDEN no se mueve: mientras falten
+  # Los cuatro entran en dos columnas de ancho parejo, y ahí el énfasis es lo
+  # único que se mueve. Sigue al progreso y el ORDEN no: mientras falten
   # entradas el paso siguiente es llenar el borrador, y recién con el orden
   # completo lo es arrancar la review. `emphasis:` es el valor con el borrador
   # completo; `emphasis_unfilled:` el de `annotated < total`. Sin la segunda
@@ -364,9 +365,13 @@ draft_controls:
   # que el cliente guarda antes de validar. `tooltip_disabled` es lo que dice en
   # el caso unknown, y va byte por byte igual en los tres clientes.
   startFromDraft: {label: "Validate and start", emphasis: primary, emphasis_unfilled: secondary, confirms: true, tooltip_disabled: "This draft has no instruction block, so the CLI cannot tell how it was generated"}
-  # Icono: el archivo vive fuera del árbol versionado y este control es la única
-  # superficie que lo abre, pero su etiqueta era la que forzaba el wrap.
-  openDraft: {label: null, accessible_name: "Open the reading order", emphasis: icon, confirms: false}
-  # `separated`: un hueco mayor que el gap entre controles. Es el único
-  # irreversible de la fila y no comparte vecindad con el de compromiso.
-  discardDraft: {label: "Discard", emphasis: secondary, confirms: true, separated: true}
+  # Con etiqueta y no como icono: en una celda de ancho fijo la etiqueta ya no
+  # fuerza el wrap que motivó el glifo, y un icono suelto entre tres etiquetas
+  # no dice qué abre. El `accessible_name` es lo que se lee en voz alta, porque
+  # "Open" a secas se repite una vez por fila y no nombra a cuál pertenece.
+  openDraft: {label: "Open", accessible_name: "Open the reading order", emphasis: secondary, confirms: false}
+  # `quiet`: sin caja, en el color de la meta. Es el único irreversible de la
+  # fila, y quitarle el relleno lo baja un escalón sin sacarlo de su celda — el
+  # hueco de un control separado no cabe en una grilla, y era lo que antes lo
+  # distinguía. Un clic de paso ya no cae sobre algo que parece un botón.
+  discardDraft: {label: "Discard", emphasis: quiet, confirms: true}

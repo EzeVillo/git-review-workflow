@@ -143,3 +143,24 @@ Más `node scripts/check-client-product-surface.mjs` en CI, que ata las tres pun
 - El conteo fijo de 27 acciones: los cuatro siguen siendo controles del cuerpo.
 - Un icono `trash` nuevo.
 - La CLI y sus dos README.
+
+## Cómo quedó (implementación)
+
+Dos decisiones de este documento cambiaron al ver la fila dibujada, y el canónico
+(`contracts/client-product-surface.yaml`) es la versión vigente:
+
+- **La botonera es una grilla de dos columnas parejas**, no una fila que envuelve. Con
+  el wrap, cada fila del bloque partía en un lugar distinto y ninguna se alineaba con
+  la de al lado.
+- Con la celda de ancho fijo, **`openDraft` vuelve a llevar etiqueta** (`"Open"`,
+  `emphasis: secondary`): la etiqueta ya no fuerza el wrap que motivó el icono, y un
+  glifo entre tres etiquetas no dice qué abre. El `accessible_name` sigue siendo la
+  oración.
+- **`separated` desaparece** —el hueco no cabe en una grilla— y lo reemplaza un énfasis
+  nuevo, **`quiet`**: el destructivo pierde la caja y queda en el color de la meta.
+- El progreso pasa de una línea propia a un **badge en la cabecera de la fila**, y
+  `startFromDraft` **nunca desaparece**: con origen/rango `unknown` va apagado y con
+  `tooltip_disabled` diciendo por qué.
+
+Los tests 4 y 5 de la lista de arriba afirman, entonces, la etiqueta y el énfasis
+`quiet`.

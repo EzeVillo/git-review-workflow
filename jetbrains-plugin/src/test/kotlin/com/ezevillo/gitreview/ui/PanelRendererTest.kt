@@ -7,8 +7,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import java.awt.BorderLayout
-import javax.swing.JButton
+import java.awt.GridLayout
 import javax.swing.JPanel
 import javax.swing.SwingConstants
 
@@ -161,34 +160,64 @@ class PanelRendererTest {
     }
 
     @Test
-    fun `a draft row that does not fit on one line asks for the height of two`() {
-        // FlowLayout lays the row out over as many lines as it needs but asks
-        // for the height of one, so at sidebar width everything past the first
-        // line is clipped away — not moved: Discard never gets drawn at all.
-        val row = JPanel(WrapLayout(4, 2))
-        repeat(4) { row.add(JButton("Validate and start")) }
-        val oneLine = row.getComponent(0).preferredSize.height
+    fun `the draft actions are a grid of two even columns, not a row that wraps`() {
+        // A wrapping row lays the four controls out over as many lines as it
+        // needs and breaks in a different place on every row of the block, so
+        // none lines up with the one beside it. Four even cells always do.
+        val renderer = PanelRenderer(PreviewPanelChrome()) { _, _, _ -> false }
+        val root = renderer.render(panelLayout(PanelFixtures.noReviewDrafts()))
+        val discard = PanelRenderer.collectButtons(root)
+            .first { it.toolTipText == "git review forget --draft (with confirmation)" }
 
-        val host = JPanel(BorderLayout())
-        host.add(row, BorderLayout.CENTER)
-        host.setSize(320, 400)
-        host.doLayout()
+        val actions = discard.parent as JPanel
+        val grid = actions.layout as? GridLayout
+        assertTrue(grid != null, "the draft actions are laid out as a grid")
+        assertEquals(2, grid!!.rows, "two rows")
+        assertEquals(2, grid.columns, "two columns")
+        assertEquals(4, actions.componentCount, "one cell per control, no struts between them")
+    }
 
-        assertTrue(
-            row.preferredSize.height > oneLine * 2,
-            "four wide controls at 320px need more than two rows of height",
-        )
+    @Test
+    fun `open draft carries a label of its own and a name that says which one`() {
+        // In a cell of even width the label no longer forces the wrap the icon
+        // was there to avoid, and a glyph among three labels does not say what
+        // it opens. "Open" on its own repeats once per row, so what is read out
+        // is the sentence.
+        val renderer = PanelRenderer(PreviewPanelChrome()) { _, _, _ -> false }
+        val root = renderer.render(panelLayout(PanelFixtures.noReviewDrafts()))
+        val open = PanelRenderer.collectButtons(root)
+            .first { it.toolTipText == "Open the reading order for editing" }
+
+        assertEquals("Open", open.text, "etiqueta visible, no un glifo")
+        assertEquals("Open the reading order", open.accessibleContext.accessibleName)
+        assertTrue(open.isBorderPainted, "no es el destructivo: conserva su caja")
+    }
+
+    @Test
+    fun `discard is the one control of the row without a fill`() {
+        // The one irreversible control of the row: with no fill it drops a step
+        // without leaving its cell, and a click in passing does not land on
+        // something shaped like a button.
+        val renderer = PanelRenderer(PreviewPanelChrome()) { _, _, _ -> false }
+        val root = renderer.render(panelLayout(PanelFixtures.noReviewDrafts()))
+        val discard = PanelRenderer.collectButtons(root)
+            .first { it.toolTipText == "git review forget --draft (with confirmation)" }
+
+        assertFalse(discard.isContentAreaFilled, "sin relleno propio")
+        assertFalse(discard.isBorderPainted, "ni borde")
+        assertEquals(PreviewPanelChrome().mutedForeground(), discard.foreground, "en el color de la meta")
+        assertEquals("Discard", discard.text)
     }
 
     @Test
     fun `an icon control without a platform icon falls back to a glyph, not to its name`() {
         // El nombre accesible es una oracion entera: si cae ahi, el control se
         // vuelve el mas ancho de la fila, que es lo contrario de un icono.
-        val layout = panelLayout(PanelFixtures.noReviewDrafts())
+        val layout = panelLayout(PanelFixtures.reviewWalk(atFirst = true))
         val renderer = PanelRenderer(PreviewPanelChrome()) { _, _, _ -> false }
         val buttons = PanelRenderer.collectButtons(renderer.render(layout))
-        val open = buttons.find { it.toolTipText == "Open the reading order for editing" }
-        assertTrue(open != null, "the draft row draws an openDraft control")
-        assertEquals(PreviewPanelChrome().glyphFile(), open!!.text)
+        val prev = buttons.find { it.accessibleContext.accessibleName == "Previous entry" }
+        assertTrue(prev != null, "the walk bar draws a prev control")
+        assertEquals(PreviewPanelChrome().glyphPrev(), prev!!.text)
     }
 }

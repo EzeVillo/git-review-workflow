@@ -331,7 +331,7 @@ function collectCanonicalControls() {
   // conteo fijo de 27 de arriba no los cuenta y no se toca.
   const draftBlock = text.split(/^draft_controls:\s*$/m)[1]?.split(/^[a-z_][a-z0-9_]*:/m)[0] ?? "";
   const draftRe =
-    /^ {2}([A-Za-z][A-Za-z0-9]*):\s*\{label:\s*(null|"[^"]*")\s*,\s*(?:accessible_name:\s*"([^"]*)"\s*,\s*)?emphasis:\s*(primary|secondary|link|icon)\s*(?:,\s*emphasis_unfilled:\s*(primary|secondary))?\s*,\s*confirms:\s*(true|false)(?:\s*,\s*separated:\s*(true|false))?(?:\s*,\s*tooltip_disabled:\s*"([^"]*)")?\}/gm;
+    /^ {2}([A-Za-z][A-Za-z0-9]*):\s*\{label:\s*(null|"[^"]*")\s*,\s*(?:accessible_name:\s*"([^"]*)"\s*,\s*)?emphasis:\s*(primary|secondary|link|icon|quiet)\s*(?:,\s*emphasis_unfilled:\s*(primary|secondary))?\s*,\s*confirms:\s*(true|false)(?:\s*,\s*tooltip_disabled:\s*"([^"]*)")?\}/gm;
   let dm;
   while ((dm = draftRe.exec(draftBlock)) !== null) {
     // Un control con emphasis_unfilled tiene DOS enfasis validos —el cliente
@@ -346,8 +346,7 @@ function collectCanonicalControls() {
       emphases,
       raw: false,
       confirms: dm[6] === "true",
-      separated: dm[7] === "true",
-      tooltipDisabled: dm[8] || null,
+      tooltipDisabled: dm[7] || null,
     });
   }
   return controls;
@@ -361,27 +360,48 @@ const rawControlIds = new Set(
   canonicalControls.filter((c) => c.raw).map((c) => c.id),
 );
 
-// tooltip_disabled de draft_controls: lo que dice un control apagado. Es copy
-// compartida como draft_agent_prompt, y el motivo de verificarla es el mismo —
-// tres clientes escribiendo a mano el mismo texto derivan sin que nadie mire—,
-// pero vive en el builder del layout de cada uno y no en su UserCopy.
-const disabledTips = canonicalControls
-  .filter((c) => c.tooltipDisabled)
-  .map((c) => [c.id, c.tooltipDisabled]);
-for (const [id, tip] of disabledTips) {
-  for (const [label, rel] of [
-    ["vscode", ["vscode-extension", "src", "views", "panelHtml.ts"]],
-    ["intellij", ["jetbrains-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "domain", "PanelLayout.kt"]],
-    ["visualstudio", ["visualstudio-extension", "src", "GitReview.Domain", "PanelLayout.cs"]],
-  ]) {
+// Los tres archivos donde vive la copy de un control del bloque de borradores:
+// no es UserCopy, porque la escribe el builder del layout de cada cliente.
+const layoutFiles = [
+  ["vscode", ["vscode-extension", "src", "views", "panelHtml.ts"]],
+  ["intellij", ["jetbrains-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "domain", "PanelLayout.kt"]],
+  ["visualstudio", ["visualstudio-extension", "src", "GitReview.Domain", "PanelLayout.cs"]],
+];
+
+/**
+ * Una cadena que los tres clientes escriben a mano y tiene que decir lo mismo.
+ * `exact` la busca entrecomillada y sin normalizar: un nombre accesible que es
+ * prefijo del tooltip de al lado --"Open the reading order" contra "Open the
+ * reading order for editing"-- se da por presente con la comparacion laxa
+ * aunque el cliente lo haya perdido.
+ */
+function requireSharedCopy(what, copy, exact) {
+  for (const [label, rel] of layoutFiles) {
     const p = join(root, ...rel);
     if (!existsSync(p)) {
       fail(`${label} panel layout missing at ${rel.join("/")}`);
       continue;
     }
-    if (!squash(readText(p, "utf8")).includes(squash(tip))) {
-      fail(`${label} is missing the disabled tooltip of ${id}`);
-    }
+    const src = readText(p, "utf8");
+    const hit = exact
+      ? src.includes(`"${copy}"`)
+      : squash(src).includes(squash(copy));
+    if (!hit) fail(`${label} is missing the ${what}`);
+  }
+}
+
+for (const c of canonicalControls) {
+  // Lo que dice un control apagado. Es copy compartida como draft_agent_prompt,
+  // y el motivo de verificarla es el mismo: tres clientes escribiendo a mano el
+  // mismo texto derivan sin que nadie mire.
+  if (c.tooltipDisabled) {
+    requireSharedCopy(`disabled tooltip of ${c.id}`, c.tooltipDisabled, false);
+  }
+  // El nombre accesible de un control CON etiqueta: es copy propia, no la
+  // etiqueta, y sin verificarla el aria-label se cae de un cliente sin que
+  // nadie lo note (uno de icono ya se verifica por su iconButton).
+  if (c.accessible && c.label != null) {
+    requireSharedCopy(`accessible name of ${c.id}`, c.accessible, true);
   }
 }
 
@@ -392,6 +412,8 @@ for (const [id, tip] of disabledTips) {
 function emphasisFromClassArg(classArg) {
   if (classArg === "null" || classArg === undefined) return "secondary";
   if (classArg === '"primary"' || classArg === "'primary'") return "primary";
+  // Un destructivo sin caja: menos que secondary, y el canonico lo declara asi.
+  if (classArg === '"quiet"' || classArg === "'quiet'") return "quiet";
   const cond = /^[A-Za-z_$][\w$]*\s*\?\s*(null|"primary")\s*:\s*(null|"primary")$/.exec(classArg);
   if (cond) {
     return [cond[1], cond[2]].map((v) => (v === "null" ? "secondary" : "primary")).join("|");

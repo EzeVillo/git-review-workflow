@@ -556,35 +556,87 @@ describe("panelHtml", () => {
         );
     });
 
-    it("Open es un icono con nombre accesible y el indice de su fila", () => {
+    it("Open es un boton con etiqueta, y lo que se lee en voz alta nombra la fila", () => {
         // El borrador vive fuera del arbol versionado y este control es la
-        // unica superficie que lo abre: baja de peso, no desaparece.
-        assert.ok(
-            /iconButton\("file", "openDraft", "Open the reading order", index\)/.test(html),
-            "icono file, con label accesible e indice"
-        );
-        assert.ok(
-            /function iconButton\(iconName, message, label, index\)/.test(html),
-            "el helper acepta el indice de la fila"
-        );
-    });
-
-    it("Discard es el ultimo de la fila y no comparte vecindad con el primary", () => {
+        // unica superficie que lo abre: baja de peso, no desaparece. En una
+        // celda de ancho fijo la etiqueta ya no fuerza el wrap que motivo el
+        // icono, y un glifo suelto entre tres etiquetas no dice que abre.
         const draftFn = html.slice(
             html.indexOf("function renderDraft("),
             html.indexOf("function renderDrafts(")
         );
         assert.ok(
-            /button\("Discard", "discardDraft", "sep", null, index\)/.test(draftFn),
-            "el destructivo lleva la clase que lo separa"
+            /button\("Open", "openDraft", null, null, index\)/.test(draftFn),
+            "etiqueta visible, sin enfasis propio, con el indice de su fila"
+        );
+        assert.ok(
+            /open\.setAttribute\("aria-label", "Open the reading order"\)/.test(draftFn),
+            "\"Open\" a secas se repite una vez por fila: el nombre accesible es la oracion"
+        );
+        assert.ok(
+            /open\.title = "Open the reading order for editing"/.test(draftFn),
+            "el tooltip sigue diciendo que se abre para editar"
+        );
+        assert.ok(
+            !/iconButton\([^)]*"openDraft"/.test(html),
+            "ya no queda un control de icono para openDraft"
+        );
+    });
+
+    it("Discard es el ultimo de la fila y pierde la caja", () => {
+        // Es el unico irreversible de la fila: sin relleno baja un escalon sin
+        // salirse de su celda, y un clic de paso no cae sobre algo que parece
+        // un boton. El hueco que antes lo separaba no cabe en una grilla.
+        const draftFn = html.slice(
+            html.indexOf("function renderDraft("),
+            html.indexOf("function renderDrafts(")
+        );
+        assert.ok(
+            /button\("Discard", "discardDraft", "quiet", null, index\)/.test(draftFn),
+            "el destructivo lleva la clase que le saca la caja"
         );
         assert.ok(
             draftFn.lastIndexOf("discardDraft") > draftFn.lastIndexOf("startFromDraft"),
             "va despues del control de compromiso"
         );
         assert.ok(
-            /\.rev-actions button\.sep \{ margin-left: [^}]+\}/.test(html),
-            "un hueco mayor que el gap entre controles"
+            /\.draft-actions button\.quiet \{[^}]*background: none;[^}]*\}/.test(html),
+            "sin relleno propio"
+        );
+        assert.ok(
+            /\.draft-actions button\.quiet \{[^}]*var\(--vscode-descriptionForeground\)[^}]*\}/.test(html),
+            "en el color de la meta, no en el del cuerpo"
+        );
+    });
+
+    it("la botonera del borrador es una grilla de dos columnas, no una fila que envuelve", () => {
+        // A ancho de sidebar los cuatro no entran en una linea, y envolviendolos
+        // cada fila del bloque partia en un lugar distinto: ninguna se alineaba
+        // con la de al lado. Cuatro celdas iguales se alinean siempre.
+        assert.ok(
+            /\.draft-actions \{[^}]*display: grid;[^}]*\}/.test(html),
+            "grilla, no flex con wrap"
+        );
+        assert.ok(
+            /\.draft-actions \{[^}]*grid-template-columns: 1fr 1fr;[^}]*\}/.test(html),
+            "dos columnas de ancho parejo"
+        );
+    });
+
+    it("el progreso del borrador va como badge en la cabecera de la fila", () => {
+        // Es un dato del largo de un badge: una linea suelta por fila
+        // multiplicaba el alto del bloque por nada.
+        const draftFn = html.slice(
+            html.indexOf("function renderDraft("),
+            html.indexOf("function renderDrafts(")
+        );
+        assert.ok(
+            /head\.appendChild\(el\("span", "badge", draft\.annotated \+ "\/" \+ draft\.total\)\)/.test(draftFn),
+            "el conteo va en la cabecera, al lado del nombre"
+        );
+        assert.ok(
+            !/rev-meta", draft\.annotated/.test(draftFn),
+            "y ya no ocupa una linea propia"
         );
     });
 });

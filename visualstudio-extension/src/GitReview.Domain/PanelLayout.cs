@@ -11,6 +11,9 @@ public enum Emphasis
 {
     Primary,
     Secondary,
+
+    /// <summary>No fill of its own, in the color of the meta: a step below Secondary.</summary>
+    Quiet,
     Link,
     Icon,
 }
@@ -21,6 +24,7 @@ public static class EmphasisExt
     {
         Emphasis.Primary => "primary",
         Emphasis.Secondary => "secondary",
+        Emphasis.Quiet => "quiet",
         Emphasis.Link => "link",
         Emphasis.Icon => "icon",
         _ => throw new ArgumentOutOfRangeException(nameof(e)),
@@ -121,8 +125,7 @@ public sealed record Control
         bool enabled = true,
         string? tooltip = null,
         int? index = null,
-        string? supportLinkId = null,
-        bool separated = false)
+        string? supportLinkId = null)
     {
         if (label is null)
         {
@@ -139,7 +142,6 @@ public sealed record Control
         Tooltip = tooltip;
         Index = index;
         SupportLinkId = supportLinkId;
-        Separated = separated;
     }
 
     public ControlId Id { get; init; }
@@ -150,14 +152,6 @@ public sealed record Control
     public string? Tooltip { get; init; }
     public int? Index { get; init; }
     public string? SupportLinkId { get; init; }
-
-    /// <summary>
-    /// A gap wider than the one between controls, before this one. The only
-    /// irreversible control of a row carries it so that it does not share an
-    /// edge with the one that commits; the canonical declares it as
-    /// <c>separated: true</c>.
-    /// </summary>
-    public bool Separated { get; init; }
 }
 
 public sealed record FileRow(string Display, int Index, bool LastOpened);
@@ -410,13 +404,12 @@ public static class PanelLayoutBuilder
         string? accessibleName = null,
         string? tooltip = null,
         int? index = null,
-        string? supportLinkId = null,
-        bool separated = false)
+        string? supportLinkId = null)
     {
         // The two rules live on the record itself; this only fills in the name a
         // labelled control gets for free.
         var name = accessibleName ?? label ?? id.Wire();
-        return new Control(id, label, name, emphasis, enabled, tooltip, index, supportLinkId, separated);
+        return new Control(id, label, name, emphasis, enabled, tooltip, index, supportLinkId);
     }
 
     private static string? TipShort(string? tip) =>
@@ -761,22 +754,28 @@ public static class PanelLayoutBuilder
                         ? "git review walkthrough draft --build, then start"
                         : "This draft has no instruction block, so the CLI cannot tell how it was generated",
                     index: index),
-                // An icon: the draft lives outside the versioned tree and this
-                // control is the one surface that opens it, but its label was
-                // what forced the row to wrap.
+                // The draft lives outside the versioned tree and this control
+                // is the one surface that opens it. It carries a label and not a
+                // glyph: in a cell of even width the label no longer forces the
+                // wrap the icon was there to avoid, and an icon among three
+                // labels does not say what it opens. What is read out is the
+                // sentence — "Open" on its own repeats once per row and names
+                // none of them.
                 Ctrl(
-                    ControlId.OpenDraft, null, Emphasis.Icon,
+                    ControlId.OpenDraft, "Open", Emphasis.Secondary,
                     enabled: true,
                     accessibleName: "Open the reading order",
                     tooltip: "Open the reading order for editing",
                     index: index),
             };
+            // The one irreversible control of the row: with no fill it drops a
+            // step without leaving its cell, and a click in passing no longer
+            // lands on something shaped like a button.
             controls.Add(Ctrl(
-                ControlId.DiscardDraft, "Discard", Emphasis.Secondary,
+                ControlId.DiscardDraft, "Discard", Emphasis.Quiet,
                 enabled: enabled,
                 tooltip: "git review forget --draft (with confirmation)",
-                index: index,
-                separated: true));
+                index: index));
             return new DraftRow(d.Branch, $"{d.Annotated}/{d.Total}", controls);
         }).ToList();
         return new Block.DraftRows(rows);

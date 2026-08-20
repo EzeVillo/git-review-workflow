@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using GitReview.Domain;
@@ -480,26 +481,41 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         var stack = new StackPanel();
         foreach (var r in block.Rows)
         {
-            stack.Children.Add(MonoLabel(r.Name));
-            stack.Children.Add(MonoLabel(r.Meta, muted: true));
-            // WrapPanel, not StackPanel: at sidebar width the four controls do
-            // not fit on one line, and a horizontal StackPanel lays them past
-            // the edge instead of wrapping — the reviewer never sees Discard.
-            var actions = new WrapPanel
+            // The progress rides the header instead of a line of its own: it is
+            // a badge-sized fact about the branch, and one loose line per row
+            // multiplied the height of the block for nothing.
+            var header = new Grid();
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var name = MonoLabel(r.Name);
+            var progress = Chip(r.Meta);
+            Grid.SetColumn(name, 0);
+            Grid.SetColumn(progress, 1);
+            header.Children.Add(name);
+            header.Children.Add(progress);
+            stack.Children.Add(header);
+
+            // A grid of two even columns, not a panel that wraps: at sidebar
+            // width the four controls do not fit on one line, and wrapping them
+            // broke every row of the block in a different place — none lined up
+            // with the one beside it. Four even cells always do.
+            var actions = new UniformGrid
             {
-                Orientation = Orientation.Horizontal,
-                Margin = new Thickness(0, 2, 0, 0),
+                Rows = 2,
+                Columns = 2,
+                Margin = new Thickness(0, 4, 0, 0),
             };
             foreach (var c in r.Controls)
             {
-                // The one irreversible control of the row does not share an
-                // edge with the one that commits.
-                if (c.Separated) actions.Children.Add(new Border { Width = 12 });
-                actions.Children.Add(RenderControl(c));
-                actions.Children.Add(new Border { Width = 4, Height = 4 });
+                var cell = RenderControl(c);
+                cell.Margin = new Thickness(0, 0, 4, 4);
+                actions.Children.Add(cell);
             }
             stack.Children.Add(actions);
-            stack.Children.Add(new Border { Height = 6 });
+            // A draft row is four cells over two lines, so it needs more air
+            // under it than an inventory one: two in a row must not read as a
+            // single eight-button pane.
+            stack.Children.Add(new Border { Height = 10 });
         }
         return stack;
     }
@@ -639,10 +655,18 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             return link;
         }
 
+        var quiet = c.Emphasis == Emphasis.Quiet;
         var btn = new Button
         {
             Content = c.Label ?? c.AccessibleName,
-            Style = c.Emphasis == Emphasis.Primary ? _primaryButton : _secondaryButton,
+            Style = c.Emphasis switch
+            {
+                Emphasis.Primary => _primaryButton,
+                // Bare carries no color setters, which is what leaves the local
+                // assignment below (and its own hover) in charge.
+                Emphasis.Quiet => _bareButton,
+                _ => _secondaryButton,
+            },
             IsEnabled = c.Enabled,
             Padding = new Thickness(10, 5, 10, 5),
             FontSize = 12,
@@ -650,6 +674,40 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             HorizontalAlignment = HorizontalAlignment.Stretch,
         };
         if (c.Emphasis == Emphasis.Primary) btn.FontWeight = FontWeights.SemiBold;
+        // What the button was drawn as, for whoever looks at the rendered tree
+        // rather than at the layout: the disabled states of a filled button and
+        // of a quiet one are different pairs, and --verify checks both.
+        btn.Tag = c.Emphasis;
+        if (quiet)
+        {
+            // A step below Secondary: no fill, in the color of the meta. It
+            // still takes the padding of a button so its cell keeps the width
+            // of the one beside it.
+            btn.Background = Brushes.Transparent;
+            btn.Foreground = c.Enabled ? _chrome.MutedForeground : _chrome.DisabledForeground;
+            if (c.Enabled)
+            {
+                btn.Cursor = Cursors.Hand;
+                btn.MouseEnter += (_, _) =>
+                {
+                    btn.Background = _chrome.RowHover;
+                    btn.Foreground = _chrome.Foreground;
+                };
+                btn.MouseLeave += (_, _) =>
+                {
+                    btn.Background = Brushes.Transparent;
+                    btn.Foreground = _chrome.MutedForeground;
+                };
+            }
+        }
+
+        // A control whose accessible name is not its label says so: "Open" on
+        // its own repeats once per draft row and names none of them.
+        if (c.AccessibleName != c.Label)
+        {
+            System.Windows.Automation.AutomationProperties.SetName(btn, c.AccessibleName);
+        }
+
         btn.Click += (_, _) => ActionRequested?.Invoke(c.Id.Wire(), c.Index, c.SupportLinkId);
         return btn;
     }

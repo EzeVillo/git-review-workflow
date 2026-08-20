@@ -278,16 +278,39 @@ public static class Program
         panel.Arrange(new Rect(0, 0, 380, 700));
         panel.UpdateLayout();
 
-        var buttons = Descendants(panel).OfType<System.Windows.Controls.Button>().ToList();
+        // The draft block is where the quiet weight lives, and busy is what
+        // switches its controls off: without a second panel the check would
+        // only ever see filled buttons and the pair below would go unread.
+        var drafts = new PanelView(chrome) { Width = 380, Height = 700 };
+        drafts.Render(PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewDraftsBusy()));
+        drafts.Measure(new Size(380, 700));
+        drafts.Arrange(new Rect(0, 0, 380, 700));
+        drafts.UpdateLayout();
+
+        var buttons = Descendants(panel).OfType<System.Windows.Controls.Button>()
+            .Concat(Descendants(drafts).OfType<System.Windows.Controls.Button>())
+            .ToList();
         check("buttons:styled", buttons.Count > 0 && buttons.All(b => b.Style is not null),
             $"{buttons.Count(b => b.Style is null)} of {buttons.Count} on the stock template");
 
         var disabled = buttons.Where(b => !b.IsEnabled).ToList();
         check("buttons:disabled-present", disabled.Count > 0, "fixture stopped producing one");
+
+        // A quiet control has no fill of its own to begin with, so what it must
+        // not do is take one from the stock template; a filled one has to come
+        // out in the chrome's disabled pair. Both have to stay readable.
+        var filled = disabled.Where(b => (Emphasis?)b.Tag != Emphasis.Quiet).ToList();
+        var quiet = disabled.Where(b => (Emphasis?)b.Tag == Emphasis.Quiet).ToList();
+        check("buttons:disabled-quiet-present", quiet.Count > 0, "fixture stopped producing one");
         check("buttons:disabled-fill",
-            disabled.All(b => ReferenceEquals(b.Background, chrome.DisabledBackground)),
-            string.Join(", ", disabled
+            filled.All(b => ReferenceEquals(b.Background, chrome.DisabledBackground)),
+            string.Join(", ", filled
                 .Where(b => !ReferenceEquals(b.Background, chrome.DisabledBackground))
+                .Select(b => $"{b.Content}={Describe(b.Background)}")));
+        check("buttons:disabled-quiet-fill",
+            quiet.All(b => b.Background is SolidColorBrush { Color.A: 0 }),
+            string.Join(", ", quiet
+                .Where(b => b.Background is not SolidColorBrush { Color.A: 0 })
                 .Select(b => $"{b.Content}={Describe(b.Background)}")));
         check("buttons:disabled-text",
             disabled.All(b => ReferenceEquals(b.Foreground, chrome.DisabledForeground)),

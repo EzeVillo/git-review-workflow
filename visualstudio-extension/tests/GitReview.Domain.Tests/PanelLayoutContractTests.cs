@@ -237,7 +237,6 @@ public class PanelLayoutContractTests
             // canonical declares one and Emphasis alone where it does not.
             Assert.Equal(spec.EmphasisUnfilled ?? spec.Emphasis, control.Emphasis.Id());
             Assert.Equal(spec.Confirms, PanelLayoutBuilder.RequiresConfirmation(control.Id));
-            Assert.Equal(spec.Separated, control.Separated);
             // Each control carries ITS row's index: an action on one row cannot
             // touch the others.
             Assert.Equal(0, control.Index);
@@ -285,22 +284,30 @@ public class PanelLayoutContractTests
     }
 
     [Fact]
-    public void Open_draft_is_an_icon_control_with_a_name_to_read_out()
+    public void Open_draft_carries_a_label_of_its_own_and_a_name_that_says_which_one()
     {
-        var open = layoutDraftRows()[0].Controls.First(c => c.Id == ControlId.OpenDraft);
-        Assert.Null(open.Label);
-        Assert.Equal(Emphasis.Icon, open.Emphasis);
+        // In a cell of even width the label no longer forces the wrap the icon
+        // was there to avoid, and a glyph among three labels does not say what
+        // it opens. What is read out is still the sentence: "Open" on its own
+        // repeats once per row and names none of them.
+        var controls = layoutDraftRows()[0].Controls;
+        var open = controls.First(c => c.Id == ControlId.OpenDraft);
+        Assert.Equal("Open", open.Label);
+        Assert.Equal(Emphasis.Secondary, open.Emphasis);
         Assert.Equal("Open the reading order", open.AccessibleName);
         Assert.Equal(0, open.Index);
+        Assert.DoesNotContain(controls, c => c.Emphasis == Emphasis.Icon);
     }
 
     [Fact]
-    public void Only_the_irreversible_control_is_separated()
+    public void The_irreversible_control_is_last_and_the_only_one_without_a_fill()
     {
+        // With no fill it drops a step without leaving its cell: the gap that
+        // used to set it apart does not fit in a grid.
         var controls = layoutDraftRows()[0].Controls;
         Assert.Equal(
             new[] { ControlId.DiscardDraft },
-            controls.Where(c => c.Separated).Select(c => c.Id).ToArray());
+            controls.Where(c => c.Emphasis == Emphasis.Quiet).Select(c => c.Id).ToArray());
         Assert.Equal(ControlId.DiscardDraft, controls[controls.Count - 1].Id);
     }
 
@@ -340,7 +347,6 @@ public class PanelLayoutContractTests
         string Emphasis,
         string? EmphasisUnfilled,
         bool Confirms,
-        bool Separated,
         string? TooltipDisabled);
 
     private static Dictionary<string, DraftSpec> DraftControlSpecs()
@@ -363,7 +369,6 @@ public class PanelLayoutContractTests
                 Scalar("emphasis")!,
                 Scalar("emphasis_unfilled"),
                 Scalar("confirms") == "true",
-                Scalar("separated") == "true",
                 Scalar("tooltip_disabled"));
         }
         return specs;

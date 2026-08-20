@@ -10,6 +10,15 @@
   `config`: none of the panel's existing refresh signals could see it. The panel now
   watches the directories the CLI reported the drafts in, and nothing else.
 
+- **One emphatic button per draft row, and the progress picks which.** While entries
+  are missing the row leads with *Copy for agent*; with the order complete, with
+  *Validate and start*. The four controls are always there and in the same order, in
+  two even columns: the row no longer changes shape with its state, so every row of
+  the block lines up with the one beside it. *Validate and start* is now switched off
+  --with a tooltip saying why-- instead of disappearing when the CLI cannot tell how
+  the draft was generated, *Open* carries a label of its own, and *Discard*, the one
+  irreversible control of the row, loses its fill.
+
 ## [0.2.0]
 
 Requires `git review` **0.7.0** or newer.

@@ -592,25 +592,32 @@ class PanelRenderer(
         box.background = chrome.background()
         box.alignmentX = Component.LEFT_ALIGNMENT
         for (r in block.rows) {
-            box.add(stacked(headerRow(listOf(monoLabel(r.name, muted = false)), emptyList())))
+            // The progress rides the header instead of a line of its own: it is
+            // a badge-sized fact about the branch, and one loose line per row
+            // multiplied the height of the block for nothing.
             box.add(
                 stacked(
-                    monoLabel(r.meta).apply {
-                        border = EmptyBorder(0, 0, 2, 0)
-                    },
+                    headerRow(
+                        listOf(monoLabel(r.name, muted = false)),
+                        listOf(chipLabel(r.meta)),
+                    ),
                 ),
             )
-            val actions = JPanel(WrapLayout(4, 2))
+            // A grid of two even columns, not a row that wraps: at sidebar
+            // width the four controls do not fit on one line, and wrapping
+            // them broke every row in a different place — none lined up with
+            // the one beside it. Four even cells always do.
+            val actions = JPanel(GridLayout(2, 2, 4, 4))
             actions.background = chrome.background()
             actions.alignmentX = Component.LEFT_ALIGNMENT
             for (c in r.controls) {
-                // The one irreversible control of the row does not share an
-                // edge with the one that commits.
-                if (c.separated) actions.add(Box.createHorizontalStrut(12))
                 actions.add(renderControl(c))
             }
             box.add(stacked(actions))
-            box.add(Box.createVerticalStrut(6))
+            // A draft row is four cells over two lines, so it needs more air
+            // under it than an inventory one: two in a row must not read as a
+            // single eight-button pane.
+            box.add(Box.createVerticalStrut(10))
         }
         return box
     }
@@ -714,12 +721,27 @@ class PanelRenderer(
                         b.border = chrome.emptyBorder()
                     }
                     Emphasis.PRIMARY -> chrome.markPrimary(b)
+                    // A step below SECONDARY: no fill, no border, in the color
+                    // of the meta. The label still carries the button's padding
+                    // so the cell keeps the width of the one beside it.
+                    Emphasis.QUIET -> {
+                        b.isBorderPainted = false
+                        b.isContentAreaFilled = false
+                        b.isOpaque = false
+                        b.foreground = chrome.mutedForeground()
+                    }
                     else -> Unit
                 }
                 b
             }
         }
         btn.isEnabled = c.enabled
+        // Un control cuyo nombre accesible no es su etiqueta lo dice: "Open" a
+        // secas se repite una vez por fila del bloque de borradores y no nombra
+        // a ninguna, asi que lo que se lee en voz alta es la oracion.
+        if (c.accessibleName != c.label) {
+            btn.accessibleContext.accessibleName = c.accessibleName
+        }
         c.tooltip?.let { btn.toolTipText = it }
         btn.addActionListener {
             if (!btn.isEnabled) return@addActionListener
@@ -848,67 +870,12 @@ class PanelRenderer(
             val out = ArrayList<JButton>()
             fun walk(c: Component) {
                 if (c is JButton) out.add(c)
-                if (c is java.awt.Container) {
+                if (c is Container) {
                     for (ch in c.components) walk(ch)
                 }
             }
             walk(root)
             return out
-        }
-    }
-}
-
-/**
- * A [FlowLayout] that reports the height its own wrapping needs.
- *
- * The stock one lays the row out over as many lines as it takes but asks for the
- * height of a single one, so in a sidebar every control past the first line is
- * clipped away — not moved, gone: the reviewer never sees *Discard* at all. Same
- * behaviour as the extension's `flex-wrap: wrap` on `.rev-actions`.
- */
-internal class WrapLayout(hgap: Int, vgap: Int) : FlowLayout(LEFT, hgap, vgap) {
-    override fun preferredLayoutSize(target: Container): Dimension = layoutSize(target)
-
-    override fun minimumLayoutSize(target: Container): Dimension = layoutSize(target)
-
-    private fun layoutSize(target: Container): Dimension {
-        synchronized(target.treeLock) {
-            // Before the first validate the target has no width of its own; the
-            // closest ancestor that does is what the row will end up inside.
-            var width = target.width
-            var parent = target.parent
-            while (width == 0 && parent != null) {
-                width = parent.width
-                parent = parent.parent
-            }
-            if (width == 0) width = Int.MAX_VALUE
-
-            val insets = target.insets
-            val maxWidth = width - (insets.left + insets.right + hgap * 2)
-            var rowWidth = 0
-            var rowHeight = 0
-            var totalHeight = 0
-            var rows = 0
-            for (i in 0 until target.componentCount) {
-                val m = target.getComponent(i)
-                if (!m.isVisible) continue
-                val d = m.preferredSize
-                if (rowWidth > 0 && rowWidth + hgap + d.width > maxWidth) {
-                    totalHeight += rowHeight + vgap
-                    rows++
-                    rowWidth = 0
-                    rowHeight = 0
-                }
-                if (rowWidth > 0) rowWidth += hgap
-                rowWidth += d.width
-                rowHeight = maxOf(rowHeight, d.height)
-            }
-            totalHeight += rowHeight
-            rows++
-            return Dimension(
-                if (width == Int.MAX_VALUE) rowWidth else width,
-                totalHeight + insets.top + insets.bottom + vgap * 2,
-            )
         }
     }
 }

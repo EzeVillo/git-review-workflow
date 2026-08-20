@@ -192,11 +192,6 @@ class PanelLayoutContractTest {
                 requiresConfirmation(control.id),
                 "confirms of ${control.id.wire}",
             )
-            assertEquals(
-                spec["separated"] as? Boolean ?: false,
-                control.separated,
-                "separated of ${control.id.wire}",
-            )
             // Cada control lleva el índice de SU fila: una acción sobre una fila
             // no puede tocar las demás.
             assertEquals(0, control.index, "index of ${control.id.wire}")
@@ -266,23 +261,33 @@ class PanelLayoutContractTest {
     }
 
     @Test
-    fun `open draft is an icon control with a name to read out`() {
+    fun `open draft carries a label of its own and a name that says which one`() {
+        // En una celda de ancho parejo la etiqueta ya no fuerza el wrap que
+        // motivo el icono, y un glifo entre tres etiquetas no dice que abre.
+        // Lo que se lee en voz alta sigue siendo la oracion: "Open" a secas se
+        // repite una vez por fila y no nombra a ninguna.
         val rows = (panelLayout(PanelFixtures.noReviewDrafts()).blocks
             .first { it is Block.DraftRows } as Block.DraftRows).rows
         val open = rows[0].controls.first { it.id == ControlId.OPEN_DRAFT }
-        assertEquals(null, open.label)
-        assertEquals(Emphasis.ICON, open.emphasis)
+        assertEquals("Open", open.label)
+        assertEquals(Emphasis.SECONDARY, open.emphasis)
         assertEquals("Open the reading order", open.accessibleName)
         assertEquals(0, open.index)
+        assertTrue(
+            rows[0].controls.none { it.emphasis == Emphasis.ICON },
+            "ningun control de la fila es un icono",
+        )
     }
 
     @Test
-    fun `only the irreversible control is separated`() {
+    fun `the irreversible control is last and the only one without a fill`() {
+        // Sin relleno baja un escalon sin salirse de su celda: el hueco que
+        // antes lo separaba no cabe en una grilla.
         val rows = (panelLayout(PanelFixtures.noReviewDrafts()).blocks
             .first { it is Block.DraftRows } as Block.DraftRows).rows
         assertEquals(
             listOf(ControlId.DISCARD_DRAFT),
-            rows[0].controls.filter { it.separated }.map { it.id },
+            rows[0].controls.filter { it.emphasis == Emphasis.QUIET }.map { it.id },
         )
         assertEquals(ControlId.DISCARD_DRAFT, rows[0].controls.last().id)
     }

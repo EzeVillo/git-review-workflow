@@ -778,7 +778,10 @@ export function panelHtml(nonce: string): string {
 
     // El archivo vive en el gitdir, fuera del árbol versionado, y éste es el
     // único control de toda la extensión que lo abre: no sobra, va abajo.
+    // "Open" a secas se repite una vez por fila y no nombra a cuál pertenece,
+    // así que lo que se lee en voz alta es la oración del canónico.
     const open = button("Open", "openDraft", null, null, index);
+    open.setAttribute("aria-label", "Open the reading order");
     open.title = "Open the reading order for editing";
     actions.appendChild(open);
 

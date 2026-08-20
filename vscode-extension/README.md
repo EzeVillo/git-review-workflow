@@ -47,6 +47,9 @@ buttons on its row:
   review on your order.
 - **Discard** — deletes it, after a confirmation that names the command.
 
+The progress on the row follows the file: hand the draft to an agent and the
+count moves on its own as it writes, with nobody hitting Refresh.
+
 It survives closing the editor, so a reading order you started on Friday is the
 first thing the panel says on Monday. The draft is **yours and local**: it lives
 outside the working tree, never gets committed or staged, and `git status` does

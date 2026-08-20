@@ -170,6 +170,39 @@ export function watchGitDirFallback(rootUri: vscode.Uri, onChange: () => void): 
 	};
 }
 
+/**
+ * Observa los directorios donde la CLI dijo que están los borradores. Es la
+ * tercera señal de refresco, y la única que no es de git: el agente que llena
+ * un borrador escribe en el gitdir, que ni la API de git ni el watcher de
+ * `HEAD`/`config` de arriba miran (ver `draftWatch.ts`).
+ *
+ * Un watcher por directorio con patrón `*.md`, nunca el archivo exacto: la CLI
+ * instala el borrador con un `mv` final, así que el evento que importa es un
+ * create y no un change, y un borrador nuevo de una rama vecina cae en la misma
+ * carpeta y entra por el mismo watcher sin costo.
+ */
+export function watchDraftDirs(dirs: readonly string[], onChange: () => void): vscode.Disposable {
+	const subscriptions: vscode.Disposable[] = [];
+	for (const dir of dirs) {
+		const watcher = vscode.workspace.createFileSystemWatcher(
+			new vscode.RelativePattern(vscode.Uri.file(dir), "*.md")
+		);
+		subscriptions.push(
+			watcher.onDidChange(onChange),
+			watcher.onDidCreate(onChange),
+			watcher.onDidDelete(onChange),
+			watcher
+		);
+	}
+	return {
+		dispose() {
+			for (const sub of subscriptions) {
+				sub.dispose();
+			}
+		},
+	};
+}
+
 export function workspaceFolderTargets(): RepositoryTarget[] {
 	return (vscode.workspace.workspaceFolders ?? []).map((folder) => ({
 		rootUri: folder.uri,

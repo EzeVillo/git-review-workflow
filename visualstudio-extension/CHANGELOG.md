@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- **The draft progress follows the file.** Hand a draft to an agent and the row's count
+  moves on its own while it writes -- no Refresh, no reopening the panel. The draft lives
+  in the gitdir, so filling it in moves no `HEAD`, touches no index and writes no
+  `config`: none of the panel's existing refresh signals could see it. The panel now
+  watches the directories the CLI reported the drafts in, and nothing else.
+
 ## [0.2.0]
 
 Requires `git review` **0.7.0** or newer.

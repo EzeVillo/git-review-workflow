@@ -251,6 +251,22 @@ working tree:
   las guardas es normativo: la existencia del borrador previo se decide **antes** de leer la fuente,
   porque negarse después de consumir stdin deja al llamador sin forma de reintentar; y la única
   escritura sigue siendo el `mv` final, así que todo rechazo deja el borrador anterior byte por byte.
+- **Que el panel se entere solo** (el otro lado del circuito): llenar un borrador es lo único que
+  cambia lo que el panel muestra sin pasar por git ni por una mutación del cliente — se escribe en
+  el gitdir, o sea que no mueve `HEAD`, no toca el índice y no escribe `config`. Ninguna de las
+  señales de refresco de los tres clientes lo veía, así que el progreso quedaba clavado hasta que
+  alguien apretaba Refresh, justo mientras el revisor mira el panel para saber si el agente terminó.
+  Los tres vigilan ahora los directorios de las rutas que la CLI **ya reportó** (`draftWatchDirs` en
+  VS Code y JetBrains, `DraftWatch.WatchDirs` en Visual Studio; un único punto por cliente sobre los
+  registros `draft` de `config`/`status --porcelain`), nunca un path rearmado del layout del gitdir
+  — la misma regla que hace que *Open draft* abra la ruta que dio la CLI en vez de derivarla.
+  Consecuencia deliberada: un borrador cuya carpeta no aparece todavía en ningún reporte (el creado
+  a mano en una terminal) no tiene quién lo mire hasta el refresco siguiente. El watcher es de cada
+  host — `createFileSystemWatcher` no recursivo, watch roots planos más `VFS_CHANGES`, un
+  `FileSystemWatcher` por directorio —, y **el conjunto sólo se rehace cuando cambia**: rehacerlo en
+  cada refresco pierde justo los eventos que llegan mientras se rehace. En IntelliJ además es lazy,
+  como el resto de ese cliente: un borrador que crece con el panel oculto se lee cuando la tool
+  window vuelve, no antes.
 - **Los tres registros porcelain del borrador:** `config --porcelain` emite un `draft<TAB><src><TAB>
   <path><TAB><annotated><TAB><total><TAB><source><TAB><range>` por cada borrador del namespace
   **activo**, con y sin argumento de rama (un borrador es un hecho del working tree, no de la rama

@@ -10,6 +10,7 @@ import com.ezevillo.gitreview.domain.SkeletonShape
 import com.ezevillo.gitreview.domain.WhyState
 import java.awt.BorderLayout
 import java.awt.Component
+import java.awt.Container
 import java.awt.Dimension
 import java.awt.FlowLayout
 import java.awt.Font
@@ -599,10 +600,13 @@ class PanelRenderer(
                     },
                 ),
             )
-            val actions = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0))
+            val actions = JPanel(WrapLayout(4, 2))
             actions.background = chrome.background()
             actions.alignmentX = Component.LEFT_ALIGNMENT
             for (c in r.controls) {
+                // The one irreversible control of the row does not share an
+                // edge with the one that commits.
+                if (c.separated) actions.add(Box.createHorizontalStrut(12))
                 actions.add(renderControl(c))
             }
             box.add(stacked(actions))
@@ -662,6 +666,7 @@ class PanelRenderer(
                     ControlId.PREV -> chrome.iconPrev()
                     ControlId.NEXT -> chrome.iconNext()
                     ControlId.COPY_CLI_INSTALL -> chrome.iconCopy()
+                    ControlId.OPEN_DRAFT -> chrome.iconFile()
                     else -> null
                 }
                 if (icon != null) {
@@ -670,6 +675,11 @@ class PanelRenderer(
                     b.text = when (c.id) {
                         ControlId.PREV -> chrome.glyphPrev()
                         ControlId.NEXT -> chrome.glyphNext()
+                        ControlId.COPY_CLI_INSTALL -> chrome.glyphCopy()
+                        ControlId.OPEN_DRAFT -> chrome.glyphFile()
+                        // Un id de icono sin glifo cae al nombre accesible, que
+                        // es una oracion: el control se vuelve el mas ancho de
+                        // su fila, que es justo lo que un icono viene a evitar.
                         else -> c.accessibleName
                     }
                 }
@@ -844,6 +854,61 @@ class PanelRenderer(
             }
             walk(root)
             return out
+        }
+    }
+}
+
+/**
+ * A [FlowLayout] that reports the height its own wrapping needs.
+ *
+ * The stock one lays the row out over as many lines as it takes but asks for the
+ * height of a single one, so in a sidebar every control past the first line is
+ * clipped away — not moved, gone: the reviewer never sees *Discard* at all. Same
+ * behaviour as the extension's `flex-wrap: wrap` on `.rev-actions`.
+ */
+internal class WrapLayout(hgap: Int, vgap: Int) : FlowLayout(LEFT, hgap, vgap) {
+    override fun preferredLayoutSize(target: Container): Dimension = layoutSize(target)
+
+    override fun minimumLayoutSize(target: Container): Dimension = layoutSize(target)
+
+    private fun layoutSize(target: Container): Dimension {
+        synchronized(target.treeLock) {
+            // Before the first validate the target has no width of its own; the
+            // closest ancestor that does is what the row will end up inside.
+            var width = target.width
+            var parent = target.parent
+            while (width == 0 && parent != null) {
+                width = parent.width
+                parent = parent.parent
+            }
+            if (width == 0) width = Int.MAX_VALUE
+
+            val insets = target.insets
+            val maxWidth = width - (insets.left + insets.right + hgap * 2)
+            var rowWidth = 0
+            var rowHeight = 0
+            var totalHeight = 0
+            var rows = 0
+            for (i in 0 until target.componentCount) {
+                val m = target.getComponent(i)
+                if (!m.isVisible) continue
+                val d = m.preferredSize
+                if (rowWidth > 0 && rowWidth + hgap + d.width > maxWidth) {
+                    totalHeight += rowHeight + vgap
+                    rows++
+                    rowWidth = 0
+                    rowHeight = 0
+                }
+                if (rowWidth > 0) rowWidth += hgap
+                rowWidth += d.width
+                rowHeight = maxOf(rowHeight, d.height)
+            }
+            totalHeight += rowHeight
+            rows++
+            return Dimension(
+                if (width == Int.MAX_VALUE) rowWidth else width,
+                totalHeight + insets.top + insets.bottom + vgap * 2,
+            )
         }
     }
 }

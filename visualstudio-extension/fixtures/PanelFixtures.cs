@@ -63,19 +63,23 @@ public static class PanelFixtures
     /// deleted by hand, so the CLI reports `unknown` and the flags cannot be
     /// replicated.
     /// </summary>
-    public static PanelModel NoReviewDrafts()
+    public static PanelModel NoReviewDrafts(bool busy = false)
     {
         var cfg =
             "draft\tfeature/telemetry\t/repo/.git/review-walkthrough/feature/telemetry.md\t3\t9\tlocal\tdelta\n" +
-            "draft\tfeature/pagos\t/repo/.git/review-walkthrough/feature/pagos.md\t0\t5\tunknown\tunknown\n";
+            "draft\tfeature/pagos\t/repo/.git/review-walkthrough/feature/pagos.md\t0\t5\tunknown\tunknown\n" +
+            "draft\tfeature/legacy\t/repo/.git/review-walkthrough/feature/legacy.md\t1\t1\tremote\tfull\n";
         return PanelModelBuilder.BuildPanelModel(
             new ReviewState(
                 Situation.NoReview,
                 Config: new EffectiveConfig("main", "origin"),
                 Branches: Porcelain.ParseListPorcelain("branch\treview-saved/feature\t1\t0\t0\twalk\t2\t5"),
                 Drafts: ConfigPorcelain.ParseConfigPorcelain(cfg).Drafts),
-            new PanelInputs(false));
+            new PanelInputs(busy));
     }
+
+    /// <summary>The same state with a mutation in flight: the one thing that switches the row off.</summary>
+    public static PanelModel NoReviewDraftsBusy() => NoReviewDrafts(busy: true);
 
     /// <summary>Configured, but nothing left over from an earlier review.</summary>
     public static PanelModel NoReviewEmpty() => PanelModelBuilder.BuildPanelModel(

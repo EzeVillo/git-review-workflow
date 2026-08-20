@@ -399,19 +399,21 @@ export const PREVIEW_PANES: PreviewPane[] = [
         ]),
     },
     {
-        // Dos borradores con avances distintos, más el inventario debajo: es
+        // Tres borradores con avances distintos, más el inventario debajo: es
         // el estado donde se ve que el bloque NO reemplaza el cuerpo. La
         // segunda fila no ofrece "Validate and start" — su bloque de
         // instrucciones se borró a mano y la CLI reporta unknown, así que los
-        // flags no se pueden replicar.
+        // flags no se pueden replicar. Y la tercera está completa (1/1), que es
+        // donde el énfasis pasa de "Copy for agent" a "Validate and start".
         name: "no-review-drafts",
-        caption: "no-review — dos borradores (uno sin flags conocidos) + inventario",
+        caption: "no-review — tres borradores (uno sin flags conocidos, uno completo) + inventario",
         model: drafts(
             [
                 ["config", "base", "develop"],
                 ["config", "remote", "origin"],
                 ["draft", "feature/telemetry", "/repo/.git/review-walkthrough/feature/telemetry.md", "3", "9", "local", "delta"],
                 ["draft", "feature/pagos", "/repo/.git/review-walkthrough/feature/pagos.md", "0", "5", "unknown", "unknown"],
+                ["draft", "feature/legacy", "/repo/.git/review-walkthrough/feature/legacy.md", "1", "1", "remote", "full"],
             ],
             [["branch", "review-saved/perf/index", "1", "0", "0", "step", "2", "4"]]
         ),

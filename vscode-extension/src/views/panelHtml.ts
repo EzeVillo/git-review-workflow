@@ -312,6 +312,39 @@ export function panelHtml(nonce: string): string {
     max-width: 100%;
     white-space: nowrap;
   }
+  /* La botonera de un borrador es una grilla de dos columnas y no una fila que
+     envuelve: a ancho de sidebar los cuatro controles no entran en una línea, y
+     envolviéndolos cada fila del bloque partía en un lugar distinto — ninguna
+     se alineaba con la de al lado ni consigo misma. Cuatro celdas iguales se
+     alinean siempre, y el peso visual queda libre para decir cuál es cuál. */
+  .draft-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .4em;
+  }
+  /* Una fila de borrador ocupa cuatro celdas y dos líneas, así que necesita más
+     aire debajo que una del inventario para que dos filas seguidas no se lean
+     como una sola botonera de ocho. */
+  .rev.draft { margin-bottom: 1.5em; }
+  .rev.draft .rev-head { margin-bottom: .45em; }
+  .draft-actions button {
+    width: auto;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* El único irreversible de la fila pierde la caja: un botón menos que mirar,
+     y lo que queda es texto quieto en el color de la meta. Grita menos que un
+     hueco y no se le puede caer un clic encima de paso. */
+  .draft-actions button.quiet {
+    background: none;
+    color: var(--vscode-descriptionForeground);
+  }
+  .draft-actions button.quiet:hover {
+    background: var(--vscode-toolbar-hoverBackground);
+    color: var(--vscode-foreground);
+  }
   /* Badge "?" a la altura de current/orphan: el mensaje va solo en title. */
   .badge.help {
     display: inline-flex;
@@ -557,8 +590,8 @@ export function panelHtml(nonce: string): string {
    * Un control sin texto visible sigue necesitando nombre: el aria-label es
    * el que lee un lector de pantalla y el title el que aparece en hover.
    */
-  function iconButton(iconName, message, label) {
-    const node = button(null, message, null, iconName);
+  function iconButton(iconName, message, label, index) {
+    const node = button(null, message, null, iconName, index);
     node.setAttribute("aria-label", label);
     node.title = label;
     return node;
@@ -700,38 +733,56 @@ export function panelHtml(nonce: string): string {
   /**
    * Una fila del bloque de borradores: la rama, el avance tal como lo reporta
    * la CLI, y los cuatro controles sobre ESA fila. El progreso no se deriva ni
-   * se reinterpreta acá — annotated/total llegan contados.
+   * se reinterpreta acá — annotated/total llegan contados; lo único que se
+   * decide con ellos es cuál de los controles lleva el énfasis, nunca cuál se
+   * ofrece ni en qué orden.
    *
-   * Validate and start falta cuando la CLI no sabe con qué origen y rango se
-   * generó el borrador: invocarlo con los defaults fallaría siempre por deriva,
-   * y un control menos es mejor que uno que adivina.
+   * Los cuatro están siempre y en el mismo orden: cuando Validate and start
+   * desaparecía —el caso de origen y rango unknown— cada fila armaba su propia
+   * botonera y ninguna se alineaba con la de al lado. Apagado no adivina los
+   * flags más que ausente, y encima dice por qué en el title.
    */
   function renderDraft(model, draft, index) {
-    const box = el("div", "rev");
+    const box = el("div", "rev draft");
 
+    // El avance va al lado del nombre y no en una línea propia: es un dato de
+    // la rama, del largo de un badge, y una línea suelta por fila multiplicaba
+    // el alto del bloque por nada.
     const head = el("div", "rev-head");
     head.appendChild(el("span", "rev-name", draft.branch));
+    head.appendChild(el("span", "badge", draft.annotated + "/" + draft.total));
     box.appendChild(head);
 
-    box.appendChild(el("div", "rev-meta", draft.annotated + "/" + draft.total));
+    const actions = el("div", "draft-actions");
+    // Un solo control enfático por fila, y el progreso decide cuál: mientras
+    // falten entradas el paso siguiente es llenar el borrador, y recién con el
+    // orden completo lo es arrancar la review. El ORDEN es fijo — mover el
+    // objetivo del clic según el estado lo corre bajo el cursor.
+    const filled = draft.annotated >= draft.total;
 
-    const actions = el("div", "rev-actions");
+    const copy = button("Copy for agent", "copyDraftPrompt", filled ? null : "primary", null, index);
+    copy.title = "Copy an instruction naming this file";
+    actions.appendChild(copy);
+
+    // Siempre presente, apagado cuando la CLI no sabe con qué flags se generó
+    // el borrador. Nunca disabled por progreso: el conteo sale del disco y el
+    // borrador puede estar abierto con cambios sin guardar (saveOpenDraft los
+    // guarda antes de validar), así que grisarlo por ahí mentiría justo al
+    // terminar de escribir.
+    const go = button("Validate and start", "startFromDraft", filled ? "primary" : null, null, index);
+    go.disabled = model.busy || !draft.startable;
+    go.title = draft.startable
+      ? "git review walkthrough draft --build, then start"
+      : "This draft has no instruction block, so the CLI cannot tell how it was generated";
+    actions.appendChild(go);
+
+    // El archivo vive en el gitdir, fuera del árbol versionado, y éste es el
+    // único control de toda la extensión que lo abre: no sobra, va abajo.
     const open = button("Open", "openDraft", null, null, index);
     open.title = "Open the reading order for editing";
     actions.appendChild(open);
 
-    const copy = button("Copy for agent", "copyDraftPrompt", null, null, index);
-    copy.title = "Copy an instruction naming this file";
-    actions.appendChild(copy);
-
-    if (draft.startable) {
-      const go = button("Validate and start", "startFromDraft", "primary", null, index);
-      go.disabled = model.busy;
-      go.title = "git review walkthrough draft --build, then start";
-      actions.appendChild(go);
-    }
-
-    const discard = button("Discard", "discardDraft", null, null, index);
+    const discard = button("Discard", "discardDraft", "quiet", null, index);
     discard.disabled = model.busy;
     discard.title = "git review forget --draft (with confirmation)";
     actions.appendChild(discard);

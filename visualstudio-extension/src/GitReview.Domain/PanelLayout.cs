@@ -121,7 +121,8 @@ public sealed record Control
         bool enabled = true,
         string? tooltip = null,
         int? index = null,
-        string? supportLinkId = null)
+        string? supportLinkId = null,
+        bool separated = false)
     {
         if (label is null)
         {
@@ -138,6 +139,7 @@ public sealed record Control
         Tooltip = tooltip;
         Index = index;
         SupportLinkId = supportLinkId;
+        Separated = separated;
     }
 
     public ControlId Id { get; init; }
@@ -148,6 +150,14 @@ public sealed record Control
     public string? Tooltip { get; init; }
     public int? Index { get; init; }
     public string? SupportLinkId { get; init; }
+
+    /// <summary>
+    /// A gap wider than the one between controls, before this one. The only
+    /// irreversible control of a row carries it so that it does not share an
+    /// edge with the one that commits; the canonical declares it as
+    /// <c>separated: true</c>.
+    /// </summary>
+    public bool Separated { get; init; }
 }
 
 public sealed record FileRow(string Display, int Index, bool LastOpened);
@@ -400,12 +410,13 @@ public static class PanelLayoutBuilder
         string? accessibleName = null,
         string? tooltip = null,
         int? index = null,
-        string? supportLinkId = null)
+        string? supportLinkId = null,
+        bool separated = false)
     {
         // The two rules live on the record itself; this only fills in the name a
         // labelled control gets for free.
         var name = accessibleName ?? label ?? id.Wire();
-        return new Control(id, label, name, emphasis, enabled, tooltip, index, supportLinkId);
+        return new Control(id, label, name, emphasis, enabled, tooltip, index, supportLinkId, separated);
     }
 
     private static string? TipShort(string? tip) =>
@@ -723,31 +734,49 @@ public static class PanelLayoutBuilder
         var enabled = !model.Busy;
         var rows = model.DraftsList.Select((d, index) =>
         {
+            // One emphatic control per row, and the progress picks which: while
+            // entries are missing the next step is writing the order, and only
+            // once it is complete is it starting the review. The ORDER is fixed
+            // — moving the click target as the state changes slides it under
+            // the cursor.
+            var filled = d.Annotated >= d.Total;
             var controls = new List<Control>
             {
                 Ctrl(
-                    ControlId.OpenDraft, "Open", Emphasis.Secondary,
-                    enabled: true, tooltip: "Open the reading order for editing", index: index),
-                Ctrl(
-                    ControlId.CopyDraftPrompt, "Copy for agent", Emphasis.Secondary,
+                    ControlId.CopyDraftPrompt, "Copy for agent",
+                    filled ? Emphasis.Secondary : Emphasis.Primary,
                     enabled: true, tooltip: "Copy an instruction naming this file", index: index),
+                // Always drawn, switched off when the CLI does not know the
+                // origin and range the draft was generated with: invoking with
+                // the defaults would fail with a drift error every time. Off
+                // says as little about the flags as absent did, and unlike
+                // absent it can say why. Never disabled by the progress: the
+                // count comes off the disk and the draft can be open with
+                // unsaved edits, which the client saves before it validates.
+                Ctrl(
+                    ControlId.StartFromDraft, "Validate and start",
+                    filled ? Emphasis.Primary : Emphasis.Secondary,
+                    enabled: enabled && d.Startable,
+                    tooltip: d.Startable
+                        ? "git review walkthrough draft --build, then start"
+                        : "This draft has no instruction block, so the CLI cannot tell how it was generated",
+                    index: index),
+                // An icon: the draft lives outside the versioned tree and this
+                // control is the one surface that opens it, but its label was
+                // what forced the row to wrap.
+                Ctrl(
+                    ControlId.OpenDraft, null, Emphasis.Icon,
+                    enabled: true,
+                    accessibleName: "Open the reading order",
+                    tooltip: "Open the reading order for editing",
+                    index: index),
             };
-            // Absent when the CLI does not know the origin and range the draft
-            // was generated with: invoking with the defaults would fail with a
-            // drift error every time, and one control fewer beats one that guesses.
-            if (d.Startable)
-            {
-                controls.Add(Ctrl(
-                    ControlId.StartFromDraft, "Validate and start", Emphasis.Primary,
-                    enabled: enabled,
-                    tooltip: "git review walkthrough draft --build, then start",
-                    index: index));
-            }
             controls.Add(Ctrl(
                 ControlId.DiscardDraft, "Discard", Emphasis.Secondary,
                 enabled: enabled,
                 tooltip: "git review forget --draft (with confirmation)",
-                index: index));
+                index: index,
+                separated: true));
             return new DraftRow(d.Branch, $"{d.Annotated}/{d.Total}", controls);
         }).ToList();
         return new Block.DraftRows(rows);

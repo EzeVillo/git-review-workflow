@@ -160,36 +160,59 @@ class PanelLayoutContractTest {
 
         val rows = (panelLayout(PanelFixtures.noReviewDrafts()).blocks
             .first { it is Block.DraftRows } as Block.DraftRows).rows
-        assertEquals(2, rows.size)
+        assertEquals(3, rows.size)
 
-        // La primera fila trae los cuatro; la segunda, todos menos
-        // startFromDraft — su bloque de instrucciones se borró a mano, así que
-        // la CLI no sabe con qué flags se generó y adivinarlos haría fallar el
-        // build por deriva sobre un borrador válido.
+        // Las tres filas traen los cuatro, en el mismo orden: la botonera no
+        // cambia de forma entre filas. En la segunda, startFromDraft va apagado
+        // —su bloque de instrucciones se borró a mano, así que la CLI no sabe
+        // con qué flags se generó y adivinarlos haría fallar el build por
+        // deriva sobre un borrador válido—, y lo dice en el tooltip.
+        val order = listOf("copyDraftPrompt", "startFromDraft", "openDraft", "discardDraft")
+        for ((n, row) in rows.withIndex()) {
+            assertEquals(order, row.controls.map { it.id.wire }, "order of row $n")
+        }
+        val unknownFlags = rows[1].controls.first { it.id == ControlId.START_FROM_DRAFT }
+        assertTrue(!unknownFlags.enabled, "sin flags conocidos el control va apagado, no ausente")
         assertEquals(
-            listOf("openDraft", "copyDraftPrompt", "startFromDraft", "discardDraft"),
-            rows[0].controls.map { it.id.wire },
-        )
-        assertEquals(
-            listOf("openDraft", "copyDraftPrompt", "discardDraft"),
-            rows[1].controls.map { it.id.wire },
+            canonical["startFromDraft"].let { (it as Map<*, *>)["tooltip_disabled"] },
+            unknownFlags.tooltip,
+            "un control apagado dice por qué lo está",
         )
 
         for (control in rows[0].controls) {
             @Suppress("UNCHECKED_CAST")
             val spec = canonical[control.id.wire] as Map<String, Any?>
             assertEquals(spec["label"], control.label, "label of ${control.id.wire}")
-            assertEquals(spec["emphasis"], control.emphasis.id, "emphasis of ${control.id.wire}")
+            // rows[0] es 3/9: incompleto, así que rige emphasis_unfilled donde
+            // el canónico lo declara y `emphasis` a secas donde no.
+            val want = spec["emphasis_unfilled"] ?: spec["emphasis"]
+            assertEquals(want, control.emphasis.id, "emphasis of ${control.id.wire}")
             assertEquals(
                 spec["confirms"] as? Boolean ?: false,
                 requiresConfirmation(control.id),
                 "confirms of ${control.id.wire}",
+            )
+            assertEquals(
+                spec["separated"] as? Boolean ?: false,
+                control.separated,
+                "separated of ${control.id.wire}",
             )
             // Cada control lleva el índice de SU fila: una acción sobre una fila
             // no puede tocar las demás.
             assertEquals(0, control.index, "index of ${control.id.wire}")
         }
         assertTrue(rows[1].controls.all { it.index == 1 }, "second row carries index 1")
+
+        // Y la tercera está completa (1/1): ahí rige `emphasis` a secas.
+        for (control in rows[2].controls) {
+            @Suppress("UNCHECKED_CAST")
+            val spec = canonical[control.id.wire] as Map<String, Any?>
+            assertEquals(
+                spec["emphasis"],
+                control.emphasis.id,
+                "emphasis of ${control.id.wire} (filled)",
+            )
+        }
     }
 
     @Test
@@ -200,6 +223,68 @@ class PanelLayoutContractTest {
         assertEquals("3/9", rows[0].meta)
         assertEquals("feature/pagos", rows[1].name)
         assertEquals("0/5", rows[1].meta)
+        assertEquals("feature/legacy", rows[2].name)
+        assertEquals("1/1", rows[2].meta)
+    }
+
+    @Test
+    fun `the emphasis follows the progress and the order never moves`() {
+        val rows = (panelLayout(PanelFixtures.noReviewDrafts()).blocks
+            .first { it is Block.DraftRows } as Block.DraftRows).rows
+
+        // 3/9: falta llenarlo, asi que el paso siguiente es Copy for agent.
+        val incomplete = rows[0].controls.associateBy { it.id }
+        assertEquals(Emphasis.PRIMARY, incomplete[ControlId.COPY_DRAFT_PROMPT]?.emphasis)
+        assertEquals(Emphasis.SECONDARY, incomplete[ControlId.START_FROM_DRAFT]?.emphasis)
+
+        // 1/1: el orden esta escrito, el paso siguiente es arrancar la review.
+        val filled = rows[2].controls.associateBy { it.id }
+        assertEquals(Emphasis.SECONDARY, filled[ControlId.COPY_DRAFT_PROMPT]?.emphasis)
+        assertEquals(Emphasis.PRIMARY, filled[ControlId.START_FROM_DRAFT]?.emphasis)
+
+        // Y el orden es el mismo en las dos: el objetivo del clic no se corre
+        // bajo el cursor cuando el borrador avanza.
+        assertEquals(
+            rows[0].controls.map { it.id },
+            rows[2].controls.map { it.id },
+            "el objetivo del clic no se mueve con el progreso",
+        )
+    }
+
+    @Test
+    fun `validate and start is never disabled by progress, only by busy`() {
+        // El conteo sale del disco y el borrador puede estar abierto con
+        // cambios sin guardar, que el cliente guarda antes de validar:
+        // grisarlo por el progreso mentiria al terminar de escribir.
+        val rows = (panelLayout(PanelFixtures.noReviewDrafts()).blocks
+            .first { it is Block.DraftRows } as Block.DraftRows).rows
+        assertTrue(rows[0].controls.first { it.id == ControlId.START_FROM_DRAFT }.enabled)
+
+        val busy = (panelLayout(PanelFixtures.noReviewDraftsBusy()).blocks
+            .first { it is Block.DraftRows } as Block.DraftRows).rows
+        assertTrue(!busy[0].controls.first { it.id == ControlId.START_FROM_DRAFT }.enabled)
+    }
+
+    @Test
+    fun `open draft is an icon control with a name to read out`() {
+        val rows = (panelLayout(PanelFixtures.noReviewDrafts()).blocks
+            .first { it is Block.DraftRows } as Block.DraftRows).rows
+        val open = rows[0].controls.first { it.id == ControlId.OPEN_DRAFT }
+        assertEquals(null, open.label)
+        assertEquals(Emphasis.ICON, open.emphasis)
+        assertEquals("Open the reading order", open.accessibleName)
+        assertEquals(0, open.index)
+    }
+
+    @Test
+    fun `only the irreversible control is separated`() {
+        val rows = (panelLayout(PanelFixtures.noReviewDrafts()).blocks
+            .first { it is Block.DraftRows } as Block.DraftRows).rows
+        assertEquals(
+            listOf(ControlId.DISCARD_DRAFT),
+            rows[0].controls.filter { it.separated }.map { it.id },
+        )
+        assertEquals(ControlId.DISCARD_DRAFT, rows[0].controls.last().id)
     }
 
     @Test

@@ -331,16 +331,23 @@ function collectCanonicalControls() {
   // conteo fijo de 27 de arriba no los cuenta y no se toca.
   const draftBlock = text.split(/^draft_controls:\s*$/m)[1]?.split(/^[a-z_][a-z0-9_]*:/m)[0] ?? "";
   const draftRe =
-    /^ {2}([A-Za-z][A-Za-z0-9]*):\s*\{label:\s*"([^"]*)"\s*,\s*emphasis:\s*(primary|secondary|link|icon)\s*,\s*confirms:\s*(true|false)\}/gm;
+    /^ {2}([A-Za-z][A-Za-z0-9]*):\s*\{label:\s*(null|"[^"]*")\s*,\s*(?:accessible_name:\s*"([^"]*)"\s*,\s*)?emphasis:\s*(primary|secondary|link|icon)\s*(?:,\s*emphasis_unfilled:\s*(primary|secondary))?\s*,\s*confirms:\s*(true|false)(?:\s*,\s*separated:\s*(true|false))?(?:\s*,\s*tooltip_disabled:\s*"([^"]*)")?\}/gm;
   let dm;
   while ((dm = draftRe.exec(draftBlock)) !== null) {
+    // Un control con emphasis_unfilled tiene DOS enfasis validos —el cliente
+    // elige con el progreso del borrador—, asi que lo que se compara despues
+    // es el conjunto y no el escalar.
+    const emphases = dm[5] ? [dm[4], dm[5]] : [dm[4]];
     controls.push({
       id: dm[1],
-      label: dm[2],
-      accessible: null,
-      emphasis: dm[3],
+      label: dm[2] === "null" ? null : dm[2].slice(1, -1),
+      accessible: dm[3] || null,
+      emphasis: dm[4],
+      emphases,
       raw: false,
-      confirms: dm[4] === "true",
+      confirms: dm[6] === "true",
+      separated: dm[7] === "true",
+      tooltipDisabled: dm[8] || null,
     });
   }
   return controls;
@@ -354,25 +361,74 @@ const rawControlIds = new Set(
   canonicalControls.filter((c) => c.raw).map((c) => c.id),
 );
 
-// Map emphasis className in button() third arg
+// tooltip_disabled de draft_controls: lo que dice un control apagado. Es copy
+// compartida como draft_agent_prompt, y el motivo de verificarla es el mismo —
+// tres clientes escribiendo a mano el mismo texto derivan sin que nadie mire—,
+// pero vive en el builder del layout de cada uno y no en su UserCopy.
+const disabledTips = canonicalControls
+  .filter((c) => c.tooltipDisabled)
+  .map((c) => [c.id, c.tooltipDisabled]);
+for (const [id, tip] of disabledTips) {
+  for (const [label, rel] of [
+    ["vscode", ["vscode-extension", "src", "views", "panelHtml.ts"]],
+    ["intellij", ["jetbrains-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "domain", "PanelLayout.kt"]],
+    ["visualstudio", ["visualstudio-extension", "src", "GitReview.Domain", "PanelLayout.cs"]],
+  ]) {
+    const p = join(root, ...rel);
+    if (!existsSync(p)) {
+      fail(`${label} panel layout missing at ${rel.join("/")}`);
+      continue;
+    }
+    if (!squash(readText(p, "utf8")).includes(squash(tip))) {
+      fail(`${label} is missing the disabled tooltip of ${id}`);
+    }
+  }
+}
+
+
+// Map emphasis className in button() third arg. Un ternario entre null y
+// "primary" no es un enfasis fijo sino uno condicional: devuelve los DOS
+// valores, que es lo mismo que el canonico declara con emphasis_unfilled.
 function emphasisFromClassArg(classArg) {
   if (classArg === "null" || classArg === undefined) return "secondary";
   if (classArg === '"primary"' || classArg === "'primary'") return "primary";
-  if (classArg === '"link"' || classArg === "'link'") return "link";
-  if (classArg === '"file-row"' || classArg === "'file-row'") return "secondary";
+  const cond = /^[A-Za-z_$][\w$]*\s*\?\s*(null|"primary")\s*:\s*(null|"primary")$/.exec(classArg);
+  if (cond) {
+    return [cond[1], cond[2]].map((v) => (v === "null" ? "secondary" : "primary")).join("|");
+  }
+  if (classArg.includes("link")) return "link";
+  if (classArg.includes("primary")) return "primary";
   return "secondary";
+}
+
+/**
+ * El enfasis de una llamada contra el del canonico. Con emphasis_unfilled hay
+ * dos valores validos y el orden en que se escriben no significa nada, asi que
+ * se comparan como conjuntos: lo que no puede pasar es que el cliente ofrezca
+ * un enfasis que el canonico no declara, ni al reves.
+ */
+function emphasisMatches(canonical, actual) {
+  if (!Array.isArray(canonical.emphases) || canonical.emphases.length < 2) {
+    return actual === canonical.emphasis;
+  }
+  const want = [...canonical.emphases].sort().join("|");
+  const got = String(actual).split("|").sort().join("|");
+  return want === got;
 }
 
 // Extract button()/iconButton() calls from panelHtml.ts
 // button(label, message, className, iconName, index)
-// iconButton(iconName, message, label)
+// iconButton(iconName, message, label, index?)
 function extractPanelCalls(src) {
   const calls = []; // {kind, label, id, emphasis, index, line, pos}
   const lines = src.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     // iconButton("left", "prev", "Previous entry")
-    const iconRe = /iconButton\(\s*"([^"]*)"\s*,\s*"([A-Za-z][A-Za-z0-9]*)"\s*,\s*"([^"]*)"\s*\)/g;
+    // El cuarto argumento es el indice de la fila, y solo lo llevan los
+    // controles de icono que actuan sobre UNA fila del cuerpo.
+    const iconRe =
+      /iconButton\(\s*"([^"]*)"\s*,\s*"([A-Za-z][A-Za-z0-9]*)"\s*,\s*"([^"]*)"\s*(?:,\s*[A-Za-z_$][\w$]*\s*)?\)/g;
     let im;
     while ((im = iconRe.exec(line)) !== null) {
       calls.push({
@@ -436,11 +492,7 @@ function extractPanelCalls(src) {
         label,
         accessible: null,
         id: bm[2],
-        emphasis: classArg.includes("primary")
-          ? "primary"
-          : classArg.includes("link")
-            ? "link"
-            : "secondary",
+        emphasis: emphasisFromClassArg(classArg),
         line: i + 1,
         pos: bm.index,
         dynamic,
@@ -477,7 +529,7 @@ for (const c of canonicalControls) {
   if (byId.length === 0) {
     fail(`control ${c.id} not found as button()/iconButton() in panelHtml.ts`);
   }
-  const fixed = byId.find((p) => p.label === c.label && p.emphasis === c.emphasis);
+  const fixed = byId.find((p) => p.label === c.label && emphasisMatches(c, p.emphasis));
   const dynamicOk = byId.some((p) => p.dynamic);
   if (!fixed && !dynamicOk && c.id !== "discardInventory") {
     // discard has ternary labels — allow either label if id matches

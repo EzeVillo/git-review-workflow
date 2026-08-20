@@ -499,4 +499,92 @@ describe("panelHtml", () => {
         assert.ok(!html.includes("Save for later"));
         assert.ok(!html.includes("Cancel review"));
     });
+
+    it("el enfasis de la fila del borrador sigue al progreso, con el orden fijo", () => {
+        // Mientras falten entradas el paso siguiente es llenar el borrador;
+        // recien con el orden completo lo es arrancar la review. El ORDEN no
+        // se mueve: reordenar los botones bajo el cursor es hostil.
+        assert.ok(
+            /const filled = draft\.annotated >= draft\.total/.test(html),
+            "el progreso decide el enfasis"
+        );
+        assert.ok(
+            /button\("Copy for agent", "copyDraftPrompt", filled \? null : "primary", null, index\)/.test(html),
+            "Copy for agent es el primary mientras el borrador este incompleto"
+        );
+        assert.ok(
+            /button\("Validate and start", "startFromDraft", filled \? "primary" : null, null, index\)/.test(html),
+            "Validate and start toma el primary recien con el orden completo"
+        );
+    });
+
+    it("los cuatro controles estan siempre: lo que cambia es el enabled", () => {
+        // Cuando Validate and start desaparecia, cada fila armaba su propia
+        // botonera y ninguna se alineaba con la de al lado.
+        const draftFn = html.slice(
+            html.indexOf("function renderDraft("),
+            html.indexOf("function renderDrafts(")
+        );
+        assert.ok(draftFn.length > 0, "no se encontro renderDraft para afirmar sobre el");
+        assert.ok(
+            !/if \(draft\.startable\)/.test(draftFn),
+            "ningun control de la fila se dibuja detras de una guarda de presencia"
+        );
+        assert.ok(
+            /go\.disabled = model\.busy \|\| !draft\.startable;/.test(draftFn),
+            "startable apaga el control, no lo saca"
+        );
+        assert.ok(
+            draftFn.includes(
+                "This draft has no instruction block, so the CLI cannot tell how it was generated"
+            ),
+            "un control apagado dice por que lo esta"
+        );
+    });
+
+    it("Validate and start nunca se deshabilita por progreso", () => {
+        // El conteo sale del disco y el revisor puede tener el borrador abierto
+        // con cambios sin guardar: saveOpenDraft los guarda antes de validar,
+        // asi que grisarlo mentiria justo al terminar de escribir.
+        const draftFn = html.slice(
+            html.indexOf("function renderDraft("),
+            html.indexOf("function renderDrafts(")
+        );
+        assert.ok(
+            !/go\.disabled = [^;]*(annotated|total|filled)/.test(draftFn),
+            "el progreso no puede deshabilitar el control"
+        );
+    });
+
+    it("Open es un icono con nombre accesible y el indice de su fila", () => {
+        // El borrador vive fuera del arbol versionado y este control es la
+        // unica superficie que lo abre: baja de peso, no desaparece.
+        assert.ok(
+            /iconButton\("file", "openDraft", "Open the reading order", index\)/.test(html),
+            "icono file, con label accesible e indice"
+        );
+        assert.ok(
+            /function iconButton\(iconName, message, label, index\)/.test(html),
+            "el helper acepta el indice de la fila"
+        );
+    });
+
+    it("Discard es el ultimo de la fila y no comparte vecindad con el primary", () => {
+        const draftFn = html.slice(
+            html.indexOf("function renderDraft("),
+            html.indexOf("function renderDrafts(")
+        );
+        assert.ok(
+            /button\("Discard", "discardDraft", "sep", null, index\)/.test(draftFn),
+            "el destructivo lleva la clase que lo separa"
+        );
+        assert.ok(
+            draftFn.lastIndexOf("discardDraft") > draftFn.lastIndexOf("startFromDraft"),
+            "va despues del control de compromiso"
+        );
+        assert.ok(
+            /\.rev-actions button\.sep \{ margin-left: [^}]+\}/.test(html),
+            "un hueco mayor que el gap entre controles"
+        );
+    });
 });

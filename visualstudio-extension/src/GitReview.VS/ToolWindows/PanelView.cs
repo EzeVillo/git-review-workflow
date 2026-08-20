@@ -482,15 +482,21 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         {
             stack.Children.Add(MonoLabel(r.Name));
             stack.Children.Add(MonoLabel(r.Meta, muted: true));
-            var actions = new StackPanel
+            // WrapPanel, not StackPanel: at sidebar width the four controls do
+            // not fit on one line, and a horizontal StackPanel lays them past
+            // the edge instead of wrapping — the reviewer never sees Discard.
+            var actions = new WrapPanel
             {
                 Orientation = Orientation.Horizontal,
                 Margin = new Thickness(0, 2, 0, 0),
             };
             foreach (var c in r.Controls)
             {
+                // The one irreversible control of the row does not share an
+                // edge with the one that commits.
+                if (c.Separated) actions.Children.Add(new Border { Width = 12 });
                 actions.Children.Add(RenderControl(c));
-                actions.Children.Add(new Border { Width = 4 });
+                actions.Children.Add(new Border { Width = 4, Height = 4 });
             }
             stack.Children.Add(actions);
             stack.Children.Add(new Border { Height = 6 });
@@ -596,7 +602,12 @@ public sealed class PanelView : System.Windows.Controls.UserControl
     {
         if (c.Emphasis == Emphasis.Icon)
         {
-            var icon = c.Id == ControlId.Prev ? "◀" : "▶";
+            // This host draws icon controls as text glyphs (no Image Catalog
+            // outside the VSIX), so they stay in the BMP: an astral codepoint
+            // is a tofu box in whatever font the theme hands us.
+            var icon = c.Id == ControlId.Prev ? "◀"
+                : c.Id == ControlId.OpenDraft ? "▤"
+                : "▶";
             var b = new Button
             {
                 Content = icon,

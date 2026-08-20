@@ -344,11 +344,29 @@ inventory_controls:
 # conteo fijo de 27 en actions: y en contributes.commands NO se toca, ni el menú
 # Tools -> git review de JetBrains, ni el .vsct de Visual Studio.
 #
-# startFromDraft no se ofrece cuando <source> o <range> del registro `draft`
-# valen unknown (el bloque de instrucciones se borró a mano): mejor un control
-# menos que uno que adivina los flags y falla siempre por deriva.
+# LOS CUATRO ESTÁN SIEMPRE, EN ESTE ORDEN. Lo que cambia con el estado de la
+# fila es el énfasis y el enabled, nunca la presencia: cuando startFromDraft
+# desaparecía —el caso de <source>/<range> unknown, con el bloque de
+# instrucciones borrado a mano— cada fila del bloque armaba una botonera
+# distinta, así que ninguna se alineaba con la de al lado y el bloque entero se
+# leía como un amontonamiento. Apagado no adivina los flags más que ausente
+# (sigue sin poder invocarse) y encima dice por qué, que un control que no está
+# no puede decir.
 draft_controls:
-  openDraft: {label: "Open", emphasis: secondary, confirms: false}
-  copyDraftPrompt: {label: "Copy for agent", emphasis: secondary, confirms: false}
-  startFromDraft: {label: "Validate and start", emphasis: primary, confirms: true}
-  discardDraft: {label: "Discard", emphasis: secondary, confirms: true}
+  # El énfasis sigue al progreso y el ORDEN no se mueve: mientras falten
+  # entradas el paso siguiente es llenar el borrador, y recién con el orden
+  # completo lo es arrancar la review. `emphasis:` es el valor con el borrador
+  # completo; `emphasis_unfilled:` el de `annotated < total`. Sin la segunda
+  # clave el énfasis no depende del progreso.
+  copyDraftPrompt: {label: "Copy for agent", emphasis: secondary, emphasis_unfilled: primary, confirms: false}
+  # NUNCA disabled por progreso, sólo por busy o por unknown: el conteo sale del
+  # disco y el revisor puede tener el borrador abierto con cambios sin guardar,
+  # que el cliente guarda antes de validar. `tooltip_disabled` es lo que dice en
+  # el caso unknown, y va byte por byte igual en los tres clientes.
+  startFromDraft: {label: "Validate and start", emphasis: primary, emphasis_unfilled: secondary, confirms: true, tooltip_disabled: "This draft has no instruction block, so the CLI cannot tell how it was generated"}
+  # Icono: el archivo vive fuera del árbol versionado y este control es la única
+  # superficie que lo abre, pero su etiqueta era la que forzaba el wrap.
+  openDraft: {label: null, accessible_name: "Open the reading order", emphasis: icon, confirms: false}
+  # `separated`: un hueco mayor que el gap entre controles. Es el único
+  # irreversible de la fila y no comparte vecindad con el de compromiso.
+  discardDraft: {label: "Discard", emphasis: secondary, confirms: true, separated: true}

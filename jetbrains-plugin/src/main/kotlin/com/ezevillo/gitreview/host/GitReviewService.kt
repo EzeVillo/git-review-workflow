@@ -7,6 +7,7 @@ import com.ezevillo.gitreview.domain.ReviewState
 import com.ezevillo.gitreview.domain.WhyState
 import com.ezevillo.gitreview.domain.PanelWhy
 import com.ezevillo.gitreview.domain.buildPanelModel
+import com.ezevillo.gitreview.domain.draftWatchDirs
 import com.ezevillo.gitreview.domain.isReviewReadable
 import com.ezevillo.gitreview.domain.pickSoleTarget
 import com.ezevillo.gitreview.settings.GitReviewSettings
@@ -19,6 +20,7 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vcs.ProjectLevelVcsManager
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
@@ -47,6 +49,16 @@ class GitReviewService(private val project: Project) : Disposable {
     private var lastWhy: PanelWhy? = null
 
     /**
+     * Refresh signal for the one thing that is neither git nor a mutation of
+     * ours: an agent filling in a draft. Same laziness as the mapping listener
+     * below -- a draft that grows while nobody looks at the panel is read when
+     * the tool window comes back, not before.
+     */
+    private val draftWatcher = DraftWatcher {
+        if (panelVisible || listeners.isNotEmpty()) scheduleRefresh()
+    }
+
+    /**
      * Whether a refresh ever resolved a state. Before that there is nothing to
      * draw: the manager's seed value is an `ERROR` placeholder, and painting it
      * would tell the reviewer the review state is broken when it was never read.
@@ -58,6 +70,7 @@ class GitReviewService(private val project: Project) : Disposable {
     val cliInvoker: CliInvoker get() = invoker
 
     init {
+        Disposer.register(this, draftWatcher)
         // Mutations run off the EDT now, so busy/idle is a real interval the panel can
         // paint. Both refreshes of a mutation happen while the lock is held; without
         // this the model would stay busy until some later refresh cleared it.
@@ -88,7 +101,8 @@ class GitReviewService(private val project: Project) : Disposable {
     }
 
     override fun dispose() {
-        // The message-bus connection is tied to this service; nothing else to release.
+        // The message-bus connection and the draft watcher's roots are tied to
+        // this service (the watcher through Disposer); nothing else to release.
     }
 
     fun currentState(): ReviewState = stateManager.current
@@ -167,6 +181,7 @@ class GitReviewService(private val project: Project) : Disposable {
         }
         val target = pickSoleTarget(roots)
         val state = stateManager.refresh(target?.rootPath)
+        draftWatcher.sync(draftWatchDirs(state))
         stateResolved = true
         lastWhy = null
         if (isReviewReadable(state.situation) && state.state?.mode?.id == "walk") {

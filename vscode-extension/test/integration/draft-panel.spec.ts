@@ -485,4 +485,52 @@ describe("US3: el bloque de borradores del panel", function () {
             [two]
         );
     });
+    /**
+     * El circuito con el agente: el panel queda a la vista mientras algo que no
+     * es la extension llena el archivo. Escribir en el gitdir no mueve HEAD, no
+     * toca el indice y no escribe config, asi que ninguna de las dos senales de
+     * refresco de siempre lo ve -- si el progreso se mueve solo, es el watcher
+     * de borradores. Ningun `api.refresh()` en el medio, a proposito.
+     */
+    async function waitForModel(
+        api: Awaited<ReturnType<typeof getTestApi>>,
+        done: (model: Awaited<ReturnType<typeof api.getPanelModel>>) => boolean,
+        label: string
+    ): Promise<Awaited<ReturnType<typeof api.getPanelModel>>> {
+        let model = await api.getPanelModel();
+        for (let i = 0; i < 200 && !done(model); i++) {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            model = await api.getPanelModel();
+        }
+        assert.ok(done(model), label + ": " + JSON.stringify(model.drafts));
+        return model;
+    }
+
+    it("el progreso se mueve solo cuando el borrador se llena desde afuera", async () => {
+        const branch = "us3-watch-fill";
+        createBranchWithChanges(repo, branch, {"src/a.ts": "a\n", "src/b.ts": "b\n"});
+        const file = makeDraft(branch);
+
+        const api = await getTestApi();
+        assert.strictEqual((await api.refresh()).situation, "no-review");
+        const before = await api.getPanelModel();
+        assert.strictEqual(
+            before.drafts.find((d) => d.branch === branch)?.annotated,
+            0,
+            "el esqueleto arranca sin anotar"
+        );
+
+        // Lo que hace el agente: escribe el archivo, y nada mas.
+        fillDraft(file, "## 1. src/a.ts\nel why de a\n\n## 2. src/b.ts\n");
+
+        const model = await waitForModel(
+            api,
+            (m) => m.drafts.find((d) => d.branch === branch)?.annotated === 1,
+            "el panel no volvio a contar el borrador sin que nadie refrescara"
+        );
+        // Recontado de verdad sobre el archivo nuevo: una anotada de dos.
+        const row = model.drafts.find((d) => d.branch === branch);
+        assert.strictEqual(row?.annotated, 1);
+        assert.strictEqual(row?.total, 2);
+    });
 });

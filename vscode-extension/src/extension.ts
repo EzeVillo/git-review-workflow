@@ -36,11 +36,13 @@ import {
     peekGitApi,
     pickSoleTarget,
     RepositoryTarget,
+    watchDraftDirs,
     watchGitApiChanges,
     watchGitDirFallback,
     workspaceFolderTargets,
 } from "./review/repository";
 import {CLI_PROBE_INTERVAL_MS, shouldProbeCli} from "./review/cliProbe";
+import {DRAFT_WATCH_DEBOUNCE_MS, draftWatchDirs} from "./review/draftWatch";
 import {MutationLock} from "./review/mutationLock";
 import {resolveEntryArg} from "./review/entryArg";
 import {isReviewReadable} from "./review/situation";
@@ -385,6 +387,7 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
     stateManager.onDidChange((state) => {
         updateView(state);
         syncCliProbe();
+        syncDraftWatcher(state);
     });
 
     /**
@@ -421,9 +424,56 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
         }, CLI_PROBE_INTERVAL_MS);
     }
 
+    /**
+     * Watcher de los borradores: llenarlos es lo único que cambia el panel sin
+     * pasar por git ni por una mutación de la extensión, así que sin esto el
+     * progreso del bloque de borradores se queda quieto mientras el agente
+     * escribe (ver `review/draftWatch.ts`). No depende de la visibilidad del
+     * panel — la señal de git tampoco lo hace, y el estado que se pinta al
+     * volver tiene que estar ya al día.
+     */
+    let draftWatcher: vscode.Disposable | undefined;
+    let draftWatchedKey = "";
+    let draftDebounce: ReturnType<typeof setTimeout> | undefined;
+
+    function onDraftFileChanged(): void {
+        if (draftDebounce !== undefined) {
+            clearTimeout(draftDebounce);
+        }
+        draftDebounce = setTimeout(() => {
+            draftDebounce = undefined;
+            void refresh();
+        }, DRAFT_WATCH_DEBOUNCE_MS);
+    }
+
+    function stopDraftWatcher(): void {
+        if (draftDebounce !== undefined) {
+            clearTimeout(draftDebounce);
+            draftDebounce = undefined;
+        }
+        draftWatcher?.dispose();
+        draftWatcher = undefined;
+        draftWatchedKey = "";
+    }
+
+    function syncDraftWatcher(state: ReviewState): void {
+        const dirs = draftWatchDirs(state);
+        // El conjunto es el mismo en la enorme mayoría de los refrescos, y
+        // rehacer los watchers ahí perdería justo los eventos que llegan
+        // mientras se rehacen.
+        const key = JSON.stringify(dirs);
+        if (key === draftWatchedKey) {
+            return;
+        }
+        draftWatcher?.dispose();
+        draftWatcher = dirs.length > 0 ? watchDraftDirs(dirs, onDraftFileChanged) : undefined;
+        draftWatchedKey = key;
+    }
+
     context.subscriptions.push(
         panelProvider.onDidChangeVisibility(() => syncCliProbe()),
         {dispose: () => stopCliProbe()},
+        {dispose: () => stopDraftWatcher()},
         vscode.workspace.onDidChangeConfiguration((e) => {
             if (e.affectsConfiguration("gitReview.path")) {
                 stateManager.invalidateVersionCheck();

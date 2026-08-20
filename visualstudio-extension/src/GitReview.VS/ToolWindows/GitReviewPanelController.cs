@@ -26,6 +26,12 @@ public sealed class GitReviewPanelController : IDisposable
     private readonly DispatcherTimer _whyCeilingTimer;
     private readonly IDisposable _busySub;
     private readonly IDisposable _discardSub;
+    /// <summary>
+    /// Refresh signal for the one thing that is neither git nor a mutation of ours:
+    /// an agent filling in a draft. Fires off the UI thread, so it comes back through
+    /// the dispatcher like everything else the panel draws.
+    /// </summary>
+    private readonly DraftWatcher _draftWatcher;
     private PanelWhy? _why;
     private string? _whyKey;
     private string? _lastOpened;
@@ -160,6 +166,15 @@ public sealed class GitReviewPanelController : IDisposable
             GitReviewDialogs.Info(reason);
         });
 
+        _draftWatcher = new DraftWatcher(() =>
+        {
+            if (_disposed) return;
+            _dispatcher.BeginInvoke((Action)(() =>
+            {
+                if (!_disposed) _ = RefreshAsync();
+            }));
+        });
+
         _probeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(CliProbe.CliProbeIntervalMs) };
         _probeTimer.Tick += async (_, _) =>
         {
@@ -225,6 +240,7 @@ public sealed class GitReviewPanelController : IDisposable
         {
             await _state.RefreshAsync().ConfigureAwait(true);
             if (seq != _refreshSeq) return;
+            _draftWatcher.Sync(DraftWatch.WatchDirs(_state.Current));
             if (SituationIds.IsReviewReadable(_state.Current.Situation)
                 && _state.Current.State?.Mode == ReviewMode.Walk)
             {
@@ -486,6 +502,7 @@ public sealed class GitReviewPanelController : IDisposable
         _whyCeilingTimer.Stop();
         _busySub.Dispose();
         _discardSub.Dispose();
+        _draftWatcher.Dispose();
         _state.StateChanged -= OnStateChanged;
         _view.ActionRequested -= OnAction;
     }

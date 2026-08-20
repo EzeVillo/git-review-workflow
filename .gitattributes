@@ -34,3 +34,11 @@ VERSION text eol=lf
 # across platforms. This rule only governs *this* repo dogfooding git review on
 # itself; a consumer repo's walkthrough is covered by the reader-side strip.
 .review/*.md text eol=lf
+
+# pluginVersion in gradle.properties is the JetBrains plugin's only source of
+# truth and the version tests read it verbatim to the end of the line, so a CRLF
+# checkout makes the bare-semver check see "0.2.0\r" and fail. Same reasoning as
+# VERSION above; Gradle itself is happy either way, the tests are not. Without
+# this the documented Windows dev loop (bats in the Linux container over the
+# Windows working tree) fails on a repo that is green in CI.
+jetbrains-plugin/gradle.properties text eol=lf

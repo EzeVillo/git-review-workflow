@@ -6,25 +6,6 @@ own [releases](https://github.com/EzeVillo/git-review-workflow/releases).
 This project follows [semantic versioning](https://semver.org/spec/v2.0.0.html)
 and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 
-## [Unreleased]
-
-### Changed
-
-- **The draft progress follows the file.** Hand a draft to an agent and the row's count
-  moves on its own while it writes -- no Refresh, no reopening the panel. The draft lives
-  in the gitdir, so filling it in moves no `HEAD`, touches no index and writes no
-  `config`: none of the panel's existing refresh signals could see it. The panel now
-  watches the directories the CLI reported the drafts in, and nothing else.
-
-- **One emphatic button per draft row, and the progress picks which.** While entries
-  are missing the row leads with *Copy for agent*; with the order complete, with
-  *Validate and start*. The four controls are always there and in the same order, in
-  two even columns: the row no longer changes shape with its state, so every row of
-  the block lines up with the one beside it. *Validate and start* is now switched off
-  --with a tooltip saying why-- instead of disappearing when the CLI cannot tell how
-  the draft was generated, *Open* carries a label of its own, and *Discard*, the one
-  irreversible control of the row, loses its fill.
-
 ## [0.2.0]
 
 Requires `git review` **0.7.0** or newer.
@@ -44,6 +25,18 @@ Requires `git review` **0.7.0** or newer.
 
 ### Changed
 
+- **The draft progress follows the file.** Hand a draft to an agent and the row's count moves on
+  its own while it writes — no Refresh, no reopening the panel. The draft lives in the gitdir, so
+  filling it in moves no `HEAD`, touches no index and writes no `config`: none of the panel's
+  existing refresh signals could see it. The panel now watches the directories the CLI reported
+  the drafts in, and nothing else.
+- **One emphatic button per draft row, and the progress picks which.** While entries are missing
+  the row leads with *Copy for agent*; with the order complete, with *Validate and start*. The
+  four controls are always there and in the same order, in two even columns: the row no longer
+  changes shape with its state, so every row of the block lines up with the one beside it.
+  *Validate and start* is now switched off — with a tooltip saying why — instead of disappearing
+  when the CLI cannot tell how the draft was generated, *Open* carries a label of its own, and
+  *Discard*, the one irreversible control of the row, loses its fill.
 - **The start assistant no longer waits.** Choosing to build a reading order writes the skeleton
   and closes the assistant: no notice left open, nothing to keep alive while you type. Everything
   the notice used to do — validating, asking whether to read the whole order or only the entries

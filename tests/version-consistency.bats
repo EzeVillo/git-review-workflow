@@ -105,3 +105,43 @@ EOF
 	man="$(sed -nE 's#.*<Identity [^>]*Version="([0-9]+\.[0-9]+\.[0-9]+)".*#\1#p' "$REPO/visualstudio-extension/src/GitReview.VS/source.extension.vsixmanifest" | head -n1)"
 	[ "$man" = "$pkg" ]
 }
+
+@test "version: visualstudio-extension Directory.Build.props matches csproj Version" {
+	# bump-version.sh stamps all three sites at once; nothing else reads this one,
+	# so a partial bump would sit here unnoticed until someone trusted the number.
+	pkg="$(sed -nE 's#.*<Version>([0-9]+\.[0-9]+\.[0-9]+)</Version>.*#\1#p' "$REPO/visualstudio-extension/src/GitReview.VS/GitReview.VS.csproj" | head -n1)"
+	props="$(sed -nE 's#.*<GitReviewClientVersion>([0-9]+\.[0-9]+\.[0-9]+)</GitReviewClientVersion>.*#\1#p' "$REPO/visualstudio-extension/Directory.Build.props" | head -n1)"
+	[ -n "$props" ]
+	[ "$props" = "$pkg" ]
+}
+
+# --- Client CHANGELOGs name the version being shipped -----------------------
+#
+# Each client's CHANGELOG top section is what its store publishes (the JetBrains
+# descriptor renders it into <change-notes>). A version bumped without its heading
+# publishes the previous cycle's notes, or none, and only the store shows it.
+
+@test "version: each client CHANGELOG has a heading for its own version" {
+	vscode="$(sed -nE 's#^  "version": "([^"]*)".*#\1#p' "$REPO/vscode-extension/package.json")"
+	jb="$(sed -nE 's#^pluginVersion = (.*)#\1#p' "$REPO/jetbrains-plugin/gradle.properties")"
+	vs="$(sed -nE 's#.*<Version>([0-9]+\.[0-9]+\.[0-9]+)</Version>.*#\1#p' "$REPO/visualstudio-extension/src/GitReview.VS/GitReview.VS.csproj" | head -n1)"
+
+	grep -qF "## [$vscode]" "$REPO/vscode-extension/CHANGELOG.md" ||
+		{ echo "vscode-extension/CHANGELOG.md has no '## [$vscode]' heading"; false; }
+	grep -qF "## [$jb]" "$REPO/jetbrains-plugin/CHANGELOG.md" ||
+		{ echo "jetbrains-plugin/CHANGELOG.md has no '## [$jb]' heading"; false; }
+	grep -qF "## [$vs]" "$REPO/visualstudio-extension/CHANGELOG.md" ||
+		{ echo "visualstudio-extension/CHANGELOG.md has no '## [$vs]' heading"; false; }
+}
+
+@test "version: no client CHANGELOG still carries an Unreleased section" {
+	# A release cut with notes left under Unreleased publishes an empty section:
+	# the JetBrains descriptor looks up the version heading first and only falls
+	# back to Unreleased, so the mistake is invisible until the Marketplace shows it.
+	for f in \
+		"$REPO/vscode-extension/CHANGELOG.md" \
+		"$REPO/jetbrains-plugin/CHANGELOG.md" \
+		"$REPO/visualstudio-extension/CHANGELOG.md"; do
+		! grep -qE '^## \[Unreleased\]' "$f" || { echo "$f still has an Unreleased section"; false; }
+	done
+}

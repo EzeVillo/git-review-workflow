@@ -1,30 +1,27 @@
 # Changelog
 
-## [Unreleased]
+Notable changes to the **git review** Visual Studio extension. The CLI it drives
+has its own
+[releases](https://github.com/EzeVillo/git-review-workflow/releases).
 
-### Changed
+This project follows [semantic versioning](https://semver.org/spec/v2.0.0.html)
+and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 
-- **The draft progress follows the file.** Hand a draft to an agent and the row's count
-  moves on its own while it writes -- no Refresh, no reopening the panel. The draft lives
-  in the gitdir, so filling it in moves no `HEAD`, touches no index and writes no
-  `config`: none of the panel's existing refresh signals could see it. The panel now
-  watches the directories the CLI reported the drafts in, and nothing else.
+## [0.1.0]
 
-- **One emphatic button per draft row, and the progress picks which.** While entries
-  are missing the row leads with *Copy for agent*; with the order complete, with
-  *Validate and start*. The four controls are always there and in the same order, in
-  two even columns: the row no longer changes shape with its state, so every row of
-  the block lines up with the one beside it. *Validate and start* is now switched off
-  --with a tooltip saying why-- instead of disappearing when the CLI cannot tell how
-  the draft was generated, *Open* carries a label of its own, and *Discard*, the one
-  irreversible control of the row, loses its fill.
+First release of the Visual Studio client. Requires `git review` **0.7.0** or newer.
 
-## [0.2.0]
-
-Requires `git review` **0.7.0** or newer.
+These notes cover the whole pre-release cycle in one section: nothing below ever
+shipped on its own, so the *Changed* and *Fixed* entries record how this release
+reached its shape rather than a difference against a version you could install.
 
 ### Added
 
+- Visual Studio client for `git review`: portable domain (C# port of the JetBrains
+  `domain/`), CLI host, and a WPF panel driven by the same `PanelLayout` /
+  `client-product-surface.yaml` as VS Code and IntelliJ.
+- The package is a real `AsyncPackage`: **View → Other Windows → git review** opens the
+  tool window, and **Tools → Options → git review** holds the path to the git-review CLI.
 - **Reading orders you started, in the panel.** A walkthrough draft you began and have not
   finished now has a place: with no review on this branch, the panel lists every one of
   them with how far along it is (`3/9`, counted by the CLI) and four buttons on its row —
@@ -36,13 +33,40 @@ Requires `git review` **0.7.0** or newer.
   right below it.
 - Copying is copying: no service is contacted, no assistant is invoked, and nothing about
   the draft is written for you.
+- **Tools → git review**: all 27 actions, named as in the VS Code palette and the
+  JetBrains menu.
+- **Refresh**, **Finish**, **Save**, **Cancel** and **Preview edits** are icon buttons on
+  the tool window's own toolbar — where VS Code and the JetBrains plugin put them —
+  instead of a row of text buttons inside the panel. Which of them is showing comes from
+  the same layout the panel body does.
+- **Preview edits** opens `git review preview` as a read-only document, the same as in the
+  other two clients.
+- Opening a file, opening a diff against the review's base, showing the why and running
+  the start wizard go through Visual Studio itself; the panel follows the IDE theme.
+- Marketplace packaging assets: product icon (shared mark), LICENSE, overview, publish
+  checklist, vsixmanifest Icon / PreviewImage / tags.
+- `build-vsix.ps1` builds the `.vsix` and can install it, including into the Experimental
+  Instance.
 
 ### Changed
 
-- **The start wizard no longer waits.** Choosing to build a reading order writes the
+- **The draft progress follows the file.** Hand a draft to an agent and the row's count
+  moves on its own while it writes — no Refresh, no reopening the panel. The draft lives
+  in the gitdir, so filling it in moves no `HEAD`, touches no index and writes no
+  `config`: none of the panel's existing refresh signals could see it. The panel now
+  watches the directories the CLI reported the drafts in, and nothing else.
+- **One emphatic button per draft row, and the progress picks which.** While entries
+  are missing the row leads with *Copy for agent*; with the order complete, with
+  *Validate and start*. The four controls are always there and in the same order, in
+  two even columns: the row no longer changes shape with its state, so every row of
+  the block lines up with the one beside it. *Validate and start* is switched off
+  — with a tooltip saying why — instead of disappearing when the CLI cannot tell how
+  the draft was generated, *Open* carries a label of its own, and *Discard*, the one
+  irreversible control of the row, loses its fill.
+- **The start wizard does not wait.** Choosing to build a reading order writes the
   skeleton and closes the wizard: no dialog left open, nothing to keep alive while you
   type. Everything that dialog used to do — validating, asking whether to read the whole
-  order or only the entries you marked `> key`, starting the review — is now on the
+  order or only the entries you marked `> key`, starting the review — is on the
   draft's row in the panel, over a state that outlives the IDE window.
 - The two offers say what you get instead of naming an internal term: *Build a reading
   order first* ("nobody wrote one for this PR; otherwise you read the whole diff") and
@@ -51,15 +75,20 @@ Requires `git review` **0.7.0** or newer.
   was generated with**, reported by the CLI itself. A draft made with `--delta`, `--local`
   or `--offline` covers a different set of paths than the defaults, so with the defaults
   that button would have failed with a drift error every time, on a perfectly valid draft.
+- **Whole mode offers no button that opens every file at once.** VS Code shows a
+  whole range in a single multi-diff editor and IntelliJ in one window with Prev/Next
+  between files; Visual Studio's differencing service opens one comparison window per pair
+  of files and has no equivalent, so the same button sprayed a window per changed file —
+  forty files, forty windows — and capping that would still be an avalanche. The file
+  inventory below it opens each diff on demand, which is the same range in the only shape
+  this host can give it well. *Open All Changes* is absent from **Tools → git review** for
+  the same reason, rather than staying as a second way to trigger it.
 
 ### Fixed
 
 - The extension no longer builds the draft's path out of a gitdir it resolved itself — the
   CLI reports it, and the panel opens what it was given. The old derivation missed the
   case where the folder you opened is below the repository root.
-
-### Fixed (earlier in this cycle)
-
 - **In walk mode the panel shows the why again.** It read the entry's prose with an
   800 ms deadline on the CLI call itself, and on Windows a `status --why` costs a couple
   of seconds — so every entry of every walk came back as "Could not read the why for this
@@ -94,14 +123,6 @@ Requires `git review` **0.7.0** or newer.
   against an empty base instead of against a blob looked up under its own name, and an
   entry whose edit was reverted says there is nothing left to compare rather than opening
   a window showing a file against itself.
-- **Whole mode no longer offers a button that opens every file at once.** VS Code shows a
-  whole range in a single multi-diff editor and IntelliJ in one window with Prev/Next
-  between files; Visual Studio's differencing service opens one comparison window per pair
-  of files and has no equivalent, so the same button sprayed a window per changed file —
-  forty files, forty windows — and capping that would still be an avalanche. The file
-  inventory below it opens each diff on demand, which is the same range in the only shape
-  this host can give it well. *Open All Changes* is gone from **Tools → git review** for
-  the same reason, rather than staying as a second way to trigger it.
 - **A mutation that is running says so.** Finish, start, abort, save, continue, compare,
   undo, the walkthrough verbs and the housekeeping ones report into the status bar while
   they work — the same lines VS Code puts in its progress notification and IntelliJ in
@@ -122,12 +143,10 @@ Requires `git review` **0.7.0** or newer.
   (saving your unsaved buffer first, which is what `--build` reads), a start that fails on
   the network hands you the exact command to re-run in a terminal, and a start whose
   repository moved while the wizard was open refuses instead of starting something else.
-- **Tools → git review**: all 27 actions, named as in the VS Code palette and the
-  JetBrains menu. Seven of them had no way in at all — Compare Revisions, Walkthrough
-  Init/Build, Set the Base Branch, Set the Remote, Forget, Go to Entry — and answered with
-  a note pointing at a menu that did not exist. *Set the Base Branch* was the one that
-  mattered most: without a base, no review can start, and the panel's own button was that
-  same dead end.
+- Seven actions had no way in at all — Compare Revisions, Walkthrough Init/Build, Set the
+  Base Branch, Set the Remote, Forget, Go to Entry — and answered with a note pointing at
+  a menu that did not exist. *Set the Base Branch* was the one that mattered most: without
+  a base, no review can start, and the panel's own button was that same dead end.
 - Clean, Forget, Discard, Continue and Finish ask their questions properly: a list of what
   there is to pick from, and the affirmative button carries the action's own words
   ("Start the review", "Cancel Review", "Discard All Saved") instead of a generic OK.
@@ -138,34 +157,11 @@ Requires `git review` **0.7.0** or newer.
   onto the side the interrupted finish was aimed at (it always assumed the separate
   branch), and a successful finish says where the edits landed.
 - Dialogs follow the IDE theme and open centred on the IDE rather than behind it.
-- **A disabled button now reads as one.** WPF paints its own disabled and hover colors
+- **A disabled button reads as one.** WPF paints its own disabled and hover colors
   from inside the stock button template, over anything the panel assigns, so a *Continue*
   that cannot be resumed came out as a white block with an unreadable label in a dark
   theme — and a hovered file row flashed Windows blue instead of the IDE's own highlight.
   The panel draws its buttons itself now, in the host's colors, in every state.
-
-- The extension now loads into Visual Studio. The package is a real `AsyncPackage`:
-  **View → Other Windows → git review** opens the tool window, and **Tools → Options →
-  git review** holds the path to the git-review CLI.
-- Opening a file, opening a diff against the review's base, showing the why and running
-  the start wizard now go through Visual Studio itself; the panel follows the IDE theme.
-- **Refresh**, **Finish**, **Save**, **Cancel** and **Preview edits** are now icon
-  buttons on the tool window's own toolbar — where VS Code and the JetBrains
-  plugin put them — instead of a row of text buttons inside the panel. Which of
-  them is showing still comes from the same layout the panel body does.
-- **Preview edits** does something: `git review preview` opens as a read-only
-  document, the same as in the other two clients. It used to answer with a note
-  pointing at a menu Visual Studio does not have.
-- `build-vsix.ps1` builds the `.vsix` and can install it, including into the
-  Experimental Instance.
-- Fixed: every CLI action ended in a "The calling thread cannot access this object"
+- Every CLI action used to end in a "The calling thread cannot access this object"
   dialog. The action had already run; the panel was being redrawn from the thread the
   mutation finished on instead of the UI thread.
-
-## [0.1.0] — 2026-08-12
-
-- Initial Visual Studio client: portable domain (C# port of JetBrains `domain/`),
-  CLI host, WPF panel driven by the same `PanelLayout` / `client-product-surface.yaml`
-  as VS Code and IntelliJ.
-- Marketplace packaging assets: product icon (shared mark), LICENSE, overview,
-  publish checklist, vsixmanifest Icon / PreviewImage / tags.

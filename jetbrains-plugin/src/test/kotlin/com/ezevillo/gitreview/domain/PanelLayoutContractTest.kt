@@ -160,18 +160,18 @@ class PanelLayoutContractTest {
 
         val rows = (panelLayout(PanelFixtures.noReviewDrafts()).blocks
             .first { it is Block.DraftRows } as Block.DraftRows).rows
-        assertEquals(2, rows.size)
+        assertEquals(3, rows.size)
 
         // La primera fila trae los cuatro; la segunda, todos menos
         // startFromDraft — su bloque de instrucciones se borró a mano, así que
         // la CLI no sabe con qué flags se generó y adivinarlos haría fallar el
         // build por deriva sobre un borrador válido.
         assertEquals(
-            listOf("openDraft", "copyDraftPrompt", "startFromDraft", "discardDraft"),
+            listOf("copyDraftPrompt", "startFromDraft", "openDraft", "discardDraft"),
             rows[0].controls.map { it.id.wire },
         )
         assertEquals(
-            listOf("openDraft", "copyDraftPrompt", "discardDraft"),
+            listOf("copyDraftPrompt", "openDraft", "discardDraft"),
             rows[1].controls.map { it.id.wire },
         )
 
@@ -179,17 +179,36 @@ class PanelLayoutContractTest {
             @Suppress("UNCHECKED_CAST")
             val spec = canonical[control.id.wire] as Map<String, Any?>
             assertEquals(spec["label"], control.label, "label of ${control.id.wire}")
-            assertEquals(spec["emphasis"], control.emphasis.id, "emphasis of ${control.id.wire}")
+            // rows[0] es 3/9: incompleto, así que rige emphasis_unfilled donde
+            // el canónico lo declara y `emphasis` a secas donde no.
+            val want = spec["emphasis_unfilled"] ?: spec["emphasis"]
+            assertEquals(want, control.emphasis.id, "emphasis of ${control.id.wire}")
             assertEquals(
                 spec["confirms"] as? Boolean ?: false,
                 requiresConfirmation(control.id),
                 "confirms of ${control.id.wire}",
+            )
+            assertEquals(
+                spec["separated"] as? Boolean ?: false,
+                control.separated,
+                "separated of ${control.id.wire}",
             )
             // Cada control lleva el índice de SU fila: una acción sobre una fila
             // no puede tocar las demás.
             assertEquals(0, control.index, "index of ${control.id.wire}")
         }
         assertTrue(rows[1].controls.all { it.index == 1 }, "second row carries index 1")
+
+        // Y la tercera está completa (1/1): ahí rige `emphasis` a secas.
+        for (control in rows[2].controls) {
+            @Suppress("UNCHECKED_CAST")
+            val spec = canonical[control.id.wire] as Map<String, Any?>
+            assertEquals(
+                spec["emphasis"],
+                control.emphasis.id,
+                "emphasis of ${control.id.wire} (filled)",
+            )
+        }
     }
 
     @Test

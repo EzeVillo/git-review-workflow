@@ -213,29 +213,38 @@ public class PanelLayoutContractTests
             canonical.Keys.OrderBy(k => k, StringComparer.Ordinal).ToArray());
 
         var rows = layoutDraftRows();
-        Assert.Equal(2, rows.Count);
+        Assert.Equal(3, rows.Count);
 
         // The first row carries the four; the second, all but startFromDraft — its
         // instruction block was deleted by hand, so the CLI does not know which flags
         // it was generated with and guessing them would make --build die on drift.
         Assert.Equal(
-            new[] { "openDraft", "copyDraftPrompt", "startFromDraft", "discardDraft" },
+            new[] { "copyDraftPrompt", "startFromDraft", "openDraft", "discardDraft" },
             rows[0].Controls.Select(c => c.Id.Wire()).ToArray());
         Assert.Equal(
-            new[] { "openDraft", "copyDraftPrompt", "discardDraft" },
+            new[] { "copyDraftPrompt", "openDraft", "discardDraft" },
             rows[1].Controls.Select(c => c.Id.Wire()).ToArray());
 
         foreach (var control in rows[0].Controls)
         {
             var spec = canonical[control.Id.Wire()];
             Assert.Equal(spec.Label, control.Label);
-            Assert.Equal(spec.Emphasis, control.Emphasis.Id());
+            // rows[0] is 3/9: unfilled, so EmphasisUnfilled rules where the
+            // canonical declares one and Emphasis alone where it does not.
+            Assert.Equal(spec.EmphasisUnfilled ?? spec.Emphasis, control.Emphasis.Id());
             Assert.Equal(spec.Confirms, PanelLayoutBuilder.RequiresConfirmation(control.Id));
+            Assert.Equal(spec.Separated, control.Separated);
             // Each control carries ITS row's index: an action on one row cannot
             // touch the others.
             Assert.Equal(0, control.Index);
         }
         Assert.All(rows[1].Controls, c => Assert.Equal(1, c.Index));
+
+        // And the third one is complete (1/1): there Emphasis alone rules.
+        foreach (var control in rows[2].Controls)
+        {
+            Assert.Equal(canonical[control.Id.Wire()].Emphasis, control.Emphasis.Id());
+        }
     }
 
     [Fact]
@@ -262,19 +271,41 @@ public class PanelLayoutContractTests
         PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewDrafts())
             .Blocks.OfType<Block.DraftRows>().Single().Rows;
 
-    private static Dictionary<string, (string Label, string Emphasis, bool Confirms)> DraftControlSpecs()
+    /// <summary>
+    /// One draft control as the canonical declares it. <c>EmphasisUnfilled</c> is
+    /// the emphasis while entries are still missing; <c>Emphasis</c>, the one for
+    /// a complete reading order — null there means the emphasis does not depend
+    /// on the progress at all.
+    /// </summary>
+    private sealed record DraftSpec(
+        string? Label,
+        string? AccessibleName,
+        string Emphasis,
+        string? EmphasisUnfilled,
+        bool Confirms,
+        bool Separated);
+
+    private static Dictionary<string, DraftSpec> DraftControlSpecs()
     {
         var root = (YamlMappingNode)LoadCanonical().Documents[0].RootNode;
         var map = (YamlMappingNode)root.Children[new YamlScalarNode("draft_controls")];
-        var specs = new Dictionary<string, (string, string, bool)>(StringComparer.Ordinal);
+        var specs = new Dictionary<string, DraftSpec>(StringComparer.Ordinal);
         foreach (var pair in map.Children)
         {
             var id = ((YamlScalarNode)pair.Key).Value!;
             var node = (YamlMappingNode)pair.Value;
-            specs[id] = (
-                ((YamlScalarNode)node.Children[new YamlScalarNode("label")]).Value!,
-                ((YamlScalarNode)node.Children[new YamlScalarNode("emphasis")]).Value!,
-                ((YamlScalarNode)node.Children[new YamlScalarNode("confirms")]).Value == "true");
+            string? Scalar(string key) =>
+                node.Children.TryGetValue(new YamlScalarNode(key), out var v)
+                    ? ((YamlScalarNode)v).Value
+                    : null;
+            var label = Scalar("label");
+            specs[id] = new DraftSpec(
+                label == "null" ? null : label,
+                Scalar("accessible_name"),
+                Scalar("emphasis")!,
+                Scalar("emphasis_unfilled"),
+                Scalar("confirms") == "true",
+                Scalar("separated") == "true");
         }
         return specs;
     }

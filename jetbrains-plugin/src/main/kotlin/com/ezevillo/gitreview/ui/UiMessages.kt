@@ -7,14 +7,16 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.ComboBox
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
-import com.intellij.ui.SimpleListCellRenderer
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
+import java.awt.Component
 import java.awt.Dimension
+import javax.swing.DefaultListCellRenderer
 import javax.swing.Icon
 import javax.swing.JComboBox
 import javax.swing.JComponent
 import javax.swing.JLabel
+import javax.swing.JList
 import javax.swing.JPanel
 
 /**
@@ -160,9 +162,24 @@ private class ChooseDialog(
         title = dialogTitle
         combo.isEditable = false
         // El texto entero, para el ítem que igual no entre en el tope de ancho.
-        combo.renderer = SimpleListCellRenderer.create<String> { label, value, _ ->
-            label.text = value
-            label.toolTipText = value
+        // Renderer de Swing y no `SimpleListCellRenderer.create`: ese método está
+        // scheduled for removal —lo reporta la validación del Marketplace— y su
+        // reemplazo, el DSL `listCellRenderer`, cuelga de `LcrRow`, que es
+        // @ApiStatus.Experimental. Sin until-build en el descriptor, atarse a una
+        // forma que puede cambiar es canjear un warning por un NoSuchMethodError
+        // en un IDE futuro; esto es un tooltip sobre un JLabel, no vale el riesgo.
+        combo.renderer = object : DefaultListCellRenderer() {
+            override fun getListCellRendererComponent(
+                list: JList<*>,
+                value: Any?,
+                index: Int,
+                selected: Boolean,
+                focused: Boolean,
+            ): Component {
+                val component = super.getListCellRendererComponent(list, value, index, selected, focused)
+                toolTipText = value as? String
+                return component
+            }
         }
         if (options.isNotEmpty()) {
             combo.selectedIndex = options.indexOf(defaultOption).coerceAtLeast(0)

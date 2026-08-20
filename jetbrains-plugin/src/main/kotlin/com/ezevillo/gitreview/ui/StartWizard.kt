@@ -37,7 +37,9 @@ import com.ezevillo.gitreview.host.MutationActions
 import com.ezevillo.gitreview.host.StartRunResult
 import com.ezevillo.gitreview.settings.GitReviewSettings
 import com.ezevillo.gitreview.vcs.pickSoleGitRoot
-import com.intellij.openapi.application.WriteIntentReadAction
+import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.application.WriteAction
+import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.project.Project
@@ -421,13 +423,17 @@ object StartWizard {
         val vf = LocalFileSystem.getInstance().refreshAndFindFileByPath(path) ?: return
         // Desde 2024.1 el EDT no trae read access implícito: este handler entra
         // por un JButton del panel, no por una AnAction que la plataforma
-        // envuelva, así que el lock lo pide el llamador. Un solo write-intent
-        // cubre las dos mitades: leer el documento y guardarlo.
-        WriteIntentReadAction.run {
-            val fdm = FileDocumentManager.getInstance()
-            val doc = fdm.getDocument(vf) ?: return@run
-            if (fdm.isDocumentUnsaved(doc)) fdm.saveDocument(doc)
-        }
+        // envuelva, así que el lock lo pide el llamador. `ReadAction`/`WriteAction`
+        // y no `WriteIntentReadAction`, que sería el lock justo pero está
+        // @ApiStatus.Experimental — el descriptor no tiene until-build, así que
+        // API que puede cambiar de forma es un NoSuchMethodError a futuro.
+        // El write lock se toma sólo si de verdad hay algo que guardar.
+        val fdm = FileDocumentManager.getInstance()
+        val unsaved = ReadAction.computeBlocking<Document?, RuntimeException> {
+            val doc = fdm.getDocument(vf)
+            if (doc != null && fdm.isDocumentUnsaved(doc)) doc else null
+        } ?: return
+        WriteAction.run<RuntimeException> { fdm.saveDocument(unsaved) }
     }
 
     private fun confirmAndStart(ctx: WizardContext, layout: ReviewLayout) {

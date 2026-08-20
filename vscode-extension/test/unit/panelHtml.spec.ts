@@ -518,7 +518,31 @@ describe("panelHtml", () => {
         );
     });
 
-    it("Validate and start nunca se deshabilita por progreso, solo por busy", () => {
+    it("los cuatro controles estan siempre: lo que cambia es el enabled", () => {
+        // Cuando Validate and start desaparecia, cada fila armaba su propia
+        // botonera y ninguna se alineaba con la de al lado.
+        const draftFn = html.slice(
+            html.indexOf("function renderDraft("),
+            html.indexOf("function renderDrafts(")
+        );
+        assert.ok(draftFn.length > 0, "no se encontro renderDraft para afirmar sobre el");
+        assert.ok(
+            !/if \(draft\.startable\)/.test(draftFn),
+            "ningun control de la fila se dibuja detras de una guarda de presencia"
+        );
+        assert.ok(
+            /go\.disabled = model\.busy \|\| !draft\.startable;/.test(draftFn),
+            "startable apaga el control, no lo saca"
+        );
+        assert.ok(
+            draftFn.includes(
+                "This draft has no instruction block, so the CLI cannot tell how it was generated"
+            ),
+            "un control apagado dice por que lo esta"
+        );
+    });
+
+    it("Validate and start nunca se deshabilita por progreso", () => {
         // El conteo sale del disco y el revisor puede tener el borrador abierto
         // con cambios sin guardar: saveOpenDraft los guarda antes de validar,
         // asi que grisarlo mentiria justo al terminar de escribir.
@@ -526,8 +550,6 @@ describe("panelHtml", () => {
             html.indexOf("function renderDraft("),
             html.indexOf("function renderDrafts(")
         );
-        assert.ok(draftFn.length > 0, "no se encontro renderDraft para afirmar sobre el");
-        assert.ok(draftFn.includes("go.disabled = model.busy;"), "solo busy");
         assert.ok(
             !/go\.disabled = [^;]*(annotated|total|filled)/.test(draftFn),
             "el progreso no puede deshabilitar el control"

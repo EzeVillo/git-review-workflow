@@ -75,6 +75,7 @@ interface PanelChrome {
     fun glyphPrev(): String = "◀"
     fun glyphNext(): String = "▶"
     fun glyphCopy(): String = "⎘"
+    fun glyphFile(): String = "▤"
 }
 
 class PluginPanelChrome : PanelChrome {

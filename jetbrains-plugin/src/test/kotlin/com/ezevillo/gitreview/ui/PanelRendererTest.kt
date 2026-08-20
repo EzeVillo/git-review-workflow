@@ -7,7 +7,9 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.awt.BorderLayout
 import javax.swing.JButton
+import javax.swing.JPanel
 import javax.swing.SwingConstants
 
 class PanelRendererTest {
@@ -156,5 +158,37 @@ class PanelRendererTest {
         val fileBtn = buttons.find { it.text == "file1.kt" }
         assertTrue(fileBtn != null)
         fileBtn!!.doClick()
+    }
+
+    @Test
+    fun `a draft row that does not fit on one line asks for the height of two`() {
+        // FlowLayout lays the row out over as many lines as it needs but asks
+        // for the height of one, so at sidebar width everything past the first
+        // line is clipped away — not moved: Discard never gets drawn at all.
+        val row = JPanel(WrapLayout(4, 2))
+        repeat(4) { row.add(JButton("Validate and start")) }
+        val oneLine = row.getComponent(0).preferredSize.height
+
+        val host = JPanel(BorderLayout())
+        host.add(row, BorderLayout.CENTER)
+        host.setSize(320, 400)
+        host.doLayout()
+
+        assertTrue(
+            row.preferredSize.height > oneLine * 2,
+            "four wide controls at 320px need more than two rows of height",
+        )
+    }
+
+    @Test
+    fun `an icon control without a platform icon falls back to a glyph, not to its name`() {
+        // El nombre accesible es una oracion entera: si cae ahi, el control se
+        // vuelve el mas ancho de la fila, que es lo contrario de un icono.
+        val layout = panelLayout(PanelFixtures.noReviewDrafts())
+        val renderer = PanelRenderer(PreviewPanelChrome()) { _, _, _ -> false }
+        val buttons = PanelRenderer.collectButtons(renderer.render(layout))
+        val open = buttons.find { it.toolTipText == "Open the reading order for editing" }
+        assertTrue(open != null, "the draft row draws an openDraft control")
+        assertEquals(PreviewPanelChrome().glyphFile(), open!!.text)
     }
 }

@@ -98,10 +98,11 @@ object PanelFixtures {
      * row does NOT offer *Validate and start*: its instruction block was deleted
      * by hand, so the CLI reports `unknown` and the flags cannot be replicated.
      */
-    fun noReviewDrafts(): PanelModel {
+    fun noReviewDrafts(busy: Boolean = false): PanelModel {
         val cfg = """
             draft	feature/telemetry	/repo/.git/review-walkthrough/feature/telemetry.md	3	9	local	delta
             draft	feature/pagos	/repo/.git/review-walkthrough/feature/pagos.md	0	5	unknown	unknown
+            draft	feature/legacy	/repo/.git/review-walkthrough/feature/legacy.md	1	1	remote	full
         """.trimIndent()
         return buildPanelModel(
             ReviewState(
@@ -110,9 +111,12 @@ object PanelFixtures {
                 branches = parseListPorcelain("branch	review-saved/feature	1	0	0	walk	2	5"),
                 drafts = parseConfigPorcelain(cfg).drafts,
             ),
-            PanelInputs(busy = false),
+            PanelInputs(busy = busy),
         )
     }
+
+    /** El mismo estado con una mutación en curso: lo único que deshabilita la fila. */
+    fun noReviewDraftsBusy(): PanelModel = noReviewDrafts(busy = true)
 
     /** Configured, with nothing in the repository yet: the bare empty state. */
     fun noReviewEmpty(): PanelModel = buildPanelModel(

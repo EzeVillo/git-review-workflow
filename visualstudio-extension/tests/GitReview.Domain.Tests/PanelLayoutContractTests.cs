@@ -215,15 +215,19 @@ public class PanelLayoutContractTests
         var rows = layoutDraftRows();
         Assert.Equal(3, rows.Count);
 
-        // The first row carries the four; the second, all but startFromDraft — its
-        // instruction block was deleted by hand, so the CLI does not know which flags
-        // it was generated with and guessing them would make --build die on drift.
-        Assert.Equal(
-            new[] { "copyDraftPrompt", "startFromDraft", "openDraft", "discardDraft" },
-            rows[0].Controls.Select(c => c.Id.Wire()).ToArray());
-        Assert.Equal(
-            new[] { "copyDraftPrompt", "openDraft", "discardDraft" },
-            rows[1].Controls.Select(c => c.Id.Wire()).ToArray());
+        // All three rows carry the four, in the same order: the button row does not
+        // change shape between rows. On the second one startFromDraft is switched
+        // off — its instruction block was deleted by hand, so the CLI does not know
+        // which flags it was generated with and guessing them would make --build die
+        // on drift — and it says so in the tooltip.
+        var order = new[] { "copyDraftPrompt", "startFromDraft", "openDraft", "discardDraft" };
+        foreach (var row in rows)
+        {
+            Assert.Equal(order, row.Controls.Select(c => c.Id.Wire()).ToArray());
+        }
+        var unknownFlags = rows[1].Controls.First(c => c.Id == ControlId.StartFromDraft);
+        Assert.False(unknownFlags.Enabled);
+        Assert.Equal(canonical["startFromDraft"].TooltipDisabled, unknownFlags.Tooltip);
 
         foreach (var control in rows[0].Controls)
         {
@@ -245,6 +249,59 @@ public class PanelLayoutContractTests
         {
             Assert.Equal(canonical[control.Id.Wire()].Emphasis, control.Emphasis.Id());
         }
+    }
+
+    [Fact]
+    public void The_emphasis_follows_the_progress_and_the_order_never_moves()
+    {
+        var rows = layoutDraftRows();
+
+        // 3/9: still to be written, so the next step is Copy for agent.
+        var unfilled = rows[0].Controls.ToDictionary(c => c.Id);
+        Assert.Equal(Emphasis.Primary, unfilled[ControlId.CopyDraftPrompt].Emphasis);
+        Assert.Equal(Emphasis.Secondary, unfilled[ControlId.StartFromDraft].Emphasis);
+
+        // 1/1: the order is written, so the next step is starting the review.
+        var filled = rows[2].Controls.ToDictionary(c => c.Id);
+        Assert.Equal(Emphasis.Secondary, filled[ControlId.CopyDraftPrompt].Emphasis);
+        Assert.Equal(Emphasis.Primary, filled[ControlId.StartFromDraft].Emphasis);
+
+        Assert.Equal(
+            rows[0].Controls.Select(c => c.Id).ToArray(),
+            rows[2].Controls.Select(c => c.Id).ToArray());
+    }
+
+    [Fact]
+    public void Validate_and_start_is_never_disabled_by_progress()
+    {
+        // The count comes off the disk and the draft can be open with unsaved
+        // edits, which the client saves before it validates.
+        var rows = layoutDraftRows();
+        Assert.True(rows[0].Controls.First(c => c.Id == ControlId.StartFromDraft).Enabled);
+
+        var busy = PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewDraftsBusy())
+            .Blocks.OfType<Block.DraftRows>().Single().Rows;
+        Assert.False(busy[0].Controls.First(c => c.Id == ControlId.StartFromDraft).Enabled);
+    }
+
+    [Fact]
+    public void Open_draft_is_an_icon_control_with_a_name_to_read_out()
+    {
+        var open = layoutDraftRows()[0].Controls.First(c => c.Id == ControlId.OpenDraft);
+        Assert.Null(open.Label);
+        Assert.Equal(Emphasis.Icon, open.Emphasis);
+        Assert.Equal("Open the reading order", open.AccessibleName);
+        Assert.Equal(0, open.Index);
+    }
+
+    [Fact]
+    public void Only_the_irreversible_control_is_separated()
+    {
+        var controls = layoutDraftRows()[0].Controls;
+        Assert.Equal(
+            new[] { ControlId.DiscardDraft },
+            controls.Where(c => c.Separated).Select(c => c.Id).ToArray());
+        Assert.Equal(ControlId.DiscardDraft, controls[controls.Count - 1].Id);
     }
 
     [Fact]
@@ -283,7 +340,8 @@ public class PanelLayoutContractTests
         string Emphasis,
         string? EmphasisUnfilled,
         bool Confirms,
-        bool Separated);
+        bool Separated,
+        string? TooltipDisabled);
 
     private static Dictionary<string, DraftSpec> DraftControlSpecs()
     {
@@ -305,7 +363,8 @@ public class PanelLayoutContractTests
                 Scalar("emphasis")!,
                 Scalar("emphasis_unfilled"),
                 Scalar("confirms") == "true",
-                Scalar("separated") == "true");
+                Scalar("separated") == "true",
+                Scalar("tooltip_disabled"));
         }
         return specs;
     }

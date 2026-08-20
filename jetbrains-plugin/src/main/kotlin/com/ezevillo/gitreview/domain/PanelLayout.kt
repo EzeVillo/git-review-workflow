@@ -130,6 +130,13 @@ data class Control(
     val index: Int? = null,
     /** openSupport allowlist id (`star`, `bug`); null for every other control. */
     val supportLinkId: String? = null,
+    /**
+     * A gap wider than the one between controls, before this one. The only
+     * irreversible control of a row carries it so that it does not share an
+     * edge with the one that commits; the canonical declares it as
+     * `separated: true`.
+     */
+    val separated: Boolean = false,
 ) {
     init {
         // 1. icon ⟹ accessible name
@@ -355,6 +362,7 @@ private fun ctrl(
     tooltip: String? = null,
     index: Int? = null,
     supportLinkId: String? = null,
+    separated: Boolean = false,
 ): Control {
     val name = accessibleName
         ?: label
@@ -368,6 +376,7 @@ private fun ctrl(
         tooltip = tooltip,
         index = index,
         supportLinkId = supportLinkId,
+        separated = separated,
     )
 }
 
@@ -757,42 +766,57 @@ private fun inventoryRows(model: PanelModel): Block.InventoryRows {
 private fun draftRows(model: PanelModel): Block.DraftRows {
     val enabled = !model.busy
     val rows = model.drafts.mapIndexed { index, d ->
+        // One emphatic control per row, and the progress picks which: while
+        // entries are missing the next step is writing the order, and only once
+        // it is complete is it starting the review. The ORDER is fixed — moving
+        // the click target as the state changes slides it under the cursor.
+        val filled = d.annotated >= d.total
         val controls = ArrayList<Control>()
-        controls.add(
-            ctrl(
-                ControlId.OPEN_DRAFT,
-                "Open",
-                Emphasis.SECONDARY,
-                enabled = true,
-                tooltip = "Open the reading order for editing",
-                index = index,
-            ),
-        )
         controls.add(
             ctrl(
                 ControlId.COPY_DRAFT_PROMPT,
                 "Copy for agent",
-                Emphasis.SECONDARY,
+                if (filled) Emphasis.SECONDARY else Emphasis.PRIMARY,
                 enabled = true,
                 tooltip = "Copy an instruction naming this file",
                 index = index,
             ),
         )
-        // Absent when the CLI does not know the origin and range the draft was
-        // generated with: invoking with the defaults would fail with a drift
-        // error every time, and one control fewer beats one that guesses.
-        if (d.startable) {
-            controls.add(
-                ctrl(
-                    ControlId.START_FROM_DRAFT,
-                    "Validate and start",
-                    Emphasis.PRIMARY,
-                    enabled = enabled,
-                    tooltip = "git review walkthrough draft --build, then start",
-                    index = index,
-                ),
-            )
-        }
+        // Always drawn, switched off when the CLI does not know the origin and
+        // range the draft was generated with: invoking with the defaults would
+        // fail with a drift error every time. Off says as little about the
+        // flags as absent did, and unlike absent it can say why.
+        controls.add(
+            ctrl(
+                ControlId.START_FROM_DRAFT,
+                "Validate and start",
+                if (filled) Emphasis.PRIMARY else Emphasis.SECONDARY,
+                // Never disabled by the progress: the count comes off the disk
+                // and the draft can be open with unsaved edits, which the
+                // client saves before it validates.
+                enabled = enabled && d.startable,
+                tooltip = if (d.startable) {
+                    "git review walkthrough draft --build, then start"
+                } else {
+                    "This draft has no instruction block, so the CLI cannot tell how it was generated"
+                },
+                index = index,
+            ),
+        )
+        // An icon: the draft lives outside the versioned tree and this control
+        // is the one surface that opens it, but its label was what forced the
+        // row to wrap.
+        controls.add(
+            ctrl(
+                ControlId.OPEN_DRAFT,
+                null,
+                Emphasis.ICON,
+                enabled = true,
+                accessibleName = "Open the reading order",
+                tooltip = "Open the reading order for editing",
+                index = index,
+            ),
+        )
         controls.add(
             ctrl(
                 ControlId.DISCARD_DRAFT,
@@ -801,6 +825,7 @@ private fun draftRows(model: PanelModel): Block.DraftRows {
                 enabled = enabled,
                 tooltip = "git review forget --draft (with confirmation)",
                 index = index,
+                separated = true,
             ),
         )
         DraftRow(name = d.branch, meta = "${d.annotated}/${d.total}", controls = controls)

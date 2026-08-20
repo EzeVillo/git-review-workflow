@@ -331,7 +331,7 @@ function collectCanonicalControls() {
   // conteo fijo de 27 de arriba no los cuenta y no se toca.
   const draftBlock = text.split(/^draft_controls:\s*$/m)[1]?.split(/^[a-z_][a-z0-9_]*:/m)[0] ?? "";
   const draftRe =
-    /^ {2}([A-Za-z][A-Za-z0-9]*):\s*\{label:\s*(null|"[^"]*")\s*,\s*(?:accessible_name:\s*"([^"]*)"\s*,\s*)?emphasis:\s*(primary|secondary|link|icon)\s*(?:,\s*emphasis_unfilled:\s*(primary|secondary))?\s*,\s*confirms:\s*(true|false)(?:\s*,\s*separated:\s*(true|false))?\}/gm;
+    /^ {2}([A-Za-z][A-Za-z0-9]*):\s*\{label:\s*(null|"[^"]*")\s*,\s*(?:accessible_name:\s*"([^"]*)"\s*,\s*)?emphasis:\s*(primary|secondary|link|icon)\s*(?:,\s*emphasis_unfilled:\s*(primary|secondary))?\s*,\s*confirms:\s*(true|false)(?:\s*,\s*separated:\s*(true|false))?(?:\s*,\s*tooltip_disabled:\s*"([^"]*)")?\}/gm;
   let dm;
   while ((dm = draftRe.exec(draftBlock)) !== null) {
     // Un control con emphasis_unfilled tiene DOS enfasis validos —el cliente
@@ -347,6 +347,7 @@ function collectCanonicalControls() {
       raw: false,
       confirms: dm[6] === "true",
       separated: dm[7] === "true",
+      tooltipDisabled: dm[8] || null,
     });
   }
   return controls;
@@ -359,6 +360,31 @@ if (canonicalControls.length === 0) {
 const rawControlIds = new Set(
   canonicalControls.filter((c) => c.raw).map((c) => c.id),
 );
+
+// tooltip_disabled de draft_controls: lo que dice un control apagado. Es copy
+// compartida como draft_agent_prompt, y el motivo de verificarla es el mismo —
+// tres clientes escribiendo a mano el mismo texto derivan sin que nadie mire—,
+// pero vive en el builder del layout de cada uno y no en su UserCopy.
+const disabledTips = canonicalControls
+  .filter((c) => c.tooltipDisabled)
+  .map((c) => [c.id, c.tooltipDisabled]);
+for (const [id, tip] of disabledTips) {
+  for (const [label, rel] of [
+    ["vscode", ["vscode-extension", "src", "views", "panelHtml.ts"]],
+    ["intellij", ["jetbrains-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "domain", "PanelLayout.kt"]],
+    ["visualstudio", ["visualstudio-extension", "src", "GitReview.Domain", "PanelLayout.cs"]],
+  ]) {
+    const p = join(root, ...rel);
+    if (!existsSync(p)) {
+      fail(`${label} panel layout missing at ${rel.join("/")}`);
+      continue;
+    }
+    if (!squash(readText(p, "utf8")).includes(squash(tip))) {
+      fail(`${label} is missing the disabled tooltip of ${id}`);
+    }
+  }
+}
+
 
 // Map emphasis className in button() third arg. Un ternario entre null y
 // "primary" no es un enfasis fijo sino uno condicional: devuelve los DOS

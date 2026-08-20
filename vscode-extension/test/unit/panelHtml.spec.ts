@@ -505,7 +505,7 @@ describe("panelHtml", () => {
         // recien con el orden completo lo es arrancar la review. El ORDEN no
         // se mueve: reordenar los botones bajo el cursor es hostil.
         assert.ok(
-            /const filled = draft\.annotated >= draft\.total/.test(html),
+            /const filled = draft\.total > 0 && draft\.annotated >= draft\.total/.test(html),
             "el progreso decide el enfasis"
         );
         assert.ok(
@@ -516,6 +516,29 @@ describe("panelHtml", () => {
             /button\("Validate and start", "startFromDraft", filled \? "primary" : null, null, index\)/.test(html),
             "Validate and start toma el primary recien con el orden completo"
         );
+    });
+
+    it("0/0 no es un borrador completo: el enfasis se queda en Copy for agent", () => {
+        // La CLI emite 0/0 para un borrador vaciado a mano Y para el que un
+        // agente esta escribiendo ahora mismo: el watcher dispara con el primer
+        // Changed, antes de que caiga el primer "## N.". Leer ese 0/0 como
+        // "completo" manda el enfasis a Validate and start, que ahi encima esta
+        // deshabilitado (source/range unknown) -- el unico control enfatico de
+        // la fila no se puede ni apretar.
+        //
+        // Se evalua la expresion real que sale del panel, no su texto: lo que
+        // se afirma es el valor que decide el enfasis.
+        const expr = /const filled = ([^;]+);/.exec(html)?.[1] ?? "";
+        assert.ok(expr.length > 0, "no se encontro la expresion de filled en renderDraft");
+        const filled = new Function("draft", "return (" + expr + ");") as (
+            draft: {annotated: number; total: number}
+        ) => boolean;
+
+        assert.strictEqual(filled({annotated: 0, total: 0}), false, "0/0 no declara ninguna entrada");
+        assert.strictEqual(filled({annotated: 0, total: 5}), false, "0/5 esta vacio de anotaciones");
+        assert.strictEqual(filled({annotated: 3, total: 9}), false, "3/9 sigue incompleto");
+        assert.strictEqual(filled({annotated: 1, total: 1}), true, "1/1 si esta completo");
+        assert.strictEqual(filled({annotated: 9, total: 9}), true, "9/9 si esta completo");
     });
 
     it("los cuatro controles estan siempre: lo que cambia es el enabled", () => {

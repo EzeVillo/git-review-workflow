@@ -247,6 +247,62 @@ class PanelLayoutContractTest {
     }
 
     @Test
+    fun `a draft with no entries at all is not a complete one`() {
+        // La CLI emite 0/0 para un borrador vaciado a mano Y para el que un
+        // agente esta escribiendo ahora mismo: el watcher dispara con el primer
+        // Changed, antes de que caiga el primer "## N.". Leer ese 0/0 como
+        // completo manda el enfasis a Validate and start, que ahi encima esta
+        // deshabilitado (source/range unknown) -- el unico control enfatico de
+        // la fila no se puede ni apretar, justo en el estado que mas necesita
+        // que Copy for agent lidere.
+        val cfg = "draft\tfeature/recien-empezado" +
+            "\t/repo/.git/review-walkthrough/feature/recien-empezado.md\t0\t0\tunknown\tunknown"
+        val model = buildPanelModel(
+            ReviewState(
+                situation = Situation.NO_REVIEW,
+                config = EffectiveConfig(base = "main", remote = "origin"),
+                drafts = parseConfigPorcelain(cfg).drafts,
+            ),
+            PanelInputs(busy = false),
+        )
+        val row = (panelLayout(model).blocks
+            .first { it is Block.DraftRows } as Block.DraftRows).rows.single()
+        assertEquals("0/0", row.meta, "el progreso es el que reporto la CLI")
+
+        val controls = row.controls.associateBy { it.id }
+        assertEquals(
+            Emphasis.PRIMARY,
+            controls[ControlId.COPY_DRAFT_PROMPT]?.emphasis,
+            "sin una sola entrada el paso siguiente es llenar el borrador",
+        )
+        assertEquals(
+            Emphasis.SECONDARY,
+            controls[ControlId.START_FROM_DRAFT]?.emphasis,
+            "0/0 no es un orden de lectura completo",
+        )
+        // Y el enfasis no puede caer sobre un control apagado: con unknown este
+        // no se puede invocar, que es de donde salio el sintoma.
+        assertTrue(
+            !controls.getValue(ControlId.START_FROM_DRAFT).enabled,
+            "con source/range unknown el control esta apagado",
+        )
+        assertTrue(
+            controls.getValue(ControlId.COPY_DRAFT_PROMPT).enabled,
+            "el enfatico de la fila tiene que poder apretarse",
+        )
+        // El ORDEN sigue siendo el mismo de siempre.
+        assertEquals(
+            listOf(
+                ControlId.COPY_DRAFT_PROMPT,
+                ControlId.START_FROM_DRAFT,
+                ControlId.OPEN_DRAFT,
+                ControlId.DISCARD_DRAFT,
+            ),
+            row.controls.map { it.id },
+        )
+    }
+
+    @Test
     fun `validate and start is never disabled by progress, only by busy`() {
         // El conteo sale del disco y el borrador puede estar abierto con
         // cambios sin guardar, que el cliente guarda antes de validar:

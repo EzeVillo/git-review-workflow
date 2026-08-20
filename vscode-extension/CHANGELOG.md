@@ -55,6 +55,12 @@ Requires `git review` **0.7.0** or newer.
 - The extension no longer builds the draft's path out of a gitdir it resolved itself — the CLI
   reports it, and the panel opens what it was given. The old derivation missed the case where the
   folder you opened is below the repository root.
+- **A draft with no entries yet no longer reads as a finished one.** `0/0` was taken as complete,
+  so the row led with *Validate and start* — which in that state is usually switched off as well,
+  leaving the one emphatic control of the row unclickable. It happens on the ordinary path, not
+  just to a draft you emptied by hand: the panel picks the file up the moment an agent starts
+  writing it, before the first entry heading lands. The row leads with *Copy for agent* until the
+  file actually declares an entry.
 
 ## [0.1.3] — 2026-08-11
 

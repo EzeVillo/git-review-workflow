@@ -1,3 +1,4 @@
+using System.Reflection;
 using Xunit;
 
 namespace GitReview.Host.Tests;
@@ -104,5 +105,142 @@ public class DraftWatcherTests : IDisposable
         File.WriteAllText(Path.Combine(_dir, "feature.md"), "## 1. src/a.ts");
 
         Assert.False(await Fired(signal.Task, 1500), "fired after dispose");
+    }
+
+    /// <summary>
+    /// Raise a real <see cref="FileSystemWatcher.Error"/> on a live watcher, through
+    /// the protected member .NET itself calls. The two things that raise it for real
+    /// -- an internal buffer overflow and a watched directory that goes away -- are
+    /// respectively a race against thousands of writes and an OS error code that is
+    /// not the same everywhere, so neither can carry a test. What is being tested is
+    /// what this class does once the error arrives.
+    /// </summary>
+    private static void RaiseError(FileSystemWatcher watcher)
+    {
+        var onError = typeof(FileSystemWatcher).GetMethod(
+            "OnError", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(onError);
+        onError!.Invoke(
+            watcher,
+            new object[] { new ErrorEventArgs(new InternalBufferOverflowException()) });
+    }
+
+    [Fact]
+    public async Task AnErrorRebuildsTheWatcherAndRefreshes()
+    {
+        var signal = new TaskCompletionSource<bool>();
+        using var watcher = new DraftWatcher(() => signal.TrySetResult(true));
+        watcher.Sync(new[] { _dir });
+        var dead = Assert.Single(watcher.LiveWatchers);
+
+        RaiseError(dead);
+
+        // The events swallowed by the error are never redelivered, so reviving the
+        // watcher without a refresh leaves the panel on the old count.
+        Assert.True(await Fired(signal.Task), "the error refreshed nothing");
+        var live = Assert.Single(watcher.LiveWatchers);
+        Assert.NotSame(dead, live);
+        Assert.Equal(dead.Path, live.Path);
+        Assert.True(live.EnableRaisingEvents);
+    }
+
+    [Fact]
+    public async Task TheRebuiltWatcherStillWakesThePanel()
+    {
+        var signal = new TaskCompletionSource<bool>();
+        // The callback reads the variable, not its value: swapping it below moves the
+        // next refresh onto a fresh signal, so the write is told apart from the error.
+        using var watcher = new DraftWatcher(() => Volatile.Read(ref signal).TrySetResult(true));
+        watcher.Sync(new[] { _dir });
+
+        RaiseError(Assert.Single(watcher.LiveWatchers));
+        Assert.True(await Fired(signal.Task), "the error refreshed nothing");
+
+        signal = new TaskCompletionSource<bool>();
+        File.WriteAllText(Path.Combine(_dir, "feature.md"), "## 1. src/a.ts");
+
+        Assert.True(await Fired(signal.Task), "the rebuilt watcher is not armed");
+    }
+
+    [Fact]
+    public async Task AnErrorOnADirectoryThatIsGoneRebuildsNothing()
+    {
+        var signal = new TaskCompletionSource<bool>();
+        using var watcher = new DraftWatcher(() => signal.TrySetResult(true));
+        var doomed = Path.Combine(_dir, "review-walkthrough");
+        Directory.CreateDirectory(doomed);
+        watcher.Sync(new[] { doomed });
+        var dead = Assert.Single(watcher.LiveWatchers);
+
+        Directory.Delete(doomed);
+        RaiseError(dead);
+
+        // Nothing to rebuild -- and nothing to retry either, which is what keeps a
+        // rebuild from becoming a spin.
+        Assert.Empty(watcher.LiveWatchers);
+        // The draft going away is still a change the panel has to hear about.
+        Assert.True(await Fired(signal.Task), "the directory going away refreshed nothing");
+    }
+
+    [Fact]
+    public async Task AnErrorAfterDisposeRebuildsNothing()
+    {
+        var signal = new TaskCompletionSource<bool>();
+        var watcher = new DraftWatcher(() => signal.TrySetResult(true));
+        watcher.Sync(new[] { _dir });
+        var dead = Assert.Single(watcher.LiveWatchers);
+        watcher.Dispose();
+
+        RaiseError(dead);
+
+        Assert.Empty(watcher.LiveWatchers);
+        Assert.False(await Fired(signal.Task, 1500), "rebuilt after dispose");
+    }
+
+    [Fact]
+    public void AWatcherThatKeepsFailingIsNotRebuiltForever()
+    {
+        using var watcher = new DraftWatcher(() => { });
+        watcher.Sync(new[] { _dir });
+
+        // Every rebuild fails again the moment it is armed. Nothing here writes a
+        // file, so no delivered event clears the budget.
+        for (var i = 0; i < DraftWatcher.MaxRearms; i++)
+        {
+            RaiseError(Assert.Single(watcher.LiveWatchers));
+        }
+
+        RaiseError(Assert.Single(watcher.LiveWatchers));
+
+        Assert.Empty(watcher.LiveWatchers);
+    }
+
+    [Fact]
+    public async Task AnEventDeliveredClearsTheRebuildBudget()
+    {
+        var signal = new TaskCompletionSource<bool>();
+        using var watcher = new DraftWatcher(() => Volatile.Read(ref signal).TrySetResult(true));
+        watcher.Sync(new[] { _dir });
+        for (var i = 0; i < DraftWatcher.MaxRearms; i++)
+        {
+            RaiseError(Assert.Single(watcher.LiveWatchers));
+        }
+        // Drain the refresh the errors scheduled, so the next signal can only come
+        // from the write below -- the debounce is one-shot and nothing else is armed.
+        Assert.True(await Fired(signal.Task), "the errors refreshed nothing");
+
+        signal = new TaskCompletionSource<bool>();
+        File.WriteAllText(Path.Combine(_dir, "feature.md"), "## 1. src/a.ts");
+        Assert.True(await Fired(signal.Task), "the rebuilt watcher is not armed");
+
+        // A watcher that delivers is a working watcher: a session long enough to
+        // overflow more than three times must not end up unwatched.
+        signal = new TaskCompletionSource<bool>();
+        var dead = Assert.Single(watcher.LiveWatchers);
+        RaiseError(dead);
+
+        var live = Assert.Single(watcher.LiveWatchers);
+        Assert.NotSame(dead, live);
+        Assert.True(await Fired(signal.Task), "the error refreshed nothing");
     }
 }

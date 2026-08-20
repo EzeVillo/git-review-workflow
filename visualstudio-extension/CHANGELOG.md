@@ -89,6 +89,24 @@ reached its shape rather than a difference against a version you could install.
 - The extension no longer builds the draft's path out of a gitdir it resolved itself — the
   CLI reports it, and the panel opens what it was given. The old derivation missed the
   case where the folder you opened is below the repository root.
+- **A draft with no entries yet no longer reads as a finished one.** `0/0` was taken as
+  complete, so the row led with *Validate and start* — which in that state is usually
+  switched off as well, leaving the one emphatic control of the row unclickable. It
+  happens on the ordinary path, not just to a draft you emptied by hand: the panel picks
+  the file up the moment an agent starts writing it, before the first entry heading
+  lands. The row leads with *Copy for agent* until the file actually declares an entry.
+- **The draft progress keeps following the file after the watcher hits an error.** This is
+  the one client that drives a raw `FileSystemWatcher` — VS Code and the JetBrains
+  platform own that recovery for their panels — and it was not listening on the error
+  channel. Two measured outcomes both ended the same way: removing the watched directory
+  switches the watcher off for good, and an internal buffer overflow keeps it alive but
+  silently drops what did not fit (3000 writes arrived as 3 events). Neither healed on its
+  own, because the watchers are only rebuilt when the set of reported directories changes
+  — which on an ordinary session is never. So the progress froze for the rest of the
+  session, while the agent was still writing and with nothing to show for it. The watcher
+  is rebuilt now, and the panel refreshed once alongside it, since the events lost inside
+  the error are not redelivered. A directory that keeps failing is given up on rather than
+  rebuilt forever.
 - **In walk mode the panel shows the why again.** It read the entry's prose with an
   800 ms deadline on the CLI call itself, and on Windows a `status --why` costs a couple
   of seconds — so every entry of every walk came back as "Could not read the why for this

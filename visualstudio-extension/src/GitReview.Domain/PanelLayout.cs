@@ -732,7 +732,17 @@ public static class PanelLayoutBuilder
             // once it is complete is it starting the review. The ORDER is fixed
             // — moving the click target as the state changes slides it under
             // the cursor.
-            var filled = d.Annotated >= d.Total;
+            //
+            // Total == 0 means "this file declares no entry at all", never
+            // "complete": the CLI reports 0/0 both for an emptied draft and for
+            // the one an agent is writing right now (the watcher fires on the
+            // first Changed, before the first "## N." heading lands). Without
+            // the Total > 0 the row is drawn as finished and the emphasis goes
+            // to Validate and start, which there is usually disabled too
+            // (source and range unknown) — the one emphatic control of the row
+            // cannot even be clicked, in the very state that most needs Copy
+            // for agent to lead.
+            var filled = d.Total > 0 && d.Annotated >= d.Total;
             var controls = new List<Control>
             {
                 Ctrl(

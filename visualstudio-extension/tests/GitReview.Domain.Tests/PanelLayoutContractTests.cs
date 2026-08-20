@@ -271,6 +271,47 @@ public class PanelLayoutContractTests
     }
 
     [Fact]
+    public void A_draft_with_no_entries_at_all_is_not_a_complete_one()
+    {
+        // The CLI reports 0/0 both for a draft emptied by hand AND for the one
+        // an agent is writing right now: the watcher fires on the first Changed,
+        // before the first "## N." heading lands. Reading that 0/0 as complete
+        // sends the emphasis to Validate and start, which there is disabled on
+        // top of it (source and range unknown) — the one emphatic control of the
+        // row cannot even be clicked, in the very state that most needs Copy for
+        // agent to lead.
+        var cfg = "draft\tfeature/recien-empezado" +
+            "\t/repo/.git/review-walkthrough/feature/recien-empezado.md\t0\t0\tunknown\tunknown\n";
+        var model = PanelModelBuilder.BuildPanelModel(
+            new ReviewState(
+                Situation.NoReview,
+                Config: new EffectiveConfig("main", "origin"),
+                Drafts: ConfigPorcelain.ParseConfigPorcelain(cfg).Drafts),
+            new PanelInputs(false));
+        var row = PanelLayoutBuilder.PanelLayout(model)
+            .Blocks.OfType<Block.DraftRows>().Single().Rows.Single();
+        Assert.Equal("0/0", row.Meta);
+
+        var controls = row.Controls.ToDictionary(c => c.Id);
+        Assert.Equal(Emphasis.Primary, controls[ControlId.CopyDraftPrompt].Emphasis);
+        Assert.Equal(Emphasis.Secondary, controls[ControlId.StartFromDraft].Emphasis);
+        // And the emphasis cannot land on a control that is off: with unknown
+        // this one cannot be invoked, which is where the symptom came from.
+        Assert.False(controls[ControlId.StartFromDraft].Enabled);
+        Assert.True(controls[ControlId.CopyDraftPrompt].Enabled);
+        // The ORDER is the same one as ever.
+        Assert.Equal(
+            new[]
+            {
+                ControlId.CopyDraftPrompt,
+                ControlId.StartFromDraft,
+                ControlId.OpenDraft,
+                ControlId.DiscardDraft,
+            },
+            row.Controls.Select(c => c.Id).ToArray());
+    }
+
+    [Fact]
     public void Validate_and_start_is_never_disabled_by_progress()
     {
         // The count comes off the disk and the draft can be open with unsaved

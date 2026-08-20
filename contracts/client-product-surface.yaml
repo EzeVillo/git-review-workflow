@@ -357,8 +357,20 @@ draft_controls:
   # único que se mueve. Sigue al progreso y el ORDEN no: mientras falten
   # entradas el paso siguiente es llenar el borrador, y recién con el orden
   # completo lo es arrancar la review. `emphasis:` es el valor con el borrador
-  # completo; `emphasis_unfilled:` el de `annotated < total`. Sin la segunda
-  # clave el énfasis no depende del progreso.
+  # completo —`total > 0 && annotated >= total`—; `emphasis_unfilled:` el de
+  # todo lo demás, que incluye `total == 0`. Sin la segunda clave el énfasis no
+  # depende del progreso.
+  #
+  # El `total > 0` no es un borde teórico: la CLI emite el registro `draft` con
+  # `0<TAB>0<TAB>unknown<TAB>unknown` tanto para un borrador vaciado a mano como
+  # para el que un agente está escribiendo justo ahora —el watcher dispara con
+  # el primer Changed, antes de que caiga el primer `## N.`—, y
+  # `annotated >= total` a secas lee ese 0/0 como completo. La fila queda
+  # dibujada como terminada y el énfasis se va a
+  # startFromDraft, que con `unknown` está encima deshabilitado: el único
+  # control enfático de la fila no se puede apretar, justo en el estado que más
+  # necesita que copyDraftPrompt lidere. `total == 0` es "no hay nada acá", no
+  # "está completo".
   copyDraftPrompt: {label: "Copy for agent", emphasis: secondary, emphasis_unfilled: primary, confirms: false}
   # NUNCA disabled por progreso, sólo por busy o por unknown: el conteo sale del
   # disco y el revisor puede tener el borrador abierto con cambios sin guardar,

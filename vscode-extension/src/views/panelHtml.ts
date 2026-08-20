@@ -758,7 +758,16 @@ export function panelHtml(nonce: string): string {
     // falten entradas el paso siguiente es llenar el borrador, y recién con el
     // orden completo lo es arrancar la review. El ORDEN es fijo — mover el
     // objetivo del clic según el estado lo corre bajo el cursor.
-    const filled = draft.annotated >= draft.total;
+    //
+    // total == 0 es "el archivo no declara ninguna entrada", no "está
+    // completo": la CLI reporta 0/0 tanto para un borrador vacío como para el
+    // que un agente está escribiendo justo ahora (el watcher dispara con el
+    // primer Changed, antes del primer "## N."). Sin el total > 0 esa fila se
+    // dibuja como terminada y el énfasis va a Validate and start, que además
+    // suele estar deshabilitado ahí (source/range unknown) — o sea que el
+    // único control enfático de la fila no se puede ni apretar, justo en el
+    // estado que más necesita que Copy for agent lidere.
+    const filled = draft.total > 0 && draft.annotated >= draft.total;
 
     const copy = button("Copy for agent", "copyDraftPrompt", filled ? null : "primary", null, index);
     copy.title = "Copy an instruction naming this file";

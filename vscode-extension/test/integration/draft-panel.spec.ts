@@ -29,6 +29,42 @@ function draftPath(repoDir: string, branch: string): string {
     return path.join(repoDir, ".git", "review-walkthrough", `${branch}.md`);
 }
 
+/**
+ * Vacía el namespace de borradores entre tests, borrando los ARCHIVOS y no los
+ * directorios.
+ *
+ * Un `rmSync(ns, {recursive: true})` falla en Windows con `EPERM`: mientras la
+ * extensión vive, su watcher tiene abierto justo el directorio donde la CLI
+ * reportó un borrador, y Windows no deja borrar un directorio con un handle
+ * encima. Eso es un problema del test y no del producto — `git review forget
+ * --draft` sólo hace `rm -f` sobre el archivo y nunca toca el directorio, que
+ * es una operación que Windows permite igual—, y el siguiente test sólo
+ * necesita que no queden borradores: un namespace de directorios vacíos no
+ * reporta ninguno, porque la CLI lista `*.md`.
+ *
+ * Sin esto el fallo no se queda en la limpieza: el `EPERM` deja el borrador en
+ * disco y el test siguiente muere en su `makeDraft` con "already exists".
+ */
+function clearDrafts(repoDir: string): void {
+    const walk = (dir: string): void => {
+        for (const entry of fs.readdirSync(dir, {withFileTypes: true})) {
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                walk(full);
+            } else {
+                // maxRetries por lo mismo que en fixture.ts al borrar el repo:
+                // en Windows un archivo recien tocado puede seguir con un handle
+                // encima un instante mas, y ahi rmSync tira EPERM/EBUSY.
+                fs.rmSync(full, {force: true, maxRetries: 10, retryDelay: 50});
+            }
+        }
+    };
+    const ns = path.join(repoDir, ".git", "review-walkthrough");
+    if (fs.existsSync(ns)) {
+        walk(ns);
+    }
+}
+
 /** Espera a que el estado converja: los controles refrescan en background. */
 async function settle(api: Awaited<ReturnType<typeof getTestApi>>): Promise<void> {
     for (let i = 0; i < 40; i++) {
@@ -47,10 +83,7 @@ describe("US3: el bloque de borradores del panel", function () {
     afterEach(async () => {
         abortReview(repo);
         withBaseConfigured(repo, "main");
-        fs.rmSync(path.join(repo.dir, ".git", "review-walkthrough"), {
-            recursive: true,
-            force: true,
-        });
+        clearDrafts(repo.dir);
         await vscode.commands.executeCommand("workbench.action.closeAllEditors");
     });
 

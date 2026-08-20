@@ -115,11 +115,26 @@ review_verbatim_paths() {
 # draft_temps: under Git Bash a stray PATH resolves find to Windows' own
 # find.exe, whose -name means nothing to it, and CI runs this suite on a real
 # Windows runner -- where the assertion would then pass or fail for reasons that
-# have nothing to do with --stdout. globstar and nullglob are bashisms, and this
-# is a bats file, not a POSIX verb.
+# have nothing to do with --stdout.
+#
+# The levels are spelled out instead of using **, because globstar is bash 4 and
+# macOS ships bash 3.2. What breaks there is not the glob -- nullglob is still
+# set, and ** degrades to a plain * -- it is the diagnostic: shopt prints
+# "globstar: invalid shell option name" on STDERR, `run` folds stderr into
+# $output, and the caller's `[ -z "$output" ]` reads that sentence as a temp file
+# left behind. A red macOS-only test over a verb that is doing its job.
+#
+# Five levels is three more than the deepest a draft can sit at: the namespace,
+# plus one directory per '/' in a branch name. nullglob on its own is bash 3.2
+# material, and this is a bats file, not a POSIX verb.
 gitdir_temps() (
-	shopt -s nullglob globstar
-	printf '%s\n' "$GITDIR"/**/*.tmp.*
+	shopt -s nullglob
+	printf '%s\n' \
+		"$GITDIR"/*.tmp.* \
+		"$GITDIR"/*/*.tmp.* \
+		"$GITDIR"/*/*/*.tmp.* \
+		"$GITDIR"/*/*/*/*.tmp.* \
+		"$GITDIR"/*/*/*/*/*.tmp.*
 )
 
 # ── --stdout writes nothing ───────────────────────────────────────────────────

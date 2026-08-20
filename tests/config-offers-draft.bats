@@ -77,18 +77,53 @@ field_of() {
 
 # ── nothing to report ─────────────────────────────────────────────────────────
 
+# Run "$@" with a deadline, exiting 124 if it runs out, like timeout(1) does.
+#
+# timeout(1) is GNU coreutils and macOS ships no equivalent -- Homebrew installs
+# it as gtimeout, which need not be there either. Calling it unconditionally is
+# a 127 on the macOS runner and a red test about nothing. The guard is not
+# decoration, though: what it pins is a verb that never returns, which as a bare
+# call would hang the whole suite instead of failing one test, so where neither
+# binary exists it is done in the shell rather than dropped.
+with_deadline() {
+	_wd_secs="$1"
+	shift
+	if command -v timeout >/dev/null 2>&1; then
+		timeout "$_wd_secs" "$@"
+		return
+	fi
+	if command -v gtimeout >/dev/null 2>&1; then
+		gtimeout "$_wd_secs" "$@"
+		return
+	fi
+	"$@" &
+	_wd_pid=$!
+	_wd_left=$((_wd_secs * 10))
+	while kill -0 "$_wd_pid" 2>/dev/null; do
+		if [ "$_wd_left" -le 0 ]; then
+			kill -9 "$_wd_pid" 2>/dev/null || true
+			wait "$_wd_pid" 2>/dev/null || true
+			return 124
+		fi
+		_wd_left=$((_wd_left - 1))
+		sleep 0.1
+	done
+	# The command's own status, which is the whole point of not just killing it.
+	wait "$_wd_pid"
+}
+
 @test "with no drafts the output is exactly what it was, and the command returns" {
 	# The "returns" half is not padding. awk with no file arguments reads standard
 	# input and blocks forever, and this verb runs on every panel refresh in a
 	# repository that usually has no drafts at all -- the failure would be a hung
-	# panel, not a red test, so it is pinned with a timeout.
+	# panel, not a red test, so it is pinned with a deadline.
 	before="$(git review config --porcelain)"
 
-	run timeout 20 git review config --porcelain
+	run with_deadline 20 git review config --porcelain
 	[ "$status" -eq 0 ]
 	[ -z "$(printf '%s\n' "$output" | awk -F'\t' '$1 == "draft"')" ]
 
-	run timeout 20 git review config --porcelain feature/checkout
+	run with_deadline 20 git review config --porcelain feature/checkout
 	[ "$status" -eq 0 ]
 	[ -z "$(printf '%s\n' "$output" | awk -F'\t' '$1 == "draft"')" ]
 

@@ -94,6 +94,17 @@ async function settle(
     }
 }
 
+type TestApi = Awaited<ReturnType<typeof getTestApi>>;
+type RefreshedState = Awaited<ReturnType<TestApi["refresh"]>>;
+
+function draftReviewStarted(branch: string): (state: RefreshedState) => boolean {
+    return (state) =>
+        state.situation === "review" &&
+        state.state?.branch === `review/${branch}` &&
+        state.state.mode === "walk" &&
+        state.draft === true;
+}
+
 describe("US3: el bloque de borradores del panel", function () {
     this.timeout(120000);
     const repo = sharedFixtureRepo();
@@ -339,7 +350,7 @@ describe("US3: el bloque de borradores del panel", function () {
                 for (let i = 0; i < 200 && !started; i++) {
                     await new Promise((resolve) => setTimeout(resolve, 50));
                 }
-                await settle(api, (state) => state.situation === "review");
+                await settle(api, draftReviewStarted(branch));
             } finally {
                 (vscode.window as unknown as {
                     showQuickPick: unknown
@@ -402,7 +413,7 @@ describe("US3: el bloque de borradores del panel", function () {
             for (let i = 0; i < 200 && !started && errors.length === 0; i++) {
                 await new Promise((resolve) => setTimeout(resolve, 50));
             }
-            await settle(api, (state) => state.situation === "review");
+            await settle(api, draftReviewStarted(branch));
         } finally {
             (vscode.window as unknown as {
                 showWarningMessage: unknown

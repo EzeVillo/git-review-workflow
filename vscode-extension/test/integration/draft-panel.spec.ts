@@ -350,10 +350,12 @@ describe("US3: el bloque de borradores del panel", function () {
         assert.strictEqual(state.draft, true);
     });
 
-    it("una fila sin flags conocidos se dibuja sin Validate and start", async () => {
+    it("una fila sin flags conocidos no es startable, y el host no la dispara", async () => {
         // SC-017: borrar el bloque de instrucciones a mano es legal, y entonces
-        // los flags no se pueden replicar. Se ofrece un control menos, nunca uno
-        // que adivina.
+        // los flags no se pueden replicar. El control se sigue dibujando pero
+        // apagado (eso lo afirma panelHtml.spec.ts, sobre el HTML); lo que se
+        // afirma acá es el otro lado: que `startable` viene en false y que el
+        // host tampoco invoca la CLI si le llega el mensaje igual.
         const branch = "us3-unknown-flags";
         createBranchWithChanges(repo, branch, {"src/a.ts": "a\n"});
         const file = makeDraft(branch);

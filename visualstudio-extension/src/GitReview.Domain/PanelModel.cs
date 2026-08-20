@@ -47,11 +47,15 @@ public sealed record PanelReview(
 /// and has not paused. Flat projection, with nothing derived — the progress is
 /// counted by the CLI and the path is resolved by the CLI.
 ///
-/// Startable says whether "Validate and start" can be offered: only when the
-/// CLI knows the origin and range the draft was generated with. With Unknown
+/// Startable says whether "Validate and start" can be <em>invoked</em>: only when
+/// the CLI knows the origin and range the draft was generated with. With Unknown
 /// (the instruction block was deleted by hand) invoking with the defaults would
-/// fail with a drift error every time, so one control fewer beats one that
-/// guesses.
+/// fail with a drift error every time.
+///
+/// The control is drawn either way, switched off: off guesses the flags no more
+/// than absent did -- it still cannot be invoked -- and unlike absent it can say
+/// why in its tooltip. The row also keeps its four cells, so it does not change
+/// shape with its state.
 /// </summary>
 public sealed record PanelDraft(
     string Branch,

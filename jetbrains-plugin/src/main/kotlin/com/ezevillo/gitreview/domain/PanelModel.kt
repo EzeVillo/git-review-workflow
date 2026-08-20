@@ -50,11 +50,15 @@ data class PanelDraft(
     val annotated: Int,
     val total: Int,
     /**
-     * Whether *Validate and start* can be offered: only when the CLI knows the
-     * origin and range the draft was generated with. With `UNKNOWN` (the
-     * instruction block was deleted by hand) invoking with the defaults would
-     * fail with a drift error every time, so one control fewer beats one that
-     * guesses.
+     * Whether *Validate and start* can be **invoked** for this row: only when
+     * the CLI knows the origin and range the draft was generated with. With
+     * `UNKNOWN` (the instruction block was deleted by hand) invoking with the
+     * defaults would fail with a drift error every time.
+     *
+     * The control is drawn either way, switched off: off guesses the flags no
+     * more than absent did -- it still cannot be invoked -- and unlike absent it
+     * can say why in its tooltip. The row also keeps its four cells, so it does
+     * not change shape with its state.
      */
     val startable: Boolean,
 )

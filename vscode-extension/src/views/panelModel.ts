@@ -89,11 +89,15 @@ export interface PanelDraft {
     annotated: number;
     total: number;
     /**
-     * Si se puede ofrecer *Validate and start* para esta fila: sólo cuando la
-     * CLI sabe con qué origen y rango se generó el borrador. Con `unknown`
+     * Si *Validate and start* se puede **invocar** para esta fila: sólo cuando
+     * la CLI sabe con qué origen y rango se generó el borrador. Con `unknown`
      * (bloque de instrucciones borrado a mano) invocar con los defaults
-     * fallaría siempre por deriva, así que se ofrece un control menos en vez de
-     * uno que adivina.
+     * fallaría siempre por deriva.
+     *
+     * El control se dibuja igual, apagado: apagado no adivina los flags más que
+     * ausente —sigue sin poder invocarse— y encima dice por qué en el title,
+     * que un control que no está no puede decir. Y la fila conserva sus cuatro
+     * celdas, así que no cambia de forma con su estado.
      */
     startable: boolean;
 }

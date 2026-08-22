@@ -24,6 +24,7 @@ public static class PanelFixtures
         ("no-review guide empty", NoReviewGuideEmpty()),
         ("no-review walkthrough stale", NoReviewWalkthroughStale()),
         ("no-review walkthrough absent", NoReviewWalkthroughAbsent()),
+        ("no-review walkthrough superseded", NoReviewWalkthroughSuperseded()),
         ("no-review empty", NoReviewEmpty()),
         ("finish-pending", FinishPending()),
         ("out-of-range", OutOfRange()),
@@ -148,6 +149,28 @@ public static class PanelFixtures
     {
         var cfg =
             "walkthrough\tabsent\t/repo/.review/walkthrough.md\t0\t0\n" +
+            "guide\tteam\t/repo/.review/walkthrough-guide.md\tabsent\n" +
+            "guide\town\t/repo/.git/review-walkthrough-guide.md\tabsent\n";
+        var parsed = ConfigPorcelain.ParseConfigPorcelain(cfg);
+        return PanelModelBuilder.BuildPanelModel(
+            new ReviewState(
+                Situation.NoReview,
+                Config: new EffectiveConfig("main", "origin"),
+                Guides: parsed.Guides,
+                Walkthrough: parsed.Walkthrough),
+            new PanelInputs(false));
+    }
+
+    /// <summary>
+    /// The walkthrough of a PR that already merged: it travelled into the base with
+    /// the merge, so it is not this PR's reading order at all. Nothing about it fell
+    /// behind — it belongs to a range that closed — and the CLI starts a new one on
+    /// its own there.
+    /// </summary>
+    public static PanelModel NoReviewWalkthroughSuperseded()
+    {
+        var cfg =
+            "walkthrough\tsuperseded\t/repo/.review/walkthrough.md\t3\t3\n" +
             "guide\tteam\t/repo/.review/walkthrough-guide.md\tabsent\n" +
             "guide\town\t/repo/.git/review-walkthrough-guide.md\tabsent\n";
         var parsed = ConfigPorcelain.ParseConfigPorcelain(cfg);

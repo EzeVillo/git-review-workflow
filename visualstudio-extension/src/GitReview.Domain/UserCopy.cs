@@ -269,10 +269,24 @@ public static class UserCopy
     public static string ComparingProgress(string lower, string upper) =>
         $"Comparing {lower}..{upper}…";
 
-    public const string WalkthroughExistsTitle = "A walkthrough already exists. Overwrite it?";
+    /// <summary>
+    /// The choice between reconciling a walkthrough and starting it over, asked
+    /// BEFORE the verb runs.
+    ///
+    /// It used to hang off the CLI FAILING: init ran, and when it died because the
+    /// file was already there, that is where the three clients offered to overwrite.
+    /// Since init updates instead of refusing, that path stopped existing — and with
+    /// it the only way to reach --force from a panel.
+    ///
+    /// Byte for byte identical to userCopy.ts and UserCopy.kt.
+    /// </summary>
+    public const string WalkthroughExistsTitle = "This branch already has a walkthrough.";
     public const string WalkthroughExistsDetail =
-        "This runs git review walkthrough init --force and replaces .review/walkthrough.md.";
-    public const string WalkthroughOverwriteButton = "Overwrite";
+        "Update keeps every entry whose file is still in range - its number, its why and its > key - and adds the files that are new.\n\n"
+        + "Start over runs git review walkthrough init --force: it replaces .review/walkthrough.md with a blank skeleton. The file is tracked, so git checkout -- brings the old one back.";
+    public const string WalkthroughUpdateButton = "Update";
+    public const string WalkthroughStartOverButton = "Start over";
+
     public const string WalkthroughInitProgress = "Initializing walkthrough…";
     public const string WalkthroughOverwriteProgress = "Overwriting walkthrough…";
     public const string WalkthroughInitFailed = "git review walkthrough init failed.";

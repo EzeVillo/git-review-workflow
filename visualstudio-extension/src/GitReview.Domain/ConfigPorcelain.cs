@@ -201,11 +201,17 @@ public sealed record GuideRecord(
 /// particular Unknown, which is NOT Stale: with no instruction block (deleting it
 /// by hand is legal) the question has no answer, and giving the worse of the two
 /// would send someone to redo a reading order that may be perfectly fine.
+///
+/// Superseded is not Stale either: the file is the walkthrough of a PR already
+/// merged into the base, which travelled in with the merge, so nothing about it
+/// fell behind — it belongs to another range. What is offered there is starting
+/// over, not reconciling.
 /// </summary>
 public enum WalkthroughState
 {
     InSync,
     Stale,
+    Superseded,
     Unknown,
     Absent,
 }
@@ -216,6 +222,7 @@ public static class WalkthroughStateExt
     {
         "in-sync" => WalkthroughState.InSync,
         "stale" => WalkthroughState.Stale,
+        "superseded" => WalkthroughState.Superseded,
         "unknown" => WalkthroughState.Unknown,
         "absent" => WalkthroughState.Absent,
         _ => null,

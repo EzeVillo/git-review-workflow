@@ -314,6 +314,7 @@ public static class PanelModelBuilder
     {
         WalkthroughState.InSync => "up to date",
         WalkthroughState.Stale => "may be out of date",
+        WalkthroughState.Superseded => "from a merged PR",
         WalkthroughState.Unknown => "state unknown",
         _ => "none",
     };
@@ -338,7 +339,16 @@ public static class PanelModelBuilder
             Annotated: record.Annotated,
             Total: record.Total,
             Exists: record.State != WalkthroughState.Absent,
-            ActionLabel: record.State == WalkthroughState.Absent ? "Create" : "Update");
+            // Three labels for one verb. Superseded is not a flavour of "fell
+            // behind": the file is another PR's, and what the CLI does there is
+            // start over on its own — so the button says what will happen instead
+            // of promising a reconciliation that does not occur.
+            ActionLabel: record.State switch
+            {
+                WalkthroughState.Absent => "Create",
+                WalkthroughState.Superseded => "Start over",
+                _ => "Update",
+            });
 
     /// <summary>
     /// The guide row at index, resolved against the HOST's state. Same role as

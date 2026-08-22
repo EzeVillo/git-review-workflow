@@ -319,6 +319,7 @@ fun toPanelGuides(guides: List<GuideRecord>, situation: Situation): List<PanelGu
 private fun walkthroughBadge(state: WalkthroughState): String = when (state) {
     WalkthroughState.IN_SYNC -> "up to date"
     WalkthroughState.STALE -> "may be out of date"
+    WalkthroughState.SUPERSEDED -> "from a merged PR"
     WalkthroughState.UNKNOWN -> "state unknown"
     WalkthroughState.ABSENT -> "none"
 }
@@ -342,7 +343,15 @@ fun toPanelWalkthrough(record: WalkthroughRecord): PanelWalkthrough = PanelWalkt
     annotated = record.annotated,
     total = record.total,
     exists = record.state != WalkthroughState.ABSENT,
-    actionLabel = if (record.state == WalkthroughState.ABSENT) "Create" else "Update",
+    // Three labels for one verb. SUPERSEDED is not a flavour of "fell behind":
+    // the file is another PR's, and what the CLI does there is start over on its
+    // own -- so the button says what will happen instead of promising a
+    // reconciliation that does not occur.
+    actionLabel = when (record.state) {
+        WalkthroughState.ABSENT -> "Create"
+        WalkthroughState.SUPERSEDED -> "Start over"
+        else -> "Update"
+    },
 )
 
 /**

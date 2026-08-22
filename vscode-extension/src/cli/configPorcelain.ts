@@ -119,8 +119,12 @@ export interface GuideRecord {
  * `unknown`, que NO es `stale`: sin el bloque de instrucciones (borrarlo a mano
  * es legal) la pregunta no tiene respuesta, y contestar la peor de las dos
  * mandaría a rehacer un orden de lectura que puede estar perfecto.
+ *
+ * `superseded` tampoco es `stale`: el archivo es el walkthrough de un PR que ya
+ * se mergeó a la base y viajó con el merge, así que no quedó atrás — es de otro
+ * rango. Lo que se ofrece ahí es empezar de cero, no reconciliar.
  */
-export type WalkthroughState = "in-sync" | "stale" | "unknown" | "absent";
+export type WalkthroughState = "in-sync" | "stale" | "superseded" | "unknown" | "absent";
 
 /**
  * El walkthrough committeado de la rama en la que estás parado, y si sigue
@@ -220,7 +224,11 @@ export function parseGuideRecord(fields: readonly (string | undefined)[]): Guide
 }
 
 function parseWalkthroughState(raw: string | undefined): WalkthroughState | undefined {
-    return raw === "in-sync" || raw === "stale" || raw === "unknown" || raw === "absent"
+    return raw === "in-sync" ||
+        raw === "stale" ||
+        raw === "superseded" ||
+        raw === "unknown" ||
+        raw === "absent"
         ? raw
         : undefined;
 }

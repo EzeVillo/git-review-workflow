@@ -431,15 +431,20 @@ walkthrough_row:
   badges:
     in-sync: "up to date"
     stale: "may be out of date"
+    superseded: "from a merged PR"
     unknown: "state unknown"
     absent: "none"
   # La etiqueta del boton walkthroughInit sigue al estado, porque el MISMO verbo
   # crea y actualiza: "Init" sobre un archivo lleno de prosa prometia lo que ese
   # verbo justamente ya no hace. Es la unica accion del producto cuya etiqueta
   # depende del estado; el precedente es discardInventory en inventory_controls.
+  # Tres, no dos. `superseded` no es una variante de "quedo atras": el archivo es
+  # de un PR ya mergeado y la CLI empieza de cero sola, asi que el boton dice lo
+  # que va a pasar en vez de prometer una reconciliacion que no ocurre.
   action_labels:
     absent: "Walkthrough: Init"
     present: "Walkthrough: Update"
+    superseded: "Walkthrough: Start over"
   controls:
     # Abrir es mostrar: el cliente no interpreta un byte del archivo, y abre LA
     # RUTA QUE REPORTO LA CLI, nunca una derivada del layout del repositorio.
@@ -448,6 +453,24 @@ walkthrough_row:
     # propio walkthrough, en el comentario de arriba de todo, que es donde se
     # mantiene sola. Mismo reparto que copyDraftPrompt.
     copyWalkthroughPrompt: {label: "Copy for agent", emphasis: secondary, confirms: false, disabled_when: absent}
+  # La eleccion entre reconciliar y empezar de cero, PREGUNTADA ANTES de invocar.
+  #
+  # Antes colgaba de que la CLI FALLARA: se corria init, y si moria porque el
+  # archivo ya estaba, recien ahi los tres clientes ofrecian sobrescribir. Desde
+  # que init actualiza en vez de negarse ese camino dejo de existir, y con el la
+  # unica forma de llegar a --force desde un panel -- el codigo seguia ahi sin
+  # que nada lo ejecutara. Por eso la pregunta va delante.
+  #
+  # Solo con el archivo presente y en un estado que se pueda reconciliar. Con
+  # `absent` no hay nada que preservar, y con `superseded` la CLI empieza de cero
+  # por su cuenta: preguntar ahi seria ofrecer preservar prosa de otro PR.
+  init_choice:
+    title: "This branch already has a walkthrough."
+    update: "Update"
+    start_over: "Start over"
+    # El cuerpo del dialogo no se compara aca: es un parrafo largo y su lugar es
+    # UserCopy, que es donde los tres lo escriben. Lo que si se verifica son las
+    # tres cadenas de arriba, que son las que deciden que se aprieta.
   # El par annotated/total se dibuja solo con el archivo presente y total > 0,
   # por el mismo motivo que en draft_controls: 0/0 es "no hay nada aca", no
   # "esta completo".

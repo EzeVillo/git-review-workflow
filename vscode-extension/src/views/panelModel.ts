@@ -522,6 +522,7 @@ function toPanelGuides(guides: readonly GuideRecord[], situation: Situation): Pa
 const WALKTHROUGH_BADGE: Record<WalkthroughState, string> = {
     "in-sync": "up to date",
     stale: "may be out of date",
+    superseded: "from a merged PR",
     unknown: "state unknown",
     absent: "none",
 };
@@ -550,7 +551,16 @@ function toPanelWalkthrough(record: WalkthroughRecord): PanelWalkthrough {
         // El verbo es el mismo (`walkthrough init`) y hace las dos cosas; lo que
         // cambia es cómo se llama en el panel, porque "Create" sobre un archivo
         // lleno de prosa es una promesa que la CLI no cumple -- y no debería.
-        actionLabel: record.state === "absent" ? "Create" : "Update",
+        // Tres etiquetas para un solo verbo. `superseded` no es una variante de
+        // "quedó atrás": el archivo es de un PR que ya se mergeó, y lo que la CLI
+        // hace ahí es empezar de cero por su cuenta -- el botón dice lo que va a
+        // pasar en vez de prometer una reconciliación que no ocurre.
+        actionLabel:
+            record.state === "absent"
+                ? "Create"
+                : record.state === "superseded"
+                  ? "Start over"
+                  : "Update",
     };
 }
 

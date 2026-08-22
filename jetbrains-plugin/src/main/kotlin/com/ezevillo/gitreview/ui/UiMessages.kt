@@ -67,6 +67,43 @@ object UiMessages {
      * Modal confirm matching VS Code `showWarningMessage(..., { modal, detail }, button)`.
      * Returns true only when the affirmative button is chosen.
      */
+    /** Which of a three-way dialog's exits the user took. */
+    enum class Choice { FIRST, SECOND, CANCELLED }
+
+    /**
+     * Two named courses of action plus Cancel, for the questions where refusing
+     * and choosing the other option are different answers.
+     *
+     * [confirm] cannot express this: its "no" is a cancel, so a second course of
+     * action would have to be a second dialog. Here both exits do something and
+     * the third one does nothing, which is what "Update / Start over / Cancel"
+     * needs.
+     */
+    fun choose(
+        project: Project?,
+        title: String,
+        detail: String,
+        firstText: String,
+        secondText: String,
+        icon: Icon = Messages.getWarningIcon(),
+    ): Choice {
+        val body = detail.ifBlank { title }
+        val result = Messages.showYesNoCancelDialog(
+            project,
+            body,
+            title,
+            firstText,
+            secondText,
+            "Cancel",
+            icon,
+        )
+        return when (result) {
+            Messages.YES -> Choice.FIRST
+            Messages.NO -> Choice.SECOND
+            else -> Choice.CANCELLED
+        }
+    }
+
     fun confirm(
         project: Project?,
         title: String,

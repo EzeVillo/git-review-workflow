@@ -36,6 +36,7 @@ object PanelFixtures {
         "no-review guide empty" to noReviewGuideEmpty(),
         "no-review walkthrough stale" to noReviewWalkthroughStale(),
         "no-review walkthrough absent" to noReviewWalkthroughAbsent(),
+        "no-review walkthrough superseded" to noReviewWalkthroughSuperseded(),
         "finish-pending" to finishPending(),
         "out-of-range" to outOfRange(),
         "error" to error(),
@@ -190,6 +191,30 @@ object PanelFixtures {
     fun noReviewWalkthroughAbsent(): PanelModel {
         val cfg = """
             walkthrough	absent	/repo/.review/walkthrough.md	0	0
+            guide	team	/repo/.review/walkthrough-guide.md	absent
+            guide	own	/repo/.git/review-walkthrough-guide.md	absent
+        """.trimIndent()
+        val parsed = parseConfigPorcelain(cfg)
+        return buildPanelModel(
+            ReviewState(
+                situation = Situation.NO_REVIEW,
+                config = EffectiveConfig(base = "main", remote = "origin"),
+                guides = parsed.guides,
+                walkthrough = parsed.walkthrough,
+            ),
+            PanelInputs(busy = false),
+        )
+    }
+
+    /**
+     * The walkthrough of a PR that already merged: it travelled into the base
+     * with the merge, so it is not this PR's reading order at all. Nothing about
+     * it fell behind -- it belongs to a range that closed -- and the CLI starts
+     * a new one on its own there.
+     */
+    fun noReviewWalkthroughSuperseded(): PanelModel {
+        val cfg = """
+            walkthrough	superseded	/repo/.review/walkthrough.md	3	3
             guide	team	/repo/.review/walkthrough-guide.md	absent
             guide	own	/repo/.git/review-walkthrough-guide.md	absent
         """.trimIndent()

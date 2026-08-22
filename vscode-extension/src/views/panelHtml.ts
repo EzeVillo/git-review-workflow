@@ -1015,9 +1015,11 @@ export function panelHtml(nonce: string): string {
     // Las dos literales enteras y no una concatenacion: la copy compartida se
     // verifica contra el canonico buscando la cadena, y un texto armado en
     // pedazos es justo el que ese check no puede ver.
-    const initLabel = model.walkthrough && model.walkthrough.actionLabel === "Update"
-      ? "Walkthrough: Update"
-      : "Walkthrough: Init";
+    const initLabel = !model.walkthrough || model.walkthrough.actionLabel === "Create"
+      ? "Walkthrough: Init"
+      : model.walkthrough.actionLabel === "Start over"
+        ? "Walkthrough: Start over"
+        : "Walkthrough: Update";
     const init = button(initLabel, "walkthroughInit");
     const build = button("Walkthrough: Build", "walkthroughBuild");
     init.disabled = model.busy;

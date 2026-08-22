@@ -14,6 +14,7 @@ import com.ezevillo.gitreview.domain.entryPickLabel
 import com.ezevillo.gitreview.domain.pendingFinishInfo
 import com.ezevillo.gitreview.domain.resumableSourceAt
 import com.ezevillo.gitreview.domain.sourceFromReviewName
+import com.ezevillo.gitreview.domain.WalkthroughState
 import com.ezevillo.gitreview.host.Bg
 import com.ezevillo.gitreview.host.GitReviewService
 import com.ezevillo.gitreview.host.MutationActions
@@ -600,48 +601,58 @@ class CompareReviewAction : AnAction(), DumbAware {
     }
 }
 
+/**
+ * Init, and the choice between reconciling and starting over, asked BEFORE the
+ * verb runs.
+ *
+ * It used to hang off the CLI FAILING: init ran, and when it died because the
+ * file was already there, that is where the overwrite was offered. Since init
+ * updates instead of refusing, that path stopped existing -- and with it the only
+ * way to reach --force from the panel.
+ *
+ * Nothing is asked when there is nothing to preserve (no walkthrough), and
+ * nothing is asked over a SUPERSEDED one either: that file is another PR's, the
+ * CLI starts over on its own, and offering to preserve it would be offering to
+ * keep prose about a change that shipped.
+ */
 class WalkthroughInitAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val m = mutations(e) ?: return
+        val service = e.project?.let { GitReviewService.getInstance(it) }
         val cwd = pickSoleGitRoot(project)?.rootPath
-        m.runSimple(
-            "walkthroughInit",
-            ActionParams.WalkthroughInit(false),
-            showFailure = false,
-            progressTitle = UserCopy.WALKTHROUGH_INIT_PROGRESS,
-        ) { first ->
-            if (first.ok) {
-                openWalkthroughFile(project, cwd)
-                return@runSimple
-            }
-            if (first.stale || first.discarded) return@runSimple
-            val exists = cwd != null && java.io.File(cwd, ".review/walkthrough.md").isFile
-            if (!exists) {
-                UiMessages.cliError(
-                    project,
-                    first.stderr,
-                    UserCopy.WALKTHROUGH_INIT_FAILED,
-                    first.stdout,
-                )
-                return@runSimple
-            }
-            if (!UiMessages.confirm(
+        val state = service?.currentState()?.walkthrough
+        val reconcilable = state != null &&
+            state.state != WalkthroughState.ABSENT &&
+            state.state != WalkthroughState.SUPERSEDED
+
+        var force = false
+        if (reconcilable) {
+            when (
+                UiMessages.choose(
                     project,
                     UserCopy.WALKTHROUGH_EXISTS_TITLE,
                     UserCopy.WALKTHROUGH_EXISTS_DETAIL,
-                    UserCopy.WALKTHROUGH_OVERWRITE_BUTTON,
+                    UserCopy.WALKTHROUGH_UPDATE_BUTTON,
+                    UserCopy.WALKTHROUGH_START_OVER_BUTTON,
                 )
             ) {
-                return@runSimple
+                UiMessages.Choice.FIRST -> force = false
+                UiMessages.Choice.SECOND -> force = true
+                UiMessages.Choice.CANCELLED -> return
             }
-            m.runSimple(
-                "walkthroughInit",
-                ActionParams.WalkthroughInit(true),
-                progressTitle = UserCopy.WALKTHROUGH_OVERWRITE_PROGRESS,
-            ) { forced ->
-                if (forced.ok) openWalkthroughFile(project, cwd)
-            }
+        }
+
+        m.runSimple(
+            "walkthroughInit",
+            ActionParams.WalkthroughInit(force),
+            progressTitle = if (force) {
+                UserCopy.WALKTHROUGH_OVERWRITE_PROGRESS
+            } else {
+                UserCopy.WALKTHROUGH_INIT_PROGRESS
+            },
+        ) { result ->
+            if (result.ok) openWalkthroughFile(project, cwd)
         }
     }
 }

@@ -274,7 +274,7 @@ porcelain)
 	# same reason as the guides, and unconditioned on the branch argument for the
 	# same reason as the drafts: it is a file of this working tree, not a property
 	# of whatever branch the caller asked about.
-	emit_walkthrough_record
+	emit_walkthrough_record "$base_val" "$remote_val"
 
 	if [ -n "$branch" ]; then
 		# Same pair of keys start reads for --delta (bin/git-review-verbs/start):

@@ -1058,10 +1058,10 @@ private fun noReviewReadyBlocks(model: PanelModel): List<Block> {
                 // promised what that verb precisely no longer does.
                 ctrl(
                     ControlId.WALKTHROUGH_INIT,
-                    if (model.walkthrough?.actionLabel == "Update") {
-                        "Walkthrough: Update"
-                    } else {
-                        "Walkthrough: Init"
+                    when (model.walkthrough?.actionLabel) {
+                        "Update" -> "Walkthrough: Update"
+                        "Start over" -> "Walkthrough: Start over"
+                        else -> "Walkthrough: Init"
                     },
                     Emphasis.SECONDARY,
                     enabled,

@@ -494,6 +494,20 @@ export const PREVIEW_PANES: PreviewPane[] = [
         ]),
     },
     {
+        // El walkthrough de un PR que ya se mergeó: viajó a la base con el merge,
+        // así que no es el orden de lectura de este PR. No quedó atrás — es de
+        // otro rango — y el botón dice lo que va a pasar: empezar de cero.
+        name: "no-review-walkthrough-superseded",
+        caption: "no-review — el walkthrough vino con un merge, es de otro PR",
+        model: drafts([
+            ["config", "base", "develop"],
+            ["config", "remote", "origin"],
+            ["walkthrough", "superseded", "/repo/.review/walkthrough.md", "3", "3"],
+            ["guide", "team", "/repo/.review/walkthrough-guide.md", "absent"],
+            ["guide", "own", "/repo/.git/review-walkthrough-guide.md", "absent"],
+        ]),
+    },
+    {
         // list --porcelain con finish … pending: pantalla de post-cierre
         // (staged edits + Clean / Undo finish), sin empty state ni inventario.
         name: "finish-pending",

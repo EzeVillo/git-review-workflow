@@ -27,6 +27,17 @@ First release of the Visual Studio client. Requires `git review` **0.7.0** or ne
   entries whose file is still in range keep their number, their why and their `> key`, files that
   entered the range arrive as placeholders to fill in, and entries whose file left it are dropped
   and named. Fill in only the new ones, hand them to an agent, or write them yourself.
+- **A walkthrough that arrived with a merge gets a new one, not a reconciled one.** Your PR
+  merges, the sidecar travels into the base with it, you branch again and touch one of the same
+  files — and that entry still carries a why about a change that already shipped. The CLI spots it
+  (the tip that wrote the walkthrough is already in the base) and starts a fresh one; the row says
+  `from a merged PR` rather than `may be out of date`, and the button reads *Walkthrough: Start
+  over*, because that is what will happen. The old one is in git either way.
+- **Choosing between updating and starting over happens before the verb runs.** With a walkthrough
+  already there, *Walkthrough: Update* asks which of the two you meant: keep every entry whose file
+  is still in range, or replace the file with a blank skeleton (`--force`). It used to be offered
+  only when the CLI refused, so once `init` stopped refusing there was no way to reach `--force`
+  from the panel at all.
 - **The tool window.** **View → Other Windows → git review** opens a WPF panel that always
   describes what the CLI reports — no state is derived in the IDE — driven by the same
   layout as the VS Code and JetBrains clients. **Tools → Options → git review** holds the

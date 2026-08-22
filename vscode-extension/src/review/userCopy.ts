@@ -47,3 +47,21 @@ export function walkthroughAgentPrompt(path: string): string {
 		"finished: leave them as they are, and fill in only the ones marked \"## ?.\"."
 	);
 }
+
+/**
+ * The choice between reconciling a walkthrough and starting it over, asked
+ * BEFORE the verb runs.
+ *
+ * It used to hang off the CLI FAILING: init ran, and when it died because the
+ * file was already there, that is where the three clients offered to overwrite.
+ * Since init updates instead of refusing, that path stopped existing — and with
+ * it the only way to reach --force from a panel. So the question goes in front.
+ *
+ * Byte for byte identical to UserCopy.kt and UserCopy.cs.
+ */
+export const WALKTHROUGH_EXISTS_TITLE = "This branch already has a walkthrough.";
+export const WALKTHROUGH_EXISTS_DETAIL =
+	"Update keeps every entry whose file is still in range - its number, its why and its > key - and adds the files that are new.\n\n" +
+	"Start over runs git review walkthrough init --force: it replaces .review/walkthrough.md with a blank skeleton. The file is tracked, so git checkout -- brings the old one back.";
+export const WALKTHROUGH_UPDATE_BUTTON = "Update";
+export const WALKTHROUGH_START_OVER_BUTTON = "Start over";

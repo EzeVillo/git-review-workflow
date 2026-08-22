@@ -677,8 +677,31 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 	if [ "$sub" = init ] && [ -e "$targetpath" ] && [ "$force" -eq 0 ]; then
 		update=1
 	fi
-	if [ "$update" -eq 0 ] && [ "$to_stdout" -eq 0 ] && [ -e "$targetpath" ] &&
-		[ "$force" -eq 0 ]; then
+	# A walkthrough that came in WITH a merge is not this PR's, and reconciling
+	# against it is worse than not reconciling at all: the entry for a file both
+	# PRs happen to touch keeps a why about a change that already shipped, and
+	# that prose gets committed to this PR. It is not staleness — nothing fell
+	# behind; it belongs to a range that closed.
+	#
+	# So this is the one case that starts over on its own, and it does not need
+	# --force to do it. The asymmetry is deliberate and it is about what each
+	# mistake looks like: prose kept from another PR reads exactly like a valid
+	# walkthrough, while a blank skeleton is visible at a glance -- and the file
+	# is tracked, so the old entries are one git checkout away either way.
+	superseded=0
+	if [ "$update" -eq 1 ]; then
+		blocktip="$(walk_sidecar_block_tip "$targetpath" || true)"
+		if walk_sidecar_superseded "$blocktip" "$baseref"; then
+			superseded=1
+			update=0
+		fi
+	fi
+	# The refusal is for the reviewer's draft, which does not update. `superseded`
+	# has to pass it: that path deliberately starts over WITHOUT --force, and
+	# without this exemption the one case that decides for itself would be the one
+	# case that cannot run.
+	if [ "$update" -eq 0 ] && [ "$superseded" -eq 0 ] && [ "$to_stdout" -eq 0 ] &&
+		[ -e "$targetpath" ] && [ "$force" -eq 0 ]; then
 		die "$targetrel already exists; pass --force to overwrite"
 	fi
 	files="$(annotatable_files)"
@@ -1123,6 +1146,16 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 	# A branch here for the reviewer's draft would be unreachable code that reads
 	# like a supported path — and if draft ever does update in place, its way back
 	# is not this one: nothing tracks that file.
+	# Said before anything else this command prints, because it is the reason the
+	# file the author had is not the file they now have. Named with the base it
+	# landed in, so it reads as a fact about the repository and not as a refusal.
+	if [ "$superseded" -eq 1 ]; then
+		{
+			echo "note: the walkthrough in your tree is $base's, not this PR's -- it came in with the merge of the PR that wrote it, so its entries describe changes that already shipped. Started a new one."
+			echo "      The old one is in git: git checkout -- $targetrel to get it back."
+		} >&2
+	fi
+
 	if [ "$update" -eq 1 ] && [ -n "$merged_removed" ]; then
 		{
 			echo "note: $(printf '%s\n' "$merged_removed" | grep -c .) entry/entries dropped -- the PR no longer changes these files:"

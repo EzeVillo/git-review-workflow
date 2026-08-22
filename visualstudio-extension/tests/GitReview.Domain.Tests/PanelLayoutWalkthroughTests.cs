@@ -110,4 +110,33 @@ public class PanelLayoutWalkthroughTests
         Assert.NotNull(Control(row, ControlId.OpenWalkthrough).Index);
         Assert.NotNull(Control(row, ControlId.CopyWalkthroughPrompt).Index);
     }
+
+    [Fact]
+    public void A_walkthrough_that_came_in_with_a_merge_is_not_stale()
+    {
+        // Nothing about it fell behind: it belongs to a range that closed. The two
+        // have to stay apart or the panel offers reconciling another PR's prose.
+        var row = Row(PanelFixtures.NoReviewWalkthroughSuperseded())!;
+        Assert.Equal("from a merged PR", row.Badge);
+        Assert.NotEqual("may be out of date", row.Badge);
+    }
+
+    [Fact]
+    public void The_button_says_start_over_on_a_superseded_walkthrough()
+    {
+        // The CLI starts over on its own there, so the button says what will
+        // happen instead of promising a reconciliation that does not occur.
+        Assert.Equal(
+            "Walkthrough: Start over",
+            InitLabel(PanelFixtures.NoReviewWalkthroughSuperseded()));
+    }
+
+    [Fact]
+    public void A_superseded_walkthrough_can_still_be_opened_and_copied()
+    {
+        // The file is right there; what changed is whose it is.
+        var row = Row(PanelFixtures.NoReviewWalkthroughSuperseded())!;
+        Assert.True(Control(row, ControlId.OpenWalkthrough).Enabled);
+        Assert.True(Control(row, ControlId.CopyWalkthroughPrompt).Enabled);
+    }
 }

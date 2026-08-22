@@ -469,6 +469,14 @@ git review walkthrough build    # validate, order by your numbers, renumber 1..N
   (the same range a reviewer will see), each as `## ?. <path>` plus a
   `<!-- why: -->` placeholder, headed by a `## Heads-up` section with its own
   placeholder. `--base <base>` overrides `reviewworkflow.base`.
+- **A walkthrough that arrived with a merge is not reconciled, it is replaced.**
+  Your PR merges, the sidecar travels into the base with it, you branch again and
+  touch one of the same files: that entry still carries a why about a change that
+  already shipped. `init` asks git whether the tip that wrote it is already in the
+  base, and when it is, writes a fresh skeleton and says so — no `--force` needed,
+  because the file is tracked and the old one is one `git checkout --` away. The
+  panel calls that state *from a merged PR* rather than *may be out of date*:
+  nothing fell behind, it belongs to a range that closed.
 - **Run `init` again whenever the PR moves on.** A walkthrough is written when the
   PR is finished, and then the PR keeps changing — review comments come back and
   three more files change. `init` over an existing walkthrough **updates** it:

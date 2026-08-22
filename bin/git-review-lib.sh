@@ -2087,23 +2087,56 @@ walk_sidecar_block_tip() {
 	return 1
 }
 
-# emit_walkthrough_record
+# walk_sidecar_superseded <tip> <baseref>
+# True when a walkthrough written against <tip> belongs to a PR that is ALREADY
+# integrated into <baseref> — so it is not this PR's reading order at all.
+#
+# The case: your PR merges, the sidecar travels into the base with it, you branch
+# again and touch one of the same files. The entry for that file is still there,
+# with a why describing a change that shipped. Reconciling against it keeps prose
+# that is not about this PR and would ride out on the next commit, which is the
+# opposite of what preserving it is for. It is not "stale": nothing about it fell
+# behind, it belongs to somebody else's range.
+#
+# Asked of git rather than inferred, and it is one process: a tip that is an
+# ancestor of the base is a tip whose commits are in the base. The bound is the
+# base and not the merge-base on purpose — the question is "did this land?", and
+# the merge-base moves with every rebase.
+#
+# Returns 2, not 1, when the answer cannot be had (no tip recorded, an object
+# this clone no longer has): callers must not read "no" out of "cannot tell", or
+# a fresh clone would silently go back to reconciling against a merged PR.
+walk_sidecar_superseded() {
+	[ -n "$1" ] || return 2
+	[ -n "$2" ] || return 2
+	git rev-parse --verify --quiet "$1^{commit}" >/dev/null 2>&1 || return 2
+	git merge-base --is-ancestor "$1" "$2" 2>/dev/null
+}
+
+# emit_walkthrough_record [<base>] [<remote>]
 # The author's sidecar as one row:
 #   walkthrough<TAB><state><TAB><path><TAB><annotated><TAB><total>
 #
-# state is absent | in-sync | stale | unknown, and the row is emitted in all four
-# cases -- the same reason emit_guide_records always emits both guides, and the
-# opposite of the draft records: a client cannot offer to create a walkthrough it
-# was never told about, and rebuilding the path on its own side is the thing the
-# reported-path rule exists to prevent.
+# state is absent | in-sync | stale | superseded | unknown, and the row is emitted
+# in all five cases -- the same reason emit_guide_records always emits both
+# guides, and the opposite of the draft records: a client cannot offer to create a
+# walkthrough it was never told about, and rebuilding the path on its own side is
+# the thing the reported-path rule exists to prevent.
 #
-#   absent   no .review/walkthrough.md in the work tree
-#   in-sync  the range has not changed outside .review/ since the file was last
-#            written or built
-#   stale    it has -- files entered or left the range, or a file the walkthrough
-#            already annotates has moved on. Worth looking at; not a verdict.
-#   unknown  no instruction block (deleting it by hand is legal), or its tip is
-#            not an object this clone has any more (a force-push, a fresh clone)
+#   absent      no .review/walkthrough.md in the work tree
+#   in-sync     the range has not changed outside .review/ since the file was last
+#               written or built
+#   stale       it has -- files entered or left the range, or a file the
+#               walkthrough already annotates has moved on. Worth looking at; not
+#               a verdict.
+#   superseded  it is the walkthrough of a PR already merged into the base: it
+#               travelled in with the merge and describes a change that shipped
+#   unknown     no instruction block (deleting it by hand is legal), or its tip is
+#               not an object this clone has any more (a force-push, a fresh clone)
+#
+# `superseded` is asked ONLY once the diff already said `stale`, which keeps its
+# two extra processes off the common path: a walkthrough that still matches its
+# range cannot be another PR's.
 #
 # The comparison EXCLUDES .review/ for one concrete reason: committing the
 # walkthrough itself moves HEAD, so without it the ordinary author's flow --
@@ -2114,6 +2147,8 @@ walk_sidecar_block_tip() {
 # builtin read of the block, one git diff, and the single awk of the progress
 # count. Nothing per entry.
 emit_walkthrough_record() {
+	_ewr_base="${1:-}"
+	_ewr_remote="${2:-origin}"
 	guide_paths_init
 	[ -n "$_guide_team_path" ] || return 0
 	_ewr_path="${_guide_team_path%/walkthrough-guide.md}/walkthrough.md"
@@ -2139,6 +2174,23 @@ emit_walkthrough_record() {
 		0) _ewr_state=in-sync ;;
 		1) _ewr_state=stale ;;
 		esac
+		# Only over a stale answer, and only with a base to ask about: the two
+		# processes below are the whole extra cost of this record, and a
+		# walkthrough that still matches its range cannot belong to another PR.
+		if [ "$_ewr_state" = stale ] && [ -n "$_ewr_base" ]; then
+			_ewr_baseref=""
+			if git rev-parse --verify --quiet \
+				"refs/remotes/$_ewr_remote/$_ewr_base^{commit}" >/dev/null 2>&1; then
+				_ewr_baseref="refs/remotes/$_ewr_remote/$_ewr_base"
+			elif git rev-parse --verify --quiet \
+				"refs/heads/$_ewr_base^{commit}" >/dev/null 2>&1; then
+				_ewr_baseref="refs/heads/$_ewr_base"
+			fi
+			if [ -n "$_ewr_baseref" ] &&
+				walk_sidecar_superseded "$_ewr_tip" "$_ewr_baseref"; then
+				_ewr_state=superseded
+			fi
+		fi
 	fi
 
 	# The same pair the drafts report, from the same awk, so "how much of it is

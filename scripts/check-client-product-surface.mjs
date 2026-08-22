@@ -156,6 +156,24 @@ if (!draftPrompt.startsWith("Fill in the reading order at {path}.")) {
 // operador de concatenacion deja el texto comparable sin obligar a los tres a
 // cortarlo en el mismo lugar -- que es formato, no copy.
 const squash = (s) => s.replace(/["`+]/g, " ").replace(/\s+/g, " ");
+const userCopyFiles = [
+  ["vscode", ["vscode-extension", "src", "review", "userCopy.ts"]],
+  ["intellij", ["jetbrains-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "domain", "UserCopy.kt"]],
+  ["visualstudio", ["visualstudio-extension", "src", "GitReview.Domain", "UserCopy.cs"]],
+];
+
+/** Una cadena que los tres UserCopy tienen que traer, entrecomillada. */
+function requireUserCopy(what, copy) {
+  for (const [label, rel] of userCopyFiles) {
+    const p = join(root, ...rel);
+    if (!existsSync(p)) {
+      fail(`${label} UserCopy module missing at ${rel.join("/")}`);
+      continue;
+    }
+    if (!readText(p, "utf8").includes(`"${copy}"`)) fail(`${label} is missing the ${what}`);
+  }
+}
+
 for (const [label, rel] of [
   ["vscode", ["vscode-extension", "src", "review", "userCopy.ts"]],
   ["intellij", ["jetbrains-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "domain", "UserCopy.kt"]],
@@ -1255,9 +1273,22 @@ if (walkthroughBlock.length === 0) {
   // "Init" sobre un archivo que ese verbo ya no crea desde cero.
   const labels = walkthroughBlock.split(/^ {2}action_labels:\s*$/m)[1]?.split(/^ {2}[a-z_]+:/m)[0] ?? "";
   const labelTexts = mapValues(labels);
-  if (labelTexts.length !== 2) fail("walkthrough_row must declare both action labels");
+  // Tres: crear, actualizar y empezar de cero. Un cliente que se quede con dos
+  // dice "Update" sobre un walkthrough que la CLI va a reemplazar entero.
+  if (labelTexts.length !== 3) fail("walkthrough_row must declare all three action labels");
   for (const label of labelTexts) {
     requireSharedCopy(`walkthrough action label "${label}"`, label, true);
+  }
+  // La eleccion entre reconciliar y empezar de cero. Es copy que los tres
+  // clientes escriben a mano y que ademas es la unica puerta a --force desde un
+  // panel, asi que un cliente que la pierda pierde el flag entero.
+  const choice = walkthroughBlock.split(/^ {2}init_choice:\s*$/m)[1]?.split(/^ {2}[a-z_]+:/m)[0] ?? "";
+  const choiceTexts = mapValues(choice);
+  if (choiceTexts.length === 0) fail("walkthrough_row declares no init_choice copy");
+  // Contra UserCopy y no contra el layout: es copy de un dialogo, como
+  // draft_agent_prompt, y vive en el modulo que los tres clientes comparten.
+  for (const text of choiceTexts) {
+    requireUserCopy(`walkthrough init choice "${text}"`, text);
   }
 }
 

@@ -580,3 +580,108 @@ EOF
 	esac
 	[ -f "$path" ]
 }
+
+# ── Un walkthrough que llegó con un merge ─────────────────────────────────────
+#
+# El PR se mergea, el sidecar viaja a la base con él, y la rama siguiente toca
+# uno de los mismos archivos. Reconciliar contra eso conserva un why sobre un
+# cambio que ya salió, y ese texto se commitea al PR nuevo.
+
+# Deja la base con el walkthrough de un PR ya mergeado, y HEAD en una rama nueva
+# que toca uno de sus archivos.
+merged_walkthrough() {
+	git switch --quiet -c feature/login
+	printf 'a1\na2\nlogin\n' >a.txt
+	git add a.txt
+	git commit --quiet -m "feat: login"
+	mkdir -p .review
+	cat >.review/walkthrough.md <<'EOF'
+# Walkthrough
+
+## Heads-up
+
+el login toca la sesion
+
+## 1. a.txt
+el flujo de login entra por aca
+
+## 2. b.txt
+la query de usuario
+EOF
+	git review walkthrough build >/dev/null 2>&1
+	git add -A
+	git commit --quiet -m "docs: walkthrough"
+	git switch --quiet develop
+	git merge --quiet --no-ff -m "merge login" feature/login
+	git switch --quiet -c feature/mfa
+	printf 'a1\na2\nlogin\nmfa\n' >a.txt
+	git add a.txt
+	git commit --quiet -m "feat: mfa"
+}
+
+@test "init starts over on a walkthrough that came in with a merge" {
+	merged_walkthrough
+	run git review walkthrough init
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"not this PR's"* ]]
+	[[ "$output" == *"came in with the merge"* ]]
+	[[ "$output" == *"git checkout -- .review/walkthrough.md"* ]]
+
+	# Skeleton, not a reconciliation: the why of the merged PR is gone.
+	grep -q '^## ?\. a\.txt$' .review/walkthrough.md
+	run grep -c 'el flujo de login entra por aca' .review/walkthrough.md
+	[ "$output" = "0" ]
+	# And its heads-up went with it: that prose was about the other change too.
+	run grep -c 'el login toca la sesion' .review/walkthrough.md
+	[ "$output" = "0" ]
+}
+
+@test "starting over needs no --force, and the old one is still in git" {
+	# The one case that decides for itself. Everything the note promises has to
+	# hold, or "started a new one" is a way of saying prose was destroyed.
+	merged_walkthrough
+	run git review walkthrough init
+	[ "$status" -eq 0 ]
+	run git checkout -- .review/walkthrough.md
+	[ "$status" -eq 0 ]
+	grep -q 'el flujo de login entra por aca' .review/walkthrough.md
+}
+
+@test "config --porcelain calls it superseded, not stale" {
+	# Nothing about it fell behind: it belongs to a range that closed. The panel
+	# needs the two apart to offer the right thing.
+	merged_walkthrough
+	run git review config --porcelain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"walkthrough	superseded	"* ]]
+	[[ "$output" != *"walkthrough	stale	"* ]]
+}
+
+@test "a walkthrough of this PR is never called superseded" {
+	# The guard against the cheap test being too eager: a tip that is not in the
+	# base is this PR's, however far behind it has fallen.
+	write_and_build
+	printf 'new\n' >c.txt
+	git add c.txt
+	git commit --quiet -m c2
+	run git review config --porcelain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"walkthrough	stale	"* ]]
+	# And init reconciles it, as it does for any PR that moved on.
+	run git review walkthrough init
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"2 kept"* ]]
+	[[ "$output" != *"not this PR's"* ]]
+}
+
+@test "with the tip gone from the clone it is unknown, never superseded" {
+	# "Cannot tell" must not read as "no": a fresh clone would go straight back
+	# to reconciling against a merged PR.
+	write_and_build
+	# El contenedor no trae python; sed alcanza y es lo que usa el resto de la suite.
+	sed -i 's/^\(       tip   \)[0-9a-f]\{40\}/\10000000000000000000000000000000000000000/' .review/walkthrough.md
+	grep -q '^       tip   0\{40\}' .review/walkthrough.md
+	run git review config --porcelain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"walkthrough	unknown	"* ]]
+}

@@ -1039,44 +1039,45 @@ public sealed class ActionDispatcher
     }
 
     /// <summary>
-    /// Walkthrough init. A refusal because one already exists is the only failure that
-    /// turns into a question, and it is distinguished by the file being there — not by
-    /// matching the CLI's wording.
+    /// Walkthrough init, and the choice between reconciling and starting over, asked
+    /// BEFORE the verb runs.
+    ///
+    /// It used to hang off the CLI FAILING: init ran, and when it died because the file
+    /// was already there, that is where the overwrite was offered. Since init updates
+    /// instead of refusing, that path stopped existing — and with it the only way to
+    /// reach --force from the panel.
+    ///
+    /// Nothing is asked when there is nothing to preserve, and nothing is asked over a
+    /// Superseded one either: that file is another PR's, the CLI starts over on its own,
+    /// and offering to preserve it would be offering to keep prose about a change that
+    /// shipped.
     /// </summary>
     private async Task WalkthroughInitAsync()
     {
         var cwd = Cwd;
-        var first = await RunAsync(
-            "walkthroughInit",
-            new ActionParams.WalkthroughInit(false),
-            showFailure: false,
-            progress: UserCopy.WalkthroughInitProgress).ConfigureAwait(true);
-        if (first is null) return;
-        if (first.ExitCode == 0 && !first.TimedOut)
-        {
-            await OpenWalkthroughAsync(cwd).ConfigureAwait(true);
-            return;
-        }
+        var w = State.Walkthrough;
+        var reconcilable = w is not null
+            && w.State != WalkthroughState.Absent
+            && w.State != WalkthroughState.Superseded;
 
-        var walkthrough = WalkthroughFile(cwd);
-        var exists = walkthrough is not null && File.Exists(walkthrough);
-        if (!exists)
+        var force = false;
+        if (reconcilable)
         {
-            GitReviewDialogs.CliError(first.Stderr, UserCopy.WalkthroughInitFailed, first.Stdout);
-            return;
-        }
-        if (!GitReviewDialogs.Confirm(
+            var picked = GitReviewDialogs.Choose(
                 UserCopy.WalkthroughExistsTitle,
                 UserCopy.WalkthroughExistsDetail,
-                UserCopy.WalkthroughOverwriteButton))
-        {
-            return;
+                new[] { UserCopy.WalkthroughUpdateButton, UserCopy.WalkthroughStartOverButton });
+            if (picked == GitReviewDialogs.Cancelled) return;
+            force = picked == 1;
         }
-        var forced = await RunAsync(
+
+        var result = await RunAsync(
             "walkthroughInit",
-            new ActionParams.WalkthroughInit(true),
-            progress: UserCopy.WalkthroughOverwriteProgress).ConfigureAwait(true);
-        if (forced is not null && forced.ExitCode == 0 && !forced.TimedOut)
+            new ActionParams.WalkthroughInit(force),
+            progress: force
+                ? UserCopy.WalkthroughOverwriteProgress
+                : UserCopy.WalkthroughInitProgress).ConfigureAwait(true);
+        if (result is not null && result.ExitCode == 0 && !result.TimedOut)
             await OpenWalkthroughAsync(cwd).ConfigureAwait(true);
     }
 

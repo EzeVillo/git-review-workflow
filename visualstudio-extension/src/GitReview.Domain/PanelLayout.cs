@@ -996,9 +996,12 @@ public static class PanelLayoutBuilder
                 // promised what that verb precisely no longer does.
                 Ctrl(
                     ControlId.WalkthroughInit,
-                    model.Walkthrough?.ActionLabel == "Update"
-                        ? "Walkthrough: Update"
-                        : "Walkthrough: Init",
+                    model.Walkthrough?.ActionLabel switch
+                    {
+                        "Update" => "Walkthrough: Update",
+                        "Start over" => "Walkthrough: Start over",
+                        _ => "Walkthrough: Init",
+                    },
                     Emphasis.Secondary,
                     enabled),
                 Ctrl(ControlId.WalkthroughBuild, "Walkthrough: Build", Emphasis.Secondary, enabled),

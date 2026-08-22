@@ -104,4 +104,30 @@ class PanelLayoutWalkthroughTest {
         assertNotNull(control(r, ControlId.OPEN_WALKTHROUGH)!!.index)
         assertNotNull(control(r, ControlId.COPY_WALKTHROUGH_PROMPT)!!.index)
     }
+
+    @Test
+    fun `a walkthrough that came in with a merge is not stale`() {
+        // Nothing about it fell behind: it belongs to a range that closed. The two
+        // have to stay apart or the panel offers reconciling another PR's prose.
+        val r = row(PanelFixtures.noReviewWalkthroughSuperseded())!!
+        assertEquals("from a merged PR", r.badge)
+    }
+
+    @Test
+    fun `the button says start over on a superseded walkthrough`() {
+        // The CLI starts over on its own there, so the button says what will
+        // happen instead of promising a reconciliation that does not occur.
+        assertEquals(
+            "Walkthrough: Start over",
+            initLabel(PanelFixtures.noReviewWalkthroughSuperseded()),
+        )
+    }
+
+    @Test
+    fun `a superseded walkthrough can still be opened and copied`() {
+        // The file is right there; what changed is whose it is.
+        val r = row(PanelFixtures.noReviewWalkthroughSuperseded())!!
+        assertTrue(control(r, ControlId.OPEN_WALKTHROUGH)!!.enabled)
+        assertTrue(control(r, ControlId.COPY_WALKTHROUGH_PROMPT)!!.enabled)
+    }
 }

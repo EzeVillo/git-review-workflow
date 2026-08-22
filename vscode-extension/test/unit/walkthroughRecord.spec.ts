@@ -26,7 +26,7 @@ describe("registro walkthrough de config --porcelain", () => {
     });
 
     it("los cuatro estados se reconocen", () => {
-        for (const state of ["in-sync", "stale", "unknown", "absent"] as const) {
+        for (const state of ["in-sync", "stale", "superseded", "unknown", "absent"] as const) {
             const result = parseConfigPorcelain(row("walkthrough", state, WT, "0", "0") + "\n");
             assert.strictEqual(result.walkthrough?.state, state);
         }
@@ -71,7 +71,11 @@ describe("registro walkthrough de config --porcelain", () => {
 });
 
 describe("proyeccion de la fila del walkthrough", () => {
-    const model = (state: "in-sync" | "stale" | "unknown" | "absent", ann = 3, tot = 3) =>
+    const model = (
+        state: "in-sync" | "stale" | "superseded" | "unknown" | "absent",
+        ann = 3,
+        tot = 3
+    ) =>
         buildPanelModel(
             {
                 situation: "no-review",
@@ -84,6 +88,7 @@ describe("proyeccion de la fila del walkthrough", () => {
     it("el badge dice cada estado en prosa", () => {
         assert.strictEqual(model("in-sync")?.badge, "up to date");
         assert.strictEqual(model("stale")?.badge, "may be out of date");
+        assert.strictEqual(model("superseded")?.badge, "from a merged PR");
         assert.strictEqual(model("unknown")?.badge, "state unknown");
         assert.strictEqual(model("absent")?.badge, "none");
     });
@@ -103,6 +108,9 @@ describe("proyeccion de la fila del walkthrough", () => {
         assert.strictEqual(model("in-sync")?.actionLabel, "Update");
         assert.strictEqual(model("stale")?.actionLabel, "Update");
         assert.strictEqual(model("unknown")?.actionLabel, "Update");
+        // superseded no es "quedo atras": el archivo es de un PR ya mergeado y la
+        // CLI empieza de cero sola, asi que el boton dice eso.
+        assert.strictEqual(model("superseded")?.actionLabel, "Start over");
     });
 
     it("exists apaga los dos controles de la fila", () => {

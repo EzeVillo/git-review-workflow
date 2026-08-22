@@ -259,10 +259,23 @@ object UserCopy {
     fun comparingProgress(lower: String, upper: String): String =
         "Comparing $lower..$upper…"
 
-    const val WALKTHROUGH_EXISTS_TITLE = "A walkthrough already exists. Overwrite it?"
+    /**
+     * The choice between reconciling a walkthrough and starting it over, asked
+     * BEFORE the verb runs.
+     *
+     * It used to hang off the CLI FAILING: init ran, and when it died because
+     * the file was already there, that is where the three clients offered to
+     * overwrite. Since init updates instead of refusing, that path stopped
+     * existing -- and with it the only way to reach --force from a panel.
+     *
+     * Byte for byte identical to userCopy.ts and UserCopy.cs.
+     */
+    const val WALKTHROUGH_EXISTS_TITLE = "This branch already has a walkthrough."
     const val WALKTHROUGH_EXISTS_DETAIL =
-        "This runs git review walkthrough init --force and replaces .review/walkthrough.md."
-    const val WALKTHROUGH_OVERWRITE_BUTTON = "Overwrite"
+        "Update keeps every entry whose file is still in range - its number, its why and its > key - and adds the files that are new.\n\n" +
+            "Start over runs git review walkthrough init --force: it replaces .review/walkthrough.md with a blank skeleton. The file is tracked, so git checkout -- brings the old one back."
+    const val WALKTHROUGH_UPDATE_BUTTON = "Update"
+    const val WALKTHROUGH_START_OVER_BUTTON = "Start over"
     const val WALKTHROUGH_INIT_PROGRESS = "Initializing walkthrough…"
     const val WALKTHROUGH_OVERWRITE_PROGRESS = "Overwriting walkthrough…"
     const val WALKTHROUGH_INIT_FAILED = "git review walkthrough init failed."

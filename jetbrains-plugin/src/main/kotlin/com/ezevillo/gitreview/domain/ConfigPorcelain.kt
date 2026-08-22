@@ -225,10 +225,16 @@ fun parseGuideRecord(fields: List<String>): GuideRecord? {
  * particular `UNKNOWN`, which is NOT `STALE`: with no instruction block (deleting
  * it by hand is legal) the question has no answer, and giving the worse of the
  * two would send someone to redo a reading order that may be perfectly fine.
+ *
+ * `SUPERSEDED` is not `STALE` either: the file is the walkthrough of a PR already
+ * merged into the base, which travelled in with the merge, so nothing about it
+ * fell behind — it belongs to another range. What is offered there is starting
+ * over, not reconciling.
  */
 enum class WalkthroughState {
     IN_SYNC,
     STALE,
+    SUPERSEDED,
     UNKNOWN,
     ABSENT,
     ;
@@ -237,6 +243,7 @@ enum class WalkthroughState {
         fun parse(raw: String?): WalkthroughState? = when (raw) {
             "in-sync" -> IN_SYNC
             "stale" -> STALE
+            "superseded" -> SUPERSEDED
             "unknown" -> UNKNOWN
             "absent" -> ABSENT
             else -> null

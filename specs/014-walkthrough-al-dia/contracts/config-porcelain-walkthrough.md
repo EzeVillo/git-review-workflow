@@ -29,7 +29,7 @@ walkthrough<TAB><state><TAB><path><TAB><annotated><TAB><total>
 
 | Campo       | Valor                                                                            |
 | ----------- | -------------------------------------------------------------------------------- |
-| `state`     | `in-sync` \| `stale` \| `unknown` \| `absent`                                     |
+| `state`     | `in-sync` \| `stale` \| `superseded` \| `unknown` \| `absent`                      |
 | `path`      | ruta **absoluta** de `.review/walkthrough.md`, exista o no el archivo             |
 | `annotated` | entradas con posición **y** *why* resuelto, más el heads-up                       |
 | `total`     | todo lo que `build` exige completar: una unidad por entrada más el heads-up       |
@@ -50,12 +50,35 @@ un hecho del working tree, no de la rama consultada.
 
 ### Los cuatro estados
 
-| `state`   | Qué significa                                                                        |
-| --------- | ------------------------------------------------------------------------------------ |
-| `absent`  | no hay `.review/walkthrough.md` en el working tree                                    |
-| `in-sync` | el rango no cambió fuera de `.review/` desde que el archivo se escribió o construyó   |
-| `stale`   | sí cambió: entraron o salieron archivos, o uno que el walkthrough ya anota se movió   |
-| `unknown` | sin bloque de instrucciones (borrarlo a mano es legal), o su tip ya no es un objeto de este clone |
+| `state`      | Qué significa                                                                     |
+| ------------ | --------------------------------------------------------------------------------- |
+| `absent`     | no hay `.review/walkthrough.md` en el working tree                                 |
+| `in-sync`    | el rango no cambió fuera de `.review/` desde que el archivo se escribió o construyó |
+| `stale`      | sí cambió: entraron o salieron archivos, o uno que el walkthrough ya anota se movió |
+| `superseded` | es el walkthrough de un PR **ya mergeado** a la base: viajó con el merge            |
+| `unknown`    | sin bloque de instrucciones (borrarlo a mano es legal), o su tip ya no es un objeto de este clone |
+
+### `superseded` NO se pliega en `stale`
+
+Tu PR se mergea, el sidecar viaja a la base con él, arrancás la rama siguiente y
+tocás uno de los mismos archivos. La entrada de ese archivo sigue ahí, con un
+*why* que describe un cambio que **ya salió** — y reconciliar contra eso conserva
+prosa que no es de este PR y que se commitearía con él.
+
+No es que haya quedado atrás: **no falló nada**, pertenece a un rango que cerró.
+Son dos ofertas distintas y por eso son dos estados: sobre `stale` lo que se
+ofrece es actualizar, sobre `superseded` empezar de cero.
+
+Se decide con **un solo proceso**: `git merge-base --is-ancestor <tip> <baseref>`,
+o sea "¿los commits que escribieron esto ya están en la base?". El límite es la
+base y no el merge-base, porque la pregunta es «¿aterrizó?» y el merge-base se
+mueve con cada rebase. Se pregunta **sólo cuando el diff ya dijo `stale`**: un
+walkthrough que todavía coincide con su rango no puede ser de otro PR, así que
+sus dos procesos quedan fuera del camino común.
+
+Y «no se puede saber» nunca se lee como «no»: sin tip registrado, o con un objeto
+que este clone ya no tiene, el estado es `unknown` — si no, un clone fresco
+volvería a reconciliar contra un PR mergeado sin decir nada.
 
 ### `unknown` NO se pliega en `stale`
 

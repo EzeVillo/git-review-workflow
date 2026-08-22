@@ -479,6 +479,14 @@ git review walkthrough build    # valida, ordena por tus números y renumera 1..
   vs la base (el mismo rango que verá un reviewer), cada uno como `## ?. <path>`
   más un placeholder `<!-- why: -->`, encabezado por una sección `## Heads-up` con
   su propio placeholder. `--base <base>` sobreescribe `reviewworkflow.base`.
+- **Un walkthrough que llegó con un merge no se reconcilia, se reemplaza.** Tu PR
+  se mergea, el sidecar viaja a la base con él, arrancás la rama siguiente y tocás
+  uno de los mismos archivos: esa entrada sigue con un porqué sobre un cambio que
+  ya salió. `init` le pregunta a git si el tip que lo escribió ya está en la base
+  y, cuando lo está, escribe un esqueleto nuevo y lo dice — sin `--force`, porque
+  el archivo es trackeado y el anterior está a un `git checkout --`. El panel
+  llama a ese estado *from a merged PR* y no *may be out of date*: no quedó atrás,
+  es de un rango que cerró.
 - **Corré `init` de nuevo cada vez que el PR se mueva.** Un walkthrough se escribe
   cuando el PR está terminado, y después el PR sigue cambiando — vuelven los
   comentarios del review y cambian tres archivos más. `init` sobre un walkthrough

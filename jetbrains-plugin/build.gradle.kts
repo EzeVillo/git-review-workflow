@@ -154,15 +154,27 @@ intellijPlatform {
             // DataGrip is not in the JetBrains plugin-verifier binary index for
             // this line (create() fails to resolve a download URL); it remains
             // Marketplace-eligible via the same depends as the others.
+            //
+            // `-PverifierIdes=idea` cuts the list to IDEA alone, and only CI
+            // passes it. The verifier downloads one IDE per entry as a Gradle
+            // dependency, so the full set is several gigabytes: on every push
+            // it would outgrow the 10 GB cache budget of the repository and
+            // evict the platform the release restores. What CI is after is the
+            // deprecated / internal / experimental API usages, and those come
+            // out the same against any of the eight — the per-product runs are
+            // for binary compatibility, and the release still does all eight
+            // before anything is published.
             val line = providers.gradleProperty("platformVersion")
             create(IntelliJPlatformType.IntellijIdea, line)
-            create(IntelliJPlatformType.WebStorm, line)
-            create(IntelliJPlatformType.PhpStorm, line)
-            create(IntelliJPlatformType.PyCharm, line)
-            create(IntelliJPlatformType.GoLand, line)
-            create(IntelliJPlatformType.CLion, line)
-            create(IntelliJPlatformType.RubyMine, line)
-            create(IntelliJPlatformType.RustRover, line)
+            if (providers.gradleProperty("verifierIdes").orNull != "idea") {
+                create(IntelliJPlatformType.WebStorm, line)
+                create(IntelliJPlatformType.PhpStorm, line)
+                create(IntelliJPlatformType.PyCharm, line)
+                create(IntelliJPlatformType.GoLand, line)
+                create(IntelliJPlatformType.CLion, line)
+                create(IntelliJPlatformType.RubyMine, line)
+                create(IntelliJPlatformType.RustRover, line)
+            }
         }
     }
 }

@@ -36,6 +36,7 @@ if [ "$#" -eq 0 ]; then
 		install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh \
 		vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh \
 		visualstudio-extension/bump-version.sh \
+		jetbrains-plugin/verification-report.sh \
 		tests/sandbox.sh
 fi
 

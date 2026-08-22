@@ -437,11 +437,36 @@ productos en el Marketplace. Dominio puro en
 ./gradlew runIde            # sandbox IDE (equivalente a F5 de la extensión)
 ./gradlew runPanelPreview   # preview Swing del PanelModel
 ./gradlew buildPlugin       # zip
-./gradlew verifyPlugin
+./gradlew verifyPlugin      # pluginVerifier sobre los 8 productos
+./gradlew verifyPlugin -PverifierIdes=idea                       # solo IDEA (lo que corre CI)
+./gradlew verifyPluginProjectConfiguration verifyPluginStructure # descriptor y configuración
 ```
 
 Shell: en Git Bash / POSIX usá `./gradlew`; en PowerShell `.\gradlew.bat`
 (no mezclar: en MINGW64 `.\gradlew.bat` falla con `command not found`).
+
+**Las tres verificaciones corren en cada push, y sus warnings se anotan sin bloquear.**
+`verifyPluginProjectConfiguration` y `verifyPluginStructure` terminan en BUILD SUCCESSFUL igual
+cuando encuentran algo —un `since-build` por debajo de la plataforma contra la que se compila, un
+nombre que el Marketplace va a objetar, un descriptor que la tienda lee distinto que el IDE—, y
+`verifyPlugin` sí falla por incompatibilidad binaria pero sus usos de API deprecada / interna /
+experimental viajan en el veredicto y en los archivos del reporte. Todo eso era invisible hasta
+que la versión ya estaba publicada, porque el verifier sólo corría en el workflow del tag. Ahora
+el job tee-a la salida y `jetbrains-plugin/verification-report.sh` la convierte en anotaciones de
+GitHub más un resumen del job; **nunca sale distinto de cero** — un warning es un warning, y
+volverlo build rojo es lo contrario de lo que se busca. Dos filtros, los dos tontos a propósito:
+el del log es una **lista de lo benigno** y no una de warnings conocidos (una forma de mensaje que
+nadie previó tiene que aparecer como ruido, no desaparecer), y el del reporte del verifier cuelga
+de que por cada IDE salgan siempre tres archivos —`dependencies`, `telemetry`,
+`verification-verdict`— y **cualquier otro** sea el verifier teniendo algo que decir, así que no
+hay que conocer sus nombres de antemano.
+
+**En CI el verifier corre contra IDEA sola** (`-PverifierIdes=idea`); los ocho productos van sólo
+en el release. Cada entrada de `pluginVerification.ides` es un IDE que Gradle baja como
+dependencia, y el set completo no entra en los 10 GB de cache del repo: lo llenaría y desalojaría
+la plataforma que el release restaura. Lo que CI busca ahí son los usos de API, que salen iguales
+contra cualquiera de los ocho; la compatibilidad binaria por producto se sigue verificando entera
+antes de publicar nada.
 
 **Prueba manual (como la extensión):** `./tests/sandbox.sh` →
 `git -C <sandbox>/work review start feature/checkout` → `./gradlew runIde` → abrir solo

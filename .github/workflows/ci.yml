@@ -42,7 +42,7 @@ jobs:
       - name: shellcheck
         # find recorre bin/ (incl. bin/git-review-verbs/, fuera del glob bin/*) y
         # excluye .gitkeep; cubre el dispatcher y todos los verbos.
-        run: shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh visualstudio-extension/bump-version.sh tests/sandbox.sh
+        run: shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh visualstudio-extension/bump-version.sh jetbrains-plugin/verification-report.sh tests/sandbox.sh
 
   test:
     strategy:
@@ -154,6 +154,41 @@ jobs:
         working-directory: jetbrains-plugin
         shell: bash
         run: ./gradlew platformTest --no-daemon
+
+      # The verifications JetBrains ships, on every push instead of only at
+      # release time. All three exit zero over findings that are warnings --
+      # a since-build below the target platform, a name the Marketplace will
+      # object to, a deprecated or internal API the plugin reached for -- so
+      # the output is teed and verification-report.sh turns what they said
+      # into annotations on the run. Real problems still fail the step on
+      # their own; warnings only have to be visible before a version is
+      # public, which is the one thing a release-only run cannot do.
+      #
+      # Linux only, like platformTest: the findings are about the descriptor
+      # and the bytecode, and neither depends on the runner.
+      - name: Plugin configuration and structure (Linux only)
+        if: runner.os == 'Linux'
+        working-directory: jetbrains-plugin
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew verifyPluginProjectConfiguration verifyPluginStructure --no-daemon 2>&1 | tee verification.log
+      # -PverifierIdes=idea: one IDE here, all eight at release. See the
+      # comment on pluginVerification in build.gradle.kts -- the full set does
+      # not fit the cache budget, and what CI is after comes out the same
+      # against any one of them.
+      - name: Plugin verifier (Linux only)
+        if: runner.os == 'Linux'
+        working-directory: jetbrains-plugin
+        shell: bash
+        run: |
+          set -o pipefail
+          ./gradlew verifyPlugin -PverifierIdes=idea --no-daemon 2>&1 | tee -a verification.log
+      - name: Report verification warnings (Linux only)
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
+        working-directory: jetbrains-plugin
+        shell: bash
+        run: ./verification-report.sh verification.log
 
   visualstudio-extension:
     # Windows only, and not out of convenience: the client is a Visual Studio

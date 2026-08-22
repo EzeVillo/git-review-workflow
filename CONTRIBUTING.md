@@ -207,7 +207,16 @@ cd jetbrains-plugin
 ./gradlew runPanelPreview   # Swing fixtures, no full IDE
 ./gradlew runIde            # sandbox IDEA host with the plugin loaded
 ./gradlew verifyPlugin      # pluginVerifier on the claimed multi-IDE set
+./gradlew verifyPlugin -PverifierIdes=idea                       # IDEA alone, what CI runs
+./gradlew verifyPluginProjectConfiguration verifyPluginStructure # descriptor and configuration
 ```
+
+All three run on every push and none of their *warnings* fail the build: a since-build below the
+target platform, a name the Marketplace will object to, a deprecated or internal API the plugin
+reached for. They exit zero and the finding scrolls past in the log, which is how a version gets
+published with one nobody read. CI tees the output and `./verification-report.sh <log>` turns it
+into GitHub annotations plus a job summary — run it the same way locally over a
+`./gradlew ... 2>&1 | tee verification.log`. Real problems still fail their own step.
 
 ### Shell: which wrapper?
 

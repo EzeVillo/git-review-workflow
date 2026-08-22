@@ -91,13 +91,32 @@ jobs:
         working-directory: jetbrains-plugin
         run: ./gradlew platformTest --no-daemon
 
-      # The same verifier the Marketplace runs on the uploaded zip. Running it
-      # here means a rejection surfaces before the version is public — once a
-      # version number is uploaded it cannot be reused, so a bad publish costs
-      # a version bump, not a re-run.
+      # The descriptor and project-configuration checks. They exit zero over
+      # their findings, so what makes them worth a step is the report below.
+      - name: Plugin configuration and structure
+        working-directory: jetbrains-plugin
+        run: |
+          set -o pipefail
+          ./gradlew verifyPluginProjectConfiguration verifyPluginStructure --no-daemon 2>&1 | tee verification.log
+
+      # The same verifier the Marketplace runs on the uploaded zip, against all
+      # eight products (CI verifies against IDEA alone; see build.gradle.kts).
+      # Running it here means a rejection surfaces before the version is public
+      # — once a version number is uploaded it cannot be reused, so a bad
+      # publish costs a version bump, not a re-run.
       - name: Plugin verifier
         working-directory: jetbrains-plugin
-        run: ./gradlew verifyPlugin --no-daemon
+        run: |
+          set -o pipefail
+          ./gradlew verifyPlugin --no-daemon 2>&1 | tee -a verification.log
+
+      # Warnings do not stop a release — they are warnings — but the run that
+      # publishes a version is the last place they can still be read before it
+      # is public, so they get annotated here too, exactly as in ci.yml.
+      - name: Report verification warnings
+        if: ${{ !cancelled() }}
+        working-directory: jetbrains-plugin
+        run: ./verification-report.sh verification.log
 
       # publishPlugin builds the zip itself (buildPlugin is a dependency), so
       # this single step produces the artifact and uploads it.

@@ -26,6 +26,13 @@ data class ReviewState(
      * against a CLI that does not know the record.
      */
     val guides: List<GuideRecord>? = null,
+    /**
+     * The author's walkthrough for the branch that is checked out (`walkthrough`
+     * record of `config --porcelain`), from the same report. Null when that
+     * report did not arrive, and against a CLI older than the record -- which is
+     * the same thing to the panel: no row, no block.
+     */
+    val walkthrough: WalkthroughRecord? = null,
     val subjects: Map<Int, String>? = null,
     val authors: Map<Int, String>? = null,
     val base: String? = null,

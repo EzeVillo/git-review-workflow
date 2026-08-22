@@ -3,6 +3,8 @@ import type {
     GuideKind,
     GuideRecord,
     GuideState,
+    WalkthroughRecord,
+    WalkthroughState,
 } from "../cli/configPorcelain";
 import {BranchRecord, EntryRecord, ReviewMode, sourceOf} from "../cli/porcelain";
 import type {PathRef} from "../cli/unquote";
@@ -119,6 +121,35 @@ export interface PanelDraft {
  * `label` y `badge` se derivan acá porque son copy del panel; `path` llega de la
  * CLI, y el cliente **lo abre, nunca lo arma**.
  */
+/**
+ * La fila del walkthrough del autor: en qué estado está, cuánto de él está
+ * escrito y qué se puede hacer con él sin salir del panel.
+ *
+ * Existe porque un walkthrough se escribe una vez, cuando el PR está terminado,
+ * y después el PR sigue moviéndose. La fila es la única superficie que lo dice
+ * sin que nadie se acuerde de preguntar, y por eso el badge es deliberadamente
+ * cauto: "may be out of date" y no "out of date". La respuesta exacta es de
+ * `build`, que es lo que corre el botón de al lado.
+ *
+ * `label`, `badge` y `actionLabel` son copy del panel y se derivan acá; `path`
+ * llega de la CLI, y el cliente **lo abre, nunca lo arma**.
+ */
+export interface PanelWalkthrough {
+    label: string;
+    /** Ruta absoluta reportada por la CLI. Existe en disco sólo si `state !== "absent"`. */
+    path: string;
+    state: WalkthroughState;
+    /** Texto del badge: el estado de la CLI, en prosa. */
+    badge: string;
+    /** Entradas completas, y todo lo que `build` exige (entradas más el heads-up). */
+    annotated: number;
+    total: number;
+    /** El archivo está ahí: se puede abrir, y hay algo que copiarle a un agente. */
+    exists: boolean;
+    /** Cómo se llama el control que invoca `walkthrough init`, que crea y actualiza. */
+    actionLabel: string;
+}
+
 export interface PanelGuide {
     kind: GuideKind;
     /** El nombre de la fila: la compartida y committeada, o la tuya fuera del árbol. */
@@ -180,6 +211,11 @@ export interface PanelModel {
      * decir, y crear la compartida ahí la CLI lo niega igual.
      */
     guides: PanelGuide[];
+    /**
+     * El walkthrough del autor, cuando la CLI reportó su fila. Ausente con una
+     * CLI anterior al registro, y entonces el bloque no se dibuja.
+     */
+    walkthrough?: PanelWalkthrough;
     /**
      * Cierre completo con undo vivo, sólo con `situation === "finish-pending"`
      * (contracts/finish-state.md): la fila `finish … pending` que hizo que el
@@ -482,6 +518,42 @@ function toPanelGuides(guides: readonly GuideRecord[], situation: Situation): Pa
     }));
 }
 
+/** El badge de cada estado del walkthrough: el valor de la CLI en prosa. */
+const WALKTHROUGH_BADGE: Record<WalkthroughState, string> = {
+    "in-sync": "up to date",
+    stale: "may be out of date",
+    unknown: "state unknown",
+    absent: "none",
+};
+
+/**
+ * Proyecta el registro `walkthrough`. Una sola fila, y sólo cuando la CLI la
+ * emitió: con una versión anterior no llega, y el bloque entero desaparece —
+ * misma degradación que las guías y los borradores.
+ *
+ * Todo lo que decide qué se puede apretar sale del estado que reportó la CLI.
+ * En particular `updatable`, que NO es `stale`: reconciliar un walkthrough con
+ * lo que el PR cambia hoy tiene sentido igual cuando el estado es `unknown` (el
+ * bloque de instrucciones se borró a mano y nadie puede decir si quedó atrás),
+ * y con `absent` el mismo verbo es lo que lo crea. Lo único que no se puede es
+ * copiar el puntero a un archivo que no existe.
+ */
+function toPanelWalkthrough(record: WalkthroughRecord): PanelWalkthrough {
+    return {
+        label: "Walkthrough",
+        path: record.path,
+        state: record.state,
+        badge: WALKTHROUGH_BADGE[record.state],
+        annotated: record.annotated,
+        total: record.total,
+        exists: record.state !== "absent",
+        // El verbo es el mismo (`walkthrough init`) y hace las dos cosas; lo que
+        // cambia es cómo se llama en el panel, porque "Create" sobre un archivo
+        // lleno de prosa es una promesa que la CLI no cumple -- y no debería.
+        actionLabel: record.state === "absent" ? "Create" : "Update",
+    };
+}
+
 /**
  * La fila `index` del bloque de guías, o `undefined`. Mismo papel que
  * `draftAt`: el índice que llega del webview se valida contra el estado del
@@ -542,6 +614,9 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
         // probable de querer escribir la tuya. El dato no cuesta una invocación
         // extra — `status --porcelain` emite los mismos registros que `config`.
         guides: state.guides !== undefined ? toPanelGuides(state.guides, state.situation) : [],
+        ...(state.walkthrough !== undefined
+            ? {walkthrough: toPanelWalkthrough(state.walkthrough)}
+            : {}),
         // Ausencia de dato (config nunca llegó) y "config llegó sin base" son
         // distintos, pero ambos se dibujan igual acá: nada que avisar. Sólo
         // "config llegó, y base está ausente" prende el aviso — y sólo en el

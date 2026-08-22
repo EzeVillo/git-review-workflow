@@ -15,6 +15,7 @@ import {
 } from "./commands/draftActions";
 import {discardInventoryReview, forgetReview} from "./commands/forgetReview";
 import {createGuide, discardGuide, openGuide} from "./commands/guideActions";
+import {copyWalkthroughPrompt, openWalkthrough} from "./commands/walkthroughRowActions";
 import {finishReview, resumeFinish, undoFinish} from "./commands/finishReview";
 import {saveReview} from "./commands/saveReview";
 import {
@@ -313,6 +314,17 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
             void discardGuide(extra, lock, stateManager, getInvokeOptions);
             return;
         }
+        // Fila del walkthrough del autor: ninguno de los dos muta nada, asi que
+        // ninguno toma el lock. Actualizarlo es walkthroughInit, que si es una
+        // accion y va por executeCommand como siempre.
+        if (message === "openWalkthrough") {
+            void openWalkthrough(stateManager);
+            return;
+        }
+        if (message === "copyWalkthroughPrompt") {
+            void copyWalkthroughPrompt(stateManager);
+            return;
+        }
         const commands: Record<
             Exclude<
                 PanelMessage,
@@ -325,6 +337,8 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
                 | "openGuide"
                 | "createGuide"
                 | "discardGuide"
+                | "openWalkthrough"
+                | "copyWalkthroughPrompt"
             >,
             string
         > = {

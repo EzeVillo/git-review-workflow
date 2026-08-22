@@ -40,13 +40,18 @@ teardown() {
 	rm -rf "$TMP"
 }
 
-# The built file with the instruction block taken out: exactly the bytes every
-# expectation below was written against before the block existed. The block is
-# emitted between the "# Walkthrough" heading and the preamble, and its two
-# endpoints are object SHAs, so it cannot be spelled out in an expected string
-# here; its own content is asserted in tests/walkthrough-prompt-block.bats.
-# The blank line that follows the closing marker goes with it, so what is left is
-# the heading, a blank line and the preamble -- the old shape exactly.
+# The built file with the instruction block and the entry anchors taken out:
+# exactly the bytes every expectation below was written against before either
+# existed. The block is emitted between the "# Walkthrough" heading and the
+# preamble, and its two endpoints are object SHAs, so it cannot be spelled out in
+# an expected string here; its own content is asserted in
+# tests/walkthrough-prompt-block.bats. The blank line that follows the closing
+# marker goes with it, so what is left is the heading, a blank line and the
+# preamble -- the old shape exactly.
+#
+# The "> at:" anchor under each entry is dropped for the same reason and only
+# that reason: it is a blob SHA. What it is and when it fires is asserted in
+# tests/walkthrough-update.bats, where the expectations can resolve the object.
 built_body() {
 	awk '
 		index($0, "<!-- git-review-range:") == 1 { skip = 1; next }
@@ -54,6 +59,7 @@ built_body() {
 			if (index($0, "-->")) { skip = 0; drop = 1 }
 			next
 		}
+		index($0, "> at: ") == 1 { next }
 		drop && $0 == "" { drop = 0; next }
 		{ drop = 0; print }
 	' "${1:-.review/walkthrough.md}"
@@ -117,14 +123,18 @@ EOF
 	[[ "$output" != *"missing from the walkthrough"* ]]
 }
 
-@test "init refuses to overwrite an existing walkthrough without --force" {
+@test "init over an existing walkthrough updates it and keeps every entry" {
+	# Refusing was the old behaviour and it left hand-editing as the only way to
+	# take a new file into an annotated PR. See tests/walkthrough-update.bats for
+	# the reconciliation itself; what matters here is that it does not refuse and
+	# does not overwrite.
 	git review walkthrough init
-	before="$(cat .review/walkthrough.md)"
 	run git review walkthrough init
-	[ "$status" -ne 0 ]
-	[[ "$output" == *"already exists"* ]]
-	# The existing file is untouched.
-	[ "$(cat .review/walkthrough.md)" = "$before" ]
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"updated .review/walkthrough.md"* ]]
+	[[ "$output" == *"3 kept, 0 added, 0 dropped"* ]]
+	run grep -c '^## ?\. ' .review/walkthrough.md
+	[ "$output" = "3" ]
 }
 
 @test "init --force overwrites an existing walkthrough" {

@@ -113,6 +113,38 @@ export interface GuideRecord {
     state: GuideState;
 }
 
+/**
+ * En qué estado está el walkthrough del autor respecto de la rama que tiene
+ * puesta. Los cuatro los decide la CLI y ninguno se infiere acá — en particular
+ * `unknown`, que NO es `stale`: sin el bloque de instrucciones (borrarlo a mano
+ * es legal) la pregunta no tiene respuesta, y contestar la peor de las dos
+ * mandaría a rehacer un orden de lectura que puede estar perfecto.
+ */
+export type WalkthroughState = "in-sync" | "stale" | "unknown" | "absent";
+
+/**
+ * El walkthrough committeado de la rama en la que estás parado, y si sigue
+ * describiendo lo que el PR cambia hoy.
+ *
+ * Existe porque un walkthrough se escribe cuando el PR está terminado y después
+ * el PR sigue moviéndose: vuelven los comentarios, cambian tres archivos, y el
+ * momento en que eso pasa es exactamente aquel en el que nadie está pensando en
+ * el walkthrough. `stale` es un "conviene mirar", nunca un veredicto — el
+ * veredicto es de `build`, que es lo que corre el control de la fila.
+ *
+ * `path` viene tal cual de la CLI, como el del borrador y el de las guías: **se
+ * abre, nunca se arma**.
+ */
+export interface WalkthroughRecord {
+    /** Ruta absoluta de `.review/walkthrough.md`, exista o no el archivo. */
+    path: string;
+    state: WalkthroughState;
+    /** Entradas con posición **y** why resueltos, más el heads-up. */
+    annotated: number;
+    /** Todo lo que `build` exige completar: una unidad por entrada más el heads-up. */
+    total: number;
+}
+
 export interface ConfigPorcelainResult {
     config: EffectiveConfig;
     /** En el orden de `git for-each-ref` (lexicográfico); duplicados (misma rama, dos orígenes) esperados, nunca fusionados. */
@@ -150,6 +182,13 @@ export interface ConfigPorcelainResult {
      * es la misma degradación que `drafts`.
      */
     guides: GuideRecord[];
+    /**
+     * El walkthrough del autor para la rama que está puesta. Presente o ausente,
+     * la CLI emite la fila igual —misma regla que las guías, y por el mismo
+     * motivo—, así que `undefined` acá significa una sola cosa: una CLI anterior
+     * al registro. El panel dibuja el bloque sólo cuando hay fila.
+     */
+    walkthrough?: WalkthroughRecord;
 }
 
 function parseGuideKind(raw: string | undefined): GuideKind | undefined {
@@ -178,6 +217,44 @@ export function parseGuideRecord(fields: readonly (string | undefined)[]): Guide
         return undefined;
     }
     return {kind, path, state};
+}
+
+function parseWalkthroughState(raw: string | undefined): WalkthroughState | undefined {
+    return raw === "in-sync" || raw === "stale" || raw === "unknown" || raw === "absent"
+        ? raw
+        : undefined;
+}
+
+/**
+ * Un registro `walkthrough` desde sus campos, o `undefined` si está malformado.
+ *
+ * El par annotated/total cae a 0/0 cuando no es un número, en vez de tirar la
+ * fila entera: el estado es lo que decide qué ofrece el bloque, y perderlo por
+ * un contador ilegible dejaría al autor sin la única superficie que le dice que
+ * su orden de lectura quedó atrás. Un estado que no se reconoce sí tira la fila
+ * — dibujar un badge inventado es peor que no dibujar el bloque.
+ */
+function parseWalkthroughRecord(
+    fields: readonly (string | undefined)[],
+): WalkthroughRecord | undefined {
+    const state = parseWalkthroughState(fields[1]);
+    const path = fields[2];
+    if (state === undefined || path === undefined || path.length === 0) {
+        return undefined;
+    }
+    return {
+        path,
+        state,
+        annotated: toCount(fields[3]),
+        total: toCount(fields[4]),
+    };
+}
+
+function toCount(field: string | undefined): number {
+    if (field === undefined || !/^\d+$/.test(field)) {
+        return 0;
+    }
+    return Number(field);
 }
 
 function toBool(field: string | undefined): boolean {
@@ -243,6 +320,7 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
     const offers: ReadingOffer[] = [];
     const drafts: DraftRecord[] = [];
     const guides: GuideRecord[] = [];
+    let walkthrough: WalkthroughRecord | undefined;
 
     for (const line of stdout.split(/\r?\n/)) {
         if (line.length === 0) {
@@ -327,6 +405,16 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
                 }
                 break;
             }
+            case "walkthrough": {
+                // Una sola fila por invocación. Si llegaran dos, gana la primera:
+                // la segunda sería una CLI contradiciéndose, y elegir la última
+                // haría depender el panel del orden de emisión.
+                const record = parseWalkthroughRecord(fields);
+                if (record !== undefined && walkthrough === undefined) {
+                    walkthrough = record;
+                }
+                break;
+            }
             case "offer": {
                 const id = parseOfferId(fields[1]);
                 const rank = parseOfferRank(fields[2]);
@@ -346,6 +434,9 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
         config.base = base;
     }
     const result: ConfigPorcelainResult = {config, candidates, remotes, drafts, guides};
+    if (walkthrough !== undefined) {
+        result.walkthrough = walkthrough;
+    }
     if (deltas.length > 0) {
         result.deltas = deltas;
     }

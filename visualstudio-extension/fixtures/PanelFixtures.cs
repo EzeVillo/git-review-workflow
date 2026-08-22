@@ -22,6 +22,8 @@ public static class PanelFixtures
         ("no-review drafts", NoReviewDrafts()),
         ("no-review guides", NoReviewGuides()),
         ("no-review guide empty", NoReviewGuideEmpty()),
+        ("no-review walkthrough stale", NoReviewWalkthroughStale()),
+        ("no-review walkthrough absent", NoReviewWalkthroughAbsent()),
         ("no-review empty", NoReviewEmpty()),
         ("finish-pending", FinishPending()),
         ("out-of-range", OutOfRange()),
@@ -117,6 +119,44 @@ public static class PanelFixtures
                 Situation.NoReview,
                 Config: new EffectiveConfig("main", "origin"),
                 Guides: ConfigPorcelain.ParseConfigPorcelain(cfg).Guides),
+            new PanelInputs(false));
+    }
+
+    /// <summary>
+    /// The author's own walkthrough, stale and half-written: the PR was finished,
+    /// annotated, and then touched again, which is the situation the row exists for.
+    /// Two files entered the range and nobody has numbered them yet.
+    /// </summary>
+    public static PanelModel NoReviewWalkthroughStale()
+    {
+        var cfg =
+            "walkthrough\tstale\t/repo/.review/walkthrough.md\t4\t6\n" +
+            "guide\tteam\t/repo/.review/walkthrough-guide.md\tabsent\n" +
+            "guide\town\t/repo/.git/review-walkthrough-guide.md\tabsent\n";
+        var parsed = ConfigPorcelain.ParseConfigPorcelain(cfg);
+        return PanelModelBuilder.BuildPanelModel(
+            new ReviewState(
+                Situation.NoReview,
+                Config: new EffectiveConfig("main", "origin"),
+                Guides: parsed.Guides,
+                Walkthrough: parsed.Walkthrough),
+            new PanelInputs(false));
+    }
+
+    /// <summary>No walkthrough at all: the row offers creating one, and nothing else.</summary>
+    public static PanelModel NoReviewWalkthroughAbsent()
+    {
+        var cfg =
+            "walkthrough\tabsent\t/repo/.review/walkthrough.md\t0\t0\n" +
+            "guide\tteam\t/repo/.review/walkthrough-guide.md\tabsent\n" +
+            "guide\town\t/repo/.git/review-walkthrough-guide.md\tabsent\n";
+        var parsed = ConfigPorcelain.ParseConfigPorcelain(cfg);
+        return PanelModelBuilder.BuildPanelModel(
+            new ReviewState(
+                Situation.NoReview,
+                Config: new EffectiveConfig("main", "origin"),
+                Guides: parsed.Guides,
+                Walkthrough: parsed.Walkthrough),
             new PanelInputs(false));
     }
 

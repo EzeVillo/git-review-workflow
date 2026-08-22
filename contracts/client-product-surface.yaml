@@ -236,6 +236,7 @@ panel_layout:
         title: "Walkthrough"
         blocks:
           - {block: row, controls: [{id: walkthroughInit, label: "Walkthrough: Init", emphasis: secondary, confirms: true}, {id: walkthroughBuild, label: "Walkthrough: Build", emphasis: secondary, confirms: true}]}
+          - {block: walkthrough_row, when: has_walkthrough}
           - {block: guide_rows}
       - block: tools_section
         title: "Settings"
@@ -401,6 +402,60 @@ guide_rows:
   # que produce un save en IntelliJ, OnAfterSave de la running document table en
   # Visual Studio. Sin eso hay un momento en que el panel miente -- apretas
   # Create, escribis las convenciones, Ctrl+S, y el badge sigue diciendo `empty`.
+  watched: on_save
+
+# La fila del walkthrough del autor, dentro de la misma tools_section
+# "Walkthrough" y por encima de las dos guias. Sus controles son del CUERPO,
+# como los de guide_rows y draft_controls, asi que el conteo fijo de 27 en
+# actions: NO se toca -- ni contributes.commands, ni el menu Tools -> git review
+# de JetBrains, ni el .vsct de Visual Studio.
+#
+# UNA sola fila, y solo cuando la CLI emitio el registro `walkthrough` de
+# config --porcelain: con una version anterior no llega y el bloque no se
+# dibuja, la misma degradacion que tienen las guias y los borradores.
+#
+# Existe porque un walkthrough se escribe una vez, cuando el PR esta terminado,
+# y despues el PR sigue moviendose -- vuelven los comentarios del review y
+# cambian tres archivos. El verbo que lo diria es build, y correrlo hay que
+# acordarselo justo en el momento en que nadie esta pensando en el walkthrough.
+walkthrough_row:
+  label: "Walkthrough"
+  # Los badges, en prosa, uno por estado de la CLI. "may be out of date" y no
+  # "out of date" a proposito: lo que la CLI compara en cada refresco es barato
+  # y aproximado (si el rango se movio desde que el archivo se escribio), y la
+  # respuesta exacta es de build. Un badge que afirma de mas sobre un archivo
+  # que puede estar perfecto es peor que uno que sugiere mirar. Y `unknown` no
+  # se pliega en `stale`: sin bloque de instrucciones la pregunta no tiene
+  # respuesta, y contestar la peor de las dos manda a rehacer un orden que puede
+  # estar bien.
+  badges:
+    in-sync: "up to date"
+    stale: "may be out of date"
+    unknown: "state unknown"
+    absent: "none"
+  # La etiqueta del boton walkthroughInit sigue al estado, porque el MISMO verbo
+  # crea y actualiza: "Init" sobre un archivo lleno de prosa prometia lo que ese
+  # verbo justamente ya no hace. Es la unica accion del producto cuya etiqueta
+  # depende del estado; el precedente es discardInventory en inventory_controls.
+  action_labels:
+    absent: "Walkthrough: Init"
+    present: "Walkthrough: Update"
+  controls:
+    # Abrir es mostrar: el cliente no interpreta un byte del archivo, y abre LA
+    # RUTA QUE REPORTO LA CLI, nunca una derivada del layout del repositorio.
+    openWalkthrough: {label: null, accessible_name: "Open the walkthrough", emphasis: icon, icon: file, confirms: false, disabled_when: absent}
+    # Copia un PUNTERO al archivo, nunca la consigna: esa vive adentro del
+    # propio walkthrough, en el comentario de arriba de todo, que es donde se
+    # mantiene sola. Mismo reparto que copyDraftPrompt.
+    copyWalkthroughPrompt: {label: "Copy for agent", emphasis: secondary, confirms: false, disabled_when: absent}
+  # El par annotated/total se dibuja solo con el archivo presente y total > 0,
+  # por el mismo motivo que en draft_controls: 0/0 es "no hay nada aca", no
+  # "esta completo".
+  progress: when_present
+  # El watcher NO mira este archivo. Vive en el work tree, asi que toda
+  # operacion de git lo mueve, y el cliente que corre init/build refresca solo
+  # -- como ya hace con las guias. Lo que si escucha cada cliente es el GUARDADO
+  # del documento, sobre la ruta que la CLI reporto.
   watched: on_save
 
 # Inventory control labels (variants) and body-only controls not in actions:

@@ -55,6 +55,11 @@ public enum ControlId
     OpenGuide,
     CreateGuide,
     DiscardGuide,
+    // The author's walkthrough row: two BODY controls, same rule as the four
+    // above — without the row that draws them they have no subject, so the fixed
+    // count of 27 does not move.
+    OpenWalkthrough,
+    CopyWalkthroughPrompt,
     CleanReview,
     CompareReview,
     WalkthroughInit,
@@ -91,6 +96,8 @@ public static class ControlIdExt
         ControlId.StartFromDraft => "startFromDraft",
         ControlId.DiscardDraft => "discardDraft",
         ControlId.OpenGuide => "openGuide",
+        ControlId.OpenWalkthrough => "openWalkthrough",
+        ControlId.CopyWalkthroughPrompt => "copyWalkthroughPrompt",
         ControlId.CreateGuide => "createGuide",
         ControlId.DiscardGuide => "discardGuide",
         ControlId.CleanReview => "cleanReview",
@@ -315,6 +322,14 @@ public abstract record Block
 
     public sealed record GuideRows(IReadOnlyList<GuideRow> Rows) : Block;
 
+    /// <summary>
+    /// The author's own walkthrough, one row, above the guides in the same
+    /// section. Drawn only when the CLI reported the record — against an older
+    /// version it does not arrive and the block disappears, the same degradation
+    /// the guides and the drafts have.
+    /// </summary>
+    public sealed record WalkthroughRow(GuideRow Entry) : Block;
+
     public sealed record ToolsSection : Block
     {
         public string Title { get; init; }
@@ -402,6 +417,7 @@ public sealed class PanelLayout
                 case Block.GuideRows gr:
                     foreach (var row in gr.Rows) outList.AddRange(row.Controls);
                     break;
+                case Block.WalkthroughRow wr: outList.AddRange(wr.Entry.Controls); break;
                 case Block.ToolsSection ts: Walk(ts.NestedBlocks, outList); break;
             }
         }
@@ -413,6 +429,7 @@ public sealed class PanelLayout
             Block.InventoryRows ir => ir.Rows.Any(r => r.Controls.Any(x => ReferenceEquals(x, c) || x == c)),
             Block.DraftRows dr => dr.Rows.Any(r => r.Controls.Any(x => ReferenceEquals(x, c) || x == c)),
             Block.GuideRows gr => gr.Rows.Any(r => r.Controls.Any(x => ReferenceEquals(x, c) || x == c)),
+            Block.WalkthroughRow wr => wr.Entry.Controls.Any(x => ReferenceEquals(x, c) || x == c),
             Block.ToolsSection ts => HostedByInventory(ts.NestedBlocks, c),
             _ => false,
         });
@@ -902,6 +919,42 @@ public static class PanelLayoutBuilder
         return new Block.GuideRows(rows);
     }
 
+    /// <summary>
+    /// The author's walkthrough row, above the guides in the same section.
+    ///
+    /// Same two-place shape as the guide rows: the labelled control underneath,
+    /// the icon one in the header beside the badge. The badge says "may be out of
+    /// date" and not "out of date" on purpose — what the CLI compares on every
+    /// refresh is cheap and approximate (has the range moved since the file was
+    /// written), and the exact answer is build's, which is what the section's
+    /// button runs.
+    ///
+    /// Copy for agent copies a POINTER to the file, never the brief: that lives
+    /// inside the walkthrough itself, in the comment at the top, which is where
+    /// it keeps itself current.
+    /// </summary>
+    private static Block.WalkthroughRow WalkthroughRowBlock(PanelWalkthrough w)
+    {
+        var controls = new List<Control>
+        {
+            Ctrl(
+                ControlId.CopyWalkthroughPrompt, "Copy for agent", Emphasis.Secondary,
+                enabled: w.Exists,
+                tooltip: w.Exists
+                    ? "Copy a pointer to the file; the instructions are inside it"
+                    : "Create the walkthrough first, then hand it to an agent",
+                index: 0),
+            Ctrl(
+                ControlId.OpenWalkthrough, null, Emphasis.Icon,
+                enabled: w.Exists,
+                accessibleName: "Open the walkthrough",
+                tooltip: w.Exists ? w.Path : "There is no walkthrough to open yet",
+                index: 0),
+        };
+        var progress = w.Exists && w.Total > 0 ? $"  {w.Annotated}/{w.Total}" : "";
+        return new Block.WalkthroughRow(new GuideRow(w.Label + progress, w.Badge, controls));
+    }
+
     private static List<Block> NoReviewReadyBlocks(PanelModel model)
     {
         var enabled = !model.Busy;
@@ -938,10 +991,23 @@ public static class PanelLayoutBuilder
         {
             new Block.Row(new[]
             {
-                Ctrl(ControlId.WalkthroughInit, "Walkthrough: Init", Emphasis.Secondary, enabled),
+                // The same verb creates and updates, so the label follows the
+                // state the CLI reported: "Init" over a file full of prose
+                // promised what that verb precisely no longer does.
+                Ctrl(
+                    ControlId.WalkthroughInit,
+                    model.Walkthrough?.ActionLabel == "Update"
+                        ? "Walkthrough: Update"
+                        : "Walkthrough: Init",
+                    Emphasis.Secondary,
+                    enabled),
                 Ctrl(ControlId.WalkthroughBuild, "Walkthrough: Build", Emphasis.Secondary, enabled),
             }),
         };
+        if (model.Walkthrough is not null)
+        {
+            walkthroughKids.Add(WalkthroughRowBlock(model.Walkthrough));
+        }
         if (model.GuidesList.Count > 0)
         {
             walkthroughKids.Add(GuideRowsBlock(model));

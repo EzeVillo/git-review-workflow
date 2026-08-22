@@ -100,6 +100,7 @@ function drafts(draftRows: string[][], inventoryRows: string[][] = []): PanelMod
         remotes: parsed.remotes,
         drafts: parsed.drafts,
         guides: parsed.guides,
+        ...(parsed.walkthrough !== undefined ? {walkthrough: parsed.walkthrough} : {}),
     };
     return buildPanelModel(state, {busy: false});
 }
@@ -463,6 +464,33 @@ export const PREVIEW_PANES: PreviewPane[] = [
             ["config", "remote", "origin"],
             ["guide", "team", "/repo/.review/walkthrough-guide.md", "absent"],
             ["guide", "own", "/repo/.git/review-walkthrough-guide.md", "empty"],
+        ]),
+    },
+    {
+        // La fila del walkthrough del autor, en el estado para el que existe: el
+        // PR estaba terminado y anotado, se le siguió agregando, y dos archivos
+        // nuevos todavía no tienen número. El badge sugiere mirar, no dictamina.
+        name: "no-review-walkthrough-stale",
+        caption: "no-review — el walkthrough puede haber quedado atrás (4/6)",
+        model: drafts([
+            ["config", "base", "develop"],
+            ["config", "remote", "origin"],
+            ["walkthrough", "stale", "/repo/.review/walkthrough.md", "4", "6"],
+            ["guide", "team", "/repo/.review/walkthrough-guide.md", "absent"],
+            ["guide", "own", "/repo/.git/review-walkthrough-guide.md", "absent"],
+        ]),
+    },
+    {
+        // Sin walkthrough: los dos controles de la fila apagados, y el botón de
+        // la sección diciendo Init en vez de Update.
+        name: "no-review-walkthrough-absent",
+        caption: "no-review — la rama no tiene walkthrough todavía",
+        model: drafts([
+            ["config", "base", "develop"],
+            ["config", "remote", "origin"],
+            ["walkthrough", "absent", "/repo/.review/walkthrough.md", "0", "0"],
+            ["guide", "team", "/repo/.review/walkthrough-guide.md", "absent"],
+            ["guide", "own", "/repo/.git/review-walkthrough-guide.md", "absent"],
         ]),
     },
     {

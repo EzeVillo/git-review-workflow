@@ -311,7 +311,7 @@ lista, o `git review <verbo> -h` para el detalle de un verbo.
 | `git review [-h \| --version]`                                                                                                             | Lista todos los verbos o imprime la versión instalada.                                                                                                                                                                                                                                                                                                                                 |
 | `git review start [<rama>] [<base> \| --base <base> \| --delta \| --from <commit>] [--step \| --no-walk \| --keys] [--local \| --offline]` | Hace fetch de `origin` y deja el diff del PR staged en una nueva rama `review/<rama>` (omití `<rama>` para revisar la rama actual; entra en modo walk si el PR trae un walkthrough; `--keys` restringe el walk a las entradas marcadas `> key`; `--local` revisa tu rama local pero sigue comparando contra la base de origin; `--offline` además salta el fetch y usa tu base local). |
 | `git review compare <a> <b> [--step \| --no-walk \| --keys]`                                                                               | Deja staged el diff entre dos commit-ish (tags, commits, ramas) en modo lectura, para leerlo o recorrerlo. `git review finish` se niega — no hay a dónde escribir.                                                                                                                                                                                                                     |
-| `git review walkthrough (init [--base <base>] [--force] \| build [--check])`                                                               | Escribe un walkthrough de lectura para el PR de la rama actual — un orden guiado de los archivos cambiados con una nota en cada uno, committeado como `.review/walkthrough.md`.                                                                                                                                                                                                        |
+| `git review walkthrough (init [--base <base>] [--force] [--stdout] \| build [--check] [--from <archivo> \| --from -])`                        | Escribe un walkthrough de lectura para el PR de la rama actual — un orden guiado de los archivos cambiados con una nota en cada uno, committeado como `.review/walkthrough.md`. Corré `init` de nuevo cuando el PR siga cambiando y **actualiza** lo que hay: las entradas cuyo archivo sigue en rango conservan su número, su porqué y su `> key`, los archivos que entraron al rango llegan como placeholders, y las entradas cuyo archivo salió se descartan y se nombran (`--force` descarta todo y escribe un esqueleto en blanco). `build` estampa un ancla `> at:` bajo cada entrada, con lo que un `build` posterior puede nombrar los porqués escritos contra una versión del archivo que ya no existe — una nota, nunca un fallo. `--stdout` imprime el esqueleto en vez de escribirlo y `--from` instala uno completado desde un archivo o la entrada estándar, para que un agente escriba el orden de lectura sin tocar tu working tree. |
 | `git review walkthrough draft [--local \| --offline] [--delta] [--force] [--stdout] [--] [<rama>]`<br>`git review walkthrough draft --build [--from <archivo> \| --from -] [--local \| --offline] [--delta] [--force] [--] [<rama>]`                                               | Escribí tu propio orden de lectura para el PR de otra persona, fuera del working tree — no se stagea, commitea ni deshace nada. `git review start` lo lee en lugar del walkthrough del PR. `--build` lo valida y renumera. `--stdout` imprime el esqueleto en vez de escribirlo (no crea nada en ninguna parte) y `--build --from` instala uno ya completado desde un archivo o la entrada estándar, para que un agente pueda escribir el orden de lectura sin tocar tu gitdir.                                                                                                                                                             |
 | `git review walkthrough guide [--team] [--delete]`                                                            | Creá o borrá una guía de autoría: prosa sobre el **contenido** — qué entradas merecen `> key`, cómo escribir un porqué, qué va en el heads-up. Sin flags crea **la tuya** (`<git-common-dir>/review-walkthrough-guide.md`), fuera del working tree, así que nunca se stagea, commitea ni la extrae `finish`. `--team` crea la compartida del repositorio (`.review/walkthrough-guide.md`, committeada con el código) y se niega adentro de una review. `--delete` borra la tuya; la compartida es un archivo trackeado, así que eso es `git rm` más un commit. Las dos se crean **vacías** — el comando imprime qué escribir, para que nada que quede en el archivo se confunda con las convenciones. |
 | `git review next` / `git review prev`                                                                                                      | Mueve una review `--step` o walkthrough a la entrada siguiente / anterior.                                                                                                                                                                                                                                                                                                             |
@@ -478,8 +478,16 @@ git review walkthrough build    # valida, ordena por tus números y renumera 1..
 - `init` escribe un esqueleto determinístico con **todos los archivos** cambiados
   vs la base (el mismo rango que verá un reviewer), cada uno como `## ?. <path>`
   más un placeholder `<!-- why: -->`, encabezado por una sección `## Heads-up` con
-  su propio placeholder. Se niega a pisar un walkthrough existente sin `--force`.
-  `--base <base>` sobreescribe `reviewworkflow.base`.
+  su propio placeholder. `--base <base>` sobreescribe `reviewworkflow.base`.
+- **Corré `init` de nuevo cada vez que el PR se mueva.** Un walkthrough se escribe
+  cuando el PR está terminado, y después el PR sigue cambiando — vuelven los
+  comentarios del review y cambian tres archivos más. `init` sobre un walkthrough
+  existente lo **actualiza**: cada entrada cuyo archivo sigue en rango conserva su
+  número, su porqué y su `> key`, los archivos que entraron al rango llegan como
+  placeholders `## ?.` para completar, y las entradas cuyo archivo salió se
+  descartan y se nombran por stderr (están en git; `git checkout --
+  .review/walkthrough.md` las trae de vuelta). `--force` es la otra dirección:
+  descartar todo y escribir un esqueleto en blanco.
 - Vos (el autor) hacés solo la parte no mecánica: reemplazás cada `?` por un
   número de orden y cada placeholder por una nota corta.
 - **`## Heads-up`** es lo único que un reviewer lee antes de abrir un archivo: los
@@ -495,6 +503,15 @@ git review walkthrough build    # valida, ordena por tus números y renumera 1..
   `git review start --keys` para recorrer solo esas entradas. El marcador solo
   sirve mientras sea selectivo, así que `build` avisa si están todas marcadas (o
   si un walkthrough largo no marca ninguna).
+- **`> at:`** lo escribe `build`, no vos: un ancla que registra contra qué versión
+  de cada archivo se escribió su porqué. En el `build` siguiente (o
+  `build --check`), toda entrada cuyo archivo cambió desde entonces se nombra —
+  los porqués que conviene releer. La deriva compara el *conjunto* de paths, así
+  que sin esto un PR que sigue cambiando los archivos que ya anota pasa en verde
+  con prosa que describe la primera versión de cada uno. Es una **nota, nunca un
+  fallo**: tocar un archivo sin reescribir su porqué suele estar bien, y una
+  verificación que se pone roja por eso es de las que la gente termina apagando.
+  El reviewer nunca ve el marcador.
 - **Guías de autoría (opcionales):** convenciones solo de **contenido** — qué
   marcar `> key`, cómo escribir los porqués y el Heads-up, costumbres locales.
   **No** cambian el formato del walkthrough y `build` no las valida: la CLI las
@@ -629,6 +646,23 @@ git review walkthrough draft --build --from - feature/checkout < order.md
   habías escrito. Las combinaciones que no pueden significar nada (`--stdout` con
   `--build` o `--force`, `--from` sin `--build`, `--from` dos veces) se rechazan
   de entrada, antes de tocar nada.
+
+El autor tiene el mismo circuito de su lado, y existe por el mismo motivo: la
+consigna del propio esqueleto dice que quien completa un walkthrough suele ser un
+agente.
+
+```sh
+git review walkthrough init --stdout > order.md   # no crea nada
+# ...un agente completa order.md...
+git review walkthrough build --from order.md      # o --from - para leer stdin
+```
+
+`init --stdout` imprime el esqueleto —la actualización, si ya hay un walkthrough—
+y no toca nada; `build --from` lo valida con las mismas reglas que cualquier otro
+build y lo instala. A diferencia del lado del borrador no toma `--force`: `build`
+ya reescribe `.review/walkthrough.md` en cada corrida ordinaria, así que pedir
+consentimiento acá volvería el flag un reflejo, y el sidecar es un archivo
+trackeado — `git checkout --` es la vuelta atrás.
 
 **git review nunca escribe el walkthrough por vos y nunca habla con ningún
 servicio.** Te da el esqueleto con la consigna ya escrita adentro, y valida lo

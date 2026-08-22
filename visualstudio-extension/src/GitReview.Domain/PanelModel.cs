@@ -97,6 +97,33 @@ public sealed record PanelGuide(
     bool Creatable,
     bool Discardable);
 
+/// <summary>
+/// The author's own walkthrough row: what state it is in, how much of it is
+/// written, and what can be done with it without leaving the panel.
+///
+/// It exists because a walkthrough is written once, when the PR is finished, and
+/// then the PR keeps moving. The row is the only surface that says so without
+/// anybody remembering to ask, which is why the badge is deliberately cautious:
+/// "may be out of date" and not "out of date". The exact answer is build's,
+/// which is what the button beside it runs.
+///
+/// Label, Badge and ActionLabel are panel copy and are derived here; Path comes
+/// from the CLI, and the client opens it, never rebuilds it.
+/// </summary>
+public sealed record PanelWalkthrough(
+    string Label,
+    string Path,
+    WalkthroughState State,
+    string Badge,
+    int Annotated,
+    int Total,
+    bool Exists,
+    /// <summary>
+    /// What the control that invokes `walkthrough init` is called — the same verb
+    /// creates AND updates, so the only thing that changes is its name.
+    /// </summary>
+    string ActionLabel);
+
 public sealed record PanelModel(
     Situation Situation,
     bool Busy,
@@ -115,6 +142,11 @@ public sealed record PanelModel(
     /// is refused by the CLI anyway.
     /// </summary>
     IReadOnlyList<PanelGuide>? Guides = null,
+    /// <summary>
+    /// The author's walkthrough, when the CLI reported its row. Null against a
+    /// CLI older than the record, and then the block is not drawn.
+    /// </summary>
+    PanelWalkthrough? Walkthrough = null,
     PendingFinish? PendingFinish = null,
     bool NoBaseConfigured = false,
     string? ConfiguredBase = null,
@@ -278,6 +310,36 @@ public static class PanelModelBuilder
         return out_;
     }
 
+    private static string WalkthroughBadge(WalkthroughState state) => state switch
+    {
+        WalkthroughState.InSync => "up to date",
+        WalkthroughState.Stale => "may be out of date",
+        WalkthroughState.Unknown => "state unknown",
+        _ => "none",
+    };
+
+    /// <summary>
+    /// Projects the `walkthrough` record. One row, and only when the CLI emitted
+    /// it: against an older version it does not arrive and the whole block
+    /// disappears — the same degradation the guides and the drafts have.
+    ///
+    /// Everything that decides what can be pressed comes from the state the CLI
+    /// reported. In particular the action label, which is NOT keyed on staleness:
+    /// the same verb creates and updates, so the only thing that changes is what
+    /// it is called, and "Create" over a file full of prose is a promise the CLI
+    /// does not keep — nor should it.
+    /// </summary>
+    public static PanelWalkthrough ToPanelWalkthrough(WalkthroughRecord record) =>
+        new(
+            Label: "Walkthrough",
+            Path: record.Path,
+            State: record.State,
+            Badge: WalkthroughBadge(record.State),
+            Annotated: record.Annotated,
+            Total: record.Total,
+            Exists: record.State != WalkthroughState.Absent,
+            ActionLabel: record.State == WalkthroughState.Absent ? "Create" : "Update");
+
     /// <summary>
     /// The guide row at index, resolved against the HOST's state. Same role as
     /// DraftAt: what ends up in the CLI does not come from the panel.
@@ -327,6 +389,7 @@ public static class PanelModelBuilder
             // write yours. It costs no extra invocation — status --porcelain emits the
             // same records config does.
             Guides: ToPanelGuides(state.GuidesList, state.Situation),
+            Walkthrough: state.Walkthrough is null ? null : ToPanelWalkthrough(state.Walkthrough),
             NoBaseConfigured: state.Situation == Situation.NoReview
                 && state.Config is not null
                 && state.Config.Base is null,

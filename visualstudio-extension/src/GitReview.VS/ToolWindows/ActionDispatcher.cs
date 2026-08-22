@@ -194,6 +194,25 @@ public sealed class ActionDispatcher
                 await DiscardGuideAsync(index).ConfigureAwait(true);
                 return;
 
+            // The author's walkthrough row. Neither control mutates anything, so
+            // neither takes the lock; updating it is walkthroughInit, which is a
+            // product action and goes the way it always did.
+            case "openWalkthrough":
+            {
+                var w = State.Walkthrough;
+                if (w is null || w.State == WalkthroughState.Absent || _host.OpenPath is null) return;
+                await _host.OpenPath(w.Path).ConfigureAwait(true);
+                return;
+            }
+
+            case "copyWalkthroughPrompt":
+            {
+                var w = State.Walkthrough;
+                if (w is null || w.State == WalkthroughState.Absent) return;
+                System.Windows.Clipboard.SetText(UserCopy.WalkthroughAgentPrompt(w.Path));
+                return;
+            }
+
             case "cleanReview":
                 await CleanAsync().ConfigureAwait(true);
                 return;

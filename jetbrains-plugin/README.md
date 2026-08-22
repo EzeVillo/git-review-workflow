@@ -92,7 +92,7 @@ The full action set lives under **Tools → git review**.
 |-----------|------------|-----------|
 | `cli-missing` / `cli-outdated` | Install/update command, **Copy**, **Other install options** | Refresh |
 | `no-review` (no base) | **Set the base branch**, Change remote | Refresh |
-| `no-review` (ready) | Inventory (Continue / Discard), **Start a review**, collapsible Other actions / Walkthrough (Init, Build, the two authoring guides) / Settings / Support | Refresh |
+| `no-review` (ready) | Inventory (Continue / Discard), **Start a review**, collapsible Other actions / Walkthrough (Init or Update, Build, the row for the walkthrough you wrote, the two authoring guides) / Settings / Support | Refresh |
 | `finish-pending` | Banner: **Clean** \| **Undo finish** | Refresh |
 | `review` walk | Identity bar, notes, entry, why, open in editor, File \| Diff, ◀ \| ▶, folded Walkthrough (the two authoring guides) | Refresh, Finish, Save, Cancel, Preview edits |
 | `review` step | Same without why; Diff only | same |

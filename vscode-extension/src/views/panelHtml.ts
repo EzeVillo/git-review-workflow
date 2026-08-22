@@ -893,6 +893,53 @@ export function panelHtml(nonce: string): string {
   }
 
   /**
+   * La fila del walkthrough del autor: en que estado esta, cuanto lleva escrito
+   * y los dos controles que actuan sobre el archivo.
+   *
+   * El badge dice "may be out of date" y no "out of date" a proposito: lo que
+   * la CLI compara en cada refresco es barato y aproximado -- si el rango se
+   * movio desde que el archivo se escribio --, y la respuesta exacta es de
+   * build, que es lo que corre el boton de la seccion. Un badge que afirma de
+   * mas sobre un archivo que puede estar perfecto es peor que uno que sugiere
+   * mirar.
+   *
+   * Copy for agent copia un PUNTERO al archivo, nunca la consigna: esa vive
+   * adentro del propio walkthrough, en el comentario de arriba de todo, que es
+   * donde se mantiene sola. Dos copias de la consigna se irian una de otra y la
+   * que se pondria vieja seria justo la que el agente lee.
+   */
+  function renderWalkthroughRow(model, walkthrough) {
+    const box = el("div", "rev guide");
+
+    const head = el("div", "rev-head");
+    head.appendChild(el("span", "rev-name", walkthrough.label));
+    head.appendChild(el("span", "badge", walkthrough.badge));
+    if (walkthrough.exists && walkthrough.total > 0) {
+      head.appendChild(el("span", "muted", walkthrough.annotated + "/" + walkthrough.total));
+    }
+
+    const rowIcons = el("div", "rev-head-actions");
+    const open = iconButton("file", "openWalkthrough", "Open the walkthrough", 0);
+    open.disabled = !walkthrough.exists;
+    open.title = walkthrough.exists
+      ? walkthrough.path
+      : "There is no walkthrough to open yet";
+    rowIcons.appendChild(open);
+    head.appendChild(rowIcons);
+    box.appendChild(head);
+
+    const actions = el("div", "draft-actions");
+    const copy = button("Copy for agent", "copyWalkthroughPrompt", null, null, 0);
+    copy.disabled = !walkthrough.exists;
+    copy.title = walkthrough.exists
+      ? "Copy a pointer to the file; the instructions are inside it"
+      : "Create the walkthrough first, then hand it to an agent";
+    actions.appendChild(copy);
+    box.appendChild(actions);
+    return box;
+  }
+
+  /**
    * El bloque de las dos guias, dentro de la seccion Walkthrough. No lleva
    * encabezado propio: son dos filas debajo de Init/Build y el nombre de cada
    * una ya dice cual es.
@@ -962,13 +1009,25 @@ export function panelHtml(nonce: string): string {
    */
   function renderWalkthroughSection(model, guides) {
     const walk = el("div", "row");
-    const init = button("Walkthrough: Init", "walkthroughInit");
+    // El mismo verbo crea y actualiza, asi que la etiqueta sigue al estado que
+    // reporto la CLI. "Init" sobre un archivo lleno de prosa prometia lo que
+    // ese verbo justamente ya no hace.
+    // Las dos literales enteras y no una concatenacion: la copy compartida se
+    // verifica contra el canonico buscando la cadena, y un texto armado en
+    // pedazos es justo el que ese check no puede ver.
+    const initLabel = model.walkthrough && model.walkthrough.actionLabel === "Update"
+      ? "Walkthrough: Update"
+      : "Walkthrough: Init";
+    const init = button(initLabel, "walkthroughInit");
     const build = button("Walkthrough: Build", "walkthroughBuild");
     init.disabled = model.busy;
     build.disabled = model.busy;
     walk.appendChild(init);
     walk.appendChild(build);
     const children = [walk];
+    if (model.walkthrough) {
+      children.push(renderWalkthroughRow(model, model.walkthrough));
+    }
     if (guides.length > 0) {
       children.push(renderGuides(model, guides));
     }

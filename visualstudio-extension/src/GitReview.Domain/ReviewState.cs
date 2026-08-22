@@ -25,6 +25,13 @@ public sealed record ReviewState(
     /// against a CLI that does not know the record.
     /// </summary>
     IReadOnlyList<GuideRecord>? Guides = null,
+    /// <summary>
+    /// The author's walkthrough for the branch that is checked out (`walkthrough`
+    /// record of `config --porcelain`), from the same report. Null when that
+    /// report did not arrive, and against a CLI older than the record — which is
+    /// the same thing to the panel: no row, no block.
+    /// </summary>
+    WalkthroughRecord? Walkthrough = null,
     IReadOnlyDictionary<int, string>? Subjects = null,
     IReadOnlyDictionary<int, string>? Authors = null,
     string? Base = null,

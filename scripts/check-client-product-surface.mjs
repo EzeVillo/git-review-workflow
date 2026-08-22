@@ -597,12 +597,22 @@ for (const c of canonicalControls) {
 }
 
 // (2) each control id in PANEL_MESSAGES or view/title
-const guideIdsForMessages =
-  [...(text.split(/^guide_rows:\s*$/m)[1]?.split(/^[a-z_][a-z0-9_]*:\s*$/m)[0] ?? "")
-    .matchAll(/^ {4}([A-Za-z][A-Za-z0-9]*):\s*\{/gm)].map((m) => m[1]);
+// Los mapas de controles cuyo sujeto es una FILA. No son acciones del producto
+// -- sin la fila que los dibuja no tienen sujeto --, asi que no cuentan contra
+// las 27 y no viven dentro de panel_layout; pero si tienen que estar cableados
+// en cada cliente, que es lo que se verifica abajo.
+function rowBlock(name) {
+  return text.split(new RegExp(`^${name}:\s*$`, "m"))[1]?.split(/^[a-z_][a-z0-9_]*:\s*$/m)[0] ?? "";
+}
+function rowControlIds(name) {
+  return [...rowBlock(name).matchAll(/^ {4}([A-Za-z][A-Za-z0-9]*):\s*\{/gm)].map((m) => m[1]);
+}
+const guideIdsForMessages = rowControlIds("guide_rows");
+const walkthroughRowIds = rowControlIds("walkthrough_row");
 const allControlIds = new Set([
   ...canonicalControls.map((c) => c.id),
   ...guideIdsForMessages,
+  ...walkthroughRowIds,
   ...titleActionIds,
 ]);
 for (const id of allControlIds) {
@@ -623,9 +633,13 @@ for (const id of allControlIds) {
 // Los del bloque de guias entran por su propio mapa, igual que los de
 // draft_controls entran por el suyo: su sujeto es la fila, no la situacion, asi
 // que no pueden declararse dentro de panel_layout.
-const guideRowsBlock = text.split(/^guide_rows:\s*$/m)[1]?.split(/^[a-z_][a-z0-9_]*:\s*$/m)[0] ?? "";
-const guideControlIds = [...guideRowsBlock.matchAll(/^ {4}([A-Za-z][A-Za-z0-9]*):\s*\{/gm)].map((m) => m[1]);
-const canonicalIds = new Set([...canonicalControls.map((c) => c.id), ...guideControlIds]);
+const guideRowsBlock = rowBlock("guide_rows");
+const guideControlIds = guideIdsForMessages;
+const canonicalIds = new Set([
+  ...canonicalControls.map((c) => c.id),
+  ...guideControlIds,
+  ...walkthroughRowIds,
+]);
 for (const p of panelCalls) {
   if (!canonicalIds.has(p.id)) {
     fail(`panelHtml.ts call id=${p.id} label=${p.label} (line ${p.line}) not in panel_layout canonical`);
@@ -1192,6 +1206,59 @@ if (guideBlock.length === 0) {
     fail("panel_layout has no Walkthrough tools section for the guide rows");
   }
   requireSharedCopy("Walkthrough tools section", "Walkthrough", true);
+}
+
+// ── The author's own walkthrough row ─────────────────────────────────────────
+//
+// Mismo grupo propio que las guias, y por el mismo motivo: sus controles cuelgan
+// de walkthrough_row.controls, no de panel_layout, porque sin la fila que los
+// dibuja no tienen sujeto.
+const walkthroughBlock = rowBlock("walkthrough_row");
+if (walkthroughBlock.length === 0) {
+  fail("walkthrough_row block missing from the canonical contract");
+} else {
+  const wantIds = ["openWalkthrough", "copyWalkthroughPrompt"];
+  for (const id of wantIds) {
+    if (!walkthroughRowIds.includes(id)) fail(`walkthrough_row does not declare ${id}`);
+    // Control de fila, no accion del producto: el conteo fijo de 27 no se mueve
+    // y la paleta no lo ofrece.
+    if (actionKeys.includes(id)) {
+      fail(`${id} is a row control, not a product action: it must not appear in actions:`);
+    }
+    if (cmdIds.includes(id)) {
+      fail(`${id} is a row control: it must not appear in contributes.commands`);
+    }
+    requireSharedCopy(`walkthrough control ${id}`, id, false);
+  }
+  const wControls = walkthroughBlock.split(/^ {2}controls:\s*$/m)[1] ?? "";
+  for (const label of [...wControls.matchAll(/label:\s*"([^"]+)"/g)].map((m) => m[1])) {
+    requireSharedCopy(`walkthrough control label "${label}"`, label, true);
+  }
+  for (const name of [...wControls.matchAll(/accessible_name:\s*"([^"]+)"/g)].map((m) => m[1])) {
+    requireSharedCopy("accessible name of a walkthrough control", name, true);
+  }
+  // El badge de cada estado es PROYECCION: lo deriva el modelo de cada cliente
+  // desde el state que reporto la CLI, asi que va contra PanelModel.
+  const badges = walkthroughBlock.split(/^ {2}badges:\s*$/m)[1]?.split(/^ {2}[a-z_]+:/m)[0] ?? "";
+  // Solo las lineas "clave: valor" del mapa. Un match de comillas sobre el bloque
+  // entero se come tambien las de los comentarios, que citan copy a proposito.
+  const mapValues = (block) =>
+    [...block.matchAll(/^ {4}[a-z-]+:\s*"([^"]+)"/gm)].map((m) => m[1]);
+  const badgeTexts = mapValues(badges);
+  if (badgeTexts.length === 0) fail("walkthrough_row declares no badges");
+  for (const badge of badgeTexts) {
+    requireModelCopy(`walkthrough badge "${badge}"`, badge);
+  }
+  // Las DOS etiquetas del boton que crea y actualiza. Es la unica accion del
+  // producto cuya etiqueta depende del estado, asi que el layout de cada cliente
+  // tiene que traer las dos -- con una sola, un cliente se quedaria diciendo
+  // "Init" sobre un archivo que ese verbo ya no crea desde cero.
+  const labels = walkthroughBlock.split(/^ {2}action_labels:\s*$/m)[1]?.split(/^ {2}[a-z_]+:/m)[0] ?? "";
+  const labelTexts = mapValues(labels);
+  if (labelTexts.length !== 2) fail("walkthrough_row must declare both action labels");
+  for (const label of labelTexts) {
+    requireSharedCopy(`walkthrough action label "${label}"`, label, true);
+  }
 }
 
 console.log(

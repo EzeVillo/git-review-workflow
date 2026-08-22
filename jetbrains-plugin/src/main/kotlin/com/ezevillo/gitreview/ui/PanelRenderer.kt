@@ -173,6 +173,11 @@ class PanelRenderer(
             is Block.InventoryRows -> renderInventory(block)
             is Block.DraftRows -> renderDrafts(block)
             is Block.GuideRows -> renderGuides(block)
+            // One row, drawn by the same renderer: the shape is a guide row's --
+            // a name, a badge, an icon in the header and a labelled button
+            // underneath -- so a second implementation would be the same code
+            // with a different chance of drifting from it.
+            is Block.WalkthroughRow -> renderGuides(Block.GuideRows(listOf(block.row)))
             is Block.ToolsSection -> renderToolsSection(block)
             is Block.Stderr -> renderStderr(block.text)
             is Block.EmptyMessage -> {

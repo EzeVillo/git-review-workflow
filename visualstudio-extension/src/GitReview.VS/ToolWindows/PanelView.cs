@@ -199,6 +199,11 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         Block.InventoryRows inv => RenderInventory(inv),
         Block.DraftRows drafts => RenderDrafts(drafts),
         Block.GuideRows guides => RenderGuides(guides),
+        // One row, drawn by the same renderer: the shape is a guide row's — a
+        // name, a badge, an icon in the header and a labelled button underneath
+        // — so a second implementation would be the same code with a different
+        // chance of drifting from it.
+        Block.WalkthroughRow w => RenderGuides(new Block.GuideRows(new[] { w.Entry })),
         Block.ToolsSection ts => RenderToolsSection(ts),
         Block.Stderr s => RenderStderr(s.Text),
         Block.EmptyMessage em => RenderEmpty(em),

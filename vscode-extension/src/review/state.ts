@@ -6,6 +6,7 @@ import {
     EffectiveConfig,
     parseConfigPorcelain,
     GuideRecord,
+    WalkthroughRecord,
 } from "../cli/configPorcelain";
 import {invokeGitReview, InvokeOptions} from "../cli/invoke";
 import {
@@ -64,6 +65,14 @@ export interface ReviewState {
      * `[]` con una CLI que no conoce el registro.
      */
     guides?: GuideRecord[];
+    /**
+     * El walkthrough del autor para la rama que está puesta (registro
+     * `walkthrough` de `config --porcelain`). Llega en el mismo reporte que
+     * `config`, sin invocaciones nuevas. Ausente cuando ese reporte no llegó, y
+     * también con una CLI anterior al registro -- que es lo mismo para el panel:
+     * sin fila no hay bloque.
+     */
+    walkthrough?: WalkthroughRecord;
     /**
      * Asunto y autor de cada commit de la secuencia, por `position`. Sólo en
      * modo step, y sólo con una CLI que los reporte: ausentes significa "esta
@@ -168,6 +177,7 @@ async function loadConfigReport(
     remotes: CandidateRemote[];
     drafts: DraftRecord[];
     guides: GuideRecord[];
+    walkthrough?: WalkthroughRecord;
 }> {
     const result = await invokeGitReview("config", ["--porcelain"], options);
     if (result.errorCode || result.exitCode !== 0) {
@@ -180,6 +190,7 @@ async function loadConfigReport(
         remotes: parsed.remotes,
         drafts: parsed.drafts,
         guides: parsed.guides,
+        ...(parsed.walkthrough !== undefined ? {walkthrough: parsed.walkthrough} : {}),
     };
 }
 
@@ -336,6 +347,9 @@ export class ReviewStateManager {
                     next.remotes = report.remotes;
                     next.drafts = report.drafts;
                     next.guides = report.guides;
+                    if (report.walkthrough !== undefined) {
+                        next.walkthrough = report.walkthrough;
+                    }
                 }
             }
             return this.setState(next);

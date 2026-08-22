@@ -53,6 +53,25 @@ object UserCopy {
         "Fill in the reading order at $path. The instructions are inside the file, " +
             "in the comment at the top. Do not change the file list or the numbering rules."
 
+    /**
+     * What "Copy for agent" puts on the clipboard for the author's own
+     * walkthrough.
+     *
+     * A pointer, like the draft one, and for the same reason. Two sentences
+     * differ, and both are about the situation rather than the format: the file
+     * usually already holds finished prose (a walkthrough is written when the PR
+     * is done, and then the PR keeps moving), so the one damaging thing an agent
+     * can do here is rewrite it whole. Saying "fill in the reading order" over a
+     * full file is an instruction to start over, and it would undo exactly what
+     * updating in place exists to preserve.
+     *
+     * Byte for byte identical to userCopy.ts and UserCopy.cs.
+     */
+    fun walkthroughAgentPrompt(path: String): String =
+        "Update the reading order at $path. The instructions are inside the file, " +
+            "in the comment at the top. Entries that already have a number and a why are " +
+            "finished: leave them as they are, and fill in only the ones marked \"## ?.\"."
+
     const val SET_BASE_TITLE = "Set the base branch"
     const val SET_BASE_PROMPT =
         "Where PRs land (main, develop, …) — full reviews compare against it"

@@ -219,6 +219,75 @@ fun parseGuideRecord(fields: List<String>): GuideRecord? {
     return GuideRecord(kind = kind, path = path, state = state)
 }
 
+/**
+ * What state the author's own walkthrough is in against the branch they have
+ * checked out. All four are decided by the CLI and none is inferred here -- in
+ * particular `UNKNOWN`, which is NOT `STALE`: with no instruction block (deleting
+ * it by hand is legal) the question has no answer, and giving the worse of the
+ * two would send someone to redo a reading order that may be perfectly fine.
+ */
+enum class WalkthroughState {
+    IN_SYNC,
+    STALE,
+    UNKNOWN,
+    ABSENT,
+    ;
+
+    companion object {
+        fun parse(raw: String?): WalkthroughState? = when (raw) {
+            "in-sync" -> IN_SYNC
+            "stale" -> STALE
+            "unknown" -> UNKNOWN
+            "absent" -> ABSENT
+            else -> null
+        }
+    }
+}
+
+/**
+ * The committed walkthrough of the branch you are standing on, and whether it
+ * still describes what the PR changes today.
+ *
+ * It exists because a walkthrough is written when the PR is finished and then
+ * the PR keeps moving: review comments come back, three files change, and that
+ * is exactly the moment nobody is thinking about the walkthrough. `STALE` is a
+ * "worth looking at", never a verdict -- the verdict is `build`'s, which is what
+ * the row's control runs.
+ *
+ * `path` comes straight from the CLI, like the draft's and the guides': it is
+ * **opened, never rebuilt**.
+ */
+data class WalkthroughRecord(
+    /** Absolute path of `.review/walkthrough.md`, whether or not the file exists. */
+    val path: String,
+    val state: WalkthroughState,
+    /** Entries with a position AND a resolved why, plus the heads-up. */
+    val annotated: Int,
+    /** Everything `build` requires: one unit per entry plus the heads-up. */
+    val total: Int,
+)
+
+/**
+ * A `walkthrough` record from its fields, or null when it is malformed.
+ *
+ * The annotated/total pair falls back to 0/0 rather than dropping the whole row:
+ * the state is what decides what the block offers, and losing it to an
+ * unreadable counter would leave the author without the one surface that tells
+ * them their reading order fell behind. An unrecognised state does drop the row
+ * -- drawing an invented badge is worse than drawing no block.
+ */
+fun parseWalkthroughRecord(fields: List<String>): WalkthroughRecord? {
+    val state = WalkthroughState.parse(fields.getOrNull(1)) ?: return null
+    val path = fields.getOrNull(2)
+    if (path.isNullOrEmpty()) return null
+    return WalkthroughRecord(
+        path = path,
+        state = state,
+        annotated = parseCount(fields.getOrNull(3)) ?: 0,
+        total = parseCount(fields.getOrNull(4)) ?: 0,
+    )
+}
+
 data class ConfigPorcelainResult(
     val config: EffectiveConfig,
     val candidates: List<CandidateBranch>,
@@ -234,6 +303,13 @@ data class ConfigPorcelainResult(
      * exists to prevent. Empty against a CLI that does not know the record.
      */
     val guides: List<GuideRecord> = emptyList(),
+    /**
+     * The author's walkthrough for the branch that is checked out. The CLI emits
+     * the row present or absent -- same rule as the guides, for the same reason --
+     * so null here means one thing only: a CLI older than the record. The panel
+     * draws the block only when there is a row.
+     */
+    val walkthrough: WalkthroughRecord? = null,
 )
 
 private fun toBool(field: String?): Boolean = field == "1"
@@ -262,6 +338,7 @@ fun parseConfigPorcelain(stdout: String): ConfigPorcelainResult {
     val offers = ArrayList<ReadingOffer>()
     val drafts = ArrayList<DraftRecord>()
     val guides = ArrayList<GuideRecord>()
+    var walkthrough: WalkthroughRecord? = null
 
     for (line in stdout.split(Regex("\r?\n"))) {
         if (line.isEmpty()) continue
@@ -317,6 +394,12 @@ fun parseConfigPorcelain(stdout: String): ConfigPorcelainResult {
                 }
             }
             "guide" -> parseGuideRecord(fields)?.let { guides.add(it) }
+            // One row per invocation. If two arrived the first wins: a second
+            // would be the CLI contradicting itself, and taking the last would
+            // make the panel depend on emission order.
+            "walkthrough" -> if (walkthrough == null) {
+                walkthrough = parseWalkthroughRecord(fields)
+            }
             "offer" -> {
                 val id = OfferId.parse(fields.getOrNull(1))
                 val rank = OfferRank.parse(fields.getOrNull(2))
@@ -337,6 +420,7 @@ fun parseConfigPorcelain(stdout: String): ConfigPorcelainResult {
         offers = offers.takeIf { it.isNotEmpty() },
         drafts = drafts,
         guides = guides,
+        walkthrough = walkthrough,
     )
 }
 

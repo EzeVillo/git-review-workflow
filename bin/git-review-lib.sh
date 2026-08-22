@@ -2028,3 +2028,129 @@ emit_guide_records() {
 	guide_state_of "$_guide_own_path"
 	porcelain_row guide own "$_guide_own_path" "$_guide_state"
 }
+
+# ── The author's own walkthrough ───────────────────────────────────────────────
+#
+# A committed walkthrough is written once, when the PR is finished, and then the
+# PR keeps moving: review comments come back, three files change, and nothing
+# anywhere says the reading order stopped matching. The verb that would say so is
+# build, and running it is something you have to remember at the one moment
+# nobody is thinking about the walkthrough.
+#
+# So the panel says it, off one porcelain row, on a refresh path that must stay
+# cheap. What follows is the cheap half of the answer -- "is it worth looking?"
+# -- deliberately, not the exact one. The exact answer is build's, and build is
+# what the row's control runs.
+
+# walk_sidecar_block_tip <path>
+# The tip SHA recorded in the instruction block of <path>, or nothing.
+#
+# The block names the range the file was last written or validated against, which
+# is precisely the datum "has this gone stale?" needs, and it is already there --
+# every init and every build regenerates it (walk_emit_prompt_block).
+#
+# ZERO processes, like guide_in_force and for the same reason: this runs on every
+# panel refresh. A builtin read loop, stopping at the block's own end, at the
+# first entry heading, or at a line cap for a file whose block was deleted by
+# hand -- which is legal, and which leaves the state unknown rather than wrong.
+#
+# IFS=' ' does the trimming: the block writes the line indented and
+# space-padded ("       tip   <sha>  (HEAD)"), and read's own field splitting
+# collapses all of it.
+walk_sidecar_block_tip() {
+	_wsbt_n=0
+	while IFS=' ' read -r _wsbt_k _wsbt_v _wsbt_rest || [ -n "$_wsbt_k" ]; do
+		_wsbt_n=$((_wsbt_n + 1))
+		case "$_wsbt_k" in
+		tip)
+			# Validated here rather than trusted: the value is about to be handed
+			# to git as a revision, and a "tip" that is somebody's prose must not
+			# become a git argument. 40 hex characters, no more, no less.
+			case "$_wsbt_v" in
+			*[!0-9a-f]* | '') ;;
+			????????????????????????????????????????)
+				printf '%s' "$_wsbt_v"
+				return 0
+				;;
+			esac
+			;;
+		esac
+		case "$_wsbt_k" in
+		'##') return 1 ;;
+		esac
+		case "$_wsbt_rest$_wsbt_v$_wsbt_k" in
+		*'-->'*) return 1 ;;
+		esac
+		[ "$_wsbt_n" -lt 80 ] || return 1
+		_wsbt_k=""
+	done <"$1"
+	return 1
+}
+
+# emit_walkthrough_record
+# The author's sidecar as one row:
+#   walkthrough<TAB><state><TAB><path><TAB><annotated><TAB><total>
+#
+# state is absent | in-sync | stale | unknown, and the row is emitted in all four
+# cases -- the same reason emit_guide_records always emits both guides, and the
+# opposite of the draft records: a client cannot offer to create a walkthrough it
+# was never told about, and rebuilding the path on its own side is the thing the
+# reported-path rule exists to prevent.
+#
+#   absent   no .review/walkthrough.md in the work tree
+#   in-sync  the range has not changed outside .review/ since the file was last
+#            written or built
+#   stale    it has -- files entered or left the range, or a file the walkthrough
+#            already annotates has moved on. Worth looking at; not a verdict.
+#   unknown  no instruction block (deleting it by hand is legal), or its tip is
+#            not an object this clone has any more (a force-push, a fresh clone)
+#
+# The comparison EXCLUDES .review/ for one concrete reason: committing the
+# walkthrough itself moves HEAD, so without it the ordinary author's flow --
+# init, build, git commit -- ended on a panel that said the file it had just
+# written was already out of date.
+#
+# Cost when the file is there: the rev-parse guide_paths_init already made, one
+# builtin read of the block, one git diff, and the single awk of the progress
+# count. Nothing per entry.
+emit_walkthrough_record() {
+	guide_paths_init
+	[ -n "$_guide_team_path" ] || return 0
+	_ewr_path="${_guide_team_path%/walkthrough-guide.md}/walkthrough.md"
+
+	if [ ! -f "$_ewr_path" ]; then
+		porcelain_row walkthrough absent "$_ewr_path" 0 0
+		return 0
+	fi
+
+	_ewr_state=unknown
+	_ewr_tip="$(walk_sidecar_block_tip "$_ewr_path" || true)"
+	if [ -n "$_ewr_tip" ]; then
+		# Two revisions as two arguments, never "A..B": on Windows with a deep cwd
+		# git stats a range spelled as one argument and dies with "Filename too
+		# long" (the same rule the instruction block's own commands follow).
+		#
+		# The pathspec keeps the sidecar and the guide out of it. :(exclude) is
+		# git 2.13; this project's floor is 2.23.
+		_ewr_rc=0
+		git diff --quiet "$_ewr_tip" HEAD -- . ':(exclude).review' 2>/dev/null ||
+			_ewr_rc=$?
+		case "$_ewr_rc" in
+		0) _ewr_state=in-sync ;;
+		1) _ewr_state=stale ;;
+		esac
+	fi
+
+	# The same pair the drafts report, from the same awk, so "how much of it is
+	# written" means one thing across both sides of the review.
+	_ewr_ann=0
+	_ewr_tot=0
+	while IFS="$(printf '\t')" read -r _ewr_f _ewr_a _ewr_t _ewr_rest; do
+		[ -n "$_ewr_f" ] || continue
+		_ewr_ann="$_ewr_a"
+		_ewr_tot="$_ewr_t"
+	done <<EOF
+$(walk_draft_progress "$_ewr_path")
+EOF
+	porcelain_row walkthrough "$_ewr_state" "$_ewr_path" "$_ewr_ann" "$_ewr_tot"
+}

@@ -259,7 +259,11 @@ describe("panelHtml", () => {
         assert.ok(html.includes("grid-template-rows"), "apertura animada 0fr→1fr");
         assert.ok(html.includes('el("div", "pane-main")'), "split body+footer en no-review con base");
         assert.ok(html.includes('button("Compare revisions", "compareReview")'));
-        assert.ok(html.includes('button("Walkthrough: Init", "walkthroughInit")'));
+        // La etiqueta sigue al estado que reporto la CLI: el mismo verbo crea y
+        // actualiza, e "Init" sobre un archivo lleno de prosa prometia lo que
+        // ese verbo justamente ya no hace.
+        assert.ok(html.includes('button(initLabel, "walkthroughInit")'));
+        assert.ok(html.includes('"Walkthrough: Init"') && html.includes("actionLabel"));
         assert.ok(html.includes('button("Walkthrough: Build", "walkthroughBuild")'));
         assert.ok(html.includes("renderOtherActions"), "Other actions en el pie compartido");
         assert.ok(html.includes('case "no-review"') && html.includes("renderEmptyStartBlock"));

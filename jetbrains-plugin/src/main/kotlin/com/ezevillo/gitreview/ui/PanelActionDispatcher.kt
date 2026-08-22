@@ -24,6 +24,7 @@ import com.ezevillo.gitreview.domain.pendingFinishInfo
 import com.ezevillo.gitreview.domain.requiresConfirmation
 import com.ezevillo.gitreview.domain.resumableSourceAt
 import com.ezevillo.gitreview.domain.sourceFromReviewName
+import com.ezevillo.gitreview.domain.WalkthroughState
 import com.ezevillo.gitreview.host.GitReviewService
 import com.ezevillo.gitreview.host.MutationActions
 import com.ezevillo.gitreview.ui.actions.runUndoFinish
@@ -136,6 +137,20 @@ class PanelActionDispatcher(
             ControlId.DISCARD_GUIDE -> {
                 discardGuideAt(index)
                 false
+            }
+            // The author's walkthrough row. Neither control mutates anything, so
+            // neither takes the lock; updating it is WALKTHROUGH_INIT, which is a
+            // product action and goes the way it always did.
+            ControlId.OPEN_WALKTHROUGH -> {
+                openWalkthrough()
+                false
+            }
+            ControlId.COPY_WALKTHROUGH_PROMPT -> {
+                val w = service.currentState().walkthrough ?: return false
+                if (w.state == WalkthroughState.ABSENT) return false
+                CopyPasteManager.getInstance()
+                    .setContents(StringSelection(UserCopy.walkthroughAgentPrompt(w.path)))
+                true
             }
             ControlId.SET_BASE -> {
                 invokeAction("com.ezevillo.gitreview.ui.actions.SetBaseAction")
@@ -334,6 +349,17 @@ class PanelActionDispatcher(
      * Abre la guia en la ruta que reporto la CLI. Mostrarla no es leerla: el
      * plugin no interpreta un byte de su contenido.
      */
+    /**
+     * Opens the author's walkthrough at the path the CLI reported. Opening it is
+     * showing it, not reading it: the plugin never interprets a byte of it.
+     */
+    private fun openWalkthrough() {
+        val w = service.currentState().walkthrough ?: return
+        if (w.state == WalkthroughState.ABSENT) return
+        val vf = LocalFileSystem.getInstance().refreshAndFindFileByPath(w.path) ?: return
+        FileEditorManager.getInstance(project).openFile(vf, true)
+    }
+
     private fun openGuideAt(index: Int?) {
         val guide = guideRowAt(index) ?: return
         if (guide.state == GuideState.ABSENT) return

@@ -583,13 +583,18 @@ gitdir_temps() (
 	[[ "$output" == *"--from requires a file (or - for standard input)"* ]]
 	assert_nothing_happened
 
+	# The author's side has the same circuit now (init --stdout / build --from),
+	# so what is illegal there is each flag on the verb at the wrong end of it.
 	git switch --quiet feature/plain
-	run git review walkthrough init --stdout
+	run git review walkthrough build --stdout
 	[ "$status" -eq 1 ]
-	[[ "$output" == *"--stdout and --from apply only to git review walkthrough draft"* ]]
-	run git review walkthrough build --from x.md
+	[[ "$output" == *"init --stdout"* ]]
+	run git review walkthrough init --from x.md
 	[ "$status" -eq 1 ]
-	[[ "$output" == *"--stdout and --from apply only to git review walkthrough draft"* ]]
+	[[ "$output" == *"build --from"* ]]
+	run git review walkthrough guide --stdout
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"a guide has no skeleton"* ]]
 	[ ! -e .review/walkthrough.md ]
 }
 

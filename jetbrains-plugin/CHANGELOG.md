@@ -13,6 +13,20 @@ Requires `git review` **0.7.0** or newer.
 
 ### Added
 
+- **The walkthrough you wrote, and whether it still matches the PR.** A walkthrough is written
+  once, when the PR is finished — and then the PR keeps moving: review comments come back, three
+  more files change, and nothing anywhere said the reading order had fallen behind. The panel's
+  *Walkthrough* section now leads with a row for it: `up to date`, `may be out of date`, `state
+  unknown` or `none`, plus how much of it is written (`4/6`), an icon that opens it at the path
+  the CLI reported, and *Copy for agent* — a one-line instruction naming that file, on the
+  clipboard, the same shape the draft rows already had. The badge is deliberately cautious: what
+  the CLI checks on every refresh is the cheap half of the question, and the exact answer is
+  *Walkthrough: Build*'s.
+- **The button that creates it also updates it, and says so.** *Walkthrough: Init* reads
+  *Walkthrough: Update* once a walkthrough exists, because that is now what the verb does:
+  entries whose file is still in range keep their number, their why and their `> key`, files that
+  entered the range arrive as placeholders to fill in, and entries whose file left it are dropped
+  and named. Fill in only the new ones, hand them to an agent, or write them yourself.
 - **Reading orders you started, in the panel.** A walkthrough draft you began and have not
   finished now has a place: with no review on this branch, the panel lists every one of
   them with how far along it is (`3/9`, counted by the CLI) and four controls on its row —

@@ -81,6 +81,14 @@ export function draftWatchDirs(state: DraftPathSource): string[] {
 export interface GuidePathSource {
     /** Registros `guide` de `config --porcelain` (siempre los dos). */
     guides?: readonly {path: string}[];
+    /**
+     * El registro `walkthrough`, por el mismo motivo y con la misma regla. El
+     * watcher tampoco lo mira: vive en el work tree, así que toda operación de
+     * git lo mueve, y el cliente que corre init/build refresca solo. Lo que
+     * queda sin cubrir es idéntico al de las guías — lo escribís a mano y
+     * guardás — y se cubre igual.
+     */
+    walkthrough?: {path: string};
 }
 
 /**
@@ -108,5 +116,8 @@ export function isReportedGuide(
         return platform === "win32" ? slashed.toLowerCase() : slashed;
     };
     const target = normalise(file);
-    return (state.guides ?? []).some((guide) => normalise(guide.path) === target);
+    if ((state.guides ?? []).some((guide) => normalise(guide.path) === target)) {
+        return true;
+    }
+    return state.walkthrough !== undefined && normalise(state.walkthrough.path) === target;
 }

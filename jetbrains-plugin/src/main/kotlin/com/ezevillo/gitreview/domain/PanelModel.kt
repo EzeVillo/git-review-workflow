@@ -102,6 +102,35 @@ data class PanelGuide(
     val discardable: Boolean,
 )
 
+/**
+ * The author's own walkthrough row: what state it is in, how much of it is
+ * written, and what can be done with it without leaving the panel.
+ *
+ * It exists because a walkthrough is written once, when the PR is finished, and
+ * then the PR keeps moving. The row is the only surface that says so without
+ * anybody remembering to ask, which is why the badge is deliberately cautious:
+ * "may be out of date" and not "out of date". The exact answer is `build`'s,
+ * which is what the button beside it runs.
+ *
+ * [label], [badge] and [actionLabel] are panel copy and are derived here; [path]
+ * comes from the CLI, and the client **opens it, never rebuilds it**.
+ */
+data class PanelWalkthrough(
+    val label: String,
+    /** Absolute, reported by the CLI. On disk only when `state != ABSENT`. */
+    val path: String,
+    val state: WalkthroughState,
+    /** Badge text: the state the CLI reported, in prose. */
+    val badge: String,
+    /** Finished entries, and everything build requires (entries plus the heads-up). */
+    val annotated: Int,
+    val total: Int,
+    /** The file is there: it can be opened, and there is something to hand an agent. */
+    val exists: Boolean,
+    /** What the control that invokes `walkthrough init` is called -- it creates AND updates. */
+    val actionLabel: String,
+)
+
 data class PanelModel(
     val situation: Situation,
     val busy: Boolean,
@@ -120,6 +149,11 @@ data class PanelModel(
      * there is refused by the CLI anyway.
      */
     val guides: List<PanelGuide> = emptyList(),
+    /**
+     * The author's walkthrough, when the CLI reported its row. Null against a CLI
+     * older than the record, and then the block is not drawn.
+     */
+    val walkthrough: PanelWalkthrough? = null,
     val pendingFinish: PendingFinish? = null,
     val noBaseConfigured: Boolean = false,
     val configuredBase: String? = null,
@@ -282,6 +316,35 @@ fun toPanelGuides(guides: List<GuideRecord>, situation: Situation): List<PanelGu
     }
 }
 
+private fun walkthroughBadge(state: WalkthroughState): String = when (state) {
+    WalkthroughState.IN_SYNC -> "up to date"
+    WalkthroughState.STALE -> "may be out of date"
+    WalkthroughState.UNKNOWN -> "state unknown"
+    WalkthroughState.ABSENT -> "none"
+}
+
+/**
+ * Projects the `walkthrough` record. One row, and only when the CLI emitted it:
+ * against an older version it does not arrive and the whole block disappears --
+ * the same degradation the guides and the drafts have.
+ *
+ * Everything that decides what can be pressed comes from the state the CLI
+ * reported. In particular the action label, which is NOT keyed on staleness:
+ * the same verb creates and updates, so the only thing that changes is what it
+ * is called, and "Create" over a file full of prose is a promise the CLI does
+ * not keep -- nor should it.
+ */
+fun toPanelWalkthrough(record: WalkthroughRecord): PanelWalkthrough = PanelWalkthrough(
+    label = "Walkthrough",
+    path = record.path,
+    state = record.state,
+    badge = walkthroughBadge(record.state),
+    annotated = record.annotated,
+    total = record.total,
+    exists = record.state != WalkthroughState.ABSENT,
+    actionLabel = if (record.state == WalkthroughState.ABSENT) "Create" else "Update",
+)
+
 /**
  * The guide row at [index], resolved against the HOST's state. Same role as
  * [draftAt]: what ends up in the CLI does not come from the panel.
@@ -319,6 +382,7 @@ fun buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelModel {
         // yours. It costs no extra invocation -- status --porcelain emits the same
         // records config does.
         guides = toPanelGuides(state.guides ?: emptyList(), state.situation),
+        walkthrough = state.walkthrough?.let { toPanelWalkthrough(it) },
         noBaseConfigured = state.situation == Situation.NO_REVIEW &&
             state.config != null &&
             state.config.base == null,

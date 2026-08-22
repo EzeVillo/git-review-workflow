@@ -181,7 +181,15 @@ class GitReviewService(private val project: Project) : Disposable {
         }
         val target = pickSoleTarget(roots)
         val state = stateManager.refresh(target?.rootPath)
-        draftWatcher.sync(draftWatchDirs(state), state.guides.orEmpty().map { it.path })
+        // The walkthrough travels with the guides in the exact-path list, for the
+        // same reason: no watch root of its own (it lives in the work tree, which
+        // every git operation moves), but a save on it has to refresh -- you
+        // write the reading order by hand and press Ctrl+S, and the badge would
+        // still say what it said before.
+        draftWatcher.sync(
+            draftWatchDirs(state),
+            state.guides.orEmpty().map { it.path } + listOfNotNull(state.walkthrough?.path),
+        )
         stateResolved = true
         lastWhy = null
         if (isReviewReadable(state.situation) && state.state?.mode?.id == "walk") {

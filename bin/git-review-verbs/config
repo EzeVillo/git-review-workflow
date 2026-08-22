@@ -269,6 +269,13 @@ porcelain)
 	# argument, for the same reason the draft records are.
 	emit_guide_records
 
+	# The author's own walkthrough for the branch they are STANDING ON, and its
+	# state against what that branch now holds. Emitted present or absent, for the
+	# same reason as the guides, and unconditioned on the branch argument for the
+	# same reason as the drafts: it is a file of this working tree, not a property
+	# of whatever branch the caller asked about.
+	emit_walkthrough_record
+
 	if [ -n "$branch" ]; then
 		# Same pair of keys start reads for --delta (bin/git-review-verbs/start):
 		# a remote review stores reviewworkflow.<branch>.reviewed; a

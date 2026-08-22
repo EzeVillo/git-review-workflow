@@ -53,6 +53,11 @@ enum class ControlId {
     OPEN_GUIDE,
     CREATE_GUIDE,
     DISCARD_GUIDE,
+    // The author's walkthrough row: two BODY controls, same rule as the four
+    // above -- without the row that draws them they have no subject, so the
+    // fixed count of 27 does not move.
+    OPEN_WALKTHROUGH,
+    COPY_WALKTHROUGH_PROMPT,
     CLEAN_REVIEW,
     COMPARE_REVIEW,
     WALKTHROUGH_INIT,
@@ -91,6 +96,8 @@ enum class ControlId {
             OPEN_GUIDE -> "openGuide"
             CREATE_GUIDE -> "createGuide"
             DISCARD_GUIDE -> "discardGuide"
+            OPEN_WALKTHROUGH -> "openWalkthrough"
+            COPY_WALKTHROUGH_PROMPT -> "copyWalkthroughPrompt"
             CLEAN_REVIEW -> "cleanReview"
             COMPARE_REVIEW -> "compareReview"
             WALKTHROUGH_INIT -> "walkthroughInit"
@@ -301,6 +308,14 @@ sealed class Block {
     data class DraftRows(val rows: List<DraftRow>) : Block()
 
     data class GuideRows(val rows: List<GuideRow>) : Block()
+
+    /**
+     * The author's own walkthrough, one row, above the guides in the same
+     * section. Drawn only when the CLI reported the record -- against an older
+     * version it does not arrive and the block disappears, the same degradation
+     * the guides and the drafts have.
+     */
+    data class WalkthroughRow(val row: GuideRow) : Block()
 
     data class ToolsSection(
         val title: String,
@@ -951,6 +966,53 @@ private fun guideRows(model: PanelModel): Block.GuideRows {
     return Block.GuideRows(rows)
 }
 
+/**
+ * The author's walkthrough row, above the guides in the same section.
+ *
+ * Same two-place shape as the guide rows: the labelled control underneath, the
+ * icon one in the header beside the badge. The badge says "may be out of date"
+ * and not "out of date" on purpose -- what the CLI compares on every refresh is
+ * cheap and approximate (has the range moved since the file was written), and
+ * the exact answer is build's, which is what the section's button runs.
+ *
+ * Copy for agent copies a POINTER to the file, never the brief: that lives
+ * inside the walkthrough itself, in the comment at the top, which is where it
+ * keeps itself current. Two copies of the brief would drift, and the one that
+ * went stale would be the one the agent reads.
+ */
+private fun walkthroughRow(model: PanelModel, w: PanelWalkthrough): Block.WalkthroughRow {
+    val controls = ArrayList<Control>()
+    controls.add(
+        ctrl(
+            ControlId.COPY_WALKTHROUGH_PROMPT,
+            "Copy for agent",
+            Emphasis.SECONDARY,
+            enabled = w.exists,
+            tooltip = if (w.exists) {
+                "Copy a pointer to the file; the instructions are inside it"
+            } else {
+                "Create the walkthrough first, then hand it to an agent"
+            },
+            index = 0,
+        ),
+    )
+    controls.add(
+        ctrl(
+            ControlId.OPEN_WALKTHROUGH,
+            null,
+            Emphasis.ICON,
+            enabled = w.exists,
+            accessibleName = "Open the walkthrough",
+            tooltip = if (w.exists) w.path else "There is no walkthrough to open yet",
+            index = 0,
+        ),
+    )
+    val progress = if (w.exists && w.total > 0) "  ${w.annotated}/${w.total}" else ""
+    return Block.WalkthroughRow(
+        GuideRow(name = w.label + progress, badge = w.badge, controls = controls),
+    )
+}
+
 private fun noReviewReadyBlocks(model: PanelModel): List<Block> {
     val enabled = !model.busy
     val out = ArrayList<Block>()
@@ -991,11 +1053,24 @@ private fun noReviewReadyBlocks(model: PanelModel): List<Block> {
     walkthroughKids.add(
         Block.Row(
             listOf(
-                ctrl(ControlId.WALKTHROUGH_INIT, "Walkthrough: Init", Emphasis.SECONDARY, enabled),
+                // The same verb creates and updates, so the label follows the
+                // state the CLI reported: "Init" over a file full of prose
+                // promised what that verb precisely no longer does.
+                ctrl(
+                    ControlId.WALKTHROUGH_INIT,
+                    if (model.walkthrough?.actionLabel == "Update") {
+                        "Walkthrough: Update"
+                    } else {
+                        "Walkthrough: Init"
+                    },
+                    Emphasis.SECONDARY,
+                    enabled,
+                ),
                 ctrl(ControlId.WALKTHROUGH_BUILD, "Walkthrough: Build", Emphasis.SECONDARY, enabled),
             ),
         ),
     )
+    model.walkthrough?.let { walkthroughKids.add(walkthroughRow(model, it)) }
     if (model.guides.isNotEmpty()) {
         walkthroughKids.add(guideRows(model))
     }

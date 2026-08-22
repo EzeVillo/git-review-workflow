@@ -52,6 +52,11 @@ export const PANEL_MESSAGES = [
     "openGuide",
     "createGuide",
     "discardGuide",
+    // Fila del walkthrough del autor: dos controles del CUERPO, misma forma que
+    // los de arriba y por el mismo motivo -- sin la fila que los dibuja no
+    // tienen sujeto, asi que el conteo de 27 sigue igual.
+    "openWalkthrough",
+    "copyWalkthroughPrompt",
     // Support (links externos): el webview manda un id; el host resuelve la
     // URL contra un allowlist y abre con openExternal. No es un comando de
     // la paleta ni de la CLI.

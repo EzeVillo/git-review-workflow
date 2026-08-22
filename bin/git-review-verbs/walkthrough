@@ -28,8 +28,8 @@ prog="git review walkthrough"
 
 usage() {
 	cat <<EOF
-usage: $prog init [--base <base>] [--force]
-       $prog build [--check]
+usage: $prog init [--base <base>] [--force] [--stdout]
+       $prog build [--check] [--from <file> | --from -]
        $prog draft [--local | --offline] [--delta] [--force] [--stdout] [--] [<branch>]
        $prog draft --build [--from <file> | --from -] [--local | --offline]
                    [--delta] [--force] [--] [<branch>]
@@ -38,11 +38,18 @@ usage: $prog init [--base <base>] [--force]
 Author a reading walkthrough for the current branch's PR, committed as
 .review/walkthrough.md.
 
-  init             write a skeleton listing every file changed vs the base
+  init             write a skeleton listing every file changed vs the base, or
+                   update the one that is there: entries whose file is still in
+                   range keep their number and their why, files that entered
+                   the range arrive as placeholders, and entries whose file
+                   left it are dropped and named
     --base <base>  diff against <base> instead of reviewworkflow.base
-    --force        overwrite an existing walkthrough
+    --force        discard what is there and write a blank skeleton
+    --stdout       print it instead of writing; nothing is created anywhere
   build            validate, order by the numbers you set and renumber 1..N
     --check        validate only; write nothing, exit non-zero on any problem
+    --from <file>  read the walkthrough from <file> instead of the one in the
+                   work tree, and install it ("-" reads standard input)
 
 Review someone else's PR in a reading order of your own, without committing:
 
@@ -189,8 +196,22 @@ fi
 if [ "$sub" != draft ] && { [ "$build_draft" -eq 1 ] || [ "$local_only" -eq 1 ] || [ "$offline" -eq 1 ] || [ "$delta_mode" -eq 1 ]; }; then
 	die "--build, --local, --offline and --delta apply only to git review walkthrough draft"
 fi
-if [ "$sub" != draft ] && { [ "$to_stdout" -eq 1 ] || [ "$from_given" -eq 1 ]; }; then
-	die "--stdout and --from apply only to git review walkthrough draft"
+# The agent circuit, both ends, on both sides of the review. It landed on draft
+# first and stayed there, which had the author — the one the skeleton's own
+# instructions call "usually an agent" — as the only side that could not hand the
+# work out and take it back. Each end belongs to the verb that produces or
+# consumes a skeleton: --stdout to init and draft, --from to the two builds.
+if [ "$sub" = build ] && [ "$to_stdout" -eq 1 ]; then
+	die "--stdout writes the skeleton; build validates one. Use git review walkthrough init --stdout"
+fi
+if [ "$sub" = guide ] && { [ "$to_stdout" -eq 1 ] || [ "$from_given" -eq 1 ]; }; then
+	die "--stdout and --from apply only to init, build and draft; a guide has no skeleton"
+fi
+if [ "$sub" = init ] && [ "$from_given" -eq 1 ]; then
+	die "--from installs a filled-in walkthrough; init writes the skeleton. Use git review walkthrough build --from"
+fi
+if [ "$sub" = init ] && [ "$to_stdout" -eq 1 ] && [ "$force" -eq 1 ]; then
+	die "--stdout writes no file, so there is nothing to force"
 fi
 if [ "$sub" != draft ] && [ -n "$branch" ]; then
 	die "only git review walkthrough draft takes a branch; init, build and guide work on the repository you are in"
@@ -632,17 +653,193 @@ annotatable_files() {
 # read the wrong one — so the two lines that genuinely differ are switched inline
 # (see below) instead of forking the block.
 if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; then
-	# --stdout prints what the file would hold and touches nothing. The
-	# "already exists" guard does not apply to it: printing cannot destroy
-	# anything, and the protection belongs to whoever writes, not to whoever
-	# shows. Everything that can still fail here — no base, no such branch, no
-	# changes, no marker — has already run above, so stdout stays empty on every
-	# one of those; an empty skeleton is never printed.
-	if [ "$to_stdout" -eq 0 ] && [ -e "$targetpath" ] && [ "$force" -eq 0 ]; then
+	# An existing file is UPDATED, not refused and not overwritten: every entry
+	# whose path is still in range keeps its number, its why and its markers, the
+	# paths that entered the range arrive as "## ?." placeholders, and the ones
+	# that left are dropped and named on stderr. That is the whole point — a PR
+	# that was finished, annotated and then touched again is the ordinary case,
+	# and the two things this command could do before were refuse (leaving the
+	# reader to hand-edit) or overwrite (destroying every why in the file).
+	#
+	# --force keeps meaning what it means everywhere else in this suite: throw away
+	# what is there and generate from scratch. It is the only way back to a blank
+	# skeleton, and it has to stay reachable — a merge cannot un-write prose that
+	# describes the wrong thing.
+	# init only, and that is a deliberate limit rather than an oversight. The
+	# author's sidecar goes stale because the PR keeps moving under a file that is
+	# already committed; a reviewer's draft is written against a tip that start
+	# then FREEZES, so during a review it cannot fall out of step. The two remain
+	# worth reconciling on the draft side too (a --delta re-review is the case),
+	# but that side already carries a circuit built on "the file is there, so I
+	# refuse" -- save, continue and forget all speak it -- and changing what draft
+	# does to an existing file is its own decision, not a side effect of this one.
+	update=0
+	if [ "$sub" = init ] && [ -e "$targetpath" ] && [ "$force" -eq 0 ]; then
+		update=1
+	fi
+	if [ "$update" -eq 0 ] && [ "$to_stdout" -eq 0 ] && [ -e "$targetpath" ] &&
+		[ "$force" -eq 0 ]; then
 		die "$targetrel already exists; pass --force to overwrite"
 	fi
 	files="$(annotatable_files)"
 	[ -n "$files" ] || die "no changed files vs $base to list"
+
+	# ── Update: reconcile what is written with what the range now holds ─────────
+	#
+	# Three sets, computed once, in ONE awk over both sides: the entries whose path
+	# is still in range (kept, with their number and their prose), the range paths
+	# no entry covers (added, as "## ?." placeholders) and the entries whose path
+	# left the range (removed, named on stderr and gone from the file).
+	#
+	# Same two-stream, range-first, lone-tab-sentinel shape as walk_sequence and
+	# walk_entry_fields, and safe for the same reason: git quotes control
+	# characters in a path unconditionally, so no line of the range side can be a
+	# bare tab.
+	#
+	# Unlike walk_parse this accepts "## ?." headings as entries. An author who
+	# wrote the why but has not numbered it yet is mid-authoring, not absent, and
+	# dropping their prose here would be the overwrite this whole path exists to
+	# stop happening.
+	#
+	# The sort key is emitted rather than the order: kept entries come back in the
+	# author's numbering, unnumbered ones after them, and added paths last in git's
+	# order — so an update reads as "what you had, then what is new", and build
+	# renumbers 1..N afterwards as it always has.
+	prev_content=""
+	merged_kept=0
+	merged_added=0
+	merged_removed=""
+	if [ "$update" -eq 1 ]; then
+		prev_content="$(walk_normalize <"$targetpath")"
+		plan="$({
+			printf '%s\n' "$files"
+			printf '\t\n'
+			printf '%s\n' "$prev_content"
+		} | awk '
+			!tail {
+				if ($0 == "\t") { tail = 1; next }
+				if ($0 != "") { nr++; rank[$0] = nr; inrange[$0] = 1 }
+				next
+			}
+			/^## / {
+				line = substr($0, 4)
+				if (match(line, /^[0-9]+\. /)) {
+					ord = substr(line, 1, RLENGTH - 2)
+					path = substr(line, RLENGTH + 1)
+				} else if (match(line, /^\?\. /)) {
+					ord = "?"
+					path = substr(line, RLENGTH + 1)
+				} else {
+					next
+				}
+				sub(/[ \t]+$/, "", path)
+				if (path == "") next
+				# A path written twice keeps its first entry, the way build reports
+				# the duplicate rather than guessing which copy was meant.
+				if (path in seen) next
+				seen[path] = 1
+				if (path in inrange) {
+					covered[path] = 1
+					printf "K\t%s\t%s\t%s\n", (ord == "?" ? 1000000 : ord), ord, path
+				} else {
+					printf "R\t0\t\t%s\n", path
+				}
+			}
+			END {
+				for (p in inrange) {
+					if (!(p in covered)) printf "A\t%s\t?\t%s\n", 2000000 + rank[p], p
+				}
+			}
+		')"
+		# A leading class letter, not a range of sort keys: telling kept from added
+		# by "is the key above two million" is the kind of test that reads as
+		# arbitrary six months from now and breaks outright on an author who
+		# numbered an entry 3000000.
+		merged_removed="$(printf '%s\n' "$plan" | grep '^R' | cut -f4- || true)"
+		plan_entries="$(printf '%s\n' "$plan" | grep -v '^R' | grep . |
+			LC_ALL=C sort -k2,2n | cut -f3- || true)"
+		merged_kept="$(printf '%s\n' "$plan" | grep -c '^K' || true)"
+		merged_added="$(printf '%s\n' "$plan" | grep -c '^A' || true)"
+	fi
+
+	# The author's preamble as it stands, carried through verbatim — the heads-up
+	# they wrote, or the placeholder they have not filled in yet. NOT walk_preamble,
+	# which strips every comment: that one serves the readers, and here an unfilled
+	# placeholder has to survive or an update would quietly answer build's "the
+	# heads-up placeholder is still there" on the author's behalf.
+	#
+	# The instruction block goes (walk_prompt_block), because the one emitted below
+	# is regenerated for the range this run resolved; the "# Walkthrough" heading
+	# goes because the skeleton writes it back.
+	prev_preamble=""
+	if [ "$update" -eq 1 ]; then
+		prev_preamble="$(printf '%s\n' "$prev_content" | walk_prompt_block | awk '
+			NR == 1 && $0 == "# Walkthrough" { next }
+			/^## / {
+				line = substr($0, 4)
+				if (line ~ /^([0-9]+|\?)\. /) exit
+			}
+			{ buf[++n] = $0 }
+			END {
+				s = 1; while (s <= n && buf[s] ~ /^[ \t]*$/) s++
+				e = n; while (e >= s && buf[e] ~ /^[ \t]*$/) e--
+				for (i = s; i <= e; i++) print buf[i]
+			}
+		')"
+	fi
+
+	# emit_merged_entries
+	# The reconciled entry list: each kept path with its number and its body
+	# exactly as the author left it (markers included — normalising them is
+	# build's job, not this one's), each added path as a "## ?." placeholder.
+	#
+	# One awk for the whole file, not one walk_body per entry: three processes per
+	# entry is the shape that cost ~15s on a 200-entry walkthrough under Git Bash,
+	# and it was removed everywhere else for that reason.
+	emit_merged_entries() {
+		{
+			printf '%s\n' "$plan_entries"
+			printf '\t\n'
+			printf '%s\n' "$prev_content"
+		} | awk '
+			!tail {
+				if ($0 == "\t") { tail = 1; next }
+				if ($0 == "") next
+				i = index($0, "\t")
+				n++
+				ord[n] = substr($0, 1, i - 1)
+				want[n] = substr($0, i + 1)
+				next
+			}
+			/^## / {
+				line = substr($0, 4)
+				if (sub(/^[0-9]+\. /, "", line) || sub(/^\?\. /, "", line)) {
+					sub(/[ \t]+$/, "", line)
+					cur = line
+					had[cur] = 1
+				} else {
+					cur = ""
+				}
+				next
+			}
+			cur != "" { cnt[cur]++; body[cur, cnt[cur]] = $0 }
+			END {
+				for (i = 1; i <= n; i++) {
+					p = want[i]
+					printf "## %s. %s\n", ord[i], p
+					if (p in had) {
+						c = cnt[p] + 0
+						s = 1; while (s <= c && body[p, s] ~ /^[ \t]*$/) s++
+						e = c; while (e >= s && body[p, e] ~ /^[ \t]*$/) e--
+						for (k = s; k <= e; k++) print body[p, k]
+					} else {
+						print "<!-- why: -->"
+					}
+					printf "\n"
+				}
+			}
+		'
+	}
 
 	# The lower bound's object type, one process, and only on a path that is about
 	# to produce a skeleton. It goes in the block because it is why the commands
@@ -751,10 +948,26 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		walk_emit_prompt_block "$tip" "$lower" "$tiplabel" "$lower_kind" \
 			"$situation" "$genflags" "$deltabranch"
 		printf '\n'
-		printf '<!-- Author the reading order for this PR. The entries below are\n'
-		printf '     PLACEHOLDERS. Edit them in place: do not add, remove, or reorder\n'
-		printf '     entries, and do not move any line -- keep every file exactly where\n'
-		printf '     it is, and keep all of them.\n\n'
+		# Two openings, one body. On an update most of the file is already written
+		# and the single most damaging thing the agent can do is rewrite it: the
+		# whole point of preserving the prose is lost if the next reader is told
+		# every entry is a placeholder. Everything after this paragraph applies
+		# unchanged to both, because it describes the format, not the situation.
+		if [ "$update" -eq 1 ]; then
+			printf '<!-- Update the reading order for this PR. Entries that already carry\n'
+			printf '     a number and a why are FINISHED: leave them exactly as they are,\n'
+			printf '     prose included. Only the "## ?." entries below are yours to fill\n'
+			printf '     in -- they are files the PR did not touch when this was last\n'
+			printf '     written. Do not add, remove, or reorder entries, and do not move\n'
+			printf '     any line.\n\n'
+			printf '     If an existing why no longer describes what its file now does,\n'
+			printf '     rewrite that one why. Nothing else.\n\n'
+		else
+			printf '<!-- Author the reading order for this PR. The entries below are\n'
+			printf '     PLACEHOLDERS. Edit them in place: do not add, remove, or reorder\n'
+			printf '     entries, and do not move any line -- keep every file exactly where\n'
+			printf '     it is, and keep all of them.\n\n'
+		fi
 		printf '       * "## ?. <file>": replace only the "?" with a reading position\n'
 		printf '         (1, 2, 3, ...). build orders the files by these numbers and\n'
 		printf '         renumbers them 1..N, so you never reorder the lines yourself.\n'
@@ -770,8 +983,13 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		printf '         unmarked: the marker is only useful while it stays selective,\n'
 		printf '         so mark a handful, not half the PR. Generated files, lockfiles,\n'
 		printf '         mechanical renames and the like are exactly what stays unmarked.\n'
-		printf '       * Fill in the "## Heads-up" section below with what a reviewer\n'
-		printf '         should keep in mind before opening a single file.\n'
+		if [ "$update" -eq 1 ]; then
+			printf '       * The "## Heads-up" section below is carried over as it was.\n'
+			printf '         Change it only if what is delicate about this PR changed.\n'
+		else
+			printf '       * Fill in the "## Heads-up" section below with what a reviewer\n'
+			printf '         should keep in mind before opening a single file.\n'
+		fi
 		# The guides IN FORCE, named, and nothing at all when there are none. The
 		# path used to be hardcoded here whether the file existed or not, which
 		# spent five lines of the agent's attention on a file that was usually not
@@ -815,22 +1033,46 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 			printf '     with uncommitted changes you may be annotating incomplete work, and\n'
 			printf '     build will not see those files. Commit them first; never push\n'
 			printf '     automatically.\n\n'
-			printf '     Then validate and write with:  git review walkthrough build -->\n\n'
+			# The author's half of the same switch the draft side makes above, and
+			# for the same reason: under --stdout nothing was written, so a closing
+			# line naming a bare "build" points at whatever .review/walkthrough.md
+			# happens to be in the work tree -- which validates and rewrites THAT
+			# file with exit 0, discarding what the agent just produced.
+			if [ "$to_stdout" -eq 1 ]; then
+				printf '     Then validate and install what you wrote with:\n'
+				printf '       git review walkthrough build --from <file>\n'
+				printf '     (or --from - to read it from standard input) -->\n\n'
+			else
+				printf '     Then validate and write with:  git review walkthrough build -->\n\n'
+			fi
 		fi
-		printf '## Heads-up\n\n'
-		printf '<!-- heads-up: the delicate parts of this PR, in a few lines -- the\n'
-		printf '     invariants it can break, the subtle or risky bits, anything that\n'
-		printf '     looks fine in isolation but is not, and what to be suspicious of.\n'
-		printf '     This is read once, before the first file. DELETE this whole comment\n'
-		printf '     (opening and closing markers included) and write it as plain text.\n'
-		printf '     If nothing here is delicate, delete the "## Heads-up" heading too --\n'
-		printf '     an empty section is worse than none. Leaving the comment, even with\n'
-		printf '     text inside it, counts as unfilled and build will reject it. -->\n\n'
-		printf '%s\n' "$files" | while IFS= read -r f; do
-			[ -n "$f" ] || continue
-			printf '## ?. %s\n' "$f"
-			printf '<!-- why: -->\n\n'
-		done
+		# On an update the author's preamble is carried through as it stands —
+		# their heads-up, or the placeholder they have not filled in yet. Emitting
+		# the placeholder over prose somebody wrote would be the overwrite this
+		# path exists to prevent; emitting nothing where they deleted the whole
+		# section (legal, and what build tells you to do when nothing is delicate)
+		# would put it back.
+		if [ "$update" -eq 1 ]; then
+			if [ -n "$prev_preamble" ]; then
+				printf '%s\n\n' "$prev_preamble"
+			fi
+			emit_merged_entries
+		else
+			printf '## Heads-up\n\n'
+			printf '<!-- heads-up: the delicate parts of this PR, in a few lines -- the\n'
+			printf '     invariants it can break, the subtle or risky bits, anything that\n'
+			printf '     looks fine in isolation but is not, and what to be suspicious of.\n'
+			printf '     This is read once, before the first file. DELETE this whole comment\n'
+			printf '     (opening and closing markers included) and write it as plain text.\n'
+			printf '     If nothing here is delicate, delete the "## Heads-up" heading too --\n'
+			printf '     an empty section is worse than none. Leaving the comment, even with\n'
+			printf '     text inside it, counts as unfilled and build will reject it. -->\n\n'
+			printf '%s\n' "$files" | while IFS= read -r f; do
+				[ -n "$f" ] || continue
+				printf '## ?. %s\n' "$f"
+				printf '<!-- why: -->\n\n'
+			done
+		fi
 	}
 
 	if [ "$to_stdout" -eq 1 ]; then
@@ -870,10 +1112,31 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 	fi
 
 	n="$(printf '%s\n' "$files" | grep -c .)"
+
+	# What an update dropped, named one by one. Prose somebody typed is going away,
+	# and the only thing that makes that acceptable is saying so where they can see
+	# it — plus the fact that the sidecar is a tracked file, so the way back is one
+	# command. On stderr: under --stdout the file was not even rewritten, and
+	# stdout has to stay a valid walkthrough.
+	#
+	# Only ever the author's file, because only init updates (see the guard above).
+	# A branch here for the reviewer's draft would be unreachable code that reads
+	# like a supported path — and if draft ever does update in place, its way back
+	# is not this one: nothing tracks that file.
+	if [ "$update" -eq 1 ] && [ -n "$merged_removed" ]; then
+		{
+			echo "note: $(printf '%s\n' "$merged_removed" | grep -c .) entry/entries dropped -- the PR no longer changes these files:"
+			printf '%s\n' "$merged_removed" | sed 's/^/        /'
+			echo "      Their whys are in git: git checkout -- $targetrel to get them back."
+		} >&2
+	fi
+
 	if [ "$sub" = draft ]; then
 		# Suppressed under --stdout, and only this one: stdout has to be the
 		# skeleton and nothing else, so that redirecting it produces a valid file.
 		# Every note below already goes to stderr and stays there.
+		# No update branch here either, and for the same reason as the dropped-entry
+		# note: only init updates, so a draft can only ever be freshly written.
 		if [ "$to_stdout" -eq 0 ]; then
 			echo "wrote $targetrel with $n file(s) from $srclabel; fill in the order and why, then run git review walkthrough draft --build$draftflags $branch"
 		fi
@@ -906,8 +1169,18 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		# Deliberately no warn_dirty: a draft is derived from committed refs, not
 		# from your working tree, so what you have uncommitted is nobody's business
 		# here — you are reviewing someone else's branch.
+	elif [ "$to_stdout" -eq 0 ]; then
+		if [ "$update" -eq 1 ]; then
+			echo "updated $targetrel: $merged_kept kept, $merged_added added, $(printf '%s\n' "$merged_removed" | grep -c . || true) dropped; fill in the new entries, then run git review walkthrough build"
+		else
+			echo "wrote $targetrel with $n file(s); fill in the order and why, then run git review walkthrough build"
+		fi
+		warn_dirty
 	else
-		echo "wrote $targetrel with $n file(s); fill in the order and why, then run git review walkthrough build"
+		# --stdout wrote nothing, so there is no "wrote" line to print and stdout
+		# belongs to the skeleton. warn_dirty still applies and still goes to
+		# stderr: an author piping this to an agent is exactly as likely to be
+		# annotating work they have not committed.
 		warn_dirty
 	fi
 	emit_guide_note
@@ -939,9 +1212,17 @@ if [ "$sub" = draft ]; then
 		[ -e "$targetpath" ] ||
 			die "no draft for $branch; run git review walkthrough draft$draftflags $branch first"
 	fi
-else
+elif [ "$from_given" -eq 0 ]; then
 	[ -e "$targetpath" ] || die "$targetrel not found; run git review walkthrough init first"
 fi
+# No presence guard on the author's --from, and no --force to go with it: build
+# ALREADY rewrites .review/walkthrough.md on every ordinary run, so demanding
+# consent to replace it here would contradict the verb one flag over — and would
+# make --force mandatory in the common case (a PR that was annotated and is now
+# being updated), which is how a destructive flag gets typed by reflex. The
+# asymmetry with the draft side is real and is the file itself: the sidecar is
+# tracked, so git checkout -- brings the old prose back; a draft is tracked by
+# nothing.
 
 # Read through walk_normalize for the same reason the runtime readers do: an
 # editor that saved CRLF would otherwise leave a \r on every path (drift errors
@@ -1094,6 +1375,94 @@ if [ -n "$missing" ] || [ -n "$extra" ]; then
 	exit 1
 fi
 
+# ── Anchors: whys written against a version of the file that no longer exists ──
+#
+# The drift check above compares the SET of paths and nothing else, which is why
+# a PR that keeps changing the files it already annotates passes it in green with
+# prose describing the first draft of each one. The anchor closes that: build
+# stamps "> at: <blob>" under every entry, so the next build can tell an entry
+# whose file has moved on from one whose file has not.
+#
+# A reserved marker line at the top of the body, beside "> key" — the shape the
+# format reserved for exactly this (walk_why and walk_draft_progress have
+# filtered "> at: " out since v2, so no reader has to learn about it) and the only
+# shape that survives the round trip through an agent: the whole file goes out and
+# comes back, and an anchor inside the entry comes back with it. In the
+# instruction block it would be regenerated on arrival, and every entry would look
+# freshly written.
+#
+# git cat-file --batch-check, not one rev-parse per entry: one process for the
+# whole walkthrough, and the query goes in on standard input so a 300-entry PR
+# cannot overflow argv (the same reason the range block never passes a path list).
+# Its answers come back one line per query, in order, which is what pairs them
+# back up with the paths.
+anchor_paths="$(printf '%s\n' "$entries" | cut -f2-)"
+anchor_map="$({
+	printf '%s\n' "$anchor_paths"
+	printf '\t\n'
+	printf '%s\n' "$anchor_paths" | awk -v t="$tip:" 'NF { print t $0 }' |
+		git cat-file --batch-check 2>/dev/null || true
+} | awk '
+	phase == 0 {
+		if ($0 == "\t") { phase = 1; next }
+		if ($0 != "") { np++; p[np] = $0 }
+		next
+	}
+	{ no++; o[no] = ($NF == "missing" ? "-" : $1) }
+	END {
+		# Pairing is positional, so a short or absent answer set is not something
+		# to guess around: emit nothing and let every anchor check downstream see
+		# no anchors at all. A missing capability degrades the note, never the
+		# build — the same rule fold_lower follows for git without merge-tree.
+		if (no != np) exit 0
+		for (i = 1; i <= np; i++) printf "%s\t%s\n", o[i], p[i]
+	}
+')"
+
+# Entries whose stored anchor disagrees with the file as it stands now. Reported,
+# never fatal: touching a file without rewriting its why is often right (a rename,
+# an import, a formatting pass), and a build that goes red over it is a check
+# people learn to switch off. "-" is a path the PR deletes — it has no blob, so an
+# entry anchored to one it used to have counts as changed like any other.
+stale_whys="$({
+	printf '%s\n' "$anchor_map"
+	printf '\t\n'
+	printf '%s\n' "$content"
+} | awk '
+	phase == 0 {
+		if ($0 == "\t") { phase = 1; next }
+		if ($0 != "") {
+			i = index($0, "\t")
+			now[substr($0, i + 1)] = substr($0, 1, i - 1)
+		}
+		next
+	}
+	/^## / {
+		line = substr($0, 4)
+		if (sub(/^[0-9]+\. /, "", line) || sub(/^\?\. /, "", line)) {
+			sub(/[ \t]+$/, "", line)
+			cur = line
+		} else {
+			cur = ""
+		}
+		next
+	}
+	cur != "" && index($0, "> at: ") == 1 {
+		a = substr($0, 7)
+		sub(/^[ \t]+/, "", a)
+		sub(/[ \t]+$/, "", a)
+		if (a != "" && (cur in now) && now[cur] != a) print cur
+		next
+	}
+')"
+if [ -n "$stale_whys" ]; then
+	{
+		echo "note: $(printf '%s\n' "$stale_whys" | grep -c .) why/whys were written against an older version of their file:"
+		printf '%s\n' "$stale_whys" | sed 's/^/        /'
+		echo "      Reread those and rewrite the ones that no longer describe the file."
+	} >&2
+fi
+
 count="$(printf '%s\n' "$entries" | grep -c .)"
 
 # Entries carrying the "> key" marker, counted over the whole file in one pass.
@@ -1189,15 +1558,31 @@ fi
 	{
 		printf '%s\n' "$sorted_paths"
 		printf '\t\n'
+		printf '%s\n' "$anchor_map"
+		printf '\t\n'
 		printf '%s\n' "$content"
 	} | awk -v key_re="$key_re" '
 		# Phase 1: the paths in the author-ordered sequence, up to the sentinel.
-		!tail {
-			if ($0 == "\t") { tail = 1; next }
+		phase == 0 {
+			if ($0 == "\t") { phase = 1; next }
 			if ($0 != "") { n++; order[n] = $0 }
 			next
 		}
-		# Phase 2: the walkthrough, split into bodies. Headers are recognised
+		# Phase 2: the anchor for each path as the tip has it now, up to the
+		# second sentinel. Absent for a path the PR deletes, and absent for all of
+		# them when the pairing upstream could not be trusted — in both cases the
+		# entry comes out with no anchor line, which is what an unanchored entry
+		# has always looked like.
+		phase == 1 {
+			if ($0 == "\t") { phase = 2; next }
+			if ($0 != "") {
+				i = index($0, "\t")
+				o = substr($0, 1, i - 1)
+				if (o != "-") at[substr($0, i + 1)] = o
+			}
+			next
+		}
+		# Phase 3: the walkthrough, split into bodies. Headers are recognised
 		# exactly as walk_body did it, since that is what this replaced.
 		/^## / {
 			line = substr($0, 4)
@@ -1210,6 +1595,11 @@ fi
 			next
 		}
 		cur != "" && $0 ~ key_re { key[cur] = 1; next }
+		# The incoming anchor is dropped rather than kept as body text: it was
+		# already read (the stale note above is what it exists for) and the line
+		# emitted below is the current one. Without this an entry would collect
+		# one anchor line per build, and the runtime filter would hide the pile.
+		cur != "" && index($0, "> at: ") == 1 { next }
 		cur != "" { cnt[cur]++; body[cur, cnt[cur]] = $0 }
 		END {
 			for (i = 1; i <= n; i++) {
@@ -1221,6 +1611,7 @@ fi
 				s = 1; while (s <= c && body[p, s] ~ /^[ \t]*$/) s++
 				e = c; while (e >= s && body[p, e] ~ /^[ \t]*$/) e--
 				if (p in key) print "> key"
+				if (p in at) printf "> at: %s\n", at[p]
 				for (k = s; k <= e; k++) print body[p, k]
 				printf "\n"
 			}

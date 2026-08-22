@@ -160,6 +160,13 @@ public sealed class ReviewStateManager
             IReadOnlyList<CandidateBranch>? candidates = null;
             IReadOnlyList<CandidateRemote>? remotes = null;
             IReadOnlyList<DraftRecord>? drafts = null;
+            // The guides and the walkthrough row come from THIS report, not from
+            // status: outside a review status is what exits 2, so the only verb
+            // that can carry them is this one. Without them the empty state drew
+            // a Walkthrough section with two buttons and nothing else, while the
+            // other two clients drew the rows.
+            IReadOnlyList<GuideRecord>? guides = null;
+            WalkthroughRecord? walkthrough = null;
             if (config.ExitCode == 0)
             {
                 try
@@ -169,6 +176,8 @@ public sealed class ReviewStateManager
                     candidates = cp.Candidates;
                     remotes = cp.Remotes;
                     drafts = cp.Drafts;
+                    guides = cp.Guides;
+                    walkthrough = cp.Walkthrough;
                 }
                 catch { /* leave null */ }
             }
@@ -181,7 +190,9 @@ public sealed class ReviewStateManager
                 Config: eff,
                 Candidates: candidates,
                 Remotes: remotes,
-                Drafts: drafts);
+                Drafts: drafts,
+                Guides: guides,
+                Walkthrough: walkthrough);
         }
         else
         {

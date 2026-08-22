@@ -195,6 +195,52 @@ public sealed record GuideRecord(
     string Path,
     GuideState State);
 
+/// <summary>
+/// What state the author's own walkthrough is in against the branch they have
+/// checked out. All four are decided by the CLI and none is inferred here — in
+/// particular Unknown, which is NOT Stale: with no instruction block (deleting it
+/// by hand is legal) the question has no answer, and giving the worse of the two
+/// would send someone to redo a reading order that may be perfectly fine.
+/// </summary>
+public enum WalkthroughState
+{
+    InSync,
+    Stale,
+    Unknown,
+    Absent,
+}
+
+public static class WalkthroughStateExt
+{
+    public static WalkthroughState? Parse(string? raw) => raw switch
+    {
+        "in-sync" => WalkthroughState.InSync,
+        "stale" => WalkthroughState.Stale,
+        "unknown" => WalkthroughState.Unknown,
+        "absent" => WalkthroughState.Absent,
+        _ => null,
+    };
+}
+
+/// <summary>
+/// The committed walkthrough of the branch you are standing on, and whether it
+/// still describes what the PR changes today.
+///
+/// It exists because a walkthrough is written when the PR is finished and then
+/// the PR keeps moving: review comments come back, three files change, and that
+/// is exactly the moment nobody is thinking about the walkthrough. Stale is a
+/// "worth looking at", never a verdict — the verdict is build's, which is what
+/// the row's control runs.
+///
+/// Path comes straight from the CLI, like the draft's and the guides': it is
+/// opened, never rebuilt.
+/// </summary>
+public sealed record WalkthroughRecord(
+    string Path,
+    WalkthroughState State,
+    int Annotated,
+    int Total);
+
 public sealed record ConfigPorcelainResult(
     EffectiveConfig Config,
     IReadOnlyList<CandidateBranch> Candidates,
@@ -209,7 +255,13 @@ public sealed record ConfigPorcelainResult(
     /// missing one without rebuilding its path, which is what the reported-path
     /// rule exists to prevent.
     /// </summary>
-    IReadOnlyList<GuideRecord>? Guides = null);
+    IReadOnlyList<GuideRecord>? Guides = null,
+    /// <summary>
+    /// The author's walkthrough for the branch that is checked out. The CLI emits
+    /// the row present or absent — same rule as the guides — so null here means
+    /// one thing only: a CLI older than the record.
+    /// </summary>
+    WalkthroughRecord? Walkthrough = null);
 
 public static class ConfigPorcelain
 {
@@ -248,6 +300,7 @@ public static class ConfigPorcelain
         var offers = new List<ReadingOffer>();
         var drafts = new List<DraftRecord>();
         var guides = new List<GuideRecord>();
+        WalkthroughRecord? walkthrough = null;
 
         foreach (var line in stdout.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
         {
@@ -313,6 +366,14 @@ public static class ConfigPorcelain
                     if (guide is not null) guides.Add(guide);
                     break;
                 }
+                case "walkthrough":
+                {
+                    // One row per invocation. If two arrived the first wins: a
+                    // second would be the CLI contradicting itself, and taking
+                    // the last would make the panel depend on emission order.
+                    if (walkthrough is null) walkthrough = ParseWalkthroughRecord(fields);
+                    break;
+                }
                 case "offer":
                 {
                     var id = OfferIdExt.Parse(Get(fields, 1));
@@ -332,7 +393,8 @@ public static class ConfigPorcelain
             deltas.Count > 0 ? deltas : null,
             offers.Count > 0 ? offers : null,
             drafts,
-            guides);
+            guides,
+            walkthrough);
     }
 
     /// <summary>
@@ -345,6 +407,27 @@ public static class ConfigPorcelain
     /// tokenizer would be the same rule written twice, and the second copy would learn
     /// about any new field late.
     /// </summary>
+    /// <summary>
+    /// A walkthrough record from its fields, or null when it is malformed.
+    ///
+    /// The annotated/total pair falls back to 0/0 rather than dropping the whole
+    /// row: the state is what decides what the block offers, and losing it to an
+    /// unreadable counter would leave the author without the one surface that
+    /// tells them their reading order fell behind. An unrecognised state does
+    /// drop the row — drawing an invented badge is worse than drawing no block.
+    /// </summary>
+    public static WalkthroughRecord? ParseWalkthroughRecord(string[] fields)
+    {
+        var state = WalkthroughStateExt.Parse(Get(fields, 1));
+        var path = Get(fields, 2);
+        if (state is null || string.IsNullOrEmpty(path)) return null;
+        return new WalkthroughRecord(
+            path!,
+            state.Value,
+            ParseCount(Get(fields, 3)) ?? 0,
+            ParseCount(Get(fields, 4)) ?? 0);
+    }
+
     public static GuideRecord? ParseGuideRecord(string[] fields)
     {
         var kind = GuideKindExt.Parse(Get(fields, 1));

@@ -34,6 +34,8 @@ object PanelFixtures {
         "no-review drafts" to noReviewDrafts(),
         "no-review guides" to noReviewGuides(),
         "no-review guide empty" to noReviewGuideEmpty(),
+        "no-review walkthrough stale" to noReviewWalkthroughStale(),
+        "no-review walkthrough absent" to noReviewWalkthroughAbsent(),
         "finish-pending" to finishPending(),
         "out-of-range" to outOfRange(),
         "error" to error(),
@@ -156,6 +158,48 @@ object PanelFixtures {
                 situation = Situation.NO_REVIEW,
                 config = EffectiveConfig(base = "main", remote = "origin"),
                 guides = parseConfigPorcelain(cfg).guides,
+            ),
+            PanelInputs(busy = false),
+        )
+    }
+
+    /**
+     * The author's own walkthrough, stale and half-written: the PR was finished,
+     * annotated, and then touched again, which is the situation the row exists
+     * for. Two files entered the range and nobody has numbered them yet.
+     */
+    fun noReviewWalkthroughStale(): PanelModel {
+        val cfg = """
+            walkthrough	stale	/repo/.review/walkthrough.md	4	6
+            guide	team	/repo/.review/walkthrough-guide.md	absent
+            guide	own	/repo/.git/review-walkthrough-guide.md	absent
+        """.trimIndent()
+        val parsed = parseConfigPorcelain(cfg)
+        return buildPanelModel(
+            ReviewState(
+                situation = Situation.NO_REVIEW,
+                config = EffectiveConfig(base = "main", remote = "origin"),
+                guides = parsed.guides,
+                walkthrough = parsed.walkthrough,
+            ),
+            PanelInputs(busy = false),
+        )
+    }
+
+    /** No walkthrough at all: the row offers creating one, and nothing else. */
+    fun noReviewWalkthroughAbsent(): PanelModel {
+        val cfg = """
+            walkthrough	absent	/repo/.review/walkthrough.md	0	0
+            guide	team	/repo/.review/walkthrough-guide.md	absent
+            guide	own	/repo/.git/review-walkthrough-guide.md	absent
+        """.trimIndent()
+        val parsed = parseConfigPorcelain(cfg)
+        return buildPanelModel(
+            ReviewState(
+                situation = Situation.NO_REVIEW,
+                config = EffectiveConfig(base = "main", remote = "origin"),
+                guides = parsed.guides,
+                walkthrough = parsed.walkthrough,
             ),
             PanelInputs(busy = false),
         )

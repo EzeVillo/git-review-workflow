@@ -85,6 +85,7 @@ class ReviewStateManager(
         var remotes: List<com.ezevillo.gitreview.domain.CandidateRemote>? = null
         var drafts: List<com.ezevillo.gitreview.domain.DraftRecord>? = null
         var guides: List<com.ezevillo.gitreview.domain.GuideRecord>? = null
+        var walkthrough: com.ezevillo.gitreview.domain.WalkthroughRecord? = null
 
         val hasFinishConflict = if (status.exitCode == 0) {
             try {
@@ -112,6 +113,7 @@ class ReviewStateManager(
                     remotes = parsed.remotes
                     drafts = parsed.drafts
                     guides = parsed.guides
+                    walkthrough = parsed.walkthrough
                 } catch (_: Exception) {
                     // leave null
                 }
@@ -156,6 +158,7 @@ class ReviewStateManager(
                 remotes = remotes,
                 drafts = drafts,
                 guides = guides,
+                walkthrough = walkthrough,
             )
             Situation.OUT_OF_RANGE -> ReviewState(
                 situation = situation,

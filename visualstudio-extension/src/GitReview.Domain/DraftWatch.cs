@@ -61,7 +61,13 @@ public static class DraftWatch
             if (string.Equals(Normalise(guide.Path), target, StringComparison.OrdinalIgnoreCase))
                 return true;
         }
-        return false;
+        // The author's walkthrough is on the same exact-path list, for the same
+        // reason: no watch root of its own (it lives in the work tree, which every
+        // git operation moves), but a save on it has to refresh — you write the
+        // reading order by hand and press Ctrl+S, and the badge would still say
+        // what it said before.
+        return state.Walkthrough is not null
+            && string.Equals(Normalise(state.Walkthrough.Path), target, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string Normalise(string path) => path.Replace('\\', '/');

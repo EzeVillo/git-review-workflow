@@ -93,31 +93,28 @@ export async function cleanReview(
     await runHousekeeping({kind: "clean-one", source}, lock, stateManager, getInvokeOptions);
 }
 
+/**
+ * La rama a limpiar sale del inventario y solo de ahí. `clean` borra ramas: un
+ * nombre tipeado a mano es la única forma de pedirle que borre algo que el
+ * revisor no vio en ninguna lista, y un typo ahí no falla, apunta a otro lado.
+ * El QuickPick filtra incrementalmente, así que escribir sigue siendo la forma
+ * de llegar al ítem — pero lo que vuelve es siempre uno de los que reportó la
+ * CLI.
+ */
 async function pickSource(branches: BranchRecord[]): Promise<string | undefined> {
     const names = [
         ...new Set(branches.map((r) => sourceFromReviewName(r.name))),
     ];
-    const fromInventory = names.map((name) => ({label: name}));
-    if (fromInventory.length > 0) {
-        const items: vscode.QuickPickItem[] = [
-            ...fromInventory,
-            {label: "Enter a branch name…"},
-        ];
-        const chosen = await vscode.window.showQuickPick(items, {
+    if (names.length === 0) {
+        void vscode.window.showErrorMessage("No reviews to clean were found.");
+        return undefined;
+    }
+    const chosen = await vscode.window.showQuickPick(
+        names.map((name) => ({label: name})),
+        {
             title: "Branch to clean",
             placeHolder: "Source branch name (without review/ prefix)",
-        });
-        if (!chosen) {
-            return undefined;
         }
-        if (chosen.label !== "Enter a branch name…") {
-            return chosen.label;
-        }
-    }
-    const typed = await vscode.window.showInputBox({
-        title: "Branch to clean",
-        prompt: "Source branch name (e.g. feature/checkout), not review/…",
-        validateInput: (v) => (v.trim() === "" ? "Required" : undefined),
-    });
-    return typed?.trim();
+    );
+    return chosen?.label;
 }

@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -74,6 +74,22 @@ public static class GitReviewDialogs
         if (options.Count == 0) return Cancelled;
         var dialog = new ChooseDialog(title, message, options, defaultIndex);
         return dialog.ShowDialog() == true ? dialog.SelectedIndex : Cancelled;
+    }
+
+    /// <summary>
+    /// Same picker, but the typed text is itself an answer: the filter box offers what
+    /// was typed as the first row whenever it does not match an option exactly. Only
+    /// <c>compare</c> needs it — it takes a commit-ish, and a tag or a SHA is a
+    /// legitimate answer no branch list carries. Every other picker stays closed over
+    /// its options, where a typo cannot become a branch name nobody meant.
+    /// Null on cancel and on empty.
+    /// </summary>
+    public static string? ChooseOrType(string title, string message, IReadOnlyList<string> options)
+    {
+        var dialog = new ChooseDialog(title, message, options, 0, freeText: true);
+        if (dialog.ShowDialog() != true) return null;
+        var text = dialog.SelectedLabel?.Trim();
+        return string.IsNullOrEmpty(text) ? null : text;
     }
 
     /// <summary>
@@ -274,22 +290,26 @@ public static class GitReviewDialogs
     /// </summary>
     private sealed class ChooseDialog : DialogBase
     {
-        private const int FilterThreshold = 8;
-
         private readonly IReadOnlyList<string> _options;
         private readonly ListBox _list = new();
         private readonly TextBox _filter = new();
+        private readonly bool _freeText;
 
         public int SelectedIndex =>
-            _list.SelectedItem is Row row ? row.Index : Cancelled;
+            _list.SelectedItem is Row row && row.Index != PickerRows.Typed ? row.Index : Cancelled;
+
+        /// <summary>The picked text — an option, or what was typed in free-text mode.</summary>
+        public string? SelectedLabel => (_list.SelectedItem as Row)?.Value;
 
         public ChooseDialog(
             string title,
             string message,
             IReadOnlyList<string> options,
-            int defaultIndex) : base(title)
+            int defaultIndex,
+            bool freeText = false) : base(title)
         {
             _options = options;
+            _freeText = freeText;
             if (!string.IsNullOrWhiteSpace(message)) Add(Label(message));
 
             _filter.Background = Chrome.CodeBackground;
@@ -299,9 +319,11 @@ public static class GitReviewDialogs
             _filter.Padding = new Thickness(5, 3, 5, 3);
             _filter.Margin = new Thickness(0, 0, 0, 6);
             _filter.CaretBrush = Chrome.Foreground;
-            _filter.Visibility = options.Count >= FilterThreshold
-                ? Visibility.Visible
-                : Visibility.Collapsed;
+            // Siempre visible, sin umbral por cantidad: el filtro es la forma de
+            // elegir, no una ayuda para listas largas. Un picker que la esconde
+            // con pocas opciones enseña dos interacciones distintas para la
+            // misma pregunta, y la que se aprende primero es la que no filtra.
+            _filter.Visibility = Visibility.Visible;
             _filter.TextChanged += (_, _) => ApplyFilter();
             // Down from the filter walks into the list instead of dead-ending.
             _filter.PreviewKeyDown += (_, e) =>
@@ -339,8 +361,7 @@ public static class GitReviewDialogs
             Select(wanted);
             Loaded += (_, _) =>
             {
-                if (_filter.Visibility == Visibility.Visible) _filter.Focus();
-                else _list.Focus();
+                _filter.Focus();
                 _list.ScrollIntoView(_list.SelectedItem);
             };
         }
@@ -348,7 +369,15 @@ public static class GitReviewDialogs
         /// <summary>Enter on the list is the same as pressing the default button.</summary>
         protected override void Accept()
         {
-            if (SelectedIndex == Cancelled) return;
+            if (_freeText)
+            {
+                if (string.IsNullOrWhiteSpace(SelectedLabel)) return;
+            }
+            else if (SelectedIndex == Cancelled)
+            {
+                return;
+            }
+
             base.Accept();
         }
 
@@ -367,19 +396,17 @@ public static class GitReviewDialogs
         {
             var needle = _filter.Text.Trim();
             var keep = SelectedIndex;
+            var rows = PickerRows.Rows(_options, needle, _freeText);
+
             _list.Items.Clear();
-            for (var i = 0; i < _options.Count; i++)
+            foreach (var index in rows)
             {
-                var label = _options[i];
-                if (needle.Length > 0
-                    && label.IndexOf(needle, StringComparison.OrdinalIgnoreCase) < 0)
-                {
-                    continue;
-                }
-                _list.Items.Add(new Row(i, label));
+                _list.Items.Add(index == PickerRows.Typed
+                    ? new Row(index, needle, "   — use as typed")
+                    : new Row(index, _options[index]));
             }
-            if (keep != Cancelled) Select(keep);
-            else if (_list.Items.Count > 0) _list.SelectedIndex = 0;
+
+            _list.SelectedIndex = PickerRows.Selection(rows, keep);
         }
 
         /// <summary>
@@ -391,11 +418,18 @@ public static class GitReviewDialogs
         {
             public int Index { get; }
 
-            public Row(int index, string label)
+            /// <summary>
+            /// Lo que el diálogo devuelve, aparte de lo que dibuja: la fila de texto
+            /// libre lleva un sufijo que la explica y que no es parte de la respuesta.
+            /// </summary>
+            public string Value { get; }
+
+            public Row(int index, string label, string? suffix = null)
             {
                 Index = index;
-                Text = label;
-                ToolTip = label;
+                Value = label;
+                Text = suffix is null ? label : label + suffix;
+                ToolTip = Text;
                 Padding = new Thickness(4, 2, 4, 2);
                 TextTrimming = TextTrimming.None;
             }

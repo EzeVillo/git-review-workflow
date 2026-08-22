@@ -78,30 +78,34 @@ export async function forgetReview(
     await runHousekeeping({kind: pick.action, source}, lock, stateManager, getInvokeOptions);
 }
 
+/**
+ * La rama sale de la lista y solo de ahí. Un marcador --delta puede sobrevivir a
+ * toda rama de review que lo hubiera nombrado, pero tipear ese nombre a ciegas
+ * no es la salida: para los huérfanos están "Forget stale delta markers" —que es
+ * exactamente los marcadores cuya rama ya no existe— y "Forget every delta
+ * marker", que no piden nombrar nada. El QuickPick filtra incrementalmente, así
+ * que escribir sigue llegando al ítem sin poder inventar uno.
+ */
 async function pickSource(
     branches: BranchRecord[],
     savedOnly: boolean
 ): Promise<string | undefined> {
     const filtered = branches.filter((r) => (savedOnly ? r.saved : true));
     const names = [...new Set(filtered.map((r) => sourceFromReviewName(r.name)))];
-    const fromList = names.map((name) => ({label: name}));
-    if (fromList.length > 0) {
-        const items: vscode.QuickPickItem[] = [...fromList, {label: "Enter a branch name…"}];
-        const chosen = await vscode.window.showQuickPick(items, {
-            title: savedOnly ? "Saved review to discard" : "Branch",
-            placeHolder: "Source branch name",
-        });
-        if (!chosen) {
-            return undefined;
-        }
-        if (chosen.label !== "Enter a branch name…") {
-            return chosen.label;
-        }
+    if (names.length === 0) {
+        void vscode.window.showErrorMessage(
+            savedOnly
+                ? "No saved reviews were found."
+                : 'No reviews were found to name a delta marker. Use "Forget stale delta markers" for markers whose branch is gone.'
+        );
+        return undefined;
     }
-    const typed = await vscode.window.showInputBox({
-        title: savedOnly ? "Saved review to discard" : "Branch for delta marker",
-        prompt: "Source branch name (e.g. feature/checkout)",
-        validateInput: (v) => (v.trim() === "" ? "Required" : undefined),
-    });
-    return typed?.trim();
+    const chosen = await vscode.window.showQuickPick(
+        names.map((name) => ({label: name})),
+        {
+            title: savedOnly ? "Saved review to discard" : "Branch for delta marker",
+            placeHolder: "Source branch name",
+        }
+    );
+    return chosen?.label;
 }

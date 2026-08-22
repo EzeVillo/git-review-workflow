@@ -50,6 +50,12 @@ First release of the Visual Studio client. Requires `git review` **0.7.0** or ne
 - *Validate and start* invokes the CLI with the **same origin and range flags the draft was
   generated with**, reported by the CLI itself — a draft made with `--delta`, `--local` or
   `--offline` covers a different set of paths than the defaults would.
+- **The pickers.** Every list you choose from has a search box: type to narrow it, arrow
+  down to walk what is left, with two options or two hundred. The ones that name a branch
+  take only a branch that exists — *Clean*, *Forget* and *Discard* delete branches and
+  config, and a name typed by hand does not fail when it is wrong, it points somewhere
+  else. `compare` is the exception, because it takes a commit-ish: there the list is still
+  offered and filtered, and a tag or a SHA you type is offered as the first row.
 - **The start wizard.** Every step — branch, origin, range, reading order — is a real
   picker. The origin step starts on your **Default start source** setting, the range step
   only appears when there is a delta marker to compare against, and *Walkthrough — draft

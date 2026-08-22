@@ -15,6 +15,14 @@ public static class UserCopy
     public const string NoBranchesForReview = "No branches to pick a review from were found.";
     public const string NoRemotes = "No remotes to pick from were found.";
     public const string NoSavedReviews = "No saved reviews.";
+    // Los pickers de housekeeping están cerrados sobre lo que la CLI reportó, así que
+    // con la lista vacía no hay nada que elegir. El de --delta nombra la salida que sí
+    // alcanza a los marcadores huérfanos — el caso por el que ahí había texto libre.
+    public const string NoReviewsToClean = "No reviews to clean were found.";
+    public const string NoReviewsToDiscard = "No reviews to discard were found.";
+    public const string NoDeltaSources =
+        "No reviews were found to name a delta marker. "
+        + "Use \"Forget stale delta markers\" for markers whose branch is gone.";
     public const string NotResumable = "That review is not resumable.";
     public const string NoActivePreview = "No active review to preview.";
     public const string NoSoleRoot = "Need a single git repository root.";
@@ -256,9 +264,6 @@ public static class UserCopy
     public const string CleanOneLabel = "Clean leftovers for one branch…";
     public const string CleanAllLabel = "Clean all leftover review branches";
     public const string CleanBranchTitle = "Branch to clean";
-    public const string CleanBranchPrompt =
-        "Source branch name (e.g. feature/checkout), not review/…";
-
     public const string ForgetPickTitle = "Forget review state";
     public const string ForgetSavedOneLabel = "Discard one saved review…";
     public const string ForgetSavedAllLabel = "Discard every saved review";
@@ -267,8 +272,6 @@ public static class UserCopy
     public const string ForgetDeltaStaleLabel = "Forget stale delta markers";
     public const string ForgetSavedSourceTitle = "Saved review to discard";
     public const string ForgetDeltaSourceTitle = "Branch for delta marker";
-    public const string ForgetSourcePrompt = "Source branch name (e.g. feature/checkout)";
-    public const string EnterBranchName = "Enter a branch name…";
 
     public const string InstallDocsUrl =
         "https://github.com/EzeVillo/git-review-workflow#readme";

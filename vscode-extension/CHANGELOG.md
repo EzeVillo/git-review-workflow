@@ -25,6 +25,18 @@ Requires `git review` **0.7.0** or newer.
 
 ### Changed
 
+- **Every branch picker filters as you type, and only takes a branch that exists.** The
+  pickers that name a branch — *Clean*, *Forget*, *Discard* — no longer offer an "Enter a
+  branch name…" way out into a free-text box. `clean` and `forget` delete branches and
+  config, and a name typed there does not fail when it is wrong, it points somewhere else.
+  The list still narrows as you type, so writing is still how you reach a row; it just
+  cannot invent one. For delta markers that outlived every review branch that would have
+  named them, *Forget stale delta markers* is exactly those, and needs no name at all.
+- **`compare` picks its bounds from the branches you have.** Both bounds now open the list
+  of candidates instead of an empty box, filtered as you type. A tag or a SHA is still a
+  valid answer there — `compare` takes a commit-ish — so what you type is offered as the
+  first row when it matches no branch, in the same box rather than behind a separate
+  "Enter commit-ish…" dialog that hid the list.
 - **The draft progress follows the file.** Hand a draft to an agent and the row's count moves on
   its own while it writes — no Refresh, no reopening the panel. The draft lives in the gitdir, so
   filling it in moves no `HEAD`, touches no index and writes no `config`: none of the panel's

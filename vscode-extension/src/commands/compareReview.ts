@@ -122,29 +122,52 @@ async function loadCandidates(
     return parseConfigPorcelain(result.stdout).candidates;
 }
 
+/**
+ * El único picker que no se cierra sobre su lista: `compare` toma un commit-ish,
+ * y un tag o un SHA son respuestas legítimas que ninguna lista de ramas trae. Lo
+ * que sí cambia es dónde se escribe — en la caja del propio QuickPick, que
+ * además filtra las candidatas, en vez de un ítem "Enter commit-ish…" que sacaba
+ * a otro diálogo y perdía la lista de vista. Lo tipeado se ofrece como primera
+ * fila mientras no coincida con una candidata, así que aceptar es siempre elegir
+ * una fila y nunca adivinar si el texto contaba.
+ */
 async function pickCommitIsh(
     candidates: CandidateBranch[],
     title: string
 ): Promise<string | undefined> {
-    const items: {label: string; description?: string; value?: string}[] = candidates.map((c) => ({
-        label: c.name,
-        description: c.origin + (c.current ? " · current" : ""),
-        value: c.name,
-    }));
-    items.push({label: "Enter commit-ish…", value: "__input__"});
-
     if (candidates.length === 0) {
         return inputCommitIsh(title);
     }
+    const branches: vscode.QuickPickItem[] = candidates.map((c) => ({
+        label: c.name,
+        description: c.origin + (c.current ? " · current" : ""),
+    }));
 
-    const picked = await vscode.window.showQuickPick(items, {title, placeHolder: "Branch, tag or commit"});
-    if (!picked) {
-        return undefined;
-    }
-    if (picked.value === "__input__" || picked.label === "Enter commit-ish…") {
-        return inputCommitIsh(title);
-    }
-    return picked.value ?? picked.label;
+    return await new Promise<string | undefined>((resolve) => {
+        const quickPick = vscode.window.createQuickPick();
+        quickPick.title = title;
+        quickPick.placeholder = "Branch, tag or commit";
+        quickPick.items = branches;
+        quickPick.onDidChangeValue((value) => {
+            const typed = value.trim();
+            const known = typed === "" || branches.some((b) => b.label === typed);
+            quickPick.items = known
+                ? branches
+                : [{label: typed, description: "use as typed"}, ...branches];
+        });
+        quickPick.onDidAccept(() => {
+            const picked = quickPick.selectedItems[0]?.label ?? quickPick.value.trim();
+            quickPick.hide();
+            resolve(picked === "" ? undefined : picked);
+        });
+        // Cancelar (Esc, o el foco afuera) también pasa por acá; el resolve de
+        // onDidAccept ya ganó la carrera, así que este solo cubre el descarte.
+        quickPick.onDidHide(() => {
+            quickPick.dispose();
+            resolve(undefined);
+        });
+        quickPick.show();
+    });
 }
 
 async function inputCommitIsh(title: string): Promise<string | undefined> {

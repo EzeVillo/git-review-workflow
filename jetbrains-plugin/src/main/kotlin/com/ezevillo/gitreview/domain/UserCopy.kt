@@ -17,6 +17,15 @@ object UserCopy {
     const val NO_BRANCHES_FOR_REVIEW = "No branches to pick a review from were found."
     const val NO_REMOTES = "No remotes to pick from were found."
     const val NO_SAVED_REVIEWS = "No saved reviews."
+
+    // Los pickers de housekeeping están cerrados sobre lo que la CLI reportó, así que
+    // con la lista vacía no hay nada que elegir. El de --delta nombra la salida que sí
+    // alcanza a los marcadores huérfanos — el caso por el que ahí había texto libre.
+    const val NO_REVIEWS_TO_CLEAN = "No reviews to clean were found."
+    const val NO_REVIEWS_TO_DISCARD = "No reviews to discard were found."
+    const val NO_DELTA_SOURCES =
+        "No reviews were found to name a delta marker. " +
+            "Use \"Forget stale delta markers\" for markers whose branch is gone."
     const val NOT_RESUMABLE = "That review is not resumable."
     const val NO_ACTIVE_PREVIEW = "No active review to preview."
     const val NO_SOLE_ROOT = "Need a single git repository root."
@@ -247,9 +256,6 @@ object UserCopy {
     const val CLEAN_ONE_LABEL = "Clean leftovers for one branch…"
     const val CLEAN_ALL_LABEL = "Clean all leftover review branches"
     const val CLEAN_BRANCH_TITLE = "Branch to clean"
-    const val CLEAN_BRANCH_PROMPT =
-        "Source branch name (e.g. feature/checkout), not review/…"
-
     const val FORGET_PICK_TITLE = "Forget review state"
     const val FORGET_SAVED_ONE_LABEL = "Discard one saved review…"
     const val FORGET_SAVED_ALL_LABEL = "Discard every saved review"
@@ -258,8 +264,6 @@ object UserCopy {
     const val FORGET_DELTA_STALE_LABEL = "Forget stale delta markers"
     const val FORGET_SAVED_SOURCE_TITLE = "Saved review to discard"
     const val FORGET_DELTA_SOURCE_TITLE = "Branch for delta marker"
-    const val FORGET_SOURCE_PROMPT = "Source branch name (e.g. feature/checkout)"
-    const val ENTER_BRANCH_NAME = "Enter a branch name…"
 
     const val INSTALL_DOCS_URL =
         "https://github.com/EzeVillo/git-review-workflow#readme"

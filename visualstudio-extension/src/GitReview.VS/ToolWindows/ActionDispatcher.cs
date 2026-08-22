@@ -596,22 +596,29 @@ public sealed class ActionDispatcher
 
     /// <summary>
     /// Discard one review. From an inventory row the name is known; from the menu it is
-    /// typed, because the reviews the menu can reach are not necessarily the ones this
-    /// branch's inventory lists.
+    /// picked out of that same inventory — filtered by typing, but never invented. This
+    /// verb deletes branches, so a name that reaches the CLI without having been listed
+    /// is a name nobody checked.
     /// </summary>
     private async Task DiscardInventoryAsync(int? index)
     {
+        var branches = State.BranchesList;
         string name;
         if (index is null)
         {
-            var typed = GitReviewDialogs.Input(
-                "Discard", "Review branch name to discard (e.g. review-saved/feature/x):");
-            if (typed is null) return;
-            name = typed;
+            if (branches.Count == 0)
+            {
+                GitReviewDialogs.Error(UserCopy.NoReviewsToDiscard);
+                return;
+            }
+
+            var names = branches.Select(b => b.Name).Distinct(StringComparer.Ordinal).ToList();
+            var idx = GitReviewDialogs.Choose("Discard", "Review branch to discard", names);
+            if (idx < 0) return;
+            name = names[idx];
         }
         else
         {
-            var branches = State.BranchesList;
             if (index < 0 || index >= branches.Count) return;
             name = branches[index.Value].Name;
         }
@@ -757,9 +764,12 @@ public sealed class ActionDispatcher
     }
 
     /// <summary>
-    /// Which branch a housekeeping verb applies to. The reviews this client knows about
-    /// are offered as a list, plus a way out for the ones it does not: a delta marker can
-    /// outlive every review branch that would have named it.
+    /// Which branch a housekeeping verb applies to — one of the reviews this client
+    /// knows about, and only those. A delta marker can outlive every review branch that
+    /// would have named it, but typing that name blind is not the way out: "Forget stale
+    /// delta markers" is exactly the markers whose branch is gone, and "Forget every
+    /// delta marker" needs no name at all. The picker filters as you type, so writing
+    /// still reaches the row — it just cannot invent one.
     /// </summary>
     private string? PickSourceName(bool savedOnly, bool forClean)
     {
@@ -776,17 +786,27 @@ public sealed class ActionDispatcher
             ? UserCopy.CleanBranchTitle
             : savedOnly ? UserCopy.ForgetSavedSourceTitle : UserCopy.ForgetDeltaSourceTitle;
 
-        if (names.Count > 0)
+        if (names.Count == 0)
         {
-            var options = names.Append(UserCopy.EnterBranchName).ToList();
-            var idx = GitReviewDialogs.Choose(title, "Source branch name", options);
-            if (idx < 0) return null;
-            if (options[idx] != UserCopy.EnterBranchName) return options[idx];
+            GitReviewDialogs.Error(
+                forClean ? UserCopy.NoReviewsToClean
+                    : savedOnly ? UserCopy.NoSavedReviews : UserCopy.NoDeltaSources);
+            return null;
         }
 
-        var prompt = forClean ? UserCopy.CleanBranchPrompt : UserCopy.ForgetSourcePrompt;
-        return GitReviewDialogs.Input(title, prompt);
+        var idx = GitReviewDialogs.Choose(title, "Source branch name", names);
+        return idx < 0 ? null : names[idx];
     }
+
+    /// <summary>
+    /// One bound of <c>compare</c>. The only picker in this client that accepts a value
+    /// outside its list, because the CLI takes a commit-ish there — a tag or a SHA is a
+    /// real answer. With no candidates to show it degrades to the plain input.
+    /// </summary>
+    private static string? PickCommitIsh(string title, IReadOnlyList<string> candidates) =>
+        candidates.Count == 0
+            ? GitReviewDialogs.Input(title, "Branch, tag or commit")
+            : GitReviewDialogs.ChooseOrType(title, "Branch, tag or commit", candidates);
 
     private async Task ConfirmAndRunHousekeepingAsync(HousekeepingAction action)
     {
@@ -880,9 +900,16 @@ public sealed class ActionDispatcher
 
     private async Task CompareAsync()
     {
-        var lower = GitReviewDialogs.Input(UserCopy.CompareLowerTitle, "Branch, tag or commit");
+        // Las candidatas que la CLI ya reportó, más lo que se tipee: compare toma un
+        // commit-ish, así que un tag o un SHA valen — pero mostrar la lista evita que
+        // el caso común (una rama) haya que escribirlo de memoria.
+        var candidates = (State.Candidates ?? Array.Empty<CandidateBranch>())
+            .Select(c => c.Name)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var lower = PickCommitIsh(UserCopy.CompareLowerTitle, candidates);
         if (lower is null) return;
-        var upper = GitReviewDialogs.Input(UserCopy.CompareUpperTitle, "Branch, tag or commit");
+        var upper = PickCommitIsh(UserCopy.CompareUpperTitle, candidates);
         if (upper is null) return;
 
         var idx = GitReviewDialogs.Choose(

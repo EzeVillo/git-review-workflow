@@ -28,6 +28,20 @@ Requires `git review` **0.7.0** or newer.
 
 ### Changed
 
+- **Branch pickers have a search box.** Every picker in the plugin — the start wizard's
+  branch step, the base and remote settings, *Clean*, *Forget*, *Discard*, *Continue* —
+  was a drop-down you could only walk with the mouse or the arrow keys. It is now a filter
+  box over a list: type to narrow it, arrow down to walk what is left. A repository with
+  two hundred branches is reachable without scrolling to it.
+- **Those pickers only take a branch that exists.** The "Enter a branch name…" way out into
+  a free-text box is gone from *Clean*, *Forget* and *Discard*. These verbs delete branches
+  and config, and a name typed there does not fail when it is wrong, it points somewhere
+  else. For delta markers that outlived every review branch that would have named them,
+  *Forget stale delta markers* is exactly those, and needs no name at all.
+- **`compare` picks its bounds from the branches you have.** Both bounds opened an empty
+  text box that never showed a candidate. They now open the same filtered list. A tag or a
+  SHA is still a valid answer — `compare` takes a commit-ish — so what you type is offered
+  as the first row when it matches no branch.
 - **The draft progress follows the file.** Hand a draft to an agent and the row's count
   moves on its own while it writes — no Refresh, no reopening the panel. The draft lives
   in the gitdir, so filling it in moves no `HEAD`, touches no index and writes no

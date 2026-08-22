@@ -439,14 +439,29 @@ class ForgetReviewAction : AnAction(), DumbAware {
 }
 
 class DiscardInventoryAction : AnAction(), DumbAware {
+    /**
+     * Desde el panel el nombre ya viene de la fila; desde el menú se elige de ese
+     * mismo inventario — filtrando al escribir, pero nunca inventando. Este verbo
+     * borra ramas, así que un nombre que llega a la CLI sin haber estado en una
+     * lista es un nombre que nadie verificó.
+     */
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        val name = UiMessages.input(
+        val names = service(e)?.currentState()?.branches.orEmpty()
+            .map { it.name }
+            .distinct()
+        if (names.isEmpty()) {
+            UiMessages.error(project, UserCopy.NO_REVIEWS_TO_DISCARD)
+            return
+        }
+        val idx = UiMessages.choose(
             project,
-            "Review branch name to discard (e.g. review-saved/feature/x):",
+            "Review branch to discard",
             "Discard",
-        ) ?: return
-        discardResolved(project, name)
+            names.toTypedArray(),
+        )
+        if (idx < 0) return
+        discardResolved(project, names[idx])
     }
 
     companion object {
@@ -530,10 +545,19 @@ private fun preview(e: AnActionEvent, stat: Boolean) {
 class CompareReviewAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        val lower = UiMessages.input(project, "Branch, tag or commit", UserCopy.COMPARE_LOWER_TITLE)
-            ?: return
-        val upper = UiMessages.input(project, "Branch, tag or commit", UserCopy.COMPARE_UPPER_TITLE)
-            ?: return
+        // Las candidatas que la CLI ya reportó, más lo que se tipee: compare toma un
+        // commit-ish, así que un tag o un SHA valen — pero mostrar la lista evita que
+        // el caso común (una rama) haya que escribirlo de memoria.
+        val candidates = service(e)?.currentState()?.candidates.orEmpty()
+            .map { it.name }
+            .distinct()
+            .toTypedArray()
+        val lower = UiMessages.chooseOrType(
+            project, "Branch, tag or commit", UserCopy.COMPARE_LOWER_TITLE, candidates,
+        ) ?: return
+        val upper = UiMessages.chooseOrType(
+            project, "Branch, tag or commit", UserCopy.COMPARE_UPPER_TITLE, candidates,
+        ) ?: return
         val layoutOptions = arrayOf(
             "Walkthrough — guided reading order if the upper tip has a walkthrough",
             "Walkthrough — keys only — only entries marked key (--keys)",
@@ -669,6 +693,15 @@ private fun confirmAndRun(project: Project, e: AnActionEvent, action: Housekeepi
     mutations(e)?.runHousekeeping(action)
 }
 
+/**
+ * A qué rama se le aplica un verbo de housekeeping — una de las reviews que este
+ * cliente conoce, y sólo ésas. Un marcador --delta puede sobrevivir a toda rama de
+ * review que lo hubiera nombrado, pero tipear ese nombre a ciegas no es la salida:
+ * "Forget stale delta markers" es exactamente los marcadores cuya rama ya no
+ * existe, y "Forget every delta marker" no pide nombrar nada. El picker filtra
+ * mientras se escribe, así que escribir sigue llegando a la fila — sin poder
+ * inventar una.
+ */
 private fun pickSourceName(
     project: Project,
     service: GitReviewService?,
@@ -682,24 +715,24 @@ private fun pickSourceName(
         branches
     }
     val names = filtered.map { sourceFromReviewName(it.name) }.distinct()
-    if (names.isNotEmpty()) {
-        val options = (names + UserCopy.ENTER_BRANCH_NAME).toTypedArray()
-        val title = when {
-            forClean -> UserCopy.CLEAN_BRANCH_TITLE
-            savedOnly -> UserCopy.FORGET_SAVED_SOURCE_TITLE
-            else -> "Branch"
-        }
-        val idx = UiMessages.choose(project, "Source branch name", title, options)
-        if (idx < 0) return null
-        if (options[idx] != UserCopy.ENTER_BRANCH_NAME) return options[idx]
-    }
-    val promptTitle = when {
+    val title = when {
         forClean -> UserCopy.CLEAN_BRANCH_TITLE
         savedOnly -> UserCopy.FORGET_SAVED_SOURCE_TITLE
         else -> UserCopy.FORGET_DELTA_SOURCE_TITLE
     }
-    val prompt = if (forClean) UserCopy.CLEAN_BRANCH_PROMPT else UserCopy.FORGET_SOURCE_PROMPT
-    return UiMessages.input(project, prompt, promptTitle)
+    if (names.isEmpty()) {
+        UiMessages.error(
+            project,
+            when {
+                forClean -> UserCopy.NO_REVIEWS_TO_CLEAN
+                savedOnly -> UserCopy.NO_SAVED_REVIEWS
+                else -> UserCopy.NO_DELTA_SOURCES
+            },
+        )
+        return null
+    }
+    val idx = UiMessages.choose(project, "Source branch name", title, names.toTypedArray())
+    return if (idx < 0) null else names[idx]
 }
 
 private fun openWalkthroughFile(project: Project, cwd: String?) {

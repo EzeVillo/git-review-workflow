@@ -20,6 +20,12 @@ data class ReviewState(
      * nuevas. `null` cuando ese reporte no llegó; vacío si llegó sin ninguno.
      */
     val drafts: List<DraftRecord>? = null,
+    /**
+     * Both authoring guides (`guide` record of `config --porcelain`), in the
+     * CLI's order and always both. Null when that report did not arrive; empty
+     * against a CLI that does not know the record.
+     */
+    val guides: List<GuideRecord>? = null,
     val subjects: Map<Int, String>? = null,
     val authors: Map<Int, String>? = null,
     val base: String? = null,

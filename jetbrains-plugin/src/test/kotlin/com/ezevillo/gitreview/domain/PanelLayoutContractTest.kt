@@ -129,6 +129,29 @@ class PanelLayoutContractTest {
         assertTrue(layout.collectControls().any { it.id == ControlId.OPEN_ALL_CHANGES && it.label == "Diff" })
     }
 
+    // La misma corrida para una review con guias: el bloque entra al layout de
+    // review-walk, asi que tiene que estar declarado ahi y no colarse como control
+    // de mas.
+    @Test
+    fun `review-walk with guides matches canonical`() {
+        assertLayoutAgainstCanonical(
+            key = "review-walk",
+            layout = panelLayout(PanelFixtures.reviewWalkGuides()),
+            mode = "walk",
+        )
+    }
+
+    // El estado con guias: las mismas ocho de no-review MAS los controles del
+    // bloque, y nada que el canonico no declare. Sin esta corrida el matcher solo
+    // ve la fixture sin guias, o sea que el bloque nuevo entraba sin gate.
+    @Test
+    fun `no-review with guides matches canonical`() {
+        assertLayoutAgainstCanonical(
+            key = "no-review",
+            layout = panelLayout(PanelFixtures.noReviewGuides()),
+        )
+    }
+
     @Test
     fun `the draft block is the first block of no-review and the body follows whole`() {
         val layout = panelLayout(PanelFixtures.noReviewDrafts())
@@ -405,6 +428,16 @@ class PanelLayoutContractTest {
             @Suppress("UNCHECKED_CAST")
             val draftControls = yaml["draft_controls"] as? Map<String, Any?>
             if (draftControls != null) allowed += draftControls.keys
+        }
+        // Y lo mismo para el bloque de guias: sus controles tambien son por fila,
+        // asi que viven en un mapa propio. Los suyos cuelgan de una clave
+        // "controls" porque el bloque declara ademas las filas y sus estados.
+        if (mentionsBlock(sit["blocks"], "guide_rows")) {
+            @Suppress("UNCHECKED_CAST")
+            val guideBlock = yaml["guide_rows"] as? Map<String, Any?>
+            @Suppress("UNCHECKED_CAST")
+            val guideControls = guideBlock?.get("controls") as? Map<String, Any?>
+            if (guideControls != null) allowed += guideControls.keys
         }
         val stray = actual.map { it.first }.filter { it !in allowed }.distinct()
         assertTrue(

@@ -91,6 +91,13 @@ public sealed record PorcelainResult(
     /// record without the field (an older CLI) does not turn the mark off.
     /// </summary>
     string? DraftPath = null,
+    /// <summary>
+    /// Both authoring guides, the same records config --porcelain emits. They travel
+    /// here too because inside a review the panel reads THIS verb and no other:
+    /// without them the guide rows would cost a whole extra invocation of
+    /// config --porcelain on every refresh.
+    /// </summary>
+    IReadOnlyList<GuideRecord>? Guides = null,
     IReadOnlyDictionary<int, string>? Subjects = null,
     IReadOnlyDictionary<int, string>? Authors = null,
     string? Base = null)
@@ -160,6 +167,7 @@ public static class Porcelain
         bool? isKeysOnly = null;
         bool? isDraft = null;
         string? draftPath = null;
+        var guides = new List<GuideRecord>();
 
         foreach (var line in lines)
         {
@@ -272,6 +280,12 @@ public static class Porcelain
                     isDraft = true;
                     if (!string.IsNullOrEmpty(Get(fields, 1))) draftPath = Get(fields, 1);
                     break;
+                case "guide":
+                {
+                    var guide = ConfigPorcelain.ParseGuideRecord(fields);
+                    if (guide is not null) guides.Add(guide);
+                    break;
+                }
                 // unknown tag: ignore (FR-003)
             }
         }
@@ -286,6 +300,7 @@ public static class Porcelain
             KeysOnly: isKeysOnly,
             Draft: isDraft,
             DraftPath: draftPath,
+            Guides: guides.Count > 0 ? guides : null,
             Subjects: subjects,
             Authors: authors,
             Base: bas);

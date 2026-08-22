@@ -308,6 +308,7 @@ Every command is a verb under `git review`. Run `git review -h` for the list, or
 | `git review compare <a> <b> [--step \| --no-walk \| --keys]`                                                                                 | Stage the diff between two commit-ish (tags, commits, branches) read-only, to read or walk it. `git review finish` refuses — there is nothing to write back.                                                                                                                                                                                                       |
 | `git review walkthrough (init [--base <base>] [--force] \| build [--check])`                                                                 | Author a reading walkthrough for the current branch's PR — a guided order of the changed files with a note on each, committed as `.review/walkthrough.md`.                                                                                                                                                                                                        |
 | `git review walkthrough draft [--local \| --offline] [--delta] [--force] [--stdout] [--] [<branch>]`<br>`git review walkthrough draft --build [--from <file> \| --from -] [--local \| --offline] [--delta] [--force] [--] [<branch>]`                                               | Write your own reading order for someone else's PR, kept out of the working tree — nothing is staged, committed or undone. `git review start` then reads it instead of the PR's walkthrough. `--build` validates and renumbers it. `--stdout` prints the skeleton instead of writing it (nothing is created anywhere) and `--build --from` installs a filled-in one from a file or standard input, so an agent can write the reading order without touching your gitdir.                                                                                                                                 |
+| `git review walkthrough guide [--team] [--delete]`                                                            | Create or remove an authoring guide: prose about **content** — which entries deserve `> key`, how to write a why, what belongs in the heads-up. Bare, it creates **yours** (`<git-common-dir>/review-walkthrough-guide.md`), outside the working tree, so it is never staged, committed or extracted by `finish`. `--team` creates the repository's shared one (`.review/walkthrough-guide.md`, committed with the code) and is refused inside a review. `--delete` removes yours; the shared one is a tracked file, so that is `git rm` plus a commit. Both are created **empty** — the command prints what to write, so nothing left in the file can be mistaken for the conventions. |
 | `git review next` / `git review prev`                                                                                                        | Move a `--step` or walkthrough review to the next / previous entry.                                                                                                                                                                                                                                                                                                |
 | `git review status [--porcelain \| --why <path>]`                                                                                            | Show the state of the review on the current branch (`--porcelain` for machine-readable output, including a `finish` record when a closure is mid-conflict; `--why <path>` for a walkthrough entry's explanation).                                                                                                                                                  |
 | `git review list [--porcelain]`                                                                                                              | List every review in progress and every saved one (current branch marked `*`; `--porcelain` also reports unresolved finishes as `pending` or `conflict`).                                                                                                                                                                                                          |
@@ -483,13 +484,35 @@ git review walkthrough build    # validate, order by your numbers, renumber 1..N
   them on entry. Reviewers can start with `git review start --keys` to walk only
   those entries. The marker only works while it stays selective, so `build` notes
   it when every entry is marked (or when a long walkthrough marks none).
-- **Authoring guide (optional):** commit `.review/walkthrough-guide.md` with team
-  rules for **content only** — which files to mark `> key`, how to write whys and
-  Heads-up, local conventions. It does **not** change the walkthrough format;
-  `build` does not validate it. `init` and `draft` mention the path in the
-  skeleton instructions and note on stderr whether the file is present (resolved
-  from the work tree you are in — useful for team conventions when drafting
-  someone else's PR too).
+- **Authoring guides (optional):** conventions for **content only** — which files
+  to mark `> key`, how to write whys and the Heads-up, local habits. They do
+  **not** change the walkthrough format, and `build` does not validate them: the
+  CLI detects them and names them, and the agent filling the walkthrough in is
+  what reads them. There are two, and they answer different questions:
+
+  |         | Whose                              | Where                                              |
+  |---------|------------------------------------|----------------------------------------------------|
+  | shared  | how **this project** wants its PRs annotated | `.review/walkthrough-guide.md`, committed with the code |
+  | yours   | how **you** annotate               | `<git-common-dir>/review-walkthrough-guide.md`, outside the working tree |
+
+  Yours is in the gitdir for the same three reasons the reviewer's draft is: it
+  never shows up in `git status`, it is never staged or committed, and `finish`
+  cannot carry it into `review-fixes/` — which it would, since extraction is
+  `git add -A`. Create either with
+  [`git review walkthrough guide`](#git-review-walkthrough).
+
+  **Both apply when both have content, and yours wins where they disagree** — the
+  same precedence a draft has over the author's walkthrough. `init` and `draft`
+  name the ones in force in the skeleton itself and report them on stderr — and so
+  does `build`, which is the verb that enforces the rule a guide most often carries
+  ("mark few entries key"). The skeleton names them two ways: written to a file it
+  gives the **paths**, and under `--stdout` it **inlines the content**, because that
+  skeleton travels down a pipe and the absolute path of a gitdir is not something the
+  agent on the other end can necessarily open. A guide
+  that is empty or holds only whitespace is not a guide: it is reported as empty
+  and nothing is applied. Both are resolved from the repository you are standing
+  in, `draft` included — the conventions of whoever is annotating, not a guide
+  from the PR tip. `clean` never touches either.
 - `build` validates the file, orders the entries by your numbers, renumbers them
   `1..N` and rewrites it, preserving the heads-up. `--check` validates **without
   writing** and exits non-zero on any problem — meant for CI. It fails if any

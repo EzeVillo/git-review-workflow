@@ -20,6 +20,8 @@ public static class PanelFixtures
         ("no-review setup", NoReviewSetup()),
         ("no-review ready", NoReviewReady()),
         ("no-review drafts", NoReviewDrafts()),
+        ("no-review guides", NoReviewGuides()),
+        ("no-review guide empty", NoReviewGuideEmpty()),
         ("no-review empty", NoReviewEmpty()),
         ("finish-pending", FinishPending()),
         ("out-of-range", OutOfRange()),
@@ -29,6 +31,7 @@ public static class PanelFixtures
         ("review whole", ReviewWhole()),
         ("finish-conflict", FinishConflict()),
         ("review walk draft", ReviewWalkDraft()),
+        ("review walk guides", ReviewWalkGuides()),
         ("review walk busy", ReviewWalk(busy: true)),
         ("review walk empty cursor", ReviewWalkEmptyCursor()),
         ("review whole empty", ReviewWholeEmpty()),
@@ -81,6 +84,42 @@ public static class PanelFixtures
     /// <summary>The same state with a mutation in flight: the one thing that switches the row off.</summary>
     public static PanelModel NoReviewDraftsBusy() => NoReviewDrafts(busy: true);
 
+    /// <summary>
+    /// Both authoring guides, each in a different state: the shared one in force
+    /// (Open yes, Create no) and the reviewer's absent (Create yes, Open and Discard
+    /// no). It is the state that shows both rows are always drawn and only the enabled
+    /// changes.
+    /// </summary>
+    public static PanelModel NoReviewGuides()
+    {
+        var cfg =
+            "guide\tteam\t/repo/.review/walkthrough-guide.md\tin-force\n" +
+            "guide\town\t/repo/.git/review-walkthrough-guide.md\tabsent\n";
+        return PanelModelBuilder.BuildPanelModel(
+            new ReviewState(
+                Situation.NoReview,
+                Config: new EffectiveConfig("main", "origin"),
+                Guides: ConfigPorcelain.ParseConfigPorcelain(cfg).Guides),
+            new PanelInputs(false));
+    }
+
+    /// <summary>
+    /// The other half: the reviewer's created and still empty (Open and Discard yes,
+    /// Create no), and a repository that has no shared guide.
+    /// </summary>
+    public static PanelModel NoReviewGuideEmpty()
+    {
+        var cfg =
+            "guide\tteam\t/repo/.review/walkthrough-guide.md\tabsent\n" +
+            "guide\town\t/repo/.git/review-walkthrough-guide.md\tempty\n";
+        return PanelModelBuilder.BuildPanelModel(
+            new ReviewState(
+                Situation.NoReview,
+                Config: new EffectiveConfig("main", "origin"),
+                Guides: ConfigPorcelain.ParseConfigPorcelain(cfg).Guides),
+            new PanelInputs(false));
+    }
+
     /// <summary>Configured, but nothing left over from an earlier review.</summary>
     public static PanelModel NoReviewEmpty() => PanelModelBuilder.BuildPanelModel(
         new ReviewState(
@@ -129,6 +168,29 @@ public static class PanelFixtures
             Entries: walkParsed.Entries);
         var model = PanelModelBuilder.BuildPanelModel(walkState, new PanelInputs(busy, Why: why));
         return model with { AtFirst = atFirst, AtLast = atLast || position >= (model.Total ?? 0) };
+    }
+
+    /// <summary>
+    /// A review with the two authoring guides: the folded Walkthrough section at the
+    /// end, and the shared row unable to create — finish extracts with git add -A, so
+    /// a file created here would leave on somebody else's review-fixes/.
+    /// </summary>
+    public static PanelModel ReviewWalkGuides()
+    {
+        var porcelain =
+            "state\treview/feature\tfeature\tdeadbeefcafebabe\twalk\tapplied\t1\t3\t3\t\"src/a.kt\"\t0\n" +
+            "entry\t1\tsrc/a.kt\t0\t1\n" +
+            "entry\t2\tsrc/b.kt\t0\t1\n" +
+            "guide\tteam\t/repo/.review/walkthrough-guide.md\tabsent\n" +
+            "guide\town\t/repo/.git/review-walkthrough-guide.md\tin-force";
+        var parsed = Porcelain.ParsePorcelain(porcelain);
+        return PanelModelBuilder.BuildPanelModel(
+            new ReviewState(
+                Situation.Review,
+                State: parsed.State,
+                Entries: parsed.Entries,
+                Guides: parsed.Guides),
+            new PanelInputs(false, Why: new PanelWhy(WhyState.Present, "Because I read it first.")));
     }
 
     public static PanelModel ReviewWalkDraft()

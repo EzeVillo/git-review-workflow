@@ -1,3 +1,4 @@
+import {GuideRecord, parseGuideRecord} from "./configPorcelain";
 import {PathRef, toPathRef} from "./unquote";
 
 export type ReviewMode = "whole" | "step" | "walk";
@@ -81,6 +82,13 @@ export interface PorcelainResult {
      * esta ruta y nunca arma una.
      */
     draftPath?: string;
+    /**
+     * Las dos guías de autoría, mismos registros que emite `config --porcelain`.
+     * Viajan también acá porque dentro de una review el panel lee **este** verbo
+     * y ningún otro: sin ellos, dibujar el bloque de guías costaría una
+     * invocación entera de `config --porcelain` por refresco.
+     */
+    guides?: GuideRecord[];
     /**
      * Asunto de cada commit de la secuencia, por `position` — sólo en modo step
      * (contracts/status-porcelain.md).
@@ -222,6 +230,7 @@ export function parsePorcelain(stdout: string): PorcelainResult {
     let isKeysOnly: true | undefined;
     let isDraft: true | undefined;
     let draftPath: string | undefined;
+    const guides: GuideRecord[] = [];
 
     for (const line of lines) {
         const fields = line.split("\t");
@@ -349,6 +358,13 @@ export function parsePorcelain(stdout: string): PorcelainResult {
                 }
                 break;
             }
+            case "guide": {
+                const guide = parseGuideRecord(fields);
+                if (guide !== undefined) {
+                    guides.push(guide);
+                }
+                break;
+            }
             default:
                 // Etiqueta desconocida: se ignora (FR-003).
                 break;
@@ -380,6 +396,9 @@ export function parsePorcelain(stdout: string): PorcelainResult {
     }
     if (isDraft) {
         result.draft = true;
+    }
+    if (guides.length > 0) {
+        result.guides = guides;
     }
     if (draftPath !== undefined) {
         result.draftPath = draftPath;

@@ -91,6 +91,13 @@ data class PorcelainResult(
      * presencia, y un registro sin campo (una CLI anterior) no la apaga.
      */
     val draftPath: String? = null,
+    /**
+     * Both authoring guides, the same records `config --porcelain` emits. They
+     * travel here too because inside a review the panel reads THIS verb and no
+     * other: without them the guide rows would cost a whole extra invocation of
+     * `config --porcelain` on every refresh.
+     */
+    val guides: List<GuideRecord> = emptyList(),
     val subjects: Map<Int, String>? = null,
     val authors: Map<Int, String>? = null,
     val base: String? = null,
@@ -155,6 +162,7 @@ fun parsePorcelain(stdout: String): PorcelainResult {
     var isKeysOnly: Boolean? = null
     var isDraft: Boolean? = null
     var draftPath: String? = null
+    val guides = ArrayList<GuideRecord>()
 
     for (line in lines) {
         val fields = line.split("\t")
@@ -249,6 +257,7 @@ fun parsePorcelain(stdout: String): PorcelainResult {
                 isDraft = true
                 fields.getOrNull(1)?.takeIf { it.isNotEmpty() }?.let { draftPath = it }
             }
+            "guide" -> parseGuideRecord(fields)?.let { guides.add(it) }
             else -> { /* unknown tag: ignore (FR-003) */ }
         }
     }
@@ -263,6 +272,7 @@ fun parsePorcelain(stdout: String): PorcelainResult {
         keysOnly = isKeysOnly,
         draft = isDraft,
         draftPath = draftPath,
+        guides = guides,
         subjects = subjects,
         authors = authors,
         base = base,

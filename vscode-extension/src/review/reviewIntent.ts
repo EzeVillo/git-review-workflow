@@ -169,3 +169,25 @@ export function draftConfigArgs(
 export function forgetDraftArgs(branch: string): string[] {
     return ["--draft", "--", branch];
 }
+
+/**
+ * `git review walkthrough guide [--team]`: crear una guía de autoría, vacía.
+ *
+ * El verbo es `walkthrough`; `guide` es el primer argumento, como `draft`. Sin
+ * rama y sin flags de origen o rango: una guía no cubre ningún rango. Nunca
+ * `--force` — la CLI lo rechaza de todas formas, porque pisar prosa escrita a
+ * mano con un archivo vacío no es algo que un flag deba poder hacer.
+ */
+export function createGuideArgs(kind: "team" | "own"): string[] {
+    return kind === "team" ? ["guide", "--team"] : ["guide"];
+}
+
+/**
+ * `git review walkthrough guide --delete`: borrar **tu** guía.
+ *
+ * Nunca con `--team`: la compartida es un archivo trackeado, así que sacarla es
+ * `git rm` más un commit, y la CLI niega la combinación.
+ */
+export function deleteGuideArgs(): string[] {
+    return ["guide", "--delete"];
+}

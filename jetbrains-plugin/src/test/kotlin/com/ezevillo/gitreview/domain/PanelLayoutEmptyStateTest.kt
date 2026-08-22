@@ -34,7 +34,7 @@ class PanelLayoutEmptyStateTest {
             assertTrue(inv < startRow)
         }
         assertTrue(layout.collectControls().any { it.id == ControlId.START_REVIEW && it.emphasis == Emphasis.PRIMARY })
-        assertEquals(3, layout.blocks.count { it is Block.ToolsSection })
+        assertEquals(4, layout.blocks.count { it is Block.ToolsSection })
     }
 
     @Test

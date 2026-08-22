@@ -220,6 +220,19 @@ public sealed class GitReviewPanelController : IDisposable
         if (visible) _ = RefreshAsync();
     }
 
+    /// <summary>
+    /// A document the shell just saved. Refreshes only when it is one of the authoring
+    /// guides the CLI reported: those have no watcher (the reviewer's lives in the root
+    /// of the gitdir, which changes on every git operation), so the save is the signal.
+    /// Anything else is one of the thousands of saves that are none of the panel's
+    /// business.
+    /// </summary>
+    public void NotifyDocumentSaved(string path)
+    {
+        if (_disposed || !DraftWatch.IsReportedGuide(_state.Current, path)) return;
+        _ = RefreshAsync();
+    }
+
     public async Task RefreshAsync()
     {
         if (_workspacePending())

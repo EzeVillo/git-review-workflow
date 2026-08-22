@@ -41,6 +41,23 @@ fun isDraftFileEvent(dirs: Collection<String>, path: String): Boolean {
     return dirs.any { it.equals(dir, ignoreCase = true) }
 }
 
+/**
+ * Whether [path] is one of the authoring guides the CLI reported.
+ *
+ * The guides get no watch root of their own, and that is deliberate: the
+ * reviewer's lives in the ROOT of the gitdir, which changes on every git
+ * operation, so watching that directory would be a storm of refreshes over the
+ * file that changes least. This matches the exact paths instead, on events the
+ * platform already delivers -- saving a document goes through the VFS -- so the
+ * one moment the panel would otherwise lie (you write the guide it just created
+ * and the badge still says `empty`) costs nothing.
+ */
+fun isReportedGuide(paths: Collection<String>, path: String): Boolean {
+    if (paths.isEmpty()) return false
+    val normalised = path.replace('\\', '/')
+    return paths.any { it.replace('\\', '/').equals(normalised, ignoreCase = true) }
+}
+
 /** The directory holding [file], with separators normalised, or null. */
 private fun containerOf(file: String?): String? {
     if (file.isNullOrBlank()) return null

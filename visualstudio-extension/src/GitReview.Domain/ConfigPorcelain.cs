@@ -140,13 +140,76 @@ public sealed record DraftRecord(
     DraftSource Source,
     DraftRange Range);
 
+/// <summary>Which of the two authoring guides a <c>guide</c> record is about.</summary>
+public enum GuideKind
+{
+    Team,
+    Own,
+}
+
+/// <summary>
+/// What state a guide is in. All three are decided by the CLI and none is
+/// inferred here: Empty is not Absent even though both mean "no conventions are
+/// being applied" — with the file there what is offered is opening it, not
+/// creating it, and discarding it is possible where discarding a missing file is
+/// not.
+/// </summary>
+public enum GuideState
+{
+    InForce,
+    Empty,
+    Absent,
+}
+
+public static class GuideKindExt
+{
+    public static GuideKind? Parse(string? raw) => raw switch
+    {
+        "team" => GuideKind.Team,
+        "own" => GuideKind.Own,
+        _ => null,
+    };
+}
+
+public static class GuideStateExt
+{
+    public static GuideState? Parse(string? raw) => raw switch
+    {
+        "in-force" => GuideState.InForce,
+        "empty" => GuideState.Empty,
+        "absent" => GuideState.Absent,
+        _ => null,
+    };
+}
+
+/// <summary>
+/// An authoring guide: prose about the CONTENT of a walkthrough (which entries
+/// deserve <c>&gt; key</c>, how to write a why, what belongs in the heads-up).
+///
+/// The client never reads a byte of it — it opens it and nothing else, exactly
+/// as with the reviewer's draft. Path comes straight from the CLI: it is opened,
+/// never rebuilt.
+/// </summary>
+public sealed record GuideRecord(
+    GuideKind Kind,
+    string Path,
+    GuideState State);
+
 public sealed record ConfigPorcelainResult(
     EffectiveConfig Config,
     IReadOnlyList<CandidateBranch> Candidates,
     IReadOnlyList<CandidateRemote> Remotes,
     IReadOnlyList<DeltaRecord>? Deltas = null,
     IReadOnlyList<ReadingOffer>? Offers = null,
-    IReadOnlyList<DraftRecord>? Drafts = null);
+    IReadOnlyList<DraftRecord>? Drafts = null,
+    /// <summary>
+    /// Both authoring guides, ALWAYS both and in the CLI's order (team, own),
+    /// whether or not either file exists. Absence is reported rather than implied
+    /// by silence: without the row the panel could not offer to create the
+    /// missing one without rebuilding its path, which is what the reported-path
+    /// rule exists to prevent.
+    /// </summary>
+    IReadOnlyList<GuideRecord>? Guides = null);
 
 public static class ConfigPorcelain
 {
@@ -184,6 +247,7 @@ public static class ConfigPorcelain
         var deltas = new List<DeltaRecord>();
         var offers = new List<ReadingOffer>();
         var drafts = new List<DraftRecord>();
+        var guides = new List<GuideRecord>();
 
         foreach (var line in stdout.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
         {
@@ -243,6 +307,12 @@ public static class ConfigPorcelain
                         DraftRangeExt.Parse(Get(fields, 6))));
                     break;
                 }
+                case "guide":
+                {
+                    var guide = ParseGuideRecord(fields);
+                    if (guide is not null) guides.Add(guide);
+                    break;
+                }
                 case "offer":
                 {
                     var id = OfferIdExt.Parse(Get(fields, 1));
@@ -261,7 +331,27 @@ public static class ConfigPorcelain
             remotes,
             deltas.Count > 0 ? deltas : null,
             offers.Count > 0 ? offers : null,
-            drafts);
+            drafts,
+            guides);
+    }
+
+    /// <summary>
+    /// A <c>guide</c> record from its fields, or null when it is malformed — ignored
+    /// whole, like any record: half a guide row would offer to create one that is
+    /// already there, or open one that is not.
+    ///
+    /// Shared because the record arrives by TWO verbs: <c>config --porcelain</c>
+    /// outside a review and <c>status --porcelain</c> inside one. One parser per
+    /// tokenizer would be the same rule written twice, and the second copy would learn
+    /// about any new field late.
+    /// </summary>
+    public static GuideRecord? ParseGuideRecord(string[] fields)
+    {
+        var kind = GuideKindExt.Parse(Get(fields, 1));
+        var path = Get(fields, 2);
+        var state = GuideStateExt.Parse(Get(fields, 3));
+        if (kind is null || string.IsNullOrEmpty(path) || state is null) return null;
+        return new GuideRecord(kind.Value, path!, state.Value);
     }
 
     /// <summary>

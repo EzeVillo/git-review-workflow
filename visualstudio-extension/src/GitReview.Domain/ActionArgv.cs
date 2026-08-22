@@ -20,6 +20,12 @@ public abstract record ActionParams
     public sealed record WalkthroughInit(bool Force) : ActionParams;
     /// <summary>012: discard ONE branch's draft, from the panel's draft block.</summary>
     public sealed record ForgetDraft(string Source) : ActionParams;
+
+    /// <summary>Create an authoring guide, empty: the repository's shared one or yours.</summary>
+    public sealed record CreateGuide(bool Team) : ActionParams;
+
+    /// <summary>Remove yours. The shared one is not removed here: that is git rm plus a commit.</summary>
+    public sealed record DeleteGuide : ActionParams;
     public sealed record WalkthroughBuild : ActionParams
     {
         public static readonly WalkthroughBuild Instance = new();
@@ -63,6 +69,11 @@ public static class ActionArgvMap
             "forgetDraft" => new ActionArgv(
                 "forget",
                 ReviewIntentLogic.ForgetDraftArgs(((ActionParams.ForgetDraft)params_!).Source)),
+            // The verb is walkthrough; guide is the first argument, like draft.
+            "createGuide" => new ActionArgv(
+                "walkthrough",
+                ReviewIntentLogic.CreateGuideArgs(((ActionParams.CreateGuide)params_!).Team)),
+            "deleteGuide" => new ActionArgv("walkthrough", ReviewIntentLogic.DeleteGuideArgs()),
             "saveReview" => new ActionArgv("save", Array.Empty<string>()),
             "abortReview" => new ActionArgv("abort", Array.Empty<string>()),
             "finishReview" => new ActionArgv(

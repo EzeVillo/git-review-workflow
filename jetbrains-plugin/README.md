@@ -92,9 +92,9 @@ The full action set lives under **Tools → git review**.
 |-----------|------------|-----------|
 | `cli-missing` / `cli-outdated` | Install/update command, **Copy**, **Other install options** | Refresh |
 | `no-review` (no base) | **Set the base branch**, Change remote | Refresh |
-| `no-review` (ready) | Inventory (Continue / Discard), **Start a review**, collapsible Other actions / Settings / Support | Refresh |
+| `no-review` (ready) | Inventory (Continue / Discard), **Start a review**, collapsible Other actions / Walkthrough (Init, Build, the two authoring guides) / Settings / Support | Refresh |
 | `finish-pending` | Banner: **Clean** \| **Undo finish** | Refresh |
-| `review` walk | Identity bar, notes, entry, why, open in editor, File \| Diff, ◀ \| ▶ | Refresh, Finish, Save, Cancel, Preview edits |
+| `review` walk | Identity bar, notes, entry, why, open in editor, File \| Diff, ◀ \| ▶, folded Walkthrough (the two authoring guides) | Refresh, Finish, Save, Cancel, Preview edits |
 | `review` step | Same without why; Diff only | same |
 | `review` whole | File list (one-click Diff per file), Diff-all | same |
 | `finish-conflict` | Conflict banner Undo \| Continue; **no** nav row | Refresh, Cancel, Preview edits |

@@ -64,6 +64,39 @@ public sealed record PanelDraft(
     int Total,
     bool Startable);
 
+/// <summary>
+/// A row of the authoring-guide block: prose about the CONTENT of a walkthrough,
+/// not about its format.
+///
+/// BOTH rows are always drawn, whether or not either file exists, and what the
+/// state changes is the enabled of the controls, never their presence — the same
+/// rule as the draft rows, and for the same reason: two rows with different
+/// button sets do not line up with each other.
+///
+/// The row name and the badge are derived here because they are panel copy; Path comes from
+/// the CLI, and the client opens it and never rebuilds it.
+///
+/// Discardable is yours only. The shared guide is a tracked file, so removing it
+/// is `git rm` plus a commit: a decision about what goes into the PR, which is
+/// not this button's to make. The CLI says the same from its side, refusing
+/// `--delete --team`.
+/// </summary>
+public sealed record PanelGuide(
+    GuideKind Kind,
+    string Label,
+    string Path,
+    GuideState State,
+    string Badge,
+    bool Exists,
+    /// <summary>
+    /// Whether Create can be INVOKED. Not the same as !Exists: inside a review the
+    /// shared guide cannot be created, because it is a file of the working tree and
+    /// finish's extraction (git add -A) would carry it into somebody else's PR. The
+    /// CLI refuses it; the control is drawn either way, off and saying why.
+    /// </summary>
+    bool Creatable,
+    bool Discardable);
+
 public sealed record PanelModel(
     Situation Situation,
     bool Busy,
@@ -75,6 +108,13 @@ public sealed record PanelModel(
     /// say, and another branch's draft does not compete for the body.
     /// </summary>
     IReadOnlyList<PanelDraft>? Drafts = null,
+    /// <summary>
+    /// Both authoring guides, in the CLI's order (shared, yours). Same rule as
+    /// Drafts: only with NoReview, empty in any other situation — inside a review
+    /// the panel has more urgent things to say, and creating the shared one there
+    /// is refused by the CLI anyway.
+    /// </summary>
+    IReadOnlyList<PanelGuide>? Guides = null,
     PendingFinish? PendingFinish = null,
     bool NoBaseConfigured = false,
     string? ConfiguredBase = null,
@@ -103,6 +143,7 @@ public sealed record PanelModel(
 {
     public IReadOnlyList<PanelReview> ReviewsList => Reviews ?? Array.Empty<PanelReview>();
     public IReadOnlyList<PanelDraft> DraftsList => Drafts ?? Array.Empty<PanelDraft>();
+    public IReadOnlyList<PanelGuide> GuidesList => Guides ?? Array.Empty<PanelGuide>();
     public IReadOnlyList<PanelEntry> FilesList => Files ?? Array.Empty<PanelEntry>();
 }
 
@@ -196,6 +237,58 @@ public static class PanelModelBuilder
         return out_;
     }
 
+    /// <summary>The badge for each state: the CLI's value in prose, without the hyphen.</summary>
+    private static string GuideBadge(GuideState state) => state switch
+    {
+        GuideState.InForce => "in force",
+        GuideState.Empty => "empty",
+        _ => "absent",
+    };
+
+    private static string GuideLabel(GuideKind kind) =>
+        kind == GuideKind.Team ? "Repository guide" : "Your guide";
+
+    /// <summary>
+    /// Projects the `guide` records, one to one and in the CLI's order, without
+    /// filling in a missing one: a record that did not arrive is a row that is
+    /// not drawn. Against a CLI that does not know the record none arrive and the
+    /// whole block disappears, the same degradation the draft block has.
+    /// </summary>
+    public static IReadOnlyList<PanelGuide> ToPanelGuides(
+        IReadOnlyList<GuideRecord> guides,
+        Situation situation)
+    {
+        // The CLI refuses to create the shared guide inside a review, for a reason the
+        // panel has to repeat rather than discover: finish extracts with `git add -A`,
+        // so a file created now would leave on somebody else's review-fixes/.
+        var inReview = situation == Situation.Review || situation == Situation.FinishConflict;
+        var out_ = new List<PanelGuide>(guides.Count);
+        foreach (var g in guides)
+        {
+            out_.Add(new PanelGuide(
+                Kind: g.Kind,
+                Label: GuideLabel(g.Kind),
+                Path: g.Path,
+                State: g.State,
+                Badge: GuideBadge(g.State),
+                Exists: g.State != GuideState.Absent,
+                Creatable: g.State == GuideState.Absent && !(inReview && g.Kind == GuideKind.Team),
+                Discardable: g.Kind == GuideKind.Own && g.State != GuideState.Absent));
+        }
+        return out_;
+    }
+
+    /// <summary>
+    /// The guide row at index, resolved against the HOST's state. Same role as
+    /// DraftAt: what ends up in the CLI does not come from the panel.
+    /// </summary>
+    public static GuideRecord? GuideAt(IReadOnlyList<GuideRecord> guides, object? index)
+    {
+        if (index is not int i) return null;
+        if (i < 0 || i >= guides.Count) return null;
+        return guides[i];
+    }
+
     /// <summary>
     /// The draft row at index, resolved against the HOST's state. Same role as
     /// ResumableSourceAt: what ends up in the CLI does not come from the panel.
@@ -229,6 +322,11 @@ public static class PanelModelBuilder
             Drafts: state.Situation == Situation.NoReview
                 ? ToPanelDrafts(state.DraftsList)
                 : Array.Empty<PanelDraft>(),
+            // Unlike Drafts, the guides are drawn INSIDE a review too: the walkthrough
+            // draft verb is run from there, which is the likeliest moment to want to
+            // write yours. It costs no extra invocation — status --porcelain emits the
+            // same records config does.
+            Guides: ToPanelGuides(state.GuidesList, state.Situation),
             NoBaseConfigured: state.Situation == Situation.NoReview
                 && state.Config is not null
                 && state.Config.Base is null,

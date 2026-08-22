@@ -39,7 +39,7 @@ public class PanelLayoutEmptyStateTests
 
         Assert.Contains(layout.CollectControls(),
             c => c.Id == ControlId.StartReview && c.Emphasis == Emphasis.Primary);
-        Assert.Equal(3, layout.Blocks.Count(b => b is Block.ToolsSection));
+        Assert.Equal(4, layout.Blocks.Count(b => b is Block.ToolsSection));
     }
 
     [Fact]

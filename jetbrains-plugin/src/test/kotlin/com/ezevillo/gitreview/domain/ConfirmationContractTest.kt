@@ -50,6 +50,20 @@ class ConfirmationContractTest {
             }
         }
 
+        // guide_rows: mismo papel que los dos de arriba (controles cuyo sujeto es
+        // la fila), pero los suyos cuelgan de una clave "controls" porque el
+        // bloque tambien declara las filas y sus estados.
+        @Suppress("UNCHECKED_CAST")
+        val guideControls =
+            (yaml["guide_rows"] as? Map<String, Any?>)?.get("controls") as? Map<String, Any?>
+        if (guideControls != null) {
+            for ((id, node) in guideControls) {
+                val map = node as? Map<*, *>
+                val confirms = map?.get("confirms") as? Boolean ?: false
+                expected[id] = expected[id] == true || confirms
+            }
+        }
+
         for (id in ControlId.entries) {
             val want = expected[id.wire] ?: false
             assertEquals(want, requiresConfirmation(id), "confirms mismatch for ${id.wire}")

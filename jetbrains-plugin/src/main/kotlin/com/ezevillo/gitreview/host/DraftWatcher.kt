@@ -1,6 +1,7 @@
 package com.ezevillo.gitreview.host
 
 import com.ezevillo.gitreview.domain.isDraftFileEvent
+import com.ezevillo.gitreview.domain.isReportedGuide
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.vfs.LocalFileSystem
@@ -23,6 +24,14 @@ class DraftWatcher(private val onChange: () -> Unit) : Disposable {
 
     @Volatile
     private var dirs: List<String> = emptyList()
+
+    /**
+     * The authoring guides, matched as EXACT paths and with no watch root of
+     * their own: see `isReportedGuide`. They ride this listener rather than one
+     * of their own because the events are the same ones.
+     */
+    @Volatile
+    private var guides: List<String> = emptyList()
     private var requests: Set<LocalFileSystem.WatchRequest> = emptySet()
 
     init {
@@ -32,8 +41,14 @@ class DraftWatcher(private val onChange: () -> Unit) : Disposable {
                 object : BulkFileListener {
                     override fun after(events: MutableList<out VFileEvent>) {
                         val watched = dirs
-                        if (watched.isEmpty()) return
-                        if (events.any { isDraftFileEvent(watched, it.path) }) onChange()
+                        val guided = guides
+                        if (watched.isEmpty() && guided.isEmpty()) return
+                        if (events.any {
+                                isDraftFileEvent(watched, it.path) || isReportedGuide(guided, it.path)
+                            }
+                        ) {
+                            onChange()
+                        }
                     }
                 },
             )
@@ -45,7 +60,10 @@ class DraftWatcher(private val onChange: () -> Unit) : Disposable {
      * that land while it happens.
      */
     @Synchronized
-    fun sync(next: List<String>) {
+    fun sync(next: List<String>, nextGuides: List<String> = emptyList()) {
+        // Los guides no llevan watch root: sólo se comparan contra los eventos
+        // que ya llegan, así que actualizarlos no puede perder ninguno.
+        guides = nextGuides
         if (next == dirs) return
         dirs = next
         requests = localFs.replaceWatchedRoots(requests, null, next)
@@ -56,5 +74,6 @@ class DraftWatcher(private val onChange: () -> Unit) : Disposable {
         localFs.replaceWatchedRoots(requests, null, null)
         requests = emptySet()
         dirs = emptyList()
+        guides = emptyList()
     }
 }

@@ -49,6 +49,11 @@ function review(rows: string[][], inputs: PanelInputs = {busy: false}): PanelMod
     if (parsed.base !== undefined) {
         state.base = parsed.base;
     }
+    // Las guías llegan por el MISMO reporte dentro de una review: `status
+    // --porcelain` emite los registros `guide` igual que `config --porcelain`.
+    if (parsed.guides !== undefined) {
+        state.guides = parsed.guides;
+    }
     if (parsed.keysOnly) {
         state.keysOnly = true;
     }
@@ -94,6 +99,7 @@ function drafts(draftRows: string[][], inventoryRows: string[][] = []): PanelMod
         candidates: parsed.candidates,
         remotes: parsed.remotes,
         drafts: parsed.drafts,
+        guides: parsed.guides,
     };
     return buildPanelModel(state, {busy: false});
 }
@@ -417,6 +423,47 @@ export const PREVIEW_PANES: PreviewPane[] = [
             ],
             [["branch", "review-saved/perf/index", "1", "0", "0", "step", "2", "4"]]
         ),
+    },
+    {
+        // Dentro de una review las guías siguen estando: `walkthrough draft` se
+        // corre desde adentro. Es la única sección plegable que una review tiene.
+        name: "review-walk-guides",
+        caption: "review walk — sección Walkthrough plegada con las dos guías",
+        model: review(
+            [
+                ["state", "review/feat/panel", "feat/panel", "a1b2c3d", "walk", "applied", "7", "15", "15", WALK_PATHS[6], "1"],
+                ...walkEntries(WALK_PATHS, [1, 7, 12]),
+                ["guide", "team", "/repo/.review/walkthrough-guide.md", "in-force"],
+                ["guide", "own", "/repo/.git/review-walkthrough-guide.md", "absent"],
+            ],
+            {busy: false, why: {state: "present", text: WHY}}
+        ),
+    },
+    {
+        // Las dos guías de autoría en la sección Walkthrough del pie, cada una en
+        // un estado distinto: la compartida en vigor (Open sí, Create no) y la
+        // propia ausente (Create sí, Open y Discard no). Es el estado donde se ve
+        // que las dos filas están siempre y sólo cambia el enabled.
+        name: "no-review-guides",
+        caption: "no-review — guías de autoría: la compartida en vigor, la propia sin crear",
+        model: drafts([
+            ["config", "base", "develop"],
+            ["config", "remote", "origin"],
+            ["guide", "team", "/repo/.review/walkthrough-guide.md", "in-force"],
+            ["guide", "own", "/repo/.git/review-walkthrough-guide.md", "absent"],
+        ]),
+    },
+    {
+        // La otra mitad: la propia creada y todavía vacía (Open y Discard sí,
+        // Create no), y la compartida que el repositorio no tiene.
+        name: "no-review-guide-empty",
+        caption: "no-review — guía propia creada y vacía, sin guía del repositorio",
+        model: drafts([
+            ["config", "base", "develop"],
+            ["config", "remote", "origin"],
+            ["guide", "team", "/repo/.review/walkthrough-guide.md", "absent"],
+            ["guide", "own", "/repo/.git/review-walkthrough-guide.md", "empty"],
+        ]),
     },
     {
         // list --porcelain con finish … pending: pantalla de post-cierre

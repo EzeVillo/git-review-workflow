@@ -5,6 +5,7 @@ import {
     DraftRecord,
     EffectiveConfig,
     parseConfigPorcelain,
+    GuideRecord,
 } from "../cli/configPorcelain";
 import {invokeGitReview, InvokeOptions} from "../cli/invoke";
 import {
@@ -57,6 +58,12 @@ export interface ReviewState {
      * llegó y no hay ninguno.
      */
     drafts?: DraftRecord[];
+    /**
+     * Las dos guías de autoría (registro `guide` de `config --porcelain`), en el
+     * orden de la CLI y siempre las dos. Ausente cuando ese reporte no llegó;
+     * `[]` con una CLI que no conoce el registro.
+     */
+    guides?: GuideRecord[];
     /**
      * Asunto y autor de cada commit de la secuencia, por `position`. Sólo en
      * modo step, y sólo con una CLI que los reporte: ausentes significa "esta
@@ -160,10 +167,11 @@ async function loadConfigReport(
     candidates: CandidateBranch[];
     remotes: CandidateRemote[];
     drafts: DraftRecord[];
+    guides: GuideRecord[];
 }> {
     const result = await invokeGitReview("config", ["--porcelain"], options);
     if (result.errorCode || result.exitCode !== 0) {
-        return {candidates: [], remotes: [], drafts: []};
+        return {candidates: [], remotes: [], drafts: [], guides: []};
     }
     const parsed = parseConfigPorcelain(result.stdout);
     return {
@@ -171,6 +179,7 @@ async function loadConfigReport(
         candidates: parsed.candidates,
         remotes: parsed.remotes,
         drafts: parsed.drafts,
+        guides: parsed.guides,
     };
 }
 
@@ -326,6 +335,7 @@ export class ReviewStateManager {
                     next.candidates = report.candidates;
                     next.remotes = report.remotes;
                     next.drafts = report.drafts;
+                    next.guides = report.guides;
                 }
             }
             return this.setState(next);
@@ -373,6 +383,9 @@ export class ReviewStateManager {
         }
         if (parsed.draft) {
             next.draft = true;
+        }
+        if (parsed.guides !== undefined) {
+            next.guides = parsed.guides;
         }
         if (parsed.draftPath !== undefined) {
             next.draftPath = parsed.draftPath;

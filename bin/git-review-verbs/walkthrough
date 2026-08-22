@@ -33,6 +33,7 @@ usage: $prog init [--base <base>] [--force]
        $prog draft [--local | --offline] [--delta] [--force] [--stdout] [--] [<branch>]
        $prog draft --build [--from <file> | --from -] [--local | --offline]
                    [--delta] [--force] [--] [<branch>]
+       $prog guide [--team] [--delete]
 
 Author a reading walkthrough for the current branch's PR, committed as
 .review/walkthrough.md.
@@ -58,6 +59,16 @@ Review someone else's PR in a reading order of your own, without committing:
     --force         overwrite an existing draft
     --stdout        print the skeleton instead of writing it; nothing is
                     created anywhere
+
+Keep the conventions the reading order is written to, as prose:
+
+  guide             create your own guide, outside the work tree, and say
+                    where it went; both guides apply when both have content,
+                    and yours wins where they disagree
+    --team          create the repository's shared guide instead
+                    (.review/walkthrough-guide.md, committed with the code)
+    --delete        remove your own guide; --team is never deleted here,
+                    it is a tracked file and that is git rm plus a commit
 EOF
 }
 
@@ -79,6 +90,8 @@ delta_mode=0
 to_stdout=0
 from_src=""
 from_given=0
+team_guide=0
+delete_guide=0
 # Positional arguments in order: the subcommand, then (draft only) the branch.
 # Kept in one helper so "--" and the bare form agree on the shape.
 take_positional() {
@@ -114,6 +127,8 @@ while [ $# -gt 0 ]; do
 	--offline) offline=1 ;;
 	--delta) delta_mode=1 ;;
 	--stdout) to_stdout=1 ;;
+	--team) team_guide=1 ;;
+	--delete) delete_guide=1 ;;
 	--from)
 		# Repetition is an error rather than last-one-wins: two sources for one
 		# draft is a mistake in the caller, and silently picking one of them is
@@ -159,8 +174,8 @@ done
 	exit 1
 }
 case "$sub" in
-init | build | draft) ;;
-*) die "unknown subcommand '$sub'; use init, build or draft" ;;
+init | build | draft | guide) ;;
+*) die "unknown subcommand '$sub'; use init, build, draft or guide" ;;
 esac
 
 # Flag/subcommand compatibility, checked up front so a misused flag never silently
@@ -178,7 +193,34 @@ if [ "$sub" != draft ] && { [ "$to_stdout" -eq 1 ] || [ "$from_given" -eq 1 ]; }
 	die "--stdout and --from apply only to git review walkthrough draft"
 fi
 if [ "$sub" != draft ] && [ -n "$branch" ]; then
-	die "only git review walkthrough draft takes a branch; init and build work on the branch you are on"
+	die "only git review walkthrough draft takes a branch; init, build and guide work on the repository you are in"
+fi
+# The two guide flags, and everything the guide subcommand does not take. A guide
+# has no range, no base and no origin, so every flag that selects one of those is
+# a mistake there — and one that no-ops silently would look like it worked.
+if [ "$sub" != guide ] && { [ "$team_guide" -eq 1 ] || [ "$delete_guide" -eq 1 ]; }; then
+	die "--team and --delete apply only to git review walkthrough guide"
+fi
+if [ "$sub" = guide ]; then
+	if [ "$team_guide" -eq 1 ] && [ "$delete_guide" -eq 1 ]; then
+		# Not an oversight and not a missing feature: the shared guide is a tracked
+		# file, so removing it is git rm plus a commit — a decision about what goes
+		# into the PR, which is not this command's to make. Said in full here
+		# because the obvious next thought is that --delete simply forgot --team.
+		die "--delete removes your own guide; the repository's guide is a tracked file, so remove it with git rm .review/walkthrough-guide.md and commit that"
+	fi
+	if [ "$force" -eq 1 ]; then
+		# --force means "destroy what is there" everywhere else in this suite. A
+		# guide is prose somebody typed and this command would replace it with an
+		# empty file, so the flag is refused rather than honoured.
+		die "--force does not apply to git review walkthrough guide; open the file and edit it, or remove it with --delete"
+	fi
+	if [ "$check" -eq 1 ]; then
+		die "--check applies only to git review walkthrough build; a guide has no format to validate"
+	fi
+	if [ "$base_explicit" -eq 1 ]; then
+		die "--base applies only to git review walkthrough init; a guide covers no range"
+	fi
 fi
 if [ "$sub" = draft ]; then
 	if [ "$check" -eq 1 ]; then
@@ -246,6 +288,54 @@ warn_dirty() {
 	echo "note: you have uncommitted changes; init and build cover committed history (base..HEAD), so uncommitted edits are invisible here. Commit the PR first; never push automatically." >&2
 }
 
+# emit_guide_note
+# The authoring guides, reported on stderr the same way whether one, both or
+# neither is in force. Never interpreted here -- only pointed at -- so build
+# keeps owning the format, and resolved from the repository you are standing in,
+# draft included: the conventions of whoever is annotating, not a guide from the
+# PR tip.
+#
+# Called by init, draft AND build. build is not decoration there: it is the verb
+# that enforces the rule a guide most often carries -- "mark few entries key" --
+# because its own note is what fires when every entry is marked. Two surfaces
+# that never named the same file is how a guide gets written and then quietly
+# ignored at the one step that could have held the walkthrough to it.
+#
+# A file that exists but holds nothing is its own case rather than folded into
+# "none": telling somebody to create a guide they already created, and are
+# looking at, is the kind of note that teaches people to stop reading notes.
+#
+# Several short lines rather than one long one: with both guides in force the
+# single line ran past 300 characters, which in a narrow terminal is a wall.
+emit_guide_note() {
+	guide_paths_init
+	_egn_team=0
+	_egn_own=0
+	if guide_in_force "$_guide_team_path"; then _egn_team=1; fi
+	if guide_in_force "$_guide_own_path"; then _egn_own=1; fi
+	{
+		if [ "$_egn_team" -eq 1 ] && [ "$_egn_own" -eq 1 ]; then
+			echo 'note: two authoring guides are in force (yours wins where they disagree):'
+			echo '        .review/walkthrough-guide.md  (this repository)'
+			echo "        $_guide_own_path  (yours)"
+			echo '      They cover keys, whys and the heads-up -- never the format.'
+		elif [ "$_egn_team" -eq 1 ]; then
+			echo 'note: authoring guide in force at .review/walkthrough-guide.md'
+			echo '      It covers keys, whys and the heads-up -- never the format.'
+		elif [ "$_egn_own" -eq 1 ]; then
+			echo "note: your authoring guide is in force at $_guide_own_path"
+			echo '      It covers keys, whys and the heads-up -- never the format.'
+		elif [ -f "$_guide_own_path" ] || [ -f "$_guide_team_path" ]; then
+			echo 'note: an authoring guide exists but is empty, so nothing was applied.'
+			echo '      Write the conventions for keys, whys and the heads-up into it.'
+		else
+			echo 'note: no authoring guide. Create one with:'
+			echo '        git review walkthrough guide         (yours, outside the work tree)'
+			echo '        git review walkthrough guide --team  (this repository, committed)'
+		fi
+	} >&2
+}
+
 # Whether HEAD is a review branch, asked once, of git, before anything below
 # derives a branch name. It is what decides which of the three situation phrases
 # the instruction block carries, and it is deliberately NOT from_review: that one
@@ -257,6 +347,65 @@ head_in_review=0
 case "$(git symbolic-ref --quiet --short HEAD || true)" in
 review/*) head_in_review=1 ;;
 esac
+
+# ── guide ─────────────────────────────────────────────────────────────────────
+#
+# Create or remove an authoring guide. Nothing here reads, writes or validates
+# the CONTENT of one: this subcommand exists so the file has a way to be made
+# that the three clients can invoke, instead of each of them rebuilding the path
+# and writing to it themselves — the same reason openDraft opens the path the CLI
+# reported rather than deriving it.
+#
+# The file is created EMPTY, deliberately. A skeleton with placeholders would be
+# actively harmful: build is what rejects an unfilled walkthrough, and there is no
+# build here, so instructions left behind in the file are read by the next agent
+# as if they were the conventions themselves. What the file is for is printed
+# instead, where it cannot be mistaken for its content.
+if [ "$sub" = guide ]; then
+	guide_paths_init
+	[ -n "$_guide_team_path" ] ||
+		die "no work tree here; a guide lives beside the repository you are reviewing in"
+
+	if [ "$delete_guide" -eq 1 ]; then
+		[ -f "$_guide_own_path" ] ||
+			die "you have no guide to remove ($_guide_own_path)"
+		rm -f "$_guide_own_path" ||
+			die "could not remove $_guide_own_path"
+		echo "removed your guide ($_guide_own_path)"
+		exit 0
+	fi
+
+	if [ "$team_guide" -eq 1 ]; then
+		# Refused inside a review for the reason the reviewer's guide exists at all:
+		# the shared one is a file of the work tree, finish extracts with
+		# "git add -A", and a file created here would ride out on review-fixes/ into
+		# somebody else's PR. The message names the command that does what was
+		# almost certainly meant.
+		if [ "$head_in_review" -eq 1 ]; then
+			die "you are inside a review, and a file created in the work tree now would be extracted onto review-fixes/ by finish. For a guide of your own, outside the work tree: git review walkthrough guide"
+		fi
+		[ ! -e "$_guide_team_path" ] ||
+			die ".review/walkthrough-guide.md already exists; open it and edit it"
+		mkdir -p "$(dirname "$_guide_team_path")" ||
+			die "could not create .review/"
+		: >"$_guide_team_path" ||
+			die "could not write .review/walkthrough-guide.md"
+		echo "created .review/walkthrough-guide.md (empty)"
+		echo "write the conventions this repository annotates its PRs by: which entries deserve '> key', how to write a why, what belongs in the heads-up. Content only -- it cannot change the walkthrough format. Then stage and commit it so the whole team gets it." >&2
+		exit 0
+	fi
+
+	[ ! -e "$_guide_own_path" ] ||
+		die "your guide already exists ($_guide_own_path); open it and edit it"
+	# No mkdir: the common gitdir is already there, which is the whole difference
+	# between this and the reviewer's draft, whose branch name can hold a '/' and
+	# so needs a directory made for it.
+	: >"$_guide_own_path" ||
+		die "could not write $_guide_own_path"
+	echo "created your guide ($_guide_own_path)"
+	echo "write how YOU annotate a PR: which entries deserve '> key', how you write a why, what you want in the heads-up. It is never staged, never committed and never extracted by finish. Content only -- it cannot change the walkthrough format." >&2
+	exit 0
+fi
 
 # ── Range resolution ──────────────────────────────────────────────────────────
 #
@@ -513,6 +662,86 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		tiplabel="$srclabel"
 	fi
 
+	# emit_guide_bullet
+	# The skeleton's one mention of the authoring guides: the ones in force, or
+	# nothing at all when neither is. Both apply when both have content -- they
+	# answer different questions (how this project wants its PRs annotated, and how
+	# you annotate) -- and the precedence line appears only when there is a
+	# contradiction to resolve.
+	#
+	# Two shapes, and which one is right depends on whether the reader can open a
+	# file at all:
+	#
+	#   * writing a file: the PATHS. The skeleton lands next to the guides it names,
+	#     so whoever opens it can open them too -- and a copy embedded in a file that
+	#     outlives this run would go stale against the guide without anybody looking.
+	#   * --stdout: the CONTENT, inlined. That skeleton travels down a pipe, and the
+	#     absolute path of somebody's gitdir is not something the agent on the other
+	#     end can necessarily open -- another container, another machine. Pointing at
+	#     a file it cannot reach fails in SILENCE: nothing checks that a guide was
+	#     read. Inlining costs nothing that --stdout promises, because that promise is
+	#     about not WRITING, and this only prints.
+	emit_guide_bullet() {
+		guide_paths_init
+		_egb_team=0
+		_egb_own=0
+		if guide_in_force "$_guide_team_path"; then _egb_team=1; fi
+		if guide_in_force "$_guide_own_path"; then _egb_own=1; fi
+		[ "$_egb_team" -eq 1 ] || [ "$_egb_own" -eq 1 ] || return 0
+
+		printf '       * Authoring guide for this repository -- follow it for CONTENT\n'
+		printf '         choices only (which entries are key, how to write the whys and\n'
+		printf '         the Heads-up). It cannot change this format, the file list, or\n'
+		if [ "$_egb_team" -eq 1 ] && [ "$_egb_own" -eq 1 ]; then
+			printf '         the numbering rules above. BOTH apply, and where they disagree\n'
+			printf '         the reviewer'"'"'s guide wins.\n'
+		else
+			printf '         the numbering rules above.\n'
+		fi
+		printf '\n'
+
+		if [ "$to_stdout" -eq 1 ]; then
+			if [ "$_egb_team" -eq 1 ]; then
+				guide_inline "$_guide_team_path" ".review/walkthrough-guide.md (this repository, shared)"
+			fi
+			if [ "$_egb_own" -eq 1 ]; then
+				guide_inline "$_guide_own_path" "$_guide_own_path (the reviewer, private)"
+			fi
+		else
+			if [ "$_egb_team" -eq 1 ]; then
+				printf '           .review/walkthrough-guide.md  (this repository, shared)\n'
+			fi
+			if [ "$_egb_own" -eq 1 ]; then
+				printf '           %s  (the reviewer, private)\n' "$_guide_own_path"
+			fi
+			printf '\n'
+		fi
+	}
+
+	# guide_inline <path> <label>
+	# One guide's content, fenced and indented into the instruction block.
+	#
+	# Two things it does to the prose, both deliberate. It rewrites any "-->" as
+	#   "-- >": the block IS an HTML comment, so a literal one in the guide would
+	#   close it early and spill the rest into the preamble -- the same class of
+	#   invisible byte as the CR and the BOM that walk_normalize exists for. And it
+	#   stops at a line limit, so an oversized guide cannot eat the whole context of
+	#   the agent this output is written for; the fence names the path, which is
+	#   where the rest is.
+	#
+	# One awk for the pair, not a sed per rule: this runs once per guide, and the
+	# two BSD/GNU sed -i differences the project keeps tripping on are worth not
+	# inviting back.
+	guide_inline() {
+		printf '     ----- %s -----\n' "$2"
+		awk -v lim=120 '
+			NR > lim { cut = 1; exit }
+			{ gsub(/-->/, "-- >"); print "     " $0 }
+			END { if (cut) print "     [...] truncated at " lim " lines; open the file for the rest" }
+		' "$1"
+		printf '     ----- end -----\n\n'
+	}
+
 	# A function rather than a brace group with a redirection glued to it, because
 	# it now has two destinations: the temp file on the way to $targetpath, and
 	# standard output under --stdout. Same bytes either way, bar the closing line
@@ -543,11 +772,16 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		printf '         mechanical renames and the like are exactly what stays unmarked.\n'
 		printf '       * Fill in the "## Heads-up" section below with what a reviewer\n'
 		printf '         should keep in mind before opening a single file.\n'
-		printf '       * Optional authoring guide: if .review/walkthrough-guide.md exists\n'
-		printf '         in this repository, follow it for content choices only (which\n'
-		printf '         entries are key, how to write whys / Heads-up, team conventions).\n'
-		printf '         It cannot change this format, the file list, or the numbering\n'
-		printf '         rules above.\n\n'
+		# The guides IN FORCE, named, and nothing at all when there are none. The
+		# path used to be hardcoded here whether the file existed or not, which
+		# spent five lines of the agent's attention on a file that was usually not
+		# there -- and, once a second guide could exist, said the wrong thing.
+		#
+		# This is the one channel that always reaches whoever has to follow them.
+		# The stderr note below reaches a terminal; an agent handed the skeleton
+		# through a pipe (draft --stdout) never sees it, and that agent is exactly
+		# who this text is written for.
+		emit_guide_bullet
 		# The two passages that cannot be written for "whoever annotates this PR".
 		# Everything above genuinely is shared; these are the author's, and the
 		# reviewer used to be handed their copy of both: a command that dies from
@@ -676,16 +910,7 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		echo "wrote $targetrel with $n file(s); fill in the order and why, then run git review walkthrough build"
 		warn_dirty
 	fi
-	# Optional repo guide for content choices (keys/whys/Heads-up). Not interpreted
-	# here — only pointed at — so build keeps owning the format. Resolved from the
-	# work tree of the repo you are in, including on draft: team conventions for
-	# who is drafting, not a guide from the PR tip.
-	guide_path="$(git rev-parse --show-toplevel)/.review/walkthrough-guide.md"
-	if [ -f "$guide_path" ]; then
-		echo "note: authoring guide found at .review/walkthrough-guide.md; use it for keys/whys (it cannot change the format)" >&2
-	else
-		echo "note: optional authoring guide: create .review/walkthrough-guide.md for team rules on keys/whys (it cannot change the format)" >&2
-	fi
+	emit_guide_note
 	exit 0
 fi
 
@@ -1010,3 +1235,8 @@ else
 	echo "built $targetrel: $count $(entry_noun "$count")$keysuffix, ordered and renumbered"
 fi
 warn_dirty
+# build names the guides too, and not as decoration: the rule a guide most
+# often carries is "mark few entries key", and the note that fires when every
+# entry is marked is this verb's. Naming the file only at init/draft left the
+# one step that could hold the walkthrough to its conventions silent about them.
+emit_guide_note

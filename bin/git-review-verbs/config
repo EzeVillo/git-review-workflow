@@ -259,6 +259,16 @@ porcelain)
 	# in emit_draft_records.
 	emit_draft_records
 
+	# The two authoring guides, always both, present or not. Unlike the drafts
+	# above, absence has to be REPORTED here rather than implied by silence: a
+	# client cannot offer to create a guide it was never told about, and having it
+	# rebuild the path on its own side is exactly what the reported-path rule
+	# exists to prevent.
+	#
+	# A fact about the REPOSITORY, so it is emitted with and without a branch
+	# argument, for the same reason the draft records are.
+	emit_guide_records
+
 	if [ -n "$branch" ]; then
 		# Same pair of keys start reads for --delta (bin/git-review-verbs/start):
 		# a remote review stores reviewworkflow.<branch>.reviewed; a

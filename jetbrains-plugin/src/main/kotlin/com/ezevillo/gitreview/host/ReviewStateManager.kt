@@ -84,6 +84,7 @@ class ReviewStateManager(
         var candidates: List<com.ezevillo.gitreview.domain.CandidateBranch>? = null
         var remotes: List<com.ezevillo.gitreview.domain.CandidateRemote>? = null
         var drafts: List<com.ezevillo.gitreview.domain.DraftRecord>? = null
+        var guides: List<com.ezevillo.gitreview.domain.GuideRecord>? = null
 
         val hasFinishConflict = if (status.exitCode == 0) {
             try {
@@ -110,6 +111,7 @@ class ReviewStateManager(
                     candidates = parsed.candidates
                     remotes = parsed.remotes
                     drafts = parsed.drafts
+                    guides = parsed.guides
                 } catch (_: Exception) {
                     // leave null
                 }
@@ -137,6 +139,7 @@ class ReviewStateManager(
                         keysOnly = porcelain.keysOnly,
                         draft = porcelain.draft,
                         draftPath = porcelain.draftPath,
+                        guides = porcelain.guides,
                     )
                 } catch (e: Exception) {
                     ReviewState(
@@ -152,6 +155,7 @@ class ReviewStateManager(
                 candidates = candidates,
                 remotes = remotes,
                 drafts = drafts,
+                guides = guides,
             )
             Situation.OUT_OF_RANGE -> ReviewState(
                 situation = situation,

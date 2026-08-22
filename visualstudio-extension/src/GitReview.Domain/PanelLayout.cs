@@ -52,6 +52,9 @@ public enum ControlId
     CopyDraftPrompt,
     StartFromDraft,
     DiscardDraft,
+    OpenGuide,
+    CreateGuide,
+    DiscardGuide,
     CleanReview,
     CompareReview,
     WalkthroughInit,
@@ -87,6 +90,9 @@ public static class ControlIdExt
         ControlId.CopyDraftPrompt => "copyDraftPrompt",
         ControlId.StartFromDraft => "startFromDraft",
         ControlId.DiscardDraft => "discardDraft",
+        ControlId.OpenGuide => "openGuide",
+        ControlId.CreateGuide => "createGuide",
+        ControlId.DiscardGuide => "discardGuide",
         ControlId.CleanReview => "cleanReview",
         ControlId.CompareReview => "compareReview",
         ControlId.WalkthroughInit => "walkthroughInit",
@@ -185,6 +191,35 @@ public sealed record DraftRow
     public IReadOnlyList<Control> Controls { get; init; }
 }
 
+/// <summary>
+/// A row of the authoring-guide block: which guide it is, the state the CLI
+/// reported as a badge, and the controls that act on THAT row.
+///
+/// Same two-place shape as <see cref="DraftRow"/>: the labelled control is the
+/// button underneath and the Icon ones are drawn in the header beside the badge.
+/// And the same rule about presence — both rows carry the same controls whatever
+/// their state, except Discard, which only the reviewer's own row has at all:
+/// the shared guide is a tracked file, so removing it is `git rm` plus a commit.
+/// </summary>
+public sealed record GuideRow
+{
+    public GuideRow(string name, string badge, IReadOnlyList<Control> controls)
+    {
+        foreach (var c in controls)
+        {
+            if (c.Index is null)
+                throw new ArgumentException($"Guide control {c.Id.Wire()} must carry an index");
+        }
+        Name = name;
+        Badge = badge;
+        Controls = controls;
+    }
+
+    public string Name { get; init; }
+    public string Badge { get; init; }
+    public IReadOnlyList<Control> Controls { get; init; }
+}
+
 public sealed record InventoryRow
 {
     /// <summary>
@@ -278,6 +313,8 @@ public abstract record Block
     public sealed record InventoryRows(IReadOnlyList<InventoryRow> Rows) : Block;
     public sealed record DraftRows(IReadOnlyList<DraftRow> Rows) : Block;
 
+    public sealed record GuideRows(IReadOnlyList<GuideRow> Rows) : Block;
+
     public sealed record ToolsSection : Block
     {
         public string Title { get; init; }
@@ -362,6 +399,9 @@ public sealed class PanelLayout
                 case Block.DraftRows dr:
                     foreach (var row in dr.Rows) outList.AddRange(row.Controls);
                     break;
+                case Block.GuideRows gr:
+                    foreach (var row in gr.Rows) outList.AddRange(row.Controls);
+                    break;
                 case Block.ToolsSection ts: Walk(ts.NestedBlocks, outList); break;
             }
         }
@@ -372,6 +412,7 @@ public sealed class PanelLayout
         {
             Block.InventoryRows ir => ir.Rows.Any(r => r.Controls.Any(x => ReferenceEquals(x, c) || x == c)),
             Block.DraftRows dr => dr.Rows.Any(r => r.Controls.Any(x => ReferenceEquals(x, c) || x == c)),
+            Block.GuideRows gr => gr.Rows.Any(r => r.Controls.Any(x => ReferenceEquals(x, c) || x == c)),
             Block.ToolsSection ts => HostedByInventory(ts.NestedBlocks, c),
             _ => false,
         });
@@ -386,6 +427,7 @@ public static class PanelLayoutBuilder
         ControlId.DiscardInventory,
         ControlId.StartFromDraft,
         ControlId.DiscardDraft,
+        ControlId.DiscardGuide,
         ControlId.CleanReview,
         ControlId.UndoFinish,
         ControlId.CompareReview,
@@ -808,6 +850,58 @@ public static class PanelLayoutBuilder
         return new Block.DraftRows(rows);
     }
 
+    /// <summary>
+    /// The authoring-guide block, inside the Walkthrough section. Two rows,
+    /// always both, whether or not either file exists: what the state changes is
+    /// the enabled of each control, never its presence — two rows that build
+    /// different button sets do not line up with each other, the same rule the
+    /// draft rows follow.
+    ///
+    /// Discard is the one exception, and it is not forgotten symmetry: the shared
+    /// guide is a tracked file, so removing it is `git rm` plus a commit — a
+    /// decision about what goes into the PR, which is not this button's to make.
+    /// The CLI says the same from its side, refusing `--delete --team`.
+    /// </summary>
+    private static Block.GuideRows GuideRowsBlock(PanelModel model)
+    {
+        var enabled = !model.Busy;
+        var rows = model.GuidesList.Select((g, index) =>
+        {
+            var controls = new List<Control>
+            {
+                Ctrl(
+                    ControlId.CreateGuide, "Create", Emphasis.Secondary,
+                    enabled: enabled && g.Creatable,
+                    tooltip: g.Exists
+                        ? "It already exists; open it and edit it"
+                        : g.Creatable
+                            ? "Create it empty, then write the conventions into it"
+                            : "Not from inside a review: finish extracts the working tree, so this file would leave on review-fixes/",
+                    index: index),
+                // With no visible label the accessible name IS the name of the
+                // control, and it names the row: "Open" on its own repeats once
+                // per guide.
+                Ctrl(
+                    ControlId.OpenGuide, null, Emphasis.Icon,
+                    enabled: g.Exists,
+                    accessibleName: "Open the guide",
+                    tooltip: g.Exists ? g.Path : "There is no file to open yet",
+                    index: index),
+            };
+            if (g.Kind == GuideKind.Own)
+            {
+                controls.Add(Ctrl(
+                    ControlId.DiscardGuide, null, Emphasis.Icon,
+                    enabled: enabled && g.Discardable,
+                    accessibleName: "Discard the guide",
+                    tooltip: "git review walkthrough guide --delete (with confirmation)",
+                    index: index));
+            }
+            return new GuideRow(g.Label, g.Badge, controls);
+        }).ToList();
+        return new Block.GuideRows(rows);
+    }
+
     private static List<Block> NoReviewReadyBlocks(PanelModel model)
     {
         var enabled = !model.Busy;
@@ -834,12 +928,25 @@ public static class PanelLayoutBuilder
             new Block[]
             {
                 new Block.Row(new[] { Ctrl(ControlId.CompareReview, "Compare revisions", Emphasis.Secondary, enabled) }),
-                new Block.Row(new[]
-                {
-                    Ctrl(ControlId.WalkthroughInit, "Walkthrough: Init", Emphasis.Secondary, enabled),
-                    Ctrl(ControlId.WalkthroughBuild, "Walkthrough: Build", Emphasis.Secondary, enabled),
-                }),
             }));
+        // Everything about the walkthrough together: init, build and the two
+        // authoring guides. It left "Other actions" when the guides arrived —
+        // four controls about the same noun plus one unrelated (Compare) is not a
+        // list of other actions, it is a drawer. Grouped this way the panel says
+        // what the CLI says, where all four hang off the walkthrough verb.
+        var walkthroughKids = new List<Block>
+        {
+            new Block.Row(new[]
+            {
+                Ctrl(ControlId.WalkthroughInit, "Walkthrough: Init", Emphasis.Secondary, enabled),
+                Ctrl(ControlId.WalkthroughBuild, "Walkthrough: Build", Emphasis.Secondary, enabled),
+            }),
+        };
+        if (model.GuidesList.Count > 0)
+        {
+            walkthroughKids.Add(GuideRowsBlock(model));
+        }
+        outList.Add(new Block.ToolsSection("Walkthrough", walkthroughKids));
         var settingsKids = new List<Block>();
         if (model.ConfiguredBase is not null)
         {
@@ -985,6 +1092,19 @@ public static class PanelLayoutBuilder
                         model,
                         enabled,
                         includeNav: model.Situation == Situation.Review));
+                }
+                // The guides inside a review too, folded and last: the walkthrough
+                // draft verb is run from in here, which is the likeliest moment to want
+                // to write yours. It is the ONLY tools section a review has — init and
+                // build do not belong (they are the author's, standing on their own PR)
+                // and neither does the rest of the footer. Not in finish-conflict: that
+                // screen is "resolve the markers", and a folded section about writing
+                // conventions is noise.
+                if (model.Situation == Situation.Review && model.GuidesList.Count > 0)
+                {
+                    outList.Add(new Block.ToolsSection(
+                        "Walkthrough",
+                        new Block[] { GuideRowsBlock(model) }));
                 }
                 blocks = outList;
                 break;

@@ -24,6 +24,10 @@ sealed class ActionParams {
     data class WalkthroughInit(val force: Boolean) : ActionParams()
     /** 012: descartar el borrador de UNA rama desde el bloque del panel. */
     data class ForgetDraft(val source: String) : ActionParams()
+    /** Crear una guia de autoria, vacia: la compartida del repo o la propia. */
+    data class CreateGuide(val team: Boolean) : ActionParams()
+    /** Borrar la propia. La compartida no se borra por aca: es git rm mas un commit. */
+    data object DeleteGuide : ActionParams()
     data object WalkthroughBuild : ActionParams()
     data object Version : ActionParams()
     data object StatusPorcelain : ActionParams()
@@ -51,6 +55,12 @@ fun actionToArgv(action: String, params: ActionParams = ActionParams.Empty): Act
             val p = params as ActionParams.ForgetDraft
             ActionArgv("forget", forgetDraftArgs(p.source))
         }
+        // El verbo es walkthrough; guide es el primer argumento, como draft.
+        "createGuide" -> {
+            val p = params as ActionParams.CreateGuide
+            ActionArgv("walkthrough", createGuideArgs(p.team))
+        }
+        "deleteGuide" -> ActionArgv("walkthrough", deleteGuideArgs())
         "saveReview" -> ActionArgv("save", emptyList())
         "abortReview" -> ActionArgv("abort", emptyList())
         "finishReview" -> {

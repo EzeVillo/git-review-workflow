@@ -209,7 +209,7 @@ panel_layout:
       - {block: paragraph, text: "Remote: {remote} (optional)."}
       - {block: row, controls: [{id: setRemote, label: "Change remote", emphasis: secondary, confirms: false}]}
   no-review:
-    source_fns: [renderDrafts, renderReview, renderEmptyStartBlock, renderOtherActions, renderSettings, renderSupport]
+    source_fns: [renderDrafts, renderReview, renderEmptyStartBlock, renderOtherActions, renderWalkthroughSection, renderSettings, renderSupport]
     fills_height: true
     blocks:
       # Los borradores empezados van PRIMERO y el cuerpo de siempre sigue entero
@@ -227,7 +227,16 @@ panel_layout:
         title: "Other actions"
         blocks:
           - {block: row, controls: [{id: compareReview, label: "Compare revisions", emphasis: secondary, confirms: true}]}
+      # Init, build y las dos guias de autoria salieron de "Other actions" a una
+      # seccion propia cuando las guias entraron: cuatro controles sobre el mismo
+      # sustantivo mas uno ajeno (Compare) no es una lista de "otras acciones", es
+      # un cajon. Agrupadas por sustantivo el panel dice lo mismo que la CLI, donde
+      # los cuatro cuelgan de `git review walkthrough`.
+      - block: tools_section
+        title: "Walkthrough"
+        blocks:
           - {block: row, controls: [{id: walkthroughInit, label: "Walkthrough: Init", emphasis: secondary, confirms: true}, {id: walkthroughBuild, label: "Walkthrough: Build", emphasis: secondary, confirms: true}]}
+          - {block: guide_rows}
       - block: tools_section
         title: "Settings"
         blocks:
@@ -262,8 +271,13 @@ panel_layout:
       - {block: paragraph, text: "Something went wrong reading the review state."}
       - {block: row, controls: [{id: outOfRangeHelp, label: "How to fix it", emphasis: primary, confirms: false}]}
       - {block: stderr, when: present}
+  # Las guias tambien adentro de una review, plegadas y al final: el verbo
+  # `walkthrough draft` se corre desde adentro, que es el momento mas probable de
+  # querer escribir la tuya. Es la UNICA tools_section de una review -- init y
+  # build no van (son del autor parado en su propio PR) y el resto del pie
+  # tampoco. No esta en finish-conflict: esa pantalla es "resolve los marcadores".
   review-walk:
-    source_fns: [renderEntry, renderOpenRow, renderNavRow]
+    source_fns: [renderEntry, renderOpenRow, renderNavRow, renderGuidesSection]
     blocks:
       - {block: identity_bar}
       - {block: notes}
@@ -273,8 +287,12 @@ panel_layout:
       - {block: row, controls: [{id: showWhy, label: "open in editor", emphasis: link, confirms: false}], when: why_present}
       - {block: row, controls: [{id: openEntry, label: "File", emphasis: secondary, confirms: false}, {id: openChange, label: "Diff", emphasis: secondary, confirms: false}]}
       - {block: row, controls: [{id: prev, label: null, accessible_name: "Previous entry", emphasis: icon, confirms: false}, {id: next, label: null, accessible_name: "Next entry", emphasis: icon, confirms: false}]}
+      - block: tools_section
+        title: "Walkthrough"
+        blocks:
+          - {block: guide_rows}
   review-step:
-    source_fns: [renderEntry, renderOpenRow, renderNavRow, renderFiles]
+    source_fns: [renderEntry, renderOpenRow, renderNavRow, renderFiles, renderGuidesSection]
     blocks:
       - {block: identity_bar}
       - {block: notes}
@@ -284,8 +302,12 @@ panel_layout:
       - {block: heading, text: "{n} file(s) in this commit"}
       - {block: file_rows}
       - {block: row, controls: [{id: prev, label: null, accessible_name: "Previous entry", emphasis: icon, confirms: false}, {id: next, label: null, accessible_name: "Next entry", emphasis: icon, confirms: false}]}
+      - block: tools_section
+        title: "Walkthrough"
+        blocks:
+          - {block: guide_rows}
   review-whole:
-    source_fns: [renderFiles]
+    source_fns: [renderFiles, renderGuidesSection]
     blocks:
       - {block: identity_bar}
       - {block: notes}
@@ -293,6 +315,10 @@ panel_layout:
       # ausente en visualstudio: ver not_in en la accion
       - {block: row, controls: [{id: openAllChanges, label: "Diff", emphasis: secondary, confirms: false, tooltip: "Open every change in this review at once"}], not_in: [visualstudio]}
       - {block: file_rows}
+      - block: tools_section
+        title: "Walkthrough"
+        blocks:
+          - {block: guide_rows}
   finish-conflict:
     source_fns: [renderFinishConflictBanner, renderEntry, renderOpenRow, renderFiles]
     blocks:
@@ -329,6 +355,53 @@ panel_excluded: [goToEntry, forgetReview, previewEditsStat, showCliLog]
 panel_unverified:
   - "posición de los bloques que no son controles (párrafos, notas, badges)"
   - "condiciones de aparición (`when`) de los controles del cuerpo"
+
+# Las dos guias de autoria, tal como el panel las dibuja. Son controles del
+# CUERPO, como los del bloque de borradores: NO son acciones del producto, asi
+# que el conteo fijo de 27 en actions: y en contributes.commands NO se toca, ni
+# el menu Tools -> git review de JetBrains, ni el .vsct de Visual Studio.
+#
+# SIEMPRE DOS FILAS, en este orden, exista o no cada archivo. La CLI reporta las
+# dos con y sin contenido (registro `guide` de config --porcelain) justamente
+# para esto: un cliente no puede ofrecer crear una guia de la que nunca le
+# hablaron, y rearmar el path de su lado es lo que la regla del path reportado
+# existe para impedir.
+#
+# Lo que cambia con el estado es el enabled, nunca la presencia -- misma regla
+# que draft_controls, y por el mismo motivo: dos filas que arman botoneras
+# distintas no se alinean una con la otra.
+guide_rows:
+  # kind y etiqueta de cada fila. El estado va como badge al lado del nombre,
+  # con estos tres valores literales, que son los de la CLI menos el guion.
+  rows:
+    - {kind: team, label: "Repository guide"}
+    - {kind: own, label: "Your guide"}
+  states: ["in force", "empty", "absent"]
+  controls:
+    # Abrir es mostrar: el cliente no interpreta un byte del archivo, y abre LA
+    # RUTA QUE REPORTO LA CLI, nunca una derivada del layout del gitdir.
+    openGuide: {label: null, accessible_name: "Open the guide", emphasis: icon, icon: file, confirms: false, disabled_when: absent}
+    # Crea el archivo VACIO invocando a la CLI (git review walkthrough guide
+    # [--team]). El cliente no escribe archivos: si lo hiciera serian tres
+    # implementaciones de "crear un archivo vacio" y tres chances de errarle al
+    # path.
+    createGuide: {label: "Create", emphasis: secondary, confirms: false, disabled_when: exists}
+    # Solo en la fila `own`, y no por simetria olvidada: la compartida es un
+    # archivo trackeado, asi que borrarla es git rm mas un commit -- una decision
+    # sobre que entra al PR, que no es de este boton. La CLI dice lo mismo del
+    # otro lado, negando --delete --team.
+    discardGuide: {label: null, accessible_name: "Discard the guide", emphasis: icon, icon: trash, confirms: true, only_in_row: own, disabled_when: absent}
+  # El watcher NO mira estos archivos, a diferencia de los borradores. El de la
+  # guia propia vive en la raiz del gitdir, que cambia en cada operacion de git:
+  # vigilarla seria una tormenta de refrescos por el archivo que menos cambia del
+  # panel. El cliente que crea o descarta una refresca el mismo, dentro del lock.
+  #
+  # Lo que si escucha cada cliente es el GUARDADO del documento, y solo sobre las
+  # rutas que la CLI reporto: onDidSaveTextDocument en VS Code, el evento de VFS
+  # que produce un save en IntelliJ, OnAfterSave de la running document table en
+  # Visual Studio. Sin eso hay un momento en que el panel miente -- apretas
+  # Create, escribis las convenciones, Ctrl+S, y el badge sigue diciendo `empty`.
+  watched: on_save
 
 # Inventory control labels (variants) and body-only controls not in actions:
 # continueReview, discardInventory (panel surface), copyCliInstall, outOfRangeHelp, openSupport

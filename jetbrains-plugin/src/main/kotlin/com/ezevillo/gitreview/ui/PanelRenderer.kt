@@ -172,6 +172,7 @@ class PanelRenderer(
             is Block.FileRows -> renderFileRows(block)
             is Block.InventoryRows -> renderInventory(block)
             is Block.DraftRows -> renderDrafts(block)
+            is Block.GuideRows -> renderGuides(block)
             is Block.ToolsSection -> renderToolsSection(block)
             is Block.Stderr -> renderStderr(block.text)
             is Block.EmptyMessage -> {
@@ -626,6 +627,45 @@ class PanelRenderer(
             // inventory ones: each is a header with glyphs plus its own button
             // pair, and without the gap the two read as a single pane.
             box.add(Box.createVerticalStrut(10))
+        }
+        return box
+    }
+
+    /**
+     * The authoring-guide rows. Same two-place shape as the draft rows -- badge
+     * and glyphs in the header, the labelled control underneath -- because they
+     * are the same kind of thing, and the reviewer should not have to learn a
+     * second row.
+     *
+     * Less air between rows than between drafts: there are exactly two, they
+     * belong together, and they sit inside a collapsed section rather than at the
+     * top of the empty state.
+     */
+    private fun renderGuides(block: Block.GuideRows): JComponent {
+        val box = JPanel()
+        box.layout = BoxLayout(box, BoxLayout.Y_AXIS)
+        box.background = chrome.background()
+        box.alignmentX = Component.LEFT_ALIGNMENT
+        for (r in block.rows) {
+            val (glyphs, labelled) = r.controls.partition { it.emphasis == Emphasis.ICON }
+            val right = ArrayList<JComponent>()
+            right.add(chipLabel(r.badge))
+            for (c in glyphs) {
+                right.add(renderControl(c))
+            }
+            box.add(
+                stacked(
+                    headerRow(listOf(monoLabel(r.name, muted = false)), right),
+                ),
+            )
+            val actions = JPanel(GridLayout(1, labelled.size, 4, 4))
+            actions.background = chrome.background()
+            actions.alignmentX = Component.LEFT_ALIGNMENT
+            for (c in labelled) {
+                actions.add(renderControl(c))
+            }
+            box.add(stacked(actions))
+            box.add(Box.createVerticalStrut(6))
         }
         return box
     }

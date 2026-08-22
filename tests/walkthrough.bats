@@ -724,28 +724,86 @@ add_nonascii_file() {
 	[ "$output" = "4" ]
 }
 
-@test "init skeleton mentions the optional authoring guide path" {
+@test "init skeleton names no guide when neither is in force" {
+	# The bullet used to name .review/walkthrough-guide.md whether it existed or
+	# not. Five lines about a file that is not there is five lines of the
+	# annotating agent's attention spent on nothing.
 	run git review walkthrough init
 	[ "$status" -eq 0 ]
-	grep -q '\.review/walkthrough-guide\.md' .review/walkthrough.md
-	grep -qi 'cannot change' .review/walkthrough.md
+	run grep -c 'Authoring guide' .review/walkthrough.md
+	[ "$output" = "0" ]
 }
 
-@test "init notes optional guide when none exists" {
+@test "init skeleton names the shared guide when it is in force" {
+	mkdir -p .review
+	printf 'mark entry points as key\n' >.review/walkthrough-guide.md
 	run git review walkthrough init
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"optional authoring guide"* ]]
-	[[ "$output" == *".review/walkthrough-guide.md"* ]]
-	[[ "$output" != *"authoring guide found"* ]]
+	grep -q 'Authoring guide for this repository' .review/walkthrough.md
+	grep -q '\.review/walkthrough-guide\.md  (this repository, shared)' .review/walkthrough.md
+	grep -qi 'cannot change this format' .review/walkthrough.md
+	# One guide, so there is no precedence to declare.
+	run grep -c 'BOTH apply' .review/walkthrough.md
+	[ "$output" = "0" ]
 }
 
-@test "init notes found guide when the file exists" {
+@test "init skeleton names both guides and who wins" {
+	mkdir -p .review
+	printf 'team rules\n' >.review/walkthrough-guide.md
+	printf 'my rules\n' >"$(git rev-parse --git-dir)/review-walkthrough-guide.md"
+	run git review walkthrough init
+	[ "$status" -eq 0 ]
+	grep -q '\.review/walkthrough-guide\.md  (this repository, shared)' .review/walkthrough.md
+	grep -q 'review-walkthrough-guide\.md  (the reviewer, private)' .review/walkthrough.md
+	grep -q "BOTH apply, and where they disagree" .review/walkthrough.md
+	grep -q "the reviewer's guide wins." .review/walkthrough.md
+}
+
+@test "init skeleton ignores a guide that holds only whitespace" {
+	# Same rule as an empty draft: a file with nothing in it is not a set of
+	# conventions, and naming it would send the agent to read blank lines.
+	mkdir -p .review
+	printf '   \n\t\n\n' >.review/walkthrough-guide.md
+	run git review walkthrough init
+	[ "$status" -eq 0 ]
+	run grep -c 'Authoring guide' .review/walkthrough.md
+	[ "$output" = "0" ]
+}
+
+@test "init notes how to create a guide when there is none" {
+	run git review walkthrough init
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"no authoring guide"* ]]
+	[[ "$output" == *"git review walkthrough guide"* ]]
+	[[ "$output" != *"in force"* ]]
+}
+
+@test "init notes the shared guide when it is in force" {
 	mkdir -p .review
 	printf '# team rules\nmark entry points as key\n' >.review/walkthrough-guide.md
 	run git review walkthrough init
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"authoring guide found at .review/walkthrough-guide.md"* ]]
-	[[ "$output" != *"optional authoring guide: create"* ]]
+	[[ "$output" == *"authoring guide in force at .review/walkthrough-guide.md"* ]]
+	[[ "$output" != *"no authoring guide"* ]]
+}
+
+@test "init notes both guides and the precedence between them" {
+	mkdir -p .review
+	printf 'team rules\n' >.review/walkthrough-guide.md
+	printf 'my rules\n' >"$(git rev-parse --git-dir)/review-walkthrough-guide.md"
+	run git review walkthrough init
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"two authoring guides are in force"* ]]
+	[[ "$output" == *"yours wins where they disagree"* ]]
+}
+
+@test "init says a guide is empty rather than telling you to create it" {
+	mkdir -p .review
+	: >.review/walkthrough-guide.md
+	run git review walkthrough init
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"exists but is empty"* ]]
+	[[ "$output" != *"no authoring guide"* ]]
 }
 
 @test "build accepts a walkthrough naming a non-ASCII path" {

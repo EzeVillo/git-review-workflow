@@ -46,6 +46,12 @@ export const PANEL_MESSAGES = [
     "copyDraftPrompt",
     "startFromDraft",
     "discardDraft",
+    // Bloque de guias de autoria: misma forma que el de borradores -- fila del
+    // bloque -> indice, controles del CUERPO, fuera de contributes.commands y de
+    // la paleta, asi que el conteo de 27 sigue igual.
+    "openGuide",
+    "createGuide",
+    "discardGuide",
     // Support (links externos): el webview manda un id; el host resuelve la
     // URL contra un allowlist y abre con openExternal. No es un comando de
     // la paleta ni de la CLI.

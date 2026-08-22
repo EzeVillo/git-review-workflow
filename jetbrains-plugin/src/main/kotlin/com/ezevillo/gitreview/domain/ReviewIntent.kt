@@ -155,3 +155,22 @@ fun draftConfigArgs(branch: String, source: ReviewSource, range: ReviewRange): L
  * without the branch.
  */
 fun forgetDraftArgs(branch: String): List<String> = listOf("--draft", "--", branch)
+
+/**
+ * `git review walkthrough guide [--team]`: create an authoring guide, empty.
+ *
+ * The verb is `walkthrough`; `guide` is the first argument, like `draft`. No
+ * branch and no origin or range flags: a guide covers no range. Never `--force`
+ * -- the CLI refuses it anyway, because overwriting hand-written prose with an
+ * empty file is not something a flag should be able to do.
+ */
+fun createGuideArgs(team: Boolean): List<String> =
+    if (team) listOf("guide", "--team") else listOf("guide")
+
+/**
+ * `git review walkthrough guide --delete`: remove YOUR guide.
+ *
+ * Never with `--team`: the shared one is a tracked file, so taking it out is
+ * `git rm` plus a commit, and the CLI refuses the combination.
+ */
+fun deleteGuideArgs(): List<String> = listOf("guide", "--delete")

@@ -9,19 +9,26 @@ public class PanelLayoutFooterTests
         b is Block.Row r ? r.Controls : Array.Empty<Control>();
 
     [Fact]
-    public void No_review_ready_ends_with_three_tools_sections()
+    public void No_review_ready_ends_with_four_tools_sections()
     {
         var layout = PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewReady());
         var sections = layout.Blocks.OfType<Block.ToolsSection>().ToList();
-        Assert.Equal(new[] { "Other actions", "Settings", "Support" }, sections.Select(s => s.Title));
-
-        var other = sections[0].NestedBlocks.SelectMany(ControlsOf).ToList();
         Assert.Equal(
-            new[] { ControlId.CompareReview, ControlId.WalkthroughInit, ControlId.WalkthroughBuild },
-            other.Select(c => c.Id));
+            new[] { "Other actions", "Walkthrough", "Settings", "Support" },
+            sections.Select(s => s.Title));
+
+        // Compare stayed where it was; init and build moved to the section named
+        // after the noun they share with the two authoring guides.
+        var other = sections[0].NestedBlocks.SelectMany(ControlsOf).ToList();
+        Assert.Equal(new[] { ControlId.CompareReview }, other.Select(c => c.Id));
         Assert.Equal("Compare revisions", other[0].Label);
-        Assert.Equal("Walkthrough: Init", other[1].Label);
-        Assert.Equal("Walkthrough: Build", other[2].Label);
+
+        var walkthrough = sections[1].NestedBlocks.SelectMany(ControlsOf).ToList();
+        Assert.Equal(
+            new[] { ControlId.WalkthroughInit, ControlId.WalkthroughBuild },
+            walkthrough.Select(c => c.Id));
+        Assert.Equal("Walkthrough: Init", walkthrough[0].Label);
+        Assert.Equal("Walkthrough: Build", walkthrough[1].Label);
     }
 
     /// <summary>

@@ -176,6 +176,24 @@ public sealed class ActionDispatcher
                 await DiscardDraftAsync(index).ConfigureAwait(true);
                 return;
 
+            // Authoring-guide block: same deal as the draft one. BODY controls,
+            // no .vsct entry, no command id, no Tools menu item.
+            case "openGuide":
+            {
+                var guide = GuideRowAt(index);
+                if (guide is null || guide.State == GuideState.Absent || _host.OpenPath is null) return;
+                await _host.OpenPath(guide.Path).ConfigureAwait(true);
+                return;
+            }
+
+            case "createGuide":
+                await CreateGuideAsync(index).ConfigureAwait(true);
+                return;
+
+            case "discardGuide":
+                await DiscardGuideAsync(index).ConfigureAwait(true);
+                return;
+
             case "cleanReview":
                 await CleanAsync().ConfigureAwait(true);
                 return;
@@ -681,6 +699,56 @@ public sealed class ActionDispatcher
             "forgetDraft",
             new ActionParams.ForgetDraft(draft.Src),
             progress: UserCopy.DiscardDraftProgress(draft.Src)).ConfigureAwait(true);
+    }
+
+    private GuideRecord? GuideRowAt(int? index) =>
+        PanelModelBuilder.GuideAt(State.GuidesList, index);
+
+    /// <summary>
+    /// Ask the CLI for the empty file, then open it.
+    ///
+    /// The write is the CLI's and not the client's: if each client created the file on
+    /// its own that would be three implementations of "create an empty file in the
+    /// gitdir" and three chances to get the path wrong — the same reason opening uses
+    /// the reported path instead of deriving it.
+    ///
+    /// Opening it is the next step and not an extra: it is created EMPTY on purpose, so
+    /// without opening it the button leaves the reviewer looking at a row saying "empty".
+    /// </summary>
+    private async Task CreateGuideAsync(int? index)
+    {
+        var guide = GuideRowAt(index);
+        if (guide is null || guide.State != GuideState.Absent) return;
+        var result = await RunAsync(
+            "createGuide",
+            new ActionParams.CreateGuide(guide.Kind == GuideKind.Team),
+            progress: UserCopy.CreateGuideProgress).ConfigureAwait(true);
+        if (result is { ExitCode: 0 } && _host.OpenPath is not null)
+        {
+            await _host.OpenPath(guide.Path).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    /// Discard YOUR guide, with a confirmation first: it is prose written by hand. The
+    /// shared one never gets here — the layout draws it no control, because removing it
+    /// is git rm plus a commit and the CLI refuses --delete --team.
+    /// </summary>
+    private async Task DiscardGuideAsync(int? index)
+    {
+        var guide = GuideRowAt(index);
+        if (guide is null || guide.Kind != GuideKind.Own || guide.State == GuideState.Absent) return;
+        if (!GitReviewDialogs.Confirm(
+                UserCopy.DiscardGuideTitle,
+                UserCopy.DiscardGuideDetail(guide.Path),
+                UserCopy.DiscardGuideButton))
+        {
+            return;
+        }
+        await RunAsync(
+            "deleteGuide",
+            new ActionParams.DeleteGuide(),
+            progress: UserCopy.DiscardGuideProgress).ConfigureAwait(true);
     }
 
     /// <summary>

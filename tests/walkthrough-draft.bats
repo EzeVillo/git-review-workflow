@@ -405,28 +405,42 @@ EOF
 	grep -q 'Fill in the "## Heads-up" section below' "$DRAFT"
 }
 
-@test "draft skeleton mentions the optional authoring guide path" {
+@test "draft skeleton names no guide when neither is in force" {
 	run git review walkthrough draft feature/plain
 	[ "$status" -eq 0 ]
-	grep -q '\.review/walkthrough-guide\.md' "$DRAFT"
-	grep -qi 'cannot change' "$DRAFT"
+	run grep -c 'Authoring guide' "$DRAFT"
+	[ "$output" = "0" ]
 }
 
-@test "draft notes optional guide when none exists in the work tree" {
+@test "draft skeleton names the guides in force" {
+	# Resolved from the work tree the reviewer is standing in, not from the PR tip:
+	# these are the conventions of whoever is annotating.
+	mkdir -p .review
+	printf 'team rules\n' >.review/walkthrough-guide.md
+	printf 'my rules\n' >"$(git rev-parse --git-dir)/review-walkthrough-guide.md"
 	run git review walkthrough draft feature/plain
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"optional authoring guide"* ]]
-	[[ "$output" == *".review/walkthrough-guide.md"* ]]
-	[[ "$output" != *"authoring guide found"* ]]
+	grep -q 'Authoring guide for this repository' "$DRAFT"
+	grep -q '\.review/walkthrough-guide\.md  (this repository, shared)' "$DRAFT"
+	grep -q 'review-walkthrough-guide\.md  (the reviewer, private)' "$DRAFT"
+	grep -qi 'cannot change this format' "$DRAFT"
 }
 
-@test "draft notes found guide when the work tree has one" {
+@test "draft notes how to create a guide when there is none" {
+	run git review walkthrough draft feature/plain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"no authoring guide"* ]]
+	[[ "$output" == *"git review walkthrough guide"* ]]
+	[[ "$output" != *"in force"* ]]
+}
+
+@test "draft notes the guide in force in the work tree" {
 	mkdir -p .review
 	printf '# team rules\n' >.review/walkthrough-guide.md
 	run git review walkthrough draft feature/plain
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"authoring guide found at .review/walkthrough-guide.md"* ]]
-	[[ "$output" != *"optional authoring guide: create"* ]]
+	[[ "$output" == *"authoring guide in force at .review/walkthrough-guide.md"* ]]
+	[[ "$output" != *"no authoring guide"* ]]
 }
 
 @test "the draft skeleton repeats the flags the draft was written with" {

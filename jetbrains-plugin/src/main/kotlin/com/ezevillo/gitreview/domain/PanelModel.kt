@@ -63,6 +63,45 @@ data class PanelDraft(
     val startable: Boolean,
 )
 
+/**
+ * A row of the authoring-guide block: prose about the CONTENT of a walkthrough,
+ * not about its format.
+ *
+ * BOTH rows are always drawn, whether or not either file exists, and what the
+ * state changes is the enabled of the controls, never their presence -- the same
+ * rule as the draft rows, and for the same reason: two rows with different
+ * button sets do not line up with each other.
+ *
+ * [label] and [badge] are derived here because they are panel copy; [path]
+ * comes from the CLI, and the client **opens it, never rebuilds it**.
+ */
+data class PanelGuide(
+    val kind: GuideKind,
+    /** The row name: the shared committed one, or yours from outside the tree. */
+    val label: String,
+    /** Absolute, reported by the CLI. On disk only when `state != ABSENT`. */
+    val path: String,
+    val state: GuideState,
+    /** Badge text: the state the CLI reported, in prose. */
+    val badge: String,
+    /** The file is there (in force or empty): it can be opened, and if it is yours, discarded. */
+    val exists: Boolean,
+    /**
+     * Whether Create can be INVOKED. Not the same as `!exists`: inside a review the
+     * shared guide cannot be created, because it is a file of the working tree and
+     * finish's extraction (`git add -A`) would carry it into somebody else's PR. The
+     * CLI refuses it; the control is drawn either way, off and saying why.
+     */
+    val creatable: Boolean,
+    /**
+     * Yours only. The shared one is a tracked file, so removing it is `git rm`
+     * plus a commit: a decision about what goes into the PR, which is not this
+     * button's to make. The CLI says the same from its side, refusing
+     * `--delete --team`.
+     */
+    val discardable: Boolean,
+)
+
 data class PanelModel(
     val situation: Situation,
     val busy: Boolean,
@@ -74,6 +113,13 @@ data class PanelModel(
      * panel has to say, and another branch's draft does not compete for the body.
      */
     val drafts: List<PanelDraft> = emptyList(),
+    /**
+     * Both authoring guides, in the CLI's order (shared, yours). Same rule as
+     * [drafts]: only with `NO_REVIEW`, empty in any other situation -- inside a
+     * review the panel has more urgent things to say, and creating the shared one
+     * there is refused by the CLI anyway.
+     */
+    val guides: List<PanelGuide> = emptyList(),
     val pendingFinish: PendingFinish? = null,
     val noBaseConfigured: Boolean = false,
     val configuredBase: String? = null,
@@ -198,6 +244,53 @@ fun toPanelDrafts(drafts: List<DraftRecord>): List<PanelDraft> =
         )
     }
 
+/** The badge for each state: the CLI's value in prose, without the hyphen. */
+private fun guideBadge(state: GuideState): String = when (state) {
+    GuideState.IN_FORCE -> "in force"
+    GuideState.EMPTY -> "empty"
+    GuideState.ABSENT -> "absent"
+}
+
+private fun guideLabel(kind: GuideKind): String = when (kind) {
+    GuideKind.TEAM -> "Repository guide"
+    GuideKind.OWN -> "Your guide"
+}
+
+/**
+ * Projects the `guide` records, one to one and in the CLI's order, without
+ * filling in a missing one: a record that did not arrive is a row that is not
+ * drawn. Against a CLI that does not know the record none arrive and the whole
+ * block disappears, which is the same degradation the draft block has.
+ */
+fun toPanelGuides(guides: List<GuideRecord>, situation: Situation): List<PanelGuide> {
+    // The CLI refuses to create the shared guide inside a review, for a reason the
+    // panel has to repeat rather than discover: finish extracts with `git add -A`,
+    // so a file created now would leave on somebody else's review-fixes/.
+    val inReview = situation == Situation.REVIEW || situation == Situation.FINISH_CONFLICT
+    return guides.map { guide ->
+        PanelGuide(
+            kind = guide.kind,
+            label = guideLabel(guide.kind),
+            path = guide.path,
+            state = guide.state,
+            badge = guideBadge(guide.state),
+            exists = guide.state != GuideState.ABSENT,
+            creatable = guide.state == GuideState.ABSENT &&
+                !(inReview && guide.kind == GuideKind.TEAM),
+            discardable = guide.kind == GuideKind.OWN && guide.state != GuideState.ABSENT,
+        )
+    }
+}
+
+/**
+ * The guide row at [index], resolved against the HOST's state. Same role as
+ * [draftAt]: what ends up in the CLI does not come from the panel.
+ */
+fun guideAt(guides: List<GuideRecord>, index: Any?): GuideRecord? {
+    if (index !is Int) return null
+    return guides.getOrNull(index)
+}
+
 /**
  * The draft row at [index], resolved against the HOST's state. Same role as
  * [resumableSourceAt]: what ends up in the CLI does not come from the panel.
@@ -221,6 +314,11 @@ fun buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelModel {
         busy = inputs.busy,
         reviews = if (state.situation == Situation.NO_REVIEW) toPanelReviews(state.branches) else emptyList(),
         drafts = if (state.situation == Situation.NO_REVIEW) toPanelDrafts(state.drafts ?: emptyList()) else emptyList(),
+        // Unlike [drafts], the guides are drawn INSIDE a review too: the walkthrough
+        // draft verb is run from there, which is the likeliest moment to want to write
+        // yours. It costs no extra invocation -- status --porcelain emits the same
+        // records config does.
+        guides = toPanelGuides(state.guides ?: emptyList(), state.situation),
         noBaseConfigured = state.situation == Situation.NO_REVIEW &&
             state.config != null &&
             state.config.base == null,

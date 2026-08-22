@@ -14,6 +14,7 @@ import {
     startFromDraft,
 } from "./commands/draftActions";
 import {discardInventoryReview, forgetReview} from "./commands/forgetReview";
+import {createGuide, discardGuide, openGuide} from "./commands/guideActions";
 import {finishReview, resumeFinish, undoFinish} from "./commands/finishReview";
 import {saveReview} from "./commands/saveReview";
 import {
@@ -42,7 +43,7 @@ import {
     workspaceFolderTargets,
 } from "./review/repository";
 import {CLI_PROBE_INTERVAL_MS, shouldProbeCli} from "./review/cliProbe";
-import {DRAFT_WATCH_DEBOUNCE_MS, draftWatchDirs} from "./review/draftWatch";
+import {DRAFT_WATCH_DEBOUNCE_MS, draftWatchDirs, isReportedGuide} from "./review/draftWatch";
 import {MutationLock} from "./review/mutationLock";
 import {resolveEntryArg} from "./review/entryArg";
 import {isReviewReadable} from "./review/situation";
@@ -299,6 +300,19 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
             void discardDraft(extra, lock, stateManager, getInvokeOptions);
             return;
         }
+        // Bloque de guias de autoria: mismo reparto que el de borradores.
+        if (message === "openGuide") {
+            void openGuide(extra, stateManager);
+            return;
+        }
+        if (message === "createGuide") {
+            void createGuide(extra, lock, stateManager, getInvokeOptions);
+            return;
+        }
+        if (message === "discardGuide") {
+            void discardGuide(extra, lock, stateManager, getInvokeOptions);
+            return;
+        }
         const commands: Record<
             Exclude<
                 PanelMessage,
@@ -308,6 +322,9 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
                 | "copyDraftPrompt"
                 | "startFromDraft"
                 | "discardDraft"
+                | "openGuide"
+                | "createGuide"
+                | "discardGuide"
             >,
             string
         > = {
@@ -474,6 +491,17 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
         panelProvider.onDidChangeVisibility(() => syncCliProbe()),
         {dispose: () => stopCliProbe()},
         {dispose: () => stopDraftWatcher()},
+        // Guardar una guia de autoria es lo unico que cambia lo que el panel
+        // muestra sin pasar por git ni por una mutacion: no mueve HEAD, no toca
+        // el indice y no escribe config. El watcher no la mira a proposito (la
+        // propia vive en la raiz del gitdir, que cambia en cada operacion de
+        // git), asi que el guardado es la senal, y solo sobre las rutas que la
+        // CLI ya reporto.
+        vscode.workspace.onDidSaveTextDocument((doc) => {
+            if (isReportedGuide(stateManager.state, doc.uri.fsPath)) {
+                void refresh();
+            }
+        }),
         vscode.workspace.onDidChangeConfiguration((e) => {
             if (e.affectsConfiguration("gitReview.path")) {
                 stateManager.invalidateVersionCheck();

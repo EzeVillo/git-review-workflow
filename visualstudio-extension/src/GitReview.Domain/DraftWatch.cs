@@ -37,6 +37,35 @@ public static class DraftWatch
         }
     }
 
+    /// <summary>
+    /// Whether <paramref name="file"/> is one of the authoring guides the CLI
+    /// reported.
+    ///
+    /// The guides get no watcher of their own, and that is deliberate: the reviewer's
+    /// lives in the ROOT of the gitdir, which changes on every git operation, so
+    /// watching that directory would be a storm of notifications over the file that
+    /// changes least. The document save is the exact signal instead, and it only fires
+    /// on paths the CLI already reported -- the same reported-path rule that has Open
+    /// open what the CLI gave instead of deriving it.
+    ///
+    /// Without it there is one moment the panel lies: you press Create, the empty file
+    /// opens, you write the conventions, Ctrl+S -- and the badge still says "empty",
+    /// because the state comes off the disk and nobody looked again.
+    /// </summary>
+    public static bool IsReportedGuide(ReviewState state, string? file)
+    {
+        if (string.IsNullOrWhiteSpace(file)) return false;
+        var target = Normalise(file!);
+        foreach (var guide in state.GuidesList)
+        {
+            if (string.Equals(Normalise(guide.Path), target, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    private static string Normalise(string path) => path.Replace('\\', '/');
+
     /// <summary>The directory holding <paramref name="file"/>, or null.</summary>
     private static string? ContainerOf(string? file)
     {

@@ -23,6 +23,12 @@ namespace GitReview.VS.Vsix;
 public sealed class GitReviewToolWindow : ToolWindowPane
 {
     private GitReviewPanelController? _controller;
+
+    /// <summary>
+    /// Advised on the running document table, and only for the authoring guides: they
+    /// are the one thing the panel draws that no watcher of ours is looking at.
+    /// </summary>
+    private DocumentSaveListener? _saveListener;
     private IReadOnlyList<string> _roots = Array.Empty<string>();
 
     /// <summary>
@@ -198,6 +204,12 @@ public sealed class GitReviewToolWindow : ToolWindowPane
         _controller.TitleActionsChanged += OnTitleActionsChanged;
         Actions = new VsHostActions(ServiceProvider(), _controller, () => _roots).Attach();
 
+        // Cuarta senal de refresco, solo para las guias de autoria: no tienen
+        // watcher, asi que el guardado es lo que le dice al panel que la escribiste.
+        _saveListener = DocumentSaveListener.Attach(
+            ServiceProvider(),
+            path => _controller?.NotifyDocumentSaved(path));
+
         SetPaneContent(_controller.View);
         // Started before the refresh, not after: it is what tells the refresh that
         // there is nothing to read yet.
@@ -262,6 +274,8 @@ public sealed class GitReviewToolWindow : ToolWindowPane
     {
         if (_controller is null) return;
         _controller.TitleActionsChanged -= OnTitleActionsChanged;
+        _saveListener?.Dispose();
+        _saveListener = null;
         _controller.Dispose();
         _controller = null;
     }

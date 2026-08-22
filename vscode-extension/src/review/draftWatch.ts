@@ -73,3 +73,40 @@ export function draftWatchDirs(state: DraftPathSource): string[] {
     }
     return [...dirs].sort();
 }
+
+/**
+ * Lo que hace falta de un `ReviewState` para decidir si un guardado toca una
+ * guía de autoría. Estructural, por lo mismo que `DraftPathSource`.
+ */
+export interface GuidePathSource {
+    /** Registros `guide` de `config --porcelain` (siempre los dos). */
+    guides?: readonly {path: string}[];
+}
+
+/**
+ * Si `file` es una de las guías que la CLI reportó.
+ *
+ * Existe porque las guías **no** las mira el watcher, y eso es deliberado: la
+ * propia vive en la RAÍZ del gitdir, que cambia en cada operación de git, así
+ * que vigilar ese directorio sería una tormenta de refrescos por el archivo que
+ * menos cambia del panel.
+ *
+ * Pero hay un momento en que el panel miente sin esto: apretás *Create*, se
+ * abre el archivo vacío, escribís las convenciones, Ctrl+S — y el badge sigue
+ * diciendo `empty`, porque el estado sale del disco y nadie volvió a mirarlo.
+ * El guardado es la señal exacta, no cuesta un watcher, y sólo dispara sobre
+ * las rutas que la CLI **ya reportó** — la misma regla del path reportado que
+ * hace que *Open* abra lo que dio la CLI en vez de derivarlo.
+ */
+export function isReportedGuide(
+    state: GuidePathSource,
+    file: string,
+    platform: string = process.platform
+): boolean {
+    const normalise = (p: string): string => {
+        const slashed = p.replace(/\\/g, "/");
+        return platform === "win32" ? slashed.toLowerCase() : slashed;
+    };
+    const target = normalise(file);
+    return (state.guides ?? []).some((guide) => normalise(guide.path) === target);
+}

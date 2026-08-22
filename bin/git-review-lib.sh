@@ -1874,3 +1874,157 @@ goto_walk_entry() {
 	walkstep="$1"
 	show_walk_entry "$1"
 }
+
+# ── Authoring guides ──────────────────────────────────────────────────────────
+#
+# A guide is prose about CONTENT: which entries deserve "> key", how to write a
+# why, what belongs in the heads-up. Two can be in play at once, and they are two
+# different things rather than two copies of one thing:
+#
+#   team  .review/walkthrough-guide.md, committed — how THIS PROJECT wants its
+#         PRs annotated. Shared with everyone, reviewed, versioned with the code.
+#   own   <git-common-dir>/review-walkthrough-guide.md, outside the work tree —
+#         how YOU annotate. Never staged, never committed, and never swept into
+#         review-fixes/ by finish's "git add -A": the same three walls that put
+#         the reviewer's draft in the gitdir put this here.
+#
+# Both apply when both are in force, and the skeleton says so — along with which
+# one wins on a contradiction, which is yours, the same precedence walk_read
+# already applies between your draft and the author's sidecar.
+#
+# Neither is read, parsed or validated by this suite. It detects them and names
+# them; the agent filling the walkthrough in is what reads them. Keeping the
+# contract that small is what lets build stay the only owner of the format, and
+# it is why there is no validation to drift.
+#
+# Where the reviewer's guide is NOT: inside review-walkthrough/. walk_draft_list
+# recurses that directory and takes every *.md in it as a <src> branch name, so a
+# guide filed there would surface as a phantom draft in list, in
+# forget --draft --all and in the progress count of config --porcelain.
+
+# guide_paths_init
+# Resolve both guide paths once per process, into _guide_team_path and
+# _guide_own_path. Both absolute, both in the SAME path style, and ONE git
+# process for the pair: rev-parse answers both questions in a single call, in the
+# order they are asked.
+#
+# Same "assign in the caller's own shell" rule as walk_gitdir_init, and for the
+# same reason -- a cache written inside a "$(...)" dies with its subshell.
+#
+# The reviewer's guide belongs to the COMMON gitdir, never to the worktree one: a
+# linked worktree has a gitdir of its own but shares the common one, and a guide
+# is a property of the repository, not of the worktree you are standing in. With
+# the worktree gitdir you get a different guide per worktree, which is not a
+# thing anybody would think to look for.
+#
+# It is derived from --absolute-git-dir rather than asked for with
+# --git-common-dir, and that is not a detour. --git-common-dir answers relative
+# to the CURRENT DIRECTORY (".git" at the top level, "../.git" one level down),
+# and on Windows the obvious fix -- prefixing $PWD -- mixes path styles inside one
+# porcelain record: rev-parse hands back "C:/Users/...", $PWD under Git Bash hands
+# back "/tmp/...", and a client handed the second one cannot open the file.
+# Asking git for the absolute worktree gitdir and stripping "/worktrees/<name>"
+# off it gives the common dir in git's own style, with no second process.
+# (--path-format=absolute would be the direct way and is git 2.31; this project
+# supports 2.23.)
+#
+# A repository with no work tree (bare) has no team guide and therefore no guides
+# at all here: both paths stay empty and every caller treats that as nothing to
+# report.
+guide_paths_init() {
+	[ -z "${_guide_paths_done:-}" ] || return 0
+	_guide_paths_done=1
+	_guide_team_path=""
+	_guide_own_path=""
+	_gpi_top=""
+	_gpi_gitdir=""
+	_gpi_n=0
+	while IFS= read -r _gpi_line; do
+		_gpi_n=$((_gpi_n + 1))
+		case "$_gpi_n" in
+		1) _gpi_top="$_gpi_line" ;;
+		2) _gpi_gitdir="$_gpi_line" ;;
+		esac
+	done <<EOF
+$(git rev-parse --show-toplevel --absolute-git-dir 2>/dev/null || true)
+EOF
+	[ "$_gpi_n" -eq 2 ] || return 0
+	[ -n "$_gpi_top" ] && [ -n "$_gpi_gitdir" ] || return 0
+	# Shortest suffix, so a repository whose own path contains "/worktrees/" keeps
+	# the last occurrence -- the one git just appended -- and not an earlier one.
+	case "$_gpi_gitdir" in
+	*/worktrees/*) _gpi_common="${_gpi_gitdir%/worktrees/*}" ;;
+	*) _gpi_common="$_gpi_gitdir" ;;
+	esac
+	_guide_team_path="$_gpi_top/.review/walkthrough-guide.md"
+	_guide_own_path="$_gpi_common/review-walkthrough-guide.md"
+}
+
+# guide_in_force <path>
+# Whether <path> is a guide with something in it. Same rule, and the same reason,
+# as walk_draft_body: a file that is empty or holds nothing but whitespace is not
+# a set of conventions, and naming one in the skeleton points the agent at
+# nothing. It is also what lets "git review walkthrough guide" create the file
+# empty — creating it does not yet claim a guide exists.
+#
+# ZERO processes, unlike walk_draft_body, because the question is only "is there
+# a non-blank line": a builtin read loop answers it and stops at the first one,
+# which for a real guide is line 1. config --porcelain runs on every panel
+# refresh, so that is the difference between free and not.
+#
+# The one shape it does not catch is a file holding nothing but a UTF-8 BOM,
+# which reads as non-whitespace. Deliberate: recognising it needs the byte, the
+# byte needs a printf, and the cost of missing it is one line in a skeleton.
+guide_in_force() {
+	[ -n "$1" ] || return 1
+	[ -f "$1" ] || return 1
+	[ -s "$1" ] || return 1
+	_gif_line=""
+	while IFS= read -r _gif_line || [ -n "$_gif_line" ]; do
+		case "$_gif_line" in
+		*[![:space:]]*) return 0 ;;
+		esac
+		_gif_line=""
+	done <"$1"
+	return 1
+}
+
+# guide_state_of <path>
+# Set _guide_state to in-force | empty | absent — the three states
+# config --porcelain reports, and the three a client needs to decide between
+# offering Open, Create or Discard.
+#
+# "empty" is not folded into "absent" even though both mean "no conventions in
+# play": the file is there, so the offer is to open and fill it, not to create
+# it, and discarding it is possible where discarding a missing file is not.
+#
+# Sets a variable instead of printing, so a caller pays no fork to ask.
+guide_state_of() {
+	if guide_in_force "$1"; then
+		_guide_state=in-force
+	elif [ -n "$1" ] && [ -f "$1" ]; then
+		_guide_state=empty
+	else
+		_guide_state=absent
+	fi
+}
+
+# emit_guide_records
+# One "guide<TAB>kind<TAB>path<TAB>state" row per guide, ALWAYS BOTH, team first.
+#
+# Both rows always, unlike the draft records, which exist only for drafts that
+# exist: a client cannot offer to CREATE a guide it was never told about, and
+# rebuilding the path on its side is the thing the reported-path rule exists to
+# prevent. So absence is reported, not implied by silence.
+#
+# Cost on the panel's refresh path: the one rev-parse in guide_paths_init, and
+# nothing else. The state of each guide is file tests plus, for a guide that has
+# bytes in it, a builtin read that stops at its first non-blank line.
+emit_guide_records() {
+	guide_paths_init
+	[ -n "$_guide_team_path" ] || return 0
+	guide_state_of "$_guide_team_path"
+	porcelain_row guide team "$_guide_team_path" "$_guide_state"
+	guide_state_of "$_guide_own_path"
+	porcelain_row guide own "$_guide_own_path" "$_guide_state"
+}

@@ -4,6 +4,9 @@ import com.ezevillo.gitreview.diff.OpenEntryActions
 import com.ezevillo.gitreview.domain.ActionParams
 import com.ezevillo.gitreview.domain.ControlId
 import com.ezevillo.gitreview.domain.DraftRecord
+import com.ezevillo.gitreview.domain.GuideKind
+import com.ezevillo.gitreview.domain.GuideRecord
+import com.ezevillo.gitreview.domain.GuideState
 import com.ezevillo.gitreview.domain.HousekeepingAction
 import com.ezevillo.gitreview.domain.HousekeepingKind
 import com.ezevillo.gitreview.domain.NPM_INSTALL_CMD
@@ -16,6 +19,7 @@ import com.ezevillo.gitreview.domain.UserCopy
 import com.ezevillo.gitreview.domain.confirmCopyFor
 import com.ezevillo.gitreview.domain.currentEntry
 import com.ezevillo.gitreview.domain.draftAt
+import com.ezevillo.gitreview.domain.guideAt
 import com.ezevillo.gitreview.domain.pendingFinishInfo
 import com.ezevillo.gitreview.domain.requiresConfirmation
 import com.ezevillo.gitreview.domain.resumableSourceAt
@@ -116,6 +120,21 @@ class PanelActionDispatcher(
             }
             ControlId.DISCARD_DRAFT -> {
                 discardDraftAt(index)
+                false
+            }
+            // Bloque de guias de autoria. Controles del CUERPO igual que los del
+            // bloque de borradores: sin accion registrada, fuera del menu
+            // Tools -> git review, y el conteo del canonico no se mueve.
+            ControlId.OPEN_GUIDE -> {
+                openGuideAt(index)
+                false
+            }
+            ControlId.CREATE_GUIDE -> {
+                createGuideAt(index)
+                false
+            }
+            ControlId.DISCARD_GUIDE -> {
+                discardGuideAt(index)
                 false
             }
             ControlId.SET_BASE -> {
@@ -305,6 +324,72 @@ class PanelActionDispatcher(
             "forgetDraft",
             ActionParams.ForgetDraft(draft.src),
             progressTitle = UserCopy.discardDraftProgress(draft.src),
+        )
+    }
+
+    private fun guideRowAt(index: Int?): GuideRecord? =
+        guideAt(service.currentState().guides ?: emptyList(), index)
+
+    /**
+     * Abre la guia en la ruta que reporto la CLI. Mostrarla no es leerla: el
+     * plugin no interpreta un byte de su contenido.
+     */
+    private fun openGuideAt(index: Int?) {
+        val guide = guideRowAt(index) ?: return
+        if (guide.state == GuideState.ABSENT) return
+        val vf = LocalFileSystem.getInstance().refreshAndFindFileByPath(guide.path) ?: return
+        FileEditorManager.getInstance(project).openFile(vf, true)
+    }
+
+    /**
+     * Pide a la CLI el archivo vacio y lo abre.
+     *
+     * La escritura la hace la CLI y no el plugin: si cada cliente creara el
+     * archivo por su cuenta serian tres implementaciones de "crear un archivo
+     * vacio en el gitdir" y tres chances de errarle a la ruta -- la misma razon
+     * por la que abrir usa la ruta reportada en vez de derivarla.
+     *
+     * Abrirlo es el paso siguiente y no un extra: se crea VACIO a proposito, asi
+     * que sin abrirlo el boton deja al revisor mirando una fila que dice "empty".
+     */
+    private fun createGuideAt(index: Int?) {
+        val guide = guideRowAt(index) ?: return
+        if (guide.state != GuideState.ABSENT) return
+        val team = guide.kind == GuideKind.TEAM
+        mutations.runSimple(
+            "createGuide",
+            ActionParams.CreateGuide(team),
+            progressTitle = UserCopy.CREATE_GUIDE_PROGRESS,
+            onDone = { done ->
+                if (done.ok) {
+                    val vf = LocalFileSystem.getInstance().refreshAndFindFileByPath(guide.path)
+                    if (vf != null) FileEditorManager.getInstance(project).openFile(vf, true)
+                }
+            },
+        )
+    }
+
+    /**
+     * Descarta TU guia, con confirmacion previa: es prosa escrita a mano. La
+     * compartida no llega aca -- el layout no le dibuja el control, porque
+     * sacarla es git rm mas un commit y la CLI niega --delete --team.
+     */
+    private fun discardGuideAt(index: Int?) {
+        val guide = guideRowAt(index) ?: return
+        if (guide.kind != GuideKind.OWN || guide.state == GuideState.ABSENT) return
+        if (!UiMessages.confirm(
+                project,
+                UserCopy.DISCARD_GUIDE_TITLE,
+                UserCopy.discardGuideDetail(guide.path),
+                UserCopy.DISCARD_GUIDE_BUTTON,
+            )
+        ) {
+            return
+        }
+        mutations.runSimple(
+            "deleteGuide",
+            ActionParams.DeleteGuide,
+            progressTitle = UserCopy.DISCARD_GUIDE_PROGRESS,
         )
     }
 

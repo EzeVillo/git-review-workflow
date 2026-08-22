@@ -182,4 +182,22 @@ public static class ReviewIntentLogic
     /// </summary>
     public static IReadOnlyList<string> ForgetDraftArgs(string branch) =>
         new List<string> { "--draft", "--", branch };
+
+    /// <summary>
+    /// <c>git review walkthrough guide [--team]</c>: create an authoring guide, empty.
+    /// The verb is walkthrough; guide is the first argument, like draft. No branch and
+    /// no origin or range flags: a guide covers no range. Never --force — the CLI
+    /// refuses it anyway, because overwriting hand-written prose with an empty file is
+    /// not something a flag should be able to do.
+    /// </summary>
+    public static IReadOnlyList<string> CreateGuideArgs(bool team) =>
+        team ? new List<string> { "guide", "--team" } : new List<string> { "guide" };
+
+    /// <summary>
+    /// <c>git review walkthrough guide --delete</c>: remove YOUR guide. Never with
+    /// --team: the shared one is a tracked file, so taking it out is `git rm` plus a
+    /// commit, and the CLI refuses the combination.
+    /// </summary>
+    public static IReadOnlyList<string> DeleteGuideArgs() =>
+        new List<string> { "guide", "--delete" };
 }

@@ -391,6 +391,26 @@ function requireSharedCopy(what, copy, exact) {
   }
 }
 
+// Los tres archivos donde vive la PROYECCION: kind y state de la CLI entran, y
+// salen la etiqueta de la fila y el texto del badge. Es copy compartida igual
+// que la del layout, solo que la escribe otro archivo de cada cliente.
+const modelFiles = [
+  ["vscode", ["vscode-extension", "src", "views", "panelModel.ts"]],
+  ["intellij", ["jetbrains-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "domain", "PanelModel.kt"]],
+  ["visualstudio", ["visualstudio-extension", "src", "GitReview.Domain", "PanelModel.cs"]],
+];
+
+function requireModelCopy(what, copy) {
+  for (const [label, rel] of modelFiles) {
+    const p = join(root, ...rel);
+    if (!existsSync(p)) {
+      fail(`${label} panel model missing at ${rel.join("/")}`);
+      continue;
+    }
+    if (!readText(p, "utf8").includes(`"${copy}"`)) fail(`${label} is missing the ${what}`);
+  }
+}
+
 for (const c of canonicalControls) {
   // Lo que dice un control apagado. Es copy compartida como draft_agent_prompt,
   // y el motivo de verificarla es el mismo: tres clientes escribiendo a mano el
@@ -577,8 +597,12 @@ for (const c of canonicalControls) {
 }
 
 // (2) each control id in PANEL_MESSAGES or view/title
+const guideIdsForMessages =
+  [...(text.split(/^guide_rows:\s*$/m)[1]?.split(/^[a-z_][a-z0-9_]*:\s*$/m)[0] ?? "")
+    .matchAll(/^ {4}([A-Za-z][A-Za-z0-9]*):\s*\{/gm)].map((m) => m[1]);
 const allControlIds = new Set([
   ...canonicalControls.map((c) => c.id),
+  ...guideIdsForMessages,
   ...titleActionIds,
 ]);
 for (const id of allControlIds) {
@@ -595,8 +619,13 @@ for (const id of allControlIds) {
   }
 }
 
-// (3) every button/iconButton call in panelHtml is in the canonical
-const canonicalIds = new Set(canonicalControls.map((c) => c.id));
+// (3) every button/iconButton call in panelHtml is in the canonical.
+// Los del bloque de guias entran por su propio mapa, igual que los de
+// draft_controls entran por el suyo: su sujeto es la fila, no la situacion, asi
+// que no pueden declararse dentro de panel_layout.
+const guideRowsBlock = text.split(/^guide_rows:\s*$/m)[1]?.split(/^[a-z_][a-z0-9_]*:\s*$/m)[0] ?? "";
+const guideControlIds = [...guideRowsBlock.matchAll(/^ {4}([A-Za-z][A-Za-z0-9]*):\s*\{/gm)].map((m) => m[1]);
+const canonicalIds = new Set([...canonicalControls.map((c) => c.id), ...guideControlIds]);
 for (const p of panelCalls) {
   if (!canonicalIds.has(p.id)) {
     fail(`panelHtml.ts call id=${p.id} label=${p.label} (line ${p.line}) not in panel_layout canonical`);
@@ -1093,6 +1122,76 @@ const vsOverview = join(root, "visualstudio-extension", "marketplace", "overview
 if (existsSync(vsOverview)) {
   const o = readText(vsOverview, "utf8");
   if (!o.includes(tagline)) fail(`visualstudio marketplace/overview.md missing the tagline: ${tagline}`);
+}
+
+// ── Authoring guides ─────────────────────────────────────────────────────────
+//
+// El bloque de las dos guias, verificado como su propio grupo y no colado en
+// canonicalControls: sus controles cuelgan de guide_rows.controls, con claves
+// (disabled_when, only_in_row) que el parser de draft_controls no conoce, y
+// forzarlos en ese molde haria que un cambio de forma pasara en silencio.
+//
+// Lo que se verifica es lo mismo de siempre: copy que los tres clientes escriben
+// a mano tiene que decir lo mismo, y un id que un cliente perdio es un boton que
+// no existe.
+const guideBlock = guideRowsBlock;
+if (guideBlock.length === 0) {
+  fail("guide_rows block missing from the canonical contract");
+} else {
+  const guideIds = [...guideBlock.matchAll(/^ {4}([A-Za-z][A-Za-z0-9]*):\s*\{/gm)].map((m) => m[1]);
+  const wantIds = ["openGuide", "createGuide", "discardGuide"];
+  for (const id of wantIds) {
+    if (!guideIds.includes(id)) fail(`guide_rows does not declare ${id}`);
+  }
+  // Los controles del bloque NO son acciones del producto: el conteo fijo de
+  // actions: y contributes.commands no se mueve, y la paleta no los ofrece.
+  for (const id of wantIds) {
+    if (actionKeys.includes(id)) {
+      fail(`${id} is a row control, not a product action: it must not appear in actions:`);
+    }
+    if (cmdIds.includes(id)) {
+      fail(`${id} is a row control: it must not appear in contributes.commands`);
+    }
+  }
+  // Cada id, y cada cadena que el usuario ve, en los tres archivos de layout.
+  for (const id of wantIds) {
+    requireSharedCopy(`guide control ${id}`, id, false);
+  }
+  // El nombre de cada fila y su badge son PROYECCION, no layout: los deriva el
+  // modelo de cada cliente a partir del kind y del state que reporto la CLI, asi
+  // que se buscan en PanelModel y no en el archivo del layout.
+  const rowsSection = guideBlock.split(/^ {2}rows:\s*$/m)[1]?.split(/^ {2}[a-z_]+:/m)[0] ?? "";
+  const rowLabels = [...rowsSection.matchAll(/label:\s*"([^"]+)"/g)].map((m) => m[1]);
+  if (rowLabels.length === 0) fail("guide_rows declares no rows");
+  for (const label of rowLabels) {
+    requireModelCopy(`guide row label "${label}"`, label);
+  }
+  // La etiqueta de un control si es del layout: la escribe el builder, no el
+  // modelo. Hoy es una sola -- los otros dos son iconos y no llevan texto.
+  const controlsSection = guideBlock.split(/^ {2}controls:\s*$/m)[1] ?? "";
+  for (const label of [...controlsSection.matchAll(/label:\s*"([^"]+)"/g)].map((m) => m[1])) {
+    requireSharedCopy(`guide control label "${label}"`, label, true);
+  }
+  const accessible = [...controlsSection.matchAll(/accessible_name:\s*"([^"]+)"/g)].map((m) => m[1]);
+  for (const name of accessible) {
+    requireSharedCopy(`accessible name of a guide control`, name, true);
+  }
+  const statesMatch = guideBlock.match(/^ {2}states:\s*\[([^\]]*)\]/m);
+  if (!statesMatch) {
+    fail("guide_rows declares no states");
+  } else {
+    for (const raw of statesMatch[1].split(",")) {
+      const state = raw.trim().replace(/^"|"$/g, "");
+      if (state.length > 0) requireModelCopy(`guide badge "${state}"`, state);
+    }
+  }
+  // La seccion que los aloja. Se movio ahi cuando las guias entraron, y con ella
+  // init y build: si un cliente se queda con los cuatro en "Other actions", el
+  // panel deja de decir lo que dice la CLI.
+  if (!/title:\s*"Walkthrough"/.test(panelLayoutBlock)) {
+    fail("panel_layout has no Walkthrough tools section for the guide rows");
+  }
+  requireSharedCopy("Walkthrough tools section", "Walkthrough", true);
 }
 
 console.log(

@@ -50,6 +50,9 @@ enum class ControlId {
     COPY_DRAFT_PROMPT,
     START_FROM_DRAFT,
     DISCARD_DRAFT,
+    OPEN_GUIDE,
+    CREATE_GUIDE,
+    DISCARD_GUIDE,
     CLEAN_REVIEW,
     COMPARE_REVIEW,
     WALKTHROUGH_INIT,
@@ -85,6 +88,9 @@ enum class ControlId {
             COPY_DRAFT_PROMPT -> "copyDraftPrompt"
             START_FROM_DRAFT -> "startFromDraft"
             DISCARD_DRAFT -> "discardDraft"
+            OPEN_GUIDE -> "openGuide"
+            CREATE_GUIDE -> "createGuide"
+            DISCARD_GUIDE -> "discardGuide"
             CLEAN_REVIEW -> "cleanReview"
             COMPARE_REVIEW -> "compareReview"
             WALKTHROUGH_INIT -> "walkthroughInit"
@@ -109,6 +115,7 @@ private val CONFIRMING_IDS: Set<ControlId> = setOf(
     ControlId.DISCARD_INVENTORY,
     ControlId.START_FROM_DRAFT,
     ControlId.DISCARD_DRAFT,
+    ControlId.DISCARD_GUIDE,
     ControlId.CLEAN_REVIEW,
     ControlId.UNDO_FINISH,
     ControlId.COMPARE_REVIEW,
@@ -169,6 +176,30 @@ data class DraftRow(
         for (c in controls) {
             require(c.index != null) {
                 "Draft control ${c.id.wire} must carry an index"
+            }
+        }
+    }
+}
+
+/**
+ * A row of the authoring-guide block: which guide it is, the state the CLI
+ * reported as a badge, and the controls that act on THAT row.
+ *
+ * Same two-place shape as [DraftRow]: the labelled control is the button
+ * underneath and the ICON ones are drawn in the header beside the badge. And
+ * the same rule about presence -- both rows carry the same controls whatever
+ * their state, except Discard, which only the reviewer's own row has at all:
+ * the shared guide is a tracked file, so removing it is `git rm` plus a commit.
+ */
+data class GuideRow(
+    val name: String,
+    val badge: String,
+    val controls: List<Control>,
+) {
+    init {
+        for (c in controls) {
+            require(c.index != null) {
+                "Guide control ${c.id.wire} must carry an index"
             }
         }
     }
@@ -268,6 +299,8 @@ sealed class Block {
     data class FileRows(val rows: List<FileRow>) : Block()
     data class InventoryRows(val rows: List<InventoryRow>) : Block()
     data class DraftRows(val rows: List<DraftRow>) : Block()
+
+    data class GuideRows(val rows: List<GuideRow>) : Block()
 
     data class ToolsSection(
         val title: String,
@@ -856,6 +889,68 @@ private fun draftRows(model: PanelModel): Block.DraftRows {
     return Block.DraftRows(rows)
 }
 
+/**
+ * The authoring-guide block, inside the Walkthrough section. Two rows, always
+ * both, whether or not either file exists: what the state changes is the enabled
+ * of each control, never its presence -- two rows that build different button
+ * sets do not line up with each other, the same rule the draft rows follow.
+ *
+ * Discard is the one exception, and it is not forgotten symmetry: the shared
+ * guide is a tracked file, so removing it is `git rm` plus a commit -- a
+ * decision about what goes into the PR, which is not this button's to make. The
+ * CLI says the same from its side, refusing `--delete --team`.
+ */
+private fun guideRows(model: PanelModel): Block.GuideRows {
+    val enabled = !model.busy
+    val rows = model.guides.mapIndexed { index, g ->
+        val controls = ArrayList<Control>()
+        controls.add(
+            ctrl(
+                ControlId.CREATE_GUIDE,
+                "Create",
+                Emphasis.SECONDARY,
+                enabled = enabled && g.creatable,
+                tooltip = if (g.exists) {
+                    "It already exists; open it and edit it"
+                } else if (g.creatable) {
+                    "Create it empty, then write the conventions into it"
+                } else {
+                    "Not from inside a review: finish extracts the working tree, so this file would leave on review-fixes/"
+                },
+                index = index,
+            ),
+        )
+        // With no visible label the accessible name IS the name of the control,
+        // and it names the row: "Open" on its own repeats once per guide.
+        controls.add(
+            ctrl(
+                ControlId.OPEN_GUIDE,
+                null,
+                Emphasis.ICON,
+                enabled = g.exists,
+                accessibleName = "Open the guide",
+                tooltip = if (g.exists) g.path else "There is no file to open yet",
+                index = index,
+            ),
+        )
+        if (g.kind == GuideKind.OWN) {
+            controls.add(
+                ctrl(
+                    ControlId.DISCARD_GUIDE,
+                    null,
+                    Emphasis.ICON,
+                    enabled = enabled && g.discardable,
+                    accessibleName = "Discard the guide",
+                    tooltip = "git review walkthrough guide --delete (with confirmation)",
+                    index = index,
+                ),
+            )
+        }
+        GuideRow(name = g.label, badge = g.badge, controls = controls)
+    }
+    return Block.GuideRows(rows)
+}
+
 private fun noReviewReadyBlocks(model: PanelModel): List<Block> {
     val enabled = !model.busy
     val out = ArrayList<Block>()
@@ -884,15 +979,27 @@ private fun noReviewReadyBlocks(model: PanelModel): List<Block> {
                 Block.Row(
                     listOf(ctrl(ControlId.COMPARE_REVIEW, "Compare revisions", Emphasis.SECONDARY, enabled)),
                 ),
-                Block.Row(
-                    listOf(
-                        ctrl(ControlId.WALKTHROUGH_INIT, "Walkthrough: Init", Emphasis.SECONDARY, enabled),
-                        ctrl(ControlId.WALKTHROUGH_BUILD, "Walkthrough: Build", Emphasis.SECONDARY, enabled),
-                    ),
-                ),
             ),
         ),
     )
+    // Everything about the walkthrough together: init, build and the two
+    // authoring guides. It left "Other actions" when the guides arrived -- four
+    // controls about the same noun plus one unrelated (Compare) is not a list of
+    // other actions, it is a drawer. Grouped this way the panel says what the CLI
+    // says, where all four hang off the walkthrough verb.
+    val walkthroughKids = ArrayList<Block>()
+    walkthroughKids.add(
+        Block.Row(
+            listOf(
+                ctrl(ControlId.WALKTHROUGH_INIT, "Walkthrough: Init", Emphasis.SECONDARY, enabled),
+                ctrl(ControlId.WALKTHROUGH_BUILD, "Walkthrough: Build", Emphasis.SECONDARY, enabled),
+            ),
+        ),
+    )
+    if (model.guides.isNotEmpty()) {
+        walkthroughKids.add(guideRows(model))
+    }
+    out.add(Block.ToolsSection(title = "Walkthrough", blocks = walkthroughKids))
     val settingsKids = ArrayList<Block>()
     model.configuredBase?.let { base ->
         settingsKids.add(Block.Paragraph("Base: $base."))
@@ -1046,6 +1153,15 @@ fun panelLayout(model: PanelModel, loading: Boolean = false): PanelLayout {
                         ),
                     )
                 }
+            }
+            // The guides inside a review too, folded and last: the walkthrough draft
+            // verb is run from in here, which is the likeliest moment to want to write
+            // yours. It is the ONLY tools section a review has -- init and build do not
+            // belong (they are the author's, standing on their own PR) and neither does
+            // the rest of the footer. Not in finish-conflict: that screen is "resolve
+            // the markers", and a folded section about writing conventions is noise.
+            if (model.situation == Situation.REVIEW && model.guides.isNotEmpty()) {
+                out.add(Block.ToolsSection(title = "Walkthrough", blocks = listOf(guideRows(model))))
             }
             blocks = out
         }

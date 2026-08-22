@@ -1,4 +1,9 @@
-import type {DraftRecord} from "../cli/configPorcelain";
+import type {
+    DraftRecord,
+    GuideKind,
+    GuideRecord,
+    GuideState,
+} from "../cli/configPorcelain";
 import {BranchRecord, EntryRecord, ReviewMode, sourceOf} from "../cli/porcelain";
 import type {PathRef} from "../cli/unquote";
 import type {Situation} from "../review/situation";
@@ -103,6 +108,44 @@ export interface PanelDraft {
 }
 
 /**
+ * Una fila del bloque de guías de autoría: prosa sobre el CONTENIDO del
+ * walkthrough, no sobre su formato.
+ *
+ * Las dos filas están siempre, exista o no cada archivo, y lo que cambia con el
+ * estado es el enabled de los controles, nunca su presencia — misma regla que
+ * las filas de borrador, y por el mismo motivo: dos filas con botoneras
+ * distintas no se alinean una con la otra.
+ *
+ * `label` y `badge` se derivan acá porque son copy del panel; `path` llega de la
+ * CLI, y el cliente **lo abre, nunca lo arma**.
+ */
+export interface PanelGuide {
+    kind: GuideKind;
+    /** El nombre de la fila: la compartida y committeada, o la tuya fuera del árbol. */
+    label: string;
+    /** Ruta absoluta reportada por la CLI. Sólo existe en disco si `state !== "absent"`. */
+    path: string;
+    state: GuideState;
+    /** Texto del badge: el estado que reportó la CLI, en prosa. */
+    badge: string;
+    /** El archivo está ahí (en vigor o vacío): se puede abrir y, si es la tuya, descartar. */
+    exists: boolean;
+    /**
+     * Si *Create* se puede **invocar**. No es `!exists`: adentro de una review la
+     * compartida no se puede crear, porque es un archivo del working tree y la
+     * extracción de `finish` (`git add -A`) se lo llevaría al PR de otra persona.
+     * La CLI lo niega; el control se dibuja igual, apagado y diciendo por qué.
+     */
+    creatable: boolean;
+    /**
+     * Sólo la tuya. La compartida es un archivo trackeado, así que borrarla es
+     * `git rm` más un commit: una decisión sobre qué entra al PR, que no es de
+     * este botón. La CLI dice lo mismo del otro lado negando `--delete --team`.
+     */
+    discardable: boolean;
+}
+
+/**
  * `PanelModel` (data-model.md) — la proyección plana y serializable que es lo
  * único que cruza hacia el webview, y el punto donde afirman los tests.
  *
@@ -130,6 +173,13 @@ export interface PanelModel {
      * panel tiene para decir, y el borrador de otra rama no le compite el cuerpo.
      */
     drafts: PanelDraft[];
+    /**
+     * Las dos guías de autoría, en el orden de la CLI (compartida, tuya). Misma
+     * regla que `drafts`: sólo con `situation === "no-review"`, array vacío en
+     * cualquier otra — dentro de una review el panel tiene cosas más urgentes que
+     * decir, y crear la compartida ahí la CLI lo niega igual.
+     */
+    guides: PanelGuide[];
     /**
      * Cierre completo con undo vivo, sólo con `situation === "finish-pending"`
      * (contracts/finish-state.md): la fila `finish … pending` que hizo que el
@@ -396,6 +446,54 @@ function toPanelDrafts(drafts: readonly DraftRecord[]): PanelDraft[] {
     }));
 }
 
+/** El badge de cada estado: el valor de la CLI en prosa, sin el guion. */
+const GUIDE_BADGE: Record<GuideState, string> = {
+    "in-force": "in force",
+    empty: "empty",
+    absent: "absent",
+};
+
+const GUIDE_LABEL: Record<GuideKind, string> = {
+    team: "Repository guide",
+    own: "Your guide",
+};
+
+/**
+ * Proyecta los registros `guide`. Uno a uno y en el orden de la CLI, sin
+ * completar la que falte: si un registro no llegó, la fila no se dibuja. Con una
+ * CLI anterior no llega ninguno y el bloque entero desaparece, que es la misma
+ * degradación que tiene el de borradores.
+ */
+function toPanelGuides(guides: readonly GuideRecord[], situation: Situation): PanelGuide[] {
+    // La CLI niega crear la compartida adentro de una review, y por una razón
+    // que el panel tiene que repetir en vez de descubrir: la extracción de
+    // `finish` es `git add -A`, así que un archivo creado ahora se iría en el
+    // `review-fixes/` de otra persona.
+    const inReview = situation === "review" || situation === "finish-conflict";
+    return guides.map((guide) => ({
+        kind: guide.kind,
+        label: GUIDE_LABEL[guide.kind],
+        path: guide.path,
+        state: guide.state,
+        badge: GUIDE_BADGE[guide.state],
+        exists: guide.state !== "absent",
+        creatable: guide.state === "absent" && !(inReview && guide.kind === "team"),
+        discardable: guide.kind === "own" && guide.state !== "absent",
+    }));
+}
+
+/**
+ * La fila `index` del bloque de guías, o `undefined`. Mismo papel que
+ * `draftAt`: el índice que llega del webview se valida contra el estado del
+ * host, así que lo que termina en la CLI no sale del panel.
+ */
+export function guideAt(guides: readonly GuideRecord[], index: unknown): GuideRecord | undefined {
+    if (typeof index !== "number" || !Number.isInteger(index)) {
+        return undefined;
+    }
+    return guides[index];
+}
+
 /**
  * La fila `index` del bloque de borradores, o `undefined`. Mismo papel que
  * `resumableSourceAt`: es donde el índice que llega del webview se valida
@@ -439,6 +537,11 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
             state.situation === "no-review" && state.drafts !== undefined
                 ? toPanelDrafts(state.drafts)
                 : [],
+        // A diferencia de `drafts`, las guías se dibujan también DENTRO de una
+        // review: `walkthrough draft` se corre desde ahí, que es el momento más
+        // probable de querer escribir la tuya. El dato no cuesta una invocación
+        // extra — `status --porcelain` emite los mismos registros que `config`.
+        guides: state.guides !== undefined ? toPanelGuides(state.guides, state.situation) : [],
         // Ausencia de dato (config nunca llegó) y "config llegó sin base" son
         // distintos, pero ambos se dibujan igual acá: nada que avisar. Sólo
         // "config llegó, y base está ausente" prende el aviso — y sólo en el

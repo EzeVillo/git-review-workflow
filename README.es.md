@@ -313,6 +313,7 @@ lista, o `git review <verbo> -h` para el detalle de un verbo.
 | `git review compare <a> <b> [--step \| --no-walk \| --keys]`                                                                               | Deja staged el diff entre dos commit-ish (tags, commits, ramas) en modo lectura, para leerlo o recorrerlo. `git review finish` se niega — no hay a dónde escribir.                                                                                                                                                                                                                     |
 | `git review walkthrough (init [--base <base>] [--force] \| build [--check])`                                                               | Escribe un walkthrough de lectura para el PR de la rama actual — un orden guiado de los archivos cambiados con una nota en cada uno, committeado como `.review/walkthrough.md`.                                                                                                                                                                                                        |
 | `git review walkthrough draft [--local \| --offline] [--delta] [--force] [--stdout] [--] [<rama>]`<br>`git review walkthrough draft --build [--from <archivo> \| --from -] [--local \| --offline] [--delta] [--force] [--] [<rama>]`                                               | Escribí tu propio orden de lectura para el PR de otra persona, fuera del working tree — no se stagea, commitea ni deshace nada. `git review start` lo lee en lugar del walkthrough del PR. `--build` lo valida y renumera. `--stdout` imprime el esqueleto en vez de escribirlo (no crea nada en ninguna parte) y `--build --from` instala uno ya completado desde un archivo o la entrada estándar, para que un agente pueda escribir el orden de lectura sin tocar tu gitdir.                                                                                                                                                             |
+| `git review walkthrough guide [--team] [--delete]`                                                            | Creá o borrá una guía de autoría: prosa sobre el **contenido** — qué entradas merecen `> key`, cómo escribir un porqué, qué va en el heads-up. Sin flags crea **la tuya** (`<git-common-dir>/review-walkthrough-guide.md`), fuera del working tree, así que nunca se stagea, commitea ni la extrae `finish`. `--team` crea la compartida del repositorio (`.review/walkthrough-guide.md`, committeada con el código) y se niega adentro de una review. `--delete` borra la tuya; la compartida es un archivo trackeado, así que eso es `git rm` más un commit. Las dos se crean **vacías** — el comando imprime qué escribir, para que nada que quede en el archivo se confunda con las convenciones. |
 | `git review next` / `git review prev`                                                                                                      | Mueve una review `--step` o walkthrough a la entrada siguiente / anterior.                                                                                                                                                                                                                                                                                                             |
 | `git review status [--porcelain \| --why <path>]`                                                                                          | Muestra el estado de la review en la rama actual (`--porcelain` para salida legible por programas, incluido un registro `finish` cuando un cierre quedó trabado por conflicto; `--why <path>` para el porqué de una entrada del walkthrough).                                                                                                                                          |
 | `git review list [--porcelain]`                                                                                                            | Lista todas las reviews en curso y las guardadas (la rama actual marcada con `*`; `--porcelain` también reporta cierres sin resolver como `pending` o `conflict`).                                                                                                                                                                                                                     |
@@ -494,13 +495,34 @@ git review walkthrough build    # valida, ordena por tus números y renumera 1..
   `git review start --keys` para recorrer solo esas entradas. El marcador solo
   sirve mientras sea selectivo, así que `build` avisa si están todas marcadas (o
   si un walkthrough largo no marca ninguna).
-- **Guide de autoría (opcional):** commiteá `.review/walkthrough-guide.md` con las
-  reglas del equipo solo de **contenido** — qué marcar `> key`, cómo escribir los
-  porqués y el Heads-up, convenciones locales. **No** cambia el formato del
-  walkthrough; `build` no lo valida. `init` y `draft` mencionan el path en las
-  instrucciones del esqueleto y avisan por stderr si el archivo está (se resuelve
-  en el work tree donde corrés el comando — también sirve al draftear el PR de
-  otro con las convenciones de tu equipo).
+- **Guías de autoría (opcionales):** convenciones solo de **contenido** — qué
+  marcar `> key`, cómo escribir los porqués y el Heads-up, costumbres locales.
+  **No** cambian el formato del walkthrough y `build` no las valida: la CLI las
+  detecta y las nombra, y el que las lee es el agente que completa el walkthrough.
+  Son dos, y contestan preguntas distintas:
+
+  |             | De quién                                        | Dónde                                                                       |
+  |-------------|-------------------------------------------------|-----------------------------------------------------------------------------|
+  | compartida  | cómo **este proyecto** quiere que se anoten sus PRs | `.review/walkthrough-guide.md`, committeada con el código                 |
+  | tuya        | cómo **vos** anotás                             | `<git-common-dir>/review-walkthrough-guide.md`, fuera del working tree      |
+
+  La tuya vive en el gitdir por las mismas tres razones que el borrador del
+  revisor: nunca aparece en `git status`, nunca se stagea ni se commitea, y
+  `finish` no puede llevársela a `review-fixes/` — cosa que haría, porque la
+  extracción es `git add -A`. Creá cualquiera de las dos con
+  [`git review walkthrough guide`](#git-review-walkthrough).
+
+  **Las dos aplican cuando las dos tienen contenido, y la tuya gana donde se
+  contradicen** — la misma precedencia que un borrador tiene sobre el walkthrough
+  del autor. `init` y `draft` nombran las que están en vigor en el esqueleto mismo
+  y las reportan por stderr — y `build` también, que es el verbo que hace cumplir la
+  regla que una guía más suele llevar («marcá pocas key»). El esqueleto las nombra de
+  dos formas: escrito a un archivo da los **paths**, y con `--stdout` **inlinea el
+  contenido**, porque ese esqueleto viaja por un pipe y el path absoluto de un gitdir
+  no es algo que el agente del otro lado pueda abrir necesariamente. Una guía vacía o de puro whitespace no es una guía: se
+  reporta como vacía y no se aplica nada. Las dos se resuelven en el repositorio
+  donde estás parado, `draft` incluido — las convenciones de quien anota, no una
+  guía del tip del PR. `clean` no toca ninguna de las dos.
 - `build` valida el archivo, ordena las entradas por tus números, las renumera
   `1..N` y lo reescribe, preservando el heads-up. `--check` valida **sin escribir**
   y sale con código distinto de cero ante cualquier problema — pensado para CI.

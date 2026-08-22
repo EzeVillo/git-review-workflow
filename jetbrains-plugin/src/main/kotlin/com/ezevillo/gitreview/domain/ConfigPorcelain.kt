@@ -148,6 +148,77 @@ data class DraftRecord(
     val range: DraftRange,
 )
 
+/** Which of the two authoring guides a `guide` record is about. */
+enum class GuideKind {
+    TEAM,
+    OWN,
+    ;
+
+    companion object {
+        fun parse(raw: String?): GuideKind? = when (raw) {
+            "team" -> TEAM
+            "own" -> OWN
+            else -> null
+        }
+    }
+}
+
+/**
+ * What state a guide is in. All three are decided by the CLI and none is
+ * inferred here: `EMPTY` is not `ABSENT` even though both mean "no conventions
+ * are being applied" -- with the file there what is offered is opening it, not
+ * creating it, and discarding it is possible where discarding a missing file is
+ * not.
+ */
+enum class GuideState {
+    IN_FORCE,
+    EMPTY,
+    ABSENT,
+    ;
+
+    companion object {
+        fun parse(raw: String?): GuideState? = when (raw) {
+            "in-force" -> IN_FORCE
+            "empty" -> EMPTY
+            "absent" -> ABSENT
+            else -> null
+        }
+    }
+}
+
+/**
+ * An authoring guide: prose about the CONTENT of a walkthrough (which entries
+ * deserve `> key`, how to write a why, what belongs in the heads-up).
+ *
+ * The plugin never reads a byte of it -- it opens it and nothing else, exactly
+ * as with the reviewer's draft. And `path` comes straight from the CLI: it is
+ * **opened, never rebuilt**.
+ */
+data class GuideRecord(
+    val kind: GuideKind,
+    /** Absolute, resolved by the CLI. On disk only when `state != ABSENT`. */
+    val path: String,
+    val state: GuideState,
+)
+
+/**
+ * A `guide` record from its fields, or null when it is malformed -- ignored
+ * whole, like any record: half a guide row would offer to create one that is
+ * already there, or open one that is not.
+ *
+ * Shared because the record arrives by TWO verbs: `config --porcelain` outside a
+ * review and `status --porcelain` inside one. One parser per tokenizer would be
+ * the same rule written twice, and the second copy would learn about any new
+ * field late.
+ */
+fun parseGuideRecord(fields: List<String>): GuideRecord? {
+    val kind = GuideKind.parse(fields.getOrNull(1)) ?: return null
+    val path = fields.getOrNull(2)
+    if (path.isNullOrEmpty()) return null
+    val state = GuideState.parse(fields.getOrNull(3)) ?: return null
+    return GuideRecord(kind = kind, path = path, state = state)
+}
+
 data class ConfigPorcelainResult(
     val config: EffectiveConfig,
     val candidates: List<CandidateBranch>,
@@ -155,6 +226,14 @@ data class ConfigPorcelainResult(
     val deltas: List<DeltaRecord>? = null,
     val offers: List<ReadingOffer>? = null,
     val drafts: List<DraftRecord> = emptyList(),
+    /**
+     * Both authoring guides, ALWAYS both and in the CLI's order (team, own),
+     * whether or not either file exists. Absence is reported rather than implied
+     * by silence: without the row the panel could not offer to create the missing
+     * one without rebuilding its path, which is what the reported-path rule
+     * exists to prevent. Empty against a CLI that does not know the record.
+     */
+    val guides: List<GuideRecord> = emptyList(),
 )
 
 private fun toBool(field: String?): Boolean = field == "1"
@@ -182,6 +261,7 @@ fun parseConfigPorcelain(stdout: String): ConfigPorcelainResult {
     val deltas = ArrayList<DeltaRecord>()
     val offers = ArrayList<ReadingOffer>()
     val drafts = ArrayList<DraftRecord>()
+    val guides = ArrayList<GuideRecord>()
 
     for (line in stdout.split(Regex("\r?\n"))) {
         if (line.isEmpty()) continue
@@ -236,6 +316,7 @@ fun parseConfigPorcelain(stdout: String): ConfigPorcelainResult {
                     )
                 }
             }
+            "guide" -> parseGuideRecord(fields)?.let { guides.add(it) }
             "offer" -> {
                 val id = OfferId.parse(fields.getOrNull(1))
                 val rank = OfferRank.parse(fields.getOrNull(2))
@@ -255,6 +336,7 @@ fun parseConfigPorcelain(stdout: String): ConfigPorcelainResult {
         deltas = deltas.takeIf { it.isNotEmpty() },
         offers = offers.takeIf { it.isNotEmpty() },
         drafts = drafts,
+        guides = guides,
     )
 }
 

@@ -57,6 +57,20 @@ public class ConfirmationContractTests
             }
         }
 
+        // guide_rows: same role as the two above (controls whose subject is the row),
+        // but its own hang off a "controls" key because the block also declares the
+        // rows and their states.
+        if (Get(root, "guide_rows") is YamlMappingNode guideBlock
+            && Get(guideBlock, "controls") is YamlMappingNode guideControls)
+        {
+            foreach (var (k, v) in guideControls.Children)
+            {
+                var id = ((YamlScalarNode)k).Value!;
+                var confirms = v is YamlMappingNode m && Bool(m, "confirms");
+                expected[id] = expected.GetValueOrDefault(id) || confirms;
+            }
+        }
+
         // The contract has to have said something about every id, or the comparison
         // below would silently pass on "false" for a control nobody described.
         var described = Enum.GetValues<ControlId>().Count(id => expected.ContainsKey(id.Wire()));

@@ -846,6 +846,65 @@ export function panelHtml(nonce: string): string {
     return box;
   }
 
+  /**
+   * Una fila de guia de autoria. Las DOS filas estan siempre -- exista o no el
+   * archivo -- y lo que cambia con el estado es el enabled, nunca la presencia:
+   * dos filas que arman botoneras distintas no se alinean una con la otra, que
+   * es la misma regla que las filas de borrador.
+   *
+   * Descartar es solo de la tuya. La compartida es un archivo trackeado, asi que
+   * borrarla es git rm mas un commit: una decision sobre que entra al PR, que no
+   * es de este boton, y la CLI dice lo mismo negando --delete --team.
+   */
+  function renderGuide(model, guide, index) {
+    const box = el("div", "rev guide");
+
+    const head = el("div", "rev-head");
+    head.appendChild(el("span", "rev-name", guide.label));
+    head.appendChild(el("span", "badge", guide.badge));
+
+    const rowIcons = el("div", "rev-head-actions");
+    const open = iconButton("file", "openGuide", "Open the guide", index);
+    open.disabled = !guide.exists;
+    open.title = guide.exists
+      ? guide.path
+      : "There is no file to open yet";
+    rowIcons.appendChild(open);
+    if (guide.kind === "own") {
+      const discard = iconButton("trash", "discardGuide", "Discard the guide", index);
+      discard.disabled = model.busy || !guide.discardable;
+      discard.title = "git review walkthrough guide --delete (with confirmation)";
+      rowIcons.appendChild(discard);
+    }
+    head.appendChild(rowIcons);
+    box.appendChild(head);
+
+    const actions = el("div", "draft-actions");
+    const create = button("Create", "createGuide", null, null, index);
+    create.disabled = model.busy || !guide.creatable;
+    create.title = guide.exists
+      ? "It already exists; open it and edit it"
+      : guide.creatable
+        ? "Create it empty, then write the conventions into it"
+        : "Not from inside a review: finish extracts the working tree, so this file would leave on review-fixes/";
+    actions.appendChild(create);
+    box.appendChild(actions);
+    return box;
+  }
+
+  /**
+   * El bloque de las dos guias, dentro de la seccion Walkthrough. No lleva
+   * encabezado propio: son dos filas debajo de Init/Build y el nombre de cada
+   * una ya dice cual es.
+   */
+  function renderGuides(model, guides) {
+    const box = el("div", "inv");
+    guides.forEach(function (guide, index) {
+      box.appendChild(renderGuide(model, guide, index));
+    });
+    return box;
+  }
+
   function renderInventory(model, reviews) {
     const box = el("div", "inv");
     box.appendChild(el("h2", null, "Reviews in this repository"));
@@ -858,6 +917,7 @@ export function panelHtml(nonce: string): string {
   // El panel redibuja el root en cada modelo; sin esto, expandir Other
   // actions / Settings / Support se pliega al primer refresh (busy, etc.).
   let otherActionsOpen = false;
+  let walkthroughSectionOpen = false;
   let settingsOpen = false;
   let supportOpen = false;
 
@@ -881,13 +941,26 @@ export function panelHtml(nonce: string): string {
   }
 
   /**
-   * Compare y walkthrough init/build en el empty state (no-review): montan
-   * o escriben fuera de una sesion de lectura. No en finish-pending.
-   * Van plegadas por defecto: son secundarias respecto de Start / base.
+   * Compare, en el empty state (no-review): monta fuera de una sesion de
+   * lectura. No en finish-pending. Plegada por defecto: es secundaria respecto
+   * de Start / base.
    */
   function renderOtherActions(model) {
     const compare = button("Compare revisions", "compareReview");
     compare.disabled = model.busy;
+    return toolsSection("Other actions", otherActionsOpen, function (open) {
+      otherActionsOpen = open;
+    }, [compare]);
+  }
+
+  /**
+   * Todo lo del walkthrough junto: init, build y las dos guias de autoria.
+   * Salio de "Other actions" cuando las guias entraron -- cuatro controles
+   * sobre el mismo sustantivo mas uno ajeno (Compare) no es una lista de otras
+   * acciones, es un cajon. Agrupado asi el panel dice lo mismo que la CLI,
+   * donde los cuatro cuelgan del verbo walkthrough.
+   */
+  function renderWalkthroughSection(model, guides) {
     const walk = el("div", "row");
     const init = button("Walkthrough: Init", "walkthroughInit");
     const build = button("Walkthrough: Build", "walkthroughBuild");
@@ -895,9 +968,13 @@ export function panelHtml(nonce: string): string {
     build.disabled = model.busy;
     walk.appendChild(init);
     walk.appendChild(build);
-    return toolsSection("Other actions", otherActionsOpen, function (open) {
-      otherActionsOpen = open;
-    }, [compare, walk]);
+    const children = [walk];
+    if (guides.length > 0) {
+      children.push(renderGuides(model, guides));
+    }
+    return toolsSection("Walkthrough", walkthroughSectionOpen, function (open) {
+      walkthroughSectionOpen = open;
+    }, children);
   }
 
   /**
@@ -976,10 +1053,25 @@ export function panelHtml(nonce: string): string {
     }, kids);
   }
 
-  /** Pie fijo: Other actions + Settings + Support (split Outline/Timeline). */
+  /**
+   * La seccion Walkthrough de una review: solo las guias. Init y build no van --
+   * son del autor parado en su propio PR, y aca estas parado en el de otro.
+   */
+  function renderGuidesSection(model, guides) {
+    return toolsSection("Walkthrough", walkthroughSectionOpen, function (open) {
+      walkthroughSectionOpen = open;
+    }, [renderGuides(model, guides)]);
+  }
+
+  /**
+   * Pie fijo: Other actions + Walkthrough + Settings + Support (split
+   * Outline/Timeline). Walkthrough va segunda porque es la que el revisor abre
+   * mientras arma una review; Settings y Support quedan al fondo, como estaban.
+   */
   function renderPaneFooter(model) {
     const footer = el("div", "pane-footer");
     footer.appendChild(renderOtherActions(model));
+    footer.appendChild(renderWalkthroughSection(model, model.guides || []));
     footer.appendChild(renderSettings(model));
     footer.appendChild(renderSupport());
     return footer;
@@ -1384,6 +1476,18 @@ export function panelHtml(nonce: string): string {
       root.appendChild(renderEntry(model));
     } else {
       root.appendChild(empty("The cursor does not point at any entry in the sequence."));
+    }
+
+    // Las guias tambien adentro de una review, y es la unica seccion plegable
+    // que existe aca: el verbo walkthrough draft se corre desde adentro, que es el
+    // momento mas probable de querer escribir la tuya. Va al final y plegada,
+    // asi que no le compite el cuerpo al cursor de lectura, que es lo que esta
+    // situacion tiene para decir.
+    // No en finish-conflict: esa pantalla es "resolve los marcadores", y una
+    // seccion plegable de convenciones de escritura ahi es ruido.
+    const guides = model.situation === "review" ? (model.guides || []) : [];
+    if (guides.length > 0) {
+      root.appendChild(renderGuidesSection(model, guides));
     }
   }
 

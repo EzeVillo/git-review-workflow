@@ -95,6 +95,17 @@ object UserCopy {
     fun discardDraftProgress(branch: String): String =
         "Discarding the reading order for $branch…"
 
+    const val DISCARD_GUIDE_BUTTON = "Discard"
+
+    const val DISCARD_GUIDE_TITLE = "Discard the authoring guide you wrote?"
+
+    fun discardGuideDetail(path: String): String =
+        "git review walkthrough guide --delete\n\nThis deletes $path. It cannot be undone."
+
+    const val DISCARD_GUIDE_PROGRESS = "Discarding your authoring guide…"
+
+    const val CREATE_GUIDE_PROGRESS = "Creating the authoring guide…"
+
     /** Recorrido completo vs sólo esenciales, tras validar un borrador con keys. */
     val DRAFT_KEYS_LABELS: List<Pair<Boolean, String>> = listOf(
         false to "Walkthrough — the whole reading order you wrote",

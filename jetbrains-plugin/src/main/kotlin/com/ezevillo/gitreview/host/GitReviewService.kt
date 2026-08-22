@@ -181,7 +181,7 @@ class GitReviewService(private val project: Project) : Disposable {
         }
         val target = pickSoleTarget(roots)
         val state = stateManager.refresh(target?.rootPath)
-        draftWatcher.sync(draftWatchDirs(state))
+        draftWatcher.sync(draftWatchDirs(state), state.guides.orEmpty().map { it.path })
         stateResolved = true
         lastWhy = null
         if (isReviewReadable(state.situation) && state.state?.mode?.id == "walk") {

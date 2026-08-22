@@ -49,6 +49,19 @@ public static class UserCopy
     public static string DiscardDraftProgress(string branch) =>
         $"Discarding the reading order for {branch}…";
 
+    // --- Panel authoring-guide block --------------------------------------------
+
+    public const string DiscardGuideButton = "Discard";
+
+    public const string DiscardGuideTitle = "Discard the authoring guide you wrote?";
+
+    public static string DiscardGuideDetail(string path) =>
+        $"git review walkthrough guide --delete\n\nThis deletes {path}. It cannot be undone.";
+
+    public const string DiscardGuideProgress = "Discarding your authoring guide…";
+
+    public const string CreateGuideProgress = "Creating the authoring guide…";
+
 
     /// <summary>
     /// What "Copy for agent" puts on the clipboard for one draft row.

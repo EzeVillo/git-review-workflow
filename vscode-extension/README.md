@@ -133,7 +133,8 @@ invents a second way to change review state.
 | **Continue** (saved review)  | Inventory row for a review paused with *Save for later*                                      | `git review continue <branch>`                               |
 | **Discard / Forget**         | Inventory row, or the palette for saved reviews and `--delta` markers                        | `git review forget --saved` / `--delta`, `git review clean`  |
 | **Compare revisions**        | Empty state, under Start; also the palette. The result is **read-only** — no writeback       | `git review compare <a> <b>`                                 |
-| **Walkthrough: Init / Build**| Empty state, under Start (this is the *author* flow); also the palette                       | `git review walkthrough init` / `build`                      |
+| **Walkthrough: Init / Build**| Empty state, under *Walkthrough* (this is the *author* flow); also the palette               | `git review walkthrough init` / `build`                      |
+| **Create / open / discard a guide** | Under *Walkthrough*, in the empty state and inside a review alike: the conventions a walkthrough is written to — the repository's shared one, and yours | `git review walkthrough guide [--team] [--delete]` |
 | **Build a reading order first** | Inside *Start a review*, at the reading-order step, when the PR has none (the *reviewer* flow) | `git review walkthrough draft`                            |
 | **Copy for agent / Validate and start / open / discard** | A row of *Reading orders you started*, in the empty state | `git review walkthrough draft --build`, `git review start`, `git review forget --draft` |
 

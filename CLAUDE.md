@@ -27,7 +27,7 @@ commitear* sobre una rama
 
 # Tests de integración de la extensión — misma regla, mismo motivo, otro
 # contenedor (trae node + el VS Code headless). Ver la sección de la extensión.
-./vscode-extension/test/run-docker.sh             # los 70 tests
+./vscode-extension/test/run-docker.sh             # los 88 tests
 ./vscode-extension/test/run-docker.sh open-entry  # las specs que matcheen
 
 # Pruebas manuales — arma un PR de juguete descartable (feature/checkout: 4
@@ -272,6 +272,59 @@ working tree:
   cada refresco pierde justo los eventos que llegan mientras se rehace. En IntelliJ además es lazy,
   como el resto de ese cliente: un borrador que crece con el panel oculto se lee cuando la tool
   window vuelve, no antes.
+- **Las dos guías de autoría** (`git review walkthrough guide`): prosa sobre el **contenido** del
+  walkthrough —qué entradas merecen `> key`, cómo se escribe un porqué, qué va en el heads-up—, no
+  sobre su formato. Son dos y contestan preguntas distintas: la **compartida**
+  (`.review/walkthrough-guide.md`, committeada) dice cómo *este proyecto* quiere que se anoten sus
+  PRs, y la **propia** (`<git-common-dir>/review-walkthrough-guide.md`) cómo *vos* anotás. La
+  segunda está en el gitdir por las mismas tres paredes que el borrador del revisor: no aparece en
+  `git status`, no se stagea ni se commitea, y `finish` no se la puede llevar a `review-fixes/` —
+  cosa que haría, porque la extracción es `git add -A`, e intentar crear la compartida adentro de
+  una review se niega justamente por eso. **`--git-common-dir`, nunca `--git-dir`:** un worktree
+  enlazado comparte la común, y una guía es del repositorio y no del worktree donde estás parado;
+  con el gitdir del worktree tenés una guía distinta por worktree, que no es algo que a nadie se le
+  ocurra ir a buscar. Y va **plana**, fuera de `review-walkthrough/`: `walk_draft_list` recursa ese
+  directorio y toma todo `*.md` como el `<src>` de una rama, así que una guía ahí adentro aparecería
+  como un borrador fantasma en `list`, en `forget --draft --all` y en el conteo de progreso.
+  **Aplican las dos si las dos tienen contenido, y la tuya gana ante contradicción** —la misma
+  precedencia que `walk_read` ya aplica entre tu borrador y el sidecar del autor—; el orden en vigor
+  se declara **en el esqueleto**, y ahí hay **dos formas y no una**: escribiendo un archivo van los
+  **paths** (el esqueleto aterriza al lado de las guías, y una copia embebida en algo que sobrevive
+  a la corrida se pondría vieja sin que nadie mire), y con `--stdout` va el **contenido inlineado**
+  (ese esqueleto viaja por un pipe, y el path absoluto de un gitdir no es algo que el agente del
+  otro lado pueda abrir — apuntarle a un archivo que no alcanza falla en silencio, porque nada
+  verifica que lo leyó). Inlinear no rompe la promesa de `--stdout`, que es sobre no **escribir**.
+  Dos cosas que el inlineado le hace a la prosa, las dos a propósito: reescribe `-->` como `-- >`
+  (el bloque **es** un comentario HTML, así que uno literal lo cerraría antes de tiempo y volcaría
+  el resto al preámbulo — la misma clase de byte invisible que el CR y el BOM) y corta a las **120
+  líneas**, para que una guía enorme no se coma el contexto del agente; la cerca nombra el path, que
+  es donde está el resto. La nota de stderr la emite `emit_guide_note`, y la llaman `init`, `draft`
+  **y `build`**: build no es decoración ahí, es el verbo que hace cumplir la regla que una guía más
+  suele llevar —«marcá pocas key»— porque el aviso que salta cuando están todas marcadas es el
+  suyo. **La CLI detecta y apunta; no crea contenido, no
+  valida, no interpreta**: `walkthrough guide` crea el archivo **vacío** a propósito, porque no hay
+  `build` que rechace un esqueleto a medio llenar y las instrucciones que quedaran adentro las
+  leería el próximo agente como si fueran las convenciones. La regla de «en vigor» es la de
+  `walk_draft_body` —vacío o puro whitespace se comporta como ausente— pero con **cero procesos**:
+  un `read` builtin que corta en la primera línea no vacía, porque esto se pregunta en cada refresco
+  del panel. `clean` no las toca, y no hay `forget --guide`: el path es fijo y la CLI ya lo imprime,
+  así que sería un comando cuyo trabajo entero es un `rm` de algo que acabás de ver en pantalla —a
+  diferencia del borrador, cuyo nombre no podés deletrear. Borrar la compartida tampoco es de este
+  comando: es un archivo trackeado, o sea `git rm` más un commit, y `--delete --team` se niega
+  diciéndolo.
+- **El registro `guide` de `config --porcelain`:** `guide<TAB><kind><TAB><path><TAB><state>`, con
+  `kind` = `team|own` y `state` = `in-force|empty|absent`. Lo emite **también `status --porcelain`**,
+  con el mismo `emit_guide_records`: adentro de una review el panel lee ese verbo y ningún otro, así
+  que sin los registros ahí las filas costarían una invocación entera de `config --porcelain` por
+  refresco en vez del único proceso que cuestan. **Siempre las dos filas**, exista o no
+  cada archivo, y ahí está la diferencia con los registros `draft`: la ausencia se **reporta**, no
+  se implica con el silencio, porque un cliente no puede ofrecer crear una guía de la que nunca le
+  hablaron y rearmar el path de su lado es lo que la regla del path reportado existe para impedir.
+  `empty` no se pliega en `absent` aunque las dos digan «no hay convenciones»: con el archivo ahí lo
+  que se ofrece es abrirlo, no crearlo. Cuesta **un solo `rev-parse`** (`--show-toplevel` y
+  `--absolute-git-dir` en la misma llamada, del que se deriva el común sacándole `/worktrees/<name>`
+  — `--git-common-dir` contesta relativo al *cwd* y en Windows prefijarlo con `$PWD` mezcla estilos
+  de path adentro de un mismo registro, y el cliente no puede abrir el resultado).
 - **Los tres registros porcelain del borrador:** `config --porcelain` emite un `draft<TAB><src><TAB>
   <path><TAB><annotated><TAB><total><TAB><source><TAB><range>` por cada borrador del namespace
   **activo**, con y sin argumento de rama (un borrador es un hecho del working tree, no de la rama
@@ -384,12 +437,37 @@ La CLI es la única fuente de verdad. Hay tres UIs de cliente en el monorepo:
 
 Los tres leen solo porcelain/argv de la CLI; el canónico anti-drift multi-cliente vive en **
 `contracts/client-product-surface.yaml`** (raíz). Incluye la matriz de 27 acciones, el bloque **
-`panel_layout:`** (disposición del panel por situación) y el bloque **`listing:`**
+`panel_layout:`** (disposición del panel por situación), **`guide_rows:`** (el bloque de las dos
+guías de autoría) y el bloque **`listing:`**
 (la copy de las tres tiendas). CI lo verifica con
 `node scripts/check-client-product-surface.mjs`
 (min_cli_version, npm, strings críticos, 27 acciones vs `package.json` de la extensión, las seis
 comprobaciones de layout vs `panelHtml.ts`, y los mismos escalares contra los archivos de dominio de
 `visualstudio-extension/`).
+
+**Las guías se dibujan también DENTRO de una review**, en una sección plegada al final, y es la
+única `tools_section` que una review tiene: el verbo `walkthrough draft` se corre desde adentro, que
+es el momento más probable de querer escribir la tuya. Init y build no van ahí (son del autor,
+parado en su propio PR) y el resto del pie tampoco; en `finish-conflict` no va nada, que esa
+pantalla es «resolvé los marcadores». Y ahí la fila compartida **no puede crear**: es un archivo del
+work tree y la extracción de `finish` (`git add -A`) se lo llevaría al PR de otra persona — la CLI
+lo niega y el panel lo dice antes, con el control dibujado y apagado.
+
+**Ninguno de los tres vigila el archivo de una guía, pero los tres escuchan el guardado.** El
+watcher no las mira a propósito (la propia vive en la raíz del gitdir, que cambia en cada operación
+de git), así que el cliente que la crea o la descarta refresca él mismo, dentro del lock; y para el
+único momento en que el panel mentiría —apretás *Create*, escribís las convenciones, Ctrl+S, y el
+badge sigue diciendo `empty`— cada host escucha el guardado del documento y refresca **sólo** sobre
+las rutas que la CLI reportó: `onDidSaveTextDocument` en VS Code, el evento de VFS que produce un
+save en IntelliJ (matcheado por path exacto, sin watch root nuevo), y `OnAfterSave` de la running
+document table en Visual Studio.
+
+**Un control cuyo sujeto es una FILA no es una acción del producto.** Los cuatro del bloque de
+borradores (`draft_controls:`) y los tres del de guías (`guide_rows.controls:`) viven en mapas
+propios del contrato y no adentro de `panel_layout:`, porque sin la fila que los dibuja no tienen
+sujeto. Consecuencia: **no tocan el conteo fijo de 27**, no van a `contributes.commands` de VS Code,
+ni al menú *Tools → git review* de JetBrains, ni al `.vsct` de Visual Studio — y el verificador lo
+comprueba en esa dirección también, así que colar uno como acción falla CI.
 
 **Una divergencia deliberada se declara en el contrato, no en el cliente.** `not_in:
 [<cliente>]` en una acción dice que ese cliente no la ofrece, y el check lo verifica en las **dos**
@@ -668,7 +746,7 @@ npm run preview:watch
 
 # Integración: en el contenedor, NO con `npm run test:integration`.
 cd ..
-./vscode-extension/test/run-docker.sh             # los 70 tests
+./vscode-extension/test/run-docker.sh             # los 88 tests
 ./vscode-extension/test/run-docker.sh open-entry  # las specs que matcheen
 MOCHA_GREP='abre el diff' ./vscode-extension/test/run-docker.sh
 ./vscode-extension/test/run-docker.sh -- sh       # una shell adentro
@@ -683,7 +761,7 @@ MOCHA_GREP='abre el diff' ./vscode-extension/test/run-docker.sh
   un walkthrough) y abrí `<sandbox>/work` en el host. Ojo: el host hereda el `PATH` del VS Code que
   lo lanzó, no el que arma el `env.sh` del sandbox — o instalás el checkout, o apuntás la setting
   `gitReview.path` a `bin/git-review`.
-- **La suite de integración va en el contenedor**, misma regla que bats: los 70 tests tardan 38 s
+- **La suite de integración va en el contenedor**, misma regla que bats: los 88 tests tardan 38 s
   adentro contra 16 minutos nativos en Windows (26×), y pasan los mismos 70. El script
   (`vscode-extension/test/run-docker.sh` + `test/Dockerfile` + `entrypoint.sh`)
   monta el repo read-only, lo copia a `/work` porque `npm install` escribe, y cachea `node_modules`,
@@ -694,7 +772,7 @@ MOCHA_GREP='abre el diff' ./vscode-extension/test/run-docker.sh
   puede aplanar el bit ejecutable y sin él todo fixture muere con un `is not a git command` que no
   dice nada; y la imagen fija **`VSCODE_CLI=1`**, sin lo cual VS Code resuelve el entorno de un
   login shell y pisa con él el `PATH` que `runTests.ts` preparó — la extensión no encuentra la CLI y
-  los 70 tests fallan con `cli-missing`.
+  los 88 tests fallan con `cli-missing`.
 - **`test:integration` corre contra `dist/`** y lo recompila solo (`pretest:integration`), así que
   lo verde siempre es el código actual.
 - **Dos specs de integración abren tabs y son flaky en Windows** por el host de test, no por la
@@ -715,7 +793,7 @@ MOCHA_GREP='abre el diff' ./vscode-extension/test/run-docker.sh
   largo. `test/unit/userDataDir.spec.ts` cubre las dos cosas contra `darwin` explícito, así que la
   regresión cae en cualquier SO.
 - **`npm run preview`** genera `out/preview/index.html` (y lo imprime como URL
-  `file://`): los dieciocho estados del panel lado a lado, a ancho de sidebar, con selector de tema
+  `file://`): los veintitrés estados del panel lado a lado, a ancho de sidebar, con selector de tema
   dark/light/alto contraste. El pane es el `panelHtml()` real y los estados de `preview/fixtures.ts`
   son salida `--porcelain` de ejemplo pasada por el parser y el modelo reales, así que **sigue al
   código y no se mantiene aparte**. Lo que no puede afirmar: los botones no tienen extensión del

@@ -19,6 +19,12 @@ public sealed record ReviewState(
     /// Null when that report did not arrive; empty if it did with none.
     /// </summary>
     IReadOnlyList<DraftRecord>? Drafts = null,
+    /// <summary>
+    /// Both authoring guides (`guide` record of `config --porcelain`), in the
+    /// CLI's order and always both. Null when that report did not arrive; empty
+    /// against a CLI that does not know the record.
+    /// </summary>
+    IReadOnlyList<GuideRecord>? Guides = null,
     IReadOnlyDictionary<int, string>? Subjects = null,
     IReadOnlyDictionary<int, string>? Authors = null,
     string? Base = null,
@@ -34,4 +40,5 @@ public sealed record ReviewState(
     public IReadOnlyList<EntryRecord> FilesList => Files ?? Array.Empty<EntryRecord>();
     public IReadOnlyList<BranchRecord> BranchesList => Branches ?? Array.Empty<BranchRecord>();
     public IReadOnlyList<DraftRecord> DraftsList => Drafts ?? Array.Empty<DraftRecord>();
+    public IReadOnlyList<GuideRecord> GuidesList => Guides ?? Array.Empty<GuideRecord>();
 }

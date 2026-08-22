@@ -309,8 +309,16 @@ EOF
 
 	run git review status --porcelain
 	[ "$status" -eq 0 ]
+	# Los registros `guide` quedan fuera del cotejo byte por byte porque llevan
+	# rutas absolutas del repo temporal; que esten, y que sean exactamente dos, se
+	# afirma aparte. Todo lo demas se sigue comparando entero, que es lo que este
+	# test cuida: sin cierre en curso no aparece ninguna fila `finish`.
+	printf '%s\n' "$output" >"$TMP/status-out"
+	rest="$(grep -v '^guide	' "$TMP/status-out")"
 	expected="$(printf 'state\treview/feature/x\tfeature/x\t%s\twhole\tnone\nentry\t1\ta.txt\nbase\tdevelop' "$tip")"
-	[ "$output" = "$expected" ]
+	[ "$rest" = "$expected" ]
+	run grep -c '^guide	' "$TMP/status-out"
+	[ "$output" = "2" ]
 
 	git switch --quiet --discard-changes develop
 

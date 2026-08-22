@@ -32,6 +32,8 @@ object PanelFixtures {
         "no-review ready" to noReviewReady(),
         "no-review one draft" to noReviewOneDraft(),
         "no-review drafts" to noReviewDrafts(),
+        "no-review guides" to noReviewGuides(),
+        "no-review guide empty" to noReviewGuideEmpty(),
         "finish-pending" to finishPending(),
         "out-of-range" to outOfRange(),
         "error" to error(),
@@ -40,6 +42,7 @@ object PanelFixtures {
         "review whole" to reviewWhole(),
         "finish-conflict" to finishConflict(),
         "review walk draft" to reviewWalkDraft(),
+        "review walk guides" to reviewWalkGuides(),
         "review walk busy" to reviewWalk(busy = true),
         "review walk empty cursor" to reviewWalkEmptyCursor(),
         "review whole empty" to reviewWholeEmpty(),
@@ -118,6 +121,46 @@ object PanelFixtures {
     /** El mismo estado con una mutación en curso: lo único que deshabilita la fila. */
     fun noReviewDraftsBusy(): PanelModel = noReviewDrafts(busy = true)
 
+    /**
+     * Both authoring guides, each in a different state: the shared one in force
+     * (Open yes, Create no) and the reviewer's absent (Create yes, Open and
+     * Discard no). It is the state that shows both rows are always drawn and
+     * only the enabled changes.
+     */
+    fun noReviewGuides(): PanelModel {
+        val cfg = """
+            guide	team	/repo/.review/walkthrough-guide.md	in-force
+            guide	own	/repo/.git/review-walkthrough-guide.md	absent
+        """.trimIndent()
+        return buildPanelModel(
+            ReviewState(
+                situation = Situation.NO_REVIEW,
+                config = EffectiveConfig(base = "main", remote = "origin"),
+                guides = parseConfigPorcelain(cfg).guides,
+            ),
+            PanelInputs(busy = false),
+        )
+    }
+
+    /**
+     * The other half: the reviewer's created and still empty (Open and Discard
+     * yes, Create no), and a repository that has no shared guide.
+     */
+    fun noReviewGuideEmpty(): PanelModel {
+        val cfg = """
+            guide	team	/repo/.review/walkthrough-guide.md	absent
+            guide	own	/repo/.git/review-walkthrough-guide.md	empty
+        """.trimIndent()
+        return buildPanelModel(
+            ReviewState(
+                situation = Situation.NO_REVIEW,
+                config = EffectiveConfig(base = "main", remote = "origin"),
+                guides = parseConfigPorcelain(cfg).guides,
+            ),
+            PanelInputs(busy = false),
+        )
+    }
+
     /** Configured, with nothing in the repository yet: the bare empty state. */
     fun noReviewEmpty(): PanelModel = buildPanelModel(
         ReviewState(
@@ -187,6 +230,32 @@ object PanelFixtures {
      * registro `draft` viaja por el porcelain como cualquier otro, así que el
      * badge sale del mismo camino que en la extensión.
      */
+    /**
+     * A review with the two authoring guides: the folded Walkthrough section at the
+     * end, and the shared row unable to create -- finish extracts with `git add -A`,
+     * so a file created here would leave on somebody else's review-fixes/.
+     */
+    fun reviewWalkGuides(): PanelModel {
+        val porcelain = """
+            state	review/feature	feature	deadbeefcafebabe	walk	applied	1	3	3	"src/a.kt"	0
+            entry	1	src/a.kt	0	1
+            entry	2	src/b.kt	0	1
+            entry	3	src/c.kt	0	0
+            guide	team	/repo/.review/walkthrough-guide.md	absent
+            guide	own	/repo/.git/review-walkthrough-guide.md	in-force
+        """.trimIndent()
+        val parsed = parsePorcelain(porcelain)
+        return buildPanelModel(
+            ReviewState(
+                situation = Situation.REVIEW,
+                state = parsed.state,
+                entries = parsed.entries,
+                guides = parsed.guides,
+            ),
+            PanelInputs(busy = false, why = PanelWhy(WhyState.PRESENT, "Because I read it first.")),
+        )
+    }
+
     fun reviewWalkDraft(): PanelModel {
         val porcelain = """
             state	review/feature	feature	deadbeefcafebabe	walk	applied	1	3	3	"src/a.kt"	0

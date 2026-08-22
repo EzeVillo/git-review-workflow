@@ -192,6 +192,27 @@ public class PanelLayoutContractTests
     }
 
     [Fact]
+    public void Review_walk_with_guides_matches_canonical()
+    {
+        // The block enters the review-walk layout, so it has to be declared there and
+        // not slip in as an undeclared control.
+        AssertLayoutAgainstCanonical(
+            "review-walk",
+            PanelLayoutBuilder.PanelLayout(PanelFixtures.ReviewWalkGuides()),
+            mode: "walk");
+    }
+
+    [Fact]
+    public void No_review_with_guides_matches_canonical()
+    {
+        // The state with guides: the same eight of no-review PLUS the block's
+        // controls, and nothing the canonical does not declare. Without this run
+        // the matcher only ever sees the fixture without guides, which is to say
+        // the new block went in with no gate on it.
+        AssertLayoutAgainstCanonical("no-review", PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewGuides()));
+    }
+
+    [Fact]
     public void The_draft_block_is_the_first_block_of_no_review_and_the_body_follows_whole()
     {
         var layout = PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewDrafts());
@@ -535,6 +556,13 @@ public class PanelLayoutContractTests
         {
             foreach (var id in RowControlIds("draft_controls")) ids.Add(id);
         }
+        // And the same for the guide block: its controls are per-row too, so they
+        // live in a map of their own. Its ones hang off a "controls" key because
+        // the block also declares the rows and their states.
+        if (MentionsBlock(blocks, "guide_rows"))
+        {
+            foreach (var id in GuideControlIds()) ids.Add(id);
+        }
         return ids;
     }
 
@@ -571,6 +599,17 @@ public class PanelLayoutContractTests
         var root = (YamlMappingNode)LoadCanonical().Documents[0].RootNode;
         if (!root.Children.TryGetValue(new YamlScalarNode(key), out var node)
             || node is not YamlMappingNode map)
+            return Array.Empty<string>();
+        return map.Children.Keys.OfType<YamlScalarNode>().Select(k => k.Value!).ToList();
+    }
+
+    private static IEnumerable<string> GuideControlIds()
+    {
+        var root = (YamlMappingNode)LoadCanonical().Documents[0].RootNode;
+        if (!root.Children.TryGetValue(new YamlScalarNode("guide_rows"), out var node)
+            || node is not YamlMappingNode block
+            || !block.Children.TryGetValue(new YamlScalarNode("controls"), out var c)
+            || c is not YamlMappingNode map)
             return Array.Empty<string>();
         return map.Children.Keys.OfType<YamlScalarNode>().Select(k => k.Value!).ToList();
     }

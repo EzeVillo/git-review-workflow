@@ -88,6 +88,31 @@ export interface DraftRecord {
 export type DraftSource = "remote" | "local" | "offline" | "unknown";
 export type DraftRange = "full" | "delta" | "unknown";
 
+/** Cuál de las dos guías de autoría es (registro `guide` de `config --porcelain`). */
+export type GuideKind = "team" | "own";
+
+/**
+ * En qué estado está una guía. Los tres los decide la CLI y ninguno se infiere
+ * acá: `empty` no es lo mismo que `absent` aunque las dos signifiquen "no hay
+ * convenciones aplicándose" — con el archivo ahí lo que se ofrece es abrirlo,
+ * no crearlo, y descartarlo es posible donde descartar uno que no existe no.
+ */
+export type GuideState = "in-force" | "empty" | "absent";
+
+/**
+ * Una guía de autoría: prosa sobre el CONTENIDO del walkthrough (qué entradas
+ * merecen `> key`, cómo escribir un porqué, qué va en el heads-up).
+ *
+ * La extensión no lee un byte de su contenido — la abre y nada más, igual que
+ * con el borrador. Y `path` viene tal cual de la CLI: **se abre, nunca se arma**.
+ */
+export interface GuideRecord {
+    kind: GuideKind;
+    /** Ruta absoluta, ya resuelta por la CLI. Existe en disco sólo si `state !== "absent"`. */
+    path: string;
+    state: GuideState;
+}
+
 export interface ConfigPorcelainResult {
     config: EffectiveConfig;
     /** En el orden de `git for-each-ref` (lexicográfico); duplicados (misma rama, dos orígenes) esperados, nunca fusionados. */
@@ -115,6 +140,44 @@ export interface ConfigPorcelainResult {
      * ninguno, que es también lo que reporta una CLI que no conoce el registro.
      */
     drafts: DraftRecord[];
+    /**
+     * Las dos guías de autoría, SIEMPRE las dos y en el orden de la CLI (team,
+     * own), exista o no cada archivo. La ausencia se reporta y no se implica con
+     * el silencio: sin la fila, el panel no podría ofrecer crear la que falta sin
+     * rearmar su path, que es justo lo que la regla del path reportado impide.
+     *
+     * Array vacío cuando la CLI no conoce el registro (una versión anterior), que
+     * es la misma degradación que `drafts`.
+     */
+    guides: GuideRecord[];
+}
+
+function parseGuideKind(raw: string | undefined): GuideKind | undefined {
+    return raw === "team" || raw === "own" ? raw : undefined;
+}
+
+function parseGuideState(raw: string | undefined): GuideState | undefined {
+    return raw === "in-force" || raw === "empty" || raw === "absent" ? raw : undefined;
+}
+
+/**
+ * Un registro `guide` desde sus campos, o `undefined` si está malformado —
+ * ignorarlo entero, como cualquier registro: media fila de guía ofrecería crear
+ * una que ya está, o abrir una que no.
+ *
+ * Exportada porque el registro llega por DOS verbos: `config --porcelain` fuera
+ * de una review y `status --porcelain` adentro. Un parser por tokenizador sería
+ * la misma regla escrita dos veces, y la segunda se enteraría tarde de cualquier
+ * campo nuevo.
+ */
+export function parseGuideRecord(fields: readonly (string | undefined)[]): GuideRecord | undefined {
+    const kind = parseGuideKind(fields[1]);
+    const path = fields[2];
+    const state = parseGuideState(fields[3]);
+    if (kind === undefined || path === undefined || path.length === 0 || state === undefined) {
+        return undefined;
+    }
+    return {kind, path, state};
 }
 
 function toBool(field: string | undefined): boolean {
@@ -179,6 +242,7 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
     const deltas: DeltaRecord[] = [];
     const offers: ReadingOffer[] = [];
     const drafts: DraftRecord[] = [];
+    const guides: GuideRecord[] = [];
 
     for (const line of stdout.split(/\r?\n/)) {
         if (line.length === 0) {
@@ -256,6 +320,13 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
                 });
                 break;
             }
+            case "guide": {
+                const guide = parseGuideRecord(fields);
+                if (guide !== undefined) {
+                    guides.push(guide);
+                }
+                break;
+            }
             case "offer": {
                 const id = parseOfferId(fields[1]);
                 const rank = parseOfferRank(fields[2]);
@@ -274,7 +345,7 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
     if (base !== undefined) {
         config.base = base;
     }
-    const result: ConfigPorcelainResult = {config, candidates, remotes, drafts};
+    const result: ConfigPorcelainResult = {config, candidates, remotes, drafts, guides};
     if (deltas.length > 0) {
         result.deltas = deltas;
     }

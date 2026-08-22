@@ -198,6 +198,7 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         Block.FileRows f => RenderFileRows(f),
         Block.InventoryRows inv => RenderInventory(inv),
         Block.DraftRows drafts => RenderDrafts(drafts),
+        Block.GuideRows guides => RenderGuides(guides),
         Block.ToolsSection ts => RenderToolsSection(ts),
         Block.Stderr s => RenderStderr(s.Text),
         Block.EmptyMessage em => RenderEmpty(em),
@@ -530,6 +531,59 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             // inventory ones: each is a header with glyphs plus its own button
             // pair, and without the gap the two read as a single pane.
             stack.Children.Add(new Border { Height = 10 });
+        }
+        return stack;
+    }
+
+    /// <summary>
+    /// The authoring-guide rows. Same two-place shape as the draft rows — badge
+    /// and glyphs in the header, the labelled control underneath — because they
+    /// are the same kind of thing, and the reviewer should not have to learn a
+    /// second row.
+    ///
+    /// Less air between rows than between drafts: there are exactly two, they
+    /// belong together, and they sit inside a collapsed section rather than at
+    /// the top of the empty state.
+    /// </summary>
+    private UIElement RenderGuides(Block.GuideRows block)
+    {
+        var stack = new StackPanel();
+        foreach (var r in block.Rows)
+        {
+            var glyphs = r.Controls.Where(c => c.Emphasis == Emphasis.Icon).ToList();
+            var labelled = r.Controls.Where(c => c.Emphasis != Emphasis.Icon).ToList();
+            var header = new Grid();
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var name = MonoLabel(r.Name);
+            var right = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            right.Children.Add(Chip(r.Badge));
+            foreach (var c in glyphs)
+            {
+                var glyph = RenderControl(c);
+                glyph.Margin = new Thickness(2, 0, 0, 0);
+                right.Children.Add(glyph);
+            }
+            Grid.SetColumn(name, 0);
+            Grid.SetColumn(right, 1);
+            header.Children.Add(name);
+            header.Children.Add(right);
+            stack.Children.Add(header);
+
+            var actions = new UniformGrid
+            {
+                Rows = 1,
+                Columns = labelled.Count,
+                Margin = new Thickness(0, 4, 0, 0),
+            };
+            foreach (var c in labelled)
+            {
+                var cell = RenderControl(c);
+                cell.Margin = new Thickness(0, 0, 4, 4);
+                actions.Children.Add(cell);
+            }
+            stack.Children.Add(actions);
+            stack.Children.Add(new Border { Height = 6 });
         }
         return stack;
     }

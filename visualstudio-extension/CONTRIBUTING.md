@@ -158,6 +158,15 @@ excluded from the net8.0 build:
   environment colors. Structure and labels stay identical to the other clients; only colors follow
   the host.
 
+### Latency budgets on Windows
+
+`git review status --porcelain` is multi-process, and process creation on Windows costs ~50ms
+against ~1ms on Linux — around 960ms for a full refresh in the monorepo's own measurements. The
+panel is built around that rather than against it: skeleton after **120ms**, `--why` ceiling
+**800ms**, CLI probe every **10s** while the situation is `cli-missing` / `cli-outdated`, and
+invoker timeouts of 15s / 120s / 300s by verb class. Changing any of them changes what a slow
+refresh feels like, so change them deliberately.
+
 ## Testing
 
 ```sh

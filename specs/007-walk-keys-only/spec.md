@@ -221,7 +221,7 @@ no-keys.
   la secuencia efectiva a entradas esenciales. Se enciende al iniciar (o
   compare) y vive con la metadata de la review hasta abort/finish/forget.
 - **Secuencia efectiva**: lista ordenada de paths que `next`/`prev` y el
-  estado enumeran. En walk normal = orden de lectura completo (curadas +
+  estado enumeran. En walk normal = orden de lectura completo (guiadas +
   uncovered). En solo-keys = solo keys en rango.
 - **Entrada esencial**: entrada del walkthrough con marcador `> key` (ya
   existente); no se redefine el marcador.

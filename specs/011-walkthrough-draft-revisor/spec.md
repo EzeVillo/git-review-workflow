@@ -52,7 +52,7 @@ agent"). La mitad del trabajo está hecha: sólo apunta al rol equivocado.
 
 ### Qué habilita
 
-- Que cualquier PR se pueda leer en orden curado, lo haya escrito el autor o
+- Que cualquier PR se pueda leer en orden guiado, lo haya escrito el autor o
   no.
 - Que armar ese orden **no requiera commitear, stagear ni deshacer nada**: el
   borrador vive fuera del árbol versionado y es invisible para la review.

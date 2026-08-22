@@ -34,7 +34,7 @@ const OFFER_META: Record<
 > = {
     walk: {
         label: "Walkthrough",
-        description: "curated reading order from the PR",
+        description: "guided reading order from the PR",
         layout: "walk",
     },
     keys: {

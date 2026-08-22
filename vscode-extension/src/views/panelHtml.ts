@@ -1127,7 +1127,7 @@ export function panelHtml(nonce: string): string {
 
   // Una entrada no anotada nunca tiene un why que pedir (la CLI ya cae en
   // "entrada sin cuerpo"), pero el texto no es el mismo que el de una entrada
-  // curada sin explicación: una es una ausencia del walkthrough, la otra un
+  // guiada sin explicación: una es una ausencia del walkthrough, la otra un
   // archivo que el walkthrough directamente no cubre.
   function renderWhy(why, annotated) {
     if (why.state === "present") { return el("div", "why", why.text); }

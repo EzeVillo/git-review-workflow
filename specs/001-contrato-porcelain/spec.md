@@ -378,7 +378,7 @@ marca cuál es la actual.
 - **Estado de review**: la situación de la review en curso. Identidad (rama,
   origen, punto fijado), modo, y —si corresponde— cursor. Es lo que responde
   "¿dónde estoy?".
-- **Entrada de walkthrough**: una unidad del recorrido curado. Tiene posición en
+- **Entrada de walkthrough**: una unidad del recorrido guiado. Tiene posición en
   el orden de lectura, un path, una marca opcional de esencial y un texto
   explicativo. Su existencia depende de que el path realmente cambie en el rango.
 - **Secuencia de lectura**: las entradas aplicables a una review concreta,

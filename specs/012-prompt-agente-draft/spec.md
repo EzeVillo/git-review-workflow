@@ -59,7 +59,7 @@ agente tarda en leer un PR entero— cuelga de una notificación.
 
 ### Por qué importa ahora
 
-El orden de lectura curado es lo único que el producto ofrece y que git y
+El orden de lectura guiado es lo único que el producto ofrece y que git y
 GitHub no tienen. Que dependa de que alguien lo escriba a mano es exactamente
 lo que 011 vino a resolver del lado del revisor, y lo resolvió a medias: le dio
 un lugar al archivo y no le dio un camino al que lo escribe.

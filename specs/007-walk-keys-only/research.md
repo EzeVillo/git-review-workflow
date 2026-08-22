@@ -34,7 +34,7 @@ sigue materializado entero).
 **Alternatives considered**: `mode=keys` — más visible en porcelain state,
 pero costo de propagación alto y falso paralelismo con step/whole.
 
-## Decisión 3 — Secuencia = curated ∩ keys (nunca uncovered)
+## Decisión 3 — Secuencia = guided ∩ keys (nunca uncovered)
 
 **Decision**: La secuencia efectiva solo-keys se deriva de
 `walk_sequence` (entradas del walkthrough en rango) filtrada por
@@ -42,7 +42,7 @@ pero costo de propagación alto y falso paralelismo con step/whole.
 
 **Rationale**: Un uncovered no puede llevar `> key` (no tiene body en el
 sidecar). Incluirlos rompería “solo keys”. El helper nuevo
-(`walk_keys_order` o filtro sobre la secuencia curada) reusa
+(`walk_keys_order` o filtro sobre la secuencia guiada) reusa
 `walk_normalize` / `changed_paths` vía `walk_sequence` — sin tercer punto
 de normalización de paths.
 

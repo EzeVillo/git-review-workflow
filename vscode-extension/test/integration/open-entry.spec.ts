@@ -227,7 +227,7 @@ describe("US2: saltar al archivo de una entrada", function () {
 
     it("modo whole: una entrada de la lista abre el archivo correcto (US2/004)", async () => {
         // Sin walkthrough: entra en whole, con la lista de FR-001 en vez de la
-        // secuencia curada. El mismo comando que usa walk abre la entrada,
+        // secuencia guiada. El mismo comando que usa walk abre la entrada,
         // resuelta desde state.entries igual que allá — sin cursor.
         const branch = "us2-whole-open";
         const oddPath = "src/raro café con espacios.ts";

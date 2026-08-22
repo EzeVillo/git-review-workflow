@@ -29,7 +29,7 @@ private data class OfferMeta(
 )
 
 private val OFFER_META: Map<OfferId, OfferMeta> = mapOf(
-    OfferId.WALK to OfferMeta("Walkthrough", "curated reading order from the PR", ReviewLayout.WALK),
+    OfferId.WALK to OfferMeta("Walkthrough", "guided reading order from the PR", ReviewLayout.WALK),
     OfferId.KEYS to OfferMeta("Walkthrough — keys only", "only entries marked key", ReviewLayout.KEYS),
     // Sin la palabra "walkthrough" como si fuera un término conocido: estas dos
     // son las únicas ofertas que no eligen una forma de leer sino que arman la

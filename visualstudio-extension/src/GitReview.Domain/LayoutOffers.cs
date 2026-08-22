@@ -28,7 +28,7 @@ public static class LayoutOffers
 
     private static readonly Dictionary<OfferId, OfferMeta> OfferMetaMap = new()
     {
-        [OfferId.Walk] = new("Walkthrough", "curated reading order from the PR", ReviewLayout.Walk),
+        [OfferId.Walk] = new("Walkthrough", "guided reading order from the PR", ReviewLayout.Walk),
         [OfferId.Keys] = new("Walkthrough — keys only", "only entries marked key", ReviewLayout.Keys),
         // Without the word "walkthrough" as if it were a known term: these two
         // are the only offers that do not pick a way to read but build the one

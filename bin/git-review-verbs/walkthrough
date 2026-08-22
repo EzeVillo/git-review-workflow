@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 #
-# git review walkthrough — author a curated reading order for the current PR.
+# git review walkthrough — author a guided reading order for the current PR.
 #
 # A walkthrough is the one thing neither git nor GitHub offers: an author-written
 # reading order over a PR, each file annotated with why it matters. It lives as a

@@ -38,7 +38,7 @@ esac
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
 # Dispatch on the review's layout: a --step review walks commits, a walkthrough
-# review walks a curated file cursor. Anything else (whole, or not a review) falls
+# review walks a guided file cursor. Anything else (whole, or not a review) falls
 # through to load_step_review_meta, whose diagnostics cover every wrong-state case.
 cur="$(git symbolic-ref --quiet --short HEAD || true)"
 require_not_finish_conflict

@@ -18,7 +18,7 @@ interface LayoutItem extends vscode.QuickPickItem {
 const LAYOUT_ITEMS: LayoutItem[] = [
     {
         label: "Walkthrough",
-        description: "curated reading order if the upper tip has a walkthrough",
+        description: "guided reading order if the upper tip has a walkthrough",
         layout: "walk",
     },
     {

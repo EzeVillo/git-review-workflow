@@ -77,7 +77,7 @@ teardown() {
 	# The metadata records walk mode and the cursor, not step keys.
 	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
 	[ "$(git config branch.review/feature/x.reviewwalkstep)" = "1" ]
-	# 3 curated entries plus the committed walkthrough itself, uncovered: the
+	# 3 guided entries plus the committed walkthrough itself, uncovered: the
 	# sidecar is content the PR adds like any other file (FR-020).
 	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "4" ]
 	run git config branch.review/feature/x.reviewstep
@@ -138,7 +138,7 @@ teardown() {
 }
 
 @test "a PR that only touches the sidecar degrades to whole but is never invisible there (FR-024)" {
-	# No curated entry can ever intersect a range whose only file IS the
+	# No guided entry can ever intersect a range whose only file IS the
 	# sidecar — a walkthrough never annotates itself — so this takes the same
 	# "none of its entries apply" path as any other range a walkthrough does not
 	# cover, exactly like the existing --delta degrade case. What changed is
@@ -308,7 +308,7 @@ teardown() {
 
 @test "--from filters the walkthrough to the reviewed subrange" {
 	# Review only commits after c1: that range changes b.txt and src/c.txt, but
-	# not a.txt. So a.txt drops out and the curated sequence becomes src/c.txt
+	# not a.txt. So a.txt drops out and the guided sequence becomes src/c.txt
 	# (1), b.txt (2) — plus the walkthrough file itself, which this subrange also
 	# touches (the "rewt"-equivalent commit that adds .review/walkthrough.md is
 	# c1's immediate successor here, so it is in range too), uncovered at (3).
@@ -631,7 +631,7 @@ EOF
 	run git review start feature/x
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
-	# 3 curated entries plus two uncovered ones, appended at the end in git's own
+	# 3 guided entries plus two uncovered ones, appended at the end in git's own
 	# order: the committed walkthrough itself (".review/" sorts before "e") and
 	# e.txt.
 	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "5" ]
@@ -1049,7 +1049,7 @@ EOF
 	run git review start feature/x
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/feature/x.reviewmode)" = "walk" ]
-	# 3 curated entries plus two uncovered ones, in git's own order: the
+	# 3 guided entries plus two uncovered ones, in git's own order: the
 	# committed walkthrough itself (".review/" sorts before "src/") and the
 	# non-ASCII file.
 	[ "$(git config branch.review/feature/x.reviewwalkcount)" = "5" ]

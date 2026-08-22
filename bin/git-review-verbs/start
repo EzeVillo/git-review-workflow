@@ -342,7 +342,7 @@ if [ "$step" -eq 1 ]; then
 
 	# A walkthrough is a whole-review reading aid; --step reviews commit by commit
 	# and bypasses it wholesale. Note it (unless the reviewer already opted out with
-	# --no-walk) so someone expecting the curated reading order is not left wondering
+	# --no-walk) so someone expecting the guided reading order is not left wondering
 	# where it went.
 	if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$tip")" && [ -n "$wtcontent" ]; then
 		echo "note: $wtdesc; --step ignores it and reviews commit by commit"
@@ -389,7 +389,7 @@ lower="$(fold_lower "$start" "$baseref" "$tip")"
 
 # Walkthrough auto-detection. When the frozen tip carries a .review/walkthrough.md
 # and the reviewer did not opt out (--no-walk) or into --step, enter walk mode:
-# the same staged, editable whole-PR review, plus a curated reading cursor over
+# the same staged, editable whole-PR review, plus a guided reading cursor over
 # it. The sequence is filtered to this review's range, so a stale walkthrough
 # (e.g. under --delta) that no longer intersects the range degrades to a plain
 # whole review with a note — a broken or stale walkthrough never aborts a review.
@@ -399,10 +399,10 @@ walk=0
 walkcount=0
 keys_filter=0
 if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$tip")" && [ -n "$wtcontent" ]; then
-	curated="$(walk_sequence "$tip" "$lower")"
+	guided="$(walk_sequence "$tip" "$lower")"
 	# grep -c returns 1 (aborting under set -e in POSIX sh) on an empty sequence.
-	curatedcount="$(printf '%s\n' "$curated" | grep -c . || true)"
-	if [ "$curatedcount" -ge 1 ]; then
+	guidedcount="$(printf '%s\n' "$guided" | grep -c . || true)"
+	if [ "$guidedcount" -ge 1 ]; then
 		walk=1
 		if [ "$keys_only" -eq 1 ]; then
 			walkpaths="$(walk_keys_order "$tip" "$lower")"
@@ -496,7 +496,7 @@ if [ "$walk" -eq 1 ]; then
 		# stale (typical when re-reviewing with --delta). The review still covers them
 		# — they are appended to the end of the reading order (walk_reading_order) — so
 		# note them rather than leave them to be discovered silently.
-		uncovered="$(printf '%s\n' "$walkpaths" | tail -n +"$((curatedcount + 1))")"
+		uncovered="$(printf '%s\n' "$walkpaths" | tail -n +"$((guidedcount + 1))")"
 		if [ -n "$uncovered" ]; then
 			echo "note: file(s) in range not in the walkthrough are added to the end of the reading order: $(printf '%s\n' "$uncovered" | tr '\n' ' ')"
 		fi

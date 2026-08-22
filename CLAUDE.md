@@ -420,6 +420,23 @@ Studio. Del lado IntelliJ, `PanelLayoutContractTest` compara
 `panelLayout(fixture)` contra el mismo YAML en cada `./gradlew test`; del lado Visual Studio,
 `PanelLayoutContractTests` (xUnit) hace lo mismo en cada `dotnet test`.
 
+**La paridad es una regla del monorepo, no una promesa al usuario.** Ninguna superficie que le
+llegue a quien instala —el `README.md` de cada cliente, el `<description>` del `plugin.xml`, el
+`overview.md` de Visual Studio, la ficha de cada tienda— nombra a los otros dos clientes ni dice
+«paridad con X». Quien instala uno ya eligió su editor y lo más probable es que no sepa que los
+otros existen: contarle que hay paridad es un dato sobre cómo está hecho el repo, no sobre lo que
+recibe. La paridad se sigue verificando igual, pero se cuenta en `CONTRIBUTING.md` —el de la raíz y
+el de cada cliente— y acá. En JetBrains la regla además la testea `PluginCompatibilityTest` sobre el
+`<description>`.
+
+**Y del desarrollo no hay nada en el README.** Los tres clientes siguen el reparto del proyecto
+raíz: el `README.md` es producto (qué hace, cómo se empieza, qué ofrece el panel, requisitos,
+settings, troubleshooting) y todo lo de construirlo, correrlo desde el checkout, testearlo y
+empaquetarlo vive en el `CONTRIBUTING.md` de al lado —`vscode-extension/`, `jetbrains-plugin/` y
+`visualstudio-extension/` tienen uno cada uno—, con la misma forma en los tres: *The CLI is the only
+source of truth · Developing · Testing · Packaging*. El de la raíz sigue teniendo una sección por
+cliente como puerta de entrada.
+
 ### Plugin de JetBrains IDE (IntelliJ Platform)
 
 `jetbrains-plugin/` es un módulo Gradle aparte (JDK 21; pin de platform en

@@ -40,7 +40,7 @@ walkthrough aplicado) y admite refinarse después de forma aditiva.
 
 Cero o más registros por invocación, uno por posición del **orden de lectura
 completo** (FR-010, FR-011; Q2 = C). En walk deriva de `walk_reading_order`:
-la secuencia curada de `walk_sequence`, seguida de todo path que
+la secuencia guiada de `walk_sequence`, seguida de todo path que
 `changed_paths` reporta en rango y que no tiene entrada propia en el
 walkthrough — agregado al final en vez de omitido, para que un review no
 llegue a `finish` con archivos del PR que el reviewer nunca vio (el
@@ -59,7 +59,7 @@ mecanismo que ya recorre `next`/`prev`.
 El grupo no aplicable al modo (`essential`+`annotated` en step, `banked` en
 walk) se omite entero de la línea, no se envía vacío — mismo criterio que en
 `state`. `total` (en `state`) cuenta las posiciones no anotadas igual que las
-curadas: son parte del mismo orden de lectura, no una lista aparte.
+guiadas: son parte del mismo orden de lectura, no una lista aparte.
 
 Vacío por completo (cero registros `entry`) en modo `whole` sin walkthrough
 aplicable, sin que eso se reporte como error (Acceptance Scenario 4 de US2).

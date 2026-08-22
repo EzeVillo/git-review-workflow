@@ -890,7 +890,7 @@ public sealed class ActionDispatcher
             UserCopy.CompareLayoutPlaceholder,
             new[]
             {
-                "Walkthrough — curated reading order if the upper tip has a walkthrough",
+                "Walkthrough — guided reading order if the upper tip has a walkthrough",
                 "Walkthrough — keys only — only entries marked key (--keys)",
                 "Commit by commit — one commit at a time (--step)",
                 "Whole diff — entire diff at once (--no-walk)",

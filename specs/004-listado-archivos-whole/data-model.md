@@ -66,7 +66,7 @@ registros `entry` en absoluto"* queda reemplazada, no matizada (FR-017).
 
 No cambia de forma; cambia de contenido.
 
-**Antes**: entradas curadas del walkthrough que intersectan el rango, seguidas de
+**Antes**: entradas guiadas del walkthrough que intersectan el rango, seguidas de
 los archivos del rango sin entrada propia, **excluyendo los que cuelgan de
 `.review/`**.
 

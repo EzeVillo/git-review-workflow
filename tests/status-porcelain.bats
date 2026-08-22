@@ -160,7 +160,7 @@ EOF
 
 	run git review status --porcelain
 	[ "$status" -eq 0 ]
-	# recorded is 4 (3 curated + the sidecar, uncovered, at start time); total
+	# recorded is 4 (3 guided + the sidecar, uncovered, at start time); total
 	# drops to 2 (src/c.txt + the sidecar) once a.txt/b.txt fold out of range.
 	expected="$(printf 'state\treview/feature/x\tfeature/x\t%s\twalk\tapplied\t1\t2\t4\tsrc/c.txt\t0' "$tip")"
 	firstline="$(printf '%s\n' "$output" | sed -n '1p')"

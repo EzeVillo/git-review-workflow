@@ -249,7 +249,7 @@ al panel sin cambiar la CLI (research.md Decisión 0); sólo la base necesita co
   junto a él (research.md Decisión 5: reemplazar, no acumular — la rama no se dibuja más, es derivable
   del origen). En `render()` (~líneas 579-596), rama `model.mode === "whole"`: cuando `model.base` esté
   presente, mostrarlo (p. ej. con el helper `note()`) junto al mensaje existente de "no hay walkthrough
-  curado"; cuando esté ausente, el mensaje queda exactamente como hoy — sin hueco ni valor vacío
+  guiado"; cuando esté ausente, el mensaje queda exactamente como hoy — sin hueco ni valor vacío
   (depende de T022)
 - [X] T024 [P] [US2] Unitarios nuevos en
   [vscode-extension/test/unit/panelModel.spec.ts](../../vscode-extension/test/unit/panelModel.spec.ts):

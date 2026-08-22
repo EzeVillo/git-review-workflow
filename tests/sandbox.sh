@@ -749,7 +749,7 @@ Sandbox ready: $dir
   env.sh       . env.sh    -> bin/ on PATH + cd work   (bash / Git Bash)
   env.ps1      . env.ps1   -> the same, in PowerShell
 
-The pull request (feature/checkout): 5 curated walkthrough entries over 4
+The pull request (feature/checkout): 5 guided walkthrough entries over 4
 commits, plus the committed walkthrough itself as a 6th, unannotated entry at
 the end of the reading order (it can never annotate itself) — so --step shows
 [n/4] and walk shows [n/6], over the same range.

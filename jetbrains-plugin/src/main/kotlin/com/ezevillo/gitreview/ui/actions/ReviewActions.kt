@@ -535,7 +535,7 @@ class CompareReviewAction : AnAction(), DumbAware {
         val upper = UiMessages.input(project, "Branch, tag or commit", UserCopy.COMPARE_UPPER_TITLE)
             ?: return
         val layoutOptions = arrayOf(
-            "Walkthrough — curated reading order if the upper tip has a walkthrough",
+            "Walkthrough — guided reading order if the upper tip has a walkthrough",
             "Walkthrough — keys only — only entries marked key (--keys)",
             "Commit by commit — one commit at a time (--step)",
             "Whole diff — entire diff at once (--no-walk)",

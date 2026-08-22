@@ -16,7 +16,7 @@
 | | |
 |---|---|
 | IDE | Visual Studio **2022** (17.x) or later — **Windows only** |
-| CLI | [`git-review-workflow`](https://www.npmjs.com/package/git-review-workflow) **≥ 0.6.0** |
+| CLI | [`git-review-workflow`](https://www.npmjs.com/package/git-review-workflow) **≥ 0.7.0** |
 | Git | `git` on `PATH` |
 
 ```powershell

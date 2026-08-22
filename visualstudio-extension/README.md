@@ -1,159 +1,169 @@
-# git review workflow — Visual Studio
+# git review workflow — Visual Studio extension
 
 <p align="center">
   <img src="media/icon.png" width="128" height="128" alt="git review workflow icon" />
 </p>
 
-**Walk a PR in order, then edit and run it — not just read the diff.**
+> Review a pull request by **editing and running** it, not just reading it. The
+> whole PR lands in your working tree as one staged diff; your fixes are then
+> extracted onto a clean branch automatically. This tool window shows where you
+> are in the review and drives every step of it without leaving Visual Studio.
+>
+> And when an **AI agent** wrote the change, it can write the **reading order**
+> too — a walkthrough committed next to the code saying which file to read first
+> and why. The panel picks it up on its own and walks you through the diff in
+> that order, instead of alphabetically.
 
-Native Visual Studio client for
-[git-review-workflow](https://github.com/EzeVillo/git-review-workflow). Full
-action and situation parity with the
-[VS Code extension](../vscode-extension/README.md) and the
-[JetBrains plugin](../jetbrains-plugin/README.md); state always comes from the
-CLI porcelain contract.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+[![Requires git review 0.7.0+](https://img.shields.io/badge/requires-git%20review%200.7.0%2B-blue.svg)](https://github.com/EzeVillo/git-review-workflow#installation)
 
-| | |
-|---|---|
-| **Marketplace id** | `com.ezevillo.gitreview.vs` |
-| **Publisher** | EzeVillo |
-| **License** | [MIT](./LICENSE) |
-| **Icon** | Same product mark as VS Code / JetBrains ([`media/icon.png`](./media/icon.png)) |
+[Project README](../README.md) · [Website](https://ezevillo.github.io/git-review-workflow/) · [Changelog](./CHANGELOG.md)
+
+---
+
+This is the Visual Studio surface of
+[git-review-workflow](https://github.com/EzeVillo/git-review-workflow), a git
+subcommand that stages an entire PR in your working tree as **staged,
+uncommitted changes** — so you read the diff, edit it inline and run the tests
+like ordinary local work, and `git review finish` then extracts *your* edits
+onto a separate branch. The extension does not reimplement any of that: it
+drives the same CLI and shows you its state.
 
 > **The CLI is required.** This is a panel over `git review`, not a standalone
 > reviewer. See [Requirements](#requirements).
 
 ## What the panel shows
 
-**A reading order, when the PR has one.** Walk mode shows the current entry: the
-file, its position in the author’s order, `key` badges, and the *why*. Commands
-open the file or diff and move with prev/next without leaving Visual Studio.
+**A reading order, when the PR has one.** If the author (often an AI coding
+agent) committed a walkthrough alongside the change, the review runs in *walk*
+mode and the panel shows the current entry: the file, its position in the order
+the author chose, whether they marked it `key`, and the *why* they wrote for it.
+Commands open the file or its diff and move with prev/next without leaving
+Visual Studio.
 
-**The files the range touches, when it doesn’t.** Whole mode lists every changed
-file; one control opens all diffs. The last opened row stays marked.
+**The files the range touches, when it doesn't.** A review without a walkthrough
+runs in *whole* mode, and there the panel is the list of changed files: a row
+opens that file's diff. The last row you opened stays marked.
 
-**Or the reading order you write yourself.** Start offers *Walkthrough — draft
-one*; the panel marks the mode `(draft)` so it is clear whose order you are on.
+**Or the reading order you write yourself.** When the PR ships without one,
+*Start a review* offers to draft one: it writes a skeleton listing every file in
+the range, the panel lists it under **Reading orders you started** with how far
+along it is (`3/9`, counted by the CLI), and *Validate and start* runs the review
+on your order once it is complete. The draft is **yours and local** — it lives
+outside the working tree, is never committed or staged, and `git status` does not
+change at any point. The panel marks the mode `(draft)` so it is clear whose
+order you are on.
 
-**Your other reviews, when this branch has none.** Inventory of active and saved
-reviews with Continue / Discard — same labels as the other clients.
+**Your other reviews, when this branch has none.** With no review on the current
+branch the panel lists the ones open elsewhere in the repository — active and
+saved, with their mode and position. Saved ones offer *Continue*; an active one
+is listed without an action, because going back to it is a branch checkout.
 
-## Requirements
+## Getting started
 
-- **Windows** (Visual Studio is Windows-only)
-- Visual Studio **2022** (17.x) or later
-- .NET 8 SDK (to build from source)
-- `git` on `PATH`
-- `git-review` CLI **≥ 0.6.0**
+1. **Install the CLI:**
 
-```powershell
-npm install -g git-review-workflow
-```
+   ```powershell
+   npm install -g git-review-workflow
+   ```
 
-## Marketplace package assets
+   Homebrew, a native Windows (PowerShell) installer and a no-Node one-liner are
+   all in the [installation guide](../README.md#installation).
 
-| Asset | Location |
-|-------|----------|
-| Listing overview | [`marketplace/overview.md`](./marketplace/overview.md) |
-| Publish checklist + screenshot plan | [`marketplace/publish-notes.md`](./marketplace/publish-notes.md) |
-| Icon (VSIX) | `src/GitReview.VS/Resources/Icon.png` (+ 90 / 128 / 256) |
-| Icon (docs) | `media/icon.png` |
-| License | [`LICENSE`](./LICENSE) |
-| Changelog | [`CHANGELOG.md`](./CHANGELOG.md) |
-| VSIX identity / description / tags | `src/GitReview.VS/source.extension.vsixmanifest` |
+2. **Tell it where PRs are integrated,** once per repository — from the panel
+   (**Set the base branch**) or on the command line:
 
-Screenshots for the gallery are **not** baked into the VSIX; capture them from
-`--preview` and upload in the Marketplace portal (see publish notes).
+   ```powershell
+   git config reviewworkflow.base develop
+   ```
 
-## Architecture
+3. **Open the `git review` tool window** (View → Other Windows, or Tools → git
+   review) and hit **Start a review**. It asks for the branch, where to read it
+   from, the range, and how to read it — offering only the layouts the CLI
+   reports as viable for that PR.
 
-- **Domain** (`GitReview.Domain`) — pure C#, no Visual Studio APIs. Mechanical
-  port of `jetbrains-plugin/.../domain/`.
-- **Host** (`GitReview.Host`) — CLI invoker (`shell: false`, UTF-8, timeouts
-  15s / 120s / 300s), review state refresh, mutation lock.
-- **UI** (`GitReview.VS`) — WPF `PanelView` renders `PanelLayout` in the **same
-  order with the same English labels** as JetBrains / VS Code. Only colors
-  follow the host theme.
+## Commands
 
-Canonical contract:
-[`contracts/client-product-surface.yaml`](../contracts/client-product-surface.yaml).
+**Tools → git review** holds the full action set: the review lifecycle (Start,
+Continue, Finish, Save, Cancel, Undo/Resume Finish), reading it (Next/Previous
+Entry, Go to Entry, Open Entry, Open Changes, Show Why) and everything around it
+(Set the Base Branch, Set the Remote, Clean, Forget, Discard, Preview Edits and
+*(stat)*, Compare Revisions, Walkthrough Init/Build, How to Install the CLI, Show
+CLI Log). Four of them — Go to Entry, Forget, Preview Edits (stat), Show CLI
+Log — are menu-only; the rest also appear on the panel where they apply.
 
-## Build & test
+A menu entry and the panel button of the same name run the same code, so they ask
+the same questions. Anything that needs a decision asks for it in a picker: which
+branch, which origin, which reading order, where the finish should land, which
+saved review to continue. Cancelling a picker cancels the action — nothing is
+chosen on your behalf.
 
-```powershell
-cd visualstudio-extension
-dotnet build GitReview.sln
-dotnet run --project src/GitReview.VS -- --verify    # layout + constant smoke
-dotnet run --project src/GitReview.VS -- --preview   # all situations, ←/→
-```
+Each action shells out to the matching `git review` verb — the extension never
+invents a second way to change review state. Mutations ask for a confirmation
+that names what will happen; preview is read-only and does not.
 
-```bash
-node ../scripts/check-client-product-surface.mjs   # three client trees
-```
+## What the panel offers, situation by situation
 
-### VSIX packaging
-
-Builds the extension itself (net472, the framework devenv loads in-proc) with
-MSBuild from your Visual Studio install — no SDK workload required, the VSSDK
-comes from NuGet:
-
-```powershell
-./build-vsix.ps1                          # src/GitReview.VS/bin/Release/net472/*.vsix
-./build-vsix.ps1 -Install -Experimental   # then: devenv /rootsuffix Exp
-```
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for running it inside Visual Studio.
-
-## Visual parity (labels)
-
-| Situation | Controls (canonical English) |
-|-----------|------------------------------|
+| Situation | Controls |
+|-----------|----------|
 | cli-missing | install title, npm command + **Copy**, **Other install options** |
 | no-review setup | **Set the base branch** (primary) |
 | no-review ready | inventory, **Start a review**, Other actions / Settings / Support |
 | finish-pending | **Clean** / **Undo finish** |
 | review walk | **File** / **Diff**, prev/next, **open in editor** |
-| review whole | **Diff** (open all) + file rows |
+| review whole | file rows, one **Diff** each |
 | finish-conflict | **Undo** / **Continue** (no nav) |
 
-Tool window toolbar: **Refresh**, **Finish**, **Save**, **Cancel**, **Preview edits** — the same five title actions, in the same order, as the VS Code view title and the IntelliJ tool-window title bar. Each appears only in the situations the contract gives it.
+The tool window toolbar carries **Refresh**, **Finish**, **Save**, **Cancel** and
+**Preview edits**; each appears only in the situations it applies to.
 
-## Commands
+## Requirements
 
-**Tools → git review** holds all 27 product actions, with the same names as the VS Code
-command palette and the JetBrains Tools menu: the review lifecycle (Start, Continue,
-Finish, Save, Cancel, Undo/Resume Finish), reading it (Next/Previous Entry, Go to Entry,
-Open Entry/Changes/All Changes, Show Why) and everything around it (Set the Base Branch,
-Set the Remote, Clean, Forget, Discard, Preview Edits and *(stat)*, Compare Revisions,
-Walkthrough Init/Build, How to Install the CLI, Show CLI Log). Four of them — Go to Entry,
-Forget, Preview Edits (stat), Show CLI Log — are menu-only in every client, by contract.
+- **Windows** (Visual Studio is Windows-only)
+- Visual Studio **2022** (17.x) or later
+- `git` on `PATH`
+- **[git-review-workflow](https://github.com/EzeVillo/git-review-workflow) 0.7.0
+  or newer**
+- A **single-folder repository.** Multi-root solutions are not supported: the
+  panel needs exactly one git repository root, the same way the CLI has one cwd
 
-A menu entry and the panel button of the same name run the same code, so they ask the same
-questions. Anything that needs a decision asks for it in a picker: which branch, which
-origin, which reading order, where the finish should land, which saved review to continue.
-Cancelling a picker cancels the action — nothing is chosen on your behalf.
+## Settings
 
-**Tools → Options → git review** has the path to the `git-review` dispatcher and the
-default start origin (remote / local / offline), the same two settings as the other clients.
+**Tools → Options → git review**:
 
-## Windows latency
+| Setting | Default | What it does |
+|---------|---------|--------------|
+| **Path to git-review** | *(empty)* | Path to the `git-review` dispatcher, for when `git` does not discover it. Empty means the extension invokes `git review`. |
+| **Default source** | `remote` | Which origin the start wizard preselects: `remote` (fetch and review the remote tip), `local` (no fetch), `offline` (no network at all). |
 
-`git review status --porcelain` is multi-process on Windows (~960 ms in monorepo
-notes). The panel budgets skeleton **120 ms**, why ceiling **800 ms**, CLI probe
-every **10 s** on cli-missing/outdated, timeouts 15s / 120s / 300s.
+## Troubleshooting
 
-## Version
+The panel reports what it found rather than failing silently — a missing CLI, a
+version too old, a repository with no base configured — and offers the action
+that fixes it. When you need the detail, **Tools → git review → Show CLI Log**
+prints every invocation the extension made and what came back.
 
-```sh
-./bump-version.sh X.Y.Z
-```
+Reading review state is several `git` processes, and process creation is far more
+expensive on Windows than elsewhere — around a second for a full refresh on a
+large repository. The panel draws a skeleton while it waits rather than blocking,
+so a slow refresh looks like a refresh, not a hang.
 
-Stamps `GitReview.VS.csproj`, `source.extension.vsixmanifest`, and
-`Directory.Build.props`. Move Unreleased notes under `## [X.Y.Z]` in
-`CHANGELOG.md` before publishing.
+## Privacy
 
-## Links
+No telemetry. No network calls except the ones you trigger through the CLI
+(`start` may fetch; `forget --delta --stale` may fetch). Support links open
+GitHub in your browser.
 
-- [Star on GitHub](https://github.com/EzeVillo/git-review-workflow)
+## Learn more
+
+- [Project README](../README.md) — the full command surface, the walkthrough
+  format, and how the workflow fits together. Also in
+  [Spanish](../README.es.md).
+- [Website](https://ezevillo.github.io/git-review-workflow/)
 - [Report a bug](https://github.com/EzeVillo/git-review-workflow/issues/new?template=bug_report.yml)
-- [Main project README](../README.md)
+- [Contributing to the extension](CONTRIBUTING.md) — building it, running it in
+  Visual Studio, the tests and the VSIX.
+
+## License
+
+[MIT](./LICENSE) © EzeVillo

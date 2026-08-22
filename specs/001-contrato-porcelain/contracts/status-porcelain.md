@@ -109,12 +109,12 @@ entry<TAB>position<TAB>id[<TAB>essential<TAB>annotated|<TAB>banked]
   orden de lectura en vez de omitirlo, para que un review no llegue al final
   con archivos del PR que el reviewer nunca vio (el precedente es `git
   status`, que no esconde los untracked). `total` cuenta estas posiciones
-  igual que las curadas. El archivo del propio sidecar (`.review/`) entra en
+  igual que las guiadas. El archivo del propio sidecar (`.review/`) entra en
   esta categoría igual que cualquier otro: un walkthrough nunca se anota a sí
   mismo, así que un review con walkthrough committeado siempre tiene al menos
   una posición sin anotar.
 - En `whole`, `entry` lista los archivos que el rango toca — el mismo dato que
-  `walk` deriva para su orden de lectura, sin curaduría ni cursor. Un rango
+  `walk` deriva para su orden de lectura, sin guía ni cursor. Un rango
   vacío produce cero registros `entry` y exit `0`, nunca un error.
 
 Ejemplo (walk, 3 entradas, la segunda esencial, la tercera sin anotar):

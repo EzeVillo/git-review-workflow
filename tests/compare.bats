@@ -227,7 +227,7 @@ EOF
 	run git review compare v1.0 wt-fixture
 	[ "$status" -eq 0 ]
 	[ "$(git config branch.review/wt-fixture.reviewmode)" = "walk" ]
-	# app.txt (curated) + the walkthrough sidecar itself and more.txt (both
+	# app.txt (guided) + the walkthrough sidecar itself and more.txt (both
 	# unannotated, appended in git's own order — ".review/" sorts before "m").
 	[ "$(git config branch.review/wt-fixture.reviewwalkcount)" = "3" ]
 	[[ "$output" == *"[1/3] app.txt"* ]]

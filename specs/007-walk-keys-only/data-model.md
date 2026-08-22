@@ -19,7 +19,7 @@ Sesión de review activa en `review/<source>` (o guardada en
 **Invariantes**:
 
 1. Si `keysOnly` entonces `mode=walk`.
-2. Si `mode=walk` y no `keysOnly`, secuencia = `walk_reading_order` (curated +
+2. Si `mode=walk` y no `keysOnly`, secuencia = `walk_reading_order` (guided +
    uncovered), como hoy.
 3. Si `keysOnly`, secuencia = keys en rango (ver abajo); `walkStep ∈ 1..total`.
 4. `keysOnly` no altera tip/base/source/working tree materializado.

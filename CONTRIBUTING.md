@@ -193,7 +193,9 @@ fine in the editor. For behaviour, use F5.
 Plugin). Same rule as the VS Code extension: the CLI is the source of truth; the plugin only invokes
 porcelain/argv and paints a
 `PanelModel`. Platform pin and versions live only in
-[`jetbrains-plugin/gradle.properties`](jetbrains-plugin/gradle.properties).
+[`jetbrains-plugin/gradle.properties`](jetbrains-plugin/gradle.properties). See
+[`jetbrains-plugin/CONTRIBUTING.md`](jetbrains-plugin/CONTRIBUTING.md) for the full guide —
+building, the sandbox IDE, the tests and the zip.
 
 One zip, many IDEs: compatibility is declared in `plugin.xml` with
 `com.intellij.modules.platform` + `Git4Idea`, and Android Studio / Rider are excluded via
@@ -291,7 +293,7 @@ a bug — fix `domain/PanelLayout.kt` or the canonical
 
 More validation detail:
 [`specs/010-panel-intellij-acciones/quickstart.md`](specs/010-panel-intellij-acciones/quickstart.md)
-and [`jetbrains-plugin/README.md`](jetbrains-plugin/README.md).
+and [`jetbrains-plugin/CONTRIBUTING.md`](jetbrains-plugin/CONTRIBUTING.md).
 
 ### UX vs the VS Code panel
 

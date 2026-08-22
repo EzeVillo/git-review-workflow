@@ -227,7 +227,7 @@ verificar que el total del orden de lectura incluye `.review/walkthrough.md` y q
   revisor cree nuevos no se suman a la lista.
 - **Un PR que sólo toca el walkthrough**: sigue degradando a `whole` — ningún
   walkthrough puede anotarse a sí mismo, así que el rango nunca tiene una entrada
-  curada que intersecte, el mismo camino que cualquier otro walkthrough que no
+  guiada que intersecte, el mismo camino que cualquier otro walkthrough que no
   aplica al rango. La diferencia la hace US1: antes esa degradación dejaba el PR
   entero invisible (`whole` no mostraba nada); ahora la nota nombra el archivo y
   `whole` lo lista. Ver FR-024.
@@ -308,13 +308,13 @@ verificar que el total del orden de lectura incluye `.review/walkthrough.md` y q
   reportarse como error ni como base movida, en ninguna de las dos superficies.
 - **FR-024**: Un PR cuyo único archivo cambiado esté bajo `.review/` MUST seguir
   degradando a `whole` con nota (ningún walkthrough puede anotarse a sí mismo, así
-  que este caso es indistinguible del resto de "ninguna entrada curada interseca
+  que este caso es indistinguible del resto de "ninguna entrada guiada interseca
   el rango" — el mismo camino que ya existe) — pero la nota de degradación MUST
   nombrar el archivo (FR-021) y el listado de `whole` resultante MUST mostrarlo
   (FR-001), así que el PR nunca queda invisible aunque no entre en modo `walk`.
   **Revisado en la implementación**: la redacción original de esta spec pedía
   forzar modo `walk` acá; se descartó por chocar con el gate existente que decide
-  degradar cuando ninguna entrada curada interseca el rango — ver
+  degradar cuando ninguna entrada guiada interseca el rango — ver
   research.md/tasks.md T014 para el razonamiento completo.
 
 ### Key Entities

@@ -156,11 +156,11 @@ tener dos ramas editando `git-review-lib.sh` en paralelo.
   test ya existente de `init` con uno equivalente para `build --check`.
 - [X] T014 [P] [US4] `tests/walk.bats`: **redefinido tras encontrar una tensión de
   diseño real.** El texto original de FR-024 pedía modo `walk` forzado para un PR
-  que sólo toca `.review/`; eso choca con el gate existente `curatedcount -ge 1`
+  que sólo toca `.review/`; eso choca con el gate existente `guidedcount -ge 1`
   (correcto para el caso general, cubierto por el test ya existente "a walkthrough
   whose entries do not intersect the range falls back to whole with a note") — un
   walkthrough estructuralmente NUNCA puede anotarse a sí mismo, así que ese PR
-  siempre tiene `curatedcount=0`. Forzar `walk` ahí exigía una regla especial sin
+  siempre tiene `guidedcount=0`. Forzar `walk` ahí exigía una regla especial sin
   justificación sólida. Como US1 ya resuelve el problema real (el archivo nunca
   queda invisible: `whole` lo lista), el test quedó como
   `"a PR that only touches the sidecar degrades to whole but is never invisible
@@ -353,7 +353,7 @@ distinta de v1.
   contra el sandbox real (no sólo los tests). **Encontró un hallazgo real**: el
   texto fijo que `sandbox.sh` imprime al terminar ya decía "5 walkthrough
   entries... la última es el propio walkthrough" para `feature/checkout` — una
-  cifra que no coincidía con la implementación real (6, no 5: 5 curadas + el
+  cifra que no coincidía con la implementación real (6, no 5: 5 guiadas + el
   sidecar sin anotar). Verificado con `git review status --porcelain` contra el
   sandbox reconstruido: total real 6 en walk, 4 en step (sin cambios, cuenta
   commits). Mismo problema en `feature/notifications` (5 reales, no 4) y en la

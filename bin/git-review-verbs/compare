@@ -203,10 +203,10 @@ walk=0
 walkcount=0
 keys_filter=0
 if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$bcommit")" && [ -n "$wtcontent" ]; then
-	curated="$(walk_sequence "$bcommit" "$acommit")"
+	guided="$(walk_sequence "$bcommit" "$acommit")"
 	# grep -c returns 1 (aborting under set -e in POSIX sh) on an empty sequence.
-	curatedcount="$(printf '%s\n' "$curated" | grep -c . || true)"
-	if [ "$curatedcount" -ge 1 ]; then
+	guidedcount="$(printf '%s\n' "$guided" | grep -c . || true)"
+	if [ "$guidedcount" -ge 1 ]; then
 		walk=1
 		if [ "$keys_only" -eq 1 ]; then
 			walkpaths="$(walk_keys_order "$bcommit" "$acommit")"
@@ -281,7 +281,7 @@ if [ "$walk" -eq 1 ]; then
 		# Files in range with no walkthrough entry: appended to the end of the reading
 		# order (walk_reading_order), so name them rather than leave them to be
 		# discovered silently — same as start.
-		uncovered="$(printf '%s\n' "$walkpaths" | tail -n +"$((curatedcount + 1))")"
+		uncovered="$(printf '%s\n' "$walkpaths" | tail -n +"$((guidedcount + 1))")"
 		if [ -n "$uncovered" ]; then
 			echo "note: file(s) in range not in the walkthrough are added to the end of the reading order: $(printf '%s\n' "$uncovered" | tr '\n' ' ')"
 		fi

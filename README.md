@@ -93,7 +93,7 @@ and running it like ordinary working-tree changes, then handing your fixes back
 without manual stashing or cherry-picking — and giving it a **guided reading
 order**, something neither git nor GitHub offers natively.
 
-|                                 |    View the PR    | Curated order + why, per file | Edit & run as working tree | Auto-extract your fixes | Incremental re-review (`--delta`) | Editor-agnostic |
+|                                 |    View the PR    | Guided order + why, per file  | Edit & run as working tree | Auto-extract your fixes | Incremental re-review (`--delta`) | Editor-agnostic |
 |---------------------------------|:-----------------:|:-----------------------------:|:--------------------------:|:-----------------------:|:---------------------------------:|:---------------:|
 | **git-review-workflow**         |         ✅         |               ✅               |             ✅              |            ✅            |                 ✅                 |        ✅        |
 | `gh pr checkout` / `glab`       | ⚠️ plain checkout |               ❌               |             ✅              |            ❌            |                 ❌                 |        ✅        |
@@ -101,7 +101,7 @@ order**, something neither git nor GitHub offers natively.
 | VS Code *GitHub PR* extension   |         ✅         |               ❌               |       ⚠️ in-IDE only       |            ❌            |                 ❌                 |        ❌        |
 | GitHub / GitLab web UI          |         ✅         |               ❌               |             ❌              |            ❌            |            ⚠️ partial             |        ✅        |
 
-None of the alternatives above give you an **author-curated reading order** —
+None of the alternatives above give you an **author-guided reading order** —
 which file to read first, and why — instead of an alphabetical file list or a
 bare diff. The author (often an AI coding agent) writes it once, with
 `git review walkthrough init`/`build`, and commits it alongside the PR; a
@@ -144,7 +144,7 @@ git review finish              # extract your edits onto review-fixes/feature/lo
 
 Prefer Homebrew, a native Windows (PowerShell) installer, or an install that
 does not need Node? See [Installation](#installation). For the full flow —
-re-reviewing updates, walking a PR via a curated walkthrough or commit by
+re-reviewing updates, walking a PR via a guided walkthrough or commit by
 commit, cleanup — see [Typical workflow](#typical-workflow).
 
 ## Installation
@@ -306,7 +306,7 @@ Every command is a verb under `git review`. Run `git review -h` for the list, or
 | `git review [-h \| --version]`                                                                                                               | List all verbs or print the installed version.                                                                                                                                                                                                                                                                                                                     |
 | `git review start [<branch>] [<base> \| --base <base> \| --delta \| --from <commit>] [--step \| --no-walk \| --keys] [--local \| --offline]` | Fetch `origin`, then stage the PR diff on a new `review/<branch>` branch (omit `<branch>` to review the current branch; enters walk mode if the PR carries a walkthrough; `--keys` restricts walk to entries marked `> key`; `--local` reviews your local branch but still diffs against origin's base; `--offline` also skips fetching and uses your local base). |
 | `git review compare <a> <b> [--step \| --no-walk \| --keys]`                                                                                 | Stage the diff between two commit-ish (tags, commits, branches) read-only, to read or walk it. `git review finish` refuses — there is nothing to write back.                                                                                                                                                                                                       |
-| `git review walkthrough (init [--base <base>] [--force] \| build [--check])`                                                                 | Author a reading walkthrough for the current branch's PR — a curated order of the changed files with a note on each, committed as `.review/walkthrough.md`.                                                                                                                                                                                                        |
+| `git review walkthrough (init [--base <base>] [--force] \| build [--check])`                                                                 | Author a reading walkthrough for the current branch's PR — a guided order of the changed files with a note on each, committed as `.review/walkthrough.md`.                                                                                                                                                                                                        |
 | `git review walkthrough draft [--local \| --offline] [--delta] [--force] [--stdout] [--] [<branch>]`<br>`git review walkthrough draft --build [--from <file> \| --from -] [--local \| --offline] [--delta] [--force] [--] [<branch>]`                                               | Write your own reading order for someone else's PR, kept out of the working tree — nothing is staged, committed or undone. `git review start` then reads it instead of the PR's walkthrough. `--build` validates and renumbers it. `--stdout` prints the skeleton instead of writing it (nothing is created anywhere) and `--build --from` installs a filled-in one from a file or standard input, so an agent can write the reading order without touching your gitdir.                                                                                                                                 |
 | `git review next` / `git review prev`                                                                                                        | Move a `--step` or walkthrough review to the next / previous entry.                                                                                                                                                                                                                                                                                                |
 | `git review status [--porcelain \| --why <path>]`                                                                                            | Show the state of the review on the current branch (`--porcelain` for machine-readable output, including a `finish` record when a closure is mid-conflict; `--why <path>` for a walkthrough entry's explanation).                                                                                                                                                  |
@@ -365,7 +365,7 @@ Has two independent axes — **range** (where the review starts) and **layout**
 - **Walk mode (automatic).** If the PR carries a walkthrough
   (`.review/walkthrough.md`, written by the author with
   [`git review walkthrough`](#git-review-walkthrough)), `git review start` enters
-  **walk mode**: the very same staged, editable whole-PR review, plus a curated
+  **walk mode**: the very same staged, editable whole-PR review, plus a guided
   reading cursor over it. It prints the author's heads-up — what is delicate in
   this PR, read once before the first file — then the first entry: a file and the
   author's note on why it matters, labelled `(key)` when it is one of the few the
@@ -450,7 +450,7 @@ git review compare v1.0 v2.0 --step   # ...and walk it commit by commit
 <summary id="git-review-walkthrough"><code>git review walkthrough</code></summary>
 
 The one thing neither git nor GitHub offers: an **author-written reading order**
-over a PR. As the author (often an AI coding agent), you curate the order in which
+over a PR. As the author (often an AI coding agent), you set the order in which
 the changed files should be read and annotate each with *why* it matters; a
 reviewer who runs `git review start` on the PR is then dropped into
 [walk mode](#git-review-start) and reads it in that order.
@@ -502,7 +502,7 @@ Filling in the order and the whys is a great fit for an AI coding agent — poin
 one at the diff and let it write the placeholders. That works on either side:
 the PR's author can have an agent draft the walkthrough alongside the change,
 and it may be **even more useful on the reviewer's side** — a human reviewer
-would need to already understand the PR to hand-curate a reading order for it,
+would need to already understand the PR to hand-write a reading order for it,
 which defeats the purpose, whereas an agent that reads the whole diff can write
 that order *before* you've read a single file (see the solo-review case in
 [Typical workflow](#typical-workflow)).
@@ -1102,7 +1102,7 @@ and a positional `base` argument overrides both.
 git config reviewworkflow.base develop      # once per repo
 
 # Author side: ship a reading walkthrough with the PR (typically written by
-# an AI agent as the author), curating the order the files should be read in
+# an AI agent as the author), setting the order the files should be read in
 # and a why for each:
 git review walkthrough init                  # skeleton of every changed file
 # ...fill in the order, a why for each, the heads-up and the > key markers...
@@ -1155,7 +1155,7 @@ git review start feature/login --offline
 
 This is a good place to hand the "fill in the order and the whys" step to an AI
 coding agent rather than doing it by hand: you have not read the PR yet, so
-manually curating a reading order for it is circular — an agent that reads the
+manually writing a reading order for it is circular — an agent that reads the
 whole diff can write that order for you before you look at a single file.
 
 ```sh

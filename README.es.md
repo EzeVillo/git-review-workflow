@@ -93,15 +93,15 @@ y después devolver tus correcciones sin stash ni cherry-pick manuales — y
 darle un **orden de lectura guiado**, algo que ni git ni GitHub ofrecen de
 forma nativa.
 
-|                                  |     Ver el PR      | Orden + por qué, por archivo | Editar y correr como working tree | Extraer tus fixes automáticamente | Re-review incremental (`--delta`) | Independiente del editor |
-|----------------------------------|:------------------:|:----------------------------:|:---------------------------------:|:---------------------------------:|:---------------------------------:|:------------------------:|
-| **git-review-workflow**          |         ✅          |              ✅               |                 ✅                 |                 ✅                 |                 ✅                 |            ✅             |
-| `gh pr checkout` / `glab`        | ⚠️ checkout pelado |              ❌               |                 ✅                 |                 ❌                 |                 ❌                 |            ✅             |
-| JetBrains *Review Pull Request*  |         ✅          |              ❌               |         ⚠️ solo en el IDE         |                 ❌                 |                 ❌                 |            ❌             |
-| Extensión *GitHub PR* de VS Code |         ✅          |              ❌               |         ⚠️ solo en el IDE         |                 ❌                 |                 ❌                 |            ❌             |
-| Web de GitHub / GitLab           |         ✅          |              ❌               |                 ❌                 |                 ❌                 |            ⚠️ parcial             |            ✅             |
+|                                  |     Ver el PR      | Orden guiado + por qué, por archivo | Editar y correr como working tree | Extraer tus fixes automáticamente | Re-review incremental (`--delta`) | Independiente del editor |
+|----------------------------------|:------------------:|:-----------------------------------:|:---------------------------------:|:---------------------------------:|:---------------------------------:|:------------------------:|
+| **git-review-workflow**          |         ✅          |                  ✅                  |                 ✅                 |                 ✅                 |                 ✅                 |            ✅             |
+| `gh pr checkout` / `glab`        | ⚠️ checkout pelado |                  ❌                  |                 ✅                 |                 ❌                 |                 ❌                 |            ✅             |
+| JetBrains *Review Pull Request*  |         ✅          |                  ❌                  |         ⚠️ solo en el IDE         |                 ❌                 |                 ❌                 |            ❌             |
+| Extensión *GitHub PR* de VS Code |         ✅          |                  ❌                  |         ⚠️ solo en el IDE         |                 ❌                 |                 ❌                 |            ❌             |
+| Web de GitHub / GitLab           |         ✅          |                  ❌                  |                 ❌                 |                 ❌                 |            ⚠️ parcial             |            ✅             |
 
-Ninguna de las alternativas de arriba te da un **orden de lectura curado por el
+Ninguna de las alternativas de arriba te da un **orden de lectura guiado por el
 autor** — qué archivo leer primero, y por qué — en vez de una lista alfabética o
 un diff pelado. El autor (a menudo un agente de IA) lo escribe una sola vez, con
 `git review walkthrough init`/`build`, y lo commitea junto con el PR; un
@@ -146,7 +146,7 @@ git review finish               # extraer tus ediciones a review-fixes/feature/l
 ¿Preferís Homebrew, un instalador nativo de Windows (PowerShell), o una
 instalación que no necesite Node? Mirá
 [Instalación](#instalación). Para el flujo completo — re-revisar actualizaciones,
-recorrer un PR con un walkthrough curado o commit por commit, limpieza — mirá
+recorrer un PR con un walkthrough guiado o commit por commit, limpieza — mirá
 [Flujo típico](#flujo-típico).
 
 ## Instalación
@@ -311,7 +311,7 @@ lista, o `git review <verbo> -h` para el detalle de un verbo.
 | `git review [-h \| --version]`                                                                                                             | Lista todos los verbos o imprime la versión instalada.                                                                                                                                                                                                                                                                                                                                 |
 | `git review start [<rama>] [<base> \| --base <base> \| --delta \| --from <commit>] [--step \| --no-walk \| --keys] [--local \| --offline]` | Hace fetch de `origin` y deja el diff del PR staged en una nueva rama `review/<rama>` (omití `<rama>` para revisar la rama actual; entra en modo walk si el PR trae un walkthrough; `--keys` restringe el walk a las entradas marcadas `> key`; `--local` revisa tu rama local pero sigue comparando contra la base de origin; `--offline` además salta el fetch y usa tu base local). |
 | `git review compare <a> <b> [--step \| --no-walk \| --keys]`                                                                               | Deja staged el diff entre dos commit-ish (tags, commits, ramas) en modo lectura, para leerlo o recorrerlo. `git review finish` se niega — no hay a dónde escribir.                                                                                                                                                                                                                     |
-| `git review walkthrough (init [--base <base>] [--force] \| build [--check])`                                                               | Escribe un walkthrough de lectura para el PR de la rama actual — un orden curado de los archivos cambiados con una nota en cada uno, committeado como `.review/walkthrough.md`.                                                                                                                                                                                                        |
+| `git review walkthrough (init [--base <base>] [--force] \| build [--check])`                                                               | Escribe un walkthrough de lectura para el PR de la rama actual — un orden guiado de los archivos cambiados con una nota en cada uno, committeado como `.review/walkthrough.md`.                                                                                                                                                                                                        |
 | `git review walkthrough draft [--local \| --offline] [--delta] [--force] [--stdout] [--] [<rama>]`<br>`git review walkthrough draft --build [--from <archivo> \| --from -] [--local \| --offline] [--delta] [--force] [--] [<rama>]`                                               | Escribí tu propio orden de lectura para el PR de otra persona, fuera del working tree — no se stagea, commitea ni deshace nada. `git review start` lo lee en lugar del walkthrough del PR. `--build` lo valida y renumera. `--stdout` imprime el esqueleto en vez de escribirlo (no crea nada en ninguna parte) y `--build --from` instala uno ya completado desde un archivo o la entrada estándar, para que un agente pueda escribir el orden de lectura sin tocar tu gitdir.                                                                                                                                                             |
 | `git review next` / `git review prev`                                                                                                      | Mueve una review `--step` o walkthrough a la entrada siguiente / anterior.                                                                                                                                                                                                                                                                                                             |
 | `git review status [--porcelain \| --why <path>]`                                                                                          | Muestra el estado de la review en la rama actual (`--porcelain` para salida legible por programas, incluido un registro `finish` cuando un cierre quedó trabado por conflicto; `--why <path>` para el porqué de una entrada del walkthrough).                                                                                                                                          |
@@ -373,7 +373,7 @@ Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
   (`.review/walkthrough.md`, escrito por el autor con
   [`git review walkthrough`](#git-review-walkthrough)), `git review start` entra
   en **modo walk**: la misma review completa staged y editable, más un cursor de
-  lectura curado por encima. Imprime el heads-up del autor — qué es delicado en
+  lectura guiado por encima. Imprime el heads-up del autor — qué es delicado en
   este PR, se lee una vez antes del primer archivo — y después la primera entrada:
   un archivo y la nota del autor sobre por qué importa, etiquetada `(key)` cuando
   es una de las pocas que el autor marcó como esenciales. Te movés por el orden de

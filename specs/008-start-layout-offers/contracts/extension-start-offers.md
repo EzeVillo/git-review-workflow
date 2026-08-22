@@ -46,7 +46,7 @@ sin walk ni keys. (No confundir con exit ≠ 0 por tip missing.)
 
 | layout | label UI (EN, producto) | description (borrador) | argv layout |
 |--------|-------------------------|------------------------|-------------|
-| `walk` | Walkthrough | curated reading order from the PR | *(ninguno)* |
+| `walk` | Walkthrough | guided reading order from the PR | *(ninguno)* |
 | `keys` | Walkthrough — keys only | only entries marked key | `--keys` |
 | `step` | Commit by commit | one commit at a time | `--step` |
 | `whole` | Whole diff | entire diff at once | `--no-walk` |

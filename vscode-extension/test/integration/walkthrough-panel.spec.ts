@@ -68,7 +68,7 @@ describe("US1: ver donde estoy en el walkthrough", function () {
         assert.strictEqual(state.situation, "review");
         assert.strictEqual(state.state?.mode, "walk");
         assert.strictEqual(state.state?.position, 2);
-        // 7 curados + 3 no cubiertos: el propio walkthrough (que ".review/"
+        // 7 guiados + 3 no cubiertos: el propio walkthrough (que ".review/"
         // ordena antes que "src/", así que va primero de los tres) más los dos
         // archivos sin entrada (004 FR-020).
         assert.strictEqual(state.state?.total, 10);

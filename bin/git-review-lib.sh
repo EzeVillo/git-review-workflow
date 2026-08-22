@@ -372,7 +372,7 @@ goto_step() {
 
 # ── Walkthrough (walk) mode helpers ───────────────────────────────────────────
 #
-# A walkthrough is a curated reading order over a PR, authored as a committed
+# A walkthrough is a guided reading order over a PR, authored as a committed
 # sidecar (.review/walkthrough.md) and consumed by the reviewer. Walk mode is the
 # same whole-PR review (the diff is staged and editable), plus a reading cursor
 # over it. Nothing here stages, resets or banks anything — the working tree is the
@@ -1234,7 +1234,7 @@ walk_count_keys() {
 
 # walk_is_annotated <tip> <path>
 # True when <path> has an entry in the walkthrough at <tip> — regardless of
-# whether that entry's path is in range. Used to tell a curated entry apart
+# whether that entry's path is in range. Used to tell a guided entry apart
 # from a file the reading order only carries because it changed in the review
 # range (see walk_reading_order). Goes through the same two normalization
 # points as every other path comparison here: walk_normalize via walk_read,
@@ -1366,7 +1366,7 @@ walk_sequence() {
 }
 
 # walk_reading_order <tip> <lower>
-# The full reading order for a walk review: the curated sequence from
+# The full reading order for a walk review: the guided sequence from
 # walk_sequence, followed by any file range_files reports in range but that has
 # no walkthrough entry — including the sidecar itself, if the PR touches it: a
 # committed walkthrough is content the PR adds like any other file, and it used
@@ -1374,20 +1374,20 @@ walk_sequence() {
 # is the walkthrough's own entry proposal in git-review-verbs/walkthrough,
 # which still filters it — annotating the file where you write your annotations
 # would be circular). In the order git reports them. Empty output means
-# walk_sequence is empty — no curated entry intersects the range — and the
+# walk_sequence is empty — no guided entry intersects the range — and the
 # caller degrades to whole, exactly as before: this function only ever adds a
-# tail to a non-empty curated sequence, never turns an empty one into something
+# tail to a non-empty guided sequence, never turns an empty one into something
 # walk mode would run on.
 #
 # Built on top of walk_sequence rather than duplicating its awk: one git show
 # and one git diff live there, and this adds one more diff plus a single awk pass
-# over range paths (set membership of the curated sequence — not one grep
+# over range paths (set membership of the guided sequence — not one grep
 # process per path).
 walk_reading_order() {
 	_wro_seq="$(walk_sequence "$1" "$2")"
 	[ -n "$_wro_seq" ] || return 0
 	printf '%s\n' "$_wro_seq"
-	# One awk: load curated paths into a set, emit range paths not in it (git order).
+	# One awk: load guided paths into a set, emit range paths not in it (git order).
 	#
 	# The sequence arrives as a stream, not as `awk -v`: BSD awk (the one true
 	# awk, which is what macOS ships) refuses a newline inside a -v value —
@@ -1402,7 +1402,7 @@ walk_reading_order() {
 		printf '\t\n'
 		range_files "$1" "$2"
 	} | awk '
-		# Phase 1: the curated sequence, up to the lone-tab sentinel.
+		# Phase 1: the guided sequence, up to the lone-tab sentinel.
 		!tail {
 			if ($0 == "\t") { tail = 1; next }
 			if ($0 != "") seen[$0] = 1
@@ -1413,9 +1413,9 @@ walk_reading_order() {
 }
 
 # walk_keys_order <tip> <lower>
-# Curated walk_sequence paths that carry the reserved "> key" marker, in
+# Guided walk_sequence paths that carry the reserved "> key" marker, in
 # walkthrough order. Uncovered paths never appear — walk_sequence only yields
-# curated entries, so the annotated column is 1 throughout and filtering on
+# guided entries, so the annotated column is 1 throughout and filtering on
 # essential alone is enough. A filter over walk_entry_fields for the same reason
 # walk_count_keys is one: a single definition of the "> key" marker, and a
 # constant number of processes for a reading order of any length. Empty output
@@ -1526,8 +1526,8 @@ emit_reading_offers() {
 
 	_ero_walk=0
 	if wtcontent="$(walk_read "$_ero_tip")" && [ -n "$wtcontent" ]; then
-		_ero_curated="$(walk_sequence "$_ero_tip" "$_ero_lower")"
-		_ero_n="$(printf '%s\n' "$_ero_curated" | grep -c . || true)"
+		_ero_guided="$(walk_sequence "$_ero_tip" "$_ero_lower")"
+		_ero_n="$(printf '%s\n' "$_ero_guided" | grep -c . || true)"
 		if [ "$_ero_n" -ge 1 ]; then
 			_ero_walk=1
 		fi
@@ -1803,7 +1803,7 @@ load_walk_review_meta() {
 	# git review walkthrough draft wrote it to.
 	walk_use_draft "$(walk_review_draft_src "$cur")"
 
-	# Keys-only submode (start/compare --keys): sequence is curated ∩ keys, not
+	# Keys-only submode (start/compare --keys): sequence is guided ∩ keys, not
 	# the full reading order. The flag lives on the branch; absence is full walk.
 	if [ "$(git config "branch.$cur.reviewwalkkeys" || true)" = "1" ]; then
 		walkpaths="$(walk_keys_order "$tip" "$(git rev-parse HEAD)")"

@@ -141,7 +141,7 @@ offer_lines() {
 	# First full review tip at keys tip; then add a commit with only non-key path
 	# is hard. Simpler: record marker at current tip then add commits that are
 	# only outside walkthrough paths... Use marker at tip of keys, push new
-	# commit that only touches uncovered file so curated keys still apply.
+	# commit that only touches uncovered file so guided keys still apply.
 	# Instead: marker after first commit of walk branch before walkthrough
 	# landed — delta range may exclude walkthrough entries.
 	git switch --quiet feature/keys

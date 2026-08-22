@@ -1,7 +1,21 @@
-# git review — VS Code extension
+# git review workflow — VS Code extension
 
-Review a pull request by **editing and running** it, from a panel that shows
-where you are in it.
+> Review a pull request by **editing and running** it, not just reading it. The
+> whole PR lands in your working tree as one staged diff; your fixes are then
+> extracted onto a clean branch automatically. This panel shows where you are in
+> the review and drives every step of it without leaving the editor.
+>
+> And when an **AI agent** wrote the change, it can write the **reading order**
+> too — a walkthrough committed next to the code saying which file to read first
+> and why. The panel picks it up on its own and walks you through the diff in
+> that order, instead of alphabetically.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/EzeVillo/git-review-workflow/blob/main/LICENSE)
+[![Requires git review 0.7.0+](https://img.shields.io/badge/requires-git%20review%200.7.0%2B-blue.svg)](https://github.com/EzeVillo/git-review-workflow#installation)
+
+[Project README](https://github.com/EzeVillo/git-review-workflow#readme) · [Website](https://ezevillo.github.io/git-review-workflow/) · [Changelog](https://github.com/EzeVillo/git-review-workflow/blob/main/vscode-extension/CHANGELOG.md)
+
+---
 
 This is the editor surface of
 [git-review-workflow](https://github.com/EzeVillo/git-review-workflow), a git
@@ -137,7 +151,7 @@ current entry) but locks navigation until you *Continue* or *Undo finish*.
 ## Requirements
 
 - **VS Code 1.75** or newer.
-- **[git-review-workflow](https://github.com/EzeVillo/git-review-workflow) 0.6.0
+- **[git-review-workflow](https://github.com/EzeVillo/git-review-workflow) 0.7.0
   or newer**, discoverable as a git subcommand (`git review -h` works), or
   pointed at directly with the `gitReview.path` setting.
 - A **single-folder workspace.** Multi-root workspaces are not supported: the

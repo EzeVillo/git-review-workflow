@@ -1,6 +1,6 @@
 # Visual Studio Marketplace listing checklist
 
-Use this when publishing `com.ezevillo.gitreview.vs` on
+Use this when publishing `git-review-workflow` on
 [marketplace.visualstudio.com](https://marketplace.visualstudio.com/).
 
 ## Package metadata (in-repo)

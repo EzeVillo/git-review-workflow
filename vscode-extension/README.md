@@ -36,19 +36,23 @@ listing every file in the range, and the assistant closes. Nothing waits on you.
 
 The half-written order shows up in the panel, under **Reading orders you
 started**, with how far along it is (`3/9`, counted by the CLI) and four
-buttons on its row:
+controls on its row — two buttons underneath and two glyphs beside the count:
 
-- **Open** — the file, at the path the CLI reported.
 - **Copy for agent** — puts a one-line instruction naming that file on the
   clipboard, for whatever you want to hand it to. Copying is copying: no
   service is contacted and no assistant is invoked.
 - **Validate and start** — validates it (on the CLI, so a rejection tells you
   exactly what to fix, in the CLI's own words) and, when it passes, starts the
-  review on your order.
-- **Discard** — deletes it, after a confirmation that names the command.
+  review on your order. It stays switched off, with a tooltip saying why, while
+  the order is unfinished or the CLI cannot tell how the draft was generated.
+- Beside the count, **open the reading order** — the file, at the path the CLI
+  reported — and **discard** it, after a confirmation that names the command.
 
-The progress on the row follows the file: hand the draft to an agent and the
-count moves on its own as it writes, with nobody hitting Refresh.
+The count is one unit per entry plus the `## Heads-up` section, which is what
+`--build` demands too: it reaches `N/N` exactly when no placeholder is left.
+Deleting the whole heads-up section is a legal way to finish it, and the total
+drops when you do. The progress follows the file: hand the draft to an agent
+and the count moves on its own as it writes, with nobody hitting Refresh.
 
 It survives closing the editor, so a reading order you started on Friday is the
 first thing the panel says on Monday. The draft is **yours and local**: it lives
@@ -117,7 +121,7 @@ invents a second way to change review state.
 | **Compare revisions**        | Empty state, under Start; also the palette. The result is **read-only** — no writeback       | `git review compare <a> <b>`                                 |
 | **Walkthrough: Init / Build**| Empty state, under Start (this is the *author* flow); also the palette                       | `git review walkthrough init` / `build`                      |
 | **Build a reading order first** | Inside *Start a review*, at the reading-order step, when the PR has none (the *reviewer* flow) | `git review walkthrough draft`                            |
-| **Open / Copy for agent / Validate and start / Discard** | A row of *Reading orders you started*, in the empty state | `git review walkthrough draft --build`, `git review start`, `git review forget --draft` |
+| **Copy for agent / Validate and start / open / discard** | A row of *Reading orders you started*, in the empty state | `git review walkthrough draft --build`, `git review start`, `git review forget --draft` |
 
 Mutations (the lifecycle actions, clean, forget, compare and writing a
 walkthrough) ask for a confirmation that names what will happen. Preview is

@@ -14,11 +14,11 @@ Requires `git review` **0.7.0** or newer.
 
 - **Reading orders you started, in the panel.** A walkthrough draft you began and have not
   finished now has a place: with no review on this branch, the panel lists every one of them with
-  how far along it is (`3/9`, counted by the CLI) and four buttons on its row — *Open* (the file,
-  at the path the CLI reported), *Copy for agent* (a one-line instruction naming that file, on the
-  clipboard), *Validate and start* (validates it and, when it passes, starts the review on your
-  order) and *Discard*. It survives closing the editor, so an order you started on Friday is the
-  first thing the panel says on Monday. The rest of the empty state — your other reviews, *Start a
+  how far along it is (`3/9`, counted by the CLI) and four controls on its row — *Copy for agent*
+  (a one-line instruction naming that file, on the clipboard), *Validate and start* (validates it
+  and, when it passes, starts the review on your order), plus two glyphs beside the count that
+  open the file at the path the CLI reported and discard it. It survives closing the editor, so an
+  order you started on Friday is the first thing the panel says on Monday. The rest of the empty state — your other reviews, *Start a
   review*, the settings — stays right below it.
 - Copying is copying: no service is contacted, no assistant is invoked, and nothing about the
   draft is written for you.
@@ -32,11 +32,12 @@ Requires `git review` **0.7.0** or newer.
   the drafts in, and nothing else.
 - **One emphatic button per draft row, and the progress picks which.** While entries are missing
   the row leads with *Copy for agent*; with the order complete, with *Validate and start*. The
-  four controls are always there and in the same order, in two even columns: the row no longer
-  changes shape with its state, so every row of the block lines up with the one beside it.
-  *Validate and start* is now switched off — with a tooltip saying why — instead of disappearing
-  when the CLI cannot tell how the draft was generated, *Open* carries a label of its own, and
-  *Discard*, the one irreversible control of the row, loses its fill.
+  four controls are always there and in the same order, so the row no longer changes shape with
+  its state and every row of the block lines up with the one beside it: the two that move the flow
+  along sit in two even columns underneath, and the two that act on the file itself — open it,
+  discard it — ride the progress count as glyphs. *Validate and start* is switched off, with a
+  tooltip saying which of the two reasons applies: the reading order is still unfinished, or the
+  CLI cannot tell how the draft was generated. It is never missing.
 - **The start assistant no longer waits.** Choosing to build a reading order writes the skeleton
   and closes the assistant: no notice left open, nothing to keep alive while you type. Everything
   the notice used to do — validating, asking whether to read the whole order or only the entries

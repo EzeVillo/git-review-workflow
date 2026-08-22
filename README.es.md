@@ -916,9 +916,14 @@ git review config --porcelain [<rama>]    # legible por máquina + candidatas
   un registro por cada uno, **con y sin argumento de rama** — un borrador es un
   hecho del working tree, no de la rama que consultaste. `<path>` es absoluta y
   ya resuelta, así que el cliente la abre y nunca la arma;
-  `<annotated>`/`<total>` es el avance contado sobre el archivo (un esqueleto
-  recién generado es `0/N`, y `<annotated> == <total>` no promete que `--build`
-  vaya a pasar); `<source>` (`remote` \| `local` \| `offline`) y `<range>`
+  `<annotated>`/`<total>` es el avance contado sobre el archivo: una unidad por
+  encabezado de entrada más la sección `## Heads-up` cuando tiene algo escrito,
+  así que un esqueleto recién generado sobre N archivos es `0/N+1`. Borrar la
+  sección entera es legal, y ahí el total baja en vez de quedar fuera de
+  alcance. `<annotated> == <total>` dice que no queda ningún placeholder de los
+  que `--build` rechaza — sigue sin prometer que `--build` vaya a pasar, porque
+  el rango pudo haber derivado por debajo. `<source>` (`remote` \| `local` \|
+  `offline`) y `<range>`
   (`full` \| `delta`) son los flags con los que se generó el borrador, leídos de
   su bloque de instrucciones, y valen `unknown` si ese bloque se borró a mano. El
   borrador de una review pausada no aparece — no por una regla, sino porque

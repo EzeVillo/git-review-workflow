@@ -595,28 +595,36 @@ class PanelRenderer(
             // The progress rides the header instead of a line of its own: it is
             // a badge-sized fact about the branch, and one loose line per row
             // multiplied the height of the block for nothing.
+            //
+            // The ICON controls ride it too, right after the pair that names
+            // their subject. Which half of the row a control lands in is read
+            // off its emphasis and decided nowhere else: the layout already
+            // says which of the four are glyphs.
+            val (glyphs, labelled) = r.controls.partition { it.emphasis == Emphasis.ICON }
+            val right = ArrayList<JComponent>()
+            right.add(chipLabel(r.meta))
+            for (c in glyphs) {
+                right.add(renderControl(c))
+            }
             box.add(
                 stacked(
-                    headerRow(
-                        listOf(monoLabel(r.name, muted = false)),
-                        listOf(chipLabel(r.meta)),
-                    ),
+                    headerRow(listOf(monoLabel(r.name, muted = false)), right),
                 ),
             )
             // A grid of two even columns, not a row that wraps: at sidebar
-            // width the four controls do not fit on one line, and wrapping
-            // them broke every row in a different place — none lined up with
-            // the one beside it. Four even cells always do.
-            val actions = JPanel(GridLayout(2, 2, 4, 4))
+            // width two long labels do not fit on one line of free widths, and
+            // wrapping them broke every row in a different place — none lined
+            // up with the one beside it. Even cells always do.
+            val actions = JPanel(GridLayout(1, labelled.size, 4, 4))
             actions.background = chrome.background()
             actions.alignmentX = Component.LEFT_ALIGNMENT
-            for (c in r.controls) {
+            for (c in labelled) {
                 actions.add(renderControl(c))
             }
             box.add(stacked(actions))
-            // A draft row is four cells over two lines, so it needs more air
-            // under it than an inventory one: two in a row must not read as a
-            // single eight-button pane.
+            // Two draft rows in a row need more air between them than two
+            // inventory ones: each is a header with glyphs plus its own button
+            // pair, and without the gap the two read as a single pane.
             box.add(Box.createVerticalStrut(10))
         }
         return box
@@ -674,6 +682,7 @@ class PanelRenderer(
                     ControlId.NEXT -> chrome.iconNext()
                     ControlId.COPY_CLI_INSTALL -> chrome.iconCopy()
                     ControlId.OPEN_DRAFT -> chrome.iconFile()
+                    ControlId.DISCARD_DRAFT -> chrome.iconTrash()
                     else -> null
                 }
                 if (icon != null) {
@@ -684,12 +693,16 @@ class PanelRenderer(
                         ControlId.NEXT -> chrome.glyphNext()
                         ControlId.COPY_CLI_INSTALL -> chrome.glyphCopy()
                         ControlId.OPEN_DRAFT -> chrome.glyphFile()
+                        ControlId.DISCARD_DRAFT -> chrome.glyphTrash()
                         // Un id de icono sin glifo cae al nombre accesible, que
                         // es una oracion: el control se vuelve el mas ancho de
                         // su fila, que es justo lo que un icono viene a evitar.
                         else -> c.accessibleName
                     }
                 }
+                // The name is the floor; the tooltip proper, when the layout
+                // gave the control one, replaces it at the bottom of this
+                // function along with every other emphasis.
                 b.toolTipText = c.accessibleName
                 b.accessibleContext.accessibleName = c.accessibleName
                 b
@@ -721,15 +734,6 @@ class PanelRenderer(
                         b.border = chrome.emptyBorder()
                     }
                     Emphasis.PRIMARY -> chrome.markPrimary(b)
-                    // A step below SECONDARY: no fill, no border, in the color
-                    // of the meta. The label still carries the button's padding
-                    // so the cell keeps the width of the one beside it.
-                    Emphasis.QUIET -> {
-                        b.isBorderPainted = false
-                        b.isContentAreaFilled = false
-                        b.isOpaque = false
-                        b.foreground = chrome.mutedForeground()
-                    }
                     else -> Unit
                 }
                 b

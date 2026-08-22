@@ -553,9 +553,12 @@ describe("panelHtml", () => {
             !/if \(draft\.startable\)/.test(draftFn),
             "ningun control de la fila se dibuja detras de una guarda de presencia"
         );
+        for (const id of ["copyDraftPrompt", "startFromDraft", "openDraft", "discardDraft"]) {
+            assert.ok(draftFn.includes('"' + id + '"'), id + " se dibuja en toda fila");
+        }
         assert.ok(
-            /go\.disabled = model\.busy \|\| !draft\.startable;/.test(draftFn),
-            "startable apaga el control, no lo saca"
+            /go\.disabled = model\.busy \|\| !draft\.startable \|\| !filled;/.test(draftFn),
+            "los dos motivos apagan el control, no lo sacan"
         );
         assert.ok(
             draftFn.includes(
@@ -565,77 +568,86 @@ describe("panelHtml", () => {
         );
     });
 
-    it("Validate and start nunca se deshabilita por progreso", () => {
-        // El conteo sale del disco y el revisor puede tener el borrador abierto
-        // con cambios sin guardar: saveOpenDraft los guarda antes de validar,
-        // asi que grisarlo mentiria justo al terminar de escribir.
+    it("Validate and start se apaga con el orden a medio escribir, y lo dice", () => {
+        // El par annotated/total cuenta todo lo que build exige -- una unidad
+        // por entrada mas el heads-up --, asi que annotated == total es la
+        // misma pregunta que "queda algun placeholder?". Encendido sobre un
+        // borrador incompleto, ofrecia un start que moria en la validacion.
         const draftFn = html.slice(
             html.indexOf("function renderDraft("),
             html.indexOf("function renderDrafts(")
         );
         assert.ok(
-            !/go\.disabled = [^;]*(annotated|total|filled)/.test(draftFn),
-            "el progreso no puede deshabilitar el control"
+            /go\.disabled = [^;]*\|\| !filled;/.test(draftFn),
+            "el progreso apaga el control"
+        );
+        // Los dos motivos son frases distintas y el de los flags manda: sin
+        // bloque de instrucciones, llenar el borrador no destraba nada.
+        assert.ok(
+            /go\.title = !draft\.startable$/m.test(draftFn),
+            "el motivo de los flags se evalua primero"
+        );
+        assert.ok(
+            draftFn.includes(
+                "Every entry needs a number and a why, and the heads-up needs prose or deleting"
+            ),
+            "y el del progreso dice que le falta al borrador"
         );
     });
 
-    it("Open es un boton con etiqueta, y lo que se lee en voz alta nombra la fila", () => {
-        // El borrador vive fuera del arbol versionado y este control es la
-        // unica superficie que lo abre: baja de peso, no desaparece. En una
-        // celda de ancho fijo la etiqueta ya no fuerza el wrap que motivo el
-        // icono, y un glifo suelto entre tres etiquetas no dice que abre.
+    it("Open y Discard son los dos glifos de la cabecera, al lado del progreso", () => {
+        // No mueven el flujo, se usan una vez cada tanto y su sujeto es el
+        // archivo que el par annotated/total acaba de nombrar. Con los cuatro
+        // juntos la fila medía el doble, y un boton sin caja entre botones con
+        // caja se lee como deshabilitado -- un icono no.
         const draftFn = html.slice(
             html.indexOf("function renderDraft("),
             html.indexOf("function renderDrafts(")
         );
         assert.ok(
-            /button\("Open", "openDraft", null, null, index\)/.test(draftFn),
-            "etiqueta visible, sin enfasis propio, con el indice de su fila"
-        );
-        assert.ok(
-            /open\.setAttribute\("aria-label", "Open the reading order"\)/.test(draftFn),
-            "\"Open\" a secas se repite una vez por fila: el nombre accesible es la oracion"
+            /iconButton\("file", "openDraft", "Open the reading order", index\)/.test(draftFn),
+            "Open es un glifo, y lo que se lee en voz alta nombra la fila"
         );
         assert.ok(
             /open\.title = "Open the reading order for editing"/.test(draftFn),
             "el tooltip sigue diciendo que se abre para editar"
         );
         assert.ok(
-            !/iconButton\([^)]*"openDraft"/.test(html),
-            "ya no queda un control de icono para openDraft"
-        );
-    });
-
-    it("Discard es el ultimo de la fila y pierde la caja", () => {
-        // Es el unico irreversible de la fila: sin relleno baja un escalon sin
-        // salirse de su celda, y un clic de paso no cae sobre algo que parece
-        // un boton. El hueco que antes lo separaba no cabe en una grilla.
-        const draftFn = html.slice(
-            html.indexOf("function renderDraft("),
-            html.indexOf("function renderDrafts(")
+            /iconButton\("trash", "discardDraft", "Discard the reading order", index\)/.test(draftFn),
+            "Discard tambien, con un nombre propio y no la etiqueta de antes"
         );
         assert.ok(
-            /button\("Discard", "discardDraft", "quiet", null, index\)/.test(draftFn),
-            "el destructivo lleva la clase que le saca la caja"
+            /discard\.disabled = model\.busy/.test(draftFn),
+            "el destructivo se apaga durante una mutacion"
         );
         assert.ok(
-            draftFn.lastIndexOf("discardDraft") > draftFn.lastIndexOf("startFromDraft"),
-            "va despues del control de compromiso"
+            /discard\.title = "git review forget --draft \(with confirmation\)"/.test(draftFn),
+            "y el hover dice que comando corre"
+        );
+        // Van en la cabecera, no en la botonera: el orden del codigo es el que
+        // los pone al lado del badge.
+        assert.ok(
+            draftFn.indexOf('rev-head-actions') < draftFn.indexOf('el("div", "draft-actions")'),
+            "los glifos se arman antes que la botonera, en la cabecera"
         );
         assert.ok(
-            /\.draft-actions button\.quiet \{[^}]*background: none;[^}]*\}/.test(html),
-            "sin relleno propio"
+            /head\.appendChild\(rowIcons\)/.test(draftFn),
+            "y se cuelgan de la cabecera, no del cuerpo"
         );
         assert.ok(
-            /\.draft-actions button\.quiet \{[^}]*var\(--vscode-descriptionForeground\)[^}]*\}/.test(html),
-            "en el color de la meta, no en el del cuerpo"
+            !/button\("(Open|Discard)"/.test(draftFn),
+            "ya no queda ninguno de los dos como boton con etiqueta"
         );
+        // El glifo del tacho tiene que existir en el catalogo: ICONS[name] sin
+        // entrada es un throw en el render, no un icono que falta.
+        assert.ok(/^    trash: \[/m.test(html), "el tacho esta en el catalogo de iconos");
     });
 
     it("la botonera del borrador es una grilla de dos columnas, no una fila que envuelve", () => {
-        // A ancho de sidebar los cuatro no entran en una linea, y envolviendolos
-        // cada fila del bloque partia en un lugar distinto: ninguna se alineaba
-        // con la de al lado. Cuatro celdas iguales se alinean siempre.
+        // A ancho de sidebar dos etiquetas largas no entran en una linea de
+        // anchos libres, y envolviendolas cada fila del bloque partia en un
+        // lugar distinto: ninguna se alineaba con la de al lado. Celdas
+        // iguales se alinean siempre.
         assert.ok(
             /\.draft-actions \{[^}]*display: grid;[^}]*\}/.test(html),
             "grilla, no flex con wrap"

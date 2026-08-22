@@ -35,11 +35,14 @@ First release of the Visual Studio client. Requires `git review` **0.7.0** or ne
   reverted says there is nothing left to compare.
 - **Reading orders you started, in the panel.** A walkthrough draft you began and have not
   finished has a place: with no review on this branch, the panel lists every one of them
-  with how far along it is (`3/9`, counted by the CLI) and four buttons on its row —
-  *Open* (the file, at the path the CLI reported), *Copy for agent* (a one-line
-  instruction naming that file, on the clipboard), *Validate and start* (validates it and,
-  when it passes, starts the review on your order) and *Discard*. It survives closing the
-  IDE, so an order you started on Friday is the first thing the panel says on Monday. The
+  with how far along it is (`3/9`, counted by the CLI) and four controls on its row —
+  *Copy for agent* (a one-line instruction naming that file, on the clipboard), *Validate
+  and start* (validates it and, when it passes, starts the review on your order), plus two
+  glyphs beside the count that open the file at the path the CLI reported and discard it.
+  *Validate and start* stays switched off — with a tooltip saying why — while the reading
+  order is unfinished or the CLI cannot tell how the draft was generated. It survives
+  closing the IDE, so an order you started on Friday is the first thing the panel says on
+  Monday. The
   rest of the empty state — your other reviews, *Start a review*, the settings — stays
   right below it.
 - Copying is copying: no service is contacted, no assistant is invoked, and nothing about

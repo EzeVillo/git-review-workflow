@@ -331,7 +331,7 @@ function collectCanonicalControls() {
   // conteo fijo de 27 de arriba no los cuenta y no se toca.
   const draftBlock = text.split(/^draft_controls:\s*$/m)[1]?.split(/^[a-z_][a-z0-9_]*:/m)[0] ?? "";
   const draftRe =
-    /^ {2}([A-Za-z][A-Za-z0-9]*):\s*\{label:\s*(null|"[^"]*")\s*,\s*(?:accessible_name:\s*"([^"]*)"\s*,\s*)?emphasis:\s*(primary|secondary|link|icon|quiet)\s*(?:,\s*emphasis_unfilled:\s*(primary|secondary))?\s*,\s*confirms:\s*(true|false)(?:\s*,\s*tooltip_disabled:\s*"([^"]*)")?\}/gm;
+    /^ {2}([A-Za-z][A-Za-z0-9]*):\s*\{label:\s*(null|"[^"]*")\s*,\s*(?:accessible_name:\s*"([^"]*)"\s*,\s*)?emphasis:\s*(primary|secondary|link|icon)\s*(?:,\s*emphasis_unfilled:\s*(primary|secondary))?\s*,\s*confirms:\s*(true|false)(?:\s*,\s*tooltip_disabled:\s*"([^"]*)")?(?:\s*,\s*tooltip_unfilled:\s*"([^"]*)")?\}/gm;
   let dm;
   while ((dm = draftRe.exec(draftBlock)) !== null) {
     // Un control con emphasis_unfilled tiene DOS enfasis validos —el cliente
@@ -347,6 +347,7 @@ function collectCanonicalControls() {
       raw: false,
       confirms: dm[6] === "true",
       tooltipDisabled: dm[7] || null,
+      tooltipUnfilled: dm[8] || null,
     });
   }
   return controls;
@@ -397,6 +398,13 @@ for (const c of canonicalControls) {
   if (c.tooltipDisabled) {
     requireSharedCopy(`disabled tooltip of ${c.id}`, c.tooltipDisabled, false);
   }
+  // El otro motivo por el que el mismo control puede estar apagado. Se verifica
+  // aparte y no como variante del anterior porque son dos frases distintas: si
+  // un cliente pierde una y deja la otra, el control sigue diciendo algo, y lo
+  // que dice es el motivo equivocado.
+  if (c.tooltipUnfilled) {
+    requireSharedCopy(`unfilled tooltip of ${c.id}`, c.tooltipUnfilled, false);
+  }
   // El nombre accesible de un control CON etiqueta: es copy propia, no la
   // etiqueta, y sin verificarla el aria-label se cae de un cliente sin que
   // nadie lo note (uno de icono ya se verifica por su iconButton).
@@ -412,8 +420,6 @@ for (const c of canonicalControls) {
 function emphasisFromClassArg(classArg) {
   if (classArg === "null" || classArg === undefined) return "secondary";
   if (classArg === '"primary"' || classArg === "'primary'") return "primary";
-  // Un destructivo sin caja: menos que secondary, y el canonico lo declara asi.
-  if (classArg === '"quiet"' || classArg === "'quiet'") return "quiet";
   const cond = /^[A-Za-z_$][\w$]*\s*\?\s*(null|"primary")\s*:\s*(null|"primary")$/.exec(classArg);
   if (cond) {
     return [cond[1], cond[2]].map((v) => (v === "null" ? "secondary" : "primary")).join("|");

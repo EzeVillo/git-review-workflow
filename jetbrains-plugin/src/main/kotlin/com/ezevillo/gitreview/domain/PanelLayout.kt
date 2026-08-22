@@ -10,14 +10,12 @@ const val SKELETON_DELAY_MS: Long = 120
 const val WHY_CEILING_MS: Long = 800
 
 enum class Emphasis {
-    /** No fill of its own, in the color of the meta: a step below SECONDARY. */
-    PRIMARY, SECONDARY, QUIET, LINK, ICON;
+    PRIMARY, SECONDARY, LINK, ICON;
 
     val id: String
         get() = when (this) {
             PRIMARY -> "primary"
             SECONDARY -> "secondary"
-            QUIET -> "quiet"
             LINK -> "link"
             ICON -> "icon"
         }
@@ -156,6 +154,11 @@ data class FileRow(
 /**
  * A row of the draft block: the branch, the progress exactly as the CLI reports
  * it, and the controls that act on THAT row.
+ *
+ * One list, two places on the row: the labelled controls are the button pair
+ * underneath, and the ICON ones are drawn in the header beside the progress —
+ * the pair names their subject, and neither of them moves the flow along. The
+ * renderer splits on the emphasis; the order inside each half is this one.
  */
 data class DraftRow(
     val name: String,
@@ -784,53 +787,66 @@ private fun draftRows(model: PanelModel): Block.DraftRows {
                 index = index,
             ),
         )
-        // Always drawn, switched off when the CLI does not know the origin and
-        // range the draft was generated with: invoking with the defaults would
-        // fail with a drift error every time. Off says as little about the
-        // flags as absent did, and unlike absent it can say why.
+        // Always drawn, switched off for two different reasons, each of which
+        // says its own thing. The flags come first: with no instruction block
+        // the build fails on drift however complete the order is, so filling it
+        // in is not the next step there.
+        //
+        // Off by progress is what makes the pair honest. The skeleton leaves a
+        // placeholder per entry AND one for the heads-up, the pair counts all
+        // of them, and build refuses on any of them alike — left on, the one
+        // emphatic control of the row offered a start that died on "the
+        // heads-up placeholder is still there". The known cost: the count comes
+        // off the disk, so a draft open with unsaved edits keeps the control
+        // gray until Ctrl+S (the host watches the draft's directory, so saving
+        // refreshes the panel on its own), and in exchange nobody starts over a
+        // half-written reading order.
         controls.add(
             ctrl(
                 ControlId.START_FROM_DRAFT,
                 "Validate and start",
                 if (filled) Emphasis.PRIMARY else Emphasis.SECONDARY,
-                // Never disabled by the progress: the count comes off the disk
-                // and the draft can be open with unsaved edits, which the
-                // client saves before it validates.
-                enabled = enabled && d.startable,
-                tooltip = if (d.startable) {
+                enabled = enabled && d.startable && filled,
+                tooltip = if (!d.startable) {
+                    "This draft has no instruction block, so the CLI cannot tell how it was generated"
+                } else if (filled) {
                     "git review walkthrough draft --build, then start"
                 } else {
-                    "This draft has no instruction block, so the CLI cannot tell how it was generated"
+                    "Every entry needs a number and a why, and the heads-up needs prose or deleting"
                 },
                 index = index,
             ),
         )
-        // The draft lives outside the versioned tree and this control is the
-        // one surface that opens it. It carries a label and not a glyph: in a
-        // cell of even width the label no longer forces the wrap the icon was
-        // there to avoid, and an icon among three labels does not say what it
-        // opens. What is read out is the sentence — "Open" on its own repeats
-        // once per row and names none of them.
+        // The two controls of the ROW, and that is why they leave the button
+        // pair: they move nothing along, they are used once in a while, and
+        // their subject is the file the progress pair just named. They are
+        // drawn as glyphs beside that pair, which leaves two controls below in
+        // two columns and a single line. With all four together the row was
+        // twice as tall and the irreversible one shared box and weight with the
+        // one that starts the review — dropping its fill lowered it a step, but
+        // a box-less button among boxed buttons reads as disabled. An icon does
+        // not.
+        //
+        // With no visible label the accessible name IS the name of the control,
+        // and it names the row: "Open" on its own repeats once per draft.
         controls.add(
             ctrl(
                 ControlId.OPEN_DRAFT,
-                "Open",
-                Emphasis.SECONDARY,
+                null,
+                Emphasis.ICON,
                 enabled = true,
                 accessibleName = "Open the reading order",
                 tooltip = "Open the reading order for editing",
                 index = index,
             ),
         )
-        // The one irreversible control of the row: with no fill it drops a step
-        // without leaving its cell, and a click in passing no longer lands on
-        // something shaped like a button.
         controls.add(
             ctrl(
                 ControlId.DISCARD_DRAFT,
-                "Discard",
-                Emphasis.QUIET,
+                null,
+                Emphasis.ICON,
                 enabled = enabled,
+                accessibleName = "Discard the reading order",
                 tooltip = "git review forget --draft (with confirmation)",
                 index = index,
             ),

@@ -547,10 +547,12 @@ walk_gitdir_abs_init() {
 # that produced walk_entry_fields).
 #
 # Definitions, from data-model.md:
-#   total      every entry heading the file declares, numbered and "## ?." alike
+#   total      every entry heading the file declares, numbered and "## ?." alike,
+#              PLUS the "## Heads-up" section whenever it holds anything at all
 #   annotated  an entry that has BOTH a numeric position and a resolved why --
 #              at least one non-blank body line that is not "> key" or "> at: ",
-#              and no line opening with "<!-- why"
+#              and no line opening with "<!-- why". The heads-up is annotated
+#              once no "<!-- heads-up" placeholder is left in the preamble.
 #   source     remote | local | offline, and range full | delta, read off the
 #              "Generated with:" line of the instruction block, which is the
 #              only place that datum lives. Both are "unknown" when the block is
@@ -559,6 +561,20 @@ walk_gitdir_abs_init() {
 # The count is over the FILE, never crossed with the range: a draft that has
 # drifted still reports its progress, and annotated == total promises nothing
 # about whether --build will pass.
+#
+# The heads-up is a unit of the pair and not a rule of its own, because build
+# rejects its placeholder exactly the way it rejects an unfilled why. Left out
+# of the count, the commonest skeleton there is -- one file in the range, its
+# heads-up untouched -- reported 1/1, so the panel drew the reading order as
+# finished and the build behind Validate and start died on "the heads-up
+# placeholder is still there". It counts only when the section holds SOMETHING,
+# which is what keeps the pair in step with build in the other direction too:
+# deleting the whole section is legal (an empty one is worse than none), so a
+# draft whose author deleted it goes from 1/2 to 1/1 instead of sitting one
+# short of a total it can no longer reach. The placeholder is spotted with
+# build's own anchored rule and over the whole preamble rather than inside the
+# section, so a comment that outlived its heading still counts against the pair
+# -- otherwise the panel would offer a start the CLI is about to refuse.
 #
 # Two shapes worth knowing about, both deliberate:
 #
@@ -576,8 +592,22 @@ walk_draft_progress() {
 			if (inentry && numbered && prose && !whyc) ann[cur]++
 			inentry = 0
 		}
-		FNR == 1 {
+		# The heads-up is settled once per FILE and not at the heading that ends
+		# its section, because the placeholder rule it mirrors is a preamble-wide
+		# one: build looks for "<!-- heads-up" anywhere before the first entry,
+		# so a comment that outlived its own heading still counts against it.
+		function close_file() {
 			close_entry()
+			if (huseen || huph) {
+				tot[cur]++
+				if (!huph) ann[cur]++
+			}
+			huopen = 0
+			huseen = 0
+			huph = 0
+		}
+		FNR == 1 {
+			close_file()
 			cur = FILENAME
 			seen[cur] = 1
 			ann[cur] = 0
@@ -585,6 +615,7 @@ walk_draft_progress() {
 			src[cur] = "unknown"
 			rng[cur] = "unknown"
 			inblock = 0
+			preamble = 1
 			if (index($0, bom) == 1) $0 = substr($0, length(bom) + 1)
 		}
 		{ sub(/\r$/, "") }
@@ -606,21 +637,35 @@ walk_draft_progress() {
 		/^## / {
 			close_entry()
 			line = substr($0, 4)
+			sub(/[ \t]+$/, "", line)
 			if (match(line, /^[0-9]+\. /)) {
 				tot[cur]++
 				inentry = 1
 				numbered = 1
 				prose = 0
 				whyc = 0
+				preamble = 0
+				huopen = 0
 			} else if (match(line, /^\?\. /)) {
 				tot[cur]++
 				inentry = 1
 				numbered = 0
 				prose = 0
 				whyc = 0
+				preamble = 0
+				huopen = 0
+			} else {
+				# Every other heading closes the heads-up section without being
+				# one. Only the heading the skeleton writes opens it, matched as
+				# loosely about case as the readers are about the key marker.
+				huopen = (preamble && tolower(line) == "heads-up")
 			}
 			next
 		}
+		# Build refuses on the anchored comment over the preamble as a whole, so
+		# this looks for it there and not inside the section.
+		preamble && index($0, "<!-- heads-up") == 1 { huph = 1 }
+		huopen && $0 ~ /[^ \t]/ { huseen = 1 }
 		inentry {
 			if (index($0, "<!-- why") == 1) { whyc = 1; next }
 			# As lenient about spelling as the build-time key_re, and for the
@@ -635,7 +680,7 @@ walk_draft_progress() {
 			if ($0 ~ /[^ \t]/) prose = 1
 		}
 		END {
-			close_entry()
+			close_file()
 			for (i = 1; i < ARGC; i++) {
 				f = ARGV[i]
 				if (f in seen)

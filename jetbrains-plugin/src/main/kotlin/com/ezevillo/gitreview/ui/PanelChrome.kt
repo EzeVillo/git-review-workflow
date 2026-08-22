@@ -71,11 +71,15 @@ interface PanelChrome {
     fun iconCopy(): Icon?
     fun iconDiff(): Icon?
     fun iconFile(): Icon?
+    fun iconTrash(): Icon?
     /** Fallback glyph when platform icons are unavailable (preview). */
     fun glyphPrev(): String = "◀"
     fun glyphNext(): String = "▶"
     fun glyphCopy(): String = "⎘"
     fun glyphFile(): String = "▤"
+    // BMP y de un solo ancho, como los demas: un codepoint astral (el tacho de
+    // verdad, U+1F5D1) sale como caja vacia en la fuente que de el tema.
+    fun glyphTrash(): String = "✕"
 }
 
 class PluginPanelChrome : PanelChrome {
@@ -120,6 +124,7 @@ class PluginPanelChrome : PanelChrome {
     override fun iconCopy(): Icon = AllIcons.Actions.Copy
     override fun iconDiff(): Icon = AllIcons.Actions.Diff
     override fun iconFile(): Icon = AllIcons.FileTypes.Any_type
+    override fun iconTrash(): Icon = AllIcons.Actions.GC
 }
 
 class PreviewPanelChrome : PanelChrome {
@@ -179,4 +184,5 @@ class PreviewPanelChrome : PanelChrome {
     override fun iconCopy(): Icon? = null
     override fun iconDiff(): Icon? = null
     override fun iconFile(): Icon? = null
+    override fun iconTrash(): Icon? = null
 }

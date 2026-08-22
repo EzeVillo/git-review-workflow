@@ -197,7 +197,7 @@ public class PanelLayoutInvariantsTests
     [Fact]
     public void Emphasis_and_control_ids_are_the_wire_names()
     {
-        Assert.Equal(new[] { "primary", "secondary", "quiet", "link", "icon" },
+        Assert.Equal(new[] { "primary", "secondary", "link", "icon" },
             Enum.GetValues<Emphasis>().Select(e => e.Id()));
         // 29 ids: 24 body plus the 5 title-bar ones. The body count grew by the
         // draft block's four (012) — controls of a ROW, not product actions: the

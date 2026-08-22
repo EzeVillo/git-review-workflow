@@ -352,14 +352,18 @@ inventory_controls:
 # leía como un amontonamiento. Apagado no adivina los flags más que ausente
 # (sigue sin poder invocarse) y encima dice por qué, que un control que no está
 # no puede decir.
+#
+# Están en DOS lugares de la fila y eso también es fijo: los dos con etiqueta
+# —los que mueven el flujo— en la botonera, y los dos de icono —los que actúan
+# sobre el archivo de esa fila— pegados al par annotated/total de la cabecera.
 draft_controls:
-  # Los cuatro entran en dos columnas de ancho parejo, y ahí el énfasis es lo
-  # único que se mueve. Sigue al progreso y el ORDEN no: mientras falten
-  # entradas el paso siguiente es llenar el borrador, y recién con el orden
-  # completo lo es arrancar la review. `emphasis:` es el valor con el borrador
-  # completo —`total > 0 && annotated >= total`—; `emphasis_unfilled:` el de
-  # todo lo demás, que incluye `total == 0`. Sin la segunda clave el énfasis no
-  # depende del progreso.
+  # Los dos con etiqueta entran en dos columnas de ancho parejo, y ahí el
+  # énfasis es lo único que se mueve. Sigue al progreso y el ORDEN no: mientras
+  # falten entradas el paso siguiente es llenar el borrador, y recién con el
+  # orden completo lo es arrancar la review. `emphasis:` es el valor con el
+  # borrador completo —`total > 0 && annotated >= total`—; `emphasis_unfilled:`
+  # el de todo lo demás, que incluye `total == 0`. Sin la segunda clave el
+  # énfasis no depende del progreso.
   #
   # El `total > 0` no es un borde teórico: la CLI emite el registro `draft` con
   # `0<TAB>0<TAB>unknown<TAB>unknown` tanto para un borrador vaciado a mano como
@@ -372,18 +376,30 @@ draft_controls:
   # necesita que copyDraftPrompt lidere. `total == 0` es "no hay nada acá", no
   # "está completo".
   copyDraftPrompt: {label: "Copy for agent", emphasis: secondary, emphasis_unfilled: primary, confirms: false}
-  # NUNCA disabled por progreso, sólo por busy o por unknown: el conteo sale del
-  # disco y el revisor puede tener el borrador abierto con cambios sin guardar,
-  # que el cliente guarda antes de validar. `tooltip_disabled` es lo que dice en
-  # el caso unknown, y va byte por byte igual en los tres clientes.
-  startFromDraft: {label: "Validate and start", emphasis: primary, emphasis_unfilled: secondary, confirms: true, tooltip_disabled: "This draft has no instruction block, so the CLI cannot tell how it was generated"}
-  # Con etiqueta y no como icono: en una celda de ancho fijo la etiqueta ya no
-  # fuerza el wrap que motivó el glifo, y un icono suelto entre tres etiquetas
-  # no dice qué abre. El `accessible_name` es lo que se lee en voz alta, porque
-  # "Open" a secas se repite una vez por fila y no nombra a cuál pertenece.
-  openDraft: {label: "Open", accessible_name: "Open the reading order", emphasis: secondary, confirms: false}
-  # `quiet`: sin caja, en el color de la meta. Es el único irreversible de la
-  # fila, y quitarle el relleno lo baja un escalón sin sacarlo de su celda — el
-  # hueco de un control separado no cabe en una grilla, y era lo que antes lo
-  # distinguía. Un clic de paso ya no cae sobre algo que parece un botón.
-  discardDraft: {label: "Discard", emphasis: quiet, confirms: true}
+  # Apagado por DOS motivos distintos, cada uno con su copy, y el de los flags
+  # manda: sin bloque de instrucciones el build falla por deriva aunque el
+  # orden esté completo, así que llenarlo no es el paso siguiente ahí.
+  #
+  # `tooltip_unfilled` es el otro, y existe porque el par annotated/total ya
+  # cuenta TODO lo que build exige —una unidad por entrada más el heads-up—,
+  # así que `annotated == total` es ahora la misma pregunta que "¿queda algún
+  # placeholder?". Encendido sobre un borrador incompleto, el único control
+  # enfático de la fila ofrecía un start que moría en "the heads-up placeholder
+  # is still there". El costo conocido: el conteo sale del disco, así que con
+  # el borrador abierto y sin guardar el control sigue gris hasta el Ctrl+S
+  # —los tres clientes vigilan el directorio del borrador, así que el guardado
+  # refresca solo—, y a cambio nadie arranca sobre un orden a medio escribir.
+  startFromDraft: {label: "Validate and start", emphasis: primary, emphasis_unfilled: secondary, confirms: true, tooltip_disabled: "This draft has no instruction block, so the CLI cannot tell how it was generated", tooltip_unfilled: "Every entry needs a number and a why, and the heads-up needs prose or deleting"}
+  # Los dos de la FILA, y por eso salen de la botonera: no mueven el flujo, se
+  # usan una vez cada tanto y su sujeto es el archivo que el par annotated/total
+  # acaba de nombrar. Van como iconos pegados a ese par, lo que deja abajo dos
+  # controles en dos columnas y una sola línea. Con los cuatro juntos la fila
+  # medía el doble y el destructivo compartía caja y peso con el que arranca la
+  # review — sacarle el relleno lo bajaba un escalón, pero un botón sin caja
+  # entre botones con caja se lee como deshabilitado. Un icono no.
+  #
+  # Sin etiqueta visible, así que el `accessible_name` no es un extra: es el
+  # nombre del control, y nombra la fila porque "Open" a secas se repite una vez
+  # por borrador.
+  openDraft: {label: null, accessible_name: "Open the reading order", emphasis: icon, confirms: false}
+  discardDraft: {label: null, accessible_name: "Discard the reading order", emphasis: icon, confirms: true}

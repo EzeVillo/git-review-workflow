@@ -313,18 +313,19 @@ export function panelHtml(nonce: string): string {
     white-space: nowrap;
   }
   /* La botonera de un borrador es una grilla de dos columnas y no una fila que
-     envuelve: a ancho de sidebar los cuatro controles no entran en una línea, y
-     envolviéndolos cada fila del bloque partía en un lugar distinto — ninguna
-     se alineaba con la de al lado ni consigo misma. Cuatro celdas iguales se
-     alinean siempre, y el peso visual queda libre para decir cuál es cuál. */
+     envuelve: a ancho de sidebar dos etiquetas largas no entran en una línea
+     de anchos libres, y envolviéndolas cada fila del bloque partía en un lugar
+     distinto — ninguna se alineaba con la de al lado ni consigo misma. Celdas
+     iguales se alinean siempre, y el peso visual queda libre para decir cuál
+     es cuál. */
   .draft-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: .4em;
   }
-  /* Una fila de borrador ocupa cuatro celdas y dos líneas, así que necesita más
-     aire debajo que una del inventario para que dos filas seguidas no se lean
-     como una sola botonera de ocho. */
+  /* Dos filas de borrador seguidas necesitan más aire entre sí que las del
+     inventario: cada una es una cabecera con iconos más su botonera, y sin el
+     hueco las dos se leen como un solo bloque de controles. */
   .rev.draft { margin-bottom: 1.5em; }
   .rev.draft .rev-head { margin-bottom: .45em; }
   .draft-actions button {
@@ -334,14 +335,26 @@ export function panelHtml(nonce: string): string {
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  /* El único irreversible de la fila pierde la caja: un botón menos que mirar,
-     y lo que queda es texto quieto en el color de la meta. Grita menos que un
-     hueco y no se le puede caer un clic encima de paso. */
-  .draft-actions button.quiet {
+  /* Los dos controles de la FILA, pegados al progreso que nombra su sujeto.
+     Sin caja: en la cabecera, dos botones rellenos pesarían más que la botonera
+     de abajo, que es la que sí mueve el flujo. El fondo aparece en hover, como
+     en la toolbar de una vista de VS Code. */
+  .rev-head-actions {
+    display: flex;
+    align-items: center;
+    /* .rev-head alinea por baseline, que es lo que quiere el nombre contra el
+       badge y no lo que quiere un glifo: sin esto los dos iconos cuelgan por
+       debajo del par que acompañan. */
+    align-self: center;
+    gap: .1em;
+    margin-left: .15em;
+  }
+  .rev-head-actions button {
+    padding: .2em .3em;
     background: none;
     color: var(--vscode-descriptionForeground);
   }
-  .draft-actions button.quiet:hover {
+  .rev-head-actions button:hover:not([disabled]) {
     background: var(--vscode-toolbar-hoverBackground);
     color: var(--vscode-foreground);
   }
@@ -545,6 +558,14 @@ export function panelHtml(nonce: string): string {
     diff: ["M2.5 5.6h8.4", "M8.1 2.8 10.9 5.6 8.1 8.4", "M13.5 10.4H5.1", "M7.9 7.6 5.1 10.4 7.9 13.2"],
     left: ["M10 3.4 5.4 8 10 12.6"],
     right: ["M6 3.4 10.6 8 6 12.6"],
+    // Tapa, asa y cuerpo: el tacho de siempre. Es el único destructivo que se
+    // dibuja como glifo, así que el trazo tiene que leerse a 1em sin la
+    // etiqueta al lado.
+    trash: [
+      "M2.8 4.3h10.4",
+      "M6.4 4.3V3.1a1 1 0 0 1 1-1h1.2a1 1 0 0 1 1 1v1.2",
+      "M4.5 4.3v8.6a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1V4.3"
+    ],
     // Círculo + trazo del ? + punto: legible a 1em en el hint del inventario.
     help: [
       "M8 2.2a5.8 5.8 0 1 0 .01 11.6A5.8 5.8 0 0 0 8 2.2z",
@@ -751,6 +772,23 @@ export function panelHtml(nonce: string): string {
     const head = el("div", "rev-head");
     head.appendChild(el("span", "rev-name", draft.branch));
     head.appendChild(el("span", "badge", draft.annotated + "/" + draft.total));
+
+    // Abrir y descartar son de la FILA, no del paso siguiente: no hacen avanzar
+    // nada, se usan una vez cada tanto y su sujeto es el archivo que el badge
+    // acaba de nombrar. Van pegados al progreso como iconos y dejan la botonera
+    // de abajo con los dos controles del flujo, uno por columna y en una sola
+    // línea — con cuatro, la fila medía el doble y el destructivo compartía
+    // caja y peso con el que arranca la review.
+    const rowIcons = el("div", "rev-head-actions");
+    const open = iconButton("file", "openDraft", "Open the reading order", index);
+    open.title = "Open the reading order for editing";
+    rowIcons.appendChild(open);
+    const discard = iconButton("trash", "discardDraft", "Discard the reading order", index);
+    discard.disabled = model.busy;
+    discard.title = "git review forget --draft (with confirmation)";
+    rowIcons.appendChild(discard);
+    head.appendChild(rowIcons);
+
     box.appendChild(head);
 
     const actions = el("div", "draft-actions");
@@ -773,31 +811,27 @@ export function panelHtml(nonce: string): string {
     copy.title = "Copy an instruction naming this file";
     actions.appendChild(copy);
 
-    // Siempre presente, apagado cuando la CLI no sabe con qué flags se generó
-    // el borrador. Nunca disabled por progreso: el conteo sale del disco y el
-    // borrador puede estar abierto con cambios sin guardar (saveOpenDraft los
-    // guarda antes de validar), así que grisarlo por ahí mentiría justo al
-    // terminar de escribir.
+    // Siempre presente, apagado por dos motivos distintos que dicen lo suyo en
+    // el title. El de los flags va primero: sin bloque de instrucciones el
+    // build falla por deriva aunque el borrador esté completo, así que llenarlo
+    // no es el paso siguiente ahí.
+    //
+    // Apagado por progreso es lo que le hace decir la verdad al par: el
+    // esqueleto trae un placeholder por entrada Y uno de heads-up, y build los
+    // rechaza a todos igual — dejarlo encendido ofrecía un start que moría en
+    // "the heads-up placeholder is still there". El costo conocido es que el
+    // conteo sale del disco: hasta que el borrador abierto se guarde (el
+    // watcher del host refresca el panel con el Changed), el control sigue
+    // gris. Guardar es un Ctrl+S, y arrancar sobre un orden a medio escribir
+    // no tiene vuelta atrás.
     const go = button("Validate and start", "startFromDraft", filled ? "primary" : null, null, index);
-    go.disabled = model.busy || !draft.startable;
-    go.title = draft.startable
-      ? "git review walkthrough draft --build, then start"
-      : "This draft has no instruction block, so the CLI cannot tell how it was generated";
+    go.disabled = model.busy || !draft.startable || !filled;
+    go.title = !draft.startable
+      ? "This draft has no instruction block, so the CLI cannot tell how it was generated"
+      : filled
+        ? "git review walkthrough draft --build, then start"
+        : "Every entry needs a number and a why, and the heads-up needs prose or deleting";
     actions.appendChild(go);
-
-    // El archivo vive en el gitdir, fuera del árbol versionado, y éste es el
-    // único control de toda la extensión que lo abre: no sobra, va abajo.
-    // "Open" a secas se repite una vez por fila y no nombra a cuál pertenece,
-    // así que lo que se lee en voz alta es la oración del canónico.
-    const open = button("Open", "openDraft", null, null, index);
-    open.setAttribute("aria-label", "Open the reading order");
-    open.title = "Open the reading order for editing";
-    actions.appendChild(open);
-
-    const discard = button("Discard", "discardDraft", "quiet", null, index);
-    discard.disabled = model.busy;
-    discard.title = "git review forget --draft (with confirmation)";
-    actions.appendChild(discard);
 
     box.appendChild(actions);
     return box;

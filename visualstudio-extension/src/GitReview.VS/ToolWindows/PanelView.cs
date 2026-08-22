@@ -484,37 +484,51 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             // The progress rides the header instead of a line of its own: it is
             // a badge-sized fact about the branch, and one loose line per row
             // multiplied the height of the block for nothing.
+            //
+            // The Icon controls ride it too, right after the pair that names
+            // their subject. Which half of the row a control lands in is read
+            // off its emphasis and decided nowhere else: the layout already
+            // says which of the four are glyphs.
+            var glyphs = r.Controls.Where(c => c.Emphasis == Emphasis.Icon).ToList();
+            var labelled = r.Controls.Where(c => c.Emphasis != Emphasis.Icon).ToList();
             var header = new Grid();
             header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             var name = MonoLabel(r.Name);
-            var progress = Chip(r.Meta);
+            var right = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            right.Children.Add(Chip(r.Meta));
+            foreach (var c in glyphs)
+            {
+                var glyph = RenderControl(c);
+                glyph.Margin = new Thickness(2, 0, 0, 0);
+                right.Children.Add(glyph);
+            }
             Grid.SetColumn(name, 0);
-            Grid.SetColumn(progress, 1);
+            Grid.SetColumn(right, 1);
             header.Children.Add(name);
-            header.Children.Add(progress);
+            header.Children.Add(right);
             stack.Children.Add(header);
 
-            // A grid of two even columns, not a panel that wraps: at sidebar
-            // width the four controls do not fit on one line, and wrapping them
-            // broke every row of the block in a different place — none lined up
-            // with the one beside it. Four even cells always do.
+            // A grid of even columns, not a panel that wraps: at sidebar width
+            // two long labels do not fit on one line of free widths, and
+            // wrapping them broke every row of the block in a different place —
+            // none lined up with the one beside it. Even cells always do.
             var actions = new UniformGrid
             {
-                Rows = 2,
-                Columns = 2,
+                Rows = 1,
+                Columns = labelled.Count,
                 Margin = new Thickness(0, 4, 0, 0),
             };
-            foreach (var c in r.Controls)
+            foreach (var c in labelled)
             {
                 var cell = RenderControl(c);
                 cell.Margin = new Thickness(0, 0, 4, 4);
                 actions.Children.Add(cell);
             }
             stack.Children.Add(actions);
-            // A draft row is four cells over two lines, so it needs more air
-            // under it than an inventory one: two in a row must not read as a
-            // single eight-button pane.
+            // Two draft rows in a row need more air between them than two
+            // inventory ones: each is a header with glyphs plus its own button
+            // pair, and without the gap the two read as a single pane.
             stack.Children.Add(new Border { Height = 10 });
         }
         return stack;
@@ -623,6 +637,7 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             // is a tofu box in whatever font the theme hands us.
             var icon = c.Id == ControlId.Prev ? "◀"
                 : c.Id == ControlId.OpenDraft ? "▤"
+                : c.Id == ControlId.DiscardDraft ? "✕"
                 : "▶";
             var b = new Button
             {
@@ -631,7 +646,10 @@ public sealed class PanelView : System.Windows.Controls.UserControl
                 Width = 32,
                 Height = 28,
                 IsEnabled = c.Enabled,
-                ToolTip = c.AccessibleName,
+                // The tooltip proper when the layout gave the control one: a
+                // glyph whose hover only repeats its own name says nothing the
+                // glyph did not, and the draft ones carry the command they run.
+                ToolTip = c.Tooltip ?? c.AccessibleName,
             };
             b.Click += (_, _) => ActionRequested?.Invoke(c.Id.Wire(), c.Index, c.SupportLinkId);
             return b;
@@ -655,18 +673,10 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             return link;
         }
 
-        var quiet = c.Emphasis == Emphasis.Quiet;
         var btn = new Button
         {
             Content = c.Label ?? c.AccessibleName,
-            Style = c.Emphasis switch
-            {
-                Emphasis.Primary => _primaryButton,
-                // Bare carries no color setters, which is what leaves the local
-                // assignment below (and its own hover) in charge.
-                Emphasis.Quiet => _bareButton,
-                _ => _secondaryButton,
-            },
+            Style = c.Emphasis == Emphasis.Primary ? _primaryButton : _secondaryButton,
             IsEnabled = c.Enabled,
             Padding = new Thickness(10, 5, 10, 5),
             FontSize = 12,
@@ -675,32 +685,8 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         };
         if (c.Emphasis == Emphasis.Primary) btn.FontWeight = FontWeights.SemiBold;
         // What the button was drawn as, for whoever looks at the rendered tree
-        // rather than at the layout: the disabled states of a filled button and
-        // of a quiet one are different pairs, and --verify checks both.
+        // rather than at the layout: --verify reads the disabled pair off it.
         btn.Tag = c.Emphasis;
-        if (quiet)
-        {
-            // A step below Secondary: no fill, in the color of the meta. It
-            // still takes the padding of a button so its cell keeps the width
-            // of the one beside it.
-            btn.Background = Brushes.Transparent;
-            btn.Foreground = c.Enabled ? _chrome.MutedForeground : _chrome.DisabledForeground;
-            if (c.Enabled)
-            {
-                btn.Cursor = Cursors.Hand;
-                btn.MouseEnter += (_, _) =>
-                {
-                    btn.Background = _chrome.RowHover;
-                    btn.Foreground = _chrome.Foreground;
-                };
-                btn.MouseLeave += (_, _) =>
-                {
-                    btn.Background = Brushes.Transparent;
-                    btn.Foreground = _chrome.MutedForeground;
-                };
-            }
-        }
-
         // A control whose accessible name is not its label says so: "Open" on
         // its own repeats once per draft row and names none of them.
         if (c.AccessibleName != c.Label)

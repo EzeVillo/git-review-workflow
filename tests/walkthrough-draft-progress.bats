@@ -152,9 +152,10 @@ EOF
 @test "a freshly generated skeleton reports zero of N" {
 	run git review walkthrough draft feature/x
 	[ "$status" -eq 0 ]
-	# N is the number of files in the range, and none of them is annotated yet:
-	# every entry is "## ?." with its placeholder intact.
-	[ "$(progress_of feature/x)" = "0/2" ]
+	# N is the number of files in the range PLUS the heads-up, and none of them
+	# is annotated yet: every entry is "## ?." with its placeholder intact, and
+	# so is the heads-up section.
+	[ "$(progress_of feature/x)" = "0/3" ]
 	run grep -c '^## ?\. ' "$DRAFT"
 	[ "$output" = "2" ]
 }
@@ -170,7 +171,124 @@ EOF
 		{ print }
 	' "$DRAFT" >"$DRAFT.x"
 	mv "$DRAFT.x" "$DRAFT"
+	# One entry of three units done: the other entry has no number and the
+	# heads-up placeholder is untouched.
+	[ "$(progress_of feature/x)" = "1/3" ]
+}
+
+# ── the heads-up is a unit of the pair ────────────────────────────────────────
+
+@test "the heads-up placeholder counts against the pair" {
+	write_draft <<'EOF'
+# Walkthrough
+
+## Heads-up
+
+<!-- heads-up: the delicate parts of this PR, in a few lines. DELETE this whole
+     comment and write it as plain text. -->
+
+## 1. a.txt
+why a
+EOF
+	# Two units, one done: the entry is annotated and the heads-up is not. build
+	# refuses on exactly this, so a pair that read 1/1 would have drawn the row
+	# as finished over a reading order that cannot start.
 	[ "$(progress_of feature/x)" = "1/2" ]
+	run git review walkthrough draft --build feature/x
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"the heads-up placeholder is still there"* ]]
+}
+
+@test "prose in the heads-up completes it" {
+	write_draft <<'EOF'
+# Walkthrough
+
+## Heads-up
+
+the lock ordering in a.txt is the subtle part.
+
+## 1. a.txt
+why a
+
+## 2. src/c.txt
+why c
+EOF
+	[ "$(progress_of feature/x)" = "3/3" ]
+	run git review walkthrough draft --build feature/x
+	[ "$status" -eq 0 ]
+}
+
+@test "a deleted heads-up section is not a missing unit" {
+	write_draft <<'EOF'
+# Walkthrough
+
+## 1. a.txt
+why a
+
+## 2. src/c.txt
+why c
+EOF
+	# Deleting the whole section is legal -- an empty heads-up is worse than
+	# none -- so the total drops instead of sitting one short of a number the
+	# draft can no longer reach.
+	[ "$(progress_of feature/x)" = "2/2" ]
+	run git review walkthrough draft --build feature/x
+	[ "$status" -eq 0 ]
+}
+
+@test "a heads-up heading with nothing under it counts as deleted" {
+	write_draft <<'EOF'
+# Walkthrough
+
+## Heads-up
+
+## 1. a.txt
+why a
+
+## 2. src/c.txt
+why c
+EOF
+	# build accepts the bare heading, so the pair has to as well: reporting 2/3
+	# here would gray out a Validate and start that was going to succeed.
+	[ "$(progress_of feature/x)" = "2/2" ]
+	run git review walkthrough draft --build feature/x
+	[ "$status" -eq 0 ]
+}
+
+@test "a heads-up placeholder left without its heading still counts" {
+	write_draft <<'EOF'
+# Walkthrough
+
+<!-- heads-up: deleted the heading and left the comment behind -->
+
+## 1. a.txt
+why a
+EOF
+	# build looks for the comment over the whole preamble, not inside the
+	# section, and the pair follows it there.
+	[ "$(progress_of feature/x)" = "1/2" ]
+	run git review walkthrough draft --build feature/x
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"the heads-up placeholder is still there"* ]]
+}
+
+@test "a why that quotes the placeholder is not an unfilled heads-up" {
+	write_draft <<'EOF'
+# Walkthrough
+
+## 1. a.txt
+documenting the format here: the skeleton writes
+<!-- heads-up: ... -->
+and the author replaces it.
+
+## 2. src/c.txt
+why c
+EOF
+	# Same confinement build uses: quoting a placeholder inside a why is
+	# ordinary prose, and counting it would gray out a start that works.
+	[ "$(progress_of feature/x)" = "2/2" ]
+	run git review walkthrough draft --build feature/x
+	[ "$status" -eq 0 ]
 }
 
 # ── counted over the file, not over the range ─────────────────────────────────

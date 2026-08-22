@@ -167,10 +167,14 @@ describe("US3: el bloque de borradores del panel", function () {
         // contra las entradas del esqueleto y no contra un numero fijo: el
         // fixture es compartido y otra spec puede haber movido main, con lo que
         // el rango de esta rama cambia sin que este test tenga nada que ver.
+        // El +1 es el heads-up: el esqueleto lo deja con su placeholder y build
+        // lo rechaza igual que a un why sin llenar, asi que es una unidad mas
+        // del par y no una regla aparte.
         const skeleton = fs.readFileSync(first.path, "utf8");
         const declared = skeleton.split("\n").filter((line) => line.startsWith("## ?. ")).length;
         assert.ok(declared > 0, skeleton);
-        assert.strictEqual(first.total, declared);
+        assert.ok(/^## Heads-up\s*$/m.test(skeleton), "el esqueleto trae su seccion Heads-up");
+        assert.strictEqual(first.total, declared + 1);
         assert.ok(fs.existsSync(first?.path ?? ""), `la ruta reportada existe: ${first?.path}`);
         assert.ok(path.isAbsolute(first?.path ?? ""), "la ruta es absoluta");
 

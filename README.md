@@ -891,9 +891,13 @@ git review config --porcelain [<branch>]  # machine-readable + candidate branche
   record each, **with or without a `<branch>` argument** — a draft is a fact
   about the working tree, not about the branch you asked after. `<path>` is
   absolute and already resolved, so a client opens it and never builds it;
-  `<annotated>`/`<total>` are the progress counted over the file (a fresh
-  skeleton is `0/N`, and `<annotated> == <total>` is not a promise that
-  `--build` will pass); `<source>` (`remote` \| `local` \| `offline`) and
+  `<annotated>`/`<total>` are the progress counted over the file: one unit per
+  entry heading plus the `## Heads-up` section whenever it holds anything at
+  all, so a fresh skeleton over N files is `0/N+1`. Deleting the whole heads-up
+  section is legal, and there the total drops rather than staying out of reach.
+  `<annotated> == <total>` says every placeholder `--build` refuses is gone —
+  it is still not a promise that `--build` will pass, since the range can have
+  drifted underneath. `<source>` (`remote` \| `local` \| `offline`) and
   `<range>` (`full` \| `delta`) are the flags the draft was generated with, read
   back out of its instruction block, and are both `unknown` when that block was
   deleted by hand. A draft that travelled with a paused review is not listed —

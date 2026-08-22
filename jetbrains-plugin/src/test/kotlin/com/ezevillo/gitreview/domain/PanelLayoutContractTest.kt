@@ -303,49 +303,59 @@ class PanelLayoutContractTest {
     }
 
     @Test
-    fun `validate and start is never disabled by progress, only by busy`() {
-        // El conteo sale del disco y el borrador puede estar abierto con
-        // cambios sin guardar, que el cliente guarda antes de validar:
-        // grisarlo por el progreso mentiria al terminar de escribir.
+    fun `validate and start is disabled while the reading order is unfinished`() {
+        // El par annotated/total cuenta todo lo que build exige —una unidad por
+        // entrada mas el heads-up—, asi que annotated == total es la misma
+        // pregunta que "queda algun placeholder?". Encendido sobre un borrador
+        // incompleto, el control ofrecia un start que moria en la validacion.
+        val yaml = loadCanonical()
+        @Suppress("UNCHECKED_CAST")
+        val spec = (yaml["draft_controls"] as Map<String, Any?>)["startFromDraft"] as Map<*, *>
         val rows = (panelLayout(PanelFixtures.noReviewDrafts()).blocks
             .first { it is Block.DraftRows } as Block.DraftRows).rows
-        assertTrue(rows[0].controls.first { it.id == ControlId.START_FROM_DRAFT }.enabled)
+
+        // rows[0] es 3/9: startable, pero a medio escribir.
+        val unfilled = rows[0].controls.first { it.id == ControlId.START_FROM_DRAFT }
+        assertTrue(!unfilled.enabled, "un orden a medio escribir no arranca")
+        assertEquals(spec["tooltip_unfilled"], unfilled.tooltip, "y dice que le falta")
+
+        // rows[2] es 1/1 con origen y rango conocidos: el unico que arranca.
+        val filled = rows[2].controls.first { it.id == ControlId.START_FROM_DRAFT }
+        assertTrue(filled.enabled, "completo y con flags conocidos: encendido")
+        assertEquals("git review walkthrough draft --build, then start", filled.tooltip)
 
         val busy = (panelLayout(PanelFixtures.noReviewDraftsBusy()).blocks
             .first { it is Block.DraftRows } as Block.DraftRows).rows
-        assertTrue(!busy[0].controls.first { it.id == ControlId.START_FROM_DRAFT }.enabled)
+        assertTrue(!busy[2].controls.first { it.id == ControlId.START_FROM_DRAFT }.enabled)
     }
 
     @Test
-    fun `open draft carries a label of its own and a name that says which one`() {
-        // En una celda de ancho parejo la etiqueta ya no fuerza el wrap que
-        // motivo el icono, y un glifo entre tres etiquetas no dice que abre.
-        // Lo que se lee en voz alta sigue siendo la oracion: "Open" a secas se
-        // repite una vez por fila y no nombra a ninguna.
+    fun `the two controls of the row are glyphs, and their names say which row`() {
+        // Salen de la botonera porque no mueven el flujo: van pegados al par
+        // annotated/total, que es lo que nombra su sujeto. Sin etiqueta
+        // visible el nombre accesible ES el nombre del control, y nombra la
+        // fila: "Open" a secas se repite una vez por borrador.
+        val yaml = loadCanonical()
+        @Suppress("UNCHECKED_CAST")
+        val canonical = yaml["draft_controls"] as Map<String, Any?>
         val rows = (panelLayout(PanelFixtures.noReviewDrafts()).blocks
             .first { it is Block.DraftRows } as Block.DraftRows).rows
-        val open = rows[0].controls.first { it.id == ControlId.OPEN_DRAFT }
-        assertEquals("Open", open.label)
-        assertEquals(Emphasis.SECONDARY, open.emphasis)
-        assertEquals("Open the reading order", open.accessibleName)
-        assertEquals(0, open.index)
-        assertTrue(
-            rows[0].controls.none { it.emphasis == Emphasis.ICON },
-            "ningun control de la fila es un icono",
-        )
-    }
 
-    @Test
-    fun `the irreversible control is last and the only one without a fill`() {
-        // Sin relleno baja un escalon sin salirse de su celda: el hueco que
-        // antes lo separaba no cabe en una grilla.
-        val rows = (panelLayout(PanelFixtures.noReviewDrafts()).blocks
-            .first { it is Block.DraftRows } as Block.DraftRows).rows
+        for (id in listOf(ControlId.OPEN_DRAFT, ControlId.DISCARD_DRAFT)) {
+            @Suppress("UNCHECKED_CAST")
+            val spec = canonical[id.wire] as Map<String, Any?>
+            val control = rows[0].controls.first { it.id == id }
+            assertEquals(null, control.label, "${id.wire} no lleva etiqueta visible")
+            assertEquals(Emphasis.ICON, control.emphasis, "emphasis of ${id.wire}")
+            assertEquals(spec["accessible_name"], control.accessibleName, "name of ${id.wire}")
+            assertEquals(0, control.index, "index of ${id.wire}")
+        }
         assertEquals(
-            listOf(ControlId.DISCARD_DRAFT),
-            rows[0].controls.filter { it.emphasis == Emphasis.QUIET }.map { it.id },
+            listOf(ControlId.OPEN_DRAFT, ControlId.DISCARD_DRAFT),
+            rows[0].controls.filter { it.emphasis == Emphasis.ICON }.map { it.id },
+            "los dos de icono son esos dos, en ese orden",
         )
-        assertEquals(ControlId.DISCARD_DRAFT, rows[0].controls.last().id)
+        assertEquals(ControlId.DISCARD_DRAFT, rows[0].controls.last().id, "el irreversible va ultimo")
     }
 
     @Test

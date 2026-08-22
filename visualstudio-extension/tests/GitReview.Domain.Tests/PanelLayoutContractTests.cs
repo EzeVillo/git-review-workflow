@@ -312,43 +312,52 @@ public class PanelLayoutContractTests
     }
 
     [Fact]
-    public void Validate_and_start_is_never_disabled_by_progress()
+    public void Validate_and_start_is_disabled_while_the_reading_order_is_unfinished()
     {
-        // The count comes off the disk and the draft can be open with unsaved
-        // edits, which the client saves before it validates.
+        // The annotated/total pair counts everything build demands -- one unit
+        // per entry plus the heads-up -- so annotated == total is now the same
+        // question as "is any placeholder left?". Left on over an unfinished
+        // draft, the control offered a start that died in the validation.
+        var canonical = DraftControlSpecs();
         var rows = layoutDraftRows();
-        Assert.True(rows[0].Controls.First(c => c.Id == ControlId.StartFromDraft).Enabled);
+
+        // rows[0] is 3/9: startable, but half-written.
+        var unfilled = rows[0].Controls.First(c => c.Id == ControlId.StartFromDraft);
+        Assert.False(unfilled.Enabled);
+        Assert.Equal(canonical["startFromDraft"].TooltipUnfilled, unfilled.Tooltip);
+
+        // rows[2] is 1/1 with a known origin and range: the only one that starts.
+        var filled = rows[2].Controls.First(c => c.Id == ControlId.StartFromDraft);
+        Assert.True(filled.Enabled);
+        Assert.Equal("git review walkthrough draft --build, then start", filled.Tooltip);
 
         var busy = PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewDraftsBusy())
             .Blocks.OfType<Block.DraftRows>().Single().Rows;
-        Assert.False(busy[0].Controls.First(c => c.Id == ControlId.StartFromDraft).Enabled);
+        Assert.False(busy[2].Controls.First(c => c.Id == ControlId.StartFromDraft).Enabled);
     }
 
     [Fact]
-    public void Open_draft_carries_a_label_of_its_own_and_a_name_that_says_which_one()
+    public void The_two_controls_of_the_row_are_glyphs_and_their_names_say_which_row()
     {
-        // In a cell of even width the label no longer forces the wrap the icon
-        // was there to avoid, and a glyph among three labels does not say what
-        // it opens. What is read out is still the sentence: "Open" on its own
-        // repeats once per row and names none of them.
+        // They leave the button pair because they move nothing along: they ride
+        // the annotated/total pair, which is what names their subject. With no
+        // visible label the accessible name IS the name of the control, and it
+        // names the row: "Open" on its own repeats once per draft.
+        var canonical = DraftControlSpecs();
         var controls = layoutDraftRows()[0].Controls;
-        var open = controls.First(c => c.Id == ControlId.OpenDraft);
-        Assert.Equal("Open", open.Label);
-        Assert.Equal(Emphasis.Secondary, open.Emphasis);
-        Assert.Equal("Open the reading order", open.AccessibleName);
-        Assert.Equal(0, open.Index);
-        Assert.DoesNotContain(controls, c => c.Emphasis == Emphasis.Icon);
-    }
 
-    [Fact]
-    public void The_irreversible_control_is_last_and_the_only_one_without_a_fill()
-    {
-        // With no fill it drops a step without leaving its cell: the gap that
-        // used to set it apart does not fit in a grid.
-        var controls = layoutDraftRows()[0].Controls;
+        foreach (var id in new[] { ControlId.OpenDraft, ControlId.DiscardDraft })
+        {
+            var spec = canonical[id.Wire()];
+            var control = controls.First(c => c.Id == id);
+            Assert.Null(control.Label);
+            Assert.Equal(Emphasis.Icon, control.Emphasis);
+            Assert.Equal(spec.AccessibleName, control.AccessibleName);
+            Assert.Equal(0, control.Index);
+        }
         Assert.Equal(
-            new[] { ControlId.DiscardDraft },
-            controls.Where(c => c.Emphasis == Emphasis.Quiet).Select(c => c.Id).ToArray());
+            new[] { ControlId.OpenDraft, ControlId.DiscardDraft },
+            controls.Where(c => c.Emphasis == Emphasis.Icon).Select(c => c.Id).ToArray());
         Assert.Equal(ControlId.DiscardDraft, controls[controls.Count - 1].Id);
     }
 
@@ -388,7 +397,8 @@ public class PanelLayoutContractTests
         string Emphasis,
         string? EmphasisUnfilled,
         bool Confirms,
-        string? TooltipDisabled);
+        string? TooltipDisabled,
+        string? TooltipUnfilled);
 
     private static Dictionary<string, DraftSpec> DraftControlSpecs()
     {
@@ -410,7 +420,8 @@ public class PanelLayoutContractTests
                 Scalar("emphasis")!,
                 Scalar("emphasis_unfilled"),
                 Scalar("confirms") == "true",
-                Scalar("tooltip_disabled"));
+                Scalar("tooltip_disabled"),
+                Scalar("tooltip_unfilled"));
         }
         return specs;
     }

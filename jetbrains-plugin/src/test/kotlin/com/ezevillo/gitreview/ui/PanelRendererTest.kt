@@ -5,9 +5,11 @@ import com.ezevillo.gitreview.domain.panelLayout
 import com.ezevillo.gitreview.fixtures.PanelFixtures
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.awt.GridLayout
+import javax.swing.JLabel
 import javax.swing.JPanel
 import javax.swing.SwingConstants
 
@@ -160,53 +162,52 @@ class PanelRendererTest {
     }
 
     @Test
-    fun `the draft actions are a grid of two even columns, not a row that wraps`() {
-        // A wrapping row lays the four controls out over as many lines as it
-        // needs and breaks in a different place on every row of the block, so
-        // none lines up with the one beside it. Four even cells always do.
+    fun `the draft actions are a grid of even columns, not a row that wraps`() {
+        // A wrapping row lays the controls out over as many lines as it needs
+        // and breaks in a different place on every row of the block, so none
+        // lines up with the one beside it. Even cells always do.
         val renderer = PanelRenderer(PreviewPanelChrome()) { _, _, _ -> false }
         val root = renderer.render(panelLayout(PanelFixtures.noReviewDrafts()))
-        val discard = PanelRenderer.collectButtons(root)
-            .first { it.toolTipText == "git review forget --draft (with confirmation)" }
+        val copy = PanelRenderer.collectButtons(root)
+            .first { it.text == "Copy for agent" }
 
-        val actions = discard.parent as JPanel
+        val actions = copy.parent as JPanel
         val grid = actions.layout as? GridLayout
         assertTrue(grid != null, "the draft actions are laid out as a grid")
-        assertEquals(2, grid!!.rows, "two rows")
+        assertEquals(1, grid!!.rows, "one line: the two glyphs left the pane")
         assertEquals(2, grid.columns, "two columns")
-        assertEquals(4, actions.componentCount, "one cell per control, no struts between them")
+        assertEquals(2, actions.componentCount, "one cell per labelled control, no struts between them")
     }
 
     @Test
-    fun `open draft carries a label of its own and a name that says which one`() {
-        // In a cell of even width the label no longer forces the wrap the icon
-        // was there to avoid, and a glyph among three labels does not say what
-        // it opens. "Open" on its own repeats once per row, so what is read out
-        // is the sentence.
+    fun `the two controls of the row are glyphs in the header, beside the progress`() {
+        // They move nothing along and their subject is the file the progress
+        // pair just named, so they ride that pair instead of the button pane.
+        // With no visible label the accessible name IS the name of the control.
         val renderer = PanelRenderer(PreviewPanelChrome()) { _, _, _ -> false }
         val root = renderer.render(panelLayout(PanelFixtures.noReviewDrafts()))
-        val open = PanelRenderer.collectButtons(root)
-            .first { it.toolTipText == "Open the reading order for editing" }
+        val buttons = PanelRenderer.collectButtons(root)
+        val open = buttons.first { it.toolTipText == "Open the reading order for editing" }
+        val discard = buttons.first { it.toolTipText == "git review forget --draft (with confirmation)" }
 
-        assertEquals("Open", open.text, "etiqueta visible, no un glifo")
         assertEquals("Open the reading order", open.accessibleContext.accessibleName)
-        assertTrue(open.isBorderPainted, "no es el destructivo: conserva su caja")
-    }
+        assertEquals("Discard the reading order", discard.accessibleContext.accessibleName)
+        // PreviewPanelChrome has no platform icons, so both fall back to their
+        // glyph -- never to the sentence, which would make them the widest
+        // controls of the row.
+        assertEquals(PreviewPanelChrome().glyphFile(), open.text)
+        assertEquals(PreviewPanelChrome().glyphTrash(), discard.text)
 
-    @Test
-    fun `discard is the one control of the row without a fill`() {
-        // The one irreversible control of the row: with no fill it drops a step
-        // without leaving its cell, and a click in passing does not land on
-        // something shaped like a button.
-        val renderer = PanelRenderer(PreviewPanelChrome()) { _, _, _ -> false }
-        val root = renderer.render(panelLayout(PanelFixtures.noReviewDrafts()))
-        val discard = PanelRenderer.collectButtons(root)
-            .first { it.toolTipText == "git review forget --draft (with confirmation)" }
-
-        assertFalse(discard.isContentAreaFilled, "sin relleno propio")
-        assertFalse(discard.isBorderPainted, "ni borde")
-        assertEquals(PreviewPanelChrome().mutedForeground(), discard.foreground, "en el color de la meta")
-        assertEquals("Discard", discard.text)
+        // Same parent, and it is the header: the pane below holds the labelled
+        // pair and nothing else.
+        assertEquals(open.parent, discard.parent, "los dos van juntos")
+        val copy = buttons.first { it.text == "Copy for agent" }
+        assertNotEquals(copy.parent, open.parent, "y no en la botonera")
+        val header = open.parent as JPanel
+        assertTrue(
+            header.components.any { it is JLabel && it.text == "3/9" },
+            "estan en la cabecera, al lado del par que nombra su sujeto",
+        )
     }
 
     @Test

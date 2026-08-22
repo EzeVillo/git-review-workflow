@@ -162,7 +162,9 @@ with_deadline() {
 		;;
 	esac
 	[ "$(field_of feature/checkout 4)" = "0" ]
-	[ "$(field_of feature/checkout 5)" = "2" ]
+	# Two files in the range plus the heads-up, none of them annotated: the
+	# skeleton leaves a placeholder in each.
+	[ "$(field_of feature/checkout 5)" = "3" ]
 }
 
 @test "the same records come out with and without a branch argument" {

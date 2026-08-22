@@ -261,7 +261,12 @@ working tree:
   registros `draft` de `config`/`status --porcelain`), nunca un path rearmado del layout del gitdir
   — la misma regla que hace que *Open draft* abra la ruta que dio la CLI en vez de derivarla.
   Consecuencia deliberada: un borrador cuya carpeta no aparece todavía en ningún reporte (el creado
-  a mano en una terminal) no tiene quién lo mire hasta el refresco siguiente. El watcher es de cada
+  a mano en una terminal) no tiene quién lo mire hasta el refresco siguiente — por eso **el cliente
+  que crea el borrador refresca él mismo**, dentro del lock y pase lo que pase, igual que después
+  de un `start`: el primero de una rama estrena su carpeta, así que ninguna señal lo ve y sin ese
+  refresco la fila no aparecía hasta que algo ajeno tocara el repo. En Visual Studio sale gratis
+  (`MutationRunner` refresca tras cada invocación) y en JetBrains lo hace el cierre del wizard; en
+  VS Code va en `invokeDraft`, que es donde el asistente corre el verbo. El watcher es de cada
   host — `createFileSystemWatcher` no recursivo, watch roots planos más `VFS_CHANGES`, un
   `FileSystemWatcher` por directorio —, y **el conjunto sólo se rehace cuando cambia**: rehacerlo en
   cada refresco pierde justo los eventos que llegan mientras se rehace. En IntelliJ además es lazy,
@@ -276,7 +281,15 @@ working tree:
   puedan divergir. El progreso lo cuenta `walk_draft_progress` con **un solo `awk`** sobre todos los
   archivos a la vez; con cero borradores `emit_draft_records` corta **antes** de invocarlo, porque
   `awk` sin argumentos de archivo lee la entrada estándar y se cuelga — y este verbo corre en cada
-  refresco del panel.
+  refresco del panel. **El par cuenta una unidad por entrada MÁS el heads-up**, porque la pregunta
+  que contesta es la de `build`: el esqueleto deja un placeholder por entrada y uno de heads-up, y
+  `build` los rechaza a todos igual, así que sin contarlo el caso más común de todos —un archivo en
+  el rango— reportaba `1/1` y el `Validate and start` que los tres clientes apagan con ese par
+  moría en «the heads-up placeholder is still there». Se cuenta sólo si la sección tiene **algo**
+  escrito, que es lo que mantiene el par en paso con `build` del otro lado: borrarla entera es
+  legal, así que el total baja de 1/2 a 1/1 en vez de quedar fuera de alcance. El placeholder se
+  busca con la regla anclada de `build` y sobre **todo el preámbulo**, no dentro de la sección: un
+  comentario que sobrevivió a su encabezado sigue contando, y uno citado dentro de un why no.
 - **Refs de ediciones:** `refs/review-edits/<src>/<step>` bancan las ediciones de cada commit en
   `--step` como objetos commit-tree; `git review save` los mueve a `refs/review-saved-edits/` para
   que `git review clean` (que poda

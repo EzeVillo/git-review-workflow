@@ -217,6 +217,7 @@ async function loadBranchContext(
  */
 async function invokeDraft(
     lock: MutationLock,
+    stateManager: ReviewStateManager,
     branch: string,
     source: ReviewSource,
     range: ReviewRange,
@@ -228,11 +229,23 @@ async function invokeDraft(
                 location: vscode.ProgressLocation.Notification,
                 title: `Drafting a walkthrough for ${branch}…`,
             },
-            async () =>
-                invokeGitReview("walkthrough", draftArgs(branch, source, range, false), {
-                    ...options,
-                    network: false,
-                })
+            async () => {
+                const invocation = await invokeGitReview(
+                    "walkthrough",
+                    draftArgs(branch, source, range, false),
+                    {...options, network: false}
+                );
+                // Refrescar acá, y pase lo que pase, por lo mismo que start:
+                // es lo que dice dónde quedó el repositorio. Y hace falta más
+                // que en start, porque ninguna otra señal ve esta mutación —
+                // el borrador se escribe en el gitdir, así que no mueve HEAD,
+                // no toca el índice y no escribe config, y el watcher de
+                // borradores sólo mira directorios que la CLI YA reportó: el
+                // primero de una rama estrena su carpeta, de modo que sin
+                // esto la fila no aparecía hasta que algo ajeno refrescara.
+                await stateManager.refresh();
+                return invocation;
+            }
         )
     );
     const text = flatten(result?.stderr ?? "");
@@ -254,6 +267,7 @@ async function runDraftFlow(
     source: ReviewSource,
     range: ReviewRange,
     lock: MutationLock,
+    stateManager: ReviewStateManager,
     options: InvokeOptions
 ): Promise<{ kind: "done" } | { kind: "back"; error?: string }> {
     let state: DraftFlowState = initialDraftFlowState(step);
@@ -261,7 +275,7 @@ async function runDraftFlow(
     for (; ;) {
         switch (state.kind) {
             case "create": {
-                const outcome = await invokeDraft(lock, branch.name, source, range, options);
+                const outcome = await invokeDraft(lock, stateManager, branch.name, source, range, options);
                 if (outcome.ok && outcome.text.length > 0) {
                     // Nota de un verbo exitoso (el borrador tapa el walkthrough
                     // del autor): se muestra, como las de start.
@@ -429,12 +443,12 @@ export async function startReview(
             break;
         }
 
-        const outcome = await runDraftFlow(picked.draft, branch, source, range, lock, options);
+        const outcome = await runDraftFlow(picked.draft, branch, source, range, lock, stateManager, options);
         if (outcome.kind === "done") {
             // El asistente termina acá: no arranca ninguna review y no deja
-            // ningún aviso abierto. El refresco que sigue a la mutación trae la
-            // fila del borrador al panel, con su ruta, y la continuación vive
-            // ahí (Open / Validate and start).
+            // ningún aviso abierto. El refresco que invokeDraft ya hizo dejó la
+            // fila del borrador en el panel, con su ruta, y la continuación
+            // vive ahí (Open / Validate and start).
             return;
         }
         // Falló la creación: se dice por qué y se vuelve a ESTE paso, sin

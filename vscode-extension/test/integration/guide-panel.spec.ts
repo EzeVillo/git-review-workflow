@@ -17,7 +17,7 @@ import {
  * Lo que sólo se puede afirmar acá — y no en los tests unitarios ni en los de
  * contrato — es el tramo que va del control a la CLI y vuelta: *Create* tiene
  * que invocar `git review walkthrough guide`, el archivo tiene que aparecer
- * donde la CLI dijo, y la fila tiene que dejar de decir `absent` sin que nadie
+ * donde la CLI dijo, y la fila tiene que dejar de decir `none` sin que nadie
  * apriete Refresh. El watcher no mira estos archivos a propósito (el de la guía
  * propia vive en la raíz del gitdir, que cambia en cada operación de git), así
  * que ese refresco lo hace el cliente que creó la guía, dentro del lock.
@@ -72,7 +72,7 @@ describe("el bloque de guias de autoria del panel", function () {
         );
         for (const guide of model.guides) {
             assert.strictEqual(guide.state, "absent");
-            assert.strictEqual(guide.badge, "absent");
+            assert.strictEqual(guide.badge, "none");
             assert.strictEqual(guide.exists, false);
             assert.ok(path.isAbsolute(guide.path), `ruta absoluta: ${guide.path}`);
         }
@@ -81,7 +81,7 @@ describe("el bloque de guias de autoria del panel", function () {
         assert.strictEqual(model.guides[1]?.discardable, false);
     });
 
-    it("Create invoca la CLI, y la fila deja de decir absent sin apretar Refresh", async () => {
+    it("Create invoca la CLI, y la fila deja de decir none sin apretar Refresh", async () => {
         const api = await getTestApi();
         await api.refresh();
         let model = await api.getPanelModel();

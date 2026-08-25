@@ -402,11 +402,17 @@ panel_unverified:
 # distintas no se alinean una con la otra.
 guide_rows:
   # kind y etiqueta de cada fila. El estado va como badge al lado del nombre,
-  # con estos tres valores literales, que son los de la CLI menos el guion.
+  # con estos tres valores literales. Dos son los de la CLI y el tercero no:
+  # `absent` se dice "none", igual que en la fila del walkthrough de arriba. No
+  # es por alinear las dos filas -- es que "empty" y "absent" se leen como
+  # sinonimos de un vistazo, y son cosas distintas: `empty` es "el archivo esta,
+  # no dice nada" y `absent` es "no hay archivo". La diferencia decide si el
+  # boton de al lado abre o crea, asi que el badge tiene que distinguirlas sin
+  # que nadie lea dos veces.
   rows:
     - {kind: team, label: "Repository guide"}
     - {kind: own, label: "Your guide"}
-  states: ["in force", "empty", "absent"]
+  states: ["in force", "empty", "none"]
   controls:
     # Abrir es mostrar: el cliente no interpreta un byte del archivo, y abre LA
     # RUTA QUE REPORTO LA CLI, nunca una derivada del layout del gitdir.

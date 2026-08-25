@@ -52,7 +52,7 @@ public class PanelLayoutGuidesTests
     public void An_absent_guide_can_be_created_but_not_opened()
     {
         var own = Rows(PanelFixtures.NoReviewGuides())[1];
-        Assert.Equal("absent", own.Badge);
+        Assert.Equal("none", own.Badge);
         Assert.False(Control(own, ControlId.OpenGuide).Enabled);
         Assert.True(Control(own, ControlId.CreateGuide).Enabled);
         // Nothing to discard, but the control is still drawn: off says why in its

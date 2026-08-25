@@ -492,11 +492,16 @@ function toPanelDrafts(drafts: readonly DraftRecord[]): PanelDraft[] {
     }));
 }
 
-/** El badge de cada estado: el valor de la CLI en prosa, sin el guion. */
+/**
+ * El badge de cada estado: dos son los valores de la CLI; `absent` se dice
+ * "none", porque "empty" y "absent" se leen como sinonimos de un vistazo y no lo
+ * son -- `empty` es "el archivo esta, no dice nada" y `absent` es "no hay
+ * archivo", que es lo que decide si el boton de al lado abre o crea.
+ */
 const GUIDE_BADGE: Record<GuideState, string> = {
     "in-force": "in force",
     empty: "empty",
-    absent: "absent",
+    absent: "none",
 };
 
 const GUIDE_LABEL: Record<GuideKind, string> = {

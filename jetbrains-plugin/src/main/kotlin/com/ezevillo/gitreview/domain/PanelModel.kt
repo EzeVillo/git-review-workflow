@@ -285,11 +285,17 @@ fun toPanelDrafts(drafts: List<DraftRecord>): List<PanelDraft> =
         )
     }
 
-/** The badge for each state: the CLI's value in prose, without the hyphen. */
+/**
+ * The badge for each state: two are the CLI's values; `absent` reads
+ * "none", because "empty" and "absent" look like synonyms at a glance and are
+ * not -- `empty` is "the file is there, it says nothing" and `absent` is "there
+ * is no file", which is what decides whether the button beside it opens or
+ * creates.
+ */
 private fun guideBadge(state: GuideState): String = when (state) {
     GuideState.IN_FORCE -> "in force"
     GuideState.EMPTY -> "empty"
-    GuideState.ABSENT -> "absent"
+    GuideState.ABSENT -> "none"
 }
 
 private fun guideLabel(kind: GuideKind): String = when (kind) {

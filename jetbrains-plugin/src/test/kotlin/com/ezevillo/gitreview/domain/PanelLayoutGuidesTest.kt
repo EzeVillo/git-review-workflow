@@ -46,7 +46,7 @@ class PanelLayoutGuidesTest {
     @Test
     fun `an absent guide can be created but not opened`() {
         val own = guideRows(PanelFixtures.noReviewGuides())[1]
-        assertEquals("absent", own.badge)
+        assertEquals("none", own.badge)
         assertFalse(control(own, ControlId.OPEN_GUIDE)!!.enabled)
         assertTrue(control(own, ControlId.CREATE_GUIDE)!!.enabled)
         // Nothing to discard, but the control is still drawn: off says why in its

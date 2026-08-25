@@ -270,12 +270,18 @@ public static class PanelModelBuilder
         return out_;
     }
 
-    /// <summary>The badge for each state: the CLI's value in prose, without the hyphen.</summary>
+    /// <summary>
+    /// The badge for each state: two are the CLI's values; `absent` reads
+    /// "none", because "empty" and "absent" look like synonyms at a glance and are
+    /// not -- `empty` is "the file is there, it says nothing" and `absent` is "there
+    /// is no file", which is what decides whether the button beside it opens or
+    /// creates.
+    /// </summary>
     private static string GuideBadge(GuideState state) => state switch
     {
         GuideState.InForce => "in force",
         GuideState.Empty => "empty",
-        _ => "absent",
+        _ => "none",
     };
 
     private static string GuideLabel(GuideKind kind) =>

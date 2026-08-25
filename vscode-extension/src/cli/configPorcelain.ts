@@ -25,6 +25,28 @@ export interface CandidateBranch {
     current: boolean;
 }
 
+/**
+ * Ramas para el picker de "branch to review" del asistente de inicio. El
+ * porcelain puede traer una fila `remote` y otra `local` para el mismo nombre
+ * (contracts/config-porcelain.md "Duplicados esperados": es el dato que hace
+ * significativa la elección de origen) — pero ese origen se pregunta después,
+ * como paso propio del asistente (`pickSource`), y el paso de rama sólo usa
+ * `name`. Sin colapsar, las dos filas salen idénticas en la lista (mismo
+ * nombre, sin nada que las distinga) y parecen una rama duplicada. Colapsa a
+ * una entrada por nombre, prefiriendo la fila marcada `current` (paridad con
+ * `branchPickerItems` de JetBrains).
+ */
+export function branchPickerItems(candidates: readonly CandidateBranch[]): CandidateBranch[] {
+    const byName = new Map<string, CandidateBranch>();
+    for (const candidate of candidates) {
+        const prev = byName.get(candidate.name);
+        if (prev === undefined || (candidate.current && !prev.current)) {
+            byName.set(candidate.name, candidate);
+        }
+    }
+    return [...byName.values()];
+}
+
 /** Remoto del repositorio elegible para `git review config remote` (porcelain `remote-candidate`). */
 export interface CandidateRemote {
     name: string;

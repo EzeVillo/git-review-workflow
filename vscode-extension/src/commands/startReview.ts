@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import {
+    branchPickerItems,
     CandidateBranch,
     deltaForSource,
     DeltaRecord,
@@ -117,7 +118,7 @@ function readDefaultSource(): ReviewSource {
  * repositorio con cientos de ramas sigue siendo navegable sin nada extra acá.
  */
 async function pickBranch(candidates: CandidateBranch[]): Promise<CandidateBranch | undefined> {
-    const items: BranchItem[] = [...candidates]
+    const items: BranchItem[] = branchPickerItems(candidates)
         .sort((a, b) => (a.current === b.current ? 0 : a.current ? -1 : 1))
         .map((candidate) => ({label: branchLabel(candidate), candidate}));
     const picked = await vscode.window.showQuickPick(items, {

@@ -1,5 +1,5 @@
 import * as assert from "node:assert";
-import {deltaForSource, parseConfigPorcelain} from "../../src/cli/configPorcelain";
+import {branchPickerItems, CandidateBranch, deltaForSource, parseConfigPorcelain} from "../../src/cli/configPorcelain";
 
 describe("parseConfigPorcelain", () => {
     it("config remote sin base configurada", () => {
@@ -247,5 +247,43 @@ describe("deltaForSource", () => {
         assert.strictEqual(deltaForSource([deltas[1]], "remote"), undefined);
         assert.strictEqual(deltaForSource(undefined, "remote"), undefined);
         assert.strictEqual(deltaForSource([], "offline"), undefined);
+    });
+});
+
+describe("branchPickerItems", () => {
+    it("colapsa una rama local y remota del mismo nombre a una sola entrada", () => {
+        const candidates: CandidateBranch[] = [
+            {name: "develop", origin: "remote", current: false},
+            {name: "develop", origin: "local", current: true},
+            {name: "feature/discount", origin: "remote", current: false},
+            {name: "feature/discount", origin: "local", current: false},
+        ];
+        const items = branchPickerItems(candidates);
+        assert.strictEqual(items.length, 2);
+        assert.deepStrictEqual(
+            items.map((c) => c.name).sort(),
+            ["develop", "feature/discount"]
+        );
+    });
+
+    it("prefiere la fila marcada current cuando hay una para el mismo nombre", () => {
+        const candidates: CandidateBranch[] = [
+            {name: "develop", origin: "remote", current: false},
+            {name: "develop", origin: "local", current: true},
+        ];
+        const items = branchPickerItems(candidates);
+        assert.strictEqual(items.length, 1);
+        assert.deepStrictEqual(items[0], {name: "develop", origin: "local", current: true});
+    });
+
+    it("una rama que sólo existe de un lado no se pierde", () => {
+        const candidates: CandidateBranch[] = [
+            {name: "main", origin: "remote", current: false},
+        ];
+        assert.deepStrictEqual(branchPickerItems(candidates), candidates);
+    });
+
+    it("lista vacía produce lista vacía", () => {
+        assert.deepStrictEqual(branchPickerItems([]), []);
     });
 });

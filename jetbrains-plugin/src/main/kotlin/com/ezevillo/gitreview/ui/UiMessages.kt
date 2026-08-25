@@ -7,18 +7,18 @@ import com.ezevillo.gitreview.domain.flattenCliMessage
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
+import com.intellij.ui.ColoredListCellRenderer
 import com.intellij.ui.DocumentAdapter
+import com.intellij.ui.SimpleTextAttributes
 import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
-import java.awt.Component
 import java.awt.Dimension
 import java.awt.event.KeyEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
-import javax.swing.DefaultListCellRenderer
 import javax.swing.DefaultListModel
 import javax.swing.Icon
 import javax.swing.JComponent
@@ -144,9 +144,8 @@ object UiMessages {
         title: String,
         options: Array<String>,
         defaultOption: String = options.first(),
-        icon: Icon = Messages.getQuestionIcon(),
     ): Int {
-        val dialog = ChooseDialog(project, message, title, options, defaultOption, icon)
+        val dialog = ChooseDialog(project, message, title, options, defaultOption)
         return if (dialog.showAndGet()) dialog.selectedIndex else -1
     }
 
@@ -164,11 +163,10 @@ object UiMessages {
         message: String,
         title: String,
         options: Array<String>,
-        icon: Icon = Messages.getQuestionIcon(),
     ): String? {
         if (options.isEmpty()) return input(project, message, title)
         val dialog = ChooseDialog(
-            project, message, title, options, options.first(), icon, freeText = true,
+            project, message, title, options, options.first(), freeText = true,
         )
         if (!dialog.showAndGet()) return null
         return dialog.selectedValue?.trim()?.takeIf { it.isNotEmpty() }
@@ -199,12 +197,17 @@ internal fun escapeHtml(text: String): String =
  * Se mide el ítem más largo y se pide ese ancho, con tope para que un nombre de
  * rama desmedido no estire el diálogo a lo ancho de la pantalla — ahí queda el
  * tooltip, y el diálogo se puede agrandar y recuerda el tamaño.
+ *
+ * Sin ícono: el de `Messages.getQuestionIcon()` que traía antes era el mismo
+ * círculo azul en los cuatro pasos del asistente sin importar la pregunta, así
+ * que no distinguía nada — y centrado por [BorderLayout] contra una lista de
+ * doce filas quedaba flotando a media altura, leyéndose como un botón de ayuda
+ * roto en vez de una decoración. Un filtro-sobre-lista ya se explica solo.
  */
 internal fun choosePanel(
     message: String,
     filter: JComponent,
     list: JList<String>,
-    icon: Icon,
 ): JComponent {
     val fm = list.getFontMetrics(list.font)
     val model = list.model
@@ -219,6 +222,7 @@ internal fun choosePanel(
         override fun getPreferredSize(): Dimension =
             Dimension(target, super.getPreferredSize().height)
     }
+    body.border = JBUI.Borders.empty(8)
     body.add(JLabel(message), BorderLayout.NORTH)
 
     val middle = JPanel(BorderLayout(0, JBUI.scale(6)))
@@ -230,11 +234,7 @@ internal fun choosePanel(
     middle.add(scroll, BorderLayout.CENTER)
     body.add(middle, BorderLayout.CENTER)
 
-    val panel = JPanel(BorderLayout(JBUI.scale(10), 0))
-    panel.border = JBUI.Borders.empty(8)
-    panel.add(JLabel(icon), BorderLayout.WEST)
-    panel.add(body, BorderLayout.CENTER)
-    return panel
+    return body
 }
 
 /**
@@ -252,7 +252,6 @@ private class ChooseDialog(
     dialogTitle: String,
     private val options: Array<String>,
     defaultOption: String,
-    private val icon: Icon,
     private val freeText: Boolean = false,
 ) : DialogWrapper(project, true) {
     private val filter = JBTextField()
@@ -266,24 +265,38 @@ private class ChooseDialog(
         title = dialogTitle
         list.selectionMode = ListSelectionModel.SINGLE_SELECTION
         list.visibleRowCount = 12
-        // El texto entero, para el ítem que igual no entre en el tope de ancho.
-        // Renderer de Swing y no `SimpleListCellRenderer.create`: ese método está
-        // scheduled for removal —lo reporta la validación del Marketplace— y su
-        // reemplazo, el DSL `listCellRenderer`, cuelga de `LcrRow`, que es
-        // @ApiStatus.Experimental. Sin until-build en el descriptor, atarse a una
-        // forma que puede cambiar es canjear un warning por un NoSuchMethodError
-        // en un IDE futuro; esto es un tooltip sobre un JLabel, no vale el riesgo.
-        list.cellRenderer = object : DefaultListCellRenderer() {
-            override fun getListCellRendererComponent(
-                list: JList<*>,
-                value: Any?,
+        // `ColoredListCellRenderer` y no `DefaultListCellRenderer`: éste último
+        // pinta con los colores por defecto de Swing en vez de los del tema activo
+        // de la plataforma, así que una fila sin seleccionar salía en el celeste de
+        // link de Swing en vez del gris de texto normal de Darcula/tema claro. Y no
+        // `SimpleListCellRenderer.create`: ese método está scheduled for removal
+        // —lo reporta la validación del Marketplace— y su reemplazo, el DSL
+        // `listCellRenderer`, cuelga de `LcrRow`, que es @ApiStatus.Experimental.
+        // `ColoredListCellRenderer` no tiene ninguno de los dos problemas: sigue
+        // los colores de selección/foco de la lista como cualquier popup nativo, y
+        // de paso separa en gris la mitad descriptiva de la etiqueta (" — texto" o
+        // " (current)"), que antes se leía con el mismo peso que el nombre.
+        list.cellRenderer = object : ColoredListCellRenderer<String>() {
+            init {
+                ipad = JBUI.insets(3, 8)
+            }
+
+            override fun customizeCellRenderer(
+                list: JList<out String>,
+                value: String,
                 index: Int,
                 selected: Boolean,
-                focused: Boolean,
-            ): Component {
-                val component = super.getListCellRendererComponent(list, value, index, selected, focused)
-                toolTipText = value as? String
-                return component
+                hasFocus: Boolean,
+            ) {
+                toolTipText = value
+                val dash = value.indexOf(" — ")
+                val suffix = if (dash >= 0) dash else PAREN_SUFFIX.find(value)?.range?.first ?: -1
+                if (suffix < 0) {
+                    append(value)
+                } else {
+                    append(value.substring(0, suffix))
+                    append(value.substring(suffix), SimpleTextAttributes.GRAYED_ATTRIBUTES)
+                }
             }
         }
         // Doble click elige, como en cualquier lista de la plataforma.
@@ -354,5 +367,10 @@ private class ChooseDialog(
 
     override fun getPreferredFocusedComponent(): JComponent = filter
 
-    override fun createCenterPanel(): JComponent = choosePanel(message, filter, list, icon)
+    override fun createCenterPanel(): JComponent = choosePanel(message, filter, list)
+
+    private companion object {
+        /** " (current)" y similares: el paréntesis final de la etiqueta. */
+        val PAREN_SUFFIX = Regex(""" \([^)]*\)$""")
+    }
 }

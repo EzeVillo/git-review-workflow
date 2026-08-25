@@ -6,9 +6,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.awt.Component
 import java.awt.Dimension
-import java.awt.Graphics
 import javax.swing.DefaultListModel
-import javax.swing.Icon
 import javax.swing.JList
 import javax.swing.JTextField
 
@@ -18,12 +16,6 @@ import javax.swing.JTextField
  * [NarrowList] es ese recorte, para que la regresión caiga sin levantar el IDE.
  */
 class ChoosePanelTest {
-    private val icon = object : Icon {
-        override fun paintIcon(c: Component?, g: Graphics?, x: Int, y: Int) = Unit
-        override fun getIconWidth(): Int = 16
-        override fun getIconHeight(): Int = 16
-    }
-
     private class NarrowList(items: Array<String>) : JList<String>(
         DefaultListModel<String>().apply { items.forEach { addElement(it) } },
     ) {
@@ -38,7 +30,7 @@ class ChoosePanelTest {
 
     private fun panelWidth(message: String, options: Array<String>): Int {
         val list = NarrowList(options)
-        return choosePanel(message, JTextField(), list, icon).preferredSize.width
+        return choosePanel(message, JTextField(), list).preferredSize.width
     }
 
     @Test
@@ -63,8 +55,7 @@ class ChoosePanelTest {
             UserCopy.START_BRANCH_PLACEHOLDER,
             arrayOf("feature/" + "x".repeat(500)),
         )
-        // Tope, mas el icono, el gap y el borde del panel exterior.
-        assertTrue(width <= JBUI.scale(720) + JBUI.scale(64), "width=$width")
+        assertTrue(width <= JBUI.scale(720), "width=$width")
         assertTrue(width >= JBUI.scale(700), "width=$width")
     }
 
@@ -81,7 +72,7 @@ class ChoosePanelTest {
     @Test
     fun `the filter box is part of the picker`() {
         val filter = JTextField()
-        val panel = choosePanel("Pick", filter, NarrowList(arrayOf("a", "b")), icon)
+        val panel = choosePanel("Pick", filter, NarrowList(arrayOf("a", "b")))
         assertTrue(filter.isShowing || contains(panel, filter), "filter not in the panel")
     }
 

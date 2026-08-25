@@ -945,13 +945,11 @@ private fun guideRows(model: PanelModel): Block.GuideRows {
                 ControlId.CREATE_GUIDE,
                 "Create",
                 Emphasis.SECONDARY,
-                enabled = enabled && g.creatable,
+                enabled = enabled && !g.exists,
                 tooltip = if (g.exists) {
                     "It already exists; open it and edit it"
-                } else if (g.creatable) {
-                    "Create it empty, then write the conventions into it"
                 } else {
-                    "Not from inside a review: finish extracts the working tree, so this file would leave on review-fixes/"
+                    "Create it empty, then write the conventions into it"
                 },
                 index = index,
             ),
@@ -1291,15 +1289,6 @@ fun panelLayout(model: PanelModel, loading: Boolean = false): PanelLayout {
                         ),
                     )
                 }
-            }
-            // The guides inside a review too, folded and last: the walkthrough draft
-            // verb is run from in here, which is the likeliest moment to want to write
-            // yours. It is the ONLY tools section a review has -- init and build do not
-            // belong (they are the author's, standing on their own PR) and neither does
-            // the rest of the footer. Not in finish-conflict: that screen is "resolve
-            // the markers", and a folded section about writing conventions is noise.
-            if (model.situation == Situation.REVIEW && model.guides.isNotEmpty()) {
-                out.add(Block.ToolsSection(title = "Walkthrough", blocks = listOf(guideRows(model))))
             }
             blocks = out
         }

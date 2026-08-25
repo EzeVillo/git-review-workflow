@@ -271,15 +271,6 @@ if [ "$porcelain" -eq 1 ]; then
 		walk_gitdir_abs_init
 		porcelain_row draft "$_walk_gitdir_abs/review-walkthrough/${walk_draft_src:-$src}.md"
 	fi
-	# The two authoring guides, the same records config --porcelain emits and by
-	# the same function -- one report, not two shapes of the same fact.
-	#
-	# They belong here and not only there because inside a review the panel reads
-	# THIS verb and nothing else: without the records the guide rows would need a
-	# config --porcelain of their own on every refresh, which is a whole extra
-	# invocation instead of the one git process this costs (the rev-parse in
-	# guide_paths_init; the states are file tests).
-	emit_guide_records
 	exit 0
 fi
 

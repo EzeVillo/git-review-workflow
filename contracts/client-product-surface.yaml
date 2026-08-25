@@ -311,13 +311,15 @@ panel_layout:
       - {block: paragraph, text: "Something went wrong reading the review state."}
       - {block: row, controls: [{id: outOfRangeHelp, label: "How to fix it", emphasis: primary, confirms: false}]}
       - {block: stderr, when: present}
-  # Las guias tambien adentro de una review, plegadas y al final: el verbo
-  # `walkthrough draft` se corre desde adentro, que es el momento mas probable de
-  # querer escribir la tuya. Es la UNICA tools_section de una review -- init y
-  # build no van (son del autor parado en su propio PR) y el resto del pie
-  # tampoco. No esta en finish-conflict: esa pantalla es "resolve los marcadores".
+  # UNA REVIEW NO TIENE PIE: ninguna tools_section. Todo lo que cuelga de
+  # `walkthrough` -- los dos verbos del autor y las dos guias de autoria -- es de
+  # quien esta parado en SU PR, y adentro de una review estas parado en el de
+  # otro. Una seccion titulada "Walkthrough" al pie del orden de lectura que
+  # estas caminando ademas diria ese sustantivo por dos cosas distintas en la
+  # misma pantalla. Todo eso vive en no-review, que es donde estan la fila del
+  # walkthrough, sus verbos y las guias.
   review-walk:
-    source_fns: [renderEntry, renderOpenRow, renderNavRow, renderGuidesSection]
+    source_fns: [renderEntry, renderOpenRow, renderNavRow]
     blocks:
       - {block: identity_bar}
       - {block: notes}
@@ -327,12 +329,8 @@ panel_layout:
       - {block: row, controls: [{id: showWhy, label: "open in editor", emphasis: link, confirms: false}], when: why_present}
       - {block: row, controls: [{id: openEntry, label: "File", emphasis: secondary, confirms: false}, {id: openChange, label: "Diff", emphasis: secondary, confirms: false}]}
       - {block: row, controls: [{id: prev, label: null, accessible_name: "Previous entry", emphasis: icon, confirms: false}, {id: next, label: null, accessible_name: "Next entry", emphasis: icon, confirms: false}]}
-      - block: tools_section
-        title: "Walkthrough"
-        blocks:
-          - {block: guide_rows}
   review-step:
-    source_fns: [renderEntry, renderOpenRow, renderNavRow, renderFiles, renderGuidesSection]
+    source_fns: [renderEntry, renderOpenRow, renderNavRow, renderFiles]
     blocks:
       - {block: identity_bar}
       - {block: notes}
@@ -342,12 +340,8 @@ panel_layout:
       - {block: heading, text: "{n} file(s) in this commit"}
       - {block: file_rows}
       - {block: row, controls: [{id: prev, label: null, accessible_name: "Previous entry", emphasis: icon, confirms: false}, {id: next, label: null, accessible_name: "Next entry", emphasis: icon, confirms: false}]}
-      - block: tools_section
-        title: "Walkthrough"
-        blocks:
-          - {block: guide_rows}
   review-whole:
-    source_fns: [renderFiles, renderGuidesSection]
+    source_fns: [renderFiles]
     blocks:
       - {block: identity_bar}
       - {block: notes}
@@ -355,10 +349,6 @@ panel_layout:
       # ausente en visualstudio: ver not_in en la accion
       - {block: row, controls: [{id: openAllChanges, label: "Diff", emphasis: secondary, confirms: false, tooltip: "Open every change in this review at once"}], not_in: [visualstudio]}
       - {block: file_rows}
-      - block: tools_section
-        title: "Walkthrough"
-        blocks:
-          - {block: guide_rows}
   finish-conflict:
     source_fns: [renderFinishConflictBanner, renderEntry, renderOpenRow, renderFiles]
     blocks:

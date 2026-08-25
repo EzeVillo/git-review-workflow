@@ -141,7 +141,6 @@ class ReviewStateManager(
                         keysOnly = porcelain.keysOnly,
                         draft = porcelain.draft,
                         draftPath = porcelain.draftPath,
-                        guides = porcelain.guides,
                     )
                 } catch (e: Exception) {
                     ReviewState(

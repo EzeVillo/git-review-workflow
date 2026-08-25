@@ -131,8 +131,7 @@ public sealed class ReviewStateManager
                     Readonly: parsed.Readonly,
                     KeysOnly: parsed.KeysOnly,
                     Draft: parsed.Draft,
-                    DraftPath: parsed.DraftPath,
-                    Guides: parsed.Guides);
+                    DraftPath: parsed.DraftPath);
             }
             catch (Exception e)
             {

@@ -48,19 +48,13 @@ class PanelLayoutFooterTest {
     }
 
     @Test
-    fun `review has no tools sections when there are no guides`() {
-        val layout = panelLayout(PanelFixtures.reviewWalk())
-        assertTrue(layout.blocks.none { it is Block.ToolsSection })
-    }
-
-    @Test
-    fun `the guides are the only tools section a review has`() {
-        // Init and build do not belong here -- they are the author's, standing on
-        // their own PR -- and neither does the rest of the footer.
-        val sections = panelLayout(PanelFixtures.reviewWalkGuides())
-            .blocks.filterIsInstance<Block.ToolsSection>()
-        assertEquals(listOf("Walkthrough"), sections.map { it.title })
-        assertTrue(sections[0].blocks.all { it is Block.GuideRows })
+    fun `a review has no tools sections at all`() {
+        // Everything hanging off `walkthrough` -- the author's two verbs and the two
+        // authoring guides -- belongs to whoever is standing on THEIR OWN PR, and in
+        // here you are standing on somebody else's.
+        assertTrue(panelLayout(PanelFixtures.reviewWalk()).blocks.none { it is Block.ToolsSection })
+        assertTrue(panelLayout(PanelFixtures.reviewStep()).blocks.none { it is Block.ToolsSection })
+        assertTrue(panelLayout(PanelFixtures.reviewWhole()).blocks.none { it is Block.ToolsSection })
     }
 
     // The walkthrough row counts: the two verbs are ITS buttons, not a loose row

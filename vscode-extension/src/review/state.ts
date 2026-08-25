@@ -398,9 +398,6 @@ export class ReviewStateManager {
         if (parsed.draft) {
             next.draft = true;
         }
-        if (parsed.guides !== undefined) {
-            next.guides = parsed.guides;
-        }
         if (parsed.draftPath !== undefined) {
             next.draftPath = parsed.draftPath;
         }

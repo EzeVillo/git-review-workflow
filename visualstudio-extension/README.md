@@ -112,7 +112,7 @@ that names what will happen; preview is read-only and does not.
 | no-review setup | **Set the base branch** (primary) |
 | no-review ready | inventory, **Start a review**, Walkthrough (the row for the walkthrough you wrote — named after the branch, with Init or Update, Build and Copy for agent — and the two authoring guides) / Compare / Settings / Support |
 | finish-pending | **Clean** / **Undo finish** |
-| review walk | **File** / **Diff**, prev/next, **open in editor**, folded Walkthrough (the two authoring guides) |
+| review walk | **File** / **Diff**, prev/next, **open in editor** — no footer sections |
 | review whole | file rows, one **Diff** each |
 | finish-conflict | **Undo** / **Continue** (no nav) |
 

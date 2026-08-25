@@ -95,13 +95,6 @@ data class PanelGuide(
     /** The file is there (in force or empty): it can be opened, and if it is yours, discarded. */
     val exists: Boolean,
     /**
-     * Whether Create can be INVOKED. Not the same as `!exists`: inside a review the
-     * shared guide cannot be created, because it is a file of the working tree and
-     * finish's extraction (`git add -A`) would carry it into somebody else's PR. The
-     * CLI refuses it; the control is drawn either way, off and saying why.
-     */
-    val creatable: Boolean,
-    /**
      * Yours only. The shared one is a tracked file, so removing it is `git rm`
      * plus a commit: a decision about what goes into the PR, which is not this
      * button's to make. The CLI says the same from its side, refusing
@@ -310,11 +303,7 @@ private fun guideLabel(kind: GuideKind): String = when (kind) {
  * drawn. Against a CLI that does not know the record none arrive and the whole
  * block disappears, which is the same degradation the draft block has.
  */
-fun toPanelGuides(guides: List<GuideRecord>, situation: Situation): List<PanelGuide> {
-    // The CLI refuses to create the shared guide inside a review, for a reason the
-    // panel has to repeat rather than discover: finish extracts with `git add -A`,
-    // so a file created now would leave on somebody else's review-fixes/.
-    val inReview = situation == Situation.REVIEW || situation == Situation.FINISH_CONFLICT
+fun toPanelGuides(guides: List<GuideRecord>): List<PanelGuide> {
     return guides.map { guide ->
         PanelGuide(
             kind = guide.kind,
@@ -323,8 +312,6 @@ fun toPanelGuides(guides: List<GuideRecord>, situation: Situation): List<PanelGu
             state = guide.state,
             badge = guideBadge(guide.state),
             exists = guide.state != GuideState.ABSENT,
-            creatable = guide.state == GuideState.ABSENT &&
-                !(inReview && guide.kind == GuideKind.TEAM),
             discardable = guide.kind == GuideKind.OWN && guide.state != GuideState.ABSENT,
         )
     }
@@ -416,11 +403,9 @@ fun buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelModel {
         busy = inputs.busy,
         reviews = if (state.situation == Situation.NO_REVIEW) toPanelReviews(state.branches) else emptyList(),
         drafts = if (state.situation == Situation.NO_REVIEW) toPanelDrafts(state.drafts ?: emptyList()) else emptyList(),
-        // Unlike [drafts], the guides are drawn INSIDE a review too: the walkthrough
-        // draft verb is run from there, which is the likeliest moment to want to write
-        // yours. It costs no extra invocation -- status --porcelain emits the same
-        // records config does.
-        guides = toPanelGuides(state.guides ?: emptyList(), state.situation),
+        // They only arrive by config --porcelain, that is, only outside a review:
+        // the footer is where they are drawn and a review has no footer.
+        guides = toPanelGuides(state.guides ?: emptyList()),
         // Only in NO_REVIEW: that is where the section lives, and inside a
         // review the panel draws the guides and nothing else of this block. The
         // row is built even when the record is missing -- see toPanelWalkthrough.

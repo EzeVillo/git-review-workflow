@@ -49,11 +49,6 @@ function review(rows: string[][], inputs: PanelInputs = {busy: false}): PanelMod
     if (parsed.base !== undefined) {
         state.base = parsed.base;
     }
-    // Las guías llegan por el MISMO reporte dentro de una review: `status
-    // --porcelain` emite los registros `guide` igual que `config --porcelain`.
-    if (parsed.guides !== undefined) {
-        state.guides = parsed.guides;
-    }
     if (parsed.keysOnly) {
         state.keysOnly = true;
     }
@@ -441,21 +436,6 @@ export const PREVIEW_PANES: PreviewPane[] = [
             ["draft", "feature/pagos", "/repo/.git/review-walkthrough/feature/pagos.md", "6", "6", "remote", "full", "reviewed"],
             ["walkthrough", "in-sync", "/repo/.review/walkthrough.md", "5", "5", "feature/telemetry"],
         ]),
-    },
-    {
-        // Dentro de una review las guías siguen estando: `walkthrough draft` se
-        // corre desde adentro. Es la única sección plegable que una review tiene.
-        name: "review-walk-guides",
-        caption: "review walk — sección Walkthrough plegada con las dos guías",
-        model: review(
-            [
-                ["state", "review/feat/panel", "feat/panel", "a1b2c3d", "walk", "applied", "7", "15", "15", WALK_PATHS[6], "1"],
-                ...walkEntries(WALK_PATHS, [1, 7, 12]),
-                ["guide", "team", "/repo/.review/walkthrough-guide.md", "in-force"],
-                ["guide", "own", "/repo/.git/review-walkthrough-guide.md", "absent"],
-            ],
-            {busy: false, why: {state: "present", text: WHY}}
-        ),
     },
     {
         // Las dos guías de autoría en la sección Walkthrough del pie, cada una en

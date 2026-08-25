@@ -189,10 +189,12 @@ describe("el bloque de guias de autoria del panel", function () {
         assert.strictEqual(fs.readFileSync(file, "utf8"), "mis reglas\n");
     });
 
-    it("dentro de una review el bloque sigue, y llega por status --porcelain", async () => {
-        // Adentro de una review el panel lee status y ningun otro verbo, asi que
-        // que las filas esten ahi prueba que el registro viaja tambien por ese
-        // reporte -- si no, dibujarlas costaria una invocacion extra por refresco.
+    it("dentro de una review no hay guias: ni registros ni filas", async () => {
+        // Adentro de una review se lee status y ningun otro verbo, y ese reporte no
+        // nombra las guias: el panel las dibuja en el pie y una review no tiene
+        // pie. Con el archivo escrito y en vigor, que el modelo este vacio prueba
+        // las dos puntas a la vez -- la CLI no las reporta ahi y el cliente no
+        // rearma nada por su cuenta.
         const branch = "guides-panel-review";
         createBranchWithChanges(repo, branch, {"src/g.ts": "g\n"});
         fs.writeFileSync(ownGuidePath(repo.dir), "mis reglas\n", "utf8");
@@ -203,12 +205,13 @@ describe("el bloque de guias de autoria del panel", function () {
         const api = await getTestApi();
         const state = await api.refresh();
         assert.strictEqual(state.situation, "review");
+        assert.strictEqual(state.guides, undefined);
         const model = await api.getPanelModel();
-        assert.deepStrictEqual(model.guides.map((g) => g.kind), ["team", "own"]);
-        assert.strictEqual(model.guides.find((g) => g.kind === "own")?.state, "in-force");
-        // Y la compartida no se puede crear desde aca: es un archivo del working
-        // tree, y la extraccion de finish (git add -A) se lo llevaria al PR de
-        // otra persona. La CLI lo niega; el panel lo dice antes.
-        assert.strictEqual(model.guides.find((g) => g.kind === "team")?.creatable, false);
+        assert.deepStrictEqual(model.guides, []);
+        // Y afuera vuelven a estar, por el verbo que si las reporta.
+        gitReviewOrThrow(["abort"], repo.dir);
+        const after = await api.refresh();
+        assert.strictEqual(after.situation, "no-review");
+        assert.deepStrictEqual((after.guides ?? []).map((g) => g.kind), ["team", "own"]);
     });
 });

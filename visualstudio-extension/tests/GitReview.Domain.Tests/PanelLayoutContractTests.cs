@@ -192,17 +192,6 @@ public class PanelLayoutContractTests
     }
 
     [Fact]
-    public void Review_walk_with_guides_matches_canonical()
-    {
-        // The block enters the review-walk layout, so it has to be declared there and
-        // not slip in as an undeclared control.
-        AssertLayoutAgainstCanonical(
-            "review-walk",
-            PanelLayoutBuilder.PanelLayout(PanelFixtures.ReviewWalkGuides()),
-            mode: "walk");
-    }
-
-    [Fact]
     public void No_review_with_guides_matches_canonical()
     {
         // The state with guides: the same eight of no-review PLUS the block's

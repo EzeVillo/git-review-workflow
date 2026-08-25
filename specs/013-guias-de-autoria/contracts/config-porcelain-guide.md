@@ -54,13 +54,16 @@ whitespace no es un conjunto de convenciones— pero implementada con **cero
 procesos**: un `read` builtin que corta en la primera línea no vacía, que para
 una guía real es la línea 1.
 
-### También lo emite `status --porcelain`
+### `status --porcelain` NO lo emite
 
-Los mismos bytes, por el mismo emisor. Adentro de una review el panel lee ese
-verbo y ningún otro, así que sin los registros ahí las filas costarían una
-invocación entera de `config --porcelain` por refresco, en vez del único proceso
-que cuestan. Dos formas del mismo hecho es como se empieza a divergir: hay un
-solo `emit_guide_records` y un solo parser por cliente.
+Lo emitió mientras el panel dibujó las dos guías adentro de una review: ahí lee
+ese verbo y ningún otro, así que sin los registros las filas habrían costado una
+invocación entera de `config --porcelain` por refresco. Esa sección no existe
+más —todo lo que cuelga de `walkthrough` es del autor parado en su propio PR, y
+adentro de una review estás parado en el de otro—, y con nada que dibujar el
+registro pasó a ser un dato que nadie pide en el camino que tiene que salir
+barato. El emisor sigue siendo uno solo, `emit_guide_records`, con un único
+llamador.
 
 ### Se emite con y sin argumento de rama
 

@@ -175,13 +175,6 @@ export interface PanelGuide {
     /** El archivo está ahí (en vigor o vacío): se puede abrir y, si es la tuya, descartar. */
     exists: boolean;
     /**
-     * Si *Create* se puede **invocar**. No es `!exists`: adentro de una review la
-     * compartida no se puede crear, porque es un archivo del working tree y la
-     * extracción de `finish` (`git add -A`) se lo llevaría al PR de otra persona.
-     * La CLI lo niega; el control se dibuja igual, apagado y diciendo por qué.
-     */
-    creatable: boolean;
-    /**
      * Sólo la tuya. La compartida es un archivo trackeado, así que borrarla es
      * `git rm` más un commit: una decisión sobre qué entra al PR, que no es de
      * este botón. La CLI dice lo mismo del otro lado negando `--delete --team`.
@@ -517,12 +510,7 @@ const GUIDE_LABEL: Record<GuideKind, string> = {
  * CLI anterior no llega ninguno y el bloque entero desaparece, que es la misma
  * degradación que tiene el de borradores.
  */
-function toPanelGuides(guides: readonly GuideRecord[], situation: Situation): PanelGuide[] {
-    // La CLI niega crear la compartida adentro de una review, y por una razón
-    // que el panel tiene que repetir en vez de descubrir: la extracción de
-    // `finish` es `git add -A`, así que un archivo creado ahora se iría en el
-    // `review-fixes/` de otra persona.
-    const inReview = situation === "review" || situation === "finish-conflict";
+function toPanelGuides(guides: readonly GuideRecord[]): PanelGuide[] {
     return guides.map((guide) => ({
         kind: guide.kind,
         label: GUIDE_LABEL[guide.kind],
@@ -530,7 +518,6 @@ function toPanelGuides(guides: readonly GuideRecord[], situation: Situation): Pa
         state: guide.state,
         badge: GUIDE_BADGE[guide.state],
         exists: guide.state !== "absent",
-        creatable: guide.state === "absent" && !(inReview && guide.kind === "team"),
         discardable: guide.kind === "own" && guide.state !== "absent",
     }));
 }
@@ -649,14 +636,12 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
             state.situation === "no-review" && state.drafts !== undefined
                 ? toPanelDrafts(state.drafts)
                 : [],
-        // A diferencia de `drafts`, las guías se dibujan también DENTRO de una
-        // review: `walkthrough draft` se corre desde ahí, que es el momento más
-        // probable de querer escribir la tuya. El dato no cuesta una invocación
-        // extra — `status --porcelain` emite los mismos registros que `config`.
-        guides: state.guides !== undefined ? toPanelGuides(state.guides, state.situation) : [],
-        // Sólo en `no-review`: es donde vive la sección, y adentro de una review
-        // el panel dibuja las guías y nada más de este bloque. La fila se
-        // construye aunque el registro falte -- ver toPanelWalkthrough.
+        // Sólo llegan por `config --porcelain`, o sea sólo fuera de una review:
+        // el pie es donde se dibujan y una review no tiene pie.
+        guides: state.guides !== undefined ? toPanelGuides(state.guides) : [],
+        // Sólo en `no-review`: es donde vive la sección — una review no tiene
+        // pie. La fila se construye aunque el registro falte -- ver
+        // toPanelWalkthrough.
         ...(state.situation === "no-review"
             ? {walkthrough: toPanelWalkthrough(state.walkthrough)}
             : {}),

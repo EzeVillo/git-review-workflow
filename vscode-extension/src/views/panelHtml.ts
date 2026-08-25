@@ -930,12 +930,10 @@ export function panelHtml(nonce: string): string {
     // pantalla y le centraba el texto, que se lee como un error de alineacion.
     const actions = el("div", "rev-actions");
     const create = button("Create", "createGuide", null, null, index);
-    create.disabled = model.busy || !guide.creatable;
+    create.disabled = model.busy || guide.exists;
     create.title = guide.exists
       ? "It already exists; open it and edit it"
-      : guide.creatable
-        ? "Create it empty, then write the conventions into it"
-        : "Not from inside a review: finish extracts the working tree, so this file would leave on review-fixes/";
+      : "Create it empty, then write the conventions into it";
     actions.appendChild(create);
     box.appendChild(actions);
     return box;
@@ -1210,16 +1208,6 @@ export function panelHtml(nonce: string): string {
     return toolsSection("Settings", settingsOpen, function (open) {
       settingsOpen = open;
     }, kids);
-  }
-
-  /**
-   * La seccion Walkthrough de una review: solo las guias. Init y build no van --
-   * son del autor parado en su propio PR, y aca estas parado en el de otro.
-   */
-  function renderGuidesSection(model, guides) {
-    return toolsSection("Walkthrough", walkthroughSectionOpen, function (open) {
-      walkthroughSectionOpen = open;
-    }, [renderGuides(model, guides)]);
   }
 
   /**
@@ -1643,18 +1631,6 @@ export function panelHtml(nonce: string): string {
       root.appendChild(renderEntry(model));
     } else {
       root.appendChild(empty("The cursor does not point at any entry in the sequence."));
-    }
-
-    // Las guias tambien adentro de una review, y es la unica seccion plegable
-    // que existe aca: el verbo walkthrough draft se corre desde adentro, que es el
-    // momento mas probable de querer escribir la tuya. Va al final y plegada,
-    // asi que no le compite el cuerpo al cursor de lectura, que es lo que esta
-    // situacion tiene para decir.
-    // No en finish-conflict: esa pantalla es "resolve los marcadores", y una
-    // seccion plegable de convenciones de escritura ahi es ruido.
-    const guides = model.situation === "review" ? (model.guides || []) : [];
-    if (guides.length > 0) {
-      root.appendChild(renderGuidesSection(model, guides));
     }
   }
 

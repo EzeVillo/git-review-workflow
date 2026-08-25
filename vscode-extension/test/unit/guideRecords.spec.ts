@@ -113,36 +113,15 @@ describe("argv de las guias", () => {
     });
 });
 
-describe("el registro guide tambien llega por status --porcelain", () => {
+describe("el registro guide es de config --porcelain y de ningun otro verbo", () => {
     const line = (...fields: string[]): string => fields.join(TAB);
     const STATE = line("state", "review/feat/x", "feat/x", "abc123", "whole", "none");
 
-    it("parsea las dos guias del reporte de una review", () => {
-        // Adentro de una review el panel lee ESTE verbo y ningun otro: sin los
-        // registros aca, las filas costarian una invocacion extra por refresco.
-        const out = [
-            STATE,
-            line("guide", "team", "/repo/.review/walkthrough-guide.md", "absent"),
-            line("guide", "own", "/repo/.git/review-walkthrough-guide.md", "in-force"),
-            "",
-        ].join("\n");
-        assert.deepStrictEqual(parsePorcelain(out).guides, [
-            {kind: "team", path: "/repo/.review/walkthrough-guide.md", state: "absent"},
-            {kind: "own", path: "/repo/.git/review-walkthrough-guide.md", state: "in-force"},
-        ]);
-    });
-
-    it("sin registros el campo queda ausente, no vacio", () => {
-        // Distingue "esta CLI no los reporta" de "no hay guias", igual que
-        // subjects/authors.
-        assert.strictEqual(parsePorcelain(STATE + "\n").guides, undefined);
-    });
-
-    it("los dos verbos usan el mismo parser", () => {
-        // Una sola regla: dos copias divergirian en cuanto apareciera un campo.
-        const row = line("guide", "own", "/x.md", "empty");
-        const fromStatus = parsePorcelain([STATE, row, ""].join("\n")).guides;
-        const fromConfig = parseConfigPorcelain(row + "\n").guides;
-        assert.deepStrictEqual(fromStatus, fromConfig);
+    it("el parser del reporte de una review no lo conoce", () => {
+        // Las guias se dibujan en el pie del panel y una review no tiene pie, asi
+        // que el reporte que se lee adentro de una review no las nombra y el
+        // parser no tiene por que reservarles un campo.
+        const parsed = parsePorcelain(STATE + "\n") as unknown as Record<string, unknown>;
+        assert.strictEqual("guides" in parsed, false);
     });
 });

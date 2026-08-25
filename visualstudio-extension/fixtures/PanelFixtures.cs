@@ -36,7 +36,6 @@ public static class PanelFixtures
         ("review whole", ReviewWhole()),
         ("finish-conflict", FinishConflict()),
         ("review walk draft", ReviewWalkDraft()),
-        ("review walk guides", ReviewWalkGuides()),
         ("review walk busy", ReviewWalk(busy: true)),
         ("review walk empty cursor", ReviewWalkEmptyCursor()),
         ("review whole empty", ReviewWholeEmpty()),
@@ -276,29 +275,6 @@ public static class PanelFixtures
             Entries: walkParsed.Entries);
         var model = PanelModelBuilder.BuildPanelModel(walkState, new PanelInputs(busy, Why: why));
         return model with { AtFirst = atFirst, AtLast = atLast || position >= (model.Total ?? 0) };
-    }
-
-    /// <summary>
-    /// A review with the two authoring guides: the folded Walkthrough section at the
-    /// end, and the shared row unable to create — finish extracts with git add -A, so
-    /// a file created here would leave on somebody else's review-fixes/.
-    /// </summary>
-    public static PanelModel ReviewWalkGuides()
-    {
-        var porcelain =
-            "state\treview/feature\tfeature\tdeadbeefcafebabe\twalk\tapplied\t1\t3\t3\t\"src/a.kt\"\t0\n" +
-            "entry\t1\tsrc/a.kt\t0\t1\n" +
-            "entry\t2\tsrc/b.kt\t0\t1\n" +
-            "guide\tteam\t/repo/.review/walkthrough-guide.md\tabsent\n" +
-            "guide\town\t/repo/.git/review-walkthrough-guide.md\tin-force";
-        var parsed = Porcelain.ParsePorcelain(porcelain);
-        return PanelModelBuilder.BuildPanelModel(
-            new ReviewState(
-                Situation.Review,
-                State: parsed.State,
-                Entries: parsed.Entries,
-                Guides: parsed.Guides),
-            new PanelInputs(false, Why: new PanelWhy(WhyState.Present, "Because I read it first.")));
     }
 
     public static PanelModel ReviewWalkDraft()

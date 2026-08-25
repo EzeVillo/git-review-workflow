@@ -95,13 +95,6 @@ public sealed record PanelGuide(
     GuideState State,
     string Badge,
     bool Exists,
-    /// <summary>
-    /// Whether Create can be INVOKED. Not the same as !Exists: inside a review the
-    /// shared guide cannot be created, because it is a file of the working tree and
-    /// finish's extraction (git add -A) would carry it into somebody else's PR. The
-    /// CLI refuses it; the control is drawn either way, off and saying why.
-    /// </summary>
-    bool Creatable,
     bool Discardable);
 
 /// <summary>
@@ -294,14 +287,8 @@ public static class PanelModelBuilder
     /// not drawn. Against a CLI that does not know the record none arrive and the
     /// whole block disappears, the same degradation the draft block has.
     /// </summary>
-    public static IReadOnlyList<PanelGuide> ToPanelGuides(
-        IReadOnlyList<GuideRecord> guides,
-        Situation situation)
+    public static IReadOnlyList<PanelGuide> ToPanelGuides(IReadOnlyList<GuideRecord> guides)
     {
-        // The CLI refuses to create the shared guide inside a review, for a reason the
-        // panel has to repeat rather than discover: finish extracts with `git add -A`,
-        // so a file created now would leave on somebody else's review-fixes/.
-        var inReview = situation == Situation.Review || situation == Situation.FinishConflict;
         var out_ = new List<PanelGuide>(guides.Count);
         foreach (var g in guides)
         {
@@ -312,7 +299,6 @@ public static class PanelModelBuilder
                 State: g.State,
                 Badge: GuideBadge(g.State),
                 Exists: g.State != GuideState.Absent,
-                Creatable: g.State == GuideState.Absent && !(inReview && g.Kind == GuideKind.Team),
                 Discardable: g.Kind == GuideKind.Own && g.State != GuideState.Absent));
         }
         return out_;
@@ -419,14 +405,11 @@ public static class PanelModelBuilder
             Drafts: state.Situation == Situation.NoReview
                 ? ToPanelDrafts(state.DraftsList)
                 : Array.Empty<PanelDraft>(),
-            // Unlike Drafts, the guides are drawn INSIDE a review too: the walkthrough
-            // draft verb is run from there, which is the likeliest moment to want to
-            // write yours. It costs no extra invocation — status --porcelain emits the
-            // same records config does.
-            Guides: ToPanelGuides(state.GuidesList, state.Situation),
-            // Only in NoReview: that is where the section lives, and inside a
-            // review the panel draws the guides and nothing else of this block.
-            // The row is built even when the record is missing — see
+            // They only arrive by config --porcelain, that is, only outside a review:
+            // the footer is where they are drawn and a review has no footer.
+            Guides: ToPanelGuides(state.GuidesList),
+            // Only in NoReview: that is where the section lives — a review has no
+            // footer. The row is built even when the record is missing — see
             // ToPanelWalkthrough.
             Walkthrough: state.Situation == Situation.NoReview
                 ? ToPanelWalkthrough(state.Walkthrough)

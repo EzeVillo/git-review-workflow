@@ -365,10 +365,10 @@ working tree:
   comando: es un archivo trackeado, o sea `git rm` más un commit, y `--delete --team` se niega
   diciéndolo.
 - **El registro `guide` de `config --porcelain`:** `guide<TAB><kind><TAB><path><TAB><state>`, con
-  `kind` = `team|own` y `state` = `in-force|empty|absent`. Lo emite **también `status --porcelain`**,
-  con el mismo `emit_guide_records`: adentro de una review el panel lee ese verbo y ningún otro, así
-  que sin los registros ahí las filas costarían una invocación entera de `config --porcelain` por
-  refresco en vez del único proceso que cuestan. **Siempre las dos filas**, exista o no
+  `kind` = `team|own` y `state` = `in-force|empty|absent`. **Sólo de ese verbo**, y por eso sólo
+  fuera de una review: las guías se dibujan en el pie del panel y una review no tiene pie, así que
+  `status --porcelain` no las nombra — sería un dato que nadie pide en el camino que tiene que salir
+  barato. **Siempre las dos filas**, exista o no
   cada archivo, y ahí está la diferencia con los registros `draft`: la ausencia se **reporta**, no
   se implica con el silencio, porque un cliente no puede ofrecer crear una guía de la que nunca le
   hablaron y rearmar el path de su lado es lo que la regla del path reportado existe para impedir.
@@ -514,13 +514,13 @@ guías de autoría) y el bloque **`listing:`**
 comprobaciones de layout vs `panelHtml.ts`, y los mismos escalares contra los archivos de dominio de
 `visualstudio-extension/`).
 
-**Las guías se dibujan también DENTRO de una review**, en una sección plegada al final, y es la
-única `tools_section` que una review tiene: el verbo `walkthrough draft` se corre desde adentro, que
-es el momento más probable de querer escribir la tuya. Init y build no van ahí (son del autor,
-parado en su propio PR) y el resto del pie tampoco; en `finish-conflict` no va nada, que esa
-pantalla es «resolvé los marcadores». Y ahí la fila compartida **no puede crear**: es un archivo del
-work tree y la extracción de `finish` (`git add -A`) se lo llevaría al PR de otra persona — la CLI
-lo niega y el panel lo dice antes, con el control dibujado y apagado.
+**Una review no tiene pie: ninguna `tools_section`.** Todo lo que cuelga de `walkthrough` —los dos
+verbos del autor y las dos guías de autoría— es de quien está parado en **su** PR, y adentro de una
+review estás parado en el de otro; una sección titulada «Walkthrough» al pie del orden de lectura
+que estás caminando diría además ese sustantivo por dos cosas distintas en la misma pantalla. Todo
+eso vive en `no-review`. Y los registros ni siquiera llegan hasta ahí: son de `config --porcelain`,
+que adentro de una review no se invoca, así que el modelo de los tres clientes tiene la lista vacía
+y ninguna superficie puede ofrecer nada sobre ellas por accidente.
 
 **Ninguno de los tres vigila el archivo de una guía, pero los tres escuchan el guardado.** El
 watcher no las mira a propósito (la propia vive en la raíz del gitdir, que cambia en cada operación
@@ -862,7 +862,7 @@ MOCHA_GREP='abre el diff' ./vscode-extension/test/run-docker.sh
   largo. `test/unit/userDataDir.spec.ts` cubre las dos cosas contra `darwin` explícito, así que la
   regresión cae en cualquier SO.
 - **`npm run preview`** genera `out/preview/index.html` (y lo imprime como URL
-  `file://`): los veintiocho estados del panel lado a lado, a ancho de sidebar, con selector de tema
+  `file://`): los veintisiete estados del panel lado a lado, a ancho de sidebar, con selector de tema
   dark/light/alto contraste. El pane es el `panelHtml()` real y los estados de `preview/fixtures.ts`
   son salida `--porcelain` de ejemplo pasada por el parser y el modelo reales, así que **sigue al
   código y no se mantiene aparte**. Lo que no puede afirmar: los botones no tienen extensión del

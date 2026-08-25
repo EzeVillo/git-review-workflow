@@ -114,21 +114,6 @@ class PanelLayoutGuidesTest {
     }
 
     @Test
-    fun `inside a review the shared guide cannot be created`() {
-        // finish extracts with git add -A, so a file created here would leave on
-        // somebody else's review-fixes/. The CLI refuses it; the control is drawn
-        // either way, off and saying why.
-        val rows = guideRows(PanelFixtures.reviewWalkGuides())
-        val team = control(rows[0], ControlId.CREATE_GUIDE)!!
-        assertFalse(team.enabled)
-        assertTrue(team.tooltip!!.contains("review-fixes/"))
-        // Yours is not in the work tree, so it stays offered -- except here it
-        // already exists, which is its own reason to be off.
-        assertEquals("in force", rows[1].badge)
-        assertTrue(control(rows[1], ControlId.OPEN_GUIDE)!!.enabled)
-    }
-
-    @Test
     fun `no guide records means no block at all`() {
         // The degradation against a CLI that does not know the record: the rows
         // disappear and Init/Build stay where they are.

@@ -47,7 +47,6 @@ object PanelFixtures {
         "review whole" to reviewWhole(),
         "finish-conflict" to finishConflict(),
         "review walk draft" to reviewWalkDraft(),
-        "review walk guides" to reviewWalkGuides(),
         "review walk busy" to reviewWalk(busy = true),
         "review walk empty cursor" to reviewWalkEmptyCursor(),
         "review whole empty" to reviewWholeEmpty(),
@@ -348,32 +347,6 @@ object PanelFixtures {
      * registro `draft` viaja por el porcelain como cualquier otro, así que el
      * badge sale del mismo camino que en la extensión.
      */
-    /**
-     * A review with the two authoring guides: the folded Walkthrough section at the
-     * end, and the shared row unable to create -- finish extracts with `git add -A`,
-     * so a file created here would leave on somebody else's review-fixes/.
-     */
-    fun reviewWalkGuides(): PanelModel {
-        val porcelain = """
-            state	review/feature	feature	deadbeefcafebabe	walk	applied	1	3	3	"src/a.kt"	0
-            entry	1	src/a.kt	0	1
-            entry	2	src/b.kt	0	1
-            entry	3	src/c.kt	0	0
-            guide	team	/repo/.review/walkthrough-guide.md	absent
-            guide	own	/repo/.git/review-walkthrough-guide.md	in-force
-        """.trimIndent()
-        val parsed = parsePorcelain(porcelain)
-        return buildPanelModel(
-            ReviewState(
-                situation = Situation.REVIEW,
-                state = parsed.state,
-                entries = parsed.entries,
-                guides = parsed.guides,
-            ),
-            PanelInputs(busy = false, why = PanelWhy(WhyState.PRESENT, "Because I read it first.")),
-        )
-    }
-
     fun reviewWalkDraft(): PanelModel {
         val porcelain = """
             state	review/feature	feature	deadbeefcafebabe	walk	applied	1	3	3	"src/a.kt"	0

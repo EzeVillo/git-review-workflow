@@ -907,12 +907,10 @@ public static class PanelLayoutBuilder
             {
                 Ctrl(
                     ControlId.CreateGuide, "Create", Emphasis.Secondary,
-                    enabled: enabled && g.Creatable,
+                    enabled: enabled && !g.Exists,
                     tooltip: g.Exists
                         ? "It already exists; open it and edit it"
-                        : g.Creatable
-                            ? "Create it empty, then write the conventions into it"
-                            : "Not from inside a review: finish extracts the working tree, so this file would leave on review-fixes/",
+                        : "Create it empty, then write the conventions into it",
                     index: index),
                 // With no visible label the accessible name IS the name of the
                 // control, and it names the row: "Open" on its own repeats once
@@ -1216,19 +1214,6 @@ public static class PanelLayoutBuilder
                         model,
                         enabled,
                         includeNav: model.Situation == Situation.Review));
-                }
-                // The guides inside a review too, folded and last: the walkthrough
-                // draft verb is run from in here, which is the likeliest moment to want
-                // to write yours. It is the ONLY tools section a review has — init and
-                // build do not belong (they are the author's, standing on their own PR)
-                // and neither does the rest of the footer. Not in finish-conflict: that
-                // screen is "resolve the markers", and a folded section about writing
-                // conventions is noise.
-                if (model.Situation == Situation.Review && model.GuidesList.Count > 0)
-                {
-                    outList.Add(new Block.ToolsSection(
-                        "Walkthrough",
-                        new Block[] { GuideRowsBlock(model) }));
                 }
                 blocks = outList;
                 break;

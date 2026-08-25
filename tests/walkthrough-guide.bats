@@ -393,33 +393,22 @@ teardown() {
 	[ "$output" = "0" ]
 }
 
-# ── dentro de una review el dato llega por status --porcelain ─────────────────
+# ── el registro es de config --porcelain, y solo de ahi ─────────────────────
 
-@test "status --porcelain reports both guides inside a review" {
-	# Adentro de una review el panel lee ESTE verbo y ningun otro: sin los
-	# registros, dibujar las filas costaria una invocacion entera de
-	# config --porcelain por refresco.
+@test "status --porcelain does not report the guides inside a review" {
+	# Las guias se dibujan en el pie del panel y una review no tiene pie, asi que
+	# el reporte que se lee adentro de una review no las nombra: es un dato que
+	# nadie pide en el camino que tiene que salir barato.
 	printf 'my rules\n' >"$OWN"
 	run git review start feature/plain
 	[ "$status" -eq 0 ]
 	run git review status --porcelain
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"guide	"* ]]
+	# Y el dato sigue estando donde el panel lo lee: config --porcelain se
+	# invoca igual desde adentro de una review y contesta lo mismo de siempre.
+	run git review config --porcelain
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"guide	team	"*"/.review/walkthrough-guide.md	absent"* ]]
 	[[ "$output" == *"guide	own	"*"/review-walkthrough-guide.md	in-force"* ]]
-}
-
-@test "the guide records of status and config say the same thing" {
-	# Un solo emisor para los dos verbos: dos formas del mismo hecho es como se
-	# empieza a divergir.
-	printf 'my rules\n' >"$OWN"
-	run git review config --porcelain
-	[ "$status" -eq 0 ]
-	printf '%s\n' "$output" | grep '^guide	' >"$TMP/from-config"
-	run git review start feature/plain
-	[ "$status" -eq 0 ]
-	run git review status --porcelain
-	[ "$status" -eq 0 ]
-	printf '%s\n' "$output" | grep '^guide	' >"$TMP/from-status"
-	run diff "$TMP/from-config" "$TMP/from-status"
-	[ "$status" -eq 0 ]
 }

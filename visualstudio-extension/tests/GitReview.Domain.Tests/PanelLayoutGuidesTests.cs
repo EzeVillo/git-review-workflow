@@ -122,35 +122,17 @@ public class PanelLayoutGuidesTests
     }
 
     [Fact]
-    public void Inside_a_review_the_guides_are_the_only_tools_section()
+    public void A_review_has_no_tools_section_at_all()
     {
-        // Init and build do not belong here — they are the author's, standing on their
-        // own PR — and neither does the rest of the footer.
-        var sections = PanelLayoutBuilder.PanelLayout(PanelFixtures.ReviewWalkGuides())
-            .Blocks.OfType<Block.ToolsSection>().ToList();
-        Assert.Equal(new[] { "Walkthrough" }, sections.Select(s => s.Title));
-        Assert.All(sections[0].NestedBlocks, b => Assert.IsType<Block.GuideRows>(b));
-    }
-
-    [Fact]
-    public void Inside_a_review_the_shared_guide_cannot_be_created()
-    {
-        // finish extracts with git add -A, so a file created here would leave on
-        // somebody else's review-fixes/. The CLI refuses it; the control is drawn
-        // either way, off and saying why.
-        var rows = Rows(PanelFixtures.ReviewWalkGuides());
-        var team = Control(rows[0], ControlId.CreateGuide);
-        Assert.False(team.Enabled);
-        Assert.Contains("review-fixes/", team.Tooltip);
-        Assert.Equal("in force", rows[1].Badge);
-        Assert.True(Control(rows[1], ControlId.OpenGuide).Enabled);
-    }
-
-    [Fact]
-    public void A_review_without_guides_has_no_tools_section_at_all()
-    {
-        var layout = PanelLayoutBuilder.PanelLayout(PanelFixtures.ReviewWalk());
-        Assert.DoesNotContain(layout.Blocks, b => b is Block.ToolsSection);
+        // Everything hanging off `walkthrough` — the author's two verbs and the two
+        // authoring guides — belongs to whoever is standing on THEIR OWN PR, and in
+        // here you are standing on somebody else's.
+        foreach (var model in new[] { PanelFixtures.ReviewWalk(), PanelFixtures.ReviewStep(), PanelFixtures.ReviewWhole() })
+        {
+            Assert.DoesNotContain(
+                PanelLayoutBuilder.PanelLayout(model).Blocks,
+                b => b is Block.ToolsSection);
+        }
     }
 
     [Fact]

@@ -129,18 +129,6 @@ class PanelLayoutContractTest {
         assertTrue(layout.collectControls().any { it.id == ControlId.OPEN_ALL_CHANGES && it.label == "Diff" })
     }
 
-    // La misma corrida para una review con guias: el bloque entra al layout de
-    // review-walk, asi que tiene que estar declarado ahi y no colarse como control
-    // de mas.
-    @Test
-    fun `review-walk with guides matches canonical`() {
-        assertLayoutAgainstCanonical(
-            key = "review-walk",
-            layout = panelLayout(PanelFixtures.reviewWalkGuides()),
-            mode = "walk",
-        )
-    }
-
     // El estado con guias: las mismas ocho de no-review MAS los controles del
     // bloque, y nada que el canonico no declare. Sin esta corrida el matcher solo
     // ve la fixture sin guias, o sea que el bloque nuevo entraba sin gate.

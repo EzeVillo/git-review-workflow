@@ -293,8 +293,27 @@ public static class Program
         check("buttons:styled", buttons.Count > 0 && buttons.All(b => b.Style is not null),
             $"{buttons.Count(b => b.Style is null)} of {buttons.Count} on the stock template");
 
-        var disabled = buttons.Where(b => !b.IsEnabled).ToList();
+        // A row header's glyph carries no fill, so it has no disabled pair to
+        // swap in - the extension dims it instead (`opacity: .5`), and so do we.
+        // Asking it for the pair below would fail the check for doing the right
+        // thing, so the question goes to the buttons that do have a fill.
+        var disabled = buttons
+            .Where(b => !b.IsEnabled && !PanelView.BareTag.Equals(b.Tag as string))
+            .ToList();
         check("buttons:disabled-present", disabled.Count > 0, "fixture stopped producing one");
+
+        // And the dimming itself, which is the whole of what says "disabled"
+        // there: without it a bare glyph looks the same enabled and not.
+        var bareDisabled = buttons
+            .Where(b => !b.IsEnabled && PanelView.BareTag.Equals(b.Tag as string))
+            .ToList();
+        check("buttons:bare-disabled-dimmed",
+            bareDisabled.Count > 0 && bareDisabled.All(b => b.Opacity < 1.0),
+            bareDisabled.Count == 0
+                ? "fixture stopped producing one"
+                : string.Join(", ", bareDisabled
+                    .Where(b => b.Opacity >= 1.0)
+                    .Select(b => $"{b.Content}")));
 
         // What a disabled button must not do is take the stock template's fill:
         // it has to come out in the chrome's disabled pair, and stay readable.

@@ -15,6 +15,12 @@ namespace GitReview.VS.ToolWindows;
 /// </summary>
 public sealed class PanelView : System.Windows.Controls.UserControl
 {
+    /// <summary>
+    /// Marks a button drawn with no fill of its own (a row header's glyph), so a
+    /// reader of the rendered tree can tell it from one that carries a fill.
+    /// </summary>
+    internal const string BareTag = "bare";
+
     private readonly PanelChrome _chrome;
     private readonly Style _primaryButton;
     private readonly Style _secondaryButton;
@@ -508,7 +514,7 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             // names their subject.
             foreach (var c in glyphs)
             {
-                var glyph = RenderControl(c);
+                var glyph = RenderControl(c, bare: true);
                 glyph.Margin = new Thickness(2, 0, 0, 0);
                 right.Children.Add(glyph);
             }
@@ -568,7 +574,7 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             var right = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
             foreach (var c in glyphs)
             {
-                var glyph = RenderControl(c);
+                var glyph = RenderControl(c, bare: true);
                 glyph.Margin = new Thickness(2, 0, 0, 0);
                 right.Children.Add(glyph);
             }
@@ -691,7 +697,15 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         return btn;
     }
 
-    private FrameworkElement RenderControl(DomainControl c)
+    /// <param name="bare">
+    /// An icon control that rides the HEADER of a row rather than a row of
+    /// controls: no box of its own, and a fill only under the pointer. The
+    /// distinction belongs to the place and not to the control, exactly as in
+    /// the extension, where the rule hangs off <c>.rev-head-actions button</c>
+    /// and not off the icon: the same glyphs in a review's nav row are two
+    /// filled buttons splitting the width (<c>.row button { flex: 1 }</c>).
+    /// </param>
+    private FrameworkElement RenderControl(DomainControl c, bool bare = false)
     {
         if (c.Emphasis == Emphasis.Icon)
         {
@@ -712,15 +726,52 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             var b = new Button
             {
                 Content = icon,
-                Style = _secondaryButton,
-                Width = 32,
-                Height = 28,
+                Style = bare ? _bareButton : _secondaryButton,
                 IsEnabled = c.Enabled,
                 // The tooltip proper when the layout gave the control one: a
                 // glyph whose hover only repeats its own name says nothing the
                 // glyph did not, and the draft ones carry the command they run.
                 ToolTip = c.Tooltip ?? c.AccessibleName,
             };
+            if (bare)
+            {
+                // A glyph in a row header is an affordance over that row, not an
+                // action of the panel: a filled box there outweighs the button
+                // pair underneath, which is the one that moves the flow. Which
+                // is why the fill waits for the pointer, like a file row's.
+                b.Background = Brushes.Transparent;
+                b.Foreground = _chrome.MutedForeground;
+                b.Padding = new Thickness(4, 3, 4, 3);
+                b.FontSize = 12;
+                b.Cursor = c.Enabled ? Cursors.Hand : Cursors.Arrow;
+                // The extension dims every disabled button (`opacity: .5`); the
+                // Bare style has no disabled pair of its own to fall back on,
+                // because a control with no fill has nothing to swap.
+                if (!c.Enabled) b.Opacity = 0.5;
+                // Says it is bare, for whoever looks at the rendered tree rather
+                // than at the layout: --verify asks the disabled pair only of
+                // the buttons that carry a fill.
+                b.Tag = BareTag;
+                if (c.Enabled)
+                {
+                    b.MouseEnter += (_, _) =>
+                    {
+                        b.Background = _chrome.RowHover;
+                        b.Foreground = _chrome.Foreground;
+                    };
+                    b.MouseLeave += (_, _) =>
+                    {
+                        b.Background = Brushes.Transparent;
+                        b.Foreground = _chrome.MutedForeground;
+                    };
+                }
+            }
+            else
+            {
+                b.Width = 32;
+                b.Height = 28;
+            }
+            System.Windows.Automation.AutomationProperties.SetName(b, c.AccessibleName);
             b.Click += (_, _) => ActionRequested?.Invoke(c.Id.Wire(), c.Index, c.SupportLinkId);
             return b;
         }

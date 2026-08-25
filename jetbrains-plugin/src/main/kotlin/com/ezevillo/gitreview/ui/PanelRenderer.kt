@@ -613,7 +613,7 @@ class PanelRenderer(
             // right edge. The glyphs go before it, still glued to the fact that
             // names their subject.
             for (c in glyphs) {
-                right.add(renderControl(c))
+                right.add(renderControl(c, bare = true))
             }
             right.add(chipLabel(r.meta))
             box.add(
@@ -659,7 +659,7 @@ class PanelRenderer(
             val (glyphs, labelled) = r.controls.partition { it.emphasis == Emphasis.ICON }
             val right = ArrayList<JComponent>()
             for (c in glyphs) {
-                right.add(renderControl(c))
+                right.add(renderControl(c, bare = true))
             }
             right.add(chipLabel(r.badge))
             box.add(
@@ -727,10 +727,70 @@ class PanelRenderer(
         return box
     }
 
-    fun renderControl(c: Control): JComponent {
+    /**
+     * @param bare un control de icono que va en la CABECERA de una fila, no en
+     *   una fila de controles: sin caja y con relleno recien bajo el puntero.
+     *   La distincion es del sitio y no del control, igual que en la extension,
+     *   donde la regla cuelga de `.rev-head-actions button` y no del icono: los
+     *   mismos glifos en la nav row de una review son dos botones rellenos que
+     *   se reparten el ancho (`.row button { flex: 1 }`).
+     */
+    fun renderControl(c: Control, bare: Boolean = false): JComponent {
         val btn = when (c.emphasis) {
             Emphasis.ICON -> {
-                val b = JButton()
+                // Un icono en la CABECERA de una fila es una afordancia sobre
+                // esa fila, no una accion del panel: la extension lo dibuja sin
+                // caja y le da relleno recien bajo el puntero (`background:
+                // none` mas el hover de la toolbar), igual que fileRow aca
+                // arriba y por el mismo motivo. Con el JButton de fabrica manda
+                // DarculaButtonUI, que le impone su ancho minimo (72px mas 14
+                // de padding): un glifo de 16 termina en un marco cuatro veces
+                // mas ancho que el, y tres cajas asi en una cabecera pesan mas
+                // que la botonera de abajo, que es la que si mueve el flujo.
+                // Asi que ahi la medida la damos nosotros, como el relleno.
+                val hover = chrome.rowHoverBackground()
+                val focus = chrome.linkForeground()
+                val b = object : JButton() {
+                    override fun paintComponent(g: Graphics) {
+                        if (bare) {
+                            if (isEnabled && (model.isRollover || model.isPressed)) {
+                                g.color = hover
+                                g.fillRect(0, 0, width, height)
+                            }
+                            // El LaF no pinta anillo de foco sobre un boton sin
+                            // borde, y el teclado es la unica forma de llegar a
+                            // estos glifos sin mouse.
+                            if (isFocusOwner) {
+                                g.color = focus
+                                g.drawRect(0, 0, width - 1, height - 1)
+                            }
+                        }
+                        super.paintComponent(g)
+                    }
+
+                    override fun getPreferredSize(): Dimension {
+                        if (!bare) return super.getPreferredSize()
+                        val ins = insets
+                        val ic = icon
+                        val w: Int
+                        val h: Int
+                        if (ic != null) {
+                            w = ic.iconWidth
+                            h = ic.iconHeight
+                        } else {
+                            val fm = getFontMetrics(font)
+                            w = fm.stringWidth(text ?: "")
+                            h = fm.height
+                        }
+                        return Dimension(w + ins.left + ins.right, h + ins.top + ins.bottom)
+                    }
+
+                    override fun getMinimumSize(): Dimension =
+                        if (bare) preferredSize else super.getMinimumSize()
+
+                    override fun getMaximumSize(): Dimension =
+                        if (bare) preferredSize else super.getMaximumSize()
+                }
                 val icon = when (c.id) {
                     ControlId.PREV -> chrome.iconPrev()
                     ControlId.NEXT -> chrome.iconNext()
@@ -766,6 +826,16 @@ class PanelRenderer(
                         // su fila, que es justo lo que un icono viene a evitar.
                         else -> c.accessibleName
                     }
+                }
+                if (bare) {
+                    b.isContentAreaFilled = false
+                    b.isBorderPainted = false
+                    b.isFocusPainted = false
+                    b.isOpaque = false
+                    b.isRolloverEnabled = true
+                    b.margin = Insets(0, 0, 0, 0)
+                    b.border = chrome.emptyBorder(3, 4, 3, 4)
+                    b.foreground = chrome.mutedForeground()
                 }
                 // The name is the floor; the tooltip proper, when the layout
                 // gave the control one, replaces it at the bottom of this

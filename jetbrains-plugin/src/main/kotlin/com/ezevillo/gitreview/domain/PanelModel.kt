@@ -61,6 +61,14 @@ data class PanelDraft(
      * not change shape with its state.
      */
     val startable: Boolean,
+    /**
+     * Whether its review is over. A draft outlives the review it was written
+     * for -- clean does not touch hand-written prose -- but it stops being work
+     * in progress, so it leaves the block at the top for a collapsed section
+     * with the two controls that still make sense: open it and discard it. The
+     * CLI decides it; nothing is inferred here.
+     */
+    val spent: Boolean,
 )
 
 /**
@@ -275,6 +283,7 @@ fun toPanelDrafts(drafts: List<DraftRecord>): List<PanelDraft> =
             annotated = draft.annotated,
             total = draft.total,
             startable = draft.source != DraftSource.UNKNOWN && draft.range != DraftRange.UNKNOWN,
+            spent = draft.state == DraftState.REVIEWED,
         )
     }
 

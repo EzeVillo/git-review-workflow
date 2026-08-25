@@ -9,10 +9,17 @@ import {
 
 describe("initialDraftFlowState", () => {
     it("create arranca creando el borrador; resume ya termino", () => {
-        assert.deepStrictEqual(initialDraftFlowState("create"), {kind: "create"});
-        // draft-resume no recrea nada: el archivo existe y volver a crearlo
-        // pisaria lo escrito. Sin creacion no queda ningun paso.
+        assert.deepStrictEqual(initialDraftFlowState("create"), {kind: "create", force: false});
+        // draft-resume no invoca nada: el archivo se usa tal cual esta.
         assert.deepStrictEqual(initialDraftFlowState("resume"), {kind: "done"});
+    });
+
+    it("update es el mismo comando que create; start-over es el que lleva --force", () => {
+        // El verbo actualiza en vez de negarse, asi que reconciliar no necesita
+        // ningun flag: lo unico que distingue a las dos ramas del picker es que
+        // una tira lo escrito y la otra no.
+        assert.deepStrictEqual(initialDraftFlowState("update"), {kind: "create", force: false});
+        assert.deepStrictEqual(initialDraftFlowState("start-over"), {kind: "create", force: true});
     });
 });
 
@@ -29,14 +36,14 @@ describe("advanceDraftFlow", () => {
         const kinds = new Set<string>();
         kinds.add(initialDraftFlowState("create").kind);
         kinds.add(initialDraftFlowState("resume").kind);
-        kinds.add(advanceDraftFlow({kind: "create"}, {kind: "created", ok: true}).kind);
-        kinds.add(advanceDraftFlow({kind: "create"}, {kind: "created", ok: false}).kind);
+        kinds.add(advanceDraftFlow({kind: "create", force: false}, {kind: "created", ok: true}).kind);
+        kinds.add(advanceDraftFlow({kind: "create", force: false}, {kind: "created", ok: false}).kind);
         assert.deepStrictEqual([...kinds].sort(), ["back", "create", "done"]);
     });
 
     it("un fallo de creacion vuelve atras con el motivo de la CLI", () => {
         const state = advanceDraftFlow(
-            {kind: "create"},
+            {kind: "create", force: false},
             {kind: "created", ok: false, error: "a draft already exists; use --force"}
         );
         assert.deepStrictEqual(state, {kind: "back", error: "a draft already exists; use --force"});
@@ -44,7 +51,7 @@ describe("advanceDraftFlow", () => {
 
     it("un fallo sin stderr vuelve atras igual, sin inventar un motivo", () => {
         assert.deepStrictEqual(
-            advanceDraftFlow({kind: "create"}, {kind: "created", ok: false}),
+            advanceDraftFlow({kind: "create", force: false}, {kind: "created", ok: false}),
             {kind: "back"}
         );
     });

@@ -7,6 +7,8 @@ import com.ezevillo.gitreview.domain.DraftFlowState
 import com.ezevillo.gitreview.domain.DraftRange
 import com.ezevillo.gitreview.domain.DraftRecord
 import com.ezevillo.gitreview.domain.DraftSource
+import com.ezevillo.gitreview.domain.DraftState
+import com.ezevillo.gitreview.domain.DraftStep
 import com.ezevillo.gitreview.domain.ReadingOffer
 import com.ezevillo.gitreview.domain.ReviewIntent
 import com.ezevillo.gitreview.domain.ReviewLayout
@@ -148,16 +150,17 @@ object StartWizard {
         val cfgResult = Bg.sync(project, "git review config") {
             service.cliInvoker.invoke("config", flags, cwd)
         }
-        val offers = if (cfgResult.exitCode == 0) {
+        var offers: List<ReadingOffer>? = null
+        var drafts: List<DraftRecord>? = null
+        if (cfgResult.exitCode == 0) {
             try {
                 val report = parseConfigPorcelain(cfgResult.stdout)
                 if (report.deltas != null) deltas = report.deltas
-                report.offers
+                offers = report.offers
+                drafts = report.drafts
             } catch (_: Exception) {
-                null
+                // Sin ofertas se cae al fallback de siempre.
             }
-        } else {
-            null
         }
         if (cfgResult.exitCode != 0) {
             val text = cfgResult.stderr.trim().ifEmpty { UserCopy.COULD_NOT_READ_OFFERS }
@@ -176,6 +179,7 @@ object StartWizard {
                 deltas = deltas,
             ),
             offers,
+            drafts,
         )
     }
 
@@ -200,8 +204,13 @@ object StartWizard {
      * aparte— cuando el revisor entra al armado del borrador y cancela: sale de
      * ahí con el borrador intacto y la oferta convertida en `draft-resume`.
      */
-    private fun layoutStep(ctx: WizardContext, offers: List<ReadingOffer>?) {
-        val items = buildLayoutItems(offers)
+    private fun layoutStep(
+        ctx: WizardContext,
+        offers: List<ReadingOffer>?,
+        drafts: List<DraftRecord>?,
+    ) {
+        val spent = drafts?.any { it.src == ctx.branch && it.state == DraftState.REVIEWED } == true
+        val items = buildLayoutItems(offers, spent)
         val labels = items.map { item ->
             if (item.description.isNotEmpty()) "${item.label} — ${item.description}" else item.label
         }.toTypedArray()
@@ -218,7 +227,30 @@ object StartWizard {
             confirmAndStart(ctx, picked.layout)
             return
         }
-        runDraftFlow(ctx, initialDraftFlowState(draftStep))
+        // Un orden que ya se leyó no se retoma a ciegas: se pregunta si
+        // reconciliarlo con lo que el PR cambió desde entonces o empezar uno
+        // nuevo. Los demás caminos no tienen nada que preguntar. Cancelar
+        // devuelve al paso de forma de lectura, que es de donde se viene.
+        var step = draftStep
+        if (step == DraftStep.RESUME && spent) {
+            when (
+                UiMessages.choose(
+                    ctx.project,
+                    UserCopy.DRAFT_EXISTS_TITLE,
+                    UserCopy.DRAFT_EXISTS_DETAIL,
+                    UserCopy.WALKTHROUGH_UPDATE_BUTTON,
+                    UserCopy.WALKTHROUGH_START_OVER_BUTTON,
+                )
+            ) {
+                UiMessages.Choice.FIRST -> step = DraftStep.UPDATE
+                UiMessages.Choice.SECOND -> step = DraftStep.START_OVER
+                UiMessages.Choice.CANCELLED -> {
+                    layoutStep(ctx, offers, drafts)
+                    return
+                }
+            }
+        }
+        runDraftFlow(ctx, initialDraftFlowState(step))
     }
 
     /**
@@ -235,7 +267,7 @@ object StartWizard {
         while (true) {
             when (val current = state) {
                 is DraftFlowState.Create -> {
-                    val outcome = invokeDraft(ctx, service)
+                    val outcome = invokeDraft(ctx, service, current.force)
                     if (outcome.ok && outcome.text.isNotEmpty()) {
                         // Nota de un verbo exitoso (el borrador tapa el
                         // walkthrough del autor): se muestra, como las de start.
@@ -263,7 +295,8 @@ object StartWizard {
                     }
                     // Con las ofertas al día: si se creó el borrador, la de
                     // armarlo ya es la de continuarlo.
-                    layoutStep(ctx, loadOffers(ctx, service))
+                    val reloaded = loadOffers(ctx, service)
+                    layoutStep(ctx, reloaded.offers, reloaded.drafts)
                     return
                 }
             }
@@ -279,6 +312,7 @@ object StartWizard {
     private fun invokeDraft(
         ctx: WizardContext,
         service: GitReviewService,
+        force: Boolean,
     ): DraftOutcome {
         // Under the mutation lock, like every other CLI invocation this plugin
         // makes — and like the extension's own invokeDraft. Drafting touches no
@@ -289,7 +323,7 @@ object StartWizard {
             Bg.sync(ctx.project, UserCopy.draftProgress(ctx.branch, build = false)) {
                 service.cliInvoker.invoke(
                     "walkthrough",
-                    draftArgs(ctx.branch, ctx.source, ctx.range, build = false),
+                    draftArgs(ctx.branch, ctx.source, ctx.range, build = false, force = force),
                     ctx.cwd,
                 )
             }
@@ -301,7 +335,13 @@ object StartWizard {
     }
 
     /** Ofertas para el contexto ya resuelto (misma invocación que el paso 4). */
-    private fun loadOffers(ctx: WizardContext, service: GitReviewService): List<ReadingOffer>? {
+    /** Las ofertas y los borradores del namespace activo, de una sola llamada. */
+    private data class OfferContext(
+        val offers: List<ReadingOffer>?,
+        val drafts: List<DraftRecord>?,
+    )
+
+    private fun loadOffers(ctx: WizardContext, service: GitReviewService): OfferContext {
         val flags = offerConfigFlags(ctx.source, ctx.range).toMutableList()
         flags.add(0, "--porcelain")
         flags.add("--")
@@ -309,11 +349,12 @@ object StartWizard {
         val result = Bg.sync(ctx.project, "git review config") {
             service.cliInvoker.invoke("config", flags, ctx.cwd)
         }
-        if (result.exitCode != 0) return null
+        if (result.exitCode != 0) return OfferContext(null, null)
         return try {
-            parseConfigPorcelain(result.stdout).offers
+            val report = parseConfigPorcelain(result.stdout)
+            OfferContext(report.offers, report.drafts)
         } catch (_: Exception) {
-            null
+            OfferContext(null, null)
         }
     }
 

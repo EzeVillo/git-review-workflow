@@ -244,6 +244,105 @@ EOF
 	grep -q '^the delicate bit is the counter$' .review/walkthrough.md
 }
 
+# ── draft: update in place, the reviewer side of the same thing ───────────────
+#
+# The reason it exists is not the same as init's. A draft cannot fall out of step
+# DURING a review -- start freezes the tip -- but it outlives the review, and the
+# next one is over a range that moved. --offline throughout: this fixture has no
+# remote, and offline is the flag that resolves both ends locally.
+
+DRAFT_OF() { printf '%s/review-walkthrough/%s.md' "$(git rev-parse --git-dir)" "$1"; }
+
+# A draft with both of its entries written, the way a reviewer would leave one.
+write_draft() {
+	d="$(DRAFT_OF feature/x)"
+	mkdir -p "$(dirname "$d")"
+	cat >"$d" <<'EOF'
+# Walkthrough
+
+## Heads-up
+
+read the counter first
+
+## 1. a.txt
+reviewer why a
+
+## 2. b.txt
+reviewer why b
+EOF
+}
+
+@test "draft updates an existing draft instead of refusing" {
+	write_draft
+	printf 'new
+' >c.txt
+	git add c.txt
+	git commit --quiet -m c2
+
+	run git review walkthrough draft --offline feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"updated "* ]]
+	[[ "$output" == *"2 kept"* ]]
+	[[ "$output" == *"1 added"* ]]
+
+	d="$(DRAFT_OF feature/x)"
+	# The reviewer's prose survives, numbering and all.
+	grep -q '^## 1\. a\.txt$' "$d"
+	grep -q '^## 2\. b\.txt$' "$d"
+	grep -q '^reviewer why a$' "$d"
+	grep -q '^reviewer why b$' "$d"
+	grep -q '^read the counter first$' "$d"
+	# And the file that entered the range arrives as a placeholder.
+	grep -q '^## ?\. c\.txt$' "$d"
+}
+
+@test "draft update names the dropped entries and offers no way back" {
+	write_draft
+	# b.txt goes back to its base content, so the PR no longer changes it.
+	printf 'b1
+' >b.txt
+	git add b.txt
+	git commit --quiet -m revert-b
+
+	run git review walkthrough draft --offline feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"1 entry/entries dropped"* ]]
+	[[ "$output" == *"b.txt"* ]]
+	# No "git checkout" hint here, unlike init: this file is not in git, so the
+	# note naming the paths is all the reviewer gets, and promising a way back
+	# would be promising something that does not exist.
+	[[ "$output" != *"git checkout --"* ]]
+	! grep -q '^## 2\. b\.txt$' "$(DRAFT_OF feature/x)"
+}
+
+@test "draft --force still discards everything and writes a blank skeleton" {
+	write_draft
+	run git review walkthrough draft --offline --force feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"wrote "* ]]
+	[[ "$output" != *"kept"* ]]
+
+	d="$(DRAFT_OF feature/x)"
+	! grep -q 'reviewer why a' "$d"
+	grep -q '^## ?\. a\.txt$' "$d"
+}
+
+@test "draft update over a current draft changes not one entry" {
+	write_draft
+	d="$(DRAFT_OF feature/x)"
+	before="$(cat "$d")"
+
+	run git review walkthrough draft --offline feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"2 kept"* ]]
+	[[ "$output" == *"0 added"* ]]
+	[[ "$output" == *"0 dropped"* ]]
+	# Same entries, in the same order, with the same prose: an update with
+	# nothing to reconcile is not an excuse to rewrite what is written.
+	[ "$(entries_of "$d")" = "$(printf '%s
+' "$before" | awk '/^## ([0-9]+|\?)\. / { on = 1 } on { print }')" ]
+}
+
 # ── init --stdout ─────────────────────────────────────────────────────────────
 
 @test "init --stdout writes nothing and names build --from as the way back" {

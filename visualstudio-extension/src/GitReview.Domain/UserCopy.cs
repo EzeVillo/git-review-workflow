@@ -284,6 +284,18 @@ public static class UserCopy
     public const string WalkthroughExistsDetail =
         "Update keeps every entry whose file is still in range - its number, its why and its > key - and adds the files that are new.\n\n"
         + "Start over runs git review walkthrough init --force: it replaces .review/walkthrough.md with a blank skeleton. The file is tracked, so git checkout -- brings the old one back.";
+    /// <summary>
+    /// The same pair of ways out on the reviewer's side. Two things differ from
+    /// the author's text, and both matter: the file is not in git, so starting
+    /// over has no way back; and what is reconciled is not a walkthrough that went
+    /// stale but a reading order that was already used, over a PR that kept moving.
+    /// </summary>
+    public const string DraftExistsTitle = "You already have a reading order for this branch.";
+
+    public const string DraftExistsDetail =
+        "Update keeps every entry whose file is still in range - its number, its why and its > key - and adds the files the PR changed since.\n\n" +
+        "Start over runs git review walkthrough draft --force: it replaces your reading order with a blank skeleton. This file is not in git, so what is written in it now is gone for good.";
+
     public const string WalkthroughUpdateButton = "Update";
     public const string WalkthroughStartOverButton = "Start over";
 

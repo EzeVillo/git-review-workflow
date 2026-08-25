@@ -107,6 +107,14 @@ export interface PanelDraft {
      * celdas, así que no cambia de forma con su estado.
      */
     startable: boolean;
+    /**
+     * Si su review ya terminó. Un borrador sobrevive a la review para la que
+     * se escribió —`clean` no toca prosa escrita a mano— pero deja de ser
+     * trabajo en curso, así que sale del bloque de arriba y baja a una sección
+     * plegada con los dos controles que siguen teniendo sentido: abrirlo y
+     * descartarlo. Lo decide la CLI; acá no se infiere.
+     */
+    spent: boolean;
 }
 
 /**
@@ -479,6 +487,7 @@ function toPanelDrafts(drafts: readonly DraftRecord[]): PanelDraft[] {
         annotated: draft.annotated,
         total: draft.total,
         startable: draft.source !== "unknown" && draft.range !== "unknown",
+        spent: draft.state === "reviewed",
     }));
 }
 

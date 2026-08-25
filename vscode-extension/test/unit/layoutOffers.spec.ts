@@ -71,6 +71,35 @@ describe("buildLayoutItems", () => {
         assert.strictEqual(items[2].draft, undefined);
     });
 
+    it("sobre un borrador gastado la fila dice otra cosa", () => {
+        // "pick up the one you left half-written" describe un orden a medio
+        // escribir; sobre uno terminado y ya usado es falso, y lo que sigue no es
+        // terminarlo sino reconciliarlo o empezar uno nuevo.
+        const offers = [{id: "draft-resume", rank: "available"} as const];
+        const fresh = buildLayoutItems(offers);
+        const spent = buildLayoutItems(offers, true);
+
+        assert.strictEqual(fresh[0].label, "Finish the reading order you started");
+        assert.strictEqual(spent[0].label, "Reuse the reading order you wrote");
+        assert.notStrictEqual(spent[0].description, fresh[0].description);
+        // Lo demas de la fila no cambia: sigue siendo el camino del borrador y
+        // sigue llevando al mismo layout.
+        assert.strictEqual(spent[0].draft, "resume");
+        assert.strictEqual(spent[0].layout, "walk");
+    });
+
+    it("el estado del borrador no toca ninguna otra fila", () => {
+        const offers = [
+            {id: "walk", rank: "recommended"} as const,
+            {id: "step", rank: "available"} as const,
+            {id: "whole", rank: "available"} as const,
+        ];
+        assert.deepStrictEqual(
+            buildLayoutItems(offers, true).map((i) => i.label),
+            buildLayoutItems(offers).map((i) => i.label)
+        );
+    });
+
     it("draft-resume convive con walk recommended, que va primero", () => {
         const items = buildLayoutItems([
             {id: "draft-resume", rank: "available"},

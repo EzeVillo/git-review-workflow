@@ -53,7 +53,10 @@ The progress follows the file, so handing the draft to an agent moves the count
 on its own, with nobody hitting Refresh. The draft is **yours and local**: it
 lives outside the working tree, is never committed or staged, and `git status`
 does not change at any point. Once it is in, the review reads it exactly like an
-author's walkthrough and the panel marks the mode `(draft)`.
+author's walkthrough and the panel marks the mode `(draft)`. Once its review is
+over the draft stays on disk but moves to **Reading orders you finished with**,
+collapsed at the bottom, where it keeps the two glyphs and loses the pair that
+writes the order and starts the review.
 
 **Your other reviews, when this branch has none.** With no review on the current
 branch the panel lists the ones open elsewhere in the repository — active and

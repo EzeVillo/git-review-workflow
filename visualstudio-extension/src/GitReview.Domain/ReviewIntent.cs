@@ -120,14 +120,21 @@ public static class ReviewIntentLogic
     /// <summary>
     /// Argv for <c>git review walkthrough draft</c> (011). Verb is walkthrough; draft is first arg.
     /// </summary>
+    /// <param name="force">
+    /// Throws away what is there and writes a blank skeleton. Without it the verb
+    /// reconciles, which is what is wanted nearly always; with it there is no way
+    /// back, because this file is not in git.
+    /// </param>
     public static IReadOnlyList<string> DraftArgs(
         string branch,
         ReviewSource source,
         ReviewRange range,
-        bool build)
+        bool build,
+        bool force = false)
     {
         var args = new List<string> { "draft" };
         if (build) args.Add("--build");
+        if (force) args.Add("--force");
         args.AddRange(OriginAndRangeFlags(source, range));
         args.Add("--");
         args.Add(branch);

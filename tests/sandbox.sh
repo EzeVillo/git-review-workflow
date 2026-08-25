@@ -463,6 +463,43 @@ publish feature/merged-base
 git config "reviewworkflow.feature/merged-base.reviewed" "$merged_base_prev"
 git switch --quiet develop
 
+# A pull request the reviewer already read, with the reading order they wrote for
+# it still on disk. The draft is generated against the tip and the marker a
+# completed review leaves behind is set to that same tip, so the CLI reports the
+# draft as `reviewed` and the panel draws it under "Reading orders you finished
+# with" instead of among the ones still to write. Nothing here deletes it: that
+# is `git review forget --draft --reviewed`, which this is the branch to try it
+# on.
+pr feature/receipts
+
+cat >src/receipts.js <<'EOF'
+export function receipt(order) {
+	return { id: order.id, total: order.total, issued: order.paidAt };
+}
+EOF
+git add src/receipts.js
+git commit --quiet -m "feat: comprobantes de pago"
+publish feature/receipts
+git switch --quiet develop
+# Written from develop, exactly as a reviewer would, then filled in and marked as
+# read. Filled in on purpose: a reading order with entries still unwritten is
+# never reported as finished, whatever the marker says -- so a bare skeleton here
+# would show up among the pending ones and this branch would demonstrate nothing.
+git review walkthrough draft feature/receipts >/dev/null 2>&1
+receipts_draft="$(git rev-parse --git-dir)/review-walkthrough/feature/receipts.md"
+awk '
+	/^<!-- heads-up/ { print "Payment state is the only thing worth re-reading here."; if (index($0, "-->") == 0) hu = 1; next }
+	hu { if (index($0, "-->")) hu = 0; next }
+	/^## [?][.] / { n++; sub(/^## [?][.] /, "## " n ". "); print; next }
+	/^<!-- why/ { print "REVIEWER: the receipt is issued off paidAt, so an unpaid order must not reach it."; if (index($0, "-->") == 0) w = 1; next }
+	w { if (index($0, "-->")) w = 0; next }
+	{ print }
+' "$receipts_draft" >"$receipts_draft.filled"
+mv "$receipts_draft.filled" "$receipts_draft"
+git review walkthrough draft --build feature/receipts >/dev/null 2>&1
+git config "reviewworkflow.feature/receipts.reviewed" \
+	"$(git rev-parse origin/feature/receipts)"
+
 # A pull request whose walkthrough went stale: every path it names was renamed
 # away, so it covers nothing in the range and the review degrades to whole with a
 # note. This is the failure mode that must never fail a review, only degrade it.
@@ -773,6 +810,8 @@ The other branches, one per state that feature/checkout cannot show:
   feature/shipping        finished with edits left unresolved (see below)
   feature/conflict        finish stopped mid-conflict (see below)
   feature/pagos           hostile subject/author bytes; review with --step
+  feature/receipts        a draft written for it and its review already closed:
+                          the reading order the panel folds away as finished
   feature/merged-base     the base merged in, plus a --delta marker: the only
                           shape whose review lower bound is a tree OID
 
@@ -796,6 +835,7 @@ Try it:
   git review start feature/checkout --no-walk  # the plain full diff, walkthrough ignored
   git review start feature/notifications     # then: git review status --porcelain
   git review walkthrough draft --delta feature/merged-base   # lower bound = tree OID
+  git review forget --draft --reviewed --dry-run   # the ones whose review is over
   git review status / list / next / prev
 $saved_note
   git review list --porcelain                # finish pending/conflict rows above

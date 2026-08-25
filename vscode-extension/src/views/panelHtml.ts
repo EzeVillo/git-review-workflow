@@ -791,6 +791,16 @@ export function panelHtml(nonce: string): string {
 
     box.appendChild(head);
 
+    // Una fila cuya review ya terminó se queda acá: el par de abajo es el
+    // flujo de escribir el orden y arrancar la review, y las dos cosas ya
+    // pasaron. Copy for agent le pediría a un agente que complete lo que está
+    // completo, y Validate and start ofrecería releer un rango que se cerró.
+    // El archivo sigue existiendo y los dos iconos de arriba siguen siendo lo
+    // que se quiere: abrirlo o tirarlo.
+    if (draft.spent) {
+      return box;
+    }
+
     const actions = el("div", "draft-actions");
     // Un solo control enfático por fila, y el progreso decide cuál: mientras
     // falten entradas el paso siguiente es llenar el borrador, y recién con el
@@ -837,13 +847,34 @@ export function panelHtml(nonce: string): string {
     return box;
   }
 
-  function renderDrafts(model, drafts) {
+  /**
+   * El bloque de borradores. Cada fila es un par [borrador, índice en
+   * model.drafts]: el índice viaja al host y es el que resuelve de qué
+   * archivo se habla, así que sigue siendo el de la lista COMPLETA aunque
+   * acá se dibuje una parte.
+   */
+  function renderDrafts(model, rows, heading) {
     const box = el("div", "inv");
-    box.appendChild(el("h2", null, "Reading orders you started"));
-    drafts.forEach(function (draft, index) {
-      box.appendChild(renderDraft(model, draft, index));
+    // Sin encabezado propio en la sección plegada: ahí el título es el summary
+    // del <details>, y un h2 abajo lo diría dos veces.
+    if (heading) {
+      box.appendChild(el("h2", null, heading));
+    }
+    rows.forEach(function (row) {
+      box.appendChild(renderDraft(model, row[0], row[1]));
     });
     return box;
+  }
+
+  /** Los pares [borrador, índice] cuyo estado gastado es el pedido. */
+  function draftRows(model, spent) {
+    const rows = [];
+    (model.drafts || []).forEach(function (draft, index) {
+      if (Boolean(draft.spent) === spent) {
+        rows.push([draft, index]);
+      }
+    });
+    return rows;
   }
 
   /**
@@ -965,6 +996,7 @@ export function panelHtml(nonce: string): string {
   // actions / Settings / Support se pliega al primer refresh (busy, etc.).
   let otherActionsOpen = false;
   let walkthroughSectionOpen = false;
+  let spentDraftsOpen = false;
   let settingsOpen = false;
   let supportOpen = false;
 
@@ -1092,6 +1124,29 @@ export function panelHtml(nonce: string): string {
   }
 
   /**
+   * Los borradores cuya review ya terminó, plegados al fondo. Siguen
+   * existiendo —descartarlos es una decisión aparte, la del verbo forget—
+   * pero no son trabajo pendiente, y arriba ocupaban el mismo lugar y el
+   * mismo peso que un orden a medio escribir.
+   *
+   * Plegada, no escondida: un archivo que existe y ninguna superficie nombra
+   * es justo el estado que este panel no deja pasar en ningún otro lado. Acá
+   * están sus dos controles de siempre, que son los que quedan con sentido.
+   */
+  function renderSpentDrafts(model) {
+    const rows = draftRows(model, true);
+    if (rows.length === 0) {
+      return null;
+    }
+    return toolsSection("Reading orders you finished with", spentDraftsOpen, function (open) {
+      spentDraftsOpen = open;
+    }, [
+      el("p", null, "Their review is over; the files are still here"),
+      renderDrafts(model, rows, null),
+    ]);
+  }
+
+  /**
    * Base y remote del repo, plegados. Solo con base ya configurada (el setup
    * los muestra inline). Debajo de Other actions, encima de Support.
    */
@@ -1133,6 +1188,10 @@ export function panelHtml(nonce: string): string {
     const footer = el("div", "pane-footer");
     footer.appendChild(renderOtherActions(model));
     footer.appendChild(renderWalkthroughSection(model, model.guides || []));
+    const spent = renderSpentDrafts(model);
+    if (spent) {
+      footer.appendChild(spent);
+    }
     footer.appendChild(renderSettings(model));
     footer.appendChild(renderSupport());
     return footer;
@@ -1149,13 +1208,15 @@ export function panelHtml(nonce: string): string {
         // guardó con setState, que puede venir de una versión sin este campo.
         // pane-main = body scrolleable + footer anclado (fills lo pone render).
         const reviews = model.reviews || [];
-        const drafts = model.drafts || [];
+        // Sólo los que todavía tienen una review por delante. Los gastados
+        // bajan a su propia sección del pie (renderSpentDrafts).
+        const drafts = draftRows(model, false);
         const body = el("div", "pane-body");
         // Los borradores empezados van primero y el cuerpo de siempre sigue
         // entero debajo: un orden de lectura a medio escribir es lo que el
         // revisor dejó abierto, pero no reemplaza el inventario ni Start.
         if (drafts.length > 0) {
-          body.appendChild(renderDrafts(model, drafts));
+          body.appendChild(renderDrafts(model, drafts, "Reading orders you started"));
         }
         if (reviews.length > 0) {
           body.appendChild(renderInventory(model, reviews));

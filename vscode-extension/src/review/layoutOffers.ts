@@ -88,7 +88,27 @@ export function effectiveOffers(offers: readonly ReadingOffer[] | undefined): Re
  * QuickPick items: recommended primero; resto en orden del contrato.
  * Nunca inventa ids que no vengan en `offers` (salvo vía effectiveOffers).
  */
-export function buildLayoutItems(offers: readonly ReadingOffer[] | undefined): LayoutPickItem[] {
+/**
+ * Lo que dice la fila del borrador cuando su review YA cerró. La de siempre
+ * —"pick up the one you left half-written"— describe un orden a medio escribir,
+ * y sobre uno terminado y ya usado es sencillamente falso: lo que sigue ahí no
+ * es terminarlo sino reconciliarlo con lo que el PR cambió desde entonces, o
+ * empezar uno nuevo. La elección se hace después, en el picker.
+ */
+const SPENT_RESUME_META = {
+    label: "Reuse the reading order you wrote",
+    description: "you already reviewed with it; update it for what changed, or start over",
+};
+
+/**
+ * @param spentDraft si el borrador de esta rama tiene su review cerrada, que es
+ *   lo único que cambia la copy de `draft-resume`. Lo dice la CLI en el campo
+ *   `state` del registro `draft`; acá no se deriva.
+ */
+export function buildLayoutItems(
+    offers: readonly ReadingOffer[] | undefined,
+    spentDraft = false
+): LayoutPickItem[] {
     const list = effectiveOffers(offers);
     const byId = new Map<OfferId, OfferRank>();
     for (const o of list) {
@@ -108,7 +128,10 @@ export function buildLayoutItems(offers: readonly ReadingOffer[] | undefined): L
     }
 
     return ordered.map((id) => {
-        const meta = OFFER_META[id];
+        const meta =
+            id === "draft-resume" && spentDraft
+                ? {...OFFER_META[id], ...SPENT_RESUME_META}
+                : OFFER_META[id];
         const rank = byId.get(id) ?? "available";
         const description =
             rank === "recommended" ? `${meta.description} (recommended)` : meta.description;

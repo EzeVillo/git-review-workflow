@@ -52,7 +52,9 @@ along it is (`3/9`, counted by the CLI), and *Validate and start* runs the revie
 on your order once it is complete. The draft is **yours and local** — it lives
 outside the working tree, is never committed or staged, and `git status` does not
 change at any point. The panel marks the mode `(draft)` so it is clear whose
-order you are on.
+order you are on. Once its review is over the draft stays on disk but moves to
+**Reading orders you finished with**, collapsed at the bottom, where it can still
+be opened or thrown away.
 
 **Your other reviews, when this branch has none.** With no review on the current
 branch the panel lists the ones open elsewhere in the repository — active and

@@ -381,6 +381,47 @@ class PanelLayoutContractTest {
         assertEquals(ControlId.DISCARD_DRAFT, rows[0].controls.last().id, "el irreversible va ultimo")
     }
 
+    /**
+     * Un borrador cuya review termino sale del bloque de arriba y baja a la
+     * seccion plegada del pie, con los dos iconos y sin el par con etiqueta. El
+     * archivo sigue existiendo -- descartarlo es el verbo forget --, asi que la
+     * fila tiene que seguir estando en algun lado y con como tirarla.
+     */
+    @Test
+    fun `a spent draft leaves the top block for the collapsed section`() {
+        val layout = panelLayout(PanelFixtures.noReviewSpentDraft())
+
+        // Arriba, solo el fresco.
+        val top = layout.blocks.filterIsInstance<Block.DraftRows>().single().rows
+        assertEquals(listOf("feature/telemetry"), top.map { it.name })
+        assertTrue(
+            top[0].controls.any { it.id == ControlId.START_FROM_DRAFT },
+            "la fila fresca conserva el par con etiqueta",
+        )
+
+        // Y el gastado, en su seccion.
+        val section = layout.blocks.filterIsInstance<Block.ToolsSection>()
+            .single { it.title == "Reading orders you finished with" }
+        val spent = section.blocks.filterIsInstance<Block.DraftRows>().single().rows
+        assertEquals(listOf("feature/pagos"), spent.map { it.name })
+        assertEquals(
+            listOf(ControlId.OPEN_DRAFT, ControlId.DISCARD_DRAFT),
+            spent[0].controls.map { it.id },
+            "solo los dos iconos: escribir el orden y arrancar la review ya pasaron",
+        )
+
+        // El indice es el de la lista COMPLETA: es lo que resuelve de que
+        // archivo se habla del lado del host, y partir el bloque no lo cambia.
+        assertEquals(1, spent[0].controls.first().index, "indice en model.drafts")
+    }
+
+    @Test
+    fun `with no spent drafts there is no section for them`() {
+        val titles = panelLayout(PanelFixtures.noReviewDrafts()).blocks
+            .filterIsInstance<Block.ToolsSection>().map { it.title }
+        assertTrue("Reading orders you finished with" !in titles, "sin gastados no hay seccion")
+    }
+
     @Test
     fun `no drafts means no block at all`() {
         val blocks = panelLayout(PanelFixtures.noReviewReady()).blocks

@@ -104,6 +104,28 @@ public enum DraftSource { Remote, Local, Offline, Unknown }
 
 public enum DraftRange { Full, Delta, Unknown }
 
+/// <summary>
+/// Whether the review a draft was written for is over (<c>Reviewed</c>) or
+/// still ahead of it (<c>Fresh</c>). The CLI decides it by comparing the tip the
+/// draft itself was generated against with the marker of the last completed
+/// review of that branch; nothing is derived here.
+///
+/// The file outlives the review either way — clean does not touch prose — so
+/// this is not "does it exist": it is where it is drawn and what is offered.
+/// </summary>
+public enum DraftState { Fresh, Reviewed }
+
+public static class DraftStateExt
+{
+    /// <summary>
+    /// Anything that is not exactly <c>reviewed</c> is Fresh, the missing field
+    /// included: a CLI older than this record does not emit it, and there the
+    /// panel has to behave as it behaved rather than hide rows over a datum
+    /// nobody gave it.
+    /// </summary>
+    public static DraftState Parse(string? raw) => raw == "reviewed" ? DraftState.Reviewed : DraftState.Fresh;
+}
+
 public static class DraftSourceExt
 {
     public static DraftSource Parse(string? raw) => raw switch
@@ -138,7 +160,8 @@ public sealed record DraftRecord(
     int Annotated,
     int Total,
     DraftSource Source,
-    DraftRange Range);
+    DraftRange Range,
+    DraftState State);
 
 /// <summary>Which of the two authoring guides a <c>guide</c> record is about.</summary>
 public enum GuideKind
@@ -364,7 +387,8 @@ public static class ConfigPorcelain
                         annotated.Value,
                         total.Value,
                         DraftSourceExt.Parse(Get(fields, 5)),
-                        DraftRangeExt.Parse(Get(fields, 6))));
+                        DraftRangeExt.Parse(Get(fields, 6)),
+                        DraftStateExt.Parse(Get(fields, 7))));
                     break;
                 }
                 case "guide":

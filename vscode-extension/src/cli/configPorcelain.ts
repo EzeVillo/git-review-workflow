@@ -83,10 +83,23 @@ export interface DraftRecord {
      */
     source: DraftSource;
     range: DraftRange;
+    /** Si su review ya terminó. Ver {@link DraftState}. */
+    state: DraftState;
 }
 
 export type DraftSource = "remote" | "local" | "offline" | "unknown";
 export type DraftRange = "full" | "delta" | "unknown";
+
+/**
+ * Si la review que este borrador alimentaba ya terminó (`reviewed`) o si
+ * todavía tiene una review por delante (`fresh`). Lo decide la CLI comparando
+ * el tip del propio borrador contra el marcador de la última review completa
+ * de esa rama; acá no se deriva nada.
+ *
+ * El archivo sobrevive a la review en los dos casos —`clean` no toca prosa—,
+ * así que esto no es "existe o no": es dónde se dibuja y qué se ofrece.
+ */
+export type DraftState = "fresh" | "reviewed";
 
 /** Cuál de las dos guías de autoría es (registro `guide` de `config --porcelain`). */
 export type GuideKind = "team" | "own";
@@ -293,6 +306,17 @@ function parseDraftSource(raw: string | undefined): DraftSource {
     return "unknown";
 }
 
+/**
+ * El estado de un borrador. Todo lo que no sea exactamente `reviewed` es
+ * `fresh`, incluido el campo ausente: una CLI anterior a este registro no lo
+ * emite, y ahí el panel tiene que comportarse como se comportaba —el borrador
+ * en el bloque de siempre, con sus cuatro controles— y no esconder filas por
+ * un dato que nadie le dio.
+ */
+function parseDraftState(raw: string | undefined): DraftState {
+    return raw === "reviewed" ? "reviewed" : "fresh";
+}
+
 function parseDraftRange(raw: string | undefined): DraftRange {
     if (raw === "full" || raw === "delta") {
         return raw;
@@ -403,6 +427,7 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
                     total,
                     source: parseDraftSource(fields[5]),
                     range: parseDraftRange(fields[6]),
+                    state: parseDraftState(fields[7]),
                 });
                 break;
             }

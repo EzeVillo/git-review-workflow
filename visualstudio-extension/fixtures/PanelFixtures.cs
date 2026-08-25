@@ -20,6 +20,7 @@ public static class PanelFixtures
         ("no-review setup", NoReviewSetup()),
         ("no-review ready", NoReviewReady()),
         ("no-review drafts", NoReviewDrafts()),
+        ("no-review spent draft", NoReviewSpentDraft()),
         ("no-review guides", NoReviewGuides()),
         ("no-review guide empty", NoReviewGuideEmpty()),
         ("no-review walkthrough stale", NoReviewWalkthroughStale()),
@@ -82,6 +83,25 @@ public static class PanelFixtures
                 Branches: Porcelain.ParseListPorcelain("branch\treview-saved/feature\t1\t0\t0\twalk\t2\t5"),
                 Drafts: ConfigPorcelain.ParseConfigPorcelain(cfg).Drafts),
             new PanelInputs(busy));
+    }
+
+    /// <summary>
+    /// One reading order still ahead of its review and one whose review is over.
+    /// The second leaves the block on top for the collapsed section at the
+    /// bottom, and keeps only the two glyphs: the pair with labels is the flow of
+    /// writing the order and starting the review, and both already happened.
+    /// </summary>
+    public static PanelModel NoReviewSpentDraft()
+    {
+        var cfg =
+            "draft\tfeature/telemetry\t/repo/.git/review-walkthrough/feature/telemetry.md\t3\t9\tlocal\tdelta\tfresh\n" +
+            "draft\tfeature/pagos\t/repo/.git/review-walkthrough/feature/pagos.md\t6\t6\tremote\tfull\treviewed\n";
+        return PanelModelBuilder.BuildPanelModel(
+            new ReviewState(
+                Situation.NoReview,
+                Config: new EffectiveConfig("main", "origin"),
+                Drafts: ConfigPorcelain.ParseConfigPorcelain(cfg).Drafts),
+            new PanelInputs(false));
     }
 
     /// <summary>The same state with a mutation in flight: the one thing that switches the row off.</summary>

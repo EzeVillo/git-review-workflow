@@ -55,7 +55,8 @@ Review someone else's PR in a reading order of your own, without committing:
 
   draft [<branch>]  write the same skeleton for <branch> (default: the branch
                     you are on, or the one a review you are inside is reading)
-                    outside the working tree; git review start then
+                    outside the working tree, or update the one that is there
+                    on the same terms as init; git review start then
                     reads it instead of the PR's own walkthrough
     --build         validate and renumber the draft, as build does for the PR's
     --from <file>   with --build: read the draft from <file> instead of the
@@ -63,7 +64,7 @@ Review someone else's PR in a reading order of your own, without committing:
     --local         draft against your local <branch>, not origin's copy
     --offline       like --local, and resolve the base locally too
     --delta         cover only the commits added since your last review
-    --force         overwrite an existing draft
+    --force         discard what is there and write a blank skeleton
     --stdout        print the skeleton instead of writing it; nothing is
                     created anywhere
 
@@ -665,16 +666,23 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 	# what is there and generate from scratch. It is the only way back to a blank
 	# skeleton, and it has to stay reachable — a merge cannot un-write prose that
 	# describes the wrong thing.
-	# init only, and that is a deliberate limit rather than an oversight. The
-	# author's sidecar goes stale because the PR keeps moving under a file that is
-	# already committed; a reviewer's draft is written against a tip that start
-	# then FREEZES, so during a review it cannot fall out of step. The two remain
-	# worth reconciling on the draft side too (a --delta re-review is the case),
-	# but that side already carries a circuit built on "the file is there, so I
-	# refuse" -- save, continue and forget all speak it -- and changing what draft
-	# does to an existing file is its own decision, not a side effect of this one.
+	# Both sides, and for the same reason. The author's sidecar goes stale because
+	# the PR keeps moving under a file that is already committed; the reviewer's
+	# draft is written against a tip that start then FREEZES, so it cannot fall out
+	# of step DURING a review -- but it outlives the review, and the next one is
+	# over a range that moved. That is the case this exists for: you read the PR,
+	# three more files land, and the order you wrote is still the right starting
+	# point for all but those three.
+	#
+	# The draft side used to refuse instead, on the circuit that save, continue and
+	# forget all speak ("the file is there, so I refuse"). Refusing left --force as
+	# the only way through, which throws away every why to get at the new files.
+	# -f and not -e: what can be reconciled is a regular file. Anything else with
+	# that name -- a directory, most plausibly a branch name that cannot be one on
+	# this filesystem -- falls through to the write path, which fails with the
+	# message that names the real problem instead of an awk that cannot read it.
 	update=0
-	if [ "$sub" = init ] && [ -e "$targetpath" ] && [ "$force" -eq 0 ]; then
+	if [ -f "$targetpath" ] && [ "$force" -eq 0 ]; then
 		update=1
 	fi
 	# A walkthrough that came in WITH a merge is not this PR's, and reconciling
@@ -688,22 +696,25 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 	# mistake looks like: prose kept from another PR reads exactly like a valid
 	# walkthrough, while a blank skeleton is visible at a glance -- and the file
 	# is tracked, so the old entries are one git checkout away either way.
+	# init only, and the asymmetry is about what the mistake costs. Starting over
+	# on its own destroys what is written, and on the author's side that is one
+	# git checkout away because the file is tracked. A reviewer's draft is not in
+	# git at all, so deciding to discard their prose for them has no way back --
+	# and it never comes up either: a branch already merged into the base has no
+	# range left, and annotatable_files dies on that before reaching this.
 	superseded=0
-	if [ "$update" -eq 1 ]; then
+	if [ "$update" -eq 1 ] && [ "$sub" = init ]; then
 		blocktip="$(walk_sidecar_block_tip "$targetpath" || true)"
 		if walk_sidecar_superseded "$blocktip" "$baseref"; then
 			superseded=1
 			update=0
 		fi
 	fi
-	# The refusal is for the reviewer's draft, which does not update. `superseded`
-	# has to pass it: that path deliberately starts over WITHOUT --force, and
-	# without this exemption the one case that decides for itself would be the one
-	# case that cannot run.
-	if [ "$update" -eq 0 ] && [ "$superseded" -eq 0 ] && [ "$to_stdout" -eq 0 ] &&
-		[ -e "$targetpath" ] && [ "$force" -eq 0 ]; then
-		die "$targetrel already exists; pass --force to overwrite"
-	fi
+	# Nothing refuses over an existing file any more: both subcommands either
+	# reconcile it or, with --force, replace it. What is left of the old guard is
+	# the invariant it protected -- an existing file is never silently overwritten --
+	# which now holds by construction, since the only path that writes from scratch
+	# over one is the one that asked for it.
 	files="$(annotatable_files)"
 	[ -n "$files" ] || die "no changed files vs $base to list"
 
@@ -1129,6 +1140,13 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		if ! : >"$tmp" 2>/dev/null; then
 			die "could not write $targetrel; the branch name may not be usable as a file name on this system"
 		fi
+		# And refuse outright when the name is taken by something that is not a
+		# regular file. mv(1) into a directory MOVES THE FILE INSIDE IT and reports
+		# success, so without this the skeleton landed as <target>/<tmp name>, the
+		# command said it had written it, and nothing on disk was a draft.
+		if [ -e "$targetpath" ] && [ ! -f "$targetpath" ]; then
+			die "$targetrel exists and is not a file; move it out of the way first"
+		fi
 		emit_skeleton >"$tmp"
 		mv "$tmp" "$targetpath"
 		trap - EXIT INT TERM
@@ -1142,10 +1160,10 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 	# command. On stderr: under --stdout the file was not even rewritten, and
 	# stdout has to stay a valid walkthrough.
 	#
-	# Only ever the author's file, because only init updates (see the guard above).
-	# A branch here for the reviewer's draft would be unreachable code that reads
-	# like a supported path — and if draft ever does update in place, its way back
-	# is not this one: nothing tracks that file.
+	# The way back is named only on the author's side, because only there is there
+	# one: the sidecar is a tracked file and the dropped whys are one git checkout
+	# away. A reviewer's draft is not in git, so the note is all there is -- which
+	# is why it names every path instead of counting them.
 	# Said before anything else this command prints, because it is the reason the
 	# file the author had is not the file they now have. Named with the base it
 	# landed in, so it reads as a fact about the repository and not as a refusal.
@@ -1160,7 +1178,9 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		{
 			echo "note: $(printf '%s\n' "$merged_removed" | grep -c .) entry/entries dropped -- the PR no longer changes these files:"
 			printf '%s\n' "$merged_removed" | sed 's/^/        /'
-			echo "      Their whys are in git: git checkout -- $targetrel to get them back."
+			if [ "$sub" = init ]; then
+				echo "      Their whys are in git: git checkout -- $targetrel to get them back."
+			fi
 		} >&2
 	fi
 
@@ -1168,10 +1188,16 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		# Suppressed under --stdout, and only this one: stdout has to be the
 		# skeleton and nothing else, so that redirecting it produces a valid file.
 		# Every note below already goes to stderr and stays there.
-		# No update branch here either, and for the same reason as the dropped-entry
-		# note: only init updates, so a draft can only ever be freshly written.
+		# Two lines, because the two outcomes are different work: a fresh skeleton
+		# is written from end to end, an update leaves you only the entries it just
+		# added. Same shape as init's pair, with this side's build command.
 		if [ "$to_stdout" -eq 0 ]; then
-			echo "wrote $targetrel with $n file(s) from $srclabel; fill in the order and why, then run git review walkthrough draft --build$draftflags $branch"
+			if [ "$update" -eq 1 ]; then
+				echo "updated $targetrel: $merged_kept kept, $merged_added added, $(printf '%s
+' "$merged_removed" | grep -c . || true) dropped; fill in the new entries, then run git review walkthrough draft --build$draftflags $branch"
+			else
+				echo "wrote $targetrel with $n file(s) from $srclabel; fill in the order and why, then run git review walkthrough draft --build$draftflags $branch"
+			fi
 		fi
 		# The reviewer's draft wins over the PR's own walkthrough for as long as it
 		# exists (see walk_read). Silently shadowing an author's reading order would

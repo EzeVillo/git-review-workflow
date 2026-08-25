@@ -23,7 +23,7 @@ una invocación.
 ## Registro `draft` (cero o N veces)
 
 ```text
-draft<TAB><src><TAB><path><TAB><annotated><TAB><total><TAB><source><TAB><range>
+draft<TAB><src><TAB><path><TAB><annotated><TAB><total><TAB><source><TAB><range><TAB><state>
 ```
 
 | Campo | Valor |
@@ -34,6 +34,7 @@ draft<TAB><src><TAB><path><TAB><annotated><TAB><total><TAB><source><TAB><range>
 | `<total>` | Entradas que el archivo declara (numeradas y `## ?.`) |
 | `<source>` | `remote`, `local` u `offline` — con qué origen se generó |
 | `<range>` | `full` o `delta` — con qué rango se generó |
+| `<state>` | `fresh` o `reviewed` — si la review que ese borrador alimentaba ya terminó |
 
 **`<source>` y `<range>` no son informativos: son lo que hace utilizable el
 botón.** *Validate and start* del panel invoca `draft --build` y `start`, y si
@@ -65,6 +66,42 @@ por directorio). Estable; nunca se reordena por locale.
 normativa, pero fijarla mantiene la salida determinista y comparable byte a byte
 en los tests.
 
+### `<state>`: si la review de ese borrador ya terminó
+
+Un borrador **sobrevive a la review para la que se escribió** — `clean` no lo
+toca, y eso no cambia — pero una vez que la review cerró deja de ser trabajo en
+curso, y el panel lo dibujaba en el mismo bloque que uno a medio escribir. Este
+campo es lo que separa las dos cosas.
+
+`reviewed` cuando **una review completada de esa rama cubrió el mismo tip**
+**contra el que el borrador se generó**; `fresh` en todo lo demás. Las tres
+piezas:
+
+- **El tip del borrador**, del `tip <sha>` de su bloque de instrucciones (misma
+  regla de 40 hex que `walk_sidecar_block_tip`). Se compara el tip del
+  **borrador**, no el de la rama hoy, porque lo que se pregunta es si *ese orden
+  de lectura* ya se leyó: uno regenerado después de la review cubre un rango que
+  nadie leyó y vuelve a `fresh`, y uno cuya rama avanzó sigue describiendo lo que
+  sí se leyó, así que sigue `reviewed`. Que además esté **derivado** es otra
+  pregunta, y la contesta `build`.
+- **El marcador** `reviewworkflow.<src>.reviewed` (o `reviewworkflowlocal.` para
+  un borrador `local`/`offline`), que es el tip que la última review **completa**
+  de esa rama cubrió: `start` lo escribe, y `abort` y un `clean` sin finish
+  exitoso lo revierten. Los dos sabores no se cruzan — hacerlo reportaría un
+  borrador como leído porque se revisó la *otra* copia de la rama.
+- **`source` = `unknown`** (bloque borrado a mano, que es legal) o sin tip
+  legible: `fresh`. No se puede probar nada, y `fresh` es el estado que ofrece
+  más, no menos.
+
+**No consulta las reviews vivas**, y eso es deliberado: `start` escribe el
+marcador antes de correr la review, así que un borrador que una review está
+leyendo ahora mismo reporta `reviewed`. Contestarlo bien cuesta un
+`for-each-ref` más un `git config` por review en un camino que corre en cada
+refresco, y el panel no dibuja el bloque con una review activa en esa rama. La
+pregunta sí se hace donde es gratis: `git review forget --draft --reviewed`
+saltea el borrador que una review walk está leyendo, porque ahí el costo se paga
+una vez y lo que está en juego es borrar prosa en uso.
+
 ### Un borrador de una review pausada nunca aparece
 
 No por una regla: `git review save` movió el archivo a
@@ -75,13 +112,8 @@ por accidente.
 
 ### Qué NO dice el registro
 
-No dice si una review activa ya lee ese borrador. Contestarlo cuesta un
-`for-each-ref` más un `git config` por review en un camino que corre en cada
-refresco del panel, y ningún requisito lo pide: el panel dibuja el bloque sólo
-con `no-review`, y descartar el borrador de una review viva ya es una operación
-permitida desde 011 (la degrada a whole, que es lo que documenta
-`git review forget --draft`). Si alguna vez hace falta, es un campo más al
-final del mismo registro.
+No dice si una review activa ya lee ese borrador; ver arriba. Si alguna vez
+hace falta, es un campo más al final del mismo registro.
 
 ## El progreso
 
@@ -114,6 +146,7 @@ Presupuesto duro, porque este verbo corre en cada refresco del panel sin review:
 | `walk_draft_list` | **0** (recursión sobre globs, builtin) |
 | Progreso de los N borradores | **1** — un solo `awk` con los N archivos como argumentos, **sólo si N ≥ 1** |
 | Gitdir absoluto | **1**, y sólo si N ≥ 1 |
+| Marcadores de `--delta` | **1**, y sólo si N ≥ 1 — un `git config --get-regexp` para **todos** los borradores, y cada fila se contesta contra ese string con un `case` builtin |
 
 **Con N = 0 no se invoca nada: cero procesos.** No es una optimización, es una
 guarda obligatoria: `awk` sin argumentos de archivo lee la entrada estándar y
@@ -137,8 +170,8 @@ config	remote	origin
 remote-candidate	origin	1
 candidate	feature/checkout	remote	0
 candidate	feature/telemetry	remote	0
-draft	feature/pagos	/repo/.git/review-walkthrough/feature/pagos.md	0	5	remote	full
-draft	feature/telemetry	/repo/.git/review-walkthrough/feature/telemetry.md	3	9	local	delta
+draft	feature/pagos	/repo/.git/review-walkthrough/feature/pagos.md	0	5	remote	full	fresh
+draft	feature/telemetry	/repo/.git/review-walkthrough/feature/telemetry.md	3	9	local	delta	reviewed
 ```
 
 ## Compatibilidad

@@ -110,6 +110,7 @@ class PanelModelTest {
                     annotated = 3,
                     total = 9,
                     startable = true,
+                    spent = false,
                 ),
             ),
             shown.drafts,

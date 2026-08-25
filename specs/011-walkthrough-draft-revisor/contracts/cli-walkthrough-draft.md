@@ -49,7 +49,7 @@ va a cubrir.
 | --- | --- | --- |
 | Éxito | Escribe el esqueleto; imprime la ruta y el número de archivos, más la instrucción de completarlo y validarlo | `0` |
 | Éxito, y el tip trae walkthrough del autor | Lo anterior **más** una nota en stderr: el borrador tendrá precedencia sobre el walkthrough del PR mientras exista (FR-005a). Nota, no rechazo | `0` |
-| Ya existe borrador, sin `--force` | `error: <ruta> already exists; pass --force to overwrite` | `1` |
+| ~~Ya existe borrador, sin `--force`~~ | ~~`error: <ruta> already exists; pass --force to overwrite`~~ — **superado**: `draft` **actualiza** el borrador existente en los mismos términos que `init` (conserva número, why y `> key` de cada entrada cuyo archivo sigue en rango; los que entraron llegan como `## ?.`; los que salieron se descartan y se nombran). `--force` sigue siendo el esqueleto en blanco. La negativa se conserva **sólo** para `--build --from`, donde vive en [012](../../012-prompt-agente-draft/contracts/cli-walkthrough-draft-io.md) | `0` |
 | Sin `reviewworkflow.base` | El mismo mensaje accionable que ya emiten `start` y `walkthrough init` | `1` |
 | Rama o tip inexistente | `error: <label> not found` | `1` |
 | Sin cambios vs la base | `error: no changes vs <base>; nothing to walk through` | `1` |

@@ -137,7 +137,7 @@ invents a second way to change review state.
 | **The walkthrough row** | Under *Walkthrough*, above the guides: whether the one you wrote still matches what the PR changes (`up to date` / `may be out of date`), how much of it is written, an icon that opens it, and *Copy for agent* — a one-line instruction naming the file | `git review config --porcelain` reports it; *Build* is what answers it exactly |
 | **Create / open / discard a guide** | Under *Walkthrough*, in the empty state and inside a review alike: the conventions a walkthrough is written to — the repository's shared one, and yours | `git review walkthrough guide [--team] [--delete]` |
 | **Build a reading order first** | Inside *Start a review*, at the reading-order step, when the PR has none (the *reviewer* flow) | `git review walkthrough draft`                            |
-| **Copy for agent / Validate and start / open / discard** | A row of *Reading orders you started*, in the empty state | `git review walkthrough draft --build`, `git review start`, `git review forget --draft` |
+| **Copy for agent / Validate and start / open / discard** | A row of *Reading orders you started*, in the empty state. Once its review is over the row keeps only *open* and *discard*, under *Reading orders you finished with* | `git review walkthrough draft --build`, `git review start`, `git review forget --draft` |
 
 Mutations (the lifecycle actions, clean, forget, compare and writing a
 walkthrough) ask for a confirmation that names what will happen. Preview is

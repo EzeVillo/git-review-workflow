@@ -95,17 +95,27 @@ fun intentToArgs(intent: ReviewIntent, currentBranch: String): List<String> {
  *
  * Origen y rango son **los mismos** que el asistente ya resolvió: el borrador
  * tiene que listar los archivos de la review que se va a iniciar, no los de
- * otro rango. Nunca `--force`: pisar un borrador empezado se pide a mano.
+ * otro rango. `--force` sólo cuando el revisor eligió *Start over* en el picker
+ * de un borrador cuya review ya cerró: es lo único que hace desaparecer prosa,
+ * y este archivo no está en git.
  */
+@JvmOverloads
 fun draftArgs(
     branch: String,
     source: ReviewSource,
     range: ReviewRange,
     build: Boolean,
+    /**
+     * Throws away what is there and writes a blank skeleton. Without it the verb
+     * reconciles, which is what is wanted nearly always; with it there is no way
+     * back, because this file is not in git.
+     */
+    force: Boolean = false,
 ): List<String> {
     val args = ArrayList<String>()
     args.add("draft")
     if (build) args.add("--build")
+    if (force) args.add("--force")
     args.addAll(originAndRangeFlags(source, range))
     args.add("--")
     args.add(branch)

@@ -23,8 +23,12 @@ package com.ezevillo.gitreview.domain
  * por cliente y se prueban igual, no si cada host las reinventa.
  */
 sealed class DraftFlowState {
-    /** Invocar `walkthrough draft` (sólo cuando el revisor eligió DRAFT). */
-    data object Create : DraftFlowState()
+    /**
+     * Invocar `walkthrough draft`. [force] es la diferencia entre reconciliar lo
+     * que hay —conservando cada why cuyo archivo sigue en rango— y tirarlo para
+     * escribir un esqueleto en blanco.
+     */
+    data class Create(val force: Boolean = false) : DraftFlowState()
 
     /**
      * El asistente terminó. No hay review empezada y no queda ningún aviso
@@ -46,12 +50,21 @@ sealed class DraftFlowEvent {
 }
 
 /**
- * Dónde arranca: RESUME no crea nada — el archivo ya existe y volver a crearlo
- * pisaría lo que el revisor escribió, que es justamente lo que `--force` existe
- * para pedir a mano. Sin nada que crear, el asistente ya terminó.
+ * Los cuatro puntos de entrada, y sólo dos de ellos invocan algo:
+ *
+ * - CREATE — no hay archivo: se escribe el esqueleto.
+ * - RESUME — hay uno a medio escribir y se usa tal cual. No se invoca nada, así
+ *   que el asistente ya terminó.
+ * - UPDATE — hay uno cuya review ya cerró y se reconcilia con el rango de hoy.
+ *   Es el MISMO comando que CREATE: el verbo actualiza en vez de negarse.
+ * - START_OVER — lo mismo con `--force`: el esqueleto en blanco, que es lo único
+ *   que hace desaparecer prosa y por eso nunca es el default.
  */
-fun initialDraftFlowState(step: DraftStep): DraftFlowState =
-    if (step == DraftStep.CREATE) DraftFlowState.Create else DraftFlowState.Done
+fun initialDraftFlowState(step: DraftStep): DraftFlowState = when (step) {
+    DraftStep.RESUME -> DraftFlowState.Done
+    DraftStep.START_OVER -> DraftFlowState.Create(force = true)
+    else -> DraftFlowState.Create()
+}
 
 /**
  * Transición. Un evento que no corresponde al estado actual lo deja intacto:

@@ -209,16 +209,23 @@ panel_layout:
       - {block: paragraph, text: "Remote: {remote} (optional)."}
       - {block: row, controls: [{id: setRemote, label: "Change remote", emphasis: secondary, confirms: false}]}
   no-review:
-    source_fns: [renderDrafts, renderReview, renderEmptyStartBlock, renderOtherActions, renderWalkthroughSection, renderSettings, renderSupport]
+    source_fns: [renderDrafts, renderReview, renderEmptyStartBlock, renderOtherActions, renderWalkthroughSection, renderSpentDrafts, renderSettings, renderSupport]
     fills_height: true
     blocks:
       # Los borradores empezados van PRIMERO y el cuerpo de siempre sigue entero
       # debajo: no es una sub-disposición que reemplace, como no-review-setup.
+      #
+      # Sólo los FRESCOS. Un borrador cuya review terminó sobrevive -- clean no
+      # toca prosa escrita a mano, y descartarlo es el verbo forget -- pero deja
+      # de ser trabajo pendiente, así que baja a su propia sección plegada del
+      # pie con los dos controles que le quedan sentido. Es el mismo draft_block
+      # dibujado en dos lugares, y no dos bloques distintos: la fila es la misma
+      # y lo único que cambia es cuál de los dos `when` la trae.
       # Sin base configurada no hay nada más que hacer en el panel; con un
       # borrador a medio escribir sí. Por eso es un bloque condicional dentro de
       # no-review y no una situación nueva -- que además obligaría a duplicar
       # toda esta lista de bloques.
-      - {block: draft_block, when: has_drafts}
+      - {block: draft_block, when: has_fresh_drafts}
       - {block: heading, text: "Reviews in this repository", when: has_reviews}
       - {block: inventory_rows}
       - {block: paragraph, text: "No active review on this branch."}
@@ -238,6 +245,17 @@ panel_layout:
           - {block: row, controls: [{id: walkthroughInit, label: "Walkthrough: Init", emphasis: secondary, confirms: true}, {id: walkthroughBuild, label: "Walkthrough: Build", emphasis: secondary, confirms: true}]}
           - {block: walkthrough_row, when: has_walkthrough}
           - {block: guide_rows}
+      # Los borradores gastados. Plegada y no escondida: un archivo que existe y
+      # ninguna superficie nombra es el estado que este panel no deja pasar en
+      # ningún otro lado, y esconder la fila se llevaría con ella el único
+      # control que puede tirarlo sin deletrear su rama. La fila pierde los dos
+      # controles con etiqueta (ver draft_controls) y conserva los dos iconos.
+      - block: tools_section
+        title: "Reading orders you finished with"
+        when: has_reviewed_drafts
+        blocks:
+          - {block: paragraph, text: "Their review is over; the files are still here"}
+          - {block: draft_block, when: has_reviewed_drafts}
       - block: tools_section
         title: "Settings"
         blocks:
@@ -507,6 +525,12 @@ inventory_controls:
 # Están en DOS lugares de la fila y eso también es fijo: los dos con etiqueta
 # —los que mueven el flujo— en la botonera, y los dos de icono —los que actúan
 # sobre el archivo de esa fila— pegados al par annotated/total de la cabecera.
+# Los DOS con etiqueta se dibujan sólo en una fila FRESCA. Una cuya review ya
+# terminó los pierde: el par de abajo es el flujo de escribir el orden y arrancar
+# la review, y las dos cosas ya pasaron -- Copy for agent le pediría a un agente
+# que complete lo que está completo, y Validate and start ofrecería releer un
+# rango que se cerró. Los dos iconos se quedan en las dos filas, que es lo que
+# hace que la sección plegada siga teniendo cómo abrir y cómo descartar.
 draft_controls:
   # Los dos con etiqueta entran en dos columnas de ancho parejo, y ahí el
   # énfasis es lo único que se mueve. Sigue al progreso y el ORDEN no: mientras

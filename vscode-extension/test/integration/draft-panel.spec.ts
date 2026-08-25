@@ -185,6 +185,38 @@ describe("US3: el bloque de borradores del panel", function () {
         assert.strictEqual(model.configuredBase, "main");
     });
 
+    it("un borrador cuya review termino llega al modelo como gastado", async () => {
+        const branch = "us3-panel-spent";
+        createBranchWithChanges(repo, branch, {"src/a.ts": "a\n"});
+        // Escrito entero, y no un esqueleto: un orden con entradas sin llenar
+        // nunca se reporta como terminado, diga lo que diga el marcador.
+        // fillDraft conserva todo lo anterior al Heads-up, o sea el bloque de
+        // instrucciones, que es de donde sale el tip que se compara.
+        fillDraft(makeDraft(branch), "## 1. src/a.ts\nmine\n");
+
+        const api = await getTestApi();
+        await api.refresh();
+        const before = (await api.getPanelModel()).drafts.find((d) => d.branch === branch);
+        assert.strictEqual(before?.spent, false, "recien escrito, con su review por delante");
+
+        // Lo que deja una review completa de esa rama: el marcador con el tip
+        // que cubrio. El borrador se genero contra ese mismo tip, asi que la
+        // CLI lo reporta gastado. Se planta la clave en vez de correr un
+        // start/finish/clean entero porque el fixture es compartido y esta
+        // spec afirma el cable (campo 8 -> model.spent), no la semantica del
+        // marcador -- eso lo cubre tests/forget-draft-reviewed.bats.
+        const tip = git(["rev-parse", `origin/${branch}`], repo.dir).trim();
+        git(["config", `reviewworkflow.${branch}.reviewed`, tip], repo.dir);
+
+        await api.refresh();
+        const after = (await api.getPanelModel()).drafts.find((d) => d.branch === branch);
+        assert.strictEqual(after?.spent, true);
+        // Y sigue estando: nada se borro por reportarlo gastado.
+        assert.ok(fs.existsSync(after?.path ?? ""), "el archivo sigue en disco");
+
+        git(["config", "--unset", `reviewworkflow.${branch}.reviewed`], repo.dir);
+    });
+
     it("con una review activa el bloque no aparece", async () => {
         const branch = "us3-panel-hidden";
         createBranchWithChanges(repo, branch, {"src/a.ts": "a\n"});

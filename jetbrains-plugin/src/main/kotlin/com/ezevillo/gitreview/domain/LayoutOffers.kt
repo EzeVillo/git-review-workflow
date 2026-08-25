@@ -12,7 +12,12 @@ val FALLBACK_OFFERS: List<ReadingOffer> = listOf(
  * —el que quedaría si el borrador se completa— y `draft` marca el desvío por el
  * bucle de armado antes de llegar a start.
  */
-enum class DraftStep { CREATE, RESUME }
+/**
+ * UPDATE y START_OVER son las dos salidas del picker que aparece cuando el orden
+ * de lectura ya se usó en una review. UPDATE es el MISMO comando que CREATE -- el
+ * verbo reconcilia en vez de negarse -- y START_OVER es ese comando con --force.
+ */
+enum class DraftStep { CREATE, RESUME, UPDATE, START_OVER }
 
 data class LayoutPickItem(
     val label: String,
@@ -59,7 +64,24 @@ fun effectiveOffers(offers: List<ReadingOffer>?): List<ReadingOffer> {
     return offers
 }
 
-fun buildLayoutItems(offers: List<ReadingOffer>?): List<LayoutPickItem> {
+/**
+ * Lo que dice la fila del borrador cuando su review YA cerró. La de siempre
+ * describe un orden a medio escribir, y sobre uno terminado y ya usado es
+ * sencillamente falso: lo que sigue no es terminarlo sino reconciliarlo con lo
+ * que el PR cambió desde entonces, o empezar uno nuevo.
+ */
+private val SPENT_RESUME_META = Pair(
+    "Reuse the reading order you wrote",
+    "you already reviewed with it; update it for what changed, or start over",
+)
+
+/**
+ * @param spentDraft si el borrador de esta rama tiene su review cerrada, que es
+ *   lo único que cambia la copy de DRAFT_RESUME. Lo dice la CLI en el campo
+ *   `state` del registro `draft`; acá no se deriva.
+ */
+@JvmOverloads
+fun buildLayoutItems(offers: List<ReadingOffer>?, spentDraft: Boolean = false): List<LayoutPickItem> {
     val list = effectiveOffers(offers)
     val byId = LinkedHashMap<OfferId, OfferRank>()
     for (o in list) byId[o.id] = o.rank
@@ -73,7 +95,13 @@ fun buildLayoutItems(offers: List<ReadingOffer>?): List<LayoutPickItem> {
     }
 
     return ordered.map { id ->
-        val meta = OFFER_META.getValue(id)
+        val base = OFFER_META.getValue(id)
+        val meta =
+            if (id == OfferId.DRAFT_RESUME && spentDraft) {
+                base.copy(label = SPENT_RESUME_META.first, description = SPENT_RESUME_META.second)
+            } else {
+                base
+            }
         val rank = byId[id] ?: OfferRank.AVAILABLE
         val description =
             if (rank == OfferRank.RECOMMENDED) "${meta.description} (recommended)" else meta.description

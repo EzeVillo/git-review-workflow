@@ -103,18 +103,29 @@ export function intentToArgs(intent: ReviewIntent, currentBranch: string): strin
  *
  * Origen y rango son **los mismos** que el asistente ya resolvió: el borrador
  * tiene que listar los archivos de la review que se va a iniciar, no los de
- * otro rango. Nunca `--force`: pisar un borrador empezado se pide a mano.
+ * otro rango. `--force` sólo cuando el revisor eligió *Start over* en el picker
+ * de un borrador cuya review ya cerró: es lo único que hace desaparecer prosa,
+ * y este archivo no está en git.
  */
 export function draftArgs(
     branch: string,
     source: ReviewSource,
     range: ReviewRange,
-    build: boolean
+    build: boolean,
+    /**
+     * Tira lo que hay y escribe un esqueleto en blanco. Sin él el verbo
+     * reconcilia, que es lo que se quiere casi siempre; con él no hay vuelta
+     * atrás, porque este archivo no está en git.
+     */
+    force = false
 ): string[] {
     const args = ["draft"];
 
     if (build) {
         args.push("--build");
+    }
+    if (force) {
+        args.push("--force");
     }
 
     args.push(...originAndRangeFlags(source, range));

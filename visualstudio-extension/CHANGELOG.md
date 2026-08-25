@@ -70,6 +70,24 @@ First release of the Visual Studio client. Requires `git review` **0.7.0** or ne
   Monday. The
   rest of the empty state — your other reviews, *Start a review*, the settings — stays
   right below it.
+- **A reading order whose review is over stops looking like pending work.** A draft
+  outlives the review it was written for — that is the promise, and `clean` still never
+  touches prose you wrote by hand — but it kept sitting in *Reading orders you started*
+  offering *Copy for agent* over a file that is already complete and *Validate and start*
+  over a range that already closed. Once the CLI reports that your last completed review of
+  that branch covered the very tip the draft was written against, the row moves to
+  **Reading orders you finished with**, collapsed at the bottom, keeping the two glyphs
+  that still mean something: open it, or throw it away. Nothing is deleted for you, and
+  `git review forget --draft --reviewed` sweeps them all at once.
+- **Starting a review on a branch you already read asks what to do with your reading
+  order.** The wizard used to offer only *Finish the reading order you started* — over an
+  order that was finished and already used, which is not what it says. Now the row reads
+  *Reuse the reading order you wrote*, and choosing it asks the same pair the author's
+  *Walkthrough: Update* asks: **Update** reconciles it with what the PR changed since
+  (every entry whose file is still in range keeps its number, its why and its `> key`; the
+  new files arrive as placeholders; the ones that left are dropped and named), or **Start
+  over** for a blank skeleton. It is asked only there — over a half-written draft the
+  answer is obvious and a modal in the common path is worse than none.
 - Copying is copying: no service is contacted, no assistant is invoked, and nothing about
   the draft is written for you.
 - *Validate and start* invokes the CLI with the **same origin and range flags the draft was

@@ -83,7 +83,9 @@ public class ReviewIntentTests
     /// <summary>
     /// The draft is of the review that is about to start, so it takes the same origin
     /// and range the wizard resolved — a draft of a different range lists the wrong
-    /// files. Never --force: overwriting a started draft is asked for by hand.
+    /// files. --force only when the reviewer chose Start over in the picker for a
+    /// draft whose review is over: it is the only thing that makes prose disappear,
+    /// and this file is not in git.
     /// </summary>
     [Fact]
     public void Draft_argv_matches_the_contract()
@@ -100,7 +102,7 @@ public class ReviewIntentTests
     }
 
     [Fact]
-    public void Draft_argv_never_forces()
+    public void Draft_argv_does_not_force_unless_asked()
     {
         foreach (var source in Enum.GetValues<ReviewSource>())
         foreach (var range in Enum.GetValues<ReviewRange>())
@@ -112,6 +114,21 @@ public class ReviewIntentTests
             Assert.Equal("feature/x", args[^1]);
             Assert.Equal("--", args[^2]);
         }
+    }
+
+    /// <summary>
+    /// Update carries no flag: the verb reconciles by default since it stopped
+    /// refusing over an existing file. Start over is the one that carries --force.
+    /// </summary>
+    [Fact]
+    public void Draft_argv_forces_only_when_starting_over()
+    {
+        Assert.Equal(
+            new[] { "draft", "--", "feature/x" },
+            ReviewIntentLogic.DraftArgs("feature/x", ReviewSource.Remote, ReviewRange.Full, false, false));
+        Assert.Equal(
+            new[] { "draft", "--force", "--local", "--delta", "--", "feature/x" },
+            ReviewIntentLogic.DraftArgs("feature/x", ReviewSource.Local, ReviewRange.Delta, false, true));
     }
 
     [Fact]

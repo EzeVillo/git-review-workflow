@@ -117,6 +117,40 @@ public class ConfigPorcelainTests
     }
 
     /// <summary>
+    /// "pick up the one you left half-written" describes a half-written order; over
+    /// one that is finished and already used it is false, and what is left is not
+    /// finishing it but reconciling it or starting a new one.
+    /// </summary>
+    [Fact]
+    public void A_spent_draft_row_says_something_else()
+    {
+        var offers = new[] { new ReadingOffer(OfferId.DraftResume, OfferRank.Available) };
+        var fresh = LayoutOffers.BuildLayoutItems(offers);
+        var spent = LayoutOffers.BuildLayoutItems(offers, spentDraft: true);
+
+        Assert.Equal("Finish the reading order you started", fresh[0].Label);
+        Assert.Equal("Reuse the reading order you wrote", spent[0].Label);
+        Assert.NotEqual(fresh[0].Description, spent[0].Description);
+        // The rest of the row does not change.
+        Assert.Equal(LayoutOffers.DraftStep.Resume, spent[0].Draft);
+        Assert.Equal(ReviewLayout.Walk, spent[0].Layout);
+    }
+
+    [Fact]
+    public void The_draft_state_touches_no_other_row()
+    {
+        var offers = new[]
+        {
+            new ReadingOffer(OfferId.Walk, OfferRank.Recommended),
+            new ReadingOffer(OfferId.Step, OfferRank.Available),
+            new ReadingOffer(OfferId.Whole, OfferRank.Available),
+        };
+        Assert.Equal(
+            LayoutOffers.BuildLayoutItems(offers).Select(i => i.Label),
+            LayoutOffers.BuildLayoutItems(offers, spentDraft: true).Select(i => i.Label));
+    }
+
+    /// <summary>
     /// Recommended offers come first whatever order the CLI printed them in, and the
     /// rest keep the canonical order — not the order of arrival.
     /// </summary>

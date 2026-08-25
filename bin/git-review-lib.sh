@@ -538,8 +538,8 @@ walk_gitdir_abs_init() {
 }
 
 # walk_draft_progress <path>...
-# Emit "<path><TAB><annotated><TAB><total><TAB><source><TAB><range>" for EVERY
-# path given, in the order given.
+# Emit "<path><TAB><annotated><TAB><total><TAB><source><TAB><range><TAB><tip>"
+# for EVERY path given, in the order given.
 #
 # ONE awk for all of them, never one per draft: this runs inside
 # config --porcelain, which the panel invokes on every refresh, and the process
@@ -557,6 +557,12 @@ walk_gitdir_abs_init() {
 #              "Generated with:" line of the instruction block, which is the
 #              only place that datum lives. Both are "unknown" when the block is
 #              not there, which is legal: deleting it by hand is allowed.
+#   tip        the SHA the block records as the range's upper bound, or empty
+#              when the block is gone or its value is not a SHA. Same datum and
+#              same 40-hex rule as walk_sidecar_block_tip, read here because the
+#              caller that needs it (emit_draft_records) has N files and a one
+#              process budget -- that helper is zero processes but per file, and
+#              this awk is already open on every one of them.
 #
 # The count is over the FILE, never crossed with the range: a draft that has
 # drifted still reports its progress, and annotated == total promises nothing
@@ -614,6 +620,7 @@ walk_draft_progress() {
 			tot[cur] = 0
 			src[cur] = "unknown"
 			rng[cur] = "unknown"
+			tp[cur] = ""
 			inblock = 0
 			preamble = 1
 			if (index($0, bom) == 1) $0 = substr($0, length(bom) + 1)
@@ -624,6 +631,16 @@ walk_draft_progress() {
 		# happens to quote the line from being mistaken for it.
 		index($0, "<!-- git-review-range:") == 1 { inblock = 1 }
 		inblock && index($0, "-->") { inblock = 0 }
+		# The upper bound of the range this file was last written against, read
+		# from inside the block for the same reason as the flags, and validated to
+		# 40 hex exactly as walk_sidecar_block_tip validates it: the value ends up
+		# compared against a recorded SHA, so prose that happens to sit on a "tip"
+		# line must not become one. A match plus length() rather than an interval
+		# {40}, which mawk and BSD awk do not all accept.
+		inblock && $1 == "tip" && $2 ~ /^[0-9a-f]+$/ && length($2) == 40 {
+			tp[cur] = $2
+			next
+		}
 		inblock && $0 ~ /^[ \t]*Generated with: / {
 			flags = $0
 			sub(/^[ \t]*Generated with: /, "", flags)
@@ -684,57 +701,177 @@ walk_draft_progress() {
 			for (i = 1; i < ARGC; i++) {
 				f = ARGV[i]
 				if (f in seen)
-					printf "%s\t%d\t%d\t%s\t%s\n", f, ann[f], tot[f], src[f], rng[f]
+					printf "%s\t%d\t%d\t%s\t%s\t%s\n", f, ann[f], tot[f], src[f], rng[f], tp[f]
 				else
-					printf "%s\t0\t0\tunknown\tunknown\n", f
+					printf "%s\t0\t0\tunknown\tunknown\t\n", f
 			}
 		}
 	' "$@"
 }
 
-# emit_draft_records
-# One porcelain "draft" record per loose draft -- every file in the ACTIVE
-# namespace, which is to say every reading order the reviewer started and has
-# not paused. A draft that travelled with a paused review is not reported here,
-# and not by a rule either: git review save moved its file to
-# review-saved-walkthrough/, which walk_draft_list does not walk.
+# walk_reviewed_markers
+# Every recorded last-reviewed tip in this repository, as the raw
+# "<key> <sha>" lines git config prints, in ONE process. Both sections at once
+# with an alternation, because a draft only ever needs one of them and which one
+# depends on the flags it was generated with -- two calls would be two processes
+# on a path that runs in every panel refresh.
+#
+# What a marker means (bin/git-review-verbs/start writes it, abort and a clean
+# without a completed finish roll it back): the tip of <src> that your last
+# COMPLETED review of it covered.
+walk_reviewed_markers() {
+	git config --get-regexp '^reviewworkflow(local)?[.].*[.]reviewed$' 2>/dev/null || true
+}
+
+# walk_draft_state <src> <source> <tip> <annotated> <total> <markers>
+# Set _wds_out to "reviewed" when this reading order is written through AND a
+# completed review of <src> covered the very tip it was generated against; to
+# "fresh" otherwise.
+#
+# Answers in a VARIABLE rather than on stdout, unlike almost everything else
+# here: the one caller runs it once per draft, and a "$(...)" around it would
+# fork a subshell each time -- the same per-draft cost the single awk exists to
+# avoid, paid again one layer up.
+#
+# It is the draft's own tip that is compared, not the branch's tip now: a draft
+# regenerated after the review covers a range nobody has read yet, and one whose
+# branch has moved on is not "already reviewed" either -- it is drifted, which is
+# a different thing the client already learns from the range.
+#
+# The flavour has to match too. A local review records its marker in its own
+# config section, so a --local draft is answered by reviewworkflowlocal and a
+# remote one by reviewworkflow, exactly as start chooses between them. Crossing
+# them would report a draft as read because the OTHER copy of the branch was.
+#
+# "unknown" source (the instruction block was deleted by hand, which is legal)
+# and a tip that is not there answer "fresh": nothing can be proved about them,
+# and fresh is the state that offers more, not less.
+#
+# A case glob, not grep: this runs once per draft and a process each would
+# undo the single-awk budget. Safe as an exact test because git refuses to
+# create a ref whose name holds '*', '?' or '[', so no branch name can arrive
+# here carrying a pattern.
+walk_draft_state() {
+	_wds_src="$1"
+	_wds_source="$2"
+	_wds_tip="$3"
+	_wds_ann="$4"
+	_wds_tot="$5"
+	_wds_marks="$6"
+	_wds_out=fresh
+	[ -n "$_wds_tip" ] || return 0
+	# An order with entries still unwritten is not one you finished with, whatever
+	# the marker says -- and saying otherwise has a concrete cost, because the
+	# clients draw a spent row without the two controls that fill it in and start
+	# it. A --force rewrite over a branch that has not moved lands on the very tip
+	# the marker records, so without this the blank skeleton the reviewer just
+	# asked for would be folded away with no way to make progress on it.
+	#
+	# Same test the three panels already use for "filled", zero extra cost: the
+	# pair is counted by the awk that read the file. total == 0 is "this file
+	# declares no entry", never "complete".
+	[ "$_wds_tot" -gt 0 ] && [ "$_wds_ann" -ge "$_wds_tot" ] || return 0
+	case "$_wds_source" in
+	remote) _wds_key="reviewworkflow.$_wds_src.reviewed" ;;
+	local | offline) _wds_key="reviewworkflowlocal.$_wds_src.reviewed" ;;
+	*) return 0 ;;
+	esac
+	case "
+$_wds_marks
+" in
+	*"
+$_wds_key $_wds_tip
+"*) _wds_out=reviewed ;;
+	esac
+}
+
+# walk_each_draft <callback>
+# Run <callback> <src> <path> <annotated> <total> <source> <range> <state> once
+# for every loose draft -- every file in the ACTIVE namespace, which is to say
+# every reading order the reviewer started and has not paused. A draft that
+# travelled with a paused review is not walked here, and not by a rule either:
+# git review save moved its file to review-saved-walkthrough/, which
+# walk_draft_list does not walk.
+#
+# One enumeration for the two surfaces that need it -- the porcelain records and
+# forget --draft --reviewed -- because a second copy of the gitdir prefix and the
+# state rule is a second copy that can disagree with this one about which drafts
+# exist and which are spent.
+#
+# The callback runs inside a pipeline, so it is downstream of a subshell: it can
+# print, and it cannot hand anything back in a variable.
 #
 # Cost, because this runs on every panel refresh without a review:
 #   walk_draft_list        0 processes (glob recursion, all builtin)
 #   walk_gitdir_abs_init   1, and only when there is something to report
 #   walk_draft_progress    1, and only when there is something to report
+#   walk_reviewed_markers  1, and only when there is something to report
 #
-# The empty case has to return BEFORE both. It is not an optimisation: awk with
-# no file arguments reads standard input and blocks forever, and a repository
-# with no drafts is the commonest case there is -- for a verb that runs in every
-# panel refresh and by hand in a terminal, that would be an indefinite hang.
-emit_draft_records() {
-	_edr_srcs="$(walk_draft_list)"
-	[ -n "$_edr_srcs" ] || return 0
+# The last one buys the <state> field, and it is one process for ALL the drafts
+# rather than one per draft: the markers are read once here and each row is
+# answered against that string with a builtin case (walk_draft_state).
+#
+# The empty case has to return BEFORE all of them. It is not an optimisation:
+# awk with no file arguments reads standard input and blocks forever, and a
+# repository with no drafts is the commonest case there is -- for a verb that
+# runs in every panel refresh and by hand in a terminal, that would be an
+# indefinite hang.
+walk_each_draft() {
+	_wed_cb="$1"
+	_wed_srcs="$(walk_draft_list)"
+	[ -n "$_wed_srcs" ] || return 0
 
 	walk_gitdir_abs_init
 	# Positional parameters as the argument vector: a branch name cannot hold a
 	# space (git forbids it), but the gitdir path can, so the paths are never
 	# passed through word splitting.
 	set --
-	while IFS= read -r _edr_src; do
-		[ -n "$_edr_src" ] || continue
-		set -- "$@" "$_walk_gitdir_abs/review-walkthrough/$_edr_src.md"
+	while IFS= read -r _wed_src; do
+		[ -n "$_wed_src" ] || continue
+		set -- "$@" "$_walk_gitdir_abs/review-walkthrough/$_wed_src.md"
 	done <<EOF
-$_edr_srcs
+$_wed_srcs
 EOF
 	[ "$#" -gt 0 ] || return 0
 
+	_wed_marks="$(walk_reviewed_markers)"
 	# <src> comes back off the path with two parameter expansions rather than out
 	# of awk: peeling the gitdir prefix and the .md inside awk would mean doing it
 	# for a <src> that can hold '/', where here it is free and exact -- this is
 	# the very prefix the loop above glued on.
-	walk_draft_progress "$@" | while IFS="$(printf '\t')" read -r _edr_path _edr_ann _edr_tot _edr_source _edr_range; do
-		[ -n "$_edr_path" ] || continue
-		_edr_name="${_edr_path#"$_walk_gitdir_abs/review-walkthrough/"}"
-		_edr_name="${_edr_name%.md}"
-		porcelain_row draft "$_edr_name" "$_edr_path" "$_edr_ann" "$_edr_tot" "$_edr_source" "$_edr_range"
+	walk_draft_progress "$@" | while IFS="$(printf '\t')" read -r _wed_path _wed_ann _wed_tot _wed_source _wed_range _wed_tip; do
+		[ -n "$_wed_path" ] || continue
+		_wed_name="${_wed_path#"$_walk_gitdir_abs/review-walkthrough/"}"
+		_wed_name="${_wed_name%.md}"
+		walk_draft_state "$_wed_name" "$_wed_source" "$_wed_tip" \
+			"$_wed_ann" "$_wed_tot" "$_wed_marks"
+		"$_wed_cb" "$_wed_name" "$_wed_path" "$_wed_ann" "$_wed_tot" \
+			"$_wed_source" "$_wed_range" "$_wds_out"
 	done
+}
+
+# emit_draft_records
+# One porcelain "draft" record per loose draft. See walk_each_draft for what is
+# walked, what it costs and why the empty case returns early.
+_emit_draft_row() {
+	porcelain_row draft "$1" "$2" "$3" "$4" "$5" "$6" "$7"
+}
+
+emit_draft_records() {
+	walk_each_draft _emit_draft_row
+}
+
+# walk_reviewed_draft_list
+# The <src> of every loose draft whose state is "reviewed", one per line: the
+# reading orders whose review is over. The inferred set behind
+# git review forget --draft --reviewed.
+_reviewed_draft_row() {
+	[ "$7" = reviewed ] || return 0
+	printf '%s\n' "$1"
+}
+
+walk_reviewed_draft_list() {
+	walk_each_draft _reviewed_draft_row
 }
 
 # walk_draft_path <src>

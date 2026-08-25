@@ -19,7 +19,7 @@ usage() {
 	cat <<EOF
 usage: $prog --delta ([--] <branch> | --all | --stale [--dry-run])
        $prog --saved ([--] <branch> | --all) [--dry-run]
-       $prog --draft ([--] <branch> | --all) [--dry-run]
+       $prog --draft ([--] <branch> | --all | --reviewed) [--dry-run]
 
 Discard the persistent state a review leaves behind. Choose one mode:
 
@@ -45,6 +45,8 @@ Discard the persistent state a review leaves behind. Choose one mode:
 --draft targets:
   <branch>     delete the draft written for one branch
   --all        delete every draft
+  --reviewed   delete only the drafts whose review is over: the ones written
+               against a tip your last completed review of that branch covered
   --dry-run    list what would be deleted without deleting it
 EOF
 }
@@ -58,6 +60,7 @@ mode=""
 arg=""
 all=0
 stale=0
+reviewed=0
 dryrun=0
 
 # set_mode <kind>: pick which kind of state to discard. Repeating one flag is
@@ -90,6 +93,7 @@ while [ $# -gt 0 ]; do
 	--draft) set_mode draft ;;
 	--all) all=1 ;;
 	--stale) stale=1 ;;
+	--reviewed) reviewed=1 ;;
 	--dry-run) dryrun=1 ;;
 	# Ends option parsing, as git does everywhere and as walkthrough draft already
 	# did. Uniformity, not safety — git refuses to create a ref whose name starts
@@ -125,6 +129,7 @@ fi
 # ── --saved ─────────────────────────────────────────────────────────────────────
 if [ "$mode" = saved ]; then
 	[ "$stale" -eq 0 ] || die "--stale only applies to --delta"
+	[ "$reviewed" -eq 0 ] || die "--reviewed only applies to --draft"
 
 	if [ -n "$arg" ] && [ "$all" -eq 1 ]; then
 		die "use either <branch> or --all, not both"
@@ -241,13 +246,18 @@ fi
 if [ "$mode" = draft ]; then
 	[ "$stale" -eq 0 ] || die "--stale only applies to --delta"
 
-	if [ -n "$arg" ] && [ "$all" -eq 1 ]; then
-		die "use either <branch> or --all, not both"
-	fi
-	if [ -z "$arg" ] && [ "$all" -eq 0 ]; then
+	# Exactly one target selector, the shape --delta already has: a branch, --all
+	# or the inferred set. Counted rather than tested pairwise so a third one can
+	# never be added without deciding what it means next to the other two.
+	selectors=0
+	[ -n "$arg" ] && selectors=$((selectors + 1))
+	[ "$all" -eq 1 ] && selectors=$((selectors + 1))
+	[ "$reviewed" -eq 1 ] && selectors=$((selectors + 1))
+	if [ "$selectors" -eq 0 ]; then
 		usage >&2
 		exit 1
 	fi
+	[ "$selectors" -eq 1 ] || die "use only one of <branch>, --all and --reviewed"
 
 	git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 
@@ -266,14 +276,39 @@ if [ "$mode" = draft ]; then
 	# "forget --draft ../../../notes" deleted <gitdir>/../../../notes.md and reported
 	# having forgotten a draft. Checked against the ref name git itself would
 	# accept, which rejects ".." as a path component, so the only files this can
-	# reach are the ones it wrote. Only the typed argument needs it: --all's names
-	# come from the namespace it just read.
+	# reach are the ones it wrote. Only the typed argument needs it: the names of
+	# the two inferred sets come from the namespace they just read.
 	#
 	# The other two modes were never exposed this way — --saved resolves a ref and
 	# --delta a config key, so an invented name is a no-op in both.
-	if [ "$all" -eq 0 ] && ! git check-ref-format "refs/heads/$arg" 2>/dev/null; then
+	if [ -n "$arg" ] && ! git check-ref-format "refs/heads/$arg" 2>/dev/null; then
 		die "not a valid branch name: $arg"
 	fi
+
+	# live_walk_reader <src>: the review branch currently reading the draft for
+	# <src>, or nothing.
+	#
+	# Found by asking each review which draft it records (walk_review_draft_src),
+	# not by assuming the review is named after the branch: a compare of
+	# origin/feature/x lives on review/origin/feature/x and drafts for feature/x,
+	# which is the whole reason that name is written down. Testing review/<src>
+	# alone said nothing for exactly the reviews that most needed it.
+	#
+	# Walk reviews only: they are the ones that read a walkthrough. The name is
+	# recorded in every mode -- custody is mode-blind -- so without the filter the
+	# step and whole reviews of the same branch, which never read the draft, would
+	# match.
+	live_walk_reader() {
+		git for-each-ref --format='%(refname:short)' refs/heads/review/ |
+			while IFS= read -r _lwr_rb; do
+				[ -n "$_lwr_rb" ] || continue
+				[ "$(git config "branch.$_lwr_rb.reviewmode" || true)" = walk ] || continue
+				if [ "$(walk_review_draft_src "$_lwr_rb")" = "$1" ]; then
+					printf '%s' "$_lwr_rb"
+					return 0
+				fi
+			done
+	}
 
 	# forget_draft_one <src>: delete the draft written for one branch.
 	forget_draft_one() {
@@ -292,26 +327,10 @@ if [ "$mode" = draft ]; then
 		# Deleting it under a live review is allowed — going back to the author's
 		# order is a legitimate thing to want — but it changes what that review
 		# reads, so say so rather than let it be discovered at the next cursor move.
-		#
-		# Found by asking each review which draft it records
-		# (walk_review_draft_src), not by assuming the review is named after the
-		# branch: a compare of origin/feature/x lives on review/origin/feature/x
-		# and drafts for feature/x, which is the whole reason that name is written
-		# down. Testing review/<src> alone said nothing for exactly the reviews
-		# that most needed it.
-		git for-each-ref --format='%(refname:short)' refs/heads/review/ |
-			while IFS= read -r _fd_rb; do
-				[ -n "$_fd_rb" ] || continue
-				# Walk reviews only: they are the ones that read a walkthrough. The
-				# name below is recorded in every mode — custody is mode-blind — so
-				# without this the step and whole reviews of the same branch, which
-				# never read the draft, would match and claim to fall back.
-				[ "$(git config "branch.$_fd_rb.reviewmode" || true)" = walk ] || continue
-				_fd_reads="$(walk_review_draft_src "$_fd_rb")"
-				if [ "$_fd_reads" = "$_fd_src" ]; then
-					echo "note: $_fd_rb was reading it; that review falls back to the PR's own walkthrough, or to the whole diff if it has none" >&2
-				fi
-			done
+		_fd_reader="$(live_walk_reader "$_fd_src")"
+		if [ -n "$_fd_reader" ]; then
+			echo "note: $_fd_reader was reading it; that review falls back to the PR's own walkthrough, or to the whole diff if it has none" >&2
+		fi
 	}
 
 	# forget_orphan_draft_one <src>: delete one archived draft that no paused review
@@ -332,6 +351,47 @@ if [ "$mode" = draft ]; then
 		rm -f "$(walk_saved_draft_path "$_fo_src")"
 		echo "forgot the archived walkthrough draft for $_fo_src (no paused review left to restore it)"
 	}
+
+	# ── --reviewed ────────────────────────────────────────────────────────────
+	# The inferred set, the way --delta --stale is one: every draft written
+	# against a tip a completed review of that branch already covered. Its whole
+	# reason to exist is that these are the ones you cannot name -- a draft is
+	# spelled by its branch, and after a handful of reviews you no longer
+	# remember which of those branches still hold prose.
+	#
+	# A draft a live review is READING is skipped rather than deleted, which is
+	# the opposite of what naming one does. The asymmetry is the suite's usual
+	# one: deleting the draft under a review degrades it to the author's order,
+	# and that is a fine thing to ask for by name and a bad thing to have
+	# happen to you as part of a sweep you did not enumerate. Its marker is
+	# already set -- start writes it before the review runs -- so without this
+	# the sweep would go for the one draft that is in use.
+	if [ "$reviewed" -eq 1 ]; then
+		swept=0
+		skipped=0
+		# A here-doc while-read (not a pipe): forget_draft_one must run in this
+		# shell, and so must the two counters below.
+		while IFS= read -r d; do
+			[ -n "$d" ] || continue
+			reader="$(live_walk_reader "$d")"
+			if [ -n "$reader" ]; then
+				echo "skipping $d ($reader is reading it)" >&2
+				skipped=$((skipped + 1))
+				continue
+			fi
+			forget_draft_one "$d"
+			swept=$((swept + 1))
+		done <<EOF
+$(walk_reviewed_draft_list)
+EOF
+		# Only when nothing matched at all. A sweep that skipped every candidate
+		# has already said so on stderr, line by line, and "none" on top of that
+		# would contradict it.
+		if [ "$swept" -eq 0 ] && [ "$skipped" -eq 0 ]; then
+			echo "no walkthrough drafts whose review is over"
+		fi
+		exit 0
+	fi
 
 	if [ "$all" -eq 1 ]; then
 		drafts="$(walk_draft_list)"
@@ -415,6 +475,8 @@ forget_delta() {
 		echo "forgot delta marker for $2$3"
 	fi
 }
+
+[ "$reviewed" -eq 0 ] || die "--reviewed only applies to --draft"
 
 # Exactly one target selector: a branch, --all or --stale.
 selectors=0

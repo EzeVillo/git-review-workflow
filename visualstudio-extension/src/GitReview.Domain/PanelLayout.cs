@@ -782,11 +782,22 @@ public static class PanelLayoutBuilder
     /// way the setup gate is: with no base configured there is nothing else to
     /// do in this panel, with a half-written reading order there is.
     /// </summary>
-    private static Block.DraftRows DraftRows(PanelModel model)
+    /// <summary>
+    /// The draft rows whose Spent is <paramref name="spent"/>. The index that
+    /// travels to the host is the one in the FULL list — it is what resolves
+    /// which file is being talked about — so it survives the split into the two
+    /// blocks.
+    /// </summary>
+    private static Block.DraftRows DraftRows(PanelModel model, bool spent = false)
     {
         var enabled = !model.Busy;
-        var rows = model.DraftsList.Select((d, index) =>
+        var rows = model.DraftsList
+            .Select((d, index) => (Draft: d, Index: index))
+            .Where(x => x.Draft.Spent == spent)
+            .Select(x =>
         {
+            var d = x.Draft;
+            var index = x.Index;
             // One emphatic control per row, and the progress picks which: while
             // entries are missing the next step is writing the order, and only
             // once it is complete is it starting the review. The ORDER is fixed
@@ -803,12 +814,20 @@ public static class PanelLayoutBuilder
             // cannot even be clicked, in the very state that most needs Copy
             // for agent to lead.
             var filled = d.Total > 0 && d.Annotated >= d.Total;
-            var controls = new List<Control>
+            var controls = new List<Control>();
+            // A row whose review is over stops here for the pair with labels:
+            // they are the flow of writing the order and starting the review,
+            // and both already happened. Copy for agent would ask an agent to
+            // complete what is complete, and Validate and start would offer to
+            // reread a range that closed. The two glyphs below stay in both
+            // kinds of row, which is what keeps the collapsed section able to
+            // open and to discard.
+            if (!spent)
             {
-                Ctrl(
+                controls.Add(Ctrl(
                     ControlId.CopyDraftPrompt, "Copy for agent",
                     filled ? Emphasis.Secondary : Emphasis.Primary,
-                    enabled: true, tooltip: "Copy an instruction naming this file", index: index),
+                    enabled: true, tooltip: "Copy an instruction naming this file", index: index));
                 // Always drawn, switched off for two different reasons,
                 // each of which says its own thing. The flags come first: with
                 // no instruction block the build fails on drift however
@@ -825,7 +844,7 @@ public static class PanelLayoutBuilder
                 // Ctrl+S (the host watches the draft's directory, so saving
                 // refreshes the panel on its own), and in exchange nobody
                 // starts over a half-written reading order.
-                Ctrl(
+                controls.Add(Ctrl(
                     ControlId.StartFromDraft, "Validate and start",
                     filled ? Emphasis.Primary : Emphasis.Secondary,
                     enabled: enabled && d.Startable && filled,
@@ -834,7 +853,8 @@ public static class PanelLayoutBuilder
                         : filled
                             ? "git review walkthrough draft --build, then start"
                             : "Every entry needs a number and a why, and the heads-up needs prose or deleting",
-                    index: index),
+                    index: index));
+            }
                 // The two controls of the ROW, and that is why they leave the
                 // button pair: they move nothing along, they are used once in a
                 // while, and their subject is the file the progress pair just
@@ -849,13 +869,12 @@ public static class PanelLayoutBuilder
                 // With no visible label the accessible name IS the name of the
                 // control, and it names the row: "Open" on its own repeats once
                 // per draft.
-                Ctrl(
-                    ControlId.OpenDraft, null, Emphasis.Icon,
-                    enabled: true,
-                    accessibleName: "Open the reading order",
-                    tooltip: "Open the reading order for editing",
-                    index: index),
-            };
+            controls.Add(Ctrl(
+                ControlId.OpenDraft, null, Emphasis.Icon,
+                enabled: true,
+                accessibleName: "Open the reading order",
+                tooltip: "Open the reading order for editing",
+                index: index));
             controls.Add(Ctrl(
                 ControlId.DiscardDraft, null, Emphasis.Icon,
                 enabled: enabled,
@@ -959,7 +978,13 @@ public static class PanelLayoutBuilder
     {
         var enabled = !model.Busy;
         var outList = new List<Block>();
-        if (model.DraftsList.Count > 0)
+        // Only the FRESH ones. A draft whose review is over survives — clean
+        // does not touch hand-written prose, and discarding one is the forget
+        // verb — but it is no longer pending work, so it drops to its own
+        // collapsed section in the footer with the two controls it still has
+        // use for.
+        var freshDrafts = model.DraftsList.Count(d => !d.Spent);
+        if (freshDrafts > 0)
         {
             outList.Add(new Block.Heading("Reading orders you started"));
             outList.Add(DraftRows(model));
@@ -971,7 +996,7 @@ public static class PanelLayoutBuilder
         }
         outList.Add(new Block.Paragraph(
             "No active review on this branch.",
-            Separated: model.ReviewsList.Count > 0 || model.DraftsList.Count > 0));
+            Separated: model.ReviewsList.Count > 0 || freshDrafts > 0));
         outList.Add(new Block.Row(new[]
         {
             Ctrl(ControlId.StartReview, "Start a review", Emphasis.Primary, enabled),
@@ -1016,6 +1041,20 @@ public static class PanelLayoutBuilder
             walkthroughKids.Add(GuideRowsBlock(model));
         }
         outList.Add(new Block.ToolsSection("Walkthrough", walkthroughKids));
+        // The spent drafts. Collapsed and not hidden: a file that exists and no
+        // surface names is the state this panel does not let past anywhere else,
+        // and hiding the row would take with it the one control that can throw
+        // the file away without spelling its branch.
+        if (model.DraftsList.Any(d => d.Spent))
+        {
+            outList.Add(new Block.ToolsSection(
+                "Reading orders you finished with",
+                new List<Block>
+                {
+                    new Block.Paragraph("Their review is over; the files are still here"),
+                    DraftRows(model, spent: true),
+                }));
+        }
         var settingsKids = new List<Block>();
         if (model.ConfiguredBase is not null)
         {

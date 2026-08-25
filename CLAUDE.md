@@ -209,7 +209,7 @@ working tree:
   `clean` **no lo toca nunca**: es prosa escrita a mano que sobrevive a la review (arrancá la rama
   de nuevo y tu orden sigue ahí), así que va con los otros dos estados persistentes que `clean` deja
   quietos —los marcadores de `--delta` y las reviews guardadas— y se descarta con
-  `git review forget --draft <rama> | --all`
+  `git review forget --draft <rama> | --all | --reviewed`
   (`--saved` se lleva el de la review pausada; `--all` barre además los archivados que ya no tiene
   quién reclamar —su `review-saved/<rama>` se borró a mano—, que si no quedan fuera del alcance de
   todos los comandos: `--saved`
@@ -218,6 +218,50 @@ working tree:
   el sufijo `(draft)`
   en `status` y `list`; la viabilidad de armarlo o continuarlo, con las ofertas
   `draft` / `draft-resume` de `config --porcelain`. Las superficies de custodia se deciden con un
+  **`draft` actualiza en vez de negarse**, en los mismos términos que `init` y con el mismo
+  código: cada entrada cuyo archivo sigue en rango conserva número, why y `> key`, los que
+  entraron llegan como `## ?.` y los que salieron se descartan nombrados. El motivo es otro que
+  el de `init` —un borrador no se puede desfasar *durante* una review, porque `start` congela el
+  tip, pero sobrevive a esa review y la siguiente es sobre un rango que se movió—, y hay dos
+  asimetrías deliberadas: **`superseded` es sólo de `init`** (empezar de cero por decisión propia
+  destruye prosa, y del lado del autor eso es un `git checkout` porque el archivo está trackeado;
+  del lado del revisor no hay vuelta atrás — y no llega a pasar, porque una rama ya mergeada en la
+  base no tiene rango y `annotatable_files` muere antes), y **el aviso de las entradas
+  descartadas no nombra una salida** en el lado del revisor, por lo mismo: ahí la nota que lista
+  los paths es todo lo que hay.
+
+  **Que su review ya haya terminado no lo borra: lo baja de bloque.** El registro `draft` de
+  `config --porcelain` cierra con un `<state>` —`fresh` o `reviewed`— que compara el tip del
+  **propio borrador** (el `tip <sha>` de su bloque de instrucciones) contra el marcador de la
+  última review completa de esa rama, en el sabor que corresponda (`reviewworkflow` para uno
+  remoto, `reviewworkflowlocal` para uno `--local`/`--offline`; cruzarlos reportaba un borrador
+  como leído porque se revisó la *otra* copia). El tip del **borrador** y no el de la rama hoy,
+  porque lo que se pregunta es si *ese orden de lectura* ya se leyó: uno regenerado después de la
+  review cubre un rango que nadie leyó y vuelve a `fresh`, y uno cuya rama avanzó sigue
+  describiendo lo que sí se leyó, así que sigue `reviewed` —que además esté derivado es otra
+  pregunta, y la contesta `build`—. Cuesta **un `git config --get-regexp` para
+  todos** —los marcadores se leen una vez y cada fila se contesta con un `case` builtin—, y a
+  propósito **no** consulta las reviews vivas: `start` escribe el marcador antes de correr la
+  review, así que un borrador que una review está leyendo reporta `reviewed`, y contestarlo bien
+  costaría un `for-each-ref` más un `git config` por review en cada refresco. La pregunta sí se
+  hace donde es gratis: `forget --draft --reviewed` —la escoba de los que no podés nombrar, porque
+  un borrador se deletrea por su rama— **saltea** el que una review walk está leyendo y lo dice.
+  Del lado del panel, un `reviewed` sale de *Reading orders you started* y baja a una sección
+  plegada del pie con los dos iconos y sin el par con etiqueta: escribir el orden y arrancar la
+  review ya pasaron las dos. Plegada y no escondida, porque un archivo que existe y ninguna
+  superficie nombra es justo lo que este panel no deja pasar en ningún otro lado. Y un orden que
+  **no está escrito entero nunca es `reviewed`**, vaya donde vaya el marcador: sin esa condición,
+  un *Start over* sobre una rama que no se movió cae en el mismo tip que el marcador registra y el
+  esqueleto en blanco recién pedido quedaba plegado abajo, sin *Copy for agent* ni *Validate and
+  start* — o sea sin forma de avanzar. Es el mismo test de `filled` que ya usan los tres paneles y
+  cuesta cero, porque el par lo cuenta el `awk` que leyó el archivo.
+
+  **Del lado del cliente eso son dos cosas.** El asistente de `start`, ante un borrador cuya review
+  ya cerró, pregunta *Update* / *Start over* antes de invocar —el mismo molde que el picker de
+  `walkthrough init` del autor, y el mismo par de botones— y la fila de la oferta `draft-resume`
+  cambia su copy, porque «pick up the one you left half-written» sobre un orden terminado y ya
+  usado es sencillamente falso. Sólo se pregunta ahí: sobre uno a medio escribir la respuesta es
+  obvia y un modal de más en el camino común es peor que ninguno.
   test de archivo y cero procesos nuevos; el gitdir del que cuelgan todos esos paths se resuelve
   **una vez por proceso** en `walk_gitdir_init`, llamado desde `walk_use_draft` (todo verbo con
   review activa) y a mano por los cuatro que arman un path sin fijar contexto — `list`, `save`,
@@ -793,7 +837,7 @@ MOCHA_GREP='abre el diff' ./vscode-extension/test/run-docker.sh
   largo. `test/unit/userDataDir.spec.ts` cubre las dos cosas contra `darwin` explícito, así que la
   regresión cae en cualquier SO.
 - **`npm run preview`** genera `out/preview/index.html` (y lo imprime como URL
-  `file://`): los veintitrés estados del panel lado a lado, a ancho de sidebar, con selector de tema
+  `file://`): los veinticuatro estados del panel lado a lado, a ancho de sidebar, con selector de tema
   dark/light/alto contraste. El pane es el `panelHtml()` real y los estados de `preview/fixtures.ts`
   son salida `--porcelain` de ejemplo pasada por el parser y el modelo reales, así que **sigue al
   código y no se mantiene aparte**. Lo que no puede afirmar: los botones no tienen extensión del

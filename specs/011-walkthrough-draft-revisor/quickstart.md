@@ -96,7 +96,7 @@ git review walkthrough draft --build feature/telemetry
 # → error nombrando los placeholders sin completar; exit ≠ 0
 
 git review walkthrough draft feature/telemetry        # otra vez
-# → error: already exists; pass --force to overwrite         ← FR-005
+# → superado: actualiza el borrador existente (FR-005 ya no aplica)
 ```
 
 Con un borrador al que le falta un archivo del PR, `--build` nombra los dos

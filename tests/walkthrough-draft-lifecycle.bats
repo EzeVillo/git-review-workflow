@@ -615,9 +615,11 @@ teardown() {
 }
 
 @test "forget --draft rejects a branch together with --all" {
+	# The refusal names the three targets since --reviewed joined them, which is
+	# the same shape --delta has had all along.
 	run git review forget --draft --all feature/x
 	[ "$status" -eq 1 ]
-	[[ "$output" == *"use either <branch> or --all, not both"* ]]
+	[[ "$output" == *"use only one of <branch>, --all and --reviewed"* ]]
 	[ -f "$DRAFT" ]
 }
 

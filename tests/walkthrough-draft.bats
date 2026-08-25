@@ -349,16 +349,42 @@ EOF
 	[[ "$output" != *"you have a walkthrough draft"* ]]
 }
 
-@test "draft refuses to overwrite an existing draft without --force" {
+@test "draft updates an existing draft instead of refusing" {
+	# The draft outlives the review it was written for, and the next one is over a
+	# range that moved -- so a second call reconciles instead of refusing. With
+	# nothing entered or left, that means every why stays where it was.
 	git review walkthrough draft feature/plain
 	fill_draft
-	before="$(cat "$DRAFT")"
+	run git review walkthrough draft feature/plain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"updated"* ]]
+	[[ "$output" == *"3 kept"* ]]
+	[[ "$output" == *"0 added"* ]]
+	[[ "$output" == *"0 dropped"* ]]
+	grep -q '^start here$' "$DRAFT"
+	grep -q '^> key$' "$DRAFT"
+	grep -q '^mind the encoding of that one path$' "$DRAFT"
+	# And no placeholder appeared: there was nothing new to fill in.
+	! grep -q '^## ?\. ' "$DRAFT"
+}
+
+@test "draft refuses when the name is taken by something that is not a file" {
+	# mv(1) into a directory MOVES THE FILE INSIDE IT and reports success, so
+	# without the guard the skeleton landed as <target>/<tmp name>, the command
+	# said it had written it, and nothing on disk was a draft.
+	mkdir -p "$DRAFT"
 	run git review walkthrough draft feature/plain
 	[ "$status" -eq 1 ]
-	[[ "$output" == *"already exists"* ]]
-	[[ "$output" == *"--force"* ]]
-	# The refusal did not touch what the reviewer had written.
-	[ "$(cat "$DRAFT")" = "$before" ]
+	[[ "$output" == *"exists and is not a file"* ]]
+	[ -d "$DRAFT" ]
+	# Nothing was written inside it either.
+	[ -z "$(ls -A "$DRAFT")" ]
+
+	# And --force does not get through it: it means "throw away what is there",
+	# not "write somewhere else".
+	run git review walkthrough draft --force feature/plain
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"exists and is not a file"* ]]
 }
 
 @test "draft --force overwrites an existing draft" {
@@ -502,10 +528,18 @@ draft_temps() (
 	# went.
 	git review walkthrough draft --offline feature/plain
 	[ -f "$DRAFT" ]
+	fill_draft
 	run git review walkthrough draft feature/plain
-	[ "$status" -ne 0 ]
-	[[ "$output" == *"already exists"* ]]
-	[[ "$output" == *"pass --force to overwrite"* ]]
+	[ "$status" -eq 0 ]
+	# The second call lands on the same file and reconciles it -- it does not
+	# write a second draft anywhere.
+	[[ "$output" == *"updated"* ]]
+	grep -q '^start here$' "$DRAFT"
+	# A glob and not find(1): under Git Bash a stray PATH resolves that name to
+	# Windows' own find.exe, and this suite runs on the Windows runner too.
+	ns="$(dirname "$(dirname "$DRAFT")")"
+	[ "$(printf '%s
+' "$ns"/*/*.md | grep -c .)" -eq 1 ]
 }
 
 @test "each git worktree keeps its own draft" {

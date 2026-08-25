@@ -1,6 +1,7 @@
 package com.ezevillo.gitreview.domain
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 
@@ -68,6 +69,36 @@ class ConfigPorcelainTest {
     }
 
     @Test
+    fun aSpentDraftRowSaysSomethingElse() {
+        // "pick up the one you left half-written" describe un orden a medio
+        // escribir; sobre uno terminado y ya usado es falso, y lo que sigue no es
+        // terminarlo sino reconciliarlo o empezar uno nuevo.
+        val offers = listOf(ReadingOffer(OfferId.DRAFT_RESUME, OfferRank.AVAILABLE))
+        val fresh = buildLayoutItems(offers)
+        val spent = buildLayoutItems(offers, spentDraft = true)
+
+        assertEquals("Finish the reading order you started", fresh[0].label)
+        assertEquals("Reuse the reading order you wrote", spent[0].label)
+        assertNotEquals(fresh[0].description, spent[0].description)
+        // Lo demás de la fila no cambia.
+        assertEquals(DraftStep.RESUME, spent[0].draft)
+        assertEquals(ReviewLayout.WALK, spent[0].layout)
+    }
+
+    @Test
+    fun theDraftStateTouchesNoOtherRow() {
+        val offers = listOf(
+            ReadingOffer(OfferId.WALK, OfferRank.RECOMMENDED),
+            ReadingOffer(OfferId.STEP, OfferRank.AVAILABLE),
+            ReadingOffer(OfferId.WHOLE, OfferRank.AVAILABLE),
+        )
+        assertEquals(
+            buildLayoutItems(offers).map { it.label },
+            buildLayoutItems(offers, spentDraft = true).map { it.label },
+        )
+    }
+
+    @Test
     fun unknownOfferIdsAreStillDropped() {
         val out = """
             config	remote	origin
@@ -127,6 +158,7 @@ class ConfigPorcelainTest {
                     total = 9,
                     source = DraftSource.LOCAL,
                     range = DraftRange.DELTA,
+                    state = DraftState.FRESH,
                 ),
             ),
             parseConfigPorcelain(out).drafts,

@@ -13,6 +13,7 @@ class DraftWatchTest {
         total = 1,
         source = DraftSource.REMOTE,
         range = DraftRange.FULL,
+        state = DraftState.FRESH,
     )
 
     private fun state(draftPath: String? = null, drafts: List<DraftRecord>? = null) =

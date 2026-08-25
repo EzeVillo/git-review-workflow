@@ -18,8 +18,12 @@ namespace GitReview.Domain;
 /// </summary>
 public abstract record DraftFlowState
 {
-    /// <summary>Invoke `walkthrough draft` (only when the reviewer chose Draft).</summary>
-    public sealed record Create : DraftFlowState
+    /// <summary>
+    /// Invoke `walkthrough draft`. Force is the difference between reconciling
+    /// what is there — keeping every why whose file is still in range — and
+    /// throwing it away for a blank skeleton.
+    /// </summary>
+    public sealed record Create(bool Force = false) : DraftFlowState
     {
         public static readonly Create Instance = new();
     }
@@ -50,14 +54,24 @@ public abstract record DraftFlowEvent
 public static class DraftFlow
 {
     /// <summary>
-    /// Where it starts: Resume creates nothing — the file exists and recreating
-    /// it would overwrite what the reviewer wrote, which is what `--force` is
-    /// there to ask for by hand. With nothing to create, the wizard is done.
+    /// The four ways in, and only two of them invoke anything:
+    /// <list type="bullet">
+    /// <item>Create — there is no file: the skeleton is written.</item>
+    /// <item>Resume — there is a half-written one and it is used as it is. Nothing
+    /// is invoked, so the wizard is already done.</item>
+    /// <item>Update — there is one whose review is over and it is reconciled with
+    /// today's range. It is the SAME command as Create: the verb updates instead
+    /// of refusing.</item>
+    /// <item>StartOver — the same with --force: the blank skeleton, which is the
+    /// only thing that makes prose disappear and so is never the default.</item>
+    /// </list>
     /// </summary>
-    public static DraftFlowState InitialDraftFlowState(LayoutOffers.DraftStep step) =>
-        step == LayoutOffers.DraftStep.Create
-            ? DraftFlowState.Create.Instance
-            : DraftFlowState.Done.Instance;
+    public static DraftFlowState InitialDraftFlowState(LayoutOffers.DraftStep step) => step switch
+    {
+        LayoutOffers.DraftStep.Resume => DraftFlowState.Done.Instance,
+        LayoutOffers.DraftStep.StartOver => new DraftFlowState.Create(Force: true),
+        _ => DraftFlowState.Create.Instance,
+    };
 
     /// <summary>
     /// Transition. An event that does not belong to the current state leaves it

@@ -114,7 +114,7 @@ public static class StartWizard
             Base: porcelain.Config.Base,
             Deltas: offersResult.Deltas ?? deltas);
 
-        return await LayoutStepAsync(context, offersResult.Offers, ct).ConfigureAwait(true);
+        return await LayoutStepAsync(context, offersResult.Offers, offersResult.Drafts, ct).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -142,9 +142,11 @@ public static class StartWizard
     private static async Task<bool> LayoutStepAsync(
         WizardContext ctx,
         IReadOnlyList<ReadingOffer>? offers,
+        IReadOnlyList<DraftRecord>? drafts,
         CancellationToken ct)
     {
-        var items = LayoutOffers.BuildLayoutItems(offers);
+        var spent = drafts?.Any(d => d.Src == ctx.Branch && d.State == DraftState.Reviewed) == true;
+        var items = LayoutOffers.BuildLayoutItems(offers, spent);
         var labels = items
             .Select(i => i.Description.Length > 0 ? $"{i.Label} — {i.Description}" : i.Label)
             .ToList();
@@ -156,9 +158,28 @@ public static class StartWizard
         var picked = items[idx];
         if (picked.Draft is null)
             return await ConfirmAndStartAsync(ctx, picked.Layout, ct).ConfigureAwait(true);
+
+        // A reading order that has already been read is not picked up blind: the
+        // reviewer is asked whether to reconcile it with what the PR changed since
+        // or start a new one. The other paths have nothing to ask. Cancelling goes
+        // back to the reading-order step, which is where this came from.
+        var step = picked.Draft.Value;
+        if (step == LayoutOffers.DraftStep.Resume && spent)
+        {
+            var choice = GitReviewDialogs.Choose(
+                UserCopy.DraftExistsTitle,
+                UserCopy.DraftExistsDetail,
+                new[] { UserCopy.WalkthroughUpdateButton, UserCopy.WalkthroughStartOverButton });
+            if (choice == GitReviewDialogs.Cancelled)
+                return await LayoutStepAsync(ctx, offers, drafts, ct).ConfigureAwait(true);
+            step = choice == 1
+                ? LayoutOffers.DraftStep.StartOver
+                : LayoutOffers.DraftStep.Update;
+        }
+
         return await RunDraftFlowAsync(
             ctx,
-            DraftFlow.InitialDraftFlowState(picked.Draft.Value),
+            DraftFlow.InitialDraftFlowState(step),
             ct).ConfigureAwait(true);
     }
 
@@ -183,7 +204,7 @@ public static class StartWizard
             {
                 case DraftFlowState.Create create:
                 {
-                    var outcome = await InvokeDraftAsync(ctx, build: false, ct).ConfigureAwait(true);
+                    var outcome = await InvokeDraftAsync(ctx, build: false, create.Force, ct).ConfigureAwait(true);
                     // A note on success (the draft covers the author's walkthrough) is
                     // shown like start's own notes are.
                     if (outcome.Ok && outcome.Text.Length > 0) GitReviewDialogs.Info(outcome.Text);
@@ -209,7 +230,7 @@ public static class StartWizard
                     // write one is now the offer to continue it.
                     var offers = await LoadOffersAsync(
                         ctx.Cli, ctx.Cwd, ctx.Branch, ctx.Source, ctx.Range, ct).ConfigureAwait(true);
-                    return await LayoutStepAsync(ctx, offers.Offers, ct).ConfigureAwait(true);
+                    return await LayoutStepAsync(ctx, offers.Offers, offers.Drafts, ct).ConfigureAwait(true);
                 }
 
                 default:
@@ -227,12 +248,13 @@ public static class StartWizard
     private static async Task<DraftOutcome> InvokeDraftAsync(
         WizardContext ctx,
         bool build,
+        bool force,
         CancellationToken ct)
     {
         using var reporting = ctx.Host.Progress?.Invoke(UserCopy.DraftProgress(ctx.Branch, build));
         var result = await ctx.Mutations.RunArgvAsync(
             "walkthrough",
-            ReviewIntentLogic.DraftArgs(ctx.Branch, ctx.Source, ctx.Range, build),
+            ReviewIntentLogic.DraftArgs(ctx.Branch, ctx.Source, ctx.Range, build, force),
             ct: ct).ConfigureAwait(true);
         if (result is null) return new DraftOutcome(false, MutationLock.DiscardReason);
         return new DraftOutcome(
@@ -244,6 +266,7 @@ public static class StartWizard
         bool Ok,
         IReadOnlyList<ReadingOffer>? Offers,
         IReadOnlyList<DeltaRecord>? Deltas,
+        IReadOnlyList<DraftRecord>? Drafts = null,
         string Stderr = "",
         string Stdout = "");
 
@@ -267,11 +290,11 @@ public static class StartWizard
             network: source == ReviewSource.Remote,
             cancellationToken: ct).ConfigureAwait(true);
         if (result.ExitCode != 0 || result.TimedOut)
-            return new OffersResult(false, null, null, result.Stderr, result.Stdout);
+            return new OffersResult(false, null, null, null, result.Stderr, result.Stdout);
         try
         {
             var parsed = ConfigPorcelain.ParseConfigPorcelain(result.Stdout);
-            return new OffersResult(true, parsed.Offers, parsed.Deltas);
+            return new OffersResult(true, parsed.Offers, parsed.Deltas, parsed.Drafts);
         }
         catch
         {

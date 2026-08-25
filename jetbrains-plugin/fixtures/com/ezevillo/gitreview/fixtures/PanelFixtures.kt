@@ -32,6 +32,7 @@ object PanelFixtures {
         "no-review ready" to noReviewReady(),
         "no-review one draft" to noReviewOneDraft(),
         "no-review drafts" to noReviewDrafts(),
+        "no-review spent draft" to noReviewSpentDraft(),
         "no-review guides" to noReviewGuides(),
         "no-review guide empty" to noReviewGuideEmpty(),
         "no-review walkthrough stale" to noReviewWalkthroughStale(),
@@ -118,6 +119,27 @@ object PanelFixtures {
                 drafts = parseConfigPorcelain(cfg).drafts,
             ),
             PanelInputs(busy = busy),
+        )
+    }
+
+    /**
+     * One reading order still ahead of its review and one whose review is over.
+     * The second leaves the block on top for the collapsed section at the
+     * bottom, and keeps only the two glyphs: the pair with labels is the flow of
+     * writing the order and starting the review, and both already happened.
+     */
+    fun noReviewSpentDraft(): PanelModel {
+        val cfg = """
+            draft	feature/telemetry	/repo/.git/review-walkthrough/feature/telemetry.md	3	9	local	delta	fresh
+            draft	feature/pagos	/repo/.git/review-walkthrough/feature/pagos.md	6	6	remote	full	reviewed
+        """.trimIndent()
+        return buildPanelModel(
+            ReviewState(
+                situation = Situation.NO_REVIEW,
+                config = EffectiveConfig(base = "main", remote = "origin"),
+                drafts = parseConfigPorcelain(cfg).drafts,
+            ),
+            PanelInputs(busy = false),
         )
     }
 

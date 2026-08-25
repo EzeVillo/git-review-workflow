@@ -133,6 +133,29 @@ enum class DraftRange {
 }
 
 /**
+ * Whether the review a draft was written for is over (`REVIEWED`) or still
+ * ahead of it (`FRESH`). The CLI decides it by comparing the tip the draft
+ * itself was generated against with the marker of the last completed review of
+ * that branch; nothing is derived here.
+ *
+ * The file outlives the review either way -- clean does not touch prose -- so
+ * this is not "does it exist": it is where it is drawn and what is offered.
+ *
+ * Anything that is not exactly "reviewed" is FRESH, the missing field included:
+ * a CLI older than this record does not emit it, and there the panel has to
+ * behave as it behaved rather than hide rows over a datum nobody gave it.
+ */
+enum class DraftState {
+    FRESH,
+    REVIEWED,
+    ;
+
+    companion object {
+        fun parse(raw: String?): DraftState = if (raw == "reviewed") REVIEWED else FRESH
+    }
+}
+
+/**
  * A loose walkthrough draft: it exists in the gitdir's ACTIVE namespace, which
  * is to say the reviewer started it and has not paused its review.
  *
@@ -146,6 +169,8 @@ data class DraftRecord(
     val total: Int,
     val source: DraftSource,
     val range: DraftRange,
+    /** Whether its review is over. See [DraftState]. */
+    val state: DraftState,
 )
 
 /** Which of the two authoring guides a `guide` record is about. */
@@ -396,6 +421,7 @@ fun parseConfigPorcelain(stdout: String): ConfigPorcelainResult {
                             total = total,
                             source = DraftSource.parse(fields.getOrNull(5)),
                             range = DraftRange.parse(fields.getOrNull(6)),
+                            state = DraftState.parse(fields.getOrNull(7)),
                         ),
                     )
                 }

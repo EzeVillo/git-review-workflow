@@ -426,6 +426,20 @@ export const PREVIEW_PANES: PreviewPane[] = [
         ),
     },
     {
+        // Uno con su review por delante y otro con la review ya cerrada. El
+        // segundo sale del bloque de arriba y baja a la sección plegada del
+        // pie, con los dos iconos y sin el par con etiqueta: escribir el orden
+        // y arrancar la review ya pasaron las dos.
+        name: "no-review-spent-draft",
+        caption: "no-review — un borrador fresco arriba y uno gastado en su sección",
+        model: drafts([
+            ["config", "base", "develop"],
+            ["config", "remote", "origin"],
+            ["draft", "feature/telemetry", "/repo/.git/review-walkthrough/feature/telemetry.md", "3", "9", "local", "delta", "fresh"],
+            ["draft", "feature/pagos", "/repo/.git/review-walkthrough/feature/pagos.md", "6", "6", "remote", "full", "reviewed"],
+        ]),
+    },
+    {
         // Dentro de una review las guías siguen estando: `walkthrough draft` se
         // corre desde adentro. Es la única sección plegable que una review tiene.
         name: "review-walk-guides",

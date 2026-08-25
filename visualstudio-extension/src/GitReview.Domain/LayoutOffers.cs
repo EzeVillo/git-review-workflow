@@ -8,10 +8,18 @@ public static class LayoutOffers
         new ReadingOffer(OfferId.Whole, OfferRank.Available),
     };
 
+    /// <summary>
+    /// Update and StartOver are the two ways out of the picker that appears when
+    /// the reading order has already been used in a review. Update is the SAME
+    /// command as Create — the verb reconciles instead of refusing — and StartOver
+    /// is that command with --force.
+    /// </summary>
     public enum DraftStep
     {
         Create,
         Resume,
+        Update,
+        StartOver,
     }
 
     public sealed record LayoutPickItem(
@@ -48,7 +56,26 @@ public static class LayoutOffers
     public static IReadOnlyList<ReadingOffer> EffectiveOffers(IReadOnlyList<ReadingOffer>? offers) =>
         offers is null || offers.Count == 0 ? FallbackOffers.ToList() : offers;
 
-    public static IReadOnlyList<LayoutPickItem> BuildLayoutItems(IReadOnlyList<ReadingOffer>? offers)
+    /// <summary>
+    /// What the draft row says once its review is over. The usual copy describes
+    /// a half-written order, and over one that is finished and already used it is
+    /// simply false: what is left is not finishing it but reconciling it with what
+    /// the PR changed since, or starting a new one.
+    /// </summary>
+    private static readonly OfferMeta SpentResumeMeta = new(
+        "Reuse the reading order you wrote",
+        "you already reviewed with it; update it for what changed, or start over",
+        ReviewLayout.Walk,
+        DraftStep.Resume);
+
+    /// <param name="spentDraft">
+    /// Whether this branch's draft has its review closed, which is the only thing
+    /// that changes the DraftResume copy. The CLI says so in the draft record's
+    /// state field; nothing is derived here.
+    /// </param>
+    public static IReadOnlyList<LayoutPickItem> BuildLayoutItems(
+        IReadOnlyList<ReadingOffer>? offers,
+        bool spentDraft = false)
     {
         var list = EffectiveOffers(offers);
         var byId = new Dictionary<OfferId, OfferRank>();
@@ -64,7 +91,9 @@ public static class LayoutOffers
 
         return ordered.Select(id =>
         {
-            var meta = OfferMetaMap[id];
+            var meta = id == OfferId.DraftResume && spentDraft
+                ? SpentResumeMeta
+                : OfferMetaMap[id];
             var rank = byId.GetValueOrDefault(id, OfferRank.Available);
             var description = rank == OfferRank.Recommended
                 ? $"{meta.Description} (recommended)"

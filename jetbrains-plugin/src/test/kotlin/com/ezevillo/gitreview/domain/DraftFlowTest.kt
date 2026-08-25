@@ -15,17 +15,25 @@ class DraftFlowTest {
 
     @Test
     fun initialStateSkipsCreationWhenResuming() {
-        assertEquals(DraftFlowState.Create, initialDraftFlowState(DraftStep.CREATE))
-        // RESUME no recrea nada: el archivo existe y volver a crearlo pisaría lo
-        // escrito. Sin creación no queda ningún paso.
+        assertEquals(DraftFlowState.Create(force = false), initialDraftFlowState(DraftStep.CREATE))
+        // RESUME no invoca nada: el archivo se usa tal cual está.
         assertEquals(DraftFlowState.Done, initialDraftFlowState(DraftStep.RESUME))
+    }
+
+    @Test
+    fun updateIsTheSameCommandAsCreateAndStartOverIsTheOneWithForce() {
+        // El verbo actualiza en vez de negarse, así que reconciliar no necesita
+        // ningún flag: lo único que distingue a las dos ramas del picker es que
+        // una tira lo escrito y la otra no.
+        assertEquals(DraftFlowState.Create(force = false), initialDraftFlowState(DraftStep.UPDATE))
+        assertEquals(DraftFlowState.Create(force = true), initialDraftFlowState(DraftStep.START_OVER))
     }
 
     @Test
     fun creatingGreenEndsTheWizard() {
         assertEquals(
             DraftFlowState.Done,
-            advanceDraftFlow(DraftFlowState.Create, DraftFlowEvent.Created(ok = true)),
+            advanceDraftFlow(DraftFlowState.Create(), DraftFlowEvent.Created(ok = true)),
         )
     }
 
@@ -37,8 +45,8 @@ class DraftFlowTest {
         val kinds = setOf(
             initialDraftFlowState(DraftStep.CREATE)::class.simpleName,
             initialDraftFlowState(DraftStep.RESUME)::class.simpleName,
-            advanceDraftFlow(DraftFlowState.Create, DraftFlowEvent.Created(ok = true))::class.simpleName,
-            advanceDraftFlow(DraftFlowState.Create, DraftFlowEvent.Created(ok = false))::class.simpleName,
+            advanceDraftFlow(DraftFlowState.Create(), DraftFlowEvent.Created(ok = true))::class.simpleName,
+            advanceDraftFlow(DraftFlowState.Create(), DraftFlowEvent.Created(ok = false))::class.simpleName,
         )
         assertEquals(setOf("Create", "Done", "Back"), kinds)
     }
@@ -48,7 +56,7 @@ class DraftFlowTest {
         assertEquals(
             DraftFlowState.Back("a draft already exists; use --force"),
             advanceDraftFlow(
-                DraftFlowState.Create,
+                DraftFlowState.Create(),
                 DraftFlowEvent.Created(ok = false, error = "a draft already exists; use --force"),
             ),
         )
@@ -58,7 +66,7 @@ class DraftFlowTest {
     fun aFailureWithoutStderrGoesBackWithoutInventingAReason() {
         assertEquals(
             DraftFlowState.Back(),
-            advanceDraftFlow(DraftFlowState.Create, DraftFlowEvent.Created(ok = false)),
+            advanceDraftFlow(DraftFlowState.Create(), DraftFlowEvent.Created(ok = false)),
         )
     }
 
@@ -105,11 +113,17 @@ class DraftFlowTest {
             listOf("draft", "--offline", "--", "feature/x"),
             draftArgs("feature/x", ReviewSource.OFFLINE, ReviewRange.FULL, build = false),
         )
-        // Nunca --force, --from ni --stdout desde un cliente.
+        // Los controles de la fila nunca llevan --force, --from ni --stdout:
+        // validan y arrancan sobre lo que hay escrito.
         val args = draftArgs("feature/x", ReviewSource.REMOTE, ReviewRange.FULL, build = true)
         assertFalse(args.contains("--force"))
         assertFalse(args.contains("--from"))
         assertFalse(args.contains("--stdout"))
+        // --force sólo cuando el revisor eligió empezar de cero en el picker.
+        assertEquals(
+            listOf("draft", "--force", "--local", "--delta", "--", "feature/x"),
+            draftArgs("feature/x", ReviewSource.LOCAL, ReviewRange.DELTA, build = false, force = true),
+        )
     }
 
     @Test

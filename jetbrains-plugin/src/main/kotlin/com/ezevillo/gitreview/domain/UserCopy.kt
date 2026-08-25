@@ -274,6 +274,18 @@ object UserCopy {
     const val WALKTHROUGH_EXISTS_DETAIL =
         "Update keeps every entry whose file is still in range - its number, its why and its > key - and adds the files that are new.\n\n" +
             "Start over runs git review walkthrough init --force: it replaces .review/walkthrough.md with a blank skeleton. The file is tracked, so git checkout -- brings the old one back."
+    /**
+     * El mismo par de salidas del lado del revisor. Dos cosas cambian respecto
+     * del texto del autor, y las dos importan: el archivo no está en git, así
+     * que empezar de cero no tiene vuelta atrás; y lo que se reconcilia no es un
+     * walkthrough que quedó viejo sino un orden de lectura que ya se usó, sobre
+     * un PR que siguió andando.
+     */
+    const val DRAFT_EXISTS_TITLE = "You already have a reading order for this branch."
+    const val DRAFT_EXISTS_DETAIL =
+        "Update keeps every entry whose file is still in range - its number, its why and its > key - and adds the files the PR changed since.\n\n" +
+        "Start over runs git review walkthrough draft --force: it replaces your reading order with a blank skeleton. This file is not in git, so what is written in it now is gone for good."
+
     const val WALKTHROUGH_UPDATE_BUTTON = "Update"
     const val WALKTHROUGH_START_OVER_BUTTON = "Start over"
     const val WALKTHROUGH_INIT_PROGRESS = "Initializing walkthrough…"

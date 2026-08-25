@@ -807,9 +807,14 @@ private fun inventoryRows(model: PanelModel): Block.InventoryRows {
  * gate is: with no base configured there is nothing else to do in this panel,
  * with a half-written reading order there is.
  */
-private fun draftRows(model: PanelModel): Block.DraftRows {
+/**
+ * The draft rows whose [PanelDraft.spent] is [spent]. The index that travels to
+ * the host is the one in the FULL list -- it is what resolves which file is
+ * being talked about -- so it survives the split into the two blocks.
+ */
+private fun draftRows(model: PanelModel, spent: Boolean = false): Block.DraftRows {
     val enabled = !model.busy
-    val rows = model.drafts.mapIndexed { index, d ->
+    val rows = model.drafts.withIndex().filter { it.value.spent == spent }.map { (index, d) ->
         // One emphatic control per row, and the progress picks which: while
         // entries are missing the next step is writing the order, and only once
         // it is complete is it starting the review. The ORDER is fixed — moving
@@ -825,46 +830,54 @@ private fun draftRows(model: PanelModel): Block.DraftRows {
         // clicked, in the very state that most needs Copy for agent to lead.
         val filled = d.total > 0 && d.annotated >= d.total
         val controls = ArrayList<Control>()
-        controls.add(
-            ctrl(
-                ControlId.COPY_DRAFT_PROMPT,
-                "Copy for agent",
-                if (filled) Emphasis.SECONDARY else Emphasis.PRIMARY,
-                enabled = true,
-                tooltip = "Copy an instruction naming this file",
-                index = index,
-            ),
-        )
-        // Always drawn, switched off for two different reasons, each of which
-        // says its own thing. The flags come first: with no instruction block
-        // the build fails on drift however complete the order is, so filling it
-        // in is not the next step there.
-        //
-        // Off by progress is what makes the pair honest. The skeleton leaves a
-        // placeholder per entry AND one for the heads-up, the pair counts all
-        // of them, and build refuses on any of them alike — left on, the one
-        // emphatic control of the row offered a start that died on "the
-        // heads-up placeholder is still there". The known cost: the count comes
-        // off the disk, so a draft open with unsaved edits keeps the control
-        // gray until Ctrl+S (the host watches the draft's directory, so saving
-        // refreshes the panel on its own), and in exchange nobody starts over a
-        // half-written reading order.
-        controls.add(
-            ctrl(
-                ControlId.START_FROM_DRAFT,
-                "Validate and start",
-                if (filled) Emphasis.PRIMARY else Emphasis.SECONDARY,
-                enabled = enabled && d.startable && filled,
-                tooltip = if (!d.startable) {
-                    "This draft has no instruction block, so the CLI cannot tell how it was generated"
-                } else if (filled) {
-                    "git review walkthrough draft --build, then start"
-                } else {
-                    "Every entry needs a number and a why, and the heads-up needs prose or deleting"
-                },
-                index = index,
-            ),
-        )
+        // A row whose review is over stops here for the pair with labels: they
+        // are the flow of writing the order and starting the review, and both
+        // already happened. Copy for agent would ask an agent to complete what
+        // is complete, and Validate and start would offer to reread a range
+        // that closed. The two glyphs below stay in both kinds of row, which is
+        // what keeps the collapsed section able to open and to discard.
+        if (!spent) {
+            controls.add(
+                ctrl(
+                    ControlId.COPY_DRAFT_PROMPT,
+                    "Copy for agent",
+                    if (filled) Emphasis.SECONDARY else Emphasis.PRIMARY,
+                    enabled = true,
+                    tooltip = "Copy an instruction naming this file",
+                    index = index,
+                ),
+            )
+            // Always drawn, switched off for two different reasons, each of which
+            // says its own thing. The flags come first: with no instruction block
+            // the build fails on drift however complete the order is, so filling it
+            // in is not the next step there.
+            //
+            // Off by progress is what makes the pair honest. The skeleton leaves a
+            // placeholder per entry AND one for the heads-up, the pair counts all
+            // of them, and build refuses on any of them alike — left on, the one
+            // emphatic control of the row offered a start that died on "the
+            // heads-up placeholder is still there". The known cost: the count comes
+            // off the disk, so a draft open with unsaved edits keeps the control
+            // gray until Ctrl+S (the host watches the draft's directory, so saving
+            // refreshes the panel on its own), and in exchange nobody starts over a
+            // half-written reading order.
+            controls.add(
+                ctrl(
+                    ControlId.START_FROM_DRAFT,
+                    "Validate and start",
+                    if (filled) Emphasis.PRIMARY else Emphasis.SECONDARY,
+                    enabled = enabled && d.startable && filled,
+                    tooltip = if (!d.startable) {
+                        "This draft has no instruction block, so the CLI cannot tell how it was generated"
+                    } else if (filled) {
+                        "git review walkthrough draft --build, then start"
+                    } else {
+                        "Every entry needs a number and a why, and the heads-up needs prose or deleting"
+                    },
+                    index = index,
+                ),
+            )
+        }
         // The two controls of the ROW, and that is why they leave the button
         // pair: they move nothing along, they are used once in a while, and
         // their subject is the file the progress pair just named. They are
@@ -1016,7 +1029,12 @@ private fun walkthroughRow(model: PanelModel, w: PanelWalkthrough): Block.Walkth
 private fun noReviewReadyBlocks(model: PanelModel): List<Block> {
     val enabled = !model.busy
     val out = ArrayList<Block>()
-    if (model.drafts.isNotEmpty()) {
+    // Only the FRESH ones. A draft whose review is over survives -- clean does
+    // not touch hand-written prose, and discarding one is the forget verb -- but
+    // it is no longer pending work, so it drops to its own collapsed section in
+    // the footer with the two controls it still has use for.
+    val freshDrafts = model.drafts.count { !it.spent }
+    if (freshDrafts > 0) {
         out.add(Block.Heading("Reading orders you started"))
         out.add(draftRows(model))
     }
@@ -1027,7 +1045,7 @@ private fun noReviewReadyBlocks(model: PanelModel): List<Block> {
     out.add(
         Block.Paragraph(
             "No active review on this branch.",
-            separated = model.reviews.isNotEmpty() || model.drafts.isNotEmpty(),
+            separated = model.reviews.isNotEmpty() || freshDrafts > 0,
         ),
     )
     out.add(
@@ -1075,6 +1093,21 @@ private fun noReviewReadyBlocks(model: PanelModel): List<Block> {
         walkthroughKids.add(guideRows(model))
     }
     out.add(Block.ToolsSection(title = "Walkthrough", blocks = walkthroughKids))
+    // The spent drafts. Collapsed and not hidden: a file that exists and no
+    // surface names is the state this panel does not let past anywhere else, and
+    // hiding the row would take with it the one control that can throw the file
+    // away without spelling its branch.
+    if (model.drafts.any { it.spent }) {
+        out.add(
+            Block.ToolsSection(
+                title = "Reading orders you finished with",
+                blocks = listOf(
+                    Block.Paragraph("Their review is over; the files are still here"),
+                    draftRows(model, spent = true),
+                ),
+            ),
+        )
+    }
     val settingsKids = ArrayList<Block>()
     model.configuredBase?.let { base ->
         settingsKids.add(Block.Paragraph("Base: $base."))

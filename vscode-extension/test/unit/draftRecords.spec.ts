@@ -14,10 +14,14 @@ import type {ReviewState} from "../../src/review/state";
 import {buildPanelModel, draftAt} from "../../src/views/panelModel";
 
 const DRAFT_LINE =
-    "draft\tfeature/checkout\t/repo/.git/review-walkthrough/feature/checkout.md\t3\t9\tlocal\tdelta";
+    "draft\tfeature/checkout\t/repo/.git/review-walkthrough/feature/checkout.md\t3\t9\tlocal\tdelta\tfresh";
+
+/** El mismo borrador con su review ya cerrada: el octavo campo es lo unico que cambia. */
+const SPENT_DRAFT_LINE =
+    "draft\tfeature/checkout\t/repo/.git/review-walkthrough/feature/checkout.md\t9\t9\tlocal\tdelta\treviewed";
 
 describe("parseConfigPorcelain — registros draft", () => {
-    it("parsea los siete campos del registro", () => {
+    it("parsea los ocho campos del registro", () => {
         const result = parseConfigPorcelain(["config\tremote\torigin", DRAFT_LINE, ""].join("\n"));
         assert.deepStrictEqual(result.drafts, [
             {
@@ -27,8 +31,28 @@ describe("parseConfigPorcelain — registros draft", () => {
                 total: 9,
                 source: "local",
                 range: "delta",
+                state: "fresh",
             },
         ]);
+    });
+
+    it("lee reviewed del octavo campo", () => {
+        const result = parseConfigPorcelain([SPENT_DRAFT_LINE, ""].join("\n"));
+        assert.strictEqual(result.drafts[0]?.state, "reviewed");
+    });
+
+    it("un registro de siete campos, de una CLI anterior, es fresh", () => {
+        // Degrada al comportamiento de antes: la fila sigue arriba con sus
+        // cuatro controles. Esconderla por un dato que nadie dio seria peor.
+        const old = DRAFT_LINE.slice(0, DRAFT_LINE.lastIndexOf("\t"));
+        const result = parseConfigPorcelain([old, ""].join("\n"));
+        assert.strictEqual(result.drafts[0]?.state, "fresh");
+    });
+
+    it("un octavo campo desconocido tambien es fresh", () => {
+        const weird = DRAFT_LINE.slice(0, DRAFT_LINE.lastIndexOf("\t")) + "\tsomething-new";
+        const result = parseConfigPorcelain([weird, ""].join("\n"));
+        assert.strictEqual(result.drafts[0]?.state, "fresh");
     });
 
     it("sin registros draft el array esta vacio, nunca ausente", () => {
@@ -150,6 +174,7 @@ describe("PanelModel.drafts", () => {
             annotated: 3,
             total: 9,
             startable: true,
+            spent: false,
         });
 
         // Una review en curso es siempre lo mas importante que el panel tiene
@@ -158,6 +183,17 @@ describe("PanelModel.drafts", () => {
             const other = buildPanelModel(stateWith(situation, stdout), {busy: false});
             assert.deepStrictEqual(other.drafts, [], situation);
         }
+    });
+
+    it("spent sigue al estado que reporta la CLI, y no se deriva del progreso", () => {
+        // Un borrador completo (9/9) sin review cerrada NO esta gastado, y uno
+        // que la CLI marca reviewed lo esta pase lo que pase con el par.
+        const filled = DRAFT_LINE.replace("\t3\t9\t", "\t9\t9\t");
+        const a = buildPanelModel(stateWith("no-review", filled + "\n"), {busy: false});
+        assert.strictEqual(a.drafts[0].spent, false);
+
+        const b = buildPanelModel(stateWith("no-review", SPENT_DRAFT_LINE + "\n"), {busy: false});
+        assert.strictEqual(b.drafts[0].spent, true);
     });
 
     it("una fila con flags desconocidos no es startable", () => {
@@ -230,11 +266,26 @@ describe("argv de los controles del bloque de borradores", () => {
         );
     });
 
-    it("nunca --force, --from ni --stdout desde el panel", () => {
+    it("los controles de la fila nunca llevan --force, --from ni --stdout", () => {
+        // Validate and start valida y arranca sobre lo que hay escrito. Tirarlo
+        // es otra decision, y se pide en otro lado (el picker del asistente).
         const args = draftArgs("feature/x", "remote", "full", true).join(" ");
         assert.ok(!args.includes("--force"), args);
         assert.ok(!args.includes("--from"), args);
         assert.ok(!args.includes("--stdout"), args);
+    });
+
+    it("--force solo cuando el revisor eligio empezar de cero", () => {
+        // Update no lleva flag: el verbo reconcilia por defecto desde que dejo
+        // de negarse sobre un archivo existente.
+        assert.deepStrictEqual(
+            draftArgs("feature/x", "remote", "full", false, false),
+            ["draft", "--", "feature/x"]
+        );
+        assert.deepStrictEqual(
+            draftArgs("feature/x", "local", "delta", false, true),
+            ["draft", "--force", "--local", "--delta", "--", "feature/x"]
+        );
     });
 
     it("Discard nombra una sola rama y nunca --all ni --saved", () => {

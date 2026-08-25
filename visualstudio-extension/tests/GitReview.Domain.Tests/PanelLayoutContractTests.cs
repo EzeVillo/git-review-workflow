@@ -357,6 +357,43 @@ public class PanelLayoutContractTests
         Assert.False(busy[2].Controls.First(c => c.Id == ControlId.StartFromDraft).Enabled);
     }
 
+    /// <summary>
+    /// A draft whose review is over leaves the block at the top for the collapsed
+    /// section in the footer, with the two glyphs and without the pair with
+    /// labels. The file still exists — discarding it is the forget verb — so the
+    /// row has to stay somewhere, and with a way to throw it away.
+    /// </summary>
+    [Fact]
+    public void A_spent_draft_leaves_the_top_block_for_the_collapsed_section()
+    {
+        var layout = PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewSpentDraft());
+
+        var top = layout.Blocks.OfType<Block.DraftRows>().Single().Rows;
+        Assert.Equal(new[] { "feature/telemetry" }, top.Select(r => r.Name));
+        Assert.Contains(top[0].Controls, c => c.Id == ControlId.StartFromDraft);
+
+        var section = layout.Blocks.OfType<Block.ToolsSection>()
+            .Single(t => t.Title == "Reading orders you finished with");
+        var spent = section.NestedBlocks.OfType<Block.DraftRows>().Single().Rows;
+        Assert.Equal(new[] { "feature/pagos" }, spent.Select(r => r.Name));
+        Assert.Equal(
+            new[] { ControlId.OpenDraft, ControlId.DiscardDraft },
+            spent[0].Controls.Select(c => c.Id));
+
+        // The index is the one in the FULL list: it is what resolves which file
+        // is being talked about on the host side, and splitting the block does
+        // not change it.
+        Assert.Equal(1, spent[0].Controls[0].Index);
+    }
+
+    [Fact]
+    public void With_no_spent_drafts_there_is_no_section_for_them()
+    {
+        var titles = PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewDrafts())
+            .Blocks.OfType<Block.ToolsSection>().Select(t => t.Title);
+        Assert.DoesNotContain("Reading orders you finished with", titles);
+    }
+
     [Fact]
     public void The_two_controls_of_the_row_are_glyphs_and_their_names_say_which_row()
     {

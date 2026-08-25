@@ -6,7 +6,7 @@ namespace GitReview.Domain.Tests;
 public class DraftWatchTests
 {
     private static DraftRecord Draft(string path) =>
-        new("x", path, 0, 1, DraftSource.Remote, DraftRange.Full);
+        new("x", path, 0, 1, DraftSource.Remote, DraftRange.Full, DraftState.Fresh);
 
     private static ReviewState State(string? draftPath = null, IReadOnlyList<DraftRecord>? drafts = null) =>
         new(Situation.NoReview, Drafts: drafts, DraftPath: draftPath);

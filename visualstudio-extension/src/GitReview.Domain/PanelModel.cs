@@ -56,13 +56,20 @@ public sealed record PanelReview(
 /// than absent did -- it still cannot be invoked -- and unlike absent it can say
 /// why in its tooltip. The row also keeps its four cells, so it does not change
 /// shape with its state.
+///
+/// Spent says whether its review is over. A draft outlives the review it was
+/// written for — clean does not touch hand-written prose — but it stops being
+/// work in progress, so it leaves the block at the top for a collapsed section
+/// with the two controls that still make sense: open it and discard it. The CLI
+/// decides it; nothing is inferred here.
 /// </summary>
 public sealed record PanelDraft(
     string Branch,
     string Path,
     int Annotated,
     int Total,
-    bool Startable);
+    bool Startable,
+    bool Spent);
 
 /// <summary>
 /// A row of the authoring-guide block: prose about the CONTENT of a walkthrough,
@@ -264,7 +271,8 @@ public static class PanelModelBuilder
                 Path: d.Path,
                 Annotated: d.Annotated,
                 Total: d.Total,
-                Startable: d.Source != DraftSource.Unknown && d.Range != DraftRange.Unknown));
+                Startable: d.Source != DraftSource.Unknown && d.Range != DraftRange.Unknown,
+                Spent: d.State == DraftState.Reviewed));
         }
         return out_;
     }

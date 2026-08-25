@@ -48,6 +48,19 @@ describe("registro walkthrough de config --porcelain", () => {
         assert.strictEqual(result.walkthrough?.total, 0);
     });
 
+    it("la rama viaja en el registro y es como se llama la fila", () => {
+        const result = parseConfigPorcelain(row("walkthrough", "stale", WT, "1", "2", "feature/x") + "\n");
+        assert.strictEqual(result.walkthrough?.branch, "feature/x");
+    });
+
+    it("sin campo de rama (HEAD detached) la fila sigue, sin nombre", () => {
+        // La CLI OMITE el campo, nunca lo manda vacio: el archivo y los dos
+        // verbos andan igual y lo unico sin respuesta es como llamarla.
+        const result = parseConfigPorcelain(row("walkthrough", "stale", WT, "1", "2") + "\n");
+        assert.strictEqual(result.walkthrough?.state, "stale");
+        assert.strictEqual(result.walkthrough?.branch, undefined);
+    });
+
     it("sin ruta no hay fila", () => {
         const result = parseConfigPorcelain(row("walkthrough", "stale", "", "1", "1") + "\n");
         assert.strictEqual(result.walkthrough, undefined);
@@ -118,8 +131,41 @@ describe("proyeccion de la fila del walkthrough", () => {
         assert.strictEqual(model("unknown")?.exists, true);
     });
 
-    it("sin registro no hay fila en el modelo", () => {
+    it("sin registro la fila sigue estando, en unknown y sin ruta", () => {
+        // Init y build son la botonera de esta fila: si la fila se cayera, los
+        // dos verbos se quedarian sin superficie. Y `unknown` es literalmente
+        // "no se puede saber", asi que no se inventa ni un badge ni un archivo.
         const m = buildPanelModel({situation: "no-review", branches: []} as never, {busy: false});
+        assert.strictEqual(m.walkthrough?.state, "unknown");
+        assert.strictEqual(m.walkthrough?.path, "");
+        assert.strictEqual(m.walkthrough?.exists, false);
+        assert.strictEqual(m.walkthrough?.label, "Walkthrough");
+    });
+
+    it("la fila se llama por la rama que anota", () => {
+        // La seccion ya se llama Walkthrough: repetirlo en la fila no agregaba
+        // un dato. El nombre llega de la CLI, como la ruta.
+        const m = buildPanelModel(
+            {
+                situation: "no-review",
+                branches: [],
+                walkthrough: {path: WT, state: "in-sync", annotated: 3, total: 3, branch: "feature/x"},
+            } as never,
+            {busy: false},
+        );
+        assert.strictEqual(m.walkthrough?.label, "feature/x");
+    });
+
+    it("con HEAD detached cae a la copy propia del panel", () => {
+        // El registro omite el campo, nunca lo manda en blanco: el archivo y los
+        // dos verbos andan igual y lo unico sin respuesta es como llamarla.
+        assert.strictEqual(model("in-sync")?.label, "Walkthrough");
+    });
+
+    it("fuera de no-review no hay fila", () => {
+        // Adentro de una review la seccion dibuja las guias y nada mas de este
+        // bloque: init y build son del autor parado en su propio PR.
+        const m = buildPanelModel({situation: "review", branches: []} as never, {busy: false});
         assert.strictEqual(m.walkthrough, undefined);
     });
 });

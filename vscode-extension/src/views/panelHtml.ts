@@ -29,7 +29,7 @@ export function panelHtml(nonce: string): string {
 <style nonce="${nonce}">
   /* 100% del webview: no-review es un split vertical al estilo del Explorer
      (archivos arriba, Outline/Timeline abajo). El body scrollea; el footer
-     (Other actions + Settings + Support) queda anclado al borde inferior y
+     (Walkthrough + Compare + Settings + Support) queda anclado al borde inferior y
      al abrir crece hacia arriba robándole alto al body — no salta al flujo
      de Start. El modo setup (sin base) no usa footer. */
   html, body { height: 100%; }
@@ -271,6 +271,10 @@ export function panelHtml(nonce: string): string {
      empieza una". El separador lo lleva el párrafo, no la lista, para que sin
      reviews el estado vacío quede exactamente como estaba. */
   .inv { padding: 1.2em .9em .2em; }
+  /* Adentro de una seccion del pie el margen lateral ya lo puso .tools-inner:
+     sumarle el del inventario sangraba las filas respecto del resto de la
+     seccion, y dos bloques seguidos quedaban a sangrias distintas. */
+  .tools-inner .inv { padding: .3em 0 .2em; }
   .inv h2 {
     margin: 0 0 .9em;
     font-size: .9em;
@@ -342,12 +346,15 @@ export function panelHtml(nonce: string): string {
   .rev-head-actions {
     display: flex;
     align-items: center;
+    /* El grupo derecho de la cabecera arranca aca: los iconos toman el hueco y
+       el badge, que va despues, lo pierde (regla de abajo). Sin esto los dos
+       autos se repartian el espacio y el badge quedaba flotando en el medio. */
+    margin-left: auto;
     /* .rev-head alinea por baseline, que es lo que quiere el nombre contra el
        badge y no lo que quiere un glifo: sin esto los dos iconos cuelgan por
        debajo del par que acompañan. */
     align-self: center;
     gap: .1em;
-    margin-left: .15em;
   }
   .rev-head-actions button {
     padding: .2em .3em;
@@ -358,6 +365,10 @@ export function panelHtml(nonce: string): string {
     background: var(--vscode-toolbar-hoverBackground);
     color: var(--vscode-foreground);
   }
+  /* El badge SIEMPRE cierra la linea. En una fila sin iconos lo empuja su propio
+     margin-left:auto; en una con iconos el hueco ya lo tomo el grupo de arriba,
+     asi que el badge se queda pegado a el en vez de abrir un segundo hueco. */
+  .rev-head-actions ~ .badge { margin-left: 0; }
   /* Badge "?" a la altura de current/orphan: el mensaje va solo en title. */
   .badge.help {
     display: inline-flex;
@@ -374,7 +385,7 @@ export function panelHtml(nonce: string): string {
     height: .85em;
   }
   .empty.after-inv { border-top: 1px solid var(--vscode-panel-border); }
-  /* Secciones del pie (Other actions / Support): mismo patrón que Outline y
+  /* Secciones del pie (Walkthrough / Compare / Support): mismo patrón que Outline y
      Timeline del Explorer — header fijo abajo, al abrir el body crece hacia
      arriba (el .pane-body de arriba se achica y scrollea) y el contenido de
      la sección scrollea si no entra. Nunca se "despegan" del fondo al abrir. */
@@ -771,7 +782,6 @@ export function panelHtml(nonce: string): string {
     // el alto del bloque por nada.
     const head = el("div", "rev-head");
     head.appendChild(el("span", "rev-name", draft.branch));
-    head.appendChild(el("span", "badge", draft.annotated + "/" + draft.total));
 
     // Abrir y descartar son de la FILA, no del paso siguiente: no hacen avanzar
     // nada, se usan una vez cada tanto y su sujeto es el archivo que el badge
@@ -788,6 +798,10 @@ export function panelHtml(nonce: string): string {
     discard.title = "git review forget --draft (with confirmation)";
     rowIcons.appendChild(discard);
     head.appendChild(rowIcons);
+    // El badge cierra la linea, como en toda fila del panel: los estados de las
+    // tres secciones caen asi en la misma columna del borde derecho, y los dos
+    // iconos siguen pegados al progreso que nombra su sujeto.
+    head.appendChild(el("span", "badge", draft.annotated + "/" + draft.total));
 
     box.appendChild(head);
 
@@ -892,7 +906,6 @@ export function panelHtml(nonce: string): string {
 
     const head = el("div", "rev-head");
     head.appendChild(el("span", "rev-name", guide.label));
-    head.appendChild(el("span", "badge", guide.badge));
 
     const rowIcons = el("div", "rev-head-actions");
     const open = iconButton("file", "openGuide", "Open the guide", index);
@@ -908,9 +921,14 @@ export function panelHtml(nonce: string): string {
       rowIcons.appendChild(discard);
     }
     head.appendChild(rowIcons);
+    head.appendChild(el("span", "badge", guide.badge));
     box.appendChild(head);
 
-    const actions = el("div", "draft-actions");
+    // Un solo control con etiqueta: mide lo que dice y arranca a la izquierda,
+    // como Continue/Discard del inventario. La grilla de dos columnas es de las
+    // botoneras de DOS -- con una sola celda ocupada estiraba el boton a media
+    // pantalla y le centraba el texto, que se lee como un error de alineacion.
+    const actions = el("div", "rev-actions");
     const create = button("Create", "createGuide", null, null, index);
     create.disabled = model.busy || !guide.creatable;
     create.title = guide.exists
@@ -924,15 +942,23 @@ export function panelHtml(nonce: string): string {
   }
 
   /**
-   * La fila del walkthrough del autor: en que estado esta, cuanto lleva escrito
-   * y los dos controles que actuan sobre el archivo.
+   * La fila del walkthrough del autor: como se llama la rama que anota, en que
+   * estado esta, cuanto lleva escrito y los CUATRO controles que actuan sobre el
+   * archivo -- los dos verbos incluidos.
+   *
+   * Init y build viven aca y no sueltos encima de la fila porque su sujeto es
+   * este archivo, igual que Create es de cada guia. Sueltos, la palabra
+   * "Walkthrough" se decia tres veces seguidas (el titulo de la seccion, las dos
+   * etiquetas con prefijo y el nombre de la fila) sin que ninguna agregara un
+   * dato; por eso van sin prefijo y la fila se llama por su rama. En el menu y
+   * la paleta siguen llevando el prefijo, que es donde no hay seccion que de
+   * contexto.
    *
    * El badge dice "may be out of date" y no "out of date" a proposito: lo que
    * la CLI compara en cada refresco es barato y aproximado -- si el rango se
    * movio desde que el archivo se escribio --, y la respuesta exacta es de
-   * build, que es lo que corre el boton de la seccion. Un badge que afirma de
-   * mas sobre un archivo que puede estar perfecto es peor que uno que sugiere
-   * mirar.
+   * build, que es lo que corre el boton de al lado. Un badge que afirma de mas
+   * sobre un archivo que puede estar perfecto es peor que uno que sugiere mirar.
    *
    * Copy for agent copia un PUNTERO al archivo, nunca la consigna: esa vive
    * adentro del propio walkthrough, en el comentario de arriba de todo, que es
@@ -944,7 +970,6 @@ export function panelHtml(nonce: string): string {
 
     const head = el("div", "rev-head");
     head.appendChild(el("span", "rev-name", walkthrough.label));
-    head.appendChild(el("span", "badge", walkthrough.badge));
     if (walkthrough.exists && walkthrough.total > 0) {
       head.appendChild(el("span", "muted", walkthrough.annotated + "/" + walkthrough.total));
     }
@@ -957,9 +982,31 @@ export function panelHtml(nonce: string): string {
       : "There is no walkthrough to open yet";
     rowIcons.appendChild(open);
     head.appendChild(rowIcons);
+    // El badge cierra la linea en TODAS las filas del panel: asi los estados de
+    // las tres secciones caen en la misma columna del borde derecho. Los iconos
+    // van antes, pegados a el, que es lo que los mantiene al lado del dato que
+    // nombra su sujeto.
+    head.appendChild(el("span", "badge", walkthrough.badge));
     box.appendChild(head);
 
-    const actions = el("div", "draft-actions");
+    // El mismo verbo crea y actualiza, asi que la etiqueta sigue al estado que
+    // reporto la CLI. "Init" sobre un archivo lleno de prosa prometia lo que ese
+    // verbo justamente ya no hace.
+    // Las tres literales enteras y no una concatenacion: la copy compartida se
+    // verifica contra el canonico buscando la cadena, y un texto armado en
+    // pedazos es justo el que ese check no puede ver.
+    const initLabel = walkthrough.actionLabel === "Create"
+      ? "Init"
+      : walkthrough.actionLabel === "Start over"
+        ? "Start over"
+        : "Update";
+    const actions = el("div", "rev-actions");
+    const init = button(initLabel, "walkthroughInit", null, null, 0);
+    init.disabled = model.busy;
+    actions.appendChild(init);
+    const build = button("Build", "walkthroughBuild", null, null, 0);
+    build.disabled = model.busy;
+    actions.appendChild(build);
     const copy = button("Copy for agent", "copyWalkthroughPrompt", null, null, 0);
     copy.disabled = !walkthrough.exists;
     copy.title = walkthrough.exists
@@ -992,9 +1039,9 @@ export function panelHtml(nonce: string): string {
     return box;
   }
 
-  // El panel redibuja el root en cada modelo; sin esto, expandir Other
-  // actions / Settings / Support se pliega al primer refresh (busy, etc.).
-  let otherActionsOpen = false;
+  // El panel redibuja el root en cada modelo; sin esto, expandir Walkthrough
+  // / Compare / Settings / Support se pliega al primer refresh (busy, etc.).
+  let compareSectionOpen = false;
   let walkthroughSectionOpen = false;
   let spentDraftsOpen = false;
   let settingsOpen = false;
@@ -1023,48 +1070,44 @@ export function panelHtml(nonce: string): string {
    * Compare, en el empty state (no-review): monta fuera de una sesion de
    * lectura. No en finish-pending. Plegada por defecto: es secundaria respecto
    * de Start / base.
+   *
+   * Se llamaba "Other actions" y era la primera del pie. Un titulo que no
+   * nombra su contenido, encima de las dos secciones que si lo nombran
+   * (Walkthrough y los ordenes de lectura terminados), y ademas la unica de las
+   * tres que monta algo FUERA de la review que estas por hacer: dos revisiones
+   * cualesquiera, sin review que empezar ni orden que escribir. Por eso ahora
+   * dice lo que hace y va ultima de las tres.
    */
-  function renderOtherActions(model) {
+  function renderCompareSection(model) {
     const compare = button("Compare revisions", "compareReview");
     compare.disabled = model.busy;
-    return toolsSection("Other actions", otherActionsOpen, function (open) {
-      otherActionsOpen = open;
+    return toolsSection("Compare", compareSectionOpen, function (open) {
+      compareSectionOpen = open;
     }, [compare]);
   }
 
   /**
-   * Todo lo del walkthrough junto: init, build y las dos guias de autoria.
-   * Salio de "Other actions" cuando las guias entraron -- cuatro controles
-   * sobre el mismo sustantivo mas uno ajeno (Compare) no es una lista de otras
-   * acciones, es un cajon. Agrupado asi el panel dice lo mismo que la CLI,
+   * Todo lo del walkthrough junto: la fila del archivo del autor -- con init,
+   * build y Copy for agent colgando de ella -- y las dos guias de autoria.
+   * Vivia con Compare en una seccion "Other actions" y se separo cuando las
+   * guias entraron -- cuatro controles sobre el mismo sustantivo mas uno ajeno
+   * no es una lista de otras acciones, es un cajon. Agrupado asi el panel dice lo mismo que la CLI,
    * donde los cuatro cuelgan del verbo walkthrough.
    */
   function renderWalkthroughSection(model, guides) {
-    const walk = el("div", "row");
-    // El mismo verbo crea y actualiza, asi que la etiqueta sigue al estado que
-    // reporto la CLI. "Init" sobre un archivo lleno de prosa prometia lo que
-    // ese verbo justamente ya no hace.
-    // Las dos literales enteras y no una concatenacion: la copy compartida se
-    // verifica contra el canonico buscando la cadena, y un texto armado en
-    // pedazos es justo el que ese check no puede ver.
-    const initLabel = !model.walkthrough || model.walkthrough.actionLabel === "Create"
-      ? "Walkthrough: Init"
-      : model.walkthrough.actionLabel === "Start over"
-        ? "Walkthrough: Start over"
-        : "Walkthrough: Update";
-    const init = button(initLabel, "walkthroughInit");
-    const build = button("Walkthrough: Build", "walkthroughBuild");
-    init.disabled = model.busy;
-    build.disabled = model.busy;
-    walk.appendChild(init);
-    walk.appendChild(build);
-    const children = [walk];
+    // Tres filas y nada suelto arriba: init y build son la botonera de la fila
+    // del walkthrough (renderWalkthroughRow), no un bloque encima de ella.
+    // Las tres filas en UN solo contenedor: dos .inv seguidos ponen su padding
+    // uno contra el otro y la fila del walkthrough queda a una sangria distinta
+    // de las dos guias, que es justo lo que estas filas existen para no hacer.
+    const rows = el("div", "inv");
     if (model.walkthrough) {
-      children.push(renderWalkthroughRow(model, model.walkthrough));
+      rows.appendChild(renderWalkthroughRow(model, model.walkthrough));
     }
-    if (guides.length > 0) {
-      children.push(renderGuides(model, guides));
-    }
+    guides.forEach(function (guide, index) {
+      rows.appendChild(renderGuide(model, guide, index));
+    });
+    const children = [rows];
     return toolsSection("Walkthrough", walkthroughSectionOpen, function (open) {
       walkthroughSectionOpen = open;
     }, children);
@@ -1148,7 +1191,7 @@ export function panelHtml(nonce: string): string {
 
   /**
    * Base y remote del repo, plegados. Solo con base ya configurada (el setup
-   * los muestra inline). Debajo de Other actions, encima de Support.
+   * los muestra inline). Debajo de Compare, encima de Support.
    */
   function renderSettings(model) {
     const kids = [];
@@ -1180,18 +1223,20 @@ export function panelHtml(nonce: string): string {
   }
 
   /**
-   * Pie fijo: Other actions + Walkthrough + Settings + Support (split
-   * Outline/Timeline). Walkthrough va segunda porque es la que el revisor abre
-   * mientras arma una review; Settings y Support quedan al fondo, como estaban.
+   * Pie fijo: Walkthrough + los ordenes terminados + Compare + Settings +
+   * Support (split Outline/Timeline). Las dos primeras son de la review que
+   * estas por hacer -- el orden que escribis y los que ya leiste --, asi que
+   * van arriba; Compare monta algo aparte y queda debajo de las dos. Settings y
+   * Support al fondo, como estaban.
    */
   function renderPaneFooter(model) {
     const footer = el("div", "pane-footer");
-    footer.appendChild(renderOtherActions(model));
     footer.appendChild(renderWalkthroughSection(model, model.guides || []));
     const spent = renderSpentDrafts(model);
     if (spent) {
       footer.appendChild(spent);
     }
+    footer.appendChild(renderCompareSection(model));
     footer.appendChild(renderSettings(model));
     footer.appendChild(renderSupport());
     return footer;
@@ -1578,7 +1623,7 @@ export function panelHtml(nonce: string): string {
   function render(model) {
     root.textContent = "";
     // fills solo en no-review configurado: body scrollea y el footer
-    // (Other actions / Settings / Support) queda anclado abajo. Setup
+    // (Walkthrough / Compare / Settings / Support) queda anclado abajo. Setup
     // (sin base) y el resto de situaciones no estiran en flex.
     root.className = model.situation === "no-review" && !model.noBaseConfigured ? "fills" : "";
     // finish-conflict sigue siendo una review legible (FR-027) — el estado

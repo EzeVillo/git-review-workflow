@@ -378,6 +378,12 @@ data class PanelLayout(
                     is Block.EmptyMessage -> b.control?.let { out.add(it) }
                     is Block.InventoryRows -> b.rows.forEach { out.addAll(it.controls) }
                     is Block.DraftRows -> b.rows.forEach { out.addAll(it.controls) }
+                    // The guide rows and the walkthrough row are collected too:
+                    // two product actions are drawn inside the latter, so a
+                    // collector that skipped it would report a panel that does
+                    // not offer them -- and the contract gate reads this list.
+                    is Block.GuideRows -> b.rows.forEach { out.addAll(it.controls) }
+                    is Block.WalkthroughRow -> out.addAll(b.row.controls)
                     is Block.ToolsSection -> walk(b.blocks)
                     else -> Unit
                 }
@@ -389,11 +395,13 @@ data class PanelLayout(
     }
 }
 
-/** Whether [c] is one of the controls of an InventoryRow reachable from [blocks]. */
+/** Whether [c] is one of the controls of a ROW block reachable from [blocks]. */
 private fun hostedByInventory(blocks: List<Block>, c: Control): Boolean = blocks.any { b ->
     when (b) {
         is Block.InventoryRows -> b.rows.any { r -> r.controls.any { it === c } }
         is Block.DraftRows -> b.rows.any { r -> r.controls.any { it === c } }
+        is Block.GuideRows -> b.rows.any { r -> r.controls.any { it === c } }
+        is Block.WalkthroughRow -> b.row.controls.any { it === c }
         is Block.ToolsSection -> hostedByInventory(b.blocks, c)
         else -> false
     }
@@ -980,13 +988,22 @@ private fun guideRows(model: PanelModel): Block.GuideRows {
 }
 
 /**
- * The author's walkthrough row, above the guides in the same section.
+ * The author's walkthrough row, the first of the section and above the guides.
  *
- * Same two-place shape as the guide rows: the labelled control underneath, the
- * icon one in the header beside the badge. The badge says "may be out of date"
- * and not "out of date" on purpose -- what the CLI compares on every refresh is
- * cheap and approximate (has the range moved since the file was written), and
- * the exact answer is build's, which is what the section's button runs.
+ * Same two-place shape as the guide rows: the labelled controls underneath, the
+ * icon one in the header beside the badge. What it has that they do not is the
+ * two VERBS -- init and build live here and not loose above the row, because
+ * their subject is the file this row names, exactly as Create is each guide's.
+ * Loose, the word "Walkthrough" was said three times running (the section title,
+ * the two prefixed labels and the row's name) without any of the three adding a
+ * fact; hence the labels without a prefix and the row named after its branch. In
+ * the menu and the palette they keep the prefix, which is where no section gives
+ * context.
+ *
+ * The badge says "may be out of date" and not "out of date" on purpose -- what
+ * the CLI compares on every refresh is cheap and approximate (has the range moved
+ * since the file was written), and the exact answer is build's, which is what the
+ * button beside it runs.
  *
  * Copy for agent copies a POINTER to the file, never the brief: that lives
  * inside the walkthrough itself, in the comment at the top, which is where it
@@ -994,7 +1011,31 @@ private fun guideRows(model: PanelModel): Block.GuideRows {
  * went stale would be the one the agent reads.
  */
 private fun walkthroughRow(model: PanelModel, w: PanelWalkthrough): Block.WalkthroughRow {
+    val enabled = !model.busy
     val controls = ArrayList<Control>()
+    // The same verb creates and updates, so the label follows the state the CLI
+    // reported: "Init" over a file full of prose promised what that verb
+    // precisely no longer does.
+    controls.add(
+        ctrl(
+            ControlId.WALKTHROUGH_INIT,
+            when (w.actionLabel) {
+                "Update" -> "Update"
+                "Start over" -> "Start over"
+                else -> "Init"
+            },
+            Emphasis.SECONDARY,
+            enabled,
+            index = 0,
+        ),
+    )
+    // Both carry the row's index like every other control of a row -- there is
+    // exactly one walkthrough row, so it is always 0. They are product actions
+    // all the same: the menu and the palette run the same two, and what says so
+    // is the action matrix, not this field.
+    controls.add(
+        ctrl(ControlId.WALKTHROUGH_BUILD, "Build", Emphasis.SECONDARY, enabled, index = 0),
+    )
     controls.add(
         ctrl(
             ControlId.COPY_WALKTHROUGH_PROMPT,
@@ -1052,42 +1093,15 @@ private fun noReviewReadyBlocks(model: PanelModel): List<Block> {
         Block.Row(listOf(ctrl(ControlId.START_REVIEW, "Start a review", Emphasis.PRIMARY, enabled))),
     )
     // Footer tools
-    out.add(
-        Block.ToolsSection(
-            title = "Other actions",
-            blocks = listOf(
-                Block.Row(
-                    listOf(ctrl(ControlId.COMPARE_REVIEW, "Compare revisions", Emphasis.SECONDARY, enabled)),
-                ),
-            ),
-        ),
-    )
-    // Everything about the walkthrough together: init, build and the two
-    // authoring guides. It left "Other actions" when the guides arrived -- four
-    // controls about the same noun plus one unrelated (Compare) is not a list of
-    // other actions, it is a drawer. Grouped this way the panel says what the CLI
-    // says, where all four hang off the walkthrough verb.
+    //
+    // Everything about the walkthrough together: the author's file -- with init,
+    // build and Copy for agent hanging off its row -- and the two authoring
+    // guides. It shared an "Other actions" section with Compare and split off
+    // when the guides arrived: four controls about the same noun plus one
+    // unrelated is not a list of other actions, it is a drawer. Grouped this way
+    // the panel says what the CLI says, where all four hang off the walkthrough
+    // verb.
     val walkthroughKids = ArrayList<Block>()
-    walkthroughKids.add(
-        Block.Row(
-            listOf(
-                // The same verb creates and updates, so the label follows the
-                // state the CLI reported: "Init" over a file full of prose
-                // promised what that verb precisely no longer does.
-                ctrl(
-                    ControlId.WALKTHROUGH_INIT,
-                    when (model.walkthrough?.actionLabel) {
-                        "Update" -> "Walkthrough: Update"
-                        "Start over" -> "Walkthrough: Start over"
-                        else -> "Walkthrough: Init"
-                    },
-                    Emphasis.SECONDARY,
-                    enabled,
-                ),
-                ctrl(ControlId.WALKTHROUGH_BUILD, "Walkthrough: Build", Emphasis.SECONDARY, enabled),
-            ),
-        ),
-    )
     model.walkthrough?.let { walkthroughKids.add(walkthroughRow(model, it)) }
     if (model.guides.isNotEmpty()) {
         walkthroughKids.add(guideRows(model))
@@ -1108,6 +1122,22 @@ private fun noReviewReadyBlocks(model: PanelModel): List<Block> {
             ),
         )
     }
+    // Compare, last of the three footer sections that do something with the
+    // repo. It is the only one that mounts something OUTSIDE the review you are
+    // about to do -- any two revisions, no review to start and no reading order
+    // to write -- so it sits below everything that is about that review. It used
+    // to be called "Other actions" and came first: a title that did not name its
+    // contents, above the two sections that do.
+    out.add(
+        Block.ToolsSection(
+            title = "Compare",
+            blocks = listOf(
+                Block.Row(
+                    listOf(ctrl(ControlId.COMPARE_REVIEW, "Compare revisions", Emphasis.SECONDARY, enabled)),
+                ),
+            ),
+        ),
+    )
     val settingsKids = ArrayList<Block>()
     model.configuredBase?.let { base ->
         settingsKids.add(Block.Paragraph("Base: $base."))

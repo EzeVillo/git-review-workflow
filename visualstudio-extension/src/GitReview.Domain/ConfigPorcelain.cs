@@ -269,7 +269,15 @@ public sealed record WalkthroughRecord(
     string Path,
     WalkthroughState State,
     int Annotated,
-    int Total);
+    int Total,
+    /// <summary>
+    /// The branch this walkthrough annotates — HEAD's, which is the range init
+    /// and build resolve. It is WHAT THE ROW IS CALLED in the panel. Null with a
+    /// detached HEAD, the one case where the CLI omits the field: the file and
+    /// both verbs still work there and the only thing without an answer is the
+    /// name.
+    /// </summary>
+    string? Branch = null);
 
 public sealed record ConfigPorcelainResult(
     EffectiveConfig Config,
@@ -452,11 +460,13 @@ public static class ConfigPorcelain
         var state = WalkthroughStateExt.Parse(Get(fields, 1));
         var path = Get(fields, 2);
         if (state is null || string.IsNullOrEmpty(path)) return null;
+        var branch = Get(fields, 5);
         return new WalkthroughRecord(
             path!,
             state.Value,
             ParseCount(Get(fields, 3)) ?? 0,
-            ParseCount(Get(fields, 4)) ?? 0);
+            ParseCount(Get(fields, 4)) ?? 0,
+            string.IsNullOrEmpty(branch) ? null : branch);
     }
 
     public static GuideRecord? ParseGuideRecord(string[] fields)

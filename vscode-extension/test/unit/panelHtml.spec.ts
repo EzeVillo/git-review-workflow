@@ -236,20 +236,24 @@ describe("panelHtml", () => {
         );
     });
 
-    it("no-review ofrece compare y walkthrough bajo Other actions; finish-pending no", () => {
+    it("no-review ofrece compare y walkthrough en el pie; finish-pending no", () => {
         // Empty state sin review activa y con base: compare/walkthrough viven
         // en el footer del split. finish-pending es una pantalla propia de
-        // post-cierre, sin empty state ni Other actions.
-        // Other actions es un <details> plegado por defecto.
-        assert.ok(html.includes('function renderOtherActions(model)'));
+        // post-cierre, sin empty state ni pie plegable.
+        // Cada seccion es un <details> plegado por defecto.
+        assert.ok(html.includes('function renderCompareSection(model)'));
         assert.ok(html.includes('function renderEmptyStartBlock(model)'));
         assert.ok(html.includes('function renderPaneFooter(model)'));
         assert.ok(html.includes('function renderSetup(model)'));
         assert.ok(html.includes('function renderSettings(model)'));
         assert.ok(html.includes('el("details", "tools")'));
-        assert.ok(html.includes('"Other actions"'));
+        assert.ok(html.includes('"Compare"'));
+        assert.ok(
+            !html.includes('toolsSection("Other actions"'),
+            "el titulo que no nombraba su contenido no vuelve"
+        );
         assert.ok(html.includes('"Settings"'));
-        assert.ok(html.includes("otherActionsOpen"), "el toggle sobrevive al redibujado del modelo");
+        assert.ok(html.includes("compareSectionOpen"), "el toggle sobrevive al redibujado del modelo");
         assert.ok(html.includes("settingsOpen"), "Settings sobrevive al redibujado");
         // Split Outline/Timeline solo con base: setup (sin base) no usa fills.
         assert.ok(html.includes("!model.noBaseConfigured") || html.includes("model.noBaseConfigured"));
@@ -262,10 +266,22 @@ describe("panelHtml", () => {
         // La etiqueta sigue al estado que reporto la CLI: el mismo verbo crea y
         // actualiza, e "Init" sobre un archivo lleno de prosa prometia lo que
         // ese verbo justamente ya no hace.
-        assert.ok(html.includes('button(initLabel, "walkthroughInit")'));
-        assert.ok(html.includes('"Walkthrough: Init"') && html.includes("actionLabel"));
-        assert.ok(html.includes('button("Walkthrough: Build", "walkthroughBuild")'));
-        assert.ok(html.includes("renderOtherActions"), "Other actions en el pie compartido");
+        assert.ok(html.includes('button(initLabel, "walkthroughInit", null, null, 0)'));
+        assert.ok(html.includes('"Init"') && html.includes("actionLabel"));
+        assert.ok(html.includes('button("Build", "walkthroughBuild", null, null, 0)'));
+        // Los dos verbos son la botonera de la FILA, no un bloque suelto encima:
+        // sin esto la palabra "Walkthrough" se decia tres veces seguidas.
+        assert.ok(
+            !html.includes('"Walkthrough: Init"') && !html.includes('"Walkthrough: Build"'),
+            "el prefijo se va del panel: el titulo de la seccion ya lo dice"
+        );
+        const walkSection = /function renderWalkthroughSection\(model, guides\) \{([^]*?)\n {2}\}/.exec(html)?.[1] ?? "";
+        assert.ok(walkSection.length > 0, "no se encontro renderWalkthroughSection");
+        assert.ok(
+            !walkSection.includes("walkthroughInit") && !walkSection.includes("walkthroughBuild"),
+            "init y build los dibuja la fila, no la seccion"
+        );
+        assert.ok(html.includes("renderCompareSection"), "Compare en el pie compartido");
         assert.ok(html.includes('case "no-review"') && html.includes("renderEmptyStartBlock"));
         assert.ok(html.includes("noBaseConfigured") && html.includes("renderSetup"));
         // Setup sin base: el copy tiene que decir PARA QUÉ se usa, no solo
@@ -279,7 +295,7 @@ describe("panelHtml", () => {
         assert.ok(pendingBranch.length > 0, "no se encontro el caso finish-pending");
         assert.ok(
             !pendingBranch.includes("renderEmptyStartBlock")
-            && !pendingBranch.includes("renderOtherActions")
+            && !pendingBranch.includes("renderCompareSection")
             && !pendingBranch.includes("renderPaneFooter")
             && !pendingBranch.includes("renderSetup"),
             "finish-pending no reutiliza el empty state de no-review"
@@ -287,9 +303,10 @@ describe("panelHtml", () => {
     });
 
     it("no-review ofrece Support con Star on GitHub y Report a bug; finish-pending no", () => {
-        // Mismo pie que Other actions: <details> plegado, toggle que
+        // Mismo pie que las demas secciones: <details> plegado, toggle que
         // sobrevive al redibujado. Dos links (star = repo, bug = issue form);
-        // openSupport + id. Orden del footer: Other actions → Settings → Support.
+        // openSupport + id. Orden del footer: Walkthrough → los ordenes
+        // terminados → Compare → Settings → Support.
         assert.ok(html.includes("function renderSupport("));
         assert.ok(html.includes('"Support"'));
         assert.ok(html.includes("supportOpen"), "el toggle sobrevive al redibujado del modelo");
@@ -301,10 +318,16 @@ describe("panelHtml", () => {
         assert.ok(!html.includes("GitHub repository"), "repo y star eran la misma URL: solo star");
         assert.ok(html.includes("renderPaneFooter") && html.includes("renderSupport"));
         const footer = /function renderPaneFooter\(model\) \{([^]*?)\n {2}\}/.exec(html)?.[1] ?? "";
-        const otherIdx = footer.indexOf("renderOtherActions");
+        const walkIdx = footer.indexOf("renderWalkthroughSection");
+        const spentIdx = footer.indexOf("renderSpentDrafts");
+        const compareIdx = footer.indexOf("renderCompareSection");
         const settingsIdx = footer.indexOf("renderSettings");
         const supportIdx = footer.indexOf("renderSupport");
-        assert.ok(otherIdx >= 0 && settingsIdx > otherIdx, "Settings va debajo de Other actions");
+        // Compare monta algo fuera de la review que estas por hacer, asi que va
+        // debajo de las dos secciones que si son de ella.
+        assert.ok(walkIdx >= 0 && spentIdx > walkIdx, "los ordenes terminados van debajo de Walkthrough");
+        assert.ok(spentIdx >= 0 && compareIdx > spentIdx, "Compare va debajo de los ordenes terminados");
+        assert.ok(compareIdx >= 0 && settingsIdx > compareIdx, "Settings va debajo de Compare");
         assert.ok(settingsIdx >= 0 && supportIdx > settingsIdx, "Support va debajo de Settings");
         const pendingBranch = /case "finish-pending": \{([^]*?)\n {6}case "out-of-range"/.exec(html)?.[1] ?? "";
         assert.ok(
@@ -409,7 +432,7 @@ describe("panelHtml", () => {
 
     it("sin reviews en el repositorio el estado vacio queda como estaba", () => {
         // Sin filas no se monta el inventario ni el separador after-inv: solo
-        // Start en el body + footer (Other actions / Support).
+        // Start en el body + footer (Walkthrough / Compare / Support).
         assert.ok(
             /if \(reviews\.length > 0\) \{/.test(html),
             "el inventario solo se dibuja cuando hay filas"
@@ -660,6 +683,44 @@ describe("panelHtml", () => {
             /\.draft-actions \{[^}]*grid-template-columns: 1fr 1fr;[^}]*\}/.test(html),
             "dos columnas de ancho parejo"
         );
+    });
+
+    it("el badge cierra la linea de toda fila, con los iconos a su izquierda", () => {
+        // Asi los estados de las tres secciones caen en la misma columna del
+        // borde derecho. El hueco lo toma el grupo de iconos; el badge, que va
+        // despues, lo pierde -- con los dos autos quedaba flotando en el medio.
+        assert.ok(
+            /\.rev-head-actions \{[^}]*margin-left: auto;[^}]*}/.test(html),
+            "el grupo derecho arranca con el hueco"
+        );
+        assert.ok(
+            html.includes(".rev-head-actions ~ .badge { margin-left: 0; }"),
+            "y el badge que lo sigue no abre un segundo hueco"
+        );
+        for (const fn of ["renderDraft(", "renderGuide(", "renderWalkthroughRow("]) {
+            const body = html.slice(html.indexOf("function " + fn));
+            const icons = body.indexOf("head.appendChild(rowIcons)");
+            const badge = body.indexOf('head.appendChild(el("span", "badge"');
+            assert.ok(icons > 0 && badge > 0, "no se encontro la cabecera de " + fn);
+            assert.ok(badge > icons, "el badge va despues de los iconos en " + fn);
+        }
+    });
+
+    it("una botonera de un solo control va a la izquierda, no en media grilla", () => {
+        // Una celda de 1fr con un boton adentro lo estira a media pantalla y le
+        // centra el texto: se lee como un error de alineacion. La grilla es de
+        // las botoneras de DOS, donde alinea una fila con la de al lado.
+        for (const fn of ["renderGuide(", "renderWalkthroughRow("]) {
+            const body = html.slice(html.indexOf("function " + fn), html.indexOf("function " + fn) + 4000);
+            assert.ok(
+                body.includes('el("div", "rev-actions")'),
+                fn + " usa la botonera del inventario"
+            );
+            assert.ok(
+                !body.includes('el("div", "draft-actions")'),
+                fn + " no usa la grilla de dos columnas"
+            );
+        }
     });
 
     it("el progreso del borrador va como badge en la cabecera de la fila", () => {

@@ -55,18 +55,14 @@ class PanelRendererTest {
         val renderer = PanelRenderer(PreviewPanelChrome()) { _, _, _ -> false }
         val layout1 = panelLayout(PanelFixtures.noReviewReady())
         val root1 = renderer.render(layout1)
-        // Open first tools section toggle if present
-        val toggles = PanelRenderer.collectButtons(root1).filter { it.text?.contains("Other actions") == true }
-        if (toggles.isNotEmpty()) {
-            toggles.first().doClick()
-        }
+        // The first tools section of the empty state.
+        val toggle1 = PanelRenderer.collectButtons(root1).single { it.text?.endsWith(" Walkthrough") == true }
+        assertTrue(toggle1.text.startsWith("▶"), "collapsed to begin with: ${toggle1.text}")
+        toggle1.doClick()
         val layout2 = panelLayout(PanelFixtures.noReviewReady())
         val root2 = renderer.render(layout2)
-        val toggle2 = PanelRenderer.collectButtons(root2).find { it.text?.contains("Other actions") == true }
-        // After expand, re-render should keep open (▼ marker)
-        if (toggle2 != null && toggles.isNotEmpty()) {
-            assertTrue(toggle2.text.startsWith("▼"), "section should stay open: ${toggle2.text}")
-        }
+        val toggle2 = PanelRenderer.collectButtons(root2).single { it.text?.endsWith(" Walkthrough") == true }
+        assertTrue(toggle2.text.startsWith("▼"), "section should stay open: ${toggle2.text}")
     }
 
     @Test
@@ -207,6 +203,43 @@ class PanelRendererTest {
         assertTrue(
             header.components.any { it is JLabel && it.text == "3/9" },
             "estan en la cabecera, al lado del par que nombra su sujeto",
+        )
+    }
+
+    @Test
+    fun `every icon control of a row draws its own glyph`() {
+        // The bug this pins: only the draft row's two ids were mapped, so a guide
+        // row's Open and Discard and the walkthrough row's Open fell through --
+        // to the accessible name here (a sentence-wide button in the header) and
+        // to Next's arrow in the other client. The canonical declares file and
+        // trash for all three pairs.
+        val chrome = PreviewPanelChrome()
+        val renderer = PanelRenderer(chrome) { _, _, _ -> false }
+        val root = renderer.render(panelLayout(PanelFixtures.noReviewWalkthroughStale()))
+        val buttons = PanelRenderer.collectButtons(root)
+        for (name in listOf("Open the guide", "Open the walkthrough")) {
+            val b = buttons.first { it.accessibleContext.accessibleName == name }
+            assertEquals(chrome.glyphFile(), b.text, name)
+        }
+        val discard = buttons.first { it.accessibleContext.accessibleName == "Discard the guide" }
+        assertEquals(chrome.glyphTrash(), discard.text)
+    }
+
+    @Test
+    fun `the badge closes the header line of every row`() {
+        // So that the states of all three sections land in the same column at the
+        // right edge. The glyphs go before it, still glued to what names their
+        // subject.
+        val renderer = PanelRenderer(PreviewPanelChrome()) { _, _, _ -> false }
+        val root = renderer.render(panelLayout(PanelFixtures.noReviewWalkthroughStale()))
+        val open = PanelRenderer.collectButtons(root)
+            .first { it.accessibleContext.accessibleName == "Open the walkthrough" }
+        val header = open.parent as JPanel
+        val badge = header.components.filterIsInstance<JLabel>().last()
+        assertEquals("may be out of date", badge.text)
+        assertTrue(
+            header.components.indexOf(badge) > header.components.indexOf(open),
+            "el badge va despues del icono",
         )
     }
 

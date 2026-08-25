@@ -63,6 +63,9 @@ active review, so build one first:
 ./tests/sandbox.sh
 git -C <sandbox>/work review start feature/checkout
 
+# or ./tests/sandbox-min.sh for the empty twin: no walkthrough and no configured
+# base, which is the only way to reach the panel's setup screen
+
 cd jetbrains-plugin && ./gradlew runIde
 ```
 

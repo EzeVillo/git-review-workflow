@@ -666,6 +666,34 @@ EOF
 	[[ "$output" == *"walkthrough	in-sync	"* ]]
 }
 
+@test "the walkthrough row names the branch it annotates" {
+	# What the clients call the row with. Without it the panel says
+	# "Walkthrough" under a section already called Walkthrough.
+	write_and_build
+	run git review config --porcelain
+	[ "$status" -eq 0 ]
+	row="$(printf '%s
+' "$output" | grep '^walkthrough	')"
+	[ "$(printf '%s
+' "$row" | cut -f6)" = "feature/x" ]
+}
+
+@test "a detached HEAD omits the branch field and still reports the row" {
+	# The file and both verbs work with a detached HEAD, so the row stays; only
+	# its name is a question with no answer, and a blank field is not an answer
+	# either -- omit, never blank.
+	write_and_build
+	git checkout --quiet --detach HEAD
+	run git review config --porcelain
+	[ "$status" -eq 0 ]
+	row="$(printf '%s
+' "$output" | grep '^walkthrough	')"
+	[ "$(printf '%s
+' "$row" | cut -f2)" = "in-sync" ]
+	[ "$(printf '%s
+' "$row" | awk -F'	' '{print NF}')" -eq 5 ]
+}
+
 @test "the reported walkthrough path is absolute and openable" {
 	write_and_build
 	run git review config --porcelain

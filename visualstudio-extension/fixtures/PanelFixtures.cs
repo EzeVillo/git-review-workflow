@@ -26,6 +26,7 @@ public static class PanelFixtures
         ("no-review walkthrough stale", NoReviewWalkthroughStale()),
         ("no-review walkthrough absent", NoReviewWalkthroughAbsent()),
         ("no-review walkthrough superseded", NoReviewWalkthroughSuperseded()),
+        ("no-review no walkthrough record", NoReviewNoWalkthroughRecord()),
         ("no-review empty", NoReviewEmpty()),
         ("finish-pending", FinishPending()),
         ("out-of-range", OutOfRange()),
@@ -116,13 +117,16 @@ public static class PanelFixtures
     public static PanelModel NoReviewGuides()
     {
         var cfg =
+            "walkthrough\tin-sync\t/repo/.review/walkthrough.md\t6\t6\tfeature/checkout\n" +
             "guide\tteam\t/repo/.review/walkthrough-guide.md\tin-force\n" +
             "guide\town\t/repo/.git/review-walkthrough-guide.md\tabsent\n";
+        var parsed = ConfigPorcelain.ParseConfigPorcelain(cfg);
         return PanelModelBuilder.BuildPanelModel(
             new ReviewState(
                 Situation.NoReview,
                 Config: new EffectiveConfig("main", "origin"),
-                Guides: ConfigPorcelain.ParseConfigPorcelain(cfg).Guides),
+                Guides: parsed.Guides,
+                Walkthrough: parsed.Walkthrough),
             new PanelInputs(false));
     }
 
@@ -133,8 +137,29 @@ public static class PanelFixtures
     public static PanelModel NoReviewGuideEmpty()
     {
         var cfg =
+            "walkthrough\tunknown\t/repo/.review/walkthrough.md\t2\t4\tfeature/checkout\n" +
             "guide\tteam\t/repo/.review/walkthrough-guide.md\tabsent\n" +
             "guide\town\t/repo/.git/review-walkthrough-guide.md\tempty\n";
+        var parsed = ConfigPorcelain.ParseConfigPorcelain(cfg);
+        return PanelModelBuilder.BuildPanelModel(
+            new ReviewState(
+                Situation.NoReview,
+                Config: new EffectiveConfig("main", "origin"),
+                Guides: parsed.Guides,
+                Walkthrough: parsed.Walkthrough),
+            new PanelInputs(false));
+    }
+
+    /// <summary>
+    /// The one case where the CLI reports no walkthrough row at all: a malformed
+    /// record. The row is drawn anyway — init and build hang off it — in the state
+    /// the CLI itself calls "cannot be told".
+    /// </summary>
+    public static PanelModel NoReviewNoWalkthroughRecord()
+    {
+        var cfg =
+            "guide\tteam\t/repo/.review/walkthrough-guide.md\tabsent\n" +
+            "guide\town\t/repo/.git/review-walkthrough-guide.md\tabsent\n";
         return PanelModelBuilder.BuildPanelModel(
             new ReviewState(
                 Situation.NoReview,
@@ -151,7 +176,7 @@ public static class PanelFixtures
     public static PanelModel NoReviewWalkthroughStale()
     {
         var cfg =
-            "walkthrough\tstale\t/repo/.review/walkthrough.md\t4\t6\n" +
+            "walkthrough\tstale\t/repo/.review/walkthrough.md\t4\t6\tfeature/checkout\n" +
             "guide\tteam\t/repo/.review/walkthrough-guide.md\tabsent\n" +
             "guide\town\t/repo/.git/review-walkthrough-guide.md\tabsent\n";
         var parsed = ConfigPorcelain.ParseConfigPorcelain(cfg);
@@ -168,7 +193,7 @@ public static class PanelFixtures
     public static PanelModel NoReviewWalkthroughAbsent()
     {
         var cfg =
-            "walkthrough\tabsent\t/repo/.review/walkthrough.md\t0\t0\n" +
+            "walkthrough\tabsent\t/repo/.review/walkthrough.md\t0\t0\tfeature/checkout\n" +
             "guide\tteam\t/repo/.review/walkthrough-guide.md\tabsent\n" +
             "guide\town\t/repo/.git/review-walkthrough-guide.md\tabsent\n";
         var parsed = ConfigPorcelain.ParseConfigPorcelain(cfg);
@@ -190,7 +215,7 @@ public static class PanelFixtures
     public static PanelModel NoReviewWalkthroughSuperseded()
     {
         var cfg =
-            "walkthrough\tsuperseded\t/repo/.review/walkthrough.md\t3\t3\n" +
+            "walkthrough\tsuperseded\t/repo/.review/walkthrough.md\t3\t3\tfeature/login\n" +
             "guide\tteam\t/repo/.review/walkthrough-guide.md\tabsent\n" +
             "guide\town\t/repo/.git/review-walkthrough-guide.md\tabsent\n";
         var parsed = ConfigPorcelain.ParseConfigPorcelain(cfg);

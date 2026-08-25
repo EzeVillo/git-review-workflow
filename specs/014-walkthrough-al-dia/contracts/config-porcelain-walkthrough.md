@@ -24,7 +24,7 @@ que es lo que corre el control de la fila.
 ## Registro `walkthrough` (exactamente una vez)
 
 ```text
-walkthrough<TAB><state><TAB><path><TAB><annotated><TAB><total>
+walkthrough<TAB><state><TAB><path><TAB><annotated><TAB><total>[<TAB><branch>]
 ```
 
 | Campo       | Valor                                                                            |
@@ -33,6 +33,23 @@ walkthrough<TAB><state><TAB><path><TAB><annotated><TAB><total>
 | `path`      | ruta **absoluta** de `.review/walkthrough.md`, exista o no el archivo             |
 | `annotated` | entradas con posición **y** *why* resuelto, más el heads-up                       |
 | `total`     | todo lo que `build` exige completar: una unidad por entrada más el heads-up       |
+| `branch`    | la rama que ese walkthrough anota — la de `HEAD`. **Omitido** con `HEAD` detached |
+
+### `branch` es cómo se llama la fila
+
+Es el nombre con el que los tres clientes **nombran la fila**, y existe por eso:
+sin él la fila decía «Walkthrough» debajo de una sección ya titulada
+*Walkthrough* y encima de dos botones que empezaban con la misma palabra. La
+rama es también el sujeto real del registro — el rango que `init` y `build`
+resuelven sale de `HEAD`, no de la rama que se haya pasado como argumento.
+
+Con `HEAD` detached el campo **se omite, nunca va en blanco** (la regla de
+`contracts/config-porcelain.md`: omitir, nunca vacío, nunca un centinela). La
+fila se sigue emitiendo: el archivo existe igual y los dos verbos funcionan
+igual; lo único sin respuesta es cómo llamarla, y esa copy es del cliente.
+
+No cuesta un proceso: `current_branch_init` ya resolvió el nombre para las filas
+`candidate` de la misma corrida.
 
 El par `annotated`/`total` es **el mismo que reportan los registros `draft`**, del
 mismo `awk`, para que «cuánto está escrito» signifique una sola cosa a los dos
@@ -120,5 +137,12 @@ prosa de alguien no puede llegar ahí.
 
 ## Degradación
 
-Una CLI anterior no emite el registro. El cliente no dibuja el bloque y no pasa
-nada más — la misma degradación que tienen los `draft` y los `guide`.
+Ninguna: el registro nace en la misma versión que los clientes exigen como
+mínimo (`min_cli_version`), así que una CLI que se puede usar siempre lo emite.
+Eso es lo que le permite al panel colgar `walkthrough init` y `walkthrough build`
+**de la fila** en vez de dibujarlos sueltos encima: los dos verbos no pueden
+quedar sin superficie por un registro que falta.
+
+Lo que sí varía es el **campo `branch`**, y su ausencia no es una degradación
+sino un hecho del repositorio — `HEAD` detached —, así que el cliente nombra la
+fila con su propia copy y todo lo demás de la fila sigue igual.

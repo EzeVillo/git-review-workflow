@@ -40,6 +40,14 @@ commitear* sobre una rama
 # lo usan: es solo para manotear los comandos.
 ./tests/sandbox.sh                    # (re)construye y dice cómo entrar
 ./tests/sandbox.sh -d /tmp/box        # en otro lado
+
+# Y el hermano vacío — dos ramas y nada más (develop + feature/discount: 2
+# commits, 3 archivos, todo ASCII), sin walkthrough, sin borrador, sin guía, sin
+# review guardada, sin marcador y SIN reviewworkflow.base: es el repo del día que
+# instalás, o sea la única forma de ver la pantalla de setup del panel. Contesta
+# la pregunta que el de arriba no puede — qué ve alguien desde cero — y es el
+# único que no depende de que los verbos anden: es git escrito directo.
+./tests/sandbox-min.sh                # (re)construye y dice cómo entrar
 ```
 
 **Todo lo que se puede correr en el contenedor se corre en el contenedor.** No es preferencia: en
@@ -369,6 +377,23 @@ working tree:
   `--absolute-git-dir` en la misma llamada, del que se deriva el común sacándole `/worktrees/<name>`
   — `--git-common-dir` contesta relativo al *cwd* y en Windows prefijarlo con `$PWD` mezcla estilos
   de path adentro de un mismo registro, y el cliente no puede abrir el resultado).
+- **El registro `walkthrough` de `config --porcelain`:**
+  `walkthrough<TAB><state><TAB><path><TAB><annotated><TAB><total>[<TAB><branch>]`, con `state` =
+  `in-sync|stale|superseded|unknown|absent`. **Siempre la fila**, exista o no el archivo, por el
+  mismo motivo que las guías. El campo `branch` es **cómo se llama la fila** en los tres paneles:
+  antes decía «Walkthrough» debajo de una sección titulada *Walkthrough* y encima de dos botones
+  que empezaban con la misma palabra, o sea el mismo sustantivo tres veces sin que ninguna de las
+  tres agregara un dato. Se **omite, nunca va en blanco**, con `HEAD` detached —el archivo y los
+  dos verbos funcionan igual ahí; lo único sin respuesta es el nombre, y esa copy es del cliente—
+  y no cuesta un proceso: `current_branch_init` ya lo resolvió **una vez por proceso** para las
+  filas `candidate` de la misma corrida (mismo patrón que `walk_gitdir_init`, y por el mismo
+  motivo: un `$(...)` no cachea nada). Del lado del panel eso convierte el bloque en **tres filas
+  y nada suelto arriba**: `walkthrough init` y `walkthrough build` son la botonera de la fila
+  —su sujeto es el archivo que la fila nombra, igual que *Create* es el de cada guía— y sus
+  etiquetas pierden el prefijo, que en el menú y la paleta sí se conserva porque ahí no hay
+  sección que dé contexto. Siguen siendo dos de las 27 acciones: por eso se declaran en
+  `panel_layout` (adentro del bloque de la fila) y no en el mapa de controles de fila, que es
+  donde viven abrir y copiar.
 - **Los tres registros porcelain del borrador:** `config --porcelain` emite un `draft<TAB><src><TAB>
   <path><TAB><annotated><TAB><total><TAB><source><TAB><range>` por cada borrador del namespace
   **activo**, con y sin argumento de rama (un borrador es un hecho del working tree, no de la rama
@@ -837,7 +862,7 @@ MOCHA_GREP='abre el diff' ./vscode-extension/test/run-docker.sh
   largo. `test/unit/userDataDir.spec.ts` cubre las dos cosas contra `darwin` explícito, así que la
   regresión cae en cualquier SO.
 - **`npm run preview`** genera `out/preview/index.html` (y lo imprime como URL
-  `file://`): los veinticuatro estados del panel lado a lado, a ancho de sidebar, con selector de tema
+  `file://`): los veintiocho estados del panel lado a lado, a ancho de sidebar, con selector de tema
   dark/light/alto contraste. El pane es el `panelHtml()` real y los estados de `preview/fixtures.ts`
   son salida `--porcelain` de ejemplo pasada por el parser y el modelo reales, así que **sigue al
   código y no se mantiene aparte**. Lo que no puede afirmar: los botones no tienen extensión del

@@ -32,6 +32,20 @@ candidate_remotes() {
 		done
 }
 
+# current_branch_init
+# Resolve the branch HEAD sits on ONCE per process into $_cur_branch (empty when
+# HEAD is detached), the same shape as walk_gitdir_init and for the same reason:
+# a $(...) cannot cache anything, and this answer is now wanted by two emitters
+# of the same porcelain run — candidate_branches and emit_walkthrough_record.
+# Asking twice would spend a second process on every panel refresh for a value
+# that cannot change mid-run.
+current_branch_init() {
+	if [ -z "${_cur_branch_done:-}" ]; then
+		_cur_branch="$(git symbolic-ref --quiet --short HEAD || true)"
+		_cur_branch_done=1
+	fi
+}
+
 # candidate_branches <remote>
 # Emit a "candidate<TAB>name<TAB>origin<TAB>current" row for every branch
 # eligible to start a review on: every ref in refs/heads/ and
@@ -50,7 +64,8 @@ candidate_remotes() {
 # porcelain_row) over its output, so the process count stays constant.
 candidate_branches() {
 	_cb_remote="$1"
-	_cb_cur="$(git symbolic-ref --quiet --short HEAD || true)"
+	current_branch_init
+	_cb_cur="$_cur_branch"
 	git for-each-ref --format='%(refname)' refs/heads/ "refs/remotes/$_cb_remote/" |
 		while IFS= read -r _cb_ref; do
 			case "$_cb_ref" in
@@ -2252,7 +2267,14 @@ walk_sidecar_superseded() {
 
 # emit_walkthrough_record [<base>] [<remote>]
 # The author's sidecar as one row:
-#   walkthrough<TAB><state><TAB><path><TAB><annotated><TAB><total>
+#   walkthrough<TAB><state><TAB><path><TAB><annotated><TAB><total>[<TAB><branch>]
+#
+# <branch> is the branch this walkthrough annotates -- the one HEAD sits on, which
+# is the range init and build resolve. It is what the clients NAME the row with,
+# so that the word "Walkthrough" is said once (the section title) instead of three
+# times. Omitted, never blank, when HEAD is detached: the file and the two verbs
+# still work there, so the row is still emitted -- only its name is a question
+# with no answer, and naming it is the client's copy to choose.
 #
 # state is absent | in-sync | stale | superseded | unknown, and the row is emitted
 # in all five cases -- the same reason emit_guide_records always emits both
@@ -2282,7 +2304,8 @@ walk_sidecar_superseded() {
 #
 # Cost when the file is there: the rev-parse guide_paths_init already made, one
 # builtin read of the block, one git diff, and the single awk of the progress
-# count. Nothing per entry.
+# count. Nothing per entry, and nothing for the branch name -- current_branch_init
+# already resolved it for the candidate rows of this same run.
 emit_walkthrough_record() {
 	_ewr_base="${1:-}"
 	_ewr_remote="${2:-origin}"
@@ -2290,8 +2313,9 @@ emit_walkthrough_record() {
 	[ -n "$_guide_team_path" ] || return 0
 	_ewr_path="${_guide_team_path%/walkthrough-guide.md}/walkthrough.md"
 
+	current_branch_init
 	if [ ! -f "$_ewr_path" ]; then
-		porcelain_row walkthrough absent "$_ewr_path" 0 0
+		emit_walkthrough_row absent "$_ewr_path" 0 0
 		return 0
 	fi
 
@@ -2341,5 +2365,18 @@ emit_walkthrough_record() {
 	done <<EOF
 $(walk_draft_progress "$_ewr_path")
 EOF
-	porcelain_row walkthrough "$_ewr_state" "$_ewr_path" "$_ewr_ann" "$_ewr_tot"
+	emit_walkthrough_row "$_ewr_state" "$_ewr_path" "$_ewr_ann" "$_ewr_tot"
+}
+
+# emit_walkthrough_row <state> <path> <annotated> <total>
+# The single place the walkthrough row is written, so that the two callers above
+# cannot disagree about the trailing branch field -- omitted, never blank, when
+# HEAD is detached (contracts/config-porcelain.md: omit, never blank, never a
+# sentinel). Requires current_branch_init to have run.
+emit_walkthrough_row() {
+	if [ -n "${_cur_branch:-}" ]; then
+		porcelain_row walkthrough "$1" "$2" "$3" "$4" "$_cur_branch"
+	else
+		porcelain_row walkthrough "$1" "$2" "$3" "$4"
+	fi
 }

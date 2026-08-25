@@ -15,14 +15,16 @@ Requires `git review` **0.7.0** or newer.
 - **The walkthrough you wrote, and whether it still matches the PR.** A walkthrough is written
   once, when the PR is finished — and then the PR keeps moving: review comments come back, three
   more files change, and nothing anywhere said the reading order had fallen behind. The panel's
-  *Walkthrough* section now leads with a row for it: `up to date`, `may be out of date`, `state
-  unknown` or `none`, plus how much of it is written (`4/6`), an icon that opens it at the path
-  the CLI reported, and *Copy for agent* — a one-line instruction naming that file, on the
-  clipboard, the same shape the draft rows already had. The badge is deliberately cautious: what
+  *Walkthrough* section now leads with a row for it, named after the branch it annotates:
+  `up to date`, `may be out of date`, `state unknown` or `none`, plus how much of it is written
+  (`4/6`), an icon that opens it at the path the CLI reported, and three buttons — *Init* (or
+  *Update*, or *Start over*), *Build*, and *Copy for agent*, a one-line instruction naming that
+  file, on the clipboard, the same shape the draft rows already had. The two verbs hang off the
+  row because their subject is the file it names, the way *Create* hangs off each guide. The badge is deliberately cautious: what
   the CLI checks on every refresh is the cheap half of the question, and the exact answer is
-  *Walkthrough: Build*'s.
-- **The button that creates it also updates it, and says so.** *Walkthrough: Init* reads
-  *Walkthrough: Update* once a walkthrough exists, because that is now what the verb does:
+  *Build*'s.
+- **The button that creates it also updates it, and says so.** *Init* reads *Update* once a
+  walkthrough exists, because that is now what the verb does:
   entries whose file is still in range keep their number, their why and their `> key`, files that
   entered the range arrive as placeholders to fill in, and entries whose file left it are dropped
   and named. Fill in only the new ones, hand them to an agent, or write them yourself.
@@ -30,10 +32,10 @@ Requires `git review` **0.7.0** or newer.
   merges, the sidecar travels into the base with it, you branch again and touch one of the same
   files — and that entry still carries a why about a change that already shipped. The CLI spots it
   (the tip that wrote the walkthrough is already in the base) and starts a fresh one; the row says
-  `from a merged PR` rather than `may be out of date`, and the button reads *Walkthrough: Start
-  over*, because that is what will happen. The old one is in git either way.
+  `from a merged PR` rather than `may be out of date`, and the button reads *Start over*, because
+  that is what will happen. The old one is in git either way.
 - **Choosing between updating and starting over happens before the verb runs.** With a walkthrough
-  already there, *Walkthrough: Update* asks which of the two you meant: keep every entry whose file
+  already there, *Update* asks which of the two you meant: keep every entry whose file
   is still in range, or replace the file with a blank skeleton (`--force`). It used to be offered
   only when the CLI refused, so once `init` stopped refusing there was no way to reach `--force`
   from the panel at all.
@@ -56,7 +58,7 @@ Requires `git review` **0.7.0** or newer.
 - **Starting a review on a branch you already read asks what to do with your reading order.**
   The wizard used to offer only *Finish the reading order you started* — over an order that was
   finished and already used, which is not what it says. Now the row reads *Reuse the reading order
-  you wrote*, and choosing it asks the same pair the author's *Walkthrough: Update* asks: **Update**
+  you wrote*, and choosing it asks the same pair the author's *Update* asks: **Update**
   reconciles it with what the PR changed since (every entry whose file is still in range keeps its
   number, its why and its `> key`; the new files arrive as placeholders; the ones that left are
   dropped and named), or **Start over** for a blank skeleton. It is asked only there — over a
@@ -103,6 +105,12 @@ Requires `git review` **0.7.0** or newer.
   generated with**, reported by the CLI itself. A draft made with `--delta`, `--local` or
   `--offline` covers a different set of paths than the defaults, so with the defaults that button
   would have failed with a drift error every time, on a perfectly valid draft.
+- **The footer section that holds *Compare revisions* now says what it does, and sits below
+  the reading orders.** It was called *Other actions* and came first: a title that named
+  nothing, above the two sections that do — *Walkthrough*, and the reading orders you
+  finished with. It is now *Compare*, and it goes under them, because it is the only one of
+  the three that mounts something outside the review you are about to start: any two
+  revisions, no review to begin and no reading order to write.
 
 ### Fixed
 

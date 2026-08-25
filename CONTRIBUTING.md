@@ -19,7 +19,7 @@ on Windows to be worth avoiding (see
 installed:
 
 ```sh
-shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh visualstudio-extension/bump-version.sh tests/sandbox.sh
+shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh visualstudio-extension/bump-version.sh jetbrains-plugin/verification-report.sh tests/sandbox.sh tests/sandbox-min.sh
 bats tests/
 ```
 
@@ -110,6 +110,22 @@ repository directly — the branch config under
 phase fails soft: if a verb is broken the script warns and the rest of the sandbox still comes out
 usable.
 
+There is a second, deliberately empty one next to it —
+[`tests/sandbox-min.sh`](tests/sandbox-min.sh) — for the opposite question: what does someone who
+just installed this see, before any of those states exists?
+
+```sh
+./tests/sandbox-min.sh                # (re)build, then print how to enter it
+```
+
+Two branches and nothing else: `develop` with three files, and `feature/discount` changing three of
+them over two commits, all of it plain ASCII. No walkthrough, no reviewer draft, no authoring guide,
+no saved review, no `--delta` marker, no leftover review branch — and no
+`reviewworkflow.base` either, which is the only way to reach the panel's setup screen, since the
+full sandbox arrives configured. Nothing here runs `git review`, so unlike the sandbox above it
+cannot fail because a verb is broken. Its directory (and its marker) are its own, so the two never
+overwrite each other by accident.
+
 > The PowerShell installer tests (`*-ps1.bats`) need `pwsh`, which the container
 > does not have, so they do not really run there — rely on CI (or local Windows)
 > for those.
@@ -141,6 +157,10 @@ the [sandbox](#trying-the-commands-by-hand) and open
 ./tests/sandbox.sh                    # from the repo root
 git -C <sandbox>/work review start feature/checkout
 ```
+
+To walk the panel the way a new user meets it — setup screen first, then a whole-mode review of a
+three-file branch — open the [empty sandbox](#trying-the-commands-by-hand) instead
+(`./tests/sandbox-min.sh`) and start nothing: it has no base configured yet.
 
 The development host inherits the `PATH` of the VS Code that launched it, not the one the sandbox's
 `env.sh` sets up: either install this checkout (`./install.sh`) or point the `gitReview.path`
@@ -249,6 +269,9 @@ as for VS Code:
 # from the monorepo root (Git Bash / WSL / Linux / macOS)
 ./tests/sandbox.sh
 git -C <sandbox>/work review start feature/checkout
+
+# or, to see the panel as a new user meets it (setup screen first, nothing else):
+./tests/sandbox-min.sh
 ```
 
 Then in the sandbox IDEA:

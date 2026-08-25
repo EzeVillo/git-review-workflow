@@ -480,6 +480,17 @@ class PanelLayoutContractTest {
             val guideControls = guideBlock?.get("controls") as? Map<String, Any?>
             if (guideControls != null) allowed += guideControls.keys
         }
+        // Y la fila del walkthrough, que tiene controles de las DOS clases: los
+        // dos verbos son acciones del producto y se declaran en el layout (los
+        // toma extractControlSpecs), mientras que abrir y copiar son de la fila
+        // y viven en el mapa propio del bloque, como los de las guias.
+        if (mentionsBlock(sit["blocks"], "walkthrough_row")) {
+            @Suppress("UNCHECKED_CAST")
+            val walkBlock = yaml["walkthrough_row"] as? Map<String, Any?>
+            @Suppress("UNCHECKED_CAST")
+            val walkControls = walkBlock?.get("controls") as? Map<String, Any?>
+            if (walkControls != null) allowed += walkControls.keys
+        }
         val stray = actual.map { it.first }.filter { it !in allowed }.distinct()
         assertTrue(
             stray.isEmpty(),
@@ -494,11 +505,26 @@ class PanelLayoutContractTest {
             "situation $key: ofrece $offered, que el contrato marca not_in: [$THIS_CLIENT]",
         )
 
+        // La etiqueta de walkthroughInit sigue al estado del archivo -- es la
+        // unica accion del producto asi --, de modo que lo que se compara es el
+        // CONJUNTO que el canonico declara en action_labels y no un escalar. El
+        // precedente es discardInventory, que tiene dos.
+        @Suppress("UNCHECKED_CAST")
+        val walkRow = yaml["walkthrough_row"] as? Map<String, Any?>
+        @Suppress("UNCHECKED_CAST")
+        val initLabels = (walkRow?.get("action_labels") as? Map<String, Any?>)
+            ?.values?.mapNotNull { it as? String }?.toSet() ?: emptySet()
+
         // 3. Los declarados, en orden, con su label y su emphasis.
         var j = 0
         for (a in actual) {
             if (j < expected.size && a.first == expected[j].id) {
-                if (expected[j].label != null) {
+                if (a.first == "walkthroughInit" && initLabels.isNotEmpty()) {
+                    assertTrue(
+                        a.second in initLabels,
+                        "situation $key walkthroughInit label ${a.second} not in $initLabels",
+                    )
+                } else if (expected[j].label != null) {
                     assertEquals(
                         expected[j].label,
                         a.second,

@@ -608,10 +608,14 @@ class PanelRenderer(
             // says which of the four are glyphs.
             val (glyphs, labelled) = r.controls.partition { it.emphasis == Emphasis.ICON }
             val right = ArrayList<JComponent>()
-            right.add(chipLabel(r.meta))
+            // The badge CLOSES the line, in every row of the panel: that is what
+            // drops the states of all three sections into the same column at the
+            // right edge. The glyphs go before it, still glued to the fact that
+            // names their subject.
             for (c in glyphs) {
                 right.add(renderControl(c))
             }
+            right.add(chipLabel(r.meta))
             box.add(
                 stacked(
                     headerRow(listOf(monoLabel(r.name, muted = false)), right),
@@ -654,16 +658,21 @@ class PanelRenderer(
         for (r in block.rows) {
             val (glyphs, labelled) = r.controls.partition { it.emphasis == Emphasis.ICON }
             val right = ArrayList<JComponent>()
-            right.add(chipLabel(r.badge))
             for (c in glyphs) {
                 right.add(renderControl(c))
             }
+            right.add(chipLabel(r.badge))
             box.add(
                 stacked(
                     headerRow(listOf(monoLabel(r.name, muted = false)), right),
                 ),
             )
-            val actions = JPanel(GridLayout(1, labelled.size, 4, 4))
+            // Left, at label width, like the inventory's actions -- and unlike
+            // the draft rows above, whose two even columns exist so that row
+            // after row lines up. Here the count is one (a guide) or three (the
+            // walkthrough): even cells would stretch a lone Create across half
+            // the sidebar and squeeze three labels that fit as they are.
+            val actions = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0))
             actions.background = chrome.background()
             actions.alignmentX = Component.LEFT_ALIGNMENT
             for (c in labelled) {
@@ -726,8 +735,18 @@ class PanelRenderer(
                     ControlId.PREV -> chrome.iconPrev()
                     ControlId.NEXT -> chrome.iconNext()
                     ControlId.COPY_CLI_INSTALL -> chrome.iconCopy()
-                    ControlId.OPEN_DRAFT -> chrome.iconFile()
-                    ControlId.DISCARD_DRAFT -> chrome.iconTrash()
+                    // The three file-and-trash pairs of the panel, not just the
+                    // draft's: a guide row's Open and Discard and the
+                    // walkthrough row's Open are the same two affordances over a
+                    // different file, and the canonical declares the same two
+                    // icons for them. Missing here, they fell through to the
+                    // accessible name below -- a sentence-wide button in a
+                    // header that a glyph exists to keep narrow.
+                    ControlId.OPEN_DRAFT,
+                    ControlId.OPEN_GUIDE,
+                    ControlId.OPEN_WALKTHROUGH,
+                    -> chrome.iconFile()
+                    ControlId.DISCARD_DRAFT, ControlId.DISCARD_GUIDE -> chrome.iconTrash()
                     else -> null
                 }
                 if (icon != null) {
@@ -737,8 +756,11 @@ class PanelRenderer(
                         ControlId.PREV -> chrome.glyphPrev()
                         ControlId.NEXT -> chrome.glyphNext()
                         ControlId.COPY_CLI_INSTALL -> chrome.glyphCopy()
-                        ControlId.OPEN_DRAFT -> chrome.glyphFile()
-                        ControlId.DISCARD_DRAFT -> chrome.glyphTrash()
+                        ControlId.OPEN_DRAFT,
+                        ControlId.OPEN_GUIDE,
+                        ControlId.OPEN_WALKTHROUGH,
+                        -> chrome.glyphFile()
+                        ControlId.DISCARD_DRAFT, ControlId.DISCARD_GUIDE -> chrome.glyphTrash()
                         // Un id de icono sin glifo cae al nombre accesible, que
                         // es una oracion: el control se vuelve el mas ancho de
                         // su fila, que es justo lo que un icono viene a evitar.

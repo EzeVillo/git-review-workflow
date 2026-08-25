@@ -502,13 +502,17 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             var name = MonoLabel(r.Name);
             var right = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            right.Children.Add(Chip(r.Meta));
+            // The badge CLOSES the line, in every row of the panel: that is what
+            // drops the states of all three sections into the same column at the
+            // right edge. The glyphs go before it, still glued to the fact that
+            // names their subject.
             foreach (var c in glyphs)
             {
                 var glyph = RenderControl(c);
                 glyph.Margin = new Thickness(2, 0, 0, 0);
                 right.Children.Add(glyph);
             }
+            right.Children.Add(Chip(r.Meta));
             Grid.SetColumn(name, 0);
             Grid.SetColumn(right, 1);
             header.Children.Add(name);
@@ -562,25 +566,25 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             var name = MonoLabel(r.Name);
             var right = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            right.Children.Add(Chip(r.Badge));
             foreach (var c in glyphs)
             {
                 var glyph = RenderControl(c);
                 glyph.Margin = new Thickness(2, 0, 0, 0);
                 right.Children.Add(glyph);
             }
+            right.Children.Add(Chip(r.Badge));
             Grid.SetColumn(name, 0);
             Grid.SetColumn(right, 1);
             header.Children.Add(name);
             header.Children.Add(right);
             stack.Children.Add(header);
 
-            var actions = new UniformGrid
-            {
-                Rows = 1,
-                Columns = labelled.Count,
-                Margin = new Thickness(0, 4, 0, 0),
-            };
+            // Left, at label width, like the inventory's actions — and unlike
+            // the draft rows above, whose even columns exist so that row after
+            // row lines up. Here the count is one (a guide) or three (the
+            // walkthrough): even cells would stretch a lone Create across half
+            // the sidebar and squeeze three labels that fit as they are.
+            var actions = new WrapPanel { Margin = new Thickness(0, 4, 0, 0) };
             foreach (var c in labelled)
             {
                 var cell = RenderControl(c);
@@ -694,9 +698,16 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             // This host draws icon controls as text glyphs (no Image Catalog
             // outside the VSIX), so they stay in the BMP: an astral codepoint
             // is a tofu box in whatever font the theme hands us.
+            // The three file-and-trash pairs of the panel, not just the draft's:
+            // a guide row's Open and Discard and the walkthrough row's Open are
+            // the same two affordances over a different file. Missing here, they
+            // fell through to the default — which is Next's arrow, so Discard
+            // drew a ▶.
             var icon = c.Id == ControlId.Prev ? "◀"
-                : c.Id == ControlId.OpenDraft ? "▤"
-                : c.Id == ControlId.DiscardDraft ? "✕"
+                : c.Id == ControlId.OpenDraft
+                    || c.Id == ControlId.OpenGuide
+                    || c.Id == ControlId.OpenWalkthrough ? "▤"
+                : c.Id == ControlId.DiscardDraft || c.Id == ControlId.DiscardGuide ? "✕"
                 : "▶";
             var b = new Button
             {

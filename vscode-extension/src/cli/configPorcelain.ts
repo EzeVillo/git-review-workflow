@@ -160,6 +160,14 @@ export interface WalkthroughRecord {
     annotated: number;
     /** Todo lo que `build` exige completar: una unidad por entrada más el heads-up. */
     total: number;
+    /**
+     * La rama que este walkthrough anota — la de `HEAD`, que es el rango que
+     * `init` y `build` resuelven. Es **cómo se llama la fila** en el panel.
+     * Ausente con `HEAD` detached, que es el único caso en que la CLI omite el
+     * campo: ahí el archivo y los dos verbos siguen andando y lo único sin
+     * respuesta es el nombre.
+     */
+    branch?: string;
 }
 
 export interface ConfigPorcelainResult {
@@ -263,11 +271,13 @@ function parseWalkthroughRecord(
     if (state === undefined || path === undefined || path.length === 0) {
         return undefined;
     }
+    const branch = fields[5];
     return {
         path,
         state,
         annotated: toCount(fields[3]),
         total: toCount(fields[4]),
+        ...(branch !== undefined && branch.length > 0 ? {branch} : {}),
     };
 }
 

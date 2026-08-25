@@ -69,7 +69,8 @@ Once it launches:
   Code and *Path to git-review* in JetBrains.
 - Open a repository with a review in progress. `../tests/sandbox.sh` builds one:
   `git -C <sandbox>/work review start feature/checkout`, then **File → Open → Folder** on
-  `<sandbox>/work`.
+  `<sandbox>/work`. Its empty twin, `../tests/sandbox-min.sh`, has no walkthrough and no configured
+  base — open that one to meet the panel the way a new user does, starting at the setup screen.
 
 ### Testing the shipped artifact
 

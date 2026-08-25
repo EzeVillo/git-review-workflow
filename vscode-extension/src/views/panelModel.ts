@@ -143,6 +143,11 @@ export interface PanelDraft {
  * llega de la CLI, y el cliente **lo abre, nunca lo arma**.
  */
 export interface PanelWalkthrough {
+    /**
+     * Cómo se llama la fila: **la rama** que este walkthrough anota, tal como la
+     * reportó la CLI. Cae a "Walkthrough" sólo cuando el registro omitió el
+     * campo, que es lo que pasa con `HEAD` detached.
+     */
     label: string;
     /** Ruta absoluta reportada por la CLI. Existe en disco sólo si `state !== "absent"`. */
     path: string;
@@ -220,8 +225,11 @@ export interface PanelModel {
      */
     guides: PanelGuide[];
     /**
-     * El walkthrough del autor, cuando la CLI reportó su fila. Ausente con una
-     * CLI anterior al registro, y entonces el bloque no se dibuja.
+     * El walkthrough del autor. **Siempre presente** en `no-review`: los dos
+     * verbos que actúan sobre el archivo son la botonera de esta fila, así que
+     * una fila condicional los dejaría sin superficie. Cuando el registro no se
+     * pudo leer, la fila llega en `unknown` — que es literalmente "no se puede
+     * saber" — y no inventa ni un estado ni una ruta.
      */
     walkthrough?: PanelWalkthrough;
     /**
@@ -238,7 +246,7 @@ export interface PanelModel {
      * `true` cuando el empty state está en **modo setup**: `no-review` y el
      * reporte de `git review config --porcelain` llegó sin `base`. El panel
      * entonces solo ofrece configurar base (obligatoria) y remote (opcional);
-     * sin Start, inventario ni footer de Other actions. `false` en cualquier
+     * sin Start, inventario ni el footer plegable. `false` en cualquier
      * otra situación (incluido `finish-pending`), y también si el reporte de
      * config nunca llegó.
      */
@@ -537,9 +545,15 @@ const WALKTHROUGH_BADGE: Record<WalkthroughState, string> = {
 };
 
 /**
- * Proyecta el registro `walkthrough`. Una sola fila, y sólo cuando la CLI la
- * emitió: con una versión anterior no llega, y el bloque entero desaparece —
- * misma degradación que las guías y los borradores.
+ * Proyecta el registro `walkthrough`. Una sola fila, **siempre**: los dos verbos
+ * que actúan sobre el archivo (`init` y `build`) son su botonera, así que
+ * dibujarla sólo a veces sería dejarlos sin superficie a veces. Sin registro
+ * —malformado, o una CLI que no lo emite y que el cliente ya rechazó por
+ * versión— la fila llega en `unknown`, que es el estado que la CLI define como
+ * "la pregunta no tiene respuesta": no inventa ni un badge ni una ruta.
+ *
+ * El nombre de la fila es la RAMA que anota, no la palabra "Walkthrough": la
+ * sección ya se llama así, y decirlo dos veces no agregaba un dato.
  *
  * Todo lo que decide qué se puede apretar sale del estado que reportó la CLI.
  * En particular `updatable`, que NO es `stale`: reconciliar un walkthrough con
@@ -548,15 +562,19 @@ const WALKTHROUGH_BADGE: Record<WalkthroughState, string> = {
  * y con `absent` el mismo verbo es lo que lo crea. Lo único que no se puede es
  * copiar el puntero a un archivo que no existe.
  */
-function toPanelWalkthrough(record: WalkthroughRecord): PanelWalkthrough {
+function toPanelWalkthrough(record: WalkthroughRecord | undefined): PanelWalkthrough {
+    // Sin registro no hay ni ruta ni estado, y ninguno de los dos se inventa:
+    // `unknown` ya significa "no se puede saber" del lado de la CLI, y una ruta
+    // vacía apaga los dos controles que necesitan el archivo.
+    const state: WalkthroughState = record?.state ?? "unknown";
     return {
-        label: "Walkthrough",
-        path: record.path,
-        state: record.state,
-        badge: WALKTHROUGH_BADGE[record.state],
-        annotated: record.annotated,
-        total: record.total,
-        exists: record.state !== "absent",
+        label: record?.branch ?? "Walkthrough",
+        path: record?.path ?? "",
+        state,
+        badge: WALKTHROUGH_BADGE[state],
+        annotated: record?.annotated ?? 0,
+        total: record?.total ?? 0,
+        exists: record !== undefined && state !== "absent",
         // El verbo es el mismo (`walkthrough init`) y hace las dos cosas; lo que
         // cambia es cómo se llama en el panel, porque "Create" sobre un archivo
         // lleno de prosa es una promesa que la CLI no cumple -- y no debería.
@@ -564,10 +582,13 @@ function toPanelWalkthrough(record: WalkthroughRecord): PanelWalkthrough {
         // "quedó atrás": el archivo es de un PR que ya se mergeó, y lo que la CLI
         // hace ahí es empezar de cero por su cuenta -- el botón dice lo que va a
         // pasar en vez de prometer una reconciliación que no ocurre.
+        // Sin registro no se sabe nada del archivo, así que el botón se queda
+        // con el nombre por defecto del verbo: "Update" prometería reconciliar
+        // algo que nadie puede decir que está.
         actionLabel:
-            record.state === "absent"
+            record === undefined || state === "absent"
                 ? "Create"
-                : record.state === "superseded"
+                : state === "superseded"
                   ? "Start over"
                   : "Update",
     };
@@ -633,7 +654,10 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
         // probable de querer escribir la tuya. El dato no cuesta una invocación
         // extra — `status --porcelain` emite los mismos registros que `config`.
         guides: state.guides !== undefined ? toPanelGuides(state.guides, state.situation) : [],
-        ...(state.walkthrough !== undefined
+        // Sólo en `no-review`: es donde vive la sección, y adentro de una review
+        // el panel dibuja las guías y nada más de este bloque. La fila se
+        // construye aunque el registro falte -- ver toPanelWalkthrough.
+        ...(state.situation === "no-review"
             ? {walkthrough: toPanelWalkthrough(state.walkthrough)}
             : {}),
         // Ausencia de dato (config nunca llegó) y "config llegó sin base" son

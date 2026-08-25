@@ -297,6 +297,14 @@ data class WalkthroughRecord(
     val annotated: Int,
     /** Everything `build` requires: one unit per entry plus the heads-up. */
     val total: Int,
+    /**
+     * The branch this walkthrough annotates -- `HEAD`'s, which is the range
+     * `init` and `build` resolve. It is **what the row is called** in the panel.
+     * Null with a detached `HEAD`, the one case where the CLI omits the field:
+     * the file and both verbs still work there and the only thing without an
+     * answer is the name.
+     */
+    val branch: String? = null,
 )
 
 /**
@@ -317,6 +325,7 @@ fun parseWalkthroughRecord(fields: List<String>): WalkthroughRecord? {
         state = state,
         annotated = parseCount(fields.getOrNull(3)) ?: 0,
         total = parseCount(fields.getOrNull(4)) ?: 0,
+        branch = fields.getOrNull(5)?.takeIf { it.isNotEmpty() },
     )
 }
 

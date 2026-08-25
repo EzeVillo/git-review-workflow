@@ -124,6 +124,11 @@ data class PanelGuide(
  * comes from the CLI, and the client **opens it, never rebuilds it**.
  */
 data class PanelWalkthrough(
+    /**
+     * What the row is called: **the branch** this walkthrough annotates, as the
+     * CLI reported it. Falls back to "Walkthrough" only when the record omitted
+     * the field, which is what a detached `HEAD` does.
+     */
     val label: String,
     /** Absolute, reported by the CLI. On disk only when `state != ABSENT`. */
     val path: String,
@@ -334,9 +339,15 @@ private fun walkthroughBadge(state: WalkthroughState): String = when (state) {
 }
 
 /**
- * Projects the `walkthrough` record. One row, and only when the CLI emitted it:
- * against an older version it does not arrive and the whole block disappears --
- * the same degradation the guides and the drafts have.
+ * Projects the `walkthrough` record. One row, **always**: `init` and `build` are
+ * this row's buttons, so drawing it only sometimes would leave the two verbs
+ * without a surface sometimes. With no record -- malformed, or a CLI old enough
+ * that the client already rejected it by version -- the row arrives as
+ * `UNKNOWN`, which is the state the CLI defines as "the question has no answer":
+ * it invents neither a badge nor a path.
+ *
+ * The row is named after the BRANCH it annotates, not the word "Walkthrough":
+ * the section is already called that, and saying it twice added no fact.
  *
  * Everything that decides what can be pressed comes from the state the CLI
  * reported. In particular the action label, which is NOT keyed on staleness:
@@ -344,24 +355,34 @@ private fun walkthroughBadge(state: WalkthroughState): String = when (state) {
  * is called, and "Create" over a file full of prose is a promise the CLI does
  * not keep -- nor should it.
  */
-fun toPanelWalkthrough(record: WalkthroughRecord): PanelWalkthrough = PanelWalkthrough(
-    label = "Walkthrough",
-    path = record.path,
-    state = record.state,
-    badge = walkthroughBadge(record.state),
-    annotated = record.annotated,
-    total = record.total,
-    exists = record.state != WalkthroughState.ABSENT,
-    // Three labels for one verb. SUPERSEDED is not a flavour of "fell behind":
-    // the file is another PR's, and what the CLI does there is start over on its
-    // own -- so the button says what will happen instead of promising a
-    // reconciliation that does not occur.
-    actionLabel = when (record.state) {
-        WalkthroughState.ABSENT -> "Create"
-        WalkthroughState.SUPERSEDED -> "Start over"
-        else -> "Update"
-    },
-)
+fun toPanelWalkthrough(record: WalkthroughRecord?): PanelWalkthrough {
+    // With no record there is neither a path nor a state, and neither is made
+    // up: UNKNOWN already means "cannot be told" on the CLI's side, and an empty
+    // path turns off the two controls that need the file.
+    val state = record?.state ?: WalkthroughState.UNKNOWN
+    return PanelWalkthrough(
+        label = record?.branch ?: "Walkthrough",
+        path = record?.path ?: "",
+        state = state,
+        badge = walkthroughBadge(state),
+        annotated = record?.annotated ?: 0,
+        total = record?.total ?: 0,
+        exists = record != null && state != WalkthroughState.ABSENT,
+        // Three labels for one verb. SUPERSEDED is not a flavour of "fell
+        // behind": the file is another PR's, and what the CLI does there is
+        // start over on its own -- so the button says what will happen instead
+        // of promising a reconciliation that does not occur.
+        actionLabel = when {
+            // No record: nothing is known about the file, so the button keeps
+            // the verb's default name. "Update" would promise reconciling
+            // something nobody can say is there.
+            record == null -> "Create"
+            state == WalkthroughState.ABSENT -> "Create"
+            state == WalkthroughState.SUPERSEDED -> "Start over"
+            else -> "Update"
+        },
+    )
+}
 
 /**
  * The guide row at [index], resolved against the HOST's state. Same role as
@@ -400,7 +421,14 @@ fun buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelModel {
         // yours. It costs no extra invocation -- status --porcelain emits the same
         // records config does.
         guides = toPanelGuides(state.guides ?: emptyList(), state.situation),
-        walkthrough = state.walkthrough?.let { toPanelWalkthrough(it) },
+        // Only in NO_REVIEW: that is where the section lives, and inside a
+        // review the panel draws the guides and nothing else of this block. The
+        // row is built even when the record is missing -- see toPanelWalkthrough.
+        walkthrough = if (state.situation == Situation.NO_REVIEW) {
+            toPanelWalkthrough(state.walkthrough)
+        } else {
+            null
+        },
         noBaseConfigured = state.situation == Situation.NO_REVIEW &&
             state.config != null &&
             state.config.base == null,

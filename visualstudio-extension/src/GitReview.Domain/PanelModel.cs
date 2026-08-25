@@ -328,9 +328,16 @@ public static class PanelModelBuilder
     };
 
     /// <summary>
-    /// Projects the `walkthrough` record. One row, and only when the CLI emitted
-    /// it: against an older version it does not arrive and the whole block
-    /// disappears — the same degradation the guides and the drafts have.
+    /// Projects the `walkthrough` record. One row, ALWAYS: init and build are
+    /// this row's buttons, so drawing it only sometimes would leave the two verbs
+    /// without a surface sometimes. With no record — malformed, or a CLI old
+    /// enough that the client already rejected it by version — the row arrives as
+    /// Unknown, which is the state the CLI defines as "the question has no
+    /// answer": it invents neither a badge nor a path.
+    ///
+    /// The row is named after the BRANCH it annotates, not the word
+    /// "Walkthrough": the section is already called that, and saying it twice
+    /// added no fact.
     ///
     /// Everything that decides what can be pressed comes from the state the CLI
     /// reported. In particular the action label, which is NOT keyed on staleness:
@@ -338,25 +345,35 @@ public static class PanelModelBuilder
     /// it is called, and "Create" over a file full of prose is a promise the CLI
     /// does not keep — nor should it.
     /// </summary>
-    public static PanelWalkthrough ToPanelWalkthrough(WalkthroughRecord record) =>
-        new(
-            Label: "Walkthrough",
-            Path: record.Path,
-            State: record.State,
-            Badge: WalkthroughBadge(record.State),
-            Annotated: record.Annotated,
-            Total: record.Total,
-            Exists: record.State != WalkthroughState.Absent,
+    public static PanelWalkthrough ToPanelWalkthrough(WalkthroughRecord? record)
+    {
+        // With no record there is neither a path nor a state, and neither is made
+        // up: Unknown already means "cannot be told" on the CLI's side, and an
+        // empty path turns off the two controls that need the file.
+        var state = record?.State ?? WalkthroughState.Unknown;
+        return new PanelWalkthrough(
+            Label: record?.Branch ?? "Walkthrough",
+            Path: record?.Path ?? string.Empty,
+            State: state,
+            Badge: WalkthroughBadge(state),
+            Annotated: record?.Annotated ?? 0,
+            Total: record?.Total ?? 0,
+            Exists: record is not null && state != WalkthroughState.Absent,
             // Three labels for one verb. Superseded is not a flavour of "fell
             // behind": the file is another PR's, and what the CLI does there is
             // start over on its own — so the button says what will happen instead
-            // of promising a reconciliation that does not occur.
-            ActionLabel: record.State switch
-            {
-                WalkthroughState.Absent => "Create",
-                WalkthroughState.Superseded => "Start over",
-                _ => "Update",
-            });
+            // of promising a reconciliation that does not occur. And with no
+            // record at all nothing is known about the file, so the button keeps
+            // the verb's default name.
+            ActionLabel: record is null
+                ? "Create"
+                : state switch
+                {
+                    WalkthroughState.Absent => "Create",
+                    WalkthroughState.Superseded => "Start over",
+                    _ => "Update",
+                });
+    }
 
     /// <summary>
     /// The guide row at index, resolved against the HOST's state. Same role as
@@ -407,7 +424,13 @@ public static class PanelModelBuilder
             // write yours. It costs no extra invocation — status --porcelain emits the
             // same records config does.
             Guides: ToPanelGuides(state.GuidesList, state.Situation),
-            Walkthrough: state.Walkthrough is null ? null : ToPanelWalkthrough(state.Walkthrough),
+            // Only in NoReview: that is where the section lives, and inside a
+            // review the panel draws the guides and nothing else of this block.
+            // The row is built even when the record is missing — see
+            // ToPanelWalkthrough.
+            Walkthrough: state.Situation == Situation.NoReview
+                ? ToPanelWalkthrough(state.Walkthrough)
+                : null,
             NoBaseConfigured: state.Situation == Situation.NoReview
                 && state.Config is not null
                 && state.Config.Base is null,

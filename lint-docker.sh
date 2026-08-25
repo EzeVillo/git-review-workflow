@@ -37,7 +37,7 @@ if [ "$#" -eq 0 ]; then
 		vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh \
 		visualstudio-extension/bump-version.sh \
 		jetbrains-plugin/verification-report.sh \
-		tests/sandbox.sh
+		tests/sandbox.sh tests/sandbox-min.sh
 fi
 
 exec docker run --rm -v "$repo_root:/mnt:ro" -w /mnt "$image" "$@"

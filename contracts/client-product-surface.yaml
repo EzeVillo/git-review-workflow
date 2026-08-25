@@ -209,7 +209,7 @@ panel_layout:
       - {block: paragraph, text: "Remote: {remote} (optional)."}
       - {block: row, controls: [{id: setRemote, label: "Change remote", emphasis: secondary, confirms: false}]}
   no-review:
-    source_fns: [renderDrafts, renderReview, renderEmptyStartBlock, renderOtherActions, renderWalkthroughSection, renderSpentDrafts, renderSettings, renderSupport]
+    source_fns: [renderDrafts, renderReview, renderEmptyStartBlock, renderWalkthroughSection, renderWalkthroughRow, renderSpentDrafts, renderCompareSection, renderSettings, renderSupport]
     fills_height: true
     blocks:
       # Los borradores empezados van PRIMERO y el cuerpo de siempre sigue entero
@@ -230,20 +230,31 @@ panel_layout:
       - {block: inventory_rows}
       - {block: paragraph, text: "No active review on this branch."}
       - {block: row, controls: [{id: startReview, label: "Start a review", emphasis: primary, confirms: true}]}
-      - block: tools_section
-        title: "Other actions"
-        blocks:
-          - {block: row, controls: [{id: compareReview, label: "Compare revisions", emphasis: secondary, confirms: true}]}
-      # Init, build y las dos guias de autoria salieron de "Other actions" a una
-      # seccion propia cuando las guias entraron: cuatro controles sobre el mismo
-      # sustantivo mas uno ajeno (Compare) no es una lista de "otras acciones", es
-      # un cajon. Agrupadas por sustantivo el panel dice lo mismo que la CLI, donde
-      # los cuatro cuelgan de `git review walkthrough`.
+      # Init, build y las dos guias de autoria vivian con Compare en una seccion
+      # "Other actions". Se separaron cuando las guias entraron: cuatro controles
+      # sobre el mismo sustantivo mas uno ajeno no es una lista de "otras
+      # acciones", es un cajon. Agrupadas por sustantivo el panel dice lo mismo
+      # que la CLI, donde los cuatro cuelgan de `git review walkthrough`.
+      #
+      # TRES FILAS Y NADA SUELTO ARRIBA. Init y build son la botonera de la fila
+      # del walkthrough, no un `row` encima de ella: su sujeto es el archivo que
+      # esa fila nombra, exactamente como Create es la botonera de cada guia.
+      # Dibujados sueltos, la palabra "Walkthrough" se decia tres veces en cuatro
+      # centimetros -- el titulo de la seccion, las dos etiquetas con prefijo y el
+      # nombre de la fila -- y ninguna de las tres decia algo que las otras dos no.
+      # Por eso las etiquetas van sin prefijo (el titulo de la seccion ya lo dice)
+      # y la fila se llama por su rama. En el menu y la paleta siguen siendo
+      # "Walkthrough: Init" / "Walkthrough: Build": ahi no hay seccion que de
+      # contexto.
+      #
+      # Y la fila va SIN `when`: el registro nace en la version que los clientes
+      # exigen como minimo, asi que siempre llega -- y colgar los dos verbos de una
+      # fila condicional seria dejarlos sin superficie cuando la condicion no se
+      # cumple.
       - block: tools_section
         title: "Walkthrough"
         blocks:
-          - {block: row, controls: [{id: walkthroughInit, label: "Walkthrough: Init", emphasis: secondary, confirms: true}, {id: walkthroughBuild, label: "Walkthrough: Build", emphasis: secondary, confirms: true}]}
-          - {block: walkthrough_row, when: has_walkthrough}
+          - {block: walkthrough_row, controls: [{id: walkthroughInit, label: "Init", emphasis: secondary, confirms: true}, {id: walkthroughBuild, label: "Build", emphasis: secondary, confirms: true}]}
           - {block: guide_rows}
       # Los borradores gastados. Plegada y no escondida: un archivo que existe y
       # ninguna superficie nombra es el estado que este panel no deja pasar en
@@ -256,6 +267,16 @@ panel_layout:
         blocks:
           - {block: paragraph, text: "Their review is over; the files are still here"}
           - {block: draft_block, when: has_reviewed_drafts}
+      # Compare, ultima de las tres del pie que hacen algo con el repo. Es la
+      # unica que monta algo FUERA de una sesion de lectura -- dos revisiones
+      # cualesquiera, sin review que empezar ni orden que escribir -- asi que va
+      # debajo de todo lo que si tiene que ver con la review que estas por hacer.
+      # Se llamaba "Other actions" y era la primera del pie: un titulo que no
+      # nombra su contenido, encima de las dos secciones que si lo nombran.
+      - block: tools_section
+        title: "Compare"
+        blocks:
+          - {block: row, controls: [{id: compareReview, label: "Compare revisions", emphasis: secondary, confirms: true}]}
       - block: tools_section
         title: "Settings"
         blocks:
@@ -422,22 +443,33 @@ guide_rows:
   # Create, escribis las convenciones, Ctrl+S, y el badge sigue diciendo `empty`.
   watched: on_save
 
-# La fila del walkthrough del autor, dentro de la misma tools_section
-# "Walkthrough" y por encima de las dos guias. Sus controles son del CUERPO,
-# como los de guide_rows y draft_controls, asi que el conteo fijo de 27 en
-# actions: NO se toca -- ni contributes.commands, ni el menu Tools -> git review
-# de JetBrains, ni el .vsct de Visual Studio.
+# La fila del walkthrough del autor, la primera de la tools_section
+# "Walkthrough" y por encima de las dos guias. UNA sola fila, SIEMPRE (ver la
+# nota del layout).
 #
-# UNA sola fila, y solo cuando la CLI emitio el registro `walkthrough` de
-# config --porcelain: con una version anterior no llega y el bloque no se
-# dibuja, la misma degradacion que tienen las guias y los borradores.
+# Sus controles son de DOS clases y por eso estan declarados en dos lugares.
+# `openWalkthrough` y `copyWalkthroughPrompt` son del CUERPO, como los de
+# guide_rows y draft_controls: sin la fila que los dibuja no tienen sujeto, asi
+# que viven en el mapa de abajo y NO cuentan contra las 27. `walkthroughInit` y
+# `walkthroughBuild` si son acciones del producto -- estan en el menu y en la
+# paleta como siempre --, asi que se declaran en el layout, adentro del bloque
+# de esta fila, que es donde el panel los dibuja.
 #
 # Existe porque un walkthrough se escribe una vez, cuando el PR esta terminado,
 # y despues el PR sigue moviendose -- vuelven los comentarios del review y
 # cambian tres archivos. El verbo que lo diria es build, y correrlo hay que
 # acordarselo justo en el momento en que nadie esta pensando en el walkthrough.
 walkthrough_row:
-  label: "Walkthrough"
+  # El nombre de la fila es LA RAMA que ese walkthrough anota, tal como la
+  # reporta el campo <branch> del registro -- nunca una derivada del cliente,
+  # la misma regla que la ruta. Antes decia "Walkthrough" debajo de una seccion
+  # titulada Walkthrough y encima de dos botones que empezaban con la palabra.
+  #
+  # `label_detached` es la unica copy propia de la fila, y se usa exactamente
+  # cuando el registro omite el campo: con HEAD detached el archivo esta y los
+  # dos verbos andan, pero la rama es una pregunta sin respuesta.
+  label: from_branch
+  label_detached: "Walkthrough"
   # Los badges, en prosa, uno por estado de la CLI. "may be out of date" y no
   # "out of date" a proposito: lo que la CLI compara en cada refresco es barato
   # y aproximado (si el rango se movio desde que el archivo se escribio), y la
@@ -460,9 +492,9 @@ walkthrough_row:
   # de un PR ya mergeado y la CLI empieza de cero sola, asi que el boton dice lo
   # que va a pasar en vez de prometer una reconciliacion que no ocurre.
   action_labels:
-    absent: "Walkthrough: Init"
-    present: "Walkthrough: Update"
-    superseded: "Walkthrough: Start over"
+    absent: "Init"
+    present: "Update"
+    superseded: "Start over"
   controls:
     # Abrir es mostrar: el cliente no interpreta un byte del archivo, y abre LA
     # RUTA QUE REPORTO LA CLI, nunca una derivada del layout del repositorio.
@@ -531,6 +563,31 @@ inventory_controls:
 # que complete lo que está completo, y Validate and start ofrecería releer un
 # rango que se cerró. Los dos iconos se quedan en las dos filas, que es lo que
 # hace que la sección plegada siga teniendo cómo abrir y cómo descartar.
+
+# La FORMA de una fila del panel, comun a las tres clases que hay (inventario,
+# borradores, guias + walkthrough). No es una accion ni un control: es donde caen
+# las piezas que toda fila tiene, y esta aca porque los tres clientes la dibujan
+# por separado y ya divergieron una vez.
+row_shape:
+  # El badge CIERRA la linea, siempre. Los controles de icono van antes, pegados a
+  # el. Asi los estados de las tres secciones caen en la misma columna del borde
+  # derecho; con el badge primero, cada fila lo dejaba a una distancia distinta del
+  # borde segun cuantos iconos tuviera al lado.
+  header: [name, "progress?", icons, badge]
+  # La botonera de abajo. Dos columnas parejas SOLO donde hay exactamente dos
+  # controles con etiqueta (las filas de borrador), que es lo que hace que una fila
+  # se alinee con la de al lado. Con uno solo, celdas parejas estiran el boton a
+  # media pantalla y le centran el texto -- se lee como un error de alineacion --,
+  # y con tres aprietan etiquetas que entran como estan.
+  actions:
+    two_labelled: even_columns
+    otherwise: left_at_label_width
+  # Cada control de icono dibuja SU glifo. El default de esa decision no puede ser
+  # otro icono: cuando openGuide/discardGuide/openWalkthrough no estaban mapeados,
+  # un cliente los dibujo con el nombre accesible (un boton del ancho de una
+  # oracion) y el otro con la flecha de "siguiente" -- o sea Discard con un ▶.
+  icons: per_control
+
 draft_controls:
   # Los dos con etiqueta entran en dos columnas de ancho parejo, y ahí el
   # énfasis es lo único que se mueve. Sigue al progreso y el ORDEN no: mientras

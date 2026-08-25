@@ -38,6 +38,7 @@ object PanelFixtures {
         "no-review walkthrough stale" to noReviewWalkthroughStale(),
         "no-review walkthrough absent" to noReviewWalkthroughAbsent(),
         "no-review walkthrough superseded" to noReviewWalkthroughSuperseded(),
+        "no-review no walkthrough record" to noReviewNoWalkthroughRecord(),
         "finish-pending" to finishPending(),
         "out-of-range" to outOfRange(),
         "error" to error(),
@@ -154,14 +155,17 @@ object PanelFixtures {
      */
     fun noReviewGuides(): PanelModel {
         val cfg = """
+            walkthrough	in-sync	/repo/.review/walkthrough.md	6	6	feature/checkout
             guide	team	/repo/.review/walkthrough-guide.md	in-force
             guide	own	/repo/.git/review-walkthrough-guide.md	absent
         """.trimIndent()
+        val parsed = parseConfigPorcelain(cfg)
         return buildPanelModel(
             ReviewState(
                 situation = Situation.NO_REVIEW,
                 config = EffectiveConfig(base = "main", remote = "origin"),
-                guides = parseConfigPorcelain(cfg).guides,
+                guides = parsed.guides,
+                walkthrough = parsed.walkthrough,
             ),
             PanelInputs(busy = false),
         )
@@ -173,8 +177,31 @@ object PanelFixtures {
      */
     fun noReviewGuideEmpty(): PanelModel {
         val cfg = """
+            walkthrough	unknown	/repo/.review/walkthrough.md	2	4	feature/checkout
             guide	team	/repo/.review/walkthrough-guide.md	absent
             guide	own	/repo/.git/review-walkthrough-guide.md	empty
+        """.trimIndent()
+        val parsed = parseConfigPorcelain(cfg)
+        return buildPanelModel(
+            ReviewState(
+                situation = Situation.NO_REVIEW,
+                config = EffectiveConfig(base = "main", remote = "origin"),
+                guides = parsed.guides,
+                walkthrough = parsed.walkthrough,
+            ),
+            PanelInputs(busy = false),
+        )
+    }
+
+    /**
+     * The one case where the CLI reports no walkthrough row at all: a malformed
+     * record. The row is drawn anyway -- init and build hang off it -- in the
+     * state the CLI itself calls "cannot be told".
+     */
+    fun noReviewNoWalkthroughRecord(): PanelModel {
+        val cfg = """
+            guide	team	/repo/.review/walkthrough-guide.md	absent
+            guide	own	/repo/.git/review-walkthrough-guide.md	absent
         """.trimIndent()
         return buildPanelModel(
             ReviewState(
@@ -193,7 +220,7 @@ object PanelFixtures {
      */
     fun noReviewWalkthroughStale(): PanelModel {
         val cfg = """
-            walkthrough	stale	/repo/.review/walkthrough.md	4	6
+            walkthrough	stale	/repo/.review/walkthrough.md	4	6	feature/checkout
             guide	team	/repo/.review/walkthrough-guide.md	absent
             guide	own	/repo/.git/review-walkthrough-guide.md	absent
         """.trimIndent()
@@ -212,7 +239,7 @@ object PanelFixtures {
     /** No walkthrough at all: the row offers creating one, and nothing else. */
     fun noReviewWalkthroughAbsent(): PanelModel {
         val cfg = """
-            walkthrough	absent	/repo/.review/walkthrough.md	0	0
+            walkthrough	absent	/repo/.review/walkthrough.md	0	0	feature/checkout
             guide	team	/repo/.review/walkthrough-guide.md	absent
             guide	own	/repo/.git/review-walkthrough-guide.md	absent
         """.trimIndent()
@@ -236,7 +263,7 @@ object PanelFixtures {
      */
     fun noReviewWalkthroughSuperseded(): PanelModel {
         val cfg = """
-            walkthrough	superseded	/repo/.review/walkthrough.md	3	3
+            walkthrough	superseded	/repo/.review/walkthrough.md	3	3	feature/login
             guide	team	/repo/.review/walkthrough-guide.md	absent
             guide	own	/repo/.git/review-walkthrough-guide.md	absent
         """.trimIndent()

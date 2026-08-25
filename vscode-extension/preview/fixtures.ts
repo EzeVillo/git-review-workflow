@@ -403,6 +403,7 @@ export const PREVIEW_PANES: PreviewPane[] = [
             ["config", "base", "develop"],
             ["config", "remote", "origin"],
             ["draft", "feature/pagos", "/repo/.git/review-walkthrough/feature/pagos.md", "0", "5", "remote", "full"],
+            ["walkthrough", "absent", "/repo/.review/walkthrough.md", "0", "0", "feature/pagos"],
         ]),
     },
     {
@@ -421,6 +422,7 @@ export const PREVIEW_PANES: PreviewPane[] = [
                 ["draft", "feature/telemetry", "/repo/.git/review-walkthrough/feature/telemetry.md", "3", "9", "local", "delta"],
                 ["draft", "feature/pagos", "/repo/.git/review-walkthrough/feature/pagos.md", "0", "5", "unknown", "unknown"],
                 ["draft", "feature/legacy", "/repo/.git/review-walkthrough/feature/legacy.md", "1", "1", "remote", "full"],
+                ["walkthrough", "absent", "/repo/.review/walkthrough.md", "0", "0", "feature/telemetry"],
             ],
             [["branch", "review-saved/perf/index", "1", "0", "0", "step", "2", "4"]]
         ),
@@ -437,6 +439,7 @@ export const PREVIEW_PANES: PreviewPane[] = [
             ["config", "remote", "origin"],
             ["draft", "feature/telemetry", "/repo/.git/review-walkthrough/feature/telemetry.md", "3", "9", "local", "delta", "fresh"],
             ["draft", "feature/pagos", "/repo/.git/review-walkthrough/feature/pagos.md", "6", "6", "remote", "full", "reviewed"],
+            ["walkthrough", "in-sync", "/repo/.review/walkthrough.md", "5", "5", "feature/telemetry"],
         ]),
     },
     {
@@ -464,6 +467,7 @@ export const PREVIEW_PANES: PreviewPane[] = [
         model: drafts([
             ["config", "base", "develop"],
             ["config", "remote", "origin"],
+            ["walkthrough", "in-sync", "/repo/.review/walkthrough.md", "6", "6", "feature/checkout"],
             ["guide", "team", "/repo/.review/walkthrough-guide.md", "in-force"],
             ["guide", "own", "/repo/.git/review-walkthrough-guide.md", "absent"],
         ]),
@@ -476,6 +480,7 @@ export const PREVIEW_PANES: PreviewPane[] = [
         model: drafts([
             ["config", "base", "develop"],
             ["config", "remote", "origin"],
+            ["walkthrough", "unknown", "/repo/.review/walkthrough.md", "2", "4", "feature/checkout"],
             ["guide", "team", "/repo/.review/walkthrough-guide.md", "absent"],
             ["guide", "own", "/repo/.git/review-walkthrough-guide.md", "empty"],
         ]),
@@ -489,7 +494,7 @@ export const PREVIEW_PANES: PreviewPane[] = [
         model: drafts([
             ["config", "base", "develop"],
             ["config", "remote", "origin"],
-            ["walkthrough", "stale", "/repo/.review/walkthrough.md", "4", "6"],
+            ["walkthrough", "stale", "/repo/.review/walkthrough.md", "4", "6", "feature/checkout"],
             ["guide", "team", "/repo/.review/walkthrough-guide.md", "absent"],
             ["guide", "own", "/repo/.git/review-walkthrough-guide.md", "absent"],
         ]),
@@ -502,7 +507,7 @@ export const PREVIEW_PANES: PreviewPane[] = [
         model: drafts([
             ["config", "base", "develop"],
             ["config", "remote", "origin"],
-            ["walkthrough", "absent", "/repo/.review/walkthrough.md", "0", "0"],
+            ["walkthrough", "absent", "/repo/.review/walkthrough.md", "0", "0", "feature/checkout"],
             ["guide", "team", "/repo/.review/walkthrough-guide.md", "absent"],
             ["guide", "own", "/repo/.git/review-walkthrough-guide.md", "absent"],
         ]),
@@ -516,7 +521,20 @@ export const PREVIEW_PANES: PreviewPane[] = [
         model: drafts([
             ["config", "base", "develop"],
             ["config", "remote", "origin"],
-            ["walkthrough", "superseded", "/repo/.review/walkthrough.md", "3", "3"],
+            ["walkthrough", "superseded", "/repo/.review/walkthrough.md", "3", "3", "feature/login"],
+            ["guide", "team", "/repo/.review/walkthrough-guide.md", "absent"],
+            ["guide", "own", "/repo/.git/review-walkthrough-guide.md", "absent"],
+        ]),
+    },
+    {
+        // El único caso en que la CLI no reporta la fila: un registro malformado.
+        // La fila se dibuja igual —init y build cuelgan de ella— en el estado que
+        // la propia CLI llama "no se puede saber".
+        name: "no-review-walkthrough-unreported",
+        caption: "no-review — la CLI no reportó la fila: se dibuja en unknown",
+        model: drafts([
+            ["config", "base", "develop"],
+            ["config", "remote", "origin"],
             ["guide", "team", "/repo/.review/walkthrough-guide.md", "absent"],
             ["guide", "own", "/repo/.git/review-walkthrough-guide.md", "absent"],
         ]),

@@ -225,5 +225,22 @@ class ConfigPorcelainTest {
                 "total=<$bad>",
             )
         }
+    }
+
+    @Test
+    fun theWalkthroughRowCarriesTheBranchItAnnotates() {
+        // It is WHAT THE ROW IS CALLED in the panel, so losing it here means a row
+        // that says "Walkthrough" under a section already called that.
+        val r = parseConfigPorcelain("walkthrough\tstale\t/repo/.review/walkthrough.md\t1\t2\tfeature/x").walkthrough
+        assertEquals("feature/x", r?.branch)
+    }
+
+    @Test
+    fun aDetachedHeadOmitsTheBranchAndTheRowStays() {
+        // The CLI OMITS the field, never blanks it: the file and both verbs work
+        // there and the only thing without an answer is the name.
+        val r = parseConfigPorcelain("walkthrough\tstale\t/repo/.review/walkthrough.md\t1\t2").walkthrough
+        assertEquals(WalkthroughState.STALE, r?.state)
+        assertEquals(null, r?.branch)
     }
 }

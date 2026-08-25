@@ -79,6 +79,10 @@ Command Palette if you need another PR). The mid-conflict branch appears as
 an active leftover with a `?` hover — switch to `review/feature/conflict`
 for the conflict banner. The script prints the whole map when it finishes.
 
+Its empty twin, `../tests/sandbox-min.sh`, is the other half of the picture: two branches, no
+walkthrough and no configured base, which is the only way to open the panel on its setup screen and
+walk the flow forward the way a new user meets it.
+
 Then open `<sandbox>/work` in the development host. Note that the host inherits
 the `PATH` of the VS Code that launched it, not the one `env.sh` sets up inside
 the sandbox: either install this checkout (`../install.sh`) or point the

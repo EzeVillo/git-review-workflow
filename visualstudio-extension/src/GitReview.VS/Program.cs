@@ -308,6 +308,23 @@ public static class Program
             string.Join(", ", disabled
                 .Where(b => !ReferenceEquals(b.Foreground, chrome.DisabledForeground))
                 .Select(b => $"{b.Content}={Describe(b.Foreground)}")));
+
+        // Every icon control draws its OWN glyph. The default arm of that switch
+        // is Next's arrow, so an id nobody mapped comes out as a ▶ — which is how
+        // Discard the guide drew one. Asked over the walkthrough section, where
+        // all three file-and-trash pairs live.
+        var rows = new PanelView(chrome) { Width = 380, Height = 700 };
+        rows.Render(PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewWalkthroughStale()));
+        rows.Measure(new Size(380, 700));
+        rows.Arrange(new Rect(0, 0, 380, 700));
+        rows.UpdateLayout();
+        var glyphs = Descendants(rows).OfType<System.Windows.Controls.Button>()
+            .Where(b => b.ToolTip is string t
+                && (t.Contains("walkthrough-guide.md") || t.Contains("/walkthrough.md")
+                    || t.StartsWith("git review walkthrough guide --delete")))
+            .ToList();
+        check("icons:own-glyph", glyphs.Count >= 2 && glyphs.All(b => (b.Content as string) != "▶"),
+            $"{glyphs.Count(b => (b.Content as string) == "▶")} of {glyphs.Count} fell through to Next's arrow");
     }
 
     private static string Describe(Brush? b) =>

@@ -27,15 +27,10 @@ public class PanelLayoutWalkthroughTests
     private static Control Control(GuideRow row, ControlId id) =>
         row.Controls.First(c => c.Id == id);
 
+    // Init and build are the ROW's buttons: their subject is the file the row
+    // names, exactly as Create is each guide's.
     private static string? InitLabel(PanelModel model) =>
-        PanelLayoutBuilder.PanelLayout(model)
-            .Blocks
-            .OfType<Block.ToolsSection>()
-            .SelectMany(s => s.NestedBlocks)
-            .OfType<Block.Row>()
-            .SelectMany(r => r.Controls)
-            .FirstOrDefault(c => c.Id == ControlId.WalkthroughInit)
-            ?.Label;
+        Row(model)?.Controls.FirstOrDefault(c => c.Id == ControlId.WalkthroughInit)?.Label;
 
     [Fact]
     public void The_row_lives_in_the_walkthrough_section_above_the_guides()
@@ -44,9 +39,39 @@ public class PanelLayoutWalkthroughTests
             .Blocks
             .OfType<Block.ToolsSection>()
             .First(s => s.Title == "Walkthrough");
+        // Nothing loose above the row: the section is three rows and no more.
         Assert.Equal(
-            new[] { "Row", "WalkthroughRow", "GuideRows" },
+            new[] { "WalkthroughRow", "GuideRows" },
             section.NestedBlocks.Select(b => b.GetType().Name));
+    }
+
+    [Fact]
+    public void The_row_is_named_after_the_branch_it_annotates()
+    {
+        // The section is already called Walkthrough; saying it again in the row
+        // added no fact, and the two prefixed buttons said it a third time.
+        Assert.StartsWith("feature/checkout", Row(PanelFixtures.NoReviewWalkthroughStale())!.Name);
+    }
+
+    [Fact]
+    public void The_two_verbs_are_buttons_of_the_row()
+    {
+        var row = Row(PanelFixtures.NoReviewWalkthroughStale())!;
+        Assert.Equal(
+            new[] { "Update", "Build", "Copy for agent" },
+            row.Controls.Where(c => c.Emphasis != Emphasis.Icon).Select(c => c.Label));
+        // And nowhere else in the section: a loose row above would say the word a
+        // third time in four centimetres.
+        var loose = PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewWalkthroughStale())
+            .Blocks
+            .OfType<Block.ToolsSection>()
+            .SelectMany(s => s.NestedBlocks)
+            .OfType<Block.Row>()
+            .SelectMany(r => r.Controls)
+            .Select(c => c.Id)
+            .ToList();
+        Assert.DoesNotContain(ControlId.WalkthroughInit, loose);
+        Assert.DoesNotContain(ControlId.WalkthroughBuild, loose);
     }
 
     [Fact]
@@ -69,8 +94,10 @@ public class PanelLayoutWalkthroughTests
         Assert.Equal("none", row.Badge);
         Assert.False(Control(row, ControlId.OpenWalkthrough).Enabled);
         Assert.False(Control(row, ControlId.CopyWalkthroughPrompt).Enabled);
-        // And no progress pair: 0/0 is "nothing here", not "finished".
-        Assert.DoesNotContain("/", row.Name);
+        // And no progress pair: 0/0 is "nothing here", not "finished". Asked of
+        // the digits, not of the slash — the row is named after a branch now, and
+        // feature/checkout has one of those.
+        Assert.DoesNotMatch(@"\d+/\d+", row.Name);
     }
 
     [Fact]
@@ -89,16 +116,25 @@ public class PanelLayoutWalkthroughTests
     {
         // The same verb creates and updates; "Init" over a file full of prose
         // promised what that verb precisely no longer does.
-        Assert.Equal("Walkthrough: Update", InitLabel(PanelFixtures.NoReviewWalkthroughStale()));
-        Assert.Equal("Walkthrough: Init", InitLabel(PanelFixtures.NoReviewWalkthroughAbsent()));
+        Assert.Equal("Update", InitLabel(PanelFixtures.NoReviewWalkthroughStale()));
+        Assert.Equal("Init", InitLabel(PanelFixtures.NoReviewWalkthroughAbsent()));
     }
 
     [Fact]
-    public void With_no_record_from_the_cli_the_row_is_not_drawn()
+    public void With_no_record_from_the_cli_the_row_is_still_drawn_in_unknown()
     {
-        // The degradation against an older CLI: no row, no block, nothing breaks.
-        Assert.Null(Row(PanelFixtures.NoReviewGuides()));
-        Assert.Equal("Walkthrough: Init", InitLabel(PanelFixtures.NoReviewGuides()));
+        // Init and build hang off this row, so a row that disappears takes the two
+        // verbs with it. Unknown is what the CLI itself calls "cannot be told", so
+        // nothing is invented: no badge, no path, both file controls off, and the
+        // two verbs still there.
+        var row = Row(PanelFixtures.NoReviewNoWalkthroughRecord())!;
+        Assert.Equal("Walkthrough", row.Name);
+        Assert.Equal("state unknown", row.Badge);
+        Assert.False(Control(row, ControlId.OpenWalkthrough).Enabled);
+        Assert.False(Control(row, ControlId.CopyWalkthroughPrompt).Enabled);
+        Assert.True(Control(row, ControlId.WalkthroughInit).Enabled);
+        Assert.True(Control(row, ControlId.WalkthroughBuild).Enabled);
+        Assert.Equal("Init", InitLabel(PanelFixtures.NoReviewNoWalkthroughRecord()));
     }
 
     [Fact]
@@ -126,9 +162,7 @@ public class PanelLayoutWalkthroughTests
     {
         // The CLI starts over on its own there, so the button says what will
         // happen instead of promising a reconciliation that does not occur.
-        Assert.Equal(
-            "Walkthrough: Start over",
-            InitLabel(PanelFixtures.NoReviewWalkthroughSuperseded()));
+        Assert.Equal("Start over", InitLabel(PanelFixtures.NoReviewWalkthroughSuperseded()));
     }
 
     [Fact]
@@ -138,5 +172,24 @@ public class PanelLayoutWalkthroughTests
         var row = Row(PanelFixtures.NoReviewWalkthroughSuperseded())!;
         Assert.True(Control(row, ControlId.OpenWalkthrough).Enabled);
         Assert.True(Control(row, ControlId.CopyWalkthroughPrompt).Enabled);
+    }
+
+    [Fact]
+    public void The_row_carries_the_branch_it_annotates()
+    {
+        // It is WHAT THE ROW IS CALLED in the panel, so losing it here means a row
+        // that says "Walkthrough" under a section already called that.
+        var r = ConfigPorcelain.ParseConfigPorcelain("walkthrough\tstale\t/repo/.review/walkthrough.md\t1\t2\tfeature/x").Walkthrough;
+        Assert.Equal("feature/x", r!.Branch);
+    }
+
+    [Fact]
+    public void A_detached_head_omits_the_branch_and_the_row_stays()
+    {
+        // The CLI OMITS the field, never blanks it: the file and both verbs work
+        // there and the only thing without an answer is the name.
+        var r = ConfigPorcelain.ParseConfigPorcelain("walkthrough\tstale\t/repo/.review/walkthrough.md\t1\t2").Walkthrough;
+        Assert.Equal(WalkthroughState.Stale, r!.State);
+        Assert.Null(r.Branch);
     }
 }

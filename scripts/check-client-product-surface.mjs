@@ -1217,13 +1217,41 @@ if (guideBlock.length === 0) {
       if (state.length > 0) requireModelCopy(`guide badge "${state}"`, state);
     }
   }
-  // La seccion que los aloja. Se movio ahi cuando las guias entraron, y con ella
-  // init y build: si un cliente se queda con los cuatro en "Other actions", el
-  // panel deja de decir lo que dice la CLI.
+  // La seccion que los aloja. Se creo cuando las guias entraron y se llevo init
+  // y build: si un cliente los deja a los cuatro en el cajon del que salieron
+  // -- la seccion que hoy es Compare --, el panel deja de decir lo que dice la
+  // CLI.
   if (!/title:\s*"Walkthrough"/.test(panelLayoutBlock)) {
     fail("panel_layout has no Walkthrough tools section for the guide rows");
   }
   requireSharedCopy("Walkthrough tools section", "Walkthrough", true);
+}
+
+// ── The footer of the empty state, in order ────────────────────────────
+//
+// Walkthrough y los ordenes de lectura terminados son de la review que estas
+// por hacer; Compare monta dos revisiones cualesquiera. Se llamaba "Other
+// actions" y era la primera: un titulo que no nombraba su contenido, encima de
+// las dos que si lo nombran. El orden es del canonico y los tres clientes lo
+// dibujan igual, asi que se verifica aca y no en cada cliente.
+{
+  const sit = situationBlock("no-review");
+  const order = [...sit.matchAll(/title:\s*"([^"]+)"/g)].map((m) => m[1]);
+  const want = ["Walkthrough", "Reading orders you finished with", "Compare", "Settings", "Support"];
+  if (order.join("|") !== want.join("|")) {
+    fail(`no-review footer sections are [${order.join(", ")}], expected [${want.join(", ")}]`);
+  }
+  requireSharedCopy("Compare tools section", "Compare", true);
+  // Solo lo que el layout DIBUJA: los tres archivos cuentan en un comentario de
+  // donde salio la seccion, y esa prosa es justamente lo que hay que conservar.
+  for (const [label, rel] of layoutFiles) {
+    const drawn = readText(join(root, ...rel), "utf8")
+      .split("\n")
+      .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l));
+    if (drawn.some((l) => l.includes('"Other actions"'))) {
+      fail(`${label} still draws the "Other actions" section: it is called Compare and goes last`);
+    }
+  }
 }
 
 // ── The author's own walkthrough row ─────────────────────────────────────────

@@ -110,7 +110,7 @@ that names what will happen; preview is read-only and does not.
 |-----------|----------|
 | cli-missing | install title, npm command + **Copy**, **Other install options** |
 | no-review setup | **Set the base branch** (primary) |
-| no-review ready | inventory, **Start a review**, Other actions / Walkthrough (Init or Update, Build, the row for the walkthrough you wrote, the two authoring guides) / Settings / Support |
+| no-review ready | inventory, **Start a review**, Walkthrough (the row for the walkthrough you wrote — named after the branch, with Init or Update, Build and Copy for agent — and the two authoring guides) / Compare / Settings / Support |
 | finish-pending | **Clean** / **Undo finish** |
 | review walk | **File** / **Diff**, prev/next, **open in editor**, folded Walkthrough (the two authoring guides) |
 | review whole | file rows, one **Diff** each |

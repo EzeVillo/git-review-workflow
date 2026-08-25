@@ -542,7 +542,13 @@ public class PanelLayoutContractTests
         {
             if (j < expected.Count && a.Id == expected[j].Id)
             {
-                if (expected[j].Label is not null)
+                // walkthroughInit's label follows the state of the file — it is the
+                // only product action that does — so what is compared is the SET the
+                // canonical declares in action_labels, not a scalar. The precedent is
+                // discardInventory, which has two.
+                if (a.Id == "walkthroughInit" && InitLabels().Count > 0)
+                    Assert.Contains(a.Label, InitLabels());
+                else if (expected[j].Label is not null)
                     Assert.Equal(expected[j].Label, a.Label);
                 if (expected[j].Emphasis is not null)
                     Assert.Equal(expected[j].Emphasis, a.Emphasis);
@@ -554,6 +560,18 @@ public class PanelLayoutContractTests
     }
 
     private sealed record Spec(string Id, string? Label, string? Emphasis);
+
+    /// <summary>The three names one verb goes by, from walkthrough_row.action_labels.</summary>
+    private static IReadOnlyCollection<string> InitLabels()
+    {
+        var root = (YamlMappingNode)LoadCanonical().Documents[0].RootNode;
+        if (!root.Children.TryGetValue(new YamlScalarNode("walkthrough_row"), out var node)
+            || node is not YamlMappingNode block
+            || !block.Children.TryGetValue(new YamlScalarNode("action_labels"), out var l)
+            || l is not YamlMappingNode map)
+            return Array.Empty<string>();
+        return map.Children.Values.OfType<YamlScalarNode>().Select(v => v.Value!).ToList();
+    }
 
     private static YamlMappingNode SituationNode(string situationKey)
     {
@@ -600,6 +618,14 @@ public class PanelLayoutContractTests
         {
             foreach (var id in GuideControlIds()) ids.Add(id);
         }
+        // And the walkthrough row, which has controls of BOTH kinds: the two verbs
+        // are product actions and are declared in the layout (ExtractFromBlocks
+        // picks those up), while opening and copying belong to the row and live in
+        // the block's own map, like the guides'.
+        if (MentionsBlock(blocks, "walkthrough_row"))
+        {
+            foreach (var id in RowBlockControlIds("walkthrough_row")) ids.Add(id);
+        }
         return ids;
     }
 
@@ -640,10 +666,17 @@ public class PanelLayoutContractTests
         return map.Children.Keys.OfType<YamlScalarNode>().Select(k => k.Value!).ToList();
     }
 
-    private static IEnumerable<string> GuideControlIds()
+    private static IEnumerable<string> GuideControlIds() => RowBlockControlIds("guide_rows");
+
+    /// <summary>
+    /// The ids under a row block's own <c>controls</c> map (<c>guide_rows</c>,
+    /// <c>walkthrough_row</c>): controls whose subject is the row, declared
+    /// beside the block rather than inside panel_layout.
+    /// </summary>
+    private static IEnumerable<string> RowBlockControlIds(string blockKey)
     {
         var root = (YamlMappingNode)LoadCanonical().Documents[0].RootNode;
-        if (!root.Children.TryGetValue(new YamlScalarNode("guide_rows"), out var node)
+        if (!root.Children.TryGetValue(new YamlScalarNode(blockKey), out var node)
             || node is not YamlMappingNode block
             || !block.Children.TryGetValue(new YamlScalarNode("controls"), out var c)
             || c is not YamlMappingNode map)
@@ -677,7 +710,12 @@ public class PanelLayoutContractTests
             if (skipNotIn && NotInThisClient(map)) continue;
             if (GatedOut(map, mode)) continue;
             var blockType = Scalar(map, "block");
-            if (blockType == "row" || blockType is null && map.Children.ContainsKey(new YamlScalarNode("controls")))
+            // `walkthrough_row` carries a `controls:` list like a row does: the two
+            // verbs drawn inside it ARE product actions, so they are declared in the
+            // layout even though the row also has controls of its own elsewhere.
+            if (blockType == "row"
+                || blockType == "walkthrough_row"
+                || blockType is null && map.Children.ContainsKey(new YamlScalarNode("controls")))
             {
                 if (map.Children.TryGetValue(new YamlScalarNode("controls"), out var controlsNode)
                     && controlsNode is YamlSequenceNode controls)

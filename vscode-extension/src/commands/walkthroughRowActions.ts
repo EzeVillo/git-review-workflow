@@ -13,7 +13,7 @@
  * Ninguno de los dos escribe el archivo ni lo interpreta: uno lo abre en la
  * ruta que reportó la CLI —**se abre, nunca se arma**— y el otro deja en el
  * portapapeles un puntero a esa misma ruta. Actualizarlo es de la CLI, por el
- * botón *Walkthrough: Update* de la sección, que invoca `walkthrough init`.
+ * botón *Update* de la fila, que invoca `walkthrough init`.
  */
 
 import * as vscode from "vscode";

@@ -5,8 +5,15 @@ namespace GitReview.Domain.Tests;
 
 public class PanelLayoutFooterTests
 {
-    private static IEnumerable<Control> ControlsOf(Block b) =>
-        b is Block.Row r ? r.Controls : Array.Empty<Control>();
+    // The walkthrough row counts: the two verbs are ITS buttons, not a loose row
+    // above it — see the section's note in the canonical.
+    private static IEnumerable<Control> ControlsOf(Block b) => b switch
+    {
+        Block.Row r => r.Controls,
+        Block.WalkthroughRow w => w.Entry.Controls,
+        Block.GuideRows g => g.Rows.SelectMany(row => row.Controls),
+        _ => Array.Empty<Control>(),
+    };
 
     [Fact]
     public void No_review_ready_ends_with_four_tools_sections()
@@ -14,21 +21,44 @@ public class PanelLayoutFooterTests
         var layout = PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewReady());
         var sections = layout.Blocks.OfType<Block.ToolsSection>().ToList();
         Assert.Equal(
-            new[] { "Other actions", "Walkthrough", "Settings", "Support" },
+            new[] { "Walkthrough", "Compare", "Settings", "Support" },
             sections.Select(s => s.Title));
 
-        // Compare stayed where it was; init and build moved to the section named
-        // after the noun they share with the two authoring guides.
-        var other = sections[0].NestedBlocks.SelectMany(ControlsOf).ToList();
-        Assert.Equal(new[] { ControlId.CompareReview }, other.Select(c => c.Id));
-        Assert.Equal("Compare revisions", other[0].Label);
-
-        var walkthrough = sections[1].NestedBlocks.SelectMany(ControlsOf).ToList();
+        // Compare names what it does and goes below the sections that are about
+        // the review you are about to do; init and build live in the section named
+        // after the noun they share with the two authoring guides — and inside it,
+        // in the row whose file they act on.
+        var walkthrough = sections[0].NestedBlocks.SelectMany(ControlsOf).ToList();
         Assert.Equal(
-            new[] { ControlId.WalkthroughInit, ControlId.WalkthroughBuild },
+            new[]
+            {
+                ControlId.WalkthroughInit,
+                ControlId.WalkthroughBuild,
+                ControlId.CopyWalkthroughPrompt,
+                ControlId.OpenWalkthrough,
+            },
             walkthrough.Select(c => c.Id));
-        Assert.Equal("Walkthrough: Init", walkthrough[0].Label);
-        Assert.Equal("Walkthrough: Build", walkthrough[1].Label);
+        Assert.Equal("Init", walkthrough[0].Label);
+        Assert.Equal("Build", walkthrough[1].Label);
+
+        var compare = sections[1].NestedBlocks.SelectMany(ControlsOf).ToList();
+        Assert.Equal(new[] { ControlId.CompareReview }, compare.Select(c => c.Id));
+        Assert.Equal("Compare revisions", compare[0].Label);
+    }
+
+    /// <summary>
+    /// The reading orders you finished with are still about the review you are about
+    /// to do; Compare mounts two revisions that have nothing to do with it, so it
+    /// sits below them.
+    /// </summary>
+    [Fact]
+    public void Compare_sits_below_the_reading_orders_you_finished_with()
+    {
+        var sections = PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewSpentDraft())
+            .Blocks.OfType<Block.ToolsSection>().ToList();
+        Assert.Equal(
+            new[] { "Walkthrough", "Reading orders you finished with", "Compare", "Settings", "Support" },
+            sections.Select(s => s.Title));
     }
 
     /// <summary>

@@ -997,10 +997,23 @@ minutos. Para previsualizarlo, abrilo directo en el navegador — no necesita se
 
 - `docs/.nojekyll` evita que Pages lo pase por Jekyll.
 - `docs/logo.svg` es el favicon: copia generada del maestro (ver *Assets del logo*), nunca a mano.
-- `docs/og.png` es la preview de los links (copia de `demo-poster.png`); las URLs de `og:image` y
-  `canonical` están hardcodeadas a
-  `ezevillo.github.io/git-review-workflow/` — si algún día se le pone dominio propio, hay que tocar
-  esas líneas del `<head>` (y agregar un `docs/CNAME`).
+- `docs/og.png` es la preview de los links, y **la genera `scripts/og/render.mjs` desde
+  `scripts/og/card.html`** (Chrome headless, un solo disparo del viewport): como el logo, no se
+  edita a mano. Sale **a 2x, o sea 2400×1260 y no los 1200×630 nominales**, porque ese par es un
+  *mínimo* para Open Graph y para Twitter y todos los scrapers bajan de escala solos; disparar a
+  escala es además la única forma de que salga nítido en un paso, ya que remuestrear en JavaScript
+  pediría un códec PNG y el navegador headless ya está ahí. Fue **copia de `demo-poster.png`** y dejó de serlo a propósito: un
+  archivo hacía dos trabajos distintos —la carátula del video de YouTube de los dos README y la
+  tarjeta social de la landing— y actualizar uno mentía sobre el otro. `demo-poster.png` sigue
+  representando el video tal como se grabó; la tarjeta representa el producto de hoy. Su contenido
+  es **el demo walk de la landing verbatim** (la misma paleta, la misma IBM Plex Mono, las mismas
+  cuatro entradas de `rate-limit`) — copiarlo en vez de inventar copy nueva es lo que evita una
+  cuarta superficie que mantener sincronizada; si los tokens de la landing se mueven, se mueven
+  también en `card.html`. El `<head>` declara `og:image:width`/`height` porque Slack y Discord
+  dibujan la card chica hasta que bajan y miden la imagen ellos mismos, y un `…:alt` en las dos
+  puntas para quien tiene las imágenes apagadas. Las URLs de `og:image` y `canonical` están
+  hardcodeadas a `ezevillo.github.io/git-review-workflow/` — si algún día se le pone dominio propio,
+  hay que tocar esas líneas del `<head>` (y agregar un `docs/CNAME`).
 - `docs/` **no** está en `files` de `package.json`, así que no viaja en el tarball de npm ni infla
   el paquete.
 

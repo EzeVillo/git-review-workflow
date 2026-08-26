@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<!--
+  Source for docs/og.png — the card Twitter, Slack and Discord draw when the
+  landing's URL is shared. Never hand-edit the PNG: change this file and re-run
+  `node scripts/og/render.mjs`, the same deal as the logo and _build_icon.py.
+
+  The palette, the type and the pane markup are lifted from docs/index.html on
+  purpose — the right-hand side is the landing's own walk demo, frozen — so the
+  card is not a fourth surface of product copy to keep in sync. If the landing's
+  tokens move, move them here too.
+
+  Why both halves: the title carries at the ~400px a timeline actually renders
+  the card at, where the pane is only texture; the pane shows what a reading
+  order *is*, which no title can. Slack and Discord truncate og:description and
+  Twitter drops it entirely on summary_large_image, so the words on the image
+  are often the only ones that arrive.
+-->
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>og card</title>
+    <link href="https://fonts.googleapis.com" rel="preconnect">
+    <link crossorigin href="https://fonts.gstatic.com" rel="preconnect">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500&display=swap"
+          rel="stylesheet">
+    <style>
+        :root {
+            --ink: #0B0E14;
+            --panel: #10151F;
+            --panel-2: #141A26;
+            --rule: #1D2534;
+            --text: #DCE2ED;
+            --muted: #7A8699;
+            --add: #4CC46B;
+            --why: #E6B455;
+
+            --mono: "IBM Plex Mono", ui-monospace, monospace;
+            --sans: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        /* The page IS the card: the renderer shoots the viewport, so these are
+           the canonical 1200x630 (taken at 2x, see render.mjs). */
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 1200px;
+            height: 630px;
+            overflow: hidden;
+        }
+
+        body {
+            background: var(--ink);
+            color: var(--text);
+            font-family: var(--sans);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .card {
+            display: grid;
+            grid-template-columns: 498px 1fr;
+            gap: 44px;
+            align-items: center;
+            width: 1200px;
+            height: 630px;
+            padding: 52px 54px;
+        }
+
+        /* A hairline of product green along the top edge: the one thing that
+           still reads once the card is scaled to a thumbnail. */
+        .card::before {
+            content: "";
+            position: fixed;
+            inset: 0 0 auto 0;
+            height: 4px;
+            background: var(--add);
+        }
+
+        /* ---- left: the mark, the h1, the install line ---- */
+        .mark {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 28px;
+            font-family: var(--mono);
+            font-weight: 600;
+            font-size: 21px;
+            letter-spacing: -.02em;
+            color: var(--text);
+        }
+
+        /* One flex item holds both words, so the gap above only ever separates
+           the glyph from the wordmark and "git review" keeps the font's space. */
+        .mark svg {
+            display: block;
+            flex: none;
+        }
+
+        .mark em {
+            font-style: normal;
+            color: var(--add);
+        }
+
+        h1 {
+            font-family: var(--mono);
+            font-weight: 500;
+            font-size: 32px;
+            line-height: 1.32;
+            letter-spacing: -.035em;
+            margin: 0 0 26px;
+        }
+
+        /* The second sentence is the turn, so it takes the quieter colour — and
+           a manual break, because left to wrap it drops "order too." alone. */
+        h1 .dim {
+            color: var(--muted);
+        }
+
+        .cmd {
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            padding: 11px 16px;
+            background: var(--panel);
+            border: 1px solid var(--rule);
+            border-radius: 4px;
+            font-family: var(--mono);
+            font-size: 16px;
+            color: var(--text);
+        }
+
+        .cmd .prompt {
+            color: var(--add);
+        }
+
+        /* ---- right: the walk pane, straight from the landing ---- */
+        .walk {
+            border: 1px solid var(--rule);
+            border-radius: 6px;
+            background: var(--panel);
+            overflow: hidden;
+        }
+
+        .walk-bar {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 13px 19px;
+            border-bottom: 1px solid var(--rule);
+            background: var(--panel-2);
+            font-family: var(--mono);
+            font-size: 15px;
+            color: var(--muted);
+        }
+
+        .walk-bar .mode {
+            color: var(--add);
+        }
+
+        .walk-bar .pos {
+            margin-left: auto;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .headsup {
+            margin: 0;
+            padding: 14px 19px;
+            border-bottom: 1px solid var(--rule);
+            font-family: var(--mono);
+            font-size: 14px;
+            line-height: 1.62;
+            color: var(--muted);
+        }
+
+        .headsup b {
+            color: var(--why);
+            font-weight: 600;
+        }
+
+        .entry {
+            display: flex;
+            flex-direction: column;
+            height: 292px;
+            padding: 24px 28px;
+        }
+
+        .entry-head {
+            margin: 0 0 18px;
+            font-family: var(--mono);
+            font-size: 19px;
+            color: var(--text);
+        }
+
+        .entry-head .n {
+            color: var(--add);
+        }
+
+        .key {
+            display: inline-block;
+            margin-left: 10px;
+            padding: 1px 7px;
+            border: 1px solid var(--add);
+            border-radius: 3px;
+            font-family: var(--mono);
+            font-size: 12.5px;
+            letter-spacing: .04em;
+            color: var(--add);
+            vertical-align: 2px;
+            white-space: nowrap;
+        }
+
+        /* The author's why keeps its own voice: mono italic, amber, quoted. The
+           auto bottom margin pins the controls to the foot of the pane. */
+        .why {
+            margin: 0 0 auto;
+            padding-left: 19px;
+            border-left: 1px solid rgba(230, 180, 85, .32);
+            font-family: var(--mono);
+            font-style: italic;
+            font-size: 18px;
+            line-height: 1.7;
+            color: var(--why);
+        }
+
+        .foot {
+            display: flex;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        .step-btn {
+            padding: 7px 14px;
+            background: var(--panel-2);
+            border: 1px solid var(--rule);
+            border-radius: 3px;
+            font-family: var(--mono);
+            font-size: 14.5px;
+            color: var(--text);
+        }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <div>
+        <!-- The mark, inlined so the render needs no second file. Generated
+             shape — keep it identical to docs/logo.svg. -->
+        <div class="mark">
+            <svg fill="none" height="30" viewBox="0 0 128 128" width="30"
+                 xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <linearGradient id="tile" gradientUnits="userSpaceOnUse" x1="64" x2="64" y1="0"
+                                    y2="128">
+                        <stop stop-color="#1A2030"/>
+                        <stop offset="1" stop-color="#10151F"/>
+                    </linearGradient>
+                </defs>
+                <rect fill="url(#tile)" height="126" rx="27.2" width="126" x="1" y="1"/>
+                <rect fill="none" height="127" rx="28.2" stroke="#2A3344" stroke-width="1"
+                      width="127" x="0.5" y="0.5"/>
+                <g transform="translate(9.86 5.50)">
+                    <g fill="#E0666B">
+                        <rect height="5.81" rx="2.91" width="33.18" x="5.81" y="23.13"/>
+                        <rect height="5.81" rx="2.91" width="38.02" x="5.81" y="35.48"/>
+                        <rect height="5.81" rx="2.91" width="38.26" x="5.81" y="47.83"/>
+                        <rect height="6.05" rx="3.03" width="30.03" x="14.05" y="59.94"/>
+                        <rect height="6.05" rx="3.03" width="33.42" x="5.81" y="72.29"/>
+                        <rect height="5.81" rx="2.91" width="24.22" x="19.62" y="84.64"/>
+                    </g>
+                    <g fill="#3DDC84">
+                        <rect height="5.81" rx="2.91" width="21.31" x="59.57" y="18.28"/>
+                        <rect height="5.81" rx="2.91" width="36.33" x="59.82" y="30.63"/>
+                        <rect height="5.81" rx="2.91" width="28.09" x="59.57" y="42.99"/>
+                        <rect height="5.81" rx="2.91" width="41.90" x="59.57" y="55.34"/>
+                    </g>
+                    <rect fill="#6B7380" height="92" rx="1.5" width="3" x="49.5" y="12"/>
+                    <circle cx="51" cy="33" fill="#D5DAE2" r="4"/>
+                    <circle cx="51" cy="93" fill="#D5DAE2" r="3"/>
+                    <g fill="none" stroke="#F3F4F6" stroke-linecap="round" stroke-linejoin="round"
+                       stroke-width="5">
+                        <line x1="73.38" x2="63.69" y1="77.13" y2="81.97"/>
+                        <line x1="73.38" x2="63.69" y1="86.82" y2="81.97"/>
+                        <line x1="78.71" x2="83.06" y1="94.08" y2="71.80"/>
+                        <line x1="88.39" x2="98.08" y1="77.13" y2="81.97"/>
+                        <line x1="88.39" x2="98.08" y1="86.82" y2="81.97"/>
+                    </g>
+                </g>
+            </svg>
+            <span>git <em>review</em></span>
+        </div>
+
+        <h1>An agent wrote the change.<br><span class="dim">Let it write the<br>reading order
+            too.</span></h1>
+
+        <div class="cmd"><span class="prompt">$</span> npm install -g git-review-workflow</div>
+    </div>
+
+    <!-- Position reads [2/4] on purpose: a card should show a walk under way,
+         not one about to start. The four entries and the why are the landing's,
+         verbatim. -->
+    <div class="walk">
+        <div class="walk-bar">
+            <span class="mode">walk</span>
+            <span>on review/feature/rate-limit</span>
+            <span class="pos">[2/4]</span>
+        </div>
+        <p class="headsup">
+            <b>heads-up</b> — the limiter sits in front of auth: get the bucket wrong and it is a
+            public DoS, not a 500.
+        </p>
+        <div class="entry">
+            <p class="entry-head"><span class="n">2.</span> src/middleware/rate-limit.ts<span
+                    class="key">key</span></p>
+            <blockquote class="why">
+                The middleware that spends the tokens. Note it runs before auth, so an
+                unauthenticated flood is cheap to reject, and that the 429 carries Retry-After.
+            </blockquote>
+            <div class="foot">
+                <span class="step-btn">git review prev</span>
+                <span class="step-btn">git review next</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

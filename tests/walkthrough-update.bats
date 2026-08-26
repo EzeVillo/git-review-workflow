@@ -42,6 +42,15 @@ teardown() {
 	rm -rf "$TMP"
 }
 
+# Portable in-place edit (the same helper step-replay.bats and
+# walkthrough-draft.bats carry, and for the same reason): BSD/macOS sed
+# consumes the script as -i's backup suffix, so the bare `sed -i 'script'
+# file` form errors on the macOS runner.
+edit_file() {
+	tmp="$(mktemp)"
+	sed "$1" "$2" >"$tmp" && mv "$tmp" "$2"
+}
+
 # A finished walkthrough for the two files the PR starts with, built so it
 # carries whatever build stamps (anchors included) rather than only what a
 # heredoc can spell.
@@ -192,7 +201,7 @@ EOF
 	# And build still refuses it, exactly as it did before the update. The new
 	# entry is numbered first so the unfilled-entry rule does not fire ahead of
 	# the heads-up one.
-	sed -i 's/^## ?\. c\.txt$/## 3. c.txt/; s/^<!-- why: -->$/why c/' .review/walkthrough.md
+	edit_file 's/^## ?\. c\.txt$/## 3. c.txt/; s/^<!-- why: -->$/why c/' .review/walkthrough.md
 	run git review walkthrough build
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"heads-up placeholder is still there"* ]]
@@ -806,7 +815,7 @@ EOF
 	# to reconciling against a merged PR.
 	write_and_build
 	# El contenedor no trae python; sed alcanza y es lo que usa el resto de la suite.
-	sed -i 's/^\(       tip   \)[0-9a-f]\{40\}/\10000000000000000000000000000000000000000/' .review/walkthrough.md
+	edit_file 's/^\(       tip   \)[0-9a-f]\{40\}/\10000000000000000000000000000000000000000/' .review/walkthrough.md
 	grep -q '^       tip   0\{40\}' .review/walkthrough.md
 	run git review config --porcelain
 	[ "$status" -eq 0 ]

@@ -30,6 +30,27 @@ function teamGuidePath(repoDir: string): string {
     return path.join(repoDir, ".review", "walkthrough-guide.md");
 }
 
+/**
+ * Canonicaliza un path para compararlo con el que reporta la CLI.
+ *
+ * Los dos lados nombran el mismo archivo escrito distinto: la CLI lo imprime
+ * con barras normales y el nombre largo, mientras que `os.tmpdir()` en el
+ * runner de Windows devuelve la forma 8.3 (`RUNNER~1`) que `fs.realpathSync`
+ * —a diferencia de su variante `.native`— no expande. Comparar los literales
+ * afirma la plataforma que corre la suite, no que el panel abra lo que la CLI
+ * dijo.
+ */
+function canonical(p: string): string {
+    let resolved = p;
+    try {
+        resolved = fs.realpathSync.native(p);
+    } catch {
+        // Sin archivo no hay nada que expandir: queda el literal.
+    }
+    const slashed = resolved.split(path.sep).join("/");
+    return process.platform === "win32" ? slashed.toLowerCase() : slashed;
+}
+
 async function settle(api: Awaited<ReturnType<typeof getTestApi>>): Promise<void> {
     for (let i = 0; i < 40; i++) {
         await new Promise((resolve) => setTimeout(resolve, 50));
@@ -105,7 +126,7 @@ describe("el bloque de guias de autoria del panel", function () {
         assert.strictEqual(own?.state, "empty");
         assert.strictEqual(own?.exists, true);
         assert.strictEqual(own?.discardable, true);
-        assert.strictEqual(own?.path, file);
+        assert.strictEqual(canonical(own!.path), canonical(file));
     });
 
     it("con contenido la fila pasa a in force", async () => {

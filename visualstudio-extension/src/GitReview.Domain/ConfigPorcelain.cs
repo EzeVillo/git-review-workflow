@@ -32,7 +32,12 @@ public static class DeltaOriginExt
 public sealed record DeltaRecord(string Name, string Tip, DeltaOrigin Origin);
 
 /// <summary>
-/// 011: DRAFT / DRAFT_RESUME are not reading forms but the path to obtain one.
+/// 011: DRAFT / DRAFT_RESUME / DRAFT_UPDATE are not reading forms but the path
+/// to obtain one. Which of the three arrives is decided by the CLI and never
+/// derived here: DraftUpdate says the draft has fallen behind today's range,
+/// which only the side holding both tips can answer. The draft record's state
+/// field does NOT answer it -- it answers a different question ("has this order
+/// been read?"), so a branch that moved after its review still says reviewed.
 /// </summary>
 public enum OfferId
 {
@@ -40,6 +45,7 @@ public enum OfferId
     Keys,
     Draft,
     DraftResume,
+    DraftUpdate,
     Step,
     Whole,
 }
@@ -52,6 +58,7 @@ public static class OfferIdExt
         OfferId.Keys => "keys",
         OfferId.Draft => "draft",
         OfferId.DraftResume => "draft-resume",
+        OfferId.DraftUpdate => "draft-update",
         OfferId.Step => "step",
         OfferId.Whole => "whole",
         _ => throw new ArgumentOutOfRangeException(nameof(o)),
@@ -63,6 +70,7 @@ public static class OfferIdExt
         "keys" => OfferId.Keys,
         "draft" => OfferId.Draft,
         "draft-resume" => OfferId.DraftResume,
+        "draft-update" => OfferId.DraftUpdate,
         "step" => OfferId.Step,
         "whole" => OfferId.Whole,
         _ => null,

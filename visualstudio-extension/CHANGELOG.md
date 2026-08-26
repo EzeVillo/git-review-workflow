@@ -97,15 +97,19 @@ First release of the Visual Studio client. Requires `git review` **0.7.0** or ne
   **Reading orders you finished with**, collapsed at the bottom, keeping the two glyphs
   that still mean something: open it, or throw it away. Nothing is deleted for you, and
   `git review forget --draft --reviewed` sweeps them all at once.
-- **Starting a review on a branch you already read asks what to do with your reading
-  order.** The wizard used to offer only *Finish the reading order you started* — over an
-  order that was finished and already used, which is not what it says. Now the row reads
-  *Reuse the reading order you wrote*, and choosing it asks the same pair the author's
-  *Update* asks: **Update** reconciles it with what the PR changed since
-  (every entry whose file is still in range keeps its number, its why and its `> key`; the
-  new files arrive as placeholders; the ones that left are dropped and named), or **Start
-  over** for a blank skeleton. It is asked only there — over a half-written draft the
-  answer is obvious and a modal in the common path is worse than none.
+- **Starting a review on a branch whose reading order you already wrote offers the move
+  that actually applies.** The wizard used to say *Finish the reading order you started*
+  over every draft, including finished ones, which is not what it says. Now the CLI
+  decides — it is the side that knows both what the order was written against and where the
+  branch is today — and the row follows: **Update the reading order you wrote** when the PR
+  moved on, which keeps every entry whose file is still in range (its number, its why, its
+  `> key`), brings the new files in as placeholders and drops the ones that left, naming
+  them; *Finish the reading order you started* while it is still half-written; and no draft
+  row at all when the order is complete and the PR has not moved, because *Walkthrough*
+  already reads it and there is nothing to reconcile. Nothing is asked along the way.
+  Starting from a blank skeleton stays where it belongs — the **Discard** glyph on the
+  draft row, which confirms first: unlike the author's walkthrough, your reading order is
+  not in git, so there is no way back.
 - Copying is copying: no service is contacted, no assistant is invoked, and nothing about
   the draft is written for you.
 - *Validate and start* invokes the CLI with the **same origin and range flags the draft was

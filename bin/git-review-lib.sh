@@ -1697,16 +1697,43 @@ emit_reading_offers() {
 	# assistant asks "how do you want to read this?" exactly when the reviewer
 	# finds out nobody wrote an order, so that is where the answer belongs.
 	#
-	# Exactly one of the two, and never `draft` on top of a usable walkthrough:
+	# Exactly one of the three, and never `draft` on top of a usable walkthrough:
 	# replacing the author's order is a deliberate act, available from the
-	# terminal, not something the assistant proposes. `draft-resume` *is* offered
-	# alongside walk, because that walk is the reviewer's own half-written draft
-	# and finishing it is the obvious next move.
+	# terminal, not something the assistant proposes. The other two *are* offered
+	# alongside walk, because that walk is the reviewer's own draft and carrying
+	# it forward is the obvious next move.
 	#
-	# A file test, no process: walk_use_draft above already resolved the gitdir
-	# the path is built from. This runs on every open of the start assistant.
+	# Which of the two is asked HERE, and not by the client, because the question
+	# they answer is "does this reading order still cover the range?" -- and the
+	# only surface that can answer it is the one holding both tips. The draft
+	# records cannot: their <state> answers a different question ("has this order
+	# been read?"), deliberately, so a branch that moved after its review still
+	# reports `reviewed`. Left to the client, the two cases arrive identical and
+	# the assistant has to guess -- which is what it used to do, offering to
+	# reconcile an order with a range that had not moved. That is a no-op, and it
+	# landed the reviewer on a `reviewed` row with neither Copy for agent nor
+	# Validate and start: an assistant step whose only outcome was a dead end.
+	#
+	#   drifted     the block records a tip that is not this one -- entries are
+	#               missing (or gone), so there is something to reconcile.
+	#   up to date  and still being written: finishing it is the next move.
+	#   up to date  and complete: nothing to offer. `walk` above already reads it,
+	#               and starting over is a decision of its own, not half a modal.
+	#
+	# The first question costs ZERO processes (a builtin read of the block that
+	# walk_use_draft already located); the count is only reached when it comes
+	# back "up to date", and never at all without a branch argument.
 	if walk_has_draft_file "$_ero_branch"; then
-		porcelain_row offer draft-resume available
+		_ero_dpath="$(walk_draft_path "$_ero_branch")"
+		_ero_dtip="$(walk_sidecar_block_tip "$_ero_dpath" || true)"
+		if [ -n "$_ero_dtip" ] && [ "$_ero_dtip" != "$_ero_tip" ]; then
+			porcelain_row offer draft-update available
+		elif [ "$_ero_walk" -eq 0 ] || ! walk_draft_filled "$_ero_dpath"; then
+			# _ero_walk == 0 is the safety net, not a nicety: a complete draft
+			# whose paths no longer meet the range leaves walk unoffered, and
+			# silence here would be a reading order with no way to reach it.
+			porcelain_row offer draft-resume available
+		fi
 	elif [ "$_ero_walk" -eq 0 ]; then
 		porcelain_row offer draft available
 	fi
@@ -2237,6 +2264,26 @@ walk_sidecar_block_tip() {
 		_wsbt_k=""
 	done <"$1"
 	return 1
+}
+
+# walk_draft_filled <path>
+# True when <path> declares at least one unit and every one of them is written:
+# the same annotated >= total > 0 that the three panels call `filled`, asked of a
+# single draft.
+#
+# One awk, and only on the branch the start assistant is asking about -- never in
+# the pathless refresh, which is why this is a helper of its own rather than a
+# field of the draft records. The caller reaches it only after the cheap question
+# (has the range moved?) has already been answered with zero processes, so the
+# common paths -- no draft, or a draft to reconcile -- never pay for it.
+walk_draft_filled() {
+	_wdf_row="$(walk_draft_progress "$1")"
+	_wdf_ann="$(printf '%s' "$_wdf_row" | cut -f2)"
+	_wdf_tot="$(printf '%s' "$_wdf_row" | cut -f3)"
+	[ -n "$_wdf_tot" ] || return 1
+	[ "$_wdf_tot" -gt 0 ] || return 1
+	[ "$_wdf_ann" -ge "$_wdf_tot" ] || return 1
+	return 0
 }
 
 # walk_sidecar_superseded <tip> <baseref>

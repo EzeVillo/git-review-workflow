@@ -9,17 +9,16 @@ public static class LayoutOffers
     };
 
     /// <summary>
-    /// Update and StartOver are the two ways out of the picker that appears when
-    /// the reading order has already been used in a review. Update is the SAME
-    /// command as Create — the verb reconciles instead of refusing — and StartOver
-    /// is that command with --force.
+    /// Update is the path the CLI points at when the reading order fell behind
+    /// the range: the SAME command as Create — the verb reconciles instead of
+    /// refusing — keeping every entry whose file is still in range and adding the
+    /// ones that came in.
     /// </summary>
     public enum DraftStep
     {
         Create,
         Resume,
         Update,
-        StartOver,
     }
 
     public sealed record LayoutPickItem(
@@ -44,38 +43,38 @@ public static class LayoutOffers
         // walkthrough is. Byte for byte identical in the three clients.
         [OfferId.Draft] = new("Build a reading order first", "nobody wrote one for this PR; otherwise you read the whole diff", ReviewLayout.Walk, DraftStep.Create),
         [OfferId.DraftResume] = new("Finish the reading order you started", "pick up the one you left half-written", ReviewLayout.Walk, DraftStep.Resume),
+        // The CLI sends this one INSTEAD of DraftResume once the draft has
+        // fallen behind the range. The two situations used to arrive
+        // indistinguishable and the wizard asked with a modal which one it was
+        // -- that is, it asked the reviewer for a datum only the CLI holds, and
+        // when the answer was "nothing moved" the reconcile was a no-op that
+        // landed on a row with no Validate and start.
+        [OfferId.DraftUpdate] = new("Update the reading order you wrote", "the PR moved on; keeps the whys whose files are still in range", ReviewLayout.Walk, DraftStep.Update),
         [OfferId.Step] = new("Commit by commit", "one commit at a time (--step)", ReviewLayout.Step),
         [OfferId.Whole] = new("Whole diff", "entire diff at once", ReviewLayout.Whole),
     };
 
     private static readonly OfferId[] OfferOrder =
     {
-        OfferId.Walk, OfferId.Keys, OfferId.Draft, OfferId.DraftResume, OfferId.Step, OfferId.Whole,
+        OfferId.Walk, OfferId.Keys, OfferId.Draft, OfferId.DraftResume, OfferId.DraftUpdate,
+        OfferId.Step, OfferId.Whole,
     };
 
     public static IReadOnlyList<ReadingOffer> EffectiveOffers(IReadOnlyList<ReadingOffer>? offers) =>
         offers is null || offers.Count == 0 ? FallbackOffers.ToList() : offers;
 
     /// <summary>
-    /// What the draft row says once its review is over. The usual copy describes
-    /// a half-written order, and over one that is finished and already used it is
-    /// simply false: what is left is not finishing it but reconciling it with what
-    /// the PR changed since, or starting a new one.
+    /// Which of the two draft rows is drawn is no longer decided here: the CLI
+    /// sends DraftResume or DraftUpdate and each carries its own fixed copy.
+    ///
+    /// This used to read the draft record's state to rewrite the DraftResume copy
+    /// once the review had closed. That field answers "has this order been read?",
+    /// not "does it still cover the range?", so a branch that moved after its
+    /// review and one that never moved arrived with the SAME reviewed -- and the
+    /// row ended up offering to reconcile an order with nothing to reconcile.
     /// </summary>
-    private static readonly OfferMeta SpentResumeMeta = new(
-        "Reuse the reading order you wrote",
-        "you already reviewed with it; update it for what changed, or start over",
-        ReviewLayout.Walk,
-        DraftStep.Resume);
-
-    /// <param name="spentDraft">
-    /// Whether this branch's draft has its review closed, which is the only thing
-    /// that changes the DraftResume copy. The CLI says so in the draft record's
-    /// state field; nothing is derived here.
-    /// </param>
     public static IReadOnlyList<LayoutPickItem> BuildLayoutItems(
-        IReadOnlyList<ReadingOffer>? offers,
-        bool spentDraft = false)
+        IReadOnlyList<ReadingOffer>? offers)
     {
         var list = EffectiveOffers(offers);
         var byId = new Dictionary<OfferId, OfferRank>();
@@ -91,9 +90,7 @@ public static class LayoutOffers
 
         return ordered.Select(id =>
         {
-            var meta = id == OfferId.DraftResume && spentDraft
-                ? SpentResumeMeta
-                : OfferMetaMap[id];
+            var meta = OfferMetaMap[id];
             var rank = byId.GetValueOrDefault(id, OfferRank.Available);
             var description = rank == OfferRank.Recommended
                 ? $"{meta.Description} (recommended)"

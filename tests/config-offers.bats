@@ -292,3 +292,107 @@ EOF
 	after_start_lb="$(count_lower_bound_msgs)"
 	[ "$after_start_lb" -gt 0 ]
 }
+
+# ── the draft's own two offers ───────────────────────────────────────────────
+#
+# Which of them is emitted answers "does this reading order still cover the
+# range?", which is a question only this side can answer: it needs the tip the
+# draft was written against AND the tip today. The draft records cannot stand in
+# for it -- their <state> answers "has this order been read?", deliberately, so a
+# branch that moved after its review still reports `reviewed`.
+#
+# Left to the client the two cases arrived identical, and the start assistant
+# asked with a modal which one it was. Answering "reconcile" on a range that had
+# not moved was a no-op that left the reviewer on a spent row with neither Copy
+# for agent nor Validate and start: a wizard step whose only outcome was a dead
+# end.
+
+# Fill in every placeholder of the draft for <branch>: numbers the "## ?." entries
+# and replaces the heads-up and why comments with prose, which is what build
+# demands and what makes the pair read N/N.
+fill_draft() {
+	_fd_path="$(git rev-parse --git-dir)/review-walkthrough/$1.md"
+	awk '
+		/^<!-- heads-up/ { print "Read the payment state first."; if (index($0, "-->") == 0) hu = 1; next }
+		hu { if (index($0, "-->")) hu = 0; next }
+		/^## [?][.] / { n++; sub(/^## [?][.] /, "## " n ". "); print; next }
+		/^<!-- why/ { print "REVIEWER: this is the why."; if (index($0, "-->") == 0) w = 1; next }
+		w { if (index($0, "-->")) w = 0; next }
+		{ print }
+	' "$_fd_path" >"$_fd_path.filled"
+	mv "$_fd_path.filled" "$_fd_path"
+}
+
+@test "a half-written draft is offered as draft-resume, never as an update" {
+	run git review walkthrough draft feature/plain
+	[ "$status" -eq 0 ]
+
+	run git review config --porcelain -- feature/plain
+	[ "$status" -eq 0 ]
+	# The skeleton covers today's range, so there is nothing to reconcile: what
+	# is left is finishing it.
+	[ "$(offer_lines)" = "$(printf 'draft-resume\tavailable\nstep\tavailable\nwhole\tavailable')" ]
+}
+
+@test "a complete draft on an unmoved range offers neither: walk already reads it" {
+	run git review walkthrough draft feature/plain
+	[ "$status" -eq 0 ]
+	fill_draft feature/plain
+	run git review walkthrough draft --build feature/plain
+	[ "$status" -eq 0 ]
+
+	run git review config --porcelain -- feature/plain
+	[ "$status" -eq 0 ]
+	# This is the case the modal used to mishandle: the order is written and it
+	# covers the range, so reconciling it would change nothing and finishing it
+	# is already done. walk carries it.
+	[ "$(offer_lines)" = "$(printf 'walk\trecommended\nstep\tavailable\nwhole\tavailable')" ]
+}
+
+@test "a draft whose branch moved is offered as draft-update, alongside walk" {
+	run git review walkthrough draft feature/plain
+	[ "$status" -eq 0 ]
+	fill_draft feature/plain
+	run git review walkthrough draft --build feature/plain
+	[ "$status" -eq 0 ]
+
+	git switch --quiet feature/plain
+	printf 'new\n' >c.txt
+	git add c.txt
+	git commit --quiet -m "one more file"
+	git push --quiet origin feature/plain
+	git switch --quiet develop
+
+	run git review config --porcelain -- feature/plain
+	[ "$status" -eq 0 ]
+	[ "$(offer_lines)" = "$(printf 'walk\trecommended\ndraft-update\tavailable\nstep\tavailable\nwhole\tavailable')" ]
+
+	# And it is not decoration: the update really does reconcile, keeping the why
+	# that was already written and adding the file that came in.
+	run git review walkthrough draft feature/plain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"1 kept, 1 added, 0 dropped"* ]]
+
+	# Which puts the offer back to draft-resume: the order now covers the range
+	# and has an entry still to write.
+	run git review config --porcelain -- feature/plain
+	[ "$status" -eq 0 ]
+	[ "$(offer_lines)" = "$(printf 'walk\trecommended\ndraft-resume\tavailable\nstep\tavailable\nwhole\tavailable')" ]
+}
+
+@test "a draft with no instruction block never claims to be out of range" {
+	run git review walkthrough draft feature/plain
+	[ "$status" -eq 0 ]
+	fill_draft feature/plain
+	# Deleting the block by hand is legal, and it takes the recorded tip with it.
+	# Without a tip the range question has no answer, so the safe reading is "not
+	# drifted": offering an update whose outcome cannot be predicted is worse
+	# than offering to finish what is there.
+	_p="$(git rev-parse --git-dir)/review-walkthrough/feature/plain.md"
+	awk '/^<!-- git-review-range:/ { skip = 1 } skip { if (index($0, "-->")) skip = 0; next } { print }' "$_p" >"$_p.x"
+	mv "$_p.x" "$_p"
+
+	run git review config --porcelain -- feature/plain
+	[ "$status" -eq 0 ]
+	[[ "$(offer_lines)" != *"draft-update"* ]]
+}

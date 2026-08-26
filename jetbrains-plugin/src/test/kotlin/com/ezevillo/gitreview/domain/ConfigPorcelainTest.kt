@@ -1,7 +1,6 @@
 package com.ezevillo.gitreview.domain
 
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 
@@ -69,33 +68,41 @@ class ConfigPorcelainTest {
     }
 
     @Test
-    fun aSpentDraftRowSaysSomethingElse() {
-        // "pick up the one you left half-written" describe un orden a medio
-        // escribir; sobre uno terminado y ya usado es falso, y lo que sigue no es
-        // terminarlo sino reconciliarlo o empezar uno nuevo.
-        val offers = listOf(ReadingOffer(OfferId.DRAFT_RESUME, OfferRank.AVAILABLE))
-        val fresh = buildLayoutItems(offers)
-        val spent = buildLayoutItems(offers, spentDraft = true)
+    fun eachDraftPathCarriesItsOwnCopyAndStep() {
+        // Las dos filas son excluyentes y la CLI elige cuál mandar: resume habla
+        // de terminar lo empezado, update de reconciliar con lo que el PR movió.
+        // Antes esto se decidía acá, mirando el `state` del registro draft — que
+        // contesta "¿ya se leyó?" y no "¿sigue cubriendo el rango?", así que una
+        // rama que avanzó y una que no llegaban idénticas.
+        val resume = buildLayoutItems(listOf(ReadingOffer(OfferId.DRAFT_RESUME, OfferRank.AVAILABLE)))
+        assertEquals("Finish the reading order you started", resume[0].label)
+        assertEquals("pick up the one you left half-written", resume[0].description)
+        assertEquals(DraftStep.RESUME, resume[0].draft)
+        assertEquals(ReviewLayout.WALK, resume[0].layout)
 
-        assertEquals("Finish the reading order you started", fresh[0].label)
-        assertEquals("Reuse the reading order you wrote", spent[0].label)
-        assertNotEquals(fresh[0].description, spent[0].description)
-        // Lo demás de la fila no cambia.
-        assertEquals(DraftStep.RESUME, spent[0].draft)
-        assertEquals(ReviewLayout.WALK, spent[0].layout)
+        val update = buildLayoutItems(listOf(ReadingOffer(OfferId.DRAFT_UPDATE, OfferRank.AVAILABLE)))
+        assertEquals("Update the reading order you wrote", update[0].label)
+        assertEquals(
+            "the PR moved on; keeps the whys whose files are still in range",
+            update[0].description,
+        )
+        assertEquals(DraftStep.UPDATE, update[0].draft)
+        assertEquals(ReviewLayout.WALK, update[0].layout)
     }
 
     @Test
-    fun theDraftStateTouchesNoOtherRow() {
-        val offers = listOf(
-            ReadingOffer(OfferId.WALK, OfferRank.RECOMMENDED),
-            ReadingOffer(OfferId.STEP, OfferRank.AVAILABLE),
-            ReadingOffer(OfferId.WHOLE, OfferRank.AVAILABLE),
+    fun draftUpdateSitsBesideWalkRecommended() {
+        // El caso real: el orden que escribiste sigue leyéndose (walk), y además
+        // se le puede sumar lo que el PR cambió desde entonces.
+        val items = buildLayoutItems(
+            listOf(
+                ReadingOffer(OfferId.DRAFT_UPDATE, OfferRank.AVAILABLE),
+                ReadingOffer(OfferId.WALK, OfferRank.RECOMMENDED),
+                ReadingOffer(OfferId.WHOLE, OfferRank.AVAILABLE),
+            ),
         )
-        assertEquals(
-            buildLayoutItems(offers).map { it.label },
-            buildLayoutItems(offers, spentDraft = true).map { it.label },
-        )
+        assertEquals(listOf(null, DraftStep.UPDATE, null), items.map { it.draft })
+        assertEquals("Walkthrough (recommended)", items[0].label)
     }
 
     @Test
@@ -225,7 +232,7 @@ class ConfigPorcelainTest {
                 "total=<$bad>",
             )
         }
-    }
+    }
 
     @Test
     fun theWalkthroughRowCarriesTheBranchItAnnotates() {

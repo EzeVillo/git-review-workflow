@@ -71,33 +71,41 @@ describe("buildLayoutItems", () => {
         assert.strictEqual(items[2].draft, undefined);
     });
 
-    it("sobre un borrador gastado la fila dice otra cosa", () => {
-        // "pick up the one you left half-written" describe un orden a medio
-        // escribir; sobre uno terminado y ya usado es falso, y lo que sigue no es
-        // terminarlo sino reconciliarlo o empezar uno nuevo.
-        const offers = [{id: "draft-resume", rank: "available"} as const];
-        const fresh = buildLayoutItems(offers);
-        const spent = buildLayoutItems(offers, true);
+    it("cada camino del borrador trae su copy y su paso, sin derivar nada", () => {
+        // Las dos filas son excluyentes y la CLI elige cual mandar: resume habla
+        // de terminar lo empezado, update de reconciliar con lo que el PR movio.
+        // Antes esto se decidia aca, mirando el `state` del registro draft -- que
+        // contesta "ya se leyo?" y no "sigue cubriendo el rango?", asi que una
+        // rama que avanzo y una que no llegaban identicas.
+        const resume = buildLayoutItems([{id: "draft-resume", rank: "available"} as const]);
+        assert.strictEqual(resume[0].label, "Finish the reading order you started");
+        assert.strictEqual(resume[0].description, "pick up the one you left half-written");
+        assert.strictEqual(resume[0].draft, "resume");
+        assert.strictEqual(resume[0].layout, "walk");
 
-        assert.strictEqual(fresh[0].label, "Finish the reading order you started");
-        assert.strictEqual(spent[0].label, "Reuse the reading order you wrote");
-        assert.notStrictEqual(spent[0].description, fresh[0].description);
-        // Lo demas de la fila no cambia: sigue siendo el camino del borrador y
-        // sigue llevando al mismo layout.
-        assert.strictEqual(spent[0].draft, "resume");
-        assert.strictEqual(spent[0].layout, "walk");
+        const update = buildLayoutItems([{id: "draft-update", rank: "available"} as const]);
+        assert.strictEqual(update[0].label, "Update the reading order you wrote");
+        assert.strictEqual(
+            update[0].description,
+            "the PR moved on; keeps the whys whose files are still in range"
+        );
+        assert.strictEqual(update[0].draft, "update");
+        assert.strictEqual(update[0].layout, "walk");
     });
 
-    it("el estado del borrador no toca ninguna otra fila", () => {
-        const offers = [
-            {id: "walk", rank: "recommended"} as const,
-            {id: "step", rank: "available"} as const,
-            {id: "whole", rank: "available"} as const,
-        ];
+    it("draft-update convive con walk recommended, que va primero", () => {
+        // El caso real: el orden que escribiste sigue leyendose (walk), y ademas
+        // se le puede sumar lo que el PR cambio desde entonces.
+        const items = buildLayoutItems([
+            {id: "draft-update", rank: "available"},
+            {id: "walk", rank: "recommended"},
+            {id: "whole", rank: "available"},
+        ]);
         assert.deepStrictEqual(
-            buildLayoutItems(offers, true).map((i) => i.label),
-            buildLayoutItems(offers).map((i) => i.label)
+            items.map((i) => i.draft),
+            [undefined, "update", undefined]
         );
+        assert.strictEqual(items[0].label, "Walkthrough (recommended)");
     });
 
     it("draft-resume convive con walk recommended, que va primero", () => {

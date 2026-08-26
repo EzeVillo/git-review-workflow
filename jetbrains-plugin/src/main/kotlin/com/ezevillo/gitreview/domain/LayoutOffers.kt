@@ -17,7 +17,7 @@ val FALLBACK_OFFERS: List<ReadingOffer> = listOf(
  * de lectura ya se usó en una review. UPDATE es el MISMO comando que CREATE -- el
  * verbo reconcilia en vez de negarse -- y START_OVER es ese comando con --force.
  */
-enum class DraftStep { CREATE, RESUME, UPDATE, START_OVER }
+enum class DraftStep { CREATE, RESUME, UPDATE }
 
 data class LayoutPickItem(
     val label: String,
@@ -52,12 +52,32 @@ private val OFFER_META: Map<OfferId, OfferMeta> = mapOf(
         ReviewLayout.WALK,
         DraftStep.RESUME,
     ),
+    // La CLI manda ésta en lugar de DRAFT_RESUME cuando el borrador quedó
+    // desfasado del rango. Antes las dos situaciones llegaban indistinguibles y
+    // el asistente preguntaba con un modal cuál era — o sea le pedía al revisor
+    // un dato que sólo la CLI tiene, y cuando la respuesta era "no se movió
+    // nada" la reconciliación era un no-op que terminaba en una fila sin
+    // Validate and start.
+    OfferId.DRAFT_UPDATE to OfferMeta(
+        "Update the reading order you wrote",
+        "the PR moved on; keeps the whys whose files are still in range",
+        ReviewLayout.WALK,
+        DraftStep.UPDATE,
+    ),
     OfferId.STEP to OfferMeta("Commit by commit", "one commit at a time (--step)", ReviewLayout.STEP),
     OfferId.WHOLE to OfferMeta("Whole diff", "entire diff at once", ReviewLayout.WHOLE),
 )
 
 private val OFFER_ORDER =
-    listOf(OfferId.WALK, OfferId.KEYS, OfferId.DRAFT, OfferId.DRAFT_RESUME, OfferId.STEP, OfferId.WHOLE)
+    listOf(
+        OfferId.WALK,
+        OfferId.KEYS,
+        OfferId.DRAFT,
+        OfferId.DRAFT_RESUME,
+        OfferId.DRAFT_UPDATE,
+        OfferId.STEP,
+        OfferId.WHOLE,
+    )
 
 fun effectiveOffers(offers: List<ReadingOffer>?): List<ReadingOffer> {
     if (offers.isNullOrEmpty()) return FALLBACK_OFFERS.toList()
@@ -65,23 +85,17 @@ fun effectiveOffers(offers: List<ReadingOffer>?): List<ReadingOffer> {
 }
 
 /**
- * Lo que dice la fila del borrador cuando su review YA cerró. La de siempre
- * describe un orden a medio escribir, y sobre uno terminado y ya usado es
- * sencillamente falso: lo que sigue no es terminarlo sino reconciliarlo con lo
- * que el PR cambió desde entonces, o empezar uno nuevo.
+ * Cuál de las dos filas del borrador se dibuja ya no se decide acá: la CLI manda
+ * DRAFT_RESUME o DRAFT_UPDATE y cada una trae su copy fija.
+ *
+ * Antes esto miraba el `state` del registro `draft` para reescribir la copy de
+ * DRAFT_RESUME cuando la review ya había cerrado. Ese campo contesta "¿ya se
+ * leyó este orden?", no "¿sigue cubriendo el rango?", así que una rama que
+ * avanzó después de su review y una que no se movió llegaban con el MISMO
+ * `reviewed` — y la fila terminaba ofreciendo reconciliar un orden que no tenía
+ * nada que reconciliar.
  */
-private val SPENT_RESUME_META = Pair(
-    "Reuse the reading order you wrote",
-    "you already reviewed with it; update it for what changed, or start over",
-)
-
-/**
- * @param spentDraft si el borrador de esta rama tiene su review cerrada, que es
- *   lo único que cambia la copy de DRAFT_RESUME. Lo dice la CLI en el campo
- *   `state` del registro `draft`; acá no se deriva.
- */
-@JvmOverloads
-fun buildLayoutItems(offers: List<ReadingOffer>?, spentDraft: Boolean = false): List<LayoutPickItem> {
+fun buildLayoutItems(offers: List<ReadingOffer>?): List<LayoutPickItem> {
     val list = effectiveOffers(offers)
     val byId = LinkedHashMap<OfferId, OfferRank>()
     for (o in list) byId[o.id] = o.rank
@@ -95,13 +109,7 @@ fun buildLayoutItems(offers: List<ReadingOffer>?, spentDraft: Boolean = false): 
     }
 
     return ordered.map { id ->
-        val base = OFFER_META.getValue(id)
-        val meta =
-            if (id == OfferId.DRAFT_RESUME && spentDraft) {
-                base.copy(label = SPENT_RESUME_META.first, description = SPENT_RESUME_META.second)
-            } else {
-                base
-            }
+        val meta = OFFER_META.getValue(id)
         val rank = byId[id] ?: OfferRank.AVAILABLE
         val description =
             if (rank == OfferRank.RECOMMENDED) "${meta.description} (recommended)" else meta.description

@@ -66,12 +66,19 @@ export interface DeltaRecord {
 /**
  * Forma de lectura viable reportada por la CLI (008).
  *
- * 011: `draft` / `draft-resume` no son formas de lectura sino el camino para
- * conseguir una — el revisor se escribe el orden que el PR no trae. Viajan por
- * el mismo registro porque se eligen en el mismo paso del asistente, y son
- * mutuamente excluyentes entre sí (contracts/config-porcelain-draft.md).
+ * 011: `draft` / `draft-resume` / `draft-update` no son formas de lectura sino
+ * el camino para conseguir una — el revisor se escribe el orden que el PR no
+ * trae. Viajan por el mismo registro porque se eligen en el mismo paso del
+ * asistente, y son mutuamente excluyentes entre sí
+ * (contracts/config-porcelain-draft.md).
+ *
+ * Cuál de las tres llega lo decide la CLI y no se deriva acá: `draft-update`
+ * dice que el borrador quedó desfasado del rango de hoy, que es una pregunta
+ * que sólo contesta quien tiene los dos tips. El campo `state` del registro
+ * `draft` NO sirve para eso — contesta otra ("¿ya se leyó este orden?"), así
+ * que una rama que avanzó después de su review sigue diciendo `reviewed`.
  */
-export type OfferId = "walk" | "keys" | "draft" | "draft-resume" | "step" | "whole";
+export type OfferId = "walk" | "keys" | "draft" | "draft-resume" | "draft-update" | "step" | "whole";
 export type OfferRank = "recommended" | "available";
 
 export interface ReadingOffer {
@@ -320,6 +327,7 @@ function parseOfferId(raw: string | undefined): OfferId | undefined {
         raw === "keys" ||
         raw === "draft" ||
         raw === "draft-resume" ||
+        raw === "draft-update" ||
         raw === "step" ||
         raw === "whole"
     ) {

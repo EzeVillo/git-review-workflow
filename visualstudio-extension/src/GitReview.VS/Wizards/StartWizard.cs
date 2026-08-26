@@ -114,7 +114,7 @@ public static class StartWizard
             Base: porcelain.Config.Base,
             Deltas: offersResult.Deltas ?? deltas);
 
-        return await LayoutStepAsync(context, offersResult.Offers, offersResult.Drafts, ct).ConfigureAwait(true);
+        return await LayoutStepAsync(context, offersResult.Offers, ct).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -136,17 +136,15 @@ public static class StartWizard
 
     /// <summary>
     /// Reading-order step. Separate — and re-entered — because a reviewer who enters the
-    /// draft flow and cancels comes back here with the draft intact and the offer turned
-    /// from "draft one" into "continue draft".
+    /// draft flow and cancels comes back here with the draft intact and the offer already
+    /// recomputed by the CLI.
     /// </summary>
     private static async Task<bool> LayoutStepAsync(
         WizardContext ctx,
         IReadOnlyList<ReadingOffer>? offers,
-        IReadOnlyList<DraftRecord>? drafts,
         CancellationToken ct)
     {
-        var spent = drafts?.Any(d => d.Src == ctx.Branch && d.State == DraftState.Reviewed) == true;
-        var items = LayoutOffers.BuildLayoutItems(offers, spent);
+        var items = LayoutOffers.BuildLayoutItems(offers);
         var labels = items
             .Select(i => i.Description.Length > 0 ? $"{i.Label} — {i.Description}" : i.Label)
             .ToList();
@@ -159,27 +157,13 @@ public static class StartWizard
         if (picked.Draft is null)
             return await ConfirmAndStartAsync(ctx, picked.Layout, ct).ConfigureAwait(true);
 
-        // A reading order that has already been read is not picked up blind: the
-        // reviewer is asked whether to reconcile it with what the PR changed since
-        // or start a new one. The other paths have nothing to ask. Cancelling goes
-        // back to the reading-order step, which is where this came from.
-        var step = picked.Draft.Value;
-        if (step == LayoutOffers.DraftStep.Resume && spent)
-        {
-            var choice = GitReviewDialogs.Choose(
-                UserCopy.DraftExistsTitle,
-                UserCopy.DraftExistsDetail,
-                new[] { UserCopy.WalkthroughUpdateButton, UserCopy.WalkthroughStartOverButton });
-            if (choice == GitReviewDialogs.Cancelled)
-                return await LayoutStepAsync(ctx, offers, drafts, ct).ConfigureAwait(true);
-            step = choice == 1
-                ? LayoutOffers.DraftStep.StartOver
-                : LayoutOffers.DraftStep.Update;
-        }
-
+        // Nothing is asked: which of the three draft paths applies was already
+        // decided by the CLI when it picked which offer to emit, which is the only
+        // side that can — the question is whether the order still covers the range,
+        // and answering it takes both tips.
         return await RunDraftFlowAsync(
             ctx,
-            DraftFlow.InitialDraftFlowState(step),
+            DraftFlow.InitialDraftFlowState(picked.Draft.Value),
             ct).ConfigureAwait(true);
     }
 
@@ -230,7 +214,7 @@ public static class StartWizard
                     // write one is now the offer to continue it.
                     var offers = await LoadOffersAsync(
                         ctx.Cli, ctx.Cwd, ctx.Branch, ctx.Source, ctx.Range, ct).ConfigureAwait(true);
-                    return await LayoutStepAsync(ctx, offers.Offers, offers.Drafts, ct).ConfigureAwait(true);
+                    return await LayoutStepAsync(ctx, offers.Offers, ct).ConfigureAwait(true);
                 }
 
                 default:

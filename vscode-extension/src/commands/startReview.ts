@@ -26,12 +26,6 @@ import {
     validateIntent,
 } from "../review/reviewIntent";
 import {resolveDefaultSource} from "../review/sourcePreference";
-import {
-    DRAFT_EXISTS_DETAIL,
-    DRAFT_EXISTS_TITLE,
-    WALKTHROUGH_START_OVER_BUTTON,
-    WALKTHROUGH_UPDATE_BUTTON,
-} from "../review/userCopy";
 import {captureToken, tokenStillValid} from "../review/staleGuard";
 import {classifyStartFailure, quoteForTerminal} from "../review/startFailure";
 import {ReviewStateManager} from "../review/state";
@@ -137,10 +131,9 @@ async function pickBranch(candidates: CandidateBranch[]): Promise<CandidateBranc
  * primero lo que se va a leer— es la que decide el camino siguiente.
  */
 async function pickLayout(
-    offers: readonly ReadingOffer[] | undefined,
-    spentDraft: boolean
+    offers: readonly ReadingOffer[] | undefined
 ): Promise<LayoutItem | undefined> {
-    const items: LayoutItem[] = buildLayoutItems(offers, spentDraft).map((item) => {
+    const items: LayoutItem[] = buildLayoutItems(offers).map((item) => {
         const entry: LayoutItem = {
             label: item.label,
             description: item.description,
@@ -155,43 +148,6 @@ async function pickLayout(
         title: "Start a review — how to read it",
         placeHolder: "Walkthrough, commit by commit, keys only, or whole diff",
     });
-}
-
-/**
- * Si el borrador de esta rama tiene su review ya cerrada. Sale del campo
- * `state` del registro `draft`; acá no se deriva nada.
- */
-function draftIsSpent(drafts: readonly DraftRecord[] | undefined, branch: string): boolean {
-    return drafts?.some((d) => d.src === branch && d.state === "reviewed") ?? false;
-}
-
-/**
- * Qué hacer con un orden de lectura que ya se usó, preguntado ANTES de invocar,
- * en el mismo molde que el picker del autor (`walkthrough init`).
- *
- * Se pregunta sólo acá y no en cada resume: sobre un borrador a medio escribir la
- * respuesta es obvia —seguir llenándolo— y un modal de más en el camino común es
- * peor que ninguno. Sobre uno terminado y ya leído no hay respuesta obvia: el PR
- * siguió andando, y reconciliar y empezar de cero son dos cosas distintas.
- *
- * Cancelar no aborta el asistente: devuelve al paso de forma de lectura, que es
- * de donde se viene y donde están las otras salidas (whole, step, o resumir tal
- * cual desde el panel).
- */
-async function pickDraftRewrite(): Promise<DraftStep | undefined> {
-    const answer = await vscode.window.showWarningMessage(
-        DRAFT_EXISTS_TITLE,
-        {modal: true, detail: DRAFT_EXISTS_DETAIL},
-        WALKTHROUGH_UPDATE_BUTTON,
-        WALKTHROUGH_START_OVER_BUTTON
-    );
-    if (answer === WALKTHROUGH_UPDATE_BUTTON) {
-        return "update";
-    }
-    if (answer === WALKTHROUGH_START_OVER_BUTTON) {
-        return "start-over";
-    }
-    return undefined;
 }
 
 /**
@@ -482,14 +438,12 @@ export async function startReview(
 
     // Forma de lectura. El paso se repite —y sólo por eso es un bucle— cuando
     // el revisor entra al armado del borrador y vuelve: sale de ahí con el
-    // borrador intacto y la oferta convertida en `draft-resume`, así que lo
-    // honesto es devolverlo a este mismo paso con las ofertas al día (FR-018a).
+    // borrador intacto y la oferta ya recalculada por la CLI, así que lo honesto
+    // es devolverlo a este mismo paso con las ofertas al día (FR-018a).
     let offers = ctx.offers;
-    let drafts = ctx.drafts;
     let layout: ReviewLayout;
     for (; ;) {
-        const spent = draftIsSpent(drafts, branch.name);
-        const picked = await pickLayout(offers, spent);
+        const picked = await pickLayout(offers);
         if (!picked) {
             return;
         }
@@ -498,20 +452,11 @@ export async function startReview(
             break;
         }
 
-        // Un orden que ya se leyó no se retoma a ciegas: se pregunta si
-        // reconciliarlo con lo que el PR cambió desde entonces o empezar uno
-        // nuevo. El resto de los caminos (crear el primero, seguir uno a medio
-        // escribir) no tienen nada que preguntar.
-        let step: DraftStep = picked.draft;
-        if (step === "resume" && spent) {
-            const chosen = await pickDraftRewrite();
-            if (chosen === undefined) {
-                continue;
-            }
-            step = chosen;
-        }
-
-        const outcome = await runDraftFlow(step, branch, source, range, lock, stateManager, options);
+        // Sin preguntar nada: cuál de los tres caminos del borrador corresponde
+        // ya lo decidió la CLI al elegir qué oferta emitir, que es la única que
+        // puede —la pregunta es si el orden sigue cubriendo el rango, y para eso
+        // hacen falta los dos tips.
+        const outcome = await runDraftFlow(picked.draft, branch, source, range, lock, stateManager, options);
         if (outcome.kind === "done") {
             // El asistente termina acá: no arranca ninguna review y no deja
             // ningún aviso abierto. El refresco que invokeDraft ya hizo dejó la
@@ -527,7 +472,6 @@ export async function startReview(
         const reloaded = await loadBranchContext(branch, source, range, options);
         if (reloaded.error === undefined) {
             offers = reloaded.offers;
-            drafts = reloaded.drafts;
         }
     }
 

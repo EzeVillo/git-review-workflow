@@ -279,7 +279,16 @@ describe("US2: el asistente ofrece armar el orden de lectura", function () {
             await vscode.commands.executeCommand("gitReview.startReview");
             assert.ok(fs.existsSync(draft));
             // Lo que el revisor escribio, que la segunda vuelta no puede tocar.
-            fs.writeFileSync(draft, "# Walkthrough\n\n## 1. src/a.ts\nmine\n", "utf8");
+            // A MEDIO escribir de verdad: el placeholder del heads-up sigue ahi,
+            // asi que el par lee 1/2. Es lo que hace que la oferta sea resume --
+            // sobre un orden COMPLETO y al dia la CLI no ofrece ninguna de las
+            // dos, porque walk ya lo lee y no queda nada que terminar ni que
+            // reconciliar.
+            fs.writeFileSync(
+                draft,
+                "# Walkthrough\n\n<!-- heads-up: what to know first -->\n\n## 1. src/a.ts\nmine\n",
+                "utf8"
+            );
             await api.refresh();
             await vscode.commands.executeCommand("gitReview.startReview");
         } finally {
@@ -299,7 +308,7 @@ describe("US2: el asistente ofrece armar el orden de lectura", function () {
         );
         assert.strictEqual(
             fs.readFileSync(draft, "utf8"),
-            "# Walkthrough\n\n## 1. src/a.ts\nmine\n",
+            "# Walkthrough\n\n<!-- heads-up: what to know first -->\n\n## 1. src/a.ts\nmine\n",
             "resume no puede recrear el borrador"
         );
         assert.strictEqual((await api.refresh()).situation, "no-review");

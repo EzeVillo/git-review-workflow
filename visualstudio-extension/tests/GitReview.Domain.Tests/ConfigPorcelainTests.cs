@@ -117,37 +117,49 @@ public class ConfigPorcelainTests
     }
 
     /// <summary>
-    /// "pick up the one you left half-written" describes a half-written order; over
-    /// one that is finished and already used it is false, and what is left is not
-    /// finishing it but reconciling it or starting a new one.
+    /// The two draft rows are exclusive and the CLI picks which one to send: resume
+    /// talks about finishing what you started, update about reconciling with what the
+    /// PR moved. This used to be decided here, off the draft record's state — which
+    /// answers "has it been read?" and not "does it still cover the range?", so a
+    /// branch that moved and one that did not arrived identical.
     /// </summary>
     [Fact]
-    public void A_spent_draft_row_says_something_else()
+    public void Each_draft_path_carries_its_own_copy_and_step()
     {
-        var offers = new[] { new ReadingOffer(OfferId.DraftResume, OfferRank.Available) };
-        var fresh = LayoutOffers.BuildLayoutItems(offers);
-        var spent = LayoutOffers.BuildLayoutItems(offers, spentDraft: true);
+        var resume = LayoutOffers.BuildLayoutItems(
+            new[] { new ReadingOffer(OfferId.DraftResume, OfferRank.Available) });
+        Assert.Equal("Finish the reading order you started", resume[0].Label);
+        Assert.Equal("pick up the one you left half-written", resume[0].Description);
+        Assert.Equal(LayoutOffers.DraftStep.Resume, resume[0].Draft);
+        Assert.Equal(ReviewLayout.Walk, resume[0].Layout);
 
-        Assert.Equal("Finish the reading order you started", fresh[0].Label);
-        Assert.Equal("Reuse the reading order you wrote", spent[0].Label);
-        Assert.NotEqual(fresh[0].Description, spent[0].Description);
-        // The rest of the row does not change.
-        Assert.Equal(LayoutOffers.DraftStep.Resume, spent[0].Draft);
-        Assert.Equal(ReviewLayout.Walk, spent[0].Layout);
+        var update = LayoutOffers.BuildLayoutItems(
+            new[] { new ReadingOffer(OfferId.DraftUpdate, OfferRank.Available) });
+        Assert.Equal("Update the reading order you wrote", update[0].Label);
+        Assert.Equal(
+            "the PR moved on; keeps the whys whose files are still in range",
+            update[0].Description);
+        Assert.Equal(LayoutOffers.DraftStep.Update, update[0].Draft);
+        Assert.Equal(ReviewLayout.Walk, update[0].Layout);
     }
 
+    /// <summary>
+    /// The real case: the order you wrote still reads (walk), and on top of that what
+    /// the PR changed since can be folded into it.
+    /// </summary>
     [Fact]
-    public void The_draft_state_touches_no_other_row()
+    public void Draft_update_sits_beside_walk_recommended()
     {
-        var offers = new[]
+        var items = LayoutOffers.BuildLayoutItems(new[]
         {
+            new ReadingOffer(OfferId.DraftUpdate, OfferRank.Available),
             new ReadingOffer(OfferId.Walk, OfferRank.Recommended),
-            new ReadingOffer(OfferId.Step, OfferRank.Available),
             new ReadingOffer(OfferId.Whole, OfferRank.Available),
-        };
+        });
         Assert.Equal(
-            LayoutOffers.BuildLayoutItems(offers).Select(i => i.Label),
-            LayoutOffers.BuildLayoutItems(offers, spentDraft: true).Select(i => i.Label));
+            new LayoutOffers.DraftStep?[] { null, LayoutOffers.DraftStep.Update, null },
+            items.Select(i => i.Draft));
+        Assert.Equal("Walkthrough (recommended)", items[0].Label);
     }
 
     /// <summary>

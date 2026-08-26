@@ -2,6 +2,7 @@ import * as assert from "node:assert";
 import {
     advanceDraftFlow,
     DraftFlowState,
+    DraftStep,
     initialDraftFlowState,
     offersIncludeKeys,
     sameDraftFile,
@@ -14,12 +15,27 @@ describe("initialDraftFlowState", () => {
         assert.deepStrictEqual(initialDraftFlowState("resume"), {kind: "done"});
     });
 
-    it("update es el mismo comando que create; start-over es el que lleva --force", () => {
+    it("update es el mismo comando que create, sin ningun flag", () => {
         // El verbo actualiza en vez de negarse, asi que reconciliar no necesita
-        // ningun flag: lo unico que distingue a las dos ramas del picker es que
-        // una tira lo escrito y la otra no.
+        // ningun flag: conserva cada entrada cuyo archivo sigue en rango y suma
+        // las que entraron.
         assert.deepStrictEqual(initialDraftFlowState("update"), {kind: "create", force: false});
-        assert.deepStrictEqual(initialDraftFlowState("start-over"), {kind: "create", force: true});
+    });
+
+    it("ningun paso del asistente llega a --force", () => {
+        // start-over se retiro: era la otra mitad de un modal que preguntaba, en
+        // cada borrador ya usado, si reconciliar o empezar de cero -- una duda
+        // que ahora contesta la CLI eligiendo que oferta emitir. Empezar de cero
+        // es lo unico que destruye prosa escrita a mano, y del lado del revisor
+        // el archivo no esta en git, asi que no vuelve a un paso por el que se
+        // pasa de largo: vive en Discard, que confirma.
+        const steps: DraftStep[] = ["create", "resume", "update"];
+        for (const step of steps) {
+            const state = initialDraftFlowState(step);
+            if (state.kind === "create") {
+                assert.strictEqual(state.force, false, `${step} no debe forzar`);
+            }
+        }
     });
 });
 

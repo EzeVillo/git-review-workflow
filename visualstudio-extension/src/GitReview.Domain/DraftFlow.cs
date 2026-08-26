@@ -54,22 +54,28 @@ public abstract record DraftFlowEvent
 public static class DraftFlow
 {
     /// <summary>
-    /// The four ways in, and only two of them invoke anything:
+    /// The three ways in, and only two of them invoke anything:
     /// <list type="bullet">
     /// <item>Create — there is no file: the skeleton is written.</item>
     /// <item>Resume — there is a half-written one and it is used as it is. Nothing
     /// is invoked, so the wizard is already done.</item>
-    /// <item>Update — there is one whose review is over and it is reconciled with
-    /// today's range. It is the SAME command as Create: the verb updates instead
+    /// <item>Update — there is one that fell behind the range and it is reconciled
+    /// with today's. It is the SAME command as Create: the verb updates instead
     /// of refusing.</item>
-    /// <item>StartOver — the same with --force: the blank skeleton, which is the
-    /// only thing that makes prose disappear and so is never the default.</item>
     /// </list>
+    ///
+    /// There is no StartOver, and the absence is deliberate. It existed as the
+    /// other half of a modal that asked, over any already-used draft, whether to
+    /// reconcile or start from scratch. That modal is gone: the CLI now offers
+    /// draft-update only when there IS something to reconcile, so no question is
+    /// left to ask. Starting over is the one thing that destroys hand-written
+    /// prose, and the modal left it one click away in a step people walked
+    /// straight past; it stays available as what it is — a deliberate act — via
+    /// Discard on the draft row, or walkthrough draft --force from the terminal.
     /// </summary>
     public static DraftFlowState InitialDraftFlowState(LayoutOffers.DraftStep step) => step switch
     {
         LayoutOffers.DraftStep.Resume => DraftFlowState.Done.Instance,
-        LayoutOffers.DraftStep.StartOver => new DraftFlowState.Create(Force: true),
         _ => DraftFlowState.Create.Instance,
     };
 

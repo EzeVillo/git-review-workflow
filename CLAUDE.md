@@ -224,8 +224,9 @@ working tree:
   exige el ref, `--draft` sólo deletrea nombres del namespace activo y `clean` es hands-off en los
   dos). Su presencia se reporta —nunca se infiere— con el registro `draft` de `status --porcelain` y
   el sufijo `(draft)`
-  en `status` y `list`; la viabilidad de armarlo o continuarlo, con las ofertas
-  `draft` / `draft-resume` de `config --porcelain`. Las superficies de custodia se deciden con un
+  en `status` y `list`; la viabilidad de armarlo, continuarlo o ponerlo al día, con las ofertas
+  `draft` / `draft-resume` / `draft-update` de `config --porcelain`. Las superficies de custodia se
+  deciden con un
   **`draft` actualiza en vez de negarse**, en los mismos términos que `init` y con el mismo
   código: cada entrada cuyo archivo sigue en rango conserva número, why y `> key`, los que
   entraron llegan como `## ?.` y los que salieron se descartan nombrados. El motivo es otro que
@@ -264,12 +265,30 @@ working tree:
   start* — o sea sin forma de avanzar. Es el mismo test de `filled` que ya usan los tres paneles y
   cuesta cero, porque el par lo cuenta el `awk` que leyó el archivo.
 
-  **Del lado del cliente eso son dos cosas.** El asistente de `start`, ante un borrador cuya review
-  ya cerró, pregunta *Update* / *Start over* antes de invocar —el mismo molde que el picker de
-  `walkthrough init` del autor, y el mismo par de botones— y la fila de la oferta `draft-resume`
-  cambia su copy, porque «pick up the one you left half-written» sobre un orden terminado y ya
-  usado es sencillamente falso. Sólo se pregunta ahí: sobre uno a medio escribir la respuesta es
-  obvia y un modal de más en el camino común es peor que ninguno.
+  **Cuál de las dos ofertas del borrador sale es otra pregunta, y la contesta el mismo verbo.**
+  `draft-resume` y `draft-update` son excluyentes y las decide `emit_reading_offers`, no el
+  cliente: lo que las separa es si el orden **sigue cubriendo el rango**, y eso necesita el tip
+  contra el que se escribió el borrador —`walk_sidecar_block_tip`, cero procesos sobre el archivo
+  que `walk_use_draft` ya ubicó— y el de hoy. El `state` del registro `draft` **no** sirve de
+  sustituto: contesta «¿ya se leyó este orden?», a propósito, así que una rama que avanzó después
+  de su review sigue diciendo `reviewed`. Tres casos y sólo dos filas: **desfasado** →
+  `draft-update`; **al día y a medio escribir** → `draft-resume`; **al día y completo** → ninguna,
+  porque `walk` ya lo lee y no queda nada que reconciliar ni que terminar. Ese último es el único
+  que cuesta un proceso (el `awk` del progreso) y se paga tarde, después de que la pregunta barata
+  dijo «al día»; el `_ero_walk == 0` que lo acompaña no es adorno, es la red: un borrador completo
+  cuyos paths ya no tocan el rango deja `walk` sin ofrecer, y callarse ahí sería un orden de
+  lectura sin ninguna superficie que lo alcance.
+
+  **Del lado del cliente eso es una cosa menos.** El asistente no pregunta nada: dibuja la oferta
+  que llegó y la invoca. Hubo un modal *Update* / *Start over* sobre cualquier borrador cuya review
+  ya había cerrado —el molde del picker de `walkthrough init` del autor— y se retiró junto con el
+  paso `START_OVER` de `DraftStep`, porque preguntaba justamente lo que el cliente no podía saber:
+  con el rango quieto, *Update* era un no-op que devolvía al revisor a una fila `reviewed`, o sea
+  plegada abajo, sin *Copy for agent* y sin *Validate and start* — un paso del asistente cuyo único
+  desenlace era un callejón. Empezar de cero **no se repone ahí**: del lado del autor el archivo
+  está trackeado y `git checkout --` lo devuelve, del lado del revisor vive fuera de git y no hay
+  vuelta atrás, así que es de Discard —que confirma y cuyo sujeto es el archivo— o de
+  `walkthrough draft --force` en la terminal, nunca de un botón al paso.
   test de archivo y cero procesos nuevos; el gitdir del que cuelgan todos esos paths se resuelve
   **una vez por proceso** en `walk_gitdir_init`, llamado desde `walk_use_draft` (todo verbo con
   review activa) y a mano por los cuatro que arman un path sin fijar contexto — `list`, `save`,

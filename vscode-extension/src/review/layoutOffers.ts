@@ -19,7 +19,7 @@ export const FALLBACK_OFFERS: readonly ReadingOffer[] = [
  * —el que quedaría si el borrador se completa— y `draft` marca el desvío por el
  * bucle de armado antes de llegar a start (contracts/client-draft-flow.md).
  */
-export type DraftStep = "create" | "resume";
+export type DraftStep = "create" | "resume" | "update";
 
 export interface LayoutPickItem {
     label: string;
@@ -59,6 +59,18 @@ const OFFER_META: Record<
         layout: "walk",
         draft: "resume",
     },
+    // La CLI manda ésta en lugar de `draft-resume` cuando el borrador quedó
+    // desfasado del rango. Antes las dos situaciones llegaban indistinguibles y
+    // el asistente preguntaba con un modal cuál era — o sea le pedía al revisor
+    // un dato que sólo la CLI tiene, y cuando la respuesta era "no se movió
+    // nada" la reconciliación era un no-op que terminaba en una fila sin
+    // Validate and start.
+    "draft-update": {
+        label: "Update the reading order you wrote",
+        description: "the PR moved on; keeps the whys whose files are still in range",
+        layout: "walk",
+        draft: "update",
+    },
     step: {
         label: "Commit by commit",
         description: "one commit at a time (--step)",
@@ -72,7 +84,7 @@ const OFFER_META: Record<
 };
 
 /** Orden estable del contrato cuando no hay recommended que reordene. */
-const OFFER_ORDER: OfferId[] = ["walk", "keys", "draft", "draft-resume", "step", "whole"];
+const OFFER_ORDER: OfferId[] = ["walk", "keys", "draft", "draft-resume", "draft-update", "step", "whole"];
 
 /**
  * Ofertas efectivas: las de la CLI, o fallback whole+step sin recommended.
@@ -89,25 +101,18 @@ export function effectiveOffers(offers: readonly ReadingOffer[] | undefined): Re
  * Nunca inventa ids que no vengan en `offers` (salvo vía effectiveOffers).
  */
 /**
- * Lo que dice la fila del borrador cuando su review YA cerró. La de siempre
- * —"pick up the one you left half-written"— describe un orden a medio escribir,
- * y sobre uno terminado y ya usado es sencillamente falso: lo que sigue ahí no
- * es terminarlo sino reconciliarlo con lo que el PR cambió desde entonces, o
- * empezar uno nuevo. La elección se hace después, en el picker.
- */
-const SPENT_RESUME_META = {
-    label: "Reuse the reading order you wrote",
-    description: "you already reviewed with it; update it for what changed, or start over",
-};
-
-/**
- * @param spentDraft si el borrador de esta rama tiene su review cerrada, que es
- *   lo único que cambia la copy de `draft-resume`. Lo dice la CLI en el campo
- *   `state` del registro `draft`; acá no se deriva.
+ * Cuál de las dos filas del borrador se dibuja ya no se decide acá: la CLI manda
+ * `draft-resume` o `draft-update` y cada una trae su copy fija.
+ *
+ * Antes esto miraba el `state` del registro `draft` para reescribir la copy de
+ * `draft-resume` cuando la review ya había cerrado. Ese campo contesta "¿ya se
+ * leyó este orden?", no "¿sigue cubriendo el rango?", así que una rama que
+ * avanzó después de su review y una que no se movió llegaban con el MISMO
+ * `reviewed` — y la fila terminaba ofreciendo reconciliar un orden que no tenía
+ * nada que reconciliar.
  */
 export function buildLayoutItems(
-    offers: readonly ReadingOffer[] | undefined,
-    spentDraft = false
+    offers: readonly ReadingOffer[] | undefined
 ): LayoutPickItem[] {
     const list = effectiveOffers(offers);
     const byId = new Map<OfferId, OfferRank>();
@@ -128,10 +133,7 @@ export function buildLayoutItems(
     }
 
     return ordered.map((id) => {
-        const meta =
-            id === "draft-resume" && spentDraft
-                ? {...OFFER_META[id], ...SPENT_RESUME_META}
-                : OFFER_META[id];
+        const meta = OFFER_META[id];
         const rank = byId.get(id) ?? "available";
         const description =
             rank === "recommended" ? `${meta.description} (recommended)` : meta.description;

@@ -21,12 +21,27 @@ class DraftFlowTest {
     }
 
     @Test
-    fun updateIsTheSameCommandAsCreateAndStartOverIsTheOneWithForce() {
-        // El verbo actualiza en vez de negarse, así que reconciliar no necesita
-        // ningún flag: lo único que distingue a las dos ramas del picker es que
-        // una tira lo escrito y la otra no.
+    fun updateIsTheSameCommandAsCreateWithNoFlag() {
+        // El verbo actualiza en vez de negarse, asi que reconciliar no necesita
+        // ningun flag: conserva cada entrada cuyo archivo sigue en rango y suma
+        // las que entraron.
         assertEquals(DraftFlowState.Create(force = false), initialDraftFlowState(DraftStep.UPDATE))
-        assertEquals(DraftFlowState.Create(force = true), initialDraftFlowState(DraftStep.START_OVER))
+    }
+
+    @Test
+    fun noWizardStepEverReachesForce() {
+        // START_OVER se retiro: era la otra mitad de un modal que preguntaba, en
+        // cada borrador ya usado, si reconciliar o empezar de cero -- una duda
+        // que ahora contesta la CLI eligiendo que oferta emitir. Empezar de cero
+        // es lo unico que destruye prosa escrita a mano, y del lado del revisor
+        // el archivo no esta en git, asi que no vuelve a un paso por el que se
+        // pasa de largo: vive en Discard, que confirma.
+        for (step in DraftStep.entries) {
+            val state = initialDraftFlowState(step)
+            if (state is DraftFlowState.Create) {
+                assertEquals(false, state.force, "$step no debe forzar")
+            }
+        }
     }
 
     @Test

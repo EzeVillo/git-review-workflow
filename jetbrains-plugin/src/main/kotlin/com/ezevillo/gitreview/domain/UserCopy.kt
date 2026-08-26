@@ -275,17 +275,21 @@ object UserCopy {
         "Update keeps every entry whose file is still in range - its number, its why and its > key - and adds the files that are new.\n\n" +
             "Start over runs git review walkthrough init --force: it replaces .review/walkthrough.md with a blank skeleton. The file is tracked, so git checkout -- brings the old one back."
     /**
-     * El mismo par de salidas del lado del revisor. Dos cosas cambian respecto
-     * del texto del autor, y las dos importan: el archivo no está en git, así
-     * que empezar de cero no tiene vuelta atrás; y lo que se reconcilia no es un
-     * walkthrough que quedó viejo sino un orden de lectura que ya se usó, sobre
-     * un PR que siguió andando.
+     * Del lado del REVISOR no hay par equivalente, y la asimetria es deliberada.
+     *
+     * Hubo uno: un modal que, sobre cualquier borrador cuya review ya habia
+     * cerrado, preguntaba si reconciliar o empezar de cero. Preguntaba porque el
+     * asistente no podia saber cual de las dos cosas hacia falta -- el `state`
+     * del registro `draft` dice si el orden ya se leyo, no si sigue cubriendo el
+     * rango --, asi que le pasaba la duda al revisor. Ahora la contesta la CLI,
+     * que es la que tiene los dos tips, ofreciendo `draft-update` solo cuando hay
+     * algo que reconciliar; sin pregunta, no hay modal.
+     *
+     * Y empezar de cero no se repone aca: del lado del autor el archivo esta
+     * trackeado y `git checkout --` lo devuelve, del lado del revisor vive fuera
+     * de git y no hay vuelta atras. Un boton para eso no va en un paso por el que
+     * se pasa de largo; va en Discard, que confirma.
      */
-    const val DRAFT_EXISTS_TITLE = "You already have a reading order for this branch."
-    const val DRAFT_EXISTS_DETAIL =
-        "Update keeps every entry whose file is still in range - its number, its why and its > key - and adds the files the PR changed since.\n\n" +
-        "Start over runs git review walkthrough draft --force: it replaces your reading order with a blank skeleton. This file is not in git, so what is written in it now is gone for good."
-
     const val WALKTHROUGH_UPDATE_BUTTON = "Update"
     const val WALKTHROUGH_START_OVER_BUTTON = "Start over"
     const val WALKTHROUGH_INIT_PROGRESS = "Initializing walkthrough…"

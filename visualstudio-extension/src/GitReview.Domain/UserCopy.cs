@@ -285,17 +285,22 @@ public static class UserCopy
         "Update keeps every entry whose file is still in range - its number, its why and its > key - and adds the files that are new.\n\n"
         + "Start over runs git review walkthrough init --force: it replaces .review/walkthrough.md with a blank skeleton. The file is tracked, so git checkout -- brings the old one back.";
     /// <summary>
-    /// The same pair of ways out on the reviewer's side. Two things differ from
-    /// the author's text, and both matter: the file is not in git, so starting
-    /// over has no way back; and what is reconciled is not a walkthrough that went
-    /// stale but a reading order that was already used, over a PR that kept moving.
+    /// On the REVIEWER's side there is no equivalent pair, and the asymmetry is
+    /// deliberate.
+    ///
+    /// There was one: a modal that, over any draft whose review had closed, asked
+    /// whether to reconcile or start from scratch. It asked because the wizard could
+    /// not know which of the two was needed — the draft record's state says whether
+    /// the order has been read, not whether it still covers the range — so it handed
+    /// the doubt to the reviewer. The CLI answers it now, holding both tips, by
+    /// offering draft-update only when there IS something to reconcile; with no
+    /// question, there is no modal.
+    ///
+    /// And starting over is not restored here: on the author's side the file is
+    /// tracked and git checkout -- brings it back, on the reviewer's side it lives
+    /// outside git and there is no way back. A button for that does not belong in a
+    /// step people walk straight past; it belongs in Discard, which confirms.
     /// </summary>
-    public const string DraftExistsTitle = "You already have a reading order for this branch.";
-
-    public const string DraftExistsDetail =
-        "Update keeps every entry whose file is still in range - its number, its why and its > key - and adds the files the PR changed since.\n\n" +
-        "Start over runs git review walkthrough draft --force: it replaces your reading order with a blank skeleton. This file is not in git, so what is written in it now is gone for good.";
-
     public const string WalkthroughUpdateButton = "Update";
     public const string WalkthroughStartOverButton = "Start over";
 

@@ -226,6 +226,22 @@ particular, sin la palabra *walkthrough* como si fuera un término conocido.
 | --- | --- | --- |
 | `draft` | `Build a reading order first` | `nobody wrote one for this PR; otherwise you read the whole diff` |
 | `draft-resume` | `Finish the reading order you started` | `pick up the one you left half-written` |
+| `draft-update` | `Update the reading order you wrote` | `the PR moved on; keeps the whys whose files are still in range` |
+
+Las tres son excluyentes y **cuál llega la decide la CLI**, que es la única que
+puede: la pregunta que separa `draft-resume` de `draft-update` es si el orden
+sigue cubriendo el rango, y contestarla necesita el tip contra el que se escribió
+el borrador *y* el de hoy. El campo `state` del registro `draft` **no** sirve de
+sustituto — contesta otra pregunta ("¿ya se leyó este orden?"), a propósito, así
+que una rama que avanzó después de su review sigue diciendo `reviewed`.
+
+Ningún cliente pregunta cuál de las dos corresponde. Hubo un modal que lo hacía
+—*Update* / *Start over* sobre cualquier borrador ya usado— y se retiró junto con
+el paso `START_OVER` de `DraftStep`: sobre un rango que no se había movido,
+*Update* era un no-op que dejaba al revisor en una fila `reviewed`, o sea sin
+*Copy for agent* ni *Validate and start*. Empezar de cero sigue existiendo como
+acto deliberado (Discard en la fila, o `walkthrough draft --force`), que es donde
+corresponde: del lado del revisor el archivo no está en git y no hay vuelta atrás.
 
 Byte por byte iguales en los tres `OFFER_META`
 ([layoutOffers.ts](../../../vscode-extension/src/review/layoutOffers.ts),

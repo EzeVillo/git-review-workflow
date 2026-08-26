@@ -49,26 +49,31 @@ export type DraftFlowEvent =
     { kind: "created"; ok: boolean; error?: string };
 
 /**
- * Los cuatro puntos de entrada, y sólo dos de ellos invocan algo:
+ * Los tres puntos de entrada, y sólo dos de ellos invocan algo:
  *
  * - `create` — no hay archivo: se escribe el esqueleto.
  * - `resume` — hay uno a medio escribir y se usa tal cual. No se invoca nada,
  *   así que el asistente ya terminó.
- * - `update` — hay uno cuya review ya cerró y se reconcilia con el rango de
+ * - `update` — hay uno que quedó desfasado del rango y se reconcilia con el de
  *   hoy. Es el MISMO comando que `create`: el verbo actualiza en vez de
  *   negarse, así que cada entrada cuyo archivo sigue en rango conserva su
  *   número, su why y su `> key`, y los que entraron llegan como placeholders.
- * - `start-over` — lo mismo con `--force`: el esqueleto en blanco, que es lo
- *   único que hace desaparecer prosa y por eso nunca es el default.
+ *
+ * No hay `start-over`, y la ausencia es deliberada. Existió como la otra mitad
+ * de un modal que preguntaba, sobre cualquier borrador ya usado, si reconciliar
+ * o empezar de cero. Ese modal se retiró: la CLI ahora ofrece `draft-update`
+ * sólo cuando hay algo que reconciliar, así que no queda pregunta que hacer.
+ * Empezar de cero es lo único que destruye prosa escrita a mano y con el modal
+ * quedaba a un clic de distancia en un paso por el que se pasaba de largo; sigue
+ * disponible como lo que es —un acto deliberado— con Discard en la fila del
+ * borrador, o con `walkthrough draft --force` desde la terminal.
  */
-export type DraftStep = "create" | "resume" | "update" | "start-over";
+export type DraftStep = "create" | "resume" | "update";
 
 export function initialDraftFlowState(step: DraftStep): DraftFlowState {
     switch (step) {
         case "resume":
             return {kind: "done"};
-        case "start-over":
-            return {kind: "create", force: true};
         default:
             return {kind: "create", force: false};
     }

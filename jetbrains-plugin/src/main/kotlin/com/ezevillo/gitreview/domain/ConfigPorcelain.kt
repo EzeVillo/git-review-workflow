@@ -40,13 +40,19 @@ data class DeltaRecord(
 )
 
 /**
- * 011: DRAFT / DRAFT_RESUME no son formas de lectura sino el camino para
- * conseguir una — el revisor se escribe el orden que el PR no trae. Viajan por
- * el mismo registro porque se eligen en el mismo paso del asistente, y son
- * mutuamente excluyentes entre sí.
+ * 011: DRAFT / DRAFT_RESUME / DRAFT_UPDATE no son formas de lectura sino el
+ * camino para conseguir una — el revisor se escribe el orden que el PR no trae.
+ * Viajan por el mismo registro porque se eligen en el mismo paso del asistente,
+ * y son mutuamente excluyentes entre sí.
+ *
+ * Cuál de las tres llega lo decide la CLI y no se deriva acá: DRAFT_UPDATE dice
+ * que el borrador quedó desfasado del rango de hoy, que es una pregunta que sólo
+ * contesta quien tiene los dos tips. El campo `state` del registro `draft` NO
+ * sirve para eso — contesta otra ("¿ya se leyó este orden?"), así que una rama
+ * que avanzó después de su review sigue diciendo `reviewed`.
  */
 enum class OfferId {
-    WALK, KEYS, DRAFT, DRAFT_RESUME, STEP, WHOLE;
+    WALK, KEYS, DRAFT, DRAFT_RESUME, DRAFT_UPDATE, STEP, WHOLE;
 
     val id: String
         get() = when (this) {
@@ -54,6 +60,7 @@ enum class OfferId {
             KEYS -> "keys"
             DRAFT -> "draft"
             DRAFT_RESUME -> "draft-resume"
+            DRAFT_UPDATE -> "draft-update"
             STEP -> "step"
             WHOLE -> "whole"
         }
@@ -64,6 +71,7 @@ enum class OfferId {
             "keys" -> KEYS
             "draft" -> DRAFT
             "draft-resume" -> DRAFT_RESUME
+            "draft-update" -> DRAFT_UPDATE
             "step" -> STEP
             "whole" -> WHOLE
             else -> null

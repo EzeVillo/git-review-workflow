@@ -300,10 +300,10 @@ public static class PanelModelBuilder
     /// </summary>
     public static string FixesBadge(FixesState state) => state switch
     {
-        FixesState.Empty => "nothing committed",
-        FixesState.Merged => "in the base",
-        FixesState.Unmerged => "not in the base",
-        _ => "state unknown",
+        FixesState.Empty => "empty",
+        FixesState.Merged => "merged",
+        FixesState.Unmerged => "unmerged",
+        _ => "unknown",
     };
 
     public static IReadOnlyList<PanelFixes> ToPanelFixes(IReadOnlyList<FixesRecord> fixes)

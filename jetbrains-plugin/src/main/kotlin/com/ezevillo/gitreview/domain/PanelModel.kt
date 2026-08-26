@@ -354,10 +354,10 @@ fun toPanelGuides(guides: List<GuideRecord>): List<PanelGuide> {
  * canonical contract.
  */
 fun fixesBadge(state: FixesState): String = when (state) {
-    FixesState.EMPTY -> "nothing committed"
-    FixesState.MERGED -> "in the base"
-    FixesState.UNMERGED -> "not in the base"
-    FixesState.UNKNOWN -> "state unknown"
+    FixesState.EMPTY -> "empty"
+    FixesState.MERGED -> "merged"
+    FixesState.UNMERGED -> "unmerged"
+    FixesState.UNKNOWN -> "unknown"
 }
 
 fun toPanelFixes(fixes: List<FixesRecord>): List<PanelFixes> = fixes.map { record ->

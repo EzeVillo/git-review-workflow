@@ -41,7 +41,7 @@ class PanelLayoutFixesTest {
     @Test
     fun `the badge says each state and none folds into another`() {
         assertEquals(
-            listOf("not in the base", "nothing committed", "in the base", "state unknown"),
+            listOf("unmerged", "empty", "merged", "unknown"),
             rows(PanelFixtures.noReviewFixes()).map { it.badge },
         )
     }

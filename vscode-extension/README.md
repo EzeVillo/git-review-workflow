@@ -143,9 +143,9 @@ invents a second way to change review state.
 **The branches your finishes left behind.** Every `finish` leaves a
 `review-fixes/<branch>`, and they pile up one per review. The empty state lists
 them under **Edits you extracted**, collapsed at the foot, each with what git can
-say about dropping it: `nothing committed` (it still sits where `finish` created
-it, so it holds none of your work), `in the base`, `not in the base`, or `state
-unknown` with no base configured. Dropping one runs `clean --fixes-only`, which
+say about dropping it: `empty` (it still sits where `finish` created it, so it
+holds none of your work), `merged`, `unmerged`, or `unknown` with no base
+configured. Dropping one runs `clean --fixes-only`, which
 leaves the review session standing — including the undo point of a finish you can
 still abort. There is deliberately no button that takes them all at once: a bare
 `clean` also deletes every `review/*` branch, and what these rows hold is work

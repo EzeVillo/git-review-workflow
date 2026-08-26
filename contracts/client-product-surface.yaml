@@ -678,10 +678,10 @@ fixes_rows:
   # no tiene respuesta, y contestar la peor de las dos pinta de peligrosa una
   # rama que puede estar vacia.
   badges:
-    empty: "nothing committed"
-    merged: "in the base"
-    unmerged: "not in the base"
-    unknown: "state unknown"
+    empty: "empty"
+    merged: "merged"
+    unmerged: "unmerged"
+    unknown: "unknown"
   controls:
     # Un solo control, y destructivo: lo que se puede hacer con una rama de fixes
     # desde aca es tirarla. Commitearla y pushearla son de Source Control, que es

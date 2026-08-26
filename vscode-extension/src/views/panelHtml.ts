@@ -1230,11 +1230,11 @@ export function panelHtml(nonce: string): string {
    *
    * El badge dice cuanto cuesta tirarla, que es la unica pregunta de esta
    * seccion. Los cuatro estados salen de la CLI y no se pliegan entre si:
-   * "nothing committed" no es una variante de "seguro" (una rama intacta esta
-   * parada en la punta del PR y no contiene NADA tuyo, que es distinto de estar
-   * integrada), y "state unknown" no es una variante de "not in the base"
-   * (sin base configurada la pregunta no tiene respuesta, y contestar la peor
-   * de las dos pinta de peligrosa una rama que puede estar vacia).
+   * "empty" no es una variante de "seguro" (una rama intacta esta parada en
+   * la punta del PR y no contiene NADA tuyo, que es distinto de estar
+   * integrada), y "unknown" no es una variante de "unmerged" (sin base
+   * configurada la pregunta no tiene respuesta, y contestar la peor de las
+   * dos pinta de peligrosa una rama que puede estar vacia).
    */
   function renderFixesRow(model, fixes, index) {
     const box = el("div", "rev guide");
@@ -1260,10 +1260,10 @@ export function panelHtml(nonce: string): string {
   }
 
   function fixesBadge(state) {
-    if (state === "empty") { return "nothing committed"; }
-    if (state === "merged") { return "in the base"; }
-    if (state === "unmerged") { return "not in the base"; }
-    return "state unknown";
+    if (state === "empty") { return "empty"; }
+    if (state === "merged") { return "merged"; }
+    if (state === "unmerged") { return "unmerged"; }
+    return "unknown";
   }
 
   /**

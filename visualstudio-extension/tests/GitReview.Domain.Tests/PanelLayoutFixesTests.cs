@@ -41,7 +41,7 @@ public class PanelLayoutFixesTests
     public void The_badge_says_each_state_and_none_folds_into_another()
     {
         Assert.Equal(
-            new[] { "not in the base", "nothing committed", "in the base", "state unknown" },
+            new[] { "unmerged", "empty", "merged", "unknown" },
             Rows(PanelFixtures.NoReviewFixes()).Select(r => r.Badge));
     }
 

@@ -238,10 +238,10 @@ describe("panelHtml", () => {
     });
 
     it("el badge de una fila de fixes dice los cuatro estados y no los pliega", () => {
-        assert.ok(html.includes('return "nothing committed";'));
-        assert.ok(html.includes('return "in the base";'));
-        assert.ok(html.includes('return "not in the base";'));
-        assert.ok(html.includes('return "state unknown";'));
+        assert.ok(html.includes('return "empty";'));
+        assert.ok(html.includes('return "merged";'));
+        assert.ok(html.includes('return "unmerged";'));
+        assert.ok(html.includes('return "unknown";'));
     });
 
     it("una review activa en otra rama explica por que no hay botones", () => {

@@ -88,6 +88,11 @@ Requires `git review` **0.7.0** or newer.
   Starting from a blank skeleton stays where it belongs — the **Discard** glyph on the
   draft row, which confirms first: unlike the author's walkthrough, your reading order is
   not in git, so there is no way back.
+- **Choosing a draft path now says what it did.** The wizard runs the verb and reports its
+  outcome — `2 kept, 1 added, 0 dropped` — instead of staying silent. The result had always been
+  there, on the CLI's stdout, and this path read only stderr: on a branch with nothing to note you
+  saw nothing at all, and on one with a note you saw the authoring-guide hint, which had nothing to
+  do with what you had just pressed.
 - Copying is copying: no service is contacted, no assistant is invoked, and nothing about
   the draft is written for you.
 

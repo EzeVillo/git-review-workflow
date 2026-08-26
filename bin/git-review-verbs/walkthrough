@@ -1193,8 +1193,19 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		# added. Same shape as init's pair, with this side's build command.
 		if [ "$to_stdout" -eq 0 ]; then
 			if [ "$update" -eq 1 ]; then
-				echo "updated $targetrel: $merged_kept kept, $merged_added added, $(printf '%s
-' "$merged_removed" | grep -c . || true) dropped; fill in the new entries, then run git review walkthrough draft --build$draftflags $branch"
+				# "fill in the new entries" only when there ARE new entries. An
+				# update that adds none is a real outcome, not a no-op -- the
+				# range moved without changing which files it touches, and the
+				# instruction block has just been rewritten against the new tip --
+				# but telling the reviewer to go fill in nothing sends them to an
+				# unchanged file looking for a placeholder that is not there.
+				merged_dropped="$(printf '%s\n' "$merged_removed" | grep -c . || true)"
+				if [ "$merged_added" -gt 0 ]; then
+					next_step="fill in the new entries, then run git review walkthrough draft --build$draftflags $branch"
+				else
+					next_step="no new entries to fill in; run git review walkthrough draft --build$draftflags $branch when you are ready"
+				fi
+				echo "updated $targetrel: $merged_kept kept, $merged_added added, $merged_dropped dropped; $next_step"
 			else
 				echo "wrote $targetrel with $n file(s) from $srclabel; fill in the order and why, then run git review walkthrough draft --build$draftflags $branch"
 			fi

@@ -9,7 +9,13 @@ import {
     ReadingOffer,
 } from "../cli/configPorcelain";
 import {invokeGitReview, InvokeOptions, resolveCommand} from "../cli/invoke";
-import {advanceDraftFlow, DraftFlowState, DraftStep, initialDraftFlowState} from "../review/draftFlow";
+import {
+    advanceDraftFlow,
+    draftOutcomeMessage,
+    DraftFlowState,
+    DraftStep,
+    initialDraftFlowState,
+} from "../review/draftFlow";
 import {MutationLock} from "../review/mutationLock";
 import {
     buildLayoutItems,
@@ -35,6 +41,7 @@ import {setBase} from "./setBase";
 function flatten(stderr: string): string {
     return stderr.split("\n").map((line) => line.trim()).filter((line) => line.length > 0).join(" ");
 }
+
 
 interface BranchItem extends vscode.QuickPickItem {
     candidate: CandidateBranch;
@@ -255,8 +262,13 @@ async function invokeDraft(
             }
         )
     );
-    const text = flatten(result?.stderr ?? "");
-    return {ok: result !== undefined && !result.errorCode && result.exitCode === 0, text};
+    const ok = result !== undefined && !result.errorCode && result.exitCode === 0;
+    // En verde, lo que hizo el verbo (stdout) más sus notas; en rojo, sólo el
+    // error, que es lo que la CLI pone en stderr y lo único que hay que decir.
+    const text = ok
+        ? draftOutcomeMessage(result?.stdout ?? "", result?.stderr ?? "")
+        : flatten(result?.stderr ?? "");
+    return {ok, text};
 }
 
 /**
@@ -286,8 +298,11 @@ async function runDraftFlow(
                     lock, stateManager, branch.name, source, range, options, state.force
                 );
                 if (outcome.ok && outcome.text.length > 0) {
-                    // Nota de un verbo exitoso (el borrador tapa el walkthrough
-                    // del autor): se muestra, como las de start.
+                    // Lo que el verbo hizo, y después sus notas (que el borrador
+                    // tapa el walkthrough del autor, por ejemplo). Es el único
+                    // acuse de recibo que tiene este paso: el asistente cierra
+                    // sin arrancar nada, y sobre un update el panel muestra el
+                    // par nuevo pero no dice qué se conservó ni qué entró.
                     void vscode.window.showInformationMessage(outcome.text);
                 }
                 state = advanceDraftFlow(state, {

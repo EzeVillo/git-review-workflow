@@ -1,6 +1,7 @@
 import * as assert from "node:assert";
 import {
     advanceDraftFlow,
+    draftOutcomeMessage,
     DraftFlowState,
     DraftStep,
     initialDraftFlowState,
@@ -113,5 +114,38 @@ describe("sameDraftFile", () => {
             sameDraftFile("/repo/.git/review-walkthrough/x.md", "/repo/.git/review-walkthrough/x.md", "linux"),
             true
         );
+    });
+});
+
+describe("draftOutcomeMessage", () => {
+    // El caso que motivo la funcion: apretar la oferta y no ver nada. El
+    // resultado del verbo viaja por stdout y este camino leia solo stderr.
+    it("el resultado del verbo no puede perderse: viene por stdout", () => {
+        const out = "updated $GIT_DIR/review-walkthrough/feature/x.md: 1 kept, 1 added, 0 dropped\n";
+        assert.strictEqual(
+            draftOutcomeMessage(out, ""),
+            "updated $GIT_DIR/review-walkthrough/feature/x.md: 1 kept, 1 added, 0 dropped"
+        );
+    });
+
+    it("con nota, el resultado va primero y la nota despues", () => {
+        const msg = draftOutcomeMessage(
+            "updated the file: 2 kept, 0 added, 0 dropped\n",
+            "note: no authoring guide. Create one with:\n        git review walkthrough guide\n"
+        );
+        assert.strictEqual(
+            msg,
+            "updated the file: 2 kept, 0 added, 0 dropped — " +
+            "note: no authoring guide. Create one with: git review walkthrough guide"
+        );
+        // El separador va ENTRE los dos tramos, nunca adentro de uno: cada uno
+        // se aplana por su cuenta antes de unirlos.
+        assert.strictEqual(msg.split(" — ").length, 2);
+    });
+
+    it("un stream vacio no deja separador colgando", () => {
+        assert.strictEqual(draftOutcomeMessage("", "note: solo la nota"), "note: solo la nota");
+        assert.strictEqual(draftOutcomeMessage("", ""), "");
+        assert.strictEqual(draftOutcomeMessage("  \n \n", "\n"), "");
     });
 });

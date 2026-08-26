@@ -20,6 +20,7 @@ import com.ezevillo.gitreview.domain.branchPickerLabel
 import com.ezevillo.gitreview.domain.buildLayoutItems
 import com.ezevillo.gitreview.domain.deltaForSource
 import com.ezevillo.gitreview.domain.draftArgs
+import com.ezevillo.gitreview.domain.draftOutcomeText
 import com.ezevillo.gitreview.domain.draftConfigArgs
 import com.ezevillo.gitreview.domain.offersIncludeKeys
 import com.ezevillo.gitreview.domain.formatCommandLine
@@ -303,9 +304,16 @@ object StartWizard {
                 )
             }
         } ?: return DraftOutcome(ok = false, text = MutationLock.DISCARD_REASON)
+        val ok = result.exitCode == 0 && !result.timedOut
         return DraftOutcome(
-            ok = result.exitCode == 0 && !result.timedOut,
-            text = UiMessages.flatten(result.stderr),
+            ok = ok,
+            // En verde, lo que hizo el verbo (stdout) más sus notas; en rojo,
+            // sólo el error, que es lo que la CLI pone en stderr.
+            text = if (ok) {
+                draftOutcomeText(result.stdout, result.stderr)
+            } else {
+                UiMessages.flatten(result.stderr)
+            },
         )
     }
 

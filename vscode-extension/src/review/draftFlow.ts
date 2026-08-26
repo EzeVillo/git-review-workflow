@@ -122,6 +122,27 @@ export function offersIncludeKeys(offers: readonly ReadingOffer[] | undefined): 
 }
 
 /**
+ * Lo que un verbo del borrador tiene para decir una vez que salió en verde, en
+ * un solo mensaje: primero lo que hizo, después sus notas.
+ *
+ * El resultado viaja por **stdout**, que es donde este proyecto pone el
+ * resultado de todos sus verbos (start, finish, forget…) y deja stderr para
+ * errores y notas. Leer sólo stderr —lo que hacía este camino— se quedaba sin la
+ * única frase que contesta qué pasó: un update dice «N kept, M added, K
+ * dropped», y sin ella apretar la oferta no producía señal ninguna. En una rama
+ * sin notas no aparecía nada; en una con nota (la de la guía de autoría)
+ * aparecía un consejo que no tenía que ver con lo que se acababa de apretar.
+ *
+ * Cada tramo se aplana por su cuenta y recién después se unen, para que el
+ * separador quede entre el resultado y la nota y no adentro de ninguno.
+ */
+export function draftOutcomeMessage(stdout: string, stderr: string): string {
+    const flatten = (text: string): string =>
+        text.split("\n").map((line) => line.trim()).filter((line) => line.length > 0).join(" ");
+    return [flatten(stdout), flatten(stderr)].filter((part) => part.length > 0).join(" — ");
+}
+
+/**
  * Si dos rutas nombran el mismo archivo, para encontrar entre los documentos
  * abiertos el borrador que hay que guardar antes de que `draft --build` lo lea
  * del disco.

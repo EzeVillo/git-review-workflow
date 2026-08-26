@@ -241,9 +241,14 @@ public static class StartWizard
             ReviewIntentLogic.DraftArgs(ctx.Branch, ctx.Source, ctx.Range, build, force),
             ct: ct).ConfigureAwait(true);
         if (result is null) return new DraftOutcome(false, MutationLock.DiscardReason);
+        var ok = result.ExitCode == 0 && !result.TimedOut;
+        // Green: what the verb did (stdout) plus its notes. Red: only the error,
+        // which is what the CLI puts on stderr.
         return new DraftOutcome(
-            result.ExitCode == 0 && !result.TimedOut,
-            CliMessage.FlattenCliMessage(result.Stderr));
+            ok,
+            ok
+                ? CliMessage.DraftOutcomeText(result.Stdout, result.Stderr)
+                : CliMessage.FlattenCliMessage(result.Stderr));
     }
 
     private sealed record OffersResult(

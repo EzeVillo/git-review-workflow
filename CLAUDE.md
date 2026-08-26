@@ -343,6 +343,26 @@ working tree:
   cada refresco pierde justo los eventos que llegan mientras se rehace. En IntelliJ además es lazy,
   como el resto de ese cliente: un borrador que crece con el panel oculto se lee cuando la tool
   window vuelve, no antes.
+
+  **Y lo que el verbo dijo se muestra: el resultado está en stdout, no en stderr.** Los verbos de
+  este proyecto imprimen su resultado por **stdout** y reservan stderr para errores y notas
+  (`start`, `finish`, `forget`… todos), así que un camino que sólo lee stderr en verde se queda sin
+  la única frase que contesta qué pasó. En el borrador eso se nota más que en ningún lado porque el
+  asistente cierra sin arrancar nada: un update dice «N kept, M added, K dropped» y sin eso apretar
+  la oferta no producía señal ninguna —o peor, en una rama sin guía de autoría aparecía la nota de
+  la guía, un consejo que no tenía que ver con lo que se acababa de apretar—. `draftOutcomeMessage`
+  / `draftOutcomeText` / `DraftOutcomeText` (uno por cliente, en el módulo puro de cada uno) aplanan
+  **cada tramo por separado** y recién después los unen, para que el separador quede entre el
+  resultado y la nota y no adentro de ninguno. Sólo en verde: un fallo sigue siendo el stderr solo,
+  que es donde la CLI lo escribió. El resto de las invocaciones del panel (build, start, forget) no
+  cambian —ahí el efecto se ve en el panel y en verde no hay nada que decir—, y por eso el arreglo
+  vive en el camino del asistente y no en un `flatten` compartido.
+
+  Del lado de la CLI, el mismo mensaje **no promete entradas que no existen**: `fill in the new
+  entries` sale sólo con `added > 0`. Un update que no agrega ninguna es un resultado legítimo —el
+  rango se movió sin cambiar qué archivos toca, y el bloque de instrucciones se acaba de reescribir
+  contra el tip nuevo—, pero mandar al revisor a llenar un placeholder que no está es mandarlo a
+  buscar algo que no va a encontrar.
 - **Las dos guías de autoría** (`git review walkthrough guide`): prosa sobre el **contenido** del
   walkthrough —qué entradas merecen `> key`, cómo se escribe un porqué, qué va en el heads-up—, no
   sobre su formato. Son dos y contestan preguntas distintas: la **compartida**

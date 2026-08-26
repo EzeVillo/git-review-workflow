@@ -716,16 +716,21 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             // This host draws icon controls as text glyphs (no Image Catalog
             // outside the VSIX), so they stay in the BMP: an astral codepoint
             // is a tofu box in whatever font the theme hands us.
-            // The three file-and-trash pairs of the panel, not just the draft's:
-            // a guide row's Open and Discard and the walkthrough row's Open are
-            // the same two affordances over a different file. Missing here, they
-            // fell through to the default — which is Next's arrow, so Discard
-            // drew a ▶.
+            // EVERY file-and-trash affordance of the panel, not just the draft's:
+            // a guide row's Open and Discard, the walkthrough row's Open and a
+            // fixes row's Discard are the same two affordances over a different
+            // subject. Missing here, they fall through to the default — which is
+            // Next's arrow, so Discard drew a ▶. It happened twice: once when the
+            // guides arrived and again when the fixes rows did, which is why the
+            // drift is now pinned over EVERY fixture rather than over a
+            // hand-written list of ids.
             var icon = c.Id == ControlId.Prev ? "◀"
                 : c.Id == ControlId.OpenDraft
                     || c.Id == ControlId.OpenGuide
                     || c.Id == ControlId.OpenWalkthrough ? "▤"
-                : c.Id == ControlId.DiscardDraft || c.Id == ControlId.DiscardGuide ? "✕"
+                : c.Id == ControlId.DiscardDraft
+                    || c.Id == ControlId.DiscardGuide
+                    || c.Id == ControlId.DiscardFixes ? "✕"
                 : "▶";
             var b = new Button
             {

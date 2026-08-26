@@ -403,6 +403,15 @@ data class PanelLayout(
                     // collector that skipped it would report a panel that does
                     // not offer them -- and the contract gate reads this list.
                     is Block.GuideRows -> b.rows.forEach { out.addAll(it.controls) }
+                    // And the fixes rows, for the same reason the guides are
+                    // collected even though their controls are per-row: what
+                    // this list feeds is the contract gate, which reads it to
+                    // reject any control the situation does not declare. Left
+                    // out, a whole section of the panel was invisible to it --
+                    // and to the two invariants above, which is how the client
+                    // that DOES collect them (Visual Studio) has been reading
+                    // this block all along.
+                    is Block.FixesRows -> b.rows.forEach { out.addAll(it.controls) }
                     is Block.WalkthroughRow -> out.addAll(b.row.controls)
                     is Block.ToolsSection -> walk(b.blocks)
                     else -> Unit
@@ -421,6 +430,7 @@ private fun hostedByInventory(blocks: List<Block>, c: Control): Boolean = blocks
         is Block.InventoryRows -> b.rows.any { r -> r.controls.any { it === c } }
         is Block.DraftRows -> b.rows.any { r -> r.controls.any { it === c } }
         is Block.GuideRows -> b.rows.any { r -> r.controls.any { it === c } }
+        is Block.FixesRows -> b.rows.any { r -> r.controls.any { it === c } }
         is Block.WalkthroughRow -> b.row.controls.any { it === c }
         is Block.ToolsSection -> hostedByInventory(b.blocks, c)
         else -> false

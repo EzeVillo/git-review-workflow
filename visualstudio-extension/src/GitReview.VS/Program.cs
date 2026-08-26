@@ -330,20 +330,45 @@ public static class Program
 
         // Every icon control draws its OWN glyph. The default arm of that switch
         // is Next's arrow, so an id nobody mapped comes out as a ▶ — which is how
-        // Discard the guide drew one. Asked over the walkthrough section, where
-        // all three file-and-trash pairs live.
-        var rows = new PanelView(chrome) { Width = 380, Height = 700 };
-        rows.Render(PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewWalkthroughStale()));
-        rows.Measure(new Size(380, 700));
-        rows.Arrange(new Rect(0, 0, 380, 700));
-        rows.UpdateLayout();
-        var glyphs = Descendants(rows).OfType<System.Windows.Controls.Button>()
-            .Where(b => b.ToolTip is string t
-                && (t.Contains("walkthrough-guide.md") || t.Contains("/walkthrough.md")
-                    || t.StartsWith("git review walkthrough guide --delete")))
-            .ToList();
-        check("icons:own-glyph", glyphs.Count >= 2 && glyphs.All(b => (b.Content as string) != "▶"),
-            $"{glyphs.Count(b => (b.Content as string) == "▶")} of {glyphs.Count} fell through to Next's arrow");
+        // Discard the guide drew one, and later Discard the extracted edits.
+        // Asked over EVERY fixture and not over a hand-written list of tooltips:
+        // the hand-written list is what let the second one through, because a
+        // control nobody named here is exactly the control nobody mapped there.
+        var stray = new List<string>();
+        var iconsSeen = 0;
+        foreach (var (fixtureName, fixtureModel) in PanelFixtures.All())
+        {
+            var layout = PanelLayoutBuilder.PanelLayout(fixtureModel);
+            // Name -> id: two rows of the same block repeat one accessible name,
+            // and they always carry the same id, so the first one answers for all.
+            var iconIds = layout.CollectControls()
+                .Where(c => c.Emphasis == Emphasis.Icon && !string.IsNullOrEmpty(c.AccessibleName))
+                .GroupBy(c => c.AccessibleName!, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.Ordinal);
+            if (iconIds.Count == 0) continue;
+
+            var view = new PanelView(chrome) { Width = 380, Height = 700 };
+            view.Render(layout);
+            view.Measure(new Size(380, 700));
+            view.Arrange(new Rect(0, 0, 380, 700));
+            view.UpdateLayout();
+
+            foreach (var b in Descendants(view).OfType<System.Windows.Controls.Button>())
+            {
+                var an = System.Windows.Automation.AutomationProperties.GetName(b);
+                if (an is null || !iconIds.TryGetValue(an, out var id)) continue;
+                iconsSeen++;
+                // Next is the one control the arrow belongs to; on anything else
+                // it is the default arm answering for an id nobody mapped.
+                if (id != ControlId.Next && (b.Content as string) == "▶")
+                    stray.Add($"{fixtureName}:{an}");
+            }
+        }
+        check("icons:own-glyph", stray.Count == 0,
+            $"{string.Join(", ", stray.Distinct())} fell through to Next's arrow");
+        // Without this the sweep passes empty the day CollectControls stops
+        // seeing a block of rows, which is the other half of the same bug.
+        check("icons:own-glyph-coverage", iconsSeen >= 12, $"only {iconsSeen} icon controls rendered");
     }
 
     private static string Describe(Brush? b) =>

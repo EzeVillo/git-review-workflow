@@ -799,18 +799,25 @@ class PanelRenderer(
                     ControlId.PREV -> chrome.iconPrev()
                     ControlId.NEXT -> chrome.iconNext()
                     ControlId.COPY_CLI_INSTALL -> chrome.iconCopy()
-                    // The three file-and-trash pairs of the panel, not just the
-                    // draft's: a guide row's Open and Discard and the
-                    // walkthrough row's Open are the same two affordances over a
-                    // different file, and the canonical declares the same two
-                    // icons for them. Missing here, they fell through to the
-                    // accessible name below -- a sentence-wide button in a
-                    // header that a glyph exists to keep narrow.
+                    // EVERY file-and-trash affordance of the panel, not just
+                    // the draft's: a guide row's Open and Discard, the
+                    // walkthrough row's Open and a fixes row's Discard are the
+                    // same two affordances over a different subject, and the
+                    // canonical declares the same two icons for them. Missing
+                    // here, they fall through to the accessible name below -- a
+                    // sentence-wide button in a header that a glyph exists to
+                    // keep narrow. It happened twice: once when the guides
+                    // arrived and again when the fixes rows did, which is why
+                    // the drift is now pinned over EVERY fixture rather than
+                    // over a hand-written list of names.
                     ControlId.OPEN_DRAFT,
                     ControlId.OPEN_GUIDE,
                     ControlId.OPEN_WALKTHROUGH,
                     -> chrome.iconFile()
-                    ControlId.DISCARD_DRAFT, ControlId.DISCARD_GUIDE -> chrome.iconTrash()
+                    ControlId.DISCARD_DRAFT,
+                    ControlId.DISCARD_GUIDE,
+                    ControlId.DISCARD_FIXES,
+                    -> chrome.iconTrash()
                     else -> null
                 }
                 if (icon != null) {
@@ -824,7 +831,10 @@ class PanelRenderer(
                         ControlId.OPEN_GUIDE,
                         ControlId.OPEN_WALKTHROUGH,
                         -> chrome.glyphFile()
-                        ControlId.DISCARD_DRAFT, ControlId.DISCARD_GUIDE -> chrome.glyphTrash()
+                        ControlId.DISCARD_DRAFT,
+                        ControlId.DISCARD_GUIDE,
+                        ControlId.DISCARD_FIXES,
+                        -> chrome.glyphTrash()
                         // Un id de icono sin glifo cae al nombre accesible, que
                         // es una oracion: el control se vuelve el mas ancho de
                         // su fila, que es justo lo que un icono viene a evitar.

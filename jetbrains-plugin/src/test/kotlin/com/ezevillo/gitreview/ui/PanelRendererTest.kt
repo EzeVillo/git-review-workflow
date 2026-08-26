@@ -1,6 +1,7 @@
 package com.ezevillo.gitreview.ui
 
 import com.ezevillo.gitreview.domain.ControlId
+import com.ezevillo.gitreview.domain.Emphasis
 import com.ezevillo.gitreview.domain.panelLayout
 import com.ezevillo.gitreview.fixtures.PanelFixtures
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -223,6 +224,47 @@ class PanelRendererTest {
         }
         val discard = buttons.first { it.accessibleContext.accessibleName == "Discard the guide" }
         assertEquals(chrome.glyphTrash(), discard.text)
+    }
+
+    @Test
+    fun `no icon control anywhere falls back to its accessible name`() {
+        // The same drift as the test above, asked over EVERY fixture instead of
+        // over a hand-written list of names -- which is what let it happen a
+        // second time: the fixes rows arrived with their own trash control, no
+        // name here mentioned it, and the row drew a sentence-wide button that
+        // reads as disabled next to the glyphs of the two sections above it.
+        // An icon control renders one of the panel's glyphs; the accessible name
+        // is the floor of the tooltip, never the face of the button.
+        val chrome = PreviewPanelChrome()
+        val glyphs = setOf(
+            chrome.glyphPrev(),
+            chrome.glyphNext(),
+            chrome.glyphCopy(),
+            chrome.glyphFile(),
+            chrome.glyphTrash(),
+        )
+        val renderer = PanelRenderer(chrome) { _, _, _ -> false }
+        var seen = 0
+        for ((name, model) in PanelFixtures.all()) {
+            val layout = panelLayout(model)
+            val iconNames = layout.collectControls()
+                .filter { it.emphasis == Emphasis.ICON }
+                .map { it.accessibleName }
+                .toSet()
+            if (iconNames.isEmpty()) continue
+            for (b in PanelRenderer.collectButtons(renderer.render(layout))) {
+                if (b.accessibleContext.accessibleName !in iconNames) continue
+                seen++
+                assertTrue(
+                    b.text in glyphs,
+                    "$name: el control de icono '${b.accessibleContext.accessibleName}' " +
+                        "dibuja \"${b.text}\" en vez de un glifo del panel",
+                )
+            }
+        }
+        // Sin esto el barrido pasa vacio el dia que collectControls deje de ver
+        // un bloque de filas, que es la otra mitad del mismo bug.
+        assertTrue(seen >= 12, "el barrido tiene que llegar a los iconos: seen=$seen")
     }
 
     @Test

@@ -731,6 +731,28 @@ class PanelRenderer(
         return box
     }
 
+    /** El icono de la plataforma para un nombre del canonico, si el chrome lo tiene. */
+    private fun platformIcon(name: String?): javax.swing.Icon? = when (name) {
+        "prev" -> chrome.iconPrev()
+        "next" -> chrome.iconNext()
+        "copy" -> chrome.iconCopy()
+        "file" -> chrome.iconFile()
+        "trash" -> chrome.iconTrash()
+        "diff" -> chrome.iconDiff()
+        else -> null
+    }
+
+    /** Y su glifo, que es lo que se dibuja donde la plataforma no da icono (el preview). */
+    private fun glyph(name: String?): String? = when (name) {
+        "prev" -> chrome.glyphPrev()
+        "next" -> chrome.glyphNext()
+        "copy" -> chrome.glyphCopy()
+        "file" -> chrome.glyphFile()
+        "trash" -> chrome.glyphTrash()
+        "diff" -> chrome.glyphDiff()
+        else -> null
+    }
+
     /**
      * @param bare un control de icono que va en la CABECERA de una fila, no en
      *   una fila de controles: sin caja y con relleno recien bajo el puntero.
@@ -795,51 +817,15 @@ class PanelRenderer(
                     override fun getMaximumSize(): Dimension =
                         if (bare) preferredSize else super.getMaximumSize()
                 }
-                val icon = when (c.id) {
-                    ControlId.PREV -> chrome.iconPrev()
-                    ControlId.NEXT -> chrome.iconNext()
-                    ControlId.COPY_CLI_INSTALL -> chrome.iconCopy()
-                    // EVERY file-and-trash affordance of the panel, not just
-                    // the draft's: a guide row's Open and Discard, the
-                    // walkthrough row's Open and a fixes row's Discard are the
-                    // same two affordances over a different subject, and the
-                    // canonical declares the same two icons for them. Missing
-                    // here, they fall through to the accessible name below -- a
-                    // sentence-wide button in a header that a glyph exists to
-                    // keep narrow. It happened twice: once when the guides
-                    // arrived and again when the fixes rows did, which is why
-                    // the drift is now pinned over EVERY fixture rather than
-                    // over a hand-written list of names.
-                    ControlId.OPEN_DRAFT,
-                    ControlId.OPEN_GUIDE,
-                    ControlId.OPEN_WALKTHROUGH,
-                    -> chrome.iconFile()
-                    ControlId.DISCARD_DRAFT,
-                    ControlId.DISCARD_GUIDE,
-                    ControlId.DISCARD_FIXES,
-                    -> chrome.iconTrash()
-                    else -> null
-                }
+                val name = ICON_OF[c.id]
+                val icon = platformIcon(name)
                 if (icon != null) {
                     b.icon = icon
                 } else {
-                    b.text = when (c.id) {
-                        ControlId.PREV -> chrome.glyphPrev()
-                        ControlId.NEXT -> chrome.glyphNext()
-                        ControlId.COPY_CLI_INSTALL -> chrome.glyphCopy()
-                        ControlId.OPEN_DRAFT,
-                        ControlId.OPEN_GUIDE,
-                        ControlId.OPEN_WALKTHROUGH,
-                        -> chrome.glyphFile()
-                        ControlId.DISCARD_DRAFT,
-                        ControlId.DISCARD_GUIDE,
-                        ControlId.DISCARD_FIXES,
-                        -> chrome.glyphTrash()
-                        // Un id de icono sin glifo cae al nombre accesible, que
-                        // es una oracion: el control se vuelve el mas ancho de
-                        // su fila, que es justo lo que un icono viene a evitar.
-                        else -> c.accessibleName
-                    }
+                    // Un id de icono sin glifo cae al nombre accesible, que es
+                    // una oracion: el control se vuelve el mas ancho de su fila,
+                    // que es justo lo que un icono viene a evitar.
+                    b.text = glyph(name) ?: c.accessibleName
                 }
                 if (bare) {
                     b.isContentAreaFilled = false
@@ -864,11 +850,7 @@ class PanelRenderer(
                 // rows do in the extension: two "Diff" buttons on one pane are
                 // told apart by what sits next to them, not by their label.
                 if (c.emphasis != Emphasis.LINK) {
-                    when (c.id) {
-                        ControlId.OPEN_CHANGE, ControlId.OPEN_ALL_CHANGES -> chrome.iconDiff()
-                        ControlId.OPEN_ENTRY -> chrome.iconFile()
-                        else -> null
-                    }?.let {
+                    platformIcon(ICON_OF[c.id])?.let {
                         b.icon = it
                         b.iconTextGap = 6
                     }
@@ -1021,6 +1003,39 @@ class PanelRenderer(
 
     /** Test helper: walk rendered tree collecting enabled control ids in order. */
     companion object {
+        /**
+         * El icono de cada control, con los NOMBRES DEL CANONICO
+         * (contracts/client-product-surface.yaml, bloque `icon_vocabulary`):
+         * un solo mapa para las dos formas en que el panel dibuja un icono
+         * --pelado en la cabecera de una fila, o al lado de una etiqueta-- para
+         * que el mismo sujeto no termine con dos marcas distintas.
+         *
+         * Que sea un mapa y no un `when` adentro del render es lo que deja que
+         * `check-client-product-surface.mjs` lo compare par por par contra el
+         * canonico y contra los otros dos clientes: el olvido que este mapa
+         * existe para impedir --un control con icono que un cliente no mapea, y
+         * que cae al nombre accesible o a la flecha de Next-- paso dos veces
+         * seguidas mientras la respuesta vivia desparramada en dos `when`.
+         *
+         * COPY_CLI_INSTALL no esta en el canonico: ese boton va con etiqueta y
+         * su icono es cosa nuestra. El chequeo corre en una sola direccion
+         * justamente para permitirlo.
+         */
+        private val ICON_OF = mapOf(
+            ControlId.PREV to "prev",
+            ControlId.NEXT to "next",
+            ControlId.COPY_CLI_INSTALL to "copy",
+            ControlId.OPEN_DRAFT to "file",
+            ControlId.OPEN_GUIDE to "file",
+            ControlId.OPEN_WALKTHROUGH to "file",
+            ControlId.OPEN_ENTRY to "file",
+            ControlId.DISCARD_DRAFT to "trash",
+            ControlId.DISCARD_GUIDE to "trash",
+            ControlId.DISCARD_FIXES to "trash",
+            ControlId.OPEN_CHANGE to "diff",
+            ControlId.OPEN_ALL_CHANGES to "diff",
+        )
+
         fun collectButtons(root: JComponent): List<JButton> {
             val out = ArrayList<JButton>()
             fun walk(c: Component) {

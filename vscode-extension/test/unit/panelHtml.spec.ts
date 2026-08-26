@@ -55,7 +55,7 @@ describe("panelHtml", () => {
         assert.ok(/node\.setAttribute\("aria-label", label\)/.test(html));
         assert.ok(/node\.title = label/.test(html));
         assert.ok(
-            /iconButton\("left", "prev", "[^"]+"\)/.test(html) && /iconButton\("right", "next", "[^"]+"\)/.test(html),
+            /iconButton\("prev", "prev", "[^"]+"\)/.test(html) && /iconButton\("next", "next", "[^"]+"\)/.test(html),
             "prev/next se dibujan con el helper que exige la etiqueta"
         );
         assert.ok(html.includes('svg.setAttribute("aria-hidden", "true")'), "el ícono no se anuncia dos veces");

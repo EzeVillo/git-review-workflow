@@ -294,7 +294,7 @@ function collectCanonicalControls() {
   const layoutBlock = panelLayoutBlock;
   // Match control objects in flow or nested form: id: foo, label: "..."
   const controlObjRe =
-    /\{\s*id:\s*([A-Za-z][A-Za-z0-9]*)\s*,\s*label:\s*(null|"[^"]*")\s*,\s*(?:accessible_name:\s*"([^"]*)"\s*,\s*)?emphasis:\s*(primary|secondary|link|icon)\s*(?:,\s*raw_button:\s*(true|false))?\s*(?:,\s*confirms:\s*(true|false))?\s*(?:,\s*tooltip:\s*"[^"]*")?\s*\}/g;
+    /\{\s*id:\s*([A-Za-z][A-Za-z0-9]*)\s*,\s*label:\s*(null|"[^"]*")\s*,\s*(?:accessible_name:\s*"([^"]*)"\s*,\s*)?emphasis:\s*(primary|secondary|link|icon)\s*(?:,\s*icon:\s*[a-z]+)?\s*(?:,\s*raw_button:\s*(true|false))?\s*(?:,\s*confirms:\s*(true|false))?\s*(?:,\s*tooltip:\s*"[^"]*")?\s*\}/g;
   let m;
   while ((m = controlObjRe.exec(layoutBlock)) !== null) {
     const labelRaw = m[2];
@@ -349,7 +349,7 @@ function collectCanonicalControls() {
   // conteo fijo de 27 de arriba no los cuenta y no se toca.
   const draftBlock = text.split(/^draft_controls:\s*$/m)[1]?.split(/^[a-z_][a-z0-9_]*:/m)[0] ?? "";
   const draftRe =
-    /^ {2}([A-Za-z][A-Za-z0-9]*):\s*\{label:\s*(null|"[^"]*")\s*,\s*(?:accessible_name:\s*"([^"]*)"\s*,\s*)?emphasis:\s*(primary|secondary|link|icon)\s*(?:,\s*emphasis_unfilled:\s*(primary|secondary))?\s*,\s*confirms:\s*(true|false)(?:\s*,\s*tooltip_disabled:\s*"([^"]*)")?(?:\s*,\s*tooltip_unfilled:\s*"([^"]*)")?\}/gm;
+    /^ {2}([A-Za-z][A-Za-z0-9]*):\s*\{label:\s*(null|"[^"]*")\s*,\s*(?:accessible_name:\s*"([^"]*)"\s*,\s*)?emphasis:\s*(primary|secondary|link|icon)\s*(?:,\s*emphasis_unfilled:\s*(primary|secondary))?(?:\s*,\s*icon:\s*[a-z]+)?\s*,\s*confirms:\s*(true|false)(?:\s*,\s*tooltip_disabled:\s*"([^"]*)")?(?:\s*,\s*tooltip_unfilled:\s*"([^"]*)")?\}/gm;
   let dm;
   while ((dm = draftRe.exec(draftBlock)) !== null) {
     // Un control con emphasis_unfilled tiene DOS enfasis validos —el cliente
@@ -1323,6 +1323,126 @@ if (walkthroughBlock.length === 0) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// EL ALFABETO DE ICONOS: cada par (control, icono) del canonico, contra los tres
+// clientes.
+//
+// El icono era lo unico de un control que ningun lado declaraba, y los dos
+// clientes que lo DERIVAN del id se olvidaron del mismo control dos veces
+// seguidas: primero los tres pares de las guias, despues el tacho de las ramas
+// de ediciones. Los dos olvidos dibujan algo -- el nombre accesible entero en
+// JetBrains, la flecha de `next` en Visual Studio --, asi que no hay excepcion
+// ni pantalla en blanco que los delate: hay que ir a mirarlos.
+//
+// Cada cliente responde desde UN mapa (ICON_OF / IconOf / la llamada literal en
+// panelHtml), asi que la pregunta se hace una sola vez por par y no hay que
+// entender el render para contestarla. La direccion es canonico -> clientes: un
+// cliente puede mapear un id que el canonico no declara (COPY_CLI_INSTALL en
+// JetBrains), lo que no puede es dejar sin mapear uno que si esta.
+// ---------------------------------------------------------------------------
+const iconVocabMatch = text.match(/^icon_vocabulary:\s*\[([^\]]*)\]/m);
+if (!iconVocabMatch) fail("missing icon_vocabulary");
+const iconVocabulary = new Set(
+  iconVocabMatch[1].split(",").map((x) => x.trim()).filter(Boolean),
+);
+if (iconVocabulary.size === 0) fail("icon_vocabulary is empty");
+
+/** Los pares (id, icono) del canonico, de las dos formas en que se declara un control. */
+const canonicalIcons = new Map();
+function declareIcon(id, icon, where) {
+  if (!iconVocabulary.has(icon)) {
+    fail(`${where}: icon "${icon}" is not in icon_vocabulary`);
+  }
+  const seen = canonicalIcons.get(id);
+  if (seen && seen !== icon) {
+    fail(`${where}: control ${id} declares two icons (${seen} and ${icon})`);
+  }
+  canonicalIcons.set(id, icon);
+}
+// a. inline en panel_layout: {id: openChange, ..., icon: diff, ...}
+for (const m of text.matchAll(/\{id:\s*([A-Za-z][A-Za-z0-9]*)[^}]*?\bicon:\s*([a-z]+)/g)) {
+  declareIcon(m[1], m[2], "panel_layout");
+}
+// b. en un mapa de fila: openGuide: {..., icon: file, ...}
+for (const m of text.matchAll(/^ {2,4}([A-Za-z][A-Za-z0-9]*):\s*\{[^}]*?\bicon:\s*([a-z]+)/gm)) {
+  declareIcon(m[1], m[2], "row controls");
+}
+if (canonicalIcons.size < 8) {
+  fail(`expected the canonical to declare at least 8 control icons, found ${canonicalIcons.size}`);
+}
+// Y al reves: un control DIBUJADO como icono sin `icon:` es el hueco de origen,
+// porque su icono vuelve a ser cosa de cada cliente y nadie puede verificarlo.
+for (const m of text.matchAll(/\{id:\s*([A-Za-z][A-Za-z0-9]*)[^}]*?emphasis:\s*icon\b[^}]*?\}/g)) {
+  if (!canonicalIcons.has(m[1])) fail(`control ${m[1]}: emphasis icon without icon:`);
+}
+for (const m of text.matchAll(/^ {2,4}([A-Za-z][A-Za-z0-9]*):\s*\{[^}]*?emphasis:\s*icon\b[^}]*?\}/gm)) {
+  if (!canonicalIcons.has(m[1])) fail(`control ${m[1]}: emphasis icon without icon:`);
+}
+
+/**
+ * VS Code pasa el icono en cada llamada, asi que lo que se lee son las llamadas:
+ * `iconButton("<icon>", "<id>", ...)` y `button(<label>, "<id>", <class>,
+ * "<icon>", ...)`. TODAS las de un id tienen que traer el mismo -- "Diff"
+ * aparece tres veces y una sin icono es un boton pelado entre dos que lo tienen.
+ */
+function vscodeIconsOf(id) {
+  const found = [];
+  for (const m of panelHtml.matchAll(/\b(iconButton|button)\(([^()]*)\)/g)) {
+    const args = m[2].split(",").map((x) => x.trim());
+    const isIconButton = m[1] === "iconButton";
+    const calledId = isIconButton ? args[1] : args[1];
+    if (calledId !== `"${id}"`) continue;
+    const icon = isIconButton ? args[0] : args[3];
+    found.push(icon && /^"[a-z]+"$/.test(icon) ? icon.slice(1, -1) : null);
+  }
+  return found;
+}
+
+const screaming = (id) => id.replace(/([A-Z])/g, "_$1").toUpperCase();
+const pascal = (id) => id[0].toUpperCase() + id.slice(1);
+
+const rendererKt = join(root, "jetbrains-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "ui", "PanelRenderer.kt");
+const panelViewCs = join(root, "visualstudio-extension", "src", "GitReview.VS", "ToolWindows", "PanelView.cs");
+const ijIcons = new Map();
+if (existsSync(rendererKt)) {
+  for (const m of readText(rendererKt, "utf8").matchAll(/ControlId\.([A-Z_]+)\s+to\s+"([a-z]+)"/g)) {
+    ijIcons.set(m[1], m[2]);
+  }
+  if (ijIcons.size === 0) fail("PanelRenderer.kt declares no ICON_OF entries");
+}
+const vsIcons = new Map();
+if (existsSync(panelViewCs)) {
+  for (const m of readText(panelViewCs, "utf8").matchAll(/\[ControlId\.([A-Za-z]+)\]\s*=\s*"([a-z]+)"/g)) {
+    vsIcons.set(m[1], m[2]);
+  }
+  if (vsIcons.size === 0) fail("PanelView.cs declares no IconOf entries");
+}
+
+const notInVs = actionsNotIn("visualstudio");
+const notInIj = actionsNotIn("intellij");
+for (const [id, icon] of canonicalIcons) {
+  const drawn = vscodeIconsOf(id);
+  if (drawn.length === 0) {
+    fail(`vscode: control ${id} carries icon "${icon}" in the canonical and is drawn by no button`);
+  }
+  const wrong = drawn.filter((x) => x !== icon);
+  if (wrong.length > 0) {
+    fail(`vscode: ${id} should draw "${icon}", ${wrong.length} of ${drawn.length} call(s) draw ${wrong.map((x) => x ?? "no icon").join(", ")}`);
+  }
+  if (ijIcons.size > 0 && !notInIj.has(id)) {
+    const got = ijIcons.get(screaming(id));
+    if (got !== icon) {
+      fail(`intellij: ICON_OF is missing ${screaming(id)} -> "${icon}"${got ? ` (found "${got}")` : ""}`);
+    }
+  }
+  if (vsIcons.size > 0 && !notInVs.has(id)) {
+    const got = vsIcons.get(pascal(id));
+    if (got !== icon) {
+      fail(`visualstudio: IconOf is missing ${pascal(id)} = "${icon}"${got ? ` (found "${got}")` : ""}`);
+    }
+  }
+}
+
 console.log(
-  `check-client-product-surface: ok (min=${min}, actions=${actionKeys.length}, panel_controls=${canonicalControls.length}, title_actions=${titleActionIds.length}, vs=${existsSync(vsVersion) ? "yes" : "no"})`,
+  `check-client-product-surface: ok (min=${min}, actions=${actionKeys.length}, panel_controls=${canonicalControls.length}, icons=${canonicalIcons.size}, title_actions=${titleActionIds.length}, vs=${existsSync(vsVersion) ? "yes" : "no"})`,
 );

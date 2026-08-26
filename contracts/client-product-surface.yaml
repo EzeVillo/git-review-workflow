@@ -177,6 +177,29 @@ actions:
     surface: both
     situations: [cli-missing, cli-outdated, no-review, finish-pending, review, finish-conflict, out-of-range, error]
 
+# EL ALFABETO DE ICONOS. Un control que lleva icono lo declara acá con `icon:`,
+# y el nombre es el MISMO en los tres clientes -- lo que cambia es de dónde sale
+# el dibujo: un SVG inline en VS Code, un AllIcons de la plataforma en JetBrains,
+# un carácter del BMP en Visual Studio (ese host no tiene Image Catalog fuera del
+# VSIX). Nombres semánticos y no del trazo: `prev` y no `left`, porque lo que el
+# canónico fija es qué significa el icono, y el chevrón es una decisión de cada
+# cliente.
+#
+# Existe porque el icono era lo único de un control que ningún lado declaraba, y
+# los dos clientes que lo DERIVAN del id (JetBrains y Visual Studio) se olvidaron
+# del mismo control dos veces seguidas: primero los tres pares de las guías y
+# después el tacho de las ramas de ediciones. El primero cayó al nombre accesible
+# --un botón del ancho de una oración en la cabecera de una fila-- y el segundo a
+# la flecha de `next`, que es un icono válido y equivocado, o sea el que no se ve.
+# `check-client-product-surface.mjs` verifica cada par (control, icono) contra las
+# tres puntas, así que un control nuevo con icono no se puede olvidar en ninguna:
+# hay que nombrarlo en las tres o CI se pone rojo.
+#
+# La dirección es canónico -> clientes. Un cliente puede mapear un id que el
+# canónico no declara (dibujarlo es cosa suya); lo que no puede es dejar sin
+# mapear uno que sí está acá.
+icon_vocabulary: [prev, next, file, trash, diff]
+
 # Disposición del panel, en orden. Normativo para:
 #   - intellij: PanelLayoutContractTest compara la estructura completa
 #   - vscode:   check-client-product-surface.mjs verifica lo de panel-layout.md § Verificación
@@ -347,8 +370,8 @@ panel_layout:
       - {block: entry_title}
       - {block: why}
       - {block: row, controls: [{id: showWhy, label: "open in editor", emphasis: link, confirms: false}], when: why_present}
-      - {block: row, controls: [{id: openEntry, label: "File", emphasis: secondary, confirms: false}, {id: openChange, label: "Diff", emphasis: secondary, confirms: false}]}
-      - {block: row, controls: [{id: prev, label: null, accessible_name: "Previous entry", emphasis: icon, confirms: false}, {id: next, label: null, accessible_name: "Next entry", emphasis: icon, confirms: false}]}
+      - {block: row, controls: [{id: openEntry, label: "File", emphasis: secondary, icon: file, confirms: false}, {id: openChange, label: "Diff", emphasis: secondary, icon: diff, confirms: false}]}
+      - {block: row, controls: [{id: prev, label: null, accessible_name: "Previous entry", emphasis: icon, icon: prev, confirms: false}, {id: next, label: null, accessible_name: "Next entry", emphasis: icon, icon: next, confirms: false}]}
   review-step:
     source_fns: [renderEntry, renderOpenRow, renderNavRow, renderFiles]
     blocks:
@@ -356,10 +379,10 @@ panel_layout:
       - {block: notes}
       - {block: entry_head}
       - {block: entry_title}
-      - {block: row, controls: [{id: openChange, label: "Diff", emphasis: secondary, confirms: false}]}
+      - {block: row, controls: [{id: openChange, label: "Diff", emphasis: secondary, icon: diff, confirms: false}]}
       - {block: heading, text: "{n} file(s) in this commit"}
       - {block: file_rows}
-      - {block: row, controls: [{id: prev, label: null, accessible_name: "Previous entry", emphasis: icon, confirms: false}, {id: next, label: null, accessible_name: "Next entry", emphasis: icon, confirms: false}]}
+      - {block: row, controls: [{id: prev, label: null, accessible_name: "Previous entry", emphasis: icon, icon: prev, confirms: false}, {id: next, label: null, accessible_name: "Next entry", emphasis: icon, icon: next, confirms: false}]}
   review-whole:
     source_fns: [renderFiles]
     blocks:
@@ -367,7 +390,7 @@ panel_layout:
       - {block: notes}
       - {block: heading, text: "{n} file(s) in this review"}
       # ausente en visualstudio: ver not_in en la accion
-      - {block: row, controls: [{id: openAllChanges, label: "Diff", emphasis: secondary, confirms: false, tooltip: "Open every change in this review at once"}], not_in: [visualstudio]}
+      - {block: row, controls: [{id: openAllChanges, label: "Diff", emphasis: secondary, icon: diff, confirms: false, tooltip: "Open every change in this review at once"}], not_in: [visualstudio]}
       - {block: file_rows}
   finish-conflict:
     source_fns: [renderFinishConflictBanner, renderEntry, renderOpenRow, renderFiles]
@@ -385,8 +408,8 @@ panel_layout:
       - {block: entry_title}
       - {block: why, when: walk}
       - {block: row, controls: [{id: showWhy, label: "open in editor", emphasis: link, confirms: false}], when: why_present}
-      - {block: row, controls: [{id: openEntry, label: "File", emphasis: secondary, confirms: false}, {id: openChange, label: "Diff", emphasis: secondary, confirms: false}], when: walk}
-      - {block: row, controls: [{id: openChange, label: "Diff", emphasis: secondary, confirms: false}], when: step}
+      - {block: row, controls: [{id: openEntry, label: "File", emphasis: secondary, icon: file, confirms: false}, {id: openChange, label: "Diff", emphasis: secondary, icon: diff, confirms: false}], when: walk}
+      - {block: row, controls: [{id: openChange, label: "Diff", emphasis: secondary, icon: diff, confirms: false}], when: step}
       - {block: heading, text: "{n} file(s) in this commit", when: step}
       - {block: file_rows, when: step}
       # navigation row intentionally absent
@@ -650,8 +673,8 @@ draft_controls:
   # Sin etiqueta visible, así que el `accessible_name` no es un extra: es el
   # nombre del control, y nombra la fila porque "Open" a secas se repite una vez
   # por borrador.
-  openDraft: {label: null, accessible_name: "Open the reading order", emphasis: icon, confirms: false}
-  discardDraft: {label: null, accessible_name: "Discard the reading order", emphasis: icon, confirms: true}
+  openDraft: {label: null, accessible_name: "Open the reading order", emphasis: icon, icon: file, confirms: false}
+  discardDraft: {label: null, accessible_name: "Discard the reading order", emphasis: icon, icon: trash, confirms: true}
 
 # Las ramas review-fixes/* que dejo un finish: la seccion "Edits you extracted"
 # del pie de no-review. Su unico control es de FILA, como los de draft_controls y

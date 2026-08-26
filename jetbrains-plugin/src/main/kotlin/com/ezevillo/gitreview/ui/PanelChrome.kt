@@ -77,6 +77,11 @@ interface PanelChrome {
     fun glyphNext(): String = "▶"
     fun glyphCopy(): String = "⎘"
     fun glyphFile(): String = "▤"
+    // Dos paneles lado a lado, que es lo que abre un diff. Misma familia de
+    // cuadrados geometricos que glyphFile, asi que las dos marcas de "abri esto"
+    // pesan y miden lo mismo. El mismo caracter que dibuja el cliente de Visual
+    // Studio, que no tiene iconos de plataforma para nada.
+    fun glyphDiff(): String = "◫"
     // BMP y de un solo ancho, como los demas: un codepoint astral (el tacho de
     // verdad, U+1F5D1) sale como caja vacia en la fuente que de el tema.
     fun glyphTrash(): String = "✕"

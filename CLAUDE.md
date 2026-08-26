@@ -563,6 +563,25 @@ sujeto. Consecuencia: **no tocan el conteo fijo de 27**, no van a `contributes.c
 ni al menú *Tools → git review* de JetBrains, ni al `.vsct` de Visual Studio — y el verificador lo
 comprueba en esa dirección también, así que colar uno como acción falla CI.
 
+**El icono de un control lo declara el contrato, no cada cliente.** `icon_vocabulary:` fija los
+cinco nombres (`prev`, `next`, `file`, `trash`, `diff`) y cada control que lleva icono los usa con
+`icon:`; lo que cambia por cliente es de dónde sale el dibujo —SVG inline en VS Code, `AllIcons` en
+JetBrains, un carácter del BMP en Visual Studio— y nunca **cuál**. Los nombres son semánticos y no
+del trazo (`prev`, no `left`): lo que el canónico fija es qué significa el icono. Existe porque el
+icono era lo único de un control que ningún lado declaraba, y los dos clientes que lo **derivan del
+id** se olvidaron del mismo control dos veces seguidas —los tres pares de las guías primero, el
+tacho de las ramas de ediciones después—: el olvido no explota ni deja la pantalla en blanco, cae al
+nombre accesible (un botón del ancho de una oración en la cabecera de una fila) o a la flecha de
+`next`, que es un icono válido y equivocado. Cada cliente contesta ahora desde **un solo mapa**
+(`ICON_OF` en `PanelRenderer.kt`, `IconOf` en `PanelView.cs`, el literal de cada llamada en
+`panelHtml.ts`) y `check-client-product-surface.mjs` compara par por par contra las tres puntas, más
+la dirección de vuelta dentro del YAML: un control con `emphasis: icon` y sin `icon:` falla. La
+verificación va **del canónico a los clientes**, así que un cliente puede mapear un id que el
+canónico no declara (`copyCliInstall` en JetBrains) pero no dejar sin mapear uno que sí está. Y como
+segunda línea, el render de cada cliente se pregunta sobre **todas** sus fixtures si algún control de
+icono cayó al fallback (`icons:own-glyph` y compañía en `--verify`, `no icon control anywhere falls
+back to its accessible name` en JetBrains): el contrato ata el nombre, esto ata el dibujo.
+
 **Una divergencia deliberada se declara en el contrato, no en el cliente.** `not_in:
 [<cliente>]` en una acción dice que ese cliente no la ofrece, y el check lo verifica en las **dos**
 direcciones: el cliente listado no puede declararla en ninguna de sus superficies (panel, menú,
@@ -761,21 +780,18 @@ funcione: un trigger de `Style` **pierde** contra un valor local, así que los b
 `--verify`, que renderiza el panel de verdad y compara el fill y el texto de los botones
 deshabilitados contra el chrome; una asignación local vuelve a fallar `buttons:disabled-fill`.
 
-**Los iconos de este cliente son glifos de texto, y viven en un alfabeto de cinco constantes.**
-Fuera del VSIX no hay Image Catalog, así que `PanelView` dibuja cada icono como un carácter — todos
-del BMP a propósito: un codepoint astral es un tofu en la fuente que traiga el tema. Las cinco
-(`GlyphPrev`/`Next`/`File`/`Trash`/`Diff`) son constantes y no literales en cada sitio porque los
-mismos dos sujetos —un archivo y una comparación— se dibujan **dos veces**: como glifo pelado en la
-cabecera de una fila y al lado de una etiqueta en un botón (*File*, *Diff*, y cada file row, igual
-que en los otros dos clientes). El día que esas dos puntas se separan, el panel dice «abrí esto» con
-dos marcas distintas. Y el glifo va **pegado a la etiqueta en un solo string**, nunca como contenido
-compuesto con color propio: un `Foreground` local le gana al setter `disabled` del `Style` y deja un
-botón apagado con el texto vivo (la misma regla del párrafo de arriba, un nivel más adentro; el gate
-es `buttons:content-inherits-foreground`). Un id de icono que nadie mapea cae en el brazo default,
-que es la flecha de *Next* — de ahí que `--verify` barra **todas** las fixtures
-(`icons:own-glyph`, `icons:labelled-glyph`, `icons:file-row-glyph`) en vez de una lista de nombres
-escrita a mano: un control que nadie nombra en el gate es exactamente el que nadie mapea en el
-render, y así se coló dos veces.
+**Los iconos de este cliente son glifos de texto.** Fuera del VSIX no hay Image Catalog, así que
+`PanelView` dibuja cada icono del alfabeto del contrato como un carácter — todos del BMP a
+propósito: un codepoint astral es un tofu en la fuente que traiga el tema. Los cinco son constantes
+(`GlyphPrev`/`Next`/`File`/`Trash`/`Diff`) porque el mismo sujeto se dibuja **dos veces**: pelado en
+la cabecera de una fila y al lado de una etiqueta en un botón (*File*, *Diff*, y cada file row). El
+glifo va **pegado a la etiqueta en un solo string**, nunca como contenido compuesto con color
+propio: un `Foreground` local le gana al setter `disabled` del `Style` y deja un botón apagado con el
+texto vivo (la misma regla del párrafo de arriba, un nivel más adentro; el gate es
+`buttons:content-inherits-foreground`). En las file rows va en el **mismo** `TextBlock` que el path,
+porque partido en dos el path recibe ancho ilimitado y pierde el `…`. Y el fallback de un id sin
+mapear sigue siendo la flecha de *Next* **a propósito**: es lo que `icons:own-glyph` busca para
+distinguir un id mapeado de uno que nadie mapeó.
 
 **Instalar el `.vsix` son tres pasos, no uno, y los tres los da el script.** `VSIXInstaller` deja la
 hive en un estado que parece bien y no lo está, de dos maneras que no avisan: instalar una versión

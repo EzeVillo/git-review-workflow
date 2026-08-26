@@ -567,8 +567,8 @@ export function panelHtml(nonce: string): string {
   const ICONS = {
     file: ["M4 1.6h5l3 3v9.8H4z", "M9 1.6v3h3"],
     diff: ["M2.5 5.6h8.4", "M8.1 2.8 10.9 5.6 8.1 8.4", "M13.5 10.4H5.1", "M7.9 7.6 5.1 10.4 7.9 13.2"],
-    left: ["M10 3.4 5.4 8 10 12.6"],
-    right: ["M6 3.4 10.6 8 6 12.6"],
+    prev: ["M10 3.4 5.4 8 10 12.6"],
+    next: ["M6 3.4 10.6 8 6 12.6"],
     // Tapa, asa y cuerpo: el tacho de siempre. Es el único destructivo que se
     // dibuja como glifo, así que el trazo tiene que leerse a 1em sin la
     // etiqueta al lado.
@@ -1621,8 +1621,8 @@ export function panelHtml(nonce: string): string {
   // misma que dibuja la barra de arriba.
   function renderNavRow(model) {
     const nav = el("div", "row");
-    const prev = iconButton("left", "prev", "Previous entry");
-    const next = iconButton("right", "next", "Next entry");
+    const prev = iconButton("prev", "prev", "Previous entry");
+    const next = iconButton("next", "next", "Next entry");
     prev.disabled = model.busy || model.atFirst;
     next.disabled = model.busy || model.atLast;
     nav.appendChild(prev);

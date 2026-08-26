@@ -39,6 +39,49 @@ public sealed class PanelView : System.Windows.Controls.UserControl
     // column.
     internal const string GlyphDiff = "◫";
 
+    /// <summary>
+    /// The icon of each control, under the CANONICAL's names
+    /// (contracts/client-product-surface.yaml, the <c>icon_vocabulary</c> block):
+    /// one map for both ways the panel draws an icon — bare in a row header, or
+    /// beside a label on a button — so the same subject cannot end up with two
+    /// different marks.
+    /// <para>
+    /// A map and not a switch inside the render, because that is what lets
+    /// <c>check-client-product-surface.mjs</c> compare it pair by pair against the
+    /// canonical and against the other two clients. The very slip this exists to
+    /// stop — a control with an icon that a client never mapped, coming out as
+    /// Next's arrow — happened twice in a row while the answer lived spread
+    /// across a ternary.
+    /// </para>
+    /// </summary>
+    private static readonly Dictionary<ControlId, string> IconOf = new()
+    {
+        [ControlId.Prev] = "prev",
+        [ControlId.Next] = "next",
+        [ControlId.OpenDraft] = "file",
+        [ControlId.OpenGuide] = "file",
+        [ControlId.OpenWalkthrough] = "file",
+        [ControlId.OpenEntry] = "file",
+        [ControlId.DiscardDraft] = "trash",
+        [ControlId.DiscardGuide] = "trash",
+        [ControlId.DiscardFixes] = "trash",
+        [ControlId.OpenChange] = "diff",
+    };
+
+    /// <summary>The glyph of a control, or null when it carries no icon.</summary>
+    private static string? GlyphOf(ControlId id) =>
+        IconOf.TryGetValue(id, out var name)
+            ? name switch
+            {
+                "prev" => GlyphPrev,
+                "next" => GlyphNext,
+                "file" => GlyphFile,
+                "trash" => GlyphTrash,
+                "diff" => GlyphDiff,
+                _ => null,
+            }
+            : null;
+
     private readonly PanelChrome _chrome;
     private readonly Style _primaryButton;
     private readonly Style _secondaryButton;
@@ -448,7 +491,10 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             TextWrapping = TextWrapping.NoWrap,
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
-        text.Inlines.Add(new System.Windows.Documents.Run(GlyphDiff) { FontFamily = _chrome.Ui });
+        text.Inlines.Add(new System.Windows.Documents.Run(GlyphOf(ControlId.OpenChange))
+        {
+            FontFamily = _chrome.Ui,
+        });
         text.Inlines.Add(new System.Windows.Documents.Run("  " + f.Display));
         var btn = new Button
         {
@@ -753,14 +799,9 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             // guides arrived and again when the fixes rows did, which is why the
             // drift is now pinned over EVERY fixture rather than over a
             // hand-written list of ids.
-            var icon = c.Id == ControlId.Prev ? GlyphPrev
-                : c.Id == ControlId.OpenDraft
-                    || c.Id == ControlId.OpenGuide
-                    || c.Id == ControlId.OpenWalkthrough ? GlyphFile
-                : c.Id == ControlId.DiscardDraft
-                    || c.Id == ControlId.DiscardGuide
-                    || c.Id == ControlId.DiscardFixes ? GlyphTrash
-                : GlyphNext;
+            // The fallback stays Next's arrow, and stays wrong on purpose: it is
+            // what --verify looks for to tell an unmapped id from a mapped one.
+            var icon = GlyphOf(c.Id) ?? GlyphNext;
             var b = new Button
             {
                 Content = icon,
@@ -840,12 +881,7 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         // content would need a Foreground of its own, and a local Foreground
         // beats the style's disabled setter, which is the rule that keeps a
         // disabled button from coming out with live text.
-        var lead = c.Id switch
-        {
-            ControlId.OpenChange => GlyphDiff,
-            ControlId.OpenEntry => GlyphFile,
-            _ => null,
-        };
+        var lead = GlyphOf(c.Id);
         var label = c.Label ?? c.AccessibleName;
         var btn = new Button
         {

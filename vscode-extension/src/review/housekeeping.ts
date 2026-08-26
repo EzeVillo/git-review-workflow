@@ -12,6 +12,7 @@ export type HousekeepingKind =
     | "clean-one"
     | "clean-keep-fixes"
     | "clean-fixes-only"
+    | "clean-fixes-only-all"
     | "clean-all"
     | "forget-saved-one"
     | "forget-saved-all"
@@ -123,6 +124,11 @@ export function argsForHousekeeping(action: HousekeepingAction): string[] {
             }
             // Flag before the branch name, same shape as --keep-fixes.
             return ["--fixes-only", action.source];
+        case "clean-fixes-only-all":
+            // No branch: --fixes-only alone only ever touches review-fixes/*
+            // (clean's own scoping, see bin/git-review-verbs/clean), so this
+            // never reaches a live review/* session the way a bare clean-all does.
+            return ["--fixes-only"];
         case "clean-all":
             return [];
         case "forget-saved-one":
@@ -192,6 +198,12 @@ ${fixesCostSentence(action.fixesState)}${session} It cannot be undone.`,
                 button: "Discard",
             };
         }
+        case "clean-fixes-only-all":
+            return {
+                title: "Discard every extracted edits branch?",
+                detail: "git review clean --fixes-only\n\nDeletes every review-fixes/* branch that is not currently checked out. Review sessions (review/*), banked edits and delta markers are left alone. It cannot be undone.",
+                button: "Discard All",
+            };
         case "clean-all":
             return {
                 title: "Clean all leftover review branches?",

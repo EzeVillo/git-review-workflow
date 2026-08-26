@@ -63,6 +63,11 @@ public enum ControlId
     // The "Edits you extracted" section: one BODY control, row -> index, same
     // rule as the ones above — the fixed count of 27 does not move.
     DiscardFixes,
+    // The bulk of that same section: no index, subject is the whole section and
+    // not one row, but same treatment as OpenSupport — a BODY control outside
+    // the fixed count of 27. Runs clean --fixes-only with NO branch, which by
+    // clean's own design never touches review/* (see Housekeeping.cs).
+    DiscardAllFixes,
     CleanReview,
     CompareReview,
     WalkthroughInit,
@@ -104,6 +109,7 @@ public static class ControlIdExt
         ControlId.CreateGuide => "createGuide",
         ControlId.DiscardGuide => "discardGuide",
         ControlId.DiscardFixes => "discardFixes",
+        ControlId.DiscardAllFixes => "discardAllFixes",
         ControlId.CleanReview => "cleanReview",
         ControlId.CompareReview => "compareReview",
         ControlId.WalkthroughInit => "walkthroughInit",
@@ -463,6 +469,7 @@ public static class PanelLayoutBuilder
         ControlId.DiscardDraft,
         ControlId.DiscardGuide,
         ControlId.DiscardFixes,
+        ControlId.DiscardAllFixes,
         ControlId.CleanReview,
         ControlId.UndoFinish,
         ControlId.CompareReview,
@@ -1111,11 +1118,12 @@ public static class PanelLayoutBuilder
         // still be pending work on ANOTHER screen (committing and pushing are
         // Source Control's), not on this one.
         //
-        // No "Clean all": a bare git review clean also takes every review/
-        // branch, that is, live sessions of other branches -- a control with more
-        // reach than its section's title. And what this holds is hand-written
-        // work; the value is in the rows, which turn a blind branch -D into an
-        // informed one.
+        // "Discard all" runs clean --fixes-only with NO branch: by clean's own
+        // design that never touches review/* (live sessions of other branches),
+        // so it does not have the reach problem that used to block this button.
+        // It is still behind a confirmation with the full detail, because what
+        // this holds is hand-written work and not machine litter; the rows below
+        // remain the default path for deciding branch by branch.
         if (model.FixesList.Count > 0)
         {
             outList.Add(new Block.ToolsSection(
@@ -1124,6 +1132,7 @@ public static class PanelLayoutBuilder
                 {
                     new Block.Paragraph(
                         "One branch per finish; commit and push them from Source Control, or drop them here"),
+                    new Block.Row(new[] { Ctrl(ControlId.DiscardAllFixes, "Discard all", Emphasis.Secondary, enabled) }),
                     FixesRowsBlock(model),
                 }));
         }

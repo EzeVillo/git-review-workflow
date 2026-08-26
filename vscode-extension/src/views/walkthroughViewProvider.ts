@@ -61,6 +61,11 @@ export const PANEL_MESSAGES = [
     // el mismo reparto que los de arriba -- sin la fila que lo dibuja no tiene
     // sujeto, asi que el conteo de 27 sigue igual.
     "discardFixes",
+    // El bulk de la misma seccion: sin indice, sujeto es la seccion entera y no
+    // una fila, pero mismo trato que openSupport -- control del CUERPO, fuera
+    // de contributes.commands y de la paleta. Corre clean --fixes-only SIN
+    // rama, que por diseno de clean nunca toca review/* (ver housekeeping.ts).
+    "discardAllFixes",
     // Support (links externos): el webview manda un id; el host resuelve la
     // URL contra un allowlist y abre con openExternal. No es un comando de
     // la paleta ni de la CLI.

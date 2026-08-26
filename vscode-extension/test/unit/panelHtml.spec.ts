@@ -220,11 +220,14 @@ describe("panelHtml", () => {
             "sin ramas de fixes no hay seccion vacia");
     });
 
-    it("no hay ningun control que se lleve todas las ramas de fixes de una", () => {
-        // Un git review clean a secas se lleva ademas todas las review/*, o sea
-        // sesiones vivas de otras ramas: seria un control con mas alcance que el
-        // titulo de su seccion.
-        assert.ok(!html.includes("Clean all"), "sin boton de limpiar todas");
+    it("Discard all corre clean --fixes-only sin rama, nunca el cleanReview de mas alcance", () => {
+        // discardAllFixes es su propio mensaje, resuelto en el host a
+        // clean --fixes-only SIN rama -- que por diseno de clean nunca toca
+        // review/*. La seccion no debe invocar cleanReview (el "clean" a secas
+        // que si se lleva las review/* vivas): un git review clean a secas
+        // seria un control con mas alcance que el titulo de esta seccion.
+        assert.ok(html.includes('button("Discard all", "discardAllFixes")'),
+            "el boton de la seccion posta discardAllFixes");
         assert.ok(!/"cleanReview"[^)]*fixes/.test(html), "la seccion no invoca cleanReview");
     });
 

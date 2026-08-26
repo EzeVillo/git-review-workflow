@@ -61,6 +61,11 @@ enum class ControlId {
     // The "Edits you extracted" section: one BODY control, row -> index, same
     // rule as the ones above -- the fixed count of 27 does not move.
     DISCARD_FIXES,
+    // The bulk of that same section: no index, subject is the whole section and
+    // not one row, but same treatment as OPEN_SUPPORT -- a BODY control outside
+    // the fixed count of 27. Runs clean --fixes-only with NO branch, which by
+    // clean's own design never touches review/* (see Housekeeping.kt).
+    DISCARD_ALL_FIXES,
     CLEAN_REVIEW,
     COMPARE_REVIEW,
     WALKTHROUGH_INIT,
@@ -102,6 +107,7 @@ enum class ControlId {
             OPEN_WALKTHROUGH -> "openWalkthrough"
             COPY_WALKTHROUGH_PROMPT -> "copyWalkthroughPrompt"
             DISCARD_FIXES -> "discardFixes"
+            DISCARD_ALL_FIXES -> "discardAllFixes"
             CLEAN_REVIEW -> "cleanReview"
             COMPARE_REVIEW -> "compareReview"
             WALKTHROUGH_INIT -> "walkthroughInit"
@@ -128,6 +134,7 @@ private val CONFIRMING_IDS: Set<ControlId> = setOf(
     ControlId.DISCARD_DRAFT,
     ControlId.DISCARD_GUIDE,
     ControlId.DISCARD_FIXES,
+    ControlId.DISCARD_ALL_FIXES,
     ControlId.CLEAN_REVIEW,
     ControlId.UNDO_FINISH,
     ControlId.COMPARE_REVIEW,
@@ -1170,10 +1177,12 @@ private fun noReviewReadyBlocks(model: PanelModel): List<Block> {
     // pending work on ANOTHER screen (committing and pushing are Source
     // Control's), not on this one.
     //
-    // No "Clean all": a bare git review clean also takes every review/ branch,
-    // that is, live sessions of other branches -- a control with more reach than
-    // its section's title. And what this holds is hand-written work; the value is
-    // in the rows, which turn a blind branch -D into an informed one.
+    // "Discard all" runs clean --fixes-only with NO branch: by clean's own
+    // design that never touches review/* (live sessions of other branches), so
+    // it does not have the reach problem that used to block this button. It is
+    // still behind a confirmation with the full detail, because what this holds
+    // is hand-written work and not machine litter; the rows below remain the
+    // default path for deciding branch by branch.
     if (model.fixes.isNotEmpty()) {
         out.add(
             Block.ToolsSection(
@@ -1182,6 +1191,7 @@ private fun noReviewReadyBlocks(model: PanelModel): List<Block> {
                     Block.Paragraph(
                         "One branch per finish; commit and push them from Source Control, or drop them here",
                     ),
+                    Block.Row(listOf(ctrl(ControlId.DISCARD_ALL_FIXES, "Discard all", Emphasis.SECONDARY, enabled))),
                     fixesRows(model),
                 ),
             ),

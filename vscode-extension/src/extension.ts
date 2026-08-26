@@ -13,7 +13,7 @@ import {
     openDraft,
     startFromDraft,
 } from "./commands/draftActions";
-import {discardFixes} from "./commands/fixesActions";
+import {discardAllFixes, discardFixes} from "./commands/fixesActions";
 import {discardInventoryReview, forgetReview} from "./commands/forgetReview";
 import {createGuide, discardGuide, openGuide} from "./commands/guideActions";
 import {copyWalkthroughPrompt, openWalkthrough} from "./commands/walkthroughRowActions";
@@ -332,6 +332,10 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
             void discardFixes(extra, lock, stateManager, getInvokeOptions);
             return;
         }
+        if (message === "discardAllFixes") {
+            void discardAllFixes(lock, stateManager, getInvokeOptions);
+            return;
+        }
         const commands: Record<
             Exclude<
                 PanelMessage,
@@ -347,6 +351,7 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
                 | "openWalkthrough"
                 | "copyWalkthroughPrompt"
                 | "discardFixes"
+                | "discardAllFixes"
             >,
             string
         > = {

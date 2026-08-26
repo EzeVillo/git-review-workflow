@@ -4,6 +4,7 @@ enum class HousekeepingKind {
     CLEAN_ONE,
     CLEAN_KEEP_FIXES,
     CLEAN_FIXES_ONE,
+    CLEAN_FIXES_ONE_ALL,
     CLEAN_ALL,
     FORGET_SAVED_ONE,
     FORGET_SAVED_ALL,
@@ -69,6 +70,10 @@ fun argsForHousekeeping(action: HousekeepingAction): List<String> = when (action
         require(!action.source.isNullOrEmpty()) { "clean-fixes-only requires source" }
         listOf("--fixes-only", action.source)
     }
+    // No branch: --fixes-only alone only ever touches review-fixes/* (clean's
+    // own scoping, see bin/git-review-verbs/clean), so this never reaches a
+    // live review/* session the way a bare CLEAN_ALL does.
+    HousekeepingKind.CLEAN_FIXES_ONE_ALL -> listOf("--fixes-only")
     HousekeepingKind.CLEAN_ALL -> emptyList()
     HousekeepingKind.FORGET_SAVED_ONE -> {
         require(!action.source.isNullOrEmpty()) { "forget-saved-one requires source" }
@@ -129,6 +134,13 @@ fun confirmCopyFor(action: HousekeepingAction): ConfirmCopy {
                 button = "Discard",
             )
         }
+        HousekeepingKind.CLEAN_FIXES_ONE_ALL -> ConfirmCopy(
+            title = "Discard every extracted edits branch?",
+            detail = "git review clean --fixes-only\n\n" +
+                "Deletes every review-fixes/* branch that is not currently checked out. " +
+                "Review sessions (review/*), banked edits and delta markers are left alone. It cannot be undone.",
+            button = "Discard All",
+        )
         HousekeepingKind.CLEAN_ALL -> ConfirmCopy(
             title = "Clean all leftover review branches?",
             detail = "Deletes every review/* and review-fixes/* branch that is not currently checked out, plus orphaned edit/undo refs. Does not touch delta markers or saved reviews.",

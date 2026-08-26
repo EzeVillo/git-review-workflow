@@ -8,9 +8,10 @@ namespace GitReview.Domain.Tests;
 /// The "Edits you extracted" section: the branches a finish left behind.
 ///
 /// What these pin down is the rule the section is built on — every row the CLI
-/// reported is drawn, including the one that cannot be deleted — and the two
-/// things a client could quietly get wrong: folding one state's badge into
-/// another, and inventing a control that takes them all at once.
+/// reported is drawn, including the one that cannot be deleted —, that the
+/// per-row control never names more than one branch, and that the bulk
+/// "Discard all" control runs clean --fixes-only with NO branch, which by
+/// clean's own scoping never reaches a live review session.
 /// </summary>
 public class PanelLayoutFixesTests
 {
@@ -73,13 +74,44 @@ public class PanelLayoutFixesTests
     }
 
     [Fact]
-    public void No_control_takes_every_branch_at_once()
+    public void Each_row_control_is_about_exactly_one_branch()
     {
-        // A bare git review clean also takes every review/ branch, that is, live
-        // sessions of other branches: more reach than this section's title.
         var controls = Rows(PanelFixtures.NoReviewFixes()).SelectMany(r => r.Controls).ToList();
         Assert.All(controls, c => Assert.Equal(ControlId.DiscardFixes, c.Id));
         Assert.All(controls, c => Assert.NotNull(c.Index));
+    }
+
+    [Fact]
+    public void Discard_all_sits_above_the_rows_with_no_row_index()
+    {
+        var discardAll = Section(PanelFixtures.NoReviewFixes())!.NestedBlocks
+            .OfType<Block.Row>()
+            .SelectMany(r => r.Controls)
+            .Single(c => c.Id == ControlId.DiscardAllFixes);
+        Assert.Equal("Discard all", discardAll.Label);
+        Assert.True(discardAll.Enabled);
+        Assert.Null(discardAll.Index);
+    }
+
+    [Fact]
+    public void Discard_all_runs_clean_fixes_only_with_no_branch()
+    {
+        // Unlike a bare `clean`, --fixes-only alone only ever enumerates
+        // review-fixes branches, so it never reaches a live review session.
+        var argv = ActionArgvMap.ActionToArgv(
+            "cleanReview",
+            new ActionParams.Housekeeping(new HousekeepingAction(HousekeepingKind.CleanFixesOneAll)));
+        Assert.Equal("clean", argv.Verb);
+        Assert.Equal(new[] { "--fixes-only" }, argv.Args);
+    }
+
+    [Fact]
+    public void The_bulk_confirmation_says_review_sessions_are_left_alone()
+    {
+        var copy = HousekeepingLogic.ConfirmCopyFor(new HousekeepingAction(HousekeepingKind.CleanFixesOneAll));
+        Assert.Contains("git review clean --fixes-only", copy.Detail);
+        Assert.Contains("Review sessions", copy.Detail);
+        Assert.Equal("Discard All", copy.Button);
     }
 
     [Fact]

@@ -191,4 +191,18 @@ describe("argsForHousekeeping", () => {
         assert.ok(c.detail.includes("review-saved"));
         assert.strictEqual(c.button, "Discard");
     });
+
+    it("clean-fixes-only-all carries no branch, unlike clean-all it stays fixes-only", () => {
+        assert.deepStrictEqual(argsForHousekeeping({kind: "clean-fixes-only-all"}), ["--fixes-only"]);
+        assert.strictEqual(verbForHousekeeping({kind: "clean-fixes-only-all"}), "clean");
+        assert.strictEqual(housekeepingNeedsNetwork({kind: "clean-fixes-only-all"}), false);
+
+        const c = confirmCopyFor({kind: "clean-fixes-only-all"});
+        assert.ok(c.detail.includes("git review clean --fixes-only"));
+        assert.ok(
+            /review sessions.*left alone/i.test(c.detail),
+            "tiene que decir que las sesiones review/* no se tocan"
+        );
+        assert.strictEqual(c.button, "Discard All");
+    });
 });

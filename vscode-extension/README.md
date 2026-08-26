@@ -139,17 +139,19 @@ invents a second way to change review state.
 | **Build a reading order first** | Inside *Start a review*, at the reading-order step, when the PR has none (the *reviewer* flow) | `git review walkthrough draft`                            |
 | **Copy for agent / Validate and start / open / discard** | A row of *Reading orders you started*, in the empty state. Once its review is over the row keeps only *open* and *discard*, under *Reading orders you finished with* | `git review walkthrough draft --build`, `git review start`, `git review forget --draft` |
 | **Discard extracted edits** | A row of *Edits you extracted*, at the foot of the empty state: one per `review-fixes/` branch a finish left behind, with what git can say about dropping it | `git review clean --fixes-only <branch>` |
+| **Discard all** | *Edits you extracted*, above the rows: drops every `review-fixes/*` branch at once | `git review clean --fixes-only` |
 
 **The branches your finishes left behind.** Every `finish` leaves a
 `review-fixes/<branch>`, and they pile up one per review. The empty state lists
 them under **Edits you extracted**, collapsed at the foot, each with what git can
 say about dropping it: `empty` (it still sits where `finish` created it, so it
 holds none of your work), `merged`, `unmerged`, or `unknown` with no base
-configured. Dropping one runs `clean --fixes-only`, which
+configured. Dropping one runs `clean --fixes-only <branch>`, which
 leaves the review session standing — including the undo point of a finish you can
-still abort. There is deliberately no button that takes them all at once: a bare
-`clean` also deletes every `review/*` branch, and what these rows hold is work
-you wrote by hand.
+still abort. **Discard all** runs the same command with no branch: by `clean`'s
+own scoping that only ever enumerates `review-fixes/*` and never touches a live
+`review/*` session, unlike a bare `clean`. It is still behind a confirmation,
+because what these rows hold is work you wrote by hand.
 
 Mutations (the lifecycle actions, clean, forget, compare and writing a
 walkthrough) ask for a confirmation that names what will happen. Preview is

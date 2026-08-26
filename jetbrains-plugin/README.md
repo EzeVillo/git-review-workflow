@@ -70,9 +70,11 @@ them under **Edits you extracted**, collapsed at the foot, each with what git ca
 say about dropping it: `empty` (it still sits where `finish` created it, so it
 holds none of your work), `merged`, `unmerged`, or `unknown` with no base
 configured. Dropping one leaves the review session
-standing, including the undo point of a finish you can still abort. There is
-deliberately no button that takes them all at once: a bare `clean` also deletes
-every `review/*` branch, and what these rows hold is work you wrote by hand.
+standing, including the undo point of a finish you can still abort. **Discard
+all** runs the same `clean --fixes-only` with no branch: by `clean`'s own
+scoping that only ever enumerates `review-fixes/*` and never touches a live
+`review/*` session, unlike a bare `clean`. It is still behind a confirmation,
+because what these rows hold is work you wrote by hand.
 
 ## Getting started
 

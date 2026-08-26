@@ -273,7 +273,14 @@ panel_layout:
       # siendo trabajo pendiente de otra pantalla (commitear y pushear son de
       # Source Control), no de esta.
       #
-      # Sin `Clean all`: ver la nota de fixes_rows.
+      # "Discard all" corre clean --fixes-only SIN rama: por diseno de clean eso
+      # enumera solo review-fixes/* y nunca toca review/* (sesiones vivas de
+      # otras ramas), a diferencia de un `clean` a secas. Ver la nota de
+      # fixes_rows para el resto del razonamiento. Su control vive en
+      # fixes_rows.controls (junto a discardFixes) y no inline aca: declararlo
+      # inline lo volveria obligatorio en TODA fixture no-review, incluidas las
+      # que no traen fixes -- el chequeo de secuencia estricto por situacion
+      # solo entiende gates de modo (walk/step/whole), no `when: has_fixes`.
       - block: tools_section
         title: "Edits you extracted"
         when: has_fixes
@@ -541,7 +548,8 @@ walkthrough_row:
   watched: on_save
 
 # Inventory control labels (variants) and body-only controls not in actions:
-# continueReview, discardInventory (panel surface), copyCliInstall, outOfRangeHelp, openSupport
+# continueReview, discardInventory (panel surface), copyCliInstall, outOfRangeHelp, openSupport,
+# discardAllFixes
 inventory_controls:
   continueReview: {label: "Continue", confirms: true}
   discardInventory:
@@ -657,13 +665,13 @@ draft_controls:
 # ediciones extraidas por review, para siempre, y sin forma de verlas ni de tirar
 # una sola sin deletrear su nombre en una terminal.
 #
-# NO hay un boton de "limpiar todas". `git review clean` a secas se lleva ademas
-# todas las review/*, o sea sesiones vivas de otras ramas: un control asi
-# adentro de esta seccion correria un verbo de mas alcance que su titulo. Y lo
-# que esta seccion contiene es trabajo escrito a mano, no basura de maquina; el
-# valor esta en las filas, que convierten un branch -D a ciegas en uno
-# informado. Un boton que se lleva todo de una es justo lo que las filas
-# existen para evitar.
+# "Discard all" (declarado junto al bloque, no aca) corre clean --fixes-only
+# SIN rama, nunca un `clean` a secas: por diseno de clean (bin/git-review-verbs/
+# clean) eso enumera solo review-fixes/* y jamas toca una review/* viva de otra
+# rama, que es el motivo por el que antes no habia boton. Sigue habiendo
+# confirmacion con el detalle completo, porque lo que hay aca es trabajo
+# escrito a mano y no basura de maquina; las filas de abajo -- badge por rama --
+# siguen siendo el camino de default para quien quiere decidir rama por rama.
 fixes_rows:
   # El nombre de la fila es LA RAMA, tal como la reporta el campo <name> del
   # registro `fixes` -- nunca una derivada del cliente, la misma regla que la
@@ -683,14 +691,14 @@ fixes_rows:
     unmerged: "unmerged"
     unknown: "unknown"
   controls:
-    # Un solo control, y destructivo: lo que se puede hacer con una rama de fixes
-    # desde aca es tirarla. Commitearla y pushearla son de Source Control, que es
-    # donde el finish ya manda.
+    # Dos controles: uno de fila, destructivo sobre UNA rama de fixes, y uno de
+    # seccion, destructivo sobre TODAS. Commitear y pushear son de Source
+    # Control, que es donde el finish ya manda.
     #
-    # Icono y no boton con etiqueta, por lo mismo que openDraft/discardDraft: el
-    # sujeto es la rama que la fila acaba de nombrar, y "Discard" repetido una
-    # vez por fila es la etiqueta que menos dice de todas. El accessible_name es
-    # el nombre real del control.
+    # discardFixes es icono y no boton con etiqueta, por lo mismo que
+    # openDraft/discardDraft: el sujeto es la rama que la fila acaba de
+    # nombrar, y "Discard" repetido una vez por fila es la etiqueta que menos
+    # dice de todas. El accessible_name es el nombre real del control.
     #
     # SIEMPRE corre --fixes-only, incluso con la sesion cerrada: el argv no puede
     # depender de un dato que se relee en cada refresco, y un `clean <x>` que
@@ -698,6 +706,13 @@ fixes_rows:
     # se llevaria puesta una review viva desde un boton que promete borrar una
     # rama de ediciones.
     discardFixes: {label: null, accessible_name: "Discard the extracted edits", emphasis: icon, icon: trash, confirms: true, disabled_when: current}
+    # discardAllFixes corre `clean --fixes-only` SIN rama: por diseno de clean
+    # eso nunca toca review/* (ver la nota de arriba de este archivo), asi que
+    # no tiene el problema de alcance que antes bloqueaba un boton asi. Vive en
+    # este mapa -- control de la SECCION, no de una fila -- por el mismo motivo
+    # que discardFixes: declararlo inline en panel_layout lo volveria
+    # obligatorio en toda fixture no-review, incluidas las que no traen fixes.
+    discardAllFixes: {label: "Discard all", emphasis: secondary, confirms: true}
   # La fila en la que estas parado no se puede borrar y lo dice, en vez de
   # ofrecer un boton que la CLI va a rechazar con "skipping (currently checked
   # out)". Es el mismo reparto que hace el inventario con la review activa.

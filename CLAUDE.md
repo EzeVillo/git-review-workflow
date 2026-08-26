@@ -514,23 +514,30 @@ guías de autoría) y el bloque **`listing:`**
 comprobaciones de layout vs `panelHtml.ts`, y los mismos escalares contra los archivos de dominio de
 `visualstudio-extension/`).
 
-**Las ramas de ediciones tienen filas, no un botón que se las lleve todas.** La sección
-«Edits you extracted» del pie de `no-review` (`fixes_rows:` en el contrato) es la superficie de las
-`review-fixes/*` que deja un `finish` —el último estado del repositorio que ninguna otra nombraba:
-`list` no las enumeraba, el inventario del panel sale de `list`, y el único *Clean* del panel vive
-en el banner de `finish-pending`—. Su único control es de **fila**, así que va en su mapa propio y
-**no toca el conteo de 27**, igual que los de `draft_controls` y `guide_rows`. Dos reglas: **no hay
-«limpiar todas»** —un `git review clean` a secas se lleva además todas las `review/*`, o sea
-sesiones vivas de otras ramas, o sea un control con más alcance que el título de su sección, y lo
-que hay acá es trabajo escrito a mano— y el Discard corre **siempre `--fixes-only`**, exista o no la
-sesión: el argv no puede depender de un dato que se relee en cada refresco, y un `clean <x>` que
-llegue tarde —la review volvió a existir entre el refresco y el click— se llevaría puesta una review
-viva. El badge sale del campo `state` del registro `fixes` y los cuatro valores **no se pliegan
-entre sí**: `empty` no es «seguro porque ya está integrada» (una rama intacta está parada en la
-punta del PR y no contiene nada tuyo) y `unknown` no es `unmerged` (sin base la pregunta no tiene
-respuesta). La fila `current` se dibuja igual y sin control: la CLI la saltea, y esconderla dejaría
-una rama que existe sin ninguna superficie que la nombre, que es justo lo que la sección vino a
-arreglar.
+**Las ramas de ediciones tienen filas, y un "Discard all" que nunca alcanza una sesión viva.** La
+sección «Edits you extracted» del pie de `no-review` (`fixes_rows:` en el contrato) es la superficie
+de las `review-fixes/*` que deja un `finish` —el último estado del repositorio que ninguna otra
+nombraba: `list` no las enumeraba, el inventario del panel sale de `list`, y el único *Clean* del
+panel vive en el banner de `finish-pending`—. Sus dos controles (`discardFixes` de fila y
+`discardAllFixes` de sección) son ambos de `fixes_rows.controls` en el contrato y **no tocan el
+conteo de 27**, igual que los de `draft_controls` y `guide_rows` — declarar `discardAllFixes` inline
+en `panel_layout` lo volvería obligatorio en toda fixture `no-review`, incluidas las que no traen
+fixes, porque el chequeo de secuencia estricto por situación de JetBrains/Visual Studio sólo entiende
+gates de modo (`walk`/`step`/`whole`), no `when: has_fixes`. Tres reglas: **`discardAllFixes` corre
+`clean --fixes-only` SIN rama**, nunca un `clean` a secas —por diseño de `clean`
+(`bin/git-review-verbs/clean`) eso enumera sólo `review-fixes/*` y jamás toca una `review/*` viva de
+otra rama, así que no hereda el problema de alcance que antes bloqueaba un botón así—; el Discard de
+fila corre **siempre `--fixes-only <rama>`**, exista o no la sesión: el argv no puede depender de un
+dato que se relee en cada refresco, y un `clean <x>` que llegue tarde —la review volvió a existir
+entre el refresco y el click— se llevaría puesta una review viva; y las dos rutas siguen detrás de
+una confirmación con el detalle completo, porque lo que hay acá es trabajo escrito a mano y no
+basura de máquina — las filas con su badge por rama siguen siendo el camino de default para quien
+quiere decidir rama por rama. El badge sale del campo `state` del registro `fixes` y los cuatro
+valores **no se pliegan entre sí**: `empty` no es «seguro porque ya está integrada» (una rama intacta
+está parada en la punta del PR y no contiene nada tuyo) y `unknown` no es `unmerged` (sin base la
+pregunta no tiene respuesta). La fila `current` se dibuja igual y sin control de fila: la CLI la
+saltea, y esconderla dejaría una rama que existe sin ninguna superficie que la nombre, que es justo
+lo que la sección vino a arreglar.
 
 **Una review no tiene pie: ninguna `tools_section`.** Todo lo que cuelga de `walkthrough` —los dos
 verbos del autor y las dos guías de autoría— es de quien está parado en **su** PR, y adentro de una

@@ -5,6 +5,7 @@ public enum HousekeepingKind
     CleanOne,
     CleanKeepFixes,
     CleanFixesOne,
+    CleanFixesOneAll,
     CleanAll,
     ForgetSavedOne,
     ForgetSavedAll,
@@ -73,6 +74,10 @@ public static class HousekeepingLogic
             string.IsNullOrEmpty(action.Source)
                 ? throw new ArgumentException("clean-fixes-only requires source")
                 : new[] { "--fixes-only", action.Source! },
+        // No branch: --fixes-only alone only ever touches review-fixes/* (clean's
+        // own scoping, see bin/git-review-verbs/clean), so this never reaches a
+        // live review/* session the way a bare CleanAll does.
+        HousekeepingKind.CleanFixesOneAll => new[] { "--fixes-only" },
         HousekeepingKind.CleanAll => Array.Empty<string>(),
         HousekeepingKind.ForgetSavedOne =>
             string.IsNullOrEmpty(action.Source)
@@ -127,6 +132,10 @@ public static class HousekeepingLogic
                         : "")
                     + " It cannot be undone.",
                 "Discard"),
+            HousekeepingKind.CleanFixesOneAll => new ConfirmCopy(
+                "Discard every extracted edits branch?",
+                "git review clean --fixes-only\n\nDeletes every review-fixes/* branch that is not currently checked out. Review sessions (review/*), banked edits and delta markers are left alone. It cannot be undone.",
+                "Discard All"),
             HousekeepingKind.CleanAll => new ConfirmCopy(
                 "Clean all leftover review branches?",
                 "Deletes every review/* and review-fixes/* branch that is not currently checked out, plus orphaned edit/undo refs. Does not touch delta markers or saved reviews.",

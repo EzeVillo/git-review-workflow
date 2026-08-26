@@ -1197,20 +1197,23 @@ export function panelHtml(nonce: string): string {
    * siempre, y sin forma de ver cuales hay ni de tirar una sin escribir su
    * nombre en una terminal.
    *
-   * NO hay boton de "limpiar todas". Un git review clean a secas se lleva
-   * ademas todas las review/*, o sea sesiones vivas de otras ramas: seria un
-   * control con mas alcance que el titulo de su seccion. Y lo que hay aca es
-   * trabajo escrito a mano -- el valor esta en las filas, que convierten un
-   * branch -D a ciegas en uno informado.
+   * "Discard all" corre clean --fixes-only SIN rama: por diseño de clean eso
+   * nunca toca review/* (sesiones vivas de otras ramas), a diferencia de un
+   * git review clean a secas -- así que no tiene el problema de alcance que
+   * bloqueaba este botón. Sigue habiendo confirmación con el detalle completo,
+   * porque lo que hay acá es trabajo escrito a mano y no basura de máquina.
    */
   function renderFixesSection(model) {
     if (!model.fixes || model.fixes.length === 0) {
       return null;
     }
+    const discardAll = button("Discard all", "discardAllFixes");
+    discardAll.disabled = model.busy;
     return toolsSection("Edits you extracted", fixesOpen, function (open) {
       fixesOpen = open;
     }, [
       el("p", null, "One branch per finish; commit and push them from Source Control, or drop them here"),
+      discardAll,
       renderFixesRows(model),
     ]);
   }

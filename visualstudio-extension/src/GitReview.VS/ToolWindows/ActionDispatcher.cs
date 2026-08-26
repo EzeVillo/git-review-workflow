@@ -199,6 +199,12 @@ public sealed class ActionDispatcher
                 await DiscardFixesAsync(index).ConfigureAwait(true);
                 return;
 
+            // Bulk of the same section: no index, runs clean --fixes-only with no
+            // branch, which by clean's own design never touches review/*.
+            case "discardAllFixes":
+                await DiscardAllFixesAsync().ConfigureAwait(true);
+                return;
+
             // The author's walkthrough row. Neither control mutates anything, so
             // neither takes the lock; updating it is walkthroughInit, which is a
             // product action and goes the way it always did.
@@ -796,6 +802,19 @@ public sealed class ActionDispatcher
             HousekeepingLogic.SourceFromReviewName(row.Name),
             FixesState: row.State,
             Session: row.Session)).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Drops every branch of edits at once: clean --fixes-only with NO branch.
+    /// By clean's own scoping that only ever enumerates review-fixes branches,
+    /// never a review session, so unlike a bare clean it does not need an index
+    /// or a row to re-resolve — it does not depend on which row the panel showed
+    /// when the button was pressed.
+    /// </summary>
+    private async Task DiscardAllFixesAsync()
+    {
+        await ConfirmAndRunHousekeepingAsync(
+            new HousekeepingAction(HousekeepingKind.CleanFixesOneAll)).ConfigureAwait(true);
     }
 
     /// <summary>

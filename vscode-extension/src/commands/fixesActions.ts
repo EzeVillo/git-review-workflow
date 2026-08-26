@@ -1,11 +1,10 @@
 /**
- * El único control de la sección "Edits you extracted": descartar la rama de
- * ediciones que dejó un `finish`.
+ * Los controles de la sección "Edits you extracted": descartar la rama de
+ * ediciones de UNA fila, o todas de una.
  *
- * Mismo reparto que los controles del bloque de borradores y del de guías: es
- * un control del CUERPO del panel, no una acción del producto — sin la fila que
- * lo dibuja no tiene sujeto —, así que no está en `contributes.commands` ni en
- * la paleta y el conteo de 27 sigue igual.
+ * Mismo reparto que los controles del bloque de borradores y del de guías: son
+ * controles del CUERPO del panel, no acciones del producto, así que no están en
+ * `contributes.commands` ni en la paleta y el conteo de 27 sigue igual.
  */
 
 import * as vscode from "vscode";
@@ -18,6 +17,7 @@ import {
     confirmCopyFor,
     type HousekeepingAction,
 } from "../review/housekeeping";
+import {runHousekeeping} from "./runHousekeeping";
 import type {ReviewStateManager} from "../review/state";
 import type {FixesRecord} from "../cli/porcelain";
 
@@ -93,4 +93,19 @@ export async function discardFixes(
             );
         }
     });
+}
+
+/**
+ * *Discard all*: corre `clean --fixes-only` SIN rama. Por diseño de `clean`
+ * (bin/git-review-verbs/clean) eso enumera solo `review-fixes/*` y nunca toca
+ * `review/*` — a diferencia de un `clean` a secas —, así que la acción no
+ * necesita un índice ni re-resolver una fila bajo el lock: no depende de cuál
+ * fila mostraba el panel cuando se apretó el botón.
+ */
+export async function discardAllFixes(
+    lock: MutationLock,
+    stateManager: ReviewStateManager,
+    getInvokeOptions: () => InvokeOptions
+): Promise<void> {
+    await runHousekeeping({kind: "clean-fixes-only-all"}, lock, stateManager, getInvokeOptions);
 }

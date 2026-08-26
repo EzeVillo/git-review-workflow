@@ -3,6 +3,7 @@ package com.ezevillo.gitreview.domain
 import com.ezevillo.gitreview.fixtures.PanelFixtures
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -10,9 +11,10 @@ import org.junit.jupiter.api.Test
  * The "Edits you extracted" section: the branches a finish left behind.
  *
  * What these pin down is the rule the section is built on -- every row the CLI
- * reported is drawn, including the one that cannot be deleted -- and the two
- * things a client could quietly get wrong: folding one state's badge into
- * another, and inventing a control that takes them all at once.
+ * reported is drawn, including the one that cannot be deleted --, that the
+ * per-row control never names more than one branch, and that the bulk
+ * "Discard all" control runs clean --fixes-only with NO branch, which by
+ * clean's own scoping never reaches a live review session.
  */
 class PanelLayoutFixesTest {
     private fun section(model: PanelModel): Block.ToolsSection? =
@@ -71,16 +73,46 @@ class PanelLayoutFixesTest {
     }
 
     @Test
-    fun `no control takes every branch at once`() {
-        // A bare git review clean also takes every review/ branch, that is, live
-        // sessions of other branches: more reach than this section's title.
+    fun `each row control is about exactly one branch`() {
         val controls = section(PanelFixtures.noReviewFixes())!!
             .blocks
             .filterIsInstance<Block.FixesRows>()
             .flatMap { it.rows }
             .flatMap { it.controls }
         assertTrue(controls.all { it.id == ControlId.DISCARD_FIXES })
-        assertTrue(controls.all { it.index != null }, "every control is about ONE row")
+        assertTrue(controls.all { it.index != null }, "every row control is about ONE row")
+    }
+
+    @Test
+    fun `Discard all sits above the rows, with no row index`() {
+        val discardAll = section(PanelFixtures.noReviewFixes())!!
+            .blocks
+            .filterIsInstance<Block.Row>()
+            .flatMap { it.controls }
+            .single { it.id == ControlId.DISCARD_ALL_FIXES }
+        assertEquals("Discard all", discardAll.label)
+        assertTrue(discardAll.enabled)
+        assertNull(discardAll.index)
+    }
+
+    @Test
+    fun `Discard all runs clean --fixes-only with no branch`() {
+        // Unlike a bare `clean`, --fixes-only alone only ever enumerates
+        // review-fixes/*, so it never reaches a live review/* session.
+        val argv = actionToArgv(
+            "cleanReview",
+            ActionParams.Housekeeping(HousekeepingAction(HousekeepingKind.CLEAN_FIXES_ONE_ALL)),
+        )
+        assertEquals("clean", argv.verb)
+        assertEquals(listOf("--fixes-only"), argv.args)
+    }
+
+    @Test
+    fun `the bulk confirmation says review sessions are left alone`() {
+        val copy = confirmCopyFor(HousekeepingAction(HousekeepingKind.CLEAN_FIXES_ONE_ALL))
+        assertTrue(copy.detail.contains("git review clean --fixes-only"))
+        assertTrue(copy.detail.contains("Review sessions"))
+        assertEquals("Discard All", copy.button)
     }
 
     @Test

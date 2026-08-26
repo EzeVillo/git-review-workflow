@@ -4,6 +4,7 @@ import com.ezevillo.gitreview.domain.ReviewState
 import com.ezevillo.gitreview.domain.Situation
 import com.ezevillo.gitreview.domain.isOutdated
 import com.ezevillo.gitreview.domain.parseConfigPorcelain
+import com.ezevillo.gitreview.domain.parseListFixes
 import com.ezevillo.gitreview.domain.parseListPorcelain
 import com.ezevillo.gitreview.domain.parsePorcelain
 import com.ezevillo.gitreview.domain.situationFor
@@ -80,6 +81,7 @@ class ReviewStateManager(
         }
 
         var branches = emptyList<com.ezevillo.gitreview.domain.BranchRecord>()
+        var fixes = emptyList<com.ezevillo.gitreview.domain.FixesRecord>()
         var config: com.ezevillo.gitreview.domain.EffectiveConfig? = null
         var candidates: List<com.ezevillo.gitreview.domain.CandidateBranch>? = null
         var remotes: List<com.ezevillo.gitreview.domain.CandidateRemote>? = null
@@ -99,9 +101,14 @@ class ReviewStateManager(
             val list = invoker.invoke("list", listOf("--porcelain"), cwd)
             if (list.exitCode == 0 && !list.timedOut) {
                 try {
+                    // One invocation, two readings: the fixes branches travel in
+                    // the same output as the inventory, so the footer section
+                    // costs no extra process per refresh.
                     branches = parseListPorcelain(list.stdout)
+                    fixes = parseListFixes(list.stdout)
                 } catch (_: Exception) {
                     branches = emptyList()
+                    fixes = emptyList()
                 }
             }
             val cfg = invoker.invoke("config", listOf("--porcelain"), cwd)
@@ -152,6 +159,7 @@ class ReviewStateManager(
             Situation.NO_REVIEW, Situation.FINISH_PENDING -> ReviewState(
                 situation = situation,
                 branches = branches,
+                fixes = fixes,
                 config = config,
                 candidates = candidates,
                 remotes = remotes,

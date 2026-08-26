@@ -10,6 +10,12 @@ public sealed record ReviewState(
     /// <summary>Step: files of the current commit (file porcelain). Empty otherwise.</summary>
     IReadOnlyList<EntryRecord>? Files = null,
     IReadOnlyList<BranchRecord>? Branches = null,
+    /// <summary>
+    /// The review-fixes/ branches a finish left behind (the <c>fixes</c> record of
+    /// the same <c>list --porcelain</c>, no new invocation). Same scope as
+    /// Branches: populated outside a review, empty inside one.
+    /// </summary>
+    IReadOnlyList<FixesRecord>? Fixes = null,
     EffectiveConfig? Config = null,
     IReadOnlyList<CandidateBranch>? Candidates = null,
     IReadOnlyList<CandidateRemote>? Remotes = null,
@@ -46,6 +52,7 @@ public sealed record ReviewState(
     public IReadOnlyList<EntryRecord> EntriesList => Entries ?? Array.Empty<EntryRecord>();
     public IReadOnlyList<EntryRecord> FilesList => Files ?? Array.Empty<EntryRecord>();
     public IReadOnlyList<BranchRecord> BranchesList => Branches ?? Array.Empty<BranchRecord>();
+    public IReadOnlyList<FixesRecord> FixesList => Fixes ?? Array.Empty<FixesRecord>();
     public IReadOnlyList<DraftRecord> DraftsList => Drafts ?? Array.Empty<DraftRecord>();
     public IReadOnlyList<GuideRecord> GuidesList => Guides ?? Array.Empty<GuideRecord>();
 }

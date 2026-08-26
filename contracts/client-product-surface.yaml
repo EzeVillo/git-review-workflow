@@ -209,7 +209,7 @@ panel_layout:
       - {block: paragraph, text: "Remote: {remote} (optional)."}
       - {block: row, controls: [{id: setRemote, label: "Change remote", emphasis: secondary, confirms: false}]}
   no-review:
-    source_fns: [renderDrafts, renderReview, renderEmptyStartBlock, renderWalkthroughSection, renderWalkthroughRow, renderSpentDrafts, renderCompareSection, renderSettings, renderSupport]
+    source_fns: [renderDrafts, renderReview, renderEmptyStartBlock, renderWalkthroughSection, renderWalkthroughRow, renderSpentDrafts, renderFixesSection, renderCompareSection, renderSettings, renderSupport]
     fills_height: true
     blocks:
       # Los borradores empezados van PRIMERO y el cuerpo de siempre sigue entero
@@ -267,6 +267,19 @@ panel_layout:
         blocks:
           - {block: paragraph, text: "Their review is over; the files are still here"}
           - {block: draft_block, when: has_reviewed_drafts}
+      # Las ramas de ediciones que dejo un finish. Plegada y detras de los
+      # ordenes terminados: las dos secciones son restos de reviews que ya
+      # pasaron, y esta es la de mas abajo porque su contenido puede seguir
+      # siendo trabajo pendiente de otra pantalla (commitear y pushear son de
+      # Source Control), no de esta.
+      #
+      # Sin `Clean all`: ver la nota de fixes_rows.
+      - block: tools_section
+        title: "Edits you extracted"
+        when: has_fixes
+        blocks:
+          - {block: paragraph, text: "One branch per finish; commit and push them from Source Control, or drop them here"}
+          - {block: fixes_rows}
       # Compare, ultima de las tres del pie que hacen algo con el repo. Es la
       # unica que monta algo FUERA de una sesion de lectura -- dos revisiones
       # cualesquiera, sin review que empezar ni orden que escribir -- asi que va
@@ -625,3 +638,65 @@ draft_controls:
   # por borrador.
   openDraft: {label: null, accessible_name: "Open the reading order", emphasis: icon, confirms: false}
   discardDraft: {label: null, accessible_name: "Discard the reading order", emphasis: icon, confirms: true}
+
+# Las ramas review-fixes/* que dejo un finish: la seccion "Edits you extracted"
+# del pie de no-review. Su unico control es de FILA, como los de draft_controls y
+# guide_rows -- sin la fila que lo dibuja no tiene sujeto --, asi que NO cuenta
+# contra las 27 acciones ni va a contributes.commands, al menu Tools -> git review
+# ni al .vsct.
+#
+# Existe porque era el ultimo estado del repositorio que ninguna superficie
+# nombraba: list no las enumeraba, el inventario del panel sale de list, y el
+# unico boton Clean del panel vive en el banner de finish-pending. Una rama de
+# ediciones extraidas por review, para siempre, y sin forma de verlas ni de tirar
+# una sola sin deletrear su nombre en una terminal.
+#
+# NO hay un boton de "limpiar todas". `git review clean` a secas se lleva ademas
+# todas las review/*, o sea sesiones vivas de otras ramas: un control asi
+# adentro de esta seccion correria un verbo de mas alcance que su titulo. Y lo
+# que esta seccion contiene es trabajo escrito a mano, no basura de maquina; el
+# valor esta en las filas, que convierten un branch -D a ciegas en uno
+# informado. Un boton que se lleva todo de una es justo lo que las filas
+# existen para evitar.
+fixes_rows:
+  # El nombre de la fila es LA RAMA, tal como la reporta el campo <name> del
+  # registro `fixes` -- nunca una derivada del cliente, la misma regla que la
+  # ruta de un borrador o de una guia.
+  label: from_branch
+  # Los badges, en prosa, uno por estado de la CLI. Dicen cuanto cuesta
+  # descartarla, que es la unica pregunta que se hace en esta seccion.
+  #
+  # `empty` no se pliega en "seguro": una rama de fixes intacta esta parada en la
+  # punta del PR y no contiene NADA tuyo, que es distinto de estar integrada.
+  # `unknown` tampoco se pliega en `unmerged`: sin base configurada la pregunta
+  # no tiene respuesta, y contestar la peor de las dos pinta de peligrosa una
+  # rama que puede estar vacia.
+  badges:
+    empty: "nothing committed"
+    merged: "in the base"
+    unmerged: "not in the base"
+    unknown: "state unknown"
+  controls:
+    # Un solo control, y destructivo: lo que se puede hacer con una rama de fixes
+    # desde aca es tirarla. Commitearla y pushearla son de Source Control, que es
+    # donde el finish ya manda.
+    #
+    # Icono y no boton con etiqueta, por lo mismo que openDraft/discardDraft: el
+    # sujeto es la rama que la fila acaba de nombrar, y "Discard" repetido una
+    # vez por fila es la etiqueta que menos dice de todas. El accessible_name es
+    # el nombre real del control.
+    #
+    # SIEMPRE corre --fixes-only, incluso con la sesion cerrada: el argv no puede
+    # depender de un dato que se relee en cada refresco, y un `clean <x>` que
+    # llegue tarde -- la sesion volvio a existir entre el refresco y el click --
+    # se llevaria puesta una review viva desde un boton que promete borrar una
+    # rama de ediciones.
+    discardFixes: {label: null, accessible_name: "Discard the extracted edits", emphasis: icon, icon: trash, confirms: true, disabled_when: current}
+  # La fila en la que estas parado no se puede borrar y lo dice, en vez de
+  # ofrecer un boton que la CLI va a rechazar con "skipping (currently checked
+  # out)". Es el mismo reparto que hace el inventario con la review activa.
+  tooltip_current: "You are on this branch; switch away first"
+  # El watcher NO mira nada aca: estas son ramas, o sea refs, y toda mutacion que
+  # las crea o las borra pasa por la CLI o por git -- las dos cosas que los tres
+  # clientes ya refrescan. No hay un archivo que vigilar.
+  watched: no

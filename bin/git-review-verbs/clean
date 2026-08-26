@@ -14,19 +14,26 @@
 # but leaves review-fixes/* alone — the usual "I'm done with this finish" step
 # after committing or before opening a PR of your edits.
 #
+# --fixes-only is its mirror, and the one the panel's "Edits you extracted"
+# section runs: drop the extracted edits and leave everything about the session
+# standing — no branch, no ref and no marker outside review-fixes/* is touched.
+# Without it there was no way to say "throw away these edits, keep the review":
+# clean <branch> takes both, and a bare clean takes every review in the repo.
+#
 set -eu
 
 prog="git review clean"
 
 usage() {
 	cat <<EOF
-usage: $prog [--keep-fixes] [branch]
+usage: $prog [--keep-fixes | --fixes-only] [branch]
 
 Delete leftover review branches.
 With no <branch>, clean every matching leftover.
 
   (default)        delete review/<branch> and review-fixes/<branch>
   --keep-fixes     delete review/<branch> only; leave review-fixes/<branch>
+  --fixes-only     delete review-fixes/<branch> only; leave the review session
 
 Never deletes the branch you are currently on.
 Incomplete reviews roll back their --delta marker (like abort); finished ones keep it.
@@ -58,6 +65,7 @@ restore_delta_if_incomplete() {
 
 arg=""
 keep_fixes=0
+fixes_only=0
 while [ $# -gt 0 ]; do
 	case "$1" in
 	-h | --h)
@@ -65,6 +73,7 @@ while [ $# -gt 0 ]; do
 		exit 0
 		;;
 	--keep-fixes) keep_fixes=1 ;;
+	--fixes-only) fixes_only=1 ;;
 	-*)
 		echo "error: unknown option $1" >&2
 		usage >&2
@@ -82,16 +91,25 @@ while [ $# -gt 0 ]; do
 	shift
 done
 
+if [ "$keep_fixes" -eq 1 ] && [ "$fixes_only" -eq 1 ]; then
+	echo "error: --keep-fixes and --fixes-only are opposites; pass at most one" >&2
+	exit 1
+fi
+
 cur="$(git symbolic-ref --quiet --short HEAD || true)"
 
 if [ -n "$arg" ]; then
 	if [ "$keep_fixes" -eq 1 ]; then
 		list="review/$arg"
+	elif [ "$fixes_only" -eq 1 ]; then
+		list="review-fixes/$arg"
 	else
 		list="review/$arg review-fixes/$arg"
 	fi
 elif [ "$keep_fixes" -eq 1 ]; then
 	list="$(git for-each-ref --format='%(refname:short)' refs/heads/review/)"
+elif [ "$fixes_only" -eq 1 ]; then
+	list="$(git for-each-ref --format='%(refname:short)' refs/heads/review-fixes/)"
 else
 	list="$(git for-each-ref --format='%(refname:short)' refs/heads/review/ refs/heads/review-fixes/)"
 fi
@@ -121,6 +139,23 @@ if [ -n "$list" ]; then
 		git branch -D "$b"
 		cleaned=1
 	done
+fi
+
+# --fixes-only stops here. Everything below belongs to the review session --
+# banked edit refs, finish undo points, the reviewresume flag -- and the whole
+# point of the flag is to leave the session standing: a reviewer who drops the
+# extracted edits of a finish they can still undo has not asked to lose the undo
+# too. Nothing outside review-fixes/* is read or written on this path, which is
+# also why no --delta marker moves (the loop above only rolls back review/*).
+if [ "$fixes_only" -eq 1 ]; then
+	if [ "$cleaned" -eq 0 ]; then
+		if [ -n "$arg" ]; then
+			echo "no review-fixes/$arg branch to clean" >&2
+		else
+			echo "no review-fixes/ branches to clean" >&2
+		fi
+	fi
+	exit 0
 fi
 
 # Drop orphaned banked commit-by-commit edit refs, plus any git review finish

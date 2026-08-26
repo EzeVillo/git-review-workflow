@@ -306,3 +306,91 @@ teardown() {
 	run git rev-parse --verify --quiet refs/heads/review/feature/x
 	[ "$status" -eq 0 ]
 }
+
+# -- --fixes-only: the mirror of --keep-fixes ---------------------------------
+
+@test "review clean --fixes-only drops the extracted edits and leaves the session" {
+	git branch review/feature/x develop
+	git branch review-fixes/feature/x develop
+
+	run git review clean --fixes-only feature/x
+	[ "$status" -eq 0 ]
+	run git rev-parse --verify --quiet refs/heads/review-fixes/feature/x
+	[ "$status" -ne 0 ]
+	run git rev-parse --verify --quiet refs/heads/review/feature/x
+	[ "$status" -eq 0 ]
+}
+
+@test "review clean --fixes-only with no branch takes every fixes branch and no review" {
+	git branch review/feature/x develop
+	git branch review-fixes/feature/x develop
+	git branch review-fixes/feature/y develop
+
+	run git review clean --fixes-only
+	[ "$status" -eq 0 ]
+	[ -z "$(git for-each-ref refs/heads/review-fixes/)" ]
+	[ "$(git for-each-ref --format='%(refname:short)' refs/heads/review/)" = "review/feature/x" ]
+}
+
+@test "review clean --fixes-only leaves banked edit refs and the finish undo alone" {
+	git review start feature/x --step
+	# A file of its own: an edit to f.txt overlaps the second commit and the
+	# replay would stop on a conflict, which is a different test.
+	printf 'note\n' >note.txt
+	git review next
+	git review finish >/dev/null
+
+	# Preconditions: a finish undo point and a banked edit ref, both of which a
+	# plain clean would tear down.
+	[ -n "$(git config branch.review/feature/x.reviewundohead)" ]
+	[ -n "$(git for-each-ref refs/review-edits/feature/x/)" ]
+
+	git switch --quiet --discard-changes develop
+	run git review clean --fixes-only feature/x
+	[ "$status" -eq 0 ]
+	run git rev-parse --verify --quiet refs/heads/review-fixes/feature/x
+	[ "$status" -ne 0 ]
+	# The session is untouched: you can still undo the finish.
+	[ -n "$(git config branch.review/feature/x.reviewundohead)" ]
+	[ -n "$(git for-each-ref refs/review-edits/feature/x/)" ]
+	[ -n "$(git for-each-ref refs/review-undo/feature/x/)" ]
+}
+
+@test "review clean --fixes-only leaves the delta marker of an incomplete review" {
+	# start records the tip it is about to review; a plain clean of an incomplete
+	# review rolls that back, which is exactly what --fixes-only must not do.
+	git review start feature/x >/dev/null
+	marker="$(git config reviewworkflow.feature/x.reviewed)"
+	[ -n "$marker" ]
+	git branch review-fixes/feature/x develop
+
+	git switch --quiet --discard-changes develop
+	run git review clean --fixes-only feature/x
+	[ "$status" -eq 0 ]
+	# A plain clean would roll this back; --fixes-only never touches the session.
+	[ "$(git config reviewworkflow.feature/x.reviewed)" = "$marker" ]
+}
+
+@test "review clean --fixes-only and --keep-fixes together are refused" {
+	git branch review/feature/x develop
+	git branch review-fixes/feature/x develop
+
+	run git review clean --fixes-only --keep-fixes feature/x
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"opposites"* ]]
+	# And nothing was deleted.
+	run git rev-parse --verify --quiet refs/heads/review-fixes/feature/x
+	[ "$status" -eq 0 ]
+	run git rev-parse --verify --quiet refs/heads/review/feature/x
+	[ "$status" -eq 0 ]
+}
+
+@test "review clean --fixes-only says so when there is nothing to drop" {
+	git branch review/feature/x develop
+
+	run git review clean --fixes-only feature/x
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"no review-fixes/feature/x branch to clean"* ]]
+	run git rev-parse --verify --quiet refs/heads/review/feature/x
+	[ "$status" -eq 0 ]
+}

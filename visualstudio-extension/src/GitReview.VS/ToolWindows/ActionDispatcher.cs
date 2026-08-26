@@ -194,6 +194,11 @@ public sealed class ActionDispatcher
                 await DiscardGuideAsync(index).ConfigureAwait(true);
                 return;
 
+            // "Edits you extracted": row -> index, same shape as the block above.
+            case "discardFixes":
+                await DiscardFixesAsync(index).ConfigureAwait(true);
+                return;
+
             // The author's walkthrough row. Neither control mutates anything, so
             // neither takes the lock; updating it is walkthroughInit, which is a
             // product action and goes the way it always did.
@@ -768,6 +773,29 @@ public sealed class ActionDispatcher
             "deleteGuide",
             new ActionParams.DeleteGuide(),
             progress: UserCopy.DiscardGuideProgress).ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Drops the branch of edits of THIS row, with a confirmation first.
+    ///
+    /// The confirmation names the real verb and says how much it costs, with the state
+    /// the CLI reported — the only one that can ask git whether those commits are in
+    /// the base. Nothing is derived here.
+    ///
+    /// Always --fixes-only, even when the session is already gone: the argv cannot
+    /// depend on a value that is re-read on every refresh. A late "clean &lt;x&gt;" —
+    /// the review came back between the refresh and the click — would take a live
+    /// review down from a button that promises to delete a branch of edits.
+    /// </summary>
+    private async Task DiscardFixesAsync(int? index)
+    {
+        var row = PanelModelBuilder.FixesAt(State.FixesList, index);
+        if (row is null || row.Current) return;
+        await ConfirmAndRunHousekeepingAsync(new HousekeepingAction(
+            HousekeepingKind.CleanFixesOne,
+            HousekeepingLogic.SourceFromReviewName(row.Name),
+            FixesState: row.State,
+            Session: row.Session)).ConfigureAwait(true);
     }
 
     /// <summary>

@@ -50,14 +50,15 @@ class ConfirmationContractTest {
             }
         }
 
-        // guide_rows: mismo papel que los dos de arriba (controles cuyo sujeto es
-        // la fila), pero los suyos cuelgan de una clave "controls" porque el
-        // bloque tambien declara las filas y sus estados.
-        @Suppress("UNCHECKED_CAST")
-        val guideControls =
-            (yaml["guide_rows"] as? Map<String, Any?>)?.get("controls") as? Map<String, Any?>
-        if (guideControls != null) {
-            for ((id, node) in guideControls) {
+        // guide_rows, walkthrough_row y fixes_rows: mismo papel que los dos de
+        // arriba (controles cuyo sujeto es la fila), pero los suyos cuelgan de
+        // una clave "controls" porque el bloque tambien declara las filas y sus
+        // estados.
+        for (key in listOf("guide_rows", "walkthrough_row", "fixes_rows")) {
+            @Suppress("UNCHECKED_CAST")
+            val rowControls =
+                (yaml[key] as? Map<String, Any?>)?.get("controls") as? Map<String, Any?> ?: continue
+            for ((id, node) in rowControls) {
                 val map = node as? Map<*, *>
                 val confirms = map?.get("confirms") as? Boolean ?: false
                 expected[id] = expected[id] == true || confirms

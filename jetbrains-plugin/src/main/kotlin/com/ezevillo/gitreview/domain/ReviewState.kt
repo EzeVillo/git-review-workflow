@@ -11,6 +11,12 @@ data class ReviewState(
     /** Step: files of the current commit (`file` porcelain). Empty otherwise. */
     val files: List<EntryRecord> = emptyList(),
     val branches: List<BranchRecord> = emptyList(),
+    /**
+     * The `review-fixes/` branches a finish left behind (`fixes` record of the
+     * same `list --porcelain`, no new invocation). Same scope as [branches]:
+     * populated outside a review, empty inside one.
+     */
+    val fixes: List<FixesRecord> = emptyList(),
     val config: EffectiveConfig? = null,
     val candidates: List<CandidateBranch>? = null,
     val remotes: List<CandidateRemote>? = null,

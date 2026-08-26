@@ -1,0 +1,139 @@
+using GitReview.Domain;
+using GitReview.Fixtures;
+using Xunit;
+
+namespace GitReview.Domain.Tests;
+
+/// <summary>
+/// The "Edits you extracted" section: the branches a finish left behind.
+///
+/// What these pin down is the rule the section is built on — every row the CLI
+/// reported is drawn, including the one that cannot be deleted — and the two
+/// things a client could quietly get wrong: folding one state's badge into
+/// another, and inventing a control that takes them all at once.
+/// </summary>
+public class PanelLayoutFixesTests
+{
+    private static Block.ToolsSection? Section(PanelModel model) =>
+        PanelLayoutBuilder.PanelLayout(model).Blocks
+            .OfType<Block.ToolsSection>()
+            .FirstOrDefault(s => s.Title == "Edits you extracted");
+
+    private static IReadOnlyList<GuideRow> Rows(PanelModel model) =>
+        Section(model)?.NestedBlocks.OfType<Block.FixesRows>().SelectMany(f => f.Rows).ToList()
+            ?? new List<GuideRow>();
+
+    [Fact]
+    public void Every_branch_the_cli_reported_gets_a_row_in_its_order()
+    {
+        Assert.Equal(
+            new[]
+            {
+                "review-fixes/feature/checkout",
+                "review-fixes/fix/quoting",
+                "review-fixes/perf/index",
+                "review-fixes/docs/readme",
+            },
+            Rows(PanelFixtures.NoReviewFixes()).Select(r => r.Name));
+    }
+
+    [Fact]
+    public void The_badge_says_each_state_and_none_folds_into_another()
+    {
+        Assert.Equal(
+            new[] { "not in the base", "nothing committed", "in the base", "state unknown" },
+            Rows(PanelFixtures.NoReviewFixes()).Select(r => r.Badge));
+    }
+
+    [Fact]
+    public void The_branch_you_are_on_is_drawn_and_its_control_is_off()
+    {
+        // Hiding it would leave a branch that exists with no surface naming it,
+        // which is what this section came to fix; offering the button would
+        // promise something the CLI skips.
+        var current = Rows(PanelFixtures.NoReviewFixes())[1];
+        var discard = Assert.Single(current.Controls);
+        Assert.Equal(ControlId.DiscardFixes, discard.Id);
+        Assert.False(discard.Enabled);
+        Assert.Equal("You are on this branch; switch away first", discard.Tooltip);
+    }
+
+    [Fact]
+    public void Every_other_row_offers_the_discard_naming_the_verb()
+    {
+        var rows = Rows(PanelFixtures.NoReviewFixes());
+        foreach (var row in new[] { rows[0], rows[2], rows[3] })
+        {
+            var discard = Assert.Single(row.Controls);
+            Assert.Equal(ControlId.DiscardFixes, discard.Id);
+            Assert.True(discard.Enabled, $"{row.Name} should offer the discard");
+            Assert.Equal("git review clean --fixes-only (with confirmation)", discard.Tooltip);
+            Assert.Equal(Emphasis.Icon, discard.Emphasis);
+        }
+    }
+
+    [Fact]
+    public void No_control_takes_every_branch_at_once()
+    {
+        // A bare git review clean also takes every review/ branch, that is, live
+        // sessions of other branches: more reach than this section's title.
+        var controls = Rows(PanelFixtures.NoReviewFixes()).SelectMany(r => r.Controls).ToList();
+        Assert.All(controls, c => Assert.Equal(ControlId.DiscardFixes, c.Id));
+        Assert.All(controls, c => Assert.NotNull(c.Index));
+    }
+
+    [Fact]
+    public void With_no_branches_there_is_no_section()
+    {
+        Assert.Null(Section(PanelFixtures.NoReviewReady()));
+    }
+
+    [Fact]
+    public void The_section_sits_after_the_spent_reading_orders_and_before_compare()
+    {
+        var titles = PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewFixes()).Blocks
+            .OfType<Block.ToolsSection>()
+            .Select(s => s.Title);
+        Assert.Equal(
+            new[] { "Walkthrough", "Edits you extracted", "Compare", "Settings", "Support" },
+            titles);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void The_argv_always_carries_fixes_only_session_or_not(bool session)
+    {
+        // A value re-read on every refresh cannot decide which branches a command
+        // deletes: a late clean <x> would take a live review down.
+        var argv = ActionArgvMap.ActionToArgv(
+            "cleanReview",
+            new ActionParams.Housekeeping(new HousekeepingAction(
+                HousekeepingKind.CleanFixesOne, "feature/x", Session: session)));
+        Assert.Equal("clean", argv.Verb);
+        Assert.Equal(new[] { "--fixes-only", "feature/x" }, argv.Args);
+    }
+
+    [Fact]
+    public void The_confirmation_says_what_dropping_it_costs()
+    {
+        var unmerged = HousekeepingLogic.ConfirmCopyFor(new HousekeepingAction(
+            HousekeepingKind.CleanFixesOne, "feature/x", FixesState: FixesState.Unmerged));
+        Assert.Contains("git review clean --fixes-only feature/x", unmerged.Detail);
+        Assert.Contains("the base branch does not have", unmerged.Detail);
+        Assert.DoesNotContain("left standing", unmerged.Detail);
+        Assert.Equal("Discard", unmerged.Button);
+
+        var empty = HousekeepingLogic.ConfirmCopyFor(new HousekeepingAction(
+            HousekeepingKind.CleanFixesOne, "feature/x", FixesState: FixesState.Empty, Session: true));
+        Assert.Contains("no work of yours is lost", empty.Detail);
+        Assert.Contains("review/feature/x is left standing", empty.Detail);
+    }
+
+    [Fact]
+    public void A_state_we_do_not_understand_reads_as_unknown()
+    {
+        var parsed = Porcelain.ParseListFixes("fixes\treview-fixes/feature/x\t0\t0\tbrand-new\n");
+        Assert.Equal(new[] { FixesState.Unknown }, parsed.Select(f => f.State));
+    }
+}

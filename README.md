@@ -317,7 +317,7 @@ Every command is a verb under `git review`. Run `git review -h` for the list, or
 | `git review finish [--onto-source] [--resume \| --abort [--force]]`                                                                          | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch); `--abort` undoes the last finish.                                                                                                                                                                                                                                    |
 | `git review preview [--stat]`                                                                                                                | Show the edits you have made so far — the diff `finish` would extract — without committing or switching branch.                                                                                                                                                                                                                                                    |
 | `git review abort`                                                                                                                           | Cancel the current review and return to where you started.                                                                                                                                                                                                                                                                                                         |
-| `git review clean [--keep-fixes] [branch]`                                                                                                   | Delete the `review/*` (and by default `review-fixes/*`) branches for `<branch>`, or all of them; `--keep-fixes` leaves `review-fixes/*` alone.                                                                                                                                                                                                                     |
+| `git review clean [--keep-fixes \| --fixes-only] [branch]`                                                                                   | Delete the `review/*` (and by default `review-fixes/*`) branches for `<branch>`, or all of them; `--keep-fixes` leaves `review-fixes/*` alone, `--fixes-only` takes only those.                                                                                                                                                                                    |
 | `git review forget --delta ([--] <branch> \| --all \| --stale [--dry-run])`                                                                  | Discard the `--delta` marker for one branch, all of them, or only stale ones.                                                                                                                                                                                                                                                                                      |
 | `git review forget --saved ([--] <branch> \| --all) [--dry-run]`                                                                             | Discard a review saved with `git review save`.                                                                                                                                                                                                                                                                                                                     |
 | `git review forget --draft ([--] <branch> \| --all \| --reviewed) [--dry-run]`                                                                             | Delete a walkthrough you drafted for someone else's PR.                                                                                                                                                                                                                                                                                                            |
@@ -860,6 +860,13 @@ Shows *every* `review/*` branch in progress at once (with its source PR, mode an
 `git review save` are listed too, under `saved`. The branch you are currently on
 is marked with a `*`.
 
+The `review-fixes/*` branches a `finish` left behind are listed last, under
+`fixes`, with what git can say about each: `nothing committed on it` (it still
+points where `finish` created it, so it holds none of your work — `finish`
+*stages* your edits, it does not commit them), `already in the base`, or `has
+commits the base does not have`. Drop one with
+`git review clean --fixes-only <branch>`.
+
 - `--porcelain` — machine-readable inventory, the same tab-separated format as
   [`status --porcelain`](#git-review-status):
 
@@ -867,6 +874,7 @@ is marked with a `*`.
   branch	<name>	<saved>	<current>	<orphan>[	<mode>[	<position>	<total>]]
   branch-draft	<name>
   finish	<branch>	pending|conflict	<onto>
+  fixes	<name>	<current>	<session>	empty|merged|unmerged|unknown
   ```
 
   `branch-draft` follows its own `branch` row, zero or one per row, whenever that
@@ -886,6 +894,24 @@ is marked with a `*`.
   inventory (no reviews is not an error); `1` only if run outside a git
   repository.
 
+  A `fixes` line is emitted for each `review-fixes/<x>` branch that exists, after
+  every `branch` record. `current` is `1` if it is the branch you are on (the one
+  branch `clean` will never delete). `session` is `1` if `review/<x>` still
+  exists, which is what makes the difference between `clean <x>` being enough and
+  needing `--fixes-only` to spare the session. The last field answers how much of
+  your work dropping it would cost:
+
+  | state      | meaning                                                                    |
+  |------------|----------------------------------------------------------------------------|
+  | `empty`    | the tip still equals its source branch — you never committed anything on it |
+  | `merged`   | contained in `reviewworkflow.base`                                          |
+  | `unmerged` | it has commits the base does not have                                       |
+  | `unknown`  | no usable `reviewworkflow.base`, so there is nothing to compare against     |
+
+  `empty` is answered first and independently of the base: an untouched fixes
+  branch sits at the PR tip, which the base normally does *not* contain, so the
+  merged test alone would report it as work you are about to lose when there is
+  none.
   A `finish` line is emitted for each `review/<x>` with an unresolved closure:
   `pending` after a completed finish still waiting for confirm/abort (edits on
   `review-fixes/<x>` or the PR branch; `HEAD` may already have left `review/*`),
@@ -1039,6 +1065,11 @@ reviewed.
 - `--keep-fixes` — delete only `review/*` (the finish undo / active session
   leftover) and leave `review-fixes/*` alone. Useful after a successful
   `finish` when you want to drop the undo point but keep your staged edits.
+- `--fixes-only` — its mirror: delete only `review-fixes/*` and leave the review
+  session standing, down to the banked edit refs, the finish undo point and the
+  `--delta` markers. For when you are done with the edits a `finish` extracted —
+  committed and pushed, or not worth keeping — but still want to be able to
+  `git review finish --abort`. Passing both flags is an error.
 - Never deletes the branch you are currently on.
 - Also drops any banked commit-by-commit edit refs and finish undo records
   (including a mid-conflict `reviewresume` flag), even when no review branches

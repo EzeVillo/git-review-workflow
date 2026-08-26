@@ -54,6 +54,46 @@ número, el registrado. Un inventario no re-deriva la secuencia de cada rama del
 repositorio; un consumidor que necesite el número exacto de una review concreta
 corre `status --porcelain` estando en ella.
 
+## Registro `fixes` (cero o más, uno por rama `review-fixes/*`)
+
+```
+fixes<TAB>name<TAB>current<TAB>session<TAB>state
+```
+
+Se emite **después de todos los registros `branch`** (y de sus `branch-draft` /
+`finish`): no son reviews —no hay nada que retomar ni que abortar en ellas— y
+una posición fija deja a `tests/porcelain-bytes.bats` comparando contra una
+salida determinada.
+
+- `name`: nombre de la rama (`review-fixes/<x>`).
+- `current`: `1` si es la rama en la que está parado HEAD, si no `0`. Es la
+  única rama que `clean` nunca borra, así que un cliente la muestra sin acción
+  de descarte.
+- `session`: `1` si `review/<x>` todavía existe. Es lo que separa el caso en que
+  `git review clean <x>` alcanza del caso en que hace falta `--fixes-only` para
+  no llevarse la sesión por delante.
+- `state`: cuánto trabajo cuesta descartarla.
+
+| `state`    | Significado                                                                    |
+|------------|--------------------------------------------------------------------------------|
+| `empty`    | la punta coincide con la de su rama de origen (local o remote-tracking)        |
+| `merged`   | contenida en `reviewworkflow.base` (o en `<remote>/<base>` si no hay local)    |
+| `unmerged` | tiene commits que la base no tiene                                             |
+| `unknown`  | no hay `reviewworkflow.base` utilizable: no hay contra qué comparar            |
+
+`empty` se resuelve **primero y sin mirar la base**: `finish` deja las ediciones
+*staged*, no commiteadas, así que una rama de fixes en la que nunca commiteaste
+sigue apuntando exactamente donde la creó el finish y no contiene nada tuyo. Como
+esa punta es la del PR —que la base normalmente **no** contiene—, el test de
+merged por sí solo la reportaría como trabajo a punto de perderse cuando no hay
+ninguno.
+
+El costo es de un número **constante** de procesos, no proporcional a la
+cantidad de ramas: un `for-each-ref` para las fixes con su punta, uno para las
+puntas de las fuentes (con los patrones armados a partir de los nombres de las
+fixes, no enumerando `refs/heads`) y uno `--merged`. Este verbo lo invoca el
+panel en cada refresco.
+
 Ejemplo (dos activas — una en step, una huérfana — y una guardada en walk):
 
 ```
@@ -62,4 +102,14 @@ branch	review/orphan	0	0	1
 branch	review-saved/feat-y	1	0	0	walk	2	5
 ```
 
-Sin reviews en el repositorio: sin líneas, exit `0`.
+Con una rama de fixes cuya review sigue abierta y otra ya integrada en la base:
+
+```
+branch	review/feat-x	0	1	0	step	3	9
+fixes	review-fixes/feat-x	0	1	empty
+fixes	review-fixes/feat-w	0	0	merged
+```
+
+Sin reviews ni ramas de fixes en el repositorio: sin líneas, exit `0`. La
+presencia de `review-fixes/*` **sí** produce salida aunque no haya ninguna
+review: son el único leftover que ninguna superficie nombraba.

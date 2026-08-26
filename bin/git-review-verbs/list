@@ -6,6 +6,11 @@
 # of them at once, so you can see what you have open across branches. The current
 # branch is marked with a "*".
 #
+# It also lists the review-fixes/* branches a finish left behind — the one kind of
+# leftover no surface used to name. They are not reviews (nothing to resume), so
+# they come last and under their own heading, with what git can say about how safe
+# each one is to drop: whether it still holds commits the base does not have.
+#
 set -eu
 
 prog="git review list"
@@ -17,7 +22,7 @@ usage: $prog [--porcelain]
 List every review/* branch in progress, with its source PR, mode and — in
 commit-by-commit mode — which commit you are on ([k/N]). The branch you are on
 is marked with a "*". Reviews paused with git review save are listed too, under
-"saved".
+"saved", and the review-fixes/* branches left by a finish under "fixes".
 
   --porcelain     machine-readable output (see the README for the format)
 EOF
@@ -59,12 +64,108 @@ cur="$(git symbolic-ref --quiet --short HEAD || true)"
 branches="$(git for-each-ref --format='%(refname:short)' refs/heads/review/)"
 saved="$(git for-each-ref --format='%(refname:short)' refs/heads/review-saved/)"
 
-if [ -z "$branches" ] && [ -z "$saved" ]; then
+# Remote the sources were reviewed from, for the remote-tracking half of the
+# "did you commit anything here" question below.
+remote="$(git config reviewworkflow.remote || echo origin)"
+
+# The branches a finish left behind. Tip and name in one call: the tip is what
+# tells an untouched fixes branch from one carrying commits, and asking for it
+# per branch would be a process each.
+fixes="$(git for-each-ref --format='%(objectname) %(refname:short)' refs/heads/review-fixes/)"
+
+if [ -z "$branches" ] && [ -z "$saved" ] && [ -z "$fixes" ]; then
 	if [ "$porcelain" -eq 0 ]; then
 		echo "no reviews in progress"
 	fi
 	exit 0
 fi
+
+# --- review-fixes/* --------------------------------------------------------
+#
+# Everything the fixes rows need, computed in a CONSTANT number of processes:
+# this verb runs on every panel refresh, and a rev-list per branch would put the
+# cost back on the number of reviews you have ever finished.
+#
+# Both lists are kept with a leading and a trailing newline so the substring
+# `case` below can anchor on them: without the anchors, refs/heads/feature/x
+# would match inside refs/heads/feature/xy.
+fixes_src_tips=""
+fixes_merged=""
+fixes_base_known=0
+
+fixes_scan() {
+	[ -n "$fixes" ] || return 0
+
+	# One for-each-ref for every source a fixes branch could have come from --
+	# the local branch and its remote-tracking twin -- with the patterns built
+	# from the fixes names themselves. Enumerating refs/heads instead would make
+	# a repository with thousands of branches pay for all of them here, and refs
+	# that do not exist are simply not printed rather than erroring.
+	set --
+	while read -r _fs_line; do
+		[ -n "$_fs_line" ] || continue
+		_fs_b="${_fs_line#* }"
+		_fs_src="${_fs_b#review-fixes/}"
+		set -- "$@" "refs/heads/$_fs_src" "refs/remotes/$remote/$_fs_src"
+	done <<EOF
+$fixes
+EOF
+	if [ $# -gt 0 ]; then
+		fixes_src_tips="
+$(git for-each-ref --format='%(objectname) %(refname)' "$@" 2>/dev/null || true)
+"
+	fi
+
+	# The base, resolved the way start resolves it: the local branch if there is
+	# one, else the remote-tracking copy. Without a usable base there is no
+	# "already integrated" to compare against, and the state is unknown rather
+	# than a guess in either direction.
+	_fs_base="$(git config reviewworkflow.base || true)"
+	if [ -n "$_fs_base" ]; then
+		if ! git rev-parse --verify --quiet "$_fs_base^{commit}" >/dev/null 2>&1; then
+			if git rev-parse --verify --quiet "$remote/$_fs_base^{commit}" >/dev/null 2>&1; then
+				_fs_base="$remote/$_fs_base"
+			else
+				_fs_base=""
+			fi
+		fi
+	fi
+	if [ -n "$_fs_base" ]; then
+		fixes_merged="
+$(git for-each-ref --merged "$_fs_base" --format='%(refname:short)' refs/heads/review-fixes/ 2>/dev/null || true)
+"
+		fixes_base_known=1
+	fi
+}
+
+# fixes_state <tip> <branch>: empty | merged | unmerged | unknown.
+#
+# empty is asked first and is the strongest answer: finish STAGES your edits, it
+# does not commit them, so a fixes branch you never committed on still points
+# exactly where it was created and holds nothing of yours -- regardless of what
+# the base does or does not contain.
+fixes_state() {
+	case "$fixes_src_tips" in
+	*"
+$1 refs/heads/${2#review-fixes/}
+"*) echo empty ; return 0 ;;
+	*"
+$1 refs/remotes/$remote/${2#review-fixes/}
+"*) echo empty ; return 0 ;;
+	esac
+	if [ "$fixes_base_known" -eq 0 ]; then
+		echo unknown
+		return 0
+	fi
+	case "$fixes_merged" in
+	*"
+$2
+"*) echo merged ; return 0 ;;
+	esac
+	echo unmerged
+}
+
+fixes_scan
 
 # row_has_draft <branch>: whether this review row carries a walkthrough draft.
 #
@@ -232,6 +333,26 @@ describe_porcelain() {
 	fi
 }
 
+# describe_fixes_porcelain <tip> <branch>: one porcelain "fixes" record.
+#
+# `session` is read off the review/* list already in hand rather than asked of
+# git again: it is what tells a plain leftover from one whose review is still
+# open, which is the difference between clean <branch> being enough and needing
+# --fixes-only to spare the session.
+describe_fixes_porcelain() {
+	fpcurrent=0
+	[ "$2" = "$cur" ] && fpcurrent=1
+	fpsession=0
+	case "
+$branches
+" in
+	*"
+review/${2#review-fixes/}
+"*) fpsession=1 ;;
+	esac
+	porcelain_row fixes "$2" "$fpcurrent" "$fpsession" "$(fixes_state "$1" "$2")"
+}
+
 if [ "$porcelain" -eq 1 ]; then
 	printf '%s\n' "$branches" | while read -r b; do
 		[ -n "$b" ] || continue
@@ -241,6 +362,15 @@ if [ "$porcelain" -eq 1 ]; then
 		printf '%s\n' "$saved" | while read -r b; do
 			[ -n "$b" ] || continue
 			describe_porcelain "$b" 1
+		done
+	fi
+	# Last, and after every branch record: these are not reviews -- there is
+	# nothing to resume on them -- and a fixed position keeps the byte-for-byte
+	# porcelain test comparing against one determinate output.
+	if [ -n "$fixes" ]; then
+		printf '%s\n' "$fixes" | while read -r fsha fb; do
+			[ -n "$fb" ] || continue
+			describe_fixes_porcelain "$fsha" "$fb"
 		done
 	fi
 	exit 0
@@ -264,4 +394,24 @@ if [ -n "$saved" ]; then
 		[ "$b" = "$cur" ] && marker="*"
 		describe "$b" "$marker"
 	done
+fi
+
+# The branches a finish left behind. Not reviews: nothing to resume, nothing to
+# abort -- what you can do with one is commit it, push it, or drop it. So each
+# line says what git can tell about that, and the closing note names the verb,
+# the same way an orphan review names git branch -D on its own line.
+if [ -n "$fixes" ]; then
+	printf '%s\n' "$fixes" | while read -r fsha fb; do
+		[ -n "$fb" ] || continue
+		marker=" "
+		[ "$fb" = "$cur" ] && marker="*"
+		case "$(fixes_state "$fsha" "$fb")" in
+		empty) note="nothing committed on it" ;;
+		merged) note="already in the base" ;;
+		unmerged) note="has commits the base does not have" ;;
+		*) note="no base set, cannot tell" ;;
+		esac
+		printf '%s %s  fixes  (%s)\n' "$marker" "$fb" "$note"
+	done
+	echo "drop one with: git review clean --fixes-only <branch>"
 fi

@@ -60,6 +60,9 @@ public enum ControlId
     // count of 27 does not move.
     OpenWalkthrough,
     CopyWalkthroughPrompt,
+    // The "Edits you extracted" section: one BODY control, row -> index, same
+    // rule as the ones above — the fixed count of 27 does not move.
+    DiscardFixes,
     CleanReview,
     CompareReview,
     WalkthroughInit,
@@ -100,6 +103,7 @@ public static class ControlIdExt
         ControlId.CopyWalkthroughPrompt => "copyWalkthroughPrompt",
         ControlId.CreateGuide => "createGuide",
         ControlId.DiscardGuide => "discardGuide",
+        ControlId.DiscardFixes => "discardFixes",
         ControlId.CleanReview => "cleanReview",
         ControlId.CompareReview => "compareReview",
         ControlId.WalkthroughInit => "walkthroughInit",
@@ -323,6 +327,15 @@ public abstract record Block
     public sealed record GuideRows(IReadOnlyList<GuideRow> Rows) : Block;
 
     /// <summary>
+    /// The branches of edits a finish left behind, one row each. Reuses
+    /// <see cref="GuideRow"/> — name, badge and the controls of that row — the
+    /// same way <see cref="WalkthroughRow"/> does: the shape is what a row of
+    /// this panel is, and there is nothing about a fixes row the shape does not
+    /// already cover.
+    /// </summary>
+    public sealed record FixesRows(IReadOnlyList<GuideRow> Rows) : Block;
+
+    /// <summary>
     /// The author's own walkthrough, one row, above the guides in the same
     /// section. Drawn only when the CLI reported the record — against an older
     /// version it does not arrive and the block disappears, the same degradation
@@ -417,6 +430,9 @@ public sealed class PanelLayout
                 case Block.GuideRows gr:
                     foreach (var row in gr.Rows) outList.AddRange(row.Controls);
                     break;
+                case Block.FixesRows fr:
+                    foreach (var row in fr.Rows) outList.AddRange(row.Controls);
+                    break;
                 case Block.WalkthroughRow wr: outList.AddRange(wr.Entry.Controls); break;
                 case Block.ToolsSection ts: Walk(ts.NestedBlocks, outList); break;
             }
@@ -429,6 +445,7 @@ public sealed class PanelLayout
             Block.InventoryRows ir => ir.Rows.Any(r => r.Controls.Any(x => ReferenceEquals(x, c) || x == c)),
             Block.DraftRows dr => dr.Rows.Any(r => r.Controls.Any(x => ReferenceEquals(x, c) || x == c)),
             Block.GuideRows gr => gr.Rows.Any(r => r.Controls.Any(x => ReferenceEquals(x, c) || x == c)),
+            Block.FixesRows fr => fr.Rows.Any(r => r.Controls.Any(x => ReferenceEquals(x, c) || x == c)),
             Block.WalkthroughRow wr => wr.Entry.Controls.Any(x => ReferenceEquals(x, c) || x == c),
             Block.ToolsSection ts => HostedByInventory(ts.NestedBlocks, c),
             _ => false,
@@ -445,6 +462,7 @@ public static class PanelLayoutBuilder
         ControlId.StartFromDraft,
         ControlId.DiscardDraft,
         ControlId.DiscardGuide,
+        ControlId.DiscardFixes,
         ControlId.CleanReview,
         ControlId.UndoFinish,
         ControlId.CompareReview,
@@ -898,6 +916,37 @@ public static class PanelLayoutBuilder
     /// decision about what goes into the PR, which is not this button's to make.
     /// The CLI says the same from its side, refusing `--delete --team`.
     /// </summary>
+    /// <summary>
+    /// The rows of "Edits you extracted": the branch, its badge and the one
+    /// control that makes sense from here. Committing and pushing are Source
+    /// Control's, which is where finish already sends you.
+    ///
+    /// The row you are standing on is drawn just the same and without the
+    /// control: the CLI skips it with "skipping (currently checked out)", so
+    /// offering the button would promise something that will not happen. Hiding
+    /// the row would be worse — it is a branch that exists and no other surface
+    /// names.
+    /// </summary>
+    private static Block.FixesRows FixesRowsBlock(PanelModel model)
+    {
+        var enabled = !model.Busy;
+        var rows = model.FixesList.Select((f, index) => new GuideRow(
+            f.Name,
+            f.Badge,
+            new[]
+            {
+                Ctrl(
+                    ControlId.DiscardFixes, null, Emphasis.Icon,
+                    enabled: enabled && !f.Current,
+                    accessibleName: "Discard the extracted edits",
+                    tooltip: f.Current
+                        ? "You are on this branch; switch away first"
+                        : "git review clean --fixes-only (with confirmation)",
+                    index: index),
+            })).ToList();
+        return new Block.FixesRows(rows);
+    }
+
     private static Block.GuideRows GuideRowsBlock(PanelModel model)
     {
         var enabled = !model.Busy;
@@ -1054,6 +1103,28 @@ public static class PanelLayoutBuilder
                 {
                     new Block.Paragraph("Their review is over; the files are still here"),
                     DraftRows(model, spent: true),
+                }));
+        }
+        // The branches of edits a finish left behind. Collapsed and behind the
+        // spent reading orders: both sections are leftovers of reviews that
+        // already happened, and this one goes last because what it holds may
+        // still be pending work on ANOTHER screen (committing and pushing are
+        // Source Control's), not on this one.
+        //
+        // No "Clean all": a bare git review clean also takes every review/
+        // branch, that is, live sessions of other branches -- a control with more
+        // reach than its section's title. And what this holds is hand-written
+        // work; the value is in the rows, which turn a blind branch -D into an
+        // informed one.
+        if (model.FixesList.Count > 0)
+        {
+            outList.Add(new Block.ToolsSection(
+                "Edits you extracted",
+                new List<Block>
+                {
+                    new Block.Paragraph(
+                        "One branch per finish; commit and push them from Source Control, or drop them here"),
+                    FixesRowsBlock(model),
                 }));
         }
         // Compare, last of the three footer sections that do something with

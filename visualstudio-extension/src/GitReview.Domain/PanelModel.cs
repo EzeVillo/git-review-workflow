@@ -98,6 +98,22 @@ public sealed record PanelGuide(
     bool Discardable);
 
 /// <summary>
+/// A row of the "Edits you extracted" section: a review-fixes/ branch a finish
+/// left behind (<c>fixes</c> record of <c>list --porcelain</c>).
+///
+/// Flat projection, not one derivation: how much dropping it costs is answered
+/// by the CLI, which is the one that can ask git. Current is the branch you are
+/// on -- clean skips it, so no control is offered. Session says review/&lt;x&gt;
+/// still exists, and it changes the confirmation copy, never the argv.
+/// </summary>
+public sealed record PanelFixes(
+    string Name,
+    bool Current,
+    bool Session,
+    FixesState State,
+    string Badge);
+
+/// <summary>
 /// The author's own walkthrough row: what state it is in, how much of it is
 /// written, and what can be done with it without leaving the panel.
 ///
@@ -143,6 +159,12 @@ public sealed record PanelModel(
     /// </summary>
     IReadOnlyList<PanelGuide>? Guides = null,
     /// <summary>
+    /// The branches of edits a finish left behind, in the CLI's order. Same rule
+    /// as Drafts and Guides: only with NoReview, which is where the footer
+    /// section lives.
+    /// </summary>
+    IReadOnlyList<PanelFixes>? Fixes = null,
+    /// <summary>
     /// The author's walkthrough, when the CLI reported its row. Null against a
     /// CLI older than the record, and then the block is not drawn.
     /// </summary>
@@ -176,6 +198,7 @@ public sealed record PanelModel(
     public IReadOnlyList<PanelReview> ReviewsList => Reviews ?? Array.Empty<PanelReview>();
     public IReadOnlyList<PanelDraft> DraftsList => Drafts ?? Array.Empty<PanelDraft>();
     public IReadOnlyList<PanelGuide> GuidesList => Guides ?? Array.Empty<PanelGuide>();
+    public IReadOnlyList<PanelFixes> FixesList => Fixes ?? Array.Empty<PanelFixes>();
     public IReadOnlyList<PanelEntry> FilesList => Files ?? Array.Empty<PanelEntry>();
 }
 
@@ -268,6 +291,42 @@ public static class PanelModelBuilder
                 Spent: d.State == DraftState.Reviewed));
         }
         return out_;
+    }
+
+    /// <summary>
+    /// The badge of a fixes row: what dropping it costs, one phrase per state and
+    /// none folding into another. Same copy as the other two clients, checked
+    /// against the canonical contract.
+    /// </summary>
+    public static string FixesBadge(FixesState state) => state switch
+    {
+        FixesState.Empty => "nothing committed",
+        FixesState.Merged => "in the base",
+        FixesState.Unmerged => "not in the base",
+        _ => "state unknown",
+    };
+
+    public static IReadOnlyList<PanelFixes> ToPanelFixes(IReadOnlyList<FixesRecord> fixes)
+    {
+        var out_ = new List<PanelFixes>(fixes.Count);
+        foreach (var f in fixes)
+        {
+            out_.Add(new PanelFixes(
+                Name: f.Name,
+                Current: f.Current,
+                Session: f.Session,
+                State: f.State,
+                Badge: FixesBadge(f.State)));
+        }
+        return out_;
+    }
+
+    /// <summary>The row at index of the fixes section, or null (same guard as GuideAt).</summary>
+    public static FixesRecord? FixesAt(IReadOnlyList<FixesRecord> fixes, object? index)
+    {
+        if (index is not int i) return null;
+        if (i < 0 || i >= fixes.Count) return null;
+        return fixes[i];
     }
 
     /// <summary>The badge for each state: the CLI's value in prose, without the hyphen.</summary>
@@ -408,6 +467,14 @@ public static class PanelModelBuilder
             // They only arrive by config --porcelain, that is, only outside a review:
             // the footer is where they are drawn and a review has no footer.
             Guides: ToPanelGuides(state.GuidesList),
+            // Only in NoReview, like the rest of the footer. One by one and in
+            // the CLI's order: nothing is filtered or reordered here, not even
+            // the Current row -- it is the only one that cannot be deleted, and
+            // hiding it would leave a branch that exists with no surface naming
+            // it, which is exactly what this section came to fix.
+            Fixes: state.Situation == Situation.NoReview
+                ? ToPanelFixes(state.FixesList)
+                : Array.Empty<PanelFixes>(),
             // Only in NoReview: that is where the section lives — a review has no
             // footer. The row is built even when the record is missing — see
             // ToPanelWalkthrough.

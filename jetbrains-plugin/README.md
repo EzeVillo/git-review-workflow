@@ -64,6 +64,16 @@ saved, with their mode and position. Saved ones offer *Continue*; an active one
 is listed without an action, because going back to it is a branch checkout the
 IDE's branch widget already does.
 
+**The branches your finishes left behind.** Every `finish` leaves a
+`review-fixes/<branch>`, and they pile up one per review. The empty state lists
+them under **Edits you extracted**, collapsed at the foot, each with what git can
+say about dropping it: `nothing committed` (it still sits where `finish` created
+it, so it holds none of your work), `in the base`, `not in the base`, or `state
+unknown` with no base configured. Dropping one leaves the review session
+standing, including the undo point of a finish you can still abort. There is
+deliberately no button that takes them all at once: a bare `clean` also deletes
+every `review/*` branch, and what these rows hold is work you wrote by hand.
+
 ## Getting started
 
 1. **Install the CLI.** With Node:

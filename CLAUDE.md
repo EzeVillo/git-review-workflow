@@ -761,6 +761,22 @@ funcione: un trigger de `Style` **pierde** contra un valor local, así que los b
 `--verify`, que renderiza el panel de verdad y compara el fill y el texto de los botones
 deshabilitados contra el chrome; una asignación local vuelve a fallar `buttons:disabled-fill`.
 
+**Los iconos de este cliente son glifos de texto, y viven en un alfabeto de cinco constantes.**
+Fuera del VSIX no hay Image Catalog, así que `PanelView` dibuja cada icono como un carácter — todos
+del BMP a propósito: un codepoint astral es un tofu en la fuente que traiga el tema. Las cinco
+(`GlyphPrev`/`Next`/`File`/`Trash`/`Diff`) son constantes y no literales en cada sitio porque los
+mismos dos sujetos —un archivo y una comparación— se dibujan **dos veces**: como glifo pelado en la
+cabecera de una fila y al lado de una etiqueta en un botón (*File*, *Diff*, y cada file row, igual
+que en los otros dos clientes). El día que esas dos puntas se separan, el panel dice «abrí esto» con
+dos marcas distintas. Y el glifo va **pegado a la etiqueta en un solo string**, nunca como contenido
+compuesto con color propio: un `Foreground` local le gana al setter `disabled` del `Style` y deja un
+botón apagado con el texto vivo (la misma regla del párrafo de arriba, un nivel más adentro; el gate
+es `buttons:content-inherits-foreground`). Un id de icono que nadie mapea cae en el brazo default,
+que es la flecha de *Next* — de ahí que `--verify` barra **todas** las fixtures
+(`icons:own-glyph`, `icons:labelled-glyph`, `icons:file-row-glyph`) en vez de una lista de nombres
+escrita a mano: un control que nadie nombra en el gate es exactamente el que nadie mapea en el
+render, y así se coló dos veces.
+
 **Instalar el `.vsix` son tres pasos, no uno, y los tres los da el script.** `VSIXInstaller` deja la
 hive en un estado que parece bien y no lo está, de dos maneras que no avisan: instalar una versión
 que ya está es un **no-op silencioso** (sale 0 y no toca nada — y en desarrollo la versión es la

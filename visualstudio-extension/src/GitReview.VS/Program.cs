@@ -335,7 +335,17 @@ public static class Program
         // the hand-written list is what let the second one through, because a
         // control nobody named here is exactly the control nobody mapped there.
         var stray = new List<string>();
+        var unmarked = new List<string>();
+        var localFg = new List<string>();
         var iconsSeen = 0;
+        var labelledSeen = 0;
+        // The verbs that open something wear the mark of what they open, the same
+        // as their rows do and the same as the other two clients draw them.
+        var leadGlyph = new Dictionary<ControlId, string>
+        {
+            [ControlId.OpenChange] = PanelView.GlyphDiff,
+            [ControlId.OpenEntry] = PanelView.GlyphFile,
+        };
         foreach (var (fixtureName, fixtureModel) in PanelFixtures.All())
         {
             var layout = PanelLayoutBuilder.PanelLayout(fixtureModel);
@@ -345,7 +355,16 @@ public static class Program
                 .Where(c => c.Emphasis == Emphasis.Icon && !string.IsNullOrEmpty(c.AccessibleName))
                 .GroupBy(c => c.AccessibleName!, StringComparer.Ordinal)
                 .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.Ordinal);
-            if (iconIds.Count == 0) continue;
+            // Counted by their rendered content and NOT looked up by accessible
+            // name: a button that lost its glyph also loses the automation name
+            // that came with it, so a name-keyed check answers about a button it
+            // can no longer find — which is to say it passes.
+            var leads = layout.CollectControls()
+                .Where(c => c.Emphasis != Emphasis.Icon && c.Emphasis != Emphasis.Link
+                    && leadGlyph.ContainsKey(c.Id))
+                .GroupBy(c => (c.Id, Label: c.Label ?? c.AccessibleName ?? ""))
+                .ToList();
+            if (iconIds.Count == 0 && leads.Count == 0) continue;
 
             var view = new PanelView(chrome) { Width = 380, Height = 700 };
             view.Render(layout);
@@ -353,13 +372,29 @@ public static class Program
             view.Arrange(new Rect(0, 0, 380, 700));
             view.UpdateLayout();
 
-            foreach (var b in Descendants(view).OfType<System.Windows.Controls.Button>())
+            var rendered = Descendants(view).OfType<System.Windows.Controls.Button>().ToList();
+            foreach (var g in leads)
             {
+                var want = leadGlyph[g.Key.Id] + "  " + g.Key.Label;
+                labelledSeen += g.Count();
+                if (rendered.Count(b => (b.Content as string) == want) < g.Count())
+                    unmarked.Add($"{fixtureName}:{g.Key.Label}");
+            }
+
+            foreach (var b in rendered)
+            {
+                // A content that paints its own text colour beats the style's
+                // disabled setter and leaves a disabled button reading as live:
+                // the same class of bug as the disabled pair below, one level
+                // deeper, where neither of those two checks can see it.
+                if (b.Content is System.Windows.Controls.TextBlock tb && HasLocalForeground(tb))
+                    localFg.Add($"{fixtureName}:{TextOf(tb)}");
+
                 var an = System.Windows.Automation.AutomationProperties.GetName(b);
                 if (an is null || !iconIds.TryGetValue(an, out var id)) continue;
                 iconsSeen++;
                 // Next is the one control the arrow belongs to; on anything else
-                // it is the default arm answering for an id nobody mapped.
+                // it is the default arm answering for an unmapped id.
                 if (id != ControlId.Next && (b.Content as string) == "▶")
                     stray.Add($"{fixtureName}:{an}");
             }
@@ -369,7 +404,51 @@ public static class Program
         // Without this the sweep passes empty the day CollectControls stops
         // seeing a block of rows, which is the other half of the same bug.
         check("icons:own-glyph-coverage", iconsSeen >= 12, $"only {iconsSeen} icon controls rendered");
+        check("icons:labelled-glyph", unmarked.Count == 0,
+            $"{string.Join(", ", unmarked.Distinct())} lost the mark of what they open");
+        check("icons:labelled-glyph-coverage", labelledSeen >= 3,
+            $"only {labelledSeen} labelled open-verbs rendered");
+        check("buttons:content-inherits-foreground", localFg.Count == 0,
+            string.Join(", ", localFg.Distinct()));
+
+        // And the file rows, whose content is a TextBlock and not a string: the
+        // mark rides the SAME TextBlock as the path, because split across a panel
+        // the path is handed an unbounded width and loses its ellipsis.
+        var fileRows = new PanelView(chrome) { Width = 380, Height = 700 };
+        fileRows.Render(PanelLayoutBuilder.PanelLayout(PanelFixtures.ReviewWhole()));
+        fileRows.Measure(new Size(380, 700));
+        fileRows.Arrange(new Rect(0, 0, 380, 700));
+        fileRows.UpdateLayout();
+        var paths = Descendants(fileRows).OfType<System.Windows.Controls.Button>()
+            .Select(b => b.Content as System.Windows.Controls.TextBlock)
+            .Where(t => t is not null && t.TextTrimming == TextTrimming.CharacterEllipsis)
+            .Select(t => TextOf(t!))
+            .ToList();
+        check("icons:file-row-glyph",
+            paths.Count > 0 && paths.All(t => t.StartsWith(PanelView.GlyphDiff)),
+            paths.Count == 0
+                ? "fixture stopped producing a file row"
+                : string.Join(" | ", paths.Where(t => !t.StartsWith(PanelView.GlyphDiff))) + " unmarked");
     }
+
+    /// <summary>
+    /// The text of a block, inlines included: the Text property answers empty
+    /// once the content was built out of runs, which is how a check on it passes
+    /// for the wrong reason.
+    /// </summary>
+    private static string TextOf(System.Windows.Controls.TextBlock tb) =>
+        tb.Inlines.Count > 0
+            ? string.Concat(tb.Inlines.OfType<System.Windows.Documents.Run>().Select(r => r.Text))
+            : tb.Text;
+
+    /// <summary>
+    /// Whether a run of text paints its own colour instead of inheriting the
+    /// button's — asked of the block and of every inline inside it.
+    /// </summary>
+    private static bool HasLocalForeground(System.Windows.Controls.TextBlock tb) =>
+        tb.ReadLocalValue(System.Windows.Controls.TextBlock.ForegroundProperty) != DependencyProperty.UnsetValue
+        || tb.Inlines.Any(i => i.ReadLocalValue(System.Windows.Documents.TextElement.ForegroundProperty)
+            != DependencyProperty.UnsetValue);
 
     private static string Describe(Brush? b) =>
         b is SolidColorBrush s ? s.Color.ToString() : b?.ToString() ?? "null";

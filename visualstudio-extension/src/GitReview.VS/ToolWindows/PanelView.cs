@@ -21,6 +21,24 @@ public sealed class PanelView : System.Windows.Controls.UserControl
     /// </summary>
     internal const string BareTag = "bare";
 
+    // The panel's glyph alphabet. This host draws its icons as text (no Image
+    // Catalog outside the VSIX), so they all stay in the BMP: an astral
+    // codepoint is a tofu box in whatever font the theme hands us. Named
+    // constants and not literals at the two call sites, because the same two
+    // subjects -- a file and a comparison -- are drawn both as a bare glyph in a
+    // row header and beside a label on a button, and the day those two drift
+    // the panel says "open" with two different marks.
+    internal const string GlyphPrev = "◀";
+    internal const string GlyphNext = "▶";
+    internal const string GlyphFile = "▤";
+    internal const string GlyphTrash = "✕";
+    // Two panes side by side, which is literally what this host opens: a
+    // comparison window from IVsDifferenceService. Same geometric-square family
+    // as GlyphFile on purpose -- the two marks of "open something" carry the
+    // same weight and the same advance width, so a column of file rows stays a
+    // column.
+    internal const string GlyphDiff = "◫";
+
     private readonly PanelChrome _chrome;
     private readonly Style _primaryButton;
     private readonly Style _secondaryButton;
@@ -417,16 +435,24 @@ public sealed class PanelView : System.Windows.Controls.UserControl
 
     private UIElement FileRowButton(FileRow f)
     {
+        // The path and the mark of what the row opens, in ONE TextBlock: split
+        // across a panel the path would be handed an unbounded width and the
+        // ellipsis would stop working, which is the whole reason a sidebar can
+        // show a long path at all. The glyph takes the UI font rather than the
+        // path's mono -- a geometric square is not in every monospaced face, and
+        // the fallback WPF picks lands at a different size than its neighbours.
+        var text = new TextBlock
+        {
+            FontFamily = _chrome.Mono,
+            FontSize = 12,
+            TextWrapping = TextWrapping.NoWrap,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        text.Inlines.Add(new System.Windows.Documents.Run(GlyphDiff) { FontFamily = _chrome.Ui });
+        text.Inlines.Add(new System.Windows.Documents.Run("  " + f.Display));
         var btn = new Button
         {
-            Content = new TextBlock
-            {
-                Text = f.Display,
-                FontFamily = _chrome.Mono,
-                FontSize = 12,
-                TextWrapping = TextWrapping.NoWrap,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-            },
+            Content = text,
             Style = _bareButton,
             HorizontalContentAlignment = HorizontalAlignment.Left,
             Background = f.LastOpened ? _chrome.RowSelected : Brushes.Transparent,
@@ -437,6 +463,9 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             Cursor = Cursors.Hand,
             ToolTip = f.LastOpened ? $"Last opened: {f.Display}" : f.Display,
         };
+        // The path is the name of the row; the glyph in front of it is for the
+        // eye only, so it is not what gets read out.
+        System.Windows.Automation.AutomationProperties.SetName(btn, f.Display);
         btn.Click += (_, _) => ActionRequested?.Invoke(ControlId.OpenChange.Wire(), f.Index, null);
         btn.MouseEnter += (_, _) => btn.Background = _chrome.RowHover;
         btn.MouseLeave += (_, _) =>
@@ -724,14 +753,14 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             // guides arrived and again when the fixes rows did, which is why the
             // drift is now pinned over EVERY fixture rather than over a
             // hand-written list of ids.
-            var icon = c.Id == ControlId.Prev ? "◀"
+            var icon = c.Id == ControlId.Prev ? GlyphPrev
                 : c.Id == ControlId.OpenDraft
                     || c.Id == ControlId.OpenGuide
-                    || c.Id == ControlId.OpenWalkthrough ? "▤"
+                    || c.Id == ControlId.OpenWalkthrough ? GlyphFile
                 : c.Id == ControlId.DiscardDraft
                     || c.Id == ControlId.DiscardGuide
-                    || c.Id == ControlId.DiscardFixes ? "✕"
-                : "▶";
+                    || c.Id == ControlId.DiscardFixes ? GlyphTrash
+                : GlyphNext;
             var b = new Button
             {
                 Content = icon,
@@ -803,9 +832,24 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             return link;
         }
 
+        // The verbs that open something carry the same mark as the rows they
+        // open, exactly as the other two clients draw them: on a pane with two
+        // "Diff" buttons the label is not what tells them apart, and a button
+        // whose whole job is "look at this file" reads faster with the mark of a
+        // file on it. Glyph and label go in ONE string on purpose -- a composed
+        // content would need a Foreground of its own, and a local Foreground
+        // beats the style's disabled setter, which is the rule that keeps a
+        // disabled button from coming out with live text.
+        var lead = c.Id switch
+        {
+            ControlId.OpenChange => GlyphDiff,
+            ControlId.OpenEntry => GlyphFile,
+            _ => null,
+        };
+        var label = c.Label ?? c.AccessibleName;
         var btn = new Button
         {
-            Content = c.Label ?? c.AccessibleName,
+            Content = lead is null ? label : lead + "  " + label,
             Style = c.Emphasis == Emphasis.Primary ? _primaryButton : _secondaryButton,
             IsEnabled = c.Enabled,
             Padding = new Thickness(10, 5, 10, 5),
@@ -818,10 +862,15 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         // rather than at the layout: --verify reads the disabled pair off it.
         btn.Tag = c.Emphasis;
         // A control whose accessible name is not its label says so: "Open" on
-        // its own repeats once per draft row and names none of them.
-        if (c.AccessibleName != c.Label)
+        // its own repeats once per draft row and names none of them. Asked of
+        // the LABEL and not of the content: a screen reader must hear "Diff",
+        // never the glyph that was glued in front of it for the eye.
+        // ...and whenever a glyph rode along, whatever the two say: the content
+        // is no longer the name, and read out loud "◫  Diff" is a box and a
+        // word.
+        if (c.AccessibleName != c.Label || lead is not null)
         {
-            System.Windows.Automation.AutomationProperties.SetName(btn, c.AccessibleName);
+            System.Windows.Automation.AutomationProperties.SetName(btn, c.AccessibleName ?? label);
         }
 
         btn.Click += (_, _) => ActionRequested?.Invoke(c.Id.Wire(), c.Index, c.SupportLinkId);

@@ -91,6 +91,7 @@ min: ver contracts/client-product-surface (canónico) = 0.4.0 al abrir esta feat
 | compare | compare | layout flags + `["--", lower, upper]` |
 | clean one | clean | `[source]` |
 | clean keep-fixes | clean | `["--keep-fixes", source]` |
+| clean fixes-only | clean | `["--fixes-only", source]` |
 | clean all | clean | `[]` |
 | forget saved one | forget | `["--saved", source]` |
 | forget saved all | forget | `["--saved", "--all"]` |

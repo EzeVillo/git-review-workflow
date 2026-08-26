@@ -11,7 +11,7 @@
  * Lo único que se mantiene a mano es *qué* estados vale la pena mirar.
  */
 import {parseConfigPorcelain} from "../src/cli/configPorcelain";
-import {parseListPorcelain, parsePorcelain} from "../src/cli/porcelain";
+import {parseListFixes, parseListPorcelain, parsePorcelain} from "../src/cli/porcelain";
 import {buildPanelModel, PanelInputs, PanelModel} from "../src/views/panelModel";
 import type {Situation} from "../src/review/situation";
 import type {ReviewState} from "../src/review/state";
@@ -73,6 +73,24 @@ function inventory(rows: string[][]): PanelModel {
         entries: [],
         files: [],
         branches: parseListPorcelain(porcelain(rows)),
+    };
+    return buildPanelModel(state, {busy: false});
+}
+
+/**
+ * `no-review` con ramas de ediciones: las filas salen de los registros `fixes`
+ * del mismo `list --porcelain`, por el parser real. Los cuatro estados juntos,
+ * que es lo que hay que mirar a ojo: son cuatro badges que no se pliegan entre
+ * sí, y la fila `current` es la única sin control.
+ */
+function fixesInventory(rows: string[][]): PanelModel {
+    const out = porcelain(rows);
+    const state: ReviewState = {
+        situation: "no-review",
+        entries: [],
+        files: [],
+        branches: parseListPorcelain(out),
+        fixes: parseListFixes(out),
     };
     return buildPanelModel(state, {busy: false});
 }
@@ -387,6 +405,20 @@ export const PREVIEW_PANES: PreviewPane[] = [
             ["branch", "review/orphan", "0", "1", "1"],
             ["branch", "review-saved/perf/index", "1", "0", "0", "step", "2", "4"],
             ["branch", "review-saved/fix/quoting", "1", "0", "0", "walk", "1", "6"],
+        ]),
+    },
+    {
+        // Las cuatro filas de "Edits you extracted" a la vez, con una review
+        // viva encima para ver las dos secciones juntas. La fila `current` es
+        // la unica sin control: la CLI la saltea, asi que el panel no la ofrece.
+        name: "no-review-fixes",
+        caption: "no-review — ramas de ediciones: los cuatro estados",
+        model: fixesInventory([
+            ["branch", "review/feature/checkout", "0", "0", "0", "walk", "3", "9"],
+            ["fixes", "review-fixes/feature/checkout", "0", "1", "unmerged"],
+            ["fixes", "review-fixes/fix/quoting", "1", "0", "empty"],
+            ["fixes", "review-fixes/perf/index", "0", "0", "merged"],
+            ["fixes", "review-fixes/docs/readme", "0", "0", "unknown"],
         ]),
     },
     {

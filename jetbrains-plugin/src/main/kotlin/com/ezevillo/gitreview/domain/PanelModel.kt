@@ -83,6 +83,25 @@ data class PanelDraft(
  * [label] and [badge] are derived here because they are panel copy; [path]
  * comes from the CLI, and the client **opens it, never rebuilds it**.
  */
+/**
+ * A row of the "Edits you extracted" section: a `review-fixes/` branch a finish
+ * left behind (`fixes` record of `list --porcelain`).
+ *
+ * Flat projection, not one derivation: how much dropping it costs is answered by
+ * the CLI, which is the one that can ask git.
+ */
+data class PanelFixes(
+    /** Branch name exactly as the CLI emitted it (`review-fixes/x`). */
+    val name: String,
+    /** The branch you are on: clean skips it, so no control is offered. */
+    val current: Boolean,
+    /** `review/<x>` still exists; it changes the confirmation copy, never the argv. */
+    val session: Boolean,
+    val state: FixesState,
+    /** Badge text: the state the CLI reported, in prose. */
+    val badge: String,
+)
+
 data class PanelGuide(
     val kind: GuideKind,
     /** The row name: the shared committed one, or yours from outside the tree. */
@@ -155,6 +174,12 @@ data class PanelModel(
      * there is refused by the CLI anyway.
      */
     val guides: List<PanelGuide> = emptyList(),
+    /**
+     * The branches of edits a finish left behind, in the CLI's order. Same rule
+     * as [drafts] and [guides]: only with `NO_REVIEW`, which is where the footer
+     * section lives.
+     */
+    val fixes: List<PanelFixes> = emptyList(),
     /**
      * The author's walkthrough, when the CLI reported its row. Null against a CLI
      * older than the record, and then the block is not drawn.
@@ -323,6 +348,34 @@ fun toPanelGuides(guides: List<GuideRecord>): List<PanelGuide> {
     }
 }
 
+/**
+ * The badge of a fixes row: what dropping it costs, one phrase per state and none
+ * folding into another. Same copy as the other two clients, checked against the
+ * canonical contract.
+ */
+fun fixesBadge(state: FixesState): String = when (state) {
+    FixesState.EMPTY -> "nothing committed"
+    FixesState.MERGED -> "in the base"
+    FixesState.UNMERGED -> "not in the base"
+    FixesState.UNKNOWN -> "state unknown"
+}
+
+fun toPanelFixes(fixes: List<FixesRecord>): List<PanelFixes> = fixes.map { record ->
+    PanelFixes(
+        name = record.name,
+        current = record.current,
+        session = record.session,
+        state = record.state,
+        badge = fixesBadge(record.state),
+    )
+}
+
+/** The row at [index] of the fixes section, or null (same guard as guideAt). */
+fun fixesAt(fixes: List<FixesRecord>, index: Any?): FixesRecord? {
+    if (index !is Int || index < 0) return null
+    return fixes.getOrNull(index)
+}
+
 private fun walkthroughBadge(state: WalkthroughState): String = when (state) {
     WalkthroughState.IN_SYNC -> "up to date"
     WalkthroughState.STALE -> "may be out of date"
@@ -412,6 +465,12 @@ fun buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelModel {
         // They only arrive by config --porcelain, that is, only outside a review:
         // the footer is where they are drawn and a review has no footer.
         guides = toPanelGuides(state.guides ?: emptyList()),
+        // Only in NO_REVIEW, like the rest of the footer. One by one and in the
+        // CLI's order: nothing is filtered or reordered here, not even the
+        // `current` row -- it is the only one that cannot be deleted, and hiding
+        // it would leave a branch that exists with no surface naming it, which
+        // is exactly what this section came to fix.
+        fixes = if (state.situation == Situation.NO_REVIEW) toPanelFixes(state.fixes) else emptyList(),
         // Only in NO_REVIEW: that is where the section lives, and inside a
         // review the panel draws the guides and nothing else of this block. The
         // row is built even when the record is missing -- see toPanelWalkthrough.

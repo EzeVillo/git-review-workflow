@@ -129,7 +129,7 @@ invents a second way to change review state.
 | **Preview edits**            | Title bar or palette, while a review is open; optional diffstat                              | `git review preview` / `--stat`                              |
 | **Undo finish**              | After a finish, while undo is still available — including one stopped mid-conflict           | `git review finish --abort`                                  |
 | **Continue** (finish)        | A finish stopped mid-conflict, once you resolve the markers in the tree                      | `git review finish --resume`                                 |
-| **Clean**                    | After a finished review; also the palette for any leftover                                   | `git review clean [--keep-fixes] [<branch>]`                 |
+| **Clean**                    | After a finished review; also the palette for any leftover                                   | `git review clean [--keep-fixes \| --fixes-only] [<branch>]`                 |
 | **Continue** (saved review)  | Inventory row for a review paused with *Save for later*                                      | `git review continue <branch>`                               |
 | **Discard / Forget**         | Inventory row, or the palette for saved reviews and `--delta` markers                        | `git review forget --saved` / `--delta`, `git review clean`  |
 | **Compare revisions**        | Empty state, under *Compare* at the foot of the panel; also the palette. The result is **read-only** — no writeback | `git review compare <a> <b>`                                 |
@@ -138,6 +138,18 @@ invents a second way to change review state.
 | **Create / open / discard a guide** | Empty state, under *Walkthrough*: the conventions a walkthrough is written to — the repository's shared one, and yours | `git review walkthrough guide [--team] [--delete]` |
 | **Build a reading order first** | Inside *Start a review*, at the reading-order step, when the PR has none (the *reviewer* flow) | `git review walkthrough draft`                            |
 | **Copy for agent / Validate and start / open / discard** | A row of *Reading orders you started*, in the empty state. Once its review is over the row keeps only *open* and *discard*, under *Reading orders you finished with* | `git review walkthrough draft --build`, `git review start`, `git review forget --draft` |
+| **Discard extracted edits** | A row of *Edits you extracted*, at the foot of the empty state: one per `review-fixes/` branch a finish left behind, with what git can say about dropping it | `git review clean --fixes-only <branch>` |
+
+**The branches your finishes left behind.** Every `finish` leaves a
+`review-fixes/<branch>`, and they pile up one per review. The empty state lists
+them under **Edits you extracted**, collapsed at the foot, each with what git can
+say about dropping it: `nothing committed` (it still sits where `finish` created
+it, so it holds none of your work), `in the base`, `not in the base`, or `state
+unknown` with no base configured. Dropping one runs `clean --fixes-only`, which
+leaves the review session standing — including the undo point of a finish you can
+still abort. There is deliberately no button that takes them all at once: a bare
+`clean` also deletes every `review/*` branch, and what these rows hold is work
+you wrote by hand.
 
 Mutations (the lifecycle actions, clean, forget, compare and writing a
 walkthrough) ask for a confirmation that names what will happen. Preview is

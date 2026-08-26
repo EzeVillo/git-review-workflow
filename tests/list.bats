@@ -264,3 +264,95 @@ branch_drafts() {
 	[ "$(branch_drafts | grep -c .)" = "1" ]
 	[ "$(branch_drafts)" = "review-saved/feature/x" ]
 }
+
+# -- review-fixes/*: the leftovers no surface used to name ---------------------
+
+# fixes_rows: the porcelain fixes records, one per line.
+fixes_rows() {
+	git review list --porcelain | awk -F'\t' '$1 == "fixes" { print }'
+}
+
+@test "review list names the review-fixes branch a finish left behind" {
+	git review start feature/x >/dev/null
+	git review finish >/dev/null
+
+	run git review list
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"review-fixes/feature/x  fixes  (nothing committed on it)"* ]]
+	[[ "$output" == *"git review clean --fixes-only <branch>"* ]]
+
+	# current=1 (finish leaves you there) and session=1: clean <branch> would take
+	# both branches, so the panel row needs to know it must pass --fixes-only.
+	[ "$(fixes_rows)" = "$(printf 'fixes\treview-fixes/feature/x\t1\t1\tempty')" ]
+}
+
+@test "a fixes branch you committed on reports unmerged, and merged once the base has it" {
+	git review start feature/x >/dev/null
+	git review finish >/dev/null
+	git switch --quiet review-fixes/feature/x
+	printf 'my fix\n' >>app.txt
+	git add app.txt
+	git commit --quiet -m "my fix"
+	git switch --quiet develop
+
+	[ "$(fixes_rows | cut -f5)" = "unmerged" ]
+
+	# Same branch, once the base contains it: nothing of yours is lost by
+	# dropping it, and the row is allowed to say so.
+	git merge --quiet --no-ff -m merge review-fixes/feature/x
+	[ "$(fixes_rows | cut -f5)" = "merged" ]
+}
+
+@test "an untouched fixes branch reports empty even when the base does not have the PR" {
+	git review start feature/x >/dev/null
+	git review finish >/dev/null
+	git switch --quiet develop
+
+	# The tip is feature/x, which develop does not contain -- so the merged test
+	# alone would call this unmerged and warn about losing work that is not there.
+	run git merge-base --is-ancestor review-fixes/feature/x develop
+	[ "$status" -ne 0 ]
+	[ "$(fixes_rows | cut -f5)" = "empty" ]
+}
+
+@test "without a base configured the fixes state is unknown, not a guess" {
+	git review start feature/x >/dev/null
+	git review finish >/dev/null
+	git switch --quiet review-fixes/feature/x
+	printf 'my fix\n' >>app.txt
+	git add app.txt
+	git commit --quiet -m "my fix"
+	git switch --quiet develop
+	git config --unset reviewworkflow.base
+
+	[ "$(fixes_rows | cut -f5)" = "unknown" ]
+	run git review list
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"(no base set, cannot tell)"* ]]
+}
+
+@test "fixes branches are listed when no review is left to list" {
+	git review start feature/x >/dev/null
+	git review finish >/dev/null
+	git switch --quiet develop
+	git review clean --keep-fixes feature/x >/dev/null
+
+	# Precondition: the two namespaces list() used to bail on are both empty.
+	[ -z "$(git for-each-ref refs/heads/review/ refs/heads/review-saved/)" ]
+
+	run git review list
+	[ "$status" -eq 0 ]
+	[[ "$output" != *"no reviews in progress"* ]]
+	[[ "$output" == *"review-fixes/feature/x"* ]]
+	[ "$(fixes_rows)" = "$(printf 'fixes\treview-fixes/feature/x\t0\t0\tempty')" ]
+}
+
+@test "the fixes record marks the branch you are standing on" {
+	git review start feature/x >/dev/null
+	git review finish >/dev/null
+
+	# finish leaves you on review-fixes/<branch>: the one row clean can never
+	# delete, and the row a panel has to disable.
+	[ "$(git symbolic-ref --short HEAD)" = "review-fixes/feature/x" ]
+	[ "$(fixes_rows | cut -f3)" = "1" ]
+}

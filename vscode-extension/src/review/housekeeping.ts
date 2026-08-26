@@ -5,11 +5,13 @@
  */
 
 import {sourceOf} from "../cli/porcelain";
+import type {FixesState} from "../cli/porcelain";
 import type {ReviewState} from "./state";
 
 export type HousekeepingKind =
     | "clean-one"
     | "clean-keep-fixes"
+    | "clean-fixes-only"
     | "clean-all"
     | "forget-saved-one"
     | "forget-saved-all"
@@ -27,6 +29,36 @@ export interface HousekeepingAction {
      * Ausente se trata como no-onto (destino por defecto).
      */
     onto?: boolean;
+    /**
+     * Sólo `clean-fixes-only`: lo que la CLI reportó sobre esa rama, para que
+     * la confirmación diga cuánto trabajo cuesta. No se deriva acá — quien
+     * puede preguntarle a git es la CLI. Ausente se trata como `unknown`.
+     */
+    fixesState?: FixesState;
+    /**
+     * Sólo `clean-fixes-only`: si `review/<src>` sigue existiendo. Cambia la
+     * copy y nada más: el argv lleva `--fixes-only` siempre, porque un dato que
+     * se relee en cada refresco no puede decidir qué ramas borra un comando.
+     */
+    session?: boolean;
+}
+
+/**
+ * Lo que la confirmación de `clean-fixes-only` dice sobre el costo. Una oración
+ * por estado y ninguna se pliega en otra: "no committed" no es "seguro porque
+ * ya está integrada", y "unknown" no es "no integrada".
+ */
+function fixesCostSentence(state: FixesState | undefined): string {
+    switch (state) {
+        case "empty":
+            return "Nothing was ever committed on it, so no work of yours is lost.";
+        case "merged":
+            return "Its commits are already in the base branch.";
+        case "unmerged":
+            return "It has commits the base branch does not have — deleting it loses them.";
+        default:
+            return "There is no base branch configured, so git cannot tell whether its commits are integrated.";
+    }
 }
 
 /** Prefijos de rama de review → source (mismo criterio que `sourceOf` en porcelain). */
@@ -85,6 +117,12 @@ export function argsForHousekeeping(action: HousekeepingAction): string[] {
             }
             // Flag before the branch name — same shape as the CLI usage line.
             return ["--keep-fixes", action.source];
+        case "clean-fixes-only":
+            if (!action.source) {
+                throw new Error("clean-fixes-only requires source");
+            }
+            // Flag before the branch name, same shape as --keep-fixes.
+            return ["--fixes-only", action.source];
         case "clean-all":
             return [];
         case "forget-saved-one":
@@ -138,6 +176,20 @@ export function confirmCopyFor(action: HousekeepingAction): ConfirmCopy {
                 title: `Drop the finish undo for ${src}?`,
                 detail: `Runs git review clean --keep-fixes ${src}: deletes review/${src} and the finish undo point so the pending finish goes away. Your staged edits stay on ${destination}; delta markers are left alone. Remember to commit and push them from Source Control.`,
                 button: "Clean",
+            };
+        }
+        case "clean-fixes-only": {
+            // La sesión se nombra sólo cuando existe: prometer que se deja algo
+            // que no está es ruido, y el argv es el mismo en los dos casos.
+            const session = action.session
+                ? ` The review session on review/${src} is left standing, so you can still undo the finish.`
+                : "";
+            return {
+                title: `Discard the edits extracted onto review-fixes/${src}?`,
+                detail: `git review clean --fixes-only ${src}
+
+${fixesCostSentence(action.fixesState)}${session} It cannot be undone.`,
+                button: "Discard",
             };
         }
         case "clean-all":

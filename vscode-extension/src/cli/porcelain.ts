@@ -142,6 +142,46 @@ export interface BranchRecord {
     };
 }
 
+/**
+ * El estado de una rama `review-fixes/*`: cuánto trabajo cuesta descartarla.
+ *
+ * `empty` no es una variante de "seguro": una rama de fixes intacta está parada
+ * en la punta del PR y no contiene **nada** tuyo, que es distinto de estar ya
+ * integrada. `unknown` tampoco se pliega en `unmerged` — sin base configurada
+ * la pregunta no tiene respuesta, y contestar la peor de las dos pinta de
+ * peligrosa una rama que puede estar vacía.
+ */
+export type FixesState = "empty" | "merged" | "unmerged" | "unknown";
+
+/**
+ * Un registro `fixes` de `git review list --porcelain`: una rama
+ * `review-fixes/<x>` que dejó un `finish`
+ * (001-contrato-porcelain/contracts/list-porcelain.md).
+ */
+export interface FixesRecord {
+    /** Nombre de la rama, tal como lo reportó la CLI: `review-fixes/<x>`. */
+    name: string;
+    /** La rama en la que está parado HEAD: la única que `clean` nunca borra. */
+    current: boolean;
+    /** `review/<x>` todavía existe, así que la review sigue abierta. */
+    session: boolean;
+    state: FixesState;
+}
+
+function parseFixesState(field: string | undefined): FixesState {
+    switch (field) {
+    case "empty":
+    case "merged":
+    case "unmerged":
+        return field;
+    default:
+        // Un valor que no entendemos se lee como "no se puede decir", nunca
+        // como uno de los tres concretos: el badge de esta fila es lo único que
+        // separa tirar una rama vacía de tirar trabajo sin pushear.
+        return "unknown";
+    }
+}
+
 function toBool(field: string | undefined): boolean {
     return field === "1";
 }
@@ -411,6 +451,40 @@ export function sourceOf(branch: BranchRecord): string {
  * ausencia de registros es un resultado válido — un repositorio sin reviews —
  * y no un error de formato.
  */
+/**
+ * Los registros `fixes` de la misma salida, en una función aparte y no como un
+ * segundo valor de `parseListPorcelain`: son ramas de *ediciones*, no reviews
+ * —no hay nada que retomar ni que abortar en ellas— y todo consumidor del
+ * inventario que ya existía sigue pidiendo exactamente lo que pedía.
+ *
+ * Se emparejan por etiqueta y no por posición, como el resto del contrato: que
+ * la CLI las emita al final es una garantía sobre la salida, no algo de lo que
+ * este parser dependa.
+ */
+export function parseListFixes(stdout: string): FixesRecord[] {
+    const fixes: FixesRecord[] = [];
+    for (const line of stdout.split(/\r?\n/)) {
+        if (line.length === 0) {
+            continue;
+        }
+        const fields = line.split("\t");
+        if (fields[0] !== "fixes") {
+            continue;
+        }
+        const name = fields[1];
+        if (name === undefined || name.length === 0) {
+            continue;
+        }
+        fixes.push({
+            name,
+            current: toBool(fields[2]),
+            session: toBool(fields[3]),
+            state: parseFixesState(fields[4]),
+        });
+    }
+    return fixes;
+}
+
 export function parseListPorcelain(stdout: string): BranchRecord[] {
     const branches: BranchRecord[] = [];
     // Por nombre de rama, no por posición de línea: el contrato pone `finish`

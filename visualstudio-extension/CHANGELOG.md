@@ -13,6 +13,22 @@ First release of the Visual Studio client. Requires `git review` **0.7.0** or ne
 
 ### Added
 
+- **The branches your finishes left behind, finally named somewhere.** Every `finish` leaves a
+  `review-fixes/<branch>` with your extracted edits on it, one per review you have ever closed —
+  and until now no surface listed them: `git review list` did not enumerate them, the panel's
+  inventory comes from `list`, and the only *Clean* in the panel lives in the post-finish banner.
+  They piled up, and throwing one away meant spelling its name in a terminal. The empty state now
+  ends with **Edits you extracted**, collapsed at the foot: one row per branch, each with what git
+  can say about dropping it — `nothing committed` (it still sits where `finish` created it, so it
+  holds none of your work), `in the base`, `not in the base`, or `state unknown` when no base is
+  configured — and a discard that runs `git review clean --fixes-only`, leaving the review session
+  standing, undo point included. The branch you are standing on is drawn like the rest and its
+  control is off, because the CLI skips it. There is deliberately **no button that takes them all
+  at once**: a bare `clean` also deletes every `review/*` branch — live sessions of other branches —
+  and what these rows hold is work you wrote by hand. The value is in the rows, which turn a blind
+  `branch -D` into an informed one.
+
+
 - **The walkthrough you wrote, and whether it still matches the PR.** A walkthrough is written
   once, when the PR is finished — and then the PR keeps moving: review comments come back, three
   more files change, and nothing anywhere said the reading order had fallen behind. The panel's

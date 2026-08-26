@@ -213,6 +213,37 @@ describe("panelHtml", () => {
             "title del boton nombra el verbo");
     });
 
+    it("la seccion Edits you extracted se dibuja sola y solo con filas", () => {
+        assert.ok(html.includes('toolsSection("Edits you extracted"'),
+            "es una seccion plegada del pie, como los ordenes terminados");
+        assert.ok(/if \(!model\.fixes \|\| model\.fixes\.length === 0\) \{\s*return null;/.test(html),
+            "sin ramas de fixes no hay seccion vacia");
+    });
+
+    it("no hay ningun control que se lleve todas las ramas de fixes de una", () => {
+        // Un git review clean a secas se lleva ademas todas las review/*, o sea
+        // sesiones vivas de otras ramas: seria un control con mas alcance que el
+        // titulo de su seccion.
+        assert.ok(!html.includes("Clean all"), "sin boton de limpiar todas");
+        assert.ok(!/"cleanReview"[^)]*fixes/.test(html), "la seccion no invoca cleanReview");
+    });
+
+    it("la fila de fixes nombra el verbo y apaga la rama en la que estas", () => {
+        assert.ok(html.includes('iconButton("trash", "discardFixes", "Discard the extracted edits"'),
+            "un solo control, destructivo y con nombre accesible");
+        assert.ok(html.includes("discard.disabled = model.busy || fixes.current;"),
+            "la current no se puede borrar: la CLI la saltea");
+        assert.ok(html.includes("You are on this branch; switch away first"));
+        assert.ok(html.includes("git review clean --fixes-only (with confirmation)"));
+    });
+
+    it("el badge de una fila de fixes dice los cuatro estados y no los pliega", () => {
+        assert.ok(html.includes('return "nothing committed";'));
+        assert.ok(html.includes('return "in the base";'));
+        assert.ok(html.includes('return "not in the base";'));
+        assert.ok(html.includes('return "state unknown";'));
+    });
+
     it("una review activa en otra rama explica por que no hay botones", () => {
         // Sin saved ni orphan no hay verbo seguro: badge ? con title al hover
         // (sandbox: review/feature/shipping o conflict desde develop).

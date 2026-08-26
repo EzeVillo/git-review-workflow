@@ -57,6 +57,10 @@ export const PANEL_MESSAGES = [
     // tienen sujeto, asi que el conteo de 27 sigue igual.
     "openWalkthrough",
     "copyWalkthroughPrompt",
+    // Seccion "Edits you extracted": un control del CUERPO, fila -> indice, con
+    // el mismo reparto que los de arriba -- sin la fila que lo dibuja no tiene
+    // sujeto, asi que el conteo de 27 sigue igual.
+    "discardFixes",
     // Support (links externos): el webview manda un id; el host resuelve la
     // URL contra un allowlist y abre con openExternal. No es un comando de
     // la paleta ni de la CLI.

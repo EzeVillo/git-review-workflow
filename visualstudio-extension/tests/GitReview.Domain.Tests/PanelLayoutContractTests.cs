@@ -75,6 +75,10 @@ public class PanelLayoutContractTests
     public void No_review_ready_control_sequence_matches_canonical()
     {
         AssertLayoutAgainstCanonical("no-review", PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewReady()));
+        // The same situation with the footer section drawn: without a fixture that
+        // has fixes rows, the whole block is a `when:` that never fires and the
+        // stray-control check never sees its control.
+        AssertLayoutAgainstCanonical("no-review", PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewFixes()));
     }
 
     [Fact]
@@ -614,6 +618,12 @@ public class PanelLayoutContractTests
         if (MentionsBlock(blocks, "walkthrough_row"))
         {
             foreach (var id in RowBlockControlIds("walkthrough_row")) ids.Add(id);
+        }
+        // And the fixes section: one control, per-row too, in its own map with the
+        // same shape as the guides'.
+        if (MentionsBlock(blocks, "fixes_rows"))
+        {
+            foreach (var id in RowBlockControlIds("fixes_rows")) ids.Add(id);
         }
         return ids;
     }

@@ -13,6 +13,7 @@ import {
     openDraft,
     startFromDraft,
 } from "./commands/draftActions";
+import {discardFixes} from "./commands/fixesActions";
 import {discardInventoryReview, forgetReview} from "./commands/forgetReview";
 import {createGuide, discardGuide, openGuide} from "./commands/guideActions";
 import {copyWalkthroughPrompt, openWalkthrough} from "./commands/walkthroughRowActions";
@@ -325,6 +326,12 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
             void copyWalkthroughPrompt(stateManager);
             return;
         }
+        // Seccion "Edits you extracted": mismo reparto que los bloques de
+        // arriba -- control del cuerpo, fila -> indice, fuera de la paleta.
+        if (message === "discardFixes") {
+            void discardFixes(extra, lock, stateManager, getInvokeOptions);
+            return;
+        }
         const commands: Record<
             Exclude<
                 PanelMessage,
@@ -339,6 +346,7 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
                 | "discardGuide"
                 | "openWalkthrough"
                 | "copyWalkthroughPrompt"
+                | "discardFixes"
             >,
             string
         > = {

@@ -112,6 +112,43 @@ data class BranchRecord(
     val finish: BranchFinish? = null,
 )
 
+/**
+ * How much work dropping a `review-fixes/` branch would cost.
+ *
+ * `empty` is not a flavour of "safe": an untouched fixes branch sits at the PR
+ * tip and holds NOTHING of yours, which is a different thing from being already
+ * integrated. `unknown` does not fold into `unmerged` either -- with no base
+ * configured the question has no answer, and giving the worse of the two paints
+ * a branch that may be empty as dangerous.
+ */
+enum class FixesState {
+    EMPTY,
+    MERGED,
+    UNMERGED,
+    UNKNOWN,
+    ;
+
+    companion object {
+        fun parse(field: String?): FixesState = when (field) {
+            "empty" -> EMPTY
+            "merged" -> MERGED
+            "unmerged" -> UNMERGED
+            // Anything we do not understand reads as "cannot tell", never as one
+            // of the three: this badge is the only thing between dropping an
+            // empty branch and dropping unpushed work.
+            else -> UNKNOWN
+        }
+    }
+}
+
+/** A `fixes` record of `git review list --porcelain`: one `review-fixes/` branch. */
+data class FixesRecord(
+    val name: String,
+    val current: Boolean,
+    val session: Boolean,
+    val state: FixesState,
+)
+
 private fun toBool(field: String?): Boolean = field == "1"
 
 private fun toInt(field: String?): Int = field?.toIntOrNull() ?: 0
@@ -279,6 +316,32 @@ fun sourceOf(branch: BranchRecord): String {
         }
     }
     return branch.name
+}
+
+/**
+ * The `fixes` records of the same output, in a function of their own rather than
+ * a second return value of [parseListPorcelain]: these are branches of *edits*,
+ * not reviews -- there is nothing to resume or abort on them -- and every
+ * existing consumer of the inventory keeps asking for exactly what it asked for.
+ */
+fun parseListFixes(stdout: String): List<FixesRecord> {
+    val fixes = ArrayList<FixesRecord>()
+    for (line in stdout.split(Regex("\r?\n"))) {
+        if (line.isEmpty()) continue
+        val fields = line.split("\t")
+        if (fields[0] != "fixes") continue
+        val name = fields.getOrNull(1)
+        if (name.isNullOrEmpty()) continue
+        fixes.add(
+            FixesRecord(
+                name = name,
+                current = toBool(fields.getOrNull(2)),
+                session = toBool(fields.getOrNull(3)),
+                state = FixesState.parse(fields.getOrNull(4)),
+            )
+        )
+    }
+    return fixes
 }
 
 /** Tokenizes `git review list --porcelain`. Empty output is valid. */

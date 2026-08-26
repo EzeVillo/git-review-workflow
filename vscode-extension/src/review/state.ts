@@ -11,7 +11,9 @@ import {
 import {invokeGitReview, InvokeOptions} from "../cli/invoke";
 import {
     BranchRecord,
+    FixesRecord,
     EntryRecord,
+    parseListFixes,
     parseListPorcelain,
     parsePorcelain,
     StateRecord,
@@ -35,6 +37,14 @@ export interface ReviewState {
      * iría contra SC-002 (contracts/cli-invocation.md § `list --porcelain`).
      */
     branches: BranchRecord[];
+    /**
+     * Las ramas `review-fixes/*` que dejó un `finish` (registro `fixes` del
+     * mismo `list --porcelain`, sin invocaciones nuevas). Opcional como
+     * `drafts` y `guides`, que son los otros dos contenidos del pie de
+     * `no-review`: dentro de una review el inventario no se invoca, y ahí la
+     * ausencia es el dato — no un reporte viejo ni un `[]` que diga "no hay".
+     */
+    fixes?: FixesRecord[];
     /**
      * La config efectiva y las ramas candidatas de `git review config
      * --porcelain` — lo que el asistente de inicio necesita antes de que
@@ -154,12 +164,20 @@ async function checkCliVersion(options: ReviewStateOptions): Promise<Situation |
  * era antes de existir esta superficie, no lo convierte en un error — la
  * situación ya la fijó `status --porcelain`, que es quien la reporta.
  */
-async function listBranches(options: ReviewStateOptions): Promise<BranchRecord[]> {
+async function listBranches(
+    options: ReviewStateOptions
+): Promise<{branches: BranchRecord[]; fixes: FixesRecord[]}> {
     const result = await invokeGitReview("list", ["--porcelain"], options);
     if (result.errorCode || result.exitCode !== 0) {
-        return [];
+        return {branches: [], fixes: []};
     }
-    return parseListPorcelain(result.stdout);
+    // Una invocación, dos lecturas: las ramas de fixes viajan en la misma
+    // salida que el inventario, así que la sección del pie no cuesta un proceso
+    // más por refresco.
+    return {
+        branches: parseListPorcelain(result.stdout),
+        fixes: parseListFixes(result.stdout),
+    };
 }
 
 /**
@@ -331,10 +349,19 @@ export class ReviewStateManager {
             // (contracts/finish-state.md) — no agrega una invocación nueva:
             // ya se llama a `listBranches` con exit 2, sólo falta mirar si
             // trae una fila `finish … pending`.
-            const branches = baseSituation === "no-review" ? await listBranches(options) : [];
+            const inventory = baseSituation === "no-review"
+                ? await listBranches(options)
+                : {branches: [] as BranchRecord[], fixes: [] as FixesRecord[]};
+            const branches = inventory.branches;
             const hasFinishPending = branches.some((branch) => branch.finish?.state === "pending");
             const situation = situationFor(result.exitCode, false, hasFinishPending);
-            const next: ReviewState = {situation, ...EMPTY_ARRAYS, branches, stderr: result.stderr};
+            const next: ReviewState = {
+                situation,
+                ...EMPTY_ARRAYS,
+                branches,
+                fixes: inventory.fixes,
+                stderr: result.stderr,
+            };
             if (situation === "no-review" || situation === "finish-pending") {
                 const report = await loadConfigReport(options);
                 // La señal de "el reporte llegó" es config, no el largo de

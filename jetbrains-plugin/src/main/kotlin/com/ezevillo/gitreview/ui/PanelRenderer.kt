@@ -178,6 +178,10 @@ class PanelRenderer(
             // underneath -- so a second implementation would be the same code
             // with a different chance of drifting from it.
             is Block.WalkthroughRow -> renderGuides(Block.GuideRows(listOf(block.row)))
+            // Same shape again, same renderer: a name, a badge and the icon in
+            // the header. What a fixes row does not have is a labelled button,
+            // and the guide renderer already draws none when there is none.
+            is Block.FixesRows -> renderGuides(Block.GuideRows(block.rows))
             is Block.ToolsSection -> renderToolsSection(block)
             is Block.Stderr -> renderStderr(block.text)
             is Block.EmptyMessage -> {

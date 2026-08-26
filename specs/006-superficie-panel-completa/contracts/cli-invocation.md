@@ -25,17 +25,21 @@ Todas serializadas por `MutationLock`, no cancelables una vez iniciada la
 mutación, confirmación **fuera** del lock, revalidación de `StateToken` cuando
 la acción se originó en una fila de inventario (FR-012).
 
-### `git review clean [--keep-fixes] [<branch>]`
+### `git review clean [--keep-fixes | --fixes-only] [<branch>]`
 
 | Argumento      | Cuándo                                                                                     |
 |----------------|--------------------------------------------------------------------------------------------|
 | *(ninguno)*    | Clean all leftovers (`review/*` y, por defecto, `review-fixes/*`)                          |
 | `<branch>`     | Source name verbatim (`feature/x`), nunca `review/x`                                       |
 | `--keep-fixes` | Post-finish del panel: borra solo `review/<branch>` (+ undo); deja `review-fixes/<branch>` |
+| `--fixes-only` | Fila de "Edits you extracted": borra solo `review-fixes/<branch>`; deja la sesion en pie  |
 
-**Prohibido**: cualquier otro flag. El panel en `finish-pending` **debe**
-pasar `--keep-fixes` (el clean “lleno” del inventario/palette sigue sin el
-flag).
+**Prohibido**: cualquier otro flag, y los dos juntos (la CLI los rechaza). El
+panel en `finish-pending` **debe** pasar `--keep-fixes` (el clean “lleno” del
+inventario/palette sigue sin el flag); la fila de la seccion “Edits you
+extracted” **debe** pasar `--fixes-only` **siempre**, exista o no todavia la
+sesion: el argv no puede depender de un dato que se relee en cada refresco, y un
+`clean <branch>` que llegue tarde se llevaria puesta una review viva.
 
 **Se consume**: exit code + stderr. Estado vía refresh `status`/`list`.
 

@@ -27,7 +27,7 @@ commitear* sobre una rama
 
 # Tests de integración de la extensión — misma regla, mismo motivo, otro
 # contenedor (trae node + el VS Code headless). Ver la sección de la extensión.
-./vscode-extension/test/run-docker.sh             # los 88 tests
+./vscode-extension/test/run-docker.sh             # los 91 tests
 ./vscode-extension/test/run-docker.sh open-entry  # las specs que matcheen
 
 # Pruebas manuales — arma un PR de juguete descartable (feature/checkout: 4
@@ -514,6 +514,24 @@ guías de autoría) y el bloque **`listing:`**
 comprobaciones de layout vs `panelHtml.ts`, y los mismos escalares contra los archivos de dominio de
 `visualstudio-extension/`).
 
+**Las ramas de ediciones tienen filas, no un botón que se las lleve todas.** La sección
+«Edits you extracted» del pie de `no-review` (`fixes_rows:` en el contrato) es la superficie de las
+`review-fixes/*` que deja un `finish` —el último estado del repositorio que ninguna otra nombraba:
+`list` no las enumeraba, el inventario del panel sale de `list`, y el único *Clean* del panel vive
+en el banner de `finish-pending`—. Su único control es de **fila**, así que va en su mapa propio y
+**no toca el conteo de 27**, igual que los de `draft_controls` y `guide_rows`. Dos reglas: **no hay
+«limpiar todas»** —un `git review clean` a secas se lleva además todas las `review/*`, o sea
+sesiones vivas de otras ramas, o sea un control con más alcance que el título de su sección, y lo
+que hay acá es trabajo escrito a mano— y el Discard corre **siempre `--fixes-only`**, exista o no la
+sesión: el argv no puede depender de un dato que se relee en cada refresco, y un `clean <x>` que
+llegue tarde —la review volvió a existir entre el refresco y el click— se llevaría puesta una review
+viva. El badge sale del campo `state` del registro `fixes` y los cuatro valores **no se pliegan
+entre sí**: `empty` no es «seguro porque ya está integrada» (una rama intacta está parada en la
+punta del PR y no contiene nada tuyo) y `unknown` no es `unmerged` (sin base la pregunta no tiene
+respuesta). La fila `current` se dibuja igual y sin control: la CLI la saltea, y esconderla dejaría
+una rama que existe sin ninguna superficie que la nombre, que es justo lo que la sección vino a
+arreglar.
+
 **Una review no tiene pie: ninguna `tools_section`.** Todo lo que cuelga de `walkthrough` —los dos
 verbos del autor y las dos guías de autoría— es de quien está parado en **su** PR, y adentro de una
 review estás parado en el de otro; una sección titulada «Walkthrough» al pie del orden de lectura
@@ -815,7 +833,7 @@ npm run preview:watch
 
 # Integración: en el contenedor, NO con `npm run test:integration`.
 cd ..
-./vscode-extension/test/run-docker.sh             # los 88 tests
+./vscode-extension/test/run-docker.sh             # los 91 tests
 ./vscode-extension/test/run-docker.sh open-entry  # las specs que matcheen
 MOCHA_GREP='abre el diff' ./vscode-extension/test/run-docker.sh
 ./vscode-extension/test/run-docker.sh -- sh       # una shell adentro
@@ -830,7 +848,7 @@ MOCHA_GREP='abre el diff' ./vscode-extension/test/run-docker.sh
   un walkthrough) y abrí `<sandbox>/work` en el host. Ojo: el host hereda el `PATH` del VS Code que
   lo lanzó, no el que arma el `env.sh` del sandbox — o instalás el checkout, o apuntás la setting
   `gitReview.path` a `bin/git-review`.
-- **La suite de integración va en el contenedor**, misma regla que bats: los 88 tests tardan 38 s
+- **La suite de integración va en el contenedor**, misma regla que bats: los 91 tests tardan 38 s
   adentro contra 16 minutos nativos en Windows (26×), y pasan los mismos 70. El script
   (`vscode-extension/test/run-docker.sh` + `test/Dockerfile` + `entrypoint.sh`)
   monta el repo read-only, lo copia a `/work` porque `npm install` escribe, y cachea `node_modules`,
@@ -841,7 +859,7 @@ MOCHA_GREP='abre el diff' ./vscode-extension/test/run-docker.sh
   puede aplanar el bit ejecutable y sin él todo fixture muere con un `is not a git command` que no
   dice nada; y la imagen fija **`VSCODE_CLI=1`**, sin lo cual VS Code resuelve el entorno de un
   login shell y pisa con él el `PATH` que `runTests.ts` preparó — la extensión no encuentra la CLI y
-  los 88 tests fallan con `cli-missing`.
+  los 91 tests fallan con `cli-missing`.
 - **`test:integration` corre contra `dist/`** y lo recompila solo (`pretest:integration`), así que
   lo verde siempre es el código actual.
 - **Dos specs de integración abren tabs y son flaky en Windows** por el host de test, no por la

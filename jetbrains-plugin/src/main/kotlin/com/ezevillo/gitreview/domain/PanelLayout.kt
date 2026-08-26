@@ -58,6 +58,9 @@ enum class ControlId {
     // fixed count of 27 does not move.
     OPEN_WALKTHROUGH,
     COPY_WALKTHROUGH_PROMPT,
+    // The "Edits you extracted" section: one BODY control, row -> index, same
+    // rule as the ones above -- the fixed count of 27 does not move.
+    DISCARD_FIXES,
     CLEAN_REVIEW,
     COMPARE_REVIEW,
     WALKTHROUGH_INIT,
@@ -98,6 +101,7 @@ enum class ControlId {
             DISCARD_GUIDE -> "discardGuide"
             OPEN_WALKTHROUGH -> "openWalkthrough"
             COPY_WALKTHROUGH_PROMPT -> "copyWalkthroughPrompt"
+            DISCARD_FIXES -> "discardFixes"
             CLEAN_REVIEW -> "cleanReview"
             COMPARE_REVIEW -> "compareReview"
             WALKTHROUGH_INIT -> "walkthroughInit"
@@ -123,6 +127,7 @@ private val CONFIRMING_IDS: Set<ControlId> = setOf(
     ControlId.START_FROM_DRAFT,
     ControlId.DISCARD_DRAFT,
     ControlId.DISCARD_GUIDE,
+    ControlId.DISCARD_FIXES,
     ControlId.CLEAN_REVIEW,
     ControlId.UNDO_FINISH,
     ControlId.COMPARE_REVIEW,
@@ -308,6 +313,14 @@ sealed class Block {
     data class DraftRows(val rows: List<DraftRow>) : Block()
 
     data class GuideRows(val rows: List<GuideRow>) : Block()
+
+    /**
+     * The branches of edits a finish left behind, one row each. Reuses [GuideRow]
+     * -- name, badge and the controls of that row -- the same way
+     * [WalkthroughRow] does: the shape is what a row of this panel is, and there
+     * is nothing about a fixes row that the shape does not already cover.
+     */
+    data class FixesRows(val rows: List<GuideRow>) : Block()
 
     /**
      * The author's own walkthrough, one row, above the guides in the same
@@ -936,6 +949,37 @@ private fun draftRows(model: PanelModel, spent: Boolean = false): Block.DraftRow
  * decision about what goes into the PR, which is not this button's to make. The
  * CLI says the same from its side, refusing `--delete --team`.
  */
+/**
+ * The rows of "Edits you extracted": the branch, its badge and the one control
+ * that makes sense from here. Committing and pushing are Source Control's, which
+ * is where finish already sends you.
+ *
+ * The row you are standing on is drawn just the same and without the control:
+ * the CLI skips it with "skipping (currently checked out)", so offering the
+ * button would promise something that will not happen. Hiding the row would be
+ * worse -- it is a branch that exists and no other surface names.
+ */
+private fun fixesRows(model: PanelModel): Block.FixesRows {
+    val enabled = !model.busy
+    val rows = model.fixes.mapIndexed { index, f ->
+        val discard = ctrl(
+            ControlId.DISCARD_FIXES,
+            null,
+            Emphasis.ICON,
+            enabled = enabled && !f.current,
+            accessibleName = "Discard the extracted edits",
+            tooltip = if (f.current) {
+                "You are on this branch; switch away first"
+            } else {
+                "git review clean --fixes-only (with confirmation)"
+            },
+            index = index,
+        )
+        GuideRow(name = f.name, badge = f.badge, controls = listOf(discard))
+    }
+    return Block.FixesRows(rows)
+}
+
 private fun guideRows(model: PanelModel): Block.GuideRows {
     val enabled = !model.busy
     val rows = model.guides.mapIndexed { index, g ->
@@ -1116,6 +1160,29 @@ private fun noReviewReadyBlocks(model: PanelModel): List<Block> {
                 blocks = listOf(
                     Block.Paragraph("Their review is over; the files are still here"),
                     draftRows(model, spent = true),
+                ),
+            ),
+        )
+    }
+    // The branches of edits a finish left behind. Collapsed and behind the spent
+    // reading orders: both sections are leftovers of reviews that already
+    // happened, and this one goes last because what it holds may still be
+    // pending work on ANOTHER screen (committing and pushing are Source
+    // Control's), not on this one.
+    //
+    // No "Clean all": a bare git review clean also takes every review/ branch,
+    // that is, live sessions of other branches -- a control with more reach than
+    // its section's title. And what this holds is hand-written work; the value is
+    // in the rows, which turn a blind branch -D into an informed one.
+    if (model.fixes.isNotEmpty()) {
+        out.add(
+            Block.ToolsSection(
+                title = "Edits you extracted",
+                blocks = listOf(
+                    Block.Paragraph(
+                        "One branch per finish; commit and push them from Source Control, or drop them here",
+                    ),
+                    fixesRows(model),
                 ),
             ),
         )

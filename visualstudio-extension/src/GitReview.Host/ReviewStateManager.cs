@@ -155,6 +155,12 @@ public sealed class ReviewStateManager
             var branches = list.ExitCode == 0
                 ? Porcelain.ParseListPorcelain(list.Stdout)
                 : Array.Empty<BranchRecord>();
+            // One invocation, two readings: the fixes branches travel in the same
+            // output as the inventory, so the footer section costs no extra
+            // process per refresh.
+            var fixes = list.ExitCode == 0
+                ? Porcelain.ParseListFixes(list.Stdout)
+                : Array.Empty<FixesRecord>();
             EffectiveConfig? eff = null;
             IReadOnlyList<CandidateBranch>? candidates = null;
             IReadOnlyList<CandidateRemote>? remotes = null;
@@ -186,6 +192,7 @@ public sealed class ReviewStateManager
             next = new ReviewState(
                 Situation: situation,
                 Branches: branches,
+                Fixes: fixes,
                 Config: eff,
                 Candidates: candidates,
                 Remotes: remotes,

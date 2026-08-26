@@ -3,6 +3,7 @@ package com.ezevillo.gitreview.domain
 enum class HousekeepingKind {
     CLEAN_ONE,
     CLEAN_KEEP_FIXES,
+    CLEAN_FIXES_ONE,
     CLEAN_ALL,
     FORGET_SAVED_ONE,
     FORGET_SAVED_ALL,
@@ -15,6 +16,19 @@ data class HousekeepingAction(
     val kind: HousekeepingKind,
     val source: String? = null,
     val onto: Boolean? = null,
+    /**
+     * CLEAN_FIXES_ONE only: what the CLI reported about that branch, so the
+     * confirmation can say how much it costs. Nothing is derived here -- the one
+     * that can ask git is the CLI. Null reads as UNKNOWN.
+     */
+    val fixesState: FixesState? = null,
+    /**
+     * CLEAN_FIXES_ONE only: whether `review/<src>` still exists. It changes the
+     * copy and nothing else -- the argv carries `--fixes-only` always, because a
+     * value re-read on every refresh cannot decide which branches a command
+     * deletes.
+     */
+    val session: Boolean = false,
 )
 
 data class ConfirmCopy(
@@ -51,6 +65,10 @@ fun argsForHousekeeping(action: HousekeepingAction): List<String> = when (action
         require(!action.source.isNullOrEmpty()) { "clean-keep-fixes requires source" }
         listOf("--keep-fixes", action.source)
     }
+    HousekeepingKind.CLEAN_FIXES_ONE -> {
+        require(!action.source.isNullOrEmpty()) { "clean-fixes-only requires source" }
+        listOf("--fixes-only", action.source)
+    }
     HousekeepingKind.CLEAN_ALL -> emptyList()
     HousekeepingKind.FORGET_SAVED_ONE -> {
         require(!action.source.isNullOrEmpty()) { "forget-saved-one requires source" }
@@ -68,6 +86,18 @@ fun argsForHousekeeping(action: HousekeepingAction): List<String> = when (action
 fun housekeepingNeedsNetwork(action: HousekeepingAction): Boolean =
     action.kind == HousekeepingKind.FORGET_DELTA_STALE
 
+/**
+ * What the CLEAN_FIXES_ONE confirmation says about the cost. One sentence per
+ * state and none folds into another: "nothing committed" is not "safe because it
+ * is already integrated", and "unknown" is not "not integrated".
+ */
+private fun fixesCostSentence(state: FixesState?): String = when (state) {
+    FixesState.EMPTY -> "Nothing was ever committed on it, so no work of yours is lost."
+    FixesState.MERGED -> "Its commits are already in the base branch."
+    FixesState.UNMERGED -> "It has commits the base branch does not have -- deleting it loses them."
+    else -> "There is no base branch configured, so git cannot tell whether its commits are integrated."
+}
+
 fun confirmCopyFor(action: HousekeepingAction): ConfirmCopy {
     val src = action.source.orEmpty()
     return when (action.kind) {
@@ -82,6 +112,21 @@ fun confirmCopyFor(action: HousekeepingAction): ConfirmCopy {
                 title = "Drop the finish undo for $src?",
                 detail = "Runs git review clean --keep-fixes $src: deletes review/$src and the finish undo point so the pending finish goes away. Your staged edits stay on $destination; delta markers are left alone. Remember to commit and push them from Source Control.",
                 button = "Clean",
+            )
+        }
+        HousekeepingKind.CLEAN_FIXES_ONE -> {
+            // The session is named only when it exists: promising to leave
+            // something that is not there is noise, and the argv is the same.
+            val session = if (action.session) {
+                " The review session on review/$src is left standing, so you can still undo the finish."
+            } else {
+                ""
+            }
+            ConfirmCopy(
+                title = "Discard the edits extracted onto review-fixes/$src?",
+                detail = "git review clean --fixes-only $src\n\n" +
+                    fixesCostSentence(action.fixesState) + session + " It cannot be undone.",
+                button = "Discard",
             )
         }
         HousekeepingKind.CLEAN_ALL -> ConfirmCopy(

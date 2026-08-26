@@ -210,6 +210,10 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         // — so a second implementation would be the same code with a different
         // chance of drifting from it.
         Block.WalkthroughRow w => RenderGuides(new Block.GuideRows(new[] { w.Entry })),
+        // Same shape again, same renderer: a name, a badge and the icon in the
+        // header. What a fixes row does not have is a labelled button, and the
+        // guide renderer already draws none when there is none.
+        Block.FixesRows f => RenderGuides(new Block.GuideRows(f.Rows)),
         Block.ToolsSection ts => RenderToolsSection(ts),
         Block.Stderr s => RenderStderr(s.Text),
         Block.EmptyMessage em => RenderEmpty(em),

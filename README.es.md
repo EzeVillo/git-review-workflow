@@ -322,7 +322,7 @@ lista, o `git review <verbo> -h` para el detalle de un verbo.
 | `git review finish [--onto-source] [--resume \| --abort [--force]]`                                                                        | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR); `--abort` deshace el último finish.                                                                                                                                                                                                                                                        |
 | `git review preview [--stat]`                                                                                                              | Muestra las ediciones que hiciste hasta ahora — el diff que `finish` extraería — sin commitear ni cambiar de rama.                                                                                                                                                                                                                                                                     |
 | `git review abort`                                                                                                                         | Cancela la review actual y vuelve a donde empezaste.                                                                                                                                                                                                                                                                                                                                   |
-| `git review clean [--keep-fixes] [rama]`                                                                                                   | Borra las ramas `review/*` (y por defecto también `review-fixes/*`) de `<rama>`, o todas; `--keep-fixes` deja `review-fixes/*` intactas.                                                                                                                                                                                                                                               |
+| `git review clean [--keep-fixes \| --fixes-only] [rama]`                                                                                   | Borra las ramas `review/*` (y por defecto también `review-fixes/*`) de `<rama>`, o todas; `--keep-fixes` deja `review-fixes/*` intactas, `--fixes-only` se lleva sólo esas.                                                                                                                                                                                                            |
 | `git review forget --delta ([--] <rama> \| --all \| --stale [--dry-run])`                                                                  | Descarta el marcador de `--delta` de una rama, de todas, o solo de las obsoletas.                                                                                                                                                                                                                                                                                                      |
 | `git review forget --saved ([--] <rama> \| --all) [--dry-run]`                                                                             | Descarta una review guardada con `git review save`.                                                                                                                                                                                                                                                                                                                                    |
 | `git review forget --draft ([--] <rama> \| --all \| --reviewed) [--dry-run]`                                                                             | Borra un walkthrough que escribiste para el PR de otra persona.                                                                                                                                                                                                                                                                                                                        |
@@ -880,6 +880,12 @@ y posición `[k/N]` para reviews `--step` y walk). Las reviews pausadas con
 `git review save` también aparecen, bajo `saved`. La rama en la que estás parado
 se marca con un `*`.
 
+Las ramas `review-fixes/*` que dejó un `finish` van al final, bajo `fixes`, con
+lo que git puede decir de cada una: `nothing committed on it` (sigue apuntando
+donde la creó el `finish`, así que no contiene nada tuyo — `finish` *stagea* tus
+ediciones, no las commitea), `already in the base`, o `has commits the base does
+not have`. Se descarta una con `git review clean --fixes-only <rama>`.
+
 - `--porcelain` — inventario legible por programas, el mismo formato separado
   por tab que [`status --porcelain`](#git-review-status):
 
@@ -887,6 +893,7 @@ se marca con un `*`.
   branch	<name>	<saved>	<current>	<orphan>[	<mode>[	<position>	<total>]]
   branch-draft	<name>
   finish	<branch>	pending|conflict	<onto>
+  fixes	<name>	<current>	<session>	empty|merged|unmerged|unknown
   ```
 
   `branch-draft` va detrás de su fila `branch`, cero o una vez por fila, cuando esa
@@ -908,6 +915,24 @@ se marca con un `*`.
   vacío (que no haya reviews no es un error); `1` sólo si corre fuera de un
   repositorio git.
 
+  Se emite una línea `fixes` por cada rama `review-fixes/<x>` que exista, detrás
+  de todos los registros `branch`. `current` es `1` si es la rama en la que estás
+  parado (la única que `clean` nunca va a borrar). `session` es `1` si `review/<x>`
+  todavía existe, que es lo que separa un `clean <x>` alcanzando con necesitar
+  `--fixes-only` para no llevarse la sesión. El último campo contesta cuánto
+  trabajo tuyo cuesta descartarla:
+
+  | estado     | significado                                                                  |
+  |------------|------------------------------------------------------------------------------|
+  | `empty`    | la punta sigue siendo la de su rama de origen — nunca commiteaste nada encima |
+  | `merged`   | contenida en `reviewworkflow.base`                                            |
+  | `unmerged` | tiene commits que la base no tiene                                            |
+  | `unknown`  | no hay `reviewworkflow.base` utilizable, así que no hay contra qué comparar   |
+
+  `empty` se pregunta primero y sin mirar la base: una rama de fixes intacta está
+  parada en la punta del PR, que la base normalmente *no* contiene, así que el
+  test de merged por sí solo la reportaría como trabajo a punto de perderse
+  cuando no hay ninguno.
   Se emite una línea `finish` por cada `review/<x>` con un cierre sin resolver:
   `pending` tras un finish completo que aún espera confirmación/aborto (las
   ediciones están en `review-fixes/<x>` o en la rama del PR; `HEAD` puede haber
@@ -1067,6 +1092,11 @@ real, así un `--delta` posterior no se saltea commits que nunca revisaste.
 - `--keep-fixes` — borra solo `review/*` (el undo del finish / leftover de la
   sesión) y deja `review-fixes/*`. Útil después de un `finish` exitoso cuando
   querés soltar el punto de undo y quedarte con las edits staged.
+- `--fixes-only` — su espejo: borra solo `review-fixes/*` y deja la sesión de
+  review en pie, hasta los edit refs bancados, el punto de undo del finish y los
+  marcadores de `--delta`. Para cuando terminaste con las ediciones que extrajo
+  un `finish` —commiteadas y pusheadas, o no valen la pena— pero todavía querés
+  poder hacer `git review finish --abort`. Pasar los dos flags es un error.
 - Nunca borra la rama en la que estás parado.
 - También descarta los edit refs bancados commit-a-commit y los registros de
   undo del finish (incluido el flag mid-conflict `reviewresume`), incluso cuando

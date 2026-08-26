@@ -19,6 +19,7 @@ public static class PanelFixtures
         ("cli-outdated", CliOutdated()),
         ("no-review setup", NoReviewSetup()),
         ("no-review ready", NoReviewReady()),
+        ("no-review fixes", NoReviewFixes()),
         ("no-review drafts", NoReviewDrafts()),
         ("no-review spent draft", NoReviewSpentDraft()),
         ("no-review guides", NoReviewGuides()),
@@ -61,6 +62,28 @@ public static class PanelFixtures
                 Situation.NoReview,
                 Config: new EffectiveConfig("main", "origin"),
                 Branches: Porcelain.ParseListPorcelain(listPorcelain)),
+            new PanelInputs(false));
+    }
+
+    /// <summary>
+    /// The four rows of "Edits you extracted" at once, with a live review above so
+    /// the two sections show together. The Current row is the only one with no
+    /// control: the CLI skips it, so the panel does not offer it.
+    /// </summary>
+    public static PanelModel NoReviewFixes()
+    {
+        var listPorcelain =
+            "branch\treview/feature/checkout\t0\t0\t0\twalk\t3\t9\n" +
+            "fixes\treview-fixes/feature/checkout\t0\t1\tunmerged\n" +
+            "fixes\treview-fixes/fix/quoting\t1\t0\tempty\n" +
+            "fixes\treview-fixes/perf/index\t0\t0\tmerged\n" +
+            "fixes\treview-fixes/docs/readme\t0\t0\tunknown\n";
+        return PanelModelBuilder.BuildPanelModel(
+            new ReviewState(
+                Situation.NoReview,
+                Config: new EffectiveConfig("main", "origin"),
+                Branches: Porcelain.ParseListPorcelain(listPorcelain),
+                Fixes: Porcelain.ParseListFixes(listPorcelain)),
             new PanelInputs(false));
     }
 

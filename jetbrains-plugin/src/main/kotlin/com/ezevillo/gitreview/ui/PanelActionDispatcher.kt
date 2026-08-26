@@ -19,6 +19,7 @@ import com.ezevillo.gitreview.domain.UserCopy
 import com.ezevillo.gitreview.domain.confirmCopyFor
 import com.ezevillo.gitreview.domain.currentEntry
 import com.ezevillo.gitreview.domain.draftAt
+import com.ezevillo.gitreview.domain.fixesAt
 import com.ezevillo.gitreview.domain.guideAt
 import com.ezevillo.gitreview.domain.pendingFinishInfo
 import com.ezevillo.gitreview.domain.requiresConfirmation
@@ -136,6 +137,11 @@ class PanelActionDispatcher(
             }
             ControlId.DISCARD_GUIDE -> {
                 discardGuideAt(index)
+                false
+            }
+            // "Edits you extracted": row -> index, same shape as the block above.
+            ControlId.DISCARD_FIXES -> {
+                discardFixesAt(index)
                 false
             }
             // The author's walkthrough row. Neither control mutates anything, so
@@ -417,6 +423,33 @@ class PanelActionDispatcher(
             ActionParams.DeleteGuide,
             progressTitle = UserCopy.DISCARD_GUIDE_PROGRESS,
         )
+    }
+
+    /**
+     * Drops the branch of edits of THIS row, with a confirmation first.
+     *
+     * The confirmation names the real verb and says how much it costs, with the
+     * state the CLI reported -- the only one that can ask git whether those
+     * commits are in the base. Nothing is derived here.
+     *
+     * Always --fixes-only, even when the session is already gone: the argv
+     * cannot depend on a value that is re-read on every refresh. A late
+     * "clean <x>" -- the review came back between the refresh and the click --
+     * would take a live review down from a button that promises to delete a
+     * branch of edits.
+     */
+    private fun discardFixesAt(index: Int?) {
+        val row = fixesAt(service.currentState().fixes, index) ?: return
+        if (row.current) return
+        val action = HousekeepingAction(
+            HousekeepingKind.CLEAN_FIXES_ONE,
+            sourceFromReviewName(row.name),
+            fixesState = row.state,
+            session = row.session,
+        )
+        val copy = confirmCopyFor(action)
+        if (!UiMessages.confirm(project, copy.title, copy.detail, copy.button)) return
+        mutations.runHousekeeping(action)
     }
 
     private fun cleanPending(model: PanelModel) {

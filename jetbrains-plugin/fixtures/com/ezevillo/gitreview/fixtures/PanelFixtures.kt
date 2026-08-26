@@ -16,6 +16,7 @@ import com.ezevillo.gitreview.domain.WalkthroughStatus
 import com.ezevillo.gitreview.domain.WhyState
 import com.ezevillo.gitreview.domain.buildPanelModel
 import com.ezevillo.gitreview.domain.parseConfigPorcelain
+import com.ezevillo.gitreview.domain.parseListFixes
 import com.ezevillo.gitreview.domain.parseListPorcelain
 import com.ezevillo.gitreview.domain.parsePorcelain
 import com.ezevillo.gitreview.domain.toPathRef
@@ -33,6 +34,7 @@ object PanelFixtures {
         "no-review one draft" to noReviewOneDraft(),
         "no-review drafts" to noReviewDrafts(),
         "no-review spent draft" to noReviewSpentDraft(),
+        "no-review fixes" to noReviewFixes(),
         "no-review guides" to noReviewGuides(),
         "no-review guide empty" to noReviewGuideEmpty(),
         "no-review walkthrough stale" to noReviewWalkthroughStale(),
@@ -80,6 +82,30 @@ object PanelFixtures {
                 situation = Situation.NO_REVIEW,
                 config = EffectiveConfig(base = "main", remote = "origin"),
                 branches = parseListPorcelain(listPorcelain),
+            ),
+            PanelInputs(busy = false),
+        )
+    }
+
+    /**
+     * The four rows of "Edits you extracted" at once, with a live review above so
+     * the two sections show together. The `current` row is the only one with no
+     * control: the CLI skips it, so the panel does not offer it.
+     */
+    fun noReviewFixes(): PanelModel {
+        val listPorcelain = """
+            branch	review/feature/checkout	0	0	0	walk	3	9
+            fixes	review-fixes/feature/checkout	0	1	unmerged
+            fixes	review-fixes/fix/quoting	1	0	empty
+            fixes	review-fixes/perf/index	0	0	merged
+            fixes	review-fixes/docs/readme	0	0	unknown
+        """.trimIndent()
+        return buildPanelModel(
+            ReviewState(
+                situation = Situation.NO_REVIEW,
+                config = EffectiveConfig(base = "main", remote = "origin"),
+                branches = parseListPorcelain(listPorcelain),
+                fixes = parseListFixes(listPorcelain),
             ),
             PanelInputs(busy = false),
         )

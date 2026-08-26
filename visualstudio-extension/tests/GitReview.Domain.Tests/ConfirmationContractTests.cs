@@ -57,13 +57,14 @@ public class ConfirmationContractTests
             }
         }
 
-        // guide_rows: same role as the two above (controls whose subject is the row),
-        // but its own hang off a "controls" key because the block also declares the
-        // rows and their states.
-        if (Get(root, "guide_rows") is YamlMappingNode guideBlock
-            && Get(guideBlock, "controls") is YamlMappingNode guideControls)
+        // guide_rows, walkthrough_row and fixes_rows: same role as the two above
+        // (controls whose subject is the row), but theirs hang off a "controls" key
+        // because the block also declares the rows and their states.
+        foreach (var key in new[] { "guide_rows", "walkthrough_row", "fixes_rows" })
         {
-            foreach (var (k, v) in guideControls.Children)
+            if (Get(root, key) is not YamlMappingNode block) continue;
+            if (Get(block, "controls") is not YamlMappingNode rowControls) continue;
+            foreach (var (k, v) in rowControls.Children)
             {
                 var id = ((YamlScalarNode)k).Value!;
                 var confirms = v is YamlMappingNode m && Bool(m, "confirms");

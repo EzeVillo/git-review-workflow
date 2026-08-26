@@ -619,6 +619,36 @@ git add x.txt
 git commit --quiet -m cf3-change-x
 publish feature/conflict
 
+# ── leftover review-fixes/* branches ──────────────────────────────────────────
+#
+# The branches of extracted edits that pile up one per finished review, which is
+# what the panel's "Edits you extracted" section lists. Written with plain git,
+# not with the verbs: they are the leftovers of reviews that already ended, so
+# there is nothing to reproduce -- and this way they exist even if the verbs do
+# not work, like everything else built above this point.
+#
+# One of each state the section can report, because that badge is the whole
+# point of the rows:
+#   feature/search   nothing committed  (still at the PR tip, holds nothing of yours)
+#   feature/refunds  not in the base    (a commit of your own, nowhere else)
+#   feature/i18n     in the base        (its commit is already on develop)
+git branch --quiet review-fixes/feature/search feature/search
+
+git branch --quiet review-fixes/feature/refunds feature/refunds
+git switch --quiet review-fixes/feature/refunds
+printf '%s\n' '// reviewed: round to cents before refunding' >>src/refunds.js
+git add src/refunds.js
+git commit --quiet -m "fix: round to cents"
+
+git switch --quiet develop
+git branch --quiet review-fixes/feature/i18n feature/i18n
+git switch --quiet review-fixes/feature/i18n
+printf '%s\n' '// reviewed: fall back to the default locale' >>src/messages.js
+git add src/messages.js
+git commit --quiet -m "fix: default locale fallback"
+git switch --quiet develop
+git merge --quiet --no-ff -m "merge the reviewed i18n fix" review-fixes/feature/i18n
+
 # Leave the reviewer where a reviewer starts: on the base branch.
 git switch --quiet develop
 
@@ -827,6 +857,17 @@ Finish-unresolved states left for the panel (list --porcelain / status):
 $finish_pending_note
 $finish_conflict_note
 
+The branches of extracted edits a finish leaves behind, one per state the
+panel's "Edits you extracted" section reports:
+
+  review-fixes/feature/search   nothing committed on it
+  review-fixes/feature/refunds  has commits the base does not have
+  review-fixes/feature/i18n     already in the base
+
+The panel only draws that section in the empty state, and the pending finish
+above keeps it out of it: drop that undo first with
+git review clean --keep-fixes feature/shipping
+
 Try it:
 
   . "$dir/env.sh"
@@ -838,7 +879,8 @@ Try it:
   git review forget --draft --reviewed --dry-run   # the ones whose review is over
   git review status / list / next / prev
 $saved_note
-  git review list --porcelain                # finish pending/conflict rows above
+  git review list --porcelain                # finish pending/conflict + fixes rows above
+  git review clean --fixes-only feature/search   # drop one branch of extracted edits
   git switch review/feature/conflict         # then: status --porcelain -> finish conflict
   git review finish        # extracts your edits to review-fixes/feature/checkout
   git review abort         # throws the review away

@@ -110,6 +110,31 @@ public sealed record BranchRecord(
     int? Total = null,
     BranchFinish? Finish = null);
 
+/// <summary>
+/// How much work dropping a <c>review-fixes/</c> branch would cost.
+/// <para>
+/// <c>Empty</c> is not a flavour of "safe": an untouched fixes branch sits at the
+/// PR tip and holds NOTHING of yours, which is a different thing from being
+/// already integrated. <c>Unknown</c> does not fold into <c>Unmerged</c> either --
+/// with no base configured the question has no answer, and giving the worse of
+/// the two paints a branch that may be empty as dangerous.
+/// </para>
+/// </summary>
+public enum FixesState
+{
+    Empty,
+    Merged,
+    Unmerged,
+    Unknown,
+}
+
+/// <summary>A <c>fixes</c> record of <c>git review list --porcelain</c>.</summary>
+public sealed record FixesRecord(
+    string Name,
+    bool Current,
+    bool Session,
+    FixesState State);
+
 public static class Porcelain
 {
     private static bool ToBool(string? field) => field == "1";
@@ -355,6 +380,43 @@ public static class Porcelain
         return branches.Select(b =>
             finishByBranch.TryGetValue(b.Name, out var f) ? b with { Finish = f } : b
         ).ToList();
+    }
+
+    private static FixesState ParseFixesState(string? field) => field switch
+    {
+        "empty" => FixesState.Empty,
+        "merged" => FixesState.Merged,
+        "unmerged" => FixesState.Unmerged,
+        // Anything we do not understand reads as "cannot tell", never as one of
+        // the three: this badge is the only thing between dropping an empty
+        // branch and dropping unpushed work.
+        _ => FixesState.Unknown,
+    };
+
+    /// <summary>
+    /// The <c>fixes</c> records of the same output, in a method of their own
+    /// rather than a second return value of <see cref="ParseListPorcelain"/>:
+    /// these are branches of <i>edits</i>, not reviews -- there is nothing to
+    /// resume or abort on them -- and every existing consumer of the inventory
+    /// keeps asking for exactly what it asked for.
+    /// </summary>
+    public static IReadOnlyList<FixesRecord> ParseListFixes(string stdout)
+    {
+        var fixes = new List<FixesRecord>();
+        foreach (var line in stdout.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None))
+        {
+            if (line.Length == 0) continue;
+            var fields = line.Split('\t');
+            if (fields[0] != "fixes") continue;
+            var name = Get(fields, 1);
+            if (string.IsNullOrEmpty(name)) continue;
+            fixes.Add(new FixesRecord(
+                Name: name!,
+                Current: ToBool(Get(fields, 2)),
+                Session: ToBool(Get(fields, 3)),
+                State: ParseFixesState(Get(fields, 4))));
+        }
+        return fixes;
     }
 
     private static string? Get(string[] fields, int i) =>

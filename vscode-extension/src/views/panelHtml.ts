@@ -1042,6 +1042,7 @@ export function panelHtml(nonce: string): string {
   let compareSectionOpen = false;
   let walkthroughSectionOpen = false;
   let spentDraftsOpen = false;
+  let fixesOpen = false;
   let settingsOpen = false;
   let supportOpen = false;
 
@@ -1188,6 +1189,84 @@ export function panelHtml(nonce: string): string {
   }
 
   /**
+   * Las ramas de ediciones que dejo un finish, plegadas al fondo del pie.
+   *
+   * Es el ultimo estado del repositorio que ninguna superficie nombraba: list
+   * no las enumeraba, el inventario sale de list, y el unico Clean del panel
+   * vive en el banner de finish-pending. Una rama por review terminada, para
+   * siempre, y sin forma de ver cuales hay ni de tirar una sin escribir su
+   * nombre en una terminal.
+   *
+   * NO hay boton de "limpiar todas". Un git review clean a secas se lleva
+   * ademas todas las review/*, o sea sesiones vivas de otras ramas: seria un
+   * control con mas alcance que el titulo de su seccion. Y lo que hay aca es
+   * trabajo escrito a mano -- el valor esta en las filas, que convierten un
+   * branch -D a ciegas en uno informado.
+   */
+  function renderFixesSection(model) {
+    if (!model.fixes || model.fixes.length === 0) {
+      return null;
+    }
+    return toolsSection("Edits you extracted", fixesOpen, function (open) {
+      fixesOpen = open;
+    }, [
+      el("p", null, "One branch per finish; commit and push them from Source Control, or drop them here"),
+      renderFixesRows(model),
+    ]);
+  }
+
+  function renderFixesRows(model) {
+    const box = el("div", "inv");
+    model.fixes.forEach(function (fixes, index) {
+      box.appendChild(renderFixesRow(model, fixes, index));
+    });
+    return box;
+  }
+
+  /**
+   * Una fila: la rama, su badge de estado y el unico control que tiene sentido
+   * desde aca. Commitear y pushear son de Source Control, que es adonde el
+   * finish ya manda.
+   *
+   * El badge dice cuanto cuesta tirarla, que es la unica pregunta de esta
+   * seccion. Los cuatro estados salen de la CLI y no se pliegan entre si:
+   * "nothing committed" no es una variante de "seguro" (una rama intacta esta
+   * parada en la punta del PR y no contiene NADA tuyo, que es distinto de estar
+   * integrada), y "state unknown" no es una variante de "not in the base"
+   * (sin base configurada la pregunta no tiene respuesta, y contestar la peor
+   * de las dos pinta de peligrosa una rama que puede estar vacia).
+   */
+  function renderFixesRow(model, fixes, index) {
+    const box = el("div", "rev guide");
+
+    const head = el("div", "rev-head");
+    head.appendChild(el("span", "rev-name", fixes.name));
+
+    const rowIcons = el("div", "rev-head-actions");
+    const discard = iconButton("trash", "discardFixes", "Discard the extracted edits", index);
+    // La fila en la que estas parado se dibuja igual y sin control: la CLI la
+    // saltea con "skipping (currently checked out)", asi que ofrecer el boton
+    // seria prometer algo que no va a pasar. Esconder la fila entera seria
+    // peor: es una rama que existe y ninguna otra superficie nombra.
+    discard.disabled = model.busy || fixes.current;
+    discard.title = fixes.current
+      ? "You are on this branch; switch away first"
+      : "git review clean --fixes-only (with confirmation)";
+    rowIcons.appendChild(discard);
+    head.appendChild(rowIcons);
+    head.appendChild(el("span", "badge", fixesBadge(fixes.state)));
+    box.appendChild(head);
+    return box;
+  }
+
+  function fixesBadge(state) {
+    if (state === "empty") { return "nothing committed"; }
+    if (state === "merged") { return "in the base"; }
+    if (state === "unmerged") { return "not in the base"; }
+    return "state unknown";
+  }
+
+  /**
    * Base y remote del repo, plegados. Solo con base ya configurada (el setup
    * los muestra inline). Debajo de Compare, encima de Support.
    */
@@ -1211,11 +1290,12 @@ export function panelHtml(nonce: string): string {
   }
 
   /**
-   * Pie fijo: Walkthrough + los ordenes terminados + Compare + Settings +
-   * Support (split Outline/Timeline). Las dos primeras son de la review que
-   * estas por hacer -- el orden que escribis y los que ya leiste --, asi que
-   * van arriba; Compare monta algo aparte y queda debajo de las dos. Settings y
-   * Support al fondo, como estaban.
+   * Pie fijo: Walkthrough + los ordenes terminados + las ramas de ediciones +
+   * Compare + Settings + Support (split Outline/Timeline). Las dos primeras son
+   * de la review que estas por hacer -- el orden que escribis y los que ya
+   * leiste --, asi que van arriba; las ediciones extraidas son restos de las que
+   * ya pasaron y van detras; Compare monta algo aparte y queda debajo de todas.
+   * Settings y Support al fondo, como estaban.
    */
   function renderPaneFooter(model) {
     const footer = el("div", "pane-footer");
@@ -1223,6 +1303,10 @@ export function panelHtml(nonce: string): string {
     const spent = renderSpentDrafts(model);
     if (spent) {
       footer.appendChild(spent);
+    }
+    const fixes = renderFixesSection(model);
+    if (fixes) {
+      footer.appendChild(fixes);
     }
     footer.appendChild(renderCompareSection(model));
     footer.appendChild(renderSettings(model));

@@ -140,6 +140,17 @@ class PanelLayoutContractTest {
         )
     }
 
+    // Y el estado con ramas de ediciones: sin una fixture que las traiga, el
+    // bloque entero es un `when:` que nunca dispara y el chequeo de controles de
+    // mas no llega a ver el suyo.
+    @Test
+    fun `no-review with fixes branches matches canonical`() {
+        assertLayoutAgainstCanonical(
+            key = "no-review",
+            layout = panelLayout(PanelFixtures.noReviewFixes()),
+        )
+    }
+
     @Test
     fun `the draft block is the first block of no-review and the body follows whole`() {
         val layout = panelLayout(PanelFixtures.noReviewDrafts())
@@ -478,6 +489,15 @@ class PanelLayoutContractTest {
             @Suppress("UNCHECKED_CAST")
             val walkControls = walkBlock?.get("controls") as? Map<String, Any?>
             if (walkControls != null) allowed += walkControls.keys
+        }
+        // Y la seccion de ramas de ediciones: un unico control, tambien de fila y
+        // en su mapa propio, con la misma forma que el de las guias.
+        if (mentionsBlock(sit["blocks"], "fixes_rows")) {
+            @Suppress("UNCHECKED_CAST")
+            val fixesBlock = yaml["fixes_rows"] as? Map<String, Any?>
+            @Suppress("UNCHECKED_CAST")
+            val fixesControls = fixesBlock?.get("controls") as? Map<String, Any?>
+            if (fixesControls != null) allowed += fixesControls.keys
         }
         val stray = actual.map { it.first }.filter { it !in allowed }.distinct()
         assertTrue(

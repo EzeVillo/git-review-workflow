@@ -6,7 +6,7 @@ import type {
     WalkthroughRecord,
     WalkthroughState,
 } from "../cli/configPorcelain";
-import {BranchRecord, EntryRecord, ReviewMode, sourceOf} from "../cli/porcelain";
+import {BranchRecord, EntryRecord, FixesState, ReviewMode, sourceOf} from "../cli/porcelain";
 import type {PathRef} from "../cli/unquote";
 import type {Situation} from "../review/situation";
 import type {ReviewState} from "../review/state";
@@ -77,6 +77,25 @@ export interface PanelReview {
         state: "pending" | "conflict";
         onto: boolean;
     };
+}
+
+/**
+ * Una fila de la sección "Edits you extracted": una rama `review-fixes/*` que
+ * dejó un `finish` (registro `fixes` de `list --porcelain`).
+ *
+ * Proyección plana, sin una sola derivación: cuánto cuesta tirarla lo contesta
+ * la CLI, que es la que puede preguntarle a git. Lo que vuelve del panel es el
+ * índice, como en `PanelReview`, y el host re-resuelve la fila antes de
+ * invocar nada.
+ */
+export interface PanelFixes {
+    /** Nombre de la rama tal cual lo emitió la CLI (`review-fixes/x`). */
+    name: string;
+    /** La rama en la que estás parado: `clean` la saltea, así que no se ofrece. */
+    current: boolean;
+    /** `review/<x>` sigue existiendo; lo dice la confirmación, no el argv. */
+    session: boolean;
+    state: FixesState;
 }
 
 /**
@@ -217,6 +236,12 @@ export interface PanelModel {
      * decir, y crear la compartida ahí la CLI lo niega igual.
      */
     guides: PanelGuide[];
+    /**
+     * Las ramas de ediciones que dejó un `finish`, en el orden de la CLI. Misma
+     * regla que `drafts` y `guides`: sólo con `situation === "no-review"`, que
+     * es donde vive la sección del pie.
+     */
+    fixes: PanelFixes[];
     /**
      * El walkthrough del autor. **Siempre presente** en `no-review`: los dos
      * verbos que actúan sobre el archivo son la botonera de esta fila, así que
@@ -644,6 +669,20 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
         // Sólo llegan por `config --porcelain`, o sea sólo fuera de una review:
         // el pie es donde se dibujan y una review no tiene pie.
         guides: state.guides !== undefined ? toPanelGuides(state.guides) : [],
+        // Sólo en `no-review`, como el resto del pie. Uno a uno y en el orden de
+        // la CLI: acá no se filtra ni se reordena nada, ni siquiera la fila
+        // `current` — es la única que no se puede borrar, y esconderla dejaría
+        // una rama que existe sin ninguna superficie que la nombre, que es
+        // justo lo que esta sección vino a arreglar.
+        fixes:
+            state.situation === "no-review" && state.fixes !== undefined
+                ? state.fixes.map((record) => ({
+                    name: record.name,
+                    current: record.current,
+                    session: record.session,
+                    state: record.state,
+                }))
+                : [],
         // Sólo en `no-review`: es donde vive la sección — una review no tiene
         // pie. La fila se construye aunque el registro falte -- ver
         // toPanelWalkthrough.

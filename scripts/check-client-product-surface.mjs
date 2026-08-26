@@ -627,10 +627,12 @@ function rowControlIds(name) {
 }
 const guideIdsForMessages = rowControlIds("guide_rows");
 const walkthroughRowIds = rowControlIds("walkthrough_row");
+const fixesRowIds = rowControlIds("fixes_rows");
 const allControlIds = new Set([
   ...canonicalControls.map((c) => c.id),
   ...guideIdsForMessages,
   ...walkthroughRowIds,
+  ...fixesRowIds,
   ...titleActionIds,
 ]);
 for (const id of allControlIds) {
@@ -657,6 +659,7 @@ const canonicalIds = new Set([
   ...canonicalControls.map((c) => c.id),
   ...guideControlIds,
   ...walkthroughRowIds,
+  ...fixesRowIds,
 ]);
 for (const p of panelCalls) {
   if (!canonicalIds.has(p.id)) {
@@ -1237,7 +1240,7 @@ if (guideBlock.length === 0) {
 {
   const sit = situationBlock("no-review");
   const order = [...sit.matchAll(/title:\s*"([^"]+)"/g)].map((m) => m[1]);
-  const want = ["Walkthrough", "Reading orders you finished with", "Compare", "Settings", "Support"];
+  const want = ["Walkthrough", "Reading orders you finished with", "Edits you extracted", "Compare", "Settings", "Support"];
   if (order.join("|") !== want.join("|")) {
     fail(`no-review footer sections are [${order.join(", ")}], expected [${want.join(", ")}]`);
   }

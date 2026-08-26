@@ -578,6 +578,20 @@ pregunta no tiene respuesta). La fila `current` se dibuja igual y sin control de
 saltea, y esconderla dejaría una rama que existe sin ninguna superficie que la nombre, que es justo
 lo que la sección vino a arreglar.
 
+**El pie se queda con el 55% del panel y scrollea adentro; nunca lo recorta.** Es un invariante de
+los tres, con tres implementaciones: `max-height` + `overflow-y: auto` en `.pane-footer`, el
+`preferredSize` capado del `JScrollPane` que `BorderLayout.SOUTH` consulta, y el `MaxHeight` que
+`_root.SizeChanged` le pone al `ScrollViewer` del pie. Sin el tope, el pie **es** el panel: la banda
+inferior de los tres layouts pide el alto que quiere, empuja el cuerpo fuera de la vista y después
+se recorta ella misma contra el borde, sin barra con la que alcanzar el resto. En la extensión hay
+además un eslabón que no se ve en el DOM: el flex item de `.tools` no es `.tools-body` sino el
+`::details-content` que Chrome interpone, y el `overflow: auto` del cuerpo no se activa hasta que
+ese wrapper —y el track del grid, que va `minmax(0, 1fr)` porque `1fr` es `minmax(auto, 1fr)`—
+aceptan bajar del min-content. Los gates son `footer:capped` / `footer:scrolls` en el `--verify` de
+Visual Studio y el test del renderer de JetBrains, los dos sobre el render de verdad; del lado de la
+extensión, donde ni la suite de integración puede mirar el webview, es un assert estructural del
+CSS.
+
 **Una review no tiene pie: ninguna `tools_section`.** Todo lo que cuelga de `walkthrough` —los dos
 verbos del autor y las dos guías de autoría— es de quien está parado en **su** PR, y adentro de una
 review estás parado en el de otro; una sección titulada «Walkthrough» al pie del orden de lectura

@@ -41,6 +41,10 @@ private const val ROW_MARKER_WIDTH = 2
 /** Corner of a badge (the extension's `border-radius: 3px`). */
 private const val CHIP_ARC = 6
 
+/** How much of the panel the footer may take before it starts scrolling
+ *  (the extension's `.pane-footer { max-height: 55% }`). */
+private const val FOOTER_MAX_FRACTION = 0.55
+
 /**
  * Generic Swing renderer of [PanelLayout]. No Project / GitReviewService.
  * @param onAction callback with control id, optional inventory/file index, and
@@ -65,7 +69,11 @@ class PanelRenderer(
         body.border = chrome.emptyBorder(8, 8, 8, 8)
         body.alignmentX = Component.LEFT_ALIGNMENT
 
-        val footer = JPanel()
+        // A ScrollBody and not a plain JPanel for the same reason the body is one:
+        // in `fillsHeight` it goes inside a scroll pane of its own, and only a
+        // Scrollable that tracks the viewport width gets its paragraphs measured at
+        // the width they will actually be painted at.
+        val footer = ScrollBody()
         footer.layout = BoxLayout(footer, BoxLayout.Y_AXIS)
         footer.background = chrome.background()
         footer.alignmentX = Component.LEFT_ALIGNMENT
@@ -92,7 +100,13 @@ class PanelRenderer(
             wrap.background = chrome.background()
             val scroll = scrollPane(body)
             wrap.add(scroll, BorderLayout.CENTER)
-            wrap.add(footer, BorderLayout.SOUTH)
+            // The footer scrolls on its own and never takes more than
+            // FOOTER_MAX_FRACTION of the window: BorderLayout hands SOUTH its full
+            // preferred height, so an open section with a long body used to push the
+            // body out and get cut off at the bottom edge with no way to reach the
+            // rest of it -- the same `max-height` + scroll split the extension's
+            // `.pane-footer` does.
+            wrap.add(cappedFooter(footer), BorderLayout.SOUTH)
             wrap
         } else {
             for (b in footerBlocks) {
@@ -122,6 +136,30 @@ class PanelRenderer(
         override fun getScrollableUnitIncrement(r: Rectangle, orientation: Int, direction: Int) = 16
         override fun getScrollableBlockIncrement(r: Rectangle, orientation: Int, direction: Int) =
             r.height
+    }
+
+    /**
+     * The footer's scroll pane, capped so the body above it always keeps at least
+     * some room. [JScrollPane.getPreferredSize] is what BorderLayout asks for the
+     * SOUTH band, so the cap goes there -- Swing has no `max-height`.
+     */
+    private fun cappedFooter(view: JComponent): JScrollPane {
+        val scroll = object : JScrollPane(view) {
+            override fun getPreferredSize(): Dimension {
+                val pref = super.getPreferredSize()
+                // Before the wrap has been laid out there is nothing to take a
+                // fraction of; the natural size is also the right answer then.
+                val available = parent?.height ?: 0
+                if (available <= 0) return pref
+                val cap = (available * FOOTER_MAX_FRACTION).toInt()
+                return if (pref.height > cap) Dimension(pref.width, cap) else pref
+            }
+        }
+        scroll.horizontalScrollBarPolicy = ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER
+        scroll.verticalScrollBarPolicy = ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
+        scroll.border = null
+        scroll.viewport.background = chrome.background()
+        return scroll
     }
 
     private fun scrollPane(view: JComponent): JScrollPane {

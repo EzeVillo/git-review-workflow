@@ -147,6 +147,12 @@ Requires `git review` **0.7.0** or newer.
 
 ### Fixed
 
+- **A section at the foot of the panel could not be scrolled.** Open one whose body does not
+  fit — the branches your finishes left behind, a long walkthrough block — and the footer took the
+  whole tool window: the inventory and *Start a review* above it were pushed out of sight, and the
+  footer's own tail was then clipped by the window edge with no scrollbar to reach it. The footer
+  now never takes more than its share of the panel and scrolls inside it.
+
 - The plugin no longer builds the draft's path out of a gitdir it resolved itself — the
   CLI reports it, and the panel opens what it was given. The old derivation missed the
   case where the project you opened is below the repository root.

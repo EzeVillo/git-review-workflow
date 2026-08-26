@@ -177,6 +177,31 @@ describe("panelHtml", () => {
         assert.ok(!html.includes('button("Update the CLI"'));
     });
 
+    it("una seccion del pie scrollea en vez de recortarse", () => {
+        // Las tres piezas del mismo reparto. La del medio es la que faltaba: el
+        // flex item de .tools no es .tools-body sino el ::details-content que
+        // Chrome interpone, y sin pedirle lo mismo se planta en el alto de su
+        // contenido, con lo que el overflow:auto del inner no llega a activarse
+        // nunca y el max-height del pie recorta el final de la seccion.
+        assert.ok(
+            /grid-template-rows: minmax\(0, 1fr\)/.test(html),
+            "un track 1fr es minmax(auto, 1fr): nunca baja del min-content y no deja scrollear"
+        );
+        assert.ok(!/grid-template-rows: [01]fr;/.test(html));
+        assert.ok(
+            /\.tools\[open\]::details-content \{[^}]*min-height: 0;/.test(html),
+            "el wrapper que interpone Chrome tiene que ceder igual que .tools-body"
+        );
+        assert.ok(
+            /\.pane-footer \{[^}]*overflow-y: auto;/.test(html),
+            "si ni los minimos entran, el pie se scrollea antes que esconder una seccion"
+        );
+        assert.ok(
+            /\.pane-footer:has\(\.tools\[open\] ~ \.tools\[open\]\) \.tools\[open\] \{\s*min-height:/.test(html),
+            "con varias abiertas ninguna puede quedarse en su solo encabezado"
+        );
+    });
+
     it("el inventario solo ofrece Continue sobre una fila guardada y resumible", () => {
         // Las dos guardas son lo que evita ofrecer una accion que el verbo
         // rechazaria; sin ellas el boton queda para cualquier fila.

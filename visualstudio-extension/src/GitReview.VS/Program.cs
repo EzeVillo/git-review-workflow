@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Media;
 using GitReview.Domain;
 using GitReview.Fixtures;
@@ -429,6 +430,40 @@ public static class Program
             paths.Count == 0
                 ? "fixture stopped producing a file row"
                 : string.Join(" | ", paths.Where(t => !t.StartsWith(PanelView.GlyphDiff))) + " unmarked");
+
+        // The footer with every section open: it is capped and scrolls, so the body
+        // above it survives and nothing inside it ends up out of reach. DockPanel
+        // hands the Bottom band whatever height it asks for, so without the cap the
+        // panel became the footer -- and its own tail was then clipped by the window
+        // with no scrollbar to reach it.
+        const double h = 460;
+        var footerView = new PanelView(chrome) { Width = 320, Height = h, ShowTitleActions = false };
+        footerView.Render(PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewFixes()));
+        Layout(footerView, 320, h);
+        foreach (var t in Descendants(footerView).OfType<System.Windows.Controls.Button>()
+                     .Where(b => (b.Content as string)?.StartsWith("▶ ") == true).ToList())
+        {
+            t.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+        }
+        Layout(footerView, 320, h);
+        var scrolls = Descendants(footerView).OfType<ScrollViewer>().ToList();
+        var footerScroll = scrolls.FirstOrDefault(sv => sv.Content is StackPanel sp
+            && Descendants(sp).OfType<System.Windows.Controls.Button>()
+                .Any(b => (b.Content as string)?.EndsWith(" Support") == true));
+        check("footer:capped", footerScroll is not null && footerScroll.ActualHeight <= h * PanelView.FooterMaxFraction + 1,
+            footerScroll is null
+                ? "no scroll viewer holds the footer sections"
+                : $"footer took {footerScroll.ActualHeight:0} of {h:0}");
+        check("footer:scrolls", footerScroll is not null && footerScroll.ScrollableHeight > 0,
+            "the capped footer does not scroll, so its tail is unreachable");
+    }
+
+    /// <summary>Measure + arrange + update, the three every check needs before it reads a size.</summary>
+    private static void Layout(FrameworkElement view, double width, double height)
+    {
+        view.Measure(new Size(width, height));
+        view.Arrange(new Rect(0, 0, width, height));
+        view.UpdateLayout();
     }
 
     /// <summary>

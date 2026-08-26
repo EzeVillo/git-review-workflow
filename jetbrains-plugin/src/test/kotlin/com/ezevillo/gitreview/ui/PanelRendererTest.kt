@@ -285,6 +285,55 @@ class PanelRendererTest {
         )
     }
 
+    /**
+     * Lays a tree out without ever realizing a peer: `validate()` is a no-op on a
+     * component that was never displayed, and a JFrame is not an option in the
+     * headless runner CI uses for this suite.
+     */
+    private fun layoutOffscreen(root: java.awt.Container, width: Int, height: Int) {
+        root.setSize(width, height)
+        fun rec(c: java.awt.Container) {
+            c.doLayout()
+            for (child in c.components) if (child is java.awt.Container) rec(child)
+        }
+        repeat(3) { rec(root) }
+    }
+
+    @Test
+    fun `the footer is capped and scrolls instead of taking over the panel`() {
+        val renderer = PanelRenderer(PreviewPanelChrome()) { _, _, _ -> false }
+        val root = renderer.render(panelLayout(PanelFixtures.noReviewFixes()))
+        PanelRenderer.collectButtons(root)
+            .filter { it.text?.startsWith("▶") == true }
+            .forEach { it.doClick() }
+        val height = 460
+        layoutOffscreen(root, 320, height)
+
+        val scrolls = collectScrollPanes(root)
+        val footer = scrolls.find { sp ->
+            PanelRenderer.collectButtons(sp.viewport.view as javax.swing.JComponent)
+                .any { it.text?.endsWith(" Support") == true }
+        }
+        assertTrue(footer != null, "a scroll pane of its own holds the footer sections")
+        assertTrue(
+            footer!!.height <= height * 0.55 + 1,
+            "the footer took ${footer.height} of $height",
+        )
+        assertTrue(
+            (footer.viewport.view as javax.swing.JComponent).preferredSize.height > footer.viewport.extentSize.height,
+            "the capped footer does not scroll, so its tail is unreachable",
+        )
+        val body = scrolls.first { it !== footer }
+        assertTrue(body.height > 0, "the body keeps room above the footer")
+    }
+
+    private fun collectScrollPanes(c: java.awt.Container): List<javax.swing.JScrollPane> {
+        val found = mutableListOf<javax.swing.JScrollPane>()
+        if (c is javax.swing.JScrollPane) found.add(c)
+        for (child in c.components) if (child is java.awt.Container) found.addAll(collectScrollPanes(child))
+        return found
+    }
+
     @Test
     fun `an icon control without a platform icon falls back to a glyph, not to its name`() {
         // El nombre accesible es una oracion entera: si cae ahi, el control se

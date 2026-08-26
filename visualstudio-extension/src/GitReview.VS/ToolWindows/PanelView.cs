@@ -40,6 +40,12 @@ public sealed class PanelView : System.Windows.Controls.UserControl
     internal const string GlyphDiff = "◫";
 
     /// <summary>
+    /// How much of the panel the footer may take before it starts scrolling
+    /// (the extension's <c>.pane-footer { max-height: 55% }</c>).
+    /// </summary>
+    internal const double FooterMaxFraction = 0.55;
+
+    /// <summary>
     /// The icon of each control, under the CANONICAL's names
     /// (contracts/client-product-surface.yaml, the <c>icon_vocabulary</c> block):
     /// one map for both ways the panel draws an icon — bare in a row header, or
@@ -90,6 +96,7 @@ public sealed class PanelView : System.Windows.Controls.UserControl
     private readonly ScrollViewer _scroll;
     private readonly StackPanel _body;
     private readonly StackPanel _footer;
+    private readonly ScrollViewer _footerScroll;
     private readonly DockPanel _root;
     private readonly StackPanel _titleBar;
 
@@ -129,12 +136,27 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             Content = _body,
         };
 
+        // The footer scrolls on its own and never takes more than FooterMaxFraction
+        // of the window. DockPanel hands the Bottom band its full desired height, so
+        // an open section with a long body pushed the scrolled body out of the panel
+        // and then got clipped at the bottom edge itself -- with no way to reach the
+        // rest of it. Same max-height + scroll split as the extension's `.pane-footer`.
+        _footerScroll = new ScrollViewer
+        {
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            Content = _footer,
+        };
+
         _root = new DockPanel { Background = _chrome.Background };
         DockPanel.SetDock(_titleBar, Dock.Top);
-        DockPanel.SetDock(_footer, Dock.Bottom);
+        DockPanel.SetDock(_footerScroll, Dock.Bottom);
         _root.Children.Add(_titleBar);
-        _root.Children.Add(_footer);
+        _root.Children.Add(_footerScroll);
         _root.Children.Add(_scroll);
+        // A binding would need a converter for the fraction; the cap is one line here
+        // and runs before the first arrange the same way.
+        _root.SizeChanged += (_, e) => _footerScroll.MaxHeight = e.NewSize.Height * FooterMaxFraction;
         Content = _root;
     }
 

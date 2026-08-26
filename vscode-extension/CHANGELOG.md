@@ -139,6 +139,15 @@ Requires `git review` **0.7.0** or newer.
 
 ### Fixed
 
+- **A section at the foot of the panel could not be scrolled.** Open one whose body does not
+  fit — the branches your finishes left behind, a long walkthrough block — and it grew past the
+  footer's share of the panel and was cut off at the bottom edge, taking the sections below it out
+  of view with it: no scrollbar, no way to reach the rest. The section's body did have
+  `overflow: auto`, but it never came into play, because the element Chrome interposes between a
+  `<details>` and its content refuses to shrink below what that content asks for. The footer now
+  keeps its share of the panel, each open section scrolls its own body, and with several open at
+  once none of them is left showing nothing but its header.
+
 - The extension no longer builds the draft's path out of a gitdir it resolved itself — the CLI
   reports it, and the panel opens what it was given. The old derivation missed the case where the
   folder you opened is below the repository root.

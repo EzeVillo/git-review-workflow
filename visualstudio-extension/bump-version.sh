@@ -29,7 +29,7 @@ sed_i() {
 
 sed_i "s#(<Version>)[0-9]+\.[0-9]+\.[0-9]+(</Version>)#\1${V}\2#" \
 	"$dir/src/GitReview.VS/GitReview.VS.csproj"
-sed_i "s#(Identity Id=\"git-review-workflow\" Version=\")[0-9]+\.[0-9]+\.[0-9]+(\")#\1${V}\2#" \
+sed_i "s#(Identity Id=\"[^\"]+\" Version=\")[0-9]+\.[0-9]+\.[0-9]+(\")#\1${V}\2#" \
 	"$dir/src/GitReview.VS/source.extension.vsixmanifest"
 sed_i "s#(<GitReviewClientVersion>)[0-9]+\.[0-9]+\.[0-9]+(</GitReviewClientVersion>)#\1${V}\2#" \
 	"$dir/Directory.Build.props"

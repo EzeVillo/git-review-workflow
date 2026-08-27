@@ -6,7 +6,7 @@ own [releases](https://github.com/EzeVillo/git-review-workflow/releases).
 This project follows [semantic versioning](https://semver.org/spec/v2.0.0.html)
 and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 
-## [0.2.0]
+## [0.2.0] — 2026-08-27
 
 Requires `git review` **0.7.0** or newer.
 

@@ -965,6 +965,15 @@ public sealed class PanelView : System.Windows.Controls.UserControl
     /// which is read off the text, exactly as JetBrains and the extension read it
     /// off the class. The border is always drawn, transparent when there is no
     /// outline, so all three weights lay out to the same size.
+    ///
+    /// It sizes to its text and centres on the line, and BOTH halves of that are
+    /// explicit: a Border in a horizontal StackPanel defaults to Stretch, so the
+    /// chip grew to whatever shared the row -- 22px next to a glyph button, 14px
+    /// alone -- and the TextBlock inside it, stretched too, drew its text against
+    /// the top edge. The same chip in two heights with the text hanging off the
+    /// top is what the other two clients never do: theirs are one height in every
+    /// row (16 in JetBrains, 17 in the extension) with the text on the row's
+    /// centre line, and that is what this matches.
     /// </summary>
     private Border Chip(string text)
     {
@@ -972,16 +981,18 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         var bare = text is "uncovered" or "?";
         return new Border
         {
+            VerticalAlignment = VerticalAlignment.Center,
             Background = solid ? _chrome.BadgeBackground : Brushes.Transparent,
             BorderBrush = solid || bare ? Brushes.Transparent : _chrome.Border,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(3),
-            Padding = new Thickness(4, 0, 4, 0),
+            Padding = new Thickness(4, 1, 4, 1),
             Margin = new Thickness(4, 0, 0, 0),
             Child = new TextBlock
             {
                 Text = text,
                 FontSize = 10,
+                VerticalAlignment = VerticalAlignment.Center,
                 Foreground = solid
                     ? _chrome.BadgeForeground
                     : bare ? _chrome.MutedForeground : _chrome.Foreground,

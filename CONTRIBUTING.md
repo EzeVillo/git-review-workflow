@@ -2,6 +2,12 @@
 
 Thanks for taking the time to contribute! Bug reports, fixes and ideas are all welcome.
 
+Two companion documents are worth knowing about: `CLAUDE.md` holds the binding rules and a map of
+where review state lives, and `decisiones.md` (in Spanish) records why things are the way they
+are — the bug that motivated a decision and the alternative that was ruled out. Neither is required
+reading to send a patch, but `decisiones.md` is the fastest way to find out what broke the last time
+someone changed the thing you are about to change.
+
 ## Development
 
 The commands are POSIX shell scripts under `bin/`. Run the checks locally before opening a pull

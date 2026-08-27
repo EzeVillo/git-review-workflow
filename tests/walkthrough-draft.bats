@@ -812,3 +812,110 @@ EOF
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"1 entry"* ]]
 }
+
+# The reviewer read the PR, wrote the order, and then the branch moved: a file
+# they had already annotated changes again and a new one lands. --delta narrows
+# what is READ, and it used to narrow what the file is allowed to HOLD with it --
+# so the entries for the files outside the increment were dropped, and the prose
+# in them is not in git and does not come back. The range in force decides what
+# must be covered; the PR decides what may be kept.
+@test "draft --delta keeps the entries for files the PR still changes" {
+	# The skeleton first: fill_draft writes over the file, it does not create
+	# the directory the draft namespace keeps it in.
+	git review walkthrough draft feature/plain
+	fill_draft
+	run git review walkthrough draft --build feature/plain
+	[ "$status" -eq 0 ]
+	git config reviewworkflow.feature/plain.reviewed "$(git rev-parse origin/feature/plain)"
+
+	# One annotated file changes again, one new file arrives.
+	git switch --quiet feature/plain
+	printf 'a1\na2\na3\n' >a.txt
+	printf 'new\n' >new.txt
+	git add -A
+	git commit --quiet -m more
+	git push --quiet origin feature/plain
+	git switch --quiet develop
+
+	run git review walkthrough draft --delta feature/plain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"3 kept, 1 added, 0 dropped"* ]]
+	[[ "$output" != *"dropped --"* ]]
+
+	# The two entries outside the increment are still there, prose and marker and
+	# all -- not merely mentioned in the message.
+	grep -Fxq '## 1. src/c.txt' "$DRAFT"
+	grep -Fxq '> key' "$DRAFT"
+	grep -Fxq 'start here' "$DRAFT"
+	grep -Fxq '## 2. src/café con espacio.js' "$DRAFT"
+	grep -Fxq 'then this' "$DRAFT"
+	grep -Fxq 'last' "$DRAFT"
+	# And the file the increment added is the one placeholder to fill in.
+	grep -Fxq '## ?. new.txt' "$DRAFT"
+	run grep -c '^## ?\. ' "$DRAFT"
+	[ "$status" -eq 0 ]
+	[ "$output" = "1" ]
+}
+
+# The other direction, so the rule above is not just "keep everything": a path
+# the PR does not change is still drift, and the note that names it is still
+# telling the truth -- which under --delta it was not.
+@test "draft --delta still drops an entry the PR does not change" {
+	# The skeleton first: fill_draft writes over the file, it does not create
+	# the directory the draft namespace keeps it in.
+	git review walkthrough draft feature/plain
+	fill_draft
+	printf '\n## 4. ghost.txt\nnames a file no commit touches\n' >>"$DRAFT"
+	git config reviewworkflow.feature/plain.reviewed "$(git rev-parse origin/feature/plain)"
+	git switch --quiet feature/plain
+	printf 'new\n' >new.txt
+	git add -A
+	git commit --quiet -m more
+	git push --quiet origin feature/plain
+	git switch --quiet develop
+
+	run git review walkthrough draft --delta feature/plain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"1 entry/entries dropped"* ]]
+	[[ "$output" == *"ghost.txt"* ]]
+	[[ "$output" == *"3 kept, 1 added, 1 dropped"* ]]
+	run grep -Fq ghost.txt "$DRAFT"
+	[ "$status" -ne 0 ]
+}
+
+# And the build side of the same rule. Validating a full order against the delta
+# range rejected every entry outside the increment as drift, so the order the
+# reviewer had just been told to keep could not be built.
+@test "draft --build --delta accepts an order covering the whole PR" {
+	# The skeleton first: fill_draft writes over the file, it does not create
+	# the directory the draft namespace keeps it in.
+	git review walkthrough draft feature/plain
+	fill_draft
+	run git review walkthrough draft --build feature/plain
+	[ "$status" -eq 0 ]
+	git config reviewworkflow.feature/plain.reviewed "$(git rev-parse origin/feature/plain)"
+	git switch --quiet feature/plain
+	printf 'new\n' >new.txt
+	git add -A
+	git commit --quiet -m more
+	git push --quiet origin feature/plain
+	git switch --quiet develop
+
+	run git review walkthrough draft --delta feature/plain
+	[ "$status" -eq 0 ]
+	edit_file 's/^## ?\. new\.txt$/## 4. new.txt/' "$DRAFT"
+	edit_file 's/^<!-- why: -->$/the new one/' "$DRAFT"
+
+	run git review walkthrough draft --build --delta feature/plain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"4 entries"* ]]
+	# All four survive the build, in order: the delta decides what is read, not
+	# what the file may hold.
+	grep -Fxq '## 1. src/c.txt' "$DRAFT"
+	grep -Fxq '## 4. new.txt' "$DRAFT"
+
+	# And the review that reads it sees only the increment.
+	run git review start --delta feature/plain
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"1 entries"* || "$output" == *"1 entry"* ]]
+}

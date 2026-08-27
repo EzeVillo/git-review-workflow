@@ -582,9 +582,13 @@ git review start feature/checkout                      # enters walk mode on you
   the next one is over a range that moved. Running `draft` over an existing one
   **updates** it on the same terms as `init`: every entry whose file is still in
   range keeps its number, its why and its `> key`, the files the PR changed since
-  arrive as `## ?.` placeholders, and entries whose file left the range are
-  dropped and named. `--force` is the way back to a blank skeleton — and unlike
-  the author's sidecar this file is not in git, so that one has no way back.
+  arrive as `## ?.` placeholders, and entries whose file **the PR no longer
+  changes** are dropped and named. `--delta` narrows what a review *reads*,
+  never what your order is allowed to hold: entries for files the PR changes in
+  commits you have already read are kept, so pointing it at an order you wrote
+  for the whole PR costs you none of it. `--force` is the way back to a blank
+  skeleton — and unlike the author's sidecar this file is not in git, so that
+  one has no way back.
 - Your draft **takes precedence** over the PR's own walkthrough for as long as it
   has something in it, and `git review status` marks the review `walk (draft)` so
   a reading order you wrote is never mistaken for the author's. An empty draft is

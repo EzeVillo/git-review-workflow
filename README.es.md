@@ -598,9 +598,13 @@ git review start feature/checkout                      # entra en walk con tu or
   que ya existe lo **actualiza** en los mismos términos que `init`: cada entrada
   cuyo archivo sigue en rango conserva su número, su why y su `> key`, los
   archivos que el PR cambió desde entonces llegan como placeholders `## ?.`, y
-  las entradas cuyo archivo salió del rango se descartan y se nombran. `--force`
-  es la vuelta al esqueleto en blanco — y a diferencia del sidecar del autor,
-  este archivo no está en git, así que esa no tiene vuelta atrás.
+  las entradas cuyo archivo **el PR ya no cambia** se descartan y se nombran.
+  `--delta` angosta lo que una review *lee*, nunca lo que tu orden puede
+  contener: las entradas de archivos que el PR cambia en commits que ya leíste
+  se conservan, así que apuntarlo a un orden que escribiste para el PR entero no
+  te cuesta nada de él. `--force` es la vuelta al esqueleto en blanco — y a
+  diferencia del sidecar del autor, este archivo no está en git, así que esa no
+  tiene vuelta atrás.
 - Tu borrador **tiene precedencia** sobre el walkthrough del propio PR mientras
   tenga algo adentro, y `git review status` marca la review como `walk (draft)`
   para que un orden de lectura que escribiste vos nunca se confunda con el del

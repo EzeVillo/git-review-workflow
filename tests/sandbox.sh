@@ -499,6 +499,85 @@ mv "$receipts_draft.filled" "$receipts_draft"
 git review walkthrough draft --build feature/receipts >/dev/null 2>&1
 git config "reviewworkflow.feature/receipts.reviewed" \
 	"$(git rev-parse origin/feature/receipts)"
+# The same reading order, one commit later: the branch moved after the review
+# closed, so the draft on disk no longer covers the range. `git review config
+# --porcelain feature/coupons` answers that with `offer draft-update`, and
+# running `walkthrough draft` again reconciles it instead of refusing.
+#
+# The commit that moves it does BOTH things on purpose, because they take
+# different paths through the update: src/coupons.js was already annotated and
+# is edited again (the entry survives with its number, its why and its `> key`,
+# and its `> at:` anchor now points at a version that is gone -- which is what
+# the next --build reports as a why written against an older file), while the
+# two new files arrive as unfilled `## ?.` entries. One of those carries a space
+# and an accent, so the reconciliation is exercised on the byte shapes that keep
+# breaking path comparison in silence.
+pr feature/coupons
+
+cat >src/coupons.js <<'EOF'
+export function coupon(code, order) {
+	return { code, order: order.id, cents: 0 };
+}
+EOF
+cat >docs/cupones.md <<'EOF'
+# Cupones
+
+Un cupón se canjea una sola vez. El canje vive en el ledger, no en el carrito.
+EOF
+git add src/coupons.js docs/cupones.md
+git commit --quiet -m "feat: canje de cupones"
+publish feature/coupons
+git switch --quiet develop
+# Written and filled from develop, exactly as for feature/receipts, and marked
+# read against THIS tip: that marker is what makes the state below `reviewed`
+# rather than a draft that was simply never used.
+git review walkthrough draft feature/coupons >/dev/null 2>&1
+coupons_draft="$(git rev-parse --git-dir)/review-walkthrough/feature/coupons.md"
+awk '
+	/^<!-- heads-up/ { print "Redemption is the only thing that writes to the ledger. Everything else reads."; if (index($0, "-->") == 0) hu = 1; next }
+	hu { if (index($0, "-->")) hu = 0; next }
+	/^## [?][.] / { path = substr($0, 7); n++; sub(/^## [?][.] /, "## " n ". "); print; next }
+	/^<!-- why/ {
+		if (path == "src/coupons.js") {
+			print "> key"
+			print "REVIEWER: the whole feature. Redeeming twice must not be possible."
+		} else {
+			print "REVIEWER: the rule support reads out loud. It has to match the code above."
+		}
+		if (index($0, "-->") == 0) w = 1
+		next
+	}
+	w { if (index($0, "-->")) w = 0; next }
+	{ print }
+' "$coupons_draft" >"$coupons_draft.filled"
+mv "$coupons_draft.filled" "$coupons_draft"
+git review walkthrough draft --build feature/coupons >/dev/null 2>&1
+git config "reviewworkflow.feature/coupons.reviewed" \
+	"$(git rev-parse origin/feature/coupons)"
+
+# And now the branch moves under it: one file re-edited, two added.
+git switch --quiet feature/coupons
+cat >src/coupons.js <<'EOF'
+import { CODES } from "./coupon-codes.js";
+
+// Codes are matched case-insensitively; the ledger keeps them as typed.
+export function coupon(code, order) {
+	const known = CODES.includes(code.toUpperCase());
+	return { code, order: order.id, cents: known ? 500 : 0 };
+}
+EOF
+cat >src/coupon-codes.js <<'EOF'
+export const CODES = ["WELCOME10", "ENVIOGRATIS"];
+EOF
+cat >"docs/reglas de cupón.md" <<'EOF'
+# Reglas de cupón
+
+Un código vale para un pedido. La comparación ignora mayúsculas.
+EOF
+git add src/coupons.js src/coupon-codes.js "docs/reglas de cupón.md"
+git commit --quiet -m "feat: normalizar los códigos de cupón"
+publish feature/coupons
+git switch --quiet develop
 
 # A pull request whose walkthrough went stale: every path it names was renamed
 # away, so it covers nothing in the range and the review degrades to whole with a
@@ -842,6 +921,9 @@ The other branches, one per state that feature/checkout cannot show:
   feature/pagos           hostile subject/author bytes; review with --step
   feature/receipts        a draft written for it and its review already closed:
                           the reading order the panel folds away as finished
+  feature/coupons         the same, one commit later: the branch moved after the
+                          review closed, so the draft no longer covers the range
+                          -> offer draft-update (one file re-edited, two added)
   feature/merged-base     the base merged in, plus a --delta marker: the only
                           shape whose review lower bound is a tree OID
 
@@ -877,6 +959,10 @@ Try it:
   git review start feature/notifications     # then: git review status --porcelain
   git review walkthrough draft --delta feature/merged-base   # lower bound = tree OID
   git review forget --draft --reviewed --dry-run   # the ones whose review is over
+  git review config --porcelain feature/coupons    # -> offer draft-update
+  git review walkthrough draft feature/coupons     # reconciles it: 2 kept, 2 added
+  git review walkthrough draft --build feature/coupons  # notes the why written
+                                             # against the older src/coupons.js
   git review status / list / next / prev
 $saved_note
   git review list --porcelain                # finish pending/conflict + fixes rows above

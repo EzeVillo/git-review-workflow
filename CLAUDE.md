@@ -239,6 +239,23 @@ working tree:
   descartadas no nombra una salida** en el lado del revisor, por lo mismo: ahí la nota que lista
   los paths es todo lo que hay.
 
+  **Y lo que se descarta lo decide el PR, no el rango en vigor.** Son dos preguntas distintas y
+  el update las hace por separado: el rango en vigor (`lower`) dice qué entradas tienen que
+  estar —lo que este `draft` está escribiendo— y el rango del PR (`pr_lower`, el merge-base con
+  la base) dice cuáles puede haber. Difieren en un solo caso, `--delta`, y ahí conflatearlas era
+  destructivo: la entrada de un archivo que el PR cambia en un commit que ya leíste caía fuera
+  del rango y se descartaba, o sea que un flag que se lee como una lente —«mostrame sólo lo
+  nuevo»— borraba prosa escrita a mano sobre código que sigue en el PR, y como el borrador vive
+  fuera de git no hay `git checkout` que la traiga. Con las dos preguntas separadas, `--delta`
+  angosta lo que la review **lee** (`walk_sequence` ya filtraba por intersección de paths, así
+  que un borrador del PR entero se lee en una review delta sin tocar el archivo) y nunca lo que
+  el borrador puede **contener**. La misma asimetría del otro lado: `missing` se mide contra el
+  rango en vigor y `extra` contra el PR, si no un borrador completo se volvía imposible de
+  buildear apenas le apuntabas `--delta`. Y el aviso de stderr recupera su verdad —«the PR no
+  longer changes these files» sólo sale cuando eso es cierto—, que era lo otro que estaba mal:
+  la única señal antes de perder el texto afirmaba algo falso. Cuesta **un `merge-base` de más y
+  sólo bajo `--delta`**; con los dos bounds iguales no se computa nada.
+
   **Que su review ya haya terminado no lo borra: lo baja de bloque.** El registro `draft` de
   `config --porcelain` cierra con un `<state>` —`fresh` o `reviewed`— que compara el tip del
   **propio borrador** (el `tip <sha>` de su bloque de instrucciones) contra el marcador de la

@@ -3,6 +3,7 @@ import {invokeGitReview, InvokeOptions} from "../cli/invoke";
 import {MutationLock} from "../review/mutationLock";
 import {ReviewStateManager} from "../review/state";
 import {captureToken, tokenStillValid} from "../review/staleGuard";
+import {STALE} from "../review/userCopy";
 
 /** El stderr de la CLI, aplanado a una línea para el toast del editor. */
 function message(stderr: string): string {
@@ -84,7 +85,7 @@ export async function saveReview(
             // Informativo, no error: nadie hizo nada mal, el mundo cambio
             // debajo del dialogo mientras esperaba la confirmacion.
             void vscode.window.showInformationMessage(
-                "The review state changed before the save ran; nothing was saved."
+                STALE
             );
             return;
         }
@@ -96,7 +97,7 @@ export async function saveReview(
             // evita el fallo silencioso.
             const text = message(result.stderr);
             void vscode.window.showErrorMessage(
-                text.length > 0 ? text : "git review save failed."
+                text.length > 0 ? text : "Could not pause the review."
             );
         }
     });

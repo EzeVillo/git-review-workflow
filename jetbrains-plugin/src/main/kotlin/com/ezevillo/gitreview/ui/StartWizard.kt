@@ -212,7 +212,7 @@ object StartWizard {
         val layoutIdx = UiMessages.choose(
             ctx.project,
             UserCopy.START_LAYOUT_PLACEHOLDER,
-            UserCopy.START_LAYOUT_TITLE,
+            UserCopy.startLayoutTitle(ctx.branch),
             labels,
         )
         if (layoutIdx < 0) return
@@ -488,16 +488,9 @@ object StartWizard {
             return
         }
 
-        val args = intentToArgs(intent, branch)
-        if (!UiMessages.confirm(
-                project,
-                UserCopy.startConfirmTitle(branch, layout),
-                UserCopy.startConfirmDetail(args, base),
-                UserCopy.START_CONFIRM_BUTTON,
-            )
-        ) {
-            return
-        }
+        // Sin confirmacion: el asistente ya pregunto cuatro cosas y elegir la
+        // forma de lectura -- el paso anterior, cuyo titulo nombra la rama -- ES
+        // arrancar. Ver UserCopy.startLayoutTitle.
 
         MutationActions(project, service).runStart(intent, branch) { result ->
             when (result) {
@@ -509,7 +502,7 @@ object StartWizard {
                 }
 
                 StartRunResult.Busy -> UiMessages.info(project, UserCopy.DISCARD_BUSY)
-                StartRunResult.Stale -> UiMessages.info(project, UserCopy.START_STALE_RUN)
+                StartRunResult.Stale -> UiMessages.info(project, UserCopy.STALE)
                 StartRunResult.NoCwd -> UiMessages.error(project, UserCopy.NO_SOLE_ROOT)
                 is StartRunResult.Network -> {
                     val text = result.stderr.trim().ifEmpty { UserCopy.START_FAILED }

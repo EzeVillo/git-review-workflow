@@ -995,7 +995,7 @@ class PanelRenderer(
      */
     private fun chipLabel(text: String): JComponent {
         val solid = text == "key"
-        val bare = text == "uncovered" || text == "?"
+        val bare = text == "not covered" || text == "?"
         val fg = when {
             solid -> chrome.badgeForeground()
             bare -> chrome.mutedForeground()

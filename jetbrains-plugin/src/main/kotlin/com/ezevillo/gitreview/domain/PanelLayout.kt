@@ -126,8 +126,10 @@ enum class ControlId {
 }
 
 /** Controls that show a confirmation dialog before mutating (canonical `confirms:`). */
+// START_REVIEW no esta: el asistente ya pregunta cuatro cosas y `start` no
+// destruye nada -- se niega solo con el arbol sucio, y una review empezada se
+// cancela con un boton del panel. Ver el canonico, bloque no-review.
 private val CONFIRMING_IDS: Set<ControlId> = setOf(
-    ControlId.START_REVIEW,
     ControlId.CONTINUE_REVIEW,
     ControlId.DISCARD_INVENTORY,
     ControlId.START_FROM_DRAFT,
@@ -469,16 +471,16 @@ private fun tipShort(tip: String?): String? = tip?.take(7)
 
 private fun entryBadge(entry: PanelEntry, mode: ReviewMode?): String? = when {
     entry.essential -> "key"
-    mode == ReviewMode.WALK && !entry.annotated -> "uncovered"
+    mode == ReviewMode.WALK && !entry.annotated -> "not covered"
     entry.banked -> "edits"
     else -> null
 }
 
 private fun inventoryMeta(r: PanelReview): String = when {
-    r.orphan -> "no metadata"
+    r.orphan -> "details are gone"
     r.position != null && r.total != null -> "${r.mode?.id ?: "?"} · ${r.position}/${r.total}"
     r.mode != null -> r.mode.id
-    else -> "no metadata"
+    else -> "details are gone"
 }
 
 private fun inventoryHelp(r: PanelReview): String {
@@ -714,13 +716,13 @@ private fun finishPendingBlocks(model: PanelModel): List<Block> {
     return listOf(
         Block.Banner(
             paragraphs = listOf(
-                "Finished. Your edits are staged on $destination.",
-                "Commit and push them from Source Control. The review branch is kept so you can undo with git review finish --abort, or clean --keep-fixes when you no longer need the undo.",
+                "Your edits are on $destination, staged and ready to commit.",
+                "Commit and push them from Source Control. Until you clean up, this is still undoable.",
             ),
             row = Block.Row(
                 listOf(
-                    ctrl(ControlId.CLEAN_REVIEW, "Clean", Emphasis.PRIMARY, enabled),
-                    ctrl(ControlId.UNDO_FINISH, "Undo finish", Emphasis.SECONDARY, enabled),
+                    ctrl(ControlId.CLEAN_REVIEW, "Done, clean up", Emphasis.PRIMARY, enabled),
+                    ctrl(ControlId.UNDO_FINISH, "Undo", Emphasis.SECONDARY, enabled),
                 ),
             ),
         ),
@@ -773,10 +775,10 @@ private fun setupBlocks(model: PanelModel): List<Block> {
     val remote = model.configuredRemote ?: "origin"
     val enabled = !model.busy
     return listOf(
-        Block.Paragraph("Configure git review for this repository."),
-        Block.Row(listOf(ctrl(ControlId.SET_BASE, "Set the base branch", Emphasis.PRIMARY, enabled))),
+        Block.Paragraph("Which branch do pull requests land on in this repo?"),
+        Block.Row(listOf(ctrl(ControlId.SET_BASE, "Choose the branch", Emphasis.PRIMARY, enabled))),
         Block.Paragraph(
-            "The base is where PRs land in this repo (main, develop, …). Full reviews compare the branch under review against it.",
+            "Reviews compare the branch you are reading against it. Usually main or develop.",
         ),
         Block.Paragraph("Remote: $remote (optional)."),
         Block.Row(listOf(ctrl(ControlId.SET_REMOTE, "Change remote", Emphasis.SECONDARY, enabled))),
@@ -788,7 +790,7 @@ private fun inventoryRows(model: PanelModel): Block.InventoryRows {
     val rows = model.reviews.mapIndexed { index, r ->
         val badges = buildList {
             if (r.current) add("current")
-            if (r.orphan) add("orphan")
+            if (r.orphan) add("broken")
         }
         val canDiscard = r.saved || r.orphan
         val controls = ArrayList<Control>()
@@ -796,8 +798,8 @@ private fun inventoryRows(model: PanelModel): Block.InventoryRows {
             if (r.saved) {
                 val tip = when {
                     r.resumable -> null
-                    r.orphan -> "This branch has no review metadata — use Discard"
-                    else -> "A review of this branch is already active"
+                    r.orphan -> "This review cannot be resumed — its details are gone"
+                    else -> "You are already reviewing this branch"
                 }
                 controls.add(
                     ctrl(
@@ -810,11 +812,11 @@ private fun inventoryRows(model: PanelModel): Block.InventoryRows {
                     ),
                 )
             }
-            val discardLabel = if (r.orphan) "Discard orphan" else "Discard"
+            val discardLabel = if (r.orphan) "Delete leftover" else "Delete"
             val discardTip = if (r.saved) {
-                "git review forget --saved (with confirmation)"
+                "Delete this paused review and its edits"
             } else {
-                "git review clean (with confirmation)"
+                "Delete this leftover branch"
             }
             controls.add(
                 ctrl(
@@ -906,11 +908,11 @@ private fun draftRows(model: PanelModel, spent: Boolean = false): Block.DraftRow
                     if (filled) Emphasis.PRIMARY else Emphasis.SECONDARY,
                     enabled = enabled && d.startable && filled,
                     tooltip = if (!d.startable) {
-                        "This draft has no instruction block, so the CLI cannot tell how it was generated"
+                        "This file lost its header, so it cannot be checked. Delete it and write a new one."
                     } else if (filled) {
-                        "git review walkthrough draft --build, then start"
+                        "Check the order, then start reading"
                     } else {
-                        "Every entry needs a number and a why, and the heads-up needs prose or deleting"
+                        "Every file still needs a number and a line saying why it matters"
                     },
                     index = index,
                 ),
@@ -946,7 +948,7 @@ private fun draftRows(model: PanelModel, spent: Boolean = false): Block.DraftRow
                 Emphasis.ICON,
                 enabled = enabled,
                 accessibleName = "Discard the reading order",
-                tooltip = "git review forget --draft (with confirmation)",
+                tooltip = "Delete this reading order",
                 index = index,
             ),
         )
@@ -988,7 +990,7 @@ private fun fixesRows(model: PanelModel): Block.FixesRows {
             tooltip = if (f.current) {
                 "You are on this branch; switch away first"
             } else {
-                "git review clean --fixes-only (with confirmation)"
+                "Delete this branch of edits"
             },
             index = index,
         )
@@ -1024,7 +1026,7 @@ private fun guideRows(model: PanelModel): Block.GuideRows {
                 Emphasis.ICON,
                 enabled = g.exists,
                 accessibleName = "Open the guide",
-                tooltip = if (g.exists) g.path else "There is no file to open yet",
+                tooltip = if (g.exists) g.path else "There is no guide yet",
                 index = index,
             ),
         )
@@ -1036,7 +1038,7 @@ private fun guideRows(model: PanelModel): Block.GuideRows {
                     Emphasis.ICON,
                     enabled = enabled && g.discardable,
                     accessibleName = "Discard the guide",
-                    tooltip = "git review walkthrough guide --delete (with confirmation)",
+                    tooltip = "Delete your guide",
                     index = index,
                 ),
             )

@@ -59,8 +59,14 @@ public class PanelLayoutFixesTests
         Assert.Equal("You are on this branch; switch away first", discard.Tooltip);
     }
 
+    /// <summary>
+    /// El tooltip nombra lo que le pasa a ESTA rama, no el comando que lo hace.
+    /// Decia "git review clean --fixes-only (with confirmation)": la sintaxis de
+    /// una herramienta que quien usa el panel eligio no usar, en el unico lugar
+    /// donde el producto puede explicar sin gastar ancho.
+    /// </summary>
     [Fact]
-    public void Every_other_row_offers_the_discard_naming_the_verb()
+    public void Every_other_row_offers_the_discard_naming_what_it_deletes()
     {
         var rows = Rows(PanelFixtures.NoReviewFixes());
         foreach (var row in new[] { rows[0], rows[2], rows[3] })
@@ -68,7 +74,7 @@ public class PanelLayoutFixesTests
             var discard = Assert.Single(row.Controls);
             Assert.Equal(ControlId.DiscardFixes, discard.Id);
             Assert.True(discard.Enabled, $"{row.Name} should offer the discard");
-            Assert.Equal("git review clean --fixes-only (with confirmation)", discard.Tooltip);
+            Assert.Equal("Delete this branch of edits", discard.Tooltip);
             Assert.Equal(Emphasis.Icon, discard.Emphasis);
         }
     }
@@ -106,12 +112,15 @@ public class PanelLayoutFixesTests
     }
 
     [Fact]
-    public void The_bulk_confirmation_says_review_sessions_are_left_alone()
+    public void The_bulk_confirmation_says_the_review_in_progress_is_not_touched()
     {
         var copy = HousekeepingLogic.ConfirmCopyFor(new HousekeepingAction(HousekeepingKind.CleanFixesOneAll));
-        Assert.Contains("git review clean --fixes-only", copy.Detail);
-        Assert.Contains("Review sessions", copy.Detail);
-        Assert.Equal("Discard All", copy.Button);
+        Assert.Contains("never committed anywhere else", copy.Detail);
+        // El alcance se sigue afirmando -- es lo que hace seguro este boton --,
+        // dicho por lo que el revisor tiene delante y no por el glob review/*.
+        Assert.Contains("reviewing right now is touched", copy.Detail);
+        Assert.DoesNotContain("git review clean", copy.Detail);
+        Assert.Equal("Delete all", copy.Button);
     }
 
     [Fact]
@@ -151,15 +160,15 @@ public class PanelLayoutFixesTests
     {
         var unmerged = HousekeepingLogic.ConfirmCopyFor(new HousekeepingAction(
             HousekeepingKind.CleanFixesOne, "feature/x", FixesState: FixesState.Unmerged));
-        Assert.Contains("git review clean --fixes-only feature/x", unmerged.Detail);
         Assert.Contains("the base branch does not have", unmerged.Detail);
-        Assert.DoesNotContain("left standing", unmerged.Detail);
-        Assert.Equal("Discard", unmerged.Button);
+        Assert.DoesNotContain("undo the finish", unmerged.Detail);
+        Assert.DoesNotContain("git review clean", unmerged.Detail);
+        Assert.Equal("Delete", unmerged.Button);
 
         var empty = HousekeepingLogic.ConfirmCopyFor(new HousekeepingAction(
             HousekeepingKind.CleanFixesOne, "feature/x", FixesState: FixesState.Empty, Session: true));
         Assert.Contains("no work of yours is lost", empty.Detail);
-        Assert.Contains("review/feature/x is left standing", empty.Detail);
+        Assert.Contains("You can still undo the finish afterwards.", empty.Detail);
     }
 
     [Fact]

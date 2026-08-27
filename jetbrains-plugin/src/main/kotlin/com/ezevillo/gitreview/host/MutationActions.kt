@@ -128,7 +128,7 @@ class MutationActions(
                     }
                     SimpleOutcome.Stale -> {
                         if (showStale) {
-                            UiMessages.info(project, UserCopy.staleMessage(action, force = isForce(params)))
+                            UiMessages.info(project, UserCopy.STALE)
                         }
                         onDone?.invoke(MutationDone(ok = false, stale = true))
                     }
@@ -212,9 +212,6 @@ class MutationActions(
     fun requireReadable(): Boolean = isReviewReadable(service.currentState().situation)
 
     private fun cwdOrNull(): String? = pickSoleGitRoot(project)?.rootPath
-
-    private fun isForce(params: ActionParams): Boolean =
-        (params as? ActionParams.UndoFinish)?.force == true
 }
 
 /** Result of a [MutationActions.runSimple] attempt, delivered on the EDT. */

@@ -122,9 +122,9 @@ describe("US1: ver donde estoy en el walkthrough", function () {
         ]);
         assert.strictEqual(picks[1].description, "current");
         assert.strictEqual(picks[2].description, "key");
-        assert.strictEqual(picks[7].description, "uncovered");
-        assert.strictEqual(picks[8].description, "uncovered");
-        assert.strictEqual(picks[9].description, "uncovered");
+        assert.strictEqual(picks[7].description, "not covered");
+        assert.strictEqual(picks[8].description, "not covered");
+        assert.strictEqual(picks[9].description, "not covered");
     });
 
     it("mode = whole sin walkthrough: sin cursor ni entrada actual, pero con el listado de archivos (US1 escenario 3 / 004 US1)", async () => {

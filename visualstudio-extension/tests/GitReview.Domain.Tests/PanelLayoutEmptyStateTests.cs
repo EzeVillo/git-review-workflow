@@ -22,7 +22,7 @@ public class PanelLayoutEmptyStateTests
         var primary = layout.CollectControls().Where(c => c.Emphasis == Emphasis.Primary).ToList();
         Assert.Single(primary);
         Assert.Equal(ControlId.SetBase, primary[0].Id);
-        Assert.Equal("Set the base branch", primary[0].Label);
+        Assert.Equal("Choose the branch", primary[0].Label);
     }
 
     [Fact]
@@ -138,7 +138,7 @@ public class PanelLayoutEmptyStateTests
     }
 
     [Fact]
-    public void An_orphan_row_offers_discard_orphan_and_no_continue()
+    public void A_broken_row_offers_delete_leftover_and_no_continue()
     {
         var branches = Porcelain.ParseListPorcelain("branch\treview-saved/gone\t1\t0\t1");
         var model = PanelModelBuilder.BuildPanelModel(
@@ -147,12 +147,12 @@ public class PanelLayoutEmptyStateTests
         var row = PanelLayoutBuilder.PanelLayout(model)
             .Blocks.OfType<Block.InventoryRows>().First().Rows.Single();
 
-        Assert.Contains("orphan", row.Badges);
-        Assert.Equal("no metadata", row.Meta);
+        Assert.Contains("broken", row.Badges);
+        Assert.Equal("details are gone", row.Meta);
         var continueControl = row.Controls.First(c => c.Id == ControlId.ContinueReview);
         Assert.False(continueControl.Enabled);
-        Assert.Equal("This branch has no review metadata — use Discard", continueControl.Tooltip);
-        Assert.Equal("Discard orphan", row.Controls.First(c => c.Id == ControlId.DiscardInventory).Label);
+        Assert.Equal("This review cannot be resumed — its details are gone", continueControl.Tooltip);
+        Assert.Equal("Delete leftover", row.Controls.First(c => c.Id == ControlId.DiscardInventory).Label);
     }
 
     /// <summary>
@@ -174,7 +174,7 @@ public class PanelLayoutEmptyStateTests
 
         var continueControl = saved.Controls.First(c => c.Id == ControlId.ContinueReview);
         Assert.False(continueControl.Enabled);
-        Assert.Equal("A review of this branch is already active", continueControl.Tooltip);
+        Assert.Equal("You are already reviewing this branch", continueControl.Tooltip);
     }
 
     [Fact]

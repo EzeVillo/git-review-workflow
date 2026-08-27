@@ -235,7 +235,7 @@ public class PanelModelTests
         var entry = new EntryRecord(2, Unquote.ToPathRef("src/a.kt"), Essential: true, Annotated: false, Banked: true);
         var label = PanelModelBuilder.EntryPickLabel(entry, 2, "Fix the thing");
         Assert.Equal("02  src/a.kt  Fix the thing", label.Label);
-        Assert.Equal("current · key · uncovered · banked edits", label.Description);
+        Assert.Equal("current · key · not covered · saved edits", label.Description);
 
         var plain = PanelModelBuilder.EntryPickLabel(new EntryRecord(10, "abc1234"), 1, null);
         Assert.Equal("10  abc1234", plain.Label);

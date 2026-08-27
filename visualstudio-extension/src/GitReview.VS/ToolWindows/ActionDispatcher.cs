@@ -1052,9 +1052,9 @@ public sealed class ActionDispatcher
             new[]
             {
                 "Walkthrough — guided reading order if the upper tip has a walkthrough",
-                "Walkthrough — keys only — only entries marked key (--keys)",
-                "Commit by commit — one commit at a time (--step)",
-                "Whole diff — entire diff at once (--no-walk)",
+                "Walkthrough — keys only — only entries marked key",
+                "Commit by commit — one commit at a time",
+                "Whole diff — entire diff at once",
             });
         if (idx < 0) return;
         var layout = idx switch
@@ -1185,7 +1185,7 @@ public sealed class ActionDispatcher
         await _panel.RefreshAsync().ConfigureAwait(true);
         if (!StaleGuard.TokenStillValid(token, _panel.State.Current))
         {
-            GitReviewDialogs.Info(UserCopy.StaleMessage(action, IsForce(params_)));
+            GitReviewDialogs.Info(UserCopy.Stale);
             return null;
         }
 
@@ -1210,9 +1210,6 @@ public sealed class ActionDispatcher
         title.EndsWith("?", StringComparison.Ordinal)
             ? title.Substring(0, title.Length - 1) + "…"
             : title;
-
-    private static bool IsForce(ActionParams? params_) =>
-        params_ is ActionParams.UndoFinish { Force: true };
 
     private static string DisplayOf(object id) =>
         id is PathRef pathRef ? pathRef.Display : id.ToString() ?? "";

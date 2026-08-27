@@ -4,6 +4,7 @@ import {MutationLock} from "../review/mutationLock";
 import {ReviewStateManager} from "../review/state";
 import {captureToken, tokenStillValid} from "../review/staleGuard";
 import {resumableSourceAt} from "../views/panelModel";
+import {STALE} from "../review/userCopy";
 
 /** El stderr de la CLI, aplanado a una línea para el toast del editor. */
 function message(stderr: string): string {
@@ -92,7 +93,7 @@ export async function continueReview(
 
         if (stale || result === undefined) {
             void vscode.window.showInformationMessage(
-                "The review state changed before continue ran; nothing was resumed."
+                STALE
             );
             return;
         }
@@ -105,7 +106,7 @@ export async function continueReview(
             // un toast genérico evita el fallo silencioso.
             const text = message(result.stderr);
             void vscode.window.showErrorMessage(
-                text.length > 0 ? text : "git review continue failed."
+                text.length > 0 ? text : "Could not resume the review."
             );
         }
     });

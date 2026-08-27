@@ -260,8 +260,8 @@ fun entryPickLabel(entry: EntryRecord, position: Int?, subject: String?): PickLa
     val marks = ArrayList<String>()
     if (entry.position == position) marks.add("current")
     if (entry.essential == true) marks.add("key")
-    if (entry.annotated == false) marks.add("uncovered")
-    if (entry.banked == true) marks.add("banked edits")
+    if (entry.annotated == false) marks.add("not covered")
+    if (entry.banked == true) marks.add("saved edits")
     val id = displayOf(entry.id)
     val label = if (!subject.isNullOrEmpty()) {
         "${pad(entry.position)}  $id  $subject"

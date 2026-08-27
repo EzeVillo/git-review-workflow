@@ -64,7 +64,7 @@ private val OFFER_META: Map<OfferId, OfferMeta> = mapOf(
         ReviewLayout.WALK,
         DraftStep.UPDATE,
     ),
-    OfferId.STEP to OfferMeta("Commit by commit", "one commit at a time (--step)", ReviewLayout.STEP),
+    OfferId.STEP to OfferMeta("Commit by commit", "one commit at a time", ReviewLayout.STEP),
     OfferId.WHOLE to OfferMeta("Whole diff", "entire diff at once", ReviewLayout.WHOLE),
 )
 

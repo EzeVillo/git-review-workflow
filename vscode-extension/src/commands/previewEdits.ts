@@ -21,7 +21,7 @@ export async function previewEdits(
     const args = stat ? ["--stat"] : [];
     const result = await invokeGitReview("preview", args, getInvokeOptions());
     if (result.exitCode !== 0) {
-        const text = result.stderr.trim() || result.stdout.trim() || "git review preview failed.";
+        const text = result.stderr.trim() || result.stdout.trim() || "Could not preview your edits.";
         void vscode.window.showErrorMessage(text);
         return;
     }

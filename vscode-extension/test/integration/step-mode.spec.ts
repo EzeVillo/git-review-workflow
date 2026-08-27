@@ -77,7 +77,7 @@ describe("US6: revisar commit por commit", function () {
 
         // Y en el selector, el commit con ediciones guardadas se distingue con texto.
         const picks = state.entries.map((entry) => entryPickLabel(entry, state.state?.position));
-        assert.strictEqual(picks[0].description, "banked edits");
+        assert.strictEqual(picks[0].description, "saved edits");
         assert.strictEqual(picks[1].description, "current");
         assert.strictEqual(picks[0].label, `01  ${state.entries[0].id as string}`);
     });

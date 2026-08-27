@@ -978,7 +978,7 @@ public sealed class PanelView : System.Windows.Controls.UserControl
     private Border Chip(string text)
     {
         var solid = text == "key";
-        var bare = text is "uncovered" or "?";
+        var bare = text is "not covered" or "?";
         return new Border
         {
             VerticalAlignment = VerticalAlignment.Center,

@@ -343,7 +343,7 @@ public class PanelLayoutContractTests
         // rows[2] is 1/1 with a known origin and range: the only one that starts.
         var filled = rows[2].Controls.First(c => c.Id == ControlId.StartFromDraft);
         Assert.True(filled.Enabled);
-        Assert.Equal("git review walkthrough draft --build, then start", filled.Tooltip);
+        Assert.Equal(canonical["startFromDraft"].Tooltip, filled.Tooltip);
 
         var busy = PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewDraftsBusy())
             .Blocks.OfType<Block.DraftRows>().Single().Rows;
@@ -448,6 +448,7 @@ public class PanelLayoutContractTests
         string Emphasis,
         string? EmphasisUnfilled,
         bool Confirms,
+        string? Tooltip,
         string? TooltipDisabled,
         string? TooltipUnfilled);
 
@@ -471,6 +472,7 @@ public class PanelLayoutContractTests
                 Scalar("emphasis")!,
                 Scalar("emphasis_unfilled"),
                 Scalar("confirms") == "true",
+                Scalar("tooltip"),
                 Scalar("tooltip_disabled"),
                 Scalar("tooltip_unfilled"));
         }

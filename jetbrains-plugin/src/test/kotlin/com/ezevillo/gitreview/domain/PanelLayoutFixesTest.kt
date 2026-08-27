@@ -61,13 +61,13 @@ class PanelLayoutFixesTest {
     }
 
     @Test
-    fun `every other row offers the discard, naming the verb`() {
+    fun `every other row offers the discard, naming what it deletes`() {
         val rows = rows(PanelFixtures.noReviewFixes())
         for (row in listOf(rows[0], rows[2], rows[3])) {
             val discard = row.controls.single()
             assertEquals(ControlId.DISCARD_FIXES, discard.id)
             assertTrue(discard.enabled, "${row.name} should offer the discard")
-            assertEquals("git review clean --fixes-only (with confirmation)", discard.tooltip)
+            assertEquals("Delete this branch of edits", discard.tooltip)
             assertEquals(Emphasis.ICON, discard.emphasis)
         }
     }
@@ -108,11 +108,14 @@ class PanelLayoutFixesTest {
     }
 
     @Test
-    fun `the bulk confirmation says review sessions are left alone`() {
+    fun `the bulk confirmation says the review in progress is not touched`() {
         val copy = confirmCopyFor(HousekeepingAction(HousekeepingKind.CLEAN_FIXES_ONE_ALL))
-        assertTrue(copy.detail.contains("git review clean --fixes-only"))
-        assertTrue(copy.detail.contains("Review sessions"))
-        assertEquals("Discard All", copy.button)
+        assertTrue(copy.detail.contains("never committed anywhere else"))
+        // El alcance se sigue afirmando -- es lo que hace seguro este boton --,
+        // dicho por lo que el revisor tiene delante y no por el glob review/*.
+        assertTrue(copy.detail.contains("reviewing right now is touched"))
+        assertFalse(copy.detail.contains("git review clean"))
+        assertEquals("Delete all", copy.button)
     }
 
     @Test
@@ -161,10 +164,10 @@ class PanelLayoutFixesTest {
                 fixesState = FixesState.UNMERGED,
             ),
         )
-        assertTrue(unmerged.detail.contains("git review clean --fixes-only feature/x"))
         assertTrue(unmerged.detail.contains("the base branch does not have"))
-        assertFalse(unmerged.detail.contains("left standing"))
-        assertEquals("Discard", unmerged.button)
+        assertFalse(unmerged.detail.contains("undo the finish"))
+        assertFalse(unmerged.detail.contains("git review clean"))
+        assertEquals("Delete", unmerged.button)
 
         val empty = confirmCopyFor(
             HousekeepingAction(
@@ -175,7 +178,7 @@ class PanelLayoutFixesTest {
             ),
         )
         assertTrue(empty.detail.contains("no work of yours is lost"))
-        assertTrue(empty.detail.contains("review/feature/x is left standing"))
+        assertTrue(empty.detail.contains("You can still undo the finish afterwards."))
     }
 
     @Test

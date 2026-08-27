@@ -10,6 +10,7 @@ import {
 } from "../review/housekeeping";
 import {ReviewStateManager} from "../review/state";
 import {captureToken, StateToken, tokenStillValid} from "../review/staleGuard";
+import {STALE} from "../review/userCopy";
 
 function flat(stderr: string): string {
     return stderr.split("\n").map((line) => line.trim()).filter((line) => line.length > 0).join(" ");
@@ -64,7 +65,7 @@ export async function runHousekeeping(
 
         if (stale) {
             void vscode.window.showInformationMessage(
-                "The review state changed before the action ran; nothing was changed."
+                STALE
             );
             return;
         }

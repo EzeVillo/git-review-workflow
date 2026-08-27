@@ -18,6 +18,7 @@ import {MutationLock} from "../review/mutationLock";
 import {createGuideArgs, deleteGuideArgs} from "../review/reviewIntent";
 import {ReviewStateManager} from "../review/state";
 import {guideAt} from "../views/panelModel";
+import {STALE} from "../review/userCopy";
 
 /** El stderr de la CLI, aplanado a una línea (mismo criterio que el resto). */
 function flatten(stderr: string): string {
@@ -94,7 +95,7 @@ export async function createGuide(
         if (result.errorCode || result.exitCode !== 0) {
             const text = flatten(result.stderr);
             void vscode.window.showErrorMessage(
-                text.length > 0 ? text : "git review walkthrough guide failed."
+                text.length > 0 ? text : "Could not create the guide."
             );
             return;
         }
@@ -139,7 +140,7 @@ export async function discardGuide(
         "Discard the authoring guide you wrote?",
         {
             modal: true,
-            detail: `git review walkthrough guide --delete\n\nThis deletes ${guide.path}. It cannot be undone.`,
+            detail: `This deletes ${guide.path}. It cannot be undone.`,
         },
         "Discard"
     );
@@ -151,7 +152,7 @@ export async function discardGuide(
         const fresh = rowAt(stateManager, index);
         if (fresh === undefined || fresh.kind !== "own" || fresh.state === "absent") {
             void vscode.window.showInformationMessage(
-                "The guides changed before discard ran; nothing was deleted."
+                STALE
             );
             return;
         }
@@ -163,7 +164,7 @@ export async function discardGuide(
         if (result.errorCode || result.exitCode !== 0) {
             const text = flatten(result.stderr);
             void vscode.window.showErrorMessage(
-                text.length > 0 ? text : "git review walkthrough guide --delete failed."
+                text.length > 0 ? text : "Could not delete the guide."
             );
         }
     });

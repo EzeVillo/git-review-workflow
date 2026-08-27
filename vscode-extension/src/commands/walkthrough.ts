@@ -85,7 +85,7 @@ export async function walkthroughInit(
         if (result.exitCode !== 0) {
             const err = result.stderr.trim() || result.stdout.trim();
             void vscode.window.showErrorMessage(
-                err.length > 0 ? err : "git review walkthrough init failed."
+                err.length > 0 ? err : "Could not create the walkthrough."
             );
             return;
         }
@@ -99,10 +99,10 @@ export async function walkthroughBuild(
     getInvokeOptions: () => InvokeOptions
 ): Promise<void> {
     const answer = await vscode.window.showWarningMessage(
-        "Rebuild the walkthrough from your filled-in draft?",
+        "Check and renumber the walkthrough?",
         {
             modal: true,
-            detail: "Validates .review/walkthrough.md, reorders entries and renumbers 1..N (git review walkthrough build).",
+            detail: "This puts the files in the order you wrote and numbers them 1 to N. If something is missing, nothing changes and you will see what to fix.",
         },
         "Build"
     );
@@ -124,7 +124,7 @@ export async function walkthroughBuild(
         );
         if (result && result.exitCode !== 0) {
             void vscode.window.showErrorMessage(
-                result.stderr.trim() || "git review walkthrough build failed."
+                result.stderr.trim() || "Could not build the walkthrough."
             );
             return;
         }

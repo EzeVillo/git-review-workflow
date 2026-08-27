@@ -161,7 +161,7 @@ export function panelHtml(nonce: string): string {
     background: var(--vscode-badge-background);
     color: var(--vscode-badge-foreground);
   }
-  /* "uncovered" no es un estado del revisor ni del autor del walkthrough: es
+  /* "not covered" no es un estado del revisor ni del autor del walkthrough: es
      un aviso, del mismo color que usan las notas del panel. */
   .badge.uncovered {
     border-color: transparent;
@@ -306,7 +306,7 @@ export function panelHtml(nonce: string): string {
     margin-bottom: .35em;
   }
   /* Acciones del inventario: a la izquierda, ancho por el label (no flex:1 a
-     todo el sidebar). "Discard orphan" es el más largo; el tope deja aire
+     todo el sidebar). "Delete leftover" es el más largo; el tope deja aire
      sin forzar una sola columna. */
   .rev-actions {
     display: flex;
@@ -725,7 +725,7 @@ export function panelHtml(nonce: string): string {
    *  re-deriva (contracts/list-porcelain.md), a diferencia de la barra. */
   function reviewMeta(review) {
     if (review.orphan) {
-      return "no metadata";
+      return "details are gone";
     }
     if (review.position !== undefined && review.total !== undefined) {
       return review.mode + " · " + review.position + "/" + review.total;
@@ -760,7 +760,7 @@ export function panelHtml(nonce: string): string {
     const head = el("div", "rev-head");
     head.appendChild(el("span", "rev-name", review.name));
     if (review.current) { head.appendChild(el("span", "badge", "current")); }
-    if (review.orphan) { head.appendChild(el("span", "badge", "orphan")); }
+    if (review.orphan) { head.appendChild(el("span", "badge", "broken")); }
 
     // Discard: saved (incl. orphan saved) o orphan no-saved. Nunca la current
     // activa legible (abort cubre eso). Continue solo en saved.
@@ -785,16 +785,16 @@ export function panelHtml(nonce: string): string {
         go.disabled = model.busy || !review.resumable;
         if (!review.resumable) {
           go.title = review.orphan
-            ? "This branch has no review metadata — use Discard"
-            : "A review of this branch is already active";
+            ? "This review cannot be resumed — its details are gone"
+            : "You are already reviewing this branch";
         }
         actions.appendChild(go);
       }
-      const discard = button(review.orphan ? "Discard orphan" : "Discard", "discardInventory", null, null, index);
+      const discard = button(review.orphan ? "Delete leftover" : "Delete", "discardInventory", null, null, index);
       discard.disabled = model.busy;
       discard.title = review.saved
-        ? "git review forget --saved (with confirmation)"
-        : "git review clean (with confirmation)";
+        ? "Delete this paused review and its edits"
+        : "Delete this leftover branch";
       actions.appendChild(discard);
       box.appendChild(actions);
     }
@@ -834,7 +834,7 @@ export function panelHtml(nonce: string): string {
     rowIcons.appendChild(open);
     const discard = iconButton("trash", "discardDraft", "Discard the reading order", index);
     discard.disabled = model.busy;
-    discard.title = "git review forget --draft (with confirmation)";
+    discard.title = "Delete this reading order";
     rowIcons.appendChild(discard);
     head.appendChild(rowIcons);
     // El badge cierra la linea, como en toda fila del panel: los estados de las
@@ -890,10 +890,10 @@ export function panelHtml(nonce: string): string {
     const go = button("Validate and start", "startFromDraft", filled ? "primary" : null, null, index);
     go.disabled = model.busy || !draft.startable || !filled;
     go.title = !draft.startable
-      ? "This draft has no instruction block, so the CLI cannot tell how it was generated"
+      ? "This file lost its header, so it cannot be checked. Delete it and write a new one."
       : filled
-        ? "git review walkthrough draft --build, then start"
-        : "Every entry needs a number and a why, and the heads-up needs prose or deleting";
+        ? "Check the order, then start reading"
+        : "Every file still needs a number and a line saying why it matters";
     actions.appendChild(go);
 
     box.appendChild(actions);
@@ -951,12 +951,12 @@ export function panelHtml(nonce: string): string {
     open.disabled = !guide.exists;
     open.title = guide.exists
       ? guide.path
-      : "There is no file to open yet";
+      : "There is no guide yet";
     rowIcons.appendChild(open);
     if (guide.kind === "own") {
       const discard = iconButton("trash", "discardGuide", "Discard the guide", index);
       discard.disabled = model.busy || !guide.discardable;
-      discard.title = "git review walkthrough guide --delete (with confirmation)";
+      discard.title = "Delete your guide";
       rowIcons.appendChild(discard);
     }
     head.appendChild(rowIcons);
@@ -1184,11 +1184,11 @@ export function panelHtml(nonce: string): string {
    */
   function renderSetup(model) {
     const box = empty(
-      "Configure git review for this repository.",
-      button("Set the base branch", "setBase", "primary")
+      "Which branch do pull requests land on in this repo?",
+      button("Choose the branch", "setBase", "primary")
     );
     box.appendChild(el("p", null,
-      "The base is where PRs land in this repo (main, develop, …). Full reviews compare the branch under review against it."));
+      "Reviews compare the branch you are reading against it. Usually main or develop."));
     const remote = model.configuredRemote !== undefined ? model.configuredRemote : "origin";
     box.appendChild(el("p", null, "Remote: " + remote + " (optional)."));
     const changeRemote = button("Change remote", "setRemote", null);
@@ -1293,7 +1293,7 @@ export function panelHtml(nonce: string): string {
     discard.disabled = model.busy || fixes.current;
     discard.title = fixes.current
       ? "You are on this branch; switch away first"
-      : "git review clean --fixes-only (with confirmation)";
+      : "Delete this branch of edits";
     rowIcons.appendChild(discard);
     head.appendChild(rowIcons);
     head.appendChild(el("span", "badge", fixesBadge(fixes.state)));
@@ -1403,18 +1403,16 @@ export function panelHtml(nonce: string): string {
         }
         const notice = el("div", "note finish-banner");
         notice.appendChild(el("p", null,
-          "Finished. Your edits are staged on " + destination + "."));
+          "Your edits are on " + destination + ", staged and ready to commit."));
         notice.appendChild(el("p", null,
-          "Commit and push them from Source Control. The review branch is kept so you can undo with git review finish --abort, or clean --keep-fixes when you no longer need the undo."));
+          "Commit and push them from Source Control. Until you clean up, this is still undoable."));
         const actions = el("div", "row");
-        const clean = button("Clean", "cleanReview", "primary");
+        const clean = button("Done, clean up", "cleanReview", "primary");
         clean.disabled = model.busy;
-        clean.title = pending
-          ? "git review clean --keep-fixes " + source
-          : "git review clean --keep-fixes";
-        const undo = button("Undo finish", "undoFinish", null);
+        clean.title = "Delete the review branch; keep your edits";
+        const undo = button("Undo", "undoFinish", null);
         undo.disabled = model.busy;
-        undo.title = "git review finish --abort";
+        undo.title = "Put the edits back and keep reviewing";
         actions.appendChild(clean);
         actions.appendChild(undo);
         notice.appendChild(actions);
@@ -1536,12 +1534,12 @@ export function panelHtml(nonce: string): string {
     }
     // "key" es el marcador del propio walkthrough (la línea "> key"), no una
     // etiqueta inventada acá; "edits" sí necesita el título, porque abreviado
-    // no dice cuáles son esas ediciones; "uncovered" sólo aplica en walk — en
+    // no dice cuáles son esas ediciones; "not covered" sólo aplica en walk — en
     // step "annotated" no significa nada y siempre vale true.
     if (model.current.essential) {
       head.appendChild(el("span", "badge key", "key"));
     } else if (model.mode === "walk" && !model.current.annotated) {
-      head.appendChild(el("span", "badge uncovered", "uncovered"));
+      head.appendChild(el("span", "badge uncovered", "not covered"));
     } else if (model.current.banked) {
       const banked = el("span", "badge", "edits");
       banked.title = "This entry has banked edits";

@@ -76,7 +76,7 @@ describe("US1 (006): housekeeping forget and clean", function () {
         const index = state.branches.findIndex((b) => b.name === `review-saved/${branch}`);
         assert.ok(index >= 0);
 
-        await withScriptedConfirm("Discard", () =>
+        await withScriptedConfirm("Delete", () =>
             vscode.commands.executeCommand("gitReview.discardInventory", index)
         );
 

@@ -9,6 +9,25 @@
 // catch.
 
 /**
+ * Lo que se dice cuando el testigo de estado (staleGuard.ts) rechaza una
+ * mutación porque el repositorio cambió entre la confirmación y la invocación.
+ * **Uno solo para los ocho comandos**, y antes eran catorce literales.
+ *
+ * Las catorce variantes decían la misma cosa con el verbo cambiado — "nothing
+ * was finished", "nothing was saved", "nothing was undone" —, y ese verbo no es
+ * información: es el botón que el revisor acaba de apretar, que todavía tiene
+ * bajo el cursor. Lo único que no puede deducir es POR QUÉ no pasó nada, y eso
+ * es idéntico en los catorce casos.
+ *
+ * No lleva "try again": el panel ya se refrescó solo, así que el estado que se
+ * ve al leer el mensaje es el nuevo. Decir que reintente sería pedirle que
+ * repita una decisión que quizá el estado nuevo ya volvió innecesaria.
+ *
+ * Byte for byte identical to UserCopy.kt and UserCopy.cs.
+ */
+export const STALE = "The repository changed while you were deciding, so nothing happened.";
+
+/**
  * What "Copy for agent" puts on the clipboard for one draft row.
  *
  * A pointer, not a prompt: the brief lives inside the file, in the instruction
@@ -61,8 +80,8 @@ export function walkthroughAgentPrompt(path: string): string {
  */
 export const WALKTHROUGH_EXISTS_TITLE = "This branch already has a walkthrough.";
 export const WALKTHROUGH_EXISTS_DETAIL =
-	"Update keeps every entry whose file is still in range - its number, its why and its > key - and adds the files that are new.\n\n" +
-	"Start over runs git review walkthrough init --force: it replaces .review/walkthrough.md with a blank skeleton. The file is tracked, so git checkout -- brings the old one back.";
+	"Update keeps everything you already wrote for files that are still in the PR, and adds the ones that are new.\n\n" +
+	"Start over replaces it with a blank list. The file is committed to the PR, so git checkout -- .review/walkthrough.md brings the old one back.";
 /**
  * Del lado del REVISOR no hay par equivalente, y la asimetría es deliberada.
  *
@@ -79,5 +98,22 @@ export const WALKTHROUGH_EXISTS_DETAIL =
  * git y no hay vuelta atrás. Un botón para eso no va en un paso por el que se
  * pasa de largo; va en Discard, que confirma y cuyo sujeto es el archivo.
  */
+/**
+ * El ÚLTIMO paso del asistente de inicio, y por eso lleva la rama: elegir una
+ * forma de lectura ahí ya arranca la review.
+ *
+ * La frase es la que decía la pantalla de confirmación que este paso reemplaza
+ * ("Start reviewing feature/x, as a walkthrough?"). Esa pantalla repetía las
+ * cuatro respuestas que el asistente ya tenía y agregaba el comando, sobre un
+ * verbo que no destruye nada — `start` se niega solo con el árbol sucio, y una
+ * review empezada se cancela con un botón del panel. Un cartel que aparece
+ * siempre deja de leerse, y entonces tampoco se lee el que importa.
+ *
+ * Byte for byte identical to UserCopy.kt and UserCopy.cs.
+ */
+export function startLayoutTitle(branch: string): string {
+	return `Start reviewing ${branch} — how do you want to read it?`;
+}
+
 export const WALKTHROUGH_UPDATE_BUTTON = "Update";
 export const WALKTHROUGH_START_OVER_BUTTON = "Start over";

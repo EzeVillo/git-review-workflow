@@ -11,6 +11,23 @@ object UserCopy {
 
     const val DISCARD_BUSY = MutationLock.DISCARD_REASON
 
+    /**
+     * Lo que se dice cuando el testigo de estado (StaleGuard) rechaza una
+     * mutacion porque el repositorio cambio entre la confirmacion y la
+     * invocacion. **Uno solo para los ocho comandos**, y antes eran diez.
+     *
+     * Las diez variantes decian la misma cosa con el verbo cambiado -- "nothing
+     * was finished", "nothing was saved", "nothing was undone" --, y ese verbo
+     * no es informacion: es el boton que el revisor acaba de apretar, que
+     * todavia tiene bajo el cursor. Lo unico que no puede deducir es POR QUE no
+     * paso nada, y eso es identico en los diez casos.
+     *
+     * No lleva "try again": el panel ya se refresco solo, asi que el estado que
+     * se ve al leer el mensaje es el nuevo. Decir que reintente seria pedirle
+     * que repita una decision que quiza el estado nuevo ya volvio innecesaria.
+     */
+    const val STALE = "The repository changed while you were deciding, so nothing happened."
+
     // --- Empty / config pickers -------------------------------------------------
 
     const val NO_BRANCHES_FOR_BASE = "No branches to pick a base from were found."
@@ -86,15 +103,23 @@ object UserCopy {
     const val START_ORIGIN_PLACEHOLDER = "Remote, local, or offline"
     const val START_RANGE_TITLE = "Start a review — range"
     const val START_RANGE_PLACEHOLDER = "Full range, or only what is new since the last review"
+    /**
+     * El ULTIMO paso del asistente, y por eso lleva la rama: elegir una forma de
+     * lectura aca ya arranca la review. La frase es la que decia la pantalla de
+     * confirmacion que este paso reemplaza.
+     */
+    fun startLayoutTitle(branch: String): String =
+        "Start reviewing $branch — how do you want to read it?"
+
+    /** El mismo paso cuando no hay una rama que nombrar (borrador de una fila). */
     const val START_LAYOUT_TITLE = "Start a review — how to read it"
     const val START_LAYOUT_PLACEHOLDER =
         "Walkthrough, commit by commit, keys only, or whole diff"
-    const val START_CONFIRM_BUTTON = "Start the review"
 
     // --- Reviewer's draft walkthrough (011) -------------------------------------
 
-    const val DRAFT_FAILED = "git review walkthrough draft failed."
-    const val DRAFT_BUILD_FAILED = "git review walkthrough draft --build failed."
+    const val DRAFT_FAILED = "Could not draft a reading order."
+    const val DRAFT_BUILD_FAILED = "Could not check your reading order."
     const val DRAFT_KEYS_PLACEHOLDER =
         "Your draft marks key entries: read all of them, or only those"
 
@@ -109,7 +134,7 @@ object UserCopy {
         "Discard the reading order you wrote for $branch?"
 
     fun discardDraftDetail(branch: String, path: String): String =
-        "git review forget --draft $branch\n\nThis deletes $path. It cannot be undone."
+        "This deletes $path. It cannot be undone."
 
     fun discardDraftProgress(branch: String): String =
         "Discarding the reading order for $branch…"
@@ -119,7 +144,7 @@ object UserCopy {
     const val DISCARD_GUIDE_TITLE = "Discard the authoring guide you wrote?"
 
     fun discardGuideDetail(path: String): String =
-        "git review walkthrough guide --delete\n\nThis deletes $path. It cannot be undone."
+        "This deletes $path. It cannot be undone."
 
     const val DISCARD_GUIDE_PROGRESS = "Discarding your authoring guide…"
 
@@ -142,25 +167,12 @@ object UserCopy {
     val RANGE_LABELS: List<Pair<ReviewRange, String>> = listOf(
         ReviewRange.FULL to "Full range — everything since the base branch",
         ReviewRange.DELTA to
-            "Only what is new — commits since your last review of this branch (--delta)",
+            "Only what is new — commits since your last review of this branch",
     )
-
-    fun startConfirmTitle(branch: String, layout: ReviewLayout): String =
-        "Start reviewing $branch, ${layoutSummary(layout)}?"
-
-    fun startConfirmDetail(args: List<String>, base: String?): String {
-        val lines = mutableListOf("git review start ${args.joinToString(" ")}")
-        if (base != null) lines.add("Comparing against $base.")
-        return lines.joinToString("\n")
-    }
 
     fun startingProgress(branch: String): String = "Starting the review of $branch…"
 
-    const val START_STALE_WIZARD =
-        "The repository changed while the wizard was open; nothing was started."
-    const val START_STALE_RUN =
-        "The repository changed before the start ran; nothing was started."
-    const val START_FAILED = "git review start failed."
+    const val START_FAILED = "Could not start the review."
 
     // --- Continue / abort / save ------------------------------------------------
 
@@ -169,27 +181,21 @@ object UserCopy {
         "This switches to review/$source and restores your edits in the working tree."
     const val CONTINUE_BUTTON = "Continue"
     fun continuingProgress(source: String): String = "Continuing the review of $source…"
-    const val CONTINUE_STALE =
-        "The review state changed before continue ran; nothing was resumed."
-    const val CONTINUE_FAILED = "git review continue failed."
+    const val CONTINUE_FAILED = "Could not resume the review."
 
     fun abortTitle(source: String): String = "Cancel the review of $source?"
     const val ABORT_DETAIL =
         "This returns to the branch you started the review from; your uncommitted edits will be discarded."
     const val ABORT_BUTTON = "Cancel Review"
     fun abortingProgress(source: String): String = "Cancelling the review of $source…"
-    const val ABORT_STALE =
-        "The review state changed before the cancellation ran; nothing was cancelled."
-    const val ABORT_FAILED = "git review abort failed."
+    const val ABORT_FAILED = "Could not cancel the review."
 
     fun saveTitle(source: String): String = "Save the review of $source for later?"
     const val SAVE_DETAIL =
         "This pauses the review and returns to the branch you started from; your edits are kept and you can resume later."
     const val SAVE_BUTTON = "Save for Later"
     fun savingProgress(source: String): String = "Saving the review of $source for later…"
-    const val SAVE_STALE =
-        "The review state changed before the save ran; nothing was saved."
-    const val SAVE_FAILED = "git review save failed."
+    const val SAVE_FAILED = "Could not pause the review."
 
     // --- Finish / undo / resume -------------------------------------------------
 
@@ -204,11 +210,7 @@ object UserCopy {
         "Onto the PR branch itself — stage the edits directly on the PR branch"
 
     fun finishingProgress(source: String): String = "Finishing the review of $source…"
-    const val FINISH_STALE_PICK =
-        "The review state changed while choosing where to finish; nothing was finished."
-    const val FINISH_STALE_RUN =
-        "The review state changed before the finish ran; nothing was finished."
-    const val FINISH_FAILED = "git review finish failed."
+    const val FINISH_FAILED = "Could not finish the review."
 
     fun finishSuccess(destination: String, outcome: FinishOutcome): String =
         when (outcome) {
@@ -227,19 +229,15 @@ object UserCopy {
         "This discards any in-progress resolution and returns you to editing the review."
     const val UNDO_BUTTON = "Undo Finish"
     const val UNDOING_PROGRESS = "Undoing the finish…"
-    const val UNDO_STALE =
-        "The review state changed before the undo ran; nothing was undone."
-    const val UNDO_ABORT_FAILED = "git review finish --abort failed."
+    const val UNDO_ABORT_FAILED = "Could not undo the finish."
     const val UNDO_FORCE_DETAIL =
-        "Aborting with --force permanently discards the work made since the finish. This cannot be undone."
+        "This permanently discards the work made since the finish. It cannot be undone."
     const val UNDO_FORCE_BUTTON = "Discard Work and Undo"
     const val FORCE_UNDOING_PROGRESS = "Force-undoing the finish…"
-    const val FORCE_UNDO_STALE =
-        "The review state changed before the force-undo ran; nothing was undone."
-    const val FORCE_UNDO_FAILED = "git review finish --abort --force failed."
+    const val FORCE_UNDO_FAILED = "Could not undo the finish, even discarding the newer work."
 
     const val RESUME_PROGRESS = "Resuming the finish…"
-    const val RESUME_FAILED = "git review finish --resume failed."
+    const val RESUME_FAILED = "Could not continue the finish."
 
     // --- Compare / walkthrough / preview / housekeeping -------------------------
 
@@ -249,9 +247,9 @@ object UserCopy {
     const val COMPARE_LAYOUT_PLACEHOLDER =
         "Walkthrough, keys only, commit by commit, or whole diff"
     const val COMPARE_CONFIRM_DETAIL =
-        "Same effect as git review compare. Local changes must be clean."
+        "Your working tree must be clean to start it."
     const val COMPARE_BUTTON = "Compare"
-    const val COMPARE_FAILED = "git review compare failed."
+    const val COMPARE_FAILED = "Could not compare those two revisions."
 
     fun compareConfirmTitle(lower: String, upper: String, layout: ReviewLayout): String =
         "Compare $lower..$upper ${layoutSummary(layout)}? This creates a read-only review (finish will refuse)."
@@ -272,8 +270,8 @@ object UserCopy {
      */
     const val WALKTHROUGH_EXISTS_TITLE = "This branch already has a walkthrough."
     const val WALKTHROUGH_EXISTS_DETAIL =
-        "Update keeps every entry whose file is still in range - its number, its why and its > key - and adds the files that are new.\n\n" +
-            "Start over runs git review walkthrough init --force: it replaces .review/walkthrough.md with a blank skeleton. The file is tracked, so git checkout -- brings the old one back."
+        "Update keeps everything you already wrote for files that are still in the PR, and adds the ones that are new.\n\n" +
+            "Start over replaces it with a blank list. The file is committed to the PR, so git checkout -- .review/walkthrough.md brings the old one back."
     /**
      * Del lado del REVISOR no hay par equivalente, y la asimetria es deliberada.
      *
@@ -294,22 +292,19 @@ object UserCopy {
     const val WALKTHROUGH_START_OVER_BUTTON = "Start over"
     const val WALKTHROUGH_INIT_PROGRESS = "Initializing walkthrough…"
     const val WALKTHROUGH_OVERWRITE_PROGRESS = "Overwriting walkthrough…"
-    const val WALKTHROUGH_INIT_FAILED = "git review walkthrough init failed."
-    const val WALKTHROUGH_FORCE_FAILED = "git review walkthrough init --force failed."
+    const val WALKTHROUGH_INIT_FAILED = "Could not create the walkthrough."
+    const val WALKTHROUGH_FORCE_FAILED = "Could not replace the walkthrough."
 
-    const val WALKTHROUGH_BUILD_TITLE = "Rebuild the walkthrough from your filled-in draft?"
+    const val WALKTHROUGH_BUILD_TITLE = "Check and renumber the walkthrough?"
     const val WALKTHROUGH_BUILD_DETAIL =
-        "Validates .review/walkthrough.md, reorders entries and renumbers 1..N (git review walkthrough build)."
+        "This puts the files in the order you wrote and numbers them 1 to N. If something is missing, nothing changes and you will see what to fix."
     const val WALKTHROUGH_BUILD_BUTTON = "Build"
     const val WALKTHROUGH_BUILD_PROGRESS = "Building walkthrough…"
-    const val WALKTHROUGH_BUILD_FAILED = "git review walkthrough build failed."
+    const val WALKTHROUGH_BUILD_FAILED = "Could not build the walkthrough."
     const val WALKTHROUGH_BUILT = "Walkthrough built."
 
-    const val PREVIEW_FAILED = "git review preview failed."
+    const val PREVIEW_FAILED = "Could not preview your edits."
     const val PREVIEW_EMPTY = "(no edits to preview)"
-
-    const val HOUSEKEEPING_STALE =
-        "The review state changed before the action ran; nothing was changed."
 
     const val CLEAN_PICK_TITLE = "Clean review leftovers"
     const val CLEAN_ONE_LABEL = "Clean leftovers for one branch…"
@@ -329,7 +324,9 @@ object UserCopy {
 
     // --- Navigate / open --------------------------------------------------------
 
-    fun navigateFailed(direction: String): String = "git review $direction failed."
+    fun navigateFailed(direction: String): String =
+        if (direction == "next") "Could not move to the next entry."
+        else "Could not move to the previous entry."
 
     const val OPEN_RANGE_FAILED = "Could not read the files of this review's range."
     fun openNoChangesLeft(display: String): String =
@@ -338,19 +335,7 @@ object UserCopy {
     fun openCommitFailed(sha: String): String = "Could not read the files of commit $sha."
     fun openCommitEmpty(sha: String): String = "Commit $sha changes no files."
 
-    // --- Stale / generic fallbacks by action id ---------------------------------
-
-    fun staleMessage(action: String, force: Boolean = false): String = when {
-        force && action == "undoFinish" -> FORCE_UNDO_STALE
-        action == "abortReview" -> ABORT_STALE
-        action == "saveReview" -> SAVE_STALE
-        action == "continueReview" -> CONTINUE_STALE
-        action == "finishReview" -> FINISH_STALE_RUN
-        action == "undoFinish" -> UNDO_STALE
-        action == "startReview" -> START_STALE_RUN
-        action == "cleanReview" || action == "forgetReview" -> HOUSEKEEPING_STALE
-        else -> HOUSEKEEPING_STALE
-    }
+    // --- Generic fallbacks by action id -----------------------------------------
 
     fun failureFallback(action: String, params: ActionParams = ActionParams.Empty): String =
         when (action) {
@@ -372,18 +357,22 @@ object UserCopy {
             }
             "walkthroughBuild" -> WALKTHROUGH_BUILD_FAILED
             "previewEdits", "previewEditsStat" -> PREVIEW_FAILED
-            "setBase", "setRemote" -> "git review config failed."
+            "setBase", "setRemote" -> "Could not save the setting."
             "next" -> navigateFailed("next")
             "prev" -> navigateFailed("prev")
             "startReview" -> START_FAILED
             "cleanReview", "forgetReview" -> {
                 val hk = (params as? ActionParams.Housekeeping)?.action
                 if (hk != null) {
-                    "git review ${verbForHousekeeping(hk)} failed."
+                    if (verbForHousekeeping(hk) == "forget") {
+                        "Could not forget that."
+                    } else {
+                        "Could not clean up."
+                    }
                 } else {
-                    "git review clean failed."
+                    "Could not clean up."
                 }
             }
-            else -> "git review $action failed."
+            else -> "Something went wrong."
         }
 }

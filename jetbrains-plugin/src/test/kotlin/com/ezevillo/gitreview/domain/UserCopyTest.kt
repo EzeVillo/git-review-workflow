@@ -1,6 +1,7 @@
 package com.ezevillo.gitreview.domain
 
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -55,34 +56,49 @@ class UserCopyTest {
         assertTrue(UserCopy.UNDO_FORCE_DETAIL.contains("cannot be undone"))
     }
 
+    /**
+     * El asistente ya no confirma: `start` se niega solo con el arbol sucio y
+     * una review empezada se cancela con un boton del panel, asi que la quinta
+     * pantalla solo repetia las cuatro respuestas y agregaba el comando.
+     *
+     * Lo que sobrevive de ella es la frase, mudada al paso que ahora ejecuta.
+     */
     @Test
-    fun `start confirm uses layoutSummary`() {
+    fun `the last wizard step names the branch it is about to review`() {
         assertEquals(
-            "Start reviewing feature/x, as a walkthrough?",
-            UserCopy.startConfirmTitle("feature/x", ReviewLayout.WALK),
+            "Start reviewing feature/x — how do you want to read it?",
+            UserCopy.startLayoutTitle("feature/x"),
         )
-        assertEquals(
-            "git review start --step -- feature/x\nComparing against main.",
-            UserCopy.startConfirmDetail(listOf("--step", "--", "feature/x"), "main"),
-        )
-        assertEquals("Start the review", UserCopy.START_CONFIRM_BUTTON)
+        // El paso de una fila del bloque de borradores no tiene rama que nombrar
+        // y se queda con el titulo llano.
+        assertEquals("Start a review — how to read it", UserCopy.START_LAYOUT_TITLE)
     }
 
     @Test
     fun `stale and failure fallbacks match VS Code`() {
+        // Uno solo para los ocho comandos. Eran diez, y cada uno nombraba el
+        // verbo que no corrio -- que es el boton que el revisor acaba de
+        // apretar, no un dato nuevo. El texto entero se afirma porque es copy
+        // compartida byte a byte con userCopy.ts y UserCopy.cs.
         assertEquals(
-            "The review state changed before the cancellation ran; nothing was cancelled.",
-            UserCopy.staleMessage("abortReview"),
+            "The repository changed while you were deciding, so nothing happened.",
+            UserCopy.STALE,
         )
+        // No nombra ningun verbo del producto: eso es lo que lo hace servir para
+        // los ocho, y lo que se rompe si alguien lo vuelve a especializar.
+        listOf("finish", "save", "undo", "start", "cancel", "resume", "discard").forEach {
+            assertFalse(UserCopy.STALE.contains(it), "STALE nombra el verbo '$it'")
+        }
+        // Los fallbacks son lo UNICO que llega cuando la CLI muere sin stderr, y
+        // decian el argv que no anduvo -- un comando que quien usa el panel no
+        // escribio, justo cuando no hay nada mas que leer.
+        assertEquals("Could not cancel the review.", UserCopy.failureFallback("abortReview"))
         assertEquals(
-            "The review state changed before the force-undo ran; nothing was undone.",
-            UserCopy.staleMessage("undoFinish", force = true),
-        )
-        assertEquals("git review abort failed.", UserCopy.failureFallback("abortReview"))
-        assertEquals(
-            "git review finish --abort --force failed.",
+            "Could not undo the finish, even discarding the newer work.",
             UserCopy.failureFallback("undoFinish", ActionParams.UndoFinish(true)),
         )
+        assertEquals("Could not move to the next entry.", UserCopy.failureFallback("next"))
+        assertEquals("Could not save the setting.", UserCopy.failureFallback("setBase"))
         assertEquals(
             "Another operation is already in progress",
             UserCopy.DISCARD_BUSY,
@@ -92,12 +108,21 @@ class UserCopyTest {
     @Test
     fun `housekeeping confirmCopy stays aligned`() {
         val clean = confirmCopyFor(HousekeepingAction(HousekeepingKind.CLEAN_ONE, "feature/x"))
-        assertEquals("Clean leftover review branches for feature/x?", clean.title)
-        assertEquals("Clean", clean.button)
+        assertEquals("Delete the leftovers from reviewing feature/x?", clean.title)
+        assertEquals("Delete", clean.button)
 
         val discard = confirmCopyFor(HousekeepingAction(HousekeepingKind.FORGET_SAVED_ONE, "feature/x"))
-        assertEquals("Discard the saved review of feature/x?", discard.title)
-        assertEquals("Discard", discard.button)
+        assertEquals("Delete the paused review of feature/x?", discard.title)
+        assertEquals("Delete", discard.button)
+
+        // Los tres de --delta dicen la CONSECUENCIA, y la dicen con la etiqueta
+        // que el asistente usa para el rango: quien vaya a apretar esto la
+        // eligio alguna vez ahi. "Removes the last-reviewed tip" describia un
+        // ref que ninguna superficie del producto nombra.
+        val delta = confirmCopyFor(HousekeepingAction(HousekeepingKind.FORGET_DELTA_ONE, "feature/x"))
+        assertEquals("Forget where you got to on feature/x?", delta.title)
+        assertTrue(delta.detail.contains("\"only what is new\""))
+        assertFalse(delta.detail.contains("--delta"))
     }
 
     @Test

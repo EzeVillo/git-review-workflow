@@ -23,17 +23,17 @@ const LAYOUT_ITEMS: LayoutItem[] = [
     },
     {
         label: "Walkthrough — keys only",
-        description: "only entries marked key (--keys)",
+        description: "only entries marked key",
         layout: "keys",
     },
     {
         label: "Commit by commit",
-        description: "one commit at a time (--step)",
+        description: "one commit at a time",
         layout: "step",
     },
     {
         label: "Whole diff",
-        description: "entire diff at once (--no-walk)",
+        description: "entire diff at once",
         layout: "whole",
     },
 ];
@@ -68,7 +68,7 @@ export async function compareReview(
     const summary = `Compare ${lower}..${upper} ${layoutSummary(layoutPick.layout)}? This creates a read-only review (finish will refuse).`;
     const answer = await vscode.window.showWarningMessage(
         summary,
-        {modal: true, detail: "Same effect as git review compare. Local changes must be clean."},
+        {modal: true, detail: "Your working tree must be clean to start it."},
         "Compare"
     );
     if (answer !== "Compare") {
@@ -101,7 +101,7 @@ export async function compareReview(
             }
         );
         if (result && result.exitCode !== 0) {
-            const text = result.stderr.trim() || "git review compare failed.";
+            const text = result.stderr.trim() || "Could not compare those two revisions.";
             void vscode.window.showErrorMessage(text);
         }
     });

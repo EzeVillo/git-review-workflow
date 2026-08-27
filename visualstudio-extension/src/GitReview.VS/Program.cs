@@ -95,7 +95,7 @@ public static class Program
 
         var setup = PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewSetup());
         var setupLabels = setup.CollectControls().Select(c => c.Label).ToList();
-        Check("setup:Set the base branch", setupLabels.Contains("Set the base branch"));
+        Check("setup:Choose the branch", setupLabels.Contains("Choose the branch"));
 
         var cli = PanelLayoutBuilder.PanelLayout(PanelFixtures.CliMissing());
         var title = cli.Blocks.OfType<Block.Paragraph>().First().Text;

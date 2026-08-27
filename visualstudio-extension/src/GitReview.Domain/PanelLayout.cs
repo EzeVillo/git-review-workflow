@@ -460,9 +460,11 @@ public sealed class PanelLayout
 
 public static class PanelLayoutBuilder
 {
+    // StartReview no esta: el asistente ya pregunta cuatro cosas y `start` no
+    // destruye nada -- se niega solo con el arbol sucio, y una review empezada
+    // se cancela con un boton del panel. Ver el canonico, bloque no-review.
     private static readonly HashSet<ControlId> ConfirmingIds = new()
     {
-        ControlId.StartReview,
         ControlId.ContinueReview,
         ControlId.DiscardInventory,
         ControlId.StartFromDraft,
@@ -503,18 +505,18 @@ public static class PanelLayoutBuilder
     private static string? EntryBadge(PanelEntry entry, ReviewMode? mode)
     {
         if (entry.Essential) return "key";
-        if (mode == ReviewMode.Walk && !entry.Annotated) return "uncovered";
+        if (mode == ReviewMode.Walk && !entry.Annotated) return "not covered";
         if (entry.Banked) return "edits";
         return null;
     }
 
     private static string InventoryMeta(PanelReview r)
     {
-        if (r.Orphan) return "no metadata";
+        if (r.Orphan) return "details are gone";
         if (r.Position is not null && r.Total is not null)
             return $"{(r.Mode?.Id() ?? "?")} · {r.Position}/{r.Total}";
         if (r.Mode is not null) return r.Mode.Value.Id();
-        return "no metadata";
+        return "details are gone";
     }
 
     private static string InventoryHelp(PanelReview r)
@@ -707,13 +709,13 @@ public static class PanelLayoutBuilder
             new Block.Banner(
                 new[]
                 {
-                    $"Finished. Your edits are staged on {destination}.",
-                    "Commit and push them from Source Control. The review branch is kept so you can undo with git review finish --abort, or clean --keep-fixes when you no longer need the undo.",
+                    $"Your edits are on {destination}, staged and ready to commit.",
+                    "Commit and push them from Source Control. Until you clean up, this is still undoable.",
                 },
                 new Block.Row(new[]
                 {
-                    Ctrl(ControlId.CleanReview, "Clean", Emphasis.Primary, enabled),
-                    Ctrl(ControlId.UndoFinish, "Undo finish", Emphasis.Secondary, enabled),
+                    Ctrl(ControlId.CleanReview, "Done, clean up", Emphasis.Primary, enabled),
+                    Ctrl(ControlId.UndoFinish, "Undo", Emphasis.Secondary, enabled),
                 })),
         };
     }
@@ -750,10 +752,10 @@ public static class PanelLayoutBuilder
         var enabled = !model.Busy;
         return new List<Block>
         {
-            new Block.Paragraph("Configure git review for this repository."),
-            new Block.Row(new[] { Ctrl(ControlId.SetBase, "Set the base branch", Emphasis.Primary, enabled) }),
+            new Block.Paragraph("Which branch do pull requests land on in this repo?"),
+            new Block.Row(new[] { Ctrl(ControlId.SetBase, "Choose the branch", Emphasis.Primary, enabled) }),
             new Block.Paragraph(
-                "The base is where PRs land in this repo (main, develop, …). Full reviews compare the branch under review against it."),
+                "Reviews compare the branch you are reading against it. Usually main or develop."),
             new Block.Paragraph($"Remote: {remote} (optional)."),
             new Block.Row(new[] { Ctrl(ControlId.SetRemote, "Change remote", Emphasis.Secondary, enabled) }),
         };
@@ -766,7 +768,7 @@ public static class PanelLayoutBuilder
         {
             var badges = new List<string>();
             if (r.Current) badges.Add("current");
-            if (r.Orphan) badges.Add("orphan");
+            if (r.Orphan) badges.Add("broken");
             var canDiscard = r.Saved || r.Orphan;
             var controls = new List<Control>();
             if (canDiscard)
@@ -776,16 +778,16 @@ public static class PanelLayoutBuilder
                     string? tip = null;
                     if (!r.Resumable)
                         tip = r.Orphan
-                            ? "This branch has no review metadata — use Discard"
-                            : "A review of this branch is already active";
+                            ? "This review cannot be resumed — its details are gone"
+                            : "You are already reviewing this branch";
                     controls.Add(Ctrl(
                         ControlId.ContinueReview, "Continue", Emphasis.Secondary,
                         enabled: enabled && r.Resumable, tooltip: tip, index: index));
                 }
-                var discardLabel = r.Orphan ? "Discard orphan" : "Discard";
+                var discardLabel = r.Orphan ? "Delete leftover" : "Delete";
                 var discardTip = r.Saved
-                    ? "git review forget --saved (with confirmation)"
-                    : "git review clean (with confirmation)";
+                    ? "Delete this paused review and its edits"
+                    : "Delete this leftover branch";
                 controls.Add(Ctrl(
                     ControlId.DiscardInventory, discardLabel, Emphasis.Secondary,
                     enabled: enabled, tooltip: discardTip, index: index));
@@ -874,10 +876,10 @@ public static class PanelLayoutBuilder
                     filled ? Emphasis.Primary : Emphasis.Secondary,
                     enabled: enabled && d.Startable && filled,
                     tooltip: !d.Startable
-                        ? "This draft has no instruction block, so the CLI cannot tell how it was generated"
+                        ? "This file lost its header, so it cannot be checked. Delete it and write a new one."
                         : filled
-                            ? "git review walkthrough draft --build, then start"
-                            : "Every entry needs a number and a why, and the heads-up needs prose or deleting",
+                            ? "Check the order, then start reading"
+                            : "Every file still needs a number and a line saying why it matters",
                     index: index));
             }
                 // The two controls of the ROW, and that is why they leave the
@@ -904,7 +906,7 @@ public static class PanelLayoutBuilder
                 ControlId.DiscardDraft, null, Emphasis.Icon,
                 enabled: enabled,
                 accessibleName: "Discard the reading order",
-                tooltip: "git review forget --draft (with confirmation)",
+                tooltip: "Delete this reading order",
                 index: index));
             return new DraftRow(d.Branch, $"{d.Annotated}/{d.Total}", controls);
         }).ToList();
@@ -948,7 +950,7 @@ public static class PanelLayoutBuilder
                     accessibleName: "Discard the extracted edits",
                     tooltip: f.Current
                         ? "You are on this branch; switch away first"
-                        : "git review clean --fixes-only (with confirmation)",
+                        : "Delete this branch of edits",
                     index: index),
             })).ToList();
         return new Block.FixesRows(rows);
@@ -975,7 +977,7 @@ public static class PanelLayoutBuilder
                     ControlId.OpenGuide, null, Emphasis.Icon,
                     enabled: g.Exists,
                     accessibleName: "Open the guide",
-                    tooltip: g.Exists ? g.Path : "There is no file to open yet",
+                    tooltip: g.Exists ? g.Path : "There is no guide yet",
                     index: index),
             };
             if (g.Kind == GuideKind.Own)
@@ -984,7 +986,7 @@ public static class PanelLayoutBuilder
                     ControlId.DiscardGuide, null, Emphasis.Icon,
                     enabled: enabled && g.Discardable,
                     accessibleName: "Discard the guide",
-                    tooltip: "git review walkthrough guide --delete (with confirmation)",
+                    tooltip: "Delete your guide",
                     index: index));
             }
             return new GuideRow(g.Label, g.Badge, controls);

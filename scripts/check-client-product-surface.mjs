@@ -349,7 +349,7 @@ function collectCanonicalControls() {
   // conteo fijo de 27 de arriba no los cuenta y no se toca.
   const draftBlock = text.split(/^draft_controls:\s*$/m)[1]?.split(/^[a-z_][a-z0-9_]*:/m)[0] ?? "";
   const draftRe =
-    /^ {2}([A-Za-z][A-Za-z0-9]*):\s*\{label:\s*(null|"[^"]*")\s*,\s*(?:accessible_name:\s*"([^"]*)"\s*,\s*)?emphasis:\s*(primary|secondary|link|icon)\s*(?:,\s*emphasis_unfilled:\s*(primary|secondary))?(?:\s*,\s*icon:\s*[a-z]+)?\s*,\s*confirms:\s*(true|false)(?:\s*,\s*tooltip_disabled:\s*"([^"]*)")?(?:\s*,\s*tooltip_unfilled:\s*"([^"]*)")?\}/gm;
+    /^ {2}([A-Za-z][A-Za-z0-9]*):\s*\{label:\s*(null|"[^"]*")\s*,\s*(?:accessible_name:\s*"([^"]*)"\s*,\s*)?emphasis:\s*(primary|secondary|link|icon)\s*(?:,\s*emphasis_unfilled:\s*(primary|secondary))?(?:\s*,\s*icon:\s*[a-z]+)?\s*,\s*confirms:\s*(true|false)(?:\s*,\s*tooltip:\s*"[^"]*")?(?:\s*,\s*tooltip_disabled:\s*"([^"]*)")?(?:\s*,\s*tooltip_unfilled:\s*"([^"]*)")?\}/gm;
   let dm;
   while ((dm = draftRe.exec(draftBlock)) !== null) {
     // Un control con emphasis_unfilled tiene DOS enfasis validos —el cliente
@@ -394,8 +394,11 @@ const layoutFiles = [
  * reading order for editing"-- se da por presente con la comparacion laxa
  * aunque el cliente lo haya perdido.
  */
-function requireSharedCopy(what, copy, exact) {
+function requireSharedCopy(what, copy, exact, excluded = []) {
   for (const [label, rel] of layoutFiles) {
+    // Una divergencia declarada en el canonico (`not_in:`) no es drift: el
+    // cliente listado no tiene el control, asi que tampoco tiene su copy.
+    if (excluded.includes(label)) continue;
     const p = join(root, ...rel);
     if (!existsSync(p)) {
       fail(`${label} panel layout missing at ${rel.join("/")}`);
@@ -449,6 +452,45 @@ for (const c of canonicalControls) {
   if (c.accessible && c.label != null) {
     requireSharedCopy(`accessible name of ${c.id}`, c.accessible, true);
   }
+}
+
+// TODO TOOLTIP DECLARADO EN EL CANONICO TIENE QUE ESTAR EN LOS TRES PANELES.
+//
+// Barrido por texto y no por control parseado, a proposito. Los tooltips se
+// declaran hoy en cuatro lugares con cuatro formas distintas -- inline en
+// panel_layout, en draft_controls, en guide_rows.controls y en
+// fixes_rows.controls --, y de esos solo el segundo tenia un parser. El
+// resultado era que el tooltip de openAllChanges vivia en el contrato sin que
+// nadie lo verificara: exactamente el drift silencioso que este archivo existe
+// para atajar, y encima sobre la copy que un cliente pierde sin que se note
+// (un tooltip que falta no rompe ningun layout).
+//
+// Un parser mas por forma seria una cuarta regex que se olvida de la quinta. El
+// barrido no se olvida: cualquier clave que empiece con `tooltip` y lleve un
+// literal entre comillas entra, venga de donde venga y se declare como se
+// declare.
+//
+// `not_in:` en la MISMA linea excluye a ese cliente, que es como se declara hoy
+// la unica divergencia deliberada (openAllChanges no existe en Visual Studio, y
+// su tooltip tampoco).
+const tooltipKeyRe = /\btooltip(?:_[a-z]+)?:\s*"((?:[^"\\]|\\.)+)"/g;
+let tooltipsChecked = 0;
+for (const line of text.split("\n")) {
+  const trimmed = line.trim();
+  if (trimmed.startsWith("#") || !/\btooltip/.test(trimmed)) continue;
+  const notIn = /not_in:\s*\[([^\]]*)\]/.exec(line);
+  const excluded = notIn
+    ? notIn[1].split(",").map((s) => s.trim()).filter(Boolean)
+    : [];
+  let tm;
+  tooltipKeyRe.lastIndex = 0;
+  while ((tm = tooltipKeyRe.exec(line)) !== null) {
+    requireSharedCopy(`tooltip "${tm[1].slice(0, 40)}…"`, tm[1], false, excluded);
+    tooltipsChecked += 1;
+  }
+}
+if (tooltipsChecked === 0) {
+  fail("no tooltips were parsed from the canonical (the sweep regex broke)");
 }
 
 

@@ -107,69 +107,77 @@ fun confirmCopyFor(action: HousekeepingAction): ConfirmCopy {
     val src = action.source.orEmpty()
     return when (action.kind) {
         HousekeepingKind.CLEAN_ONE -> ConfirmCopy(
-            title = "Clean leftover review branches for $src?",
-            detail = "Deletes review/$src and review-fixes/$src (and banked edit refs) if they exist and are not checked out. Does not touch delta markers.",
-            button = "Clean",
+            title = "Delete the leftovers from reviewing $src?",
+            detail = "This removes the review branch and any edits you extracted from it. Anything you already committed elsewhere stays. It cannot be undone.",
+            button = "Delete",
         )
         HousekeepingKind.CLEAN_KEEP_FIXES -> {
+            // Lo que se CONSERVA va primero, y no es un adorno: este dialogo
+            // sale del boton que cierra el ciclo, y la unica duda que frena a
+            // alguien ahi es si el clean se lleva sus ediciones. La respuesta es
+            // que no, y decirla antes de nombrar lo que si se pierde es la
+            // diferencia entre leer el cartel y apretar a ciegas.
             val destination = if (action.onto == true) src else "review-fixes/$src"
             ConfirmCopy(
-                title = "Drop the finish undo for $src?",
-                detail = "Runs git review clean --keep-fixes $src: deletes review/$src and the finish undo point so the pending finish goes away. Your staged edits stay on $destination; delta markers are left alone. Remember to commit and push them from Source Control.",
-                button = "Clean",
+                title = "Done with the review of $src?",
+                detail = "Your edits stay on $destination - commit and push them from Source Control. What goes away is being able to undo this finish.",
+                button = "Done",
             )
         }
         HousekeepingKind.CLEAN_FIXES_ONE -> {
             // The session is named only when it exists: promising to leave
             // something that is not there is noise, and the argv is the same.
             val session = if (action.session) {
-                " The review session on review/$src is left standing, so you can still undo the finish."
+                " You can still undo the finish afterwards."
             } else {
                 ""
             }
             ConfirmCopy(
-                title = "Discard the edits extracted onto review-fixes/$src?",
-                detail = "git review clean --fixes-only $src\n\n" +
-                    fixesCostSentence(action.fixesState) + session + " It cannot be undone.",
-                button = "Discard",
+                title = "Delete the edits you extracted from $src?",
+                detail = fixesCostSentence(action.fixesState) + session + " It cannot be undone.",
+                button = "Delete",
             )
         }
         HousekeepingKind.CLEAN_FIXES_ONE_ALL -> ConfirmCopy(
-            title = "Discard every extracted edits branch?",
-            detail = "git review clean --fixes-only\n\n" +
-                "Deletes every review-fixes/* branch that is not currently checked out. " +
-                "Review sessions (review/*), banked edits and delta markers are left alone. It cannot be undone.",
-            button = "Discard All",
+            title = "Delete every branch of extracted edits?",
+            detail = "They hold edits you made while reviewing and never committed anywhere else. " +
+                "Nothing you are reviewing right now is touched. It cannot be undone.",
+            button = "Delete all",
         )
         HousekeepingKind.CLEAN_ALL -> ConfirmCopy(
-            title = "Clean all leftover review branches?",
-            detail = "Deletes every review/* and review-fixes/* branch that is not currently checked out, plus orphaned edit/undo refs. Does not touch delta markers or saved reviews.",
-            button = "Clean All",
+            title = "Delete all review leftovers?",
+            detail = "This removes every review branch and every branch of extracted edits that you are not currently on. Paused reviews and your last review points are left alone. It cannot be undone.",
+            button = "Delete all",
         )
         HousekeepingKind.FORGET_SAVED_ONE -> ConfirmCopy(
-            title = "Discard the saved review of $src?",
-            detail = "Deletes review-saved/$src, its banked edits and metadata, and rolls back the delta marker it left.",
-            button = "Discard",
+            title = "Delete the paused review of $src?",
+            detail = "This throws away the edits you had saved with it. It cannot be undone.",
+            button = "Delete",
         )
         HousekeepingKind.FORGET_SAVED_ALL -> ConfirmCopy(
-            title = "Discard every saved review?",
-            detail = "Deletes all review-saved/* branches, their banked edits and metadata, and rolls back their delta markers.",
-            button = "Discard All Saved",
+            title = "Delete every paused review?",
+            detail = "This throws away the edits saved with each of them. It cannot be undone.",
+            button = "Delete all",
         )
+        // Los tres de --delta dicen la CONSECUENCIA y no la operacion, y la
+        // dicen con la etiqueta que el asistente usa para el rango ("only what
+        // is new"): quien vaya a apretar esto lo eligio alguna vez ahi, y es el
+        // unico lugar donde ese dato se nota. "Removes the last-reviewed tip"
+        // describia un ref que ninguna superficie del producto nombra.
         HousekeepingKind.FORGET_DELTA_ONE -> ConfirmCopy(
-            title = "Forget the delta marker for $src?",
-            detail = "Removes the last-reviewed tip used by git review start --delta for this branch (remote and local markers).",
-            button = "Forget Marker",
+            title = "Forget where you got to on $src?",
+            detail = "Next time you review this branch, \"only what is new\" will have no starting point, so you will be offered the full range instead.",
+            button = "Forget",
         )
         HousekeepingKind.FORGET_DELTA_ALL -> ConfirmCopy(
-            title = "Forget every delta marker?",
-            detail = "Removes all last-reviewed tips used by git review start --delta.",
-            button = "Forget All Markers",
+            title = "Forget where you got to on every branch?",
+            detail = "Next time you review any of them, \"only what is new\" will have no starting point, so you will be offered the full range instead.",
+            button = "Forget all",
         )
         HousekeepingKind.FORGET_DELTA_STALE -> ConfirmCopy(
-            title = "Forget stale delta markers?",
-            detail = "Fetches from the remote (when needed) and removes markers whose branch no longer exists.",
-            button = "Forget Stale",
+            title = "Forget the branches that are gone?",
+            detail = "This clears where you got to on branches that no longer exist. It checks the remote first, so it may take a moment.",
+            button = "Forget",
         )
     }
 }

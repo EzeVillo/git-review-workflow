@@ -11,6 +11,24 @@ public static class UserCopy
     public const string ProductTitle = "git review";
     public const string DiscardBusy = MutationLock.DiscardReason;
 
+    /// <summary>
+    /// Lo que se dice cuando el testigo de estado (StaleGuard) rechaza una
+    /// mutacion porque el repositorio cambio entre la confirmacion y la
+    /// invocacion. <b>Uno solo para los ocho comandos</b>, y antes eran diez.
+    /// <para>
+    /// Las diez variantes decian la misma cosa con el verbo cambiado -- "nothing
+    /// was finished", "nothing was saved", "nothing was undone" --, y ese verbo
+    /// no es informacion: es el boton que el revisor acaba de apretar, que
+    /// todavia tiene bajo el cursor. Lo unico que no puede deducir es POR QUE no
+    /// paso nada, y eso es identico en los diez casos.
+    /// </para>
+    /// <para>
+    /// No lleva "try again": el panel ya se refresco solo, asi que el estado que
+    /// se ve al leer el mensaje es el nuevo.
+    /// </para>
+    /// </summary>
+    public const string Stale = "The repository changed while you were deciding, so nothing happened.";
+
     public const string NoBranchesForBase = "No branches to pick a base from were found.";
     public const string NoBranchesForReview = "No branches to pick a review from were found.";
     public const string NoRemotes = "No remotes to pick from were found.";
@@ -44,7 +62,7 @@ public static class UserCopy
         $"Discard the reading order you wrote for {branch}?";
 
     public static string DiscardDraftDetail(string branch, string path) =>
-        $"git review forget --draft {branch}\n\nThis deletes {path}. It cannot be undone.";
+        $"This deletes {path}. It cannot be undone.";
 
     public static string DiscardDraftProgress(string branch) =>
         $"Discarding the reading order for {branch}…";
@@ -56,7 +74,7 @@ public static class UserCopy
     public const string DiscardGuideTitle = "Discard the authoring guide you wrote?";
 
     public static string DiscardGuideDetail(string path) =>
-        $"git review walkthrough guide --delete\n\nThis deletes {path}. It cannot be undone.";
+        $"This deletes {path}. It cannot be undone.";
 
     public const string DiscardGuideProgress = "Discarding your authoring guide…";
 
@@ -108,13 +126,21 @@ public static class UserCopy
     public const string StartOriginPlaceholder = "Remote, local, or offline";
     public const string StartRangeTitle = "Start a review — range";
     public const string StartRangePlaceholder = "Full range, or only what is new since the last review";
-    public const string StartLayoutTitle = "Start a review — how to read it";
+    /// <summary>
+    /// El ULTIMO paso del asistente, y por eso lleva la rama: elegir una forma
+    /// de lectura aca ya arranca la review. La frase es la que decia la pantalla
+    /// de confirmacion que este paso reemplaza.
+    /// </summary>
+    public static string StartLayoutTitle(string branch) =>
+        $"Start reviewing {branch} — how do you want to read it?";
+
+    /// <summary>El mismo paso sin una rama que nombrar (borrador de una fila).</summary>
+    public const string StartLayoutTitlePlain = "Start a review — how to read it";
     public const string StartLayoutPlaceholder =
         "Walkthrough, commit by commit, keys only, or whole diff";
-    public const string StartConfirmButton = "Start the review";
 
-    public const string DraftFailed = "git review walkthrough draft failed.";
-    public const string DraftBuildFailed = "git review walkthrough draft --build failed.";
+    public const string DraftFailed = "Could not draft a reading order.";
+    public const string DraftBuildFailed = "Could not check your reading order.";
     public const string DraftWaitTitle = "Draft your reading order";
     public const string DraftContinueButton = "Continue";
     public const string DraftKeysPlaceholder =
@@ -158,53 +184,33 @@ public static class UserCopy
     {
         (ReviewRange.Full, "Full range — everything since the base branch"),
         (ReviewRange.Delta,
-            "Only what is new — commits since your last review of this branch (--delta)"),
+            "Only what is new — commits since your last review of this branch"),
     };
-
-    public static string StartConfirmTitle(string branch, ReviewLayout layout) =>
-        $"Start reviewing {branch}, {LayoutOffers.LayoutSummary(layout)}?";
-
-    public static string StartConfirmDetail(IReadOnlyList<string> args, string? bas)
-    {
-        var lines = new List<string> { $"git review start {string.Join(" ", args)}" };
-        if (bas is not null) lines.Add($"Comparing against {bas}.");
-        return string.Join("\n", lines);
-    }
 
     public static string StartingProgress(string branch) => $"Starting the review of {branch}…";
 
-    public const string StartStaleWizard =
-        "The repository changed while the wizard was open; nothing was started.";
-    public const string StartStaleRun =
-        "The repository changed before the start ran; nothing was started.";
-    public const string StartFailed = "git review start failed.";
+    public const string StartFailed = "Could not start the review.";
 
     public static string ContinueTitle(string source) => $"Continue the saved review of {source}?";
     public static string ContinueDetail(string source) =>
         $"This switches to review/{source} and restores your edits in the working tree.";
     public const string ContinueButton = "Continue";
     public static string ContinuingProgress(string source) => $"Continuing the review of {source}…";
-    public const string ContinueStale =
-        "The review state changed before continue ran; nothing was resumed.";
-    public const string ContinueFailed = "git review continue failed.";
+    public const string ContinueFailed = "Could not resume the review.";
 
     public static string AbortTitle(string source) => $"Cancel the review of {source}?";
     public const string AbortDetail =
         "This returns to the branch you started the review from; your uncommitted edits will be discarded.";
     public const string AbortButton = "Cancel Review";
     public static string AbortingProgress(string source) => $"Cancelling the review of {source}…";
-    public const string AbortStale =
-        "The review state changed before the cancellation ran; nothing was cancelled.";
-    public const string AbortFailed = "git review abort failed.";
+    public const string AbortFailed = "Could not cancel the review.";
 
     public static string SaveTitle(string source) => $"Save the review of {source} for later?";
     public const string SaveDetail =
         "This pauses the review and returns to the branch you started from; your edits are kept and you can resume later.";
     public const string SaveButton = "Save for Later";
     public static string SavingProgress(string source) => $"Saving the review of {source} for later…";
-    public const string SaveStale =
-        "The review state changed before the save ran; nothing was saved.";
-    public const string SaveFailed = "git review save failed.";
+    public const string SaveFailed = "Could not pause the review.";
 
     public static string FinishLocationTitle(string source) =>
         $"Finish the review of {source} — where do your edits go?";
@@ -216,11 +222,7 @@ public static class UserCopy
         "Onto the PR branch itself — stage the edits directly on the PR branch";
 
     public static string FinishingProgress(string source) => $"Finishing the review of {source}…";
-    public const string FinishStalePick =
-        "The review state changed while choosing where to finish; nothing was finished.";
-    public const string FinishStaleRun =
-        "The review state changed before the finish ran; nothing was finished.";
-    public const string FinishFailed = "git review finish failed.";
+    public const string FinishFailed = "Could not finish the review.";
 
     public static string FinishSuccess(string destination, FinishOutcome outcome) => outcome switch
     {
@@ -239,19 +241,15 @@ public static class UserCopy
         "This discards any in-progress resolution and returns you to editing the review.";
     public const string UndoButton = "Undo Finish";
     public const string UndoingProgress = "Undoing the finish…";
-    public const string UndoStale =
-        "The review state changed before the undo ran; nothing was undone.";
-    public const string UndoAbortFailed = "git review finish --abort failed.";
+    public const string UndoAbortFailed = "Could not undo the finish.";
     public const string UndoForceDetail =
-        "Aborting with --force permanently discards the work made since the finish. This cannot be undone.";
+        "This permanently discards the work made since the finish. It cannot be undone.";
     public const string UndoForceButton = "Discard Work and Undo";
     public const string ForceUndoingProgress = "Force-undoing the finish…";
-    public const string ForceUndoStale =
-        "The review state changed before the force-undo ran; nothing was undone.";
-    public const string ForceUndoFailed = "git review finish --abort --force failed.";
+    public const string ForceUndoFailed = "Could not undo the finish, even discarding the newer work.";
 
     public const string ResumeProgress = "Resuming the finish…";
-    public const string ResumeFailed = "git review finish --resume failed.";
+    public const string ResumeFailed = "Could not continue the finish.";
 
     public const string CompareLowerTitle = "Compare: lower bound (from)";
     public const string CompareUpperTitle = "Compare: upper bound (to)";
@@ -259,9 +257,9 @@ public static class UserCopy
     public const string CompareLayoutPlaceholder =
         "Walkthrough, keys only, commit by commit, or whole diff";
     public const string CompareConfirmDetail =
-        "Same effect as git review compare. Local changes must be clean.";
+        "Your working tree must be clean to start it.";
     public const string CompareButton = "Compare";
-    public const string CompareFailed = "git review compare failed.";
+    public const string CompareFailed = "Could not compare those two revisions.";
 
     public static string CompareConfirmTitle(string lower, string upper, ReviewLayout layout) =>
         $"Compare {lower}..{upper} {LayoutOffers.LayoutSummary(layout)}? This creates a read-only review (finish will refuse).";
@@ -282,8 +280,8 @@ public static class UserCopy
     /// </summary>
     public const string WalkthroughExistsTitle = "This branch already has a walkthrough.";
     public const string WalkthroughExistsDetail =
-        "Update keeps every entry whose file is still in range - its number, its why and its > key - and adds the files that are new.\n\n"
-        + "Start over runs git review walkthrough init --force: it replaces .review/walkthrough.md with a blank skeleton. The file is tracked, so git checkout -- brings the old one back.";
+        "Update keeps everything you already wrote for files that are still in the PR, and adds the ones that are new.\n\n"
+        + "Start over replaces it with a blank list. The file is committed to the PR, so git checkout -- .review/walkthrough.md brings the old one back.";
     /// <summary>
     /// On the REVIEWER's side there is no equivalent pair, and the asymmetry is
     /// deliberate.
@@ -306,22 +304,19 @@ public static class UserCopy
 
     public const string WalkthroughInitProgress = "Initializing walkthrough…";
     public const string WalkthroughOverwriteProgress = "Overwriting walkthrough…";
-    public const string WalkthroughInitFailed = "git review walkthrough init failed.";
-    public const string WalkthroughForceFailed = "git review walkthrough init --force failed.";
+    public const string WalkthroughInitFailed = "Could not create the walkthrough.";
+    public const string WalkthroughForceFailed = "Could not replace the walkthrough.";
 
-    public const string WalkthroughBuildTitle = "Rebuild the walkthrough from your filled-in draft?";
+    public const string WalkthroughBuildTitle = "Check and renumber the walkthrough?";
     public const string WalkthroughBuildDetail =
-        "Validates .review/walkthrough.md, reorders entries and renumbers 1..N (git review walkthrough build).";
+        "This puts the files in the order you wrote and numbers them 1 to N. If something is missing, nothing changes and you will see what to fix.";
     public const string WalkthroughBuildButton = "Build";
     public const string WalkthroughBuildProgress = "Building walkthrough…";
-    public const string WalkthroughBuildFailed = "git review walkthrough build failed.";
+    public const string WalkthroughBuildFailed = "Could not build the walkthrough.";
     public const string WalkthroughBuilt = "Walkthrough built.";
 
-    public const string PreviewFailed = "git review preview failed.";
+    public const string PreviewFailed = "Could not preview your edits.";
     public const string PreviewEmpty = "(no edits to preview)";
-
-    public const string HousekeepingStale =
-        "The review state changed before the action ran; nothing was changed.";
 
     public const string CleanPickTitle = "Clean review leftovers";
     public const string CleanOneLabel = "Clean leftovers for one branch…";
@@ -339,26 +334,16 @@ public static class UserCopy
     public const string InstallDocsUrl =
         "https://github.com/EzeVillo/git-review-workflow#readme";
 
-    public static string NavigateFailed(string direction) => $"git review {direction} failed.";
+    public static string NavigateFailed(string direction) =>
+        direction == "next"
+            ? "Could not move to the next entry."
+            : "Could not move to the previous entry.";
 
     public const string OpenRangeFailed = "Could not read the files of this review's range.";
     public static string OpenNoChangesLeft(string display) =>
         $"{display} has no changes left in this review.";
     public static string OpenCommitFailed(string sha) => $"Could not read the files of commit {sha}.";
     public static string OpenCommitEmpty(string sha) => $"Commit {sha} changes no files.";
-
-    public static string StaleMessage(string action, bool force = false) => (force, action) switch
-    {
-        (true, "undoFinish") => ForceUndoStale,
-        (_, "abortReview") => AbortStale,
-        (_, "saveReview") => SaveStale,
-        (_, "continueReview") => ContinueStale,
-        (_, "finishReview") => FinishStaleRun,
-        (_, "undoFinish") => UndoStale,
-        (_, "startReview") => StartStaleRun,
-        (_, "cleanReview" or "forgetReview") => HousekeepingStale,
-        _ => HousekeepingStale,
-    };
 
     public static string FailureFallback(string action, ActionParams? params_ = null)
     {
@@ -379,14 +364,16 @@ public static class UserCopy
                 : WalkthroughInitFailed,
             "walkthroughBuild" => WalkthroughBuildFailed,
             "previewEdits" or "previewEditsStat" => PreviewFailed,
-            "setBase" or "setRemote" => "git review config failed.",
+            "setBase" or "setRemote" => "Could not save the setting.",
             "next" => NavigateFailed("next"),
             "prev" => NavigateFailed("prev"),
             "startReview" => StartFailed,
-            "cleanReview" or "forgetReview" => params_ is ActionParams.Housekeeping hk
-                ? $"git review {HousekeepingLogic.VerbForHousekeeping(hk.Action)} failed."
-                : "git review clean failed.",
-            _ => $"git review {action} failed.",
+            "cleanReview" or "forgetReview" =>
+                params_ is ActionParams.Housekeeping hk
+                && HousekeepingLogic.VerbForHousekeeping(hk.Action) == "forget"
+                    ? "Could not forget that."
+                    : "Could not clean up.",
+            _ => "Something went wrong.",
         };
     }
 }

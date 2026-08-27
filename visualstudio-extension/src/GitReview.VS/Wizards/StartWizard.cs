@@ -149,7 +149,7 @@ public static class StartWizard
             .Select(i => i.Description.Length > 0 ? $"{i.Label} — {i.Description}" : i.Label)
             .ToList();
         var idx = GitReviewDialogs.Choose(
-            UserCopy.StartLayoutTitle,
+            UserCopy.StartLayoutTitle(ctx.Branch),
             UserCopy.StartLayoutPlaceholder,
             labels);
         if (idx < 0) return false;
@@ -392,7 +392,7 @@ public static class StartWizard
             if (DraftFlow.OffersIncludeKeys(parsed?.Offers))
             {
                 var idx = GitReviewDialogs.Choose(
-                    UserCopy.StartLayoutTitle,
+                    UserCopy.StartLayoutTitlePlain,
                     UserCopy.DraftKeysPlaceholder,
                     UserCopy.DraftKeysLabels.Select(k => k.Label).ToList());
                 if (idx < 0) return false;
@@ -450,14 +450,10 @@ public static class StartWizard
             return false;
         }
 
+        // Sin confirmacion: el asistente ya pregunto cuatro cosas y elegir la
+        // forma de lectura -- el paso anterior, cuyo titulo nombra la rama -- ES
+        // arrancar. Ver UserCopy.StartLayoutTitle.
         var args = ReviewIntentLogic.IntentToArgs(intent, ctx.Branch);
-        if (!GitReviewDialogs.Confirm(
-                UserCopy.StartConfirmTitle(ctx.Branch, layout),
-                UserCopy.StartConfirmDetail(args, ctx.Base),
-                UserCopy.StartConfirmButton))
-        {
-            return false;
-        }
 
         // The wizard was open long enough for the repository to have moved on; a start
         // that lands on a different situation than the one it was configured for is a
@@ -468,7 +464,7 @@ public static class StartWizard
         if (!StaleGuard.TokenStillValid(token, current)
             || current.Situation is not (Situation.NoReview or Situation.FinishPending))
         {
-            GitReviewDialogs.Info(UserCopy.StartStaleWizard);
+            GitReviewDialogs.Info(UserCopy.Stale);
             return false;
         }
 

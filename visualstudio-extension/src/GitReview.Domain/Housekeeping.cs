@@ -115,51 +115,59 @@ public static class HousekeepingLogic
         return action.Kind switch
         {
             HousekeepingKind.CleanOne => new ConfirmCopy(
-                $"Clean leftover review branches for {src}?",
-                $"Deletes review/{src} and review-fixes/{src} (and banked edit refs) if they exist and are not checked out. Does not touch delta markers.",
-                "Clean"),
+                $"Delete the leftovers from reviewing {src}?",
+                "This removes the review branch and any edits you extracted from it. Anything you already committed elsewhere stays. It cannot be undone.",
+                "Delete"),
+            // Lo que se CONSERVA va primero, y no es un adorno: este dialogo
+            // sale del boton que cierra el ciclo, y la unica duda que frena a
+            // alguien ahi es si el clean se lleva sus ediciones. La respuesta es
+            // que no, y decirla antes de nombrar lo que si se pierde es la
+            // diferencia entre leer el cartel y apretar a ciegas.
             HousekeepingKind.CleanKeepFixes => new ConfirmCopy(
-                $"Drop the finish undo for {src}?",
-                $"Runs git review clean --keep-fixes {src}: deletes review/{src} and the finish undo point so the pending finish goes away. Your staged edits stay on {(action.Onto == true ? src : $"review-fixes/{src}")}; delta markers are left alone. Remember to commit and push them from Source Control.",
-                "Clean"),
+                $"Done with the review of {src}?",
+                $"Your edits stay on {(action.Onto == true ? src : $"review-fixes/{src}")} - commit and push them from Source Control. What goes away is being able to undo this finish.",
+                "Done"),
             HousekeepingKind.CleanFixesOne => new ConfirmCopy(
-                $"Discard the edits extracted onto review-fixes/{src}?",
-                $"git review clean --fixes-only {src}\n\n{FixesCostSentence(action.FixesState)}"
+                $"Delete the edits you extracted from {src}?",
+                FixesCostSentence(action.FixesState)
                     // The session is named only when it exists: promising to leave
                     // something that is not there is noise, and the argv is the same.
-                    + (action.Session
-                        ? $" The review session on review/{src} is left standing, so you can still undo the finish."
-                        : "")
+                    + (action.Session ? " You can still undo the finish afterwards." : "")
                     + " It cannot be undone.",
-                "Discard"),
+                "Delete"),
             HousekeepingKind.CleanFixesOneAll => new ConfirmCopy(
-                "Discard every extracted edits branch?",
-                "git review clean --fixes-only\n\nDeletes every review-fixes/* branch that is not currently checked out. Review sessions (review/*), banked edits and delta markers are left alone. It cannot be undone.",
-                "Discard All"),
+                "Delete every branch of extracted edits?",
+                "They hold edits you made while reviewing and never committed anywhere else. Nothing you are reviewing right now is touched. It cannot be undone.",
+                "Delete all"),
             HousekeepingKind.CleanAll => new ConfirmCopy(
-                "Clean all leftover review branches?",
-                "Deletes every review/* and review-fixes/* branch that is not currently checked out, plus orphaned edit/undo refs. Does not touch delta markers or saved reviews.",
-                "Clean All"),
+                "Delete all review leftovers?",
+                "This removes every review branch and every branch of extracted edits that you are not currently on. Paused reviews and your last review points are left alone. It cannot be undone.",
+                "Delete all"),
             HousekeepingKind.ForgetSavedOne => new ConfirmCopy(
-                $"Discard the saved review of {src}?",
-                $"Deletes review-saved/{src}, its banked edits and metadata, and rolls back the delta marker it left.",
-                "Discard"),
+                $"Delete the paused review of {src}?",
+                "This throws away the edits you had saved with it. It cannot be undone.",
+                "Delete"),
             HousekeepingKind.ForgetSavedAll => new ConfirmCopy(
-                "Discard every saved review?",
-                "Deletes all review-saved/* branches, their banked edits and metadata, and rolls back their delta markers.",
-                "Discard All Saved"),
+                "Delete every paused review?",
+                "This throws away the edits saved with each of them. It cannot be undone.",
+                "Delete all"),
+            // Los tres de --delta dicen la CONSECUENCIA y no la operacion, y la
+            // dicen con la etiqueta que el asistente usa para el rango ("only
+            // what is new"): quien vaya a apretar esto lo eligio alguna vez ahi,
+            // y es el unico lugar donde ese dato se nota. "Removes the
+            // last-reviewed tip" describia un ref que ninguna superficie nombra.
             HousekeepingKind.ForgetDeltaOne => new ConfirmCopy(
-                $"Forget the delta marker for {src}?",
-                "Removes the last-reviewed tip used by git review start --delta for this branch (remote and local markers).",
-                "Forget Marker"),
+                $"Forget where you got to on {src}?",
+                "Next time you review this branch, \"only what is new\" will have no starting point, so you will be offered the full range instead.",
+                "Forget"),
             HousekeepingKind.ForgetDeltaAll => new ConfirmCopy(
-                "Forget every delta marker?",
-                "Removes all last-reviewed tips used by git review start --delta.",
-                "Forget All Markers"),
+                "Forget where you got to on every branch?",
+                "Next time you review any of them, \"only what is new\" will have no starting point, so you will be offered the full range instead.",
+                "Forget all"),
             HousekeepingKind.ForgetDeltaStale => new ConfirmCopy(
-                "Forget stale delta markers?",
-                "Fetches from the remote (when needed) and removes markers whose branch no longer exists.",
-                "Forget Stale"),
+                "Forget the branches that are gone?",
+                "This clears where you got to on branches that no longer exist. It checks the remote first, so it may take a moment.",
+                "Forget"),
             _ => throw new ArgumentOutOfRangeException(),
         };
     }

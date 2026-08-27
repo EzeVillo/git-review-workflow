@@ -50,7 +50,7 @@ public static class LayoutOffers
         // when the answer was "nothing moved" the reconcile was a no-op that
         // landed on a row with no Validate and start.
         [OfferId.DraftUpdate] = new("Update the reading order you wrote", "the PR moved on; keeps the whys whose files are still in range", ReviewLayout.Walk, DraftStep.Update),
-        [OfferId.Step] = new("Commit by commit", "one commit at a time (--step)", ReviewLayout.Step),
+        [OfferId.Step] = new("Commit by commit", "one commit at a time", ReviewLayout.Step),
         [OfferId.Whole] = new("Whole diff", "entire diff at once", ReviewLayout.Whole),
     };
 

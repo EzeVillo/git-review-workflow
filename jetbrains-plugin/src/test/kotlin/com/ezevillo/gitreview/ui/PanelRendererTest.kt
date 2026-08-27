@@ -76,7 +76,7 @@ class PanelRendererTest {
         val start = buttons.find { it.text == "Start a review" }
         assertTrue(start != null, "start button present")
         assertEquals(chrome.primaryButtonBackground(), start!!.background)
-        val discard = buttons.find { it.text == "Discard" }
+        val discard = buttons.find { it.text == "Delete" }
         assertTrue(discard != null, "inventory button present")
         assertTrue(
             discard!!.background != chrome.primaryButtonBackground(),
@@ -185,7 +185,7 @@ class PanelRendererTest {
         val root = renderer.render(panelLayout(PanelFixtures.noReviewDrafts()))
         val buttons = PanelRenderer.collectButtons(root)
         val open = buttons.first { it.toolTipText == "Open the reading order for editing" }
-        val discard = buttons.first { it.toolTipText == "git review forget --draft (with confirmation)" }
+        val discard = buttons.first { it.toolTipText == "Delete this reading order" }
 
         assertEquals("Open the reading order", open.accessibleContext.accessibleName)
         assertEquals("Discard the reading order", discard.accessibleContext.accessibleName)

@@ -91,11 +91,15 @@ describe("la seccion de ramas de ediciones", function () {
 
         const original = vscode.window.showWarningMessage;
         let asked = 0;
+        // El titulo se guarda y se afirma DESPUES del try: un assert adentro de
+        // este callback vive en una promesa que nadie espera, asi que fallaba
+        // como "unhandled rejection" y el test seguia pasando igual.
+        let title = "";
         // Sin confirmar no se borra nada.
         (vscode.window as unknown as {showWarningMessage: unknown}).showWarningMessage =
             async (message: string) => {
                 asked++;
-                assert.ok(message.includes(`review-fixes/${BRANCH}`), message);
+                title = message;
                 return undefined;
             };
         try {
@@ -108,13 +112,17 @@ describe("la seccion de ramas de ediciones", function () {
             (vscode.window as unknown as {showWarningMessage: unknown}).showWarningMessage = original;
         }
         assert.strictEqual(asked, 1, "se pide confirmacion");
+        // Nombra la rama que la fila del panel acaba de nombrar, dicha como lo
+        // que es -- las ediciones que sacaste revisandola -- y no por el
+        // namespace del ref, que quien usa el panel no tiene por que conocer.
+        assert.strictEqual(title, `Delete the edits you extracted from ${BRANCH}?`);
         assert.ok(branchExists(repo.dir, `review-fixes/${BRANCH}`), "sin confirmar no se borra");
 
         let confirmed = 0;
         (vscode.window as unknown as {showWarningMessage: unknown}).showWarningMessage =
             async () => {
                 confirmed++;
-                return "Discard";
+                return "Delete";
             };
         try {
             api.sendPanelMessage("discardFixes", index);

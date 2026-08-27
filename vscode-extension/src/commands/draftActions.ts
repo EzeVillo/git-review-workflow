@@ -28,7 +28,7 @@ import {
 } from "../review/reviewIntent";
 import {captureToken, tokenStillValid} from "../review/staleGuard";
 import {ReviewStateManager} from "../review/state";
-import {draftAgentPrompt} from "../review/userCopy";
+import {STALE, draftAgentPrompt} from "../review/userCopy";
 import {draftAt} from "../views/panelModel";
 
 /** El stderr de la CLI, aplanado a una línea (mismo criterio que el resto). */
@@ -201,7 +201,7 @@ export async function startFromDraft(
         // quedan exactamente como estaban.
         const text = flatten(built.stderr);
         void vscode.window.showErrorMessage(
-            text.length > 0 ? text : "git review walkthrough draft --build failed."
+            text.length > 0 ? text : "Could not check your reading order."
         );
         return;
     }
@@ -238,7 +238,7 @@ export async function startFromDraft(
     }
     if (!tokenStillValid(token, stateManager.state)) {
         void vscode.window.showInformationMessage(
-            "The repository changed while the dialog was open; nothing was started."
+            STALE
         );
         return;
     }
@@ -258,7 +258,7 @@ export async function startFromDraft(
         if (result.errorCode || result.exitCode !== 0) {
             const text = flatten(result.stderr);
             void vscode.window.showErrorMessage(
-                text.length > 0 ? text : "git review start failed."
+                text.length > 0 ? text : "Could not start the review."
             );
         }
     });
@@ -285,7 +285,7 @@ export async function discardDraft(
         `Discard the reading order you wrote for ${draft.src}?`,
         {
             modal: true,
-            detail: `git review forget --draft ${draft.src}\n\nThis deletes ${draft.path}. It cannot be undone.`,
+            detail: `This deletes ${draft.path}. It cannot be undone.`,
         },
         "Discard"
     );
@@ -299,7 +299,7 @@ export async function discardDraft(
         const fresh = rowAt(stateManager, index);
         if (fresh === undefined || fresh.src !== draft.src) {
             void vscode.window.showInformationMessage(
-                "The drafts changed before discard ran; nothing was deleted."
+                STALE
             );
             return;
         }
@@ -311,7 +311,7 @@ export async function discardDraft(
         if (result.errorCode || result.exitCode !== 0) {
             const text = flatten(result.stderr);
             void vscode.window.showErrorMessage(
-                text.length > 0 ? text : "git review forget --draft failed."
+                text.length > 0 ? text : "Could not delete the reading order."
             );
         }
     });

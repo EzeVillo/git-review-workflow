@@ -227,15 +227,19 @@ describe("panelHtml", () => {
         assert.ok(/go\.title = review\.orphan/.test(html), "el motivo depende de la fila");
         assert.ok(html.includes("use Discard") || html.includes("Discard"),
             "huerfana guardada: apunta a Discard en el panel");
-        assert.ok(html.includes("A review of this branch is already active"));
+        assert.ok(html.includes("You are already reviewing this branch"));
     });
 
-    it("orphan en el inventario ofrece Discard a un clic", () => {
+    it("una review rota en el inventario se borra a un clic", () => {
         assert.ok(/function reviewMeta\(review\)/.test(html));
-        assert.ok(html.includes('button(review.orphan ? "Discard orphan" : "Discard", "discardInventory"'),
-            "orphan/saved llevan boton discardInventory");
-        assert.ok(html.includes("git review forget --saved") || html.includes("git review clean"),
-            "title del boton nombra el verbo");
+        assert.ok(html.includes('button(review.orphan ? "Delete leftover" : "Delete", "discardInventory"'),
+            "rota/pausada llevan boton discardInventory");
+        // El tooltip dice que se borra, no que comando corre: decia
+        // "git review forget --saved (with confirmation)".
+        assert.ok(html.includes("Delete this paused review and its edits"),
+            "el hover de una pausada nombra lo que se pierde");
+        assert.ok(html.includes("Delete this leftover branch"),
+            "y el de una rota nombra la rama");
     });
 
     it("la seccion Edits you extracted se dibuja sola y solo con filas", () => {
@@ -262,7 +266,7 @@ describe("panelHtml", () => {
         assert.ok(html.includes("discard.disabled = model.busy || fixes.current;"),
             "la current no se puede borrar: la CLI la saltea");
         assert.ok(html.includes("You are on this branch; switch away first"));
-        assert.ok(html.includes("git review clean --fixes-only (with confirmation)"));
+        assert.ok(html.includes("Delete this branch of edits"));
     });
 
     it("el badge de una fila de fixes dice los cuatro estados y no los pliega", () => {
@@ -343,11 +347,18 @@ describe("panelHtml", () => {
         assert.ok(html.includes("renderCompareSection"), "Compare en el pie compartido");
         assert.ok(html.includes('case "no-review"') && html.includes("renderEmptyStartBlock"));
         assert.ok(html.includes("noBaseConfigured") && html.includes("renderSetup"));
-        // Setup sin base: el copy tiene que decir PARA QUÉ se usa, no solo
-        // que es obligatoria — si no, el revisor no sabe qué elegir.
+        // Setup sin base: UNA PANTALLA CON UNA SOLA PREGUNTA LA HACE. Decia
+        // "Configure git review for this repository.", que describe la pantalla
+        // y no lo que hay que contestar — y ahi el parrafo de abajo pasaba de
+        // respaldo a requisito. La pregunta se contesta sin leerlo, y el parrafo
+        // sigue estando para quien quiera saber contra que se compara.
         assert.ok(
-            html.includes("where PRs land") && html.includes("compare"),
-            "renderSetup explica el uso de la base (donde aterrizan los PRs / contra que se compara)"
+            html.includes("Which branch do pull requests land on in this repo?"),
+            "renderSetup hace la pregunta que la pantalla existe para contestar"
+        );
+        assert.ok(
+            html.includes("Reviews compare the branch you are reading against it"),
+            "y sigue diciendo para que se usa la base"
         );
         assert.ok(html.includes('"setRemote"') || html.includes("'setRemote'") || html.includes("setRemote"));
         const pendingBranch = /case "finish-pending": \{([^]*?)\n {6}case "out-of-range"/.exec(html)?.[1] ?? "";
@@ -540,14 +551,17 @@ describe("panelHtml", () => {
             pendingBranch.includes("Commit and push"),
             "tiene que recordar commitear y pushear las edits staged"
         );
-        assert.ok(pendingBranch.includes('"Undo finish", "undoFinish"') || pendingBranch.includes("undoFinish"));
+        assert.ok(pendingBranch.includes("undoFinish"));
         assert.ok(
-            pendingBranch.includes('"Clean", "cleanReview"') || pendingBranch.includes("cleanReview"),
-            "Clean (git review clean --keep-fixes) cierra el limbo del undo"
+            pendingBranch.includes('"Done, clean up", "cleanReview"'),
+            "el que cierra el limbo del undo dice que cierra el ciclo, no solo Clean"
         );
+        // EL PROXIMO PASO SE DICE SOLO SI ESTA FUERA DEL PANEL. Los dos comandos
+        // que este texto nombraba -- finish --abort y clean --keep-fixes -- son
+        // los dos botones dibujados debajo de el.
         assert.ok(
-            pendingBranch.includes("clean --keep-fixes") || pendingBranch.includes("--keep-fixes"),
-            "el copy/tooltip tiene que nombrar --keep-fixes"
+            !pendingBranch.includes("--keep-fixes") && !pendingBranch.includes("--abort"),
+            "el copy no nombra los comandos que sus propios botones corren"
         );
         assert.ok(
             !pendingBranch.includes("renderEmptyStartBlock") && !pendingBranch.includes("startReview"),
@@ -648,7 +662,7 @@ describe("panelHtml", () => {
         );
         assert.ok(
             draftFn.includes(
-                "This draft has no instruction block, so the CLI cannot tell how it was generated"
+                "This file lost its header, so it cannot be checked. Delete it and write a new one."
             ),
             "un control apagado dice por que lo esta"
         );
@@ -675,7 +689,7 @@ describe("panelHtml", () => {
         );
         assert.ok(
             draftFn.includes(
-                "Every entry needs a number and a why, and the heads-up needs prose or deleting"
+                "Every file still needs a number and a line saying why it matters"
             ),
             "y el del progreso dice que le falta al borrador"
         );
@@ -707,8 +721,8 @@ describe("panelHtml", () => {
             "el destructivo se apaga durante una mutacion"
         );
         assert.ok(
-            /discard\.title = "git review forget --draft \(with confirmation\)"/.test(draftFn),
-            "y el hover dice que comando corre"
+            /discard\.title = "Delete this reading order"/.test(draftFn),
+            "y el hover dice que se borra, no que comando corre"
         );
         // Van en la cabecera, no en la botonera: el orden del codigo es el que
         // los pone al lado del badge.

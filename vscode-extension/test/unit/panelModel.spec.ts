@@ -716,13 +716,13 @@ describe("entryPickLabel", () => {
         assert.strictEqual(entryPickLabel(entries[0], 2).description, "");
     });
 
-    it("una entrada no anotada lleva la marca uncovered", () => {
-        assert.strictEqual(entryPickLabel(entries[3], 2).description, "uncovered");
+    it("una entrada no anotada lleva la marca not covered", () => {
+        assert.strictEqual(entryPickLabel(entries[3], 2).description, "not covered");
     });
 
     it("en step la marca es la de ediciones guardadas", () => {
         const step = parsePorcelain("state\tr\ts\tt\tstep\tnone\t1\t1\t1\tabc1234\nentry\t1\tabc1234\t1\n");
-        assert.strictEqual(entryPickLabel(step.entries[0], 2).description, "banked edits");
+        assert.strictEqual(entryPickLabel(step.entries[0], 2).description, "saved edits");
         assert.strictEqual(entryPickLabel(step.entries[0], 2).label, "01  abc1234");
     });
 

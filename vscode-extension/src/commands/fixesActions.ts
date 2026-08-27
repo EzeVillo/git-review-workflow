@@ -20,6 +20,7 @@ import {
 import {runHousekeeping} from "./runHousekeeping";
 import type {ReviewStateManager} from "../review/state";
 import type {FixesRecord} from "../cli/porcelain";
+import {STALE} from "../review/userCopy";
 
 function rowAt(stateManager: ReviewStateManager, index: unknown): FixesRecord | undefined {
     if (typeof index !== "number" || !Number.isInteger(index) || index < 0) {
@@ -77,7 +78,7 @@ export async function discardFixes(
         const fresh = rowAt(stateManager, index);
         if (fresh === undefined || fresh.name !== row.name) {
             void vscode.window.showInformationMessage(
-                "The branches changed before discard ran; nothing was deleted."
+                STALE
             );
             return;
         }
@@ -89,7 +90,7 @@ export async function discardFixes(
         if (result.errorCode || result.exitCode !== 0) {
             const text = flatten(result.stderr);
             void vscode.window.showErrorMessage(
-                text.length > 0 ? text : "git review clean --fixes-only failed."
+                text.length > 0 ? text : "Could not delete those branches."
             );
         }
     });

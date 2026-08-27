@@ -19,7 +19,6 @@ import {
 import {MutationLock} from "../review/mutationLock";
 import {
     buildLayoutItems,
-    layoutSummary,
     offerConfigFlags,
 } from "../review/layoutOffers";
 import {
@@ -36,6 +35,7 @@ import {captureToken, tokenStillValid} from "../review/staleGuard";
 import {classifyStartFailure, quoteForTerminal} from "../review/startFailure";
 import {ReviewStateManager} from "../review/state";
 import {setBase} from "./setBase";
+import {STALE, startLayoutTitle} from "../review/userCopy";
 
 /** El stderr de la CLI, aplanado a una línea para el toast del editor (mismo criterio que continueReview.ts). */
 function flatten(stderr: string): string {
@@ -91,7 +91,7 @@ const RANGE_ITEMS: RangeItem[] = [
     },
     {
         label: "Only what is new",
-        description: "commits since your last review of this branch (--delta)",
+        description: "commits since your last review of this branch",
         range: "delta",
     },
 ];
@@ -138,7 +138,8 @@ async function pickBranch(candidates: CandidateBranch[]): Promise<CandidateBranc
  * primero lo que se va a leer— es la que decide el camino siguiente.
  */
 async function pickLayout(
-    offers: readonly ReadingOffer[] | undefined
+    offers: readonly ReadingOffer[] | undefined,
+    branch: string
 ): Promise<LayoutItem | undefined> {
     const items: LayoutItem[] = buildLayoutItems(offers).map((item) => {
         const entry: LayoutItem = {
@@ -152,7 +153,10 @@ async function pickLayout(
         return entry;
     });
     return vscode.window.showQuickPick(items, {
-        title: "Start a review — how to read it",
+        // El ÚLTIMO paso, y por eso nombra la rama: elegir acá ya arranca la
+        // review — la pantalla de confirmación que seguía a este paso repetía
+        // las cuatro respuestas del asistente y agregaba el comando.
+        title: startLayoutTitle(branch),
         placeHolder: "Walkthrough, commit by commit, keys only, or whole diff",
     });
 }
@@ -312,7 +316,7 @@ async function runDraftFlow(
                         ? undefined
                         : outcome.text.length > 0
                             ? outcome.text
-                            : "git review walkthrough draft failed.",
+                            : "Could not draft a reading order.",
                 });
                 break;
             }
@@ -327,25 +331,6 @@ async function runDraftFlow(
                 } : {kind: "back"};
         }
     }
-}
-
-/**
- * Confirmación con la frase resumen (FR-017 / FR-011), en el mismo molde que
- * `continueReview.ts`. Nombra la forma real (walk / keys / step / whole), no
- * “automatically…”.
- */
-async function confirmIntent(intent: ReviewIntent, args: string[], base: string | undefined): Promise<boolean> {
-    const branch = intent.branch ?? "the current branch";
-    const detailLines = [`git review start ${args.join(" ")}`];
-    if (base !== undefined) {
-        detailLines.push(`Comparing against ${base}.`);
-    }
-    const answer = await vscode.window.showWarningMessage(
-        `Start reviewing ${branch}, ${layoutSummary(intent.layout)}?`,
-        {modal: true, detail: detailLines.join("\n")},
-        "Start the review"
-    );
-    return answer === "Start the review";
 }
 
 /**
@@ -458,7 +443,7 @@ export async function startReview(
     let offers = ctx.offers;
     let layout: ReviewLayout;
     for (; ;) {
-        const picked = await pickLayout(offers);
+        const picked = await pickLayout(offers, branch.name);
         if (!picked) {
             return;
         }
@@ -502,22 +487,14 @@ export async function startReview(
 
     const args = intentToArgs(intent, branch.name);
 
-    // La base del reporte leído arriba, o — si hacía falta y setBase() la
-    // fijó recién — la que quedó tras su refresh: parsed.config.base sigue
-    // siendo el valor de ANTES de ese paso, así que no alcanza por sí solo.
-    const base = parsed.config.base ?? stateManager.state.config?.base;
-
-    // Capturado justo antes de la confirmación (FR-038). Check externo: UX
-    // si el modal ya quedó obsoleto. Check **dentro** del lock (como abort/
-    // save/continue): cierra la ventana entre "Start the review" y el spawn
-    // (otro proceso arrancó una review, HEAD cambió, watcher refresh).
+    // Capturado antes del spawn (FR-038). El asistente pudo estar abierto un
+    // rato: el check externo evita el progreso cuando el estado ya quedó
+    // obsoleto, y el de adentro del lock cierra la ventana entre este punto y
+    // el spawn (otro proceso arrancó una review, HEAD cambió, watcher refresh).
     const token = captureToken(stateManager.state);
-    if (!(await confirmIntent(intent, args, base))) {
-        return;
-    }
     if (!tokenStillValid(token, stateManager.state)) {
         void vscode.window.showInformationMessage(
-            "The repository changed while the wizard was open; nothing was started."
+            STALE
         );
         return;
     }
@@ -556,7 +533,7 @@ export async function startReview(
 
         if (stale) {
             void vscode.window.showInformationMessage(
-                "The repository changed before the start ran; nothing was started."
+                STALE
             );
             return;
         }
@@ -565,7 +542,7 @@ export async function startReview(
             const text = flatten(result?.stderr ?? "");
             if (result && classifyStartFailure(result.stderr) === "network") {
                 const action = await vscode.window.showErrorMessage(
-                    text.length > 0 ? text : "git review start failed.",
+                    text.length > 0 ? text : "Could not start the review.",
                     "Run in Terminal"
                 );
                 if (action === "Run in Terminal") {
@@ -575,7 +552,7 @@ export async function startReview(
                 // Mismo fallback que el camino de red: exit ≠ 0 sin stderr
                 // (CLI matada / rota) no debe ser un fallo silencioso.
                 void vscode.window.showErrorMessage(
-                    text.length > 0 ? text : "git review start failed."
+                    text.length > 0 ? text : "Could not start the review."
                 );
             }
             return;

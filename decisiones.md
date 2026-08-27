@@ -935,3 +935,61 @@ la historia compartida. El
 los caches de Actions tienen scope por rama y un tag no es la default branch, así que lo único que
 el release puede restaurar es lo que ese job escribió en el último push a `main` — sin eso cada
 release rebaja un IDE por producto verificado.
+
+## 15. La copy de los paneles
+
+Los tres clientes le hablaban a alguien que ya conocía la CLI, y no por descuido: los textos eran
+**precisos sobre el mecanismo**. Un tooltip decía `git review forget --draft (with confirmation)`,
+una confirmación arrancaba con el comando y seguía con globs (`review-fixes/*`, «banked edits»,
+«delta markers»), y el banner de cierre mandaba a la terminal —`git review finish --abort`,
+`clean --keep-fixes`— teniendo los dos botones que corren justo eso tres centímetros más abajo.
+Nada de eso contesta la pregunta que alguien tiene delante de un panel.
+
+Tres reglas, en orden de importancia:
+
+**1. El próximo paso se dice sólo si está fuera del panel.** Si el próximo paso es un botón que ya
+está en pantalla, el botón *es* el texto: nombrarlo en prosa lo dice dos veces y encima enseña una
+sintaxis que quien mira el panel eligió no usar. Se escribe el próximo paso cuando vive en otro
+lado —Source Control, el editor, `git checkout --`— porque ahí el panel es lo único que puede
+señalarlo. El banner de `finish-pending` es el caso de manual: «Commit and push them from Source
+Control» se queda, los dos comandos se fueron.
+
+**2. Tres capas, y el mecanismo nunca en la primera.** Etiqueta (qué hace, 1-3 palabras); contexto
+(una oración, sólo si el resultado no es obvio o no tiene vuelta atrás); detalle técnico —el
+comando, el stderr, la ruta— siempre a un clic, nunca en el camino.
+
+**3. Se confirma lo que no se puede deshacer.** Un cartel que aparece siempre deja de leerse, y
+entonces tampoco se lee el que importa. Por eso la confirmación de `start` **se borró**: el
+asistente ya pregunta cuatro cosas, la quinta pantalla repetía las cuatro respuestas y agregaba el
+comando, y `start` no destruye nada (se niega solo con el árbol sucio, y una review empezada se
+cancela con un botón). Lo que sobrevive de esa pantalla es la frase, mudada al paso que ahora
+ejecuta: el título del picker de forma de lectura nombra la rama (`UserCopy.startLayoutTitle`).
+
+**Un aviso de estado obsoleto, no diez.** Eran diez constantes por cliente —catorce literales en VS
+Code— y cada una nombraba el verbo que no corrió: «nothing was finished», «nothing was saved». Ese
+verbo no es información, es el botón que el revisor acaba de apretar. Lo único que no puede deducir
+es *por qué* no pasó nada, y eso es idéntico en los diez casos. Tampoco lleva «try again»: el panel
+ya se refrescó solo, así que el estado que se ve al leer el mensaje es el nuevo.
+
+**Los fallbacks de error dicen qué no pasó, no qué comando falló.** Son lo único que llega cuando la
+CLI muere *sin stderr* (matada, rota, un exit ≠ 0 mudo), o sea el peor momento para contestar con
+un argv. Cuando la CLI **sí** trae stderr no cambió nada: ese texto se sigue mostrando tal cual
+(FR-024), porque los mensajes de esta CLI dicen qué pasó y cómo salir.
+
+**Un nombre por concepto, y ninguno prestado de git**: `orphan` → `broken`, `no metadata` →
+`details are gone`, `uncovered` → `not covered`, `banked edits` → `saved edits`, y un solo verbo
+para borrar (`Delete`, no `Discard`/`Clean`/`Forget` según el día). La distinción entre el
+*walkthrough* (el archivo del autor, versionado en el PR) y el *reading order* (el que escribe el
+revisor) sí se mantiene: son dos objetos distintos y el producto los trata distinto.
+
+**Esto es de los paneles, no de la CLI.** `git review status` sigue imprimiendo `(uncovered)` y los
+README siguen diciendo «banked edits»: esa superficie es para quien eligió la terminal, y ahí el
+vocabulario de git es el vocabulario correcto.
+
+**Dónde vive cada texto.** El patrón que ya tenían JetBrains y Visual Studio —un `UserCopy` con
+todas las cadenas— es ahora también el de VS Code (`src/review/userCopy.ts`), y el canónico sigue
+siendo `contracts/client-product-surface.yaml`. Los tooltips entraron ahí: se declaraban en cuatro
+formas distintas y sólo una tenía parser, así que el de `openAllChanges` vivía en el contrato sin
+que nadie lo verificara. Ahora `check-client-product-surface.mjs` barre **toda** clave que empiece
+con `tooltip` y la exige en los tres paneles (con `not_in:` en la misma línea como única excepción),
+en vez de una regex por forma que se olvida de la quinta.

@@ -4,6 +4,7 @@ import {finishOutcome} from "../review/finishOutcome";
 import {MutationLock} from "../review/mutationLock";
 import {ReviewStateManager} from "../review/state";
 import {captureToken, tokenStillValid} from "../review/staleGuard";
+import {STALE} from "../review/userCopy";
 
 /** El stderr de la CLI, aplanado a una línea para el toast del editor (mismo criterio que el resto de los comandos). */
 function message(stderr: string): string {
@@ -86,7 +87,7 @@ export async function finishReview(
     // esperaba. La revalidación autoritativa va otra vez dentro del lock.
     if (!tokenStillValid(token, stateManager.state)) {
         void vscode.window.showInformationMessage(
-            "The review state changed while choosing where to finish; nothing was finished."
+            STALE
         );
         return;
     }
@@ -113,7 +114,7 @@ export async function finishReview(
 
         if (stale) {
             void vscode.window.showInformationMessage(
-                "The review state changed before the finish ran; nothing was finished."
+                STALE
             );
             return;
         }
@@ -123,7 +124,7 @@ export async function finishReview(
             // rota), un toast genérico evita el fallo silencioso.
             const text = message(invocation?.stderr ?? "");
             void vscode.window.showErrorMessage(
-                text.length > 0 ? text : "git review finish failed."
+                text.length > 0 ? text : "Could not finish the review."
             );
             return;
         }
@@ -198,7 +199,7 @@ export async function undoFinish(
         );
         if (stale) {
             void vscode.window.showInformationMessage(
-                "The review state changed before the undo ran; nothing was undone."
+                STALE
             );
             return {stale: true as const};
         }
@@ -220,7 +221,7 @@ export async function undoFinish(
     // se detiene (nunca ofrecer force a ciegas).
     const text = message(invocation.stderr);
     if (text.length === 0) {
-        void vscode.window.showErrorMessage("git review finish --abort failed.");
+        void vscode.window.showErrorMessage("Could not undo the finish.");
         return;
     }
 
@@ -235,7 +236,7 @@ export async function undoFinish(
         text,
         {
             modal: true,
-            detail: "Aborting with --force permanently discards the work made since the finish. This cannot be undone.",
+            detail: "This permanently discards the work made since the finish. It cannot be undone.",
         },
         "Discard Work and Undo"
     );
@@ -265,14 +266,14 @@ export async function undoFinish(
         );
         if (stale) {
             void vscode.window.showInformationMessage(
-                "The review state changed before the force-undo ran; nothing was undone."
+                STALE
             );
             return;
         }
         if (forceInvocation && forceInvocation.exitCode !== 0) {
             const forceText = message(forceInvocation.stderr);
             void vscode.window.showErrorMessage(
-                forceText.length > 0 ? forceText : "git review finish --abort --force failed."
+                forceText.length > 0 ? forceText : "Could not undo the finish, even discarding the newer work."
             );
         }
     });
@@ -314,7 +315,7 @@ export async function resumeFinish(
         if (result.exitCode !== 0) {
             const text = message(result.stderr);
             void vscode.window.showErrorMessage(
-                text.length > 0 ? text : "git review finish --resume failed."
+                text.length > 0 ? text : "Could not continue the finish."
             );
         }
     });

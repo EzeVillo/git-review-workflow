@@ -8,15 +8,25 @@ import org.junit.jupiter.api.Test
 
 class PanelLayoutFinishTest {
     @Test
-    fun `finish-pending banner has Clean primary and Undo finish`() {
+    fun `finish-pending banner leads with where the edits are, not with the verb`() {
         val layout = panelLayout(PanelFixtures.finishPending())
         val banner = layout.blocks.filterIsInstance<Block.Banner>().first()
-        assertTrue(banner.paragraphs.first().startsWith("Finished. Your edits are staged on"))
+        assertTrue(banner.paragraphs.first().startsWith("Your edits are on"))
+        assertTrue(banner.paragraphs.first().endsWith("staged and ready to commit."))
+        // Commit y push se quedan -- ese paso vive en Source Control, o sea
+        // fuera del panel --, pero los dos comandos que este texto nombraba son
+        // los dos botones dibujados debajo de el.
+        assertTrue(banner.paragraphs[1].contains("Commit and push them from Source Control"))
+        assertFalse(banner.paragraphs[1].contains("--abort"))
+        assertFalse(banner.paragraphs[1].contains("--keep-fixes"))
         val ids = banner.row.controls.map { it.id to it.emphasis }
         assertEquals(ControlId.CLEAN_REVIEW, ids[0].first)
         assertEquals(Emphasis.PRIMARY, ids[0].second)
+        // "Clean" solo no decia que limpia; ahora dice ademas cual de los dos
+        // cierra el ciclo.
+        assertEquals("Done, clean up", banner.row.controls[0].label)
         assertEquals(ControlId.UNDO_FINISH, ids[1].first)
-        assertEquals("Undo finish", banner.row.controls[1].label)
+        assertEquals("Undo", banner.row.controls[1].label)
     }
 
     @Test

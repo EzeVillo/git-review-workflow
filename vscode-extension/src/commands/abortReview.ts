@@ -4,6 +4,7 @@ import {MutationLock} from "../review/mutationLock";
 import {isReviewReadable} from "../review/situation";
 import {ReviewStateManager} from "../review/state";
 import {captureToken, tokenStillValid} from "../review/staleGuard";
+import {STALE} from "../review/userCopy";
 
 /** El stderr de la CLI, aplanado a una línea para el toast del editor. */
 function message(stderr: string): string {
@@ -91,7 +92,7 @@ export async function abortReview(
             // Informativo, no error: nadie hizo nada mal, el mundo cambió
             // debajo del diálogo mientras esperaba la confirmación.
             void vscode.window.showInformationMessage(
-                "The review state changed before the cancellation ran; nothing was cancelled."
+                STALE
             );
             return;
         }
@@ -103,7 +104,7 @@ export async function abortReview(
             // genérico evita el fallo silencioso.
             const text = message(result.stderr);
             void vscode.window.showErrorMessage(
-                text.length > 0 ? text : "git review abort failed."
+                text.length > 0 ? text : "Could not cancel the review."
             );
         }
     });

@@ -242,8 +242,8 @@ public static class PanelModelBuilder
         var marks = new List<string>();
         if (entry.Position == position) marks.Add("current");
         if (entry.Essential == true) marks.Add("key");
-        if (entry.Annotated == false) marks.Add("uncovered");
-        if (entry.Banked == true) marks.Add("banked edits");
+        if (entry.Annotated == false) marks.Add("not covered");
+        if (entry.Banked == true) marks.Add("saved edits");
         var id = DisplayOf(entry.Id);
         var label = !string.IsNullOrEmpty(subject)
             ? $"{Pad(entry.Position)}  {id}  {subject}"

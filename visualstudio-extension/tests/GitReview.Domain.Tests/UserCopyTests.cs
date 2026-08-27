@@ -69,81 +69,84 @@ public class UserCopyTests
         Assert.NotEqual(UserCopy.UndoDetailPending, UserCopy.UndoDetailConflict);
     }
 
+    /// <summary>
+    /// El asistente ya no confirma: `start` se niega solo con el arbol sucio y
+    /// una review empezada se cancela con un boton del panel, asi que la quinta
+    /// pantalla solo repetia las cuatro respuestas y agregaba el comando.
+    /// Lo que sobrevive de ella es la frase, mudada al paso que ahora ejecuta.
+    /// </summary>
     [Fact]
-    public void Start_confirm_uses_the_layout_summary_and_shows_the_command()
+    public void The_last_wizard_step_names_the_branch_it_is_about_to_review()
     {
         Assert.Equal(
-            "Start reviewing feature/x, as a walkthrough?",
-            UserCopy.StartConfirmTitle("feature/x", ReviewLayout.Walk));
-        Assert.Equal(
-            "Start reviewing feature/x, commit by commit?",
-            UserCopy.StartConfirmTitle("feature/x", ReviewLayout.Step));
-        Assert.Equal(
-            "git review start --step -- feature/x\nComparing against main.",
-            UserCopy.StartConfirmDetail(new[] { "--step", "--", "feature/x" }, "main"));
-        // With no base to name, the second line is omitted rather than left blank.
-        Assert.Equal(
-            "git review start -- feature/x",
-            UserCopy.StartConfirmDetail(new[] { "--", "feature/x" }, null));
-        Assert.Equal("Start the review", UserCopy.StartConfirmButton);
+            "Start reviewing feature/x — how do you want to read it?",
+            UserCopy.StartLayoutTitle("feature/x"));
+        // El paso de una fila del bloque de borradores no tiene rama que nombrar
+        // y se queda con el titulo llano.
+        Assert.Equal("Start a review — how to read it", UserCopy.StartLayoutTitlePlain);
     }
 
     /// <summary>
-    /// Every stale message names the action that did not happen, so the reviewer
-    /// knows what to retry. A generic one would leave them guessing.
+    /// Hay UN solo aviso de estado obsoleto, no uno por accion.
+    /// <para>
+    /// Eran diez, y cada uno nombraba el verbo que no corrio -- "nothing was
+    /// saved", "nothing was undone". Ese verbo no es informacion: es el boton
+    /// que el revisor acaba de apretar. Lo que si necesita saber es por que no
+    /// paso nada, y eso es identico en los diez casos.
+    /// </para>
+    /// <para>
+    /// El test afirma el texto entero a proposito: es copy compartida byte a
+    /// byte con userCopy.ts y UserCopy.kt, asi que una divergencia tiene que
+    /// romper aca y no en la lectura de alguien.
+    /// </para>
     /// </summary>
     [Fact]
-    public void Stale_messages_name_the_action_that_did_not_run()
+    public void Stale_is_one_message_that_says_why_nothing_happened()
     {
         Assert.Equal(
-            "The review state changed before the cancellation ran; nothing was cancelled.",
-            UserCopy.StaleMessage("abortReview"));
-        Assert.Equal(
-            "The review state changed before the force-undo ran; nothing was undone.",
-            UserCopy.StaleMessage("undoFinish", force: true));
-        Assert.Equal(
-            "The review state changed before the undo ran; nothing was undone.",
-            UserCopy.StaleMessage("undoFinish"));
-        Assert.Equal(
-            "The review state changed before the save ran; nothing was saved.",
-            UserCopy.StaleMessage("saveReview"));
-        Assert.Equal(
-            "The review state changed before the finish ran; nothing was finished.",
-            UserCopy.StaleMessage("finishReview"));
-        Assert.Equal(UserCopy.HousekeepingStale, UserCopy.StaleMessage("somethingElse"));
+            "The repository changed while you were deciding, so nothing happened.",
+            UserCopy.Stale);
 
-        // Every one of them says nothing happened — that is the point of the message.
-        foreach (var action in new[] { "abortReview", "saveReview", "continueReview", "finishReview", "undoFinish", "startReview", "cleanReview" })
-            Assert.Contains("nothing was", UserCopy.StaleMessage(action));
+        // No nombra ningun verbo del producto: eso es lo que lo hace servir para
+        // los ocho comandos, y lo que se rompe si alguien lo vuelve a especializar.
+        foreach (var verb in new[] { "finish", "save", "undo", "start", "cancel", "resume", "discard" })
+            Assert.DoesNotContain(verb, UserCopy.Stale, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Estos mensajes son lo UNICO que llega cuando la CLI muere sin stderr
+    /// (matada, rota, un exit != 0 mudo), y decian el argv que no anduvo: "git
+    /// review finish --abort --force failed." nombra un comando que quien usa el
+    /// panel no escribio, en el unico momento en que no hay nada mas que leer.
+    /// Con stderr no cambia nada -- ese texto se sigue mostrando tal cual.
+    /// </summary>
     [Fact]
-    public void Failure_fallbacks_name_the_command_that_failed()
+    public void Failure_fallbacks_name_what_did_not_happen()
     {
-        Assert.Equal("git review abort failed.", UserCopy.FailureFallback("abortReview"));
+        Assert.Equal("Could not cancel the review.", UserCopy.FailureFallback("abortReview"));
         Assert.Equal(
-            "git review finish --abort --force failed.",
+            "Could not undo the finish, even discarding the newer work.",
             UserCopy.FailureFallback("undoFinish", new ActionParams.UndoFinish(true)));
         Assert.Equal(
-            "git review finish --abort failed.",
+            "Could not undo the finish.",
             UserCopy.FailureFallback("undoFinish", new ActionParams.UndoFinish(false)));
         Assert.Equal(
-            "git review walkthrough init --force failed.",
+            "Could not replace the walkthrough.",
             UserCopy.FailureFallback("walkthroughInit", new ActionParams.WalkthroughInit(true)));
-        Assert.Equal("git review next failed.", UserCopy.FailureFallback("next"));
-        Assert.Equal("git review config failed.", UserCopy.FailureFallback("setBase"));
+        Assert.Equal("Could not move to the next entry.", UserCopy.FailureFallback("next"));
+        Assert.Equal("Could not save the setting.", UserCopy.FailureFallback("setBase"));
     }
 
-    /// <summary>The housekeeping fallback names the verb that actually ran.</summary>
+    /// <summary>The housekeeping fallback still follows the verb that ran.</summary>
     [Fact]
     public void The_housekeeping_fallback_follows_the_verb()
     {
         Assert.Equal(
-            "git review clean failed.",
+            "Could not clean up.",
             UserCopy.FailureFallback("cleanReview",
                 new ActionParams.Housekeeping(new HousekeepingAction(HousekeepingKind.CleanAll))));
         Assert.Equal(
-            "git review forget failed.",
+            "Could not forget that.",
             UserCopy.FailureFallback("forgetReview",
                 new ActionParams.Housekeeping(new HousekeepingAction(HousekeepingKind.ForgetSavedAll))));
     }
@@ -156,7 +159,10 @@ public class UserCopyTests
         {
             var message = UserCopy.FailureFallback(action);
             Assert.False(string.IsNullOrWhiteSpace(message), $"{action} has no failure message");
-            Assert.EndsWith("failed.", message);
+            // Ninguno vuelve a nombrar un comando: eso es lo que se acaba de
+            // sacar, y es lo que un mapa nuevo reintroduce sin querer.
+            Assert.DoesNotContain("git review", message, StringComparison.Ordinal);
+            Assert.EndsWith(".", message);
         }
     }
 

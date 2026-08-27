@@ -344,7 +344,7 @@ class PanelLayoutContractTest {
         // rows[2] es 1/1 con origen y rango conocidos: el unico que arranca.
         val filled = rows[2].controls.first { it.id == ControlId.START_FROM_DRAFT }
         assertTrue(filled.enabled, "completo y con flags conocidos: encendido")
-        assertEquals("git review walkthrough draft --build, then start", filled.tooltip)
+        assertEquals(spec["tooltip"], filled.tooltip, "y dice que va a hacer")
 
         val busy = (panelLayout(PanelFixtures.noReviewDraftsBusy()).blocks
             .first { it is Block.DraftRows } as Block.DraftRows).rows

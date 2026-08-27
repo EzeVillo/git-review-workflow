@@ -217,14 +217,23 @@ public class PanelLayoutInvariantsTests
     {
         var confirming = new[]
         {
-            ControlId.StartReview, ControlId.ContinueReview, ControlId.DiscardInventory,
+            ControlId.ContinueReview, ControlId.DiscardInventory,
             ControlId.CleanReview, ControlId.UndoFinish, ControlId.CompareReview,
             ControlId.WalkthroughInit, ControlId.WalkthroughBuild, ControlId.SaveReview,
             ControlId.AbortReview,
         };
         foreach (var id in confirming)
             Assert.True(PanelLayoutBuilder.RequiresConfirmation(id), $"{id.Wire()} must confirm");
-        foreach (var id in new[] { ControlId.Refresh, ControlId.Next, ControlId.Prev, ControlId.OpenEntry })
+        // StartReview esta del otro lado a proposito: su asistente ya pregunta
+        // cuatro cosas, y `start` no destruye nada -- se niega solo con el arbol
+        // sucio, y una review empezada se cancela con un boton del panel. Un
+        // cartel que aparece siempre deja de leerse, y entonces tampoco se lee
+        // el que importa.
+        foreach (var id in new[]
+                 {
+                     ControlId.StartReview, ControlId.Refresh, ControlId.Next,
+                     ControlId.Prev, ControlId.OpenEntry,
+                 })
             Assert.False(PanelLayoutBuilder.RequiresConfirmation(id), $"{id.Wire()} must not confirm");
     }
 

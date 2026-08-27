@@ -6,18 +6,21 @@ namespace GitReview.Domain.Tests;
 public class PanelLayoutFinishTests
 {
     [Fact]
-    public void Finish_pending_banner_has_clean_primary_and_undo_finish()
+    public void Finish_pending_banner_leads_with_where_the_edits_are()
     {
         var layout = PanelLayoutBuilder.PanelLayout(PanelFixtures.FinishPending());
         var banner = layout.Blocks.OfType<Block.Banner>().First();
-        Assert.StartsWith("Finished. Your edits are staged on", banner.Paragraphs[0]);
+        Assert.StartsWith("Your edits are on", banner.Paragraphs[0]);
+        Assert.EndsWith("staged and ready to commit.", banner.Paragraphs[0]);
 
         var controls = banner.ControlsRow.Controls;
         Assert.Equal(ControlId.CleanReview, controls[0].Id);
         Assert.Equal(Emphasis.Primary, controls[0].Emphasis);
-        Assert.Equal("Clean", controls[0].Label);
+        // "Clean" solo no decia que limpia -- podia leerse como que se lleva las
+        // ediciones. Ahora dice ademas cual de los dos cierra el ciclo.
+        Assert.Equal("Done, clean up", controls[0].Label);
         Assert.Equal(ControlId.UndoFinish, controls[1].Id);
-        Assert.Equal("Undo finish", controls[1].Label);
+        Assert.Equal("Undo", controls[1].Label);
     }
 
     /// <summary>
@@ -39,17 +42,28 @@ public class PanelLayoutFinishTests
             return PanelLayoutBuilder.PanelLayout(model).Blocks.OfType<Block.Banner>().First().Paragraphs[0];
         }
 
-        Assert.Equal("Finished. Your edits are staged on review-fixes/feature/x.", FirstParagraph(false));
-        Assert.Equal("Finished. Your edits are staged on feature/x.", FirstParagraph(true));
+        Assert.Equal("Your edits are on review-fixes/feature/x, staged and ready to commit.", FirstParagraph(false));
+        Assert.Equal("Your edits are on feature/x, staged and ready to commit.", FirstParagraph(true));
     }
 
+    /// <summary>
+    /// EL PROXIMO PASO SE DICE SOLO SI ESTA FUERA DEL PANEL.
+    /// <para>
+    /// Commitear y pushear viven en Source Control, asi que ese si se nombra: es
+    /// la unica superficie que puede senalarlo. Los dos comandos que este parrafo
+    /// nombraba -- finish --abort y clean --keep-fixes -- son los dos botones
+    /// dibujados justo debajo de el.
+    /// </para>
+    /// </summary>
     [Fact]
-    public void The_banner_says_how_to_undo_and_how_to_stop_being_able_to()
+    public void The_banner_points_outside_the_panel_and_nowhere_else()
     {
         var banner = PanelLayoutBuilder.PanelLayout(PanelFixtures.FinishPending())
             .Blocks.OfType<Block.Banner>().First();
-        Assert.Contains("git review finish --abort", banner.Paragraphs[1]);
-        Assert.Contains("clean --keep-fixes", banner.Paragraphs[1]);
+        Assert.Contains("Commit and push them from Source Control", banner.Paragraphs[1]);
+        Assert.Contains("still undoable", banner.Paragraphs[1]);
+        Assert.DoesNotContain("--abort", banner.Paragraphs[1]);
+        Assert.DoesNotContain("--keep-fixes", banner.Paragraphs[1]);
     }
 
     [Fact]

@@ -138,20 +138,29 @@ public class HousekeepingTests
     public void Confirm_copy_stays_aligned_with_the_other_clients()
     {
         var clean = HousekeepingLogic.ConfirmCopyFor(new HousekeepingAction(HousekeepingKind.CleanOne, "feature/x"));
-        Assert.Equal("Clean leftover review branches for feature/x?", clean.Title);
-        Assert.Equal("Clean", clean.Button);
-        Assert.Contains("Does not touch delta markers.", clean.Detail);
+        Assert.Equal("Delete the leftovers from reviewing feature/x?", clean.Title);
+        Assert.Equal("Delete", clean.Button);
+        Assert.Contains("already committed elsewhere stays", clean.Detail);
+        // Nada de namespaces de refs: quien lee esto no sabe que es review-fixes/*.
+        Assert.DoesNotContain("review-fixes/", clean.Detail);
 
         var discard = HousekeepingLogic.ConfirmCopyFor(new HousekeepingAction(HousekeepingKind.ForgetSavedOne, "feature/x"));
-        Assert.Equal("Discard the saved review of feature/x?", discard.Title);
-        Assert.Equal("Discard", discard.Button);
+        Assert.Equal("Delete the paused review of feature/x?", discard.Title);
+        Assert.Equal("Delete", discard.Button);
 
-        Assert.Equal("Clean All",
+        Assert.Equal("Delete all",
             HousekeepingLogic.ConfirmCopyFor(new HousekeepingAction(HousekeepingKind.CleanAll)).Button);
-        Assert.Equal("Discard All Saved",
+        Assert.Equal("Delete all",
             HousekeepingLogic.ConfirmCopyFor(new HousekeepingAction(HousekeepingKind.ForgetSavedAll)).Button);
-        Assert.Equal("Forget Stale",
+        Assert.Equal("Forget",
             HousekeepingLogic.ConfirmCopyFor(new HousekeepingAction(HousekeepingKind.ForgetDeltaStale)).Button);
+
+        // Los tres de --delta dicen la CONSECUENCIA con la etiqueta que el
+        // asistente usa para el rango, no el ref que ninguna superficie nombra.
+        var delta = HousekeepingLogic.ConfirmCopyFor(new HousekeepingAction(HousekeepingKind.ForgetDeltaOne, "feature/x"));
+        Assert.Equal("Forget where you got to on feature/x?", delta.Title);
+        Assert.Contains("\"only what is new\"", delta.Detail);
+        Assert.DoesNotContain("--delta", delta.Detail);
     }
 
     /// <summary>
@@ -163,11 +172,11 @@ public class HousekeepingTests
     {
         var separate = HousekeepingLogic.ConfirmCopyFor(
             new HousekeepingAction(HousekeepingKind.CleanKeepFixes, "feature/x", Onto: false));
-        Assert.Contains("Your staged edits stay on review-fixes/feature/x", separate.Detail);
+        Assert.Contains("Your edits stay on review-fixes/feature/x", separate.Detail);
 
         var onto = HousekeepingLogic.ConfirmCopyFor(
             new HousekeepingAction(HousekeepingKind.CleanKeepFixes, "feature/x", Onto: true));
-        Assert.Contains("Your staged edits stay on feature/x", onto.Detail);
+        Assert.Contains("Your edits stay on feature/x", onto.Detail);
         Assert.DoesNotContain("review-fixes/feature/x", onto.Detail);
     }
 }

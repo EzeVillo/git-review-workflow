@@ -445,10 +445,10 @@ export function entryPickLabel(
     }
     // `annotated` sólo viene en walk; ausente (step) nunca dispara esta marca.
     if (entry.annotated === false) {
-        marks.push("uncovered");
+        marks.push("not covered");
     }
     if (entry.banked) {
-        marks.push("banked edits");
+        marks.push("saved edits");
     }
     // El asunto acompaña al identificador, no lo reemplaza: nadie reconoce un
     // commit por siete caracteres hexadecimales, pero el SHA es lo que se pega

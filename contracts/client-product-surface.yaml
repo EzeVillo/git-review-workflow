@@ -226,9 +226,9 @@ panel_layout:
   no-review-setup:
     source_fns: [renderSetup]
     blocks:
-      - {block: paragraph, text: "Configure git review for this repository."}
-      - {block: row, controls: [{id: setBase, label: "Set the base branch", emphasis: primary, confirms: false}]}
-      - {block: paragraph, text: "The base is where PRs land in this repo (main, develop, …). Full reviews compare the branch under review against it."}
+      - {block: paragraph, text: "Which branch do pull requests land on in this repo?"}
+      - {block: row, controls: [{id: setBase, label: "Choose the branch", emphasis: primary, confirms: false}]}
+      - {block: paragraph, text: "Reviews compare the branch you are reading against it. Usually main or develop."}
       - {block: paragraph, text: "Remote: {remote} (optional)."}
       - {block: row, controls: [{id: setRemote, label: "Change remote", emphasis: secondary, confirms: false}]}
   no-review:
@@ -252,7 +252,17 @@ panel_layout:
       - {block: heading, text: "Reviews in this repository", when: has_reviews}
       - {block: inventory_rows}
       - {block: paragraph, text: "No active review on this branch."}
-      - {block: row, controls: [{id: startReview, label: "Start a review", emphasis: primary, confirms: true}]}
+      # SE CONFIRMA LO QUE NO SE PUEDE DESHACER, y `start` no es eso: se niega
+      # solo con el arbol sucio, y una review empezada se cancela con un boton
+      # del panel. El asistente ya pregunta cuatro cosas -- rama, origen, rango,
+      # forma de lectura -- y la quinta pantalla repetia las cuatro respuestas y
+      # agregaba el comando. Un cartel que aparece siempre deja de leerse, y
+      # entonces tampoco se lee el que importa.
+      #
+      # El contexto que ese cartel daba -- que rama se va a revisar -- se mudo al
+      # paso que ahora ejecuta: el titulo del picker de forma de lectura
+      # (UserCopy.startLayoutTitle), que es el ultimo del asistente.
+      - {block: row, controls: [{id: startReview, label: "Start a review", emphasis: primary, confirms: false}]}
       # Init, build y las dos guias de autoria vivian con Compare en una seccion
       # "Other actions". Se separaron cuando las guias entraron: cuatro controles
       # sobre el mismo sustantivo mas uno ajeno no es una lista de "otras
@@ -334,14 +344,30 @@ panel_layout:
   finish-pending:
     source_fns: [renderEmptyState]
     blocks:
+      # EL PROXIMO PASO SE DICE SOLO SI ESTA FUERA DEL PANEL.
+      #
+      # Decia "...so you can undo with git review finish --abort, or
+      # clean --keep-fixes when you no longer need the undo": los dos comandos
+      # que nombraba esa frase son los dos botones dibujados abajo, a tres
+      # centimetros. Un texto que manda a la terminal teniendo el control al
+      # lado gasta la unica pantalla que el revisor lee entera despues de
+      # cerrar, y le ensena una sintaxis que no necesita.
+      #
+      # Commitear y pushear SI se quedan: ese paso vive en Source Control, o
+      # sea fuera de este panel, y esta es la unica superficie que puede
+      # senalarlo.
+      #
+      # "Clean" solo no dice que limpia -- podia leerse como que se lleva las
+      # ediciones. "Done, clean up" dice ademas cual de los dos cierra el
+      # ciclo, que es la pregunta real de esta pantalla.
       - block: banner
         paragraphs:
-          - "Finished. Your edits are staged on {destination}."
-          - "Commit and push them from Source Control. The review branch is kept so you can undo with git review finish --abort, or clean --keep-fixes when you no longer need the undo."
+          - "Your edits are on {destination}, staged and ready to commit."
+          - "Commit and push them from Source Control. Until you clean up, this is still undoable."
         row:
           controls:
-            - {id: cleanReview, label: "Clean", emphasis: primary, confirms: true}
-            - {id: undoFinish, label: "Undo finish", emphasis: secondary, confirms: true}
+            - {id: cleanReview, label: "Done, clean up", emphasis: primary, confirms: true}
+            - {id: undoFinish, label: "Undo", emphasis: secondary, confirms: true}
   out-of-range:
     source_fns: [render]
     blocks:
@@ -459,7 +485,7 @@ guide_rows:
   controls:
     # Abrir es mostrar: el cliente no interpreta un byte del archivo, y abre LA
     # RUTA QUE REPORTO LA CLI, nunca una derivada del layout del gitdir.
-    openGuide: {label: null, accessible_name: "Open the guide", emphasis: icon, icon: file, confirms: false, disabled_when: absent}
+    openGuide: {label: null, accessible_name: "Open the guide", emphasis: icon, icon: file, confirms: false, disabled_when: absent, tooltip_disabled: "There is no guide yet"}
     # Crea el archivo VACIO invocando a la CLI (git review walkthrough guide
     # [--team]). El cliente no escribe archivos: si lo hiciera serian tres
     # implementaciones de "crear un archivo vacio" y tres chances de errarle al
@@ -469,7 +495,7 @@ guide_rows:
     # archivo trackeado, asi que borrarla es git rm mas un commit -- una decision
     # sobre que entra al PR, que no es de este boton. La CLI dice lo mismo del
     # otro lado, negando --delete --team.
-    discardGuide: {label: null, accessible_name: "Discard the guide", emphasis: icon, icon: trash, confirms: true, only_in_row: own, disabled_when: absent}
+    discardGuide: {label: null, accessible_name: "Discard the guide", emphasis: icon, icon: trash, confirms: true, only_in_row: own, disabled_when: absent, tooltip: "Delete your guide"}
   # El watcher NO mira estos archivos, a diferencia de los borradores. El de la
   # guia propia vive en la raiz del gitdir, que cambia en cada operacion de git:
   # vigilarla seria una tormenta de refrescos por el archivo que menos cambia del
@@ -576,7 +602,7 @@ walkthrough_row:
 inventory_controls:
   continueReview: {label: "Continue", confirms: true}
   discardInventory:
-    labels: ["Discard", "Discard orphan"]
+    labels: ["Delete", "Delete leftover"]
     confirms: true
 
 # Los cuatro controles de una fila del bloque de borradores. Son controles del
@@ -661,7 +687,7 @@ draft_controls:
   # el borrador abierto y sin guardar el control sigue gris hasta el Ctrl+S
   # —los tres clientes vigilan el directorio del borrador, así que el guardado
   # refresca solo—, y a cambio nadie arranca sobre un orden a medio escribir.
-  startFromDraft: {label: "Validate and start", emphasis: primary, emphasis_unfilled: secondary, confirms: true, tooltip_disabled: "This draft has no instruction block, so the CLI cannot tell how it was generated", tooltip_unfilled: "Every entry needs a number and a why, and the heads-up needs prose or deleting"}
+  startFromDraft: {label: "Validate and start", emphasis: primary, emphasis_unfilled: secondary, confirms: true, tooltip: "Check the order, then start reading", tooltip_disabled: "This file lost its header, so it cannot be checked. Delete it and write a new one.", tooltip_unfilled: "Every file still needs a number and a line saying why it matters"}
   # Los dos de la FILA, y por eso salen de la botonera: no mueven el flujo, se
   # usan una vez cada tanto y su sujeto es el archivo que el par annotated/total
   # acaba de nombrar. Van como iconos pegados a ese par, lo que deja abajo dos
@@ -674,7 +700,7 @@ draft_controls:
   # nombre del control, y nombra la fila porque "Open" a secas se repite una vez
   # por borrador.
   openDraft: {label: null, accessible_name: "Open the reading order", emphasis: icon, icon: file, confirms: false}
-  discardDraft: {label: null, accessible_name: "Discard the reading order", emphasis: icon, icon: trash, confirms: true}
+  discardDraft: {label: null, accessible_name: "Discard the reading order", emphasis: icon, icon: trash, confirms: true, tooltip: "Delete this reading order"}
 
 # Las ramas review-fixes/* que dejo un finish: la seccion "Edits you extracted"
 # del pie de no-review. Su unico control es de FILA, como los de draft_controls y
@@ -728,7 +754,7 @@ fixes_rows:
     # llegue tarde -- la sesion volvio a existir entre el refresco y el click --
     # se llevaria puesta una review viva desde un boton que promete borrar una
     # rama de ediciones.
-    discardFixes: {label: null, accessible_name: "Discard the extracted edits", emphasis: icon, icon: trash, confirms: true, disabled_when: current}
+    discardFixes: {label: null, accessible_name: "Discard the extracted edits", emphasis: icon, icon: trash, confirms: true, disabled_when: current, tooltip: "Delete this branch of edits"}
     # discardAllFixes corre `clean --fixes-only` SIN rama: por diseno de clean
     # eso nunca toca review/* (ver la nota de arriba de este archivo), asi que
     # no tiene el problema de alcance que antes bloqueaba un boton asi. Vive en

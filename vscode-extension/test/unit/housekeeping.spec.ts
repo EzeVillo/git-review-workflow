@@ -73,42 +73,53 @@ describe("pendingFinishSource", () => {
         assert.strictEqual(pendingFinishSource(stateWith("finish-pending", list)), undefined);
     });
 
-    it("confirm clean-one nombra review/ y review-fixes/ y no el delta", () => {
+    it("confirm clean-one dice que se borra, que se queda y que no hay vuelta", () => {
         const c = confirmCopyFor({kind: "clean-one", source: "feature/shipping"});
-        assert.strictEqual(c.button, "Clean");
+        assert.strictEqual(c.button, "Delete");
         assert.ok(c.title.includes("feature/shipping"));
-        assert.ok(c.detail.includes("review/feature/shipping"));
-        assert.ok(c.detail.includes("review-fixes/feature/shipping"));
+        // Un destructivo tiene que contestar tres cosas, y las tres se afirman
+        // por separado: que se lleva, que sobrevive y si se puede deshacer.
         assert.ok(
-            c.detail.toLowerCase().includes("delta"),
-            "tiene que decir que el delta no se toca"
+            /review branch and any edits you extracted/i.test(c.detail),
+            "tiene que decir que se lleva la review y las ediciones extraidas"
         );
         assert.ok(
-            /does not touch|not touch/i.test(c.detail),
-            "tiene que afirmar que el delta queda"
+            /already committed elsewhere stays/i.test(c.detail),
+            "y que lo que ya commiteaste en otro lado no se toca"
+        );
+        assert.ok(/cannot be undone/i.test(c.detail), "y que no hay vuelta atras");
+        // Nada de namespaces de refs: quien lee esto no sabe que es review-fixes/*.
+        assert.ok(
+            !c.detail.includes("review-fixes/"),
+            "el cartel no deletrea namespaces de ramas"
         );
     });
 
     it("confirm clean-keep-fixes sin onto nombra review-fixes y pide commit/push", () => {
         const c = confirmCopyFor({kind: "clean-keep-fixes", source: "feature/shipping"});
-        assert.strictEqual(c.button, "Clean");
-        assert.ok(c.detail.includes("--keep-fixes"));
-        assert.ok(c.detail.includes("review/feature/shipping"));
+        assert.strictEqual(c.button, "Done");
         assert.ok(
             c.detail.includes("review-fixes/feature/shipping"),
             "sin onto las edits staged viven en review-fixes"
         );
         assert.ok(
-            !c.detail.includes("stay on feature/shipping;"),
+            !c.detail.includes("stay on feature/shipping "),
             "sin onto no debe nombrar la rama del PR como destino de las edits"
         );
+        // Commit y push se quedan en el texto: ese paso vive en Source Control,
+        // o sea FUERA del panel, y este cartel es lo unico que puede senalarlo.
         assert.ok(
             /commit and push/i.test(c.detail),
             "tiene que recordar commitear y pushear"
         );
+        // Lo que se pierde se nombra, pero despues de lo que se conserva.
         assert.ok(
-            !/Deletes review\/feature\/shipping and review-fixes/i.test(c.detail),
-            "no debe prometer borrar review-fixes"
+            /undo this finish/i.test(c.detail),
+            "tiene que decir que lo que se va es poder deshacer el cierre"
+        );
+        assert.ok(
+            !c.detail.includes("--keep-fixes"),
+            "y no ensena el flag: el boton ya lo corre"
         );
     });
 
@@ -118,8 +129,7 @@ describe("pendingFinishSource", () => {
             source: "feature/shipping",
             onto: true,
         });
-        assert.strictEqual(c.button, "Clean");
-        assert.ok(c.detail.includes("review/feature/shipping"));
+        assert.strictEqual(c.button, "Done");
         assert.ok(
             c.detail.includes("feature/shipping"),
             "con onto las edits staged viven en la rama del PR"
@@ -188,8 +198,15 @@ describe("argsForHousekeeping", () => {
     it("confirm copy names the effect", () => {
         const c = confirmCopyFor({kind: "forget-saved-one", source: "feat"});
         assert.ok(c.title.includes("feat"));
-        assert.ok(c.detail.includes("review-saved"));
-        assert.strictEqual(c.button, "Discard");
+        // El efecto que importa son las ediciones, no el namespace de la rama:
+        // decia "Deletes review-saved/feat, its banked edits and metadata".
+        assert.ok(
+            /throws away the edits/i.test(c.detail),
+            "tiene que decir que se pierden las ediciones guardadas"
+        );
+        assert.ok(/cannot be undone/i.test(c.detail));
+        assert.ok(!c.detail.includes("review-saved"), "sin namespaces de refs");
+        assert.strictEqual(c.button, "Delete");
     });
 
     it("clean-fixes-only-all carries no branch, unlike clean-all it stays fixes-only", () => {
@@ -198,11 +215,20 @@ describe("argsForHousekeeping", () => {
         assert.strictEqual(housekeepingNeedsNetwork({kind: "clean-fixes-only-all"}), false);
 
         const c = confirmCopyFor({kind: "clean-fixes-only-all"});
-        assert.ok(c.detail.includes("git review clean --fixes-only"));
         assert.ok(
-            /review sessions.*left alone/i.test(c.detail),
-            "tiene que decir que las sesiones review/* no se tocan"
+            /never committed anywhere else/i.test(c.detail),
+            "tiene que decir que es trabajo que no esta en ningun otro lado"
         );
-        assert.strictEqual(c.button, "Discard All");
+        // El alcance sigue afirmandose -- es lo que hace seguro este boton --,
+        // solo que dicho por lo que el revisor tiene delante y no por el glob.
+        assert.ok(
+            /reviewing right now is touched/i.test(c.detail),
+            "tiene que decir que la review en curso no se toca"
+        );
+        assert.ok(
+            !c.detail.includes("git review clean"),
+            "y no arranca con el comando que corre"
+        );
+        assert.strictEqual(c.button, "Delete all");
     });
 });

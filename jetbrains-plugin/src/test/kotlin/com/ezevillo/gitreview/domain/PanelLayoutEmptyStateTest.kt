@@ -18,7 +18,7 @@ class PanelLayoutEmptyStateTest {
         val primary = layout.collectControls().filter { it.emphasis == Emphasis.PRIMARY }
         assertEquals(1, primary.size)
         assertEquals(ControlId.SET_BASE, primary[0].id)
-        assertEquals("Set the base branch", primary[0].label)
+        assertEquals("Choose the branch", primary[0].label)
     }
 
     @Test

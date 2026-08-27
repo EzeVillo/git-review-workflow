@@ -93,9 +93,8 @@ describe("clean --fixes-only", () => {
             fixesState: "unmerged",
             session: false,
         });
-        assert.ok(unmerged.detail.includes("git review clean --fixes-only feature/x"));
-        assert.ok(unmerged.detail.includes("the base branch does not have"));
-        assert.ok(!unmerged.detail.includes("left standing"));
+                assert.ok(unmerged.detail.includes("the base branch does not have"));
+        assert.ok(!unmerged.detail.includes("undo the finish"));
 
         const empty = confirmCopyFor({
             kind: "clean-fixes-only",
@@ -105,12 +104,12 @@ describe("clean --fixes-only", () => {
         });
         assert.ok(empty.detail.includes("no work of yours is lost"));
         // La sesion se nombra solo cuando existe.
-        assert.ok(empty.detail.includes("review/feature/x is left standing"));
+        assert.ok(empty.detail.includes("You can still undo the finish afterwards."));
     });
 
     it("sin estado reportado no afirma nada sobre la base", () => {
         const copy = confirmCopyFor({kind: "clean-fixes-only", source: "feature/x"});
         assert.ok(copy.detail.includes("cannot tell"));
-        assert.strictEqual(copy.button, "Discard");
+        assert.strictEqual(copy.button, "Delete");
     });
 });

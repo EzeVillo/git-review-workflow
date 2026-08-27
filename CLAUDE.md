@@ -139,6 +139,32 @@ implica con el silencio. Los `draft` solo cuando hay. Detalle en `decisiones.md`
   (omitir el arg para la rama actual, `--` para terminar el parseo, riesgo asimétrico en los verbos
   destructivos) antes que inventar comandos nuevos.
 
+### La copy de los paneles
+
+Detalle y el porqué de cada una en `decisiones.md` §15. Vale para los tres clientes; **no** para la
+CLI, cuyo público eligió la terminal y donde el vocabulario de git es el correcto.
+
+- **El próximo paso se dice sólo si está FUERA del panel.** Si es un botón que ya está en pantalla,
+  el botón *es* el texto. Nombrar en prosa un comando que un control de al lado corre está
+  prohibido: es lo que hacía el banner de cierre con `finish --abort` y `clean --keep-fixes`.
+- **Tres capas, y el mecanismo nunca en la primera.** Etiqueta (1-3 palabras) → contexto (una
+  oración, sólo si el resultado no es obvio o no tiene vuelta atrás) → detalle técnico (el comando,
+  el stderr, la ruta) siempre a un clic. **Un tooltip no es un lugar para un argv:** dice qué le
+  pasa al objeto de su fila, en imperativo.
+- **Se confirma lo que no se puede deshacer, y nada más.** Un cartel que aparece siempre deja de
+  leerse, y entonces tampoco se lee el que importa. `startReview` no confirma a propósito; el gate
+  es `ConfirmationContractTest` / `ConfirmationContractTests` contra el `confirms:` del canónico.
+- **Un solo aviso de estado obsoleto** (`STALE` / `Stale`), sin nombrar el verbo que no corrió: ese
+  verbo es el botón que el revisor acaba de apretar. Especializarlo otra vez rompe su test.
+- **Los fallbacks de error dicen qué no pasó, no qué comando falló.** Sólo aparecen cuando la CLI
+  muere *sin* stderr; con stderr no se toca nada (FR-024).
+- **Un nombre por concepto y ninguno prestado de git.** `broken`, `details are gone`, `not covered`,
+  `saved edits`, `last review point`; un solo verbo para borrar (`Delete`). *Walkthrough* (el
+  archivo del autor) y *reading order* (el del revisor) sí son dos cosas distintas.
+- **Todo texto va al `UserCopy` de su cliente**, nunca embebido en un comando: `userCopy.ts`,
+  `UserCopy.kt`, `UserCopy.cs`. Lo compartido se declara en `contracts/client-product-surface.yaml`,
+  y **todo `tooltip*:` que se declare ahí lo exige CI en los tres paneles**.
+
 ### Walk y walkthrough
 
 - **Toda comparación de paths entre el walkthrough y git pasa por dos puntos únicos de

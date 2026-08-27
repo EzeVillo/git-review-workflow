@@ -60,7 +60,7 @@ export async function setBase(
         if (result.exitCode !== 0) {
             const text = result.stderr.trim();
             void vscode.window.showErrorMessage(
-                text.length > 0 ? text : "git review config failed."
+                text.length > 0 ? text : "Could not save the setting."
             );
         }
     });

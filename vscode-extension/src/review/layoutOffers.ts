@@ -73,7 +73,7 @@ const OFFER_META: Record<
     },
     step: {
         label: "Commit by commit",
-        description: "one commit at a time (--step)",
+        description: "one commit at a time",
         layout: "step",
     },
     whole: {

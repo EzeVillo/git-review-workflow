@@ -556,9 +556,9 @@ class CompareReviewAction : AnAction(), DumbAware {
         ) ?: return
         val layoutOptions = arrayOf(
             "Walkthrough — guided reading order if the upper tip has a walkthrough",
-            "Walkthrough — keys only — only entries marked key (--keys)",
-            "Commit by commit — one commit at a time (--step)",
-            "Whole diff — entire diff at once (--no-walk)",
+            "Walkthrough — keys only — only entries marked key",
+            "Commit by commit — one commit at a time",
+            "Whole diff — entire diff at once",
         )
         val layoutIdx = UiMessages.choose(
             project,

@@ -18,16 +18,15 @@ import com.ezevillo.gitreview.domain.WalkthroughState
 import com.ezevillo.gitreview.host.Bg
 import com.ezevillo.gitreview.host.GitReviewService
 import com.ezevillo.gitreview.host.MutationActions
+import com.ezevillo.gitreview.host.openInEditor
 import com.ezevillo.gitreview.ui.StartWizard
 import com.ezevillo.gitreview.ui.UiMessages
 import com.ezevillo.gitreview.vcs.pickSoleGitRoot
 import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
-import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.vfs.LocalFileSystem
 import java.io.File
 
 private fun service(e: AnActionEvent) = e.project?.let { GitReviewService.getInstance(it) }
@@ -536,11 +535,7 @@ private fun preview(e: AnActionEvent, stat: Boolean) {
     val tmp = File.createTempFile("git-review-preview", suffix)
     tmp.writeText(body)
     tmp.deleteOnExit()
-    val vf = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(tmp) ?: run {
-        UiMessages.info(project, body, "Preview edits")
-        return
-    }
-    FileEditorManager.getInstance(project).openFile(vf, true)
+    openInEditor(project, tmp) { UiMessages.info(project, body, "Preview edits") }
 }
 
 class CompareReviewAction : AnAction(), DumbAware {
@@ -748,7 +743,5 @@ private fun pickSourceName(
 
 private fun openWalkthroughFile(project: Project, cwd: String?) {
     if (cwd == null) return
-    val file = File(cwd, ".review/walkthrough.md")
-    val vf = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file) ?: return
-    FileEditorManager.getInstance(project).openFile(vf, true)
+    openInEditor(project, File(cwd, ".review/walkthrough.md"))
 }

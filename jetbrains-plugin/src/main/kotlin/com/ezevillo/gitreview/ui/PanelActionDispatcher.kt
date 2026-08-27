@@ -28,6 +28,7 @@ import com.ezevillo.gitreview.domain.sourceFromReviewName
 import com.ezevillo.gitreview.domain.WalkthroughState
 import com.ezevillo.gitreview.host.GitReviewService
 import com.ezevillo.gitreview.host.MutationActions
+import com.ezevillo.gitreview.host.openInEditor
 import com.ezevillo.gitreview.ui.actions.runUndoFinish
 import com.ezevillo.gitreview.vcs.pickSoleGitRoot
 import com.intellij.ide.BrowserUtil
@@ -37,10 +38,8 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.ex.ActionUtil
 import com.intellij.openapi.actionSystem.impl.SimpleDataContext
-import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.vfs.LocalFileSystem
 import java.awt.datatransfer.StringSelection
 
 /**
@@ -328,8 +327,7 @@ class PanelActionDispatcher(
      */
     private fun openDraftAt(index: Int?) {
         val draft = draftRowAt(index) ?: return
-        val vf = LocalFileSystem.getInstance().refreshAndFindFileByPath(draft.path) ?: return
-        FileEditorManager.getInstance(project).openFile(vf, true)
+        openInEditor(project, draft.path)
     }
 
     /**
@@ -368,15 +366,13 @@ class PanelActionDispatcher(
     private fun openWalkthrough() {
         val w = service.currentState().walkthrough ?: return
         if (w.state == WalkthroughState.ABSENT) return
-        val vf = LocalFileSystem.getInstance().refreshAndFindFileByPath(w.path) ?: return
-        FileEditorManager.getInstance(project).openFile(vf, true)
+        openInEditor(project, w.path)
     }
 
     private fun openGuideAt(index: Int?) {
         val guide = guideRowAt(index) ?: return
         if (guide.state == GuideState.ABSENT) return
-        val vf = LocalFileSystem.getInstance().refreshAndFindFileByPath(guide.path) ?: return
-        FileEditorManager.getInstance(project).openFile(vf, true)
+        openInEditor(project, guide.path)
     }
 
     /**
@@ -399,10 +395,7 @@ class PanelActionDispatcher(
             ActionParams.CreateGuide(team),
             progressTitle = UserCopy.CREATE_GUIDE_PROGRESS,
             onDone = { done ->
-                if (done.ok) {
-                    val vf = LocalFileSystem.getInstance().refreshAndFindFileByPath(guide.path)
-                    if (vf != null) FileEditorManager.getInstance(project).openFile(vf, true)
-                }
+                if (done.ok) openInEditor(project, guide.path)
             },
         )
     }

@@ -7,6 +7,7 @@ import com.ezevillo.gitreview.domain.ReviewMode
 import com.ezevillo.gitreview.domain.ReviewState
 import com.ezevillo.gitreview.domain.UserCopy
 import com.ezevillo.gitreview.host.Bg
+import com.ezevillo.gitreview.host.refreshAndFind
 import com.ezevillo.gitreview.settings.LastOpenedStore
 import com.ezevillo.gitreview.ui.UiMessages
 import com.intellij.diff.DiffContentFactory
@@ -18,7 +19,6 @@ import com.intellij.diff.requests.SimpleDiffRequest
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import java.io.File
 
@@ -247,9 +247,8 @@ object OpenEntryActions {
         )
     }
 
-    private fun findWorkingTreeFile(file: File): VirtualFile? =
-        LocalFileSystem.getInstance().refreshAndFindFileByIoFile(file)
-            ?: LocalFileSystem.getInstance().findFileByIoFile(file)
+    /** Always inside a [Bg.async] `work` block: resolving a path is not an EDT operation. */
+    private fun findWorkingTreeFile(file: File): VirtualFile? = refreshAndFind(file)
 
     /**
      * One file → single request. Several (step commit or whole open-all) →

@@ -43,8 +43,8 @@ import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.application.WriteAction
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileEditor.FileDocumentManager
-import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.io.FileUtil
 
 /**
  * Multi-step start wizard (dialogs). Branch list comes from
@@ -442,20 +442,28 @@ object StartWizard {
      * perder el foco — que es justo lo que no pasa mientras el panel conduce.
      */
     private fun saveDraftDocument(project: Project, path: String) {
-        // El refresh sincrónico del VFS va FUERA del lock a propósito: la
-        // plataforma lo rechaza bajo read lock, y acá ya estamos en el EDT.
-        val vf = LocalFileSystem.getInstance().refreshAndFindFileByPath(path) ?: return
-        // Desde 2024.1 el EDT no trae read access implícito: este handler entra
-        // por un JButton del panel, no por una AnAction que la plataforma
-        // envuelva, así que el lock lo pide el llamador. `ReadAction`/`WriteAction`
-        // y no `WriteIntentReadAction`, que sería el lock justo pero está
+        // La VFS no se toca desde acá. Resolver un path es dos operaciones en
+        // una: si la VFS nunca vio el archivo hay que crear el nodo y disparar el
+        // evento de creación, o sea mutar el modelo de la plataforma, y este
+        // handler entra por un JButton del panel — sin write-intent lock (ver
+        // `openInEditor`). El borrador vive en el gitdir, que es justamente lo
+        // que ningún editor indexa, así que sería siempre ese camino.
+        // La pregunta acá es más chica que la que contesta la VFS: ¿hay un
+        // documento abierto y sucio para ESTE archivo? Los documentos sucios ya
+        // traen su VirtualFile cargado, así que se responde sin ir al disco — y
+        // si el archivo no está en la VFS no hay documento abierto, o sea que la
+        // respuesta correcta es la misma que daba el `?: return` de antes.
+        // Desde 2024.1 el EDT tampoco trae read access implícito, así que el lock
+        // lo pide el llamador. `ReadAction`/`WriteAction` y no
+        // `WriteIntentReadAction`, que sería el lock justo pero está
         // @ApiStatus.Experimental — el descriptor no tiene until-build, así que
         // API que puede cambiar de forma es un NoSuchMethodError a futuro.
         // El write lock se toma sólo si de verdad hay algo que guardar.
         val fdm = FileDocumentManager.getInstance()
         val unsaved = ReadAction.computeBlocking<Document?, RuntimeException> {
-            val doc = fdm.getDocument(vf)
-            if (doc != null && fdm.isDocumentUnsaved(doc)) doc else null
+            fdm.unsavedDocuments.firstOrNull { doc ->
+                fdm.getFile(doc)?.let { FileUtil.pathsEqual(it.path, path) } == true
+            }
         } ?: return
         WriteAction.run<RuntimeException> { fdm.saveDocument(unsaved) }
     }

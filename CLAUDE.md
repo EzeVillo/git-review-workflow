@@ -753,6 +753,23 @@ checkout si hace falta → tool window **git review** + menú **Tools → git re
 `CONTRIBUTING.md`
 (sección *The JetBrains IDE plugin*) y `specs/009-plugin-intellij/quickstart.md`.
 
+**La VFS se toca en un solo lugar, y nunca desde el EDT.** `host/EditorFiles.kt` es la única
+puerta: `openInEditor` resuelve el path en un pooled thread y abre el editor de vuelta en el EDT
+—las dos mitades con el `Bg.async` que el camino del diff ya usaba—, y `refreshAndFind` queda para
+los llamadores que necesitan el `VirtualFile` como *valor* (los lados del diff), que ya corren
+adentro de un `work` de `Bg.async`. El motivo es que `refreshAndFindFileBy*` son dos operaciones
+con un solo nombre: buscan el archivo y, si la VFS nunca lo vio, **crean el nodo y disparan el
+evento de creación** — o sea mutan el modelo de la plataforma, que pide el write-intent lock que un
+`ActionListener` de Swing no tiene (el panel entra por un `JButton`, no por una `AnAction` que la
+plataforma envuelva). Lo que lo vuelve traicionero es *qué* archivos toman esa rama: los del
+working tree pegan siempre en la caché y la llamada se lee como sana al lado de la que revienta,
+mientras que **el borrador del revisor y su guía propia viven en el gitdir**, el único lugar que
+ningún editor indexa, así que son siempre el nodo que hay que crear. Falla en runtime, sólo ahí, y
+ningún test de la suite lo ve; el gate es `VfsAccessTest`, que prohíbe la llamada directa en todo
+`src/main/kotlin`. Por lo mismo `saveDraftDocument` del wizard **no** resuelve el path: le pregunta
+a `FileDocumentManager` por sus documentos sucios, que ya traen su `VirtualFile` cargado — sin
+archivo en la VFS no hay documento abierto, que es la misma respuesta que quería.
+
 **UX:** paridad de producto (CLI + matriz de acciones/situaciones + disposición del panel), no de
 píxeles. El panel es Swing nativo a propósito (no CEF/HTML del webview de VS Code):
 `domain/PanelLayout.kt` proyecta el modelo y

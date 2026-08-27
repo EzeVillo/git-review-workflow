@@ -6,7 +6,7 @@
     <!-- Reader-facing copy, not a summary of the monorepo: no sibling clients, no
          restating the supported-VS list the gallery already shows. Opens with the
          shared tagline (contracts/client-product-surface.yaml → listing.tagline). -->
-    <Description xml:space="preserve">Walk a PR in order, then edit and run it — not just read the diff. git review stages the entire pull request into your working tree as uncommitted changes, so reviewing it is ordinary local work: go to a definition, run the tests, fix what you find. Your fixes are then extracted onto a branch of their own, leaving the author's commits exactly as they were. The tool window keeps your place: the reading order the author wrote, one file at a time with the reason each change is there. Requires the git review command-line tool.</Description>
+    <Description xml:space="preserve">Walk a PR in order, then edit and run it — not just read the diff.</Description>
     <MoreInfo>https://github.com/EzeVillo/git-review-workflow/tree/main/visualstudio-extension#readme</MoreInfo>
     <!-- Flat names: these travel inside the .vsix (see the Content items in the csproj). -->
     <License>LICENSE</License>

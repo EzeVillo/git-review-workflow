@@ -2,6 +2,7 @@ package com.ezevillo.gitreview.domain
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -36,11 +37,12 @@ class UserCopyTest {
     }
 
     @Test
-    fun `finish success toasts match VS Code`() {
-        assertEquals(
-            "review-fixes/feature/x is ready. Undo is available if you need it.",
-            UserCopy.finishSuccess("review-fixes/feature/x", FinishOutcome.PENDING),
-        )
+    fun `finish only toasts when the panel has no banner to say it`() {
+        // El caso normal NO notifica: el panel entra en finish-pending y su
+        // banner dice lo mismo con mas contexto -- el destino, que hay que
+        // commitear desde Source Control, y los dos botones --. El toast era esa
+        // frase otra vez, un segundo antes. Queda el residual, sin banner.
+        assertNull(UserCopy.finishSuccess("review-fixes/feature/x", FinishOutcome.PENDING))
         assertEquals(
             "feature/x is ready.",
             UserCopy.finishSuccess("feature/x", FinishOutcome.NO_EDITS),
@@ -69,9 +71,10 @@ class UserCopyTest {
             "Start reviewing feature/x — how do you want to read it?",
             UserCopy.startLayoutTitle("feature/x"),
         )
-        // El paso de una fila del bloque de borradores no tiene rama que nombrar
-        // y se queda con el titulo llano.
-        assertEquals("Start a review — how to read it", UserCopy.START_LAYOUT_TITLE)
+        // Vale para los DOS caminos que llegan al start -- el asistente y el
+        // boton de una fila del bloque de borradores --, asi que no queda
+        // ninguna variante sin rama.
+        assertTrue(UserCopy.startLayoutTitle("x").contains("x"))
     }
 
     @Test

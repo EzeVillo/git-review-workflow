@@ -154,6 +154,18 @@ CLI, cuyo público eligió la terminal y donde el vocabulario de git es el corre
 - **Se confirma lo que no se puede deshacer, y nada más.** Un cartel que aparece siempre deja de
   leerse, y entonces tampoco se lee el que importa. `startReview` no confirma a propósito; el gate
   es `ConfirmationContractTest` / `ConfirmationContractTests` contra el `confirms:` del canónico.
+  Vale para los DOS caminos que llegan al start: el asistente y *Validate and start*.
+- **Lo que el panel muestra no se notifica.** Toda mutación refresca el panel antes de hablar, así
+  que en el camino feliz el acuse ya está en pantalla y el toast lo repite. No notifican: crear un
+  borrador (deja su fila), `walkthrough build` (deja el badge al día y abre el archivo) ni un
+  `finish` que quedó `pending` (deja su banner). Sí notifican los que el panel no puede contestar:
+  un `update` de borrador («N kept, M added, K dropped»), copiar al portapapeles, y el residual de
+  `finish` sin banner. **Cuál de los dos es se decide por lo que se pidió, nunca leyendo la salida
+  de la CLI** — de ahí el `update` en `DraftFlowState.Create` y el retorno nullable de
+  `finishSuccess`.
+- **El `stdout` de un verbo no se reenvía tal cual.** Termina en el comando del paso siguiente
+  («…then run `git review walkthrough draft --build`»), que en el panel es un botón. Las notas de
+  `stderr` sí, cuando el panel no las cubre.
 - **Un solo aviso de estado obsoleto** (`STALE` / `Stale`), sin nombrar el verbo que no corrió: ese
   verbo es el botón que el revisor acaba de apretar. Especializarlo otra vez rompe su test.
 - **Los fallbacks de error dicen qué no pasó, no qué comando falló.** Sólo aparecen cuando la CLI

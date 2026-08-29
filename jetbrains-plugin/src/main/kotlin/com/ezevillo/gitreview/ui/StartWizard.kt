@@ -219,7 +219,7 @@ object StartWizard {
         val picked = items[layoutIdx]
         val draftStep = picked.draft
         if (draftStep == null) {
-            confirmAndStart(ctx, picked.layout)
+            runStart(ctx, picked.layout)
             return
         }
         // Sin preguntar nada: cuál de los tres caminos del borrador corresponde
@@ -243,10 +243,13 @@ object StartWizard {
         while (true) {
             when (val current = state) {
                 is DraftFlowState.Create -> {
-                    val outcome = invokeDraft(ctx, service, current.force)
+                    val outcome = invokeDraft(ctx, service, current.force, current.update)
+                    // Solo lo que el panel no dice. Sobre un `update` eso es el
+                    // resultado del verbo -- el panel muestra el par nuevo pero
+                    // no que se conservo ni que entro --; sobre un `create`,
+                    // nada: el refresco ya dibujo la fila del borrador, y todo
+                    // lo que el verbo nombra ahi tiene su propia fila.
                     if (outcome.ok && outcome.text.isNotEmpty()) {
-                        // Nota de un verbo exitoso (el borrador tapa el
-                        // walkthrough del autor): se muestra, como las de start.
                         UiMessages.info(ctx.project, outcome.text)
                     }
                     state = advanceDraftFlow(
@@ -289,6 +292,7 @@ object StartWizard {
         ctx: WizardContext,
         service: GitReviewService,
         force: Boolean,
+        update: Boolean,
     ): DraftOutcome {
         // Under the mutation lock, like every other CLI invocation this plugin
         // makes — and like the extension's own invokeDraft. Drafting touches no
@@ -307,10 +311,18 @@ object StartWizard {
         val ok = result.exitCode == 0 && !result.timedOut
         return DraftOutcome(
             ok = ok,
-            // En verde, lo que hizo el verbo (stdout) más sus notas; en rojo,
-            // sólo el error, que es lo que la CLI pone en stderr.
+            // En verde el acuse depende del paso, y un `create` NO TIENE
+            // NINGUNO: el refresco de arriba acaba de dibujar la fila del
+            // borrador, y todo lo que el verbo dice ahi tiene su propia fila en
+            // el panel -- el archivo y el comando siguiente (la fila y su boton
+            // Validate and start), el walkthrough del autor al que tapa (su
+            // fila) y la guia de autoria que falta (las dos filas de guias, con
+            // su Create). Notificarlo era repetir el panel entero en un parrafo.
+            //
+            // Un `update` si: dice "N kept, M added, K dropped", y de las tres
+            // cosas que nombra ninguna se ve en la fila. En rojo, el error.
             text = if (ok) {
-                draftOutcomeText(result.stdout, result.stderr)
+                if (update) draftOutcomeText(result.stdout, result.stderr) else ""
             } else {
                 UiMessages.flatten(result.stderr)
             },
@@ -414,7 +426,7 @@ object StartWizard {
                 val idx = UiMessages.choose(
                     project,
                     UserCopy.DRAFT_KEYS_PLACEHOLDER,
-                    UserCopy.START_LAYOUT_TITLE,
+                    UserCopy.startLayoutTitle(draft.src),
                     labels,
                 )
                 if (idx < 0) return
@@ -422,7 +434,7 @@ object StartWizard {
             }
         }
 
-        confirmAndStart(
+        runStart(
             WizardContext(
                 project = project,
                 cwd = cwd,
@@ -468,7 +480,7 @@ object StartWizard {
         WriteAction.run<RuntimeException> { fdm.saveDocument(unsaved) }
     }
 
-    private fun confirmAndStart(ctx: WizardContext, layout: ReviewLayout) {
+    private fun runStart(ctx: WizardContext, layout: ReviewLayout) {
         val project = ctx.project
         val branch = ctx.branch
         val intent = ReviewIntent(

@@ -111,8 +111,6 @@ object UserCopy {
     fun startLayoutTitle(branch: String): String =
         "Start reviewing $branch — how do you want to read it?"
 
-    /** El mismo paso cuando no hay una rama que nombrar (borrador de una fila). */
-    const val START_LAYOUT_TITLE = "Start a review — how to read it"
     const val START_LAYOUT_PLACEHOLDER =
         "Walkthrough, commit by commit, keys only, or whole diff"
 
@@ -212,10 +210,20 @@ object UserCopy {
     fun finishingProgress(source: String): String = "Finishing the review of $source…"
     const val FINISH_FAILED = "Could not finish the review."
 
-    fun finishSuccess(destination: String, outcome: FinishOutcome): String =
+    /**
+     * El acuse de un finish en verde, o `null` cuando el panel ya lo dio.
+     *
+     * `PENDING` es el caso normal y devuelve null: el panel entra en
+     * finish-pending y su banner dice lo mismo con mas contexto -- el destino,
+     * que hay que commitear desde Source Control, y los dos botones --. El
+     * toast era esa frase otra vez, un segundo antes.
+     *
+     * `NO_EDITS` es el residual: sin registro pending no hay banner, asi que sin
+     * esta linea un finish exitoso no dejaria ninguna senal.
+     */
+    fun finishSuccess(destination: String, outcome: FinishOutcome): String? =
         when (outcome) {
-            FinishOutcome.PENDING ->
-                "$destination is ready. Undo is available if you need it."
+            FinishOutcome.PENDING -> null
             FinishOutcome.NO_EDITS -> "$destination is ready."
         }
 
@@ -301,7 +309,6 @@ object UserCopy {
     const val WALKTHROUGH_BUILD_BUTTON = "Build"
     const val WALKTHROUGH_BUILD_PROGRESS = "Building walkthrough…"
     const val WALKTHROUGH_BUILD_FAILED = "Could not build the walkthrough."
-    const val WALKTHROUGH_BUILT = "Walkthrough built."
 
     const val PREVIEW_FAILED = "Could not preview your edits."
     const val PREVIEW_EMPTY = "(no edits to preview)"

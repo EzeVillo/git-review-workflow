@@ -31,7 +31,7 @@ export type DraftFlowState =
  * que hay —conservando cada why cuyo archivo sigue en rango— y tirarlo para
  * escribir un esqueleto en blanco.
  */
-    | { kind: "create"; force: boolean }
+    | { kind: "create"; force: boolean; update: boolean }
     /**
      * El asistente terminó. No hay review empezada y no queda ningún aviso
      * abierto: el borrador está en el panel, con sus cuatro controles.
@@ -75,7 +75,10 @@ export function initialDraftFlowState(step: DraftStep): DraftFlowState {
         case "resume":
             return {kind: "done"};
         default:
-            return {kind: "create", force: false};
+            // `update` viaja en el estado porque decide el ACUSE, no el argv:
+            // los dos pasos corren el mismo comando, y lo unico que los separa
+            // es si el panel ya contesta lo que el verbo tiene para decir.
+            return {kind: "create", force: false, update: step === "update"};
     }
 }
 
@@ -137,9 +140,22 @@ export function offersIncludeKeys(offers: readonly ReadingOffer[] | undefined): 
  * separador quede entre el resultado y la nota y no adentro de ninguno.
  */
 export function draftOutcomeMessage(stdout: string, stderr: string): string {
-    const flatten = (text: string): string =>
-        text.split("\n").map((line) => line.trim()).filter((line) => line.length > 0).join(" ");
-    return [flatten(stdout), flatten(stderr)].filter((part) => part.length > 0).join(" — ");
+    return [draftNotes(stdout), draftNotes(stderr)].filter((part) => part.length > 0).join(" — ");
+}
+
+/**
+ * Sólo las notas, para el paso que el panel ya contesta.
+ *
+ * Un `create` deja el stdout diciendo qué archivo escribió y con qué comando
+ * seguir, y las dos cosas están mejor dichas en el panel: la fila del borrador
+ * lo nombra con su progreso, y el comando es el botón *Validate and start* de
+ * esa misma fila. El refresco que precede a este mensaje ya la dibujó.
+ *
+ * Las notas no: que el borrador tape el walkthrough del autor, o que haya una
+ * review pausada con el suyo, no se ve en ninguna fila.
+ */
+export function draftNotes(text: string): string {
+    return text.split("\n").map((line) => line.trim()).filter((line) => line.length > 0).join(" ");
 }
 
 /**

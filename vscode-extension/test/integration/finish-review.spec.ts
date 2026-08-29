@@ -250,11 +250,14 @@ describe("US3 (005): quedarse con las ediciones al terminar", function () {
             vscode.commands.executeCommand("gitReview.finishReview")
         );
         assert.deepStrictEqual(errors, [], "un finish que completa no debe mostrar ningun error");
-        assert.ok(
-            infos.some(
-                (m) => m.includes(`review-fixes/${branch}`) && m.includes("ready") && m.includes("Undo")
-            ),
-            `toast de pending con destino y undo; got: ${JSON.stringify(infos)}`
+        // Y TAMPOCO un toast: el panel entra en finish-pending y su banner dice
+        // lo mismo con mas contexto -- el destino, que hay que commitear desde
+        // Source Control, y los dos botones. El toast era esa frase otra vez, un
+        // segundo antes. Que el banner esta se afirma abajo (situation +
+        // pendingFinish).
+        assert.deepStrictEqual(
+            infos, [],
+            `un cierre pending lo cuenta el panel, no un toast; got: ${JSON.stringify(infos)}`
         );
 
         assert.strictEqual(headBranch(repo), `review-fixes/${branch}`);
@@ -321,13 +324,12 @@ describe("US3 (005): quedarse con las ediciones al terminar", function () {
             vscode.commands.executeCommand("gitReview.finishReview")
         );
         assert.deepStrictEqual(errors, [], "sin ediciones no es un error");
-        // Extract vacio tambien deja finish pending (undo vivo): mismo toast
-        // de destino listo + undo, nunca un error.
-        assert.ok(
-            infos.some(
-                (m) => m.includes(`review-fixes/${branch}`) && m.includes("ready")
-            ),
-            `toast de exito sobre el destino; got: ${JSON.stringify(infos)}`
+        // Extract vacio tambien deja finish PENDING (undo vivo), asi que hay
+        // banner y por lo tanto no hay toast -- el toast sobrevive solo para el
+        // residual sin registro pending, que es el unico caso sin banner.
+        assert.deepStrictEqual(
+            infos, [],
+            `un cierre pending lo cuenta el panel, no un toast; got: ${JSON.stringify(infos)}`
         );
 
         // Extract vacio: review-fixes en el tip, sin staged, con undo pending —

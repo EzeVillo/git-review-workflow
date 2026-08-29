@@ -993,3 +993,46 @@ formas distintas y sólo una tenía parser, así que el de `openAllChanges` viv�
 que nadie lo verificara. Ahora `check-client-product-surface.mjs` barre **toda** clave que empiece
 con `tooltip` y la exige en los tres paneles (con `not_in:` en la misma línea como única excepción),
 en vez de una regex por forma que se olvida de la quinta.
+
+### 15.1 El acuse de recibo: lo que el panel muestra no se notifica
+
+La primera pasada dejó una notificación que era el diagnóstico entero en un párrafo. Al crear un
+borrador desde el asistente caía esto, y el panel se actualizaba al mismo tiempo:
+
+> wrote $GIT_DIR/review-walkthrough/feature/legacy.md with 1 file(s) from origin/feature/legacy;
+> fill in the order and why, then run `git review walkthrough draft --build feature/legacy` — note:
+> feature/legacy already carries a walkthrough from its author; your draft takes precedence over it
+> while it exists. Delete it to go back to theirs. note: no authoring guide. Create one with:
+> `git review walkthrough guide` (yours, outside the work tree) `git review walkthrough guide --team`
+> (this repository, committed)
+
+Las tres partes tienen su propia fila en el panel que el refresco acaba de dibujar: el archivo y el
+comando siguiente son la fila del borrador y su botón *Validate and start*; el walkthrough del autor
+al que tapa es la fila de arriba, con su badge; y la guía que falta son las dos filas de guías, cada
+una con su *Create*. Era el panel entero, repetido en prosa, con tres comandos encima.
+
+**Toda mutación refresca el panel antes de hablar**, así que en el camino feliz el acuse ya está en
+pantalla. No notifican: crear un borrador, `walkthrough build` (que además abre el archivo) y un
+`finish` que quedó `pending` (cuyo banner decía la misma frase que el toast, un segundo después).
+
+Sí notifican los que el panel no puede contestar: un `update` de borrador —«N kept, M added, K
+dropped», que la fila no muestra porque sólo trae el par nuevo—, copiar al portapapeles, y el
+`finish` residual sin registro `pending`, que es el único caso sin banner.
+
+**Cuál de los dos es se decide por lo que se pidió, nunca leyendo la salida de la CLI.** `create` y
+`update` corren exactamente el mismo comando, así que la distinción no está en el texto: viaja en
+`DraftFlowState.Create.update`, puesto por `initialDraftFlowState` a partir del `DraftStep` que el
+revisor eligió. La misma forma tiene el otro lado: `finishSuccess` devuelve `null` cuando el panel
+ya lo dijo, de modo que la regla vive en el dominio compartido y no repetida en tres hosts.
+
+Cuidado con revertir esto a «mostrar sólo stderr»: esa fue la versión anterior y tenía un bug propio
+—apretar la oferta de *update* no producía señal ninguna, porque el resultado del verbo viaja por
+stdout— que es justo lo que `draftOutcomeMessage` vino a arreglar. Las dos funciones conviven a
+propósito.
+
+**Lo que queda fuera del alcance de los clientes:** varias notas que la CLI emite en verde terminan
+ofreciendo un comando (`start` sugiere `walkthrough draft` cuando la rama no tiene walkthrough, y
+`draft` sugiere `walkthrough guide` cuando no hay guía), y en el panel esos comandos son botones a la
+vista. Filtrarlas del lado del cliente exigiría parsear la salida humana, que el contrato prohíbe.
+Arreglarlo bien es un cambio de la CLI —que no las emita cuando quien invoca ya ofrece el control—,
+y por eso no se hizo acá.

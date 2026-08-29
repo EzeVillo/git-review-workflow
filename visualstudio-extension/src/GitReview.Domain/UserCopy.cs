@@ -134,8 +134,6 @@ public static class UserCopy
     public static string StartLayoutTitle(string branch) =>
         $"Start reviewing {branch} — how do you want to read it?";
 
-    /// <summary>El mismo paso sin una rama que nombrar (borrador de una fila).</summary>
-    public const string StartLayoutTitlePlain = "Start a review — how to read it";
     public const string StartLayoutPlaceholder =
         "Walkthrough, commit by commit, keys only, or whole diff";
 
@@ -224,10 +222,22 @@ public static class UserCopy
     public static string FinishingProgress(string source) => $"Finishing the review of {source}…";
     public const string FinishFailed = "Could not finish the review.";
 
-    public static string FinishSuccess(string destination, FinishOutcome outcome) => outcome switch
+    /// <summary>
+    /// El acuse de un finish en verde, o <c>null</c> cuando el panel ya lo dio.
+    /// <para>
+    /// Pending es el caso normal y devuelve null: el panel entra en
+    /// finish-pending y su banner dice lo mismo con mas contexto -- el destino,
+    /// que hay que commitear desde Source Control, y los dos botones --. El
+    /// toast era esa frase otra vez, un segundo antes.
+    /// </para>
+    /// <para>
+    /// NoEdits es el residual: sin registro pending no hay banner, asi que sin
+    /// esta linea un finish exitoso no dejaria ninguna senal.
+    /// </para>
+    /// </summary>
+    public static string? FinishSuccess(string destination, FinishOutcome outcome) => outcome switch
     {
-        FinishOutcome.Pending => $"{destination} is ready. Undo is available if you need it.",
-        FinishOutcome.NoEdits => $"{destination} is ready.",
+        FinishOutcome.Pending => null,
         _ => $"{destination} is ready.",
     };
 
@@ -313,7 +323,6 @@ public static class UserCopy
     public const string WalkthroughBuildButton = "Build";
     public const string WalkthroughBuildProgress = "Building walkthrough…";
     public const string WalkthroughBuildFailed = "Could not build the walkthrough.";
-    public const string WalkthroughBuilt = "Walkthrough built.";
 
     public const string PreviewFailed = "Could not preview your edits.";
     public const string PreviewEmpty = "(no edits to preview)";

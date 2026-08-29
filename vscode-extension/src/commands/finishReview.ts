@@ -132,12 +132,15 @@ export async function finishReview(
         // Exit 0 always landed on the destination. Toast from refreshed state
         // only (finishOutcome), never from finish stdout/stderr.
         const destination = picked.ontoSource ? source : `review-fixes/${source}`;
+        // `pending` es el caso normal, y ahí NO se notifica: el panel entra en
+        // finish-pending y su banner dice lo mismo con más contexto —el destino,
+        // que hay que commitear desde Source Control, y los dos botones—. El
+        // toast era esa frase otra vez, un segundo antes.
+        //
+        // `no-edits` es el residual: sin registro pending no hay banner, así que
+        // sin esta línea un finish exitoso no dejaría ninguna señal.
         const outcome = finishOutcome(stateManager.state, reviewBranch);
-        if (outcome === "pending") {
-            void vscode.window.showInformationMessage(
-                `${destination} is ready. Undo is available if you need it.`
-            );
-        } else {
+        if (outcome !== "pending") {
             void vscode.window.showInformationMessage(`${destination} is ready.`);
         }
     });

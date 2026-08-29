@@ -128,7 +128,10 @@ export async function walkthroughBuild(
             );
             return;
         }
-        void vscode.window.showInformationMessage("Walkthrough built.");
+        // Sin toast: el build tiene DOS acuses visibles y este era el tercero.
+        // El refresco de arriba deja la fila del walkthrough con su badge al día
+        // y su par annotated/total recontado, y la línea de abajo abre el
+        // archivo en el editor.
         await openWalkthrough(getInvokeOptions().cwd);
     });
 }

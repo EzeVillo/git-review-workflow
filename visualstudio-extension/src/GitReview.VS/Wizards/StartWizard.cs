@@ -155,7 +155,7 @@ public static class StartWizard
         if (idx < 0) return false;
         var picked = items[idx];
         if (picked.Draft is null)
-            return await ConfirmAndStartAsync(ctx, picked.Layout, ct).ConfigureAwait(true);
+            return await RunStartAsync(ctx, picked.Layout, ct).ConfigureAwait(true);
 
         // Nothing is asked: which of the three draft paths applies was already
         // decided by the CLI when it picked which offer to emit, which is the only
@@ -188,7 +188,7 @@ public static class StartWizard
             {
                 case DraftFlowState.Create create:
                 {
-                    var outcome = await InvokeDraftAsync(ctx, build: false, create.Force, ct).ConfigureAwait(true);
+                    var outcome = await InvokeDraftAsync(ctx, build: false, create.Force, create.Update, ct).ConfigureAwait(true);
                     // A note on success (the draft covers the author's walkthrough) is
                     // shown like start's own notes are.
                     if (outcome.Ok && outcome.Text.Length > 0) GitReviewDialogs.Info(outcome.Text);
@@ -233,6 +233,7 @@ public static class StartWizard
         WizardContext ctx,
         bool build,
         bool force,
+        bool update,
         CancellationToken ct)
     {
         using var reporting = ctx.Host.Progress?.Invoke(UserCopy.DraftProgress(ctx.Branch, build));
@@ -242,12 +243,20 @@ public static class StartWizard
             ct: ct).ConfigureAwait(true);
         if (result is null) return new DraftOutcome(false, MutationLock.DiscardReason);
         var ok = result.ExitCode == 0 && !result.TimedOut;
-        // Green: what the verb did (stdout) plus its notes. Red: only the error,
-        // which is what the CLI puts on stderr.
+        // En verde el acuse depende del paso, y un create NO TIENE NINGUNO: el
+        // refresco acaba de dibujar la fila del borrador, y todo lo que el verbo
+        // dice ahi tiene su propia fila en el panel -- el archivo y el comando
+        // siguiente (la fila y su boton Validate and start), el walkthrough del
+        // autor al que tapa (su fila) y la guia de autoria que falta (las dos
+        // filas de guias, con su Create). Notificarlo era repetir el panel
+        // entero en un parrafo.
+        //
+        // Un update si: dice "N kept, M added, K dropped", y de las tres cosas
+        // que nombra ninguna se ve en la fila. Red: only the error.
         return new DraftOutcome(
             ok,
             ok
-                ? CliMessage.DraftOutcomeText(result.Stdout, result.Stderr)
+                ? (update ? CliMessage.DraftOutcomeText(result.Stdout, result.Stderr) : "")
                 : CliMessage.FlattenCliMessage(result.Stderr));
     }
 
@@ -392,7 +401,7 @@ public static class StartWizard
             if (DraftFlow.OffersIncludeKeys(parsed?.Offers))
             {
                 var idx = GitReviewDialogs.Choose(
-                    UserCopy.StartLayoutTitlePlain,
+                    UserCopy.StartLayoutTitle(draft.Src),
                     UserCopy.DraftKeysPlaceholder,
                     UserCopy.DraftKeysLabels.Select(k => k.Label).ToList());
                 if (idx < 0) return false;
@@ -411,7 +420,7 @@ public static class StartWizard
             range,
             stateManager.Current.Config?.Base,
             deltas);
-        return await ConfirmAndStartAsync(ctx, layout, ct).ConfigureAwait(true);
+        return await RunStartAsync(ctx, layout, ct).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -436,7 +445,7 @@ public static class StartWizard
     }
 
 
-    private static async Task<bool> ConfirmAndStartAsync(
+    private static async Task<bool> RunStartAsync(
         WizardContext ctx,
         ReviewLayout layout,
         CancellationToken ct)

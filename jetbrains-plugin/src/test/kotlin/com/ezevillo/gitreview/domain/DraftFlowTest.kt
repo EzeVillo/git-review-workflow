@@ -21,11 +21,21 @@ class DraftFlowTest {
     }
 
     @Test
-    fun updateIsTheSameCommandAsCreateWithNoFlag() {
+    fun updateIsTheSameCommandAsCreateAndOnlyChangesTheAcknowledgement() {
         // El verbo actualiza en vez de negarse, asi que reconciliar no necesita
         // ningun flag: conserva cada entrada cuyo archivo sigue en rango y suma
-        // las que entraron.
-        assertEquals(DraftFlowState.Create(force = false), initialDraftFlowState(DraftStep.UPDATE))
+        // las que entraron. `update` no toca el argv -- decide QUE SE DICE
+        // despues: un update contesta "N kept, M added, K dropped", que es lo
+        // unico que el panel no puede mostrar, y un create no agrega nada a la
+        // fila que el refresco acaba de dibujar.
+        assertEquals(
+            DraftFlowState.Create(force = false, update = true),
+            initialDraftFlowState(DraftStep.UPDATE),
+        )
+        assertEquals(
+            DraftFlowState.Create(force = false, update = false),
+            initialDraftFlowState(DraftStep.CREATE),
+        )
     }
 
     @Test

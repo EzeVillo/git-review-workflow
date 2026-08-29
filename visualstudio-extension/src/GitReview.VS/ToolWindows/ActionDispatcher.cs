@@ -556,7 +556,9 @@ public sealed class ActionDispatcher
         // Derived from refreshed state, never from finish's human stdout.
         var destination = UserCopy.FinishDestination(ontoSource, source);
         var outcome = FinishOutcomeLogic.FinishOutcome(_panel.State.Current, reviewBranch);
-        GitReviewDialogs.Info(UserCopy.FinishSuccess(destination, outcome));
+        // null cuando el panel ya lo dijo (ver UserCopy.FinishSuccess).
+        var toast = UserCopy.FinishSuccess(destination, outcome);
+        if (toast is not null) GitReviewDialogs.Info(toast);
     }
 
     /// <summary>
@@ -1141,7 +1143,9 @@ public sealed class ActionDispatcher
         var result = await RunAsync(
             "walkthroughBuild", progress: UserCopy.WalkthroughBuildProgress).ConfigureAwait(true);
         if (result is null || result.ExitCode is not 0 || result.TimedOut) return;
-        GitReviewDialogs.Info(UserCopy.WalkthroughBuilt);
+        // Sin toast: el build tiene DOS acuses visibles y este era el tercero.
+        // El refresco deja la fila del walkthrough con su badge al dia y su par
+        // annotated/total recontado, y la linea de abajo abre el archivo.
         await OpenWalkthroughAsync(cwd).ConfigureAwait(true);
     }
 

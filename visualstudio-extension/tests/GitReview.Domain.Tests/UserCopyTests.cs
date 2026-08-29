@@ -36,12 +36,16 @@ public class UserCopyTests
         Assert.Equal("Continue", UserCopy.ContinueButton);
     }
 
+    /// <summary>
+    /// El caso normal NO notifica: el panel entra en finish-pending y su banner
+    /// dice lo mismo con mas contexto -- el destino, que hay que commitear desde
+    /// Source Control, y los dos botones --. El toast era esa frase otra vez, un
+    /// segundo antes. Queda el residual, que no tiene banner que lo diga.
+    /// </summary>
     [Fact]
-    public void Finish_success_toasts_match_the_other_clients()
+    public void Finish_only_toasts_when_the_panel_has_no_banner_to_say_it()
     {
-        Assert.Equal(
-            "review-fixes/feature/x is ready. Undo is available if you need it.",
-            UserCopy.FinishSuccess("review-fixes/feature/x", FinishOutcome.Pending));
+        Assert.Null(UserCopy.FinishSuccess("review-fixes/feature/x", FinishOutcome.Pending));
         Assert.Equal(
             "feature/x is ready.",
             UserCopy.FinishSuccess("feature/x", FinishOutcome.NoEdits));
@@ -81,9 +85,10 @@ public class UserCopyTests
         Assert.Equal(
             "Start reviewing feature/x — how do you want to read it?",
             UserCopy.StartLayoutTitle("feature/x"));
-        // El paso de una fila del bloque de borradores no tiene rama que nombrar
-        // y se queda con el titulo llano.
-        Assert.Equal("Start a review — how to read it", UserCopy.StartLayoutTitlePlain);
+        // Vale para los DOS caminos que llegan al start -- el asistente y el
+        // boton de una fila del bloque de borradores --, asi que no queda
+        // ninguna variante sin rama.
+        Assert.Contains("x", UserCopy.StartLayoutTitle("x"), StringComparison.Ordinal);
     }
 
     /// <summary>

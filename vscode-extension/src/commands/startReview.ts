@@ -239,7 +239,8 @@ async function invokeDraft(
     source: ReviewSource,
     range: ReviewRange,
     options: InvokeOptions,
-    force: boolean
+    force: boolean,
+    update: boolean
 ): Promise<{ ok: boolean; text: string }> {
     const result = await lock.run(async () =>
         vscode.window.withProgress(
@@ -269,8 +270,18 @@ async function invokeDraft(
     const ok = result !== undefined && !result.errorCode && result.exitCode === 0;
     // En verde, lo que hizo el verbo (stdout) más sus notas; en rojo, sólo el
     // error, que es lo que la CLI pone en stderr y lo único que hay que decir.
+    // En verde el acuse depende del paso, y un `create` NO TIENE NINGUNO: el
+    // refresco de arriba acaba de dibujar la fila del borrador, y todo lo que
+    // el verbo dice ahí tiene su propia fila en el panel — el archivo y el
+    // comando siguiente (la fila y su botón *Validate and start*), el
+    // walkthrough del autor al que tapa (su fila, con su badge) y la guía de
+    // autoría que falta (las dos filas de guías, con su Create). Notificarlo
+    // era repetir el panel entero en un párrafo.
+    //
+    // Un `update` sí: dice "N kept, M added, K dropped", y de las tres cosas
+    // que nombra ninguna se ve en la fila, que sólo muestra el par nuevo.
     const text = ok
-        ? draftOutcomeMessage(result?.stdout ?? "", result?.stderr ?? "")
+        ? (update ? draftOutcomeMessage(result?.stdout ?? "", result?.stderr ?? "") : "")
         : flatten(result?.stderr ?? "");
     return {ok, text};
 }
@@ -299,14 +310,15 @@ async function runDraftFlow(
         switch (state.kind) {
             case "create": {
                 const outcome = await invokeDraft(
-                    lock, stateManager, branch.name, source, range, options, state.force
+                    lock, stateManager, branch.name, source, range, options, state.force, state.update
                 );
+                // Sólo lo que el panel no dice. Sobre un `update` eso incluye
+                // el resultado del verbo —el panel muestra el par nuevo pero no
+                // qué se conservó ni qué entró—; sobre un `create`, únicamente
+                // las notas: el refresco que acaba de correr ya dibujó la fila
+                // del borrador, que es el acuse, y el comando con el que el
+                // stdout cierra es el botón de esa misma fila.
                 if (outcome.ok && outcome.text.length > 0) {
-                    // Lo que el verbo hizo, y después sus notas (que el borrador
-                    // tapa el walkthrough del autor, por ejemplo). Es el único
-                    // acuse de recibo que tiene este paso: el asistente cierra
-                    // sin arrancar nada, y sobre un update el panel muestra el
-                    // par nuevo pero no dice qué se conservó ni qué entró.
                     void vscode.window.showInformationMessage(outcome.text);
                 }
                 state = advanceDraftFlow(state, {

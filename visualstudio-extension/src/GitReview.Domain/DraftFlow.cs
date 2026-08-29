@@ -23,7 +23,7 @@ public abstract record DraftFlowState
     /// what is there — keeping every why whose file is still in range — and
     /// throwing it away for a blank skeleton.
     /// </summary>
-    public sealed record Create(bool Force = false) : DraftFlowState
+    public sealed record Create(bool Force = false, bool Update = false) : DraftFlowState
     {
         public static readonly Create Instance = new();
     }
@@ -76,7 +76,11 @@ public static class DraftFlow
     public static DraftFlowState InitialDraftFlowState(LayoutOffers.DraftStep step) => step switch
     {
         LayoutOffers.DraftStep.Resume => DraftFlowState.Done.Instance,
-        _ => DraftFlowState.Create.Instance,
+        // Update no toca el argv: decide el ACUSE. Un create no tiene ninguno --
+        // el refresco deja la fila del borrador dibujada, y todo lo que el verbo
+        // dice ahi tiene su propia fila en el panel --, y un update si, porque
+        // "N kept, M added, K dropped" no se ve en ninguna.
+        _ => new DraftFlowState.Create(Update: step == LayoutOffers.DraftStep.Update),
     };
 
     /// <summary>

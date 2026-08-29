@@ -28,7 +28,7 @@ sealed class DraftFlowState {
      * que hay —conservando cada why cuyo archivo sigue en rango— y tirarlo para
      * escribir un esqueleto en blanco.
      */
-    data class Create(val force: Boolean = false) : DraftFlowState()
+    data class Create(val force: Boolean = false, val update: Boolean = false) : DraftFlowState()
 
     /**
      * El asistente terminó. No hay review empezada y no queda ningún aviso
@@ -69,7 +69,11 @@ sealed class DraftFlowEvent {
  */
 fun initialDraftFlowState(step: DraftStep): DraftFlowState = when (step) {
     DraftStep.RESUME -> DraftFlowState.Done
-    else -> DraftFlowState.Create()
+    // `update` no toca el argv: decide el ACUSE. Un create no tiene ninguno --
+    // el refresco deja la fila del borrador dibujada, y todo lo que el verbo
+    // dice ahi tiene su propia fila en el panel --, y un update si, porque
+    // "N kept, M added, K dropped" no se ve en ninguna.
+    else -> DraftFlowState.Create(update = step == DraftStep.UPDATE)
 }
 
 /**

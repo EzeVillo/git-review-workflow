@@ -204,8 +204,8 @@ class MutationActions(
             }
             val destination = UserCopy.finishDestination(ontoSource, source)
             val outcome = finishOutcome(service.currentState(), reviewBranch)
-            val msg = UserCopy.finishSuccess(destination, outcome)
-            onDone(msg)
+            // null cuando el panel ya lo dijo (ver UserCopy.finishSuccess).
+            onDone(UserCopy.finishSuccess(destination, outcome))
         }
     }
 
@@ -241,5 +241,5 @@ sealed class StartRunResult {
 }
 
 /** Exposed for tests: pending vs residual toast after a successful finish. */
-fun finishSuccessCopy(ontoSource: Boolean, source: String, outcome: FinishOutcome): String =
+fun finishSuccessCopy(ontoSource: Boolean, source: String, outcome: FinishOutcome): String? =
     UserCopy.finishSuccess(UserCopy.finishDestination(ontoSource, source), outcome)

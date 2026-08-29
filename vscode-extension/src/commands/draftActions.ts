@@ -28,7 +28,7 @@ import {
 } from "../review/reviewIntent";
 import {captureToken, tokenStillValid} from "../review/staleGuard";
 import {ReviewStateManager} from "../review/state";
-import {STALE, draftAgentPrompt} from "../review/userCopy";
+import {STALE, draftAgentPrompt, startLayoutTitle} from "../review/userCopy";
 import {draftAt} from "../views/panelModel";
 
 /** El stderr de la CLI, aplanado a una línea (mismo criterio que el resto). */
@@ -126,7 +126,7 @@ async function saveDraftDocument(file: string): Promise<void> {
 }
 
 /** Recorrido completo vs sólo esenciales, cuando el borrador marcó entradas. */
-async function pickDraftKeys(): Promise<boolean | undefined> {
+async function pickDraftKeys(branch: string): Promise<boolean | undefined> {
     const picked = await vscode.window.showQuickPick(
         [
             {
@@ -141,7 +141,9 @@ async function pickDraftKeys(): Promise<boolean | undefined> {
             },
         ],
         {
-            title: "Start a review — how to read it",
+            // El único paso entre el botón y el start, así que nombra la rama:
+            // misma regla que el último paso del asistente.
+            title: startLayoutTitle(branch),
             placeHolder: "Your draft marks key entries: read all of them, or only those",
         }
     );
@@ -217,7 +219,7 @@ export async function startFromDraft(
     if (!report.errorCode && report.exitCode === 0) {
         const offers = parseConfigPorcelain(report.stdout).offers;
         if (offersIncludeKeys(offers)) {
-            const keysOnly = await pickDraftKeys();
+            const keysOnly = await pickDraftKeys(draft.src);
             if (keysOnly === undefined) {
                 return;
             }
@@ -227,15 +229,10 @@ export async function startFromDraft(
 
     const intent: ReviewIntent = {branch: draft.src, layout, range, source};
     const args = intentToArgs(intent, draft.src);
+    // Sin confirmación: es la misma que se borró del asistente, y acá sobra
+    // todavía más — el botón que trajo hasta acá dice "Validate and start", y
+    // el paso de keys (cuando lo hay) ya nombra la rama.
     const token = captureToken(stateManager.state);
-    const answer = await vscode.window.showWarningMessage(
-        `Start reviewing ${draft.src} with the reading order you wrote?`,
-        {modal: true, detail: `git review start ${args.join(" ")}`},
-        "Start the review"
-    );
-    if (answer !== "Start the review") {
-        return;
-    }
     if (!tokenStillValid(token, stateManager.state)) {
         void vscode.window.showInformationMessage(
             STALE

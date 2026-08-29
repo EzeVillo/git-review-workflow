@@ -670,7 +670,10 @@ class WalkthroughBuildAction : AnAction(), DumbAware {
             progressTitle = UserCopy.WALKTHROUGH_BUILD_PROGRESS,
         ) { done ->
             if (done.ok) {
-                UiMessages.info(project, UserCopy.WALKTHROUGH_BUILT)
+                // Sin toast: el build tiene DOS acuses visibles y este era el
+                // tercero. El refresco deja la fila del walkthrough con su badge
+                // al dia y su par annotated/total recontado, y la linea de abajo
+                // abre el archivo en el editor.
                 openWalkthroughFile(project, cwd)
             }
         }

@@ -147,6 +147,28 @@ private val CONFIRMING_IDS: Set<ControlId> = setOf(
 
 fun requiresConfirmation(id: ControlId): Boolean = id in CONFIRMING_IDS
 
+/**
+ * Las mutaciones que traen el panel a la vista (`reveals:` del canonico).
+ *
+ * "Lo que el panel muestra no se notifica" tiene un supuesto que nadie
+ * garantizaba: que el panel este A LA VISTA. El borrador nace en el asistente de
+ * inicio, que corre sobre el editor, y con la tool window cerrada la fila nueva
+ * se dibuja donde nadie la ve -- y como esa mutacion tampoco notifica, no queda
+ * ningun acuse en ningun lado.
+ *
+ * La lista es corta a proposito: solo las mutaciones cuya respuesta es un bloque
+ * que ANTES NO ESTABA. Si el panel salta en cada mutacion, deja de significar
+ * que paso algo.
+ */
+private val REVEALING_IDS: Set<ControlId> = setOf(
+    ControlId.START_REVIEW,
+    ControlId.START_FROM_DRAFT,
+    ControlId.CONTINUE_REVIEW,
+    ControlId.FINISH_REVIEW,
+)
+
+fun revealsPanel(id: ControlId): Boolean = id in REVEALING_IDS
+
 data class Control(
     val id: ControlId,
     val label: String?,

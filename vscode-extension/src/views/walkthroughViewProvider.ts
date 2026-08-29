@@ -203,6 +203,27 @@ export class WalkthroughViewProvider implements vscode.WebviewViewProvider {
         this.visibilityEmitter.fire(view.visible);
     }
 
+    /**
+     * Trae la vista al frente SIN robar el foco: el revisor sigue escribiendo
+     * donde estaba, y lo que cambia es que el panel deja de estar tapado.
+     *
+     * Dos caminos porque `show` es del WebviewView, que sólo existe una vez que
+     * la vista se resolvió — o sea nunca si el panel jamás se abrió, que es
+     * justo el caso que esto vino a cubrir. Ahí lo abre el comando `.focus` que
+     * el host genera por cada vista contribuida, con `preserveFocus` para que se
+     * comporte igual que el otro camino.
+     */
+    reveal(): void {
+        if (this.view !== undefined) {
+            this.view.show(true);
+            return;
+        }
+        void vscode.commands.executeCommand(
+            `${WalkthroughViewProvider.viewId}.focus`,
+            {preserveFocus: true}
+        );
+    }
+
     update(model: PanelModel): void {
         this.model = model;
         this.post();

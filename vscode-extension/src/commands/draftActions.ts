@@ -31,6 +31,7 @@ import {ReviewStateManager} from "../review/state";
 import {STALE, draftAgentPrompt, startLayoutTitle} from "../review/userCopy";
 import {draftAt} from "../views/panelModel";
 import {confirmMutation} from "../review/confirm";
+import {PanelRevealer, revealPanel} from "../views/reveal";
 
 /** El stderr de la CLI, aplanado a una línea (mismo criterio que el resto). */
 function flatten(stderr: string): string {
@@ -167,7 +168,8 @@ export async function startFromDraft(
     index: unknown,
     lock: MutationLock,
     stateManager: ReviewStateManager,
-    getInvokeOptions: () => InvokeOptions
+    getInvokeOptions: () => InvokeOptions,
+    reveal: PanelRevealer
 ): Promise<void> {
     const draft = rowAt(stateManager, index);
     if (draft === undefined) {
@@ -258,7 +260,12 @@ export async function startFromDraft(
             void vscode.window.showErrorMessage(
                 text.length > 0 ? text : "Could not start the review."
             );
+            return;
         }
+        // El panel pasa a review de punta a punta. Vino de una fila del panel,
+        // así que casi siempre es un no-op — y no distinguir de dónde vino es
+        // deliberado: sería estado que este cliente no tiene por qué llevar.
+        revealPanel("startFromDraft", reveal);
     });
 }
 

@@ -447,6 +447,47 @@ title_actions:
   - {id: abortReview, label: "Cancel", when: "(review|finish-conflict) && !busy", confirms: true}
   - {id: previewEdits, label: "Preview edits", when: "(review|finish-conflict) && !busy", confirms: false}
 
+
+# LAS MUTACIONES QUE TRAEN EL PANEL A LA VISTA.
+#
+# «Lo que el panel muestra no se notifica» (CLAUDE.md § La copy de los paneles)
+# tiene un supuesto que nadie garantizaba: que el panel esté A LA VISTA. El
+# borrador nace en el asistente de inicio, que corre sobre el editor, y si la
+# vista está cerrada o el sidebar está en otra pestaña, la fila nueva se dibuja
+# donde nadie la ve — y como esa mutación tampoco notifica, no queda ningún
+# acuse en ningún lado.
+#
+# Se REVELA y no se notifica: el acuse correcto es la cosa, no un párrafo sobre
+# la cosa. Y sin robar el foco: el revisor sigue escribiendo donde estaba, lo que
+# cambia es que el panel deja de estar tapado.
+#
+# LA LISTA ES CORTA A PROPÓSITO: sólo las mutaciones cuya respuesta es un bloque
+# que ANTES NO ESTABA. Una guía que se crea, un borrador que se descarta, un
+# cursor que avanza mueven una fila YA dibujada, y para verlas el panel tenía que
+# estar a la vista de todos modos. Revelar en cada mutación es el mismo error que
+# notificar en cada mutación, un escalón más arriba: si el panel salta siempre,
+# deja de significar que pasó algo.
+#
+# Revelar cuando ya está visible es un no-op, así que la lista no distingue de
+# dónde vino la acción — sería estado que ningún cliente tiene por qué llevar.
+#
+# NO cubre el scroll. Un panel visible pero scrolleado en el pie tampoco muestra
+# la fila nueva, que nace primero en `no-review`; llevarlo al tope es otra
+# superficie (un mensaje al webview en VS Code, otra cosa en cada host) y no
+# entró acá.
+reveals:
+  # La situación entera cambia: no-review pasa a review. Y es el ÚNICO camino que
+  # puede terminar sin cambiarla —el del borrador, que deja el panel en no-review
+  # con una fila nueva arriba de todo—, que es justamente el caso que motivó esto.
+  - startReview
+  # Lo mismo, desde la fila del borrador.
+  - startFromDraft
+  # Idem: la review pausada vuelve, y el panel pasa a review.
+  - continueReview
+  # La situación pasa a finish-pending, con su banner y sus dos botones. Se
+  # dispara desde el título del panel y también desde la paleta, donde el panel
+  # puede no estar a la vista.
+  - finishReview
 # existen como acción, nunca como control del panel
 panel_excluded: [goToEntry, forgetReview, previewEditsStat, showCliLog]
 

@@ -482,6 +482,29 @@ public static class PanelLayoutBuilder
 
     public static bool RequiresConfirmation(ControlId id) => ConfirmingIds.Contains(id);
 
+    /// <summary>
+    /// The mutations that bring the panel into view (`reveals:` in the canonical).
+    ///
+    /// "What the panel shows is not notified" rests on an assumption nobody
+    /// guaranteed: that the panel is IN VIEW. The draft is born in the start
+    /// wizard, which runs over the editor, and with the tool window closed the new
+    /// row is drawn where nobody sees it — and since that mutation does not notify
+    /// either, no acknowledgement is left anywhere.
+    ///
+    /// The list is short on purpose: only the mutations whose answer is a block
+    /// that WAS NOT THERE BEFORE. If the panel jumps on every mutation, it stops
+    /// meaning that something happened.
+    /// </summary>
+    private static readonly HashSet<ControlId> RevealingIds = new()
+    {
+        ControlId.StartReview,
+        ControlId.StartFromDraft,
+        ControlId.ContinueReview,
+        ControlId.FinishReview,
+    };
+
+    public static bool RevealsPanel(ControlId id) => RevealingIds.Contains(id);
+
     private static Control Ctrl(
         ControlId id,
         string? label,

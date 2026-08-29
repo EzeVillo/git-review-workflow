@@ -36,6 +36,7 @@ import {classifyStartFailure, quoteForTerminal} from "../review/startFailure";
 import {ReviewStateManager} from "../review/state";
 import {setBase} from "./setBase";
 import {STALE, draftUpdated, startLayoutTitle} from "../review/userCopy";
+import {PanelRevealer, revealPanel} from "../views/reveal";
 
 /** El stderr de la CLI, aplanado a una línea para el toast del editor (mismo criterio que continueReview.ts). */
 function flatten(stderr: string): string {
@@ -312,7 +313,8 @@ async function runDraftFlow(
     range: ReviewRange,
     lock: MutationLock,
     stateManager: ReviewStateManager,
-    options: InvokeOptions
+    options: InvokeOptions,
+    reveal: PanelRevealer
 ): Promise<{ kind: "done" } | { kind: "back"; error?: string }> {
     let state: DraftFlowState = initialDraftFlowState(step);
 
@@ -330,6 +332,15 @@ async function runDraftFlow(
                 // stdout cierra es el botón de esa misma fila.
                 if (outcome.ok && outcome.text.length > 0) {
                     void vscode.window.showInformationMessage(outcome.text);
+                }
+                if (outcome.ok) {
+                    // EL CASO QUE MOTIVO EL REVEAL. Este camino termina SIN
+                    // cambiar de situacion: el panel sigue en no-review y lo
+                    // unico que pasa es que el bloque de borradores nace arriba
+                    // de todo. Y el asistente corrio sobre el editor, asi que la
+                    // vista pudo quedar cerrada -- y como un `create` tampoco
+                    // notifica, sin esto no quedaba acuse en ningun lado.
+                    revealPanel("startReview", reveal);
                 }
                 state = advanceDraftFlow(state, {
                     kind: "created",
@@ -380,7 +391,8 @@ function runInTerminal(args: string[], options: InvokeOptions): void {
 export async function startReview(
     lock: MutationLock,
     stateManager: ReviewStateManager,
-    getInvokeOptions: () => InvokeOptions
+    getInvokeOptions: () => InvokeOptions,
+    reveal: PanelRevealer
 ): Promise<void> {
     // finish-pending is still an empty working branch: a leftover finish of
     // another source must not block starting a different review (CLI start only
@@ -478,7 +490,9 @@ export async function startReview(
         // ya lo decidió la CLI al elegir qué oferta emitir, que es la única que
         // puede —la pregunta es si el orden sigue cubriendo el rango, y para eso
         // hacen falta los dos tips.
-        const outcome = await runDraftFlow(picked.draft, branch, source, range, lock, stateManager, options);
+        const outcome = await runDraftFlow(
+            picked.draft, branch, source, range, lock, stateManager, options, reveal
+        );
         if (outcome.kind === "done") {
             // El asistente termina acá: no arranca ninguna review y no deja
             // ningún aviso abierto. El refresco que invokeDraft ya hizo dejó la
@@ -579,6 +593,12 @@ export async function startReview(
             }
             return;
         }
+
+        // El acuse es el panel, así que el panel tiene que estar a la vista: el
+        // asistente corrió sobre el editor y la vista pudo quedar cerrada o en
+        // otra pestaña del sidebar. Va acá y no antes: sólo en verde y después
+        // del refresco, o sea sobre el panel ya redibujado.
+        revealPanel("startReview", reveal);
 
         // start emite notas a stderr en invocaciones EXITOSAS (rama local
         // desactualizada, review previa con commits nuevos): se muestran

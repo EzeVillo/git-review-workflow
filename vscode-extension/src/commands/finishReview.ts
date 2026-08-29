@@ -6,6 +6,7 @@ import {ReviewStateManager} from "../review/state";
 import {captureToken, tokenStillValid} from "../review/staleGuard";
 import {STALE} from "../review/userCopy";
 import {confirmMutation} from "../review/confirm";
+import {PanelRevealer, revealPanel} from "../views/reveal";
 
 /** El stderr de la CLI, aplanado a una línea para el toast del editor (mismo criterio que el resto de los comandos). */
 function message(stderr: string): string {
@@ -58,7 +59,8 @@ const LOCATION_ITEMS: LocationItem[] = [
 export async function finishReview(
     lock: MutationLock,
     stateManager: ReviewStateManager,
-    getInvokeOptions: () => InvokeOptions
+    getInvokeOptions: () => InvokeOptions,
+    reveal: PanelRevealer
 ): Promise<void> {
     const state = stateManager.state;
     if (state.situation !== "review" || !state.state) {
@@ -140,6 +142,11 @@ export async function finishReview(
         //
         // `no-edits` es el residual: sin registro pending no hay banner, así que
         // sin esta línea un finish exitoso no dejaría ninguna señal.
+        // El acuse del caso normal es el banner de finish-pending, así que el
+        // panel tiene que estar a la vista: Finish está en el título del panel
+        // pero también en la paleta, donde puede no estarlo.
+        revealPanel("finishReview", reveal);
+
         const outcome = finishOutcome(stateManager.state, reviewBranch);
         if (outcome !== "pending") {
             void vscode.window.showInformationMessage(`${destination} is ready.`);

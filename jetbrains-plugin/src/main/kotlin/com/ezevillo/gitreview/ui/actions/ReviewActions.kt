@@ -29,6 +29,7 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import java.io.File
+import com.ezevillo.gitreview.host.revealPanel
 
 private fun service(e: AnActionEvent) = e.project?.let { GitReviewService.getInstance(it) }
 private fun mutations(e: AnActionEvent): MutationActions? {
@@ -114,6 +115,9 @@ class ContinueReviewAction : AnAction(), DumbAware {
             "continueReview",
             ActionParams.Continue(source),
             progressTitle = UserCopy.continuingProgress(source),
+            // La situacion entera cambia --no-review pasa a review--, y esto se
+            // dispara tambien desde el menu Tools, con el panel cerrado.
+            onDone = { if (it.ok) revealPanel(project, ControlId.CONTINUE_REVIEW) },
         )
     }
 }
@@ -138,6 +142,10 @@ class FinishReviewAction : AnAction(), DumbAware {
         if (idx < 0) return
         val onto = idx == 1
         mutations(e)?.runFinish(onto) { msg ->
+            // El acuse del caso normal es el banner de finish-pending, asi que
+            // el panel tiene que estar a la vista: Finish esta en su titulo pero
+            // tambien en el menu Tools, donde puede no estarlo.
+            revealPanel(project, ControlId.FINISH_REVIEW)
             if (msg != null) {
                 UiMessages.info(project, msg)
             }

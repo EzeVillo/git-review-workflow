@@ -41,6 +41,7 @@ import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.ide.CopyPasteManager
 import com.intellij.openapi.project.Project
 import java.awt.datatransfer.StringSelection
+import com.ezevillo.gitreview.host.revealPanel
 
 /**
  * Routes [ControlId] (+ optional index) to existing host actions.
@@ -296,6 +297,7 @@ class PanelActionDispatcher(
             "continueReview",
             ActionParams.Continue(source),
             progressTitle = UserCopy.continuingProgress(source),
+            onDone = { if (it.ok) revealPanel(project, ControlId.CONTINUE_REVIEW) },
         )
     }
 

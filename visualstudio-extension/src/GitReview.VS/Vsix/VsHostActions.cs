@@ -21,16 +21,19 @@ public sealed class VsHostActions
     private readonly IServiceProvider _serviceProvider;
     private readonly GitReviewPanelController _panel;
     private readonly Func<IReadOnlyList<string>> _roots;
+    private readonly Action _revealPanel;
     private readonly string _scratch;
 
     public VsHostActions(
         IServiceProvider serviceProvider,
         GitReviewPanelController panel,
-        Func<IReadOnlyList<string>> roots)
+        Func<IReadOnlyList<string>> roots,
+        Action revealPanel)
     {
         _serviceProvider = serviceProvider;
         _panel = panel;
         _roots = roots;
+        _revealPanel = revealPanel;
         _scratch = Path.Combine(
             Path.GetTempPath(),
             "git-review-vs",
@@ -51,6 +54,7 @@ public sealed class VsHostActions
                 PreviewEdits = PreviewEditsAsync,
                 DefaultSource = () => GitReviewOptions.Current.DefaultSource,
                 Progress = ShowProgress,
+                RevealPanel = _revealPanel,
             });
 
     /// <summary>

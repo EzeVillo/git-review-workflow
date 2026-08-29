@@ -1130,3 +1130,38 @@ Con la lista de bloques, `discardGuide` y `discardInventory` quedaban afuera en 
 que quedó recorre el archivo entero recordando la última clave abierta, que es lo que una regex
 sola no puede hacer.
 
+### 15.4 El reveal: que el panel esté a la vista
+
+§15.1 dejó una regla —«lo que el panel muestra no se notifica»— apoyada en un supuesto que nadie
+garantizaba: **que el panel esté a la vista**. El borrador nace en el asistente de inicio, que corre
+sobre el editor; con la vista cerrada o el sidebar en otra pestaña, la fila nueva se dibuja donde
+nadie la ve, y como esa mutación tampoco notifica, no queda ningún acuse en ningún lado.
+
+**Se revela, no se notifica.** El acuse correcto es la cosa, no un párrafo sobre la cosa — que es la
+regla 1 otra vez. Y **sin robar el foco**: `view.show(true)` en VS Code, `ToolWindow.show()` (no
+`activate`) en JetBrains, `IVsWindowFrame.ShowNoActivate()` en Visual Studio. El revisor sigue
+escribiendo donde estaba; lo que cambia es que el panel deja de estar tapado.
+
+**La lista es corta a propósito:** `startReview`, `startFromDraft`, `continueReview`, `finishReview`
+— sólo las mutaciones cuya respuesta es un bloque que **antes no estaba**. Una guía que se crea, un
+borrador que se descarta, un cursor que avanza mueven una fila ya dibujada, y para verlas el panel
+tenía que estar a la vista igual. Si el panel salta en cada mutación, deja de significar que pasó
+algo — el mismo error que notificar en cada mutación, un escalón más arriba.
+
+De las cuatro, `startReview` es la que importa y la que menos se nota: es el **único** camino que
+puede terminar *sin* cambiar de situación —el del borrador, que deja el panel en `no-review` con el
+bloque nuevo arriba de todo— y es justo el que motivó todo esto.
+
+**Nació con sus gates, y esa es la decisión.** `confirms:` había estado años declarado en tres
+lugares sin gobernar en ninguno (§15.3); una tabla nueva sin gate nace decorativa. Así que `reveals:`
+copia la forma entera: una puerta por cliente que toma el id, y tres chequeos —la tabla == el
+canónico, todo id declarado pasa por la puerta leyendo el **argumento**, y ninguna otra superficie
+trae la ventana al frente—. Los tres se probaron rompiéndolos.
+
+Una diferencia con la puerta de confirmación, y es deliberada: ante un id no declarado, `confirm`
+**confirma igual** y el reveal **no revela**. Un cartel de más molesta y uno de menos borra trabajo
+sin preguntar; un reveal de más es exactamente el ruido que esta tabla existe para evitar.
+
+**Lo que no cubre:** el scroll. Un panel visible pero scrolleado en el pie tampoco muestra la fila
+nueva, que nace primero en `no-review`. Llevarlo al tope es otra superficie —un mensaje al webview en
+VS Code, otra cosa en cada host— y no entró acá.

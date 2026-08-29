@@ -1617,6 +1617,65 @@ for (const [file, body] of srcFiles) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// QUE `reveals:` GOBIERNE, con la leccion que dejo `confirms:`: una tabla que
+// nadie consulta no es un contrato, es un comentario. Los mismos tres chequeos.
+// ---------------------------------------------------------------------------
+
+const revealsBlock = text.split(/^reveals:\s*$/m)[1]?.split(/^[a-z_][a-z0-9_]*:/m)[0] ?? "";
+const canonicalRevealing = new Set(
+  [...revealsBlock.matchAll(/^\s*-\s+([A-Za-z][A-Za-z0-9]*)\s*$/gm)].map((m) => m[1]),
+);
+if (canonicalRevealing.size === 0) {
+  fail("canonical: reveals: is empty or missing");
+}
+
+const revealTs = readText(join(root, "vscode-extension", "src", "views", "reveal.ts"), "utf8");
+const revealBlock = revealTs.match(/export const REVEALING_IDS = \[([\s\S]*?)\] as const;/);
+if (!revealBlock) {
+  fail("vscode: reveal.ts has no REVEALING_IDS array");
+}
+const clientRevealing = new Set(
+  [...(revealBlock?.[1] ?? "").matchAll(/"([A-Za-z][A-Za-z0-9]*)"/g)].map((m) => m[1]),
+);
+for (const id of canonicalRevealing) {
+  if (!clientRevealing.has(id)) {
+    fail(`vscode: ${id} is in reveals: and missing from REVEALING_IDS`);
+  }
+}
+for (const id of clientRevealing) {
+  if (!canonicalRevealing.has(id)) {
+    fail(`vscode: REVEALING_IDS carries ${id}, which the canonical does not list under reveals:`);
+  }
+}
+
+const revealed = new Set();
+for (const [, body] of srcFiles) {
+  for (const m of body.matchAll(/revealPanel\(\s*"([A-Za-z][A-Za-z0-9]*)"/g)) {
+    revealed.add(m[1]);
+  }
+}
+for (const id of canonicalRevealing) {
+  if (!revealed.has(id)) {
+    fail(`vscode: ${id} is in reveals: but is never passed to revealPanel`);
+  }
+}
+for (const id of revealed) {
+  if (!canonicalRevealing.has(id)) {
+    fail(`vscode: revealPanel is called with ${id}, which the canonical does not list under reveals:`);
+  }
+}
+
+// Ninguna otra forma de traer el panel al frente: el vehiculo es
+// WalkthroughViewProvider.reveal(), y el unico que lo referencia es el host que
+// arma el closure. Cualquier otro llamador se saltearia la tabla.
+for (const [file, body] of srcFiles) {
+  if (file.endsWith("walkthroughViewProvider.ts") || file.endsWith("extension.ts")) continue;
+  if (/\.reveal\(\)/.test(body)) {
+    fail(`vscode: ${file} reveals the panel itself; it must go through revealPanel`);
+  }
+}
+
 console.log(
   `check-client-product-surface: ok (min=${min}, actions=${actionKeys.length}, panel_controls=${canonicalControls.length}, icons=${canonicalIcons.size}, title_actions=${titleActionIds.length}, confirms=${canonicalConfirming.size}, vs=${existsSync(vsVersion) ? "yes" : "no"})`,
 );

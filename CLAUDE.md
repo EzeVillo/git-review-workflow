@@ -172,6 +172,13 @@ CLI, cuyo público eligió la terminal y donde el vocabulario de git es el corre
   `finish` sin banner. **Cuál de los dos es se decide por lo que se pidió, nunca leyendo la salida
   de la CLI** — de ahí el `update` en `DraftFlowState.Create` y el retorno nullable de
   `finishSuccess`.
+- **El panel se revela, no se notifica — y sólo cuando nace un bloque que antes no estaba.**
+  «Lo que el panel muestra no se notifica» supone que el panel está *a la vista*, y el borrador nace
+  en el asistente, que corre sobre el editor. `reveals:` del canónico lista las cuatro mutaciones que
+  lo traen al frente **sin robar el foco** (`show(true)`, `ToolWindow.show()`, `ShowNoActivate`), y
+  la lista es corta a propósito: un panel que salta siempre deja de significar que pasó algo. Misma
+  forma que `confirms:` —una puerta por cliente que toma el id, y tres gates— porque nació con ellos:
+  una tabla sin gate nace decorativa. No cubre el scroll.
 - **Advice: en verde, un cliente no reenvía las notas que ya tiene.** La CLI las apaga en el origen
   —los tres invocadores exportan `GIT_REVIEW_ADVICE=0`, un lugar por cliente— porque distinguirlas
   del lado del panel sería parsear salida humana. **Advice es una pregunta, no una lista:** ¿quien

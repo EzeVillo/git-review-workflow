@@ -202,7 +202,7 @@ public sealed class GitReviewToolWindow : ToolWindowPane
         // well would be the same five buttons twice.
         _controller.View.ShowTitleActions = false;
         _controller.TitleActionsChanged += OnTitleActionsChanged;
-        Actions = new VsHostActions(ServiceProvider(), _controller, () => _roots).Attach();
+        Actions = new VsHostActions(ServiceProvider(), _controller, () => _roots, RevealSelf).Attach();
 
         // Cuarta senal de refresco, solo para las guias de autoria: no tienen
         // watcher, asi que el guardado es lo que le dice al panel que la escribiste.
@@ -245,6 +245,28 @@ public sealed class GitReviewToolWindow : ToolWindowPane
         _workspacePending = false;
         _rootsTimer?.Stop();
         _rootsTimer = null;
+    }
+
+    /// <summary>
+    /// El vehiculo del reveal: trae esta ventana al frente SIN llevarle el foco,
+    /// asi que el revisor sigue escribiendo donde estaba y lo que cambia es que
+    /// el panel deja de estar tapado.
+    ///
+    /// <c>ShowNoActivate</c> y no <c>Show</c>: el segundo activa la ventana, que
+    /// es exactamente lo que no se quiere. Un <c>Frame</c> que no es un
+    /// IVsWindowFrame no puede pasar en el shell real, pero se guarda igual: un
+    /// reveal es un acuse, y ningun acuse tiene por que tirar la mutacion abajo.
+    ///
+    /// La decision de SI corresponde revelar no esta aca: esta en
+    /// <see cref="PanelReveal"/>, contra el `reveals:` del canonico.
+    /// </summary>
+    private void RevealSelf()
+    {
+        ThreadHelper.ThrowIfNotOnUIThread();
+        if (Frame is IVsWindowFrame frame)
+        {
+            frame.ShowNoActivate();
+        }
     }
 
     private IServiceProvider ServiceProvider() => (IServiceProvider)Package;

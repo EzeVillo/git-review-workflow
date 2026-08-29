@@ -1,5 +1,6 @@
 package com.ezevillo.gitreview.ui
 
+import com.ezevillo.gitreview.domain.ControlId
 import com.ezevillo.gitreview.domain.DeltaRecord
 import com.ezevillo.gitreview.domain.DraftFlowEvent
 import com.ezevillo.gitreview.domain.MutationLock
@@ -45,6 +46,7 @@ import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.io.FileUtil
+import com.ezevillo.gitreview.host.revealPanel
 
 /**
  * Multi-step start wizard (dialogs). Branch list comes from
@@ -219,7 +221,7 @@ object StartWizard {
         val picked = items[layoutIdx]
         val draftStep = picked.draft
         if (draftStep == null) {
-            runStart(ctx, picked.layout)
+            runStart(ctx, picked.layout, ControlId.START_REVIEW)
             return
         }
         // Sin preguntar nada: cuál de los tres caminos del borrador corresponde
@@ -251,6 +253,14 @@ object StartWizard {
                     // lo que el verbo nombra ahi tiene su propia fila.
                     if (outcome.ok && outcome.text.isNotEmpty()) {
                         UiMessages.info(ctx.project, outcome.text)
+                    }
+                    if (outcome.ok) {
+                        // EL CASO QUE MOTIVO EL REVEAL. Este camino termina SIN
+                        // cambiar de situacion: el panel sigue en no-review y lo
+                        // unico que pasa es que el bloque de borradores nace
+                        // arriba de todo. Y un `create` tampoco notifica, asi que
+                        // sin esto no quedaba acuse en ningun lado.
+                        revealPanel(ctx.project, ControlId.START_REVIEW)
                     }
                     state = advanceDraftFlow(
                         current,
@@ -453,6 +463,7 @@ object StartWizard {
                 base = service.currentState().config?.base,
             ),
             layout,
+            ControlId.START_FROM_DRAFT,
         )
     }
 
@@ -488,7 +499,13 @@ object StartWizard {
         WriteAction.run<RuntimeException> { fdm.saveDocument(unsaved) }
     }
 
-    private fun runStart(ctx: WizardContext, layout: ReviewLayout) {
+    /**
+     * @param from el control que trajo hasta aca. Los dos caminos que llegan al
+     * start comparten esta funcion --el asistente y *Validate and start*--, y el
+     * canonico los declara por separado en `reveals:`, asi que el id viaja en vez
+     * de adivinarse. Es la misma forma que toma la puerta de confirmacion.
+     */
+    private fun runStart(ctx: WizardContext, layout: ReviewLayout, from: ControlId) {
         val project = ctx.project
         val branch = ctx.branch
         val intent = ReviewIntent(
@@ -515,6 +532,11 @@ object StartWizard {
         MutationActions(project, service).runStart(intent, branch) { result ->
             when (result) {
                 is StartRunResult.Ok -> {
+                    // El acuse es el panel, asi que el panel tiene que estar a
+                    // la vista: el asistente corrio sobre el editor y la tool
+                    // window pudo quedar cerrada. Solo en verde y despues del
+                    // refresco, o sea sobre el panel ya redibujado.
+                    revealPanel(project, from)
                     // Successful start can still emit notes on stderr (FR-031).
                     if (result.note != null) {
                         UiMessages.info(project, result.note)

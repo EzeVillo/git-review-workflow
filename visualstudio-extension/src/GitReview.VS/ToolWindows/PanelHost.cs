@@ -62,4 +62,13 @@ public sealed class PanelHost
     /// standalone build, where there is no shell to report into.
     /// </summary>
     public Func<string, IDisposable>? Progress { get; init; }
+
+    /// <summary>
+    /// Brings the panel into view WITHOUT taking focus. Only the mutations the
+    /// canonical lists under <c>reveals:</c> use it, and only through
+    /// <see cref="PanelReveal"/> — never called straight from an action.
+    /// Null in the standalone build, where there is no shell to bring anything
+    /// forward.
+    /// </summary>
+    public Action? RevealPanel { get; init; }
 }

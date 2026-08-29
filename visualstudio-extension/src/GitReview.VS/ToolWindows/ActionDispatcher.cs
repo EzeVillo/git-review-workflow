@@ -520,7 +520,14 @@ public sealed class ActionDispatcher
             _panel.State,
             cwd,
             _host).ConfigureAwait(true);
-        if (started) await _panel.RefreshAsync().ConfigureAwait(true);
+        if (!started) return;
+        await _panel.RefreshAsync().ConfigureAwait(true);
+        // El acuse es el panel, asi que el panel tiene que estar a la vista: el
+        // asistente corrio sobre el editor. Y el camino del borrador termina SIN
+        // cambiar de situacion --el panel sigue en no-review y lo unico que pasa
+        // es que el bloque de borradores nace arriba de todo--, que es el caso
+        // que motivo esto. Despues del refresco y solo en verde.
+        PanelReveal.Reveal(ControlId.StartReview, _host);
     }
 
     /// <summary>
@@ -557,6 +564,11 @@ public sealed class ActionDispatcher
         var destination = UserCopy.FinishDestination(ontoSource, source);
         var outcome = FinishOutcomeLogic.FinishOutcome(_panel.State.Current, reviewBranch);
         // null cuando el panel ya lo dijo (ver UserCopy.FinishSuccess).
+        // El acuse del caso normal es el banner de finish-pending, asi que el
+        // panel tiene que estar a la vista: Finish esta en su barra de titulo
+        // pero tambien en el menu, donde puede no estarlo.
+        PanelReveal.Reveal(ControlId.FinishReview, _host);
+
         var toast = UserCopy.FinishSuccess(destination, outcome);
         if (toast is not null) GitReviewDialogs.Info(toast);
     }
@@ -636,10 +648,14 @@ public sealed class ActionDispatcher
         {
             return;
         }
-        await RunAsync(
+        var result = await RunAsync(
             "continueReview",
             new ActionParams.Continue(source),
             progress: UserCopy.ContinuingProgress(source)).ConfigureAwait(true);
+        if (result is null || result.ExitCode is not 0 || result.TimedOut) return;
+        // La situacion entera cambia --no-review pasa a review--, y esto se
+        // dispara tambien desde el menu, con el panel cerrado.
+        PanelReveal.Reveal(ControlId.ContinueReview, _host);
     }
 
     // -- housekeeping -------------------------------------------------------
@@ -709,7 +725,12 @@ public sealed class ActionDispatcher
             cwd,
             _host,
             draft).ConfigureAwait(true);
-        if (started) await _panel.RefreshAsync().ConfigureAwait(true);
+        if (!started) return;
+        await _panel.RefreshAsync().ConfigureAwait(true);
+        // El panel pasa a review de punta a punta. Vino de una fila del panel,
+        // asi que casi siempre es un no-op -- y no distinguir de donde vino es
+        // deliberado: seria estado que este cliente no tiene por que llevar.
+        PanelReveal.Reveal(ControlId.StartFromDraft, _host);
     }
 
     /// <summary>

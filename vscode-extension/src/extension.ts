@@ -138,6 +138,12 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
     const lock = new MutationLock();
     const whyProvider = new WhyContentProvider(getInvokeOptions);
     const panelProvider = new WalkthroughViewProvider(handlePanelMessage);
+    /**
+     * La puerta del reveal, como `getInvokeOptions`: el host provee el vehículo
+     * y la decisión de si corresponde vive en `views/reveal.ts`, contra el
+     * `reveals:` del canónico.
+     */
+    const revealPanelView = (): void => panelProvider.reveal();
 
     // El *why* de la entrada actual: una invocación aparte, para UNA entrada,
     // que llega después del `status --porcelain` (FR-018a, SC-009). `whyKey`
@@ -295,7 +301,7 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
             return;
         }
         if (message === "startFromDraft") {
-            void startFromDraft(extra, lock, stateManager, getInvokeOptions);
+            void startFromDraft(extra, lock, stateManager, getInvokeOptions, revealPanelView);
             return;
         }
         if (message === "discardDraft") {
@@ -672,9 +678,9 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
         vscode.commands.registerCommand("gitReview.prev", () => navigate("prev", lock, stateManager, getInvokeOptions)),
         vscode.commands.registerCommand("gitReview.refresh", () => refresh()),
         vscode.commands.registerCommand("gitReview.continueReview", (index?: unknown) =>
-            continueReview(index, lock, stateManager, getInvokeOptions)),
+            continueReview(index, lock, stateManager, getInvokeOptions, revealPanelView)),
         vscode.commands.registerCommand("gitReview.startReview", () =>
-            startReview(lock, stateManager, getInvokeOptions)),
+            startReview(lock, stateManager, getInvokeOptions, revealPanelView)),
         vscode.commands.registerCommand("gitReview.setBase", () =>
             setBase(lock, stateManager, getInvokeOptions)),
         vscode.commands.registerCommand("gitReview.setRemote", () =>
@@ -682,7 +688,7 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
         vscode.commands.registerCommand("gitReview.abortReview", () =>
             abortReview(lock, stateManager, getInvokeOptions)),
         vscode.commands.registerCommand("gitReview.finishReview", () =>
-            finishReview(lock, stateManager, getInvokeOptions)),
+            finishReview(lock, stateManager, getInvokeOptions, revealPanelView)),
         vscode.commands.registerCommand("gitReview.saveReview", () =>
             saveReview(lock, stateManager, getInvokeOptions)),
         vscode.commands.registerCommand("gitReview.undoFinish", () =>

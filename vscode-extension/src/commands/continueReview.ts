@@ -6,6 +6,7 @@ import {captureToken, tokenStillValid} from "../review/staleGuard";
 import {resumableSourceAt} from "../views/panelModel";
 import {STALE} from "../review/userCopy";
 import {confirmMutation} from "../review/confirm";
+import {PanelRevealer, revealPanel} from "../views/reveal";
 
 /** El stderr de la CLI, aplanado a una línea para el toast del editor. */
 function message(stderr: string): string {
@@ -41,7 +42,8 @@ export async function continueReview(
     index: unknown,
     lock: MutationLock,
     stateManager: ReviewStateManager,
-    getInvokeOptions: () => InvokeOptions
+    getInvokeOptions: () => InvokeOptions,
+    reveal: PanelRevealer
 ): Promise<void> {
     const source = resumableSourceAt(stateManager.state.branches, index);
     if (source === undefined) {
@@ -97,7 +99,11 @@ export async function continueReview(
             return;
         }
 
-        if (result.exitCode !== 0) {
+        if (result.exitCode === 0) {
+            // La situación entera cambia —no-review pasa a review—, y esto se
+            // puede disparar desde la paleta con el panel cerrado.
+            revealPanel("continueReview", reveal);
+        } else {
             // El working tree sucio es el modo de fallo que no se puede
             // anticipar desde el inventario, y su mensaje ya dice qué hacer
             // ("commit or stash them first"): se muestra el de la CLI, no uno

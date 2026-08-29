@@ -127,7 +127,7 @@ class DraftFlowTest {
     @Test
     fun draftArgvMatchesTheContract() {
         assertEquals(
-            listOf("draft", "--", "feature/x"),
+            listOf("draft", "--porcelain", "--", "feature/x"),
             draftArgs("feature/x", ReviewSource.REMOTE, ReviewRange.FULL, build = false),
         )
         assertEquals(
@@ -135,7 +135,7 @@ class DraftFlowTest {
             draftArgs("feature/x", ReviewSource.LOCAL, ReviewRange.DELTA, build = true),
         )
         assertEquals(
-            listOf("draft", "--offline", "--", "feature/x"),
+            listOf("draft", "--porcelain", "--offline", "--", "feature/x"),
             draftArgs("feature/x", ReviewSource.OFFLINE, ReviewRange.FULL, build = false),
         )
         // Los controles de la fila nunca llevan --force, --from ni --stdout:
@@ -146,9 +146,16 @@ class DraftFlowTest {
         assertFalse(args.contains("--stdout"))
         // --force sólo cuando el revisor eligió empezar de cero en el picker.
         assertEquals(
-            listOf("draft", "--force", "--local", "--delta", "--", "feature/x"),
+            listOf("draft", "--porcelain", "--force", "--local", "--delta", "--", "feature/x"),
             draftArgs("feature/x", ReviewSource.LOCAL, ReviewRange.DELTA, build = false, force = true),
         )
+        // El paso que escribe el esqueleto pide el registro `merged`; el que
+        // valida e instala no, porque no lo emite -- su resultado es el badge.
+        assertTrue(
+            draftArgs("feature/x", ReviewSource.REMOTE, ReviewRange.FULL, build = false)
+                .contains("--porcelain"),
+        )
+        assertFalse(args.contains("--porcelain"))
     }
 
     @Test

@@ -28,9 +28,10 @@ prog="git review walkthrough"
 
 usage() {
 	cat <<EOF
-usage: $prog init [--base <base>] [--force] [--stdout]
+usage: $prog init [--base <base>] [--force] [--stdout] [--porcelain]
        $prog build [--check] [--from <file> | --from -]
-       $prog draft [--local | --offline] [--delta] [--force] [--stdout] [--] [<branch>]
+       $prog draft [--local | --offline] [--delta] [--force] [--stdout]
+                   [--porcelain] [--] [<branch>]
        $prog draft --build [--from <file> | --from -] [--local | --offline]
                    [--delta] [--force] [--] [<branch>]
        $prog guide [--team] [--delete]
@@ -46,6 +47,9 @@ Author a reading walkthrough for the current branch's PR, committed as
     --base <base>  diff against <base> instead of reviewworkflow.base
     --force        discard what is there and write a blank skeleton
     --stdout       print it instead of writing; nothing is created anywhere
+    --porcelain    replace the summary line with a "merged" record --
+                   kept, added and dropped as tab-separated counts -- for a
+                   caller that writes its own sentence
   build            validate, order by the numbers you set and renumber 1..N
     --check        validate only; write nothing, exit non-zero on any problem
     --from <file>  read the walkthrough from <file> instead of the one in the
@@ -67,6 +71,9 @@ Review someone else's PR in a reading order of your own, without committing:
     --force         discard what is there and write a blank skeleton
     --stdout        print the skeleton instead of writing it; nothing is
                     created anywhere
+    --porcelain     replace the summary line with a "merged" record -- kept,
+                    added and dropped as tab-separated counts -- for a caller
+                    that writes its own sentence
 
 Keep the conventions the reading order is written to, as prose:
 
@@ -96,6 +103,7 @@ local_only=0
 offline=0
 delta_mode=0
 to_stdout=0
+porcelain=0
 from_src=""
 from_given=0
 team_guide=0
@@ -135,6 +143,7 @@ while [ $# -gt 0 ]; do
 	--offline) offline=1 ;;
 	--delta) delta_mode=1 ;;
 	--stdout) to_stdout=1 ;;
+	--porcelain) porcelain=1 ;;
 	--team) team_guide=1 ;;
 	--delete) delete_guide=1 ;;
 	--from)
@@ -330,6 +339,12 @@ warn_dirty() {
 # Several short lines rather than one long one: with both guides in force the
 # single line ran past 300 characters, which in a narrow terminal is a wall.
 emit_guide_note() {
+	# Advice de punta a punta: las cinco ramas describen cual guia esta en vigor,
+	# que es lo que el registro `guide` de config --porcelain ya trae, y la ultima
+	# ademas ofrece los dos comandos que en un panel son el Create de cada fila.
+	if ! advice_enabled; then
+		return 0
+	fi
 	guide_paths_init
 	_egn_team=0
 	_egn_own=0
@@ -1247,21 +1262,40 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		# added. Same shape as init's pair, with this side's build command.
 		if [ "$to_stdout" -eq 0 ]; then
 			if [ "$update" -eq 1 ]; then
+				merged_dropped="$(printf '%s\n' "$merged_removed" | grep -c . || true)"
+			else
+				# A fresh skeleton is all additions: nothing to keep, nothing to
+				# drop. Saying so costs one line and gives the record below ONE
+				# shape, which is what keeps a client from having to know which of
+				# the two steps it just ran in order to read the answer.
+				merged_kept=0
+				merged_added="$n"
+				merged_dropped=0
+			fi
+			if [ "$porcelain" -eq 1 ]; then
+				# THE ONLY WAY THESE THREE NUMBERS REACH A PANEL. The human line
+				# below carries them too, but reading it would be parsing human
+				# output, which the clients' contract forbids -- and they are the
+				# one thing this verb says that no row answers: the draft's row
+				# shows the NEW annotated/total pair, never what moved to get
+				# there. Without the record a client is left with nothing to say,
+				# or forwarding prose again.
+				porcelain_row merged "$merged_kept" "$merged_added" "$merged_dropped"
+			elif [ "$update" -eq 1 ]; then
 				# "fill in the new entries" only when there ARE new entries. An
 				# update that adds none is a real outcome, not a no-op -- the
 				# range moved without changing which files it touches, and the
 				# instruction block has just been rewritten against the new tip --
 				# but telling the reviewer to go fill in nothing sends them to an
 				# unchanged file looking for a placeholder that is not there.
-				merged_dropped="$(printf '%s\n' "$merged_removed" | grep -c . || true)"
 				if [ "$merged_added" -gt 0 ]; then
 					next_step="fill in the new entries, then run git review walkthrough draft --build$draftflags $branch"
 				else
 					next_step="no new entries to fill in; run git review walkthrough draft --build$draftflags $branch when you are ready"
 				fi
-				echo "updated $targetrel: $merged_kept kept, $merged_added added, $merged_dropped dropped; $next_step"
+				echo "updated $targetrel: $merged_kept kept, $merged_added added, $merged_dropped dropped$(advice_suffix "; $next_step")"
 			else
-				echo "wrote $targetrel with $n file(s) from $srclabel; fill in the order and why, then run git review walkthrough draft --build$draftflags $branch"
+				echo "wrote $targetrel with $n file(s) from $srclabel$(advice_suffix "; fill in the order and why, then run git review walkthrough draft --build$draftflags $branch")"
 			fi
 		fi
 		# The reviewer's draft wins over the PR's own walkthrough for as long as it
@@ -1269,7 +1303,7 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		# be the kind of surprise this project spends its error messages avoiding —
 		# so say it, and carry on: choosing your own order is legitimate, and the
 		# assistant never proposes this, you had to ask for it.
-		if git show "$tip:.review/walkthrough.md" >/dev/null 2>&1; then
+		if advice_enabled && git show "$tip:.review/walkthrough.md" >/dev/null 2>&1; then
 			echo "note: $branch already carries a walkthrough from its author; your draft takes precedence over it while it exists. Delete it to go back to theirs." >&2
 		fi
 		# A paused review took its draft with it (git review save), which is why the
@@ -1283,7 +1317,7 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		# surface that decided by the name, and the one where getting it wrong only
 		# misinforms: with no claimant there is no git review continue to refuse, and
 		# the next save replaces the leftover instead of stopping.
-		if [ -f "$(walk_saved_draft_path "$branch")" ]; then
+		if advice_enabled && [ -f "$(walk_saved_draft_path "$branch")" ]; then
 			if walk_saved_draft_claims | cut -f1 | grep -Fxq -e "$branch"; then
 				echo "note: a paused review of $branch carries a walkthrough draft of its own; git review continue will not resume over this one until one of the two is gone." >&2
 			else
@@ -1295,9 +1329,20 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		# here — you are reviewing someone else's branch.
 	elif [ "$to_stdout" -eq 0 ]; then
 		if [ "$update" -eq 1 ]; then
-			echo "updated $targetrel: $merged_kept kept, $merged_added added, $(printf '%s\n' "$merged_removed" | grep -c . || true) dropped; fill in the new entries, then run git review walkthrough build"
+			merged_dropped="$(printf '%s\n' "$merged_removed" | grep -c . || true)"
 		else
-			echo "wrote $targetrel with $n file(s); fill in the order and why, then run git review walkthrough build"
+			# Same as the draft side: a fresh skeleton is all additions, and
+			# saying so is what gives the record one shape across both steps.
+			merged_kept=0
+			merged_added="$n"
+			merged_dropped=0
+		fi
+		if [ "$porcelain" -eq 1 ]; then
+			porcelain_row merged "$merged_kept" "$merged_added" "$merged_dropped"
+		elif [ "$update" -eq 1 ]; then
+			echo "updated $targetrel: $merged_kept kept, $merged_added added, $merged_dropped dropped$(advice_suffix '; fill in the new entries, then run git review walkthrough build')"
+		else
+			echo "wrote $targetrel with $n file(s)$(advice_suffix '; fill in the order and why, then run git review walkthrough build')"
 		fi
 		warn_dirty
 	else

@@ -280,12 +280,19 @@ describe("argv de los controles del bloque de borradores", () => {
         // de negarse sobre un archivo existente.
         assert.deepStrictEqual(
             draftArgs("feature/x", "remote", "full", false, false),
-            ["draft", "--", "feature/x"]
+            ["draft", "--porcelain", "--", "feature/x"]
         );
         assert.deepStrictEqual(
             draftArgs("feature/x", "local", "delta", false, true),
-            ["draft", "--force", "--local", "--delta", "--", "feature/x"]
+            ["draft", "--porcelain", "--force", "--local", "--delta", "--", "feature/x"]
         );
+    });
+
+    // El paso que escribe el esqueleto pide el registro `merged`; el que valida
+    // e instala no, porque no lo emite -- su resultado es el badge de la fila.
+    it("--porcelain va en el paso que escribe y no en --build", () => {
+        assert.ok(draftArgs("feature/x", "remote", "full", false).includes("--porcelain"));
+        assert.ok(!draftArgs("feature/x", "remote", "full", true).includes("--porcelain"));
     });
 
     it("Discard nombra una sola rama y nunca --all ni --saved", () => {

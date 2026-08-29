@@ -91,14 +91,30 @@ public class ReviewIntentTests
     public void Draft_argv_matches_the_contract()
     {
         Assert.Equal(
-            new[] { "draft", "--", "feature/x" },
+            new[] { "draft", "--porcelain", "--", "feature/x" },
             ReviewIntentLogic.DraftArgs("feature/x", ReviewSource.Remote, ReviewRange.Full, false));
         Assert.Equal(
             new[] { "draft", "--build", "--local", "--delta", "--", "feature/x" },
             ReviewIntentLogic.DraftArgs("feature/x", ReviewSource.Local, ReviewRange.Delta, true));
         Assert.Equal(
-            new[] { "draft", "--offline", "--", "feature/x" },
+            new[] { "draft", "--porcelain", "--offline", "--", "feature/x" },
             ReviewIntentLogic.DraftArgs("feature/x", ReviewSource.Offline, ReviewRange.Full, false));
+    }
+
+    /// <summary>
+    /// The step that writes the skeleton asks for the `merged` record; the one
+    /// that validates and installs does not, because it emits none -- its result
+    /// is the row's badge.
+    /// </summary>
+    [Fact]
+    public void Draft_argv_asks_for_the_record_only_where_it_exists()
+    {
+        Assert.Contains(
+            "--porcelain",
+            ReviewIntentLogic.DraftArgs("feature/x", ReviewSource.Remote, ReviewRange.Full, false));
+        Assert.DoesNotContain(
+            "--porcelain",
+            ReviewIntentLogic.DraftArgs("feature/x", ReviewSource.Remote, ReviewRange.Full, true));
     }
 
     [Fact]
@@ -124,10 +140,10 @@ public class ReviewIntentTests
     public void Draft_argv_forces_only_when_starting_over()
     {
         Assert.Equal(
-            new[] { "draft", "--", "feature/x" },
+            new[] { "draft", "--porcelain", "--", "feature/x" },
             ReviewIntentLogic.DraftArgs("feature/x", ReviewSource.Remote, ReviewRange.Full, false, false));
         Assert.Equal(
-            new[] { "draft", "--force", "--local", "--delta", "--", "feature/x" },
+            new[] { "draft", "--porcelain", "--force", "--local", "--delta", "--", "feature/x" },
             ReviewIntentLogic.DraftArgs("feature/x", ReviewSource.Local, ReviewRange.Delta, false, true));
     }
 

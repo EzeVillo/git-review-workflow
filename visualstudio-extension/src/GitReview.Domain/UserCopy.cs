@@ -134,6 +134,35 @@ public static class UserCopy
     public static string StartLayoutTitle(string branch) =>
         $"Start reviewing {branch} — how do you want to read it?";
 
+    /// <summary>
+    /// The only thing a draft update says that no row answers: what was kept,
+    /// what came in and what fell out. The row shows the NEW annotated/total
+    /// pair, never what moved to get there.
+    ///
+    /// Written here rather than forwarding the CLI's stdout, which says the same
+    /// with an absolute path and the next command — and that command is the
+    /// "Validate and start" button on that very row. The three numbers arrive in
+    /// the `merged` record of <c>walkthrough draft --porcelain</c>.
+    ///
+    /// Zeroes are not spelled out. An update that adds and drops nothing is a
+    /// real outcome — the range moved without changing which files it touches —
+    /// and earns its sentence, but making somebody read "0 added, 0 dropped" to
+    /// find out neither happened is the noise this sentence exists to avoid.
+    ///
+    /// Byte for byte identical to userCopy.ts and UserCopy.kt.
+    /// </summary>
+    public static string DraftUpdated(int kept, int added, int dropped)
+    {
+        if (added == 0 && dropped == 0)
+        {
+            return $"Reading order updated: nothing moved, {kept} kept.";
+        }
+        var text = $"Reading order updated: {kept} kept";
+        if (added > 0) text += $", {added} added";
+        if (dropped > 0) text += $", {dropped} no longer in the PR";
+        return text + ".";
+    }
+
     public const string StartLayoutPlaceholder =
         "Walkthrough, commit by commit, keys only, or whole diff";
 

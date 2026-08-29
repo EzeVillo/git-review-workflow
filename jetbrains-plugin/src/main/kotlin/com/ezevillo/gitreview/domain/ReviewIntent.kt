@@ -114,7 +114,18 @@ fun draftArgs(
 ): List<String> {
     val args = ArrayList<String>()
     args.add("draft")
-    if (build) args.add("--build")
+    if (build) {
+        args.add("--build")
+    } else {
+        // The step that writes or reconciles the skeleton, and the only one
+        // with a result to report. --porcelain swaps that sentence for the
+        // `merged` record: the panel writes its own from those three numbers
+        // (UserCopy.draftUpdated) instead of forwarding one that carries an
+        // absolute path and the next command. --build does not take it because
+        // it does not emit the record -- it validates and installs, and its
+        // result is the row's badge.
+        args.add("--porcelain")
+    }
     if (force) args.add("--force")
     args.addAll(originAndRangeFlags(source, range))
     args.add("--")

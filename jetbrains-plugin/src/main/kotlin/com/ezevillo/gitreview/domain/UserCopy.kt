@@ -114,6 +114,35 @@ object UserCopy {
     const val START_LAYOUT_PLACEHOLDER =
         "Walkthrough, commit by commit, keys only, or whole diff"
 
+    /**
+     * The only thing a draft `update` says that no row answers: what was kept,
+     * what came in and what fell out. The row shows the NEW annotated/total
+     * pair, never what moved to get there.
+     *
+     * Written here rather than forwarding the CLI's stdout, which says the same
+     * with an absolute path and the next command -- and that command is the
+     * *Validate and start* button on that very row. The three numbers arrive in
+     * the `merged` record of `walkthrough draft --porcelain`: reading them out
+     * of the human sentence would be parsing human output, which the contract
+     * forbids.
+     *
+     * Zeroes are not spelled out. An update that adds and drops nothing is a
+     * real outcome -- the range moved without changing which files it touches
+     * -- and earns its sentence, but making somebody read "0 added, 0 dropped"
+     * to find out neither happened is the noise this sentence exists to avoid.
+     *
+     * Byte for byte identical to userCopy.ts and UserCopy.cs.
+     */
+    fun draftUpdated(kept: Int, added: Int, dropped: Int): String {
+        if (added == 0 && dropped == 0) {
+            return "Reading order updated: nothing moved, $kept kept."
+        }
+        val text = StringBuilder("Reading order updated: $kept kept")
+        if (added > 0) text.append(", $added added")
+        if (dropped > 0) text.append(", $dropped no longer in the PR")
+        return "$text."
+    }
+
     // --- Reviewer's draft walkthrough (011) -------------------------------------
 
     const val DRAFT_FAILED = "Could not draft a reading order."

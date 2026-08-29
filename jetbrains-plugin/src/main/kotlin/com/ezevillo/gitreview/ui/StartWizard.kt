@@ -20,7 +20,7 @@ import com.ezevillo.gitreview.domain.branchPickerLabel
 import com.ezevillo.gitreview.domain.buildLayoutItems
 import com.ezevillo.gitreview.domain.deltaForSource
 import com.ezevillo.gitreview.domain.draftArgs
-import com.ezevillo.gitreview.domain.draftOutcomeText
+import com.ezevillo.gitreview.domain.parseMergedRecord
 import com.ezevillo.gitreview.domain.draftConfigArgs
 import com.ezevillo.gitreview.domain.offersIncludeKeys
 import com.ezevillo.gitreview.domain.formatCommandLine
@@ -319,12 +319,20 @@ object StartWizard {
             // fila) y la guia de autoria que falta (las dos filas de guias, con
             // su Create). Notificarlo era repetir el panel entero en un parrafo.
             //
-            // Un `update` si: dice "N kept, M added, K dropped", y de las tres
-            // cosas que nombra ninguna se ve en la fila. En rojo, el error.
-            text = if (ok) {
-                if (update) draftOutcomeText(result.stdout, result.stderr) else ""
-            } else {
+            // Un `update` si: que se conservo, que entro y que se cayo no esta
+            // en ninguna fila, porque la del borrador muestra el par NUEVO. Los
+            // tres numeros llegan por el registro `merged` y la frase es
+            // nuestra; sin registro (una CLI vieja) el acuse se cae entero, que
+            // es mejor que reenviar la prosa con la ruta y el comando
+            // siguiente. En rojo, el error.
+            text = if (!ok) {
                 UiMessages.flatten(result.stderr)
+            } else if (!update) {
+                ""
+            } else {
+                parseMergedRecord(result.stdout)
+                    ?.let { UserCopy.draftUpdated(it.kept, it.added, it.dropped) }
+                    ?: ""
             },
         )
     }

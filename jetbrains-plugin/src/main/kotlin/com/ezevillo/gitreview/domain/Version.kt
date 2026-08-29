@@ -4,7 +4,7 @@ package com.ezevillo.gitreview.domain
  * Minimum CLI version that ships the porcelain contract used by this plugin.
  * Keep in sync with `contracts/client-product-surface.yaml` (anti-drift CI).
  */
-const val MIN_CLI_VERSION: String = "0.7.0"
+const val MIN_CLI_VERSION: String = "0.8.0"
 
 private fun parseVersion(version: String): Triple<Int, Int, Int>? {
     val parts = version.trim().split(".")

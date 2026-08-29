@@ -106,4 +106,34 @@ public static class DraftFlow
     /// </summary>
     public static bool OffersIncludeKeys(IReadOnlyList<ReadingOffer>? offers) =>
         offers is not null && offers.Any(o => o.Id == OfferId.Keys);
+
+    /// <summary>
+    /// Reads the `merged` record emitted by <c>walkthrough draft --porcelain</c>.
+    ///
+    /// It exists because those three numbers are the ONLY thing the verb says
+    /// that no row answers: the draft's row shows the new annotated/total pair,
+    /// never what moved to get there. The human sentence carries them too, but
+    /// reading it would be parsing human output — the path this client used to
+    /// take, and the one its invocation contract forbids.
+    ///
+    /// <c>null</c> when the record is absent (an old CLI, a --build, a
+    /// --stdout): the caller stays quiet, which is the right degradation — a
+    /// mutation with no acknowledgement is less trouble than an invented one.
+    /// </summary>
+    public static MergedCounts? ParseMergedRecord(string stdout)
+    {
+        foreach (var line in stdout.Split('\n'))
+        {
+            var fields = line.Trim().Split('\t');
+            if (fields.Length < 4 || fields[0] != "merged") continue;
+            if (!int.TryParse(fields[1], out var kept)) return null;
+            if (!int.TryParse(fields[2], out var added)) return null;
+            if (!int.TryParse(fields[3], out var dropped)) return null;
+            return new MergedCounts(kept, added, dropped);
+        }
+        return null;
+    }
 }
+
+/// <summary>The three numbers of an update, as the `merged` record counts them.</summary>
+public sealed record MergedCounts(int Kept, int Added, int Dropped);

@@ -95,14 +95,35 @@ function askpassCommand(): string {
 }
 
 /**
- * Entorno para la invocación con `options.network`: parte de `process.env`
- * (perder el resto — `PATH` incluido — rompería la resolución del propio
- * `git`) y sólo agrega las tres variables de la Decisión 5.
+ * El entorno de TODA invocación: `process.env` (perder el resto — `PATH`
+ * incluido — rompería la resolución del propio `git`) más la única variable
+ * que esta extensión le impone a la CLI.
+ *
+ * `GIT_REVIEW_ADVICE=0` apaga las notas que un panel no necesita: las que
+ * ofrecen un comando —acá es un botón— y las que describen algo que ya viaja
+ * como registro porcelain —acá es una fila—. Va en UN solo lugar y este es,
+ * porque el filtro del otro lado no existe: distinguir una nota de otra
+ * exigiría leer la salida humana, que `contracts/cli-invocation.md` prohíbe.
+ * Lo que NO apaga sigue llegando entero (una entrada que el PR ya no cambia,
+ * un cursor que se movió); ver `advice_enabled` en `bin/git-review-lib.sh`.
+ *
+ * Una CLI vieja ignora la variable y sigue imprimiendo todo: la degradación es
+ * más ruido, nunca un fallo.
+ */
+function baseEnv(): NodeJS.ProcessEnv {
+    return {
+        ...process.env,
+        GIT_REVIEW_ADVICE: "0",
+    };
+}
+
+/**
+ * El de arriba más las tres variables de la Decisión 5, para `options.network`.
  */
 function networkEnv(): NodeJS.ProcessEnv {
     const askpass = askpassCommand();
     return {
-        ...process.env,
+        ...baseEnv(),
         GIT_TERMINAL_PROMPT: "0",
         GIT_ASKPASS: askpass,
         SSH_ASKPASS: askpass,
@@ -223,7 +244,7 @@ export function invokeGitReview(
             // Sólo POSIX: en Windows `detached` abriría una consola nueva, y no
             // compra nada (no hay grupos de procesos a los que señalizar).
             ...(process.platform === "win32" ? {} : {detached: true}),
-            ...(options.network ? {env: networkEnv()} : {}),
+            env: options.network ? networkEnv() : baseEnv(),
         });
 
         let stdout = "";

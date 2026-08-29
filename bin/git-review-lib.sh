@@ -10,6 +10,60 @@
 # live together (installed as libexec, not on PATH). It only defines functions,
 # so sourcing it has no side effects.
 
+# ── Advice: lo que quien tiene el porcelain no necesita ──────────────────────
+
+# advice_enabled
+# Whether to print the notes a caller with its own interface does not need.
+#
+# Same shape as git's advice.*: `git status` suggests commands, and
+# advice.statusHints=false leaves the state and drops the suggestions. Here the
+# problem is one step further out — the three panels reinvoke these verbs and
+# forward what they print, so a note offering `git review walkthrough guide`
+# lands as a paragraph naming a command that is a button two rows down. The
+# client cannot tell one note from another without parsing human output, which
+# its contract forbids, so the caller that already has the control turns them
+# off at the source.
+#
+# TWO kinds are advice, and the test for both is the same question — does the
+# caller already have this?
+#   - an offer of a command or a flag: it has the button;
+#   - state that already travels as a porcelain record (which guide is in
+#     force, that a draft shadows the author's walkthrough): it has the row.
+# What is NOT advice is everything else the verb has to say: an entry the PR no
+# longer changes, a cursor that moved, a branch that differs from your local
+# one. No record carries those, so no row can answer them, and they print
+# either way. That is the line — not how long the note is.
+#
+# Precedence is git's: the environment wins over config, and unset means on, so
+# a terminal keeps every note it has always had. GIT_REVIEW_ADVICE is what the
+# clients export (one place per client); the config key is for a person who
+# wants their own terminal quieter.
+advice_enabled() {
+	case "${GIT_REVIEW_ADVICE-}" in
+		0 | false | no) return 1 ;;
+		1 | true | yes) return 0 ;;
+	esac
+	# Read defensively, like every other config read here: `git config` exits
+	# non-zero on a missing key, and under set -e an unguarded call would abort
+	# the verb over a key nobody ever set.
+	if [ "$(git config --bool reviewworkflow.advice 2>/dev/null || true)" = "false" ]; then
+		return 1
+	fi
+	return 0
+}
+
+# advice_suffix <text>
+# The offer half of a mixed note, emitted only when advice is on so the note
+# keeps its state and loses its command. A suffix and not a second note because
+# the two halves are one sentence: "reviewing X, which differs from your local
+# Y; use --local to review what you have checked out" reads as a non sequitur
+# once split, and the state half is the part that must survive.
+advice_suffix() {
+	if advice_enabled; then
+		printf '%s' "$1"
+	fi
+}
+
 # ── Branch / remote candidates (git review config --porcelain) ────────────────
 
 # candidate_remotes <effective-remote>

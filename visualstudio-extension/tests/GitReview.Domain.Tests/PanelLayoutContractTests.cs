@@ -184,7 +184,7 @@ public class PanelLayoutContractTests
     [Fact]
     public void Min_cli_version_constant()
     {
-        Assert.Equal("0.7.0", CliVersion.MinCliVersion);
+        Assert.Equal("0.8.0", CliVersion.MinCliVersion);
         Assert.Equal(CliVersion.MinCliVersion, CanonicalScalar("min_cli_version"));
     }
 

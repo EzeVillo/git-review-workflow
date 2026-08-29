@@ -29,7 +29,7 @@ class VersionTest {
     @Test
     fun isOutdatedAgainstMin() {
         assertFalse(isOutdated(MIN_CLI_VERSION))
-        assertEquals("0.7.0", MIN_CLI_VERSION)
+        assertEquals("0.8.0", MIN_CLI_VERSION)
         assertTrue(isOutdated("0.2.1"))
         assertTrue(isOutdated("0.3.0"))
         assertTrue(isOutdated("0.3.9"))
@@ -39,7 +39,11 @@ class VersionTest {
         assertTrue(isOutdated("0.5.9"))
         assertTrue(isOutdated("0.6.0"))
         assertTrue(isOutdated("0.6.9"))
-        assertFalse(isOutdated("0.7.1"))
+        // 0.7.x no trae `walkthrough draft --porcelain`: mandarselo seria un
+        // `unknown option`, o sea el borrador que no se escribe.
+        assertTrue(isOutdated("0.7.0"))
+        assertTrue(isOutdated("0.7.9"))
+        assertFalse(isOutdated("0.8.1"))
         assertTrue(isOutdated("garbage"))
     }
 }

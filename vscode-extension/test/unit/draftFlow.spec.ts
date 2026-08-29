@@ -1,13 +1,14 @@
 import * as assert from "node:assert";
 import {
     advanceDraftFlow,
-    draftOutcomeMessage,
     DraftFlowState,
     DraftStep,
     initialDraftFlowState,
     offersIncludeKeys,
+    parseMergedRecord,
     sameDraftFile,
 } from "../../src/review/draftFlow";
+import {draftUpdated} from "../../src/review/userCopy";
 
 describe("initialDraftFlowState", () => {
     it("create arranca creando el borrador; resume ya termino", () => {
@@ -121,35 +122,71 @@ describe("sameDraftFile", () => {
     });
 });
 
-describe("draftOutcomeMessage", () => {
-    // El caso que motivo la funcion: apretar la oferta y no ver nada. El
-    // resultado del verbo viaja por stdout y este camino leia solo stderr.
-    it("el resultado del verbo no puede perderse: viene por stdout", () => {
-        const out = "updated $GIT_DIR/review-walkthrough/feature/x.md: 1 kept, 1 added, 0 dropped\n";
+describe("parseMergedRecord", () => {
+    // El caso que motivo el registro: apretar la oferta y no ver nada. El
+    // resultado del verbo viaja por stdout, pero leer su FRASE seria parsear
+    // salida humana; los tres numeros llegan en campos.
+    it("lee los tres numeros del registro", () => {
+        assert.deepStrictEqual(parseMergedRecord("merged\t1\t2\t3\n"), {
+            kept: 1,
+            added: 2,
+            dropped: 3,
+        });
+    });
+
+    it("encuentra el registro entre otras lineas", () => {
+        assert.deepStrictEqual(parseMergedRecord("otra\tcosa\nmerged\t0\t1\t0\n"), {
+            kept: 0,
+            added: 1,
+            dropped: 0,
+        });
+    });
+
+    // Sin registro el llamador se calla: una CLI vieja imprime la frase humana
+    // y ninguna otra, y ahi la respuesta correcta es no acusar nada.
+    it("sin registro devuelve undefined en vez de inventar", () => {
+        assert.strictEqual(parseMergedRecord(""), undefined);
         assert.strictEqual(
-            draftOutcomeMessage(out, ""),
-            "updated $GIT_DIR/review-walkthrough/feature/x.md: 1 kept, 1 added, 0 dropped"
+            parseMergedRecord("updated /tmp/x.md: 1 kept, 2 added, 3 dropped\n"),
+            undefined
+        );
+        // El nombre solo no alcanza: sin los tres campos no hay respuesta.
+        assert.strictEqual(parseMergedRecord("merged\t1\t2\n"), undefined);
+        // Ni un campo que no es un numero.
+        assert.strictEqual(parseMergedRecord("merged\t1\tdos\t3\n"), undefined);
+    });
+});
+
+describe("draftUpdated", () => {
+    it("nombra las tres cosas cuando las tres pasaron", () => {
+        assert.strictEqual(
+            draftUpdated(3, 1, 2),
+            "Reading order updated: 3 kept, 1 added, 2 no longer in the PR."
         );
     });
 
-    it("con nota, el resultado va primero y la nota despues", () => {
-        const msg = draftOutcomeMessage(
-            "updated the file: 2 kept, 0 added, 0 dropped\n",
-            "note: no authoring guide. Create one with:\n        git review walkthrough guide\n"
-        );
+    // Los ceros no se dicen: hacer leer "0 added" para descubrir que no se
+    // agrego nada es el ruido que esta frase existe para no tener.
+    it("omite el cero en vez de enumerarlo", () => {
+        assert.strictEqual(draftUpdated(3, 1, 0), "Reading order updated: 3 kept, 1 added.");
         assert.strictEqual(
-            msg,
-            "updated the file: 2 kept, 0 added, 0 dropped — " +
-            "note: no authoring guide. Create one with: git review walkthrough guide"
+            draftUpdated(3, 0, 2),
+            "Reading order updated: 3 kept, 2 no longer in the PR."
         );
-        // El separador va ENTRE los dos tramos, nunca adentro de uno: cada uno
-        // se aplana por su cuenta antes de unirlos.
-        assert.strictEqual(msg.split(" — ").length, 2);
     });
 
-    it("un stream vacio no deja separador colgando", () => {
-        assert.strictEqual(draftOutcomeMessage("", "note: solo la nota"), "note: solo la nota");
-        assert.strictEqual(draftOutcomeMessage("", ""), "");
-        assert.strictEqual(draftOutcomeMessage("  \n \n", "\n"), "");
+    // Un update que no mueve nada es un resultado real, no un no-op: el rango
+    // se corrio sin cambiar que archivos toca. Sin frase no hay ninguna senal.
+    it("un update que no movio nada igual dice que paso", () => {
+        assert.strictEqual(draftUpdated(4, 0, 0), "Reading order updated: nothing moved, 4 kept.");
+    });
+
+    // Ninguna de las tres frases nombra un comando ni una ruta: eso era el
+    // stdout que este acuse reemplaza.
+    it("no nombra comandos ni rutas", () => {
+        for (const text of [draftUpdated(3, 1, 2), draftUpdated(3, 1, 0), draftUpdated(4, 0, 0)]) {
+            assert.ok(!text.includes("git review"), text);
+            assert.ok(!text.includes("/"), text);
+        }
     });
 });

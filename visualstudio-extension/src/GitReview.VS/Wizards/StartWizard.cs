@@ -251,13 +251,24 @@ public static class StartWizard
         // filas de guias, con su Create). Notificarlo era repetir el panel
         // entero en un parrafo.
         //
-        // Un update si: dice "N kept, M added, K dropped", y de las tres cosas
-        // que nombra ninguna se ve en la fila. Red: only the error.
+        // Un update si: que se conservo, que entro y que se cayo no esta en
+        // ninguna fila, porque la del borrador muestra el par NUEVO. Los tres
+        // numeros llegan por el registro `merged` y la frase es nuestra; sin
+        // registro (una CLI vieja) el acuse se cae entero, que es mejor que
+        // reenviar la prosa con la ruta y el comando siguiente. Red: only the
+        // error.
+        if (!ok)
+        {
+            return new DraftOutcome(false, CliMessage.FlattenCliMessage(result.Stderr));
+        }
+        if (!update)
+        {
+            return new DraftOutcome(true, "");
+        }
+        var merged = DraftFlow.ParseMergedRecord(result.Stdout);
         return new DraftOutcome(
-            ok,
-            ok
-                ? (update ? CliMessage.DraftOutcomeText(result.Stdout, result.Stderr) : "")
-                : CliMessage.FlattenCliMessage(result.Stderr));
+            true,
+            merged is null ? "" : UserCopy.DraftUpdated(merged.Kept, merged.Added, merged.Dropped));
     }
 
     private sealed record OffersResult(

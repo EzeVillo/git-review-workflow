@@ -86,6 +86,18 @@ public class CliInvoker
             };
             ProcessCompat.AddArgs(psi, resolved.Args);
 
+            // La unica variable que esta extension le impone a la CLI, y va en
+            // TODA invocacion. Apaga las notas que un panel no necesita: las
+            // que ofrecen un comando --aca es un boton-- y las que describen
+            // algo que ya viaja como registro porcelain --aca es una fila--.
+            // Un solo lugar, porque del otro lado no hay filtro posible:
+            // distinguir una nota de otra seria leer salida humana, que el
+            // contrato de invocacion prohibe. Lo que NO es advice sigue
+            // llegando entero (una entrada que el PR ya no cambia, un cursor
+            // que se movio). Ver advice_enabled en bin/git-review-lib.sh; una
+            // CLI vieja la ignora y solo imprime de mas.
+            psi.Environment["GIT_REVIEW_ADVICE"] = "0";
+
             if (network)
             {
                 var askpass = _askpassCommand();

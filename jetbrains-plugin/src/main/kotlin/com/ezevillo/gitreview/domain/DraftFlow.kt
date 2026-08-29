@@ -102,3 +102,31 @@ fun advanceDraftFlow(state: DraftFlowState, event: DraftFlowEvent): DraftFlowSta
  */
 fun offersIncludeKeys(offers: List<ReadingOffer>?): Boolean =
     offers != null && offers.any { it.id == OfferId.KEYS }
+
+/** Los tres numeros de un `update`, tal como los cuenta el registro `merged`. */
+data class MergedCounts(val kept: Int, val added: Int, val dropped: Int)
+
+/**
+ * Lee el registro `merged` que emite `walkthrough draft --porcelain`.
+ *
+ * Existe porque esos tres numeros son lo UNICO que el verbo dice y ninguna fila
+ * contesta: la del borrador muestra el par annotated/total nuevo, nunca lo que
+ * se movio para llegar ahi. La frase humana los trae tambien, pero leerla seria
+ * parsear salida humana -- el camino que este cliente tenia y que su contrato de
+ * invocacion prohibe.
+ *
+ * `null` cuando el registro no esta (una CLI vieja, un `--build`, un
+ * `--stdout`): el llamador se calla, que es la degradacion correcta -- una
+ * mutacion sin acuse molesta menos que un acuse inventado.
+ */
+fun parseMergedRecord(stdout: String): MergedCounts? {
+    for (line in stdout.split("\n")) {
+        val fields = line.trim().split("\t")
+        if (fields.size < 4 || fields[0] != "merged") continue
+        val kept = fields[1].toIntOrNull() ?: return null
+        val added = fields[2].toIntOrNull() ?: return null
+        val dropped = fields[3].toIntOrNull() ?: return null
+        return MergedCounts(kept, added, dropped)
+    }
+    return null
+}

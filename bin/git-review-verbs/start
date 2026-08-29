@@ -254,7 +254,7 @@ prev="$(git config "$markerkey" || true)"
 if [ "$local_mode" -eq 0 ]; then
 	localtip="$(git rev-parse --verify --quiet "refs/heads/$src" || true)"
 	if [ -n "$localtip" ] && [ "$localtip" != "$tip" ]; then
-		echo "note: reviewing $srclabel ($(git rev-parse --short "$tip")), which differs from your local $src ($(git rev-parse --short "$localtip")); use --local to review what you have checked out" >&2
+		echo "note: reviewing $srclabel ($(git rev-parse --short "$tip")), which differs from your local $src ($(git rev-parse --short "$localtip"))$(advice_suffix '; use --local to review what you have checked out')" >&2
 	fi
 fi
 
@@ -287,7 +287,7 @@ else
 	range="vs $baselabel"
 	if [ -n "$prev" ] && [ "$prev" != "$tip" ] && git merge-base --is-ancestor "$prev" "$tip"; then
 		n="$(git rev-list --count "$prev..$tip")"
-		echo "note: previously reviewed at $(git rev-parse --short "$prev"); $n new commit(s) since (use --delta to review only those)" >&2
+		echo "note: previously reviewed at $(git rev-parse --short "$prev"); $n new commit(s) since$(advice_suffix ' (use --delta to review only those)')" >&2
 	fi
 fi
 
@@ -428,7 +428,7 @@ if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$tip")" && [ -n "$wtcontent" 
 		# already on disk — theirs, stale or empty — this command would refuse for
 		# want of --force, and suggesting a command that cannot run is worse than
 		# suggesting nothing.
-		if ! walk_has_draft_file "$src"; then
+		if advice_enabled && ! walk_has_draft_file "$src"; then
 			echo "note: to read it in an order of your own instead: $(draft_command) (nothing gets committed)"
 		fi
 	fi
@@ -533,7 +533,7 @@ else
 	# reviewer would want to know they can write one themselves — and the only
 	# moment they are looking. Suppressed when they opted out with --no-walk:
 	# they already made the call.
-	if [ "$no_walk" -eq 0 ] && ! walk_read "$tip" >/dev/null; then
+	if advice_enabled && [ "$no_walk" -eq 0 ] && ! walk_read "$tip" >/dev/null; then
 		# Two ways to have no reading order, and they need different sentences. A
 		# draft that is there but empty used to produce neither: it satisfied
 		# walk_read, so this note was skipped, and the review landed in whole with

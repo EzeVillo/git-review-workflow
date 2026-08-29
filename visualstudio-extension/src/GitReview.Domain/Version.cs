@@ -6,7 +6,7 @@ namespace GitReview.Domain;
 /// </summary>
 public static class CliVersion
 {
-    public const string MinCliVersion = "0.7.0";
+    public const string MinCliVersion = "0.8.0";
 
     private static (int, int, int)? ParseVersion(string version)
     {

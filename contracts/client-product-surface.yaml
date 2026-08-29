@@ -2,7 +2,7 @@
 # Source of bootstrap strings: vscode-extension code as of 2026-08-08.
 # Normative for CI: scripts/check-client-product-surface.mjs
 schema_version: 1
-min_cli_version: "0.7.0" # verified: vscode-extension/src/cli/version.ts
+min_cli_version: "0.8.0" # verified: vscode-extension/src/cli/version.ts
 npm_install: "npm install -g git-review-workflow" # verified: src/cli/installHint.ts
 npm_update: "npm install -g git-review-workflow@latest" # verified: src/cli/installHint.ts
 docs_readme_url: "https://github.com/EzeVillo/git-review-workflow#readme"

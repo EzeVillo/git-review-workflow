@@ -31,7 +31,7 @@ describe("compareVersions", () => {
 describe("isOutdated", () => {
 	it("false para la versión mínima exacta", () => {
 		assert.strictEqual(isOutdated(MIN_CLI_VERSION), false);
-		assert.strictEqual(MIN_CLI_VERSION, "0.7.0");
+		assert.strictEqual(MIN_CLI_VERSION, "0.8.0");
 	});
 
 	it("true para una versión menor (incluye 0.5.x)", () => {
@@ -44,10 +44,14 @@ describe("isOutdated", () => {
 		assert.strictEqual(isOutdated("0.5.9"), true);
 		assert.strictEqual(isOutdated("0.6.0"), true);
 		assert.strictEqual(isOutdated("0.6.9"), true);
+		// 0.7.x no trae `walkthrough draft --porcelain`: mandarselo seria un
+		// `unknown option`, o sea el borrador que no se escribe.
+		assert.strictEqual(isOutdated("0.7.0"), true);
+		assert.strictEqual(isOutdated("0.7.9"), true);
 	});
 
 	it("false para una versión mayor", () => {
-		assert.strictEqual(isOutdated("0.7.1"), false);
+		assert.strictEqual(isOutdated("0.8.1"), false);
 	});
 
 	it("true para formato inválido", () => {

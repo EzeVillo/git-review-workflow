@@ -103,7 +103,8 @@ guard espejo para las de walk. Por eso las claves de walk son propias y nunca se
   review **completada** los conserva a través de `clean`; un start abandonado los revierte. Se
   borran a mano con `git review forget --delta`.
 - **Entradas de config:** `reviewworkflow.base` (dónde se integran los PRs — **sin default**, un
-  review completo falla sin él) y `reviewworkflow.remote` (default `origin`). Las dos son claves
+  review completo falla sin él), `reviewworkflow.remote` (default `origin`) y
+  `reviewworkflow.advice` (default **encendido**; ver *Advice* abajo). Las tres son claves
   `git config` por repo, por diseño.
 
 **Archivos de prosa** — dos son del **autor** y van trackeados al PR; los tres del **revisor** viven
@@ -152,17 +153,30 @@ CLI, cuyo público eligió la terminal y donde el vocabulario de git es el corre
   el stderr, la ruta) siempre a un clic. **Un tooltip no es un lugar para un argv:** dice qué le
   pasa al objeto de su fila, en imperativo.
 - **Se confirma lo que no se puede deshacer, y nada más.** Un cartel que aparece siempre deja de
-  leerse, y entonces tampoco se lee el que importa. `startReview` no confirma a propósito; el gate
-  es `ConfirmationContractTest` / `ConfirmationContractTests` contra el `confirms:` del canónico.
-  Vale para los DOS caminos que llegan al start: el asistente y *Validate and start*.
+  leerse, y entonces tampoco se lee el que importa. `startReview` no confirma a propósito, y vale
+  para los DOS caminos que llegan al start: el asistente y *Validate and start*.
+  **CUIDADO: hoy esto no tiene gate.** `confirms:` del canónico no gobierna en ninguno de los tres
+  —en JetBrains se consulta en un `if` de cuerpo vacío, en Visual Studio en un `default:` no-op, y
+  en VS Code no existe la tabla—, así que `ConfirmationContractTest` /
+  `ConfirmationContractTests` comparan una constante contra el YAML que nadie lee para decidir. El
+  diálogo real vive esparcido en cada acción. Ver `decisiones.md` §15.2.
 - **Lo que el panel muestra no se notifica.** Toda mutación refresca el panel antes de hablar, así
   que en el camino feliz el acuse ya está en pantalla y el toast lo repite. No notifican: crear un
   borrador (deja su fila), `walkthrough build` (deja el badge al día y abre el archivo) ni un
   `finish` que quedó `pending` (deja su banner). Sí notifican los que el panel no puede contestar:
-  un `update` de borrador («N kept, M added, K dropped»), copiar al portapapeles, y el residual de
+  un `update` de borrador (los tres números del registro `merged`), copiar al portapapeles, y el residual de
   `finish` sin banner. **Cuál de los dos es se decide por lo que se pidió, nunca leyendo la salida
   de la CLI** — de ahí el `update` en `DraftFlowState.Create` y el retorno nullable de
   `finishSuccess`.
+- **Advice: en verde, un cliente no reenvía las notas que ya tiene.** La CLI las apaga en el origen
+  —los tres invocadores exportan `GIT_REVIEW_ADVICE=0`, un lugar por cliente— porque distinguirlas
+  del lado del panel sería parsear salida humana. **Advice es una pregunta, no una lista:** ¿quien
+  invoca ya tiene esto? Sí de dos formas —ofrece un comando o un flag (tiene el botón), o es estado
+  que ya viaja como registro porcelain (tiene la fila)—. Todo lo demás se imprime igual: una entrada
+  que el PR ya no cambia, un cursor que se movió, una rama que difiere de la local. La línea es esa,
+  **no** cuán larga es la nota. Una nota mixta conserva su estado y pierde su oferta
+  (`advice_suffix`). Gate: `tests/advice.bats`, que prueba las dos mitades. Detalle en
+  `decisiones.md` §15.2.
 - **El `stdout` de un verbo no se reenvía tal cual.** Termina en el comando del paso siguiente
   («…then run `git review walkthrough draft --build`»), que en el panel es un botón. Las notas de
   `stderr` sí, cuando el panel no las cubre.

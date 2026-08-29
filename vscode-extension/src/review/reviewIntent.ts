@@ -123,6 +123,15 @@ export function draftArgs(
 
     if (build) {
         args.push("--build");
+    } else {
+        // El paso que escribe o reconcilia el esqueleto, y el único que tiene
+        // un resultado que contar. `--porcelain` cambia esa frase por el
+        // registro `merged`: el panel arma la suya con esos tres números
+        // (userCopy.draftUpdated) en vez de reenviar una que trae una ruta
+        // absoluta y el comando del paso siguiente. `--build` no lo lleva
+        // porque no emite el registro — valida e instala, y su resultado es el
+        // badge de la fila.
+        args.push("--porcelain");
     }
     if (force) {
         args.push("--force");

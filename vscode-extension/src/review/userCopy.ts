@@ -115,5 +115,37 @@ export function startLayoutTitle(branch: string): string {
 	return `Start reviewing ${branch} — how do you want to read it?`;
 }
 
+/**
+ * Lo único que un `update` de borrador dice y ninguna fila contesta: qué se
+ * conservó, qué entró y qué se cayó. La fila muestra el par annotated/total
+ * NUEVO, nunca lo que se movió para llegar ahí.
+ *
+ * Se escribe acá y no se reenvía el stdout de la CLI, que dice lo mismo con
+ * una ruta absoluta y el comando del paso siguiente — el comando es el botón
+ * *Validate and start* de esa misma fila. Los tres números llegan por el
+ * registro `merged` de `walkthrough draft --porcelain`: leerlos de la frase
+ * humana sería parsear salida humana, que el contrato prohíbe.
+ *
+ * Los ceros no se dicen. Un update que no agrega ni tira nada es un resultado
+ * real —el rango se movió sin cambiar qué archivos toca— y merece su frase,
+ * pero enumerar "0 added, 0 dropped" es hacer leer dos cifras para descubrir
+ * que no pasó ninguna de las dos cosas.
+ *
+ * Byte for byte identical to UserCopy.kt and UserCopy.cs.
+ */
+export function draftUpdated(kept: number, added: number, dropped: number): string {
+	if (added === 0 && dropped === 0) {
+		return `Reading order updated: nothing moved, ${kept} kept.`;
+	}
+	let text = `Reading order updated: ${kept} kept`;
+	if (added > 0) {
+		text += `, ${added} added`;
+	}
+	if (dropped > 0) {
+		text += `, ${dropped} no longer in the PR`;
+	}
+	return `${text}.`;
+}
+
 export const WALKTHROUGH_UPDATE_BUTTON = "Update";
 export const WALKTHROUGH_START_OVER_BUTTON = "Start over";

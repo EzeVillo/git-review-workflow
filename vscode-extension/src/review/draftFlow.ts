@@ -125,37 +125,34 @@ export function offersIncludeKeys(offers: readonly ReadingOffer[] | undefined): 
 }
 
 /**
- * Lo que un verbo del borrador tiene para decir una vez que salió en verde, en
- * un solo mensaje: primero lo que hizo, después sus notas.
+ * Los tres números de un `update`, leídos del registro `merged` que emite
+ * `walkthrough draft --porcelain`.
  *
- * El resultado viaja por **stdout**, que es donde este proyecto pone el
- * resultado de todos sus verbos (start, finish, forget…) y deja stderr para
- * errores y notas. Leer sólo stderr —lo que hacía este camino— se quedaba sin la
- * única frase que contesta qué pasó: un update dice «N kept, M added, K
- * dropped», y sin ella apretar la oferta no producía señal ninguna. En una rama
- * sin notas no aparecía nada; en una con nota (la de la guía de autoría)
- * aparecía un consejo que no tenía que ver con lo que se acababa de apretar.
+ * Este registro existe porque son lo ÚNICO que el verbo dice y ninguna fila
+ * contesta: la del borrador muestra el par annotated/total nuevo, nunca lo que
+ * se movió para llegar ahí. La frase humana los trae también, pero leerla sería
+ * parsear salida humana — el camino que este archivo tenía y que
+ * `contracts/cli-invocation.md` prohíbe.
  *
- * Cada tramo se aplana por su cuenta y recién después se unen, para que el
- * separador quede entre el resultado y la nota y no adentro de ninguno.
+ * `undefined` cuando el registro no está (una CLI vieja, un `--build`, un
+ * `--stdout`): el llamador se calla, que es la degradación correcta —una
+ * mutación sin acuse molesta menos que un acuse inventado.
  */
-export function draftOutcomeMessage(stdout: string, stderr: string): string {
-    return [draftNotes(stdout), draftNotes(stderr)].filter((part) => part.length > 0).join(" — ");
-}
-
-/**
- * Sólo las notas, para el paso que el panel ya contesta.
- *
- * Un `create` deja el stdout diciendo qué archivo escribió y con qué comando
- * seguir, y las dos cosas están mejor dichas en el panel: la fila del borrador
- * lo nombra con su progreso, y el comando es el botón *Validate and start* de
- * esa misma fila. El refresco que precede a este mensaje ya la dibujó.
- *
- * Las notas no: que el borrador tape el walkthrough del autor, o que haya una
- * review pausada con el suyo, no se ve en ninguna fila.
- */
-export function draftNotes(text: string): string {
-    return text.split("\n").map((line) => line.trim()).filter((line) => line.length > 0).join(" ");
+export function parseMergedRecord(
+    stdout: string
+): { kept: number; added: number; dropped: number } | undefined {
+    for (const line of stdout.split("\n")) {
+        const fields = line.trim().split("\t");
+        if (fields[0] !== "merged" || fields.length < 4) {
+            continue;
+        }
+        const [kept, added, dropped] = fields.slice(1, 4).map((field) => Number(field));
+        if (!Number.isInteger(kept) || !Number.isInteger(added) || !Number.isInteger(dropped)) {
+            return undefined;
+        }
+        return {kept, added, dropped};
+    }
+    return undefined;
 }
 
 /**

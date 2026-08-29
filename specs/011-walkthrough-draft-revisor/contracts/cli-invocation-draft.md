@@ -26,7 +26,7 @@ unidireccional de paths, uso acotado de la API de `vscode.git`— se mantiene.
 
 ## Invocaciones nuevas
 
-### `git review walkthrough draft [--local | --offline] [--delta] -- <branch>`
+### `git review walkthrough draft --porcelain [--local | --offline] [--delta] -- <branch>`
 
 **Cuándo**: el revisor eligió la oferta `draft` en el paso de forma de lectura
 del asistente de inicio. Nunca por iniciativa del cliente.
@@ -34,13 +34,22 @@ del asistente de inicio. Nunca por iniciativa del cliente.
 | Argumento               | De dónde                                                     |
 |-------------------------|--------------------------------------------------------------|
 | `draft`                 | Siempre                                                       |
+| `--porcelain`           | Siempre. Cambia la línea de resumen por el registro `merged`  |
 | `--local` / `--offline` | El **origen** que el asistente ya resolvió; mutuamente excluyentes |
 | `--delta`               | El **rango** que el asistente ya resolvió                     |
 | `<branch>`              | El `name` de la candidata elegida, verbatim, detrás de `--`   |
 
-**Se consume**: el exit code y el stderr. **No se parsea la salida humana**: ni
-la ruta que imprime, ni la cantidad de archivos, ni la nota de precedencia — esa
-última se muestra tal cual, como cualquier nota de un verbo exitoso.
+**Se consume**: el exit code, el stderr y el registro `merged` del stdout
+(`merged<TAB>kept<TAB>added<TAB>dropped`). **No se parsea la salida humana**: la
+frase que `--porcelain` reemplaza traía la ruta, la cantidad y el comando del
+paso siguiente, y leerla era exactamente lo prohibido acá. Los tres números son
+lo único que este verbo dice y ninguna fila del panel contesta; con ellos el
+cliente arma su propia frase (`UserCopy.draftUpdated`). Sin el registro —una CLI
+por debajo de `min_cli_version`— el cliente **se calla**, nunca inventa.
+
+Las notas de stderr tampoco se reenvían en bloque: el invocador exporta
+`GIT_REVIEW_ADVICE=0`, así que las que ofrecen un comando y las que repiten un
+registro no llegan. Las que quedan sí se muestran tal cual.
 
 **Prohibido**: `--force` (sobrescribir un borrador empezado no es una decisión
 que el asistente pueda tomar por el revisor; para eso está la terminal) y

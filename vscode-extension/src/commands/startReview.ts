@@ -11,10 +11,10 @@ import {
 import {invokeGitReview, InvokeOptions, resolveCommand} from "../cli/invoke";
 import {
     advanceDraftFlow,
-    draftOutcomeMessage,
     DraftFlowState,
     DraftStep,
     initialDraftFlowState,
+    parseMergedRecord,
 } from "../review/draftFlow";
 import {MutationLock} from "../review/mutationLock";
 import {
@@ -35,7 +35,7 @@ import {captureToken, tokenStillValid} from "../review/staleGuard";
 import {classifyStartFailure, quoteForTerminal} from "../review/startFailure";
 import {ReviewStateManager} from "../review/state";
 import {setBase} from "./setBase";
-import {STALE, startLayoutTitle} from "../review/userCopy";
+import {STALE, draftUpdated, startLayoutTitle} from "../review/userCopy";
 
 /** El stderr de la CLI, aplanado a una línea para el toast del editor (mismo criterio que continueReview.ts). */
 function flatten(stderr: string): string {
@@ -268,8 +268,11 @@ async function invokeDraft(
         )
     );
     const ok = result !== undefined && !result.errorCode && result.exitCode === 0;
-    // En verde, lo que hizo el verbo (stdout) más sus notas; en rojo, sólo el
-    // error, que es lo que la CLI pone en stderr y lo único que hay que decir.
+    // En rojo, sólo el error: es lo que la CLI pone en stderr y lo único que
+    // hay que decir.
+    if (!ok) {
+        return {ok, text: flatten(result?.stderr ?? "")};
+    }
     // En verde el acuse depende del paso, y un `create` NO TIENE NINGUNO: el
     // refresco de arriba acaba de dibujar la fila del borrador, y todo lo que
     // el verbo dice ahí tiene su propia fila en el panel — el archivo y el
@@ -278,12 +281,19 @@ async function invokeDraft(
     // autoría que falta (las dos filas de guías, con su Create). Notificarlo
     // era repetir el panel entero en un párrafo.
     //
-    // Un `update` sí: dice "N kept, M added, K dropped", y de las tres cosas
-    // que nombra ninguna se ve en la fila, que sólo muestra el par nuevo.
-    const text = ok
-        ? (update ? draftOutcomeMessage(result?.stdout ?? "", result?.stderr ?? "") : "")
-        : flatten(result?.stderr ?? "");
-    return {ok, text};
+    // Un `update` sí: qué se conservó, qué entró y qué se cayó no está en
+    // ninguna fila, porque la del borrador muestra el par NUEVO. Los tres
+    // números llegan por el registro `merged` y la frase es nuestra; sin
+    // registro (una CLI vieja) el acuse se cae entero, que es mejor que
+    // reenviar la prosa que trae la ruta y el comando siguiente.
+    if (!update) {
+        return {ok, text: ""};
+    }
+    const merged = parseMergedRecord(result?.stdout ?? "");
+    return {
+        ok,
+        text: merged === undefined ? "" : draftUpdated(merged.kept, merged.added, merged.dropped),
+    };
 }
 
 /**

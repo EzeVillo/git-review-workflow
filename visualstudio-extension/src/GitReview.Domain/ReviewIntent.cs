@@ -133,7 +133,21 @@ public static class ReviewIntentLogic
         bool force = false)
     {
         var args = new List<string> { "draft" };
-        if (build) args.Add("--build");
+        if (build)
+        {
+            args.Add("--build");
+        }
+        else
+        {
+            // The step that writes or reconciles the skeleton, and the only one
+            // with a result to report. --porcelain swaps that sentence for the
+            // `merged` record: the panel writes its own from those three numbers
+            // (UserCopy.DraftUpdated) instead of forwarding one that carries an
+            // absolute path and the next command. --build does not take it
+            // because it does not emit the record -- it validates and installs,
+            // and its result is the row's badge.
+            args.Add("--porcelain");
+        }
         if (force) args.Add("--force");
         args.AddRange(OriginAndRangeFlags(source, range));
         args.Add("--");

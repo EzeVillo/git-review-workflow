@@ -1030,9 +1030,66 @@ Cuidado con revertir esto a «mostrar sólo stderr»: esa fue la versión anteri
 stdout— que es justo lo que `draftOutcomeMessage` vino a arreglar. Las dos funciones conviven a
 propósito.
 
-**Lo que queda fuera del alcance de los clientes:** varias notas que la CLI emite en verde terminan
-ofreciendo un comando (`start` sugiere `walkthrough draft` cuando la rama no tiene walkthrough, y
-`draft` sugiere `walkthrough guide` cuando no hay guía), y en el panel esos comandos son botones a la
-vista. Filtrarlas del lado del cliente exigiría parsear la salida humana, que el contrato prohíbe.
-Arreglarlo bien es un cambio de la CLI —que no las emita cuando quien invoca ya ofrece el control—,
-y por eso no se hizo acá.
+**Las notas que la CLI emite en verde** —`start` ofreciendo `walkthrough draft`, `draft` ofreciendo
+`walkthrough guide`— quedaron fuera de esta pasada porque filtrarlas desde el cliente exigiría
+parsear la salida humana, que el contrato prohíbe. Se arreglaron en la CLI: ver §15.2.
+
+### 15.2 Advice: lo que quien tiene el porcelain no necesita
+
+§15.1 terminaba con un pendiente: varias notas que la CLI emite **en verde** ofrecen un comando, y en
+un panel ese comando es un botón que está a la vista. Filtrarlas del lado del cliente exigiría
+parsear la salida humana, que su contrato de invocación prohíbe. La única solución de fondo era que
+la CLI no las emitiera cuando quien la invoca ya ofrece el control, y es lo que se hizo.
+
+**El mecanismo es el de git, no uno nuevo.** `git status` sugiere comandos y `advice.statusHints=false`
+los apaga dejando el estado. Acá la llave es `reviewworkflow.advice` (o `GIT_REVIEW_ADVICE` en el
+entorno, que gana, como los knobs de git); sin definir significa **encendido**, así que una terminal
+conserva todas las notas de siempre. Los tres clientes exportan la variable en **un solo lugar**: su
+invocador (`invoke.ts`, `CliInvoker.kt`, `CliInvoker.cs`).
+
+**La definición es una pregunta, no una lista.** ¿Quien invoca ya tiene esto? Dos formas de que la
+respuesta sea sí, y las dos son advice:
+
+- **ofrece un comando o un flag** — el panel tiene el botón (`use --local`, `then run git review
+  walkthrough draft --build`, `Create one with: git review walkthrough guide`);
+- **es estado que ya viaja como registro porcelain** — el panel tiene la fila (qué guía está en
+  vigor, que el borrador tapa el walkthrough del autor, que hay un borrador archivado).
+
+Lo que **no** es advice es todo lo demás que el verbo tiene para decir: una entrada que el PR ya no
+cambia y su path, un cursor que se movió, una rama que difiere de la local, un walkthrough que no
+aplica al rango. Ningún registro las lleva, así que ninguna fila puede contestarlas, y se imprimen
+igual con el advice apagado. Esa es la línea — **no** cuán larga es la nota. `tests/advice.bats`
+prueba las dos mitades, y el test que cuida la de abajo (una entrada caída se sigue nombrando) es el
+que rompe si alguien vuelve a confundir «largo» con «prescindible».
+
+Las notas mixtas conservan su estado y pierden su oferta, con `advice_suffix`: «reviewing X, which
+differs from your local Y» se queda; «; use `--local` to review what you have checked out» se va. Un
+suffix y no una nota aparte porque las dos mitades son una oración.
+
+**Los tres números del update viajan como registro, no como frase.** Es lo único que el verbo dice y
+ninguna fila contesta —la del borrador muestra el par annotated/total **nuevo**, nunca lo que se
+movió para llegar ahí—, así que apagar la frase sin reemplazo dejaba *Update* sin señal, el bug que
+§15.1 acababa de arreglar. `walkthrough draft --porcelain` (y `init --porcelain`) emiten
+`merged<TAB>kept<TAB>added<TAB>dropped` en lugar de la línea humana, y la frase la escribe
+`UserCopy.draftUpdated` de cada cliente: sin ruta absoluta, sin comando, y sin decir los ceros —«0
+added, 0 dropped» es hacer leer dos cifras para descubrir que no pasó ninguna de las dos cosas. Un
+create emite el mismo registro con `0 kept, N added, 0 dropped` para que tenga **una sola forma**: un
+cliente no debería tener que saber qué paso corrió para leer la respuesta.
+
+Sin registro (una CLI vieja) el acuse se cae entero y el cliente se calla. Es deliberado: una
+mutación sin acuse molesta menos que un acuse inventado, y el panel igual se refrescó. El caso real
+lo cubre `min_cli_version`, que subió a 0.8.0 porque `--porcelain` es superficie nueva y una CLI
+0.7.0 lo rechazaría con `unknown option` — o sea el borrador no se escribiría.
+
+**Lo que sigue pendiente, y es más grave de lo que parecía.** `confirms:` en el canónico **no
+gobierna nada en ninguno de los tres clientes**: en JetBrains `requiresConfirmation(id)` se consulta
+en un `if` de cuerpo vacío (`PanelActionDispatcher.kt`), en Visual Studio sólo en un `default:` que
+hace un refresh no-op (`GitReviewPanelController.cs`), y en VS Code no existe la tabla — hay 16
+`showWarningMessage` sueltos. `ConfirmationContractTest` compara una constante contra el YAML, y nada
+consulta esa constante para decidir. La prueba está en el árbol: el canónico dice
+`startFromDraft: {confirms: true}`, la tabla de JetBrains tiene `START_FROM_DRAFT`, y el
+comportamiento real ya no confirma en ninguno de los tres porque `runStart` dejó de hacerlo — con las
+cinco suites en verde. El arreglo es una **puerta única** de confirmación por cliente y un gate que
+cuente sus call sites contra el canónico, que es el mismo patrón que ya usa el repo para la VFS y
+para los iconos.
+

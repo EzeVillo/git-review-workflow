@@ -30,6 +30,7 @@ import {captureToken, tokenStillValid} from "../review/staleGuard";
 import {ReviewStateManager} from "../review/state";
 import {STALE, draftAgentPrompt, startLayoutTitle} from "../review/userCopy";
 import {draftAt} from "../views/panelModel";
+import {confirmMutation} from "../review/confirm";
 
 /** El stderr de la CLI, aplanado a una línea (mismo criterio que el resto). */
 function flatten(stderr: string): string {
@@ -278,15 +279,13 @@ export async function discardDraft(
     if (draft === undefined) {
         return;
     }
-    const answer = await vscode.window.showWarningMessage(
+    const confirmed = await confirmMutation(
+        "discardDraft",
         `Discard the reading order you wrote for ${draft.src}?`,
-        {
-            modal: true,
-            detail: `This deletes ${draft.path}. It cannot be undone.`,
-        },
+        `This deletes ${draft.path}. It cannot be undone.`,
         "Discard"
     );
-    if (answer !== "Discard") {
+    if (!confirmed) {
         return;
     }
 

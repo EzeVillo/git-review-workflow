@@ -155,11 +155,15 @@ CLI, cuyo público eligió la terminal y donde el vocabulario de git es el corre
 - **Se confirma lo que no se puede deshacer, y nada más.** Un cartel que aparece siempre deja de
   leerse, y entonces tampoco se lee el que importa. `startReview` no confirma a propósito, y vale
   para los DOS caminos que llegan al start: el asistente y *Validate and start*.
-  **CUIDADO: hoy esto no tiene gate.** `confirms:` del canónico no gobierna en ninguno de los tres
-  —en JetBrains se consulta en un `if` de cuerpo vacío, en Visual Studio en un `default:` no-op, y
-  en VS Code no existe la tabla—, así que `ConfirmationContractTest` /
-  `ConfirmationContractTests` comparan una constante contra el YAML que nadie lee para decidir. El
-  diálogo real vive esparcido en cada acción. Ver `decisiones.md` §15.2.
+- **Un diálogo de confirmación se abre en UN solo lugar por cliente, y esa puerta toma el id.**
+  `UiMessages.confirm`, `GitReviewDialogs.Confirm`, `confirmMutation`. Es lo que hace que
+  `confirms:` del canónico **gobierne** en vez de sólo describir: antes la tabla existía y nadie la
+  consultaba —un `if` de cuerpo vacío en JetBrains, un `default:` no-op en Visual Studio, nada en
+  VS Code—, así que sacar una confirmación no ponía nada en rojo. Tres gates, en los tres:
+  la tabla == el canónico, todo id declarado **pasa por la puerta** (leyendo el argumento, no
+  buscando el nombre suelto en el archivo) y **no hay ningún otro modal**. Única excepción, y está
+  declarada en los tres: `walkthroughInit`, que elige entre dos cursos en vez de confirmar.
+  Detalle en `decisiones.md` §15.2.
 - **Lo que el panel muestra no se notifica.** Toda mutación refresca el panel antes de hablar, así
   que en el camino feliz el acuse ya está en pantalla y el toast lo repite. No notifican: crear un
   borrador (deja su fila), `walkthrough build` (deja el badge al día y abre el archivo) ni un

@@ -467,7 +467,6 @@ public static class PanelLayoutBuilder
     {
         ControlId.ContinueReview,
         ControlId.DiscardInventory,
-        ControlId.StartFromDraft,
         ControlId.DiscardDraft,
         ControlId.DiscardGuide,
         ControlId.DiscardFixes,

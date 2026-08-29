@@ -4,7 +4,7 @@
  * Fails on missing YAML, schema issues, min_cli_version / npm / string drift,
  * and action-count mismatch vs vscode-extension package.json.
  */
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -1485,6 +1485,138 @@ for (const [id, icon] of canonicalIcons) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// QUE `confirms:` GOBIERNE, no solo que este declarado.
+//
+// Este campo se venia parseando y descartando: `collectCanonicalControls` lo
+// leia y ningun chequeo lo usaba, asi que del lado de VS Code el `confirms:`
+// del canonico no gobernaba nada -- la extension tenia dieciseis
+// `showWarningMessage` sueltos y ningun gate. Asi el canonico llego a declarar
+// `confirms: true` para un control que hacia rato no confirmaba, con las cinco
+// suites en verde.
+//
+// Los tres chequeos de abajo cierran el circulo: la tabla del cliente coincide
+// con el canonico, todo id declarado tiene un llamador que pasa por la puerta, y
+// no hay ninguna otra puerta.
+// ---------------------------------------------------------------------------
+
+// walkthroughInit es la EXCEPCION declarada: no confirma con un si/no sino con
+// un picker de dos cursos ("Update" / "Start over"), que confirmMutation no
+// puede expresar porque su "no" es un cancel. Sigue siendo `confirms: true`
+// porque hay un modal entre el clic y la mutacion, que es lo que la clave dice.
+const CONFIRM_BY_PICKER = new Set(["walkthroughInit"]);
+
+// Barrido de TODO el canonico y no de una lista de bloques: `confirms:` se
+// declara en cinco lugares distintos --panel_layout, title_actions y los tres
+// mapas de controles por fila-- y una lista de bloques es lo que ya dejo afuera
+// a discardGuide. Hay TRES formas, y las tres aparecen en el archivo:
+//   {id: foo, ..., confirms: true}      entrada inline de una lista
+//   foo: {..., confirms: true}          clave de mapa en una linea
+//   foo:                                clave de mapa en bloque
+//     confirms: true
+// La primera es una regex; las otras dos piden recordar la ultima clave abierta,
+// que es lo que una regex no puede hacer.
+function collectConfirmingIds(yaml) {
+  const found = new Set();
+  for (const m of yaml.matchAll(/\{\s*id:\s*([A-Za-z][A-Za-z0-9]*)[^}]*confirms:\s*true/g)) {
+    found.add(m[1]);
+  }
+  let key = null;
+  let keyIndent = -1;
+  for (const line of yaml.split("\n")) {
+    // Las entradas inline ya las tomo la regex de arriba, y dejarlas pasar por
+    // aca le atribuiria su confirms a la clave del bloque que las contiene.
+    if (line.includes("{id:")) continue;
+    // Sólo una clave que ABRE un mapa, en bloque o con llaves. Sin esto,
+    // `labels: [...]` y la propia línea `confirms: true` cuentan como claves y
+    // el id que se atribuye es el de una propiedad.
+    const opened = line.match(/^(\s*)([A-Za-z][A-Za-z0-9]*):\s*(?:\{.*)?$/);
+    if (opened) {
+      key = opened[2];
+      keyIndent = opened[1].length;
+    }
+    if (!/confirms:\s*true/.test(line) || key === null) continue;
+    const indent = line.match(/^\s*/)[0].length;
+    if (opened || indent > keyIndent) found.add(key);
+  }
+  return found;
+}
+
+const canonicalConfirming = collectConfirmingIds(text);
+if (canonicalConfirming.size === 0) {
+  fail("canonical: no control declares confirms: true");
+}
+
+const confirmTs = readText(join(root, "vscode-extension", "src", "review", "confirm.ts"), "utf8");
+const confirmBlock = confirmTs.match(/export const CONFIRMING_IDS = \[([\s\S]*?)\] as const;/);
+if (!confirmBlock) {
+  fail("vscode: confirm.ts has no CONFIRMING_IDS array");
+}
+const clientConfirming = new Set(
+  [...(confirmBlock?.[1] ?? "").matchAll(/"([A-Za-z][A-Za-z0-9]*)"/g)].map((m) => m[1]),
+);
+for (const id of canonicalConfirming) {
+  if (!clientConfirming.has(id)) {
+    fail(`vscode: ${id} is confirms: true in the canonical and missing from CONFIRMING_IDS`);
+  }
+}
+for (const id of clientConfirming) {
+  if (!canonicalConfirming.has(id)) {
+    fail(`vscode: CONFIRMING_IDS carries ${id}, which the canonical does not mark confirms: true`);
+  }
+}
+
+// Los .ts de src/, para los dos chequeos de fuente.
+function tsSources(dir) {
+  const out = [];
+  for (const name of readdirSync(dir)) {
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) out.push(...tsSources(full));
+    else if (name.endsWith(".ts")) out.push([full, readText(full, "utf8")]);
+  }
+  return out;
+}
+const srcFiles = tsSources(join(root, "vscode-extension", "src"));
+if (srcFiles.length === 0) {
+  fail("vscode: no sources found under src/");
+}
+// Los ids REALMENTE pasados por la puerta, extraidos del primer argumento y no
+// buscados sueltos en el archivo: "saveReview" aparece en saveReview.ts como
+// nombre de funcion, de comando y de import, asi que un `includes` da verde con
+// el call site cambiado -- probado, daba verde.
+//
+// Dos entradas y no una: runHousekeeping recibe el id y delega en la puerta,
+// porque un solo dialogo sirve a varios controles. Si aparece una tercera
+// delegacion, el gate la reclama sola: su id no va a estar en esta lista.
+const passedToGate = new Set();
+for (const [, body] of srcFiles) {
+  for (const m of body.matchAll(
+    /(?:confirmMutation|runHousekeeping)\(\s*"([A-Za-z][A-Za-z0-9]*)"/g,
+  )) {
+    passedToGate.add(m[1]);
+  }
+}
+for (const id of canonicalConfirming) {
+  if (CONFIRM_BY_PICKER.has(id)) continue;
+  if (!passedToGate.has(id)) {
+    fail(`vscode: ${id} is confirms: true but is never passed to confirmMutation`);
+  }
+}
+for (const id of passedToGate) {
+  if (!canonicalConfirming.has(id)) {
+    fail(`vscode: confirmMutation is called with ${id}, which the canonical does not mark confirms: true`);
+  }
+}
+
+for (const [file, body] of srcFiles) {
+  if (file.endsWith("confirm.ts")) continue;
+  // La excepcion del picker se anota en el codigo, junto al modal.
+  if (body.includes("EXCEPCION DECLARADA a la puerta unica")) continue;
+  if (body.includes("modal: true")) {
+    fail(`vscode: ${file} opens a modal itself; it must go through confirmMutation`);
+  }
+}
+
 console.log(
-  `check-client-product-surface: ok (min=${min}, actions=${actionKeys.length}, panel_controls=${canonicalControls.length}, icons=${canonicalIcons.size}, title_actions=${titleActionIds.length}, vs=${existsSync(vsVersion) ? "yes" : "no"})`,
+  `check-client-product-surface: ok (min=${min}, actions=${actionKeys.length}, panel_controls=${canonicalControls.length}, icons=${canonicalIcons.size}, title_actions=${titleActionIds.length}, confirms=${canonicalConfirming.size}, vs=${existsSync(vsVersion) ? "yes" : "no"})`,
 );

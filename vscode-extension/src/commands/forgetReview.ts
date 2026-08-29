@@ -31,6 +31,7 @@ export async function discardInventoryReview(
             ? "forget-saved-one"
             : "clean-one";
     await runHousekeeping(
+        "discardInventory",
         {kind, source},
         lock,
         stateManager,
@@ -64,7 +65,7 @@ export async function forgetReview(
         pick.action === "forget-delta-all" ||
         pick.action === "forget-delta-stale"
     ) {
-        await runHousekeeping({kind: pick.action}, lock, stateManager, getInvokeOptions);
+        await runHousekeeping("cleanReview", {kind: pick.action}, lock, stateManager, getInvokeOptions);
         return;
     }
 
@@ -75,7 +76,7 @@ export async function forgetReview(
     if (!source) {
         return;
     }
-    await runHousekeeping({kind: pick.action, source}, lock, stateManager, getInvokeOptions);
+    await runHousekeeping("cleanReview", {kind: pick.action, source}, lock, stateManager, getInvokeOptions);
 }
 
 /**

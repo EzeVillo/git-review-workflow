@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -54,8 +55,28 @@ public static class GitReviewDialogs
     /// <see cref="UserCopy"/> ("Start the review", "Cancel Review", …) — the same text
     /// VS Code passes to <c>showWarningMessage</c> and IntelliJ to <c>showYesNoDialog</c>.
     /// </summary>
-    public static bool Confirm(string title, string detail, string button)
+    /// <summary>
+    /// THE ONLY GATE to a confirmation dialog in this extension, which is why it
+    /// takes the <paramref name="id"/>: that is what makes the canonical's
+    /// <c>confirms:</c> GOVERN instead of merely describe.
+    ///
+    /// The table used to exist with nobody consulting it — the panel controller
+    /// looked at it only in a <c>default:</c> that did a no-op refresh — so
+    /// adding or removing a confirmation turned nothing red, and the canonical
+    /// ended up declaring <c>confirms: true</c> for a control that had long
+    /// stopped confirming. The id changes nothing on screen: it changes that a
+    /// caller cannot open a modal the contract does not declare.
+    ///
+    /// A mismatch confirms anyway and reports it: an extra modal is annoying, a
+    /// missing one deletes work without asking. The static gate is
+    /// ConfirmationContractTests.
+    /// </summary>
+    public static bool Confirm(ControlId id, string title, string detail, string button)
     {
+        if (!PanelLayoutBuilder.RequiresConfirmation(id))
+        {
+            Debug.Fail($"Confirm() called for {id.Wire()}, which the canonical marks confirms: false");
+        }
         var dialog = new ConfirmDialog(title, string.IsNullOrWhiteSpace(detail) ? title : detail, button);
         return dialog.ShowDialog() == true;
     }

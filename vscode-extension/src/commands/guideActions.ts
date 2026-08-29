@@ -19,6 +19,7 @@ import {createGuideArgs, deleteGuideArgs} from "../review/reviewIntent";
 import {ReviewStateManager} from "../review/state";
 import {guideAt} from "../views/panelModel";
 import {STALE} from "../review/userCopy";
+import {confirmMutation} from "../review/confirm";
 
 /** El stderr de la CLI, aplanado a una línea (mismo criterio que el resto). */
 function flatten(stderr: string): string {
@@ -136,15 +137,13 @@ export async function discardGuide(
     if (guide === undefined || guide.kind !== "own" || guide.state === "absent") {
         return;
     }
-    const answer = await vscode.window.showWarningMessage(
+    const confirmed = await confirmMutation(
+        "discardGuide",
         "Discard the authoring guide you wrote?",
-        {
-            modal: true,
-            detail: `This deletes ${guide.path}. It cannot be undone.`,
-        },
+        `This deletes ${guide.path}. It cannot be undone.`,
         "Discard"
     );
-    if (answer !== "Discard") {
+    if (!confirmed) {
         return;
     }
 

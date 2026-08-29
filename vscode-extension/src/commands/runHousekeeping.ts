@@ -11,6 +11,7 @@ import {
 import {ReviewStateManager} from "../review/state";
 import {captureToken, StateToken, tokenStillValid} from "../review/staleGuard";
 import {STALE} from "../review/userCopy";
+import {ConfirmingId, confirmMutation} from "../review/confirm";
 
 function flat(stderr: string): string {
     return stderr.split("\n").map((line) => line.trim()).filter((line) => line.length > 0).join(" ");
@@ -21,6 +22,16 @@ function flat(stderr: string): string {
  * StateToken opcional cuando la acción nació de una fila del inventario.
  */
 export async function runHousekeeping(
+    /**
+     * El control que el revisor apretó. Varios llegan acá —discardInventory,
+     * discardAllFixes y los dos verbos de limpieza— y el diálogo es uno, así
+     * que el id viaja en vez de adivinarse desde la acción.
+     *
+     * `forgetReview` no tiene ninguno: llega por el menú y la paleta, y el
+     * canónico declara `confirms:` por CONTROL, así que no hay dónde
+     * declararlo. Comparte esta puerta con clean, que sí lo tiene.
+     */
+    id: ConfirmingId,
     action: HousekeepingAction,
     lock: MutationLock,
     stateManager: ReviewStateManager,
@@ -28,12 +39,7 @@ export async function runHousekeeping(
     token?: StateToken
 ): Promise<void> {
     const copy = confirmCopyFor(action);
-    const answer = await vscode.window.showWarningMessage(
-        copy.title,
-        {modal: true, detail: copy.detail},
-        copy.button
-    );
-    if (answer !== copy.button) {
+    if (!await confirmMutation(id, copy.title, copy.detail, copy.button)) {
         return;
     }
 

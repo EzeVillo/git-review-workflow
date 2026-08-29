@@ -101,7 +101,7 @@ public sealed class ActionDispatcher
             {
                 var source = State.State?.Source;
                 if (source is null) return;
-                if (!GitReviewDialogs.Confirm(
+                if (!GitReviewDialogs.Confirm(ControlId.AbortReview,
                         UserCopy.AbortTitle(source), UserCopy.AbortDetail, UserCopy.AbortButton))
                 {
                     return;
@@ -115,7 +115,7 @@ public sealed class ActionDispatcher
             {
                 var source = State.State?.Source;
                 if (source is null) return;
-                if (!GitReviewDialogs.Confirm(
+                if (!GitReviewDialogs.Confirm(ControlId.SaveReview,
                         UserCopy.SaveTitle(source), UserCopy.SaveDetail, UserCopy.SaveButton))
                 {
                     return;
@@ -571,7 +571,7 @@ public sealed class ActionDispatcher
         var detail = State.Situation == Situation.FinishConflict
             ? UserCopy.UndoDetailConflict
             : UserCopy.UndoDetailPending;
-        if (!GitReviewDialogs.Confirm(UserCopy.UndoTitle, detail, UserCopy.UndoButton)) return;
+        if (!GitReviewDialogs.Confirm(ControlId.UndoFinish, UserCopy.UndoTitle, detail, UserCopy.UndoButton)) return;
 
         var result = await RunAsync(
             "undoFinish",
@@ -591,7 +591,7 @@ public sealed class ActionDispatcher
             GitReviewDialogs.Error(text);
             return;
         }
-        if (!GitReviewDialogs.Confirm(text, UserCopy.UndoForceDetail, UserCopy.UndoForceButton)) return;
+        if (!GitReviewDialogs.Confirm(ControlId.UndoFinish, text, UserCopy.UndoForceDetail, UserCopy.UndoForceButton)) return;
         await RunAsync(
             "undoFinish",
             new ActionParams.UndoFinish(true),
@@ -629,7 +629,7 @@ public sealed class ActionDispatcher
             GitReviewDialogs.Error(UserCopy.NotResumable);
             return;
         }
-        if (!GitReviewDialogs.Confirm(
+        if (!GitReviewDialogs.Confirm(ControlId.ContinueReview,
                 UserCopy.ContinueTitle(source),
                 UserCopy.ContinueDetail(source),
                 UserCopy.ContinueButton))
@@ -677,7 +677,7 @@ public sealed class ActionDispatcher
         var action = name.StartsWith("review-saved/", StringComparison.Ordinal)
             ? new HousekeepingAction(HousekeepingKind.ForgetSavedOne, src)
             : new HousekeepingAction(HousekeepingKind.CleanOne, src);
-        await ConfirmAndRunHousekeepingAsync(action).ConfigureAwait(true);
+        await ConfirmAndRunHousekeepingAsync(ControlId.DiscardInventory, action).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -720,7 +720,7 @@ public sealed class ActionDispatcher
     {
         var draft = DraftRowAt(index);
         if (draft is null) return;
-        if (!GitReviewDialogs.Confirm(
+        if (!GitReviewDialogs.Confirm(ControlId.DiscardDraft,
                 UserCopy.DiscardDraftTitle(draft.Src),
                 UserCopy.DiscardDraftDetail(draft.Src, draft.Path),
                 UserCopy.DiscardDraftButton))
@@ -770,7 +770,7 @@ public sealed class ActionDispatcher
     {
         var guide = GuideRowAt(index);
         if (guide is null || guide.Kind != GuideKind.Own || guide.State == GuideState.Absent) return;
-        if (!GitReviewDialogs.Confirm(
+        if (!GitReviewDialogs.Confirm(ControlId.DiscardGuide,
                 UserCopy.DiscardGuideTitle,
                 UserCopy.DiscardGuideDetail(guide.Path),
                 UserCopy.DiscardGuideButton))
@@ -799,7 +799,7 @@ public sealed class ActionDispatcher
     {
         var row = PanelModelBuilder.FixesAt(State.FixesList, index);
         if (row is null || row.Current) return;
-        await ConfirmAndRunHousekeepingAsync(new HousekeepingAction(
+        await ConfirmAndRunHousekeepingAsync(ControlId.DiscardFixes, new HousekeepingAction(
             HousekeepingKind.CleanFixesOne,
             HousekeepingLogic.SourceFromReviewName(row.Name),
             FixesState: row.State,
@@ -815,7 +815,7 @@ public sealed class ActionDispatcher
     /// </summary>
     private async Task DiscardAllFixesAsync()
     {
-        await ConfirmAndRunHousekeepingAsync(
+        await ConfirmAndRunHousekeepingAsync(ControlId.DiscardAllFixes, 
             new HousekeepingAction(HousekeepingKind.CleanFixesOneAll)).ConfigureAwait(true);
     }
 
@@ -828,7 +828,7 @@ public sealed class ActionDispatcher
         var pending = HousekeepingLogic.PendingFinishInfo(State);
         if (pending is not null)
         {
-            await ConfirmAndRunHousekeepingAsync(new HousekeepingAction(
+            await ConfirmAndRunHousekeepingAsync(ControlId.CleanReview, new HousekeepingAction(
                 HousekeepingKind.CleanKeepFixes,
                 pending.Value.Source,
                 pending.Value.Onto)).ConfigureAwait(true);
@@ -851,7 +851,7 @@ public sealed class ActionDispatcher
         {
             action = new HousekeepingAction(HousekeepingKind.CleanAll);
         }
-        await ConfirmAndRunHousekeepingAsync(action).ConfigureAwait(true);
+        await ConfirmAndRunHousekeepingAsync(ControlId.CleanReview, action).ConfigureAwait(true);
     }
 
     private async Task ForgetAsync()
@@ -896,7 +896,12 @@ public sealed class ActionDispatcher
                 action = new HousekeepingAction(HousekeepingKind.ForgetDeltaStale);
                 break;
         }
-        await ConfirmAndRunHousekeepingAsync(action).ConfigureAwait(true);
+        // forgetReview no tiene control de panel -- llega por el menu y la
+        // paleta --, asi que no tiene ControlId propio: el canonico declara
+        // `confirms:` por CONTROL, y sin control no hay donde declararlo. Comparte
+        // la puerta del housekeeping con clean, que si lo tiene, y por eso pasa
+        // el suyo. Mismo trato que confirmAndRun en el plugin de JetBrains.
+        await ConfirmAndRunHousekeepingAsync(ControlId.CleanReview, action).ConfigureAwait(true);
     }
 
     /// <summary>
@@ -944,10 +949,17 @@ public sealed class ActionDispatcher
             ? GitReviewDialogs.Input(title, "Branch, tag or commit")
             : GitReviewDialogs.ChooseOrType(title, "Branch, tag or commit", candidates);
 
-    private async Task ConfirmAndRunHousekeepingAsync(HousekeepingAction action)
+    /// <param name="id">
+    /// The control the reviewer actually pressed. Four of them land here —
+    /// discardInventory, discardFixes, discardAllFixes and the two housekeeping
+    /// verbs — and the dialog is one, so the id travels rather than being
+    /// guessed from the action: the gate checks what was declared for the
+    /// control, not what the verb happens to be.
+    /// </param>
+    private async Task ConfirmAndRunHousekeepingAsync(ControlId id, HousekeepingAction action)
     {
         var copy = HousekeepingLogic.ConfirmCopyFor(action);
-        if (!GitReviewDialogs.Confirm(copy.Title, copy.Detail, copy.Button)) return;
+        if (!GitReviewDialogs.Confirm(id, copy.Title, copy.Detail, copy.Button)) return;
         // One verb per kind (clean / forget), resolved in the domain.
         var verb = HousekeepingLogic.VerbForHousekeeping(action) == "forget"
             ? "forgetReview"
@@ -1066,7 +1078,7 @@ public sealed class ActionDispatcher
             2 => ReviewLayout.Step,
             _ => ReviewLayout.Whole,
         };
-        if (!GitReviewDialogs.Confirm(
+        if (!GitReviewDialogs.Confirm(ControlId.CompareReview,
                 UserCopy.CompareConfirmTitle(lower, upper, layout),
                 UserCopy.CompareConfirmDetail,
                 UserCopy.CompareButton))
@@ -1132,7 +1144,7 @@ public sealed class ActionDispatcher
 
     private async Task WalkthroughBuildAsync()
     {
-        if (!GitReviewDialogs.Confirm(
+        if (!GitReviewDialogs.Confirm(ControlId.WalkthroughBuild,
                 UserCopy.WalkthroughBuildTitle,
                 UserCopy.WalkthroughBuildDetail,
                 UserCopy.WalkthroughBuildButton))

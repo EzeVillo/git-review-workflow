@@ -4,6 +4,7 @@ import {MutationLock} from "../review/mutationLock";
 import {ReviewStateManager} from "../review/state";
 import {captureToken, tokenStillValid} from "../review/staleGuard";
 import {STALE} from "../review/userCopy";
+import {confirmMutation} from "../review/confirm";
 
 /** El stderr de la CLI, aplanado a una línea para el toast del editor. */
 function message(stderr: string): string {
@@ -43,15 +44,13 @@ export async function saveReview(
     const source = state.state.source;
     const token = captureToken(state);
 
-    const answer = await vscode.window.showWarningMessage(
+    const confirmed = await confirmMutation(
+        "saveReview",
         `Save the review of ${source} for later?`,
-        {
-            modal: true,
-            detail: "This pauses the review and returns to the branch you started from; your edits are kept and you can resume later.",
-        },
+        "This pauses the review and returns to the branch you started from; your edits are kept and you can resume later.",
         "Save for Later"
     );
-    if (answer !== "Save for Later") {
+    if (!confirmed) {
         return;
     }
 

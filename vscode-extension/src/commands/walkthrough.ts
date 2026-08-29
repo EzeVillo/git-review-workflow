@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import {invokeGitReview, InvokeOptions} from "../cli/invoke";
 import {MutationLock} from "../review/mutationLock";
 import {ReviewStateManager} from "../review/state";
+import {confirmMutation} from "../review/confirm";
 import {
     WALKTHROUGH_EXISTS_DETAIL,
     WALKTHROUGH_EXISTS_TITLE,
@@ -43,6 +44,11 @@ async function pickInitMode(
     if (walkthrough.state === "superseded") {
         return "update";
     }
+    // EXCEPCION DECLARADA a la puerta unica (ver review/confirm.ts): esto no es
+    // una confirmacion sino una eleccion entre dos cursos --actualizar lo que hay
+    // o empezar de cero--, y confirmMutation no puede expresarla porque su "no"
+    // es un cancel. Sigue siendo `confirms: true` en el canonico porque hay un
+    // modal entre el clic y la mutacion, que es lo que esa clave significa.
     const answer = await vscode.window.showWarningMessage(
         WALKTHROUGH_EXISTS_TITLE,
         {modal: true, detail: WALKTHROUGH_EXISTS_DETAIL},
@@ -98,15 +104,13 @@ export async function walkthroughBuild(
     stateManager: ReviewStateManager,
     getInvokeOptions: () => InvokeOptions
 ): Promise<void> {
-    const answer = await vscode.window.showWarningMessage(
+    const confirmed = await confirmMutation(
+        "walkthroughBuild",
         "Check and renumber the walkthrough?",
-        {
-            modal: true,
-            detail: "This puts the files in the order you wrote and numbers them 1 to N. If something is missing, nothing changes and you will see what to fix.",
-        },
+        "This puts the files in the order you wrote and numbers them 1 to N. If something is missing, nothing changes and you will see what to fix.",
         "Build"
     );
-    if (answer !== "Build") {
+    if (!confirmed) {
         return;
     }
 

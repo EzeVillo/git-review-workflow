@@ -5,6 +5,7 @@ import {MutationLock} from "../review/mutationLock";
 import {layoutSummary} from "../review/layoutOffers";
 import {ReviewLayout} from "../review/reviewIntent";
 import {ReviewStateManager} from "../review/state";
+import {confirmMutation} from "../review/confirm";
 
 interface LayoutItem extends vscode.QuickPickItem {
     layout: ReviewLayout;
@@ -66,12 +67,13 @@ export async function compareReview(
     }
 
     const summary = `Compare ${lower}..${upper} ${layoutSummary(layoutPick.layout)}? This creates a read-only review (finish will refuse).`;
-    const answer = await vscode.window.showWarningMessage(
+    const confirmed = await confirmMutation(
+        "compareReview",
         summary,
-        {modal: true, detail: "Your working tree must be clean to start it."},
+        "Your working tree must be clean to start it.",
         "Compare"
     );
-    if (answer !== "Compare") {
+    if (!confirmed) {
         return;
     }
 

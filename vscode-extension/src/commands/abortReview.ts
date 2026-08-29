@@ -5,6 +5,7 @@ import {isReviewReadable} from "../review/situation";
 import {ReviewStateManager} from "../review/state";
 import {captureToken, tokenStillValid} from "../review/staleGuard";
 import {STALE} from "../review/userCopy";
+import {confirmMutation} from "../review/confirm";
 
 /** El stderr de la CLI, aplanado a una línea para el toast del editor. */
 function message(stderr: string): string {
@@ -50,15 +51,13 @@ export async function abortReview(
     const source = state.state.source;
     const token = captureToken(state);
 
-    const answer = await vscode.window.showWarningMessage(
+    const confirmed = await confirmMutation(
+        "abortReview",
         `Cancel the review of ${source}?`,
-        {
-            modal: true,
-            detail: "This returns to the branch you started the review from; your uncommitted edits will be discarded.",
-        },
+        "This returns to the branch you started the review from; your uncommitted edits will be discarded.",
         "Cancel Review"
     );
-    if (answer !== "Cancel Review") {
+    if (!confirmed) {
         return;
     }
 

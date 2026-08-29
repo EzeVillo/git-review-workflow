@@ -687,7 +687,13 @@ draft_controls:
   # el borrador abierto y sin guardar el control sigue gris hasta el Ctrl+S
   # —los tres clientes vigilan el directorio del borrador, así que el guardado
   # refresca solo—, y a cambio nadie arranca sobre un orden a medio escribir.
-  startFromDraft: {label: "Validate and start", emphasis: primary, emphasis_unfilled: secondary, confirms: true, tooltip: "Check the order, then start reading", tooltip_disabled: "This file lost its header, so it cannot be checked. Delete it and write a new one.", tooltip_unfilled: "Every file still needs a number and a line saying why it matters"}
+  # NO confirma, por lo mismo que startReview: `start` no destruye nada -- se
+  # niega solo con el arbol sucio, y una review empezada se cancela con un boton
+  # del panel. Este es el segundo de los dos caminos que llegan al start, y la
+  # regla vale para los dos: el asistente y esta fila. Cuando hay un paso en el
+  # medio (elegir keys only) ese paso nombra la rama, que es el unico contexto
+  # que el cartel borrado daba.
+  startFromDraft: {label: "Validate and start", emphasis: primary, emphasis_unfilled: secondary, confirms: false, tooltip: "Check the order, then start reading", tooltip_disabled: "This file lost its header, so it cannot be checked. Delete it and write a new one.", tooltip_unfilled: "Every file still needs a number and a line saying why it matters"}
   # Los dos de la FILA, y por eso salen de la botonera: no mueven el flujo, se
   # usan una vez cada tanto y su sujeto es el archivo que el par annotated/total
   # acaba de nombrar. Van como iconos pegados a ese par, lo que deja abajo dos

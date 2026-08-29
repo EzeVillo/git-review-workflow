@@ -132,7 +132,6 @@ enum class ControlId {
 private val CONFIRMING_IDS: Set<ControlId> = setOf(
     ControlId.CONTINUE_REVIEW,
     ControlId.DISCARD_INVENTORY,
-    ControlId.START_FROM_DRAFT,
     ControlId.DISCARD_DRAFT,
     ControlId.DISCARD_GUIDE,
     ControlId.DISCARD_FIXES,

@@ -1,9 +1,12 @@
 package com.ezevillo.gitreview.ui
 
+import com.ezevillo.gitreview.domain.ControlId
 import com.ezevillo.gitreview.domain.PickerRows
 import com.ezevillo.gitreview.domain.UserCopy
 import com.ezevillo.gitreview.domain.cliErrorText
 import com.ezevillo.gitreview.domain.flattenCliMessage
+import com.ezevillo.gitreview.domain.requiresConfirmation
+import com.intellij.openapi.diagnostic.logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.Messages
@@ -39,6 +42,8 @@ import javax.swing.event.DocumentEvent
  * - VS Code **button** → Yes / primary button text
  */
 object UiMessages {
+    private val logger = logger<UiMessages>()
+
     fun info(project: Project?, text: String, title: String = UserCopy.PRODUCT_TITLE) {
         Messages.showInfoMessage(project, text, title)
     }
@@ -63,10 +68,6 @@ object UiMessages {
         error(project, cliErrorText(stderr, stdout, fallback), title)
     }
 
-    /**
-     * Modal confirm matching VS Code `showWarningMessage(..., { modal, detail }, button)`.
-     * Returns true only when the affirmative button is chosen.
-     */
     /** Which of a three-way dialog's exits the user took. */
     enum class Choice { FIRST, SECOND, CANCELLED }
 
@@ -104,14 +105,33 @@ object UiMessages {
         }
     }
 
+    /**
+     * LA UNICA PUERTA a un dialogo de confirmacion de este plugin, y por eso
+     * toma el [id]: es lo que hace que `confirms:` del canonico GOBIERNE en vez
+     * de solo describir.
+     *
+     * Antes la tabla existia y nadie la consultaba -- el despachador la miraba
+     * en un `if` de cuerpo vacio --, asi que sacar o agregar una confirmacion no
+     * ponia nada en rojo, y el canonico llego a declarar `confirms: true` para
+     * un control que hacia rato no confirmaba. El id no cambia lo que se dibuja:
+     * cambia que un llamador no pueda abrir un modal que el contrato no declara.
+     *
+     * En debug tira; en produccion escribe al log y sigue confirmando, que es la
+     * degradacion segura -- un modal de mas molesta, uno de menos borra trabajo
+     * sin preguntar. El gate estatico es ConfirmationContractTest.
+     */
     fun confirm(
         project: Project?,
+        id: ControlId,
         title: String,
         detail: String,
         yesText: String,
         icon: Icon = Messages.getWarningIcon(),
         noText: String = "Cancel",
     ): Boolean {
+        if (!requiresConfirmation(id)) {
+            logger.error("confirm() called for ${id.wire}, which the canonical marks confirms: false")
+        }
         val body = detail.ifBlank { title }
         val result = Messages.showYesNoDialog(
             project,

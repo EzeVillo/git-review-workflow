@@ -284,6 +284,7 @@ class PanelActionDispatcher(
         }
         if (!UiMessages.confirm(
                 project,
+                ControlId.CONTINUE_REVIEW,
                 UserCopy.continueTitle(source),
                 UserCopy.continueDetail(source),
                 UserCopy.CONTINUE_BUTTON,
@@ -309,7 +310,7 @@ class PanelActionDispatcher(
             HousekeepingAction(HousekeepingKind.CLEAN_ONE, src)
         }
         val copy = confirmCopyFor(action)
-        if (!UiMessages.confirm(project, copy.title, copy.detail, copy.button)) return
+        if (!UiMessages.confirm(project, ControlId.DISCARD_INVENTORY, copy.title, copy.detail, copy.button)) return
         mutations.runHousekeeping(action)
     }
 
@@ -338,6 +339,7 @@ class PanelActionDispatcher(
         val draft = draftRowAt(index) ?: return
         if (!UiMessages.confirm(
                 project,
+                ControlId.DISCARD_DRAFT,
                 UserCopy.discardDraftTitle(draft.src),
                 UserCopy.discardDraftDetail(draft.src, draft.path),
                 UserCopy.DISCARD_DRAFT_BUTTON,
@@ -410,6 +412,7 @@ class PanelActionDispatcher(
         if (guide.kind != GuideKind.OWN || guide.state == GuideState.ABSENT) return
         if (!UiMessages.confirm(
                 project,
+                ControlId.DISCARD_GUIDE,
                 UserCopy.DISCARD_GUIDE_TITLE,
                 UserCopy.discardGuideDetail(guide.path),
                 UserCopy.DISCARD_GUIDE_BUTTON,
@@ -447,7 +450,7 @@ class PanelActionDispatcher(
             session = row.session,
         )
         val copy = confirmCopyFor(action)
-        if (!UiMessages.confirm(project, copy.title, copy.detail, copy.button)) return
+        if (!UiMessages.confirm(project, ControlId.DISCARD_FIXES, copy.title, copy.detail, copy.button)) return
         mutations.runHousekeeping(action)
     }
 
@@ -461,7 +464,7 @@ class PanelActionDispatcher(
     private fun discardAllFixes() {
         val action = HousekeepingAction(HousekeepingKind.CLEAN_FIXES_ONE_ALL)
         val copy = confirmCopyFor(action)
-        if (!UiMessages.confirm(project, copy.title, copy.detail, copy.button)) return
+        if (!UiMessages.confirm(project, ControlId.DISCARD_ALL_FIXES, copy.title, copy.detail, copy.button)) return
         mutations.runHousekeeping(action)
     }
 
@@ -472,7 +475,7 @@ class PanelActionDispatcher(
             ?: return
         val action = HousekeepingAction(HousekeepingKind.CLEAN_KEEP_FIXES, src, onto = info?.second)
         val copy = confirmCopyFor(action)
-        if (!UiMessages.confirm(project, copy.title, copy.detail, copy.button)) return
+        if (!UiMessages.confirm(project, ControlId.CLEAN_REVIEW, copy.title, copy.detail, copy.button)) return
         mutations.runHousekeeping(action)
     }
 

@@ -5,6 +5,7 @@ import {ReviewStateManager} from "../review/state";
 import {captureToken, tokenStillValid} from "../review/staleGuard";
 import {resumableSourceAt} from "../views/panelModel";
 import {STALE} from "../review/userCopy";
+import {confirmMutation} from "../review/confirm";
 
 /** El stderr de la CLI, aplanado a una línea para el toast del editor. */
 function message(stderr: string): string {
@@ -48,15 +49,13 @@ export async function continueReview(
     }
     const token = captureToken(stateManager.state);
 
-    const answer = await vscode.window.showWarningMessage(
+    const confirmed = await confirmMutation(
+        "continueReview",
         `Continue the saved review of ${source}?`,
-        {
-            modal: true,
-            detail: `This switches to review/${source} and restores your edits in the working tree.`,
-        },
+        `This switches to review/${source} and restores your edits in the working tree.`,
         "Continue"
     );
-    if (answer !== "Continue") {
+    if (!confirmed) {
         return;
     }
 

@@ -21,6 +21,7 @@ import {runHousekeeping} from "./runHousekeeping";
 import type {ReviewStateManager} from "../review/state";
 import type {FixesRecord} from "../cli/porcelain";
 import {STALE} from "../review/userCopy";
+import {confirmMutation} from "../review/confirm";
 
 function rowAt(stateManager: ReviewStateManager, index: unknown): FixesRecord | undefined {
     if (typeof index !== "number" || !Number.isInteger(index) || index < 0) {
@@ -63,12 +64,7 @@ export async function discardFixes(
         session: row.session,
     };
     const copy = confirmCopyFor(action);
-    const answer = await vscode.window.showWarningMessage(
-        copy.title,
-        {modal: true, detail: copy.detail},
-        copy.button
-    );
-    if (answer !== copy.button) {
+    if (!await confirmMutation("discardFixes", copy.title, copy.detail, copy.button)) {
         return;
     }
 
@@ -108,5 +104,5 @@ export async function discardAllFixes(
     stateManager: ReviewStateManager,
     getInvokeOptions: () => InvokeOptions
 ): Promise<void> {
-    await runHousekeeping({kind: "clean-fixes-only-all"}, lock, stateManager, getInvokeOptions);
+    await runHousekeeping("discardAllFixes", {kind: "clean-fixes-only-all"}, lock, stateManager, getInvokeOptions);
 }

@@ -5,6 +5,7 @@ import {MutationLock} from "../review/mutationLock";
 import {ReviewStateManager} from "../review/state";
 import {captureToken, tokenStillValid} from "../review/staleGuard";
 import {STALE} from "../review/userCopy";
+import {confirmMutation} from "../review/confirm";
 
 /** El stderr de la CLI, aplanado a una línea para el toast del editor (mismo criterio que el resto de los comandos). */
 function message(stderr: string): string {
@@ -177,12 +178,13 @@ export async function undoFinish(
             ? "This discards any in-progress resolution and returns you to editing the review."
             : "This returns you to the review branch with your edits restored.";
 
-    const answer = await vscode.window.showWarningMessage(
+    const confirmed = await confirmMutation(
+        "undoFinish",
         "Undo this finish?",
-        {modal: true, detail},
+        detail,
         "Undo Finish"
     );
-    if (answer !== "Undo Finish") {
+    if (!confirmed) {
         return;
     }
 
@@ -235,15 +237,13 @@ export async function undoFinish(
         return;
     }
 
-    const forceAnswer = await vscode.window.showWarningMessage(
+    const forced = await confirmMutation(
+        "undoFinish",
         text,
-        {
-            modal: true,
-            detail: "This permanently discards the work made since the finish. It cannot be undone.",
-        },
+        "This permanently discards the work made since the finish. It cannot be undone.",
         "Discard Work and Undo"
     );
-    if (forceAnswer !== "Discard Work and Undo") {
+    if (!forced) {
         return;
     }
 

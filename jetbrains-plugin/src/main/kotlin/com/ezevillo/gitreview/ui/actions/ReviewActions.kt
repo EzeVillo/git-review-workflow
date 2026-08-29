@@ -1,6 +1,7 @@
 package com.ezevillo.gitreview.ui.actions
 
 import com.ezevillo.gitreview.diff.OpenEntryActions
+import com.ezevillo.gitreview.domain.ControlId
 import com.ezevillo.gitreview.domain.ActionParams
 import com.ezevillo.gitreview.domain.HousekeepingAction
 import com.ezevillo.gitreview.domain.HousekeepingKind
@@ -101,6 +102,7 @@ class ContinueReviewAction : AnAction(), DumbAware {
         }
         if (!UiMessages.confirm(
                 project,
+                ControlId.CONTINUE_REVIEW,
                 UserCopy.continueTitle(source),
                 UserCopy.continueDetail(source),
                 UserCopy.CONTINUE_BUTTON,
@@ -161,6 +163,7 @@ class AbortReviewAction : AnAction(), DumbAware {
         val source = service(e)?.currentState()?.state?.source ?: return
         if (!UiMessages.confirm(
                 project,
+                ControlId.ABORT_REVIEW,
                 UserCopy.abortTitle(source),
                 UserCopy.ABORT_DETAIL,
                 UserCopy.ABORT_BUTTON,
@@ -193,6 +196,7 @@ class SaveReviewAction : AnAction(), DumbAware {
         val source = service(e)?.currentState()?.state?.source ?: return
         if (!UiMessages.confirm(
                 project,
+                ControlId.SAVE_REVIEW,
                 UserCopy.saveTitle(source),
                 UserCopy.SAVE_DETAIL,
                 UserCopy.SAVE_BUTTON,
@@ -233,7 +237,7 @@ internal fun runUndoFinish(project: Project, mutations: MutationActions, situati
     } else {
         UserCopy.UNDO_DETAIL_PENDING
     }
-    if (!UiMessages.confirm(project, UserCopy.UNDO_TITLE, detail, UserCopy.UNDO_BUTTON)) {
+    if (!UiMessages.confirm(project, ControlId.UNDO_FINISH, UserCopy.UNDO_TITLE, detail, UserCopy.UNDO_BUTTON)) {
         return
     }
     mutations.runSimple(
@@ -255,6 +259,7 @@ internal fun runUndoFinish(project: Project, mutations: MutationActions, situati
         }
         if (!UiMessages.confirm(
                 project,
+                ControlId.UNDO_FINISH,
                 text,
                 UserCopy.UNDO_FORCE_DETAIL,
                 UserCopy.UNDO_FORCE_BUTTON,
@@ -474,7 +479,7 @@ class DiscardInventoryAction : AnAction(), DumbAware {
                 HousekeepingAction(HousekeepingKind.CLEAN_ONE, src)
             }
             val copy = confirmCopyFor(action)
-            if (!UiMessages.confirm(project, copy.title, copy.detail, copy.button)) return
+            if (!UiMessages.confirm(project, ControlId.DISCARD_INVENTORY, copy.title, copy.detail, copy.button)) return
             MutationActions(project, GitReviewService.getInstance(project)).runHousekeeping(action)
         }
     }
@@ -575,6 +580,7 @@ class CompareReviewAction : AnAction(), DumbAware {
         }
         if (!UiMessages.confirm(
                 project,
+                ControlId.COMPARE_REVIEW,
                 UserCopy.compareConfirmTitle(lower, upper, layout),
                 UserCopy.COMPARE_CONFIRM_DETAIL,
                 UserCopy.COMPARE_BUTTON,
@@ -657,6 +663,7 @@ class WalkthroughBuildAction : AnAction(), DumbAware {
         val project = e.project ?: return
         if (!UiMessages.confirm(
                 project,
+                ControlId.WALKTHROUGH_BUILD,
                 UserCopy.WALKTHROUGH_BUILD_TITLE,
                 UserCopy.WALKTHROUGH_BUILD_DETAIL,
                 UserCopy.WALKTHROUGH_BUILD_BUTTON,
@@ -698,7 +705,7 @@ class ShowWhyAction : AnAction(), DumbAware {
 
 private fun confirmAndRun(project: Project, e: AnActionEvent, action: HousekeepingAction) {
     val copy = confirmCopyFor(action)
-    if (!UiMessages.confirm(project, copy.title, copy.detail, copy.button)) return
+    if (!UiMessages.confirm(project, ControlId.CLEAN_REVIEW, copy.title, copy.detail, copy.button)) return
     mutations(e)?.runHousekeeping(action)
 }
 

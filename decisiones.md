@@ -1081,15 +1081,52 @@ mutación sin acuse molesta menos que un acuse inventado, y el panel igual se re
 lo cubre `min_cli_version`, que subió a 0.8.0 porque `--porcelain` es superficie nueva y una CLI
 0.7.0 lo rechazaría con `unknown option` — o sea el borrador no se escribiría.
 
-**Lo que sigue pendiente, y es más grave de lo que parecía.** `confirms:` en el canónico **no
-gobierna nada en ninguno de los tres clientes**: en JetBrains `requiresConfirmation(id)` se consulta
-en un `if` de cuerpo vacío (`PanelActionDispatcher.kt`), en Visual Studio sólo en un `default:` que
-hace un refresh no-op (`GitReviewPanelController.cs`), y en VS Code no existe la tabla — hay 16
-`showWarningMessage` sueltos. `ConfirmationContractTest` compara una constante contra el YAML, y nada
-consulta esa constante para decidir. La prueba está en el árbol: el canónico dice
-`startFromDraft: {confirms: true}`, la tabla de JetBrains tiene `START_FROM_DRAFT`, y el
-comportamiento real ya no confirma en ninguno de los tres porque `runStart` dejó de hacerlo — con las
-cinco suites en verde. El arreglo es una **puerta única** de confirmación por cliente y un gate que
-cuente sus call sites contra el canónico, que es el mismo patrón que ya usa el repo para la VFS y
-para los iconos.
+### 15.3 Que `confirms:` gobierne
+
+Mirando el código para lo de arriba apareció algo peor que una copy repetida: **`confirms:` del
+canónico no gobernaba nada en ninguno de los tres**. En JetBrains `requiresConfirmation(id)` se
+consultaba en un `if` de cuerpo vacío; en Visual Studio sólo en un `default:` que hacía un refresh
+no-op; en VS Code la tabla no existía y había 16 `showWarningMessage` sueltos en 16 archivos. El
+diálogo real vivía esparcido en cada acción, y `ConfirmationContractTest` comparaba una constante
+contra el YAML que nadie leía para decidir.
+
+La prueba estaba en el árbol: el canónico decía `startFromDraft: {confirms: true}`, la tabla de
+JetBrains tenía `START_FROM_DRAFT`, y el comportamiento real ya no confirmaba en ninguno de los tres
+—`runStart` había dejado de hacerlo—, con las cinco suites en verde. También explica por qué dos
+clientes se movieron juntos y el tercero no: no era un gate haciendo su trabajo, era que dos
+comparten `runStart`.
+
+**Una puerta por cliente, y toma el id.** `UiMessages.confirm(project, id, …)`,
+`GitReviewDialogs.Confirm(id, …)`, `confirmMutation(id, …)`. El id no cambia lo que se dibuja: cambia
+que un llamador no pueda abrir un modal que el contrato no declara. En runtime un id no declarado se
+reporta y **confirma igual** — un cartel de más molesta, uno de menos borra trabajo sin preguntar.
+
+**Tres gates, y los tres se probaron rompiéndolos:**
+
+1. la tabla del cliente == el `confirms: true` del canónico;
+2. todo id declarado **pasa por la puerta**;
+3. **no hay ningún otro modal** fuera de ella.
+
+El (2) se escribió dos veces. La primera versión preguntaba «¿el archivo menciona la puerta y
+menciona el id?», y con el call site de `saveReview` cambiado a otro id **daba verde**: el string
+`saveReview` está en ese archivo como nombre de función, de comando y de import. La versión que
+quedó extrae el **primer argumento** de la llamada y compara conjuntos, en las dos direcciones. Un
+gate que no se probó rompiéndolo es exactamente el gate que este §15.3 vino a arreglar.
+
+**Dos formas que no encajan, las dos declaradas y no escondidas:**
+
+- **`walkthroughInit`** no confirma: elige entre dos cursos («Update» / «Start over»), y la puerta no
+  puede expresarlo porque su «no» es un cancel. Sigue siendo `confirms: true` porque hay un modal
+  entre el clic y la mutación, que es lo que esa clave significa; los tres gates lo excluyen por
+  nombre, y el modal lleva el comentario que lo dice.
+- **`forgetReview`** no tiene `ControlId`: llega por el menú y la paleta, y el canónico declara
+  `confirms:` **por control**, así que no hay dónde declararlo. Comparte la puerta del housekeeping
+  con `clean`, que sí lo tiene, y pasa el de `clean`. Es el hueco conocido: cerrarlo es declarar
+  `confirms:` también en `actions:` y darles `ControlId` a las acciones que no dibujan control.
+
+Un detalle del barrido: el checker leía `confirms:` de dos bloques y el canónico lo declara en
+**tres formas** —entrada inline con `id:`, clave de mapa en una línea, y clave de mapa en bloque—.
+Con la lista de bloques, `discardGuide` y `discardInventory` quedaban afuera en silencio. El barrido
+que quedó recorre el archivo entero recordando la última clave abierta, que es lo que una regex
+sola no puede hacer.
 

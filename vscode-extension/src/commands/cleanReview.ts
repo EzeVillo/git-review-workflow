@@ -34,6 +34,7 @@ export async function cleanReview(
         }
         const source = sourceOf(review);
         await runHousekeeping(
+            "cleanReview",
             {kind: "clean-one", source},
             lock,
             stateManager,
@@ -45,6 +46,7 @@ export async function cleanReview(
 
     if (typeof target === "string" && target.trim() !== "") {
         await runHousekeeping(
+            "cleanReview",
             {kind: "clean-one", source: target.trim()},
             lock,
             stateManager,
@@ -61,6 +63,7 @@ export async function cleanReview(
     const pending = pendingFinishInfo(stateManager.state);
     if (pending !== undefined) {
         await runHousekeeping(
+            "cleanReview",
             {kind: "clean-keep-fixes", source: pending.source, onto: pending.onto},
             lock,
             stateManager,
@@ -82,7 +85,7 @@ export async function cleanReview(
         return;
     }
     if (pick.action === "all") {
-        await runHousekeeping({kind: "clean-all"}, lock, stateManager, getInvokeOptions);
+        await runHousekeeping("cleanReview", {kind: "clean-all"}, lock, stateManager, getInvokeOptions);
         return;
     }
 
@@ -90,7 +93,7 @@ export async function cleanReview(
     if (!source) {
         return;
     }
-    await runHousekeeping({kind: "clean-one", source}, lock, stateManager, getInvokeOptions);
+    await runHousekeeping("cleanReview", {kind: "clean-one", source}, lock, stateManager, getInvokeOptions);
 }
 
 /**

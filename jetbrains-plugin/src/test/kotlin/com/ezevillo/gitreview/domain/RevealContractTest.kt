@@ -3,6 +3,7 @@ package com.ezevillo.gitreview.domain
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.yaml.snakeyaml.Yaml
 import java.io.File
 
 /**
@@ -76,13 +77,10 @@ class RevealContractTest {
     private fun canonicalReveals(): Set<String> {
         val file = File(monorepoRoot(), "contracts/client-product-surface.yaml")
         require(file.isFile) { "canonical missing at ${file.absolutePath}" }
-        val block = file.readText()
-            .substringAfter("\nreveals:\n", "")
-            .substringBefore("\n#")
-            .lineSequence()
-        return block
-            .mapNotNull { Regex("""^\s*-\s+([A-Za-z][A-Za-z0-9]*)\s*$""").find(it)?.groupValues?.get(1) }
-            .toSet()
+        @Suppress("UNCHECKED_CAST")
+        val yaml = Yaml().load(file.readText()) as Map<String, Any?>
+        val reveals = yaml["reveals"] as? List<String> ?: emptyList()
+        return reveals.toSet()
     }
 
     private fun uiSources(): List<Pair<File, String>> = sourcesUnder("ui")

@@ -7,9 +7,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class CliMessageTest {
-    // El caso que motivo el registro: apretar la oferta y no ver nada. El
-    // resultado del verbo viaja por stdout, pero leer su FRASE seria parsear
-    // salida humana; los tres numeros llegan en campos.
+    // El registro existe porque leer la FRASE del verbo por stdout seria parsear
+    // salida humana; los tres numeros llegan en campos aparte.
     @Test
     fun readsTheThreeNumbersOfTheRecord() {
         assertEquals(MergedCounts(1, 2, 3), parseMergedRecord("merged\t1\t2\t3\n"))
@@ -20,15 +19,14 @@ class CliMessageTest {
         assertEquals(MergedCounts(0, 1, 0), parseMergedRecord("otra\tcosa\nmerged\t0\t1\t0\n"))
     }
 
-    // Sin registro el llamador se calla: una CLI vieja imprime la frase humana
-    // y ninguna otra, y ahi la respuesta correcta es no acusar nada.
+    // Sin registro el llamador se calla: una CLI vieja imprime solo la frase humana,
+    // y ahi la respuesta correcta es no acusar nada.
     @Test
     fun withoutTheRecordItReturnsNullRatherThanInventing() {
         assertNull(parseMergedRecord(""))
         assertNull(parseMergedRecord("updated /tmp/x.md: 1 kept, 2 added, 3 dropped\n"))
-        // El nombre solo no alcanza: sin los tres campos no hay respuesta.
+        // Tampoco cuenta un registro con menos de tres campos, ni uno con un campo no numerico.
         assertNull(parseMergedRecord("merged\t1\t2\n"))
-        // Ni un campo que no es un numero.
         assertNull(parseMergedRecord("merged\t1\tdos\t3\n"))
     }
 
@@ -40,8 +38,8 @@ class CliMessageTest {
         )
     }
 
-    // Los ceros no se dicen: hacer leer "0 added" para descubrir que no se
-    // agrego nada es el ruido que esta frase existe para no tener.
+    // Los ceros no se dicen: leer "0 added" para enterarse de que no paso nada
+    // es el ruido que esta frase evita.
     @Test
     fun omitsTheZeroRatherThanEnumeratingIt() {
         assertEquals("Reading order updated: 3 kept, 1 added.", UserCopy.draftUpdated(3, 1, 0))
@@ -52,14 +50,13 @@ class CliMessageTest {
     }
 
     // Un update que no mueve nada es un resultado real, no un no-op: el rango
-    // se corrio sin cambiar que archivos toca. Sin frase no hay ninguna senal.
+    // se corrio sin cambiar que archivos toca, y sin frase no habria senal de eso.
     @Test
     fun anUpdateThatMovedNothingStillSaysWhatHappened() {
         assertEquals("Reading order updated: nothing moved, 4 kept.", UserCopy.draftUpdated(4, 0, 0))
     }
 
-    // Ninguna de las tres frases nombra un comando ni una ruta: eso era el
-    // stdout que este acuse reemplaza.
+    // Ninguna de las tres frases nombra un comando ni una ruta: eso era el stdout que reemplazan.
     @Test
     fun namesNoCommandAndNoPath() {
         for (text in listOf(

@@ -15,11 +15,11 @@ function firstLine(text: string): string {
 /**
  * `gitReview.next` / `gitReview.prev`: invoca el verbo de la CLI a través del
  * `MutationLock`, refresca con `status --porcelain` inmediatamente después
- * (nunca parsea la salida humana del verbo, FR-015), y muestra los cambios de
- * la entrada resultante — lo mismo que el botón "Diff", no el archivo pelado:
+ * (nunca parsea la salida humana del verbo), y muestra los cambios de la
+ * entrada resultante — lo mismo que el botón "Diff", no el archivo pelado:
  * avanzar es pasar a leer *el diff* de esa entrada, y el archivo entero sigue a
  * un clic de distancia desde el panel. Los límites de la secuencia se
- * propagan tal cual desde la CLI, sin comportamiento propio (FR-016).
+ * propagan tal cual desde la CLI, sin comportamiento propio.
  *
  * El lock **sólo** cubre CLI + refresh. Abrir el editor (`openChange`) es
  * solo lectura y puede tardar (multi-diff de un commit grande): dejar el
@@ -32,10 +32,10 @@ export async function navigate(
     stateManager: ReviewStateManager,
     getInvokeOptions: () => InvokeOptions
 ): Promise<void> {
-    // FR-027: con un cierre trabado la review sigue legible pero moverse por
-    // la secuencia no corresponde — el panel retira next/prev
-    // (`navigationLocked`) y el comando se niega acá también, para que un
-    // atajo o `executeCommand` no mute el porcelain a espaldas del banner.
+    // Con un cierre trabado la review sigue legible pero moverse por la
+    // secuencia no corresponde — el panel retira next/prev (`navigationLocked`)
+    // y el comando se niega acá también, para que un atajo o `executeCommand`
+    // no mute el porcelain a espaldas del banner.
     if (stateManager.state.situation !== "review") {
         return;
     }
@@ -66,8 +66,8 @@ export async function navigate(
         // En un extremo de la secuencia la CLI no falla: informa por stdout y
         // deja el cursor donde estaba (bin/git-review-verbs/next). Sin esto el
         // clic sería mudo, así que se muestra ese mismo mensaje — el de la CLI,
-        // no uno propio (FR-016) — y no se reabre lo que ya está abierto. La
-        // señal es que el cursor no se movió, no el texto del verbo (FR-015).
+        // no uno propio — y no se reabre lo que ya está abierto. La señal es que
+        // el cursor no se movió, no el texto del verbo.
         if (state.state.position === before) {
             const message = firstLine(result.stdout);
             if (message.length > 0) {

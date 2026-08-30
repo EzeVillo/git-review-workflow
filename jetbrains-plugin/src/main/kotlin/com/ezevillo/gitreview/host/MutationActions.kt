@@ -29,7 +29,7 @@ import com.intellij.openapi.project.Project
  * and the optional callback comes back on the EDT, where dialogs are legal.
  *
  * Failure / stale toasts use the same English copy as the VS Code extension
- * ([UserCopy]); CLI stderr is shown unredacted (FR-024).
+ * ([UserCopy]); CLI stderr is shown unredacted.
  */
 class MutationActions(
     private val project: Project,

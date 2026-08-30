@@ -6,10 +6,8 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
- * US4 (012): lo que queda del camino del borrador dentro del asistente, y su
- * paridad con la de la extensión (`vscode-extension/test/unit/draftFlow.spec.ts`).
- * Los casos son deliberadamente los mismos: si una de las dos se desvía, se ve
- * acá.
+ * Lo que queda del camino del borrador dentro del asistente, en paridad deliberada con
+ * `vscode-extension/test/unit/draftFlow.spec.ts`: si una de las dos se desvía, se ve acá.
  */
 class DraftFlowTest {
 
@@ -22,12 +20,10 @@ class DraftFlowTest {
 
     @Test
     fun updateIsTheSameCommandAsCreateAndOnlyChangesTheAcknowledgement() {
-        // El verbo actualiza en vez de negarse, asi que reconciliar no necesita
-        // ningun flag: conserva cada entrada cuyo archivo sigue en rango y suma
-        // las que entraron. `update` no toca el argv -- decide QUE SE DICE
-        // despues: un update contesta "N kept, M added, K dropped", que es lo
-        // unico que el panel no puede mostrar, y un create no agrega nada a la
-        // fila que el refresco acaba de dibujar.
+        // El verbo actualiza en vez de negarse: reconciliar no necesita flag, conserva
+        // lo que sigue en rango y suma lo nuevo. `update` no toca el argv -- decide QUE
+        // SE DICE después: "N kept, M added, K dropped" es lo único que el panel no
+        // puede mostrar; un create no agrega nada a la fila que el refresco ya dibujó.
         assertEquals(
             DraftFlowState.Create(force = false, update = true),
             initialDraftFlowState(DraftStep.UPDATE),
@@ -40,12 +36,9 @@ class DraftFlowTest {
 
     @Test
     fun noWizardStepEverReachesForce() {
-        // START_OVER se retiro: era la otra mitad de un modal que preguntaba, en
-        // cada borrador ya usado, si reconciliar o empezar de cero -- una duda
-        // que ahora contesta la CLI eligiendo que oferta emitir. Empezar de cero
-        // es lo unico que destruye prosa escrita a mano, y del lado del revisor
-        // el archivo no esta en git, asi que no vuelve a un paso por el que se
-        // pasa de largo: vive en Discard, que confirma.
+        // Ningún paso del asistente llega a force=true: empezar de cero destruye
+        // prosa escrita a mano que no está en git, así que esa acción vive en
+        // Discard, que sí confirma.
         for (step in DraftStep.entries) {
             val state = initialDraftFlowState(step)
             if (state is DraftFlowState.Create) {
@@ -64,9 +57,9 @@ class DraftFlowTest {
 
     @Test
     fun theMachineHasThreeStatesAndNoneWaits() {
-        // El bucle de 011 (Open / Wait / Build / Reload / PickKeys) se retiró
-        // entero: lo que hacía vive en el panel, sobre un estado que sobrevive a
-        // cerrar el IDE. Si alguno volviera, este test lo dice.
+        // El bucle viejo (Open / Wait / Build / Reload / PickKeys) se retiró entero: lo
+        // que hacía vive en el panel, sobre un estado que sobrevive a cerrar el IDE. Si
+        // alguno volviera, este test lo dice.
         val kinds = setOf(
             initialDraftFlowState(DraftStep.CREATE)::class.simpleName,
             initialDraftFlowState(DraftStep.RESUME)::class.simpleName,
@@ -149,8 +142,8 @@ class DraftFlowTest {
             listOf("draft", "--porcelain", "--force", "--local", "--delta", "--", "feature/x"),
             draftArgs("feature/x", ReviewSource.LOCAL, ReviewRange.DELTA, build = false, force = true),
         )
-        // El paso que escribe el esqueleto pide el registro `merged`; el que
-        // valida e instala no, porque no lo emite -- su resultado es el badge.
+        // El paso que escribe el esqueleto pide el registro `merged`; el que valida
+        // e instala no, porque no lo emite -- su resultado es el badge.
         assertTrue(
             draftArgs("feature/x", ReviewSource.REMOTE, ReviewRange.FULL, build = false)
                 .contains("--porcelain"),
@@ -160,9 +153,9 @@ class DraftFlowTest {
 
     @Test
     fun theThreeStepsOfValidateAndStartCarryTheSameFlags() {
-        // Salen de los campos source/range del registro `draft`, no de los
-        // defaults: con los defaults, un borrador hecho con --delta o --local
-        // cubre otro conjunto de paths y --build muere por deriva, siempre.
+        // Salen de los campos source/range del registro `draft`, no de los defaults:
+        // con los defaults, un borrador hecho con --delta o --local cubre otro
+        // conjunto de paths y --build muere por deriva, siempre.
         assertEquals(
             listOf("draft", "--build", "--local", "--delta", "--", "feature/x"),
             draftArgs("feature/x", ReviewSource.LOCAL, ReviewRange.DELTA, build = true),

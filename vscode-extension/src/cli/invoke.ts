@@ -10,12 +10,11 @@ export interface InvokeOptions {
     timeoutMs?: number;
     signal?: AbortSignal;
     /**
-     * `true` sólo para la invocación que toca la red (`start`): agrega al
-     * entorno del proceso hijo `GIT_TERMINAL_PROMPT=0` y apunta
-     * `GIT_ASKPASS`/`SSH_ASKPASS` al no-op de `scripts/askpass-noop.js`, para
-     * que un `fetch` que necesita credenciales falle rápido con el
-     * diagnóstico de git en vez de colgarse esperando un TTY que no existe
-     * (research.md Decisión 5 de `005`).
+     * `true` sólo para `start`: agrega `GIT_TERMINAL_PROMPT=0` y apunta
+     * `GIT_ASKPASS`/`SSH_ASKPASS` al no-op de `scripts/askpass-noop.js`, para que
+     * un `fetch` que necesita credenciales falle rápido con el diagnóstico de
+     * git en vez de colgarse esperando un TTY que no existe (research.md
+     * Decisión 5 de `005`).
      */
     network?: boolean;
 }
@@ -28,10 +27,9 @@ export interface InvokeResult {
     /** Código de error de Node cuando el spawn falló (p. ej. "ENOENT"). */
     errorCode?: string;
     /**
-     * La invocación se cortó al vencer su timeout. Llega con `exitCode: null` y
-     * sin `errorCode`, así que sin este campo un consumidor no puede
-     * distinguirla de un proceso que murió por su cuenta — y el diagnóstico que
-     * corresponde es el opuesto (la CLI está viva pero lenta, no rota).
+     * La invocación se cortó por timeout: llega con `exitCode: null` sin
+     * `errorCode`, indistinguible de un proceso muerto por su cuenta — pero el
+     * diagnóstico es el opuesto (CLI viva pero lenta, no rota).
      */
     timedOut?: true;
 }
@@ -95,20 +93,12 @@ function askpassCommand(): string {
 }
 
 /**
- * El entorno de TODA invocación: `process.env` (perder el resto — `PATH`
- * incluido — rompería la resolución del propio `git`) más la única variable
- * que esta extensión le impone a la CLI.
- *
- * `GIT_REVIEW_ADVICE=0` apaga las notas que un panel no necesita: las que
- * ofrecen un comando —acá es un botón— y las que describen algo que ya viaja
- * como registro porcelain —acá es una fila—. Va en UN solo lugar y este es,
- * porque el filtro del otro lado no existe: distinguir una nota de otra
- * exigiría leer la salida humana, que `contracts/cli-invocation.md` prohíbe.
- * Lo que NO apaga sigue llegando entero (una entrada que el PR ya no cambia,
- * un cursor que se movió); ver `advice_enabled` en `bin/git-review-lib.sh`.
- *
- * Una CLI vieja ignora la variable y sigue imprimiendo todo: la degradación es
- * más ruido, nunca un fallo.
+ * El entorno de TODA invocación: `process.env` completo (perder `PATH` rompería
+ * la resolución de `git`) más `GIT_REVIEW_ADVICE=0`, apagado en este único lugar
+ * porque filtrar del lado del panel exigiría parsear salida humana (ver
+ * "Advice" en CLAUDE.md y `advice_enabled` en `bin/git-review-lib.sh`). Una CLI
+ * vieja ignora la variable y sigue imprimiendo todo: la degradación es más
+ * ruido, nunca un fallo.
  */
 function baseEnv(): NodeJS.ProcessEnv {
     return {
@@ -147,17 +137,15 @@ export interface ResolvedCommand {
 
 /**
  * Resuelve el ejecutable y los args de la invocación (contracts/cli-invocation.md
- * § "Forma de toda invocación"). Con `git` de por medio, el subcomando
- * "review" lo consume git y el dispatcher recibe [<verbo>, ...args] igual —
- * pero invocar el dispatcher directamente (gitReview.path) salta ese paso de
- * git, así que el verbo va primero: bin/git-review espera $1=<verbo>, nunca
- * "review" (bin/git-review:67).
+ * § "Forma de toda invocación"). Con `git` de por medio, "review" lo consume el
+ * propio git y el dispatcher recibe igual [<verbo>, ...args]; invocar el
+ * dispatcher directamente (gitReview.path) salta ese paso, así que el verbo va
+ * primero — `bin/git-review` espera $1=<verbo>, nunca "review".
  *
- * Exportada (no sólo de uso interno) para que un consumidor que necesite
- * mostrar o reproducir la invocación exacta —el escape *Run in Terminal* de
- * `startReview.ts`, research.md Decisión 5— resuelva el mismo comando que de
- * verdad correría `invokeGitReview`, en vez de hardcodear `git review <verbo>`
- * e ignorar `gitReview.path`.
+ * Exportada para que un consumidor que necesite mostrar o reproducir la
+ * invocación exacta (el escape *Run in Terminal* de `startReview.ts`, research.md
+ * Decisión 5) resuelva el mismo comando que correría `invokeGitReview`, en vez
+ * de hardcodear `git review <verbo>` e ignorar `gitReview.path`.
  */
 export function resolveCommand(verb: string, args: string[], gitReviewPath: string | undefined): ResolvedCommand {
     if (gitReviewPath === undefined || gitReviewPath.trim() === "") {
@@ -172,16 +160,14 @@ export function resolveCommand(verb: string, args: string[], gitReviewPath: stri
 /**
  * Mata lo que se pueda del árbol de procesos de una invocación vencida.
  *
- * Es best-effort **por diseño**, y conviene saber exactamente cuánto alcanza:
- * en Windows `taskkill /T` sólo llega a los procesos cuya paternidad Windows
- * registra, y la capa MSYS por la que corren los verbos POSIX no la registra —
- * medido: matar el `sh` con `/T /F` deja vivo un nieto `sleep` 3s después. En
- * POSIX sí alcanza al árbol entero, porque el hijo se spawnea como líder de su
- * propio grupo (`detached`) y la señal va al grupo (`-pid`).
+ * Best-effort por diseño: en Windows `taskkill /T` sólo llega a los procesos cuya
+ * paternidad Windows registra, y la capa MSYS de los verbos POSIX no la registra
+ * — medido: matar el `sh` con `/T /F` deja vivo un nieto `sleep` 3s después. En
+ * POSIX sí alcanza al árbol entero, porque el hijo se spawnea líder de su propio
+ * grupo (`detached`) y la señal va al grupo (`-pid`).
  *
- * Por eso quien llama no espera a que esto surta efecto: desconecta los pipes y
- * resuelve igual. Un nieto que sobreviva termina solo — los verbos son finitos
- * — y mientras tanto ya no bloquea a nadie.
+ * Por eso quien llama no espera a que surta efecto: desconecta los pipes y
+ * resuelve igual, que un nieto sobreviviente termina solo.
  */
 function killTree(child: ChildProcess): void {
     const pid = child.pid;
@@ -212,20 +198,17 @@ function killTree(child: ChildProcess): void {
 }
 
 /**
- * Invoca `git review <verbo> [...args]` según la forma fijada en
- * contracts/cli-invocation.md: sin shell propio (cross-spawn resuelve
- * `.cmd`/`.bat` de Windows sin reintroducir el problema de citado que
- * `shell: true` traería para los paths que viajan como argv), cwd en la raíz
- * del repo objetivo, cancelable y con timeout.
+ * Invoca `git review <verbo> [...args]` según contracts/cli-invocation.md: sin
+ * shell propio (cross-spawn resuelve `.cmd`/`.bat` de Windows sin reintroducir el
+ * problema de citado que `shell: true` traería para los paths que viajan como
+ * argv), cwd en la raíz del repo objetivo, cancelable y con timeout.
  *
- * El timeout es **propio**, no la opción `timeout` de `spawn`: ésa no corta
- * nada acá. Node le manda SIGTERM al hijo y después espera el evento `close`,
- * que no llega hasta que se cierran los pipes — y los sostienen los nietos, que
- * la señal no alcanzó. Medido en Windows: un hijo con timeout de 2000ms
- * resolvía a los 8117ms, o sea al terminar solo; el timeout no adelantaba nada.
- * Ése es el "← exit null 29656ms" con `READ_TIMEOUT_MS = 15000` que se veía en
- * el log. Acá el temporizador mata lo que puede y resuelve en el acto, así que
- * el techo que promete `timeoutForClass` se cumple de verdad.
+ * El timeout es propio y no la opción `timeout` de `spawn`: ésa manda SIGTERM
+ * pero espera el evento `close`, que no llega hasta que se cierran los pipes, y
+ * los sostienen los nietos a quienes la señal no alcanza. Medido en Windows: un
+ * hijo con timeout de 2000ms resolvía recién a los 8117ms. Acá el temporizador
+ * mata lo que puede y resuelve en el acto, así que el techo de `timeoutForClass`
+ * se cumple de verdad.
  */
 export function invokeGitReview(
     verb: string,
@@ -253,15 +236,15 @@ export function invokeGitReview(
         child.stdout?.setEncoding("utf8").on("data", (chunk: string) => (stdout += chunk));
         child.stderr?.setEncoding("utf8").on("data", (chunk: string) => (stderr += chunk));
 
-        // Declarado antes de `settle` y asignado después: `settle` lo lee, y si
-        // un `error` llegara antes de que el temporizador exista, un `const`
-        // todavía en su zona muerta temporal tiraría ReferenceError en lugar de
-        // rechazar limpio. `clearTimeout(undefined)` es un no-op.
+        // Declarado antes de `settle` y asignado después: si `settle` lo lee antes
+        // de que exista, un `const` en su zona muerta temporal tiraría
+        // ReferenceError en vez de rechazar limpio. `clearTimeout(undefined)` es
+        // un no-op.
         let timer: ReturnType<typeof setTimeout> | undefined;
 
-        // Un único punto de salida: `close` puede llegar después de que el
-        // temporizador ya resolvió (y al revés), y resolver dos veces dejaría
-        // el timer vivo o pisaría el resultado ya entregado.
+        // Único punto de salida: `close` puede llegar después de que el
+        // temporizador ya resolvió (y al revés); resolver dos veces dejaría el
+        // timer vivo o pisaría el resultado ya entregado.
         const settle = (result: InvokeResult): void => {
             if (settled) {
                 return;

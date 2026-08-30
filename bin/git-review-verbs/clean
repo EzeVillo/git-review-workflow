@@ -3,22 +3,12 @@
 # git review clean — delete leftover review/<branch> branches (and, by default,
 # review-fixes/<branch> too).
 #
-# With no <branch> it cleans every matching leftover. It never deletes the
-# branch you are currently on. When it deletes an *incomplete* review/* (one
-# that never finished successfully), it rolls back that review's --delta marker
-# the same way git review abort does, so abandoned starts do not skip commits.
-# A finish that completed (reviewundoouthead set) keeps the marker — that tip
-# was reviewed. For fully independent marker cleanup use git review forget --delta.
-#
-# --keep-fixes drops the review session / finish undo (review/* + undo refs)
-# but leaves review-fixes/* alone — the usual "I'm done with this finish" step
-# after committing or before opening a PR of your edits.
-#
-# --fixes-only is its mirror, and the one the panel's "Edits you extracted"
-# section runs: drop the extracted edits and leave everything about the session
-# standing — no branch, no ref and no marker outside review-fixes/* is touched.
-# Without it there was no way to say "throw away these edits, keep the review":
-# clean <branch> takes both, and a bare clean takes every review in the repo.
+# With no <branch> it cleans every matching leftover, never the branch you are
+# currently on. Deleting an *incomplete* review/* (one that never finished
+# successfully) rolls back that review's --delta marker the way git review abort
+# does, so abandoned starts do not skip commits; a completed finish
+# (reviewundoouthead set) keeps the marker — that tip was reviewed. Independent
+# marker cleanup is git review forget --delta.
 #
 set -eu
 
@@ -40,9 +30,8 @@ Incomplete reviews roll back their --delta marker (like abort); finished ones ke
 EOF
 }
 
-# restore_delta_if_incomplete <src>
-# If review/<src> never completed a finish (no reviewundoouthead), roll the
-# --delta marker back using reviewprevreviewed — same as git review abort.
+# restore_delta_if_incomplete <src>: no reviewundoouthead means the finish never
+# completed, so roll the --delta marker back via reviewprevreviewed, like abort.
 restore_delta_if_incomplete() {
 	_rdi_src="$1"
 	_rdi_rb="review/$_rdi_src"
@@ -114,8 +103,8 @@ else
 	list="$(git for-each-ref --format='%(refname:short)' refs/heads/review/ refs/heads/review-fixes/)"
 fi
 
-# Track whether any cleanup actually happened so the closing message is honest:
-# deleting orphaned refs counts as work even when no review branches exist.
+# Keeps the closing message honest: deleting orphaned refs counts as work even
+# when no review branches exist.
 cleaned=0
 
 # No branches is not a stopping point: banked edit refs can still be orphaned
@@ -131,8 +120,7 @@ if [ -n "$list" ]; then
 		fi
 		case "$b" in
 		review/*)
-			# Roll back --delta before deleting the branch (config keys stay readable
-			# after branch -D, but read first for clarity / future key cleanup).
+			# Before the delete: the keys stay readable after branch -D, but read first.
 			restore_delta_if_incomplete "${b#review/}"
 			;;
 		esac
@@ -141,12 +129,10 @@ if [ -n "$list" ]; then
 	done
 fi
 
-# --fixes-only stops here. Everything below belongs to the review session --
-# banked edit refs, finish undo points, the reviewresume flag -- and the whole
-# point of the flag is to leave the session standing: a reviewer who drops the
-# extracted edits of a finish they can still undo has not asked to lose the undo
-# too. Nothing outside review-fixes/* is read or written on this path, which is
-# also why no --delta marker moves (the loop above only rolls back review/*).
+# --fixes-only stops here: everything below is session state (banked edit refs,
+# finish undo points, reviewresume), and dropping the extracted edits of a finish
+# you can still undo is not asking to lose the undo. Nothing outside
+# review-fixes/* is read or written on this path, so no --delta marker moves.
 if [ "$fixes_only" -eq 1 ]; then
 	if [ "$cleaned" -eq 0 ]; then
 		if [ -n "$arg" ]; then
@@ -158,16 +144,12 @@ if [ "$fixes_only" -eq 1 ]; then
 	exit 0
 fi
 
-# Drop orphaned banked commit-by-commit edit refs, plus any git review finish
-# undo points (refs/review-undo/* and their branch.review/<branch>.reviewundo*
-# config) left behind by a finish that was never aborted.
-#
-# Live step banks (refs/review-edits/<src>/* while review/<src> still exists)
-# are session state, not leftover junk — purging them while a step review is
-# active would silently destroy banked edits. Only purge edit-refs whose
-# review/<src> branch is already gone. Undo refs stay janitorial: clean always
-# tears down unresolved finish undo, even when the review branch is still
-# checked out (see clean.bats).
+# Drop orphaned banked edit refs, plus any finish undo points (refs/review-undo/*
+# and their branch.review/<branch>.reviewundo* config) left behind by a finish
+# that was never aborted. Only edit-refs whose review/<src> is already gone: a
+# live step bank is session state, and purging it under an active review would
+# silently destroy banked edits. Undo refs stay janitorial — always torn down,
+# even with the review branch still checked out (see clean.bats).
 if [ -n "$arg" ]; then
 	undons="refs/review-undo/$arg/"
 	undobranches="$arg"
@@ -211,17 +193,12 @@ EOF
 	fi
 fi
 
-# Walkthrough drafts are deliberately NOT touched here, in either namespace.
-# They join the two other kinds of state clean already leaves alone — the --delta
-# markers and a review paused with git review save — and for the same reason: the
-# reviewer wrote them by hand, they outlive the review they were written for
-# (start it again and your reading order is still there), and throwing them away
-# is what git review forget --draft is for. The edit refs above take the opposite
-# rule because a machine produced them; a draft is prose.
-#
-# This used to prune every draft whose review/<src> was gone, which quietly
-# deleted the one written just before the review existed — the first step of the
-# documented flow (walkthrough draft → fill it in → --build → start).
+# Walkthrough drafts are deliberately NOT touched, in either namespace: like the
+# --delta markers and a review paused with save, they are hand-written prose that
+# outlives the review, and discarding one is git review forget --draft. Pruning
+# the drafts whose review/<src> was gone deleted the one written *before* the
+# review existed — the first step of the documented flow (draft → fill it in →
+# --build → start).
 
 _undo_refs="$(git for-each-ref --format='%(refname)' "$undons")"
 if [ -n "$_undo_refs" ]; then
@@ -233,7 +210,6 @@ $_undo_refs
 EOF
 	cleaned=1
 fi
-# Word splitting is intentional: branch names cannot contain whitespace.
 # shellcheck disable=SC2086
 for b in $undobranches; do
 	# reviewresume must die with the undo: otherwise next/prev/save stay blocked
@@ -246,11 +222,9 @@ for b in $undobranches; do
 done
 
 if [ "$cleaned" -eq 0 ]; then
-	# Saved reviews live in review-saved/*, a namespace git review clean deliberately
-	# leaves alone (it owns review/* and, unless --keep-fixes, review-fixes/*).
-	# Point at them when nothing else was found, so "no review branches" does not
-	# read as wrong to someone staring at a review-saved/<branch> they expected
-	# this to clear.
+	# review-saved/* is a namespace clean deliberately leaves alone. Point at it
+	# when nothing else was found, so "no review branches" does not read as wrong
+	# to someone staring at a review-saved/<branch> they expected this to clear.
 	if [ -n "$arg" ]; then
 		saved="$(git for-each-ref --format='%(refname:short)' "refs/heads/review-saved/$arg")"
 	else

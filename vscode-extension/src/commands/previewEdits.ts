@@ -5,7 +5,7 @@ import {ReviewStateManager} from "../review/state";
 
 /**
  * `gitReview.previewEdits`: muestra `git review preview [--stat]` como
- * documento de solo lectura. No muta; sin confirmación modal (006 FR-013).
+ * documento de solo lectura. No muta; sin confirmación modal.
  */
 export async function previewEdits(
     stateManager: ReviewStateManager,
@@ -33,7 +33,7 @@ export async function previewEdits(
     }
 
     const body = result.stdout.length > 0 ? result.stdout : "(no edits to preview)\n";
-    // Documento untitled: no alimenta el view-model (FR-005); solo muestra.
+    // Documento untitled: no alimenta el view-model, solo muestra.
     const doc = await vscode.workspace.openTextDocument({
         language: stat ? "plaintext" : "diff",
         content: body,

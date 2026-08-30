@@ -18,7 +18,7 @@ function flat(stderr: string): string {
 }
 
 /**
- * Confirmación + invocación de clean/forget (006). Confirmación fuera del lock;
+ * Confirmación + invocación de clean/forget. Confirmación fuera del lock;
  * StateToken opcional cuando la acción nació de una fila del inventario.
  */
 export async function runHousekeeping(

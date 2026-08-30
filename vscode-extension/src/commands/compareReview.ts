@@ -41,7 +41,7 @@ const LAYOUT_ITEMS: LayoutItem[] = [
 
 /**
  * `gitReview.compareReview`: monta `git review compare <a> <b> [--step|--no-walk|--keys]`
- * con confirmación (006 US3). Sin layout "auto" / "Automatic".
+ * con confirmación. Sin layout "auto" / "Automatic".
  */
 export async function compareReview(
     lock: MutationLock,

@@ -90,8 +90,8 @@ fun intentToArgs(intent: ReviewIntent, currentBranch: String): List<String> {
 }
 
 /**
- * Argv de `git review walkthrough draft` (011). El verbo es `walkthrough`;
- * `draft` es el primer argumento.
+ * Argv de `git review walkthrough draft`. El verbo es `walkthrough`; `draft`
+ * es el primer argumento.
  *
  * Origen y rango son **los mismos** que el asistente ya resolvió: el borrador
  * tiene que listar los archivos de la review que se va a iniciar, no los de

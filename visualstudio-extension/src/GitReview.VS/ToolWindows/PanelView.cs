@@ -9,9 +9,8 @@ using DomainControl = GitReview.Domain.Control;
 namespace GitReview.VS.ToolWindows;
 
 /// <summary>
-/// WPF renderer of <see cref="PanelLayout"/>. Labels, order, and control
-/// emphasis match JetBrains PanelRenderer / VS Code panelHtml — only colors
-/// follow <see cref="PanelChrome"/>.
+/// WPF renderer of <see cref="PanelLayout"/>. Labels, order and control emphasis match
+/// the canonical product surface; only colors follow <see cref="PanelChrome"/>.
 /// </summary>
 public sealed class PanelView : System.Windows.Controls.UserControl
 {
@@ -21,43 +20,35 @@ public sealed class PanelView : System.Windows.Controls.UserControl
     /// </summary>
     internal const string BareTag = "bare";
 
-    // The panel's glyph alphabet. This host draws its icons as text (no Image
-    // Catalog outside the VSIX), so they all stay in the BMP: an astral
-    // codepoint is a tofu box in whatever font the theme hands us. Named
-    // constants and not literals at the two call sites, because the same two
-    // subjects -- a file and a comparison -- are drawn both as a bare glyph in a
-    // row header and beside a label on a button, and the day those two drift
-    // the panel says "open" with two different marks.
+    // The panel's glyph alphabet: text, not icons (no Image Catalog outside the VSIX),
+    // and kept in the BMP — an astral codepoint renders as a tofu box in whatever font
+    // the theme hands us. Named constants, not literals at each call site, so the same
+    // subject (a file, a comparison) can't end up drawn with two different marks.
     internal const string GlyphPrev = "◀";
     internal const string GlyphNext = "▶";
     internal const string GlyphFile = "▤";
     internal const string GlyphTrash = "✕";
-    // Two panes side by side, which is literally what this host opens: a
-    // comparison window from IVsDifferenceService. Same geometric-square family
-    // as GlyphFile on purpose -- the two marks of "open something" carry the
-    // same weight and the same advance width, so a column of file rows stays a
-    // column.
+    // Two panes side by side — literally what IVsDifferenceService opens. Same
+    // geometric-square family as GlyphFile on purpose, so a column of file rows
+    // keeps one advance width.
     internal const string GlyphDiff = "◫";
 
     /// <summary>
-    /// How much of the panel the footer may take before it starts scrolling
-    /// (the extension's <c>.pane-footer { max-height: 55% }</c>).
+    /// How much of the panel the footer may take before it scrolls instead of growing.
+    /// See CLAUDE.md, "El pie se queda con el 55%".
     /// </summary>
     internal const double FooterMaxFraction = 0.55;
 
     /// <summary>
-    /// The icon of each control, under the CANONICAL's names
-    /// (contracts/client-product-surface.yaml, the <c>icon_vocabulary</c> block):
-    /// one map for both ways the panel draws an icon — bare in a row header, or
-    /// beside a label on a button — so the same subject cannot end up with two
-    /// different marks.
+    /// The icon of each control, under the canonical's names
+    /// (<c>contracts/client-product-surface.yaml</c>, <c>icon_vocabulary</c>): one map
+    /// for both ways the panel draws an icon — bare in a row header, or beside a label
+    /// on a button — so the same subject can't end up with two different marks.
     /// <para>
-    /// A map and not a switch inside the render, because that is what lets
-    /// <c>check-client-product-surface.mjs</c> compare it pair by pair against the
-    /// canonical and against the other two clients. The very slip this exists to
-    /// stop — a control with an icon that a client never mapped, coming out as
-    /// Next's arrow — happened twice in a row while the answer lived spread
-    /// across a ternary.
+    /// A map and not a switch, because that is what lets
+    /// <c>check-client-product-surface.mjs</c> compare it against the canonical. The
+    /// slip this exists to stop — a control with an icon nobody mapped, falling back
+    /// to Next's arrow — happened twice before this existed.
     /// </para>
     /// </summary>
     private static readonly Dictionary<ControlId, string> IconOf = new()
@@ -104,11 +95,10 @@ public sealed class PanelView : System.Windows.Controls.UserControl
     public event Action<string, int?, string?>? ActionRequested;
 
     /// <summary>
-    /// Whether the five title actions are drawn as a row inside the pane. False in
-    /// the Visual Studio tool window, where the shell draws them as the window's own
-    /// toolbar (the same place VS Code and IntelliJ put them) and drawing them here
-    /// as well would show every one of them twice. The standalone preview has no
-    /// window frame to hang a toolbar on, so it keeps them.
+    /// Whether the five title actions are drawn as a row inside the pane. False in the
+    /// Visual Studio tool window, where the shell draws them as the window's own toolbar
+    /// and drawing them here too would show every one of them twice. The standalone
+    /// preview has no window frame to hang a toolbar on, so it keeps them.
     /// </summary>
     public bool ShowTitleActions { get; set; } = true;
 
@@ -136,11 +126,10 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             Content = _body,
         };
 
-        // The footer scrolls on its own and never takes more than FooterMaxFraction
-        // of the window. DockPanel hands the Bottom band its full desired height, so
-        // an open section with a long body pushed the scrolled body out of the panel
-        // and then got clipped at the bottom edge itself -- with no way to reach the
-        // rest of it. Same max-height + scroll split as the extension's `.pane-footer`.
+        // The footer scrolls on its own, capped at FooterMaxFraction of the window:
+        // DockPanel hands the Bottom band its full desired height, so an open section
+        // with a long body pushed the rest of the panel out and got clipped at the
+        // bottom edge with no way to reach it.
         _footerScroll = new ScrollViewer
         {
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -162,10 +151,9 @@ public sealed class PanelView : System.Windows.Controls.UserControl
 
     /// <summary>
     /// Before the first refresh has resolved anything. The state manager's seed is a
-    /// placeholder, so rendering it would announce a missing CLI -- with an Install
-    /// button -- for the couple of seconds the first status takes, every time the
-    /// window opens. The other two clients hold the same way: IntelliJ paints this
-    /// line and the VS Code webview stays empty until the first model arrives.
+    /// placeholder, so rendering it would announce a missing CLI — with an Install
+    /// button — for the couple of seconds the first status takes, every time the
+    /// window opens.
     /// </summary>
     public void RenderWaiting()
     {
@@ -183,16 +171,14 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         });
     }
 
-    /// <summary>Same words as the JetBrains panel's pre-first-refresh surface.</summary>
     private const string WaitingText = "Reading the review state…";
 
     /// <summary>
     /// Last-resort fallback when <see cref="Render"/> itself throws. The normal render
-    /// path clears the panel before drawing the new content, so an exception partway
-    /// through — a block variant this WPF renderer does not handle, for example —
-    /// otherwise leaves the tool window permanently blank with no visible trace: the
-    /// domain-side --verify fixtures only exercise PanelLayoutBuilder, never this
-    /// renderer, so a gap here would not show up there.
+    /// path clears the panel before drawing new content, so a mid-render exception — an
+    /// unhandled block variant, say — would otherwise leave the tool window permanently
+    /// blank with no trace: <c>--verify</c> only exercises PanelLayoutBuilder, never
+    /// this renderer, so a gap here would not show up there.
     /// </summary>
     public void RenderFatal(Exception ex)
     {
@@ -500,12 +486,11 @@ public sealed class PanelView : System.Windows.Controls.UserControl
 
     private UIElement FileRowButton(FileRow f)
     {
-        // The path and the mark of what the row opens, in ONE TextBlock: split
-        // across a panel the path would be handed an unbounded width and the
-        // ellipsis would stop working, which is the whole reason a sidebar can
-        // show a long path at all. The glyph takes the UI font rather than the
-        // path's mono -- a geometric square is not in every monospaced face, and
-        // the fallback WPF picks lands at a different size than its neighbours.
+        // Path and glyph in ONE TextBlock: split across a panel, the path gets an
+        // unbounded width and the ellipsis stops working — the whole reason a sidebar
+        // can show a long path at all. The glyph uses the UI font, not the path's mono:
+        // a geometric square isn't in every monospaced face, and WPF's fallback lands
+        // at a different size.
         var text = new TextBlock
         {
             FontFamily = _chrome.Mono,
@@ -584,24 +569,20 @@ public sealed class PanelView : System.Windows.Controls.UserControl
     }
 
     /// <summary>
-    /// The draft block. Same shape as an inventory row — name, meta, actions — because it
-    /// is the same kind of thing: a row of the empty state you act on. Product parity,
-    /// not pixel parity: what has to match the other clients is the order, the labels and
-    /// which controls a row offers.
+    /// The draft block: same shape as an inventory row — name, meta, actions — since
+    /// it's the same kind of thing, a row of the empty state you act on. Product parity,
+    /// not pixel parity (see CLAUDE.md): order, labels, and which controls a row offers.
     /// </summary>
     private UIElement RenderDrafts(Block.DraftRows block)
     {
         var stack = new StackPanel();
         foreach (var r in block.Rows)
         {
-            // The progress rides the header instead of a line of its own: it is
-            // a badge-sized fact about the branch, and one loose line per row
-            // multiplied the height of the block for nothing.
-            //
-            // The Icon controls ride it too, right after the pair that names
-            // their subject. Which half of the row a control lands in is read
-            // off its emphasis and decided nowhere else: the layout already
-            // says which of the four are glyphs.
+            // The progress rides the header, not a line of its own: it's a badge-sized
+            // fact about the branch, and a loose line per row would multiply the
+            // block's height for nothing. Icon controls ride it too, right after the
+            // pair naming their subject — which half of the row a control lands in is
+            // read off its emphasis, decided nowhere else.
             var glyphs = r.Controls.Where(c => c.Emphasis == Emphasis.Icon).ToList();
             var labelled = r.Controls.Where(c => c.Emphasis != Emphasis.Icon).ToList();
             var header = new Grid();
@@ -609,10 +590,9 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             var name = MonoLabel(r.Name);
             var right = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            // The badge CLOSES the line, in every row of the panel: that is what
-            // drops the states of all three sections into the same column at the
-            // right edge. The glyphs go before it, still glued to the fact that
-            // names their subject.
+            // The badge CLOSES the line in every row of the panel — what lines all
+            // three sections' states up in the same column at the right edge. Glyphs
+            // go before it, next to the pair that names their subject.
             foreach (var c in glyphs)
             {
                 var glyph = RenderControl(c, bare: true);
@@ -626,10 +606,9 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             header.Children.Add(right);
             stack.Children.Add(header);
 
-            // A grid of even columns, not a panel that wraps: at sidebar width
-            // two long labels do not fit on one line of free widths, and
-            // wrapping them broke every row of the block in a different place —
-            // none lined up with the one beside it. Even cells always do.
+            // Even columns, not a wrapping panel: at sidebar width two long labels
+            // don't fit free, and wrapping broke each row in a different place —
+            // none lined up. Even cells always do.
             var actions = new UniformGrid
             {
                 Rows = 1,
@@ -643,23 +622,22 @@ public sealed class PanelView : System.Windows.Controls.UserControl
                 actions.Children.Add(cell);
             }
             stack.Children.Add(actions);
-            // Two draft rows in a row need more air between them than two
-            // inventory ones: each is a header with glyphs plus its own button
-            // pair, and without the gap the two read as a single pane.
+            // More air between draft rows than inventory ones: each has a header
+            // with glyphs plus its own button pair, and without the gap two rows
+            // read as one.
             stack.Children.Add(new Border { Height = 10 });
         }
         return stack;
     }
 
     /// <summary>
-    /// The authoring-guide rows. Same two-place shape as the draft rows — badge
-    /// and glyphs in the header, the labelled control underneath — because they
-    /// are the same kind of thing, and the reviewer should not have to learn a
-    /// second row.
+    /// The authoring-guide rows: same two-place shape as the draft rows — badge and
+    /// glyphs in the header, the labelled control underneath — so the reviewer
+    /// doesn't have to learn a second row shape.
     ///
-    /// Less air between rows than between drafts: there are exactly two, they
-    /// belong together, and they sit inside a collapsed section rather than at
-    /// the top of the empty state.
+    /// Less air between rows than drafts: there are exactly two, they belong
+    /// together, and they sit inside a collapsed section rather than the top of
+    /// the empty state.
     /// </summary>
     private UIElement RenderGuides(Block.GuideRows block)
     {
@@ -686,11 +664,10 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             header.Children.Add(right);
             stack.Children.Add(header);
 
-            // Left, at label width, like the inventory's actions — and unlike
-            // the draft rows above, whose even columns exist so that row after
-            // row lines up. Here the count is one (a guide) or three (the
-            // walkthrough): even cells would stretch a lone Create across half
-            // the sidebar and squeeze three labels that fit as they are.
+            // Left, at label width, like the inventory's actions — unlike the draft
+            // rows' even columns, which exist so row after row lines up. Here the
+            // count is one (a guide) or three (the walkthrough): even cells would
+            // stretch a lone Create across half the sidebar.
             var actions = new WrapPanel { Margin = new Thickness(0, 4, 0, 0) };
             foreach (var c in labelled)
             {
@@ -736,7 +713,8 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         toggle.Click += (_, _) =>
         {
             _sectionOpen[section.Title] = !_sectionOpen.GetValueOrDefault(section.Title, false);
-            // Re-render would need parent model; toggle local body for FR-034
+            // Local toggle, not a full re-render: that would need the parent model
+            // this view doesn't have.
             var now = _sectionOpen[section.Title];
             toggle.Content = (now ? "▼ " : "▶ ") + section.Title;
             body.Visibility = now ? Visibility.Visible : Visibility.Collapsed;
@@ -799,55 +777,45 @@ public sealed class PanelView : System.Windows.Controls.UserControl
     }
 
     /// <param name="bare">
-    /// An icon control that rides the HEADER of a row rather than a row of
-    /// controls: no box of its own, and a fill only under the pointer. The
-    /// distinction belongs to the place and not to the control, exactly as in
-    /// the extension, where the rule hangs off <c>.rev-head-actions button</c>
-    /// and not off the icon: the same glyphs in a review's nav row are two
-    /// filled buttons splitting the width (<c>.row button { flex: 1 }</c>).
+    /// An icon control that rides the HEADER of a row rather than sitting in a row of
+    /// controls: no box of its own, a fill only under the pointer. The distinction
+    /// belongs to the place, not the control — the same glyphs in a review's nav row
+    /// are two filled buttons splitting the width.
     /// </param>
     private FrameworkElement RenderControl(DomainControl c, bool bare = false)
     {
         if (c.Emphasis == Emphasis.Icon)
         {
-            // This host draws icon controls as text glyphs (no Image Catalog
-            // outside the VSIX), so they stay in the BMP: an astral codepoint
-            // is a tofu box in whatever font the theme hands us.
-            // EVERY file-and-trash affordance of the panel, not just the draft's:
-            // a guide row's Open and Discard, the walkthrough row's Open and a
-            // fixes row's Discard are the same two affordances over a different
-            // subject. Missing here, they fall through to the default — which is
-            // Next's arrow, so Discard drew a ▶. It happened twice: once when the
-            // guides arrived and again when the fixes rows did, which is why the
-            // drift is now pinned over EVERY fixture rather than over a
-            // hand-written list of ids.
-            // The fallback stays Next's arrow, and stays wrong on purpose: it is
-            // what --verify looks for to tell an unmapped id from a mapped one.
+            // EVERY file-and-trash affordance of the panel, not just the draft's — a
+            // guide row's Open and Discard, the walkthrough's Open, a fixes row's
+            // Discard — falls back to Next's arrow when unmapped (it happened twice:
+            // once for guides, again for fixes), which is why the fallback stays
+            // wrong on purpose: it's what --verify looks for to spot an unmapped id.
             var icon = GlyphOf(c.Id) ?? GlyphNext;
             var b = new Button
             {
                 Content = icon,
                 Style = bare ? _bareButton : _secondaryButton,
                 IsEnabled = c.Enabled,
-                // The tooltip proper when the layout gave the control one: a
-                // glyph whose hover only repeats its own name says nothing the
-                // glyph did not, and the draft ones carry the command they run.
+                // The tooltip proper when the layout gave one: a glyph whose hover only
+                // repeats its own name says nothing new, but the draft ones carry the
+                // command they run.
                 ToolTip = c.Tooltip ?? c.AccessibleName,
             };
             if (bare)
             {
                 // A glyph in a row header is an affordance over that row, not an
-                // action of the panel: a filled box there outweighs the button
-                // pair underneath, which is the one that moves the flow. Which
-                // is why the fill waits for the pointer, like a file row's.
+                // action of the panel: a filled box there outweighs the button pair
+                // underneath, the one that moves the flow. Which is why the fill
+                // waits for the pointer, like a file row's.
                 b.Background = Brushes.Transparent;
                 b.Foreground = _chrome.MutedForeground;
                 b.Padding = new Thickness(4, 3, 4, 3);
                 b.FontSize = 12;
                 b.Cursor = c.Enabled ? Cursors.Hand : Cursors.Arrow;
-                // The extension dims every disabled button (`opacity: .5`); the
-                // Bare style has no disabled pair of its own to fall back on,
-                // because a control with no fill has nothing to swap.
+                // A disabled bare button dims by opacity: it has no disabled pair of
+                // its own to fall back on, since a control with no fill has nothing
+                // to swap.
                 if (!c.Enabled) b.Opacity = 0.5;
                 // Says it is bare, for whoever looks at the rendered tree rather
                 // than at the layout: --verify asks the disabled pair only of
@@ -895,14 +863,12 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             return link;
         }
 
-        // The verbs that open something carry the same mark as the rows they
-        // open, exactly as the other two clients draw them: on a pane with two
-        // "Diff" buttons the label is not what tells them apart, and a button
-        // whose whole job is "look at this file" reads faster with the mark of a
-        // file on it. Glyph and label go in ONE string on purpose -- a composed
-        // content would need a Foreground of its own, and a local Foreground
-        // beats the style's disabled setter, which is the rule that keeps a
-        // disabled button from coming out with live text.
+        // The verbs that open something carry the mark of the rows they open — on a
+        // pane with two "Diff" buttons the label alone doesn't tell them apart. Glyph
+        // and label share ONE string (see CLAUDE.md, "el glifo va pegado a la
+        // etiqueta"): composed content would need its own Foreground, and a local
+        // Foreground beats the style's disabled trigger — the rule that keeps a
+        // disabled button from showing live text.
         var lead = GlyphOf(c.Id);
         var label = c.Label ?? c.AccessibleName;
         var btn = new Button
@@ -919,13 +885,10 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         // What the button was drawn as, for whoever looks at the rendered tree
         // rather than at the layout: --verify reads the disabled pair off it.
         btn.Tag = c.Emphasis;
-        // A control whose accessible name is not its label says so: "Open" on
-        // its own repeats once per draft row and names none of them. Asked of
-        // the LABEL and not of the content: a screen reader must hear "Diff",
-        // never the glyph that was glued in front of it for the eye.
-        // ...and whenever a glyph rode along, whatever the two say: the content
-        // is no longer the name, and read out loud "◫  Diff" is a box and a
-        // word.
+        // AutomationProperties.Name is set whenever the accessible name differs from
+        // the label ("Open" alone repeats once per draft row and names none of them)
+        // or a glyph rode along — content read aloud would otherwise be "◫  Diff", a
+        // box and a word.
         if (c.AccessibleName != c.Label || lead is not null)
         {
             System.Windows.Automation.AutomationProperties.SetName(btn, c.AccessibleName ?? label);
@@ -956,24 +919,18 @@ public sealed class PanelView : System.Windows.Controls.UserControl
     };
 
     /// <summary>
-    /// A mark on an entry or an inventory row, in the extension's three weights:
-    /// <c>key</c> is what the walkthrough author called essential and goes solid,
-    /// in the badge pair, which is the one fill here whose contrast is fixed by
-    /// the chrome rather than by the host; <c>uncovered</c> and the help mark are
-    /// warnings of ours and go bare; everything else — <c>edits</c>,
-    /// <c>current</c>, <c>orphan</c> — is a state and goes in outline. Which is
-    /// which is read off the text, exactly as JetBrains and the extension read it
-    /// off the class. The border is always drawn, transparent when there is no
-    /// outline, so all three weights lay out to the same size.
+    /// A mark on an entry or inventory row, in three weights read off the text:
+    /// <c>key</c> (the walkthrough author called it essential) goes solid, the one fill
+    /// whose contrast is fixed by the chrome; <c>uncovered</c> and the help mark are
+    /// warnings and go bare; everything else (<c>edits</c>, <c>current</c>,
+    /// <c>orphan</c>) is a state and goes in outline. The border is always drawn,
+    /// transparent when there's no outline, so all three weights lay out to the same
+    /// size.
     ///
-    /// It sizes to its text and centres on the line, and BOTH halves of that are
-    /// explicit: a Border in a horizontal StackPanel defaults to Stretch, so the
-    /// chip grew to whatever shared the row -- 22px next to a glyph button, 14px
-    /// alone -- and the TextBlock inside it, stretched too, drew its text against
-    /// the top edge. The same chip in two heights with the text hanging off the
-    /// top is what the other two clients never do: theirs are one height in every
-    /// row (16 in JetBrains, 17 in the extension) with the text on the row's
-    /// centre line, and that is what this matches.
+    /// Sizing to its text and centring on the line are both explicit: a Border in a
+    /// horizontal StackPanel defaults to Stretch, so without this the chip grew to
+    /// whatever shared the row and its text drew against the top edge instead of the
+    /// row's centre.
     /// </summary>
     private Border Chip(string text)
     {

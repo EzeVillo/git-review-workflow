@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * Anti-drift check: contracts/client-product-surface.yaml vs both clients.
- * Fails on missing YAML, schema issues, min_cli_version / npm / string drift,
- * and action-count mismatch vs vscode-extension package.json.
+ * Anti-drift check: contracts/client-product-surface.yaml vs los tres clientes.
+ * Falla si falta el YAML, si el esquema no cierra, si driftea min_cli_version /
+ * npm / los strings criticos, o si el conteo de acciones no da contra el
+ * package.json de la extension.
  */
 import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -133,14 +134,10 @@ if (!setBase.includes("No branches to pick a base from were found.")) {
 }
 
 // draft_agent_prompt — lo que copyDraftPrompt pone en el portapapeles, byte por
-// byte igual en los tres clientes. Vive en una constante por cliente y no suelto
-// en el archivo de comandos, justamente para que este check compare contra una
-// constante y no contra codigo: la fragilidad de lo segundo aparece cuando el
-// texto cambia, que es lo unico que este check existe para detectar.
-// El escalar es un bloque plegado (>-), asi que en el YAML vive cortado en
-// varias lineas y en los clientes en una sola: se pliega aca y se compara contra
-// el texto del cliente con los espacios normalizados, que es la unica forma de
-// que "byte por byte igual" signifique lo mismo de los dos lados.
+// byte igual en los tres clientes. Vive en una constante por cliente para que
+// este check compare contra una constante y no contra codigo. El escalar es un
+// bloque plegado (>-): se pliega aca y se compara con los espacios normalizados,
+// unica forma de que "byte por byte igual" signifique lo mismo de los dos lados.
 const draftPromptBlock = text.match(/^ {2}draft_agent_prompt: >-\n((?: {4}.*\n)+)/m);
 if (!draftPromptBlock) fail("YAML missing draft_agent_prompt string");
 const draftPrompt = (draftPromptBlock?.[1] ?? "")
@@ -151,10 +148,9 @@ const draftPrompt = (draftPromptBlock?.[1] ?? "")
 if (!draftPrompt.startsWith("Fill in the reading order at {path}.")) {
   fail(`draft_agent_prompt must name the row's path: ${draftPrompt}`);
 }
-// Los tres clientes parten la cadena en dos literales para no pasarse del ancho
-// de linea, y cada lenguaje lo escribe distinto. Sacar comillas, backticks y el
-// operador de concatenacion deja el texto comparable sin obligar a los tres a
-// cortarlo en el mismo lugar -- que es formato, no copy.
+// Cada cliente parte la cadena en dos literales, y cada lenguaje lo escribe
+// distinto. Sacar comillas, backticks y el operador de concatenacion compara el
+// texto sin obligarlos a cortarlo en el mismo lugar -- eso es formato, no copy.
 const squash = (s) => s.replace(/["`+]/g, " ").replace(/\s+/g, " ");
 const userCopyFiles = [
   ["vscode", ["vscode-extension", "src", "review", "userCopy.ts"]],
@@ -456,23 +452,16 @@ for (const c of canonicalControls) {
 
 // TODO TOOLTIP DECLARADO EN EL CANONICO TIENE QUE ESTAR EN LOS TRES PANELES.
 //
-// Barrido por texto y no por control parseado, a proposito. Los tooltips se
-// declaran hoy en cuatro lugares con cuatro formas distintas -- inline en
-// panel_layout, en draft_controls, en guide_rows.controls y en
-// fixes_rows.controls --, y de esos solo el segundo tenia un parser. El
-// resultado era que el tooltip de openAllChanges vivia en el contrato sin que
-// nadie lo verificara: exactamente el drift silencioso que este archivo existe
-// para atajar, y encima sobre la copy que un cliente pierde sin que se note
-// (un tooltip que falta no rompe ningun layout).
+// Barrido por texto y no por control parseado: los tooltips se declaran en
+// cuatro lugares con cuatro formas (inline en panel_layout, draft_controls,
+// guide_rows.controls, fixes_rows.controls) y un parser por forma se olvida de
+// la quinta. Con solo uno parseado, el tooltip de openAllChanges vivia en el
+// contrato sin que nadie lo verificara -- y un tooltip que falta no rompe ningun
+// layout, asi que se pierde sin que se note. Entra cualquier clave que empiece
+// con `tooltip` y lleve un literal entre comillas.
 //
-// Un parser mas por forma seria una cuarta regex que se olvida de la quinta. El
-// barrido no se olvida: cualquier clave que empiece con `tooltip` y lleve un
-// literal entre comillas entra, venga de donde venga y se declare como se
-// declare.
-//
-// `not_in:` en la MISMA linea excluye a ese cliente, que es como se declara hoy
-// la unica divergencia deliberada (openAllChanges no existe en Visual Studio, y
-// su tooltip tampoco).
+// `not_in:` en la MISMA linea excluye a ese cliente: es como se declara la unica
+// divergencia deliberada (openAllChanges no existe en Visual Studio).
 const tooltipKeyRe = /\btooltip(?:_[a-z]+)?:\s*"((?:[^"\\]|\\.)+)"/g;
 let tooltipsChecked = 0;
 for (const line of text.split("\n")) {
@@ -1203,13 +1192,11 @@ if (existsSync(vsOverview)) {
 
 // ── Authoring guides ─────────────────────────────────────────────────────────
 //
-// El bloque de las dos guias, verificado como su propio grupo y no colado en
-// canonicalControls: sus controles cuelgan de guide_rows.controls, con claves
-// (disabled_when, only_in_row) que el parser de draft_controls no conoce, y
-// forzarlos en ese molde haria que un cambio de forma pasara en silencio.
-//
-// Lo que se verifica es lo mismo de siempre: copy que los tres clientes escriben
-// a mano tiene que decir lo mismo, y un id que un cliente perdio es un boton que
+// Grupo propio y no colado en canonicalControls: sus controles cuelgan de
+// guide_rows.controls con claves (disabled_when, only_in_row) que el parser de
+// draft_controls no conoce, y forzarlos en ese molde haria que un cambio de
+// forma pasara en silencio. Se verifica lo de siempre: la copy que los tres
+// escriben a mano dice lo mismo, y un id que un cliente perdio es un boton que
 // no existe.
 const guideBlock = guideRowsBlock;
 if (guideBlock.length === 0) {

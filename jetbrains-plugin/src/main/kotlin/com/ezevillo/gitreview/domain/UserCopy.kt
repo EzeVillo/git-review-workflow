@@ -12,19 +12,15 @@ object UserCopy {
     const val DISCARD_BUSY = MutationLock.DISCARD_REASON
 
     /**
-     * Lo que se dice cuando el testigo de estado (StaleGuard) rechaza una
-     * mutacion porque el repositorio cambio entre la confirmacion y la
-     * invocacion. **Uno solo para los ocho comandos**, y antes eran diez.
-     *
-     * Las diez variantes decian la misma cosa con el verbo cambiado -- "nothing
-     * was finished", "nothing was saved", "nothing was undone" --, y ese verbo
-     * no es informacion: es el boton que el revisor acaba de apretar, que
-     * todavia tiene bajo el cursor. Lo unico que no puede deducir es POR QUE no
-     * paso nada, y eso es identico en los diez casos.
+     * Lo que dice StaleGuard cuando rechaza una mutacion porque el repositorio
+     * cambio entre la confirmacion y la invocacion. **Uno solo para los ocho
+     * comandos**: el verbo no es informacion, es el boton que el revisor acaba
+     * de apretar y todavia tiene bajo el cursor. Especializarlo por verbo (como
+     * antes) es el error a no repetir -- lo unico que no se puede deducir es POR
+     * QUE no paso nada, y eso es identico en todos los casos.
      *
      * No lleva "try again": el panel ya se refresco solo, asi que el estado que
-     * se ve al leer el mensaje es el nuevo. Decir que reintente seria pedirle
-     * que repita una decision que quiza el estado nuevo ya volvio innecesaria.
+     * se ve al leer el mensaje ya es el nuevo.
      */
     const val STALE = "The repository changed while you were deciding, so nothing happened."
 
@@ -143,7 +139,7 @@ object UserCopy {
         return "$text."
     }
 
-    // --- Reviewer's draft walkthrough (011) -------------------------------------
+    // --- Reviewer's draft walkthrough -------------------------------------------
 
     const val DRAFT_FAILED = "Could not draft a reading order."
     const val DRAFT_BUILD_FAILED = "Could not check your reading order."
@@ -153,7 +149,7 @@ object UserCopy {
     fun draftProgress(branch: String, build: Boolean): String =
         if (build) "Validating your draft for $branch…" else "Drafting a walkthrough for $branch…"
 
-    // --- Bloque de borradores del panel (012) -----------------------------------
+    // --- Bloque de borradores del panel -----------------------------------------
 
     const val DISCARD_DRAFT_BUTTON = "Discard"
 
@@ -296,12 +292,8 @@ object UserCopy {
 
     /**
      * The choice between reconciling a walkthrough and starting it over, asked
-     * BEFORE the verb runs.
-     *
-     * It used to hang off the CLI FAILING: init ran, and when it died because
-     * the file was already there, that is where the three clients offered to
-     * overwrite. Since init updates instead of refusing, that path stopped
-     * existing -- and with it the only way to reach --force from a panel.
+     * BEFORE the verb runs: init updates instead of refusing when the file
+     * already exists, so there is no failure left to hang an overwrite offer off.
      *
      * Byte for byte identical to userCopy.ts and UserCopy.cs.
      */
@@ -311,19 +303,17 @@ object UserCopy {
             "Start over replaces it with a blank list. The file is committed to the PR, so git checkout -- .review/walkthrough.md brings the old one back."
     /**
      * Del lado del REVISOR no hay par equivalente, y la asimetria es deliberada.
-     *
-     * Hubo uno: un modal que, sobre cualquier borrador cuya review ya habia
-     * cerrado, preguntaba si reconciliar o empezar de cero. Preguntaba porque el
-     * asistente no podia saber cual de las dos cosas hacia falta -- el `state`
-     * del registro `draft` dice si el orden ya se leyo, no si sigue cubriendo el
-     * rango --, asi que le pasaba la duda al revisor. Ahora la contesta la CLI,
-     * que es la que tiene los dos tips, ofreciendo `draft-update` solo cuando hay
-     * algo que reconciliar; sin pregunta, no hay modal.
+     * Antes habia un modal que, sobre cualquier borrador con la review ya
+     * cerrada, preguntaba reconciliar o empezar de cero -- porque el asistente
+     * no podia saber cual hacia falta (el `state` del registro `draft` dice si
+     * el orden ya se leyo, no si sigue cubriendo el rango). Ahora lo contesta la
+     * CLI, que tiene los dos tips, ofreciendo `draft-update` solo cuando hay algo
+     * que reconciliar: sin pregunta, no hay modal.
      *
      * Y empezar de cero no se repone aca: del lado del autor el archivo esta
-     * trackeado y `git checkout --` lo devuelve, del lado del revisor vive fuera
-     * de git y no hay vuelta atras. Un boton para eso no va en un paso por el que
-     * se pasa de largo; va en Discard, que confirma.
+     * trackeado y `git checkout --` lo devuelve; del lado del revisor vive fuera
+     * de git y no hay vuelta atras. Ese boton va en Discard, que confirma, no en
+     * un paso por el que se pasa de largo.
      */
     const val WALKTHROUGH_UPDATE_BUTTON = "Update"
     const val WALKTHROUGH_START_OVER_BUTTON = "Start over"

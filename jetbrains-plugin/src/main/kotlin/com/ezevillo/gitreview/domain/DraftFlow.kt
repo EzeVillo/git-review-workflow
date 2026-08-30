@@ -1,26 +1,18 @@
 package com.ezevillo.gitreview.domain
 
 /**
- * Lo que queda del camino del borrador dentro del asistente (012,
- * contracts/client-draft-panel.md § 3): crear, y terminar.
+ * Lo que queda del camino del borrador dentro del asistente: crear, y terminar.
+ * No espera nada -- lo que hacían `Build`, `Reload` y `PickKeys` vive ahora en
+ * *Validate and start*, un control del panel sobre un estado que sobrevive a
+ * cerrar el IDE.
  *
- * Antes había un bucle: crear → abrir → **esperar** → validar → recargar
- * ofertas → elegir esenciales. La espera era un diálogo que se quedaba abierto
- * mientras el revisor escribía su orden de lectura, y todo lo que venía después
- * dependía de que ese diálogo siguiera ahí. Lo que hacían `Build`, `Reload` y
- * `PickKeys` vive ahora en *Validate and start*, un control del panel, sobre un
- * estado que sobrevive a cerrar el IDE. El asistente no espera nada.
- *
- * Tampoco abre el borrador, y por eso ya no necesita su ruta: en el instante
+ * Tampoco abre el borrador, y por eso no necesita su ruta: en el instante
  * posterior a crearlo todavía no hay registro `draft` que la traiga, así que
- * abrir ahí exigiría o una invocación extra o volver a armar la ruta — que es
- * exactamente lo que esta feature retira. El refresco post-mutación que ya
- * existe trae la fila con su `<path>` un instante después.
+ * abrir ahí exigiría una invocación extra o volver a armar la ruta a mano. El
+ * refresco post-mutación que ya existe trae la fila con su `<path>` un instante
+ * después.
  *
- * Dominio puro, sin la plataforma IntelliJ, y los mismos estados y transiciones
- * que `draftFlow.ts` en la extensión y `DraftFlow.cs` en Visual Studio: la
- * paridad de producto se sostiene si las transiciones viven en un solo lugar
- * por cliente y se prueban igual, no si cada host las reinventa.
+ * Dominio puro, sin la plataforma IntelliJ.
  */
 sealed class DraftFlowState {
     /**
@@ -58,21 +50,15 @@ sealed class DraftFlowEvent {
  * - UPDATE — hay uno que quedó desfasado del rango y se reconcilia con el de
  *   hoy. Es el MISMO comando que CREATE: el verbo actualiza en vez de negarse.
  *
- * No hay START_OVER, y la ausencia es deliberada. Existió como la otra mitad de
- * un modal que preguntaba, sobre cualquier borrador ya usado, si reconciliar o
- * empezar de cero. Ese modal se retiró: la CLI ahora ofrece `draft-update` sólo
- * cuando hay algo que reconciliar, así que no queda pregunta que hacer. Empezar
- * de cero es lo único que destruye prosa escrita a mano y con el modal quedaba a
- * un clic de distancia en un paso por el que se pasaba de largo; sigue
- * disponible como lo que es —un acto deliberado— con Discard en la fila del
- * borrador, o con `walkthrough draft --force` desde la terminal.
+ * No hay START_OVER, y la ausencia es deliberada: la CLI ofrece `draft-update`
+ * sólo cuando hay algo que reconciliar, así que no queda pregunta que hacer.
+ * Empezar de cero sigue disponible como acto deliberado -- con Discard en la
+ * fila del borrador, o `walkthrough draft --force` desde la terminal -- nunca
+ * como default de un paso por el que se pasa de largo.
  */
 fun initialDraftFlowState(step: DraftStep): DraftFlowState = when (step) {
     DraftStep.RESUME -> DraftFlowState.Done
-    // `update` no toca el argv: decide el ACUSE. Un create no tiene ninguno --
-    // el refresco deja la fila del borrador dibujada, y todo lo que el verbo
-    // dice ahi tiene su propia fila en el panel --, y un update si, porque
-    // "N kept, M added, K dropped" no se ve en ninguna.
+    // `update` no toca el argv, sólo decide el acuse (ver StartWizard.invokeDraft).
     else -> DraftFlowState.Create(update = step == DraftStep.UPDATE)
 }
 

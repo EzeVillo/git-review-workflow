@@ -5,9 +5,9 @@ import {panelHtml} from "../../src/views/panelHtml";
 const html = panelHtml("TESTNONCE");
 
 /**
- * Propiedades estructurales del HTML del panel. No prueban cómo se ve —eso se
- * mira a ojo (quickstart §8)—, sino las tres cosas que un webview puede romper
- * en silencio: el tema, la accesibilidad y la CSP (research.md Decisión 4).
+ * Propiedades estructurales del HTML del panel (no cómo se ve, eso se mira a
+ * ojo): las tres cosas que un webview puede romper en silencio — el tema, la
+ * accesibilidad y la CSP.
  */
 describe("panelHtml", () => {
     it("declara la CSP con el nonce y sin permitir orígenes externos", () => {
@@ -50,8 +50,8 @@ describe("panelHtml", () => {
     });
 
     it("un boton sin texto visible igual tiene nombre accesible", () => {
-        // Los controles de navegar son sólo un ícono: sin esto un lector de
-        // pantalla anuncia un botón mudo, y el hover no dice a dónde va.
+        // Icono sin texto visible: sin aria-label/title un lector de pantalla
+        // anuncia un botón mudo.
         assert.ok(/node\.setAttribute\("aria-label", label\)/.test(html));
         assert.ok(/node\.title = label/.test(html));
         assert.ok(
@@ -62,8 +62,8 @@ describe("panelHtml", () => {
     });
 
     it("los iconos son svg inline: nada que cargar desde afuera", () => {
-        // Los codicons son una fuente: usarlos obligaría a servir el .ttf como
-        // recurso del webview y a abrirle `font-src` a la CSP de arriba.
+        // Los codicons son una fuente: usarlos obligaría a servir el .ttf y abrir
+        // `font-src` en la CSP de arriba.
         assert.ok(html.includes("createElementNS"), "los paths se crean en el namespace de SVG");
         assert.ok(!html.includes("@font-face"));
         const csp = /content="([^"]*)"/.exec(html)?.[1] ?? "";
@@ -74,19 +74,17 @@ describe("panelHtml", () => {
     });
 
     it("los controles de navegación se deshabilitan también en los extremos", () => {
-        // No hay DOM acá (el webview corre en su propio contexto), así que se
-        // afirma sobre el origen del `disabled`: si alguien vuelve a atarlo sólo
-        // a `busy`, el clic en el último paso queda mudo otra vez.
+        // Sin DOM en este contexto: se afirma sobre el origen del `disabled` para
+        // que no vuelva a atarse sólo a `busy` (mudo en el último paso).
         assert.ok(/prev\.disabled\s*=\s*model\.busy\s*\|\|\s*model\.atFirst/.test(html));
         assert.ok(/next\.disabled\s*=\s*model\.busy\s*\|\|\s*model\.atLast/.test(html));
         assert.ok(html.includes("button[disabled]"), "y el estado tiene que verse, no sólo existir");
     });
 
     it("pide el modelo recién después de registrar el listener que lo recibe", () => {
-        // Ocultar la vista destruye el contexto del webview, así que esto corre
-        // de nuevo en cada reapertura. Si el `ready` sale antes del listener, el
-        // modelo que el host postea en respuesta llega al vacío y el panel queda
-        // en blanco — y sin sus botones no hay forma de pedir otro.
+        // Ocultar la vista destruye el contexto del webview: esto corre de nuevo
+        // en cada reapertura. Si `ready` sale antes del listener, el modelo que
+        // responde el host llega al vacío y el panel queda en blanco.
         const listener = html.indexOf('window.addEventListener("message"');
         const ready = html.indexOf('postMessage({type: "ready"})');
         assert.ok(listener !== -1, "el webview tiene que escuchar el modelo");
@@ -100,9 +98,8 @@ describe("panelHtml", () => {
     });
 
     it("la carga es una sola fase: el why en vuelo tambien cuenta como pendiente", () => {
-        // Sin el segundo término, el panel vuelve a las dos fases: primero
-        // `working…` sobre la entrada vieja y después "Loading the why…" sobre
-        // la nueva, que es exactamente lo que se sentía como tildado.
+        // Sin el segundo término el panel vuelve a dos fases: `working…` sobre
+        // la entrada vieja y después "Loading the why…" sobre la nueva.
         assert.ok(
             /m\.busy === true \|\| \(m\.why !== undefined && m\.why\.state === "loading"\)/.test(html),
             "el estado pendiente tiene que cubrir busy y el why en vuelo"
@@ -164,7 +161,6 @@ describe("panelHtml", () => {
     });
 
     it("cli-missing y cli-outdated recomiendan npm con Copy y otras opciones", () => {
-        // Camino principal: comando a la vista + Copy (el host resuelve el string).
         assert.ok(html.includes("Install with npm (recommended):"));
         assert.ok(html.includes("Update with npm (recommended):"));
         assert.ok(html.includes("npm install -g git-review-workflow"));
@@ -178,11 +174,9 @@ describe("panelHtml", () => {
     });
 
     it("una seccion del pie scrollea en vez de recortarse", () => {
-        // Las tres piezas del mismo reparto. La del medio es la que faltaba: el
-        // flex item de .tools no es .tools-body sino el ::details-content que
-        // Chrome interpone, y sin pedirle lo mismo se planta en el alto de su
-        // contenido, con lo que el overflow:auto del inner no llega a activarse
-        // nunca y el max-height del pie recorta el final de la seccion.
+        // El flex item de .tools no es .tools-body sino el ::details-content que
+        // Chrome interpone: sin darle el mismo min-height se planta en el alto de
+        // su contenido y el overflow:auto del inner nunca llega a activarse.
         assert.ok(
             /grid-template-rows: minmax\(0, 1fr\)/.test(html),
             "un track 1fr es minmax(auto, 1fr): nunca baja del min-content y no deja scrollear"
@@ -234,8 +228,7 @@ describe("panelHtml", () => {
         assert.ok(/function reviewMeta\(review\)/.test(html));
         assert.ok(html.includes('button(review.orphan ? "Delete leftover" : "Delete", "discardInventory"'),
             "rota/pausada llevan boton discardInventory");
-        // El tooltip dice que se borra, no que comando corre: decia
-        // "git review forget --saved (with confirmation)".
+        // El tooltip dice qué se borra, no qué comando corre.
         assert.ok(html.includes("Delete this paused review and its edits"),
             "el hover de una pausada nombra lo que se pierde");
         assert.ok(html.includes("Delete this leftover branch"),
@@ -250,11 +243,9 @@ describe("panelHtml", () => {
     });
 
     it("Discard all corre clean --fixes-only sin rama, nunca el cleanReview de mas alcance", () => {
-        // discardAllFixes es su propio mensaje, resuelto en el host a
-        // clean --fixes-only SIN rama -- que por diseno de clean nunca toca
-        // review/*. La seccion no debe invocar cleanReview (el "clean" a secas
-        // que si se lleva las review/* vivas): un git review clean a secas
-        // seria un control con mas alcance que el titulo de esta seccion.
+        // discardAllFixes resuelve a `clean --fixes-only` sin rama, que por diseno
+        // de clean nunca toca review/*. cleanReview es el "clean" a secas que si
+        // se lleva las review/* vivas: mas alcance del que esta seccion promete.
         assert.ok(html.includes('button("Discard all", "discardAllFixes")'),
             "el boton de la seccion posta discardAllFixes");
         assert.ok(!/"cleanReview"[^)]*fixes/.test(html), "la seccion no invoca cleanReview");
@@ -277,8 +268,7 @@ describe("panelHtml", () => {
     });
 
     it("una review activa en otra rama explica por que no hay botones", () => {
-        // Sin saved ni orphan no hay verbo seguro: badge ? con title al hover
-        // (sandbox: review/feature/shipping o conflict desde develop).
+        // Sin saved ni orphan no hay verbo seguro: badge ? con title al hover.
         assert.ok(html.includes("function inventoryHelpTitle(review)"));
         assert.ok(html.includes("Still active — switch to this branch to work on it."));
         assert.ok(html.includes("Finish waiting on") || html.includes("use Undo above"));
@@ -300,10 +290,8 @@ describe("panelHtml", () => {
     });
 
     it("no-review ofrece compare y walkthrough en el pie; finish-pending no", () => {
-        // Empty state sin review activa y con base: compare/walkthrough viven
-        // en el footer del split. finish-pending es una pantalla propia de
-        // post-cierre, sin empty state ni pie plegable.
-        // Cada seccion es un <details> plegado por defecto.
+        // finish-pending es una pantalla propia de post-cierre, sin empty state
+        // ni pie plegable: cada seccion del footer es un <details> por defecto.
         assert.ok(html.includes('function renderCompareSection(model)'));
         assert.ok(html.includes('function renderEmptyStartBlock(model)'));
         assert.ok(html.includes('function renderPaneFooter(model)'));
@@ -326,9 +314,9 @@ describe("panelHtml", () => {
         assert.ok(html.includes("grid-template-rows"), "apertura animada 0fr→1fr");
         assert.ok(html.includes('el("div", "pane-main")'), "split body+footer en no-review con base");
         assert.ok(html.includes('button("Compare revisions", "compareReview")'));
-        // La etiqueta sigue al estado que reporto la CLI: el mismo verbo crea y
-        // actualiza, e "Init" sobre un archivo lleno de prosa prometia lo que
-        // ese verbo justamente ya no hace.
+        // La etiqueta sigue al estado que reporta la CLI: el mismo verbo crea y
+        // actualiza, y "Init" sobre un archivo con contenido prometeria lo que
+        // ese verbo ya no hace.
         assert.ok(html.includes('button(initLabel, "walkthroughInit", null, null, 0)'));
         assert.ok(html.includes('"Init"') && html.includes("actionLabel"));
         assert.ok(html.includes('button("Build", "walkthroughBuild", null, null, 0)'));
@@ -347,11 +335,8 @@ describe("panelHtml", () => {
         assert.ok(html.includes("renderCompareSection"), "Compare en el pie compartido");
         assert.ok(html.includes('case "no-review"') && html.includes("renderEmptyStartBlock"));
         assert.ok(html.includes("noBaseConfigured") && html.includes("renderSetup"));
-        // Setup sin base: UNA PANTALLA CON UNA SOLA PREGUNTA LA HACE. Decia
-        // "Configure git review for this repository.", que describe la pantalla
-        // y no lo que hay que contestar — y ahi el parrafo de abajo pasaba de
-        // respaldo a requisito. La pregunta se contesta sin leerlo, y el parrafo
-        // sigue estando para quien quiera saber contra que se compara.
+        // Setup sin base tiene que hacer la pregunta, no describir la pantalla:
+        // el parrafo de abajo es respaldo, no el unico dato para contestarla.
         assert.ok(
             html.includes("Which branch do pull requests land on in this repo?"),
             "renderSetup hace la pregunta que la pantalla existe para contestar"
@@ -373,10 +358,8 @@ describe("panelHtml", () => {
     });
 
     it("no-review ofrece Support con Star on GitHub y Report a bug; finish-pending no", () => {
-        // Mismo pie que las demas secciones: <details> plegado, toggle que
-        // sobrevive al redibujado. Dos links (star = repo, bug = issue form);
-        // openSupport + id. Orden del footer: Walkthrough → los ordenes
-        // terminados → Compare → Settings → Support.
+        // Orden fijo del footer: Walkthrough -> ordenes terminados -> Compare
+        // -> Settings -> Support.
         assert.ok(html.includes("function renderSupport("));
         assert.ok(html.includes('"Support"'));
         assert.ok(html.includes("supportOpen"), "el toggle sobrevive al redibujado del modelo");
@@ -410,7 +393,7 @@ describe("panelHtml", () => {
         assert.ok(html.includes('case "out-of-range"'));
         assert.ok(html.includes('case "error"'));
         // Ambos empty states cablean el mismo boton: el stderr de la CLI ya
-        // trae el how-to y el host lo re-muestra (FR-024).
+        // trae el how-to y el host lo re-muestra.
         const howTo = 'button("How to fix it", "outOfRangeHelp", "primary")';
         const outOfRangeIdx = html.indexOf('case "out-of-range"');
         const errorIdx = html.indexOf('case "error"');
@@ -436,8 +419,8 @@ describe("panelHtml", () => {
     });
 
     it("modo whole dibuja la lista de archivos, no un mensaje fijo de 'sin walkthrough' (FR-010)", () => {
-        // El mensaje incondicional que reemplazó esta feature: si sigue estando
-        // sin condicionarlo a model.files, la lista nunca se dibuja.
+        // El mensaje de "sin walkthrough" no puede ser incondicional: sin atarlo
+        // a model.files, la lista nunca se dibuja.
         assert.ok(
             !/appendChild\(empty\("This review has no walkthrough[^)]*\)\);\s*\}\s*else if \(model\.current\)/.test(
                 html
@@ -511,7 +494,7 @@ describe("panelHtml", () => {
         assert.ok(html.includes("after-inv"), "con filas el Start lleva separador bajo el inventario");
     });
 
-    // ── finish (005 US3, contracts/finish-state.md) ─────────────────────────
+    // ── finish (contracts/finish-state.md) ──────────────────────────────────
 
     it("finish-conflict entra por la rama de review, no por el estado vacio (FR-027)", () => {
         assert.ok(
@@ -529,9 +512,9 @@ describe("panelHtml", () => {
         assert.ok(bannerBody.length > 0, "no se encontro renderFinishConflictBanner para afirmar sobre el");
         assert.ok(bannerBody.includes('"Undo", "undoFinish"'));
         assert.ok(bannerBody.includes('"Continue", "resumeFinish"'));
-        // Los controles de navegacion se retiran, no solo se deshabilitan
-        // (FR-027): un boton disabled sigue dejando ver una secuencia que ya
-        // no corresponde recorrer.
+        // Los controles de navegacion se retiran, no solo se deshabilitan: un
+        // boton disabled sigue dejando ver una secuencia que ya no corresponde
+        // recorrer.
         assert.ok(
             /if \(!model\.navigationLocked\) \{ body\.appendChild\(renderNavRow\(model\)\); \}/.test(html),
             "renderEntry/renderPending tienen que retirar renderNavRow bajo navigationLocked"
@@ -556,9 +539,8 @@ describe("panelHtml", () => {
             pendingBranch.includes('"Done, clean up", "cleanReview"'),
             "el que cierra el limbo del undo dice que cierra el ciclo, no solo Clean"
         );
-        // EL PROXIMO PASO SE DICE SOLO SI ESTA FUERA DEL PANEL. Los dos comandos
-        // que este texto nombraba -- finish --abort y clean --keep-fixes -- son
-        // los dos botones dibujados debajo de el.
+        // El copy no nombra --abort ni --keep-fixes: son los dos botones dibujados
+        // debajo (ver CLAUDE.md, "La copy de los paneles").
         assert.ok(
             !pendingBranch.includes("--keep-fixes") && !pendingBranch.includes("--abort"),
             "el copy no nombra los comandos que sus propios botones corren"
@@ -619,15 +601,11 @@ describe("panelHtml", () => {
     });
 
     it("0/0 no es un borrador completo: el enfasis se queda en Copy for agent", () => {
-        // La CLI emite 0/0 para un borrador vaciado a mano Y para el que un
-        // agente esta escribiendo ahora mismo: el watcher dispara con el primer
-        // Changed, antes de que caiga el primer "## N.". Leer ese 0/0 como
-        // "completo" manda el enfasis a Validate and start, que ahi encima esta
-        // deshabilitado (source/range unknown) -- el unico control enfatico de
-        // la fila no se puede ni apretar.
-        //
-        // Se evalua la expresion real que sale del panel, no su texto: lo que
-        // se afirma es el valor que decide el enfasis.
+        // La CLI emite 0/0 tanto para un borrador vaciado a mano como para el que
+        // un agente recien esta escribiendo (el watcher dispara con el primer
+        // Changed, antes del primer "## N."). Leerlo como "completo" manda el
+        // enfasis a Validate and start, que ahi esta deshabilitado sin remedio.
+        // Se evalua la expresion real del panel, no su texto.
         const expr = /const filled = ([^;]+);/.exec(html)?.[1] ?? "";
         assert.ok(expr.length > 0, "no se encontro la expresion de filled en renderDraft");
         const filled = new Function("draft", "return (" + expr + ");") as (
@@ -669,10 +647,9 @@ describe("panelHtml", () => {
     });
 
     it("Validate and start se apaga con el orden a medio escribir, y lo dice", () => {
-        // El par annotated/total cuenta todo lo que build exige -- una unidad
-        // por entrada mas el heads-up --, asi que annotated == total es la
-        // misma pregunta que "queda algun placeholder?". Encendido sobre un
-        // borrador incompleto, ofrecia un start que moria en la validacion.
+        // annotated/total cuenta todo lo que build exige (una unidad por entrada
+        // mas el heads-up), asi que annotated == total equivale a "no queda
+        // ningun placeholder".
         const draftFn = html.slice(
             html.indexOf("function renderDraft("),
             html.indexOf("function renderDrafts(")
@@ -696,10 +673,8 @@ describe("panelHtml", () => {
     });
 
     it("Open y Discard son los dos glifos de la cabecera, al lado del progreso", () => {
-        // No mueven el flujo, se usan una vez cada tanto y su sujeto es el
-        // archivo que el par annotated/total acaba de nombrar. Con los cuatro
-        // juntos la fila medía el doble, y un boton sin caja entre botones con
-        // caja se lee como deshabilitado -- un icono no.
+        // Con los cuatro como botones la fila medía el doble, y un boton sin caja
+        // entre botones con caja se lee como deshabilitado -- un icono no.
         const draftFn = html.slice(
             html.indexOf("function renderDraft("),
             html.indexOf("function renderDrafts(")
@@ -744,10 +719,9 @@ describe("panelHtml", () => {
     });
 
     it("la botonera del borrador es una grilla de dos columnas, no una fila que envuelve", () => {
-        // A ancho de sidebar dos etiquetas largas no entran en una linea de
-        // anchos libres, y envolviendolas cada fila del bloque partia en un
-        // lugar distinto: ninguna se alineaba con la de al lado. Celdas
-        // iguales se alinean siempre.
+        // Dos etiquetas largas no entran en una linea de anchos libres, y al
+        // envolver cada fila partia en un lugar distinto: celdas iguales se
+        // alinean siempre.
         assert.ok(
             /\.draft-actions \{[^}]*display: grid;[^}]*\}/.test(html),
             "grilla, no flex con wrap"
@@ -759,9 +733,8 @@ describe("panelHtml", () => {
     });
 
     it("el badge cierra la linea de toda fila, con los iconos a su izquierda", () => {
-        // Asi los estados de las tres secciones caen en la misma columna del
-        // borde derecho. El hueco lo toma el grupo de iconos; el badge, que va
-        // despues, lo pierde -- con los dos autos quedaba flotando en el medio.
+        // Asi los estados de las tres secciones caen en la misma columna: el
+        // hueco lo toma el grupo de iconos, y el badge que sigue no abre otro.
         assert.ok(
             /\.rev-head-actions \{[^}]*margin-left: auto;[^}]*}/.test(html),
             "el grupo derecho arranca con el hueco"

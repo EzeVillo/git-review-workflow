@@ -18,33 +18,23 @@ import {
 } from "./helpers/fixture";
 
 /**
- * US3 (012): el bloque de borradores del estado vacío.
- *
- * Un orden de lectura a medio escribir es lo que el revisor dejó abierto, y
- * tiene que estar a la vista en el primer vistazo al panel — sin abrir ningún
- * asistente, y después de cerrar y reabrir el editor. Lo que se afirma es el
- * `PanelModel` (el webview corre en su propio contexto) y el efecto real de
- * cada control sobre el disco y sobre el estado de git.
+ * El bloque de borradores del estado vacío: un orden a medio escribir tiene
+ * que verse en el primer vistazo al panel, sin abrir ningún asistente y tras
+ * cerrar y reabrir el editor. Se afirma el `PanelModel` (el webview corre en
+ * su propio contexto) y el efecto real de cada control sobre disco y git.
  */
 function draftPath(repoDir: string, branch: string): string {
     return path.join(repoDir, ".git", "review-walkthrough", `${branch}.md`);
 }
 
 /**
- * Vacía el namespace de borradores entre tests, borrando los ARCHIVOS y no los
- * directorios.
- *
- * Un `rmSync(ns, {recursive: true})` falla en Windows con `EPERM`: mientras la
- * extensión vive, su watcher tiene abierto justo el directorio donde la CLI
- * reportó un borrador, y Windows no deja borrar un directorio con un handle
- * encima. Eso es un problema del test y no del producto — `git review forget
- * --draft` sólo hace `rm -f` sobre el archivo y nunca toca el directorio, que
- * es una operación que Windows permite igual—, y el siguiente test sólo
- * necesita que no queden borradores: un namespace de directorios vacíos no
- * reporta ninguno, porque la CLI lista `*.md`.
- *
- * Sin esto el fallo no se queda en la limpieza: el `EPERM` deja el borrador en
- * disco y el test siguiente muere en su `makeDraft` con "already exists".
+ * Vacía el namespace de borradores borrando ARCHIVOS, no directorios: un
+ * `rmSync(ns, {recursive: true})` falla en Windows con EPERM mientras la
+ * extensión tiene el directorio abierto por su watcher. Es un problema del
+ * test, no del producto (`git review forget --draft` sólo hace `rm -f` sobre
+ * el archivo); un namespace de directorios vacíos no reporta ningún borrador,
+ * porque la CLI lista `*.md`. Sin esto el EPERM deja el archivo en disco y el
+ * test siguiente muere en `makeDraft` con "already exists".
  */
 function clearDrafts(repoDir: string): void {
     const walk = (dir: string): void => {
@@ -67,19 +57,14 @@ function clearDrafts(repoDir: string): void {
 }
 
 /**
- * Espera a que el estado converja: los controles refrescan en background.
+ * Espera a que el estado converja: los controles refrescan en background y no
+ * hay otra señal cuando lo que se afirma es que NO pasa nada.
  *
- * Con `until` corta apenas se cumple; sin él son las cuarenta pasadas enteras,
- * que es lo que hace falta cuando lo que se afirma es que NO pasa nada — eso no
- * tiene señal que esperar y el único margen es el tiempo.
- *
- * La diferencia no es cosmética en Windows: cada `refresh` es un
- * `status --porcelain` de verdad, nueve procesos git, y ahí crear un proceso
- * cuesta ~50 ms contra ~1 ms en Linux. Cuarenta pasadas fijas son ~40 s por
- * llamada, y dos llamadas en un mismo test ya se comen el timeout de dos
- * minutos de la suite (que es exactamente como se caían los dos tests de
- * `startFromDraft` en el runner de Windows, verdes en Linux). Con la condición,
- * el caso normal sale en la primera vuelta.
+ * `until` corta apenas se cumple; sin esa condición son las cuarenta pasadas
+ * fijas, que en Windows (cada refresh es un `status --porcelain` real, nueve
+ * procesos git a ~50 ms cada uno contra ~1 ms en Linux) se comen el timeout de
+ * dos minutos de la suite — así se caían los dos tests de `startFromDraft` ahí,
+ * verdes en Linux.
  */
 async function settle(
     api: Awaited<ReturnType<typeof getTestApi>>,
@@ -120,17 +105,15 @@ describe("US3: el bloque de borradores del panel", function () {
     });
 
     /**
-     * Llena un esqueleto conservando todo lo anterior a `## Heads-up`, que es
-     * donde vive el bloque de instrucciones. Sobrescribir el archivo entero
-     * borraría ese bloque, y con él los flags de origen y rango que la CLI
-     * devuelve por el registro `draft` — o sea que el borrador dejaría de ser
-     * startable y el test estaría probando otra cosa.
+     * Llena un esqueleto conservando todo lo anterior a `## Heads-up`, donde
+     * vive el bloque de instrucciones: sobrescribir el archivo entero se
+     * llevaría los flags de origen y rango que la CLI devuelve por el registro
+     * `draft`, y el borrador dejaría de ser startable.
      */
     function fillDraft(file: string, body: string): void {
         const text = fs.readFileSync(file, "utf8");
-        // El encabezado, al principio de linea: el andamiaje tambien nombra
-        // "## Heads-up" adentro de su comentario, y cortar ahi partiria el
-        // comentario al medio y dejaria las entradas pegadas a esa linea.
+        // Con salto de línea al principio: el andamiaje también nombra
+        // "## Heads-up" en su propio comentario, y cortar ahí lo partiría.
         const cut = text.indexOf("\n## Heads-up") + 1;
         assert.ok(cut > 0, "el esqueleto trae su seccion Heads-up");
         fs.writeFileSync(file, text.slice(0, cut) + body, "utf8");

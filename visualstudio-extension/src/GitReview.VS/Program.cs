@@ -62,9 +62,8 @@ public static class Program
         Check("support_star", SupportLinks.StarUrl.Contains("git-review-workflow"));
 
         // Every fixture has to produce a layout the panel can actually draw, in both
-        // the resolved and the loading pass. "at least one control" passed for almost
-        // anything, which made this the weakest gate in the suite for eight of the
-        // fixtures; the shape checks below are what the WPF renderer needs to be true.
+        // the resolved and the loading pass: "at least one control" passes for almost
+        // anything, so the shape checks below are what actually has to hold true.
         foreach (var (name, model) in PanelFixtures.All())
         {
             try
@@ -215,8 +214,7 @@ public static class Program
             string.Join(", ", borrowed.Select(b => b.Name)));
 
         // Text over its own fill. The thresholds are WCAG AA: 4.5 for body text,
-        // 3 for the muted and link weights, which the other two clients get from
-        // the host's own tokens rather than from a ratio.
+        // 3 for the muted and link weights.
         Contrast("foreground", chrome.Background, chrome.Foreground, 4.5);
         Contrast("muted", chrome.Background, chrome.MutedForeground, 3.0);
         Contrast("link", chrome.Background, chrome.LinkForeground, 3.0);
@@ -248,12 +246,12 @@ public static class Program
 
     /// <summary>
     /// The panel's buttons have to keep taking their colors from the style in
-    /// <see cref="PanelButtons"/> and not from assignments on the instance. WPF's
-    /// stock template paints hover and disabled from inside the template, and a
-    /// local Background is exactly what stops a style trigger from overriding it —
-    /// which is how a disabled Continue came out as the Windows fill with a #838383
-    /// label on it, a white block over the dark theme. Renders for real (Main is
-    /// STA), because that is the only place where the triggers have run.
+    /// <see cref="PanelButtons"/>, never from assignments on the instance — a local
+    /// value beats a style trigger (see CLAUDE.md, "un trigger de Style pierde
+    /// contra un valor local"), which is how a disabled Continue once came out as
+    /// the Windows fill with a #838383 label, a white block over the dark theme.
+    /// Renders for real (Main is STA), because that's the only place the triggers
+    /// have run.
     /// </summary>
     private static void VerifyButtons(Action<string, bool, string> check)
     {
@@ -294,10 +292,10 @@ public static class Program
         check("buttons:styled", buttons.Count > 0 && buttons.All(b => b.Style is not null),
             $"{buttons.Count(b => b.Style is null)} of {buttons.Count} on the stock template");
 
-        // A row header's glyph carries no fill, so it has no disabled pair to
-        // swap in - the extension dims it instead (`opacity: .5`), and so do we.
-        // Asking it for the pair below would fail the check for doing the right
-        // thing, so the question goes to the buttons that do have a fill.
+        // A row header's glyph carries no fill, so it has no disabled pair to swap
+        // in — it dims by opacity instead. Asking it for the pair below would fail
+        // the check for doing the right thing, so the question goes to buttons
+        // that do have a fill.
         var disabled = buttons
             .Where(b => !b.IsEnabled && !PanelView.BareTag.Equals(b.Tag as string))
             .ToList();
@@ -329,19 +327,18 @@ public static class Program
                 .Where(b => !ReferenceEquals(b.Foreground, chrome.DisabledForeground))
                 .Select(b => $"{b.Content}={Describe(b.Foreground)}")));
 
-        // Every icon control draws its OWN glyph. The default arm of that switch
-        // is Next's arrow, so an id nobody mapped comes out as a ▶ — which is how
-        // Discard the guide drew one, and later Discard the extracted edits.
-        // Asked over EVERY fixture and not over a hand-written list of tooltips:
-        // the hand-written list is what let the second one through, because a
-        // control nobody named here is exactly the control nobody mapped there.
+        // Every icon control draws its OWN glyph; the default arm of that switch is
+        // Next's arrow, so an unmapped id comes out as a ▶ — which is how Discard
+        // the guide, and later Discard the extracted edits, drew one. Checked over
+        // EVERY fixture, not a hand-written list of tooltips: a hand-written list
+        // is exactly what let the second one through.
         var stray = new List<string>();
         var unmarked = new List<string>();
         var localFg = new List<string>();
         var iconsSeen = 0;
         var labelledSeen = 0;
         // The verbs that open something wear the mark of what they open, the same
-        // as their rows do and the same as the other two clients draw them.
+        // as their rows do.
         var leadGlyph = new Dictionary<ControlId, string>
         {
             [ControlId.OpenChange] = PanelView.GlyphDiff,
@@ -431,11 +428,10 @@ public static class Program
                 ? "fixture stopped producing a file row"
                 : string.Join(" | ", paths.Where(t => !t.StartsWith(PanelView.GlyphDiff))) + " unmarked");
 
-        // The footer with every section open: it is capped and scrolls, so the body
-        // above it survives and nothing inside it ends up out of reach. DockPanel
-        // hands the Bottom band whatever height it asks for, so without the cap the
-        // panel became the footer -- and its own tail was then clipped by the window
-        // with no scrollbar to reach it.
+        // The footer with every section open: it's capped and scrolls, so the body
+        // above it survives. DockPanel hands the Bottom band whatever height it asks
+        // for, so without the cap the panel became the footer — and its own tail was
+        // then clipped by the window with no scrollbar to reach it.
         const double h = 460;
         var footerView = new PanelView(chrome) { Width = 320, Height = h, ShowTitleActions = false };
         footerView.Render(PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewFixes()));

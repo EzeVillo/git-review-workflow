@@ -43,9 +43,10 @@ enum class ControlId {
     UNDO_FINISH,
     RESUME_FINISH,
     DISCARD_INVENTORY,
-    // Draft block (012): four BODY controls, not product actions. They are not
-    // in the action matrix, not in the Tools menu, and the canonical's fixed
-    // count of 27 does not move.
+    // Draft block: four BODY controls, not product actions -- not in the action
+    // matrix, not in the Tools menu; the canonical's fixed count of 27 does not
+    // move. Same treatment below for the walkthrough row, the fixes section and
+    // OPEN_SUPPORT: a control with no row to draw it has no subject.
     OPEN_DRAFT,
     COPY_DRAFT_PROMPT,
     START_FROM_DRAFT,
@@ -53,18 +54,11 @@ enum class ControlId {
     OPEN_GUIDE,
     CREATE_GUIDE,
     DISCARD_GUIDE,
-    // The author's walkthrough row: two BODY controls, same rule as the four
-    // above -- without the row that draws them they have no subject, so the
-    // fixed count of 27 does not move.
     OPEN_WALKTHROUGH,
     COPY_WALKTHROUGH_PROMPT,
-    // The "Edits you extracted" section: one BODY control, row -> index, same
-    // rule as the ones above -- the fixed count of 27 does not move.
     DISCARD_FIXES,
-    // The bulk of that same section: no index, subject is the whole section and
-    // not one row, but same treatment as OPEN_SUPPORT -- a BODY control outside
-    // the fixed count of 27. Runs clean --fixes-only with NO branch, which by
-    // clean's own design never touches review/* (see Housekeeping.kt).
+    // Whole-section subject, not one row; runs clean --fixes-only with no
+    // branch (see noReviewReadyBlocks for why that never touches review/*).
     DISCARD_ALL_FIXES,
     CLEAN_REVIEW,
     COMPARE_REVIEW,
@@ -148,17 +142,9 @@ private val CONFIRMING_IDS: Set<ControlId> = setOf(
 fun requiresConfirmation(id: ControlId): Boolean = id in CONFIRMING_IDS
 
 /**
- * Las mutaciones que traen el panel a la vista (`reveals:` del canonico).
- *
- * "Lo que el panel muestra no se notifica" tiene un supuesto que nadie
- * garantizaba: que el panel este A LA VISTA. El borrador nace en el asistente de
- * inicio, que corre sobre el editor, y con la tool window cerrada la fila nueva
- * se dibuja donde nadie la ve -- y como esa mutacion tampoco notifica, no queda
- * ningun acuse en ningun lado.
- *
- * La lista es corta a proposito: solo las mutaciones cuya respuesta es un bloque
- * que ANTES NO ESTABA. Si el panel salta en cada mutacion, deja de significar
- * que paso algo.
+ * Mutaciones que traen el panel a la vista (`reveals:` del canónico): solo las
+ * que hacen nacer un bloque que antes no estaba. Ver CLAUDE.md, "La copy de
+ * los paneles".
  */
 private val REVEALING_IDS: Set<ControlId> = setOf(
     ControlId.START_REVIEW,
@@ -181,7 +167,6 @@ data class Control(
     val supportLinkId: String? = null,
 ) {
     init {
-        // 1. icon ⟹ accessible name
         if (label == null) {
             require(emphasis == Emphasis.ICON) {
                 "Control ${id.wire}: null label requires ICON emphasis"
@@ -190,7 +175,7 @@ data class Control(
                 "Control ${id.wire}: icon controls need a non-empty accessibleName"
             }
         }
-        // 4. index only on row items — enforced at Block construction for FileRows/InventoryRows
+        // index is only allowed on row items; enforced at Block construction time.
     }
 }
 
@@ -201,13 +186,10 @@ data class FileRow(
 )
 
 /**
- * A row of the draft block: the branch, the progress exactly as the CLI reports
- * it, and the controls that act on THAT row.
- *
- * One list, two places on the row: the labelled controls are the button pair
- * underneath, and the ICON ones are drawn in the header beside the progress —
- * the pair names their subject, and neither of them moves the flow along. The
- * renderer splits on the emphasis; the order inside each half is this one.
+ * A row of the draft block: branch, CLI-reported progress, and the controls
+ * for that row. Labelled controls render as the button pair below; ICON ones
+ * sit in the header beside the progress. The renderer splits on emphasis, so
+ * this list's order is what each half uses.
  */
 data class DraftRow(
     val name: String,
@@ -224,14 +206,10 @@ data class DraftRow(
 }
 
 /**
- * A row of the authoring-guide block: which guide it is, the state the CLI
- * reported as a badge, and the controls that act on THAT row.
- *
- * Same two-place shape as [DraftRow]: the labelled control is the button
- * underneath and the ICON ones are drawn in the header beside the badge. And
- * the same rule about presence -- both rows carry the same controls whatever
- * their state, except Discard, which only the reviewer's own row has at all:
- * the shared guide is a tracked file, so removing it is `git rm` plus a commit.
+ * A row of the authoring-guide block: which guide, its CLI-reported badge, and
+ * the controls for that row. Same two-place shape as [DraftRow]. Discard is
+ * the one exception: only the reviewer's own guide has it, since the shared
+ * guide is a tracked file and removing it means `git rm` plus a commit.
  */
 data class GuideRow(
     val name: String,
@@ -260,8 +238,8 @@ data class InventoryRow(
                 "Inventory control ${c.id.wire} must carry an index"
             }
         }
-        // helpTooltip is required when the row has no controls *and* is not the
-        // current active review (which the extension also shows without a "?").
+        // helpTooltip is required when the row has no controls and is not the
+        // current review.
     }
 }
 
@@ -273,9 +251,9 @@ sealed class Block {
     data class IdentityBar(
         val mode: String,
         /**
-         * 011: de quién es el orden de lectura. Es una precisión sobre el modo
-         * —el mismo "walk (draft)" que escribe la terminal—, no un bloque ni un
-         * control nuevo: `panel_layout` no cambia.
+         * De quién es el orden de lectura: una precisión sobre el modo (el
+         * mismo "walk (draft)" que escribe la terminal), no un bloque ni
+         * control nuevo -- `panel_layout` no cambia.
          */
         val draft: Boolean = false,
         val name: String,
@@ -288,10 +266,10 @@ sealed class Block {
     data class Note(val text: String) : Block()
 
     /**
-     * @param separated a rule above the paragraph, the extension's
-     *   `.empty.after-inv`: what separates "you already have these reviews"
-     *   from "this is how you start one". Carried by the paragraph and not by
-     *   the list, so with no reviews the empty state is untouched.
+     * @param separated a rule above the paragraph: separates "you already have
+     *   these reviews" from "this is how you start one". Lives on the
+     *   paragraph, not the list, so the empty state is untouched with no
+     *   reviews.
      */
     data class Paragraph(
         val text: String,
@@ -345,18 +323,16 @@ sealed class Block {
     data class GuideRows(val rows: List<GuideRow>) : Block()
 
     /**
-     * The branches of edits a finish left behind, one row each. Reuses [GuideRow]
-     * -- name, badge and the controls of that row -- the same way
-     * [WalkthroughRow] does: the shape is what a row of this panel is, and there
-     * is nothing about a fixes row that the shape does not already cover.
+     * The branches of edits a finish left behind, one row each. Reuses
+     * [GuideRow] (name, badge, controls) like [WalkthroughRow] does -- one
+     * shape covers every row this panel draws.
      */
     data class FixesRows(val rows: List<GuideRow>) : Block()
 
     /**
-     * The author's own walkthrough, one row, above the guides in the same
-     * section. Drawn only when the CLI reported the record -- against an older
-     * version it does not arrive and the block disappears, the same degradation
-     * the guides and the drafts have.
+     * The author's own walkthrough, one row above the guides. Drawn only when
+     * the CLI reports the record; against an older CLI it degrades away like
+     * the guides and drafts do.
      */
     data class WalkthroughRow(val row: GuideRow) : Block()
 
@@ -390,17 +366,15 @@ data class PanelLayout(
 ) {
     init {
         val controls = collectControls()
-        // One PRIMARY per situation, counted over the controls that are NOT row
-        // controls. A row control is a per-row affordance repeated as many times
-        // as there are rows — "the obvious thing to do with THIS draft" — so
-        // counting them here would make the rule depend on how many drafts the
-        // reviewer happens to have, which is not a property of the layout.
+        // One PRIMARY per situation, over controls that are NOT row controls: a
+        // row control repeats once per row (e.g. per draft), so counting it
+        // would make the rule depend on how many rows happen to exist.
         val primaries = controls.count { it.emphasis == Emphasis.PRIMARY && it.index == null }
         require(primaries <= 1) {
             "At most one PRIMARY control per situation, found $primaries"
         }
-        // index allowed only inside InventoryRows: FileRows carries its index on the
-        // row (FileRow.index), not on a Control.
+        // index is only allowed on the row blocks below; FileRows carries its
+        // index on FileRow, not on a Control.
         for (c in controls) {
             if (c.index != null) {
                 require(hostedByInventory(blocks, c)) {
@@ -421,19 +395,11 @@ data class PanelLayout(
                     is Block.EmptyMessage -> b.control?.let { out.add(it) }
                     is Block.InventoryRows -> b.rows.forEach { out.addAll(it.controls) }
                     is Block.DraftRows -> b.rows.forEach { out.addAll(it.controls) }
-                    // The guide rows and the walkthrough row are collected too:
-                    // two product actions are drawn inside the latter, so a
-                    // collector that skipped it would report a panel that does
-                    // not offer them -- and the contract gate reads this list.
+                    // GuideRows and FixesRows are collected too, even though
+                    // their controls are per-row: this list feeds the contract
+                    // gate (and the two invariants above), and skipping either
+                    // would make a whole panel section invisible to both.
                     is Block.GuideRows -> b.rows.forEach { out.addAll(it.controls) }
-                    // And the fixes rows, for the same reason the guides are
-                    // collected even though their controls are per-row: what
-                    // this list feeds is the contract gate, which reads it to
-                    // reject any control the situation does not declare. Left
-                    // out, a whole section of the panel was invisible to it --
-                    // and to the two invariants above, which is how the client
-                    // that DOES collect them (Visual Studio) has been reading
-                    // this block all along.
                     is Block.FixesRows -> b.rows.forEach { out.addAll(it.controls) }
                     is Block.WalkthroughRow -> out.addAll(b.row.controls)
                     is Block.ToolsSection -> walk(b.blocks)
@@ -760,8 +726,8 @@ private fun cliBlocks(model: PanelModel, missing: Boolean): List<Block> {
     val cmd = if (missing) NPM_INSTALL_CMD else NPM_UPDATE_CMD
     val out = ArrayList<Block>()
     out.add(Block.Paragraph(title))
-    // The hint and the reload line are asides around the command, not the
-    // message itself (the extension's `.cli-install-hint` / `-reload`).
+    // The hint and reload lines are asides around the command, not the
+    // message itself.
     out.add(Block.Paragraph(hint, muted = true))
     out.add(
         Block.CodeCommand(
@@ -862,41 +828,30 @@ private fun inventoryRows(model: PanelModel): Block.InventoryRows {
 }
 
 /**
- * The draft block: reading orders the reviewer started and has not paused, each
- * with its four controls. First block of the empty state, with the usual body
- * whole underneath — it is not a sub-layout that replaces, the way the setup
- * gate is: with no base configured there is nothing else to do in this panel,
- * with a half-written reading order there is.
- */
-/**
- * The draft rows whose [PanelDraft.spent] is [spent]. The index that travels to
- * the host is the one in the FULL list -- it is what resolves which file is
- * being talked about -- so it survives the split into the two blocks.
+ * The draft block: reading orders the reviewer started and has not paused.
+ * First block of the empty state, above the usual body -- unlike the setup
+ * gate it doesn't replace that body, since a half-written order still leaves
+ * something to do in the panel.
+ *
+ * Returns only the rows whose [PanelDraft.spent] matches [spent]. Each control
+ * keeps the index from the FULL list -- what the host uses to resolve which
+ * file it means -- so it survives the split.
  */
 private fun draftRows(model: PanelModel, spent: Boolean = false): Block.DraftRows {
     val enabled = !model.busy
     val rows = model.drafts.withIndex().filter { it.value.spent == spent }.map { (index, d) ->
-        // One emphatic control per row, and the progress picks which: while
-        // entries are missing the next step is writing the order, and only once
-        // it is complete is it starting the review. The ORDER is fixed — moving
-        // the click target as the state changes slides it under the cursor.
-        //
-        // total == 0 means "this file declares no entry at all", never
-        // "complete": the CLI reports 0/0 both for an emptied draft and for the
-        // one an agent is writing right now (the watcher fires on the first
-        // Changed, before the first "## N." heading lands). Without the
-        // total > 0 the row is drawn as finished and the emphasis goes to
-        // Validate and start, which there is usually disabled too (source and
-        // range unknown) — the one emphatic control of the row cannot even be
-        // clicked, in the very state that most needs Copy for agent to lead.
+        // The click target (Copy vs Validate) stays fixed by progress so it
+        // never slides under the cursor. total == 0 means "no entries", not
+        // "complete" -- the CLI reports 0/0 both for an emptied draft and for
+        // one an agent is mid-writing (the watcher fires before the first
+        // "## N." heading lands), so requiring total > 0 avoids disabling the
+        // row's only clickable control right when Copy for agent matters most.
         val filled = d.total > 0 && d.annotated >= d.total
         val controls = ArrayList<Control>()
-        // A row whose review is over stops here for the pair with labels: they
-        // are the flow of writing the order and starting the review, and both
-        // already happened. Copy for agent would ask an agent to complete what
-        // is complete, and Validate and start would offer to reread a range
-        // that closed. The two glyphs below stay in both kinds of row, which is
-        // what keeps the collapsed section able to open and to discard.
+        // A spent row skips the labelled pair -- both already happened
+        // (order written, review started); offering them again would be
+        // stale. The two icon controls below stay on every row, spent or
+        // not, so the collapsed section can still open or discard the file.
         if (!spent) {
             controls.add(
                 ctrl(
@@ -908,20 +863,17 @@ private fun draftRows(model: PanelModel, spent: Boolean = false): Block.DraftRow
                     index = index,
                 ),
             )
-            // Always drawn, switched off for two different reasons, each of which
-            // says its own thing. The flags come first: with no instruction block
-            // the build fails on drift however complete the order is, so filling it
-            // in is not the next step there.
+            // Disabled for two independent reasons. Not startable: no
+            // instruction block, so build fails on drift regardless of how
+            // complete the order looks. Not filled: the skeleton leaves a
+            // placeholder per entry plus one for the heads-up, and build
+            // refuses on any of them -- requiring total > 0 avoids offering a
+            // start that dies on "the heads-up placeholder is still there".
             //
-            // Off by progress is what makes the pair honest. The skeleton leaves a
-            // placeholder per entry AND one for the heads-up, the pair counts all
-            // of them, and build refuses on any of them alike — left on, the one
-            // emphatic control of the row offered a start that died on "the
-            // heads-up placeholder is still there". The known cost: the count comes
-            // off the disk, so a draft open with unsaved edits keeps the control
-            // gray until Ctrl+S (the host watches the draft's directory, so saving
-            // refreshes the panel on its own), and in exchange nobody starts over a
-            // half-written reading order.
+            // Known cost: the count reads off disk, so unsaved edits keep the
+            // button gray until Ctrl+S (the host watches the draft's
+            // directory and refreshes on save) -- traded for never offering
+            // to restart a half-written order.
             controls.add(
                 ctrl(
                     ControlId.START_FROM_DRAFT,
@@ -939,18 +891,14 @@ private fun draftRows(model: PanelModel, spent: Boolean = false): Block.DraftRow
                 ),
             )
         }
-        // The two controls of the ROW, and that is why they leave the button
-        // pair: they move nothing along, they are used once in a while, and
-        // their subject is the file the progress pair just named. They are
-        // drawn as glyphs beside that pair, which leaves two controls below in
-        // two columns and a single line. With all four together the row was
-        // twice as tall and the irreversible one shared box and weight with the
-        // one that starts the review — dropping its fill lowered it a step, but
-        // a box-less button among boxed buttons reads as disabled. An icon does
-        // not.
+        // Open/Discard sit outside the button pair as icons: used
+        // occasionally, and their subject is the file the pair just named.
+        // As full buttons all four made the row twice as tall, and an
+        // unfilled button among filled ones reads as disabled -- an icon
+        // does not carry that risk.
         //
-        // With no visible label the accessible name IS the name of the control,
-        // and it names the row: "Open" on its own repeats once per draft.
+        // With no visible label, the accessible name IS the control's name;
+        // a literal "Open" would repeat once per draft.
         controls.add(
             ctrl(
                 ControlId.OPEN_DRAFT,
@@ -979,25 +927,11 @@ private fun draftRows(model: PanelModel, spent: Boolean = false): Block.DraftRow
 }
 
 /**
- * The authoring-guide block, inside the Walkthrough section. Two rows, always
- * both, whether or not either file exists: what the state changes is the enabled
- * of each control, never its presence -- two rows that build different button
- * sets do not line up with each other, the same rule the draft rows follow.
- *
- * Discard is the one exception, and it is not forgotten symmetry: the shared
- * guide is a tracked file, so removing it is `git rm` plus a commit -- a
- * decision about what goes into the PR, which is not this button's to make. The
- * CLI says the same from its side, refusing `--delete --team`.
- */
-/**
- * The rows of "Edits you extracted": the branch, its badge and the one control
- * that makes sense from here. Committing and pushing are Source Control's, which
- * is where finish already sends you.
- *
- * The row you are standing on is drawn just the same and without the control:
- * the CLI skips it with "skipping (currently checked out)", so offering the
- * button would promise something that will not happen. Hiding the row would be
- * worse -- it is a branch that exists and no other surface names.
+ * Rows of "Edits you extracted": branch, badge, and the one control that
+ * makes sense here (commit/push are Source Control's, where finish already
+ * points). The row you're standing on renders without the control -- the CLI
+ * skips it with "skipping (currently checked out)" -- but stays visible: it
+ * names a branch no other surface does.
  */
 private fun fixesRows(model: PanelModel): Block.FixesRows {
     val enabled = !model.busy
@@ -1020,6 +954,14 @@ private fun fixesRows(model: PanelModel): Block.FixesRows {
     return Block.FixesRows(rows)
 }
 
+/**
+ * The authoring-guide block, inside the Walkthrough section: two rows, always
+ * both, whichever file exists or not -- only each control's enabled state
+ * changes, never its presence, so the two rows never build different button
+ * sets. Discard is the one exception (see [GuideRow]): the shared guide is
+ * tracked, so removing it is a `git rm` plus commit, not this button's call.
+ * The CLI agrees from its side, refusing `--delete --team`.
+ */
 private fun guideRows(model: PanelModel): Block.GuideRows {
     val enabled = !model.busy
     val rows = model.guides.mapIndexed { index, g ->
@@ -1070,34 +1012,26 @@ private fun guideRows(model: PanelModel): Block.GuideRows {
 }
 
 /**
- * The author's walkthrough row, the first of the section and above the guides.
+ * The author's walkthrough row, first of the section, above the guides. Same
+ * two-place shape as the guide rows, plus init/build living on the row (their
+ * subject is the file it names) instead of loose above it -- saying
+ * "Walkthrough" three times over (title, labels, row name) added no fact, so
+ * the labels drop the prefix here (kept in the menu/palette, where nothing
+ * else gives context).
  *
- * Same two-place shape as the guide rows: the labelled controls underneath, the
- * icon one in the header beside the badge. What it has that they do not is the
- * two VERBS -- init and build live here and not loose above the row, because
- * their subject is the file this row names, exactly as Create is each guide's.
- * Loose, the word "Walkthrough" was said three times running (the section title,
- * the two prefixed labels and the row's name) without any of the three adding a
- * fact; hence the labels without a prefix and the row named after its branch. In
- * the menu and the palette they keep the prefix, which is where no section gives
- * context.
+ * Badge says "may be out of date", not "out of date": the CLI's per-refresh
+ * check is cheap and approximate (has the range moved since the file was
+ * written); the exact answer is what Build computes.
  *
- * The badge says "may be out of date" and not "out of date" on purpose -- what
- * the CLI compares on every refresh is cheap and approximate (has the range moved
- * since the file was written), and the exact answer is build's, which is what the
- * button beside it runs.
- *
- * Copy for agent copies a POINTER to the file, never the brief: that lives
- * inside the walkthrough itself, in the comment at the top, which is where it
- * keeps itself current. Two copies of the brief would drift, and the one that
- * went stale would be the one the agent reads.
+ * Copy for agent copies a POINTER to the file, never the brief itself -- the
+ * brief lives in the walkthrough's own header comment, the one place it stays
+ * current. Two copies would drift, and the agent would read the stale one.
  */
 private fun walkthroughRow(model: PanelModel, w: PanelWalkthrough): Block.WalkthroughRow {
     val enabled = !model.busy
     val controls = ArrayList<Control>()
-    // The same verb creates and updates, so the label follows the state the CLI
-    // reported: "Init" over a file full of prose promised what that verb
-    // precisely no longer does.
+    // Same verb creates and updates; the label follows CLI state -- "Init"
+    // over existing prose would promise what the verb no longer does.
     controls.add(
         ctrl(
             ControlId.WALKTHROUGH_INIT,
@@ -1111,10 +1045,9 @@ private fun walkthroughRow(model: PanelModel, w: PanelWalkthrough): Block.Walkth
             index = 0,
         ),
     )
-    // Both carry the row's index like every other control of a row -- there is
-    // exactly one walkthrough row, so it is always 0. They are product actions
-    // all the same: the menu and the palette run the same two, and what says so
-    // is the action matrix, not this field.
+    // Both carry the row's index (always 0 -- one walkthrough row) like every
+    // control on a row. Still product actions: the action matrix says so, not
+    // this field.
     controls.add(
         ctrl(ControlId.WALKTHROUGH_BUILD, "Build", Emphasis.SECONDARY, enabled, index = 0),
     )
@@ -1152,10 +1085,9 @@ private fun walkthroughRow(model: PanelModel, w: PanelWalkthrough): Block.Walkth
 private fun noReviewReadyBlocks(model: PanelModel): List<Block> {
     val enabled = !model.busy
     val out = ArrayList<Block>()
-    // Only the FRESH ones. A draft whose review is over survives -- clean does
-    // not touch hand-written prose, and discarding one is the forget verb -- but
-    // it is no longer pending work, so it drops to its own collapsed section in
-    // the footer with the two controls it still has use for.
+    // Only FRESH drafts: a spent one survives (clean leaves hand-written
+    // prose; forget is the discard verb) but is no longer pending work, so it
+    // moves to its own collapsed footer section.
     val freshDrafts = model.drafts.count { !it.spent }
     if (freshDrafts > 0) {
         out.add(Block.Heading("Reading orders you started"))
@@ -1174,25 +1106,20 @@ private fun noReviewReadyBlocks(model: PanelModel): List<Block> {
     out.add(
         Block.Row(listOf(ctrl(ControlId.START_REVIEW, "Start a review", Emphasis.PRIMARY, enabled))),
     )
-    // Footer tools
+    // Footer tools.
     //
-    // Everything about the walkthrough together: the author's file -- with init,
-    // build and Copy for agent hanging off its row -- and the two authoring
-    // guides. It shared an "Other actions" section with Compare and split off
-    // when the guides arrived: four controls about the same noun plus one
-    // unrelated is not a list of other actions, it is a drawer. Grouped this way
-    // the panel says what the CLI says, where all four hang off the walkthrough
-    // verb.
+    // Walkthrough section groups the author's file (init/build/Copy for agent
+    // on its row) with the two authoring guides -- one noun, one section.
+    // Compare stays separate below: it is unrelated to either.
     val walkthroughKids = ArrayList<Block>()
     model.walkthrough?.let { walkthroughKids.add(walkthroughRow(model, it)) }
     if (model.guides.isNotEmpty()) {
         walkthroughKids.add(guideRows(model))
     }
     out.add(Block.ToolsSection(title = "Walkthrough", blocks = walkthroughKids))
-    // The spent drafts. Collapsed and not hidden: a file that exists and no
-    // surface names is the state this panel does not let past anywhere else, and
-    // hiding the row would take with it the one control that can throw the file
-    // away without spelling its branch.
+    // Spent drafts: collapsed, not hidden -- a file nothing else names is a
+    // state this panel never allows elsewhere, and hiding it would remove the
+    // only way to discard it without knowing its branch.
     if (model.drafts.any { it.spent }) {
         out.add(
             Block.ToolsSection(
@@ -1204,18 +1131,15 @@ private fun noReviewReadyBlocks(model: PanelModel): List<Block> {
             ),
         )
     }
-    // The branches of edits a finish left behind. Collapsed and behind the spent
-    // reading orders: both sections are leftovers of reviews that already
-    // happened, and this one goes last because what it holds may still be
-    // pending work on ANOTHER screen (committing and pushing are Source
-    // Control's), not on this one.
+    // Edits left behind by a finish. Collapsed below the spent drafts -- same
+    // leftover status, but this one may hold work still pending on ANOTHER
+    // screen (commit/push are Source Control's).
     //
-    // "Discard all" runs clean --fixes-only with NO branch: by clean's own
-    // design that never touches review/* (live sessions of other branches), so
-    // it does not have the reach problem that used to block this button. It is
-    // still behind a confirmation with the full detail, because what this holds
-    // is hand-written work and not machine litter; the rows below remain the
-    // default path for deciding branch by branch.
+    // "Discard all" runs clean --fixes-only with no branch, which by clean's
+    // own design never touches review/* (live sessions of other branches).
+    // Still behind a full-detail confirmation: this is hand-written work, not
+    // machine litter, and the rows below stay the default path for deciding
+    // branch by branch.
     if (model.fixes.isNotEmpty()) {
         out.add(
             Block.ToolsSection(
@@ -1230,12 +1154,10 @@ private fun noReviewReadyBlocks(model: PanelModel): List<Block> {
             ),
         )
     }
-    // Compare, last of the three footer sections that do something with the
-    // repo. It is the only one that mounts something OUTSIDE the review you are
-    // about to do -- any two revisions, no review to start and no reading order
-    // to write -- so it sits below everything that is about that review. It used
-    // to be called "Other actions" and came first: a title that did not name its
-    // contents, above the two sections that do.
+    // Compare: last of the three footer sections, the only one that mounts
+    // something OUTSIDE the review at hand (any two revisions, nothing to
+    // start or write) -- so it sits below everything that IS about this
+    // review.
     out.add(
         Block.ToolsSection(
             title = "Compare",

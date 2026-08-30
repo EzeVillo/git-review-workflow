@@ -14,15 +14,15 @@ function label(candidate: CandidateBranch): string {
  * `candidate` (contracts/cli-invocation.md § `config <key> <value>`).
  * Invocable standalone desde el estado vacío (sin `candidates`: usa el
  * último reporte de `config --porcelain` que trae `stateManager.state`), y
- * también como el paso que T024 antepone cuando el asistente de inicio
- * arranca sin base configurada — ahí el asistente le pasa las candidatas
- * que **ya leyó fresco** un momento antes, para no depender del reporte
- * cacheado del panel (que puede estar ausente por un fallo transitorio del
- * refresco anterior aunque el asistente tenga la lista en la mano).
+ * también como el paso que antepone el asistente de inicio cuando arranca sin
+ * base configurada — ahí el asistente le pasa las candidatas que **ya leyó
+ * fresco** un momento antes, para no depender del reporte cacheado del panel
+ * (que puede estar ausente por un fallo transitorio del refresco anterior
+ * aunque el asistente tenga la lista en la mano).
  *
  * El valor que llega a la CLI es siempre el `name` de una `candidate` tal
- * cual, precedido por `--` (mismo motivo que en `start`, U1): nunca algo
- * tipeado a mano, y nunca una rama construida por la extensión.
+ * cual, precedido por `--` (mismo motivo que en `start`): nunca algo tipeado
+ * a mano, y nunca una rama construida por la extensión.
  */
 export async function setBase(
     lock: MutationLock,
@@ -36,9 +36,9 @@ export async function setBase(
         return;
     }
 
-    // La actual primero (research.md Decisión 9, FR-011), igual que el primer
-    // paso del asistente de inicio: es casi siempre la que se quiere comparar
-    // contra, y la búsqueda incremental del QuickPick cubre el resto.
+    // La actual primero (research.md Decisión 9), igual que el primer paso del
+    // asistente de inicio: es casi siempre la que se quiere comparar contra, y
+    // la búsqueda incremental del QuickPick cubre el resto.
     const items = [...list]
         .sort((a, b) => (a.current === b.current ? 0 : a.current ? -1 : 1))
         .map((candidate) => ({label: label(candidate), candidate}));

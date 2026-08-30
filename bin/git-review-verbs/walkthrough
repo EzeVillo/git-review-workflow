@@ -2,25 +2,24 @@
 #
 # git review walkthrough — author a guided reading order for the current PR.
 #
-# A walkthrough is the one thing neither git nor GitHub offers: an author-written
-# reading order over a PR, each file annotated with why it matters. It lives as a
-# committed sidecar, .review/walkthrough.md, so it merges with the PR and is
-# readable on GitHub. A reviewer who runs "git review start" on a PR that carries
-# one is dropped into walk mode: the same staged, editable review, plus a cursor
-# that walks the files in this order (git review next / prev).
+# A walkthrough is an author-written reading order over a PR, each file annotated
+# with why it matters. It lives as a committed sidecar, .review/walkthrough.md, so
+# it merges with the PR and is readable on GitHub; a reviewer who runs
+# "git review start" on a PR that carries one lands in walk mode: the same staged,
+# editable review plus a cursor over these files (git review next / prev).
 #
 # Three subcommands, in the git stash push/pop spirit:
-#   init   write a deterministic skeleton listing every changed file, for you (the
-#          author, typically an AI agent) to fill in with an order number and a why.
-#   build  validate what you filled in, order the entries by your numbers, renumber
-#          them 1..N and rewrite the file. --check validates without writing, for CI.
-#   draft  the same thing from the other side of the review: a walkthrough you
-#          write for someone else's PR, kept out of the working tree entirely.
+#   init   write a deterministic skeleton listing every changed file, for the
+#          author (typically an AI agent) to fill in with an order and a why.
+#   build  validate it, order by those numbers, renumber 1..N and rewrite the
+#          file. --check validates without writing, for CI.
+#   draft  the same from the other side of the review: a reading order you write
+#          for someone else's PR, kept out of the working tree entirely.
 #
-# init and build are the author's: they operate on the committed sidecar of the
-# branch you are standing on. draft is the reviewer's, and that is the whole
-# difference — it names the branch (you are standing on the base, not on the PR)
-# and it writes into the gitdir, so nothing is ever staged, committed or undone.
+# init and build are the author's, on the committed sidecar of the branch you are
+# standing on. draft is the reviewer's: it names the branch (you stand on the base,
+# not on the PR) and writes into the gitdir, so nothing is ever staged, committed
+# or undone. See decisiones.md §3.
 #
 set -eu
 
@@ -147,9 +146,8 @@ while [ $# -gt 0 ]; do
 	--team) team_guide=1 ;;
 	--delete) delete_guide=1 ;;
 	--from)
-		# Repetition is an error rather than last-one-wins: two sources for one
-		# draft is a mistake in the caller, and silently picking one of them is
-		# how the wrong prose gets installed.
+		# Repetition is an error, not last-one-wins: two sources for one draft is a
+		# caller bug, and silently picking one installs the wrong prose.
 		if [ "$from_given" -eq 1 ]; then die "--from given more than once"; fi
 		shift
 		if [ $# -eq 0 ] || [ -z "$1" ]; then
@@ -195,8 +193,7 @@ init | build | draft | guide) ;;
 *) die "unknown subcommand '$sub'; use init, build, draft or guide" ;;
 esac
 
-# Flag/subcommand compatibility, checked up front so a misused flag never silently
-# no-ops.
+# Flag/subcommand compatibility, up front, so a misused flag never silently no-ops.
 if [ "$sub" = build ] && { [ "$base_explicit" -eq 1 ] || [ "$force" -eq 1 ]; }; then
 	die "--base and --force apply only to git review walkthrough init"
 fi
@@ -206,11 +203,9 @@ fi
 if [ "$sub" != draft ] && { [ "$build_draft" -eq 1 ] || [ "$local_only" -eq 1 ] || [ "$offline" -eq 1 ] || [ "$delta_mode" -eq 1 ]; }; then
 	die "--build, --local, --offline and --delta apply only to git review walkthrough draft"
 fi
-# The agent circuit, both ends, on both sides of the review. It landed on draft
-# first and stayed there, which had the author — the one the skeleton's own
-# instructions call "usually an agent" — as the only side that could not hand the
-# work out and take it back. Each end belongs to the verb that produces or
-# consumes a skeleton: --stdout to init and draft, --from to the two builds.
+# The agent circuit, both ends, on both sides of the review: each end belongs to
+# the verb that produces or consumes a skeleton -- --stdout to init and draft,
+# --from to the two builds. See decisiones.md §5.
 if [ "$sub" = build ] && [ "$to_stdout" -eq 1 ]; then
 	die "--stdout writes the skeleton; build validates one. Use git review walkthrough init --stdout"
 fi
@@ -226,24 +221,22 @@ fi
 if [ "$sub" != draft ] && [ -n "$branch" ]; then
 	die "only git review walkthrough draft takes a branch; init, build and guide work on the repository you are in"
 fi
-# The two guide flags, and everything the guide subcommand does not take. A guide
-# has no range, no base and no origin, so every flag that selects one of those is
-# a mistake there — and one that no-ops silently would look like it worked.
+# A guide has no range, no base and no origin, so every flag that selects one is a
+# mistake there — and one that no-ops silently would look like it worked.
 if [ "$sub" != guide ] && { [ "$team_guide" -eq 1 ] || [ "$delete_guide" -eq 1 ]; }; then
 	die "--team and --delete apply only to git review walkthrough guide"
 fi
 if [ "$sub" = guide ]; then
 	if [ "$team_guide" -eq 1 ] && [ "$delete_guide" -eq 1 ]; then
-		# Not an oversight and not a missing feature: the shared guide is a tracked
-		# file, so removing it is git rm plus a commit — a decision about what goes
-		# into the PR, which is not this command's to make. Said in full here
-		# because the obvious next thought is that --delete simply forgot --team.
+		# Not an oversight: the shared guide is a tracked file, so removing it is
+		# git rm plus a commit — a decision about what goes into the PR, which is
+		# not this command's to make.
 		die "--delete removes your own guide; the repository's guide is a tracked file, so remove it with git rm .review/walkthrough-guide.md and commit that"
 	fi
 	if [ "$force" -eq 1 ]; then
-		# --force means "destroy what is there" everywhere else in this suite. A
-		# guide is prose somebody typed and this command would replace it with an
-		# empty file, so the flag is refused rather than honoured.
+		# --force means "destroy what is there" everywhere else in this suite; a
+		# guide is prose somebody typed and this would replace it with an empty
+		# file, so the flag is refused rather than honoured.
 		die "--force does not apply to git review walkthrough guide; open the file and edit it, or remove it with --delete"
 	fi
 	if [ "$check" -eq 1 ]; then
@@ -257,10 +250,9 @@ if [ "$sub" = draft ]; then
 	if [ "$check" -eq 1 ]; then
 		die "--check applies only to git review walkthrough build; draft --build validates the draft"
 	fi
-	# The two new flags sit on opposite ends of the same circuit — one hands the
-	# skeleton out, the other takes the filled-in copy back — so every way of
-	# asking for both at once is a mistake, and each gets its own sentence rather
-	# than one generic "incompatible flags".
+	# The two ends of the same circuit — one hands the skeleton out, the other takes
+	# the filled-in copy back — so every way of asking for both at once is a
+	# mistake, and each gets its own sentence, not one "incompatible flags".
 	if [ "$to_stdout" -eq 1 ] && [ "$build_draft" -eq 1 ]; then
 		die "--stdout writes the skeleton; --build validates one. Use one or the other"
 	fi
@@ -278,10 +270,10 @@ if [ "$sub" = draft ]; then
 	if [ "$local_only" -eq 1 ] && [ "$offline" -eq 1 ]; then
 		die "use only one of --local and --offline"
 	fi
-	# Asymmetric risk, as everywhere else in this suite: --force destroys work
-	# the reviewer typed, so it only means anything where something gets written.
-	# With --from there IS something to destroy — the stored draft is replaced by
-	# prose from somewhere else — so there it is not only legal but required.
+	# Asymmetric risk, as everywhere else in this suite: --force destroys work the
+	# reviewer typed, so it only means anything where something gets written. With
+	# --from there IS — the stored draft is replaced by prose from somewhere else —
+	# so there it is required.
 	if [ "$build_draft" -eq 1 ] && [ "$force" -eq 1 ] && [ "$from_given" -eq 0 ]; then
 		die "--force applies only when creating a draft, not to --build"
 	fi
@@ -294,26 +286,23 @@ git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
 # Uncommitted changes to non-sidecar paths. init and build derive their file set
-# from committed history (base..HEAD), so working-tree edits the author has not
-# committed are invisible here; annotating them would be annotating incomplete
-# work. The walkthrough itself is expected to be dirty while you author it, so
-# anything under .review/ is ignored (mirrors annotatable_files excluding it).
-# Purely a diagnostic — the sole use is to enrich a refusal or emit a note.
+# from committed history (base..HEAD), so uncommitted edits are invisible here and
+# annotating them would be annotating incomplete work. Anything under .review/ is
+# ignored: the walkthrough is expected to be dirty while you author it. Purely a
+# diagnostic — it only enriches a refusal or emits a note.
 has_uncommitted() {
-	# True when porcelain has any line for a path outside .review/ (grep -qv exits 0
-	# as soon as one non-.review line exists; 1 on a clean or sidecar-only tree).
+	# grep -qv exits 0 on the first non-.review line; 1 on a clean or sidecar-only
+	# tree.
 	git status --porcelain 2>/dev/null | grep -qv '\.review/'
 }
 
-# Emit a non-fatal heads-up when the working tree carries uncommitted reviewable
-# changes, so an author (often an AI agent) does not silently build a walkthrough
-# over work that never made it into base..HEAD.
+# Non-fatal heads-up when the working tree carries uncommitted reviewable changes,
+# so an author (often an AI agent) does not silently build a walkthrough over work
+# that never made it into base..HEAD.
 warn_dirty() {
-	# Never for a draft. That diagnostic exists because an author can annotate work
-	# they have not committed yet; a reviewer drafts against someone else's
-	# committed refs, so their own dirty tree — the review edits they are making —
-	# has nothing to do with it, and warning about it would be noise at best.
-	# Guarded here, once, rather than at each of the five call sites.
+	# Never for a draft: a reviewer drafts against someone else's committed refs, so
+	# their own dirty tree — the review edits they are making — has nothing to do
+	# with it. Guarded here, once, rather than at each of the five call sites.
 	[ "$sub" != draft ] || return 0
 	has_uncommitted || return 0
 	echo "note: you have uncommitted changes; init and build cover committed history (base..HEAD), so uncommitted edits are invisible here. Commit the PR first; never push automatically." >&2
@@ -321,27 +310,21 @@ warn_dirty() {
 
 # emit_guide_note
 # The authoring guides, reported on stderr the same way whether one, both or
-# neither is in force. Never interpreted here -- only pointed at -- so build
-# keeps owning the format, and resolved from the repository you are standing in,
-# draft included: the conventions of whoever is annotating, not a guide from the
-# PR tip.
+# neither is in force. Never interpreted here -- only pointed at -- so build keeps
+# owning the format; resolved from the repository you are standing in, draft
+# included, so it names the conventions of whoever is annotating.
 #
-# Called by init, draft AND build. build is not decoration there: it is the verb
-# that enforces the rule a guide most often carries -- "mark few entries key" --
-# because its own note is what fires when every entry is marked. Two surfaces
-# that never named the same file is how a guide gets written and then quietly
-# ignored at the one step that could have held the walkthrough to it.
-#
-# A file that exists but holds nothing is its own case rather than folded into
-# "none": telling somebody to create a guide they already created, and are
-# looking at, is the kind of note that teaches people to stop reading notes.
-#
-# Several short lines rather than one long one: with both guides in force the
-# single line ran past 300 characters, which in a narrow terminal is a wall.
+# Called by init, draft AND build: build enforces the rule a guide most often
+# carries ("mark few entries key"), so leaving it silent there is how a guide gets
+# written and then ignored at the one step that could hold the walkthrough to it.
+# An existing but empty guide is its own branch: telling somebody to create the
+# file they are looking at teaches them to stop reading notes. Several short lines
+# because with both in force a single one ran past 300 characters, a wall in a
+# narrow terminal. See decisiones.md §7.
 emit_guide_note() {
-	# Advice de punta a punta: las cinco ramas describen cual guia esta en vigor,
-	# que es lo que el registro `guide` de config --porcelain ya trae, y la ultima
-	# ademas ofrece los dos comandos que en un panel son el Create de cada fila.
+	# Advice: las ramas describen cuál guía está en vigor —lo que el registro `guide`
+	# de config --porcelain ya trae— y la última ofrece los dos comandos que en un
+	# panel son el Create de cada fila.
 	if ! advice_enabled; then
 		return 0
 	fi
@@ -373,13 +356,12 @@ emit_guide_note() {
 	} >&2
 }
 
-# Whether HEAD is a review branch, asked once, of git, before anything below
-# derives a branch name. It is what decides which of the three situation phrases
-# the instruction block carries, and it is deliberately NOT from_review: that one
-# is 1 only when the reviewer omitted the branch (see below), so
-# "git review walkthrough draft feature/x" run from inside review/feature/x would
-# get the base-branch phrase while standing in a review -- the disagreement the
-# spec forbids. from_review stays exactly as it is, for deriving the name.
+# Whether HEAD is a review branch, asked of git before anything below derives a
+# branch name: it picks which of the three situation phrases the instruction block
+# carries. Deliberately NOT from_review -- that is 1 only when the reviewer omitted
+# the branch, so "draft feature/x" run from inside review/feature/x would get the
+# base-branch phrase while standing in a review. from_review stays as it is, for
+# deriving the name.
 head_in_review=0
 case "$(git symbolic-ref --quiet --short HEAD || true)" in
 review/*) head_in_review=1 ;;
@@ -387,17 +369,15 @@ esac
 
 # ── guide ─────────────────────────────────────────────────────────────────────
 #
-# Create or remove an authoring guide. Nothing here reads, writes or validates
-# the CONTENT of one: this subcommand exists so the file has a way to be made
-# that the three clients can invoke, instead of each of them rebuilding the path
-# and writing to it themselves — the same reason openDraft opens the path the CLI
-# reported rather than deriving it.
+# Create or remove an authoring guide. The CLI detects and points: nothing here
+# reads, validates or interprets the CONTENT of one. It exists so the file has a
+# way to be made that the three clients can invoke, instead of each rebuilding the
+# path and writing to it themselves.
 #
-# The file is created EMPTY, deliberately. A skeleton with placeholders would be
-# actively harmful: build is what rejects an unfilled walkthrough, and there is no
-# build here, so instructions left behind in the file are read by the next agent
-# as if they were the conventions themselves. What the file is for is printed
-# instead, where it cannot be mistaken for its content.
+# The file is created EMPTY, deliberately: build is what rejects an unfilled
+# walkthrough and there is no build here, so instructions left in the file get read
+# by the next agent as if they were the conventions themselves. What the file is
+# for is printed instead, where it cannot be mistaken for its content.
 if [ "$sub" = guide ]; then
 	guide_paths_init
 	[ -n "$_guide_team_path" ] ||
@@ -416,8 +396,7 @@ if [ "$sub" = guide ]; then
 		# Refused inside a review for the reason the reviewer's guide exists at all:
 		# the shared one is a file of the work tree, finish extracts with
 		# "git add -A", and a file created here would ride out on review-fixes/ into
-		# somebody else's PR. The message names the command that does what was
-		# almost certainly meant.
+		# somebody else's PR.
 		if [ "$head_in_review" -eq 1 ]; then
 			die "you are inside a review, and a file created in the work tree now would be extracted onto review-fixes/ by finish. For a guide of your own, outside the work tree: git review walkthrough guide"
 		fi
@@ -434,9 +413,8 @@ if [ "$sub" = guide ]; then
 
 	[ ! -e "$_guide_own_path" ] ||
 		die "your guide already exists ($_guide_own_path); open it and edit it"
-	# No mkdir: the common gitdir is already there, which is the whole difference
-	# between this and the reviewer's draft, whose branch name can hold a '/' and
-	# so needs a directory made for it.
+	# No mkdir: the common gitdir is already there — the whole difference with the
+	# reviewer's draft, whose branch name can hold a '/'.
 	: >"$_guide_own_path" ||
 		die "could not write $_guide_own_path"
 	echo "created your guide ($_guide_own_path)"
@@ -447,24 +425,20 @@ fi
 # ── Range resolution ──────────────────────────────────────────────────────────
 #
 # Two callers, one rule: annotate exactly the files the review will cover.
-#
-# init/build are the author's, standing on their own PR, so the tip is HEAD.
-# draft is the reviewer's, standing on the base branch, so the tip is the named
-# branch's remote (or local) copy — the same resolution git review start and
-# emit_reading_offers use, flags included, because the draft has to list the file
-# set of the review that start is about to create, not some other one.
+# init/build are the author's, standing on their own PR, so the tip is HEAD. draft
+# is the reviewer's, standing on the base, so the tip is the named branch's remote
+# (or local) copy — the same resolution git review start and emit_reading_offers
+# use, flags included, or the draft would list the file set of some review other
+# than the one start is about to create.
 if [ "$sub" = draft ]; then
-	# Standing inside the review is the likeliest moment to want a draft: the
-	# reviewer has just been shown the diff and wants to write the reading order
-	# down. The branch they are on is not one anybody drafts for — review/feature/x
-	# has no remote copy — so the bare command died with "origin/review/feature/x
-	# not found", naming a ref that never existed and never will.
-	#
-	# Resolved through walk_review_draft_src, the same function every verb with an
-	# active review resolves it with, which is what makes the draft this writes the
-	# one that review then reads. It hands back a branch name — never a
-	# remote-tracking one — so the range resolution below needs no special case for
-	# where the name came from.
+	# Standing inside the review is the likeliest moment to want a draft, and the
+	# branch you are on is not one anybody drafts for: review/feature/x has no
+	# remote copy, so the bare command died with "origin/review/feature/x not
+	# found", naming a ref that never existed and never will. Resolved through
+	# walk_review_draft_src, the same function every verb with an active review
+	# uses, which is what makes this draft the one review then reads; it hands back
+	# a branch name — never a remote-tracking one — so the range resolution below
+	# needs no special case for where the name came from.
 	from_review=0
 	if [ -z "$branch" ]; then
 		rb="$(git symbolic-ref --quiet --short HEAD || true)"
@@ -483,13 +457,11 @@ if [ "$sub" = draft ]; then
 		die "no base set; run: git config reviewworkflow.base <branch>"
 
 	remote="$(git config reviewworkflow.remote || echo origin)"
-	# A compare of a loose revision records its own identity as the draft's name,
-	# because a short SHA is the only name that comparison has — and that names no
-	# branch, so the resolution below went looking for origin/<short-sha> and died
-	# on a ref that never existed, exactly the way the bare command used to die on
-	# origin/review/feature/x. Only for a name this verb derived from the review the
-	# reviewer is standing in: a name they typed themselves is theirs to be told is
-	# missing, which is what "$srclabel not found" already says.
+	# A compare of a loose revision records a short SHA as the draft's name, and that
+	# names no branch: the resolution below then went looking for origin/<short-sha>
+	# and died on a ref that never existed. Only for a name this verb derived from
+	# the review the reviewer is standing in — a name they typed themselves is
+	# theirs to be told is missing, which "$srclabel not found" already says.
 	if [ "$from_review" -eq 1 ] &&
 		! git rev-parse --verify --quiet "refs/heads/$branch" >/dev/null &&
 		! git rev-parse --verify --quiet "refs/remotes/$remote/$branch" >/dev/null; then
@@ -544,19 +516,17 @@ if [ "$sub" = draft ]; then
 	# dangling "review lower bound" object just to list file names.
 	lower="$(resolve_lower_bound "$start" "$baseref" "$tip")"
 
-	# The PR's own range, carried alongside the one this run is writing about.
-	# With --delta the two differ, and the difference is the whole reason this
-	# exists: a path the PR changes in a commit you already reviewed is still a
-	# file your reading order may describe. `lower` answers "what does this run
-	# WRITE about"; this answers "what is this draft ALLOWED to hold" -- and
-	# conflating them is what made --delta destroy prose about files the PR
-	# still changes, on a flag that reads as a lens.
+	# The PR's own range, carried alongside the one this run writes about. With
+	# --delta the two differ, and that difference is the point: a path the PR changes
+	# in a commit you already reviewed is still a file your reading order may
+	# describe. `lower` answers "what does this run WRITE about"; this one answers
+	# "what is this draft ALLOWED to hold" -- conflating them made --delta destroy
+	# prose about files the PR still changes, on a flag that reads as a lens.
 	#
 	# merge-base and not resolve_lower_bound: with the full range's own start the
 	# fold can never fire (the merge-base is its own ancestor), so the extra call
 	# would be a process spent to be handed back its argument. Falls back to the
-	# range in force if it cannot be computed, which is the pre-existing
-	# behaviour and never widens what is allowed.
+	# range in force, which never widens what is allowed.
 	pr_lower="$lower"
 	if [ "$delta_mode" -eq 1 ]; then
 		pr_lower="$(git merge-base "$baseref" "$tip" 2>/dev/null || true)"
@@ -569,10 +539,10 @@ if [ "$sub" = draft ]; then
 	draftrel="\$GIT_DIR/review-walkthrough/$branch.md"
 
 	# The origin and range flags this run resolved with, echoed back into the
-	# commands the messages below suggest. Without them the suggestion is a
-	# different command: --build would validate the draft against another range,
-	# and on a branch with no copy on the remote both --build and start fail
-	# outright with "origin/<branch> not found" — after telling you to run them.
+	# commands the messages below suggest. Without them --build would validate the
+	# draft against another range, and on a branch with no copy on the remote both
+	# --build and start fail with "origin/<branch> not found" — after telling you to
+	# run them.
 	draftflags=""
 	if [ "$offline" -eq 1 ]; then
 		draftflags=" --offline"
@@ -583,11 +553,10 @@ if [ "$sub" = draft ]; then
 		draftflags="$draftflags --delta"
 	fi
 
-	# The same flags again, normalised into the shape the instruction block
-	# records and config --porcelain reads back out of it: no leading space, a
-	# fixed order, and a literal for "none of them". Separate from draftflags on
-	# purpose — that one is glued into command suggestions and has to keep its
-	# leading space, while this one is a value.
+	# The same flags normalised into the shape the instruction block records and
+	# config --porcelain reads back out of it: no leading space, a fixed order, a
+	# literal for "none". Separate from draftflags, which is glued into command
+	# suggestions and has to keep its leading space.
 	genflags=""
 	if [ "$offline" -eq 1 ]; then
 		genflags="--offline"
@@ -649,11 +618,10 @@ if [ "$mb" = "$tip" ]; then
 fi
 lower="$(fold_lower "$mb" "$baseref" "$tip")"
 # No range flag reaches init/build, so the PR's range and the range in force are
-# the same object -- assigned rather than recomputed so the readers below can
-# stay unconditional.
+# the same object; assigned rather than recomputed so the readers stay unconditional.
 pr_lower="$lower"
-# init and build take no origin or range flags at all, so the block's record of
-# them is the literal. --base picks a different base, not a different origin.
+# No origin or range flags here either, so the block's record of them is the
+# literal. --base picks a different base, not a different origin.
 genflags="(defaults)"
 deltabranch=""
 fi
@@ -662,9 +630,8 @@ toplevel="$(git rev-parse --show-toplevel)"
 wtrel=".review/walkthrough.md"
 wtpath="$toplevel/$wtrel"
 
-# What each subcommand reads and writes. The two differ in exactly one thing —
-# where the file lives — which is the entire point of the feature: the author's
-# is content of the PR, the reviewer's must never be.
+# The one thing the two subcommands differ in, and the entire point of the
+# feature: the author's file is content of the PR, the reviewer's must never be.
 if [ "$sub" = draft ]; then
 	targetpath="$draftpath"
 	targetrel="$draftrel"
@@ -673,82 +640,64 @@ else
 	targetrel="$wtrel"
 fi
 
-# The annotatable file set: everything the PR changes, minus the sidecar
-# directory itself (a walkthrough never annotates .review/ — the only place in
-# the project this filter still applies; every reader of "what does this
-# review touch" now includes it, since it is content like any other file the
-# PR changes). Named distinctly from git-review-lib.sh's range_files, which
-# this script also has in scope via the source above and which does NOT
-# filter: same shape, opposite policy, so a shared name here would silently
-# shadow one or the other depending on source order.
+# The annotatable file set: everything the PR changes, minus .review/ itself (a
+# walkthrough never annotates the sidecar directory — the only place in the project
+# this filter still applies; every other reader of "what does this review touch"
+# includes it). Named distinctly from git-review-lib.sh's range_files, also in
+# scope here via the source above and NOT filtered: same shape, opposite policy, so
+# a shared name would silently shadow one or the other by source order.
 annotatable_files() {
 	changed_paths "$lower" "$tip" | grep -v '^\.review/' || true
 }
 
-# The same set over the PR's whole range: what an entry is allowed to name, as
-# opposed to what this run is writing about. Identical to annotatable_files
-# except under --delta, and the caller below skips it entirely when the two
-# bounds are the same object -- this is one more diff over the whole PR, and it
-# would be spent to recompute a list already in a variable.
+# The same set over the PR's whole range: what an entry is ALLOWED to name, as
+# opposed to what this run writes about. Identical to annotatable_files except
+# under --delta, and the caller below skips it when the two bounds are the same
+# object rather than spend a whole-PR diff recomputing a list already in hand.
 pr_annotatable_files() {
 	changed_paths "$pr_lower" "$tip" | grep -v '^\.review/' || true
 }
 
-# Skeleton generation, shared by init and draft rather than copied: the text is a
-# long set of instructions to whoever fills it in, and all but its closing note is
-# written for "the person annotating this PR" without assuming that person is the
-# author. Two copies would drift, and the drift would be invisible until someone
-# read the wrong one — so the two lines that genuinely differ are switched inline
-# (see below) instead of forking the block.
+# Skeleton generation, shared by init and draft rather than copied: all but its
+# closing note is written for "the person annotating this PR" without assuming that
+# person is the author, and two copies would drift invisibly until someone read the
+# wrong one. The two lines that genuinely differ are switched inline (see below).
 if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; then
-	# An existing file is UPDATED, not refused and not overwritten: every entry
-	# whose path is still in range keeps its number, its why and its markers, the
-	# paths that entered the range arrive as "## ?." placeholders, and the ones
-	# that left are dropped and named on stderr. That is the whole point — a PR
-	# that was finished, annotated and then touched again is the ordinary case,
-	# and the two things this command could do before were refuse (leaving the
-	# reader to hand-edit) or overwrite (destroying every why in the file).
+	# An existing file is UPDATED, not refused and not overwritten: entries whose
+	# path is still in range keep their number, their why and their markers, paths
+	# that entered the range arrive as "## ?." placeholders, and the ones that left
+	# are dropped and named on stderr. A PR that was annotated and then touched
+	# again is the ordinary case, and the two things this could do before were
+	# refuse (leaving the reader to hand-edit) or overwrite (destroying every why).
+	# --force stays the only way back to a blank skeleton, and has to stay reachable:
+	# a merge cannot un-write prose that describes the wrong thing.
 	#
-	# --force keeps meaning what it means everywhere else in this suite: throw away
-	# what is there and generate from scratch. It is the only way back to a blank
-	# skeleton, and it has to stay reachable — a merge cannot un-write prose that
-	# describes the wrong thing.
-	# Both sides, and for the same reason. The author's sidecar goes stale because
-	# the PR keeps moving under a file that is already committed; the reviewer's
-	# draft is written against a tip that start then FREEZES, so it cannot fall out
-	# of step DURING a review -- but it outlives the review, and the next one is
-	# over a range that moved. That is the case this exists for: you read the PR,
-	# three more files land, and the order you wrote is still the right starting
-	# point for all but those three.
+	# Both sides, for different reasons. The author's sidecar goes stale because the
+	# PR keeps moving under a file that is already committed; the reviewer's draft is
+	# written against a tip that start then FREEZES, so it cannot fall out of step
+	# DURING a review -- but it outlives the review, and the next one is over a range
+	# that moved.
 	#
-	# The draft side used to refuse instead, on the circuit that save, continue and
-	# forget all speak ("the file is there, so I refuse"). Refusing left --force as
-	# the only way through, which throws away every why to get at the new files.
 	# -f and not -e: what can be reconciled is a regular file. Anything else with
-	# that name -- a directory, most plausibly a branch name that cannot be one on
-	# this filesystem -- falls through to the write path, which fails with the
-	# message that names the real problem instead of an awk that cannot read it.
+	# that name -- most plausibly a branch name that cannot be a file on this
+	# filesystem -- falls through to the write path, which fails with the message
+	# that names the real problem instead of an awk that cannot read it.
 	update=0
 	if [ -f "$targetpath" ] && [ "$force" -eq 0 ]; then
 		update=1
 	fi
-	# A walkthrough that came in WITH a merge is not this PR's, and reconciling
-	# against it is worse than not reconciling at all: the entry for a file both
-	# PRs happen to touch keeps a why about a change that already shipped, and
-	# that prose gets committed to this PR. It is not staleness — nothing fell
-	# behind; it belongs to a range that closed.
+	# A walkthrough that came in WITH a merge is not this PR's: the entry for a file
+	# both PRs happen to touch keeps a why about a change that already shipped, and
+	# that prose gets committed to this PR. Not staleness — nothing fell behind; it
+	# belongs to a range that closed.
 	#
-	# So this is the one case that starts over on its own, and it does not need
-	# --force to do it. The asymmetry is deliberate and it is about what each
-	# mistake looks like: prose kept from another PR reads exactly like a valid
-	# walkthrough, while a blank skeleton is visible at a glance -- and the file
-	# is tracked, so the old entries are one git checkout away either way.
-	# init only, and the asymmetry is about what the mistake costs. Starting over
-	# on its own destroys what is written, and on the author's side that is one
-	# git checkout away because the file is tracked. A reviewer's draft is not in
-	# git at all, so deciding to discard their prose for them has no way back --
-	# and it never comes up either: a branch already merged into the base has no
-	# range left, and annotatable_files dies on that before reaching this.
+	# So this is the one case that starts over on its own, without --force. Prose
+	# kept from another PR reads exactly like a valid walkthrough, while a blank
+	# skeleton is visible at a glance, and the sidecar is tracked so the old entries
+	# are one git checkout away. init only: a reviewer's draft is not in git at all,
+	# so discarding their prose for them has no way back -- and it never comes up
+	# either, since a branch already merged into the base has no range left and
+	# annotatable_files dies on that before reaching this.
 	superseded=0
 	if [ "$update" -eq 1 ] && [ "$sub" = init ]; then
 		blocktip="$(walk_sidecar_block_tip "$targetpath" || true)"
@@ -757,16 +706,13 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 			update=0
 		fi
 	fi
-	# Nothing refuses over an existing file any more: both subcommands either
-	# reconcile it or, with --force, replace it. What is left of the old guard is
-	# the invariant it protected -- an existing file is never silently overwritten --
-	# which now holds by construction, since the only path that writes from scratch
-	# over one is the one that asked for it.
+	# The invariant the old existence guard protected -- an existing file is never
+	# silently overwritten -- now holds by construction: both subcommands reconcile
+	# it, and the only path that writes from scratch over one is the one that asked.
 	files="$(annotatable_files)"
 	[ -n "$files" ] || die "no changed files vs $base to list"
-	# What an entry may name, which is not the same question as what this run
-	# writes about (see pr_lower). The same object under every path but --delta,
-	# and reused rather than recomputed there.
+	# What an entry may name, which is not what this run writes about (see
+	# pr_lower). The same object under every path but --delta.
 	if [ "$pr_lower" = "$lower" ]; then
 		pr_files="$files"
 	else
@@ -775,25 +721,21 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 
 	# ── Update: reconcile what is written with what the range now holds ─────────
 	#
-	# Three sets, computed once, in ONE awk over both sides: the entries whose path
-	# is still in range (kept, with their number and their prose), the range paths
-	# no entry covers (added, as "## ?." placeholders) and the entries whose path
-	# left the range (removed, named on stderr and gone from the file).
+	# Three sets in ONE awk over both sides: entries whose path is still in range
+	# (kept, with their number and their prose), range paths no entry covers (added,
+	# as "## ?." placeholders) and entries whose path left it (removed, named on
+	# stderr and gone from the file). Same two-stream, range-first,
+	# lone-tab-sentinel shape as walk_sequence and walk_entry_fields, and safe for
+	# the same reason: git quotes control characters in a path unconditionally, so
+	# no line of the range side can be a bare tab.
 	#
-	# Same two-stream, range-first, lone-tab-sentinel shape as walk_sequence and
-	# walk_entry_fields, and safe for the same reason: git quotes control
-	# characters in a path unconditionally, so no line of the range side can be a
-	# bare tab.
+	# Unlike walk_parse this accepts "## ?." headings as entries: an author who wrote
+	# the why but has not numbered it yet is mid-authoring, and dropping their prose
+	# would be the overwrite this whole path exists to stop.
 	#
-	# Unlike walk_parse this accepts "## ?." headings as entries. An author who
-	# wrote the why but has not numbered it yet is mid-authoring, not absent, and
-	# dropping their prose here would be the overwrite this whole path exists to
-	# stop happening.
-	#
-	# The sort key is emitted rather than the order: kept entries come back in the
-	# author's numbering, unnumbered ones after them, and added paths last in git's
-	# order — so an update reads as "what you had, then what is new", and build
-	# renumbers 1..N afterwards as it always has.
+	# The sort key is emitted rather than the order -- kept entries in the author's
+	# numbering, unnumbered ones after them, added paths last in git's order -- so an
+	# update reads as "what you had, then what is new"; build renumbers 1..N after.
 	prev_content=""
 	merged_kept=0
 	merged_added=0
@@ -854,10 +796,9 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 				}
 			}
 		')"
-		# A leading class letter, not a range of sort keys: telling kept from added
-		# by "is the key above two million" is the kind of test that reads as
-		# arbitrary six months from now and breaks outright on an author who
-		# numbered an entry 3000000.
+		# A leading class letter, not a range of sort keys: "is the key above two
+		# million" reads as arbitrary six months from now and breaks outright on an
+		# author who numbered an entry 3000000.
 		merged_removed="$(printf '%s\n' "$plan" | grep '^R' | cut -f4- || true)"
 		plan_entries="$(printf '%s\n' "$plan" | grep -v '^R' | grep . |
 			LC_ALL=C sort -k2,2n | cut -f3- || true)"
@@ -867,13 +808,11 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 
 	# The author's preamble as it stands, carried through verbatim — the heads-up
 	# they wrote, or the placeholder they have not filled in yet. NOT walk_preamble,
-	# which strips every comment: that one serves the readers, and here an unfilled
-	# placeholder has to survive or an update would quietly answer build's "the
-	# heads-up placeholder is still there" on the author's behalf.
-	#
-	# The instruction block goes (walk_prompt_block), because the one emitted below
-	# is regenerated for the range this run resolved; the "# Walkthrough" heading
-	# goes because the skeleton writes it back.
+	# which strips every comment: an unfilled placeholder has to survive here, or an
+	# update would answer build's "the heads-up placeholder is still there" on the
+	# author's behalf. The instruction block goes (walk_prompt_block) because the one
+	# emitted below is regenerated for the range this run resolved; the
+	# "# Walkthrough" heading goes because the skeleton writes it back.
 	prev_preamble=""
 	if [ "$update" -eq 1 ]; then
 		prev_preamble="$(printf '%s\n' "$prev_content" | walk_prompt_block | awk '
@@ -892,13 +831,11 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 	fi
 
 	# emit_merged_entries
-	# The reconciled entry list: each kept path with its number and its body
-	# exactly as the author left it (markers included — normalising them is
-	# build's job, not this one's), each added path as a "## ?." placeholder.
-	#
-	# One awk for the whole file, not one walk_body per entry: three processes per
-	# entry is the shape that cost ~15s on a 200-entry walkthrough under Git Bash,
-	# and it was removed everywhere else for that reason.
+	# The reconciled entry list: each kept path with its number and its body exactly
+	# as the author left it (markers included — normalising them is build's job),
+	# each added path as a "## ?." placeholder. One awk for the whole file, not one
+	# walk_body per entry: three processes per entry is what cost ~15s on a 200-entry
+	# walkthrough under Git Bash.
 	emit_merged_entries() {
 		{
 			printf '%s\n' "$plan_entries"
@@ -944,13 +881,13 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		'
 	}
 
-	# The lower bound's object type, one process, and only on a path that is about
-	# to produce a skeleton. It goes in the block because it is why the commands
-	# there are shaped the way they are: with the base merged into the PR the bound
-	# is a tree, and a tree is what makes the history commands lie instead of fail.
+	# The lower bound's object type, one process, only where a skeleton is about to
+	# be produced. It goes in the block because it is why the commands there are
+	# shaped the way they are: with the base merged into the PR the bound is a tree,
+	# and a tree makes the history commands lie instead of fail.
 	lower_kind="$(git cat-file -t "$lower" 2>/dev/null || echo unknown)"
-	# Which working tree this skeleton is being written from. Decided by HEAD, not
-	# by from_review — see the note where head_in_review is set.
+	# Which working tree this skeleton is written from, decided by HEAD, not by
+	# from_review — see the note where head_in_review is set.
 	if [ "$sub" != draft ]; then
 		situation="init"
 		tiplabel="HEAD"
@@ -965,22 +902,18 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 	# emit_guide_bullet
 	# The skeleton's one mention of the authoring guides: the ones in force, or
 	# nothing at all when neither is. Both apply when both have content -- they
-	# answer different questions (how this project wants its PRs annotated, and how
-	# you annotate) -- and the precedence line appears only when there is a
-	# contradiction to resolve.
+	# answer different questions -- and the precedence line appears only when there
+	# is a contradiction to resolve.
 	#
-	# Two shapes, and which one is right depends on whether the reader can open a
-	# file at all:
+	# Two shapes, and which is right depends on whether the reader can open a file:
 	#
 	#   * writing a file: the PATHS. The skeleton lands next to the guides it names,
-	#     so whoever opens it can open them too -- and a copy embedded in a file that
-	#     outlives this run would go stale against the guide without anybody looking.
+	#     and an embedded copy that outlives this run would go stale unseen.
 	#   * --stdout: the CONTENT, inlined. That skeleton travels down a pipe, and the
-	#     absolute path of somebody's gitdir is not something the agent on the other
-	#     end can necessarily open -- another container, another machine. Pointing at
-	#     a file it cannot reach fails in SILENCE: nothing checks that a guide was
-	#     read. Inlining costs nothing that --stdout promises, because that promise is
-	#     about not WRITING, and this only prints.
+	#     absolute path of somebody's gitdir may be unreachable on the other end --
+	#     another container, another machine. Pointing at a file it cannot open fails
+	#     in SILENCE: nothing checks that a guide was read. --stdout promises not to
+	#     WRITE, and this only prints.
 	emit_guide_bullet() {
 		guide_paths_init
 		_egb_team=0
@@ -1019,19 +952,14 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 	}
 
 	# guide_inline <path> <label>
-	# One guide's content, fenced and indented into the instruction block.
-	#
-	# Two things it does to the prose, both deliberate. It rewrites any "-->" as
-	#   "-- >": the block IS an HTML comment, so a literal one in the guide would
-	#   close it early and spill the rest into the preamble -- the same class of
-	#   invisible byte as the CR and the BOM that walk_normalize exists for. And it
-	#   stops at a line limit, so an oversized guide cannot eat the whole context of
-	#   the agent this output is written for; the fence names the path, which is
-	#   where the rest is.
-	#
-	# One awk for the pair, not a sed per rule: this runs once per guide, and the
-	# two BSD/GNU sed -i differences the project keeps tripping on are worth not
-	# inviting back.
+	# One guide's content, fenced and indented into the instruction block. It
+	# rewrites any "-->" as "-- >" -- the block IS an HTML comment, so a literal one
+	# in the guide would close it early and spill the rest into the preamble, the
+	# same class of invisible byte as the CR and the BOM walk_normalize exists for --
+	# and it stops at a line limit, so an oversized guide cannot eat the context of
+	# the agent this output is written for; the fence names the path, which is where
+	# the rest is. One awk for the pair, not a sed per rule: the BSD/GNU sed -i
+	# differences the project keeps tripping on are worth not inviting back.
 	guide_inline() {
 		printf '     ----- %s -----\n' "$2"
 		awk -v lim=120 '
@@ -1042,20 +970,19 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 		printf '     ----- end -----\n\n'
 	}
 
-	# A function rather than a brace group with a redirection glued to it, because
-	# it now has two destinations: the temp file on the way to $targetpath, and
-	# standard output under --stdout. Same bytes either way, bar the closing line
-	# below, which has to name a different command when no file was written.
+	# A function rather than a brace group with a redirection glued to it, because it
+	# has two destinations: the temp file on the way to $targetpath, and standard
+	# output under --stdout. Same bytes either way, bar the closing line below, which
+	# names a different command when no file was written.
 	emit_skeleton() {
 		printf '# Walkthrough\n\n'
 		walk_emit_prompt_block "$tip" "$lower" "$tiplabel" "$lower_kind" \
 			"$situation" "$genflags" "$deltabranch"
 		printf '\n'
-		# Two openings, one body. On an update most of the file is already written
-		# and the single most damaging thing the agent can do is rewrite it: the
-		# whole point of preserving the prose is lost if the next reader is told
-		# every entry is a placeholder. Everything after this paragraph applies
-		# unchanged to both, because it describes the format, not the situation.
+		# Two openings, one body. On an update most of the file is already written and
+		# the most damaging thing the agent can do is rewrite it, which is what being
+		# told every entry is a placeholder would get. Everything after this paragraph
+		# applies to both: it describes the format, not the situation.
 		if [ "$update" -eq 1 ]; then
 			printf '<!-- Update the reading order for this PR. Entries that already carry\n'
 			printf '     a number and a why are FINISHED: leave them exactly as they are,\n'
@@ -1093,24 +1020,16 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 			printf '       * Fill in the "## Heads-up" section below with what a reviewer\n'
 			printf '         should keep in mind before opening a single file.\n'
 		fi
-		# The guides IN FORCE, named, and nothing at all when there are none. The
-		# path used to be hardcoded here whether the file existed or not, which
-		# spent five lines of the agent's attention on a file that was usually not
-		# there -- and, once a second guide could exist, said the wrong thing.
-		#
-		# This is the one channel that always reaches whoever has to follow them.
-		# The stderr note below reaches a terminal; an agent handed the skeleton
-		# through a pipe (draft --stdout) never sees it, and that agent is exactly
-		# who this text is written for.
+		# The guides IN FORCE, named, and nothing at all when there are none. This is
+		# the one channel that always reaches whoever has to follow them: the stderr
+		# note below reaches a terminal, and an agent handed the skeleton through a
+		# pipe (draft --stdout) never sees it, though it is who this text is for.
 		emit_guide_bullet
 		# The two passages that cannot be written for "whoever annotates this PR".
-		# Everything above genuinely is shared; these are the author's, and the
-		# reviewer used to be handed their copy of both: a command that dies from
-		# the base (build reads .review/walkthrough.md on the branch you are
-		# standing on, and the reviewer is not standing on the PR), and an
-		# instruction to commit a PR that is not theirs — the very advice warn_dirty
-		# is deliberately suppressed for on this path, contradicted in the file the
-		# reviewer has open.
+		# Everything above genuinely is shared; these are the author's, and handing
+		# the reviewer their copy gave them a command that dies from the base (build
+		# reads .review/walkthrough.md on the branch you are standing on) and an
+		# instruction to commit a PR that is not theirs.
 		if [ "$sub" = draft ]; then
 			printf '     Note: this walkthrough is built from the committed history of\n'
 			printf '     %s, over the range named at the top of this file and\n' "$srclabel"
@@ -1118,11 +1037,9 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 			printf '     are invisible here, and nothing you write in this file is\n'
 			printf '     ever staged or committed.\n\n'
 			# Under --stdout no file was written, so the ordinary closing line is
-			# not merely unhelpful, it is dangerous: --build without --from either
-			# dies with "no draft for <branch>", or -- if that branch happens to
-			# have a draft from before -- validates and rewrites THAT file, with
-			# exit 0 and a success message, discarding what the agent just wrote.
-			# That is precisely the silent failure this circuit exists to remove.
+			# dangerous: --build without --from either dies with "no draft for
+			# <branch>" or -- if that branch has an older draft -- validates and
+			# rewrites THAT file, exit 0, discarding what the agent just wrote.
 			if [ "$to_stdout" -eq 1 ]; then
 				printf '     Then validate and install what you wrote with:\n'
 				printf '       git review walkthrough draft --build --from <file>%s %s\n' "$draftflags" "$branch"
@@ -1136,11 +1053,10 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 			printf '     with uncommitted changes you may be annotating incomplete work, and\n'
 			printf '     build will not see those files. Commit them first; never push\n'
 			printf '     automatically.\n\n'
-			# The author's half of the same switch the draft side makes above, and
-			# for the same reason: under --stdout nothing was written, so a closing
-			# line naming a bare "build" points at whatever .review/walkthrough.md
-			# happens to be in the work tree -- which validates and rewrites THAT
-			# file with exit 0, discarding what the agent just produced.
+			# The author's half of the same switch, for the same reason: with
+			# nothing written, a closing line naming a bare "build" points at
+			# whatever .review/walkthrough.md is in the work tree and rewrites
+			# THAT, exit 0, discarding what the agent just produced.
 			if [ "$to_stdout" -eq 1 ]; then
 				printf '     Then validate and install what you wrote with:\n'
 				printf '       git review walkthrough build --from <file>\n'
@@ -1149,12 +1065,10 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 				printf '     Then validate and write with:  git review walkthrough build -->\n\n'
 			fi
 		fi
-		# On an update the author's preamble is carried through as it stands —
-		# their heads-up, or the placeholder they have not filled in yet. Emitting
-		# the placeholder over prose somebody wrote would be the overwrite this
-		# path exists to prevent; emitting nothing where they deleted the whole
-		# section (legal, and what build tells you to do when nothing is delicate)
-		# would put it back.
+		# On an update the author's preamble is carried through as it stands.
+		# Emitting the placeholder over prose somebody wrote would be the overwrite
+		# this path exists to prevent; emitting nothing where they deleted the whole
+		# section (legal, and what build tells you to do) would put it back.
 		if [ "$update" -eq 1 ]; then
 			if [ -n "$prev_preamble" ]; then
 				printf '%s\n\n' "$prev_preamble"
@@ -1179,40 +1093,38 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 	}
 
 	if [ "$to_stdout" -eq 1 ]; then
-		# Nothing else touches the filesystem on this path: no mkdir, no temp
-		# file, no traps, no mv. That is the invariant --stdout sells, and it is
-		# what makes "draft --stdout <branch> > order.md" a thing an agent can be
-		# handed without it writing into anybody's gitdir.
+		# Nothing else touches the filesystem on this path: no mkdir, no temp file,
+		# no traps, no mv. That is the invariant --stdout sells, and what makes
+		# "draft --stdout <branch> > order.md" safe to hand to an agent.
 		emit_skeleton
 	else
 		mkdir -p "$(dirname "$targetpath")"
 		tmp="$targetpath.tmp.$$"
-		# Removed on any exit, not just the happy one. Without this a die between
-		# here and the mv below — or a Ctrl-C — left a .tmp.NNN beside the drafts
-		# forever: walk_draft_list only matches *.md so nothing mistook it for a
-		# draft, but nothing collected it either, since clean is deliberately
-		# hands-off in there and forget --draft only knows names it can spell.
+		# Removed on any exit, not just the happy one: without this a die between here
+		# and the mv below — or a Ctrl-C — left a .tmp.NNN beside the drafts forever.
+		# Nothing collects it: walk_draft_list only matches *.md, clean is
+		# deliberately hands-off in there, and forget --draft only knows names it can
+		# spell.
 		trap 'rm -f "$tmp"' EXIT
-		# Cleaning up is not the same as stopping. A POSIX shell resumes the script
-		# where the signal hit once the handler returns, so a Ctrl-C that only ran
-		# the rm above deleted the temp file and then let the rest of the command
-		# write it again and move it into place — the interrupt did nothing.
-		# Exiting from the handler is what makes it an interrupt; the EXIT trap
-		# runs on the way out and does the removing, once, for both paths.
+		# Cleaning up is not stopping. A POSIX shell resumes where the signal hit once
+		# the handler returns, so a Ctrl-C that only ran the rm above deleted the temp
+		# file and then let the rest of the command write it again and move it into
+		# place — the interrupt did nothing. Exiting from the handler is what makes it
+		# an interrupt; the EXIT trap does the removing, once, for both paths.
 		# 128+signal, the way a shell reports a signalled child.
 		trap 'exit 130' INT
 		trap 'exit 143' TERM
-		# Fail on the file, not on the redirect. A branch name is a file name here,
-		# and some legal branch names are not legal files: "nul", "aux" and "com1"
-		# are reserved device names on Windows, and a bare shell redirection error
-		# would report a path with no hint of why that one is special.
+		# Fail on the file, not on the redirect: a branch name is a file name here and
+		# some legal branch names are not legal files ("nul", "aux" and "com1" are
+		# reserved device names on Windows), which a bare shell redirection error
+		# would report as a path with no hint of why that one is special.
 		if ! : >"$tmp" 2>/dev/null; then
 			die "could not write $targetrel; the branch name may not be usable as a file name on this system"
 		fi
-		# And refuse outright when the name is taken by something that is not a
-		# regular file. mv(1) into a directory MOVES THE FILE INSIDE IT and reports
-		# success, so without this the skeleton landed as <target>/<tmp name>, the
-		# command said it had written it, and nothing on disk was a draft.
+		# And refuse when the name is taken by something that is not a regular file:
+		# mv(1) into a directory MOVES THE FILE INSIDE IT and reports success, so the
+		# skeleton landed as <target>/<tmp name>, the command said it had written it,
+		# and nothing on disk was a draft.
 		if [ -e "$targetpath" ] && [ ! -f "$targetpath" ]; then
 			die "$targetrel exists and is not a file; move it out of the way first"
 		fi
@@ -1223,19 +1135,17 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 
 	n="$(printf '%s\n' "$files" | grep -c .)"
 
-	# What an update dropped, named one by one. Prose somebody typed is going away,
-	# and the only thing that makes that acceptable is saying so where they can see
-	# it — plus the fact that the sidecar is a tracked file, so the way back is one
-	# command. On stderr: under --stdout the file was not even rewritten, and
-	# stdout has to stay a valid walkthrough.
+	# What an update dropped, named one by one: prose somebody typed is going away,
+	# and saying so where they can see it is what makes that acceptable. On stderr --
+	# under --stdout the file was not even rewritten, and stdout has to stay a valid
+	# walkthrough. The way back is named only on the author's side, because only
+	# there is there one: the sidecar is tracked and the dropped whys are one git
+	# checkout away, while a reviewer's draft is in no repository, which is why that
+	# note names every path instead of counting them.
 	#
-	# The way back is named only on the author's side, because only there is there
-	# one: the sidecar is a tracked file and the dropped whys are one git checkout
-	# away. A reviewer's draft is not in git, so the note is all there is -- which
-	# is why it names every path instead of counting them.
-	# Said before anything else this command prints, because it is the reason the
-	# file the author had is not the file they now have. Named with the base it
-	# landed in, so it reads as a fact about the repository and not as a refusal.
+	# The superseded note goes before anything else this command prints: it is the
+	# reason the file the author had is not the file they now have. Named with the
+	# base it landed in, so it reads as a fact and not as a refusal.
 	if [ "$superseded" -eq 1 ]; then
 		{
 			echo "note: the walkthrough in your tree is $base's, not this PR's -- it came in with the merge of the PR that wrote it, so its entries describe changes that already shipped. Started a new one."
@@ -1254,40 +1164,34 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 	fi
 
 	if [ "$sub" = draft ]; then
-		# Suppressed under --stdout, and only this one: stdout has to be the
-		# skeleton and nothing else, so that redirecting it produces a valid file.
-		# Every note below already goes to stderr and stays there.
-		# Two lines, because the two outcomes are different work: a fresh skeleton
-		# is written from end to end, an update leaves you only the entries it just
-		# added. Same shape as init's pair, with this side's build command.
+		# Suppressed under --stdout, and only this one: stdout has to be the skeleton
+		# and nothing else, so redirecting it produces a valid file. Two lines,
+		# because the two outcomes are different work: a fresh skeleton is written
+		# end to end, an update leaves you only the entries it just added.
 		if [ "$to_stdout" -eq 0 ]; then
 			if [ "$update" -eq 1 ]; then
 				merged_dropped="$(printf '%s\n' "$merged_removed" | grep -c . || true)"
 			else
-				# A fresh skeleton is all additions: nothing to keep, nothing to
-				# drop. Saying so costs one line and gives the record below ONE
-				# shape, which is what keeps a client from having to know which of
-				# the two steps it just ran in order to read the answer.
+				# A fresh skeleton is all additions. Saying so gives the record
+				# below ONE shape, so a client need not know which of the two
+				# steps it just ran in order to read the answer.
 				merged_kept=0
 				merged_added="$n"
 				merged_dropped=0
 			fi
 			if [ "$porcelain" -eq 1 ]; then
-				# THE ONLY WAY THESE THREE NUMBERS REACH A PANEL. The human line
-				# below carries them too, but reading it would be parsing human
-				# output, which the clients' contract forbids -- and they are the
-				# one thing this verb says that no row answers: the draft's row
-				# shows the NEW annotated/total pair, never what moved to get
-				# there. Without the record a client is left with nothing to say,
-				# or forwarding prose again.
+				# THE ONLY WAY THESE THREE NUMBERS REACH A PANEL: reading the
+				# human line below would be parsing human output, which the
+				# clients' contract forbids, and no row answers this -- the
+				# draft's row shows the NEW annotated/total pair, never what moved
+				# to get there. See decisiones.md §8.
 				porcelain_row merged "$merged_kept" "$merged_added" "$merged_dropped"
 			elif [ "$update" -eq 1 ]; then
 				# "fill in the new entries" only when there ARE new entries. An
 				# update that adds none is a real outcome, not a no-op -- the
-				# range moved without changing which files it touches, and the
-				# instruction block has just been rewritten against the new tip --
-				# but telling the reviewer to go fill in nothing sends them to an
-				# unchanged file looking for a placeholder that is not there.
+				# range moved without changing which files it touches -- but
+				# telling the reviewer to fill in nothing sends them looking for a
+				# placeholder that is not there.
 				if [ "$merged_added" -gt 0 ]; then
 					next_step="fill in the new entries, then run git review walkthrough draft --build$draftflags $branch"
 				else

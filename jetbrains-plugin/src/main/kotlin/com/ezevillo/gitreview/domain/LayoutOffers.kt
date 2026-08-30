@@ -7,18 +7,20 @@ val FALLBACK_OFFERS: List<ReadingOffer> = listOf(
 )
 
 /**
- * Elegir DRAFT no es elegir una forma distinta de leer: es escribir el orden
- * que después se lee como walkthrough. Por eso el ítem lleva igual su `layout`
- * —el que quedaría si el borrador se completa— y `draft` marca el desvío por el
- * bucle de armado antes de llegar a start.
- */
-/**
- * UPDATE y START_OVER son las dos salidas del picker que aparece cuando el orden
- * de lectura ya se usó en una review. UPDATE es el MISMO comando que CREATE -- el
- * verbo reconcilia en vez de negarse -- y START_OVER es ese comando con --force.
+ * Los tres pasos del borrador. CREATE escribe el esqueleto; RESUME toma el que
+ * ya está a medio escribir, sin invocar nada; UPDATE reconcilia el que quedó
+ * desfasado del rango, y es el MISMO comando que CREATE porque el verbo
+ * actualiza en vez de negarse. Empezar de cero no está acá a propósito: ver
+ * [DraftFlowState].
  */
 enum class DraftStep { CREATE, RESUME, UPDATE }
 
+/**
+ * Elegir DRAFT no es elegir una forma distinta de leer: es escribir el orden
+ * que después se lee como walkthrough. Por eso el ítem lleva igual su [layout]
+ * —el que quedaría si el borrador se completa— y [draft] marca el desvío por el
+ * bucle de armado antes de llegar a start.
+ */
 data class LayoutPickItem(
     val label: String,
     val description: String,

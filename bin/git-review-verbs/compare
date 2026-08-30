@@ -2,11 +2,10 @@
 #
 # git review compare <a> <b> — stage the diff between two commit-ish, read-only.
 #
-# Unlike git review start, compare has no writable source branch: it materialises
-# the diff <a>..<b> (with <a> the lower bound, <b> the tip) as a staged, read-only
-# review you can annotate inline. There is nothing to extract, so git review finish
-# refuses on it. With --step it walks <a>..<b> one commit at a time, like start
-# --step, advancing with git review next.
+# Unlike git review start there is no writable source branch: it materialises the
+# diff <a>..<b> (<a> the lower bound, <b> the tip) as a staged review you can
+# annotate inline, and git review finish refuses on it. --step walks the range one
+# commit at a time, like start --step, advancing with git review next.
 #
 set -eu
 
@@ -99,7 +98,6 @@ fi
 
 git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 
-# Shared helpers, sourced from the libexec directory the dispatcher points us at.
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
@@ -112,12 +110,11 @@ require_clean_work_tree
 # Remember where to return to when the compare is aborted.
 returnbranch="$(git symbolic-ref --quiet --short HEAD || true)"
 
-# Pick a refname-safe identity for the review branch from <b> (the tip). A tag or
-# branch name passes through unchanged, for a readable review/<b>; anything git
-# would reject as a ref component (HEAD~3, a^, x:y) falls back to <b>'s short hash,
-# so the branch and the per-step edit refs (refs/review-edits/<name>/*) are always
-# valid. This name is the review's identity for status/list/clean, never a writeback
-# target — compare is read-only.
+# A refname-safe identity for the review branch, taken from <b> (the tip). A tag
+# or branch name passes through for a readable review/<b>; anything git would
+# reject as a ref component (HEAD~3, a^, x:y) falls back to <b>'s short hash, so
+# the branch and refs/review-edits/<name>/* stay valid. Identity for
+# status/list/clean only, never a writeback target — compare is read-only.
 if git check-ref-format "review/$b" 2>/dev/null; then
 	name="$b"
 else
@@ -130,30 +127,21 @@ git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null &&
 git rev-parse --verify --quiet "refs/heads/review-saved/$name" >/dev/null &&
 	die "you have a saved review of $name; resume it with git review continue $name or discard it with git review forget --saved $name"
 
-# Compare is the one reader that works with revisions rather than a branch, so
-# the draft context cannot be inferred the way it is everywhere else: it is set
-# only when <b> actually names a branch the reviewer has drafted for. Comparing
-# two SHAs or tags falls through to the PR's own walkthrough, the only reading
-# order a loose revision has. Without this, the same branch would read in one
-# order under start and another under compare, with nothing to explain it.
-# A local branch is its own source name; a remote-tracking one is the name minus
-# its remote's first segment. Stripping to the last segment would be wrong for
-# every namespaced branch: feature/checkout would look up a draft for "checkout".
+# The draft context, set only when <b> actually names a branch the reviewer has
+# drafted for: compare is the one reader that works with revisions, and two SHAs
+# or tags have no reading order but the PR's own. A local branch is its own source
+# name; a remote-tracking one is the name minus its remote's first segment —
+# stripping to the last segment would look up "checkout" for feature/checkout.
 #
-# This is the one derivation of a draft name in the suite. It is recorded on the
-# review below (reviewdraft) and read back from there ever after, so that the
-# name a draft is written under and the name it is looked up under cannot come
-# from two different computations — they used to, and the disagreement was
-# invisible: the draft written from inside this review went to origin/feature/x
-# while every other entry point looked under feature/x.
+# This is the SINGLE derivation of a draft name in the suite. It is recorded below
+# (reviewdraft) and read back from there ever after, so the name a draft is written
+# under and the name it is looked up under cannot come from two computations: they
+# used to, invisibly — the draft written from inside this review went to
+# origin/feature/x while every other entry point looked under feature/x.
 #
-# Above the --step branch, because that branch exits: with the derivation below
-# it, a compare --step of a remote-tracking branch recorded no name at all and
-# every reader fell back to the review's source. That is the disagreement again,
-# in the one mode nobody thought to look at — git review walkthrough draft from
-# inside such a review died with "origin/origin/feature/x not found", and save
-# filed the draft nowhere, so the paused review's row never showed it and
-# forget --saved never took it.
+# Above the --step branch, because that branch exits: below it, a compare --step of
+# a remote-tracking branch recorded no name at all and every reader fell back to
+# the review's source.
 draftsrc="$name"
 if git rev-parse --verify --quiet "refs/heads/$b" >/dev/null; then
 	draftsrc="$b"
@@ -182,8 +170,7 @@ if [ "$step" -eq 1 ]; then
 	git config "branch.$rb.reviewstep" "1"
 	git config "branch.$rb.reviewreadonly" "1"
 	# The draft's name, from the single derivation above — see the whole-mode write
-	# below. A step review reads no walkthrough and still holds custody of one, and
-	# here the name really does differ from the review's own.
+	# below. A step review reads no walkthrough but still holds custody of one.
 	git config "branch.$rb.reviewdraft" "$draftsrc"
 	if [ -n "$returnbranch" ]; then
 		git config "branch.$rb.reviewreturn" "$returnbranch"
@@ -194,11 +181,11 @@ if [ "$step" -eq 1 ]; then
 	exit 0
 fi
 
-# Walkthrough auto-detection, exactly like git review start: if <b>'s tree carries
-# a .review/walkthrough.md whose entries intersect the compared range, enter walk
-# mode. It stays read-only — reviewreadonly is still set below, so git review finish
-# refuses regardless of mode — walk only adds a reading cursor. --keys fails before
-# creating the branch when there is no walk or no key in range (same as start).
+# Walkthrough auto-detection, exactly like git review start: a .review/walkthrough.md
+# on <b> whose entries intersect the range enters walk mode, which only adds a
+# reading cursor — reviewreadonly is set below either way, so finish refuses in
+# every mode. --keys fails before the branch is created when there is no walk or
+# no key in range (same as start).
 walk=0
 walkcount=0
 keys_filter=0
@@ -225,8 +212,8 @@ if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$bcommit")" && [ -n "$wtconte
 		fi
 		degradedfiles="$(range_files "$bcommit" "$acommit" | tr '\n' ' ')"
 		# Attributed to whoever wrote the order that failed to apply, as start does:
-		# the draft in force here belongs to the branch, which for a remote-tracking
-		# <b> is not even spelled the same as the review.
+		# the draft belongs to the branch, which for a remote-tracking <b> is not
+		# even spelled the same as the review.
 		if [ -n "${walk_draft_src:-}" ] && walk_is_draft "$walk_draft_src"; then
 			echo "note: you have a walkthrough draft for $walk_draft_src, but none of its entries apply to $a..$b; reading the whole diff: $degradedfiles"
 		else
@@ -249,10 +236,9 @@ git config "branch.$rb.reviewtip" "$bcommit"
 git config "branch.$rb.reviewreadonly" "1"
 # Where this review's draft lives, from the single derivation above. Recorded in
 # every mode and whether or not a draft exists yet, because the surfaces that need
-# it are not the walk ones: a draft written inside a whole-mode compare, and the
-# custody of it in list, save, continue and forget. For a loose revision it is the
-# review's own identity — the only name that comparison has — which is what those
-# surfaces used to derive for every review, correctly there and nowhere else.
+# it are not the walk ones: a draft written inside a whole-mode compare, and its
+# custody in list, save, continue and forget. For a loose revision it is the
+# review's own identity — the only name a comparison has.
 git config "branch.$rb.reviewdraft" "$draftsrc"
 if [ -n "$returnbranch" ]; then
 	git config "branch.$rb.reviewreturn" "$returnbranch"
@@ -263,24 +249,22 @@ if [ "$walk" -eq 1 ]; then
 	git config "branch.$rb.reviewwalkstep" "1"
 	git config "branch.$rb.reviewwalkcount" "$walkcount"
 	# The base HEAD was just pinned to, so the cursor's diagnostics can ask git
-	# whether HEAD moved instead of inferring it (walk_at_base). Same key start
-	# writes, for the same reason.
+	# whether HEAD moved instead of inferring it (walk_at_base). Same key as start.
 	git config "branch.$rb.reviewwalkbase" "$(git rev-parse HEAD)"
 	if [ "$keys_filter" -eq 1 ]; then
 		git config "branch.$rb.reviewwalkkeys" "1"
 	fi
 	# Whether this reading order came from the reviewer's own draft — the same flag
-	# start writes, and for the same diagnostics. The name it belongs to is
-	# reviewdraft, written above for every compare; this says only that the order
-	# being walked is the one in that file.
+	# start writes, for the same diagnostics. The name is reviewdraft above; this
+	# says only that the order being walked is the one in that file.
 	if [ -n "${walk_draft_src:-}" ] && walk_is_draft "$walk_draft_src"; then
 		git config "branch.$rb.reviewwalkfromdraft" "1"
 	fi
 
 	if [ "$keys_filter" -eq 0 ]; then
 		# Files in range with no walkthrough entry: appended to the end of the reading
-		# order (walk_reading_order), so name them rather than leave them to be
-		# discovered silently — same as start.
+		# order (walk_reading_order), so name them rather than let them be discovered
+		# silently — same as start.
 		uncovered="$(printf '%s\n' "$walkpaths" | tail -n +"$((guidedcount + 1))")"
 		if [ -n "$uncovered" ]; then
 			echo "note: file(s) in range not in the walkthrough are added to the end of the reading order: $(printf '%s\n' "$uncovered" | tr '\n' ' ')"

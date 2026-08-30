@@ -43,12 +43,11 @@ public sealed class GitReviewToolWindow : ToolWindowPane
 
     /// <summary>
     /// The one object the shell ever sees as this pane's content. <c>WindowPane.Content</c>
-    /// is an ordinary auto-property that the shell reads exactly once, in
-    /// <c>IVsUIElementPane.CreateUIElementPane</c>, which runs while the frame is being
-    /// created — that is, before <see cref="OnToolWindowCreated"/>. Assigning
-    /// <c>Content</c> after that writes a field nobody reads again: the shell keeps
-    /// rendering whatever it got, so the pane stays exactly as the constructor left it.
-    /// Hence a container fixed at construction time whose child gets swapped instead.
+    /// is an ordinary auto-property the shell reads exactly once, in
+    /// <c>IVsUIElementPane.CreateUIElementPane</c> — before <see cref="OnToolWindowCreated"/>
+    /// runs. Assigning <c>Content</c> after that writes a field nobody reads again, so the
+    /// pane stays exactly as the constructor left it. Hence a container fixed at
+    /// construction time whose child gets swapped instead.
     /// </summary>
     private readonly Grid _host = new();
 

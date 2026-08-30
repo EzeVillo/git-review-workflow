@@ -9,13 +9,12 @@ namespace GitReview.VS.ToolWindows;
 
 /// <summary>
 /// The full action matrix: the 27 product actions plus the panel-only controls, each
-/// with the confirmation, picker and staleness re-check its counterpart has in VS Code
-/// and IntelliJ. Confirmation and error copy come from <see cref="UserCopy"/> and
-/// <see cref="HousekeepingLogic"/>, so all three clients say the same words.
+/// with its own confirmation, picker and staleness re-check. Confirmation and error
+/// copy come from <see cref="UserCopy"/> and <see cref="HousekeepingLogic"/>.
 ///
-/// Every action is answered here whether it was clicked in the panel or picked from
-/// Tools → git review: the menu routes through the panel's own action path, so there is
-/// one implementation per action rather than one per surface.
+/// Every action is answered here whether clicked in the panel or picked from Tools →
+/// git review: the menu routes through the panel's own action path, one implementation
+/// per action rather than per surface.
 /// </summary>
 public sealed class ActionDispatcher
 {
@@ -26,9 +25,9 @@ public sealed class ActionDispatcher
     private const string WalkthroughPath = ".review/walkthrough.md";
 
     /// <summary>
-    /// Cap on the files a single commit's Diff opens at once, same as the JetBrains
-    /// client: Visual Studio gives each one its own comparison window, and a commit that
-    /// touches two hundred files should not open two hundred of them.
+    /// Cap on the files a single commit's Diff opens at once: Visual Studio gives each
+    /// one its own comparison window, and a commit that touches two hundred files
+    /// should not open two hundred of them.
     /// </summary>
     private const int CommitDiffFileCap = 20;
 
@@ -150,8 +149,8 @@ public sealed class ActionDispatcher
                 await DiscardInventoryAsync(index).ConfigureAwait(true);
                 return;
 
-            // Draft block (012): four BODY controls. No .vsct entry, no command id,
-            // no Tools menu item — the canonical's count of 27 does not move.
+            // Draft block: four BODY controls. No .vsct entry, no command id, no Tools
+            // menu item — the canonical's count of 27 does not move.
             case "openDraft":
             {
                 var draft = DraftRowAt(index);
@@ -176,8 +175,7 @@ public sealed class ActionDispatcher
                 await DiscardDraftAsync(index).ConfigureAwait(true);
                 return;
 
-            // Authoring-guide block: same deal as the draft one. BODY controls,
-            // no .vsct entry, no command id, no Tools menu item.
+            // Authoring-guide block: same shape as the draft block above.
             case "openGuide":
             {
                 var guide = GuideRowAt(index);
@@ -199,15 +197,12 @@ public sealed class ActionDispatcher
                 await DiscardFixesAsync(index).ConfigureAwait(true);
                 return;
 
-            // Bulk of the same section: no index, runs clean --fixes-only with no
-            // branch, which by clean's own design never touches review/*.
             case "discardAllFixes":
                 await DiscardAllFixesAsync().ConfigureAwait(true);
                 return;
 
-            // The author's walkthrough row. Neither control mutates anything, so
-            // neither takes the lock; updating it is walkthroughInit, which is a
-            // product action and goes the way it always did.
+            // The author's walkthrough row. Neither control mutates anything, so neither
+            // takes the lock; updating it is walkthroughInit, a product action of its own.
             case "openWalkthrough":
             {
                 var w = State.Walkthrough;
@@ -273,9 +268,8 @@ public sealed class ActionDispatcher
             case "showWhy":
             {
                 if (_host.OpenText is null) return;
-                // The panel's own why, not a model rebuilt here: BuildPanelModel takes
-                // the text as an input, so a model built without it reads as one whose
-                // why is still loading and this action would never open anything.
+                // The panel's own why, not a model rebuilt here: BuildPanelModel takes it
+                // as an input, so a model built without it reads as still loading.
                 var why = _panel.Why?.Text;
                 if (string.IsNullOrEmpty(why)) return;
                 await _host.OpenText(why!).ConfigureAwait(true);
@@ -299,7 +293,7 @@ public sealed class ActionDispatcher
         if (result is null) return;
         if (result.ExitCode is not 0 || result.TimedOut)
         {
-            // Information, not error — same as VS Code for a refused navigation.
+            // Information, not error: a refused navigation is not a failure.
             GitReviewDialogs.Info(
                 CliMessage.CliErrorText(result.Stderr, result.Stdout, UserCopy.NavigateFailed(wire)));
             return;
@@ -408,13 +402,10 @@ public sealed class ActionDispatcher
             GitReviewDialogs.Error(UserCopy.NoSoleRoot);
             return;
         }
-        // Which sides this file actually has comes from git, not from the entry name:
-        // an entry the reviewer has since reverted has no diff left to show, and a file
-        // the pull request adds or deletes only exists on one side. Both are answers,
-        // and building the request from the path alone could state neither. Not being able
-        // to ask git is a third answer, and not one about the review: reporting it as "no
-        // changes left" would state, of a file the walkthrough just pointed at, something
-        // this host never checked.
+        // The sides actually present come from git, not from the entry name: a reverted
+        // entry has no diff left, and an added/deleted file exists on only one side. A
+        // failure to ask git gets its own error rather than being folded into "no
+        // changes left".
         var changes = await RangeChanges.ForRangeAsync(_panel.Cli, cwd).ConfigureAwait(true);
         if (changes is null)
         {
@@ -522,11 +513,10 @@ public sealed class ActionDispatcher
             _host).ConfigureAwait(true);
         if (!started) return;
         await _panel.RefreshAsync().ConfigureAwait(true);
-        // El acuse es el panel, asi que el panel tiene que estar a la vista: el
-        // asistente corrio sobre el editor. Y el camino del borrador termina SIN
-        // cambiar de situacion --el panel sigue en no-review y lo unico que pasa
-        // es que el bloque de borradores nace arriba de todo--, que es el caso
-        // que motivo esto. Despues del refresco y solo en verde.
+        // El acuse es el panel: hay que revelarlo (ver CLAUDE.md, "se revela, no se
+        // notifica"). Caso que lo motivó: el camino del borrador no cambia de
+        // situación, solo nace el bloque de borradores arriba de todo. Va después del
+        // refresco y solo en verde.
         PanelReveal.Reveal(ControlId.StartReview, _host);
     }
 
@@ -564,9 +554,8 @@ public sealed class ActionDispatcher
         var destination = UserCopy.FinishDestination(ontoSource, source);
         var outcome = FinishOutcomeLogic.FinishOutcome(_panel.State.Current, reviewBranch);
         // null cuando el panel ya lo dijo (ver UserCopy.FinishSuccess).
-        // El acuse del caso normal es el banner de finish-pending, asi que el
-        // panel tiene que estar a la vista: Finish esta en su barra de titulo
-        // pero tambien en el menu, donde puede no estarlo.
+        // El acuse normal es el banner de finish-pending, así que el panel debe estar
+        // a la vista: Finish también se dispara desde el menú, donde puede no estarlo.
         PanelReveal.Reveal(ControlId.FinishReview, _host);
 
         var toast = UserCopy.FinishSuccess(destination, outcome);
@@ -653,8 +642,8 @@ public sealed class ActionDispatcher
             new ActionParams.Continue(source),
             progress: UserCopy.ContinuingProgress(source)).ConfigureAwait(true);
         if (result is null || result.ExitCode is not 0 || result.TimedOut) return;
-        // La situacion entera cambia --no-review pasa a review--, y esto se
-        // dispara tambien desde el menu, con el panel cerrado.
+        // La situación entera cambia —no-review pasa a review— y esto se dispara
+        // también desde el menú, con el panel cerrado.
         PanelReveal.Reveal(ControlId.ContinueReview, _host);
     }
 
@@ -727,9 +716,9 @@ public sealed class ActionDispatcher
             draft).ConfigureAwait(true);
         if (!started) return;
         await _panel.RefreshAsync().ConfigureAwait(true);
-        // El panel pasa a review de punta a punta. Vino de una fila del panel,
-        // asi que casi siempre es un no-op -- y no distinguir de donde vino es
-        // deliberado: seria estado que este cliente no tiene por que llevar.
+        // El panel pasa a review de punta a punta. Vino de una fila propia, así que
+        // casi siempre es no-op — no distinguir el origen es deliberado: sería
+        // estado de más.
         PanelReveal.Reveal(ControlId.StartFromDraft, _host);
     }
 
@@ -758,15 +747,10 @@ public sealed class ActionDispatcher
         PanelModelBuilder.GuideAt(State.GuidesList, index);
 
     /// <summary>
-    /// Ask the CLI for the empty file, then open it.
-    ///
-    /// The write is the CLI's and not the client's: if each client created the file on
-    /// its own that would be three implementations of "create an empty file in the
-    /// gitdir" and three chances to get the path wrong — the same reason opening uses
-    /// the reported path instead of deriving it.
-    ///
-    /// Opening it is the next step and not an extra: it is created EMPTY on purpose, so
-    /// without opening it the button leaves the reviewer looking at a row saying "empty".
+    /// Asks the CLI for the empty file, then opens it: the CLI owns the write (the CLI
+    /// is the only source of truth, see CLAUDE.md), so opening uses the path it reported
+    /// rather than deriving one. It opens automatically because the file is created
+    /// EMPTY on purpose — without opening it the row would just sit there saying "empty".
     /// </summary>
     private async Task CreateGuideAsync(int? index)
     {
@@ -805,16 +789,13 @@ public sealed class ActionDispatcher
     }
 
     /// <summary>
-    /// Drops the branch of edits of THIS row, with a confirmation first.
+    /// Drops the branch of edits of THIS row, confirmed first with the cost as the CLI
+    /// reported it — nothing here is derived, since only git knows whether those commits
+    /// already reached the base.
     ///
-    /// The confirmation names the real verb and says how much it costs, with the state
-    /// the CLI reported — the only one that can ask git whether those commits are in
-    /// the base. Nothing is derived here.
-    ///
-    /// Always --fixes-only, even when the session is already gone: the argv cannot
-    /// depend on a value that is re-read on every refresh. A late "clean &lt;x&gt;" —
-    /// the review came back between the refresh and the click — would take a live
-    /// review down from a button that promises to delete a branch of edits.
+    /// Always --fixes-only, even if the session is gone by the time this runs: the argv
+    /// can't depend on a value re-read after the confirmation, or a review that came back
+    /// in that window could get taken down by a button that only promises to delete edits.
     /// </summary>
     private async Task DiscardFixesAsync(int? index)
     {
@@ -828,11 +809,9 @@ public sealed class ActionDispatcher
     }
 
     /// <summary>
-    /// Drops every branch of edits at once: clean --fixes-only with NO branch.
-    /// By clean's own scoping that only ever enumerates review-fixes branches,
-    /// never a review session, so unlike a bare clean it does not need an index
-    /// or a row to re-resolve — it does not depend on which row the panel showed
-    /// when the button was pressed.
+    /// Drops every branch of edits at once: clean --fixes-only with no branch, which by
+    /// clean's own scoping only ever enumerates review-fixes branches — so unlike a bare
+    /// clean it needs no index or row to resolve against.
     /// </summary>
     private async Task DiscardAllFixesAsync()
     {
@@ -917,21 +896,18 @@ public sealed class ActionDispatcher
                 action = new HousekeepingAction(HousekeepingKind.ForgetDeltaStale);
                 break;
         }
-        // forgetReview no tiene control de panel -- llega por el menu y la
-        // paleta --, asi que no tiene ControlId propio: el canonico declara
-        // `confirms:` por CONTROL, y sin control no hay donde declararlo. Comparte
-        // la puerta del housekeeping con clean, que si lo tiene, y por eso pasa
-        // el suyo. Mismo trato que confirmAndRun en el plugin de JetBrains.
+        // forgetReview no tiene control de panel —llega por el menú y la paleta—, así
+        // que no tiene ControlId propio: el canónico declara `confirms:` por CONTROL, y
+        // sin control no hay dónde declararlo. Comparte la puerta del housekeeping con
+        // clean, que sí lo tiene, y por eso pasa el suyo.
         await ConfirmAndRunHousekeepingAsync(ControlId.CleanReview, action).ConfigureAwait(true);
     }
 
     /// <summary>
     /// Which branch a housekeeping verb applies to — one of the reviews this client
-    /// knows about, and only those. A delta marker can outlive every review branch that
-    /// would have named it, but typing that name blind is not the way out: "Forget stale
-    /// delta markers" is exactly the markers whose branch is gone, and "Forget every
-    /// delta marker" needs no name at all. The picker filters as you type, so writing
-    /// still reaches the row — it just cannot invent one.
+    /// knows about, never typed blind. A delta marker can outlive its review branch,
+    /// which is why "stale" and "every" need no name at all. The picker still filters
+    /// as you type; it just cannot invent a row.
     /// </summary>
     private string? PickSourceName(bool savedOnly, bool forClean)
     {
@@ -971,22 +947,19 @@ public sealed class ActionDispatcher
             : GitReviewDialogs.ChooseOrType(title, "Branch, tag or commit", candidates);
 
     /// <param name="id">
-    /// The control the reviewer actually pressed. Four of them land here —
-    /// discardInventory, discardFixes, discardAllFixes and the two housekeeping
-    /// verbs — and the dialog is one, so the id travels rather than being
-    /// guessed from the action: the gate checks what was declared for the
-    /// control, not what the verb happens to be.
+    /// The control the reviewer actually pressed — discardInventory, discardFixes,
+    /// discardAllFixes, clean or forget — travels through rather than being guessed
+    /// from the action: the confirmation gate checks what was declared for the
+    /// control, not the verb.
     /// </param>
     private async Task ConfirmAndRunHousekeepingAsync(ControlId id, HousekeepingAction action)
     {
         var copy = HousekeepingLogic.ConfirmCopyFor(action);
         if (!GitReviewDialogs.Confirm(id, copy.Title, copy.Detail, copy.Button)) return;
-        // One verb per kind (clean / forget), resolved in the domain.
         var verb = HousekeepingLogic.VerbForHousekeeping(action) == "forget"
             ? "forgetReview"
             : "cleanReview";
-        // The confirmation's own question, as a statement: same line the extension
-        // puts in its progress notification.
+        // The confirmation's own question, restated as a running-now line.
         await RunAsync(
             verb,
             new ActionParams.Housekeeping(action),
@@ -1121,18 +1094,12 @@ public sealed class ActionDispatcher
     }
 
     /// <summary>
-    /// Walkthrough init, and the choice between reconciling and starting over, asked
-    /// BEFORE the verb runs.
+    /// Walkthrough init: reconcile-vs-start-over is asked BEFORE the verb runs, not after
+    /// a failure — init now updates instead of refusing, so there is no CLI error left to
+    /// hang the offer off of.
     ///
-    /// It used to hang off the CLI FAILING: init ran, and when it died because the file
-    /// was already there, that is where the overwrite was offered. Since init updates
-    /// instead of refusing, that path stopped existing — and with it the only way to
-    /// reach --force from the panel.
-    ///
-    /// Nothing is asked when there is nothing to preserve, and nothing is asked over a
-    /// Superseded one either: that file is another PR's, the CLI starts over on its own,
-    /// and offering to preserve it would be offering to keep prose about a change that
-    /// shipped.
+    /// Nothing is asked when there is nothing to preserve, nor over a Superseded file:
+    /// that one belongs to another PR and the CLI already starts over on its own.
     /// </summary>
     private async Task WalkthroughInitAsync()
     {
@@ -1176,9 +1143,9 @@ public sealed class ActionDispatcher
         var result = await RunAsync(
             "walkthroughBuild", progress: UserCopy.WalkthroughBuildProgress).ConfigureAwait(true);
         if (result is null || result.ExitCode is not 0 || result.TimedOut) return;
-        // Sin toast: el build tiene DOS acuses visibles y este era el tercero.
-        // El refresco deja la fila del walkthrough con su badge al dia y su par
-        // annotated/total recontado, y la linea de abajo abre el archivo.
+        // Sin toast: el refresco ya deja la fila con el badge al día y el par
+        // annotated/total recontado, y la línea de abajo abre el archivo (ver CLAUDE.md,
+        // "Lo que el panel muestra no se notifica").
         await OpenWalkthroughAsync(cwd).ConfigureAwait(true);
     }
 
@@ -1196,17 +1163,14 @@ public sealed class ActionDispatcher
     // -- running ------------------------------------------------------------
 
     /// <summary>
-    /// Every mutation goes through here: re-read the state after the confirmation, refuse
-    /// if the repository moved while the dialog was open, then run under the mutation lock
-    /// and refresh. Returns null when there was nothing to report on (busy, or stale) —
-    /// those already told the reviewer what happened.
-    /// </summary>
-    /// <summary>
-    /// One mutation: staleness re-check, the CLI call, the refresh that follows, and a
-    /// failure reported the way its counterpart reports it. <paramref name="progress"/>
-    /// is what the shell says while that runs -- the reviewer who started a finish from
-    /// the menu is not necessarily watching the panel's greyed-out buttons. It covers
-    /// the two refreshes as well as the verb: on Windows those are seconds of their own.
+    /// Every mutation: re-read state after the confirmation, refuse if the repository
+    /// moved while the dialog was open, run under the mutation lock, then refresh.
+    /// Returns null when there is nothing left to report (busy, or stale) — both already
+    /// told the reviewer what happened.
+    ///
+    /// <paramref name="progress"/> covers the two refreshes as well as the verb itself —
+    /// on Windows those are seconds of their own — because a finish started from the menu
+    /// may not have the panel's greyed-out buttons in view.
     /// </summary>
     private async Task<InvokeResult?> RunAsync(
         string action,

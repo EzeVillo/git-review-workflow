@@ -10,7 +10,7 @@ import {runHousekeeping} from "./runHousekeeping";
 type ForgetPick = vscode.QuickPickItem & {action: HousekeepingKind};
 
 /**
- * Discard desde inventario: forget --saved o clean según la fila (006).
+ * Discard desde inventario: forget --saved o clean según la fila.
  */
 export async function discardInventoryReview(
     index: unknown,

@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
- * Table-driven argv parity for mutative actions (SC-003 / FR-008 / T016d).
+ * Table-driven argv parity for mutative actions.
  */
 class ActionArgvParityTest {
     @Test

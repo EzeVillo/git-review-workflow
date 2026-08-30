@@ -232,7 +232,7 @@ object StartWizard {
     }
 
     /**
-     * Lo que queda del camino del borrador (012). Las decisiones viven en
+     * Lo que queda del camino del borrador. Las decisiones viven en
      * `DraftFlow`; acá sólo está el vehículo: una invocación y el cierre.
      *
      * No abre el borrador y no deja ningún diálogo esperando. La continuación
@@ -246,20 +246,16 @@ object StartWizard {
             when (val current = state) {
                 is DraftFlowState.Create -> {
                     val outcome = invokeDraft(ctx, service, current.force, current.update)
-                    // Solo lo que el panel no dice. Sobre un `update` eso es el
-                    // resultado del verbo -- el panel muestra el par nuevo pero
-                    // no que se conservo ni que entro --; sobre un `create`,
-                    // nada: el refresco ya dibujo la fila del borrador, y todo
-                    // lo que el verbo nombra ahi tiene su propia fila.
+                    // Solo lo que el panel no dice ya llega en outcome.text (ver
+                    // invokeDraft): nada en un create, el par nuevo en un update.
                     if (outcome.ok && outcome.text.isNotEmpty()) {
                         UiMessages.info(ctx.project, outcome.text)
                     }
                     if (outcome.ok) {
-                        // EL CASO QUE MOTIVO EL REVEAL. Este camino termina SIN
-                        // cambiar de situacion: el panel sigue en no-review y lo
-                        // unico que pasa es que el bloque de borradores nace
-                        // arriba de todo. Y un `create` tampoco notifica, asi que
-                        // sin esto no quedaba acuse en ningun lado.
+                        // Ver CLAUDE.md "El panel se revela, no se notifica": la
+                        // situacion no cambia, pero la fila del borrador nace
+                        // arriba de todo y un `create` tampoco notifica -- sin
+                        // este reveal no quedaba acuse en ningun lado.
                         revealPanel(ctx.project, ControlId.START_REVIEW)
                     }
                     state = advanceDraftFlow(
@@ -295,8 +291,8 @@ object StartWizard {
     private data class DraftOutcome(val ok: Boolean, val text: String)
 
     /**
-     * La creación del borrador. Sólo la creación: validarlo es cosa del panel
-     * desde 012, con los flags que la CLI grabó en el archivo.
+     * La creación del borrador. Sólo la creación: validarlo es cosa del panel,
+     * con los flags que la CLI grabó en el archivo.
      */
     private fun invokeDraft(
         ctx: WizardContext,
@@ -321,20 +317,15 @@ object StartWizard {
         val ok = result.exitCode == 0 && !result.timedOut
         return DraftOutcome(
             ok = ok,
-            // En verde el acuse depende del paso, y un `create` NO TIENE
-            // NINGUNO: el refresco de arriba acaba de dibujar la fila del
-            // borrador, y todo lo que el verbo dice ahi tiene su propia fila en
-            // el panel -- el archivo y el comando siguiente (la fila y su boton
-            // Validate and start), el walkthrough del autor al que tapa (su
-            // fila) y la guia de autoria que falta (las dos filas de guias, con
-            // su Create). Notificarlo era repetir el panel entero en un parrafo.
-            //
-            // Un `update` si: que se conservo, que entro y que se cayo no esta
-            // en ninguna fila, porque la del borrador muestra el par NUEVO. Los
-            // tres numeros llegan por el registro `merged` y la frase es
-            // nuestra; sin registro (una CLI vieja) el acuse se cae entero, que
-            // es mejor que reenviar la prosa con la ruta y el comando
-            // siguiente. En rojo, el error.
+            // En verde: un `create` no notifica nada -- el refresco ya dibujo la
+            // fila del borrador, y cada cosa que el verbo nombra (el archivo con
+            // su Validate and start, el walkthrough que tapa, la guia que falta)
+            // ya tiene su propia fila; notificarlo era repetir el panel en un
+            // parrafo. Un `update` si: cuanto se conservo/entro/cayo no esta en
+            // ninguna fila -- la del borrador muestra el par NUEVO -- asi que
+            // sale de los tres numeros del registro `merged`; sin registro (CLI
+            // vieja) el acuse se cae entero antes que reenviar prosa con ruta y
+            // comando siguiente. En rojo, el error.
             text = if (!ok) {
                 UiMessages.flatten(result.stderr)
             } else if (!update) {
@@ -347,9 +338,11 @@ object StartWizard {
         )
     }
 
-    /** Ofertas para el contexto ya resuelto (misma invocación que el paso 4). */
-    /** Las ofertas para este contexto. Los borradores no se leen aca: cual de
-     *  los tres caminos del borrador corresponde ya viene decidido en la oferta. */
+    /**
+     * Las ofertas para este contexto (misma invocación que el paso 4). Los
+     * borradores no se leen acá: cuál de los tres caminos corresponde ya viene
+     * decidido en la oferta.
+     */
     private data class OfferContext(
         val offers: List<ReadingOffer>?,
     )
@@ -372,7 +365,7 @@ object StartWizard {
     }
 
     /**
-     * *Validate and start* de una fila del bloque de borradores (012): los mismos
+     * *Validate and start* de una fila del bloque de borradores: los mismos
      * cuatro pasos que la extensión, con los flags de ESA fila.
      *
      * Vive acá y no en el despachador porque el paso 4 es el `start` de siempre,
@@ -473,23 +466,22 @@ object StartWizard {
      * perder el foco — que es justo lo que no pasa mientras el panel conduce.
      */
     private fun saveDraftDocument(project: Project, path: String) {
-        // La VFS no se toca desde acá. Resolver un path es dos operaciones en
-        // una: si la VFS nunca vio el archivo hay que crear el nodo y disparar el
-        // evento de creación, o sea mutar el modelo de la plataforma, y este
-        // handler entra por un JButton del panel — sin write-intent lock (ver
-        // `openInEditor`). El borrador vive en el gitdir, que es justamente lo
-        // que ningún editor indexa, así que sería siempre ese camino.
-        // La pregunta acá es más chica que la que contesta la VFS: ¿hay un
-        // documento abierto y sucio para ESTE archivo? Los documentos sucios ya
-        // traen su VirtualFile cargado, así que se responde sin ir al disco — y
-        // si el archivo no está en la VFS no hay documento abierto, o sea que la
-        // respuesta correcta es la misma que daba el `?: return` de antes.
-        // Desde 2024.1 el EDT tampoco trae read access implícito, así que el lock
-        // lo pide el llamador. `ReadAction`/`WriteAction` y no
-        // `WriteIntentReadAction`, que sería el lock justo pero está
-        // @ApiStatus.Experimental — el descriptor no tiene until-build, así que
-        // API que puede cambiar de forma es un NoSuchMethodError a futuro.
-        // El write lock se toma sólo si de verdad hay algo que guardar.
+        // La VFS no se toca acá. Resolver el path desde cero significaría crear
+        // el nodo de VFS y disparar su evento de creación -- mutar el modelo de
+        // la plataforma, que pide el write-intent lock que este JButton no tiene
+        // (ver `openInEditor`) -- y el borrador vive en el gitdir, que ningún
+        // editor indexa, así que sería siempre ese camino. La pregunta real es
+        // más chica: ¿hay un documento abierto y sucio para ESTE archivo? Un
+        // documento sucio ya trae su VirtualFile cargado, así que se contesta sin
+        // tocar disco ni VFS; si el archivo no está en la VFS tampoco hay
+        // documento abierto, mismo resultado que el `?: return` de antes.
+        //
+        // Desde 2024.1 el EDT no trae read access implícito, así que el lock lo
+        // pide el llamador -- `ReadAction`/`WriteAction` y no
+        // `WriteIntentReadAction` (el lock más preciso), que sigue
+        // @ApiStatus.Experimental sin until-build: una API así puede cambiar de
+        // forma y volverse un NoSuchMethodError. El write lock se toma sólo si
+        // de verdad hay algo que guardar.
         val fdm = FileDocumentManager.getInstance()
         val unsaved = ReadAction.computeBlocking<Document?, RuntimeException> {
             fdm.unsavedDocuments.firstOrNull { doc ->
@@ -537,7 +529,7 @@ object StartWizard {
                     // window pudo quedar cerrada. Solo en verde y despues del
                     // refresco, o sea sobre el panel ya redibujado.
                     revealPanel(project, from)
-                    // Successful start can still emit notes on stderr (FR-031).
+                    // Successful start can still emit notes on stderr.
                     if (result.note != null) {
                         UiMessages.info(project, result.note)
                     }

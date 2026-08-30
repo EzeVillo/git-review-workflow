@@ -2,13 +2,10 @@
 #
 # git review continue — resume a review put aside with git review save.
 #
-# It turns review-saved/<branch> back into the active review/<branch>, restoring
-# the exact state you left: in whole mode the staged PR diff with your edits in the
-# working tree; in step mode the commit you were on, its edits, and every other
-# banked edit — so review-next / review-prev keep working as before.
-#
-# With no argument it resumes the only saved review, or lists them if there is more
-# than one. Name a branch to pick a specific one.
+# Turns review-saved/<branch> back into the active review/<branch>, restoring the
+# exact state you left: in whole mode the staged PR diff with your edits in the
+# working tree; in step mode the commit you were on, its edits and every other
+# banked edit, so next/prev keep working as before.
 #
 set -eu
 
@@ -53,7 +50,6 @@ done
 
 git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 
-# Shared helpers, sourced from the libexec directory the dispatcher points us at.
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
@@ -88,46 +84,37 @@ mode="$(git config "branch.$saved.reviewmode" || echo whole)"
 
 # restore_draft: bring the reviewer's walkthrough draft back to the active
 # namespace. Called from both mode paths immediately before the review branch is
-# created, which is the one point that satisfies both constraints at once:
+# created — the one point that satisfies both constraints at once:
 #
-#   * late enough that every guard which can still die has already run. Moving it
-#     back and then aborting would leave the draft in the active namespace with
-#     the review still paused — and the next git review clean, seeing no
-#     review/<src>, used to delete it outright.
+#   * late enough that every guard which can still die has already run: moving it
+#     back and then aborting leaves the draft in the active namespace with the
+#     review still paused, and clean, seeing no review/<src>, used to delete it.
 #   * early enough that nothing has read a walkthrough yet: the walk path rebuilds
-#     its cursor through walk_read further down, which has to find the draft
-#     already in place or it would fall through to the PR's own walkthrough — or
-#     to none at all — and quietly resume in a different reading order.
-#
-# From the branch's creation onward the draft has an owner again, so a failure
-# below (a patch that will not apply) leaves it beside a live review, not adrift.
+#     its cursor through walk_read below, which has to find the draft already in
+#     place or it resumes in a different reading order, silently.
 #
 # The draft's branch comes from walk_review_draft_src rather than being assumed to
 # be the review's own source: a compare of origin/feature/x drafts for feature/x,
 # and save filed it under that name.
 restore_draft() {
-	# Resolve the gitdir in this shell, where the two path lookups below can share
-	# it: inside "$(walk_draft_path ...)" the cache would die with the subshell and
-	# each would spawn its own git rev-parse (see walk_gitdir_init).
+	# Resolve the gitdir in this shell so the two lookups below share it: inside a
+	# "$(...)" the cache dies with the subshell and each forks its own git rev-parse
+	# (see walk_gitdir_init).
 	walk_gitdir_init
-	# Only the review that filed it takes it back. Two paused reviews of one branch
+	# Only the review that filed it takes it back: two paused reviews of one branch
 	# file under one name, and a review that carried no draft has no claim on the
-	# file sitting there — it used to walk off with it, which left the review that
-	# had written it refusing to resume over "a draft written while paused" that was
-	# its own prose, moved.
+	# file sitting there — it used to walk off with another review's prose.
 	walk_saved_draft_filed "$saved" || return 0
 	_draftsrc="$(walk_review_draft_src "$saved")"
 	_saved_draft="$(walk_saved_draft_path "$_draftsrc")"
 	if [ -f "$_saved_draft" ]; then
 		_live_draft="$(walk_draft_path "$_draftsrc")"
-		# Never over a draft that is already there. Both files are hand-written
-		# prose, this one is newer, and nothing in the resume can tell which the
-		# reviewer meant to keep — so refuse and let them say, rather than overwrite
-		# and mention nothing, which is what this did: write a draft while the review
-		# was paused and continue silently reinstated the archived one, cursor and
-		# all, as if the writing had never happened. The same asymmetry the
-		# destructive verbs are built on: refusing costs a command, guessing costs
-		# the only copy.
+		# Never over a draft that is already there. Both files are hand-written prose
+		# and nothing in the resume can tell which the reviewer meant to keep, so
+		# refuse and let them say: writing a draft while the review was paused used to
+		# have continue silently reinstate the archived one, cursor and all. The
+		# asymmetry the destructive verbs are built on — refusing costs a command,
+		# guessing costs the only copy.
 		if [ -f "$_live_draft" ]; then
 			die "a walkthrough draft for $_draftsrc already exists, and the paused review carries one of its own; resuming would overwrite yours. Keep yours by discarding the archived one with 'git review forget --saved $src' (that discards the paused review too), or drop yours with 'git review forget --draft $_draftsrc' and resume."
 		fi
@@ -193,9 +180,9 @@ if [ "$mode" = "step" ]; then
 	restore_meta reviewlocal
 	restore_meta reviewreadonly
 	restore_meta reviewreturn
-	# The name the draft was filed under, restored in every mode for the same
-	# reason save copies it in every mode: the resumed review has to look the file
-	# up under the name it was written to, not under its own source.
+	# The name the draft was filed under, restored in every mode for the same reason
+	# save copies it in every mode: the resumed review has to look the file up under
+	# the name it was written to, not under its own source.
 	restore_meta reviewdraft
 
 	git branch -D "$saved" >/dev/null
@@ -204,12 +191,10 @@ if [ "$mode" = "step" ]; then
 	show_commit "$cstep" "$step" "$count"
 else
 	# whole and walk mode: rebuild the pristine review state (PR diff staged at the
-	# lower bound) and replay your edits into the working tree, leaving exactly what
-	# you had when you saved. Walk restores its reading cursor on top.
-	# Without || true a deleted reviewsavedlower (hand-edited or half-deleted
-	# config) would let set -e kill us mid-restore with no message; report it and
-	# bail before creating the review branch, the way the step path validates its
-	# keys above.
+	# lower bound) and replay your edits into the working tree; walk restores its
+	# reading cursor on top. Read with || true and reported: a deleted
+	# reviewsavedlower would otherwise let set -e kill us mid-restore with no
+	# message, so bail before creating the branch, as the step path does above.
 	lower="$(git config "branch.$saved.reviewsavedlower" || true)"
 	[ -n "$lower" ] || die "missing review metadata for $saved; was it created with git review start? Discard it with 'git review forget --saved $src'."
 
@@ -230,9 +215,7 @@ else
 	restore_meta reviewlocal
 	restore_meta reviewreadonly
 	restore_meta reviewreturn
-	# The name the draft was filed under, restored in every mode for the same
-	# reason save copies it in every mode: the resumed review has to look the file
-	# up under the name it was written to, not under its own source.
+	# The name the draft was filed under (see the step path above).
 	restore_meta reviewdraft
 
 	if [ "$mode" = "walk" ]; then
@@ -244,9 +227,9 @@ else
 		restore_meta reviewwalkbase
 		git branch -D "$saved" >/dev/null
 
-		# Re-derive the sequence and reprint the entry you were on, so continue lands
-		# you back on the same reading cursor the way the step path reprints its commit.
-		# load_walk_review_meta applies the keys-only filter when reviewwalkkeys is set.
+		# Re-derive the sequence and reprint the entry you were on, the way the step
+		# path reprints its commit. load_walk_review_meta applies the keys-only filter
+		# when reviewwalkkeys is set.
 		cur="$rb"
 		load_walk_review_meta
 		echo "resumed review of $src — walkthrough entry $walkstep/$total"

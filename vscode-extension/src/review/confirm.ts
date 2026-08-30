@@ -1,15 +1,9 @@
 import * as vscode from "vscode";
 
 /**
- * Los controles que abren un diálogo antes de mutar, o sea el `confirms:` del
- * canónico (`contracts/client-product-surface.yaml`).
- *
- * Vive acá y no disperso en veinte comandos porque hasta ahora no vivía en
- * ningún lado: esta extensión tenía sus confirmaciones repartidas en dieciséis
- * `showWarningMessage` sueltos y `confirms:` no gobernaba nada — el checker del
- * contrato lo parseaba y lo descartaba sin usarlo. Sacar o agregar una
- * confirmación no ponía nada en rojo, y así el canónico llegó a declarar
- * `confirms: true` para un control que hacía rato no confirmaba.
+ * Los controles que abren un diálogo antes de mutar: el `confirms:` del
+ * canónico (`contracts/client-product-surface.yaml`), que sin esta puerta
+ * existía pero nadie lo consultaba (ver CLAUDE.md, "La copy de los paneles").
  *
  * `startReview` y `startFromDraft` NO están, a propósito y en los dos caminos
  * que llegan al start: el asistente ya pregunta cuatro cosas y `start` no
@@ -42,16 +36,15 @@ export function requiresConfirmation(id: string): boolean {
 }
 
 /**
- * LA ÚNICA PUERTA a un diálogo de confirmación de esta extensión, y por eso
- * toma el `id`: es lo que hace que la tabla de arriba **gobierne** en vez de
- * sólo describir. El id no cambia lo que se dibuja; cambia que un llamador no
- * pueda abrir un modal que el contrato no declara.
+ * LA ÚNICA PUERTA a un diálogo de confirmación de esta extensión. Toma el
+ * `id` para que un llamador no pueda abrir un modal que el contrato no
+ * declara; el id no cambia lo que se dibuja.
  *
  * Devuelve `true` sólo cuando se eligió el botón afirmativo: cerrar el diálogo
  * o apretar Cancel es «no hagas nada», nunca «seguí».
  *
- * El gate estático lo corre `scripts/check-client-product-surface.mjs`: todo id
- * declarado tiene un llamador acá, y no hay ningún otro modal en `src/`.
+ * Gate estático: `scripts/check-client-product-surface.mjs` confirma que todo
+ * id declarado tiene un llamador acá y que no hay ningún otro modal en `src/`.
  */
 export async function confirmMutation(
     id: ConfirmingId,
@@ -60,9 +53,8 @@ export async function confirmMutation(
     button: string
 ): Promise<boolean> {
     if (!requiresConfirmation(id)) {
-        // Un id que el canónico no declara no puede abrir un modal. Se reporta
-        // y se confirma igual: un cartel de más molesta, uno de menos borra
-        // trabajo sin preguntar. El gate estático es el que lo evita antes.
+        // No debería pasar (lo evita el gate estático), pero si pasa se confirma
+        // igual: un cartel de más molesta, uno de menos borra trabajo sin preguntar.
         console.error(`confirmMutation called for ${id}, which the canonical marks confirms: false`);
     }
     const answer = await vscode.window.showWarningMessage(

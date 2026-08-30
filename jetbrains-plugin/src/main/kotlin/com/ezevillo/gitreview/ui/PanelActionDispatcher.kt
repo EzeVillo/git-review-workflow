@@ -56,9 +56,8 @@ class PanelActionDispatcher(
     private val mutations = MutationActions(project, service)
 
     fun dispatch(id: ControlId, index: Int?, supportLinkId: String? = null): Boolean {
-        // Guard: confirmation path must run when required (FR-032)
+        // Confirmation happens inside the routed action, not here.
         if (requiresConfirmation(id)) {
-            // Actual dialog is inside the routed action (or here for index-resolved paths)
         }
         return when (id) {
             ControlId.REFRESH -> {
@@ -102,9 +101,9 @@ class PanelActionDispatcher(
                 discardAt(index)
                 false
             }
-            // Bloque de borradores (012). Cuatro controles del CUERPO del panel:
-            // no hay acción registrada para ninguno, no están en el menú
-            // Tools -> git review, y el conteo del canónico no se mueve.
+            // Bloque de borradores: cuatro controles del CUERPO del panel, sin
+            // acción registrada, fuera del menú Tools -> git review, y el
+            // conteo del canónico no se mueve.
             ControlId.OPEN_DRAFT -> {
                 openDraftAt(index)
                 false
@@ -359,14 +358,7 @@ class PanelActionDispatcher(
     private fun guideRowAt(index: Int?): GuideRecord? =
         guideAt(service.currentState().guides ?: emptyList(), index)
 
-    /**
-     * Abre la guia en la ruta que reporto la CLI. Mostrarla no es leerla: el
-     * plugin no interpreta un byte de su contenido.
-     */
-    /**
-     * Opens the author's walkthrough at the path the CLI reported. Opening it is
-     * showing it, not reading it: the plugin never interprets a byte of it.
-     */
+    /** Same rule as [openDraftAt]: opens the CLI-reported path, reads none of it. */
     private fun openWalkthrough() {
         val w = service.currentState().walkthrough ?: return
         if (w.state == WalkthroughState.ABSENT) return

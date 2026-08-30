@@ -1,51 +1,34 @@
 #!/usr/bin/env sh
 #
-# git-review-lib.sh — helpers shared by the git review step commands.
-#
-# This file is *sourced, never run*. The verbs that need the helpers below
-# (start, next, prev, continue, compare) load it as
-# "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh" — GIT_REVIEW_LIBEXEC is exported by
-# the git-review dispatcher before it execs the verb, and points at the real
-# directory where the dispatcher, this lib and the git-review-verbs/ directory
-# live together (installed as libexec, not on PATH). It only defines functions,
-# so sourcing it has no side effects.
+# git-review-lib.sh — helpers shared by the git review verbs. *Sourced, never
+# run*: the verbs load it as "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh", a path
+# the git-review dispatcher exports before exec'ing the verb, pointing at the
+# libexec directory where it, this lib and git-review-verbs/ live together (never
+# on PATH). It only defines functions, so sourcing it has no side effects.
 
 # ── Advice: lo que quien tiene el porcelain no necesita ──────────────────────
 
 # advice_enabled
-# Whether to print the notes a caller with its own interface does not need.
+# Whether to print the notes a caller with its own interface does not need. Same
+# shape as git's advice.*, one step further out: the three panels reinvoke these
+# verbs and forward what they print, so a note offering `git review walkthrough
+# guide` lands as a paragraph naming a command that is a button two rows down,
+# and telling one note from another on their side would mean parsing human
+# output. Advice is one question — does the caller already have this? An offer of
+# a command or a flag (it has the button) and state that already travels as a
+# porcelain record (it has the row) are advice; everything else the verb has to
+# say prints either way. See CLAUDE.md "Advice" and decisiones.md §15.2.
 #
-# Same shape as git's advice.*: `git status` suggests commands, and
-# advice.statusHints=false leaves the state and drops the suggestions. Here the
-# problem is one step further out — the three panels reinvoke these verbs and
-# forward what they print, so a note offering `git review walkthrough guide`
-# lands as a paragraph naming a command that is a button two rows down. The
-# client cannot tell one note from another without parsing human output, which
-# its contract forbids, so the caller that already has the control turns them
-# off at the source.
-#
-# TWO kinds are advice, and the test for both is the same question — does the
-# caller already have this?
-#   - an offer of a command or a flag: it has the button;
-#   - state that already travels as a porcelain record (which guide is in
-#     force, that a draft shadows the author's walkthrough): it has the row.
-# What is NOT advice is everything else the verb has to say: an entry the PR no
-# longer changes, a cursor that moved, a branch that differs from your local
-# one. No record carries those, so no row can answer them, and they print
-# either way. That is the line — not how long the note is.
-#
-# Precedence is git's: the environment wins over config, and unset means on, so
-# a terminal keeps every note it has always had. GIT_REVIEW_ADVICE is what the
-# clients export (one place per client); the config key is for a person who
-# wants their own terminal quieter.
+# Precedence is git's: GIT_REVIEW_ADVICE (what the clients export, one place per
+# client) wins over the config key, and unset means on, so a terminal keeps every
+# note it has always had.
 advice_enabled() {
 	case "${GIT_REVIEW_ADVICE-}" in
 		0 | false | no) return 1 ;;
 		1 | true | yes) return 0 ;;
 	esac
-	# Read defensively, like every other config read here: `git config` exits
-	# non-zero on a missing key, and under set -e an unguarded call would abort
-	# the verb over a key nobody ever set.
+	# Read defensively, like every config read here: `git config` exits non-zero
+	# on a missing key, and set -e would abort the verb over a key nobody set.
 	if [ "$(git config --bool reviewworkflow.advice 2>/dev/null || true)" = "false" ]; then
 		return 1
 	fi
@@ -53,11 +36,10 @@ advice_enabled() {
 }
 
 # advice_suffix <text>
-# The offer half of a mixed note, emitted only when advice is on so the note
-# keeps its state and loses its command. A suffix and not a second note because
-# the two halves are one sentence: "reviewing X, which differs from your local
-# Y; use --local to review what you have checked out" reads as a non sequitur
-# once split, and the state half is the part that must survive.
+# The offer half of a mixed note, emitted only when advice is on: the note keeps
+# its state and loses its command. A suffix and not a second note because the two
+# halves are one sentence — "reviewing X, which differs from your local Y; use
+# --local to review what you have checked out" — and the state half must survive.
 advice_suffix() {
 	if advice_enabled; then
 		printf '%s' "$1"
@@ -67,12 +49,11 @@ advice_suffix() {
 # ── Branch / remote candidates (git review config --porcelain) ────────────────
 
 # candidate_remotes <effective-remote>
-# Emit a "remote-candidate<TAB>name<TAB>current" row for every remote name
-# `git remote` lists. current is 1 only for the name that matches the effective
-# reviewworkflow.remote (origin when unset) — the pick list can put that first
-# without re-deriving which remote is configured. One `git remote` call; the
-# loop is shell built-ins over its output (contracts/config-porcelain.md
-# "Costo"). Name is what a caller passes back to `config remote`.
+# Emit a "remote-candidate<TAB>name<TAB>current" row for every remote `git remote`
+# lists. current is 1 only for the effective reviewworkflow.remote (origin when
+# unset), so the pick list can put it first without re-deriving it; name is what a
+# caller passes back to `config remote`. One `git remote` call and a loop of shell
+# built-ins over its output (contracts/config-porcelain.md "Costo").
 candidate_remotes() {
 	_cr_effective="$1"
 	git remote |
@@ -88,11 +69,10 @@ candidate_remotes() {
 
 # current_branch_init
 # Resolve the branch HEAD sits on ONCE per process into $_cur_branch (empty when
-# HEAD is detached), the same shape as walk_gitdir_init and for the same reason:
-# a $(...) cannot cache anything, and this answer is now wanted by two emitters
-# of the same porcelain run — candidate_branches and emit_walkthrough_record.
-# Asking twice would spend a second process on every panel refresh for a value
-# that cannot change mid-run.
+# HEAD is detached). Same shape and reason as walk_gitdir_init: a $(...) cannot
+# cache anything, and two emitters of one porcelain run want it now
+# (candidate_branches, emit_walkthrough_record), so asking twice would spend a
+# process per panel refresh on a value that cannot change mid-run.
 current_branch_init() {
 	if [ -z "${_cur_branch_done:-}" ]; then
 		_cur_branch="$(git symbolic-ref --quiet --short HEAD || true)"
@@ -101,21 +81,18 @@ current_branch_init() {
 }
 
 # candidate_branches <remote>
-# Emit a "candidate<TAB>name<TAB>origin<TAB>current" row for every branch
-# eligible to start a review on: every ref in refs/heads/ and
-# refs/remotes/<remote>/, minus the three product namespaces (review/,
-# review-saved/, review-fixes/) and <remote>/HEAD — exactly what git review
-# start refuses to review
-# (bin/git-review-verbs/start:151-153), so offering them would be offering a
-# guaranteed failure. name has no namespace prefix (it is what a caller passes
-# back to start or to config <key>); origin is remote|local; current is 1 only
-# for the local branch HEAD sits on, 0 everywhere else (including every remote
-# row — a remote copy is never "current", only the local checkout can be).
+# Emit a "candidate<TAB>name<TAB>origin<TAB>current" row for every branch eligible
+# to start a review on: every ref in refs/heads/ and refs/remotes/<remote>/, minus
+# the three product namespaces (review/, review-saved/, review-fixes/) and
+# <remote>/HEAD — exactly what bin/git-review-verbs/start refuses to review, so
+# offering them would be offering a guaranteed failure. name has no namespace
+# prefix (it is what a caller passes back to start or to config <key>); origin is
+# remote|local; current is 1 only for the local branch HEAD sits on — a remote
+# copy is never "current".
 #
-# One for-each-ref call regardless of how many branches exist, not one process
-# per branch (contracts/config-porcelain.md "Costo", same rule as status and
-# list): the loop below is shell built-ins (case, parameter expansion,
-# porcelain_row) over its output, so the process count stays constant.
+# One for-each-ref call regardless of how many branches exist, not one process per
+# branch (contracts/config-porcelain.md "Costo"): the loop below is shell built-ins
+# over its output, so the process count stays constant.
 candidate_branches() {
 	_cb_remote="$1"
 	current_branch_init
@@ -151,13 +128,12 @@ candidate_branches() {
 # ── Porcelain (machine-readable) output ───────────────────────────────────────
 #
 # porcelain_row <field> [field...]
-# Print one porcelain-format line: the given fields joined by a tab, terminated
-# by a newline. This is the single point that writes a porcelain line — every
-# emitter (state, entry, uncovered, branch) builds its record by passing its
-# fields through here instead of printf-ing tabs itself, so the separator lives
-# in one place. A field the record's mode does not apply to is omitted from the
-# call entirely, never passed as an empty string: omit, never blank, never a
-# sentinel (contracts/status-porcelain.md, data-model.md).
+# Print one porcelain-format line: the given fields joined by a tab, terminated by
+# a newline. The single point that writes a porcelain line — every emitter passes
+# its fields through here instead of printf-ing tabs itself, so the separator
+# lives in one place. A field the record's mode does not apply to is omitted from
+# the call entirely: omit, never blank, never a sentinel
+# (contracts/status-porcelain.md, data-model.md).
 porcelain_row() {
 	_pr_first=1
 	for _pr_field in "$@"; do
@@ -174,11 +150,10 @@ porcelain_row() {
 # show_commit <commit> <n> <total>
 # Print a commit's diffstat first and its identifying header last, so the header
 # stays next to the prompt instead of scrolling off the top when the diffstat is
-# long for a commit that touches many files. core.quotePath=false for the same
-# reason as changed_paths, one layer up: this is what the reviewer reads to know
-# which files the step touches, and git's default would show it "src/caf\303\251.js"
-# — an escape nobody can paste into an editor. Cosmetic here (nothing compares
-# these bytes), but it keeps every path this project prints in one shape.
+# long. core.quotePath=false for the same reason as changed_paths: git's default
+# would show "src/caf\303\251.js", an escape nobody can paste into an editor.
+# Cosmetic here (nothing compares these bytes), but it keeps every path this
+# project prints in one shape.
 show_commit() {
 	git --no-pager -c core.quotePath=false show --stat --format='' "$1"
 	printf -- '----\n[%s/%s] %s\n%s\n\n%s\n----\nreview this commit, edit files, then run git review next\n' \
@@ -218,8 +193,8 @@ require_not_pending_finish() {
 # require_clean_work_tree
 # Refuse start/compare/continue when the worktree is dirty: tracked changes
 # (diff / cached) *or* untracked non-ignored files. finish/save capture untracked
-# with `git add -A` as review edits, so allowing pre-existing untracked through
-# start would absorb junk as if the reviewer wrote it. Same message as before.
+# with `git add -A` as review edits, so letting pre-existing untracked through
+# start would absorb junk as if the reviewer wrote it.
 require_clean_work_tree() {
 	if ! git diff --quiet || ! git diff --cached --quiet ||
 		[ -n "$(git ls-files --others --exclude-standard)" ]; then
@@ -229,12 +204,11 @@ require_clean_work_tree() {
 }
 
 # apply_review_patch FROM TO [git-apply-args...]
-# Diff FROM..TO and apply it, routing the patch through a temp file rather than a
-# shell variable. Capturing a binary patch with command substitution drops its
-# NUL bytes and trailing newline, so git apply later rejects it ("corrupt binary
-# patch"). Always passes --binary to git apply (in addition to any caller args)
-# so continue/finish/goto_step get the same binary safety as preview. An empty
-# diff is a no-op success; returns git apply's exit status.
+# Diff FROM..TO and apply it through a temp file, never a shell variable:
+# capturing a binary patch with command substitution drops its NUL bytes and its
+# trailing newline, and git apply then rejects it ("corrupt binary patch").
+# Always passes --binary so continue/finish/goto_step get the same safety as
+# preview. An empty diff is a no-op success; returns git apply's exit status.
 apply_review_patch() {
 	_from="$1"
 	_to="$2"
@@ -302,32 +276,24 @@ load_step_review_meta() {
 		exit 1
 	fi
 
-	# Same as the walk loader: a step review does not read a walkthrough itself,
-	# but its verbs share this scope with the walk readers, so the context is set
-	# here too rather than left half-applied depending on the mode.
+	# Set here too, not left half-applied by mode: a step review does not read a
+	# walkthrough, but its verbs share this scope with the walk readers. Keep the
+	# asymmetry in mind before giving step a surface that shows a "why" — the
+	# context is set but nothing reports it (status emits the draft record only in
+	# walk mode), so a step verb that started reading one would show the reviewer's
+	# own prose without saying whose it is, the one thing this feature prevents.
 	#
-	# Note the asymmetry it creates, and keep it in mind before giving step any
-	# surface that shows a "why": the context is set, but nothing reports it —
-	# status only emits the draft record (and the "(draft)" suffix) in walk mode,
-	# because that is where a reading order exists. Today nothing reads a
-	# walkthrough here (status --why refuses outside walk), so it is inert; a step
-	# verb that started reading one would show the reviewer's own prose without
-	# saying whose it is, which is the one thing this feature exists to prevent.
-	#
-	# Through the recorded name, like the walk loader: a step review of a
-	# remote-tracking branch (compare --step) drafts under the branch's name too,
-	# and one config read is what keeps the two loaders from disagreeing about
-	# whose file it is.
+	# Through the recorded name, like the walk loader: a compare --step of a
+	# remote-tracking branch drafts under the branch's name, and one config read is
+	# what keeps the two loaders from disagreeing about whose file it is.
 	walk_use_draft "$(walk_review_draft_src "$cur")"
 
 	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
 
-	# Guard against a step that maps to no commit (corrupt config, hand-edited
-	# metadata): otherwise goto_step's sed yields an empty commit and git rev-parse
-	# '^{tree}' crashes mid-move.
-	# grep -c exits 1 when the count is 0; under set -e that aborts the verb
-	# without the corrupt-metadata diagnostic below. Walk uses || true for the
-	# same reason.
+	# Guard against a step that maps to no commit (hand-edited metadata): otherwise
+	# goto_step's sed yields an empty commit and git rev-parse '^{tree}' crashes
+	# mid-move. grep -c exits 1 on a count of 0, which under set -e would abort
+	# before the diagnostic below — hence || true (walk does the same).
 	total="$(printf '%s\n' "$commits" | grep -c . || true)"
 	case "$count" in
 	*[!0-9]*)
@@ -358,32 +324,22 @@ load_step_review_meta() {
 # load_step_texts
 # Load the subject and the author of every commit in the step sequence into the
 # globals `subjects` and `authors` — one line per commit, aligned with `commits`
-# by line number, so the n-th line of each list belongs to the n-th commit.
+# by line number. Relies on the globals load_step_review_meta sets (start, tip);
+# call it after, never instead. The step verbs that only move the cursor do not
+# call it: no use for the text, no reason to pay the two processes.
 #
-# Two git processes for the whole sequence, not one per commit: a --step review
-# of dozens of commits has to stay instant to navigate (FR-014/SC-008), and on
-# Windows, where fork() is emulated, 2N processes is the difference between
-# instant and perceptible (research.md Decisión 2). The traversal flags are the
-# same ones load_step_review_meta uses for `commits`, which is what makes the
-# three lists line up.
+# Two git processes for the whole sequence, not one per commit: on Windows, where
+# fork() is emulated, 2N processes is the difference between instant and
+# perceptible. Same traversal flags as `commits`, which is what makes the lists
+# line up; aligning by line number is safe because neither format can emit an
+# inner newline (%s is the first line by definition, and git strips the newline
+# out of the ident). If that stopped holding, the symptom would be a subject
+# silently paired with the wrong commit.
 #
-# Lining up by line number is safe because neither format can emit an inner
-# newline: %s is the first line of the message by definition, and git strips the
-# newline out of the ident when it builds the commit (research.md Decisión 1,
-# measured). If that ever stopped holding, the symptom would be a subject paired
-# with the wrong commit, silently.
-#
-# Relies on the globals set by load_step_review_meta (start, tip); call it after,
-# never instead of it. The step verbs that only move the cursor do not call it:
-# they have no use for the text and should not pay the two extra processes.
-#
-# Both lists keep their trailing newline, so each holds exactly one line per
-# commit and the caller can stream them with `while read` instead of indexing
-# line by line. That matters: command substitution strips trailing newlines, and
-# a last commit with an EMPTY subject would otherwise shorten the list and drop
-# its record — which a consumer reads as "this CLI has no subjects" rather than
-# "this commit has none" (FR-004). Appending an x and stripping it back off with
-# ${var%x} is the usual idiom for holding on to those newlines.
+# Both lists keep their trailing newline (append an x, strip it with ${var%x}):
+# command substitution strips trailing newlines, so a last commit with an EMPTY
+# subject would shorten the list and drop its record -- which a consumer reads as
+# "this CLI has no subjects" rather than "this commit has none".
 load_step_texts() {
 	# shellcheck disable=SC2034  # both are globals for the caller (status), like
 	# the ones load_step_review_meta sets; nothing in this file consumes them.
@@ -442,10 +398,9 @@ goto_step() {
 # ── Walkthrough (walk) mode helpers ───────────────────────────────────────────
 #
 # A walkthrough is a guided reading order over a PR, authored as a committed
-# sidecar (.review/walkthrough.md) and consumed by the reviewer. Walk mode is the
-# same whole-PR review (the diff is staged and editable), plus a reading cursor
-# over it. Nothing here stages, resets or banks anything — the working tree is the
-# whole PR throughout, exactly as in whole mode; only a cursor config key moves.
+# sidecar (.review/walkthrough.md). Walk mode is the same whole-PR review (the
+# diff staged and editable) plus a reading cursor over it: nothing here stages,
+# resets or banks anything, only a cursor config key moves.
 
 # resolve_lower_bound <start> <baseref> <tip>
 # Same fold decision as fold_lower, but never creates a commit: prints <start>
@@ -495,34 +450,33 @@ fold_lower() {
 
 # changed_paths <lower> <tip>
 # The paths a review range changes, one per line, verbatim — the git side of every
-# path comparison in this project (a walkthrough's entries, the drift check, the
+# path comparison in this project (walkthrough entries, the drift check, the
 # uncovered-files note). core.quotePath=false is the whole point of the helper:
-# with git's default, any path holding a non-ASCII byte comes out escaped and
+# with git's default any path holding a non-ASCII byte comes out escaped and
 # quoted ("src/caf\303\251.js") while the same path written in a walkthrough is
-# literal, so the two never compare equal. The walkthrough entry then drops out of
-# the reading order in silence, and build reports the same file as both missing
-# and extra. Same shape as a CRLF sidecar (see walk_normalize), except it hides
-# from anyone whose repo is ASCII-only rather than from anyone on Windows.
-# A path holding a '"' or a '\' is still quoted, with quotePath off or on; both
-# are illegal on Windows and vanishingly rare elsewhere, and unquoting them here
-# would mean re-implementing git's C escaping in awk.
+# literal, so the two never compare equal — the entry drops out of the reading
+# order in silence and build reports the same file as both missing and extra.
+# Same shape as a CRLF sidecar (see walk_normalize), except it hides from anyone
+# whose repo is ASCII-only rather than from anyone on Windows. A path holding a
+# '"' or a '\' is still quoted either way; both are illegal on Windows and
+# vanishingly rare elsewhere, and unquoting them here would mean re-implementing
+# git's C escaping in awk.
 changed_paths() {
 	git -c core.quotePath=false diff --name-only "$1" "$2"
 }
 
 # range_files <tip> <lower>
 # The files a review's range touches, in git's own order — the same
-# changed_paths(lower, tip) call every other reader of "what does this review
-# touch" already makes (walk_reading_order below, and the degraded-walkthrough
-# notes in start and compare), wrapped so the argument order is not repeated
-# and inverted at each call site. whole mode's file listing is this and nothing
-# more: HEAD sits at the lower bound in every mode (git reset --soft in start),
-# so this is the same pair of endpoints walk already reads.
+# changed_paths(lower, tip) every other reader of "what does this review touch"
+# makes, wrapped so the argument order is not repeated and inverted at each call
+# site. whole mode's file listing is this and nothing more: HEAD sits at the lower
+# bound in every mode (start's git reset --soft), so these are the endpoints walk
+# already reads.
 #
-# 2>/dev/null || true, folded in here rather than left to each caller: a range
-# that will not diff (an unresolvable bound, reachable from start/compare
-# before the review's tip is fixed) yields no paths, so no entry intersects and
-# the caller degrades — it must never abort the review under set -eu.
+# 2>/dev/null || true folded in here rather than left to each caller: a range that
+# will not diff (an unresolvable bound, reachable from start/compare before the
+# review's tip is fixed) yields no paths, so no entry intersects and the caller
+# degrades — it must never abort the review under set -eu.
 range_files() {
 	changed_paths "$2" "$1" 2>/dev/null || true
 }
@@ -540,25 +494,22 @@ commit_files() {
 
 # walk_normalize  (stdin: text)
 # Make an authored walkthrough's bytes comparable, whatever wrote it. Every reader
-# below matches on whole lines — the path in "## N. <path>", the "> key" marker,
-# the entry body looked up by path — so an invisible byte at either end of a line
-# makes a path differ from git's, no entry intersects the range, and the reviewer
-# silently loses walk mode. Two such bytes exist, both of them things a Windows
-# editor adds on its own:
+# below matches on whole lines, so an invisible byte at either end makes a path
+# differ from git's, no entry intersects the range, and the reviewer silently
+# loses walk mode. Two such bytes, both added by a Windows editor on its own:
 #
-#   * a line-final carriage return (CRLF endings, an author with core.autocrlf on).
-#     Only the line-final CR goes; a CR mid-line is content and stays. It bites
-#     only on Linux/macOS, because the MSYS awk swallows the CR — exactly the case
-#     a Windows author cannot see.
-#   * a UTF-8 BOM on the first line (Notepad, PowerShell Out-File and > all write
-#     one by default). It hides the "# Walkthrough" heading from walk_preamble,
-#     which then prints it as if it were the author's heads-up and build bakes the
-#     duplicate into the file; on a walkthrough that opens straight with an entry
-#     it hides that entry from walk_parse outright.
+#   * a line-final carriage return (CRLF, an author with core.autocrlf on). Only
+#     the line-final CR goes; a CR mid-line is content. It bites only on
+#     Linux/macOS, because the MSYS awk swallows it — the case a Windows author
+#     cannot see.
+#   * a UTF-8 BOM on the first line (Notepad, PowerShell Out-File and >). It hides
+#     the "# Walkthrough" heading from walk_preamble, which prints it as the
+#     author's heads-up and lets build bake the duplicate in; on a walkthrough
+#     opening straight with an entry it hides that entry from walk_parse.
 #
-# The BOM is matched as a string rather than a regex escape because \357\273\277 is
-# not portable across the three awks in CI; index/substr/length agree with each
-# other whether the awk counts bytes or characters, so this works in either.
+# The BOM is matched as a string, not a regex escape: the escape is not portable
+# across the three awks in CI, while index/substr/length agree whether the awk
+# counts bytes or characters.
 walk_normalize() {
 	awk -v bom="$(printf '\357\273\277')" '
 		NR == 1 && index($0, bom) == 1 { $0 = substr($0, length(bom) + 1) }
@@ -568,99 +519,78 @@ walk_normalize() {
 
 # walk_gitdir_init
 # Resolve the working tree's gitdir once for the life of the process, into
-# _walk_gitdir. Every draft path below derives from it.
+# _walk_gitdir; every draft path below derives from it.
 #
 # It has to be resolved in the caller's own shell, not lazily inside the path
-# helpers: those are called as "$(walk_draft_path ...)", and an assignment made
-# inside a command substitution dies with its subshell, so a cache written there
-# would never be read and every walk_read would pay another git process. That is
-# not hypothetical — walk_read consults the draft on every read, so a plain
-# status in walk mode called this four times, on the path whose process count the
-# panel's latency is measured in.
+# helpers: those run as "$(walk_draft_path ...)", and an assignment made inside a
+# command substitution dies with its subshell, so the cache would never be read
+# and every walk_read would pay another git process — a plain status in walk mode
+# called this four times.
 #
-# walk_use_draft calls this, which covers every verb with an active review; the
-# verbs that build a draft path without setting a draft context (list, save,
-# continue, forget) call it themselves.
-#
-# Caching is safe because no verb in this suite ever changes directory: the value
-# may be relative (".git", from the top level of the work tree), which a chdir
-# would silently invalidate.
+# walk_use_draft calls it, covering every verb with an active review; the verbs
+# that build a draft path without setting a draft context (list, save, continue,
+# forget) call it themselves. Caching is safe because no verb ever changes
+# directory: the value may be relative (".git"), which a chdir would silently
+# invalidate.
 walk_gitdir_init() {
 	[ -n "${_walk_gitdir:-}" ] || _walk_gitdir="$(git rev-parse --git-dir)"
 }
 
 # walk_gitdir_abs_init
-# The gitdir again, this time ABSOLUTE, resolved once for the life of the
-# process into _walk_gitdir_abs. Same shape and same reason as
-# walk_gitdir_init: it has to be assigned in the caller's own shell, because an
-# assignment made inside a "$(...)" dies with its subshell and the cache would
-# never be read.
+# The gitdir again, this time ABSOLUTE, resolved once into _walk_gitdir_abs. Same
+# shape and reason as walk_gitdir_init: an assignment made inside a "$(...)" dies
+# with its subshell, so the cache would never be read.
 #
 # Separate from _walk_gitdir rather than replacing it: that one may legitimately
 # be relative (".git" from the top level) and every draft path built from it is
-# used for opening files by this process, where relative is fine and cheaper.
-# This one exists for the one job that needs more — handing a path to a client
-# that will open it from somewhere else entirely — so it is only resolved when
-# there is at least one draft to report.
+# opened by this process, where relative is fine and cheaper. This one exists for
+# the one job that needs more — handing a path to a client that will open it from
+# somewhere else — so it is only resolved when there is a draft to report.
 walk_gitdir_abs_init() {
 	[ -n "${_walk_gitdir_abs:-}" ] || _walk_gitdir_abs="$(git rev-parse --absolute-git-dir)"
 }
 
 # walk_draft_progress <path>...
 # Emit "<path><TAB><annotated><TAB><total><TAB><source><TAB><range><TAB><tip>"
-# for EVERY path given, in the order given.
-#
-# ONE awk for all of them, never one per draft: this runs inside
-# config --porcelain, which the panel invokes on every refresh, and the process
-# count of that path is what the panel's latency is measured in (the same rule
-# that produced walk_entry_fields).
+# for EVERY path given, in the order given. ONE awk for all of them, never one
+# per draft: this runs inside config --porcelain, which the panel invokes on
+# every refresh, and that path's process count is what the panel's latency is
+# measured in (the same rule that produced walk_entry_fields).
 #
 # Definitions, from data-model.md:
 #   total      every entry heading the file declares, numbered and "## ?." alike,
 #              PLUS the "## Heads-up" section whenever it holds anything at all
-#   annotated  an entry that has BOTH a numeric position and a resolved why --
-#              at least one non-blank body line that is not "> key" or "> at: ",
-#              and no line opening with "<!-- why". The heads-up is annotated
-#              once no "<!-- heads-up" placeholder is left in the preamble.
+#   annotated  an entry with BOTH a numeric position and a resolved why -- at
+#              least one non-blank body line that is not "> key" or "> at: ", and
+#              no line opening with "<!-- why". The heads-up is annotated once no
+#              "<!-- heads-up" placeholder is left in the preamble.
 #   source     remote | local | offline, and range full | delta, read off the
-#              "Generated with:" line of the instruction block, which is the
-#              only place that datum lives. Both are "unknown" when the block is
-#              not there, which is legal: deleting it by hand is allowed.
-#   tip        the SHA the block records as the range's upper bound, or empty
-#              when the block is gone or its value is not a SHA. Same datum and
-#              same 40-hex rule as walk_sidecar_block_tip, read here because the
-#              caller that needs it (emit_draft_records) has N files and a one
-#              process budget -- that helper is zero processes but per file, and
-#              this awk is already open on every one of them.
+#              "Generated with:" line of the instruction block, the only place
+#              that datum lives. Both are "unknown" when the block is not there,
+#              which is legal: deleting it by hand is allowed.
+#   tip        the SHA the block records as the range's upper bound, or empty when
+#              the block is gone or its value is not a SHA. Same 40-hex rule as
+#              walk_sidecar_block_tip, read here because the caller that needs it
+#              (emit_draft_records) has N files and a one-process budget.
 #
-# The count is over the FILE, never crossed with the range: a draft that has
-# drifted still reports its progress, and annotated == total promises nothing
-# about whether --build will pass.
+# The count is over the FILE, never crossed with the range: a drifted draft still
+# reports its progress, and annotated == total promises nothing about --build.
 #
-# The heads-up is a unit of the pair and not a rule of its own, because build
-# rejects its placeholder exactly the way it rejects an unfilled why. Left out
-# of the count, the commonest skeleton there is -- one file in the range, its
-# heads-up untouched -- reported 1/1, so the panel drew the reading order as
-# finished and the build behind Validate and start died on "the heads-up
-# placeholder is still there". It counts only when the section holds SOMETHING,
-# which is what keeps the pair in step with build in the other direction too:
-# deleting the whole section is legal (an empty one is worse than none), so a
-# draft whose author deleted it goes from 1/2 to 1/1 instead of sitting one
-# short of a total it can no longer reach. The placeholder is spotted with
-# build's own anchored rule and over the whole preamble rather than inside the
-# section, so a comment that outlived its heading still counts against the pair
-# -- otherwise the panel would offer a start the CLI is about to refuse.
+# The heads-up counts as a unit of the pair because build rejects its placeholder
+# the way it rejects an unfilled why. Left out, the commonest skeleton -- one file
+# in the range, its heads-up untouched -- reported 1/1, so the panel drew the
+# reading order as finished and the build behind Validate and start died on the
+# placeholder. It counts only when the section holds SOMETHING, so deleting the
+# whole section (legal) goes from 1/2 to 1/1 instead of sitting one short of a
+# total it can no longer reach. Matched with build's own anchored rule over the
+# preamble, so a comment that outlived its heading still counts.
 #
-# Two shapes worth knowing about, both deliberate:
-#
-#   * per-file closing is FNR == 1 plus the END block, never ENDFILE, which is a
-#     gawk extension -- CI runs mawk and BSD awk as well.
-#   * the END block walks ARGV rather than printing as it goes, so a file of
-#     ZERO BYTES still gets a line. awk runs no rule at all for an empty file and
-#     never assigns it a FILENAME, so a draft that was created and not yet
-#     written would otherwise vanish from the report -- and that is precisely the
-#     state a fresh one is in, the one that most needs to be listed so it can be
-#     opened or discarded.
+# Two deliberate shapes: per-file closing is FNR == 1 plus END, never ENDFILE (a
+# gawk extension -- CI runs mawk and BSD awk too); and END walks ARGV instead of
+# printing as it goes, so a ZERO-BYTE file still gets a line. awk runs no rule and
+# assigns no FILENAME for an empty file, which is exactly the state a freshly
+# created draft is in -- the one that most needs listing to be opened or
+# discarded.
 walk_draft_progress() {
 	awk -v bom="$(printf '\357\273\277')" '
 		function close_entry() {
@@ -779,11 +709,11 @@ walk_draft_progress() {
 }
 
 # walk_reviewed_markers
-# Every recorded last-reviewed tip in this repository, as the raw
-# "<key> <sha>" lines git config prints, in ONE process. Both sections at once
-# with an alternation, because a draft only ever needs one of them and which one
-# depends on the flags it was generated with -- two calls would be two processes
-# on a path that runs in every panel refresh.
+# Every recorded last-reviewed tip in this repository, as the raw "<key> <sha>"
+# lines git config prints, in ONE process: both sections at once with an
+# alternation, because a draft needs only one of them and which one depends on the
+# flags it was generated with -- two calls would be two processes on a path that
+# runs in every panel refresh.
 #
 # What a marker means (bin/git-review-verbs/start writes it, abort and a clean
 # without a completed finish roll it back): the tip of <src> that your last
@@ -795,31 +725,22 @@ walk_reviewed_markers() {
 # walk_draft_state <src> <source> <tip> <annotated> <total> <markers>
 # Set _wds_out to "reviewed" when this reading order is written through AND a
 # completed review of <src> covered the very tip it was generated against; to
-# "fresh" otherwise.
-#
-# Answers in a VARIABLE rather than on stdout, unlike almost everything else
-# here: the one caller runs it once per draft, and a "$(...)" around it would
-# fork a subshell each time -- the same per-draft cost the single awk exists to
-# avoid, paid again one layer up.
+# "fresh" otherwise. Answers in a VARIABLE rather than on stdout, unlike almost
+# everything else here: the one caller runs it once per draft, and a "$(...)"
+# would fork a subshell each time -- the same per-draft cost the single awk
+# exists to avoid, paid again one layer up.
 #
 # It is the draft's own tip that is compared, not the branch's tip now: a draft
 # regenerated after the review covers a range nobody has read yet, and one whose
-# branch has moved on is not "already reviewed" either -- it is drifted, which is
-# a different thing the client already learns from the range.
+# branch moved on is drifted, not "already reviewed". The flavour has to match
+# too -- a --local draft is answered by reviewworkflowlocal and a remote one by
+# reviewworkflow, exactly as start chooses between them; crossing them would
+# report a draft as read because the OTHER copy of the branch was. An "unknown"
+# source (the block deleted by hand, which is legal) or a missing tip answers
+# "fresh": nothing can be proved, and fresh offers more, not less.
 #
-# The flavour has to match too. A local review records its marker in its own
-# config section, so a --local draft is answered by reviewworkflowlocal and a
-# remote one by reviewworkflow, exactly as start chooses between them. Crossing
-# them would report a draft as read because the OTHER copy of the branch was.
-#
-# "unknown" source (the instruction block was deleted by hand, which is legal)
-# and a tip that is not there answer "fresh": nothing can be proved about them,
-# and fresh is the state that offers more, not less.
-#
-# A case glob, not grep: this runs once per draft and a process each would
-# undo the single-awk budget. Safe as an exact test because git refuses to
-# create a ref whose name holds '*', '?' or '[', so no branch name can arrive
-# here carrying a pattern.
+# A case glob, not grep: this runs once per draft. Safe as an exact test because
+# git refuses to create a ref whose name holds '*', '?' or '['.
 walk_draft_state() {
 	_wds_src="$1"
 	_wds_source="$2"
@@ -830,14 +751,12 @@ walk_draft_state() {
 	_wds_out=fresh
 	[ -n "$_wds_tip" ] || return 0
 	# An order with entries still unwritten is not one you finished with, whatever
-	# the marker says -- and saying otherwise has a concrete cost, because the
-	# clients draw a spent row without the two controls that fill it in and start
-	# it. A --force rewrite over a branch that has not moved lands on the very tip
-	# the marker records, so without this the blank skeleton the reviewer just
-	# asked for would be folded away with no way to make progress on it.
-	#
-	# Same test the three panels already use for "filled", zero extra cost: the
-	# pair is counted by the awk that read the file. total == 0 is "this file
+	# the marker says: the clients draw a spent row without the two controls that
+	# fill it in and start it, and a --force rewrite over a branch that has not
+	# moved lands on the very tip the marker records -- so without this the blank
+	# skeleton the reviewer just asked for would be folded away with no way to make
+	# progress on it. Same test the three panels use for "filled", at zero extra
+	# cost (the awk that read the file counted the pair). total == 0 is "this file
 	# declares no entry", never "complete".
 	[ "$_wds_tot" -gt 0 ] && [ "$_wds_ann" -ge "$_wds_tot" ] || return 0
 	case "$_wds_source" in
@@ -856,35 +775,25 @@ $_wds_key $_wds_tip
 
 # walk_each_draft <callback>
 # Run <callback> <src> <path> <annotated> <total> <source> <range> <state> once
-# for every loose draft -- every file in the ACTIVE namespace, which is to say
-# every reading order the reviewer started and has not paused. A draft that
-# travelled with a paused review is not walked here, and not by a rule either:
-# git review save moved its file to review-saved-walkthrough/, which
-# walk_draft_list does not walk.
+# for every loose draft -- every file in the ACTIVE namespace, which is every
+# reading order the reviewer started and has not paused (git review save moved a
+# paused one to review-saved-walkthrough/, which walk_draft_list does not walk).
 #
 # One enumeration for the two surfaces that need it -- the porcelain records and
-# forget --draft --reviewed -- because a second copy of the gitdir prefix and the
-# state rule is a second copy that can disagree with this one about which drafts
-# exist and which are spent.
+# forget --draft --reviewed -- so the gitdir prefix and the state rule cannot
+# exist twice and disagree about which drafts exist and which are spent.
 #
 # The callback runs inside a pipeline, so it is downstream of a subshell: it can
 # print, and it cannot hand anything back in a variable.
 #
-# Cost, because this runs on every panel refresh without a review:
-#   walk_draft_list        0 processes (glob recursion, all builtin)
-#   walk_gitdir_abs_init   1, and only when there is something to report
-#   walk_draft_progress    1, and only when there is something to report
-#   walk_reviewed_markers  1, and only when there is something to report
+# Cost, because this runs on every panel refresh without a review: walk_draft_list
+# is 0 processes (glob recursion, all builtin); walk_gitdir_abs_init,
+# walk_draft_progress and walk_reviewed_markers are 1 each, only when there is
+# something to report. The last buys <state> for ALL the drafts at once.
 #
-# The last one buys the <state> field, and it is one process for ALL the drafts
-# rather than one per draft: the markers are read once here and each row is
-# answered against that string with a builtin case (walk_draft_state).
-#
-# The empty case has to return BEFORE all of them. It is not an optimisation:
+# The empty case has to return BEFORE all of them, and not as an optimisation:
 # awk with no file arguments reads standard input and blocks forever, and a
-# repository with no drafts is the commonest case there is -- for a verb that
-# runs in every panel refresh and by hand in a terminal, that would be an
-# indefinite hang.
+# repository with no drafts is the commonest case there is.
 walk_each_draft() {
 	_wed_cb="$1"
 	_wed_srcs="$(walk_draft_list)"
@@ -944,17 +853,13 @@ walk_reviewed_draft_list() {
 }
 
 # walk_draft_path <src>
-# Where the reviewer's own walkthrough for <src> lives while it is in play.
+# Where the reviewer's own walkthrough for <src> lives while a review is in play:
+# inside the working tree's gitdir, per CLAUDE.md's prose-files table (invisible
+# to git status, start's dirty check and finish's git add -A). Same idiom as
+# COMMIT_EDITMSG/MERGE_MSG. A branch name holding '/' becomes a subdirectory, as
+# it does under refs/; callers that write must mkdir -p.
 #
-# Inside the working tree's gitdir, deliberately: it is a real file any editor or
-# agent can open and save, it never shows up in git status, start never sees a
-# dirty tree because of it, and finish cannot carry it into review-fixes/ — the
-# three walls that made a reviewer-written walkthrough impossible. Same idiom git
-# uses for COMMIT_EDITMSG and MERGE_MSG. A branch name holding '/' becomes a
-# subdirectory, exactly as it does under refs/; callers that write must mkdir -p.
-#
-# --git-dir (not --git-common-dir) so each git worktree keeps its own draft: a
-# review is per working tree, and so is its reading order.
+# --git-dir (not --git-common-dir): a review is per working tree, so is its draft.
 walk_draft_path() {
 	walk_gitdir_init
 	printf '%s/review-walkthrough/%s.md' "$_walk_gitdir" "$1"
@@ -987,12 +892,10 @@ walk_draft_list() {
 
 # walk_saved_draft_list
 # The same enumeration over the archived namespace, as <src> names. Its only
-# caller is forget --draft --all, and only for the ones no paused review claims:
-# an archive entry normally belongs to a review-saved/<src> branch and is returned
-# by git review continue, but the branch can be deleted by hand, and then the file
-# it left behind was reachable from nothing — forget --saved refused without the
-# ref, forget --draft --all looked only at the active namespace, and clean is
-# hands-off in there by design.
+# caller is forget --draft --all, for entries no paused review claims: an archive
+# entry normally belongs to a review-saved/<src> branch (restored by continue),
+# but if that branch is deleted by hand the file becomes reachable from nothing —
+# forget --saved needs the ref, and clean is hands-off in there by design.
 walk_saved_draft_list() {
 	walk_gitdir_init
 	_wdl_root="$_walk_gitdir/review-saved-walkthrough"
@@ -1023,13 +926,13 @@ _walk_draft_list_dir() {
 # walk_use_draft <src>
 # Point the walkthrough readers at <src>'s local draft, if it has one.
 #
-# The context travels in a variable rather than as an argument because walk_read
-# takes a commit-ish, not a branch, and neither do the eleven readers stacked on
-# top of it — threading a second parameter would mean changing every one of those
-# signatures and their call sites. load_walk_review_meta and load_step_review_meta
-# call this themselves, so every verb with an active review inherits the context
-# without touching it; only the readers that resolve a source outside a review
-# (start, compare, emit_reading_offers, walkthrough draft) call it directly.
+# The context travels in a variable, not an argument: walk_read takes a
+# commit-ish, not a branch, and neither do the eleven readers stacked on top of
+# it, so threading a parameter would touch every signature and call site.
+# load_walk_review_meta and load_step_review_meta call this themselves, so every
+# verb with an active review inherits it; readers resolving a source outside a
+# review (start, compare, emit_reading_offers, walkthrough draft) call it
+# directly.
 walk_use_draft() {
 	walk_draft_src="$1"
 	# Here rather than in walk_draft_path: this runs in the verb's own shell,
@@ -1039,21 +942,16 @@ walk_use_draft() {
 
 # walk_review_draft_src <review-branch>
 # The name the draft of the review on <review-branch> lives under, as recorded by
-# the verb that created the review (branch.<rb>.reviewdraft).
+# the verb that created it (branch.<rb>.reviewdraft) — the only function that
+# reads it, so a review cannot end up with two names for its own draft. Never
+# re-derive this at a call site instead: a creator and a reader disagreeing here
+# is what once made start report no draft over prose the reviewer had just
+# written.
 #
-# The name is *recorded*, never re-derived, and this is the only function that
-# reads it — the point being that one review cannot have two names for its own
-# draft. It is not always the review's source: a compare of a remote-tracking
-# branch reviews "origin/feature/x" and drafts for "feature/x", because the draft
-# belongs to the branch, not to the ref you happened to name it by. When both a
-# creator and a reader derived that separately, they disagreed — the draft was
-# written under one name and looked up under the other, so a later git review
-# start read the author's order and reported no draft at all, over prose the
-# reviewer had just written.
-#
-# The source is the fallback for reviews created before the key existed; for
-# those, deriving it is what the readers did anyway, so they keep behaving
-# exactly as they did.
+# Not always the review's source: a compare of a remote-tracking branch reviews
+# "origin/feature/x" but drafts for "feature/x", since the draft belongs to the
+# branch, not the ref you named it by. Falls back to reviewsource for reviews
+# created before this key existed, matching what readers derived back then.
 walk_review_draft_src() {
 	_wrds_name="$(git config "branch.$1.reviewdraft" || true)"
 	if [ -z "$_wrds_name" ]; then
@@ -1064,22 +962,19 @@ walk_review_draft_src() {
 
 # walk_saved_draft_filed <saved-branch>
 # Whether <saved-branch> is the review that filed the archived draft under its
-# name — the answer git review save wrote down (branch.<saved>.reviewdraftfiled)
-# when it put the review aside.
+# name -- the answer git review save recorded (branch.<saved>.reviewdraftfiled)
+# when it paused the review.
 #
-# The name cannot answer it on its own. A draft belongs to a branch, so two
-# reviews of one branch file under one name, and save only refuses that collision
-# when it has a file of its own to move — pause a draftless review of feature/x
-# first and a drafted compare of origin/feature/x after, and both sit paused over
-# one archived file that only the second wrote. Every reader then answered "mine"
-# for both: continue on the first walked off with the second's prose (and left the
-# second refusing to resume over a draft it had written itself), forget --saved on
-# it destroyed prose it had never written, and list badged a row for a file that
-# was not its.
+# The name alone cannot answer it: a draft belongs to a branch, so two reviews of
+# one branch (e.g. a draftless feature/x paused first, a drafted compare of
+# origin/feature/x paused after) can both sit over one archived file that only
+# the second wrote. Answering "mine" for both used to send continue to the wrong
+# review's prose, forget --saved to destroy prose it never wrote, and list to
+# badge a file that was not its.
 #
-# Absent on reviews paused before the key existed. For those the answer is the one
-# every reader gave then — the file under your name is yours — so a review paused
-# across the upgrade still comes back with its reading order.
+# Absent on reviews paused before the key existed; for those "the file under your
+# name is yours" is what every reader assumed anyway, so they keep working across
+# the upgrade.
 walk_saved_draft_filed() {
 	case "$(git config "branch.$1.reviewdraftfiled" || true)" in
 	1 | "") return 0 ;;
@@ -1089,21 +984,19 @@ walk_saved_draft_filed() {
 
 # walk_saved_draft_claims
 # Every paused review that owns an archived draft, as "<src><TAB><review-branch>",
-# one per line. The <src> is the name the review recorded, which is the name its
-# draft is filed under in review-saved-walkthrough/.
+# one per line: the <src> is the name the review recorded, the name its draft is
+# filed under in review-saved-walkthrough/.
 #
-# It exists because that name and the branch's own are not the same string: a
-# compare of a remote-tracking branch is paused as review-saved/origin/feature/x
-# and its draft is feature/x's. Asking "is there a refs/heads/review-saved/<file
-# name>?" therefore answers no for exactly those reviews, and the two callers here
-# both act destructively on that answer — forget --draft --all swept the archived
-# draft of a live paused review, announcing that no paused review was left to
-# restore it, and save overwrote it. Ask each paused review what it claims instead;
-# it is the same question walk_review_draft_src answers everywhere else.
+# Exists because that name and the branch's own can differ: a compare of a
+# remote-tracking branch pauses as review-saved/origin/feature/x but its draft is
+# feature/x's, so testing for refs/heads/review-saved/<file name> answers no for
+# exactly those reviews — which once let forget --draft --all sweep a live
+# paused review's draft, and save overwrite it. Ask each paused review what it
+# claims instead, the same question walk_review_draft_src answers elsewhere.
 #
-# A review that filed nothing claims nothing (walk_saved_draft_filed): it will not
-# restore that file at continue, so it must not be what stops save from replacing
-# it or forget --draft --all from sweeping it either. One rule, all four surfaces.
+# A review that filed nothing claims nothing (walk_saved_draft_filed): it must
+# not stop save from replacing that file or forget --draft --all from sweeping
+# it, same as it does not restore it at continue. One rule, all four surfaces.
 walk_saved_draft_claims() {
 	git for-each-ref --format='%(refname:short)' refs/heads/review-saved/ |
 		while IFS= read -r _wsc_rb; do
@@ -1117,15 +1010,15 @@ walk_saved_draft_claims() {
 
 # walk_draft_body <src>
 # Print <src>'s draft, normalised, or nothing (non-zero rc) when <src> has no
-# draft in force. "In force" and "the file exists" are not the same thing: a draft
-# that is empty, or holds nothing but whitespace, has no reading order in it and
-# must behave exactly as an absent one. It used to be answered by the file test
-# alone, and an empty file then shadowed the author's walkthrough while telling
-# every caller a walkthrough existed — start landed in whole with no note at all,
-# and --keys reported the PR carried none, on a PR that carried one.
+# draft in force. "In force" and "the file exists" are not the same thing: an
+# empty draft, or one holding only whitespace, has no reading order and must
+# behave exactly as an absent one — a bare file test used to answer this, and an
+# empty file then shadowed the author's walkthrough while every caller believed
+# one existed (start landed in whole with no note, --keys reported no entries on
+# a PR that had them).
 #
-# The single place that rule is written down, so that walk_read's precedence and
-# walk_is_draft's badge cannot drift apart and disagree about the same file.
+# The single place this rule is written, so walk_read's precedence and
+# walk_is_draft's badge cannot drift apart over the same file.
 #
 # -s before reading: zero bytes is the ordinary shape of this (an editor opened
 # and closed, a redirect, an interrupted write), and ruling it out costs nothing.
@@ -1149,14 +1042,12 @@ walk_draft_body() {
 # author's committed walkthrough — the question behind the "(draft)" suffix in
 # status and the draft record in status --porcelain.
 #
-# Answered by walk_draft_body, which is to say by the same rule walk_read applies
-# when it picks one over the other. It costs the one process that reads the file
-# where it used to be a bare file test; the alternative was a status line that
-# said "walk (draft)" over the author's prose, which is the confusion the suffix
-# exists to prevent. list and the start assistant deliberately keep asking the
-# cheaper question — for them a draft file that exists is a draft they are
-# responsible for, empty or not, because they report custody, not what is being
-# read.
+# Answered by walk_draft_body, the same rule walk_read applies when picking one
+# over the other; it costs one process where a bare file test once let status
+# say "walk (draft)" over the author's own prose. list and the start assistant
+# deliberately keep asking the cheaper question instead (walk_has_draft_file):
+# for them a draft file that exists is theirs to handle, empty or not, because
+# they report custody, not what is being read.
 walk_is_draft() {
 	walk_draft_body "$1" >/dev/null
 }
@@ -1177,13 +1068,11 @@ walk_has_draft_file() {
 # Never aborts the caller: used in conditions and command substitutions.
 #
 # Precedence: the reviewer's own draft for the source branch first, the
-# walkthrough committed at <tip> second. This is the single point where
-# walkthrough content enters the readers — which is why line-ending
-# normalisation lives here, and why putting precedence here means next, prev,
-# status --why, compare, --keys and the panel all read a draft with no change of
-# their own. A draft is only consulted when a caller has named the source with
-# walk_use_draft; unset, this behaves exactly as it always did, which is what
-# keeps the author's flow untouched.
+# walkthrough committed at <tip> second. The single point where walkthrough
+# content enters the readers — hence why line-ending normalisation lives here,
+# and why every reader (next, prev, status --why, compare, --keys, the panel)
+# gets a draft with no change of its own. Consulted only when a caller has named
+# the source with walk_use_draft; unset, this behaves exactly as it always did.
 walk_read() {
 	if [ -n "${walk_draft_src:-}" ] && _wr_body="$(walk_draft_body "$walk_draft_src")"; then
 		printf '%s\n' "$_wr_body"
@@ -1195,18 +1084,16 @@ walk_read() {
 
 # walk_parse  (stdin: walkthrough content)
 # Emit one "order<TAB>path" line per numbered entry ("## N. path"), in file order.
-# The intro heading ("# Walkthrough"), skeleton entries ("## ?. path") and any
-# other line are ignored. Leniency is deliberate: at runtime the file was already
-# validated by "git review walkthrough build", and a stray line must degrade the
-# review, never crash it.
+# The intro heading, skeleton entries ("## ?. path") and any other line are
+# ignored — leniency is deliberate: the file was already validated by
+# "git review walkthrough build", so a stray line must degrade the review, never
+# crash it.
 #
-# Trailing whitespace is trimmed off the path for the same reason walk_normalize
-# drops the CR: one space typed after the filename is invisible in every editor
-# and makes the entry compare unequal to git's path — the entry vanishes from the
-# reading order, or build names the identical file on both sides of a drift error.
-# It costs the ability to annotate a file whose name really ends in a space (legal
-# on Linux, unwritable on Windows); the same trade walk_normalize already makes
-# for a name ending in a CR.
+# Trims trailing whitespace off the path, one of the two normalization points
+# CLAUDE.md's "Walk y walkthrough" describes (see also walk_normalize): an
+# invisible trailing space makes the entry compare unequal to git's path and
+# silently drops it from the reading order. Costs the ability to annotate a file
+# whose name really ends in a space (legal on Linux, unwritable on Windows).
 walk_parse() {
 	awk '
 		/^## / {
@@ -1281,8 +1168,8 @@ walk_preamble() {
 #
 # A walkthrough's skeleton is filled in by somebody who is not looking at the PR
 # — usually an agent, from a working tree that holds the wrong content for the
-# job. The block below is the one place that says, in objects rather than in
-# words, which range the reading order is about and how to see it.
+# job. The block below says, in objects rather than words, which range the
+# reading order is about and how to see it.
 #
 # Two functions because generating and consuming are different jobs: init, draft
 # and the canonical rewrite emit one (walk_emit_prompt_block), and the rewrite
@@ -1292,30 +1179,21 @@ walk_preamble() {
 # walk_emit_prompt_block <tip> <lower> <tip-label> <lower-kind> <situation> <flags> [<delta-branch>]
 # Print the instruction block for a walkthrough skeleton. The ONE generator: the
 # author's sidecar and the reviewer's draft get the same bytes, with exactly two
-# passages switched inline (the situation phrase, and — outside this function —
-# the scaffolding's closing command). Two copies of this text would drift, and
-# the drift would be invisible until somebody read the wrong one.
+# passages switched inline (the situation phrase, and, outside this function,
+# the scaffolding's closing command) — two copies of this text would drift
+# invisibly.
 #
-# <situation> is init | base | review, meaning the working tree the block is
-# being written from: the PR branch, the base branch, or a review/* branch.
-# <flags> is the normalised origin/range flag string ("--local --delta",
-# "(defaults)"), which is the only home of that datum — config --porcelain reads
-# it back out of the file. <delta-branch>, when non-empty, adds the sentence
-# saying the range is incremental and names the branch it is incremental over.
+# <situation> is init | base | review: the working tree the block is written from
+# (PR branch, base branch, review/* branch). <flags> is the normalised
+# origin/range flag string ("--local --delta", "(defaults)"), the only home of
+# that datum — config --porcelain reads it back out of the file. <delta-branch>,
+# when non-empty, names the branch the range is incremental over.
 #
-# Two hard rules on the content, both measured (research § Hallazgo 0):
-#
-#   * the two endpoints are NEVER written as one two-dot argument. git diff with
-#     that shape and no "--" stats it as a possible pathspec, and on Windows
-#     with a deep cwd that stat blows past MAX_PATH: "fatal: failed to stat
-#     ...: Filename too long", exit 128. It does not depend on the type of
-#     either endpoint, so the rule holds for the author's side too.
-#   * no git log / rev-list / shortlog / range-diff, ever. <lower> is a tree OID
-#     whenever the base was merged into the PR, and those commands take a tree
-#     as "everything": they print the whole repository's history with exit 0,
-#     silently, and whoever is annotating believes they are reading the PR.
-#
-# What does work with a lower bound of either type, and is what the block uses:
+# Two hard, measured prohibitions on the content (CLAUDE.md, "Walk y
+# walkthrough"): never <lower>..<tip> as ONE argument (Windows deep-cwd stat,
+# "fatal: ... Filename too long", exit 128), and never
+# git log/rev-list/shortlog/range-diff (a tree <lower> makes them print the whole
+# repo's history, silently, exit 0). What works with either bound type:
 # "git diff <lower> <tip>" as two arguments, and "git show <rev>:<path>".
 walk_emit_prompt_block() {
 	_wepb_tip="$1"
@@ -1384,18 +1262,14 @@ walk_emit_prompt_block() {
 # walk_prompt_block  (stdin: walkthrough content; stdout: the same, minus the block)
 # Swallow the incoming instruction block so the canonical rewrite regenerates it
 # instead of carrying it forward. Recognition is a prefix comparison, not a
-# regex: the opening line has to START with the sentinel. Only the first block is
-# consumed, and only while still in the preamble — past the first entry heading
-# the text is somebody's why, and a why is never rewritten.
+# regex: the opening line has to START with the sentinel. Only the first block
+# is consumed, and only while still in the preamble — past the first entry
+# heading the text is somebody's why, never rewritten.
 #
-# This is NOT the "filtered when read" half of the format contract. That half is
-# walk_preamble's, and walk_preamble does not change: it already drops every
-# HTML comment for its three callers, which are this rewrite and start/compare —
-# the two that print the heads-up to the reviewer. (status --why never goes
-# through walk_preamble at all, because it never shows the preamble; the block
-# is invisible there too, but for a different reason, so nothing about that path
-# is covered by the filter.) What this function adds is the rewrite's own need:
-# with the block gone from the content, emitting a fresh one cannot duplicate it.
+# Distinct from walk_preamble's own comment-stripping (used by the rewrite and
+# by start/compare when they print the heads-up; status --why never shows the
+# preamble at all, so it never goes through either). This function exists purely
+# so the rewrite, with the block gone from the content, does not duplicate it.
 walk_prompt_block() {
 	awk '
 		# The preamble ends at the first entry heading; past it, pass everything.
@@ -1450,37 +1324,26 @@ walk_is_annotated() {
 }
 
 # walk_entry_fields <tip>  (stdin: paths, one per line, in order)
-# Emit "position<TAB>path<TAB>essential<TAB>annotated" for each path on stdin,
-# 1-based position in the order given, essential 1/0 for the "> key" marker,
-# annotated 1/0 for whether the path has a walkthrough entry at all (0 for a
-# file walk_reading_order appended because it has none). Fields only, not a
-# porcelain line: the caller passes each field through porcelain_row. This is
-# also the one place that decides those two flags — walk_count_keys and
-# walk_keys_order are filters over this output rather than three near-copies of
-# the same marker parsing.
+# Emit "position<TAB>path<TAB>essential<TAB>annotated" for each path on stdin:
+# 1-based position, essential 1/0 for the "> key" marker, annotated 1/0 for
+# whether the path has any walkthrough entry (0 for a file walk_reading_order
+# appended because it has none). Fields only, not a porcelain line — the caller
+# passes them through porcelain_row. The one place deciding those two flags:
+# walk_count_keys and walk_keys_order filter this output instead of re-parsing.
 #
-# ONE awk for the whole list, not one process per path. Reading the walkthrough
-# once (a single git show) was never the expensive part: the loop this replaced
-# spawned a walk_body awk plus two greps per entry, so a 184-entry reading order
-# cost ~900 processes and 27s under Git Bash on Windows, where fork() is
-# emulated — enough for the VS Code panel to hit its 15s read timeout on every
-# refresh. That is the actual O(1)-per-invocation goal of the porcelain
-# contract; one git show with an O(N) loop around it does not meet it.
+# ONE awk for the whole list, not one per path: the loop this replaced spawned a
+# walk_body awk plus two greps per entry, so a 184-entry reading order cost ~900
+# processes and 27s under Git Bash on Windows (fork() emulated) — enough to blow
+# the VS Code panel's 15s read timeout on every refresh.
 #
-# The two streams go into that single awk back to back and are told apart by a
-# sentinel line holding one tab, with the PATHS FIRST: a path can never be a
-# lone tab (git quotes control characters unconditionally, the same property
-# walk_sequence relies on to tell its two streams apart), whereas a walkthrough
-# body is arbitrary prose that may well contain a tab-only line. Feeding the
-# content first and the paths second would let the author's own text end the
-# first phase early. The paths are buffered and printed at END so the caller's
-# order — the reading order — survives, and so a path that appears twice gets
-# the same flags both times.
+# Two streams (paths, then walkthrough content) feed one awk, told apart by a
+# sentinel line holding a lone tab: a path can never BE one (git quotes control
+# characters unconditionally), while a why is arbitrary prose that might contain
+# one. Paths go first and are buffered to END so their order survives and a
+# repeated path keeps its flags.
 #
-# The content cannot travel as `awk -v` either, for two independent reasons: -v
-# processes escape sequences, so a why containing a literal \n or \t would be
-# silently rewritten, and BSD awk refuses a -v value containing a newline
-# outright (see walk_reading_order). Anything arbitrary goes in as a stream.
+# The content cannot travel as `awk -v`: -v rewrites escape sequences, and BSD awk
+# refuses a -v value containing a newline outright (see walk_reading_order).
 walk_entry_fields() {
 	_we_content="$(walk_read "$1" || true)"
 	{
@@ -1540,18 +1403,17 @@ walk_why() {
 }
 
 # walk_sequence <tip> <lower>
-# Derive the ordered, range-filtered reading sequence for a review whose tip is
-# <tip> and lower bound is <lower>: parse the walkthrough at <tip>, keep only
-# entries whose path is actually in the review range (changed_paths <lower>
-# <tip>), order them by the author's number and print the paths, one per line, in
-# reading order. Empty output means no walkthrough, or none of its entries
-# intersect the range — callers degrade to a plain whole review.
+# The ordered, range-filtered reading sequence for a review: parse the
+# walkthrough at <tip>, keep only entries whose path is in the review range
+# (changed_paths <lower> <tip>), order by the author's number, print one path
+# per line. Empty output means no walkthrough or no intersecting entry —
+# callers degrade to a plain whole review.
 #
-# The two sides are fed to one awk as a single stream, range first, and told apart
-# by the tab that walk_parse puts in front of every entry path: git quotes control
-# characters in a path unconditionally, so a line from changed_paths can never
-# hold a literal tab. That is what lets this run without the scratch file it used
-# to need — one less thing to leave behind in .git when a step fails under set -e.
+# Both sides feed one awk as a single stream, range first, told apart by the tab
+# walk_parse puts before every entry path: git quotes control characters
+# unconditionally, so a changed_paths line can never hold a literal tab. This is
+# what lets it run without the scratch file it used to need, one less thing left
+# behind in .git when a step fails under set -e.
 walk_sequence() {
 	_ws_content="$(walk_read "$1")" || return 0
 	[ -n "$_ws_content" ] || return 0
@@ -1573,36 +1435,28 @@ walk_sequence() {
 
 # walk_reading_order <tip> <lower>
 # The full reading order for a walk review: the guided sequence from
-# walk_sequence, followed by any file range_files reports in range but that has
-# no walkthrough entry — including the sidecar itself, if the PR touches it: a
-# committed walkthrough is content the PR adds like any other file, and it used
-# to be the one file no review ever showed a reviewer (the sole exception left
-# is the walkthrough's own entry proposal in git-review-verbs/walkthrough,
-# which still filters it — annotating the file where you write your annotations
-# would be circular). In the order git reports them. Empty output means
-# walk_sequence is empty — no guided entry intersects the range — and the
-# caller degrades to whole, exactly as before: this function only ever adds a
-# tail to a non-empty guided sequence, never turns an empty one into something
-# walk mode would run on.
+# walk_sequence, followed by any file range_files reports in range with no
+# walkthrough entry, in git's order — including the sidecar itself when the PR
+# touches it (a committed walkthrough is a file like any other; the one place
+# still filtering it out is the walkthrough's own entry proposal in
+# git-review-verbs/walkthrough, to avoid annotating the file you annotate in).
+# Empty output means walk_sequence found no guided entry in range, and the
+# caller degrades to whole: this only ever appends to a non-empty sequence,
+# never turns an empty one into something walk mode would run on.
 #
-# Built on top of walk_sequence rather than duplicating its awk: one git show
-# and one git diff live there, and this adds one more diff plus a single awk pass
-# over range paths (set membership of the guided sequence — not one grep
-# process per path).
+# Built on walk_sequence rather than duplicating its awk: one more diff, plus a
+# single awk pass doing set membership over range paths (not a grep per path).
 walk_reading_order() {
 	_wro_seq="$(walk_sequence "$1" "$2")"
 	[ -n "$_wro_seq" ] || return 0
 	printf '%s\n' "$_wro_seq"
 	# One awk: load guided paths into a set, emit range paths not in it (git order).
 	#
-	# The sequence arrives as a stream, not as `awk -v`: BSD awk (the one true
-	# awk, which is what macOS ships) refuses a newline inside a -v value —
-	# "awk: newline in string <value>... at source line 1", exit 2 — while
-	# gawk and mawk accept it. A multi-line -v therefore aborts every walk
-	# review on macOS and nowhere else. Same two-stream, lone-tab-sentinel
-	# shape as walk_entry_fields, and safe for the same reason: git quotes
-	# control characters in a path unconditionally, so neither stream can
-	# produce a line that is just a tab.
+	# The sequence arrives as a stream, not `awk -v`: BSD awk (what macOS ships)
+	# refuses a newline inside a -v value outright ("awk: newline in string...",
+	# exit 2), aborting every walk review on macOS alone — gawk and mawk accept
+	# it. Same two-stream, lone-tab-sentinel shape as walk_entry_fields, safe for
+	# the same reason (git quotes control characters unconditionally).
 	{
 		printf '%s\n' "$_wro_seq"
 		printf '\t\n'
@@ -1621,22 +1475,21 @@ walk_reading_order() {
 # walk_keys_order <tip> <lower>
 # Guided walk_sequence paths that carry the reserved "> key" marker, in
 # walkthrough order. Uncovered paths never appear — walk_sequence only yields
-# guided entries, so the annotated column is 1 throughout and filtering on
-# essential alone is enough. A filter over walk_entry_fields for the same reason
-# walk_count_keys is one: a single definition of the "> key" marker, and a
-# constant number of processes for a reading order of any length. Empty output
-# means no essential entry intersects the range — callers that asked for --keys
-# fail before opening a review rather than materializing an empty sequence.
+# guided entries, so filtering on essential alone is enough. A filter over
+# walk_entry_fields, like walk_count_keys, for the same single-definition and
+# constant-process reasons. Empty output means no essential entry intersects
+# the range — callers that asked for --keys fail before opening a review rather
+# than materializing an empty sequence.
 walk_keys_order() {
 	walk_sequence "$1" "$2" | walk_entry_fields "$1" |
 		awk -F'\t' '$3 == "1" { print $2 }'
 }
 
 # emit_reading_offers <branch> <remote> <source_mode> <delta>
-# Print offer rows for config --porcelain (008-start-layout-offers). source_mode
-# is remote|local|offline; delta is 0|1. Never fetches. Dies on unresolvable tip
-# or on --delta without a marker for that origin. Lower bound mirrors start
-# (merge-base / previous tip + fold_lower) without creating a review branch.
+# Print offer rows for config --porcelain. source_mode is remote|local|offline;
+# delta is 0|1. Never fetches. Dies on unresolvable tip or on --delta without a
+# marker for that origin. Lower bound mirrors start (merge-base / previous tip +
+# fold_lower) without creating a review branch.
 emit_reading_offers() {
 	_ero_branch="$1"
 	_ero_remote="$2"
@@ -1666,11 +1519,11 @@ emit_reading_offers() {
 		_ero_markerkey="reviewworkflow.$_ero_branch.reviewed"
 	fi
 
-	# Tip missing: hard error for every origin (remote default, local, offline,
-	# delta). Soft-skip used to return 0 with zero offer rows for a missing
-	# remote tracking ref; that looks like a pre-008 CLI to consumers
-	# (synthetic whole+step fallback) instead of "no remote tip". Local-only
-	# branches must use --local.
+	# Tip missing is a hard error for every origin (remote default, local,
+	# offline, delta): silently returning zero offer rows would look to a client
+	# like an older CLI lacking this feature, triggering its whole+step
+	# fallback, instead of reporting "no remote tip". Local-only branches must
+	# use --local.
 	if ! git rev-parse --verify --quiet "$_ero_srcref^{commit}" >/dev/null; then
 		echo "error: $_ero_srclabel not found" >&2
 		return 1
@@ -1747,36 +1600,29 @@ emit_reading_offers() {
 			porcelain_row offer keys available
 		fi
 	fi
-	# Drafting the reading order yourself, as a reading offer of its own: the
-	# assistant asks "how do you want to read this?" exactly when the reviewer
-	# finds out nobody wrote an order, so that is where the answer belongs.
+	# Drafting the reading order yourself is a reading offer of its own, and
+	# exactly one of the three. Never `draft` on top of a usable walkthrough:
+	# replacing the author's order is a deliberate, terminal-only act. The other
+	# two ARE offered alongside walk, since walk IS the reviewer's own draft
+	# there.
 	#
-	# Exactly one of the three, and never `draft` on top of a usable walkthrough:
-	# replacing the author's order is a deliberate act, available from the
-	# terminal, not something the assistant proposes. The other two *are* offered
-	# alongside walk, because that walk is the reviewer's own draft and carrying
-	# it forward is the obvious next move.
+	# draft-update vs draft-resume is decided HERE and not by the client: it
+	# needs both tips, which the draft's <state> cannot answer -- that field
+	# asks "has this order been read?", not "does it still cover the range?",
+	# so a branch that moved after review still reports `reviewed`. Guessed
+	# client-side, it offered to reconcile a range that had not moved: a no-op
+	# landing the reviewer on a `reviewed` row with no button that does
+	# anything.
 	#
-	# Which of the two is asked HERE, and not by the client, because the question
-	# they answer is "does this reading order still cover the range?" -- and the
-	# only surface that can answer it is the one holding both tips. The draft
-	# records cannot: their <state> answers a different question ("has this order
-	# been read?"), deliberately, so a branch that moved after its review still
-	# reports `reviewed`. Left to the client, the two cases arrive identical and
-	# the assistant has to guess -- which is what it used to do, offering to
-	# reconcile an order with a range that had not moved. That is a no-op, and it
-	# landed the reviewer on a `reviewed` row with neither Copy for agent nor
-	# Validate and start: an assistant step whose only outcome was a dead end.
-	#
-	#   drifted     the block records a tip that is not this one -- entries are
-	#               missing (or gone), so there is something to reconcile.
+	#   drifted     the block records a different tip -- entries are missing or
+	#               gone, something to reconcile.
 	#   up to date  and still being written: finishing it is the next move.
-	#   up to date  and complete: nothing to offer. `walk` above already reads it,
-	#               and starting over is a decision of its own, not half a modal.
+	#   up to date  and complete: nothing to offer -- `walk` above already
+	#               reads it, and starting over is a decision of its own.
 	#
-	# The first question costs ZERO processes (a builtin read of the block that
-	# walk_use_draft already located); the count is only reached when it comes
-	# back "up to date", and never at all without a branch argument.
+	# The first question is ZERO processes (a builtin read of the block
+	# walk_use_draft already located); the count only runs once it answers
+	# "up to date", and never at all without a branch argument.
 	if walk_has_draft_file "$_ero_branch"; then
 		_ero_dpath="$(walk_draft_path "$_ero_branch")"
 		_ero_dtip="$(walk_sidecar_block_tip "$_ero_dpath" || true)"
@@ -1800,17 +1646,16 @@ emit_reading_offers() {
 # True when HEAD still sits where start pinned it, false when it moved, and
 # non-zero-with-no-answer when the review predates the key that records it.
 #
-# Walk mode keeps HEAD at the review's lower bound for the review's whole life, so
-# "did the reviewer run git commit?" is a question git can answer outright. It used
-# to be inferred instead, from the reading sequence having got shorter — which was
-# the only shrinking cause back when every walkthrough was the author's, frozen in
-# the tip. A reviewer's draft is a file they are invited to edit, so that inference
-# now has two causes and picks the wrong one: editing your own draft told you HEAD
-# had moved and to run git reset --soft.
+# Walk mode keeps HEAD at the review's lower bound for the review's whole life,
+# so this is a question git can answer outright instead of inferring it from
+# the reading sequence having shrunk — the old approach, which broke once a
+# reviewer's draft became editable: shrinking now has two causes, and the
+# inference picked the wrong one (telling a reviewer who had only edited their
+# own draft to run git reset --soft).
 #
 # Three states, not two: a review created before reviewwalkbase existed has no
-# recorded base, and guessing for it would be the same mistake in the other
-# direction. Callers fall back to the old inference there.
+# recorded base, and guessing would repeat the same mistake in reverse — callers
+# fall back to the old inference there.
 walk_at_base() {
 	_wab_base="$(git config "branch.$cur.reviewwalkbase" || true)"
 	[ -n "$_wab_base" ] || return 2
@@ -1819,49 +1664,43 @@ walk_at_base() {
 
 # walk_recover_cursor
 # Re-seat a cursor that the reviewer's own draft got shorter under, or fail (and
-# leave walk_range_error to explain). True only when all of it holds: the cursor
-# ran off the end (not off the front, which no edit can cause), entries remain,
-# HEAD is provably still at the base, and the walkthrough in force is a draft that
-# still exists.
+# leave walk_range_error to explain). True only when the cursor ran off the end
+# (never off the front, which no edit can cause), entries remain, HEAD is
+# provably still at the base, and the walkthrough in force is a still-existing
+# draft.
 #
-# Clamping rather than erroring, because every one of those conditions says the
-# state is intact and the reading position is the only thing that went stale — and
-# the position is not precious: the sequence behind it is re-derived on every
-# command by design. The alternative was a dead end. There is no verb that moves
-# the cursor without loading this metadata first, so an out-of-range cursor made
-# next, prev and status all abort with the same message, leaving `git review abort`
-# — discard the review — as the only way out of having edited your own prose.
+# Clamps rather than errors because those conditions together mean the state is
+# intact and only the reading position went stale — and the position is not
+# precious, since the sequence is re-derived every command. The alternative was a
+# dead end: every verb loads this metadata first, so an out-of-range cursor made
+# next/prev/status all abort alike, leaving `git review abort` as the only way out
+# of having edited your own prose.
 #
-# reviewwalkcount moves with it: it is the baseline a later genuine range change is
-# measured against, so leaving it at the old value would re-report this shrink for
+# reviewwalkcount moves with it: it is the baseline a later genuine range change
+# is measured against, so leaving it stale would re-report this same shrink for
 # the rest of the review.
 walk_recover_cursor() {
 	[ "$walkstep" -gt "$total" ] || return 1
 	[ "$total" -ge 1 ] || return 1
 	walk_at_base || return 1
-	# walk_draft_src, not the reviewwalkfromdraft flag: the flag is only raised when
-	# start/compare open *on* a draft, and the case this function exists for is a
-	# draft written mid-review — a review that by definition never had one. Reading
-	# the flag here made the recovery unreachable on its own motivating path, the
-	# one the recorded name exists to support. Whether that name has a draft in
-	# force is the next line's question, so widening this one costs nothing.
+	# walk_draft_src, not the reviewwalkfromdraft flag: the flag is only raised
+	# when start/compare open ON a draft, but this function exists for a draft
+	# written MID-review, which by definition never had one — reading the flag
+	# here made recovery unreachable on its own motivating path.
 	_wrc_draft="${walk_draft_src:-}"
 	[ -n "$_wrc_draft" ] || return 1
 	walk_is_draft "$_wrc_draft" || return 1
 
 	echo "note: your walkthrough draft for $_wrc_draft now has $total $(entry_noun "$total") in this review's range; the cursor was at $walkstep and moved to $total." >&2
-	# Best-effort on purpose: this is the one place the read path writes config, so
-	# it also runs from `git review status` — on every panel refresh and every
-	# watcher beat. A config write can fail for reasons that have nothing to do with
-	# the review: another process holding .git/config.lock (git takes it with no
-	# retry and exits 255), a read-only gitdir. None of that is worth killing the
-	# command over. The clamp below is already in force for this invocation, the
-	# whole thing is idempotent, and the next one re-derives and retries.
+	# Best-effort: this is the one place the read path writes config, so it also
+	# runs from `git review status` on every panel refresh. A write can fail for
+	# reasons unrelated to the review (.git/config.lock held by another process,
+	# a read-only gitdir) and none of that is worth killing the command over —
+	# the clamp is already in force for this call, and the next one retries.
 	#
-	# Not redundant with the caller being an AND-OR list. It is today — POSIX
-	# suppresses -e inside a function run as the non-final command of one — but that
-	# is an invariant living in another function, and one refactor away from turning
-	# a lost lock into an aborted status.
+	# Not redundant with the caller's AND-OR list: that only suppresses -e today
+	# because of an invariant living in another function, one refactor away from
+	# turning a lost lock into an aborted status.
 	git config "branch.$cur.reviewwalkstep" "$total" || true
 	git config "branch.$cur.reviewwalkcount" "$total" || true
 	walkstep="$total"
@@ -1871,20 +1710,18 @@ walk_recover_cursor() {
 
 # walk_range_error <walkstep> <total> <walkcount>
 # Emit the right diagnostic for a walk cursor that fell outside the live reading
-# range, then exit 1. A walk review's tip and its committed walkthrough are frozen,
-# so the derived sequence only shrinks when HEAD moves off the review's base —
-# almost always a stray `git commit` that folded the staged whole-PR diff into HEAD.
-# When the live <total> dropped below the <walkcount> recorded at start, name that
-# recoverable cause and its fix, instead of blaming "corrupt metadata" for a
-# self-inflicted, undoable state. A cursor out of range while the range is intact
-# (total still == walkcount, or a non-numeric/absent walkcount) is genuine
+# range, then exit 1. A walk review's tip and committed walkthrough are frozen,
+# so the derived sequence only shrinks when HEAD moves off the base — almost
+# always a stray `git commit` folding the staged whole-PR diff into HEAD. When
+# live <total> dropped below the <walkcount> recorded at start, name that
+# recoverable cause and its fix instead of blaming "corrupt metadata"; a range
+# that is still intact (total == walkcount, or walkcount unusable) IS
 # corruption — a hand-edited key — and keeps the original diagnostic.
 #
-# The reviewer's draft adds two causes that are neither, and each gets its own
-# message: the draft is gone (deleted or emptied), and the draft is there but
-# contributes no entry to this range. Both are states of a file the reviewer owns
-# and can fix in place, so both name the command that fixes it. "Corrupt
-# metadata" is the last resort, not the catch-all.
+# The reviewer's draft adds two more recoverable causes, each with its own
+# message: the draft is gone (deleted or emptied), or it contributes no entry to
+# this range. Both are states of a file the reviewer owns and can fix, so both
+# name the fix. "Corrupt metadata" is the last resort, not the catch-all.
 walk_range_error() {
 	_wre_step="$1"
 	_wre_total="$2"
@@ -1893,32 +1730,29 @@ walk_range_error() {
 	'' | *[!0-9]*) _wre_count=0 ;;
 	esac
 	# A reviewer's draft, unlike a committed walkthrough, can be deleted out from
-	# under a live review — its tip is frozen, the draft is a file. When that
-	# happens the sequence changes shape under the cursor exactly as it does after
-	# a stray commit, and without this the reviewer gets told HEAD moved and to run
-	# git reset --soft, which is both wrong and destructive-sounding. Name the real
-	# cause instead.
+	# under a live review, changing the sequence's shape exactly as a stray
+	# commit does — without this the reviewer was told HEAD moved and to run
+	# git reset --soft, which is both wrong and destructive-sounding.
 	#
-	# Decided on whether this review's reading order came from the draft
-	# (reviewwalkfromdraft, recorded at creation), not on "there is no walkthrough
-	# left": when the PR carries one of its own, deleting the draft makes the
-	# review fall back to the author's order, so walk_read still succeeds and the
-	# range can still have collapsed — the exact case that got the HEAD message
-	# wrong. A flag and not the name, because the name is recorded separately and
-	# unconditionally (walk_review_draft_src): whether a draft *was* being read is
-	# the one thing that cannot be recomputed once the file is gone. The old
-	# total==0 test stays as the fallback for a review started before the flag.
+	# Decided on reviewwalkfromdraft (recorded at creation), not on "no
+	# walkthrough left": when the PR has its own, deleting the draft falls back
+	# to the author's order, so walk_read still succeeds while the range has
+	# still collapsed — exactly the case that got the HEAD message wrong. A
+	# flag, not the name, because whether a draft WAS being read cannot be
+	# recomputed once the file is gone; the name is recorded separately
+	# (walk_review_draft_src). The old total==0 test stays as fallback for
+	# reviews started before the flag.
 	_wre_draft=""
 	if [ "$(git config "branch.$cur.reviewwalkfromdraft" || true)" = "1" ]; then
 		_wre_draft="${walk_draft_src:-$src}"
 	elif [ -n "${walk_draft_src:-}" ] && walk_is_draft "$walk_draft_src"; then
-		# A draft written mid-review carries no flag: at creation there was nothing
-		# to record. It is adopted from the context the loader resolved instead —
-		# but only once walk_is_draft confirms a draft is actually in force. That
-		# confirmation is the whole of it: walk_draft_src falls back to the review's
-		# own source name, so taking it unconditionally would make every draft-less
-		# walk review look like one whose draft went missing, and answer a stray
-		# commit with "your draft is gone" instead of the HEAD message below.
+		# A draft written mid-review carries no flag (nothing to record at
+		# creation), so it is adopted from the loader's context instead, but only
+		# once walk_is_draft confirms one is actually in force — walk_draft_src
+		# falls back to the review's own source name, so taking it
+		# unconditionally would make every draft-less review look like one
+		# whose draft went missing, misdiagnosing a stray commit as "your draft
+		# is gone".
 		_wre_draft="$walk_draft_src"
 	fi
 	_wre_gone=0
@@ -1931,13 +1765,12 @@ walk_range_error() {
 		_wre_gone=1
 	fi
 	if [ "$_wre_gone" -eq 1 ]; then
-		# Deleted and emptied are the same thing to walk_read and two different
-		# things to the reviewer, who most likely has the file open. Reported with
-		# walk_has_draft_file — the custody question — precisely because
-		# walk_is_draft just answered the other one. It also decides the fix: the
-		# draft verb refuses to overwrite a file that exists, so telling someone
-		# with an empty draft to "write it again" without --force sends them to a
-		# second error.
+		# Deleted and emptied are the same to walk_read but different to the
+		# reviewer, who likely has the file open — told apart here with
+		# walk_has_draft_file (custody), since walk_is_draft just answered the
+		# other question. It also picks the fix: the draft verb refuses to
+		# overwrite an existing file, so an empty draft needs --force or the
+		# reviewer hits a second error.
 		if walk_has_draft_file "$_wre_draft"; then
 			_wre_what="the file is now empty"
 			_wre_fix="git review walkthrough draft --force $_wre_draft"
@@ -1948,31 +1781,27 @@ walk_range_error() {
 		echo "error: the walkthrough this review was reading is gone — it was $_wre_draft's draft, and $_wre_what. Write it again with '$_wre_fix', or discard the review with 'git review abort'." >&2
 		exit 1
 	fi
-	# The shrink is only evidence of a stray commit while nothing else can shrink
-	# the sequence. When the base is recorded and HEAD is still on it, this message
-	# would be provably false — the reviewer would be sent to git reset --soft over
-	# a range that never moved — so it is skipped and the generic diagnostic below
-	# takes over. walk_recover_cursor has already handled the one shape of that
-	# which is recoverable (their own draft, still there, cursor past the end).
+	# The shrink only points to a stray commit while nothing else could have
+	# caused it: if the base is recorded and HEAD is still on it, this message
+	# would be provably false, so it is skipped in favor of the generic
+	# diagnostic below. walk_recover_cursor already handles the one recoverable
+	# shape of that (their own draft, still there, cursor past the end).
 	if [ "$_wre_step" -ge 1 ] && [ "$_wre_count" -ge 1 ] && [ "$_wre_total" -lt "$_wre_count" ] &&
 		! walk_at_base; then
 		echo "error: HEAD has moved off this review's base — the walkthrough cursor is at entry $_wre_step but only $_wre_total of $_wre_count $(entry_noun "$_wre_count") remain in range. Walk mode keeps the whole-PR diff staged with HEAD at the base; you now have commit(s) on top (did you run git commit?). Undo them with 'git reset --soft' to restage the diff, or 'git review abort' to discard the review, then retry." >&2
 		exit 3
 	fi
-	# A draft that is in force and yields no entry at all in this range. That is a
-	# state of the draft, not corruption: the reviewer either rewrote it down to
-	# the skeleton — "## ?." headings are not entries until they carry a number —
-	# or wrote one whose paths do not meet the range. walk_recover_cursor cannot
-	# clamp it because there is nothing to clamp to, and without this branch the
-	# reviewer who follows the "gone" message above, drafts the skeleton it asked
-	# for and runs the next command is answered with "corrupt metadata": untrue,
-	# and the only exit it names is discarding the review.
+	# A draft that is in force but yields no entry in range — a state of the
+	# draft, not corruption: the reviewer rewrote it down to the skeleton
+	# ("## ?." headings are not entries until numbered) or wrote paths outside
+	# the range. walk_recover_cursor cannot clamp it (nothing to clamp to), and
+	# without this branch the reviewer who follows the "gone" message above and
+	# drafts the skeleton is wrongly told "corrupt metadata".
 	#
-	# Deliberately below the HEAD check and not above it. A stray commit empties
-	# the sequence too, and that state is about HEAD, not about the draft: ordering
-	# this first told a reviewer who had just committed over the staged diff to go
-	# number their entries, and dropped the exit code the clients read as
-	# out-of-range from 3 to 1.
+	# Deliberately below the HEAD check: a stray commit also empties the
+	# sequence, and that state is about HEAD, not the draft — ordering this
+	# first would misdirect a reviewer who just committed, and change the exit
+	# code clients read as out-of-range from 3 to 1.
 	if [ -n "$_wre_draft" ] && [ "$_wre_total" -eq 0 ]; then
 		echo "error: your walkthrough draft for $_wre_draft has no entries in this review's range; the cursor is at entry $_wre_step. Number the entries and run 'git review walkthrough draft --build $_wre_draft', or discard the review with 'git review abort'." >&2
 		exit 1
@@ -2022,18 +1851,13 @@ load_walk_review_meta() {
 		exit 1
 	fi
 
-	# Point the readers at the draft this review is reading, if any. It has to
-	# happen before the sequence below, which is the first thing here to go
-	# through walk_read. Doing it in the context loader rather than in each verb
-	# is what guarantees every surface of one review — next, prev, status --why,
-	# preview — reads the same walkthrough.
-	#
-	# walk_review_draft_src is the one place that answers "under what name?", and
-	# it answers it from what the review recorded rather than from reviewsource —
-	# a compare of a remote-tracking branch reviews "origin/feature/x" while its
-	# draft is "feature/x"'s. The name is recorded whether or not a draft existed
-	# at creation, so a draft written mid-review is picked up under the same name
-	# git review walkthrough draft wrote it to.
+	# Point the readers at the draft this review is reading, if any, before the
+	# sequence below (the first thing here to go through walk_read). Doing it
+	# in the context loader, not in each verb, guarantees every surface of one
+	# review — next, prev, status --why, preview — reads the same walkthrough.
+	# Resolved via walk_review_draft_src, which answers "under what name?" from
+	# what the review recorded (see that function for why this can differ from
+	# reviewsource).
 	walk_use_draft "$(walk_review_draft_src "$cur")"
 
 	# Keys-only submode (start/compare --keys): sequence is guided ∩ keys, not
@@ -2073,15 +1897,13 @@ load_walk_review_meta() {
 
 # show_walk_entry <k>
 # Print the k-th entry of the reading order: a rule, the "[k/N] <path>" header,
-# either the author's "why" prose or, for a file the walkthrough does not
-# annotate, a fixed line saying so, another rule and the prompt. An entry the
-# author marked "> key" is labelled as such in the header — the reading order
-# says what to read when, the marker says which ones not to skim; an
-# unannotated entry is labelled "(uncovered)" instead, since it has no marker
-# to carry. The path carries no line number on purpose — clicking it in an IDE
-# terminal just opens the file at the top; a hunk line only ever pointed at the
-# first change and went stale the moment you edited.
-# Relies on the globals set by load_walk_review_meta (tip, total, walkpaths).
+# either the author's "why" prose or a fixed line for a file the walkthrough
+# does not annotate, another rule and the prompt. A "> key" entry is labelled
+# as such (the order says what to read when, the marker says which not to
+# skim); an unannotated one is labelled "(uncovered)" instead. No line number
+# in the path on purpose: it would just open the file at the top in an IDE
+# terminal anyway, and a hunk line goes stale the moment you edit.
+# Relies on the globals load_walk_review_meta sets (tip, total, walkpaths).
 show_walk_entry() {
 	_swe_path="$(printf '%s\n' "$walkpaths" | sed -n "${1}p")"
 	if walk_is_annotated "$tip" "$_swe_path"; then
@@ -2111,59 +1933,42 @@ goto_walk_entry() {
 # ── Authoring guides ──────────────────────────────────────────────────────────
 #
 # A guide is prose about CONTENT: which entries deserve "> key", how to write a
-# why, what belongs in the heads-up. Two can be in play at once, and they are two
-# different things rather than two copies of one thing:
+# why, what belongs in the heads-up — team's (.review/walkthrough-guide.md,
+# committed) and your own (<git-common-dir>/review-walkthrough-guide.md,
+# outside the work tree, never staged/committed/swept into review-fixes/); see
+# CLAUDE.md's prose-files table. Both apply when both are in force, and the
+# skeleton says which wins on a contradiction: yours, same precedence walk_read
+# applies between draft and sidecar.
 #
-#   team  .review/walkthrough-guide.md, committed — how THIS PROJECT wants its
-#         PRs annotated. Shared with everyone, reviewed, versioned with the code.
-#   own   <git-common-dir>/review-walkthrough-guide.md, outside the work tree —
-#         how YOU annotate. Never staged, never committed, and never swept into
-#         review-fixes/ by finish's "git add -A": the same three walls that put
-#         the reviewer's draft in the gitdir put this here.
+# Neither is read, parsed or validated by this suite — detected and named only;
+# the agent filling the walkthrough in reads them. Keeps build the only owner
+# of the format, with no validation to drift.
 #
-# Both apply when both are in force, and the skeleton says so — along with which
-# one wins on a contradiction, which is yours, the same precedence walk_read
-# already applies between your draft and the author's sidecar.
-#
-# Neither is read, parsed or validated by this suite. It detects them and names
-# them; the agent filling the walkthrough in is what reads them. Keeping the
-# contract that small is what lets build stay the only owner of the format, and
-# it is why there is no validation to drift.
-#
-# Where the reviewer's guide is NOT: inside review-walkthrough/. walk_draft_list
-# recurses that directory and takes every *.md in it as a <src> branch name, so a
-# guide filed there would surface as a phantom draft in list, in
-# forget --draft --all and in the progress count of config --porcelain.
+# The own guide lives PLAIN, never inside review-walkthrough/: walk_draft_list
+# recurses that directory taking every *.md as a <src> branch name, so a guide
+# filed there would surface as a phantom draft everywhere that enumerates them.
 
 # guide_paths_init
-# Resolve both guide paths once per process, into _guide_team_path and
-# _guide_own_path. Both absolute, both in the SAME path style, and ONE git
-# process for the pair: rev-parse answers both questions in a single call, in the
-# order they are asked.
+# Resolve both guide paths once per process into _guide_team_path/_guide_own_path,
+# both absolute and in the SAME path style, in ONE git process (rev-parse answers
+# both in a single call). Same "assign in the caller's own shell" rule as
+# walk_gitdir_init, for the same reason: a cache written inside a "$(...)" dies
+# with its subshell.
 #
-# Same "assign in the caller's own shell" rule as walk_gitdir_init, and for the
-# same reason -- a cache written inside a "$(...)" dies with its subshell.
+# The reviewer's guide belongs to the COMMON gitdir, never the worktree one: a
+# linked worktree has its own gitdir but shares the common one, and a guide is
+# a property of the repository, not of the worktree you happen to be in.
 #
-# The reviewer's guide belongs to the COMMON gitdir, never to the worktree one: a
-# linked worktree has a gitdir of its own but shares the common one, and a guide
-# is a property of the repository, not of the worktree you are standing in. With
-# the worktree gitdir you get a different guide per worktree, which is not a
-# thing anybody would think to look for.
+# Derived from --absolute-git-dir and a string-strip of "/worktrees/<name>",
+# rather than --git-common-dir: that answers relative to the CURRENT DIRECTORY,
+# and on Windows the obvious fix (prefixing $PWD) mixes path styles inside one
+# porcelain record -- rev-parse hands back "C:/Users/...", Git Bash's $PWD
+# hands back "/tmp/...", and a client given the second cannot open the file.
+# (--path-format=absolute would be the direct route; it needs git 2.31, this
+# project supports 2.23.)
 #
-# It is derived from --absolute-git-dir rather than asked for with
-# --git-common-dir, and that is not a detour. --git-common-dir answers relative
-# to the CURRENT DIRECTORY (".git" at the top level, "../.git" one level down),
-# and on Windows the obvious fix -- prefixing $PWD -- mixes path styles inside one
-# porcelain record: rev-parse hands back "C:/Users/...", $PWD under Git Bash hands
-# back "/tmp/...", and a client handed the second one cannot open the file.
-# Asking git for the absolute worktree gitdir and stripping "/worktrees/<name>"
-# off it gives the common dir in git's own style, with no second process.
-# (--path-format=absolute would be the direct way and is git 2.31; this project
-# supports 2.23.)
-#
-# A repository with no work tree (bare) has no team guide and therefore no guides
-# at all here: both paths stay empty and every caller treats that as nothing to
-# report.
+# A bare repository has no work tree and therefore no team guide at all: both
+# paths stay empty and every caller treats that as nothing to report.
 guide_paths_init() {
 	[ -z "${_guide_paths_done:-}" ] || return 0
 	_guide_paths_done=1
@@ -2194,20 +1999,19 @@ EOF
 }
 
 # guide_in_force <path>
-# Whether <path> is a guide with something in it. Same rule, and the same reason,
-# as walk_draft_body: a file that is empty or holds nothing but whitespace is not
-# a set of conventions, and naming one in the skeleton points the agent at
-# nothing. It is also what lets "git review walkthrough guide" create the file
-# empty — creating it does not yet claim a guide exists.
+# Whether <path> is a guide with something in it. Same rule and reason as
+# walk_draft_body: empty or whitespace-only is not a set of conventions, and
+# lets "git review walkthrough guide" create the file empty without yet
+# claiming one exists.
 #
-# ZERO processes, unlike walk_draft_body, because the question is only "is there
-# a non-blank line": a builtin read loop answers it and stops at the first one,
-# which for a real guide is line 1. config --porcelain runs on every panel
-# refresh, so that is the difference between free and not.
+# ZERO processes, unlike walk_draft_body: the question is only "is there a
+# non-blank line", answered by a builtin read loop that stops at the first one
+# — line 1 for a real guide. config --porcelain runs on every panel refresh, so
+# that is free vs not.
 #
-# The one shape it does not catch is a file holding nothing but a UTF-8 BOM,
-# which reads as non-whitespace. Deliberate: recognising it needs the byte, the
-# byte needs a printf, and the cost of missing it is one line in a skeleton.
+# Does not catch a file holding only a UTF-8 BOM (reads as non-whitespace):
+# deliberate, since recognising it needs a printf for one line's cost in a
+# skeleton.
 guide_in_force() {
 	[ -n "$1" ] || return 1
 	[ -f "$1" ] || return 1
@@ -2264,16 +2068,14 @@ emit_guide_records() {
 
 # ── The author's own walkthrough ───────────────────────────────────────────────
 #
-# A committed walkthrough is written once, when the PR is finished, and then the
-# PR keeps moving: review comments come back, three files change, and nothing
-# anywhere says the reading order stopped matching. The verb that would say so is
-# build, and running it is something you have to remember at the one moment
-# nobody is thinking about the walkthrough.
+# A committed walkthrough is written once when the PR is finished, then the PR
+# keeps moving -- review comments land, files change -- and nothing says the
+# reading order stopped matching except build, which you have to remember to
+# run at the one moment nobody is thinking about the walkthrough.
 #
-# So the panel says it, off one porcelain row, on a refresh path that must stay
-# cheap. What follows is the cheap half of the answer -- "is it worth looking?"
-# -- deliberately, not the exact one. The exact answer is build's, and build is
-# what the row's control runs.
+# So the panel says it instead, off one porcelain row on a refresh path that
+# must stay cheap: what follows answers "is it worth looking?", deliberately
+# not the exact question, which is build's to answer.
 
 # walk_sidecar_block_tip <path>
 # The tip SHA recorded in the instruction block of <path>, or nothing.
@@ -2341,24 +2143,22 @@ walk_draft_filled() {
 }
 
 # walk_sidecar_superseded <tip> <baseref>
-# True when a walkthrough written against <tip> belongs to a PR that is ALREADY
-# integrated into <baseref> — so it is not this PR's reading order at all.
+# True when a walkthrough written against <tip> belongs to a PR ALREADY
+# integrated into <baseref> -- not this PR's reading order at all.
 #
-# The case: your PR merges, the sidecar travels into the base with it, you branch
-# again and touch one of the same files. The entry for that file is still there,
-# with a why describing a change that shipped. Reconciling against it keeps prose
-# that is not about this PR and would ride out on the next commit, which is the
-# opposite of what preserving it is for. It is not "stale": nothing about it fell
-# behind, it belongs to somebody else's range.
+# The case: your PR merges, its sidecar travels into the base, you branch again
+# and touch one of the same files -- its entry is still there, with a why
+# describing a change that already shipped. Reconciling against it keeps prose
+# that belongs to somebody else's range and would ride out on the next commit;
+# it is not "stale", nothing about it fell behind.
 #
-# Asked of git rather than inferred, and it is one process: a tip that is an
-# ancestor of the base is a tip whose commits are in the base. The bound is the
-# base and not the merge-base on purpose — the question is "did this land?", and
-# the merge-base moves with every rebase.
+# One process: a tip that is an ancestor of the base is a tip whose commits are
+# in the base. Bound is the base, not the merge-base, on purpose -- the
+# question is "did this land?", and the merge-base moves with every rebase.
 #
 # Returns 2, not 1, when the answer cannot be had (no tip recorded, an object
-# this clone no longer has): callers must not read "no" out of "cannot tell", or
-# a fresh clone would silently go back to reconciling against a merged PR.
+# this clone lacks): callers must not read "no" out of "cannot tell", or a
+# fresh clone would silently reconcile against an already-merged PR.
 walk_sidecar_superseded() {
 	[ -n "$1" ] || return 2
 	[ -n "$2" ] || return 2
@@ -2370,43 +2170,34 @@ walk_sidecar_superseded() {
 # The author's sidecar as one row:
 #   walkthrough<TAB><state><TAB><path><TAB><annotated><TAB><total>[<TAB><branch>]
 #
-# <branch> is the branch this walkthrough annotates -- the one HEAD sits on, which
-# is the range init and build resolve. It is what the clients NAME the row with,
-# so that the word "Walkthrough" is said once (the section title) instead of three
-# times. Omitted, never blank, when HEAD is detached: the file and the two verbs
-# still work there, so the row is still emitted -- only its name is a question
-# with no answer, and naming it is the client's copy to choose.
+# <branch> is the branch this walkthrough annotates (the one HEAD sits on,
+# which init/build resolve too), letting clients say "Walkthrough" once instead
+# of three times. Omitted, never blank, when HEAD is detached: the row still
+# emits, only its name has no answer.
 #
-# state is absent | in-sync | stale | superseded | unknown, and the row is emitted
-# in all five cases -- the same reason emit_guide_records always emits both
-# guides, and the opposite of the draft records: a client cannot offer to create a
-# walkthrough it was never told about, and rebuilding the path on its own side is
-# the thing the reported-path rule exists to prevent.
+# state is absent | in-sync | stale | superseded | unknown, emitted in all five
+# cases -- like emit_guide_records' two guides, and unlike the draft records: a
+# client cannot offer to create a walkthrough it was never told about.
 #
 #   absent      no .review/walkthrough.md in the work tree
-#   in-sync     the range has not changed outside .review/ since the file was last
-#               written or built
-#   stale       it has -- files entered or left the range, or a file the
-#               walkthrough already annotates has moved on. Worth looking at; not
-#               a verdict.
-#   superseded  it is the walkthrough of a PR already merged into the base: it
-#               travelled in with the merge and describes a change that shipped
-#   unknown     no instruction block (deleting it by hand is legal), or its tip is
-#               not an object this clone has any more (a force-push, a fresh clone)
+#   in-sync     the range has not changed outside .review/ since last written/built
+#   stale       it has -- files entered/left the range, or an annotated file
+#               moved on. Worth looking at, not a verdict.
+#   superseded  the walkthrough of a PR already merged into the base -- it
+#               travelled in with the merge, describing a shipped change
+#   unknown     no instruction block (legal to delete by hand), or its tip is an
+#               object this clone no longer has (force-push, fresh clone)
 #
-# `superseded` is asked ONLY once the diff already said `stale`, which keeps its
-# two extra processes off the common path: a walkthrough that still matches its
-# range cannot be another PR's.
+# `superseded` is asked only once the diff already said `stale` (a walkthrough
+# still matching its range cannot be another PR's), keeping its two extra
+# processes off the common path.
 #
-# The comparison EXCLUDES .review/ for one concrete reason: committing the
-# walkthrough itself moves HEAD, so without it the ordinary author's flow --
-# init, build, git commit -- ended on a panel that said the file it had just
-# written was already out of date.
+# The comparison EXCLUDES .review/: without it, committing the walkthrough itself
+# (which moves HEAD) made the ordinary init/build/commit flow end on a panel
+# calling the file just written already out of date.
 #
-# Cost when the file is there: the rev-parse guide_paths_init already made, one
-# builtin read of the block, one git diff, and the single awk of the progress
-# count. Nothing per entry, and nothing for the branch name -- current_branch_init
-# already resolved it for the candidate rows of this same run.
+# Cost when the file is there: nothing per entry and nothing for the branch name
+# -- one builtin block read, one git diff, and the progress awk.
 emit_walkthrough_record() {
 	_ewr_base="${1:-}"
 	_ewr_remote="${2:-origin}"
@@ -2423,12 +2214,11 @@ emit_walkthrough_record() {
 	_ewr_state=unknown
 	_ewr_tip="$(walk_sidecar_block_tip "$_ewr_path" || true)"
 	if [ -n "$_ewr_tip" ]; then
-		# Two revisions as two arguments, never "A..B": on Windows with a deep cwd
-		# git stats a range spelled as one argument and dies with "Filename too
-		# long" (the same rule the instruction block's own commands follow).
+		# Two revisions as two arguments, never "A..B" (see walk_emit_prompt_block
+		# / CLAUDE.md "Walk y walkthrough" for the Windows deep-cwd trap avoided).
 		#
-		# The pathspec keeps the sidecar and the guide out of it. :(exclude) is
-		# git 2.13; this project's floor is 2.23.
+		# The pathspec excludes the sidecar and the guide. :(exclude) is git
+		# 2.13; this project's floor is 2.23.
 		_ewr_rc=0
 		git diff --quiet "$_ewr_tip" HEAD -- . ':(exclude).review' 2>/dev/null ||
 			_ewr_rc=$?
@@ -2436,9 +2226,8 @@ emit_walkthrough_record() {
 		0) _ewr_state=in-sync ;;
 		1) _ewr_state=stale ;;
 		esac
-		# Only over a stale answer, and only with a base to ask about: the two
-		# processes below are the whole extra cost of this record, and a
-		# walkthrough that still matches its range cannot belong to another PR.
+		# Only over a stale answer, and only with a base to ask about -- see the
+		# state table above for why.
 		if [ "$_ewr_state" = stale ] && [ -n "$_ewr_base" ]; then
 			_ewr_baseref=""
 			if git rev-parse --verify --quiet \

@@ -3,9 +3,9 @@ import {EntryRecord, ReviewMode} from "../cli/porcelain";
 import {entryPickLabel} from "../views/panelModel";
 
 /**
- * `showQuickPick` no permite preseleccionar un ítem, y FR-006 pide que la
- * entrada actual esté señalada también acá. `activeItems` se asigna **después**
- * de `items`: asignar `items` reposiciona el cursor en el primero.
+ * `showQuickPick` no permite preseleccionar un ítem, y acá hace falta que la
+ * entrada actual esté señalada también. `activeItems` se asigna **después** de
+ * `items`: asignar `items` reposiciona el cursor en el primero.
  */
 function show<T extends vscode.QuickPickItem>(
     items: T[],
@@ -40,10 +40,10 @@ interface EntryItem extends vscode.QuickPickItem {
 }
 
 /**
- * `gitReview.goToEntry` — la secuencia completa, en el orden de la CLI (FR-005a).
+ * `gitReview.goToEntry` — la secuencia completa, en el orden de la CLI.
  * **Abre** la entrada elegida; no mueve el cursor: la CLI no tiene un verbo para
  * saltar a una posición arbitraria y sintetizarlo con `next`/`prev` sería
- * inventar comportamiento propio (FR-002, FR-016).
+ * inventar comportamiento propio.
  */
 export async function pickEntry(
     entries: EntryRecord[],

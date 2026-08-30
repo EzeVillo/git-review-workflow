@@ -82,12 +82,10 @@ record_exit() {
 	echo "note: commits you make on $1 are kept, and uncommitted edits too while you stay on $1$(advice_suffix ' — git review finish --abort refuses to discard them without --force')." >&2
 }
 
-# --abort restores the undo point recorded by the finish being undone. It runs
-# before the review/* check on purpose: after a finish you are on
-# review-fixes/<branch> (or, with --onto-source, on the PR branch), never on
-# review/<branch>. You may also abort from another branch (e.g. develop): the
-# CLI resolves which finish to undo the same way list --porcelain finds finish
-# rows — see resolve_abort_target.
+# --abort restores the undo point of the finish being undone. Runs before the
+# review/* check on purpose: after a finish, HEAD sits on review-fixes/<branch>
+# (or the PR branch, with --onto-source), never on review/<branch> — and abort
+# may run from any other branch too; resolve_abort_target picks the target.
 #
 # resolve_abort_target: set asrc + rb for the finish to undo, or exit.
 # 1) HEAD on review-fixes/<src>, review/<src>, or the PR branch with an undo
@@ -198,12 +196,11 @@ do_abort() {
 		exit 1
 	}
 
-	# The pre-finish index and working tree live only in refs/review-undo/<src>/.
-	# If those refs were deleted by hand while the config undo record survived,
-	# there is nothing left to restore the review from. Resolve them up front, with
-	# --quiet, and bail with a clear pointer — otherwise rev-parse --verify dies
-	# below with an opaque "Needed a single revision", possibly only after
-	# reset --hard has already mutated the tree.
+	# The pre-finish index/working tree live only in refs/review-undo/<src>/. If
+	# those refs were deleted by hand while the config undo record survived, resolve
+	# them up front and bail with a clear pointer — otherwise rev-parse dies below
+	# with an opaque "Needed a single revision", possibly after reset --hard has
+	# already mutated the tree.
 	idxtree="$(git rev-parse --verify --quiet "refs/review-undo/$asrc/index^{tree}" || true)"
 	wttree="$(git rev-parse --verify --quiet "refs/review-undo/$asrc/worktree^{tree}" || true)"
 	if [ -z "$idxtree" ] || [ -z "$wttree" ]; then
@@ -218,12 +215,11 @@ do_abort() {
 	editold="$(git config "branch.$rb.reviewundoeditold" || true)"
 
 	# Guard: a finish leaves your edits on the branch it produced (review-fixes, or
-	# the PR branch with --onto-source). If you have since changed that branch — new
-	# commits, or an edited working tree — aborting would throw that work away. Like
-	# git branch -d, refuse and point at the work; --force tears it down anyway.
-	# Skipped when no exit state was recorded: a finish stopped mid-conflict never
-	# produced the branch, so --abort there discards the in-progress conflict
-	# resolution the way git rebase --abort does.
+	# the PR branch with --onto-source). Changing that branch since — new commits, or
+	# an edited working tree — would have --abort throw that work away; like
+	# git branch -d, refuse and point at it, with --force tearing it down anyway.
+	# Skipped when no exit state was recorded: mid-conflict never produced the
+	# branch, so --abort there discards the resolution, like git rebase --abort.
 	outhead="$(git config "branch.$rb.reviewundoouthead" || true)"
 	outtree="$(git config "branch.$rb.reviewundoouttree" || true)"
 	if [ "$force" -eq 0 ] && [ -n "$outhead" ]; then
@@ -250,12 +246,11 @@ do_abort() {
 		fi
 	fi
 
-	# Return to the review branch and restore the exact pre-finish state: HEAD,
-	# then the working tree (read-tree -m -u brings back additions, edits,
-	# deletions and the captured untracked files), then the index on top.
-	# When already on the review branch — e.g. aborting a finish that stopped
-	# mid-conflict — skip the checkout (the index may hold unmerged entries that
-	# a same-branch checkout chokes on); the reset --hard below clears them.
+	# Return to the review branch and restore the exact pre-finish state: HEAD, then
+	# the working tree (read-tree -m -u brings back additions/edits/deletions and
+	# captured untracked files), then the index. Skip the checkout when already on
+	# the review branch (mid-conflict abort): the index may hold unmerged entries a
+	# same-branch checkout chokes on; reset --hard below clears them.
 	if [ "$cur" != "$rb" ]; then
 		git checkout -q -f "$rb"
 	fi
@@ -274,15 +269,13 @@ do_abort() {
 		fi
 	fi
 
-	# Drop the branch finish created, leaving only the review/<branch> you are
-	# back on. --onto-source deletes the PR branch when finish created it; when it
-	# already existed, finish staged onto it without committing and left it at the
-	# reviewed tip ($outhead), so reset it back there — this also discards any
-	# commits made on it since, which is what reaching here (untouched, or --force)
-	# means. Default (fixes) only deletes review-fixes/* when this finish created
-	# it (srccreated=1): never a pre-existing fixes branch that blocked finish.
-	# Skipped when no exit state was recorded (mid-conflict never touched the
-	# destination branch).
+	# Drop the branch finish created, leaving only review/<branch>. --onto-source
+	# deletes the PR branch when finish created it; when it pre-existed, finish only
+	# staged onto it, so reset it back to the reviewed tip ($outhead) — discarding
+	# any commits made since, which is what reaching here (untouched, or --force)
+	# means. Default (fixes) only deletes review-fixes/* when this finish created it
+	# (srccreated=1), never a pre-existing one. Skipped when no exit state was
+	# recorded (mid-conflict never touched the destination).
 	if [ "$kind" = "onto-source" ]; then
 		if [ "$srccreated" = "1" ] &&
 			git rev-parse --verify --quiet "refs/heads/$asrc" >/dev/null; then
@@ -353,20 +346,19 @@ if [ "$(git config "branch.$cur.reviewreadonly" || true)" = "1" ]; then
 	exit 1
 fi
 
-# Shared helpers, sourced from the libexec directory the dispatcher points us at,
-# so the step block below validates its metadata through load_step_review_meta —
-# the same guard the other step commands use — instead of reading the keys raw.
-# Also provides apply_review_patch (binary-safe patch apply used by step replay
+# Provides load_step_review_meta (the metadata guard other step commands share)
+# and apply_review_patch (binary-safe patch apply, used by both the step replay
 # and the final extract onto review-fixes / the PR branch).
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
 # A step review records reviewmode=step alongside reviewstart/reviewcount/
-# reviewstep; a whole review records none of those keys. If reviewmode was lost to
-# a hand-edit but the step keys survive, we would fall through to the whole-mode
-# tail below and diff the current step commit (not the tip) against the tip —
-# silently reversing the author's later commits into the extracted fix. Report the
-# inconsistency rather than producing a corrupt patch.
+# reviewstep; a whole review records none of them (walk's mirror keys are
+# reviewwalk* — see CLAUDE.md's state model for why the two never share a key). If
+# reviewmode were lost to a hand-edit but the step keys survived, falling through
+# to the whole-mode tail below would diff the step commit — not the tip — against
+# the tip, silently reversing later commits into the extracted fix. Report the
+# inconsistency instead.
 mode="$(git config "branch.$cur.reviewmode" || true)"
 if [ "$mode" != "step" ]; then
 	for k in reviewstart reviewcount reviewstep; do
@@ -376,10 +368,10 @@ if [ "$mode" != "step" ]; then
 		}
 	done
 fi
-# The mirror guard for walk mode. A walk review records reviewmode=walk alongside
-# reviewwalkstep/reviewwalkcount; those keys with any other mode mean hand-edited
-# or corrupt metadata. Walk itself needs no special extraction — its edits live in
-# the working tree, so it falls through to the whole-mode tail below, correctly.
+# The mirror guard for walk mode: reviewwalkstep/reviewwalkcount with any other
+# mode means hand-edited or corrupt metadata. Walk needs no special extraction —
+# its edits live in the working tree — so it correctly falls through to the
+# whole-mode tail below.
 if [ "$mode" != "walk" ]; then
 	for k in reviewwalkstep reviewwalkcount reviewwalkkeys reviewwalkfromdraft reviewwalkbase; do
 		[ -z "$(git config "branch.$cur.$k" || true)" ] || {
@@ -436,14 +428,13 @@ record_undo() {
 	fi
 }
 
-# A finish records an undo point that lives until you --abort it (or tear the
-# review down). If one already exists when starting a fresh finish, a previous
-# finish on this branch has not been resolved — switching back to review/<branch>
-# by hand and finishing again would clobber the undo point with new HEAD/index/
+# A finish records an undo point that lives until --abort (or the review is torn
+# down). If one already exists when starting fresh, a prior finish on this branch
+# is unresolved: finishing again would clobber the undo point's HEAD/index/
 # worktree snapshots while leaving the old exit state behind, so a later --abort
 # would restore a mix of the two and could delete the earlier finish's branch.
-# Refuse the way git refuses a second merge or rebase while one is in progress,
-# and point at the way out.
+# Refuse like git refuses a second merge/rebase in progress, and point at the way
+# out.
 if [ "$resume" -eq 0 ] && [ -n "$(git config "branch.$cur.reviewundohead" || true)" ]; then
 	if [ "$(git config "branch.$cur.reviewresume" || true)" = "conflict" ]; then
 		echo "error: a finish on $cur stopped at a conflict and is still pending." >&2
@@ -476,11 +467,10 @@ fi
 # whole-PR review. With --resume we skip the replay: the working tree already
 # holds the resolved edits.
 if [ "$mode" = "step" ] && [ "$resume" -eq 0 ]; then
-	# Validate and load the step metadata (count, step, start, commits) through the
-	# shared helper, so a hand-deleted or corrupt key is reported the same way the
-	# other step commands report it — instead of defaulting count to 0 (which
-	# silently discards every banked edit) or letting a missing reviewstart kill us
-	# under set -e with no message.
+	# Validate and load step metadata (count, step, start, commits) through the
+	# shared helper, reported the same way other step commands do — instead of
+	# defaulting count to 0 (silently discarding every banked edit) or letting a
+	# missing reviewstart kill us under set -e with no message.
 	load_step_review_meta
 	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
 	git add -A
@@ -538,14 +528,12 @@ elif [ "$resume" -eq 1 ]; then
 fi
 
 # Detect real review edits against the PR tip *before* folding them into a
-# session commit. In whole/walk the index already holds the tip tree (the staged
-# PR on top of the base). Committing that when there is nothing to extract moved
-# HEAD off the base and broke walk — and the old early-exit left you stranded on
-# review/* still "in progress" (panel still offering Finish/Next) with no
-# review-fixes destination. Compare the staged tree to the tip; only commit when
-# they differ. Either way, finish always lands on the destination branch and
-# keeps the undo point so finish --abort can restore the session (including the
-# empty-extract case: review-fixes/<src> at the tip with nothing staged).
+# session commit: committing an unchanged staged tree moved HEAD off the base and
+# broke walk, and the old early-exit left you stranded on review/* "in progress"
+# with no review-fixes destination. Compare the staged tree to the tip and only
+# commit when they differ; finish always lands on the destination branch and
+# keeps the undo point either way, including the empty-extract case
+# (review-fixes/<src> at the tip with nothing staged).
 git add -A
 has_edits=1
 if git diff --cached --quiet "$tip"; then

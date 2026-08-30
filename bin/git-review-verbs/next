@@ -2,10 +2,9 @@
 #
 # git review next — advance a commit-by-commit review (started with review start --step).
 #
-# Moving banks the edits you made on the current commit into a ref of its own and
-# restores any edits you had previously banked on the commit you move to, so you
-# can walk back and forth without losing work. git review finish replays every
-# banked edit onto the PR tip.
+# Moving banks the current commit's edits into a ref of its own and restores any
+# banked on the commit you move to, so you can walk back and forth without losing
+# work. git review finish replays every banked edit onto the PR tip.
 #
 set -eu
 
@@ -33,12 +32,10 @@ case "${1:-}" in
 	;;
 esac
 
-# Shared helpers, sourced from the libexec directory the dispatcher points us at.
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
-# Dispatch on the review's layout: a --step review walks commits, a walkthrough
-# review walks a guided file cursor. Anything else (whole, or not a review) falls
+# Dispatch on the review's layout. Anything else (whole, or not a review) falls
 # through to load_step_review_meta, whose diagnostics cover every wrong-state case.
 cur="$(git symbolic-ref --quiet --short HEAD || true)"
 require_not_finish_conflict

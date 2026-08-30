@@ -1,8 +1,8 @@
 /**
- * Los cuatro controles de una fila del bloque de borradores (012,
- * contracts/client-draft-panel.md § 1). Son controles del **cuerpo** del panel,
- * no acciones del producto: no están en `contributes.commands` ni en la paleta,
- * y sin la fila que los dibuja no tienen sujeto.
+ * Los cuatro controles de una fila del bloque de borradores
+ * (contracts/client-draft-panel.md § 1). Son controles del **cuerpo** del
+ * panel, no acciones del producto: no están en `contributes.commands` ni en la
+ * paleta, y sin la fila que los dibuja no tienen sujeto.
  *
  * Todo lo que necesitan sale del registro `draft` de `config --porcelain`: la
  * ruta que abren, el progreso que muestran y los flags de origen y rango con

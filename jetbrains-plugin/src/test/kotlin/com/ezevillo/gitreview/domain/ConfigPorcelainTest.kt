@@ -28,7 +28,6 @@ class ConfigPorcelainTest {
         assertNull(deltaForSource(r.deltas, "local"))
     }
 
-    /** 011: los ids nuevos se parsean, y el orden del selector los ubica. */
     @Test
     fun draftOffersParseAndOrder() {
         val out = """
@@ -69,11 +68,9 @@ class ConfigPorcelainTest {
 
     @Test
     fun eachDraftPathCarriesItsOwnCopyAndStep() {
-        // Las dos filas son excluyentes y la CLI elige cuál mandar: resume habla
-        // de terminar lo empezado, update de reconciliar con lo que el PR movió.
-        // Antes esto se decidía acá, mirando el `state` del registro draft — que
-        // contesta "¿ya se leyó?" y no "¿sigue cubriendo el rango?", así que una
-        // rama que avanzó y una que no llegaban idénticas.
+        // Resume y update son excluyentes: resume termina lo empezado, update reconcilia
+        // con lo que el PR movió. No decidir esto mirando el `state` del registro draft:
+        // contesta "¿ya se leyó?", no "¿sigue cubriendo el rango?".
         val resume = buildLayoutItems(listOf(ReadingOffer(OfferId.DRAFT_RESUME, OfferRank.AVAILABLE)))
         assertEquals("Finish the reading order you started", resume[0].label)
         assertEquals("pick up the one you left half-written", resume[0].description)
@@ -92,8 +89,6 @@ class ConfigPorcelainTest {
 
     @Test
     fun draftUpdateSitsBesideWalkRecommended() {
-        // El caso real: el orden que escribiste sigue leyéndose (walk), y además
-        // se le puede sumar lo que el PR cambió desde entonces.
         val items = buildLayoutItems(
             listOf(
                 ReadingOffer(OfferId.DRAFT_UPDATE, OfferRank.AVAILABLE),
@@ -148,7 +143,7 @@ class ConfigPorcelainTest {
         assertEquals(emptyList<CandidateBranch>(), branchPickerItems(emptyList()))
     }
 
-    // --- registros draft (012) --------------------------------------------------
+    // --- registros draft --------------------------------------------------
 
     @Test
     fun draftRecordsParseTheirSevenFields() {
@@ -191,9 +186,9 @@ class ConfigPorcelainTest {
 
     @Test
     fun anUnknownSourceOrRangeReadsAsUnknown() {
-        // Es lo que la CLI emite cuando el bloque de instrucciones se borró a
-        // mano, y también lo único honesto para un valor que agregue una CLI más
-        // nueva: en los dos casos este cliente no puede replicar los flags.
+        // Es lo que la CLI emite cuando el bloque de instrucciones se borró a mano, y
+        // también lo único honesto ante un valor que agregue una CLI más nueva: en los
+        // dos casos este cliente no puede replicar los flags.
         val out = "draft\tfeature/x\t/repo/.git/review-walkthrough/feature/x.md\t0\t2\tunknown\tunknown"
         val draft = parseConfigPorcelain(out).drafts.single()
         assertEquals(DraftSource.UNKNOWN, draft.source)
@@ -215,10 +210,10 @@ class ConfigPorcelainTest {
 
     @Test
     fun aProgressThatIsNotANonNegativeIntegerInvalidatesTheRecord() {
-        // La regla tiene que ser la misma en los tres clientes: la CLI cuenta con
-        // awk y emite siempre dígitos, así que un signo o un espacio es un registro
-        // que este cliente no entendió. Aceptarlo acá y no en la extensión hacía
-        // que la misma línea dibujara fila en dos paneles y en el tercero no.
+        // La regla es la misma en los tres clientes: la CLI cuenta con awk y emite
+        // siempre dígitos, así que un signo o un espacio es un registro que este
+        // cliente no entendió. Aceptar acá lo que otro cliente rechaza dibujaría la
+        // misma línea como fila en dos paneles y en el tercero no.
         for (bad in listOf("-3", "+3", " 3", "3 ", "3.0", "", "0x2")) {
             val path = "/repo/.git/review-walkthrough/feature/x.md"
             assertEquals(

@@ -77,13 +77,6 @@ data class PanelDraft(
  *
  * BOTH rows are always drawn, whether or not either file exists, and what the
  * state changes is the enabled of the controls, never their presence -- the same
- * rule as the draft rows, and for the same reason: two rows with different
- * button sets do not line up with each other.
- *
- * [label] and [badge] are derived here because they are panel copy; [path]
- * comes from the CLI, and the client **opens it, never rebuilds it**.
- */
-/**
  * A row of the "Edits you extracted" section: a `review-fixes/` branch a finish
  * left behind (`fixes` record of `list --porcelain`).
  *
@@ -102,6 +95,14 @@ data class PanelFixes(
     val badge: String,
 )
 
+/**
+ * A row of the authoring-guide block: both rows are always built, the same rule
+ * as the draft rows and for the same reason -- two rows with different button
+ * sets do not line up with each other.
+ *
+ * [label] and [badge] are derived here because they are panel copy; [path]
+ * comes from the CLI, and the client **opens it, never rebuilds it**.
+ */
 data class PanelGuide(
     val kind: GuideKind,
     /** The row name: the shared committed one, or yours from outside the tree. */
@@ -203,7 +204,7 @@ data class PanelModel(
     val degraded: Boolean = false,
     val readonly: Boolean = false,
     val keysOnly: Boolean = false,
-    /** 011: el orden de lectura es el borrador del revisor (registro `draft`). */
+    /** El orden de lectura es el borrador del revisor (registro `draft`). */
     val draft: Boolean = false,
     val current: PanelEntry? = null,
     val entryCount: Int = 0,

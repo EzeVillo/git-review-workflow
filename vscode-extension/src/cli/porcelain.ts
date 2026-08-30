@@ -53,7 +53,7 @@ export interface StatusFinishRecord {
 export interface PorcelainResult {
     state: StateRecord;
     entries: EntryRecord[];
-    /** Sólo si hay un cierre trabado en curso sobre esta review (FR-027). */
+    /** Sólo si hay un cierre trabado en curso sobre esta review. */
     finish?: StatusFinishRecord;
     /**
      * `true` sólo cuando la CLI emitió el registro `readonly` (`git review
@@ -67,15 +67,15 @@ export interface PorcelainResult {
      */
     keysOnly?: true;
     /**
-     * `true` sólo cuando la CLI emitió el registro `draft` (011): el orden de
-     * lectura es el borrador del revisor y no el walkthrough del autor. Sólo se
-     * da en walk. De dónde sale el walkthrough **no se infiere** en ningún
-     * cliente: llega por este registro o no se sabe.
+     * `true` sólo cuando la CLI emitió el registro `draft`: el orden de lectura
+     * es el borrador del revisor y no el walkthrough del autor. Sólo se da en
+     * walk. De dónde sale el walkthrough **no se infiere** en ningún cliente:
+     * llega por este registro o no se sabe.
      */
     draft?: true;
     /**
      * Ruta absoluta del borrador en vigor, tal como la reportó la CLI en el
-     * campo del registro `draft` (012). Va aparte del booleano a propósito: la
+     * campo del registro `draft`. Va aparte del booleano a propósito: la
      * presencia sigue siendo la presencia, y un campo faltante (una CLI vieja,
      * o un registro recortado) no puede apagar la marca. El cliente **abre**
      * esta ruta y nunca arma una.
@@ -85,15 +85,11 @@ export interface PorcelainResult {
      * Asunto de cada commit de la secuencia, por `position` — sólo en modo step
      * (contracts/status-porcelain.md).
      *
-     * Mapas y no campos de `EntryRecord` por dos razones: emparejar por
-     * `position` es lo que el contrato exige (nunca por orden de aparición), y
-     * dejarlos afuera conserva intacta la forma de `EntryRecord` que los tests
-     * existentes ya afirman.
-     *
-     * Opcionales porque **la ausencia del mapa entero significa "la CLI no
-     * provee este dato"**, y eso es distinto de un mapa con una entrada vacía,
-     * que significa "el dato existe y está vacío" (FR-004). Misma disciplina que
-     * `toOptionalInt`: un campo ausente no se convierte en un valor inventado.
+     * Mapa y no campo de `EntryRecord`: el contrato exige emparejar por
+     * `position`, nunca por orden de aparición. Opcional porque la ausencia del
+     * mapa entero significa "la CLI no provee este dato", distinto de un mapa con
+     * una entrada vacía ("el dato existe y está vacío"): un campo ausente no se
+     * convierte en un valor inventado.
      */
     subjects?: Map<number, string>;
     /** Autor de cada commit, por `position`. Sólo en step; ver `subjects`. */
@@ -194,18 +190,15 @@ function toInt(field: string | undefined): number {
  * El campo de **texto libre** de un registro: todo lo que sigue al `skip`-ésimo
  * tab de `line`, hasta el fin de línea.
  *
- * No es `line.split("\t")[skip]`, y la diferencia es la razón por la que estos
- * registros existen. El asunto de un commit y el nombre de un autor los escribe
- * una persona, no git, así que **pueden contener un tab literal** — a diferencia
- * de un path, que git cita incondicionalmente (research.md Decisión 1, medido).
- * Con `split` un asunto con un tab adentro se partiría en varios elementos y el
- * consumidor mostraría sólo el primero, en silencio. Por eso el contrato manda
- * el texto libre como último campo del registro: acá no hay nada después que
- * desplazar, y leer "el resto de la línea" es exacto.
+ * Deliberadamente no es un `split` por tabs: el asunto de un commit y el nombre
+ * de un autor los escribe una persona, no git, así que pueden contener un tab
+ * literal — a diferencia de un path, que git cita incondicionalmente. Con
+ * `split`, un asunto con un tab adentro se partiría y el consumidor mostraría
+ * sólo el primer pedazo, en silencio. Por eso el contrato manda el texto libre
+ * como último campo: no hay nada después que desplazar.
  *
- * `undefined` cuando la línea no llega a tener `skip` tabs: es un registro que
- * no entendemos, no un campo vacío. Un campo legítimamente vacío (un commit sin
- * asunto) sí devuelve `""` — la distinción que pide FR-004.
+ * `undefined` cuando la línea no llega a tener `skip` tabs: es un registro que no
+ * entendemos, no un campo vacío. Un campo legítimamente vacío devuelve `""`.
  */
 function restAfterTab(line: string, skip: number): string | undefined {
     let index = -1;
@@ -240,7 +233,7 @@ function parseReviewMode(field: string | undefined): ReviewMode | undefined {
  * `state`/`entry`). El campo `mode` del registro `state` se lee **primero** y
  * decide la aridad esperada de las líneas siguientes — nunca al revés
  * (research.md Decisión 2, data-model.md). Etiquetas desconocidas y campos
- * extra al final: se ignoran (FR-003).
+ * extra al final: se ignoran.
  */
 export function parsePorcelain(stdout: string): PorcelainResult {
     // Strip CR so CRLF (wrappers / Windows redirections) does not poison fields.
@@ -253,7 +246,7 @@ export function parsePorcelain(stdout: string): PorcelainResult {
     const entries: EntryRecord[] = [];
     const files: EntryRecord[] = [];
     // Se crean sólo si el registro llegó: un mapa vacío diría "la CLI reporta
-    // asuntos y esta review no tiene ninguno", que es otra cosa (FR-004).
+    // asuntos y esta review no tiene ninguno", que es otra cosa.
     let subjects: Map<number, string> | undefined;
     let authors: Map<number, string> | undefined;
     let base: string | undefined;
@@ -390,7 +383,7 @@ export function parsePorcelain(stdout: string): PorcelainResult {
                 break;
             }
             default:
-                // Etiqueta desconocida: se ignora (FR-003).
+                // Etiqueta desconocida: se ignora.
                 break;
         }
     }
@@ -445,21 +438,14 @@ export function sourceOf(branch: BranchRecord): string {
 }
 
 /**
- * Tokeniza `git review list --porcelain` (registros `branch`). Mismo formato
- * porcelain v1 y mismas reglas que `parsePorcelain`: etiquetas desconocidas y
- * campos extra al final se ignoran (FR-003). A diferencia de `status`, la
- * ausencia de registros es un resultado válido — un repositorio sin reviews —
- * y no un error de formato.
- */
-/**
- * Los registros `fixes` de la misma salida, en una función aparte y no como un
- * segundo valor de `parseListPorcelain`: son ramas de *ediciones*, no reviews
- * —no hay nada que retomar ni que abortar en ellas— y todo consumidor del
- * inventario que ya existía sigue pidiendo exactamente lo que pedía.
+ * Los registros `fixes` de la salida de `list --porcelain`, en una función
+ * aparte y no como un segundo valor de `parseListPorcelain`: son ramas de
+ * *ediciones*, no reviews —no hay nada que retomar ni que abortar en ellas— y
+ * todo consumidor del inventario que ya existía sigue pidiendo exactamente lo
+ * que pedía.
  *
- * Se emparejan por etiqueta y no por posición, como el resto del contrato: que
- * la CLI las emita al final es una garantía sobre la salida, no algo de lo que
- * este parser dependa.
+ * Se emparejan por etiqueta y no por posición: que la CLI las emita al final
+ * es una garantía sobre la salida, no algo de lo que este parser dependa.
  */
 export function parseListFixes(stdout: string): FixesRecord[] {
     const fixes: FixesRecord[] = [];
@@ -485,11 +471,18 @@ export function parseListFixes(stdout: string): FixesRecord[] {
     return fixes;
 }
 
+/**
+ * Tokeniza `git review list --porcelain` (registros `branch`). Mismo formato
+ * porcelain v1 y mismas reglas que `parsePorcelain`: etiquetas desconocidas y
+ * campos extra al final se ignoran. A diferencia de `status`, la ausencia de
+ * registros es un resultado válido — un repositorio sin reviews — y no un
+ * error de formato.
+ */
 export function parseListPorcelain(stdout: string): BranchRecord[] {
     const branches: BranchRecord[] = [];
-    // Por nombre de rama, no por posición de línea: el contrato pone `finish`
-    // justo después de su `branch`, pero `parsePorcelain` ya establece que un
-    // consumidor empareja por etiqueta, nunca por orden de aparición (001).
+    // Por nombre de rama, no por posición de línea: aunque el contrato pone
+    // `finish` justo después de su `branch`, se empareja por etiqueta, nunca
+    // por orden de aparición.
     const finishByBranch = new Map<string, { state: "pending" | "conflict"; onto: boolean }>();
 
     for (const line of stdout.split(/\r?\n/)) {

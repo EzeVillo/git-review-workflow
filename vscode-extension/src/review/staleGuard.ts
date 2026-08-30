@@ -2,10 +2,9 @@ import type {ReviewState} from "./state";
 import type {Situation} from "./situation";
 
 /**
- * Testigo del estado en el momento en que se arma un diálogo con confirmación
- * (data-model.md § `StateToken`, research.md Decisión 8, FR-038). `branch`/
- * `tip` ausentes cuando no hay review activa al capturar — sigue siendo un
- * testigo válido, sólo que de "no había nada".
+ * Testigo del estado en el momento en que se arma un diálogo con confirmación.
+ * `branch`/`tip` ausentes cuando no hay review activa al capturar — sigue
+ * siendo un testigo válido, sólo que de "no había nada".
  */
 export interface StateToken {
     branch?: string;
@@ -24,7 +23,7 @@ export function captureToken(state: ReviewState): StateToken {
 /**
  * Revalida el testigo contra el estado leído justo antes de invocar. Una
  * comparación de tres strings sobre datos que el refresco ya trae — no cuesta
- * una invocación extra (data-model.md § `StateToken`).
+ * una invocación extra.
  */
 export function tokenStillValid(token: StateToken, state: ReviewState): boolean {
     return (

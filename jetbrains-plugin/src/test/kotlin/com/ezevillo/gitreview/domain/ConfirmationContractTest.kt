@@ -8,7 +8,7 @@ import org.yaml.snakeyaml.Yaml
 import java.io.File
 
 /**
- * FR-032: requiresConfirmation(id) matches confirms: in the canonical YAML.
+ * requiresConfirmation(id) matches confirms: in the canonical YAML.
  */
 class ConfirmationContractTest {
     @Test
@@ -39,9 +39,8 @@ class ConfirmationContractTest {
         walk(yaml["panel_layout"])
         walk(yaml["title_actions"])
 
-        // inventory_controls y draft_controls: los dos mapas de controles por
-        // fila, que no pueden declararse dentro de panel_layout porque su
-        // sujeto es la fila y no la situación.
+        // inventory_controls y draft_controls: controles cuyo sujeto es la fila, por
+        // eso no pueden declararse dentro de panel_layout (que es por situación).
         for (key in listOf("inventory_controls", "draft_controls")) {
             @Suppress("UNCHECKED_CAST")
             val rowControls = yaml[key] as? Map<String, Any?> ?: continue
@@ -52,10 +51,9 @@ class ConfirmationContractTest {
             }
         }
 
-        // guide_rows, walkthrough_row y fixes_rows: mismo papel que los dos de
-        // arriba (controles cuyo sujeto es la fila), pero los suyos cuelgan de
-        // una clave "controls" porque el bloque tambien declara las filas y sus
-        // estados.
+        // guide_rows, walkthrough_row y fixes_rows: mismo papel (fila, no situación),
+        // pero cuelgan de una clave "controls" porque el bloque también declara las
+        // filas y sus estados.
         for (key in listOf("guide_rows", "walkthrough_row", "fixes_rows")) {
             @Suppress("UNCHECKED_CAST")
             val rowControls =
@@ -74,30 +72,27 @@ class ConfirmationContractTest {
     }
 
     /**
-     * QUE LA TABLA GOBIERNE, no solo que coincida.
+     * Que la tabla GOBIERNE, no solo que coincida con otra declaración.
      *
-     * El test de arriba compara dos declaraciones entre si, y eso es exactamente
-     * lo que no alcanza: durante un tiempo el canonico dijo
-     * `startFromDraft: {confirms: true}`, CONFIRMING_IDS tuvo START_FROM_DRAFT, y
-     * el control hacia rato que no confirmaba -- las cinco suites en verde,
-     * porque el `if (requiresConfirmation(id))` del despachador tenia el cuerpo
-     * vacio y nadie mas leia la tabla.
-     *
-     * Estos dos asserts cierran el circulo por el fuente: todo id declarado tiene
-     * un llamador que lo pasa por la puerta, y no hay ninguna otra puerta.
+     * El test de arriba compara dos declaraciones entre sí, y eso no alcanza: durante
+     * un tiempo el canónico decía `startFromDraft: {confirms: true}`, CONFIRMING_IDS lo
+     * tenía, y el control hacía rato que no confirmaba -- las cinco suites en verde,
+     * porque el `if (requiresConfirmation(id))` del despachador tenía el cuerpo vacío y
+     * nadie más leía la tabla. Estos dos asserts cierran el círculo por el fuente: todo
+     * id declarado pasa por la puerta, y no hay otra.
      */
     @Test
     fun `every confirming id is passed through the single gate`() {
         val sources = uiSources()
-        // walkthroughInit es la EXCEPCION declarada: no confirma con un si/no
-        // sino con un picker de dos cursos ("Update" / "Start over"), que
-        // UiMessages.choose expresa y confirm no puede -- su "no" es un cancel.
-        // Sigue siendo `confirms: true` en el canonico porque hay un modal entre
-        // el clic y la mutacion, que es lo que esa clave significa.
+        // walkthroughInit es la EXCEPCION declarada: no confirma con un sí/no sino con
+        // un picker de dos cursos ("Update" / "Start over"), que UiMessages.choose
+        // expresa y confirm no puede -- su "no" es un cancel. Sigue siendo
+        // `confirms: true` en el canónico porque hay un modal entre el clic y la
+        // mutación, que es lo que esa clave significa.
         val byPicker = setOf(ControlId.WALKTHROUGH_INIT)
-        // El id REALMENTE pasado, extraido del segundo argumento y no buscado
-        // suelto en el archivo: un `contains` da verde con el call site cambiado,
-        // porque el nombre del control aparece en el archivo por otros motivos.
+        // El id REALMENTE pasado, extraído del segundo argumento y no buscado suelto en
+        // el archivo: un `contains` da verde con el call site cambiado, porque el
+        // nombre del control aparece en el archivo por otros motivos.
         val gate = Regex(
             """UiMessages\.confirm\(\s*project,\s*ControlId\.([A-Z_]+)""",
             RegexOption.DOT_MATCHES_ALL,

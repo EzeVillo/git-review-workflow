@@ -369,9 +369,8 @@ object PanelFixtures {
     }
 
     /**
-     * 011: la misma review walk, leída sobre el borrador del revisor. El
-     * registro `draft` viaja por el porcelain como cualquier otro, así que el
-     * badge sale del mismo camino que en la extensión.
+     * La misma review walk, leída sobre el borrador del revisor. El registro
+     * `draft` viaja por el porcelain como cualquier otro.
      */
     fun reviewWalkDraft(): PanelModel {
         val porcelain = """

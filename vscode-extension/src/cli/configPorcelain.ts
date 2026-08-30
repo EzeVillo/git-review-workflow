@@ -2,13 +2,13 @@
  * Tokeniza `git review config --porcelain` (contracts/config-porcelain.md):
  * mismo formato porcelain v1 que `porcelain.ts`, mismo tokenizador línea por
  * línea (split por tab, primer campo = etiqueta), y mismas reglas — etiquetas
- * desconocidas y campos extra al final de un registro conocido se ignoran
- * (FR-003). Existe como módulo aparte porque el registro que reporta (config
- * efectiva + ramas candidatas) no tiene nada que ver con el de una review
- * activa: es la respuesta a "cómo se armaría", no a "cómo está armada"
- * (data-model.md § EffectiveConfig).
+ * desconocidas y campos extra al final de un registro conocido se ignoran.
+ * Existe como módulo aparte porque el registro que reporta (config efectiva +
+ * ramas candidatas) no tiene nada que ver con el de una review activa: es la
+ * respuesta a "cómo se armaría", no a "cómo está armada" (data-model.md §
+ * EffectiveConfig).
  *
- * 008: también parsea `offer` (formas de lectura viables para un tip/rango).
+ * También parsea `offer` (formas de lectura viables para un tip/rango).
  */
 
 export interface EffectiveConfig {
@@ -64,10 +64,10 @@ export interface DeltaRecord {
 }
 
 /**
- * Forma de lectura viable reportada por la CLI (008).
+ * Forma de lectura viable reportada por la CLI.
  *
- * 011: `draft` / `draft-resume` / `draft-update` no son formas de lectura sino
- * el camino para conseguir una — el revisor se escribe el orden que el PR no
+ * `draft` / `draft-resume` / `draft-update` no son formas de lectura sino el
+ * camino para conseguir una — el revisor se escribe el orden que el PR no
  * trae. Viajan por el mismo registro porque se eligen en el mismo paso del
  * asistente, y son mutuamente excluyentes entre sí
  * (contracts/config-porcelain-draft.md).
@@ -92,8 +92,8 @@ export interface ReadingOffer {
  * `config --porcelain`, contracts/config-porcelain-drafts.md).
  *
  * Nada de esto se deriva acá: cada campo viene tal cual de la CLI. En
- * particular `path`, que el cliente **abre y nunca arma** — derivar el gitdir
- * para reconstruirla es justo lo que 012 retira.
+ * particular `path`, que el cliente **abre y nunca arma**: derivarla
+ * reconstruyendo el gitdir es la trampa que este campo evita.
  */
 export interface DraftRecord {
     /** La rama a la que pertenece, verbatim (puede traer `/`). */
@@ -210,13 +210,13 @@ export interface ConfigPorcelainResult {
     remotes: CandidateRemote[];
     /**
      * Sólo cuando la invocación nombró una rama Y hay al menos un tip reviewed
-     * previo (FR-015). Cero, una o dos filas — remote y local son ejes disjuntos.
+     * previo. Cero, una o dos filas — remote y local son ejes disjuntos.
      */
     deltas?: DeltaRecord[];
     /**
      * Formas de lectura viables para el tip/rango del contexto (flags de
-     * origen/rango). Ausente cuando la CLI no emitió ninguna (pre-008 o tip
-     * no resoluble en soft-skip).
+     * origen/rango). Ausente cuando la CLI no emitió ninguna (una CLI anterior,
+     * o tip no resoluble en soft-skip).
      */
     offers?: ReadingOffer[];
     /**
@@ -497,7 +497,7 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
                 break;
             }
             default:
-                // Etiqueta desconocida: se ignora (FR-003).
+                // Etiqueta desconocida: se ignora.
                 break;
         }
     }

@@ -28,7 +28,7 @@ export async function copyCliInstallCommand(kind: unknown): Promise<void> {
  * Botón "How to fix it" de `out-of-range` y `error`: muestra el diagnóstico
  * que la CLI ya produce con la acción concreta (`git reset --soft`,
  * `git review abort`, `git branch -D`, …), preservado tal cual, sin texto
- * propio (FR-023, FR-024).
+ * propio.
  */
 export async function showOutOfRangeHelp(stderr: string | undefined): Promise<void> {
     const message = stderr && stderr.trim().length > 0

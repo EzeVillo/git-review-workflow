@@ -28,8 +28,8 @@ function message(stderr: string): string {
  * del estado del host. Un índice que no resuelve no hace nada.
  *
  * El `StateToken` se captura al abrir el diálogo y se revalida justo antes de
- * invocar (FR-012 / staleGuard), igual que finish/save/abort: el inventario
- * puede cambiar debajo del modal.
+ * invocar (staleGuard), igual que finish/save/abort: el inventario puede
+ * cambiar debajo del modal.
  *
  * La espera se muestra con el progreso del editor y no con el esqueleto del
  * panel: el esqueleto es la silueta de una entrada y acá no hay ninguna —el
@@ -107,8 +107,8 @@ export async function continueReview(
             // El working tree sucio es el modo de fallo que no se puede
             // anticipar desde el inventario, y su mensaje ya dice qué hacer
             // ("commit or stash them first"): se muestra el de la CLI, no uno
-            // redactado acá (FR-024). Si no hay stderr (CLI matada / rota),
-            // un toast genérico evita el fallo silencioso.
+            // redactado acá. Si no hay stderr (CLI matada / rota), un toast
+            // genérico evita el fallo silencioso.
             const text = message(result.stderr);
             void vscode.window.showErrorMessage(
                 text.length > 0 ? text : "Could not resume the review."

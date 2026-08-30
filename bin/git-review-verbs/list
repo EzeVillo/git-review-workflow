@@ -50,7 +50,6 @@ git rev-parse --git-dir >/dev/null 2>&1 || {
 	exit 1
 }
 
-# Shared helpers, sourced from the libexec directory the dispatcher points us at.
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
@@ -169,29 +168,19 @@ fixes_scan
 
 # row_has_draft <branch>: whether this review row carries a walkthrough draft.
 #
-# Whose reading order it is: the inventory is where a reviewer looks days later
-# to decide what to resume, which is exactly when "was this order mine or the
-# author's?" stops being obvious. A paused review's draft lives in the saved
-# namespace, so look where this row's review is.
+# Looks in the namespace of THIS row's review (saved rows check the saved one).
+# Named via walk_review_draft_src, not the review's own source: that is wrong for
+# a compare of a remote-tracking branch, and this row is what hands the file to
+# forget --saved.
 #
-# walk_review_draft_src is what names the file: the review's source is not it
-# for a compare of a remote-tracking branch, and this row is the surface that
-# hands that file to forget --saved.
+# Checked in every mode, not only walk: save moves the draft regardless of mode,
+# so marking only walk rows used to delist that prose the moment the review
+# paused.
 #
-# In every mode, not only walk, because save moves the draft in every mode too: a
-# whole or step review of a branch you had drafted for carries that draft into
-# the saved namespace when you pause it, and forget --saved discards it along
-# with the review. Marking only walk rows meant the one surface that could have
-# shown the reviewer their prose was in there did not, and it left with the
-# review without ever having been listed.
-#
-# CUSTODY, not "what is being read": the file exists, empty or not
-# (walk_has_draft_file's question, not walk_is_draft's).
-#
-# One function, called by both describe() and describe_porcelain(), because they
-# are two renderings of one decision. The condition has three parts and a copy
-# that forgets the third passes the eye and not the case; a parity test over two
-# copies is exactly the pattern the rest of the walk code avoids.
+# CUSTODY, not "what is being read" (walk_has_draft_file, not walk_is_draft): the
+# file existing is what matters, empty or not. One function for describe() and
+# describe_porcelain(), so the three-part condition cannot be copied minus a
+# part.
 row_has_draft() {
 	_rhd_src="$(walk_review_draft_src "$1")"
 	[ -n "$_rhd_src" ] || return 1
@@ -238,21 +227,8 @@ describe() {
 	shorttip="$tip"
 	[ -n "$tip" ] && shorttip="$(git rev-parse --short "$tip" 2>/dev/null || echo "$tip")"
 
-	# Whose reading order it is: the inventory is where a reviewer looks days later
-	# to decide what to resume, which is exactly when "was this order mine or the
-	# author's?" stops being obvious. A paused review's draft lives in the saved
-	# namespace, so look where this row's review is.
-	#
-	# walk_review_draft_src is what names the file: the review's source is not it
-	# for a compare of a remote-tracking branch, and this row is the surface that
-	# hands that file to forget --saved.
-	#
-	# Outside the mode branch, because save moves the draft outside it too: a whole
-	# or step review of a branch you had drafted for carries that draft into the
-	# saved namespace when you pause it, and forget --saved discards it along with
-	# the review. Marking only walk rows meant the one surface that could have shown
-	# the reviewer their prose was in there did not, and it left with the review
-	# without ever having been listed.
+	# Whose reading order it is, and why every mode (not only walk) is checked — see
+	# row_has_draft above; describe_porcelain shares the same call.
 	draft_note=""
 	if row_has_draft "$b"; then
 		draft_note=" (draft)"
@@ -273,8 +249,8 @@ describe() {
 
 # describe_porcelain <branch> <is_saved>: print one porcelain "branch" record,
 # reading its mode and position from the branch config — same data describe()
-# shows a human, never re-derived (research.md, Decision 7). Position/total are
-# omitted, not "?", when either config key is missing (contracts/list-porcelain.md).
+# shows a human, never re-derived. Position/total are omitted, not "?", when
+# either config key is missing (contracts/list-porcelain.md).
 describe_porcelain() {
 	pb="$1"
 	pcurrent=0

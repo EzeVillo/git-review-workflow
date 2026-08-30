@@ -32,12 +32,12 @@ public static class DeltaOriginExt
 public sealed record DeltaRecord(string Name, string Tip, DeltaOrigin Origin);
 
 /// <summary>
-/// 011: DRAFT / DRAFT_RESUME / DRAFT_UPDATE are not reading forms but the path
-/// to obtain one. Which of the three arrives is decided by the CLI and never
-/// derived here: DraftUpdate says the draft has fallen behind today's range,
-/// which only the side holding both tips can answer. The draft record's state
-/// field does NOT answer it -- it answers a different question ("has this order
-/// been read?"), so a branch that moved after its review still says reviewed.
+/// DRAFT / DRAFT_RESUME / DRAFT_UPDATE are not reading forms but the path to obtain
+/// one. Which of the three arrives is decided by the CLI, never derived here:
+/// DraftUpdate means the draft fell behind today's range, which only the side
+/// holding both tips can answer — the draft record's State field answers a
+/// different question ("has this order been read?"), so a branch that moved after
+/// its review still says Reviewed.
 /// </summary>
 public enum OfferId
 {
@@ -261,17 +261,12 @@ public static class WalkthroughStateExt
 }
 
 /// <summary>
-/// The committed walkthrough of the branch you are standing on, and whether it
-/// still describes what the PR changes today.
+/// The committed walkthrough of the branch you're standing on, and whether it still
+/// describes what the PR changes today. Stale is "worth looking at", never a
+/// verdict — the verdict is build's, run by the row's control.
 ///
-/// It exists because a walkthrough is written when the PR is finished and then
-/// the PR keeps moving: review comments come back, three files change, and that
-/// is exactly the moment nobody is thinking about the walkthrough. Stale is a
-/// "worth looking at", never a verdict — the verdict is build's, which is what
-/// the row's control runs.
-///
-/// Path comes straight from the CLI, like the draft's and the guides': it is
-/// opened, never rebuilt.
+/// Path comes straight from the CLI, like the draft's and the guides': opened,
+/// never rebuilt.
 /// </summary>
 public sealed record WalkthroughRecord(
     string Path,
@@ -317,12 +312,10 @@ public static class ConfigPorcelain
     /// A non-negative count, or null: a malformed field invalidates the record.
     /// </summary>
     /// <remarks>
-    /// Not a bare int.TryParse. That one is NumberStyles.Integer, which allows a
-    /// leading sign and surrounding whitespace, so "-3", "+3" and " 3 " all became
-    /// progress pairs -- and the CLI emits none of those, so anything of that shape
-    /// is a record this client did not understand. The three clients have to agree
-    /// on that or the same porcelain line draws a row in two of them and is dropped
-    /// by the third.
+    /// Not a bare int.TryParse: that one is NumberStyles.Integer, which allows a
+    /// leading sign and surrounding whitespace, so "-3", "+3" and " 3 " would all
+    /// become progress pairs — and the CLI emits none of those, so anything of that
+    /// shape is a record this client shouldn't understand.
     /// </remarks>
     private static int? ParseCount(string? raw)
     {
@@ -445,23 +438,13 @@ public static class ConfigPorcelain
     }
 
     /// <summary>
-    /// A <c>guide</c> record from its fields, or null when it is malformed — ignored
-    /// whole, like any record: half a guide row would offer to create one that is
-    /// already there, or open one that is not.
+    /// A walkthrough record from its fields, or null when malformed.
     ///
-    /// Shared because the record arrives by TWO verbs: <c>config --porcelain</c>
-    /// outside a review and <c>status --porcelain</c> inside one. One parser per
-    /// tokenizer would be the same rule written twice, and the second copy would learn
-    /// about any new field late.
-    /// </summary>
-    /// <summary>
-    /// A walkthrough record from its fields, or null when it is malformed.
-    ///
-    /// The annotated/total pair falls back to 0/0 rather than dropping the whole
-    /// row: the state is what decides what the block offers, and losing it to an
-    /// unreadable counter would leave the author without the one surface that
-    /// tells them their reading order fell behind. An unrecognised state does
-    /// drop the row — drawing an invented badge is worse than drawing no block.
+    /// The annotated/total pair falls back to 0/0 rather than dropping the row: the
+    /// state is what decides what the block offers, and losing it to an unreadable
+    /// counter would leave the author without the one surface that flags a stale
+    /// reading order. An unrecognised state does drop the row — an invented badge is
+    /// worse than no block.
     /// </summary>
     public static WalkthroughRecord? ParseWalkthroughRecord(string[] fields)
     {
@@ -477,6 +460,15 @@ public static class ConfigPorcelain
             string.IsNullOrEmpty(branch) ? null : branch);
     }
 
+    /// <summary>
+    /// A <c>guide</c> record from its fields, or null when malformed — ignored whole,
+    /// like any record: half a guide row would offer to create one that already
+    /// exists, or open one that doesn't.
+    ///
+    /// Shared because the record arrives via TWO verbs: <c>config --porcelain</c>
+    /// outside a review and <c>status --porcelain</c> inside one — one parser
+    /// instead of the same rule written twice.
+    /// </summary>
     public static GuideRecord? ParseGuideRecord(string[] fields)
     {
         var kind = GuideKindExt.Parse(Get(fields, 1));

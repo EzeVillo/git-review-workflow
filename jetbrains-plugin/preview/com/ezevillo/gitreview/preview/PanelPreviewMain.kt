@@ -16,7 +16,7 @@ import javax.swing.UIManager
 import javax.swing.WindowConstants
 
 /**
- * Standalone Swing preview of real [PanelRenderer] output (feature 010).
+ * Standalone Swing preview of real [PanelRenderer] output.
  * Compare side-by-side with `npm run preview` in vscode-extension.
  */
 object PanelPreviewMain {

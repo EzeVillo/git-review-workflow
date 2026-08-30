@@ -2,22 +2,19 @@ import {NPM_INSTALL_CMD, NPM_UPDATE_CMD} from "../cli/installHint";
 import {MIN_CLI_VERSION} from "../cli/version";
 
 /**
- * El HTML del panel, aparte del provider y sin dependencia de `vscode`: es lo
- * que permite abrirlo en un navegador con un `PanelModel` de ejemplo y
- * verificar el render, que ninguna de las dos suites puede afirmar (un webview
- * corre en su propio contexto — research.md Decisión 11).
+ * HTML del panel, separado del provider y sin depender de `vscode`: así se abre
+ * en un navegador con un `PanelModel` de ejemplo y se verifica el render, algo
+ * que ninguna suite de tests puede hacer (un webview corre en su propio contexto).
  *
- * Todo el color sale de variables `--vscode-*` (incluidos los temas de alto
- * contraste, FR-031); los controles son `<button>` reales para que el orden de
- * tab y el foco sean los del host. El único script es inline y va con `nonce`;
- * el contenido variable se inserta con `textContent`, nunca con `innerHTML`
- * (research.md Decisión 4).
+ * Todo el color sale de variables `--vscode-*` (incluye alto contraste); los
+ * controles son `<button>` reales para heredar tab order y foco del host. Script
+ * único, inline, con `nonce`; el contenido variable se inserta con `textContent`,
+ * nunca con `innerHTML`.
  *
- * **El texto visible va en inglés**, igual que el de la CLI: el panel muestra
- * su stderr al lado del propio, y el `--porcelain` del que sale todo esto habla
- * en inglés. Donde el ícono alcanza (navegar) no hay palabra; donde desambigua
- * (archivo vs diff) acompaña a una. Un botón sin texto lleva `aria-label`: el
- * ícono saca la palabra de la vista, no del árbol de accesibilidad.
+ * **El texto visible va en inglés**, como el de la CLI: el panel muestra su
+ * stderr al lado del propio y el `--porcelain` de donde sale todo habla en
+ * inglés. Ícono solo donde alcanza (navegar); ícono + palabra donde desambigua
+ * (archivo vs diff). Sin texto visible, el botón lleva `aria-label`.
  */
 export function panelHtml(nonce: string): string {
     return `<!DOCTYPE html>

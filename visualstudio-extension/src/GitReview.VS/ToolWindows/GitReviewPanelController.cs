@@ -67,11 +67,10 @@ public sealed class GitReviewPanelController : IDisposable
 
     /// <summary>
     /// The why only while the entry it was read for is still the one on screen. The
-    /// state and the why arrive separately -- a navigation publishes the new entry as
-    /// soon as the verb returns, its prose a couple of seconds later -- so the loaded
-    /// text has to be dropped the moment it stops belonging to what is drawn, or the
-    /// new entry is briefly captioned with the previous entry's why. Same rule, and
-    /// the same key, as the extension's whyTarget/whyKey.
+    /// state and the why arrive separately — a navigation publishes the new entry as
+    /// soon as the verb returns, its prose a couple of seconds later — so the loaded
+    /// text has to be dropped the moment it stops belonging to what's drawn, or the
+    /// new entry gets briefly captioned with the previous entry's why.
     /// </summary>
     private PanelWhy? EffectiveWhy => _whyKey == WhyKeyOf(_state.Current) ? _why : null;
 
@@ -95,8 +94,8 @@ public sealed class GitReviewPanelController : IDisposable
     /// the reviewer even though it arrives in two parts (the verb plus status
     /// --porcelain, then the why), and drawing the model in between would show the
     /// entry with a second loading state inside it. Past the ceiling the entry is
-    /// drawn anyway with the why loading in place, exactly as in VS Code and
-    /// IntelliJ: a slow why must not hold the entry back.
+    /// drawn anyway with the why loading in place: a slow why must not hold the
+    /// entry back.
     /// </summary>
     private bool Loading =>
         _refreshing || (EffectiveWhy?.State == WhyState.Loading && !_whyCeilingReached);
@@ -150,11 +149,10 @@ public sealed class GitReviewPanelController : IDisposable
 
         _state.StateChanged += OnStateChanged;
         _busySub = _mutations.Lock.OnDidChangeBusy(_ => Render());
-        // A discarded mutation is reported here and nowhere else, so it is reported
-        // whoever asked for it: the panel's own buttons go through a path that could
-        // say it, but Tools -> git review and the toolbar do not, and a navigation
-        // dropped because a finish was still running looked like a click that did
-        // nothing. Same ownership as the JetBrains service and the extension.
+        // A discarded mutation is reported here and nowhere else, so whoever asked
+        // for it gets told: the panel's own buttons go through a path that could say
+        // it, but Tools -> git review and the toolbar don't, and a navigation dropped
+        // because a finish was still running looked like a click that did nothing.
         _discardSub = _mutations.Lock.OnDidDiscard(reason =>
         {
             if (_disposed) return;
@@ -357,9 +355,8 @@ public sealed class GitReviewPanelController : IDisposable
             _dispatcher.BeginInvoke((Action)(() => PublishWhy(seq, why)));
             return;
         }
-        // A refresh that started after this read owns the panel now: its entry is the
-        // one on screen, and publishing this text would caption it with the why of the
-        // entry the reviewer already left.
+        // A refresh that started after this read owns the panel now — publishing this
+        // text would caption its entry with the why of one the reviewer already left.
         if (seq != _refreshSeq) return;
         _why = why;
         _whyCeilingTimer.Stop();
@@ -394,12 +391,12 @@ public sealed class GitReviewPanelController : IDisposable
         {
             if (!_state.HasResolved || _workspacePending())
             {
-                // Nothing has been read yet -- or the workspace the last read belonged
-                // to is being replaced and the host cannot say where the new one is.
-                // No layout to publish, and therefore no title actions either: a
-                // toolbar built from a placeholder would offer buttons for a situation
-                // nobody has established, and one left on the previous layout would
-                // offer them for a repository the panel is no longer pointed at.
+                // Nothing read yet, or the workspace the last read belonged to is being
+                // replaced and the host can't say where the new one is. No layout to
+                // publish, so no title actions either: a toolbar built from a
+                // placeholder would offer buttons for a situation nobody established,
+                // and one left on the previous layout would offer them for a
+                // repository the panel no longer points at.
                 LastLayout = null;
                 NotifyTitleActions(Array.Empty<DomainControl>());
                 _view.RenderWaiting();

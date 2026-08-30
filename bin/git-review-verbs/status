@@ -86,7 +86,6 @@ if [ -z "$src" ] || [ -z "$tip" ]; then
 	exit 1
 fi
 
-# Shared helpers, sourced from the libexec directory the dispatcher points us at.
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
@@ -113,24 +112,19 @@ if [ "$porcelain" -eq 1 ]; then
 		nl="$(printf '\nx')"
 		nl="${nl%x}"
 		# The two lists the entry records need, each in ONE process instead of one
-		# per position — the same "constant number of processes" rule the subject
-		# and author records already follow (research.md Decisión 2). The naive
-		# loop cost four processes per commit (a printf subshell, a sed to index,
-		# a git rev-parse --short and a git rev-parse --verify), and under Git
-		# Bash on Windows, where fork() is emulated, that was ~9s of a ~9s
-		# 50-commit status.
+		# per position: the naive loop cost four processes per commit and, under Git
+		# Bash on Windows where fork() is emulated, that was ~9s of a ~9s 50-commit
+		# status.
 		#
 		# Same traversal flags as `commits` in load_step_review_meta, so the n-th
-		# line is the n-th commit; and the trailing newline is kept with the
-		# `printf x` / ${var%x} idiom for the same reason load_step_texts keeps
-		# it — command substitution would strip it and the streamed list has to
-		# hold exactly $total lines.
+		# line is the n-th commit; the trailing newline is kept with the `printf x`
+		# / ${var%x} idiom, since command substitution would strip it and the list
+		# must hold exactly $total lines.
 		#
-		# --abbrev-commit is left WITHOUT an explicit --abbrev=<n>: both it and
-		# git rev-parse --short abbreviate through the same default (core.abbrev
-		# and git's uniqueness rule), so the bytes are identical to what the
-		# per-commit rev-parse produced. Pinning a length here would silently
-		# diverge from --short in any repo that sets core.abbrev.
+		# --abbrev-commit is left WITHOUT an explicit --abbrev=<n>: it and git
+		# rev-parse --short abbreviate through the same default (core.abbrev plus
+		# git's uniqueness rule), so pinning a length here would silently diverge
+		# from --short wherever core.abbrev is set.
 		shorts="$(git rev-list --abbrev-commit --reverse --first-parent --no-merges "$start..$tip"; printf x)"
 		shorts="${shorts%x}"
 		# Every banked ref at once, wrapped in newlines so a membership test can
@@ -148,18 +142,17 @@ if [ "$porcelain" -eq 1 ]; then
 			i=$((i + 1))
 		done; }
 		# Free text goes in its own record, last field, one per record: a subject
-		# and an author name can both contain a literal tab (see the free-text
-		# rule in contracts/status-porcelain.md), and only the last field of a
-		# line survives that without shifting anything.
+		# and an author name can both contain a literal tab (the free-text rule in
+		# contracts/status-porcelain.md), and only the last field of a line
+		# survives that without shifting anything.
 		#
 		# Each list is streamed in ONE pass rather than indexed with sed line by
-		# line. porcelain_row is a shell function, so a pass costs one subshell
-		# instead of two processes per position; indexing cost 2N processes, and
-		# under Git Bash on Windows — where fork() is emulated — that alone
-		# added ~75% to a 50-commit status (FR-014/SC-008, measured). The line
-		# count is exactly $total because load_step_texts keeps the trailing
-		# newline, so an empty subject still gets its own record with an empty
-		# field instead of vanishing.
+		# line: porcelain_row is a shell function, so a pass costs one subshell
+		# instead of two processes per position (indexing cost 2N processes, and
+		# under Git Bash on Windows — where fork() is emulated — added ~75% to a
+		# 50-commit status, measured). The line count is exactly $total because
+		# load_step_texts keeps the trailing newline, so an empty subject still
+		# gets its own record instead of vanishing.
 		printf '%s' "$subjects" | { i=1; while IFS= read -r text; do
 			porcelain_row subject "$i" "$text"
 			i=$((i + 1))
@@ -206,10 +199,9 @@ if [ "$porcelain" -eq 1 ]; then
 			fi
 		fi
 		porcelain_row state "$cur" "$src" "$tip" "$mode" "$pwalkthrough"
-		# Whole mode's inventory: one entry per file the range touches, in git's
-		# own order. No essential/annotated/banked fields — whole has no
-		# walkthrough and no bank — and no cursor on `state` above: this is a
-		# listing, not a sequence (FR-002, FR-004).
+		# Whole mode's inventory: one entry per file the range touches, in git's own
+		# order. No essential/annotated/banked fields (whole has no walkthrough or
+		# bank) and no cursor on `state` above — a listing, not a sequence.
 		i=1
 		range_files "$tip" "$(git rev-parse HEAD)" | while IFS= read -r pfile; do
 			[ -n "$pfile" ] || continue
@@ -252,21 +244,18 @@ if [ "$porcelain" -eq 1 ]; then
 	if [ "$(git config "branch.$cur.reviewwalkkeys" || true)" = "1" ]; then
 		porcelain_row keys
 	fi
-	# The reading order is the reviewer's own draft, not the PR author's.
-	# A presence record, for the same reason keys and readonly are ones: the
-	# published clients parse `state` by position, so widening it is the kind of
-	# change that quietly misaligns a consumer, while an unknown label is
-	# something porcelain v1 already promises they ignore.
+	# The reading order is the reviewer's own draft, not the PR author's: a
+	# presence record, like keys/readonly. Published clients parse `state` by
+	# position, so widening it risks misaligning a consumer, while an unknown label
+	# is one porcelain v1 clients already promise to ignore.
+	#
 	# walk_draft_src, not $src: load_walk_review_meta resolved which draft this
-	# review reads (they differ for a compare of a remote-tracking branch), and it
-	# is set only on the walk path — which is the same condition as the mode test.
-	# It carries the absolute path now: a client that wants to open the draft has
-	# to be given it, never left to build it out of a gitdir it resolved itself.
-	# The field goes LAST, which is the contract's rule for free text — it is the
-	# only field here that could contain a tab — and it is a field rather than a
-	# new record because all three published clients parse this one by label and
-	# ignore extra trailing fields, which is exactly what `state` does not do.
-	# The condition is untouched, and so is the human-readable line.
+	# review reads (they differ for a compare of a remote-tracking branch). Carries
+	# the absolute path so a client can open it without resolving the gitdir.
+	#
+	# Goes LAST as a field and not a new record (the contract's free-text rule --
+	# it is the only field here that could hold a tab): all three clients parse
+	# this record by label and ignore trailing fields, unlike `state`.
 	if [ "$mode" = walk ] && walk_is_draft "${walk_draft_src:-$src}"; then
 		walk_gitdir_abs_init
 		porcelain_row draft "$_walk_gitdir_abs/review-walkthrough/${walk_draft_src:-$src}.md"
@@ -325,12 +314,11 @@ if [ "$mode" = "step" ]; then
 		"$(git rev-parse --short "$cnow")" "$(git log -1 --format='%s' "$cnow")"
 
 	# Every banked ref in ONE process instead of a git rev-parse --verify per
-	# position — the same technique the --porcelain branch above uses, for the
-	# same reason: under Git Bash on Windows, where fork() is emulated, the N
-	# rev-parse calls were almost all of a ~3.5s 50-commit status. The refs come
-	# back one per line and the membership test is a plain shell `case` over the
-	# list wrapped in newlines; the trailing newline in the pattern is what keeps
-	# step 1 from matching refs/review-edits/<src>/10.
+	# position, the same technique the --porcelain branch above uses: under Git
+	# Bash on Windows, where fork() is emulated, the N rev-parse calls were almost
+	# all of a ~3.5s 50-commit status. The membership test is a plain shell `case`
+	# over the refs wrapped in newlines; the trailing newline in the pattern is
+	# what keeps step 1 from matching refs/review-edits/<src>/10.
 	nl="$(printf '\nx')"
 	nl="${nl%x}"
 	banked_refs="$nl$(git for-each-ref --format='%(refname)' "refs/review-edits/$src/")$nl"
@@ -408,9 +396,9 @@ elif [ "$mode" = "walk" ]; then
 else
 	base="$(git config "branch.$cur.reviewbase" || true)"
 	printf '  mode    whole%s\n' "${base:+  (base $base)}"
-	# The files the range touches (FR-001): a whole review has no cursor, so this
-	# is a plain listing, not a "[k/N]" line — never omitted, and never a blank
-	# section standing in for zero files (FR-007, the git-status precedent).
+	# The files the range touches: a whole review has no cursor, so this is a
+	# plain listing, not a "[k/N]" line — never omitted, never a blank section
+	# standing in for zero files (the git-status precedent).
 	files="$(range_files "$tip" "$(git rev-parse HEAD)")"
 	filecount="$(printf '%s\n' "$files" | grep -c . || true)"
 	if [ "$filecount" -eq 0 ]; then

@@ -55,7 +55,7 @@ class PanelRenderer(
     private val chrome: PanelChrome,
     private val onAction: (ControlId, Int?, String?) -> Boolean = { _, _, _ -> false },
 ) {
-    /** Section open state survives re-renders (FR-034). */
+    /** Section open state survives re-renders. */
     private val sectionOpen = mutableMapOf<String, Boolean>()
     private var copyReset: javax.swing.Timer? = null
 
@@ -69,10 +69,9 @@ class PanelRenderer(
         body.border = chrome.emptyBorder(8, 8, 8, 8)
         body.alignmentX = Component.LEFT_ALIGNMENT
 
-        // A ScrollBody and not a plain JPanel for the same reason the body is one:
-        // in `fillsHeight` it goes inside a scroll pane of its own, and only a
-        // Scrollable that tracks the viewport width gets its paragraphs measured at
-        // the width they will actually be painted at.
+        // A ScrollBody, not a plain JPanel: same reason as the class doc below --
+        // fillsHeight gives it its own scroll pane, and only Scrollable measures
+        // paragraphs at the width they will actually be painted at.
         val footer = ScrollBody()
         footer.layout = BoxLayout(footer, BoxLayout.Y_AXIS)
         footer.background = chrome.background()
@@ -100,18 +99,13 @@ class PanelRenderer(
             wrap.background = chrome.background()
             val scroll = scrollPane(body)
             wrap.add(scroll, BorderLayout.CENTER)
-            // The footer scrolls on its own and never takes more than
-            // FOOTER_MAX_FRACTION of the window: BorderLayout hands SOUTH its full
-            // preferred height, so an open section with a long body used to push the
-            // body out and get cut off at the bottom edge with no way to reach the
-            // rest of it -- the same `max-height` + scroll split the extension's
-            // `.pane-footer` does.
+            // Capped so an open section with a long body can't push the body
+            // above it off screen (see cappedFooter()).
             wrap.add(cappedFooter(footer), BorderLayout.SOUTH)
             wrap
         } else {
-            for (b in footerBlocks) {
-                // already in footer; if not fills, append footer under body inside scroll
-            }
+            // Los bloques del pie ya se agregaron a `footer` arriba; sin
+            // fillsHeight va bajo el body, adentro del scroll.
             if (footerBlocks.isNotEmpty()) {
                 body.add(footer)
             }
@@ -140,8 +134,9 @@ class PanelRenderer(
 
     /**
      * The footer's scroll pane, capped so the body above it always keeps at least
-     * some room. [JScrollPane.getPreferredSize] is what BorderLayout asks for the
-     * SOUTH band, so the cap goes there -- Swing has no `max-height`.
+     * some room -- mirrors the extension's `.pane-footer { max-height: 55% }`.
+     * BorderLayout hands SOUTH its full preferred height and Swing has no
+     * `max-height`, so the cap goes into [JScrollPane.getPreferredSize] itself.
      */
     private fun cappedFooter(view: JComponent): JScrollPane {
         val scroll = object : JScrollPane(view) {
@@ -177,9 +172,8 @@ class PanelRenderer(
             is Block.Note -> renderNote(block)
             is Block.Paragraph -> renderParagraph(block)
             is Block.Heading -> {
-                // The extension's `h2`: it labels the list under it, so it reads
-                // quieter than the content — not louder, the way a bold
-                // foreground-coloured line did.
+                // The extension's `h2`: reads quieter than the content, not
+                // louder like a bold foreground-coloured line did.
                 val l = JLabel(block.text)
                 l.font = chrome.boldFont(11f)
                 l.foreground = chrome.mutedForeground()
@@ -526,7 +520,7 @@ class PanelRenderer(
      * eye picks up from the column is the list of paths — a stack of framed
      * buttons reads as a stack of actions and buries them. The last opened one
      * carries the inactive-selection fill *and* a bar at the margin, because in
-     * a high-contrast theme the fill alone can be indistinguishable (FR-031).
+     * a high-contrast theme the fill alone can be indistinguishable.
      */
     private fun fileRow(f: FileRow): JButton {
         val hover = chrome.rowHoverBackground()
@@ -640,20 +634,14 @@ class PanelRenderer(
         box.background = chrome.background()
         box.alignmentX = Component.LEFT_ALIGNMENT
         for (r in block.rows) {
-            // The progress rides the header instead of a line of its own: it is
-            // a badge-sized fact about the branch, and one loose line per row
-            // multiplied the height of the block for nothing.
-            //
-            // The ICON controls ride it too, right after the pair that names
-            // their subject. Which half of the row a control lands in is read
-            // off its emphasis and decided nowhere else: the layout already
-            // says which of the four are glyphs.
+            // Progress rides the header (a badge-sized fact) instead of its own
+            // line, which used to add height for nothing; the ICON controls ride
+            // there too, right after the pair naming their subject -- which half
+            // a control lands in is read off its emphasis alone.
             val (glyphs, labelled) = r.controls.partition { it.emphasis == Emphasis.ICON }
             val right = ArrayList<JComponent>()
-            // The badge CLOSES the line, in every row of the panel: that is what
-            // drops the states of all three sections into the same column at the
-            // right edge. The glyphs go before it, still glued to the fact that
-            // names their subject.
+            // The badge always closes the line, across every row in the panel,
+            // so the three sections' states line up in one column at the edge.
             for (c in glyphs) {
                 right.add(renderControl(c, bare = true))
             }
@@ -802,16 +790,11 @@ class PanelRenderer(
     fun renderControl(c: Control, bare: Boolean = false): JComponent {
         val btn = when (c.emphasis) {
             Emphasis.ICON -> {
-                // Un icono en la CABECERA de una fila es una afordancia sobre
-                // esa fila, no una accion del panel: la extension lo dibuja sin
-                // caja y le da relleno recien bajo el puntero (`background:
-                // none` mas el hover de la toolbar), igual que fileRow aca
-                // arriba y por el mismo motivo. Con el JButton de fabrica manda
-                // DarculaButtonUI, que le impone su ancho minimo (72px mas 14
-                // de padding): un glifo de 16 termina en un marco cuatro veces
-                // mas ancho que el, y tres cajas asi en una cabecera pesan mas
-                // que la botonera de abajo, que es la que si mueve el flujo.
-                // Asi que ahi la medida la damos nosotros, como el relleno.
+                // DarculaButtonUI impone un ancho minimo (72px mas 14 de padding)
+                // sobre un JButton de fabrica: un glifo de 16 termina en un marco
+                // cuatro veces mas ancho que el, y tres cajas asi en una cabecera
+                // pesan mas que la botonera de abajo. Por eso la medida de abajo
+                // la damos nosotros, como el relleno.
                 val hover = chrome.rowHoverBackground()
                 val focus = chrome.linkForeground()
                 val b = object : JButton() {
@@ -821,9 +804,6 @@ class PanelRenderer(
                                 g.color = hover
                                 g.fillRect(0, 0, width, height)
                             }
-                            // El LaF no pinta anillo de foco sobre un boton sin
-                            // borde, y el teclado es la unica forma de llegar a
-                            // estos glifos sin mouse.
                             if (isFocusOwner) {
                                 g.color = focus
                                 g.drawRect(0, 0, width - 1, height - 1)
@@ -1043,17 +1023,16 @@ class PanelRenderer(
     companion object {
         /**
          * El icono de cada control, con los NOMBRES DEL CANONICO
-         * (contracts/client-product-surface.yaml, bloque `icon_vocabulary`):
-         * un solo mapa para las dos formas en que el panel dibuja un icono
-         * --pelado en la cabecera de una fila, o al lado de una etiqueta-- para
-         * que el mismo sujeto no termine con dos marcas distintas.
+         * (contracts/client-product-surface.yaml, bloque `icon_vocabulary`): un
+         * solo mapa para las dos formas en que el panel dibuja un icono -pelado
+         * en la cabecera de una fila, o al lado de una etiqueta- para que el
+         * mismo sujeto no tenga dos marcas distintas.
          *
-         * Que sea un mapa y no un `when` adentro del render es lo que deja que
+         * Mapa y no `when` adentro del render para que
          * `check-client-product-surface.mjs` lo compare par por par contra el
-         * canonico y contra los otros dos clientes: el olvido que este mapa
-         * existe para impedir --un control con icono que un cliente no mapea, y
-         * que cae al nombre accesible o a la flecha de Next-- paso dos veces
-         * seguidas mientras la respuesta vivia desparramada en dos `when`.
+         * canonico y los otros clientes: sin eso, un control con icono que
+         * queda sin mapear cae en silencio al nombre accesible o a la flecha
+         * de Next, sin que nada lo marque en rojo.
          *
          * COPY_CLI_INSTALL no esta en el canonico: ese boton va con etiqueta y
          * su icono es cosa nuestra. El chequeo corre en una sola direccion

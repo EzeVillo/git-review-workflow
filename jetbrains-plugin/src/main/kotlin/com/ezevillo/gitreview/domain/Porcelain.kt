@@ -286,7 +286,7 @@ fun parsePorcelain(stdout: String): PorcelainResult {
                 isDraft = true
                 fields.getOrNull(1)?.takeIf { it.isNotEmpty() }?.let { draftPath = it }
             }
-            else -> { /* unknown tag: ignore (FR-003) */ }
+            else -> { /* unknown tag: ignore */ }
         }
     }
 

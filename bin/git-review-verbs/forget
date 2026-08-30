@@ -95,12 +95,11 @@ while [ $# -gt 0 ]; do
 	--stale) stale=1 ;;
 	--reviewed) reviewed=1 ;;
 	--dry-run) dryrun=1 ;;
-	# Ends option parsing, as git does everywhere and as walkthrough draft already
-	# did. Uniformity, not safety — git refuses to create a ref whose name starts
-	# with "-", so no branch can arrive here disguised as a flag. What it fixes is a
-	# caller (a client, a script) that spells its arguments defensively having to
-	# know which verb of the suite accepts the spelling and which answers "unknown
-	# option --". Must stay above the -* arm, which would otherwise claim it.
+	# Ends option parsing, as git does and walkthrough draft already does. Uniformity,
+	# not safety — git refuses a ref name starting with "-", so no branch can arrive
+	# disguised as a flag. Fixes a caller that spells arguments defensively from
+	# having to know which verb accepts "--" and which answers "unknown option --".
+	# Must stay above the -* arm, which would otherwise claim it.
 	--)
 		shift
 		while [ $# -gt 0 ]; do
@@ -188,16 +187,13 @@ if [ "$mode" = saved ]; then
 		git for-each-ref --format='%(refname)' "refs/review-saved-edits/$src/" | while read -r ref; do
 			git update-ref -d "$ref"
 		done
-		# The reviewer's own walkthrough draft goes with it: discarding a paused
-		# review is the deliberate act that also discards the reading order it was
-		# paused with. Under the name the review recorded (walk_review_draft_src),
-		# which is not the review's own source for a compare of a remote-tracking
-		# branch — and getting that wrong here means leaving the real file behind
-		# with nothing left to claim it.
-		# And only the one this review filed (walk_saved_draft_filed): a review
-		# paused without a draft shares the name but not the file, and deleting it
-		# here destroyed the only copy of prose another paused review had written
-		# and was still going to resume on.
+		# The reviewer's own walkthrough draft goes with it: discarding a paused review
+		# deliberately discards the reading order it was paused with. Named via
+		# walk_review_draft_src, not the review's own source — wrong for a compare of a
+		# remote-tracking branch, and getting it wrong here leaves the real file behind,
+		# unclaimed. Filtered by walk_saved_draft_filed too: a review paused without a
+		# draft shares the name but not the file, and deleting it here destroyed another
+		# paused review's only copy of its prose.
 		draftsrc="$(walk_review_draft_src "$saved")"
 		saveddraft="$(walk_saved_draft_path "$draftsrc")"
 		hadraft=0
@@ -208,10 +204,9 @@ if [ "$mode" = saved ]; then
 		git branch -D "$saved" >/dev/null
 
 		echo "discarded saved review of $src"
-		# Named, not left to be inferred from the docs: the draft is hand-written
-		# prose that every other verb goes out of its way to preserve — clean will
-		# not touch one — so the single command that does destroy it should be the
-		# one command that says so out loud.
+		# Named, not left to be inferred: the draft is hand-written prose every other
+		# verb preserves (clean won't touch one), so the one command that destroys it
+		# should say so out loud.
 		if [ "$hadraft" -eq 1 ]; then
 			echo "note: its walkthrough draft for $draftsrc went with it" >&2
 		fi
@@ -234,15 +229,15 @@ fi
 
 # ── --draft ─────────────────────────────────────────────────────────────────────
 # The reviewer's own walkthrough for someone else's PR. git review clean never
-# touches it — it is hand-written prose that outlives the review it was written
-# for, like the two kinds of state above — so this is the way to throw one away.
+# touches it — hand-written prose that outlives the review — so this is the way
+# to throw one away.
 #
 # Only the active namespace: a draft that travelled with a paused review lives in
 # review-saved-walkthrough/ and belongs to that review, which forget --saved
 # discards as a whole. Two namespaces, one owner each.
 #
-# The directory a namespaced branch created is left behind empty, exactly as git
-# leaves .git/refs/heads/<ns>/ after the last branch in it is deleted.
+# The directory a namespaced draft created is left behind empty, like git leaves
+# .git/refs/heads/<ns>/ after the last branch in it.
 if [ "$mode" = draft ]; then
 	[ "$stale" -eq 0 ] || die "--stale only applies to --delta"
 
@@ -261,8 +256,7 @@ if [ "$mode" = draft ]; then
 
 	git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 
-	# For walk_draft_path / walk_draft_list. Sourcing has no side effects — the
-	# library defines functions and nothing else.
+	# For walk_draft_path / walk_draft_list.
 	# shellcheck source=../git-review-lib.sh
 	. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
@@ -272,15 +266,13 @@ if [ "$mode" = draft ]; then
 	walk_gitdir_init
 
 	# A draft's file name is its branch name, so an argument that is not a legal
-	# branch name is not a draft — and unchecked it addressed any file on the disk:
+	# branch name is not a draft — unchecked, it addressed any file on disk:
 	# "forget --draft ../../../notes" deleted <gitdir>/../../../notes.md and reported
-	# having forgotten a draft. Checked against the ref name git itself would
-	# accept, which rejects ".." as a path component, so the only files this can
-	# reach are the ones it wrote. Only the typed argument needs it: the names of
-	# the two inferred sets come from the namespace they just read.
-	#
-	# The other two modes were never exposed this way — --saved resolves a ref and
-	# --delta a config key, so an invented name is a no-op in both.
+	# having forgotten a draft. Checked against the ref name git itself would accept,
+	# which rejects ".." as a path component. Only the typed argument needs it: the
+	# inferred sets' names come from the namespace they just read, and the other two
+	# modes were never exposed this way — --saved resolves a ref, --delta a config
+	# key, so an invented name is a no-op in both.
 	if [ -n "$arg" ] && ! git check-ref-format "refs/heads/$arg" 2>/dev/null; then
 		die "not a valid branch name: $arg"
 	fi
@@ -288,16 +280,14 @@ if [ "$mode" = draft ]; then
 	# live_walk_reader <src>: the review branch currently reading the draft for
 	# <src>, or nothing.
 	#
-	# Found by asking each review which draft it records (walk_review_draft_src),
-	# not by assuming the review is named after the branch: a compare of
-	# origin/feature/x lives on review/origin/feature/x and drafts for feature/x,
-	# which is the whole reason that name is written down. Testing review/<src>
+	# Found by asking each review which draft it records (walk_review_draft_src), not
+	# by assuming the review is named after the branch: a compare of origin/feature/x
+	# lives on review/origin/feature/x and drafts for feature/x — testing review/<src>
 	# alone said nothing for exactly the reviews that most needed it.
 	#
-	# Walk reviews only: they are the ones that read a walkthrough. The name is
-	# recorded in every mode -- custody is mode-blind -- so without the filter the
-	# step and whole reviews of the same branch, which never read the draft, would
-	# match.
+	# Walk reviews only, filtered explicitly: the name is recorded in every mode
+	# (custody is mode-blind), so without the filter step/whole reviews of the same
+	# branch, which never read the draft, would match.
 	live_walk_reader() {
 		git for-each-ref --format='%(refname:short)' refs/heads/review/ |
 			while IFS= read -r _lwr_rb; do
@@ -334,14 +324,12 @@ if [ "$mode" = draft ]; then
 	}
 
 	# forget_orphan_draft_one <src>: delete one archived draft that no paused review
-	# can reclaim. git review save puts a draft aside with the review it belongs to
-	# and git review continue brings it back, so the archive has exactly one owner
-	# per entry — until that owner is deleted by hand (git branch -D review-saved/x,
-	# a prune), and then the file answers to nothing: --saved refuses without the
-	# ref, --draft spells names in the active namespace only, and clean is
-	# deliberately hands-off in both. Swept here rather than given a flag of its
-	# own: --all already means "every draft I am still holding", and an entry with
-	# no review behind it is not a paused review's prose any more, just a file.
+	# can reclaim. save/continue give the archive exactly one owner per entry, until
+	# that owner is deleted by hand (branch -D review-saved/x, a prune) and the file
+	# answers to nothing: --saved refuses without the ref, --draft spells names in the
+	# active namespace only, and clean is deliberately hands-off in both. Swept here
+	# rather than given its own flag: --all already means "every draft I am still
+	# holding", and an ownerless entry is just a file, not a paused review's prose.
 	forget_orphan_draft_one() {
 		_fo_src="$1"
 		if [ "$dryrun" -eq 1 ]; then
@@ -353,19 +341,15 @@ if [ "$mode" = draft ]; then
 	}
 
 	# ── --reviewed ────────────────────────────────────────────────────────────
-	# The inferred set, the way --delta --stale is one: every draft written
-	# against a tip a completed review of that branch already covered. Its whole
-	# reason to exist is that these are the ones you cannot name -- a draft is
-	# spelled by its branch, and after a handful of reviews you no longer
-	# remember which of those branches still hold prose.
+	# The inferred set, like --delta --stale: every draft written against a tip a
+	# completed review already covered — these are the ones you cannot name, since
+	# after a handful of reviews you no longer remember which branches still hold
+	# prose.
 	#
-	# A draft a live review is READING is skipped rather than deleted, which is
-	# the opposite of what naming one does. The asymmetry is the suite's usual
-	# one: deleting the draft under a review degrades it to the author's order,
-	# and that is a fine thing to ask for by name and a bad thing to have
-	# happen to you as part of a sweep you did not enumerate. Its marker is
-	# already set -- start writes it before the review runs -- so without this
-	# the sweep would go for the one draft that is in use.
+	# A draft a live review is READING is skipped, not deleted — the opposite of
+	# naming one by hand. Degrading a review's draft to the author's order is fine
+	# to ask for explicitly and bad to have happen as part of an unenumerated sweep;
+	# without this filter the sweep would take the one draft still in use.
 	if [ "$reviewed" -eq 1 ]; then
 		swept=0
 		skipped=0
@@ -395,14 +379,13 @@ EOF
 
 	if [ "$all" -eq 1 ]; then
 		drafts="$(walk_draft_list)"
-		# What the paused reviews claim, asked of each review rather than derived
-		# from the file's name. The two are not the same string — a compare of
-		# origin/feature/x is paused as review-saved/origin/feature/x and its draft
-		# is feature/x's — so testing refs/heads/review-saved/<file name> answered
-		# "no paused review" for precisely those reviews, and this loop then deleted
-		# a live paused review's reading order and said so in as many words. The next
-		# git review continue came back to "the walkthrough this review was reading
-		# is gone", with git review abort as the only way out.
+		# What the paused reviews claim, asked of each review rather than derived from
+		# the file's name: a compare of origin/feature/x is paused as
+		# review-saved/origin/feature/x but drafts for feature/x, so testing
+		# refs/heads/review-saved/<file name> said "no paused review" for exactly those
+		# reviews — deleting a live paused review's reading order, with continue then
+		# finding "the walkthrough this review was reading is gone" and abort the only
+		# way out.
 		claims="$(walk_saved_draft_claims | cut -f1)"
 		# Filtered before the emptiness test below, not while deleting: an archive
 		# entry whose review is still paused is not garbage and must not make the
@@ -443,12 +426,11 @@ EOF
 fi
 
 # ── --delta ─────────────────────────────────────────────────────────────────────
-# parse_marker <key>: split a marker key into the source branch ($msrc), a human
-# label ($mlabel) and whether it is a local marker ($mislocal). Local markers (git
-# review start --local) live in their own config section, reviewworkflowlocal.<src>
-# .reviewed, while remote ones are reviewworkflow.<src>.reviewed. Disjoint sections
-# (rather than a .local segment inside one section) keep the two apart even for a
-# branch literally named "<src>.local".
+# parse_marker <key>: split into source branch ($msrc), human label ($mlabel) and
+# whether it is local ($mislocal). Local markers live in their own section,
+# reviewworkflowlocal.<src>.reviewed, not a .local segment inside
+# reviewworkflow.<src>.reviewed — which would be ambiguous for a branch literally
+# named "<src>.local".
 parse_marker() {
 	case "$1" in
 	reviewworkflowlocal.*)

@@ -32,18 +32,17 @@ const LOCATION_ITEMS: LocationItem[] = [
 
 /**
  * `gitReview.finishReview`: cierra la review activa extrayendo las ediciones a
- * donde el revisor elija (contracts/cli-invocation.md § `finish`, FR-018).
+ * donde el revisor elija (contracts/cli-invocation.md § `finish`).
  *
  * El `QuickPick` de ubicación es la única decisión — sin casilla, dos ítems
  * con descripción — y no pide una confirmación modal aparte: a diferencia de
- * `abortReview.ts`/`saveReview.ts`, `finish` no descarta nada, así que no cae
- * bajo el mismo criterio que FR-023. El `StateToken` (staleGuard.ts) se
- * captura antes de abrir el `QuickPick` y se revalida justo antes de invocar
- * (FR-038): el diálogo puede quedar abierto un rato, y el repositorio puede
- * cambiar debajo mientras el revisor elige.
+ * `abortReview.ts`/`saveReview.ts`, `finish` no descarta nada. El `StateToken`
+ * (staleGuard.ts) se captura antes de abrir el `QuickPick` y se revalida justo
+ * antes de invocar: el diálogo puede quedar abierto un rato, y el repositorio
+ * puede cambiar debajo mientras el revisor elige.
  *
- * **El toast de éxito no se deriva del texto de la CLI** (T050,
- * contracts/cli-invocation.md § "no parsear la salida humana"). Tras exit 0 se
+ * **El toast de éxito no se deriva del texto de la CLI**
+ * (contracts/cli-invocation.md § "no parsear la salida humana"). Tras exit 0 se
  * mira el `ReviewState` ya refrescado con `finishOutcome` (pending vs residual
  * no-edits). Un list fallido no inventa "sin cambios": sin fila pending el toast
  * sigue siendo de éxito normal sobre el destino.
@@ -123,8 +122,8 @@ export async function finishReview(
         }
 
         if (!invocation || invocation.exitCode !== 0) {
-            // stderr de la CLI tal cual (FR-024); si viene vacío (CLI matada /
-            // rota), un toast genérico evita el fallo silencioso.
+            // stderr de la CLI tal cual; si viene vacío (CLI matada / rota), un
+            // toast genérico evita el fallo silencioso.
             const text = message(invocation?.stderr ?? "");
             void vscode.window.showErrorMessage(
                 text.length > 0 ? text : "Could not finish the review."
@@ -135,16 +134,12 @@ export async function finishReview(
         // Exit 0 always landed on the destination. Toast from refreshed state
         // only (finishOutcome), never from finish stdout/stderr.
         const destination = picked.ontoSource ? source : `review-fixes/${source}`;
-        // `pending` es el caso normal, y ahí NO se notifica: el panel entra en
-        // finish-pending y su banner dice lo mismo con más contexto —el destino,
-        // que hay que commitear desde Source Control, y los dos botones—. El
-        // toast era esa frase otra vez, un segundo antes.
-        //
-        // `no-edits` es el residual: sin registro pending no hay banner, así que
-        // sin esta línea un finish exitoso no dejaría ninguna señal.
-        // El acuse del caso normal es el banner de finish-pending, así que el
-        // panel tiene que estar a la vista: Finish está en el título del panel
-        // pero también en la paleta, donde puede no estarlo.
+        // `pending` (caso normal) no se notifica: el banner de finish-pending ya
+        // dice lo mismo con más contexto (ver "Lo que el panel muestra no se
+        // notifica" en CLAUDE.md). `no-edits` sí, porque sin registro pending no
+        // hay banner y un finish exitoso no dejaría ninguna señal. El reveal hace
+        // falta porque Finish también se invoca desde la paleta, donde el panel
+        // puede no estar a la vista.
         revealPanel("finishReview", reveal);
 
         const outcome = finishOutcome(stateManager.state, reviewBranch);
@@ -156,7 +151,7 @@ export async function finishReview(
 
 /**
  * `gitReview.undoFinish`: deshace un cierre `pending` o `conflict`
- * (contracts/cli-invocation.md § `finish --abort` / `--force`, FR-021/FR-029).
+ * (contracts/cli-invocation.md § `finish --abort` / `--force`).
  *
  * Mismo molde que `abortReview.ts`: la confirmación va **fuera** del
  * `MutationLock`, el `StateToken` se captura al abrir el diálogo y se revalida
@@ -228,9 +223,9 @@ export async function undoFinish(
 
     // Fallo esperado: hay trabajo nuevo en la rama del cierre. El stderr es lo
     // que habilita la segunda confirmación (contracts/cli-invocation.md §
-    // finish --abort --force) — se muestra tal cual, sin redactar (FR-024).
-    // Sin stderr no hay diagnóstico ni mención de --force: toast genérico y
-    // se detiene (nunca ofrecer force a ciegas).
+    // finish --abort --force) — se muestra tal cual, sin redactar. Sin stderr
+    // no hay diagnóstico ni mención de --force: toast genérico y se detiene
+    // (nunca ofrecer force a ciegas).
     const text = message(invocation.stderr);
     if (text.length === 0) {
         void vscode.window.showErrorMessage("Could not undo the finish.");
@@ -291,7 +286,7 @@ export async function undoFinish(
 
 /**
  * `gitReview.resumeFinish`: continúa un cierre trabado por conflicto
- * (contracts/cli-invocation.md § `finish --resume`, FR-020).
+ * (contracts/cli-invocation.md § `finish --resume`).
  *
  * Sin confirmación previa: no descarta nada — es el reverso de deshacer. El
  * flag `--onto-source` sale **únicamente** del campo `onto` del registro

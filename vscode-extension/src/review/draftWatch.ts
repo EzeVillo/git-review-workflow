@@ -2,24 +2,20 @@
  * Qué hay que vigilar para ver crecer un borrador, y cada cuánto se contesta.
  *
  * El borrador del revisor vive en el gitdir (`<gitdir>/review-walkthrough/
- * <src>.md`), o sea fuera del working tree y fuera de los refs: el agente que
- * lo completa no mueve `HEAD`, no toca el índice y no escribe una sola línea
- * de `config`, así que **ninguna** de las señales de refresco del panel lo ve.
- * Sin esto el progreso `3/9` se queda congelado hasta que alguien aprieta
- * Refresh — justo en el momento en que el revisor está mirando el panel para
- * ver si el agente terminó.
+ * <src>.md`), fuera del working tree y de los refs: el agente que lo completa
+ * no mueve `HEAD`, no toca el índice y no escribe `config`, así que
+ * **ninguna** señal de refresco del panel lo ve. Sin esto el progreso `3/9`
+ * se queda congelado hasta que alguien aprieta Refresh — justo cuando el
+ * revisor mira el panel para ver si el agente terminó.
  *
  * Los directorios salen de las rutas que la CLI ya reportó (`draft` de
  * `config --porcelain` y de `status --porcelain`), nunca de rearmar el layout
- * del gitdir: es la misma regla que hace que *Open draft* abra la ruta que dio
- * la CLI en vez de derivarla. Consecuencia deliberada: un borrador de una rama
- * cuya carpeta todavía no aparece en ningún reporte no tiene quién lo mire —
- * ahí no hay progreso que seguir, sólo un archivo que aún no existe para el
- * panel.
+ * del gitdir. Consecuencia deliberada: un borrador de una rama cuya carpeta
+ * todavía no aparece en ningún reporte no tiene quién lo mire — ahí no hay
+ * progreso que seguir, sólo un archivo que aún no existe para el panel.
  *
- * Módulo sin `vscode` a propósito, como `soleTarget`: la decisión de qué mirar
- * es pura y se testea sin editor. El watcher en sí vive en `repository.ts`,
- * con las otras dos señales de refresco.
+ * Módulo sin `vscode`, como `soleTarget`: la decisión de qué mirar es pura y
+ * se testea sin editor. El watcher en sí vive en `repository.ts`.
  */
 
 /**
@@ -94,17 +90,16 @@ export interface GuidePathSource {
 /**
  * Si `file` es una de las guías que la CLI reportó.
  *
- * Existe porque las guías **no** las mira el watcher, y eso es deliberado: la
- * propia vive en la RAÍZ del gitdir, que cambia en cada operación de git, así
- * que vigilar ese directorio sería una tormenta de refrescos por el archivo que
+ * Existe porque las guías **no** las mira el watcher, a propósito: la propia
+ * vive en la RAÍZ del gitdir, que cambia en cada operación de git, así que
+ * vigilar ese directorio sería una tormenta de refrescos por el archivo que
  * menos cambia del panel.
  *
  * Pero hay un momento en que el panel miente sin esto: apretás *Create*, se
  * abre el archivo vacío, escribís las convenciones, Ctrl+S — y el badge sigue
  * diciendo `empty`, porque el estado sale del disco y nadie volvió a mirarlo.
  * El guardado es la señal exacta, no cuesta un watcher, y sólo dispara sobre
- * las rutas que la CLI **ya reportó** — la misma regla del path reportado que
- * hace que *Open* abra lo que dio la CLI en vez de derivarlo.
+ * rutas que la CLI ya reportó.
  */
 export function isReportedGuide(
     state: GuidePathSource,

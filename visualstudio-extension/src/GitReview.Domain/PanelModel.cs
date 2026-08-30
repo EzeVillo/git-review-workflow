@@ -43,25 +43,21 @@ public sealed record PanelReview(
     BranchFinish? Finish = null);
 
 /// <summary>
-/// A row of the empty state's draft block: a reading order the reviewer started
-/// and has not paused. Flat projection, with nothing derived — the progress is
-/// counted by the CLI and the path is resolved by the CLI.
+/// A row of the empty state's draft block: a reading order the reviewer started and
+/// has not paused. Flat projection — progress and path both come from the CLI, nothing
+/// derived here.
 ///
-/// Startable says whether "Validate and start" can be <em>invoked</em>: only when
-/// the CLI knows the origin and range the draft was generated with. With Unknown
-/// (the instruction block was deleted by hand) invoking with the defaults would
-/// fail with a drift error every time.
+/// Startable says whether "Validate and start" can be <em>invoked</em>: only when the
+/// CLI knows the origin and range the draft was generated with. With Unknown (the
+/// instruction block was deleted by hand) invoking with the defaults would fail with a
+/// drift error every time. The control is drawn either way but switched off — it still
+/// can't be invoked, but unlike an absent control it can say why in its tooltip, and
+/// the row keeps its four cells so it doesn't change shape with its state.
 ///
-/// The control is drawn either way, switched off: off guesses the flags no more
-/// than absent did -- it still cannot be invoked -- and unlike absent it can say
-/// why in its tooltip. The row also keeps its four cells, so it does not change
-/// shape with its state.
-///
-/// Spent says whether its review is over. A draft outlives the review it was
-/// written for — clean does not touch hand-written prose — but it stops being
-/// work in progress, so it leaves the block at the top for a collapsed section
-/// with the two controls that still make sense: open it and discard it. The CLI
-/// decides it; nothing is inferred here.
+/// Spent says whether its review is over. A draft outlives the review it was written
+/// for — clean doesn't touch hand-written prose — but it stops being work in progress,
+/// so it moves to a collapsed section with just open and discard. The CLI decides it;
+/// nothing is inferred here.
 /// </summary>
 public sealed record PanelDraft(
     string Branch,
@@ -72,21 +68,19 @@ public sealed record PanelDraft(
     bool Spent);
 
 /// <summary>
-/// A row of the authoring-guide block: prose about the CONTENT of a walkthrough,
-/// not about its format.
+/// A row of the authoring-guide block: prose about the CONTENT of a walkthrough, not
+/// its format.
 ///
-/// BOTH rows are always drawn, whether or not either file exists, and what the
-/// state changes is the enabled of the controls, never their presence — the same
-/// rule as the draft rows, and for the same reason: two rows with different
-/// button sets do not line up with each other.
+/// BOTH rows are always drawn, whether or not either file exists — state changes the
+/// controls' enabled, never their presence, same rule as the draft rows and for the
+/// same reason: two rows with different button sets don't line up.
 ///
-/// The row name and the badge are derived here because they are panel copy; Path comes from
-/// the CLI, and the client opens it and never rebuilds it.
+/// Name and badge are derived here since they're panel copy; Path comes from the CLI,
+/// which the client opens and never rebuilds.
 ///
-/// Discardable is yours only. The shared guide is a tracked file, so removing it
-/// is `git rm` plus a commit: a decision about what goes into the PR, which is
-/// not this button's to make. The CLI says the same from its side, refusing
-/// `--delete --team`.
+/// Discardable is yours only: the shared guide is a tracked file, so removing it is
+/// `git rm` plus a commit — a decision about what goes into the PR, not this button's
+/// to make. The CLI refuses `--delete --team` for the same reason.
 /// </summary>
 public sealed record PanelGuide(
     GuideKind Kind,
@@ -146,22 +140,20 @@ public sealed record PanelModel(
     string? RepoLabel = null,
     IReadOnlyList<PanelReview>? Reviews = null,
     /// <summary>
-    /// Same rule as Reviews: only with NoReview, empty in any other situation.
-    /// A review in progress is always the most important thing the panel has to
-    /// say, and another branch's draft does not compete for the body.
+    /// Only populated in NoReview, empty otherwise: a review in progress is the most
+    /// important thing the panel has to say, and another branch's draft does not
+    /// compete for the body.
     /// </summary>
     IReadOnlyList<PanelDraft>? Drafts = null,
     /// <summary>
-    /// Both authoring guides, in the CLI's order (shared, yours). Same rule as
-    /// Drafts: only with NoReview, empty in any other situation — inside a review
-    /// the panel has more urgent things to say, and creating the shared one there
-    /// is refused by the CLI anyway.
+    /// Both authoring guides, in the CLI's order (shared, yours). Only in NoReview:
+    /// inside a review the panel has more urgent things to say, and creating the
+    /// shared one there is refused by the CLI anyway.
     /// </summary>
     IReadOnlyList<PanelGuide>? Guides = null,
     /// <summary>
-    /// The branches of edits a finish left behind, in the CLI's order. Same rule
-    /// as Drafts and Guides: only with NoReview, which is where the footer
-    /// section lives.
+    /// The branches of edits a finish left behind, in the CLI's order. Only in
+    /// NoReview, where the footer section lives.
     /// </summary>
     IReadOnlyList<PanelFixes>? Fixes = null,
     /// <summary>
@@ -294,9 +286,8 @@ public static class PanelModelBuilder
     }
 
     /// <summary>
-    /// The badge of a fixes row: what dropping it costs, one phrase per state and
-    /// none folding into another. Same copy as the other two clients, checked
-    /// against the canonical contract.
+    /// The badge of a fixes row: what dropping it costs, one phrase per state, none
+    /// folding into another — checked against the canonical contract.
     /// </summary>
     public static string FixesBadge(FixesState state) => state switch
     {
@@ -379,28 +370,22 @@ public static class PanelModelBuilder
     };
 
     /// <summary>
-    /// Projects the `walkthrough` record. One row, ALWAYS: init and build are
-    /// this row's buttons, so drawing it only sometimes would leave the two verbs
-    /// without a surface sometimes. With no record — malformed, or a CLI old
-    /// enough that the client already rejected it by version — the row arrives as
-    /// Unknown, which is the state the CLI defines as "the question has no
-    /// answer": it invents neither a badge nor a path.
+    /// Projects the `walkthrough` record. One row, ALWAYS: init and build are this
+    /// row's buttons, so drawing it only sometimes would leave them without a
+    /// surface. With no record — malformed, or a CLI too old for it — the row
+    /// arrives as Unknown, the state the CLI defines as "the question has no
+    /// answer": no badge, no path invented.
     ///
-    /// The row is named after the BRANCH it annotates, not the word
-    /// "Walkthrough": the section is already called that, and saying it twice
-    /// added no fact.
+    /// Named after the BRANCH it annotates, not "Walkthrough": the section already
+    /// has that name, and saying it twice adds nothing.
     ///
-    /// Everything that decides what can be pressed comes from the state the CLI
-    /// reported. In particular the action label, which is NOT keyed on staleness:
-    /// the same verb creates and updates, so the only thing that changes is what
-    /// it is called, and "Create" over a file full of prose is a promise the CLI
-    /// does not keep — nor should it.
+    /// Everything pressable comes from the CLI-reported state. The action label
+    /// isn't keyed on staleness (see field doc above) — "Create" over a file full
+    /// of prose would be a promise the CLI doesn't keep.
     /// </summary>
     public static PanelWalkthrough ToPanelWalkthrough(WalkthroughRecord? record)
     {
-        // With no record there is neither a path nor a state, and neither is made
-        // up: Unknown already means "cannot be told" on the CLI's side, and an
-        // empty path turns off the two controls that need the file.
+        // Empty path also turns off the two controls that need a file.
         var state = record?.State ?? WalkthroughState.Unknown;
         return new PanelWalkthrough(
             Label: record?.Branch ?? "Walkthrough",
@@ -410,12 +395,11 @@ public static class PanelModelBuilder
             Annotated: record?.Annotated ?? 0,
             Total: record?.Total ?? 0,
             Exists: record is not null && state != WalkthroughState.Absent,
-            // Three labels for one verb. Superseded is not a flavour of "fell
-            // behind": the file is another PR's, and what the CLI does there is
-            // start over on its own — so the button says what will happen instead
-            // of promising a reconciliation that does not occur. And with no
-            // record at all nothing is known about the file, so the button keeps
-            // the verb's default name.
+            // Three labels for one verb. Superseded isn't a flavour of "fell behind":
+            // the file belongs to another PR, and the CLI starts over on its own
+            // there — so the button says what will happen rather than promising a
+            // reconciliation that won't occur. With no record at all, the button
+            // keeps the verb's default name.
             ActionLabel: record is null
                 ? "Create"
                 : state switch
@@ -437,10 +421,7 @@ public static class PanelModelBuilder
         return guides[i];
     }
 
-    /// <summary>
-    /// The draft row at index, resolved against the HOST's state. Same role as
-    /// ResumableSourceAt: what ends up in the CLI does not come from the panel.
-    /// </summary>
+    /// <summary>The draft row at index, resolved against the HOST's state — same role as GuideAt.</summary>
     public static DraftRecord? DraftAt(IReadOnlyList<DraftRecord> drafts, object? index)
     {
         if (index is not int i) return null;
@@ -470,19 +451,17 @@ public static class PanelModelBuilder
             Drafts: state.Situation == Situation.NoReview
                 ? ToPanelDrafts(state.DraftsList)
                 : Array.Empty<PanelDraft>(),
-            // They only arrive by config --porcelain, that is, only outside a review:
-            // the footer is where they are drawn and a review has no footer.
+            // Only outside a review: the footer is where they are drawn, and a review
+            // has no footer (see CLAUDE.md, "Una review no tiene pie").
             Guides: ToPanelGuides(state.GuidesList),
-            // Only in NoReview, like the rest of the footer. One by one and in
-            // the CLI's order: nothing is filtered or reordered here, not even
-            // the Current row -- it is the only one that cannot be deleted, and
-            // hiding it would leave a branch that exists with no surface naming
-            // it, which is exactly what this section came to fix.
+            // Only in NoReview, like the rest of the footer. One by one, in the CLI's
+            // order, with nothing filtered or reordered — not even Current, the one
+            // row that can't be deleted: hiding it would leave a branch with no
+            // surface naming it, exactly what this section exists to fix.
             Fixes: state.Situation == Situation.NoReview
                 ? ToPanelFixes(state.FixesList)
                 : Array.Empty<PanelFixes>(),
-            // Only in NoReview: that is where the section lives — a review has no
-            // footer. The row is built even when the record is missing — see
+            // Only in NoReview. Built even when the record is missing — see
             // ToPanelWalkthrough.
             Walkthrough: state.Situation == Situation.NoReview
                 ? ToPanelWalkthrough(state.Walkthrough)

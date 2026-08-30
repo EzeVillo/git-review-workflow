@@ -18,12 +18,11 @@ function message(stderr: string): string {
  * `reviewreturn`, borra `review/<src>` y sus ediciones bancadas.
  *
  * Mismo molde que `continueReview.ts`: la confirmación va **fuera** del
- * `MutationLock` (tomarlo mientras el modal espera dejaría el panel `busy` sin
- * que nada esté mutando todavía), y adentro sólo la invocación, con
- * `withProgress` no cancelable — a mitad de un abort no hay nada que cancelar.
+ * `MutationLock`, y adentro sólo la invocación, con `withProgress` no
+ * cancelable — a mitad de un abort no hay nada que cancelar.
  *
  * A diferencia de `continueReview.ts` esto SÍ revalida un `StateToken`
- * (staleGuard.ts, Fase 2) justo antes de invocar: es el primer verbo que lo
+ * (staleGuard.ts) justo antes de invocar: es el primer verbo que lo
  * hace, porque acá el costo de un estado stale es distinto al de "resumir la
  * review equivocada" — es borrar una rama sobre la que el diálogo ya no dice
  * la verdad (p. ej. otra pestaña de terminal corrió `git review abort` o
@@ -62,10 +61,9 @@ export async function abortReview(
     }
 
     await lock.run(async () => {
-        // El testigo del estado se comparte entre la revalidacion de acá abajo
-        // y el chequeo de despues del progreso: `withProgress` sólo devuelve el
-        // resultado de la invocación, así que la marca de "no se invocó" viaja
-        // por fuera de él.
+        // El testigo se comparte entre la revalidación de acá abajo y el chequeo
+        // después del progreso: `withProgress` sólo devuelve el resultado de la
+        // invocación, así que la marca de "no se invocó" viaja por fuera de él.
         let stale = false;
 
         const result = await vscode.window.withProgress(
@@ -79,9 +77,8 @@ export async function abortReview(
                     return undefined;
                 }
                 const invocation = await invokeGitReview("abort", [], getInvokeOptions());
-                // Refrescar pase lo que pase: aunque el verbo falle, es lo que
-                // dice dónde quedó el repositorio — la salida humana no se
-                // parsea nunca.
+                // Refrescar pase lo que pase (ver continueReview.ts): dice dónde
+                // quedó el repositorio; la salida humana no se parsea nunca.
                 await stateManager.refresh();
                 return invocation;
             }
@@ -97,10 +94,10 @@ export async function abortReview(
         }
 
         if (result && result.exitCode !== 0) {
-            // El mensaje de la CLI se muestra tal cual, sin redactar acá
-            // (FR-024) — es la misma garantía que continueReview.ts. Si el
-            // exit no es 0 y no hay stderr (CLI matada / rota), un toast
-            // genérico evita el fallo silencioso.
+            // El mensaje de la CLI se muestra tal cual, sin redactar acá — es la
+            // misma garantía que continueReview.ts. Si el exit no es 0 y no hay
+            // stderr (CLI matada / rota), un toast genérico evita el fallo
+            // silencioso.
             const text = message(result.stderr);
             void vscode.window.showErrorMessage(
                 text.length > 0 ? text : "Could not cancel the review."

@@ -1,13 +1,9 @@
 #!/usr/bin/env sh
 #
-# git-review — entry-point dispatcher for the `git review <verb>` workflow.
-#
-# git discovers this as the `review` subcommand once bin/ is on PATH, so
-# `git review <verb> [args]` runs us with <verb> in $1. We route <verb> to its
-# implementation in the private git-review-verbs/ directory — files that are NOT
-# on PATH and not named git-*, so git cannot discover them as `git <verb>`; the
-# dispatcher is the only entry point. `-h`/no args lists the commands;
-# `--version` prints the version.
+# git-review — entry-point dispatcher for `git review <verb>`: routes <verb> to
+# its implementation in the private git-review-verbs/ directory (not on PATH,
+# not named git-*, so git cannot discover them as `git <verb>`; this dispatcher
+# is the only entry point). See CLAUDE.md "Arquitectura" for the full contract.
 #
 set -eu
 

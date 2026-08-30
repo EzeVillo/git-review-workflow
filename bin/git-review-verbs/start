@@ -95,9 +95,8 @@ while [ $# -gt 0 ]; do
 		[ -n "$from" ] || die "--from requires a commit"
 		;;
 	--)
-		# End-of-options, the git convention: everything after is positional,
-		# so a branch whose name starts with "-" (or collides with a flag) can
-		# still be reviewed, e.g. git review start -- --weird develop.
+		# End-of-options: a branch name starting with "-" is read as positional
+		# after --, e.g. git review start -- --weird develop.
 		shift
 		while [ $# -gt 0 ]; do
 			if [ -z "$src" ]; then
@@ -150,15 +149,13 @@ fi
 
 git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 
-# Shared helpers, sourced from the libexec directory the dispatcher points us at.
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
-# With no <branch>, review the branch you currently have checked out. This is
-# git's own default — push, status, log and rebase all act on the current branch
-# when you name nothing. It only resolves the name; the mode (remote vs --local)
-# is still chosen by flags. The check against the review/*, review-saved/* and
-# review-fixes/* namespaces avoids the nonsense of reviewing a review branch.
+# With no <branch>, review the branch checked out — git's own default (push,
+# status, log, rebase all do this). Only resolves the name; --local vs remote is
+# still chosen by flags. Guards against review/*, review-saved/* and
+# review-fixes/* so nobody reviews a review branch.
 if [ -z "$src" ]; then
 	cur="$(git symbolic-ref --quiet --short HEAD || true)"
 	[ -n "$cur" ] || die "no branch given and HEAD is detached; name a branch to review"
@@ -181,16 +178,13 @@ fi
 require_clean_work_tree
 
 # --local reviews your local <branch> directly; the default reviews the remote's.
-# The base is a separate concern: it is the shared merge target, so it still
-# resolves against origin (and origin is still fetched) even under --local —
-# only --offline, which implies --local, also takes the base from your local
-# branches and skips the network entirely. The two axes are kept apart
-# everywhere: which ref the tip comes from, how it is named in messages, and
-# the delta marker — local markers live in their own config section
-# (reviewworkflowlocal.*) so a local and a remote review of the same branch
-# name never overwrite each other's progress. A separate section, rather than a
-# reviewworkflow.<src>.local.reviewed key, is deliberate: the latter would be
-# ambiguous for a branch literally named "<src>.local".
+# The base is a separate concern — the shared merge target — so it still resolves
+# against origin (and origin is still fetched) under --local; only --offline, which
+# implies --local, also takes the base from local branches and skips the network.
+# The two axes stay apart everywhere, including the delta marker: local markers
+# live in their own config section (reviewworkflowlocal.*), not a
+# reviewworkflow.<src>.local.reviewed key, which would be ambiguous for a branch
+# literally named "<src>.local".
 if [ "$offline_mode" -eq 0 ]; then
 	git fetch --quiet "$remote" || die "could not update from $remote"
 fi
@@ -204,14 +198,12 @@ else
 	markerkey="reviewworkflow.$src.reviewed"
 fi
 
-# Resolve the base into a ref and a human label. A base is normally a branch, so
-# try the branch namespace first — the remote's copy, or the local branch with
-# --offline — to keep the familiar origin/<base> labels and the merged-base
-# folding below. Anything that is not a branch there still works as a read-only
-# lower bound via any commit-ish: a tag, a SHA, or an origin/<x> spelled out in
-# full. baseref stays empty when the base does not resolve at all; the
-# full-review path treats that as fatal ("not found"), while the delta/from
-# folding treats an unresolvable base as a no-op, exactly as before.
+# Resolve the base into a ref and a human label. Try the branch namespace first
+# (the remote's copy, or local with --offline) for the familiar origin/<base>
+# label and the merged-base folding below; anything else still works as a
+# read-only lower bound via any commit-ish (tag, SHA, full origin/<x>). baseref
+# stays empty when the base does not resolve at all: fatal for a full review,
+# a no-op for delta/from folding.
 baseref=""
 baselabel="$base"
 if [ -n "$base" ]; then
@@ -245,12 +237,11 @@ git rev-parse --verify --quiet "refs/heads/review-saved/$src" >/dev/null &&
 tip="$(git rev-parse "$srcref")"
 prev="$(git config "$markerkey" || true)"
 
-# A remote review targets the remote's copy of the branch, never your local one,
-# which git review start never updates. If a local branch of the same name exists
-# and points elsewhere, you are reviewing a different snapshot than the one you
-# have checked out — and a later git review finish --onto-source, which writes to
-# the local branch, will refuse unless it sits at the reviewed tip. Warn rather than
-# silently review the wrong thing; --local reviews what you have checked out.
+# A remote review targets the remote's copy, never your local branch (which start
+# never updates). If a local branch of the same name points elsewhere, you'd be
+# reviewing a different snapshot than what's checked out, and a later
+# finish --onto-source will refuse unless the local branch sits at the reviewed
+# tip. Warn rather than silently review the wrong thing.
 if [ "$local_mode" -eq 0 ]; then
 	localtip="$(git rev-parse --verify --quiet "refs/heads/$src" || true)"
 	if [ -n "$localtip" ] && [ "$localtip" != "$tip" ]; then
@@ -292,20 +283,16 @@ else
 fi
 
 # Read this source's own draft in preference to the PR's walkthrough, if the
-# reviewer wrote one. Before the --step branch below and not after it: --step's
-# own walk_read is the note that says a reading order is being bypassed, and with
-# the context set later that note was the one thing in the suite that still saw
-# only the author's file — so a reviewer who wrote an order and then asked for
-# --step was told nothing at all, while the same PR annotated by its author said
-# so. It is also before the first walk_read and the --keys check, so every
-# decision from here on describes the same walkthrough.
+# reviewer wrote one. Must run before the --step branch's own walk_read (the note
+# there about bypassing a reading order used to see only the author's file, so a
+# reviewer with their own draft was told nothing) and before the --keys check, so
+# every decision from here on describes the same walkthrough.
 walk_use_draft "$src"
 
 # draft_command: the git review walkthrough draft invocation for this review,
-# flags and all. Three of the messages below suggest it, so it is built once, with
-# this review's own origin and range: drafting against a different range than the
-# one being reviewed would annotate the wrong file set, and on a branch with no
-# copy on the remote the bare form just fails.
+# flags and all. Built once — three messages below suggest it — with this
+# review's own origin and range, since drafting against a different range would
+# annotate the wrong file set.
 draft_command() {
 	_dc_flags=""
 	if [ "$offline_mode" -eq 1 ]; then
@@ -319,12 +306,10 @@ draft_command() {
 	printf 'git review walkthrough draft%s %s' "$_dc_flags" "$src"
 }
 
-# Whose reading order is in force, for the notes below. A reviewer's draft shadows
-# the author's walkthrough (walk_read), so a note that blames "the PR" for an order
-# that is actually the reviewer's own sends them to read someone else's branch
-# looking for their own typo — and the PR may carry no walkthrough at all. Same
-# distinction the "(draft)" suffix draws in status and list, on the surface the
-# reviewer sees first.
+# Whose reading order is in force, for the notes below: a reviewer's draft shadows
+# the author's walkthrough (walk_read), so blaming "the PR" for the reviewer's own
+# order would send them hunting a typo on someone else's branch. Same distinction
+# the "(draft)" suffix draws in status and list.
 if walk_is_draft "$src"; then
 	wtdesc="you have a walkthrough draft for $src"
 else
@@ -340,10 +325,8 @@ if [ "$step" -eq 1 ]; then
 	count="$(printf '%s\n' "$commits" | wc -l | tr -d ' ')"
 	first="$(printf '%s\n' "$commits" | sed -n '1p')"
 
-	# A walkthrough is a whole-review reading aid; --step reviews commit by commit
-	# and bypasses it wholesale. Note it (unless the reviewer already opted out with
-	# --no-walk) so someone expecting the guided reading order is not left wondering
-	# where it went.
+	# A walkthrough is a whole-review reading aid; --step bypasses it wholesale. Note
+	# it (unless --no-walk already opted out) so it's not silently missing.
 	if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$tip")" && [ -n "$wtcontent" ]; then
 		echo "note: $wtdesc; --step ignores it and reviews commit by commit"
 	fi
@@ -357,12 +340,9 @@ if [ "$step" -eq 1 ]; then
 	git config "branch.$rb.reviewmode" "step"
 	git config "branch.$rb.reviewcount" "$count"
 	git config "branch.$rb.reviewstep" "1"
-	# Where this review's draft lives, recorded here too — see the whole-mode write
-	# below for what the name is for. A step review reads no walkthrough, but it
-	# holds custody of one all the same: save files the draft with it, list badges
-	# the row and forget --saved discards it. Here the name happens to equal the
-	# source, so leaving it out was invisible; in compare it is not, and a key that
-	# only some modes write is a key every reader has to second-guess.
+	# Recorded even though a step review reads no walkthrough: it still holds
+	# custody of a draft (save/list/forget --saved need the name). See the
+	# whole-mode write below for the full rationale.
 	git config "branch.$rb.reviewdraft" "$src"
 	if [ -n "$prev" ]; then
 		git config "branch.$rb.reviewprevreviewed" "$prev"
@@ -380,21 +360,19 @@ if [ "$step" -eq 1 ]; then
 	exit 0
 fi
 
-# Lower bound for the staged diff. Normally it is the range start, but if the
-# base branch has been merged into the PR, fold that already-merged base content
-# into the lower bound so changes that came from the base do not appear as part
-# of the review. fold_lower (shared with git review walkthrough) is a no-op when
-# the base was not merged in, and degrades gracefully on git without merge-tree.
+# Lower bound for the staged diff: normally the range start, but folded past any
+# base content already merged into the PR (fold_lower, shared with walkthrough) so
+# that content doesn't appear as part of the review. No-op when the base wasn't
+# merged in; degrades gracefully on git without merge-tree.
 lower="$(fold_lower "$start" "$baseref" "$tip")"
 
-# Walkthrough auto-detection. When the frozen tip carries a .review/walkthrough.md
-# and the reviewer did not opt out (--no-walk) or into --step, enter walk mode:
-# the same staged, editable whole-PR review, plus a guided reading cursor over
-# it. The sequence is filtered to this review's range, so a stale walkthrough
-# (e.g. under --delta) that no longer intersects the range degrades to a plain
-# whole review with a note — a broken or stale walkthrough never aborts a review.
-# --keys is the exception: it requires a walk with at least one > key entry and
-# fails before creating the branch rather than degrading.
+# Walkthrough auto-detection: a .review/walkthrough.md on the tip, unless
+# --no-walk or --step, enters walk mode — the same staged whole-PR review plus a
+# guided reading cursor filtered to this range. A stale walkthrough that no
+# longer intersects the range degrades to a plain whole review with a note (a
+# broken/stale walkthrough never aborts a review). --keys is the exception: it
+# requires a walk with at least one > key entry and fails before creating the
+# branch instead of degrading.
 walk=0
 walkcount=0
 keys_filter=0
@@ -421,23 +399,19 @@ if [ "$no_walk" -eq 0 ] && wtcontent="$(walk_read "$tip")" && [ -n "$wtcontent" 
 		fi
 		degradedfiles="$(range_files "$tip" "$lower" | tr '\n' ' ')"
 		echo "note: $wtdesc, but none of its entries apply to this review range; reviewing the whole diff: $degradedfiles"
-		# The same offer the start assistant makes for this situation (the "draft"
-		# offer of config --porcelain, which a stale walkthrough gets instead of
-		# "walk"). Without it the assistant proposed a way out that the terminal
-		# never mentioned. Guarded on the file, not on what is in force: with a draft
-		# already on disk — theirs, stale or empty — this command would refuse for
-		# want of --force, and suggesting a command that cannot run is worse than
-		# suggesting nothing.
+		# Same offer the start assistant makes for this situation. Guarded on the
+		# file, not on what is in force: with a draft already on disk (theirs, stale
+		# or empty) this command would refuse for want of --force, and suggesting a
+		# command that cannot run is worse than suggesting nothing.
 		if advice_enabled && ! walk_has_draft_file "$src"; then
 			echo "note: to read it in an order of your own instead: $(draft_command) (nothing gets committed)"
 		fi
 	fi
 elif [ "$keys_only" -eq 1 ]; then
 	# An empty draft reaches here having shadowed nothing (walk_read treats it as
-	# absent), so "the PR has none" would be true and useless — the file standing
-	# between them and walk mode is their own, and it is empty. The file test, not
-	# walk_is_draft: what matters here is that the file is theirs and on disk,
-	# which is exactly what walk_is_draft now says no to.
+	# absent), so "the PR has none" would be true but useless. The file test, not
+	# walk_is_draft: what matters is that the file is theirs and on disk, which is
+	# exactly what walk_is_draft says no to.
 	if walk_has_draft_file "$src"; then
 		die "--keys needs a walkthrough to read keys from, and your draft for $src is empty; fill it in (or start it over with '$(draft_command) --force'), or start without --keys"
 	fi
@@ -450,12 +424,11 @@ git reset -q --soft "$lower"
 git config "branch.$rb.reviewsource" "$src"
 git config "branch.$rb.reviewbase" "$base"
 git config "branch.$rb.reviewtip" "$tip"
-# The name this review's walkthrough draft lives under, decided here and read back
-# by everything that has to find the file (walk_review_draft_src). Recorded whether
-# or not a draft exists yet, and in every mode, because the question it answers is
-# "where would mine be?" — which is what a draft written mid-review, and the
-# custody surfaces (list, save, continue, forget), need. Here it is the source
-# itself; compare is where the two come apart.
+# The name this review's walkthrough draft lives under, read back by
+# walk_review_draft_src. Recorded whether or not a draft exists yet, and in every
+# mode, because the custody surfaces (list, save, continue, forget) need to answer
+# "where would mine be?" for a draft written mid-review. Here it equals the
+# source; compare is where the two names diverge.
 git config "branch.$rb.reviewdraft" "$src"
 if [ -n "$prev" ]; then
 	git config "branch.$rb.reviewprevreviewed" "$prev"
@@ -472,30 +445,26 @@ if [ "$walk" -eq 1 ]; then
 	git config "branch.$rb.reviewmode" "walk"
 	git config "branch.$rb.reviewwalkstep" "1"
 	git config "branch.$rb.reviewwalkcount" "$walkcount"
-	# Where HEAD was just pinned, so that later on "did you commit on top of this
-	# review?" can be asked of git instead of guessed from the reading sequence
-	# having got shorter (walk_at_base). Its own key rather than reviewstart:
-	# finish's metadata guard treats the step keys as proof of a step review, and
-	# every walk key is spelled reviewwalk* for exactly that reason.
+	# Where HEAD was just pinned, so later on "did you commit on top of this
+	# review?" can be asked of git instead of guessed from the sequence having got
+	# shorter (walk_at_base). Its own key rather than reviewstart, since finish's
+	# metadata guard treats the step keys as proof of a step review.
 	git config "branch.$rb.reviewwalkbase" "$(git rev-parse HEAD)"
 	if [ "$keys_filter" -eq 1 ]; then
 		git config "branch.$rb.reviewwalkkeys" "1"
 	fi
-	# Whether this reading order came from the reviewer's own draft. A flag and not
-	# a name — reviewdraft above already holds the name — recorded only when the
-	# draft is the one being read, so its absence keeps meaning "the author's".
-	# It is what lets the cursor's diagnostics tell "you deleted your draft" apart
-	# from "you committed on top of the review" when the sequence changes under
-	# them: once the file is gone, nothing else can tell those two apart.
+	# A flag, not a name (reviewdraft above holds that): recorded only when the
+	# order came from the reviewer's own draft, so absence keeps meaning "the
+	# author's". Lets the cursor's diagnostics tell "you deleted your draft" apart
+	# from "you committed on top of the review" once the file is gone.
 	if walk_is_draft "$src"; then
 		git config "branch.$rb.reviewwalkfromdraft" "1"
 	fi
 
 	if [ "$keys_filter" -eq 0 ]; then
-		# Files in the review range with no walkthrough entry: the walkthrough may be
-		# stale (typical when re-reviewing with --delta). The review still covers them
-		# — they are appended to the end of the reading order (walk_reading_order) — so
-		# note them rather than leave them to be discovered silently.
+		# Files in range with no walkthrough entry (typical of a stale walkthrough
+		# under --delta) are still covered — appended to the end of the reading
+		# order (walk_reading_order) — so note them rather than leave them silent.
 		uncovered="$(printf '%s\n' "$walkpaths" | tail -n +"$((guidedcount + 1))")"
 		if [ -n "$uncovered" ]; then
 			echo "note: file(s) in range not in the walkthrough are added to the end of the reading order: $(printf '%s\n' "$uncovered" | tr '\n' ' ')"
@@ -513,9 +482,8 @@ if [ "$walk" -eq 1 ]; then
 		echo "$rb ready ($range) — walkthrough keys-only: $walkcount key$([ "$walkcount" -eq 1 ] || echo s); read, edit, then run git review next"
 	fi
 
-	# The author's heads-up, printed once before the first entry: what is delicate
-	# in this PR, read before opening a file. Absent on a walkthrough that carries
-	# none (nothing is printed then, not an empty block).
+	# The author's heads-up, printed once before the first entry. Nothing prints
+	# when the walkthrough carries none.
 	headsup="$(printf '%s\n' "$wtcontent" | walk_preamble)"
 	if [ -n "$headsup" ]; then
 		printf -- '----\n%s\n' "$headsup"
@@ -529,15 +497,12 @@ if [ "$walk" -eq 1 ]; then
 	show_walk_entry 1
 else
 	echo "$rb ready ($range) — the staged diff is the PR; edit, then run git review finish"
-	# Landing in whole because nobody wrote a reading order is the moment the
-	# reviewer would want to know they can write one themselves — and the only
-	# moment they are looking. Suppressed when they opted out with --no-walk:
-	# they already made the call.
+	# Landing in whole for want of a reading order is the one moment the reviewer
+	# is looking, so offer to write one — unless --no-walk already made that call.
 	if advice_enabled && [ "$no_walk" -eq 0 ] && ! walk_read "$tip" >/dev/null; then
-		# Two ways to have no reading order, and they need different sentences. A
-		# draft that is there but empty used to produce neither: it satisfied
-		# walk_read, so this note was skipped, and the review landed in whole with
-		# nothing said at all — the only silent degradation left in walk mode.
+		# Two ways to have no reading order need different sentences: a draft that is
+		# there but empty used to satisfy walk_read, skipping this note and landing
+		# in whole with nothing said — the only silent degradation left in walk mode.
 		if walk_has_draft_file "$src"; then
 			echo "note: your walkthrough draft for $src is empty, so it gave this review no reading order. Fill it in, or write it again with '$(draft_command) --force' (nothing gets committed)"
 		else

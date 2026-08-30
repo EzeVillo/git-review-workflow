@@ -45,9 +45,9 @@ public enum ControlId
     UndoFinish,
     ResumeFinish,
     DiscardInventory,
-    // Draft block (012): four BODY controls, not product actions. They are not
-    // in the action matrix, not in the Tools menu, not in the .vsct, and the
-    // canonical's fixed count of 27 does not move.
+    // BODY controls: their subject is a row or section, not a product action, so
+    // none of them enter the action matrix, the Tools menu or the .vsct — the
+    // canonical's fixed count of 27 does not move for any of them.
     OpenDraft,
     CopyDraftPrompt,
     StartFromDraft,
@@ -55,18 +55,12 @@ public enum ControlId
     OpenGuide,
     CreateGuide,
     DiscardGuide,
-    // The author's walkthrough row: two BODY controls, same rule as the four
-    // above — without the row that draws them they have no subject, so the fixed
-    // count of 27 does not move.
     OpenWalkthrough,
     CopyWalkthroughPrompt,
-    // The "Edits you extracted" section: one BODY control, row -> index, same
-    // rule as the ones above — the fixed count of 27 does not move.
     DiscardFixes,
-    // The bulk of that same section: no index, subject is the whole section and
-    // not one row, but same treatment as OpenSupport — a BODY control outside
-    // the fixed count of 27. Runs clean --fixes-only with NO branch, which by
-    // clean's own design never touches review/* (see Housekeeping.cs).
+    // DiscardAllFixes acts on the whole section, not one row. Runs clean
+    // --fixes-only with NO branch, which by clean's own design never touches
+    // review/* (Housekeeping.cs).
     DiscardAllFixes,
     CleanReview,
     CompareReview,
@@ -130,11 +124,10 @@ public static class ControlIdExt
 public sealed record Control
 {
     /// <summary>
-    /// The two rules a control cannot break, checked here and not in the factory:
-    /// a label-less control is an icon button and an icon button is unreachable
-    /// without a name to read out. Callers inside the builder go through
-    /// <c>Ctrl</c>, but the record is what the panel renders, so this is where
-    /// the rule has to hold — same as the <c>init</c> block on the Kotlin side.
+    /// Enforced here rather than in the builder's <c>Ctrl</c> factory, because this
+    /// record is what the panel actually renders: a label-less control must carry
+    /// ICON emphasis, and an icon control needs a non-empty accessible name to be
+    /// reachable.
     /// </summary>
     public Control(
         ControlId id,
@@ -176,13 +169,10 @@ public sealed record Control
 public sealed record FileRow(string Display, int Index, bool LastOpened);
 
 /// <summary>
-/// A row of the draft block: the branch, the progress exactly as the CLI
-/// reports it, and the controls that act on THAT row.
-///
-/// One list, two places on the row: the labelled controls are the button pair
-/// underneath, and the Icon ones are drawn in the header beside the progress —
-/// the pair names their subject, and neither of them moves the flow along. The
-/// view splits on the emphasis; the order inside each half is this one.
+/// A row of the draft block: the branch, the CLI's own progress count, and the
+/// controls acting on THAT row. The view splits this one list by emphasis:
+/// labelled controls render as the button pair underneath, Icon ones in the
+/// header beside the progress. Order inside each half is the order here.
 /// </summary>
 public sealed record DraftRow
 {
@@ -209,14 +199,12 @@ public sealed record DraftRow
 }
 
 /// <summary>
-/// A row of the authoring-guide block: which guide it is, the state the CLI
-/// reported as a badge, and the controls that act on THAT row.
-///
-/// Same two-place shape as <see cref="DraftRow"/>: the labelled control is the
-/// button underneath and the Icon ones are drawn in the header beside the badge.
-/// And the same rule about presence — both rows carry the same controls whatever
-/// their state, except Discard, which only the reviewer's own row has at all:
-/// the shared guide is a tracked file, so removing it is `git rm` plus a commit.
+/// A row of the authoring-guide block: which guide it is, the CLI's badge for
+/// its state, and the controls that act on THAT row. Same two-place shape as
+/// <see cref="DraftRow"/>, and both guide rows carry the same controls
+/// regardless of state — except Discard, which only the reviewer's own row
+/// has: the shared guide is a tracked file, so removing it is `git rm` plus a
+/// commit.
 /// </summary>
 public sealed record GuideRow
 {
@@ -240,11 +228,9 @@ public sealed record GuideRow
 public sealed record InventoryRow
 {
     /// <summary>
-    /// An inventory control is routed back to its row by index, so a control
-    /// without one is a button that acts on nothing in particular — the panel
-    /// falls back to asking which review, which is not what the reviewer clicked.
-    /// <see cref="PanelLayout"/> checks the other direction (an index is only
-    /// legal here); this is the forward one.
+    /// An inventory control is routed back to its row by index; one without an
+    /// index acts on no review in particular. <see cref="PanelLayout"/> checks
+    /// the reverse direction — an index is only legal here.
     /// </summary>
     public InventoryRow(
         string name,
@@ -334,18 +320,15 @@ public abstract record Block
 
     /// <summary>
     /// The branches of edits a finish left behind, one row each. Reuses
-    /// <see cref="GuideRow"/> — name, badge and the controls of that row — the
-    /// same way <see cref="WalkthroughRow"/> does: the shape is what a row of
-    /// this panel is, and there is nothing about a fixes row the shape does not
-    /// already cover.
+    /// <see cref="GuideRow"/>'s shape (name, badge, controls) since nothing
+    /// about a fixes row falls outside it.
     /// </summary>
     public sealed record FixesRows(IReadOnlyList<GuideRow> Rows) : Block;
 
     /// <summary>
-    /// The author's own walkthrough, one row, above the guides in the same
-    /// section. Drawn only when the CLI reported the record — against an older
-    /// version it does not arrive and the block disappears, the same degradation
-    /// the guides and the drafts have.
+    /// The author's own walkthrough, one row above the guides. Drawn only when
+    /// the CLI reports the record — against an older CLI it does not arrive and
+    /// the block disappears, same degradation as the guides and drafts blocks.
     /// </summary>
     public sealed record WalkthroughRow(GuideRow Entry) : Block;
 
@@ -394,10 +377,9 @@ public sealed class PanelLayout
         FillsHeight = fillsHeight;
 
         var controls = CollectControls();
-        // One PRIMARY per situation, counted over the controls that are NOT row
-        // controls. A row control is a per-row affordance repeated as many times
-        // as there are rows — "the obvious thing to do with THIS draft" — so
-        // counting them here would make the rule depend on how many drafts the
+        // One PRIMARY per situation, counted over non-row controls only: a row
+        // control repeats once per row ("the obvious thing for THIS draft"), so
+        // counting it here would make the rule depend on how many drafts the
         // reviewer happens to have, which is not a property of the layout.
         var primaries = controls.Count(c => c.Emphasis == Emphasis.Primary && c.Index is null);
         if (primaries > 1)
@@ -483,17 +465,10 @@ public static class PanelLayoutBuilder
     public static bool RequiresConfirmation(ControlId id) => ConfirmingIds.Contains(id);
 
     /// <summary>
-    /// The mutations that bring the panel into view (`reveals:` in the canonical).
-    ///
-    /// "What the panel shows is not notified" rests on an assumption nobody
-    /// guaranteed: that the panel is IN VIEW. The draft is born in the start
-    /// wizard, which runs over the editor, and with the tool window closed the new
-    /// row is drawn where nobody sees it — and since that mutation does not notify
-    /// either, no acknowledgement is left anywhere.
-    ///
-    /// The list is short on purpose: only the mutations whose answer is a block
-    /// that WAS NOT THERE BEFORE. If the panel jumps on every mutation, it stops
-    /// meaning that something happened.
+    /// The mutations that bring the panel into view (`reveals:` in the
+    /// canonical). Deliberately short: only mutations whose answer is a block
+    /// that was not there before — a panel that jumps on every mutation stops
+    /// meaning that something happened. See CLAUDE.md, "La copy de los paneles".
     /// </summary>
     private static readonly HashSet<ControlId> RevealingIds = new()
     {
@@ -667,15 +642,12 @@ public static class PanelLayoutBuilder
     }
 
     /// <summary>
-    /// Whole is the file inventory, and nothing else. The other two clients put an
-    /// "open every change at once" button here — VS Code has a multi-diff editor
-    /// (<c>vscode.changes</c>) and IntelliJ a <c>DiffRequestChain</c>, so in both it is
-    /// one window. Visual Studio's <c>IVsDifferenceService</c> only opens one comparison
-    /// window per pair of files, so the same button would open a window per changed file;
-    /// a cap on that is still an avalanche. The file rows below open each diff on demand,
-    /// which is the same information in the only shape this host can give it well.
-    /// Deliberate, and recorded as <c>not_in: [visualstudio]</c> in
-    /// <c>contracts/client-product-surface.yaml</c> — reponerlo es editar el contrato.
+    /// Whole is just the file inventory. An "open every change at once" button
+    /// is deliberately absent: <c>IVsDifferenceService</c> only opens one
+    /// comparison window per file pair, so that button would open a window per
+    /// changed file — a cap on that is still an avalanche. The file rows below
+    /// open each diff on demand instead. Declared as <c>not_in: [visualstudio]</c>
+    /// in <c>contracts/client-product-surface.yaml</c>.
     /// </summary>
     private static List<Block> WholeBlocks(PanelModel model, bool enabled) =>
         FileInventoryBlocks(model, enabled, "review");
@@ -825,17 +797,12 @@ public static class PanelLayoutBuilder
     }
 
     /// <summary>
-    /// The draft block: reading orders the reviewer started and has not paused,
-    /// each with its four controls. First block of the empty state, with the
-    /// usual body whole underneath — it is not a sub-layout that replaces, the
-    /// way the setup gate is: with no base configured there is nothing else to
-    /// do in this panel, with a half-written reading order there is.
-    /// </summary>
-    /// <summary>
-    /// The draft rows whose Spent is <paramref name="spent"/>. The index that
-    /// travels to the host is the one in the FULL list — it is what resolves
-    /// which file is being talked about — so it survives the split into the two
-    /// blocks.
+    /// The draft rows whose Spent is <paramref name="spent"/> — reading orders
+    /// the reviewer started and has not paused. Unlike the setup gate (no base
+    /// configured), this is additive over the normal empty-state body, not a
+    /// replacement: a half-written reading order does not block the rest of the
+    /// panel. The index passed to the host is from the FULL list, so it still
+    /// resolves the right file after the split into two blocks.
     /// </summary>
     private static Block.DraftRows DraftRows(PanelModel model, bool spent = false)
     {
@@ -847,52 +814,35 @@ public static class PanelLayoutBuilder
         {
             var d = x.Draft;
             var index = x.Index;
-            // One emphatic control per row, and the progress picks which: while
-            // entries are missing the next step is writing the order, and only
-            // once it is complete is it starting the review. The ORDER is fixed
-            // — moving the click target as the state changes slides it under
-            // the cursor.
+            // The ORDER of controls is fixed regardless of state: moving the
+            // click target as the row's state changes would slide it under the
+            // cursor.
             //
             // Total == 0 means "this file declares no entry at all", never
             // "complete": the CLI reports 0/0 both for an emptied draft and for
-            // the one an agent is writing right now (the watcher fires on the
-            // first Changed, before the first "## N." heading lands). Without
-            // the Total > 0 the row is drawn as finished and the emphasis goes
-            // to Validate and start, which there is usually disabled too
-            // (source and range unknown) — the one emphatic control of the row
-            // cannot even be clicked, in the very state that most needs Copy
-            // for agent to lead.
+            // one an agent is writing right now (the watcher fires on the first
+            // Changed, before the first "## N." heading lands). Without the
+            // Total > 0 check the row reads as finished and disables Copy for
+            // agent — the one control the state most needs.
             var filled = d.Total > 0 && d.Annotated >= d.Total;
             var controls = new List<Control>();
-            // A row whose review is over stops here for the pair with labels:
-            // they are the flow of writing the order and starting the review,
-            // and both already happened. Copy for agent would ask an agent to
-            // complete what is complete, and Validate and start would offer to
-            // reread a range that closed. The two glyphs below stay in both
-            // kinds of row, which is what keeps the collapsed section able to
-            // open and to discard.
+            // A spent row skips the labelled pair: writing the order and
+            // starting the review both already happened. The two icon controls
+            // below stay either way, so a spent row can still be opened or
+            // discarded.
             if (!spent)
             {
                 controls.Add(Ctrl(
                     ControlId.CopyDraftPrompt, "Copy for agent",
                     filled ? Emphasis.Secondary : Emphasis.Primary,
                     enabled: true, tooltip: "Copy an instruction naming this file", index: index));
-                // Always drawn, switched off for two different reasons,
-                // each of which says its own thing. The flags come first: with
-                // no instruction block the build fails on drift however
-                // complete the order is, so filling it in is not the next step
-                // there.
-                //
-                // Off by progress is what makes the pair honest. The skeleton
-                // leaves a placeholder per entry AND one for the heads-up, the
-                // pair counts all of them, and build refuses on any of them
-                // alike — left on, the one emphatic control of the row offered
-                // a start that died on "the heads-up placeholder is still
-                // there". The known cost: the count comes off the disk, so a
-                // draft open with unsaved edits keeps the control gray until
-                // Ctrl+S (the host watches the draft's directory, so saving
-                // refreshes the panel on its own), and in exchange nobody
-                // starts over a half-written reading order.
+                // StartFromDraft is gated on two independent things: Startable
+                // (the file lost its header and cannot be checked at all) and
+                // filled (every entry the skeleton counts, including the
+                // heads-up placeholder, must be written or build fails on
+                // drift). Known cost: the count comes off disk, so unsaved edits
+                // keep this gray until Ctrl+S — the host's directory watcher
+                // refreshes the panel once they are saved.
                 controls.Add(Ctrl(
                     ControlId.StartFromDraft, "Validate and start",
                     filled ? Emphasis.Primary : Emphasis.Secondary,
@@ -904,20 +854,10 @@ public static class PanelLayoutBuilder
                             : "Every file still needs a number and a line saying why it matters",
                     index: index));
             }
-                // The two controls of the ROW, and that is why they leave the
-                // button pair: they move nothing along, they are used once in a
-                // while, and their subject is the file the progress pair just
-                // named. They are drawn as glyphs beside that pair, which
-                // leaves two controls below in two columns and a single line.
-                // With all four together the row was twice as tall and the
-                // irreversible one shared box and weight with the one that
-                // starts the review — dropping its fill lowered it a step, but
-                // a box-less button among boxed buttons reads as disabled. An
-                // icon does not.
-                //
-                // With no visible label the accessible name IS the name of the
-                // control, and it names the row: "Open" on its own repeats once
-                // per draft.
+            // Open/Discard render as icon glyphs rather than a third boxed
+            // button: a box-less button among boxed ones reads as disabled. With
+            // no visible label the accessible name IS the control's name ("Open"
+            // alone would repeat once per draft).
             controls.Add(Ctrl(
                 ControlId.OpenDraft, null, Emphasis.Icon,
                 enabled: true,
@@ -936,27 +876,14 @@ public static class PanelLayoutBuilder
     }
 
     /// <summary>
-    /// The authoring-guide block, inside the Walkthrough section. Two rows,
-    /// always both, whether or not either file exists: what the state changes is
-    /// the enabled of each control, never its presence — two rows that build
-    /// different button sets do not line up with each other, the same rule the
-    /// draft rows follow.
+    /// The rows of "Edits you extracted": branch, badge, and the one control
+    /// that makes sense here — committing and pushing are Source Control's,
+    /// which is where finish already sends you.
     ///
-    /// Discard is the one exception, and it is not forgotten symmetry: the shared
-    /// guide is a tracked file, so removing it is `git rm` plus a commit — a
-    /// decision about what goes into the PR, which is not this button's to make.
-    /// The CLI says the same from its side, refusing `--delete --team`.
-    /// </summary>
-    /// <summary>
-    /// The rows of "Edits you extracted": the branch, its badge and the one
-    /// control that makes sense from here. Committing and pushing are Source
-    /// Control's, which is where finish already sends you.
-    ///
-    /// The row you are standing on is drawn just the same and without the
-    /// control: the CLI skips it with "skipping (currently checked out)", so
-    /// offering the button would promise something that will not happen. Hiding
-    /// the row would be worse — it is a branch that exists and no other surface
-    /// names.
+    /// The row you are standing on renders without the control: the CLI skips
+    /// it ("skipping, currently checked out"), so offering the button would
+    /// promise something that will not happen. Hiding the row would be worse —
+    /// it is a branch that exists and no other surface names.
     /// </summary>
     private static Block.FixesRows FixesRowsBlock(PanelModel model)
     {
@@ -978,6 +905,14 @@ public static class PanelLayoutBuilder
         return new Block.FixesRows(rows);
     }
 
+    /// <summary>
+    /// The authoring-guide block, inside the Walkthrough section. Both rows
+    /// always draw, whether or not the file exists — only each control's
+    /// enabled state changes, never the rows' presence. Discard is the one
+    /// exception: the shared guide is a tracked file, so removing it is `git
+    /// rm` plus a commit, not this button's call (the CLI agrees, refusing
+    /// `--delete --team`).
+    /// </summary>
     private static Block.GuideRows GuideRowsBlock(PanelModel model)
     {
         var enabled = !model.Busy;
@@ -1017,37 +952,28 @@ public static class PanelLayoutBuilder
     }
 
     /// <summary>
-    /// The author's walkthrough row, the first of the section and above the
-    /// guides.
+    /// The author's walkthrough row, first of the section, above the guides.
+    /// Same two-place shape as the guide rows, but also owns two VERBS (init,
+    /// build) that a guide row leaves to the section title — their subject is
+    /// the file this row names, exactly as Create is each guide's. Labels carry
+    /// no "Walkthrough" prefix here (the section title already says it); the
+    /// menu and Tools submenu keep the prefix, where no section gives context.
     ///
-    /// Same two-place shape as the guide rows: the labelled controls underneath,
-    /// the icon one in the header beside the badge. What it has that they do not
-    /// is the two VERBS — init and build live here and not loose above the row,
-    /// because their subject is the file this row names, exactly as Create is
-    /// each guide's. Loose, the word "Walkthrough" was said three times running
-    /// (the section title, the two prefixed labels and the row's name) without
-    /// any of the three adding a fact; hence the labels without a prefix and the
-    /// row named after its branch. In the menu and the Tools submenu they keep
-    /// the prefix, which is where no section gives context.
+    /// The badge says "may be out of date", not "out of date": the CLI's
+    /// refresh-time comparison is cheap and approximate (has the range moved
+    /// since the file was written); the exact answer is build's.
     ///
-    /// The badge says "may be out of date" and not "out of date" on purpose —
-    /// what the CLI compares on every refresh is cheap and approximate (has the
-    /// range moved since the file was written), and the exact answer is build's,
-    /// which is what the button beside it runs.
-    ///
-    /// Copy for agent copies a POINTER to the file, never the brief: that lives
-    /// inside the walkthrough itself, in the comment at the top, which is where
-    /// it keeps itself current.
+    /// Copy for agent copies a POINTER to the file, never the brief — that lives
+    /// in the walkthrough's own top comment, where it stays current on its own.
     /// </summary>
     private static Block.WalkthroughRow WalkthroughRowBlock(PanelWalkthrough w, bool enabled)
     {
         var controls = new List<Control>
         {
-            // The same verb creates and updates, so the label follows the state
-            // the CLI reported: "Init" over a file full of prose promised what
-            // that verb precisely no longer does. Both carry the row's index like
-            // every other control of a row — there is exactly one walkthrough
-            // row, so it is always 0.
+            // The same verb creates and updates; the label follows the CLI's
+            // reported state ("Init" over a file full of prose would promise
+            // what the verb no longer does). Index is always 0: one walkthrough
+            // row per panel.
             Ctrl(
                 ControlId.WalkthroughInit,
                 w.ActionLabel switch
@@ -1082,11 +1008,10 @@ public static class PanelLayoutBuilder
     {
         var enabled = !model.Busy;
         var outList = new List<Block>();
-        // Only the FRESH ones. A draft whose review is over survives — clean
-        // does not touch hand-written prose, and discarding one is the forget
-        // verb — but it is no longer pending work, so it drops to its own
-        // collapsed section in the footer with the two controls it still has
-        // use for.
+        // Only the FRESH ones. A draft whose review is over survives (clean
+        // never touches hand-written prose; discarding it is forget), but it is
+        // no longer pending work, so it drops to its own collapsed footer
+        // section with only the controls it still has use for.
         var freshDrafts = model.DraftsList.Count(d => !d.Spent);
         if (freshDrafts > 0)
         {
@@ -1105,13 +1030,10 @@ public static class PanelLayoutBuilder
         {
             Ctrl(ControlId.StartReview, "Start a review", Emphasis.Primary, enabled),
         }));
-        // Everything about the walkthrough together: the author's file — with
-        // init, build and Copy for agent hanging off its row — and the two
-        // authoring guides. It shared an "Other actions" section with Compare
-        // and split off when the guides arrived: four controls about the same
-        // noun plus one unrelated is not a list of other actions, it is a
-        // drawer. Grouped this way the panel says what the CLI says, where all
-        // four hang off the walkthrough verb.
+        // Everything about the walkthrough together: the author's file (init,
+        // build, Copy for agent on its row) and the two authoring guides. All
+        // hang off the same CLI verb, so they get their own section rather than
+        // sharing "Other actions" with Compare.
         var walkthroughKids = new List<Block>();
         if (model.Walkthrough is not null)
         {
@@ -1122,10 +1044,9 @@ public static class PanelLayoutBuilder
             walkthroughKids.Add(GuideRowsBlock(model));
         }
         outList.Add(new Block.ToolsSection("Walkthrough", walkthroughKids));
-        // The spent drafts. Collapsed and not hidden: a file that exists and no
-        // surface names is the state this panel does not let past anywhere else,
-        // and hiding the row would take with it the one control that can throw
-        // the file away without spelling its branch.
+        // Collapsed, not hidden: a file that exists with no surface naming it is
+        // a state this panel disallows elsewhere, and hiding the row would take
+        // the one control that discards it without spelling its branch.
         if (model.DraftsList.Any(d => d.Spent))
         {
             outList.Add(new Block.ToolsSection(
@@ -1136,18 +1057,15 @@ public static class PanelLayoutBuilder
                     DraftRows(model, spent: true),
                 }));
         }
-        // The branches of edits a finish left behind. Collapsed and behind the
-        // spent reading orders: both sections are leftovers of reviews that
-        // already happened, and this one goes last because what it holds may
-        // still be pending work on ANOTHER screen (committing and pushing are
-        // Source Control's), not on this one.
+        // Behind the spent reading orders on purpose: both are leftovers of
+        // reviews already done, but this one may still be pending work on
+        // ANOTHER screen (Source Control), not this one.
         //
-        // "Discard all" runs clean --fixes-only with NO branch: by clean's own
-        // design that never touches review/* (live sessions of other branches),
-        // so it does not have the reach problem that used to block this button.
-        // It is still behind a confirmation with the full detail, because what
-        // this holds is hand-written work and not machine litter; the rows below
-        // remain the default path for deciding branch by branch.
+        // "Discard all" runs clean --fixes-only with NO branch, which by
+        // clean's design never touches review/* (other branches' live
+        // sessions). Still behind a confirmation with full detail — this is
+        // hand-written work, not machine litter — with the rows below as the
+        // default path for deciding branch by branch.
         if (model.FixesList.Count > 0)
         {
             outList.Add(new Block.ToolsSection(
@@ -1160,13 +1078,10 @@ public static class PanelLayoutBuilder
                     FixesRowsBlock(model),
                 }));
         }
-        // Compare, last of the three footer sections that do something with
-        // the repo. It is the only one that mounts something OUTSIDE the
-        // review you are about to do -- any two revisions, no review to start
-        // and no reading order to write -- so it sits below everything that is
-        // about that review. It used to be called "Other actions" and came
-        // first: a title that did not name its contents, above the two
-        // sections that do.
+        // Compare goes last of the three footer sections: it is the only one
+        // that mounts something OUTSIDE the review at hand (any two revisions,
+        // no review to start), so it sits below everything that IS about that
+        // review.
         outList.Add(new Block.ToolsSection(
             "Compare",
             new Block[]

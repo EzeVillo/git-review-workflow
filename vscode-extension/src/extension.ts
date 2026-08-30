@@ -76,8 +76,8 @@ function configuredGitReviewPath(): string | undefined {
  * Lo único que la extensión guarda de una sesión a la otra: por rama de review,
  * el `display` del último archivo que se abrió desde la lista de `whole`.
  *
- * No contradice FR-001/FR-002 —seguir sin derivar estado del review—: la lista
- * de whole no tiene cursor, ni la CLI uno que consultar, así que "por dónde
+ * No contradice "seguir sin derivar estado del review": la lista de whole no
+ * tiene cursor, ni la CLI uno que consultar, así que "por dónde
  * iba" no es un dato que exista del lado del review. Lo sabe únicamente el
  * editor, que es quien abrió el diff, y sin persistirlo la marca moriría cada
  * vez que se cierra la ventana. Nada de esto influye en lo que la CLI reporta:
@@ -146,11 +146,10 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
     const revealPanelView = (): void => panelProvider.reveal();
 
     // El *why* de la entrada actual: una invocación aparte, para UNA entrada,
-    // que llega después del `status --porcelain` (FR-018a, SC-009). `whyKey`
-    // evita repedirlo en cada refresco del watcher mientras el cursor no se
-    // mueve; `whyGeneration` descarta la respuesta de una entrada que dejó de
-    // ser la actual — el revisor puede avanzar dos veces antes de que la
-    // primera explicación vuelva.
+    // que llega después del `status --porcelain`. `whyKey` evita repedirlo en
+    // cada refresco del watcher mientras el cursor no se mueve; `whyGeneration`
+    // descarta la respuesta de una entrada que dejó de ser la actual — el
+    // revisor puede avanzar dos veces antes de que la primera explicación vuelva.
     let whyGeneration = 0;
     let whyKey: string | undefined;
     let currentWhy: PanelWhy | undefined;
@@ -288,10 +287,10 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
             void copyCliInstallCommand(extra);
             return;
         }
-        // Bloque de borradores (012): controles del cuerpo del panel, no
-        // acciones. No están en contributes.commands ni en la paleta —el
-        // canónico sigue teniendo 27 acciones— así que se despachan acá
-        // directamente, como copyCliInstall, y no por executeCommand.
+        // Bloque de borradores: controles del cuerpo del panel, no acciones. No
+        // están en contributes.commands ni en la paleta —el canónico sigue
+        // teniendo 27 acciones— así que se despachan acá directamente, como
+        // copyCliInstall, y no por executeCommand.
         if (message === "openDraft") {
             void openDraft(extra, stateManager);
             return;
@@ -308,7 +307,7 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
             void discardDraft(extra, lock, stateManager, getInvokeOptions);
             return;
         }
-        // Bloque de guias de autoria: mismo reparto que el de borradores.
+        // Bloque de guías de autoría: mismo reparto que el de borradores.
         if (message === "openGuide") {
             void openGuide(extra, stateManager);
             return;
@@ -321,9 +320,9 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
             void discardGuide(extra, lock, stateManager, getInvokeOptions);
             return;
         }
-        // Fila del walkthrough del autor: ninguno de los dos muta nada, asi que
-        // ninguno toma el lock. Actualizarlo es walkthroughInit, que si es una
-        // accion y va por executeCommand como siempre.
+        // Fila del walkthrough del autor: ninguno de los dos muta nada, así que
+        // ninguno toma el lock. Actualizarlo es walkthroughInit, que sí es una
+        // acción y va por executeCommand como siempre.
         if (message === "openWalkthrough") {
             void openWalkthrough(stateManager);
             return;
@@ -332,8 +331,8 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
             void copyWalkthroughPrompt(stateManager);
             return;
         }
-        // Seccion "Edits you extracted": mismo reparto que los bloques de
-        // arriba -- control del cuerpo, fila -> indice, fuera de la paleta.
+        // Sección "Edits you extracted": mismo reparto que los bloques de
+        // arriba — control del cuerpo, fila → índice, fuera de la paleta.
         if (message === "discardFixes") {
             void discardFixes(extra, lock, stateManager, getInvokeOptions);
             return;
@@ -428,7 +427,7 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
     }
 
     lock.onDidChangeBusy(() => updateView(stateManager.state));
-    // FR-036: palette/atajos no ven gitReview.busy del panel; avisar el descarte.
+    // La paleta y los atajos no ven gitReview.busy del panel; avisar el descarte.
     context.subscriptions.push(
         lock.onDidDiscard((reason) => {
             void vscode.window.showInformationMessage(reason);
@@ -524,12 +523,10 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
         panelProvider.onDidChangeVisibility(() => syncCliProbe()),
         {dispose: () => stopCliProbe()},
         {dispose: () => stopDraftWatcher()},
-        // Guardar una guia de autoria es lo unico que cambia lo que el panel
-        // muestra sin pasar por git ni por una mutacion: no mueve HEAD, no toca
-        // el indice y no escribe config. El watcher no la mira a proposito (la
-        // propia vive en la raiz del gitdir, que cambia en cada operacion de
-        // git), asi que el guardado es la senal, y solo sobre las rutas que la
-        // CLI ya reporto.
+        // Guardar una guía de autoría es lo único que cambia el panel sin pasar
+        // por git ni por una mutación (mismo motivo que el watcher no la mira
+        // en `createGuide`, guideActions.ts): el guardado es la señal, y sólo
+        // sobre las rutas que la CLI ya reportó.
         vscode.workspace.onDidSaveTextDocument((doc) => {
             if (isReportedGuide(stateManager.state, doc.uri.fsPath)) {
                 void refresh();

@@ -10,14 +10,12 @@ export type StartFailureCategory = "network" | "repository";
 /**
  * Los fragmentos de **stderr de git** que delatan que `start` falló tratando
  * de tocar la red: un fetch sin credenciales válidas, un remoto que no
- * responde, o el entorno no interactivo (research.md Decisión 5) rechazando
- * un pedido de contraseña. Deliberadamente NO incluye "could not update
- * from" — esa frase es el `die()` del propio verbo
- * (`bin/git-review-verbs/start`: `git fetch --quiet "$remote" || die "could
- * not update from $remote"`), no stderr de git, y el contrato ("Clasificar no
- * es parsear") sólo autoriza mirar el de git. Es además redundante: `git
- * fetch` sigue escribiendo su propio stderr antes de que el `die` lo haga, así
- * que las marcas de abajo ya cubren el mismo fallo sin cruzar esa frontera.
+ * responde, o el entorno no interactivo rechazando un pedido de contraseña.
+ * Deliberadamente NO incluye "could not update from": es el `die()` del
+ * propio verbo (`bin/git-review-verbs/start`), no stderr de git, y el
+ * contrato ("Clasificar no es parsear") sólo autoriza mirar el de git. Es
+ * además redundante — `git fetch` ya escribe su propio stderr antes de que el
+ * `die` lo haga, así que las marcas de abajo cubren el mismo fallo.
  */
 const NETWORK_MARKERS = [
     "could not resolve host",
@@ -41,12 +39,11 @@ const NETWORK_MARKERS = [
  * Credenciales y red se colapsan deliberadamente en una sola categoría
  * ("network"): separar con precisión "pide credenciales" de "el remoto no
  * responde" depende de mensajes que varían entre versiones y transportes de
- * git — el riesgo que research.md ya deja registrado, con la salida que el
- * brief de esta fase autoriza explícitamente. Equivocarse hacia el lado
- * ruidoso (ofrecer el escape de más) es inocuo; equivocarse hacia el
- * silencioso deja a alguien mirando un timeout sin salida (SC-007). Todo lo
- * que no matchea ninguna marca es "repository": working tree sucio, rama
- * inexistente, review ya existente — el diagnóstico de la CLI y nada más.
+ * git. Equivocarse hacia el lado ruidoso (ofrecer el escape de más) es
+ * inocuo; equivocarse hacia el silencioso deja a alguien mirando un timeout
+ * sin salida. Todo lo que no matchea ninguna marca es "repository": working
+ * tree sucio, rama inexistente, review ya existente — el diagnóstico de la
+ * CLI y nada más.
  */
 export function classifyStartFailure(stderr: string): StartFailureCategory {
     const text = stderr.toLowerCase();

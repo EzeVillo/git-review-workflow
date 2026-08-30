@@ -40,15 +40,12 @@ data class DeltaRecord(
 )
 
 /**
- * 011: DRAFT / DRAFT_RESUME / DRAFT_UPDATE no son formas de lectura sino el
- * camino para conseguir una — el revisor se escribe el orden que el PR no trae.
- * Viajan por el mismo registro porque se eligen en el mismo paso del asistente,
- * y son mutuamente excluyentes entre sí.
- *
- * Cuál de las tres llega lo decide la CLI y no se deriva acá: DRAFT_UPDATE dice
- * que el borrador quedó desfasado del rango de hoy, que es una pregunta que sólo
- * contesta quien tiene los dos tips. El campo `state` del registro `draft` NO
- * sirve para eso — contesta otra ("¿ya se leyó este orden?"), así que una rama
+ * DRAFT / DRAFT_RESUME / DRAFT_UPDATE no son formas de lectura sino el camino
+ * para conseguir una — el revisor se escribe el orden que el PR no trae. Son
+ * mutuamente excluyentes y las decide la CLI, no se derivan acá: DRAFT_UPDATE
+ * dice que el borrador quedó desfasado del rango de hoy, algo que sólo contesta
+ * quien tiene los dos tips. El `state` del registro `draft` NO sirve para
+ * eso — contesta otra pregunta ("¿ya se leyó este orden?"), así que una rama
  * que avanzó después de su review sigue diciendo `reviewed`.
  */
 enum class OfferId {
@@ -480,7 +477,7 @@ fun parseConfigPorcelain(stdout: String): ConfigPorcelainResult {
  * Porcelain may emit both a remote and a local row for the same name; origin
  * is chosen later as the wizard source step, so the picker collapses to one
  * entry per name. Prefer the row marked `current` when present. Current branch
- * sorts first (FR-011 / research.md Decision 9).
+ * sorts first.
  */
 fun branchPickerItems(candidates: List<CandidateBranch>): List<CandidateBranch> {
     val byName = LinkedHashMap<String, CandidateBranch>()

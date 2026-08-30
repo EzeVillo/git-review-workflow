@@ -2,15 +2,14 @@
 #
 # git review config — read or write the product's own configuration keys.
 #
-# Mirrors git config's own grammar on purpose (a key alone reads, a key plus a
-# value writes): it is the vocabulary every user already knows, and the one
-# --porcelain gives a caller that has no review to ask yet (contracts/
-# config-porcelain.md). Valid with or without an active review, in any git
-# repository — there is no exit 2 here, because "no review" is not a condition
-# this verb can observe.
+# Mirrors git config's own grammar (a key alone reads, a key plus a value writes):
+# the vocabulary every user already knows, and the one --porcelain gives a caller
+# that has no review to ask yet (contracts/config-porcelain.md). Valid with or
+# without an active review, in any git repository — there is no exit 2, because
+# "no review" is not a condition this verb can observe.
 #
-# --porcelain with a branch also emits reading offers (008) for the tip/range
-# context: default remote full, or --local/--offline/--delta. Never fetches.
+# --porcelain with a branch also emits reading offers for the tip/range context:
+# default remote full, or --local/--offline/--delta. Never fetches.
 #
 set -eu
 
@@ -47,10 +46,8 @@ die() {
 	exit 1
 }
 
-# config_key <key>
-# Translate a product key to its git config key, or fail on stdout for an
-# unknown one (die's caller). The translation is internal on purpose (FR-008):
-# nothing outside this function knows reviewworkflow.* exists.
+# config_key <key>: product key to git config key, or fail for an unknown one (the
+# caller dies). Internal on purpose: nothing outside knows reviewworkflow.* exists.
 config_key() {
 	case "$1" in
 	base) echo reviewworkflow.base ;;
@@ -68,11 +65,9 @@ pos_count=0
 pos1=""
 pos2=""
 
-# add_pos <arg>
-# Collect a positional argument into the first free slot. What each slot means
-# (a key/value pair, or a single branch for --porcelain) is decided once every
-# argument is in, after the loop — the same reason start resolves src/base
-# after its own loop: an option and a positional can arrive in either order.
+# add_pos <arg>: collect a positional into the first free slot. What each slot
+# means (a key/value pair, or a branch for --porcelain) is decided after the loop,
+# as start resolves src/base: an option and a positional arrive in either order.
 add_pos() {
 	if [ "$pos_count" -eq 0 ]; then
 		pos1="$1"
@@ -113,11 +108,10 @@ while [ $# -gt 0 ]; do
 		unset_key="$1"
 		;;
 	--)
-		# End-of-options, the git convention (same idiom as start,
-		# bin/git-review-verbs/start:92-109): a value that starts with "-" — a
-		# legal branch name — is read as a positional from here on, never as an
-		# option. Valid both for a value ("config base -- -foo") and for the
-		# --porcelain branch argument ("config --porcelain -- -foo").
+		# End-of-options, the git convention (same idiom as bin/git-review-verbs/
+		# start): a value that starts with "-" — a legal branch name — is read as a
+		# positional from here on, never as an option. Valid both for a value
+		# ("config base -- -foo") and for --porcelain's branch argument.
 		shift
 		while [ $# -gt 0 ]; do
 			add_pos "$1"
@@ -222,15 +216,11 @@ write)
 	git config "$gkey" "$value" || die "could not set $key"
 	;;
 unset)
-	# Idempotent: unsetting a key that was never set is not an error — nothing
-	# about "clean up this config" implies "and fail if there was nothing to
-	# clean". git config --unset itself exits 5 for a missing key; that exit
-	# code is not part of this verb's contract.
+	# Idempotent: unsetting a key that was never set is not an error. git config
+	# --unset exits 5 for a missing key; that code is not part of this contract.
 	git config --unset "$gkey" 2>/dev/null || true
 	;;
 porcelain)
-	# Shared helpers (porcelain_row, candidate_branches, emit_reading_offers),
-	# sourced from the libexec directory the dispatcher points us at.
 	# shellcheck source=../git-review-lib.sh
 	. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
@@ -242,47 +232,37 @@ porcelain)
 	fi
 	porcelain_row config remote "$remote_val"
 
-	# Remotes first (for config remote), then branch candidates (for start /
-	# config base). Same constant-process budget as before: one extra `git
-	# remote` call, not one per name.
+	# Remotes first (for config remote), then branch candidates (for start / config
+	# base). Constant process budget: one `git remote` call, not one per name.
 	candidate_remotes "$remote_val"
 	candidate_branches "$remote_val"
 
-	# Loose walkthrough drafts, with and without a branch argument alike. Not
-	# because this verb's output is symmetric — it is not: delta and offer exist
-	# only with a branch — but because a draft is a fact about the WORKING TREE,
-	# not about the branch you asked after. Conditioning it on the argument would
-	# make the same repository report different drafts depending on what was
-	# asked, and that relationship does not exist.
-	#
-	# Zero drafts emits nothing and, importantly, spends nothing: see the guard
-	# in emit_draft_records.
+	# Loose walkthrough drafts, with and without a branch argument alike: a draft is
+	# a fact about the WORKING TREE, not about the branch you asked after, so
+	# conditioning it on the argument would make one repository report different
+	# drafts per question. Zero drafts emits — and spends — nothing (the guard in
+	# emit_draft_records).
 	emit_draft_records
 
-	# The two authoring guides, always both, present or not. Unlike the drafts
-	# above, absence has to be REPORTED here rather than implied by silence: a
-	# client cannot offer to create a guide it was never told about, and having it
-	# rebuild the path on its own side is exactly what the reported-path rule
-	# exists to prevent.
-	#
-	# A fact about the REPOSITORY, so it is emitted with and without a branch
-	# argument, for the same reason the draft records are.
+	# The two authoring guides, always both, present or not: unlike the drafts above,
+	# absence is REPORTED rather than implied by silence — a client cannot offer to
+	# create a guide it was never told about, and rebuilding the path on its own side
+	# is what the reported-path rule prevents. A fact about the REPOSITORY, so
+	# unconditioned on the branch argument too.
 	emit_guide_records
 
-	# The author's own walkthrough for the branch they are STANDING ON, and its
-	# state against what that branch now holds. Emitted present or absent, for the
-	# same reason as the guides, and unconditioned on the branch argument for the
-	# same reason as the drafts: it is a file of this working tree, not a property
-	# of whatever branch the caller asked about.
+	# The author's own walkthrough for the branch they are STANDING ON, and its state
+	# against what that branch now holds. Present or absent like the guides, and
+	# unconditioned on the branch argument like the drafts: a file of this working
+	# tree, not a property of whatever branch the caller asked about.
 	emit_walkthrough_record "$base_val" "$remote_val"
 
 	if [ -n "$branch" ]; then
-		# Same pair of keys start reads for --delta (bin/git-review-verbs/start):
-		# a remote review stores reviewworkflow.<branch>.reviewed; a
-		# --local/--offline one stores reviewworkflowlocal.<branch>.reviewed.
-		# Emit zero, one or two rows — never OR them into a single tip — so a
-		# consumer can offer --delta only for the source that actually has a
-		# marker (start --offline --delta must not see a remote-only tip).
+		# Same pair of keys start reads for --delta: reviewworkflow.<branch>.reviewed
+		# for a remote review, reviewworkflowlocal.<branch>.reviewed for --local/
+		# --offline. Zero, one or two rows — never OR'd into a single tip — so a
+		# consumer offers --delta only for the source that actually has a marker
+		# (start --offline --delta must not see a remote-only tip).
 		remote_tip="$(git config "reviewworkflow.$branch.reviewed" || true)"
 		local_tip="$(git config "reviewworkflowlocal.$branch.reviewed" || true)"
 		if [ -n "$remote_tip" ]; then
@@ -292,7 +272,7 @@ porcelain)
 			porcelain_row delta "$branch" "$local_tip" local
 		fi
 
-		# Reading offers for this tip/range (008). Default context = remote full.
+		# Reading offers for this tip/range; default context = remote full.
 		# --local/--offline/--delta select the same axes as start, without fetch.
 		_offer_source=remote
 		if [ "$offline_mode" -eq 1 ]; then

@@ -78,10 +78,9 @@ export function logCliEnd(result: CliLogEnd): void {
         return;
     }
     const ms = `${result.durationMs}ms`;
-    // Antes que el resto: un timeout llega con exitCode null y sin errorCode,
-    // indistinguible en el log de un proceso que murió por su cuenta. Ésa fue
-    // exactamente la línea ilegible que hizo pasar por misterio un `status`
-    // que tardaba 30s ("← exit null 29656ms" con un timeout de 15000).
+    // Antes que el resto: un timeout da exitCode null sin errorCode, indistinguible
+    // en el log de un proceso muerto por su cuenta ("← exit null 29656ms" con
+    // timeout=15000 se leía como misterio, no como timeout).
     if (result.timedOut) {
         channel.warn(`← timed out after ${ms} (killed)`);
         return;

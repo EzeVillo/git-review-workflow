@@ -13,8 +13,8 @@ import type {ReviewState} from "../review/state";
 
 /**
  * Los cuatro estados del *why*, no dos: `loading` existe porque el panel se
- * dibuja con el `status --porcelain` y la explicación llega después, y `absent`
- * (exit 0, cuerpo vacío) tiene que verse distinto de `failed` (FR-018).
+ * dibuja con `status --porcelain` y la explicación llega después; `absent`
+ * (exit 0, cuerpo vacío) tiene que verse distinto de `failed`.
  */
 export type WhyState = "loading" | "present" | "absent" | "failed";
 
@@ -37,9 +37,8 @@ export interface PanelEntry {
     banked: boolean;
     /**
      * Sólo en step, y sólo si la CLI los reportó. Ausentes = "esta CLI no los
-     * provee", y el panel dibuja exactamente lo que dibujaba antes de que
-     * existieran (FR-003). `subject` vacío es otra cosa: un commit sin asunto,
-     * que sí se muestra como tal (FR-004).
+     * provee", y el panel dibuja lo mismo que dibujaba antes de que existieran.
+     * `subject` vacío es otra cosa: un commit sin asunto, que sí se muestra así.
      */
     subject?: string;
     author?: string;
@@ -61,11 +60,11 @@ export interface PanelReview {
     position?: number;
     total?: number;
     /**
-     * Si corresponde ofrecer `Continue`. Es la lectura de los dos modos de
-     * fallo del verbo que el propio inventario deja ver —huérfana, o con una
-     * review activa para el mismo source—, no una regla nueva: quien decide si
-     * se puede resumir sigue siendo `git review continue`. El working tree
-     * sucio, su tercer modo de fallo, no se ve desde acá y se deja fallar.
+     * Si corresponde ofrecer `Continue`: la lectura de los dos modos de fallo
+     * que el propio inventario ya deja ver —huérfana, o con una review activa
+     * para el mismo source—, no una regla nueva; quien decide si se puede
+     * resumir sigue siendo `git review continue`. El tercer modo de fallo,
+     * working tree sucio, no se ve desde acá y se deja fallar.
      */
     resumable: boolean;
     /**
@@ -115,15 +114,11 @@ export interface PanelDraft {
     annotated: number;
     total: number;
     /**
-     * Si *Validate and start* se puede **invocar** para esta fila: sólo cuando
-     * la CLI sabe con qué origen y rango se generó el borrador. Con `unknown`
-     * (bloque de instrucciones borrado a mano) invocar con los defaults
-     * fallaría siempre por deriva.
-     *
-     * El control se dibuja igual, apagado: apagado no adivina los flags más que
-     * ausente —sigue sin poder invocarse— y encima dice por qué en el title,
-     * que un control que no está no puede decir. Y la fila conserva sus cuatro
-     * celdas, así que no cambia de forma con su estado.
+     * Si *Validate and start* se puede **invocar**: sólo cuando la CLI sabe con
+     * qué origen y rango se generó el borrador. Con `unknown` (bloque de
+     * instrucciones borrado a mano) invocar con los defaults fallaría siempre
+     * por deriva. El control se dibuja igual pero apagado, y dice por qué en el
+     * title — así la fila conserva sus cuatro celdas sin cambiar de forma.
      */
     startable: boolean;
     /**
@@ -137,29 +132,13 @@ export interface PanelDraft {
 }
 
 /**
- * Una fila del bloque de guías de autoría: prosa sobre el CONTENIDO del
- * walkthrough, no sobre su formato.
- *
- * Las dos filas están siempre, exista o no cada archivo, y lo que cambia con el
- * estado es el enabled de los controles, nunca su presencia — misma regla que
- * las filas de borrador, y por el mismo motivo: dos filas con botoneras
- * distintas no se alinean una con la otra.
- *
- * `label` y `badge` se derivan acá porque son copy del panel; `path` llega de la
- * CLI, y el cliente **lo abre, nunca lo arma**.
- */
-/**
- * La fila del walkthrough del autor: en qué estado está, cuánto de él está
- * escrito y qué se puede hacer con él sin salir del panel.
- *
- * Existe porque un walkthrough se escribe una vez, cuando el PR está terminado,
- * y después el PR sigue moviéndose. La fila es la única superficie que lo dice
- * sin que nadie se acuerde de preguntar, y por eso el badge es deliberadamente
- * cauto: "may be out of date" y no "out of date". La respuesta exacta es de
- * `build`, que es lo que corre el botón de al lado.
- *
- * `label`, `badge` y `actionLabel` son copy del panel y se derivan acá; `path`
- * llega de la CLI, y el cliente **lo abre, nunca lo arma**.
+ * La fila del walkthrough del autor: en qué estado está, cuánto tiene escrito y
+ * qué se puede hacer con él sin salir del panel. Existe porque un walkthrough se
+ * escribe una vez, cuando el PR está terminado, y el PR sigue moviéndose después
+ * — es la única superficie que lo recuerda, y por eso el badge es deliberadamente
+ * cauto ("may be out of date", no "out of date"); la respuesta exacta es de
+ * `build`. `label`, `badge` y `actionLabel` son copy del panel derivada acá;
+ * `path` llega de la CLI y el cliente **lo abre, nunca lo arma**.
  */
 export interface PanelWalkthrough {
     /**
@@ -182,6 +161,14 @@ export interface PanelWalkthrough {
     actionLabel: string;
 }
 
+/**
+ * Una fila del bloque de guías de autoría: prosa sobre el CONTENIDO del
+ * walkthrough, no sobre su formato. Las dos filas están siempre, exista o no
+ * cada archivo; lo que cambia con el estado es el enabled de los controles,
+ * nunca su presencia (misma regla que las filas de borrador: dos botoneras
+ * distintas no se alinean entre sí). `label` y `badge` son copy del panel
+ * derivada acá; `path` llega de la CLI y el cliente **lo abre, nunca lo arma**.
+ */
 export interface PanelGuide {
     kind: GuideKind;
     /** El nombre de la fila: la compartida y committeada, o la tuya fuera del árbol. */
@@ -212,69 +199,55 @@ export interface PanelGuide {
 export interface PanelModel {
     situation: Situation;
     busy: boolean;
-    /** Sólo con más de un repositorio en la ventana (FR-029). */
+    /** Sólo con más de un repositorio en la ventana. */
     repoLabel?: string;
     /**
      * Inventario del repositorio, en el orden de la CLI. Sólo con
-     * `situation === "no-review"` (`state.branches`); en `finish-pending` el
-     * panel no dibuja inventario (pantalla de post-cierre) y el host resuelve
-     * el source del clean/undo desde `state.branches` + `pendingFinish`.
-     * En cualquier otra situación es un array vacío.
+     * `situation === "no-review"` (`state.branches`) y array vacío en cualquier
+     * otra: en `finish-pending` el panel no dibuja inventario (pantalla de
+     * post-cierre) y el host resuelve el source del clean/undo desde
+     * `state.branches` + `pendingFinish`.
      */
     reviews: PanelReview[];
     /**
-     * Órdenes de lectura empezados y no pausados, en el orden de la CLI. Misma
-     * regla que `reviews`: sólo con `situation === "no-review"`, array vacío en
-     * cualquier otra. Una review en curso es siempre lo más importante que el
-     * panel tiene para decir, y el borrador de otra rama no le compite el cuerpo.
+     * Órdenes de lectura empezados y no pausados, en el orden de la CLI. Mismo
+     * alcance que `reviews`; una review en curso siempre pesa más que el
+     * borrador de otra rama, así que no le compite el cuerpo del panel.
      */
     drafts: PanelDraft[];
-    /**
-     * Las dos guías de autoría, en el orden de la CLI (compartida, tuya). Misma
-     * regla que `drafts`: sólo con `situation === "no-review"`, array vacío en
-     * cualquier otra — dentro de una review el panel tiene cosas más urgentes que
-     * decir, y crear la compartida ahí la CLI lo niega igual.
-     */
+    /** Las dos guías de autoría, en el orden de la CLI (compartida, tuya). Mismo alcance que `reviews`. */
     guides: PanelGuide[];
-    /**
-     * Las ramas de ediciones que dejó un `finish`, en el orden de la CLI. Misma
-     * regla que `drafts` y `guides`: sólo con `situation === "no-review"`, que
-     * es donde vive la sección del pie.
-     */
+    /** Las ramas de ediciones que dejó un `finish`, en el orden de la CLI. Mismo alcance que `reviews`. */
     fixes: PanelFixes[];
     /**
      * El walkthrough del autor. **Siempre presente** en `no-review`: los dos
      * verbos que actúan sobre el archivo son la botonera de esta fila, así que
      * una fila condicional los dejaría sin superficie. Cuando el registro no se
-     * pudo leer, la fila llega en `unknown` — que es literalmente "no se puede
-     * saber" — y no inventa ni un estado ni una ruta.
+     * pudo leer, la fila llega en `unknown` — literalmente "no se puede saber"
+     * — y no inventa ni un estado ni una ruta.
      */
     walkthrough?: PanelWalkthrough;
     /**
      * Cierre completo con undo vivo, sólo con `situation === "finish-pending"`
-     * (contracts/finish-state.md): la fila `finish … pending` que hizo que el
-     * estado dejara de ser `"no-review"`. El panel nombra el destino de las
-     * edits y ofrece `finish --abort` / `clean <src>`. Ausente en cualquier
-     * otra situación, y también si el inventario no trae ninguna fila
-     * `pending` (no debería ocurrir: es la misma fila que decidió la
-     * situación).
+     * (contracts/finish-state.md): la fila `finish … pending` que sacó al
+     * estado de `"no-review"`. El panel nombra el destino de las edits y
+     * ofrece `finish --abort` / `clean <src>`. Ausente en cualquier otra
+     * situación.
      */
     pendingFinish?: { branch: string; onto: boolean };
     /**
      * `true` cuando el empty state está en **modo setup**: `no-review` y el
-     * reporte de `git review config --porcelain` llegó sin `base`. El panel
-     * entonces solo ofrece configurar base (obligatoria) y remote (opcional);
-     * sin Start, inventario ni el footer plegable. `false` en cualquier
-     * otra situación (incluido `finish-pending`), y también si el reporte de
-     * config nunca llegó.
+     * reporte de `git review config --porcelain` llegó sin `base`. Ahí sólo
+     * se ofrece configurar base (obligatoria) y remote (opcional); sin Start,
+     * inventario ni footer. `false` en cualquier otra situación, incluido
+     * cuando el reporte de config nunca llegó.
      */
     noBaseConfigured: boolean;
     /**
-     * La base configurada para arrancar una review nueva — distinta de
-     * `base` de acá abajo, que es la de una review YA activa (whole). Sólo
-     * presente en el empty state (`no-review`) y el reporte de config con
-     * `base` (FR-010/US1 escenario 6). Ausente si el reporte nunca llegó o
-     * si llegó sin base — ahí es `noBaseConfigured` (setup).
+     * La base configurada para arrancar una review nueva — distinta de `base`
+     * de acá abajo, que es la de una review YA activa (whole). Sólo presente
+     * en el empty state con `base` configurada; ausente si el reporte nunca
+     * llegó o llegó sin base (ahí es `noBaseConfigured`).
      */
     configuredBase?: string;
     /**
@@ -288,49 +261,46 @@ export interface PanelModel {
     mode?: ReviewMode;
     branch?: string;
     /**
-     * Origen de la review (el PR) y punto sobre el que quedó fijada. Los dos ya
-     * venían en `state` desde `001` y el panel no los dibujaba: son la mitad de
-     * la Historia 2 que no necesitó contrato nuevo (research.md Decisión 0).
-     * El `tip` viaja completo, como lo emite la CLI; abreviarlo es presentación
+     * Origen de la review (el PR) y el punto sobre el que quedó fijada. El
+     * `tip` viaja completo, como lo emite la CLI; abreviarlo es presentación
      * y ocurre al dibujar, no acá.
      */
     source?: string;
     tip?: string;
     /**
      * Base contra la que se armó el rango. Sólo en whole y sólo si la CLI la
-     * reportó: sin ella el panel no muestra nada en su lugar (FR-009).
+     * reportó: sin ella el panel no muestra nada en su lugar.
      */
     base?: string;
     /** Sólo en step/walk. */
     position?: number;
     total?: number;
     /**
-     * `total < recorded`: la base se movió pero el cursor sigue en rango
-     * (FR-011). No `total !== recorded`: en walk, `recorded` de un review
-     * abierto antes de que los archivos no anotados entraran a la secuencia
-     * queda por debajo del `total` recién derivado, y eso no es la base
-     * moviéndose — es la secuencia creciendo, algo que no hay que avisar.
+     * `total < recorded`: la base se movió pero el cursor sigue en rango. No
+     * `total !== recorded`: en walk, un review abierto antes de que los
+     * archivos no anotados entraran a la secuencia deja `recorded` por debajo
+     * del `total` recién derivado — eso es la secuencia creciendo, no la base
+     * moviéndose, y no hay que avisarlo.
      */
     baseMoved: boolean;
     /**
-     * Extremos de la secuencia, para que el panel no ofrezca un control que ya
-     * no puede mover nada. No duplican la regla de la CLI —quien decide si el
-     * cursor se mueve sigue siendo el verbo (FR-016)—: son la lectura de la
-     * `position`/`total` que la CLI *ya* reportó, la misma que el panel dibuja
-     * en la barra. Fuera de step/walk son `false`: sin cursor no hay extremo.
+     * Extremos de la secuencia, para no ofrecer un control que ya no puede
+     * mover nada. No duplican la regla de la CLI —quien decide si el cursor se
+     * mueve sigue siendo el verbo—: son la lectura de `position`/`total` que la
+     * CLI *ya* reportó, la misma que dibuja la barra. Fuera de step/walk son
+     * `false`: sin cursor no hay extremo.
      */
     atFirst: boolean;
     atLast: boolean;
     /**
-     * `true` sólo con `situation === "finish-conflict"` (FR-027,
-     * contracts/finish-state.md): la review sigue siendo legible —`mode`,
-     * `branch`, `current`, etc. se proyectan igual que en una review normal—,
-     * pero moverse por la secuencia con un cierre a medio aplicar no
-     * corresponde. Se refleja forzando `atFirst`/`atLast` en `false` sin
-     * importar dónde esté el cursor, no ocultando el resto de la review.
+     * `true` sólo con `situation === "finish-conflict"` (contracts/finish-
+     * state.md): la review sigue siendo legible —`mode`, `branch`, `current`,
+     * etc. se proyectan igual que en una review normal—, pero moverse por la
+     * secuencia con un cierre a medio aplicar no corresponde. Se refleja
+     * forzando `atFirst`/`atLast` en `false`, no ocultando el resto.
      */
     navigationLocked: boolean;
-    /** `walkthrough === "degraded"` (FR-010). */
+    /** `walkthrough === "degraded"`. */
     degraded: boolean;
     /**
      * Compare de solo lectura: `finish` no aplica. Siempre booleano en el
@@ -345,33 +315,31 @@ export interface PanelModel {
     keysOnly: boolean;
     /**
      * El orden de lectura es el borrador del revisor y no el walkthrough del
-     * PR (`status --porcelain` → registro `draft`, 011). Siempre booleano en el
-     * modelo, y **nunca** inferido: sólo refleja el registro.
+     * PR (`status --porcelain` → registro `draft`). Siempre booleano, y
+     * **nunca** inferido: sólo refleja el registro.
      */
     draft: boolean;
     /** La entrada actual, elegida por `position` y nunca por `id`. */
     current?: PanelEntry;
     entryCount: number;
     /**
-     * Inventario de archivos seleccionables:
-     * - whole: los del rango (FR-010), desde `entry`;
-     * - step: los del commit actual, desde registros `file`.
-     * Sin cursor propio. Vacío (nunca ausente) en walk o cuando no hay paths.
+     * Inventario de archivos seleccionables: en whole, los del rango (desde
+     * `entry`); en step, los del commit actual (registros `file`). Sin cursor
+     * propio. Vacío (nunca ausente) en walk o cuando no hay paths.
      */
     files: PanelEntry[];
     /**
      * `PanelEntry.display` de la última fila de archivo que el revisor abrió
      * (whole o step), para marcarla en la lista. Sólo si sigue en `files`: un
      * path que salió del rango o del commit actual no deja una marca huérfana.
-     *
-     * No es estado del review y la CLI no lo conoce: es del lado del editor.
-     * Se lleva por `display` y no por posición porque las posiciones se corren
-     * cuando el rango/commit cambia.
+     * No es estado del review —es del lado del editor, y la CLI no lo conoce—
+     * y se lleva por `display` y no por posición porque las posiciones se
+     * corren cuando el rango/commit cambia.
      */
     lastOpened?: string;
     /** Sólo en walk: el modo step no tiene explicaciones. */
     why?: PanelWhy;
-    /** stderr de la CLI, preservado tal cual (FR-024). */
+    /** stderr de la CLI, preservado tal cual. */
     stderr?: string;
 }
 
@@ -427,8 +395,8 @@ function pad(position: number): string {
 
 /**
  * Texto de una entrada en el `QuickPick` de la secuencia. Vive acá, sin
- * `vscode`, porque es lo que hace visible la posición actual y las marcas
- * (FR-006, FR-007, FR-027) — o sea, lo que puede romperse en silencio.
+ * `vscode`, para poder probarse sin un editor: es lo que hace visible la
+ * posición actual y las marcas, o sea lo que puede romperse en silencio.
  */
 export function entryPickLabel(
     entry: EntryRecord,
@@ -452,7 +420,7 @@ export function entryPickLabel(
     }
     // El asunto acompaña al identificador, no lo reemplaza: nadie reconoce un
     // commit por siete caracteres hexadecimales, pero el SHA es lo que se pega
-    // en una terminal (FR-007). Un asunto vacío no agrega nada que mostrar.
+    // en una terminal. Un asunto vacío no agrega nada que mostrar.
     const id = displayOf(entry.id);
     return {
         label: subject !== undefined && subject.length > 0
@@ -474,7 +442,7 @@ export function currentEntry(entries: EntryRecord[], position: number | undefine
  * Proyecta el inventario de `list --porcelain`. `resumable` necesita ver la
  * lista entera y no sólo la fila: una guardada deja de poder resumirse cuando
  * existe además una activa para el mismo source, que es lo que el verbo
- * rechaza con "is already active" (`bin/git-review-verbs/continue:80`).
+ * rechaza con "is already active" (`bin/git-review-verbs/continue`).
  */
 function toPanelReviews(branches: BranchRecord[]): PanelReview[] {
     const active = new Set(branches.filter((b) => !b.saved).map(sourceOf));
@@ -612,9 +580,10 @@ function toPanelWalkthrough(record: WalkthroughRecord | undefined): PanelWalkthr
 }
 
 /**
- * La fila `index` del bloque de guías, o `undefined`. Mismo papel que
- * `draftAt`: el índice que llega del webview se valida contra el estado del
- * host, así que lo que termina en la CLI no sale del panel.
+ * La fila `index` del bloque de guías, o `undefined`. El índice que llega del
+ * webview se valida acá contra el estado del host (entero en rango), así que
+ * lo que termina en la CLI nunca sale directamente del panel. Mismo papel que
+ * `draftAt` y `resumableSourceAt`.
  */
 export function guideAt(guides: readonly GuideRecord[], index: unknown): GuideRecord | undefined {
     if (typeof index !== "number" || !Number.isInteger(index)) {
@@ -623,11 +592,7 @@ export function guideAt(guides: readonly GuideRecord[], index: unknown): GuideRe
     return guides[index];
 }
 
-/**
- * La fila `index` del bloque de borradores, o `undefined`. Mismo papel que
- * `resumableSourceAt`: es donde el índice que llega del webview se valida
- * contra el estado del host, así que lo que termina en la CLI no sale del panel.
- */
+/** La fila `index` del bloque de borradores, o `undefined`. Mismo papel que `guideAt`. */
 export function draftAt(drafts: readonly DraftRecord[], index: unknown): DraftRecord | undefined {
     if (typeof index !== "number" || !Number.isInteger(index)) {
         return undefined;
@@ -637,11 +602,9 @@ export function draftAt(drafts: readonly DraftRecord[], index: unknown): DraftRe
 
 /**
  * El *source* de la fila `index` del inventario, sólo si esa fila puede
- * resumirse. Es el punto donde el índice que llega del webview se convierte en
- * el argumento de `continue`: valida que sea un entero en rango contra el
- * inventario que tiene el host, así que lo que termina en la CLI sale del
- * estado del host y no del panel. Cualquier índice que no resuelva es
- * `undefined`, y el comando no hace nada.
+ * resumirse — es el argumento que espera `continue`. Mismo papel que
+ * `guideAt`, y además exige que la fila sea `resumable`. Índice fuera de rango
+ * o fila no resumible: `undefined`, y el comando no hace nada.
  */
 export function resumableSourceAt(branches: BranchRecord[], index: unknown): string | undefined {
     if (typeof index !== "number" || !Number.isInteger(index)) {

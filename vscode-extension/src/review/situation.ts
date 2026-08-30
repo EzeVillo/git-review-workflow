@@ -1,6 +1,6 @@
 /**
- * `Situation` — el resultado de una invocación (data-model.md § Situation).
- * Módulo sin dependencia de `vscode`: es lógica pura, testeable sin host.
+ * `Situation`: el resultado de una invocación. Módulo sin dependencia de
+ * `vscode`: es lógica pura, testeable sin host.
  */
 export type Situation =
     "review"
@@ -32,15 +32,14 @@ export function situationForExitCode(exitCode: number | null): Situation {
 
 /**
  * `situationForExitCode` ampliado con el registro `finish`
- * (contracts/finish-state.md, data-model.md § `Situation`): `finish-conflict`
- * gana siempre sobre `review`, y `finish-pending` sobre `no-review` — nunca al
- * revés, y nunca sobre ninguna otra situación (`out-of-range`/`error`/
- * `cli-*` no cambian, aunque el inventario trajera un cierre pendiente de OTRA
- * review). `hasFinishConflict` viene de parsear el registro `finish` de
- * `status --porcelain` (sólo posible con exit `0`); `hasFinishPending` viene
- * de si el inventario de `list --porcelain` trae al menos una fila `finish …
- * pending` (sólo relevante con exit `2`, donde el panel ya invoca `list` para
- * el estado vacío).
+ * (contracts/finish-state.md): `finish-conflict` gana siempre sobre `review`,
+ * y `finish-pending` sobre `no-review` — nunca al revés, y nunca sobre
+ * ninguna otra situación (`out-of-range`/`error`/`cli-*` no cambian, aunque el
+ * inventario trajera un cierre pendiente de OTRA review). `hasFinishConflict`
+ * viene de parsear el registro `finish` de `status --porcelain` (sólo posible
+ * con exit `0`); `hasFinishPending` viene de si el inventario de
+ * `list --porcelain` trae al menos una fila `finish … pending` (sólo
+ * relevante con exit `2`, donde el panel ya invoca `list` para el estado vacío).
  */
 export function situationFor(
     exitCode: number | null,
@@ -58,10 +57,10 @@ export function situationFor(
 }
 
 /**
- * `true` para las dos situaciones donde `ReviewState.state` queda poblado y
- * es seguro leer la review en curso o salir de ella del todo: `review` y
- * `finish-conflict` (data-model.md § `Situation` — un cierre trabado sigue
- * dejando la review legible; lo único que no corresponde es *navegarla*).
+ * `true` para las dos situaciones donde `ReviewState.state` queda poblado y es
+ * seguro leer la review en curso o salir de ella del todo: `review` y
+ * `finish-conflict` — un cierre trabado sigue dejando la review legible; lo
+ * único que no corresponde es *navegarla*.
  * Usada por los comandos de sólo lectura (`openEntry`/`openChange`/
  * `openAllChanges`/`showWhy`/`goToEntry`) y por `abortReview` — tirar la
  * review entera es uno de los tres caminos que contracts/finish-state.md

@@ -50,7 +50,7 @@ interface BranchItem extends vscode.QuickPickItem {
 
 interface LayoutItem extends vscode.QuickPickItem {
     layout: ReviewLayout;
-    /** Presente sólo en las ofertas `draft` / `draft-resume` (011). */
+    /** Presente sólo en las ofertas `draft` / `draft-resume`. */
     draft?: DraftStep;
 }
 
@@ -63,8 +63,8 @@ interface RangeItem extends vscode.QuickPickItem {
 }
 
 /**
- * Origen (FR-014): remoto / local / offline. Las dos últimas se explican
- * en la descripción porque deciden red y resolución de la base.
+ * Origen: remoto / local / offline. Las dos últimas se explican en la
+ * descripción porque deciden red y resolución de la base.
  */
 const SOURCE_ITEMS: SourceItem[] = [
     {
@@ -104,7 +104,7 @@ function branchLabel(candidate: CandidateBranch): string {
 /**
  * Lee `gitReview.defaultSource` con la precedencia user/workspace que ya
  * resuelve el host (research.md Decisión 11). Sólo preselección — nunca
- * decide sola el argv (FR-016a / T074).
+ * decide sola el argv.
  */
 function readDefaultSource(): ReviewSource {
     const inspected = vscode.workspace.getConfiguration("gitReview").inspect<string>("defaultSource");
@@ -115,8 +115,8 @@ function readDefaultSource(): ReviewSource {
 }
 
 /**
- * Paso 1 — rama a revisar. La actual va primera (research.md Decisión 9,
- * FR-011); `showQuickPick` filtra incrementalmente por su cuenta, así que un
+ * Paso 1 — rama a revisar. La actual va primera (research.md Decisión 9);
+ * `showQuickPick` filtra incrementalmente por su cuenta, así que un
  * repositorio con cientos de ramas sigue siendo navegable sin nada extra acá.
  */
 async function pickBranch(candidates: CandidateBranch[]): Promise<CandidateBranch | undefined> {
@@ -131,11 +131,11 @@ async function pickBranch(candidates: CandidateBranch[]): Promise<CandidateBranc
 }
 
 /**
- * Paso 4 — cómo leerla (008): ítems dinámicos desde `offer` de la CLI.
- * Sin Automatic; solo lo viable para tip+rango (o fallback whole+step).
+ * Paso 4 — cómo leerla: ítems dinámicos desde `offer` de la CLI. Sin
+ * Automatic; solo lo viable para tip+rango (o fallback whole+step).
  *
- * 011: entre los ítems puede venir el de armarse el orden de lectura. Devuelve
- * el ítem entero y no sólo el layout porque esa distinción —leer ya, o escribir
+ * Entre los ítems puede venir el de armarse el orden de lectura. Devuelve el
+ * ítem entero y no sólo el layout porque esa distinción —leer ya, o escribir
  * primero lo que se va a leer— es la que decide el camino siguiente.
  */
 async function pickLayout(
@@ -165,8 +165,7 @@ async function pickLayout(
 /**
  * Origen: el ítem de `defaultSource` va primero para preseleccionarlo (el
  * QuickPick activa el primer ítem al abrir). El valor que llega a la CLI es
- * el que el usuario confirma acá o en el modal final, no el ajuste solo
- * (FR-016 / FR-016a).
+ * el que el usuario confirma acá o en el modal final, no el ajuste solo.
  */
 async function pickSource(defaultSource: ReviewSource): Promise<ReviewSource | undefined> {
     const preferred = SOURCE_ITEMS.find((item) => item.source === defaultSource) ?? SOURCE_ITEMS[0];
@@ -181,8 +180,7 @@ async function pickSource(defaultSource: ReviewSource): Promise<ReviewSource | u
 
 /**
  * Rango incremental: sólo se llama cuando hay un `delta` del origin que
- * corresponde al source elegido (FR-015). Sin ese registro este paso no se
- * ofrece.
+ * corresponde al source elegido. Sin ese registro este paso no se ofrece.
  */
 async function pickRange(): Promise<ReviewRange | undefined> {
     const picked = await vscode.window.showQuickPick(RANGE_ITEMS, {
@@ -193,9 +191,9 @@ async function pickRange(): Promise<ReviewRange | undefined> {
 }
 
 /**
- * Deltas + ofertas para la rama en el contexto source/range (008).
- * Misma invocación: `config --porcelain [--local|--offline] [--delta] -- <branch>`.
- * Siempre `network: false` (el tip remoto es el tracking ref local).
+ * Deltas + ofertas para la rama en el contexto source/range. Misma invocación:
+ * `config --porcelain [--local|--offline] [--delta] -- <branch>`. Siempre
+ * `network: false` (el tip remoto es el tracking ref local).
  */
 async function loadBranchContext(
     branch: CandidateBranch,
@@ -230,8 +228,8 @@ async function loadBranchContext(
 
 /**
  * La creación del borrador, con su progreso y bajo el lock. Sólo la creación:
- * validarlo es cosa del panel desde 012, con los flags que la CLI grabó en el
- * archivo y devuelve por el registro `draft`.
+ * validarlo es cosa del panel, con los flags que la CLI grabó en el archivo y
+ * devuelve por el registro `draft`.
  */
 async function invokeDraft(
     lock: MutationLock,
@@ -255,14 +253,13 @@ async function invokeDraft(
                     draftArgs(branch, source, range, false, force),
                     {...options, network: false}
                 );
-                // Refrescar acá, y pase lo que pase, por lo mismo que start:
-                // es lo que dice dónde quedó el repositorio. Y hace falta más
-                // que en start, porque ninguna otra señal ve esta mutación —
-                // el borrador se escribe en el gitdir, así que no mueve HEAD,
-                // no toca el índice y no escribe config, y el watcher de
+                // Refrescar acá pase lo que pase, como en start: dice dónde quedó
+                // el repositorio. Hace más falta que en start porque ninguna otra
+                // señal ve esta mutación — el borrador vive en el gitdir (no mueve
+                // HEAD, no toca el índice, no escribe config) y el watcher de
                 // borradores sólo mira directorios que la CLI YA reportó: el
-                // primero de una rama estrena su carpeta, de modo que sin
-                // esto la fila no aparecía hasta que algo ajeno refrescara.
+                // primero de una rama estrena carpeta, y sin esto su fila no
+                // aparecía hasta que algo ajeno refrescara.
                 await stateManager.refresh();
                 return invocation;
             }
@@ -274,19 +271,12 @@ async function invokeDraft(
     if (!ok) {
         return {ok, text: flatten(result?.stderr ?? "")};
     }
-    // En verde el acuse depende del paso, y un `create` NO TIENE NINGUNO: el
-    // refresco de arriba acaba de dibujar la fila del borrador, y todo lo que
-    // el verbo dice ahí tiene su propia fila en el panel — el archivo y el
-    // comando siguiente (la fila y su botón *Validate and start*), el
-    // walkthrough del autor al que tapa (su fila, con su badge) y la guía de
-    // autoría que falta (las dos filas de guías, con su Create). Notificarlo
-    // era repetir el panel entero en un párrafo.
-    //
-    // Un `update` sí: qué se conservó, qué entró y qué se cayó no está en
-    // ninguna fila, porque la del borrador muestra el par NUEVO. Los tres
-    // números llegan por el registro `merged` y la frase es nuestra; sin
-    // registro (una CLI vieja) el acuse se cae entero, que es mejor que
-    // reenviar la prosa que trae la ruta y el comando siguiente.
+    // `create` no notifica nada: el refresco ya dibujó la fila del borrador con
+    // todo lo que el verbo diría (archivo, Validate and start, walkthrough
+    // tapado, guías faltantes). `update` sí, porque qué se conservó/entró/cayó
+    // no está en ninguna fila (ver "Lo que el panel muestra no se notifica" en
+    // CLAUDE.md); los tres números salen del registro `merged`, y sin él (CLI
+    // vieja) el acuse se cae entero antes que reenviar prosa de la CLI.
     if (!update) {
         return {ok, text: ""};
     }
@@ -298,8 +288,8 @@ async function invokeDraft(
 }
 
 /**
- * Lo que queda del camino del borrador dentro del asistente (012,
- * contracts/client-draft-panel.md § 3). Las decisiones viven en `draftFlow`;
+ * Lo que queda del camino del borrador dentro del asistente
+ * (contracts/client-draft-panel.md § 3). Las decisiones viven en `draftFlow`;
  * acá sólo está el vehículo: una invocación, y el asistente termina.
  *
  * No abre el borrador y no deja ningún aviso esperando. La continuación —
@@ -324,22 +314,16 @@ async function runDraftFlow(
                 const outcome = await invokeDraft(
                     lock, stateManager, branch.name, source, range, options, state.force, state.update
                 );
-                // Sólo lo que el panel no dice. Sobre un `update` eso incluye
-                // el resultado del verbo —el panel muestra el par nuevo pero no
-                // qué se conservó ni qué entró—; sobre un `create`, únicamente
-                // las notas: el refresco que acaba de correr ya dibujó la fila
-                // del borrador, que es el acuse, y el comando con el que el
-                // stdout cierra es el botón de esa misma fila.
+                // Sólo lo que el panel no dice (ver `invokeDraft`): en `create`
+                // el refresco ya dibujó la fila y no hay nada que agregar en texto.
                 if (outcome.ok && outcome.text.length > 0) {
                     void vscode.window.showInformationMessage(outcome.text);
                 }
                 if (outcome.ok) {
-                    // EL CASO QUE MOTIVO EL REVEAL. Este camino termina SIN
-                    // cambiar de situacion: el panel sigue en no-review y lo
-                    // unico que pasa es que el bloque de borradores nace arriba
-                    // de todo. Y el asistente corrio sobre el editor, asi que la
-                    // vista pudo quedar cerrada -- y como un `create` tampoco
-                    // notifica, sin esto no quedaba acuse en ningun lado.
+                    // El caso que motivó `reveals:` en el contrato: nace el bloque
+                    // de borradores pero la situación no cambia, y el asistente
+                    // corrió sobre el editor — sin esto no quedaba acuse en ningún
+                    // lado (ver "El panel se revela..." en CLAUDE.md).
                     revealPanel("startReview", reveal);
                 }
                 state = advanceDraftFlow(state, {
@@ -370,11 +354,9 @@ async function runDraftFlow(
  * Escape a terminal (research.md Decisión 5): manda el comando **exacto** que
  * se intentó a una terminal integrada, donde sí hay quién conteste un pedido
  * de credenciales interactivo — algo que la invocación capturada, sin TTY,
- * nunca puede ofrecer. "Exacto" incluye respetar `gitReview.path`: reusa
- * `resolveCommand`, el mismo punto que `invokeGitReview` usa para decidir qué
- * ejecutable corre, en vez de hardcodear `git review start` — con ese ajuste
- * seteado (el caso que la Decisión 5 existe para cubrir) `git review` no
- * necesariamente existe como subcomando de git (I1, revisión Fase 3).
+ * nunca puede ofrecer. "Exacto" incluye respetar `gitReview.path` reusando
+ * `resolveCommand` en vez de hardcodear `git review start`: con ese ajuste
+ * seteado, `git review` no necesariamente existe como subcomando de git.
  */
 function runInTerminal(args: string[], options: InvokeOptions): void {
     const {command, args: commandArgs} = resolveCommand("start", args, options.gitReviewPath);
@@ -384,9 +366,9 @@ function runInTerminal(args: string[], options: InvokeOptions): void {
 }
 
 /**
- * `gitReview.startReview`: asistente de inicio (005 + 008).
- * Orden (008): rama → origen → rango (si hay delta) → forma de lectura
- * (desde `offer`) → confirmación → start con network: true.
+ * `gitReview.startReview`: asistente de inicio. Orden: rama → origen → rango
+ * (si hay delta) → forma de lectura (desde `offer`) → confirmación → start
+ * con network: true.
  */
 export async function startReview(
     lock: MutationLock,
@@ -429,8 +411,8 @@ export async function startReview(
         return;
     }
 
-    // Origen siempre visible (FR-016): defaultSource sólo preselecciona.
-    // 008: origen y rango ANTES de la forma de lectura (ofertas dependen del tip).
+    // Origen siempre visible: defaultSource sólo preselecciona. Origen y rango
+    // van ANTES de la forma de lectura porque las ofertas dependen del tip.
     const defaultSource = readDefaultSource();
     const source = await pickSource(defaultSource);
     if (!source) {
@@ -473,7 +455,7 @@ export async function startReview(
     // Forma de lectura. El paso se repite —y sólo por eso es un bucle— cuando
     // el revisor entra al armado del borrador y vuelve: sale de ahí con el
     // borrador intacto y la oferta ya recalculada por la CLI, así que lo honesto
-    // es devolverlo a este mismo paso con las ofertas al día (FR-018a).
+    // es devolverlo a este mismo paso con las ofertas al día.
     let offers = ctx.offers;
     let layout: ReviewLayout;
     for (; ;) {
@@ -523,10 +505,10 @@ export async function startReview(
 
     const args = intentToArgs(intent, branch.name);
 
-    // Capturado antes del spawn (FR-038). El asistente pudo estar abierto un
-    // rato: el check externo evita el progreso cuando el estado ya quedó
-    // obsoleto, y el de adentro del lock cierra la ventana entre este punto y
-    // el spawn (otro proceso arrancó una review, HEAD cambió, watcher refresh).
+    // Capturado antes del spawn. El asistente pudo estar abierto un rato: el
+    // check externo evita el progreso cuando el estado ya quedó obsoleto, y el
+    // de adentro del lock cierra la ventana entre este punto y el spawn (otro
+    // proceso arrancó una review, HEAD cambió, watcher refresh).
     const token = captureToken(stateManager.state);
     if (!tokenStillValid(token, stateManager.state)) {
         void vscode.window.showInformationMessage(
@@ -559,9 +541,8 @@ export async function startReview(
                     ...options,
                     network: true
                 });
-                // Refrescar pase lo que pase: aunque start falle, es lo que dice
-                // dónde quedó el repositorio — la salida humana no se parsea
-                // nunca (FR-015/FR-024).
+                // Refrescar pase lo que pase (ver continueReview.ts), aunque
+                // start falle: la salida humana no se parsea nunca.
                 await stateManager.refresh();
                 return invocation;
             }
@@ -594,16 +575,15 @@ export async function startReview(
             return;
         }
 
-        // El acuse es el panel, así que el panel tiene que estar a la vista: el
-        // asistente corrió sobre el editor y la vista pudo quedar cerrada o en
-        // otra pestaña del sidebar. Va acá y no antes: sólo en verde y después
-        // del refresco, o sea sobre el panel ya redibujado.
+        // El acuse es el panel: se revela sólo en verde y después del refresco
+        // (panel ya redibujado), nunca antes — mismo motivo que el reveal del
+        // borrador más arriba.
         revealPanel("startReview", reveal);
 
         // start emite notas a stderr en invocaciones EXITOSAS (rama local
-        // desactualizada, review previa con commits nuevos): se muestran
-        // aunque el exit sea 0 (FR-031) — descartarlas sería tirar
-        // información que la CLI decidió dar.
+        // desactualizada, review previa con commits nuevos): se muestran aunque
+        // el exit sea 0 — descartarlas sería tirar información que la CLI
+        // decidió dar.
         const note = flatten(result.stderr);
         if (note.length > 0) {
             void vscode.window.showInformationMessage(note);

@@ -1,10 +1,8 @@
 import {ReviewSource} from "./reviewIntent";
 
 /**
- * `SourcePreference` (data-model.md § SourcePreference): el default de origen
- * que el asistente preselecciona. Es un ajuste del host
- * (`gitReview.defaultSource`), no estado del producto — la CLI no sabe que
- * existe (research.md Decisión 11, FR-016a).
+ * El default de origen que el asistente preselecciona. Es un ajuste del host
+ * (`gitReview.defaultSource`), no estado del producto — la CLI no sabe que existe.
  *
  * La precedencia workspace-sobre-user es la de VS Code: quien llama pasa los
  * niveles ya leídos de `inspect("defaultSource")` (o el valor efectivo de

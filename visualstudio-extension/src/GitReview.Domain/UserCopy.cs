@@ -12,19 +12,16 @@ public static class UserCopy
     public const string DiscardBusy = MutationLock.DiscardReason;
 
     /// <summary>
-    /// Lo que se dice cuando el testigo de estado (StaleGuard) rechaza una
-    /// mutacion porque el repositorio cambio entre la confirmacion y la
-    /// invocacion. <b>Uno solo para los ocho comandos</b>, y antes eran diez.
+    /// Lo que se dice cuando StaleGuard rechaza una mutación porque el repositorio
+    /// cambió entre la confirmación y la invocación. Uno solo para los ocho comandos.
     /// <para>
-    /// Las diez variantes decian la misma cosa con el verbo cambiado -- "nothing
-    /// was finished", "nothing was saved", "nothing was undone" --, y ese verbo
-    /// no es informacion: es el boton que el revisor acaba de apretar, que
-    /// todavia tiene bajo el cursor. Lo unico que no puede deducir es POR QUE no
-    /// paso nada, y eso es identico en los diez casos.
+    /// El verbo ("finished", "saved", "undone"...) no es información: es el botón
+    /// que el revisor acaba de apretar y todavía tiene bajo el cursor. Lo único que
+    /// no puede deducir es POR QUÉ no pasó nada, y eso es idéntico en los ocho casos.
     /// </para>
     /// <para>
-    /// No lleva "try again": el panel ya se refresco solo, asi que el estado que
-    /// se ve al leer el mensaje es el nuevo.
+    /// No lleva "try again": el panel ya se refrescó solo, así que el estado que se
+    /// ve al leer el mensaje es el nuevo.
     /// </para>
     /// </summary>
     public const string Stale = "The repository changed while you were deciding, so nothing happened.";
@@ -54,7 +51,7 @@ public static class UserCopy
     public const string OutOfRangeFallback =
         "Run 'git review status' in a terminal for the diagnosis and recovery command.";
 
-    // --- Panel draft block (012) ------------------------------------------------
+    // --- Panel draft block -------------------------------------------------------
 
     public const string DiscardDraftButton = "Discard";
 
@@ -88,8 +85,6 @@ public static class UserCopy
     /// instruction block at the top, and repeating it here would give an agent
     /// two sources for the same rules. <paramref name="path"/> is the absolute
     /// path the CLI reported for that row — never one this client built.
-    ///
-    /// Byte for byte identical to userCopy.ts and UserCopy.kt.
     /// </summary>
     public static string DraftAgentPrompt(string path) =>
         $"Fill in the reading order at {path}. The instructions are inside the file, "
@@ -106,8 +101,6 @@ public static class UserCopy
     /// can do here is rewrite it whole. Saying "fill in the reading order" over a
     /// full file is an instruction to start over, and it would undo exactly what
     /// updating in place exists to preserve.
-    ///
-    /// Byte for byte identical to userCopy.ts and UserCopy.kt.
     /// </summary>
     public static string WalkthroughAgentPrompt(string path) =>
         $"Update the reading order at {path}. The instructions are inside the file, "
@@ -127,9 +120,8 @@ public static class UserCopy
     public const string StartRangeTitle = "Start a review — range";
     public const string StartRangePlaceholder = "Full range, or only what is new since the last review";
     /// <summary>
-    /// El ULTIMO paso del asistente, y por eso lleva la rama: elegir una forma
-    /// de lectura aca ya arranca la review. La frase es la que decia la pantalla
-    /// de confirmacion que este paso reemplaza.
+    /// El ÚLTIMO paso del asistente, y por eso lleva la rama: elegir una forma de
+    /// lectura acá ya arranca la review, así que no hay una confirmación después.
     /// </summary>
     public static string StartLayoutTitle(string branch) =>
         $"Start reviewing {branch} — how do you want to read it?";
@@ -148,8 +140,6 @@ public static class UserCopy
     /// real outcome — the range moved without changing which files it touches —
     /// and earns its sentence, but making somebody read "0 added, 0 dropped" to
     /// find out neither happened is the noise this sentence exists to avoid.
-    ///
-    /// Byte for byte identical to userCopy.ts and UserCopy.kt.
     /// </summary>
     public static string DraftUpdated(int kept, int added, int dropped)
     {
@@ -254,14 +244,14 @@ public static class UserCopy
     /// <summary>
     /// El acuse de un finish en verde, o <c>null</c> cuando el panel ya lo dio.
     /// <para>
-    /// Pending es el caso normal y devuelve null: el panel entra en
-    /// finish-pending y su banner dice lo mismo con mas contexto -- el destino,
-    /// que hay que commitear desde Source Control, y los dos botones --. El
-    /// toast era esa frase otra vez, un segundo antes.
+    /// Pending es el caso normal y devuelve null: el panel entra en finish-pending
+    /// y su banner dice lo mismo con más contexto —el destino, que hay que
+    /// commitear desde Source Control, y los dos botones—. El toast sería esa
+    /// misma frase otra vez, un segundo antes.
     /// </para>
     /// <para>
-    /// NoEdits es el residual: sin registro pending no hay banner, asi que sin
-    /// esta linea un finish exitoso no dejaria ninguna senal.
+    /// NoEdits es el residual: sin registro pending no hay banner, así que sin
+    /// esta línea un finish exitoso no dejaría ninguna señal.
     /// </para>
     /// </summary>
     public static string? FinishSuccess(string destination, FinishOutcome outcome) => outcome switch
@@ -308,14 +298,8 @@ public static class UserCopy
 
     /// <summary>
     /// The choice between reconciling a walkthrough and starting it over, asked
-    /// BEFORE the verb runs.
-    ///
-    /// It used to hang off the CLI FAILING: init ran, and when it died because the
-    /// file was already there, that is where the three clients offered to overwrite.
-    /// Since init updates instead of refusing, that path stopped existing — and with
-    /// it the only way to reach --force from a panel.
-    ///
-    /// Byte for byte identical to userCopy.ts and UserCopy.kt.
+    /// BEFORE the verb runs: init now updates instead of refusing, so there's no CLI
+    /// failure left to hang the offer off of (and no other way to reach --force).
     /// </summary>
     public const string WalkthroughExistsTitle = "This branch already has a walkthrough.";
     public const string WalkthroughExistsDetail =
@@ -323,20 +307,15 @@ public static class UserCopy
         + "Start over replaces it with a blank list. The file is committed to the PR, so git checkout -- .review/walkthrough.md brings the old one back.";
     /// <summary>
     /// On the REVIEWER's side there is no equivalent pair, and the asymmetry is
-    /// deliberate.
+    /// deliberate: the CLI now offers draft-update only when there IS something to
+    /// reconcile (it holds both tips; the draft record's own state only says whether
+    /// the order was read, not whether it still covers the range), so there's no
+    /// question left to ask.
     ///
-    /// There was one: a modal that, over any draft whose review had closed, asked
-    /// whether to reconcile or start from scratch. It asked because the wizard could
-    /// not know which of the two was needed — the draft record's state says whether
-    /// the order has been read, not whether it still covers the range — so it handed
-    /// the doubt to the reviewer. The CLI answers it now, holding both tips, by
-    /// offering draft-update only when there IS something to reconcile; with no
-    /// question, there is no modal.
-    ///
-    /// And starting over is not restored here: on the author's side the file is
-    /// tracked and git checkout -- brings it back, on the reviewer's side it lives
-    /// outside git and there is no way back. A button for that does not belong in a
-    /// step people walk straight past; it belongs in Discard, which confirms.
+    /// Starting over isn't offered here either: the author's file is tracked and
+    /// `git checkout --` brings it back, but the reviewer's lives outside git with
+    /// no way back — that belongs in Discard, which confirms, not in a step people
+    /// walk straight past.
     /// </summary>
     public const string WalkthroughUpdateButton = "Update";
     public const string WalkthroughStartOverButton = "Start over";

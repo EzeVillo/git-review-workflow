@@ -46,7 +46,7 @@ class GitReviewToolWindowFactory : ToolWindowFactory, DumbAware {
             },
         )
         // The content is only built when the window is being shown, so this is
-        // still "no CLI before the panel is on screen" (FR-017) — but it no
+        // still "no CLI before the panel is on screen" — but it no
         // longer hangs on `isVisible`, which the platform may not have flipped
         // yet at create time. When it was false here and the state change had
         // already gone by, nothing ever asked for the first refresh and the

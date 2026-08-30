@@ -12,20 +12,9 @@ import {
 } from "../review/userCopy";
 
 /**
- * `gitReview.walkthroughInit` / `walkthroughBuild` (006 US4).
- * No parsea el sidecar; init abre el archivo tras éxito.
- * Confirmación de --force **fuera** del lock (mismo molde que abort/save).
- */
-/**
  * Cuál de las dos cosas hace `walkthrough init`, preguntado ANTES de invocar.
  *
- * Antes esto colgaba de que la CLI **fallara**: se corría `init`, y si moría
- * porque el archivo ya estaba, recién ahí se ofrecía sobrescribir. Desde que
- * `init` actualiza en vez de negarse, ese camino dejó de existir y con él la
- * única forma de llegar a `--force` desde el panel — el código seguía ahí sin
- * que nada lo ejecutara.
- *
- * Así que la pregunta va delante, y sólo cuando hay algo que preservar: con el
+ * La pregunta va delante, y sólo cuando hay algo que preservar: con el
  * registro `walkthrough` diciendo que el archivo está, las dos salidas son
  * reconciliar (lo normal) o empezar de cero. Sin registro o sin archivo no hay
  * nada que preguntar y se invoca directo, que es lo que hacía siempre.
@@ -44,11 +33,14 @@ async function pickInitMode(
     if (walkthrough.state === "superseded") {
         return "update";
     }
-    // EXCEPCION DECLARADA a la puerta unica (ver review/confirm.ts): esto no es
-    // una confirmacion sino una eleccion entre dos cursos --actualizar lo que hay
-    // o empezar de cero--, y confirmMutation no puede expresarla porque su "no"
-    // es un cancel. Sigue siendo `confirms: true` en el canonico porque hay un
-    // modal entre el clic y la mutacion, que es lo que esa clave significa.
+    // EXCEPCION DECLARADA a la puerta unica (ver review/confirm.ts y CLAUDE.md).
+    // La frase de arriba la lee scripts/check-client-product-surface.mjs, literal
+    // y sin acentos: es lo que exime a este modal del gate. No la reformules.
+    //
+    // Es una eleccion entre dos cursos --actualizar lo que hay o empezar de
+    // cero--, no una confirmacion, y confirmMutation no puede expresarla porque
+    // su "no" es un cancel. Sigue siendo `confirms: true` en el canonico porque
+    // hay un modal entre el clic y la mutacion.
     const answer = await vscode.window.showWarningMessage(
         WALKTHROUGH_EXISTS_TITLE,
         {modal: true, detail: WALKTHROUGH_EXISTS_DETAIL},
@@ -65,9 +57,9 @@ async function pickInitMode(
 }
 
 /**
- * `gitReview.walkthroughInit` (006 US4). No parsea el sidecar; abre el archivo
- * tras el éxito. La elección entre actualizar y empezar de cero se hace **fuera**
- * del lock (mismo molde que abort/save).
+ * `gitReview.walkthroughInit`. No parsea el sidecar; abre el archivo tras el
+ * éxito. La elección entre actualizar y empezar de cero se hace **fuera** del
+ * lock (mismo molde que abort/save).
  */
 export async function walkthroughInit(
     lock: MutationLock,

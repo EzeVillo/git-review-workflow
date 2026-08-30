@@ -7,14 +7,12 @@ namespace GitReview.VS.Wizards;
 
 /// <summary>
 /// Multi-step start flow: branch → origin → range → reading order → confirm, with the
-/// draft loop (011) hanging off the reading-order step. Same steps, same order and the
-/// same <see cref="UserCopy"/> labels as the VS Code start assistant and the JetBrains
-/// wizard.
+/// draft loop hanging off the reading-order step.
 ///
 /// Every step is a real modal picker (<see cref="GitReviewDialogs.Choose"/>): cancelling
-/// one ends the wizard, and nothing is ever chosen on the reviewer's behalf. It used to
-/// print the options into a message box and then take the first one regardless, which
-/// meant a review started on whichever branch happened to sort first.
+/// one ends the wizard, and nothing is chosen on the reviewer's behalf — a message box
+/// that just listed the options and took the first one regardless once started a review
+/// on whichever branch happened to sort first.
 /// </summary>
 public static class StartWizard
 {
@@ -157,10 +155,9 @@ public static class StartWizard
         if (picked.Draft is null)
             return await RunStartAsync(ctx, picked.Layout, ct).ConfigureAwait(true);
 
-        // Nothing is asked: which of the three draft paths applies was already
-        // decided by the CLI when it picked which offer to emit, which is the only
-        // side that can — the question is whether the order still covers the range,
-        // and answering it takes both tips.
+        // Nothing is asked: which of the three draft paths applies was already decided
+        // by the CLI when it picked the offer to emit — only the side holding both tips
+        // can tell whether the order still covers the range.
         return await RunDraftFlowAsync(
             ctx,
             DraftFlow.InitialDraftFlowState(picked.Draft.Value),
@@ -168,7 +165,7 @@ public static class StartWizard
     }
 
     /// <summary>
-    /// What is left of the draft path (012). The decisions live in <see cref="DraftFlow"/>;
+    /// What is left of the draft path. The decisions live in <see cref="DraftFlow"/>;
     /// this is only the vehicle: one invocation, and the wizard closes.
     ///
     /// It does not open the draft and leaves no dialog waiting. The continuation —
@@ -243,20 +240,11 @@ public static class StartWizard
             ct: ct).ConfigureAwait(true);
         if (result is null) return new DraftOutcome(false, MutationLock.DiscardReason);
         var ok = result.ExitCode == 0 && !result.TimedOut;
-        // En verde el acuse depende del paso, y un create NO TIENE NINGUNO: el
-        // refresco acaba de dibujar la fila del borrador, y todo lo que el verbo
-        // dice ahi tiene su propia fila en el panel -- el archivo y el comando
-        // siguiente (la fila y su boton Validate and start), el walkthrough del
-        // autor al que tapa (su fila) y la guia de autoria que falta (las dos
-        // filas de guias, con su Create). Notificarlo era repetir el panel
-        // entero en un parrafo.
-        //
-        // Un update si: que se conservo, que entro y que se cayo no esta en
-        // ninguna fila, porque la del borrador muestra el par NUEVO. Los tres
-        // numeros llegan por el registro `merged` y la frase es nuestra; sin
-        // registro (una CLI vieja) el acuse se cae entero, que es mejor que
-        // reenviar la prosa con la ruta y el comando siguiente. Red: only the
-        // error.
+        // Create no notifica: el refresco ya dibuja la fila del borrador, y todo lo
+        // que el verbo diría tiene ya su propia fila (archivo, walkthrough del autor,
+        // guías). Update sí: los tres números (kept/added/dropped) no están en
+        // ninguna fila, solo en el registro `merged` (ver CLAUDE.md, "Lo que el panel
+        // muestra no se notifica"). En rojo, solo el error.
         if (!ok)
         {
             return new DraftOutcome(false, CliMessage.FlattenCliMessage(result.Stderr));
@@ -336,8 +324,8 @@ public static class StartWizard
     }
 
     /// <summary>
-    /// "Validate and start" on a row of the panel's draft block (012): the same four
-    /// steps as the extension, with THAT row's flags.
+    /// "Validate and start" on a row of the panel's draft block: the same four steps,
+    /// with THAT row's flags.
     ///
     /// It lives here and not in the dispatcher because step 4 is the usual start, with
     /// its confirmation, its staleness guard and its error handling: a second copy of
@@ -470,9 +458,9 @@ public static class StartWizard
             return false;
         }
 
-        // Sin confirmacion: el asistente ya pregunto cuatro cosas y elegir la
-        // forma de lectura -- el paso anterior, cuyo titulo nombra la rama -- ES
-        // arrancar. Ver UserCopy.StartLayoutTitle.
+        // Sin confirmación: el asistente ya preguntó cuatro cosas, y elegir la forma
+        // de lectura —el paso anterior, cuyo título nombra la rama— YA ES arrancar.
+        // Ver UserCopy.StartLayoutTitle.
         var args = ReviewIntentLogic.IntentToArgs(intent, ctx.Branch);
 
         // The wizard was open long enough for the repository to have moved on; a start
@@ -501,7 +489,7 @@ public static class StartWizard
         if (result is null) return false;
         if (result.ExitCode == 0 && !result.TimedOut)
         {
-            // A successful start still emits notes on stderr (FR-031).
+            // A successful start still emits notes on stderr.
             var note = CliMessage.FlattenCliMessage(result.Stderr);
             if (note.Length > 0) GitReviewDialogs.Info(note);
             return true;

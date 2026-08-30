@@ -2,17 +2,14 @@
 #
 # git review save — pause the review on the current branch and put it aside.
 #
-# A review in progress lives on a review/<branch> branch. Saving it converts that
-# branch into review-saved/<branch> and returns you to where you started, so you
-# can pick up something else and resume later with git review continue.
-#
-# The saved review carries everything needed to resume exactly where you left off:
+# review/<branch> becomes review-saved/<branch>, carrying everything needed to
+# resume exactly where you left off:
 #   whole mode  the staged PR diff and your uncommitted edits, captured as a
 #               commit whose diff against the tip is just your edits.
-#   step mode   the step you are on, the edits on it, and every edit you have
-#               banked on other commits — the banked-edit refs are moved out of
-#               refs/review-edits/ (which git review clean prunes) into
-#               refs/review-saved-edits/ so a git review clean never touches them.
+#   step mode   the step you are on, its edits, and every edit banked on other
+#               commits — the banked-edit refs move out of refs/review-edits/
+#               (which git review clean prunes) into refs/review-saved-edits/, so
+#               a clean never touches a saved review.
 #
 set -eu
 
@@ -61,9 +58,9 @@ esac
 # away and leave refs/review-undo orphaned with conflict markers banked as edits.
 require_not_finish_conflict
 
-# A completed finish leaves reviewundohead while you sit on review-fixes (or the
-# PR branch). Saving from a hand-switched review/* with that undo live would
-# rename the branch that owns the undo and orphan review-fixes / the undo point.
+# A completed finish leaves reviewundohead while you sit on review-fixes (or the PR
+# branch); saving from a hand-switched review/* would rename the branch that owns
+# the undo and orphan review-fixes / the undo point.
 require_not_pending_finish
 
 src="$(git config "branch.$cur.reviewsource" || true)"
@@ -81,8 +78,7 @@ git rev-parse --verify --quiet "refs/heads/$saved" >/dev/null &&
 
 mode="$(git config "branch.$cur.reviewmode" || echo whole)"
 
-# Where to return to once the review is put aside — the branch you started from,
-# falling back to the base branch, exactly like git review abort.
+# Where to return to: the branch you started from, else the base — like abort.
 ret="$(git config "branch.$cur.reviewreturn" || true)"
 base="$(git config "branch.$cur.reviewbase" || true)"
 target=""
@@ -93,30 +89,21 @@ elif [ -n "$base" ] && git rev-parse --verify --quiet "refs/heads/$base" >/dev/n
 fi
 [ -n "$target" ] || die "could not determine a branch to return to; switch away manually first"
 
-# The archived namespace already holding a draft under the name this review would
-# file its own under. The move at the end of this script is an mv: without this it
-# replaced whatever was there and said nothing, which is the one place in the suite
-# where hand-written prose was destroyed silently.
+# Does the archive already hold a draft under the name this review would file its
+# own under? The move at the end of this script is an mv: without this guard it
+# replaced whatever was there and said nothing — the one place in the suite where
+# hand-written prose was destroyed silently. A free review-saved/<src> is not
+# enough, because two reviews can want one file name (start feature/x and compare
+# develop origin/feature/x both draft for feature/x); asked of the paused reviews
+# rather than of the file's name, for the same reason forget --draft --all has to.
 #
-# Two reviews can want the same file name — a draft belongs to a branch, and both
-# git review start feature/x and git review compare develop origin/feature/x draft
-# for feature/x — so it is not enough that review-saved/<src> is free. Asked of the
-# paused reviews rather than of the file's name, for the same reason
-# forget --draft --all has to: the archived draft of review-saved/origin/feature/x
-# is filed under feature/x.
-#
-# Refuse when a paused review still claims it (its prose is the only copy and this
-# would be the command that ate it); replace it, out loud, when nothing does — an
-# entry no review can reclaim is already what forget --draft --all sweeps. Checked
-# here, before anything is written, while the move itself stays last: a guard that
-# can still die has no business running after the review has been put aside.
-#
-# Conditioned on this review having a draft at all, on exactly the file test the
-# move at the end makes: with no file there is no mv and nothing to protect, and
-# refusing anyway blocked a review that had never been annotated from being paused
-# — over prose that belongs to someone else and that saving would not have touched.
-# The likeliest way in is the ordinary one: the archive is normally there *because*
-# an earlier review of the same branch was saved with its draft.
+# Refuse when a paused review still claims it (its prose is the only copy); replace
+# it, out loud, when nothing does — an entry no review can reclaim is what
+# forget --draft --all already sweeps. Checked here, before anything is written,
+# while the move itself stays last: a guard that can still die has no business
+# running after the review has been put aside. Conditioned on this review having a
+# draft at all, on exactly the file test the move makes: no file, no mv, nothing to
+# protect.
 walk_gitdir_init
 _save_draftsrc="$(walk_review_draft_src "$cur")"
 _save_replaces=0

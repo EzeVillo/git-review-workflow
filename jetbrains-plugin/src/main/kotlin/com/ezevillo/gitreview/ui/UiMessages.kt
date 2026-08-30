@@ -106,15 +106,9 @@ object UiMessages {
     }
 
     /**
-     * LA UNICA PUERTA a un dialogo de confirmacion de este plugin, y por eso
-     * toma el [id]: es lo que hace que `confirms:` del canonico GOBIERNE en vez
-     * de solo describir.
-     *
-     * Antes la tabla existia y nadie la consultaba -- el despachador la miraba
-     * en un `if` de cuerpo vacio --, asi que sacar o agregar una confirmacion no
-     * ponia nada en rojo, y el canonico llego a declarar `confirms: true` para
-     * un control que hacia rato no confirmaba. El id no cambia lo que se dibuja:
-     * cambia que un llamador no pueda abrir un modal que el contrato no declara.
+     * LA UNICA PUERTA a un dialogo de confirmacion de este plugin: toma el [id]
+     * para que `confirms:` del canonico GOBIERNE y no solo describa (ver
+     * CLAUDE.md, "La copy de los paneles", y decisiones.md §15.3).
      *
      * En debug tira; en produccion escribe al log y sigue confirmando, que es la
      * degradacion segura -- un modal de mas molesta, uno de menos borra trabajo
@@ -211,18 +205,16 @@ internal fun escapeHtml(text: String): String =
  * levantar la plataforma.
  *
  * [DialogWrapper] empaqueta contra el tamaño preferido de este panel, y ni un
- * combo ni una lista piden el ancho de sus ítems: las etiquetas del asistente
- * ("Local — review the local branch without fetching…") salían cortadas con
- * puntos suspensivos, y leerlas pedía agrandar la ventana a mano en cada paso.
- * Se mide el ítem más largo y se pide ese ancho, con tope para que un nombre de
- * rama desmedido no estire el diálogo a lo ancho de la pantalla — ahí queda el
- * tooltip, y el diálogo se puede agrandar y recuerda el tamaño.
+ * combo ni una lista piden el ancho de sus ítems -- las etiquetas del asistente
+ * salían cortadas con puntos suspensivos. Se mide el ítem más largo y se pide
+ * ese ancho, con tope para que un nombre de rama desmedido no estire el diálogo
+ * a lo ancho de la pantalla (el tooltip cubre el resto); igual se puede
+ * agrandar y recuerda el tamaño.
  *
- * Sin ícono: el de `Messages.getQuestionIcon()` que traía antes era el mismo
- * círculo azul en los cuatro pasos del asistente sin importar la pregunta, así
- * que no distinguía nada — y centrado por [BorderLayout] contra una lista de
- * doce filas quedaba flotando a media altura, leyéndose como un botón de ayuda
- * roto en vez de una decoración. Un filtro-sobre-lista ya se explica solo.
+ * Sin ícono: el de `Messages.getQuestionIcon()` era el mismo círculo azul en
+ * los cuatro pasos del asistente, sin distinguir nada, y centrado contra una
+ * lista de doce filas quedaba flotando a media altura como un botón de ayuda
+ * roto. Un filtro-sobre-lista ya se explica solo.
  */
 internal fun choosePanel(
     message: String,
@@ -285,17 +277,14 @@ private class ChooseDialog(
         title = dialogTitle
         list.selectionMode = ListSelectionModel.SINGLE_SELECTION
         list.visibleRowCount = 12
-        // `ColoredListCellRenderer` y no `DefaultListCellRenderer`: éste último
-        // pinta con los colores por defecto de Swing en vez de los del tema activo
-        // de la plataforma, así que una fila sin seleccionar salía en el celeste de
-        // link de Swing en vez del gris de texto normal de Darcula/tema claro. Y no
-        // `SimpleListCellRenderer.create`: ese método está scheduled for removal
-        // —lo reporta la validación del Marketplace— y su reemplazo, el DSL
-        // `listCellRenderer`, cuelga de `LcrRow`, que es @ApiStatus.Experimental.
-        // `ColoredListCellRenderer` no tiene ninguno de los dos problemas: sigue
-        // los colores de selección/foco de la lista como cualquier popup nativo, y
-        // de paso separa en gris la mitad descriptiva de la etiqueta (" — texto" o
-        // " (current)"), que antes se leía con el mismo peso que el nombre.
+        // `ColoredListCellRenderer`, no `DefaultListCellRenderer` (pinta con los
+        // colores por defecto de Swing, no los del tema activo: una fila sin
+        // seleccionar salía celeste-link en vez de gris normal) ni
+        // `SimpleListCellRenderer.create` (scheduled for removal según el
+        // Marketplace, y su reemplazo `listCellRenderer` cuelga de `LcrRow`,
+        // @ApiStatus.Experimental). Ésta sigue los colores de selección/foco de
+        // la lista como cualquier popup nativo, y de paso separa en gris la
+        // mitad descriptiva de la etiqueta (" — texto" o " (current)").
         list.cellRenderer = object : ColoredListCellRenderer<String>() {
             init {
                 ipad = JBUI.insets(3, 8)

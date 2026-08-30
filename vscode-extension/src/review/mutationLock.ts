@@ -1,19 +1,15 @@
 /**
- * Cola serializada de profundidad 1 para invocaciones mutantes (`next`/
- * `prev`). Una segunda invocación mientras la primera está en vuelo se
- * descarta, no se encola — encolarla ejecutaría una intención basada en una
- * posición que ya no es la vigente (research.md Decisión 9, FR-020).
- * Publica `busy` a través de `onDidChangeBusy`; `extension.ts` traduce eso a
- * la context key `gitReview.busy`. El descarte en sí avisa por
- * `onDidDiscard`, para que quien la disparó desde la paleta o un atajo se
- * entere sin silencio (research.md Decisión 7 de `005`, FR-036).
+ * Cola serializada de profundidad 1 para invocaciones mutantes (`next`/`prev`):
+ * una segunda invocación mientras la primera está en vuelo se descarta, no se
+ * encola — encolarla ejecutaría una intención basada en una posición que ya no
+ * es la vigente. Publica `busy` por `onDidChangeBusy` (`extension.ts` lo
+ * traduce a la context key `gitReview.busy`) y el descarte por `onDidDiscard`,
+ * para que la paleta de comandos o un atajo se enteren sin silencio.
  *
- * Sin dependencia de `vscode` a propósito: es lógica pura, testeable sin
- * host (T035).
+ * Sin dependencia de `vscode`: es lógica pura, testeable sin host.
  */
-// Motivo fijo, no derivado de la operación en vuelo: quien escucha (paleta de
-// comandos, atajo) no tiene por qué saber cuál era esa operación, sólo que la
-// suya no corrió (research.md Decisión 7, FR-036).
+// Fijo, no derivado de la operación en vuelo: quien escucha no necesita saber
+// cuál era, sólo que la suya no corrió.
 const DISCARD_REASON = "Another operation is already in progress";
 
 export class MutationLock {
@@ -31,10 +27,9 @@ export class MutationLock {
     }
 
     /**
-     * Se dispara cuando `run()` descarta una llamada por haber una mutación
-     * en vuelo — la señal que le falta al descarte silencioso de `run()`
-     * (FR-036): `gitReview.busy` ya apaga los controles del panel, pero no
-     * cubre la paleta de comandos ni un atajo de teclado.
+     * Se dispara cuando `run()` descarta una llamada por haber otra en vuelo:
+     * la señal que falta porque `gitReview.busy` apaga los controles del
+     * panel pero no cubre la paleta de comandos ni un atajo de teclado.
      */
     onDidDiscard(listener: (reason: string) => void): { dispose(): void } {
         this.discardListeners.add(listener);

@@ -14,15 +14,13 @@ function message(stderr: string): string {
 /**
  * `gitReview.saveReview`: pausa la review activa (contracts/cli-invocation.md
  * § `save`) como `review-saved/<src>` y vuelve a la rama de origen. La review
- * queda en el inventario del estado vacío, retomable con `continue` (ya
- * existente desde `002`).
+ * queda en el inventario del estado vacío, retomable con `continue`.
  *
  * Mismo molde que `abortReview.ts`: la confirmación va **fuera** del
- * `MutationLock` (tomarlo mientras el modal espera dejaría el panel `busy` sin
- * que nada esté mutando todavía), y adentro sólo la invocación, con
- * `withProgress` no cancelable. El `StateToken` se captura al abrir el diálogo
- * y se revalida justo antes de invocar (staleGuard.ts): si el estado cambió
- * debajo del modal, no se invoca nada.
+ * `MutationLock`, y adentro sólo la invocación, con `withProgress` no
+ * cancelable. El `StateToken` se captura al abrir el diálogo y se revalida
+ * justo antes de invocar (staleGuard.ts): si el estado cambió debajo del
+ * modal, no se invoca nada.
  *
  * El texto de la confirmación es más suave que el de `abort`: no se descarta
  * nada, sólo se pausa — las ediciones viajan con la review guardada y se
@@ -55,10 +53,9 @@ export async function saveReview(
     }
 
     await lock.run(async () => {
-        // El testigo del estado se comparte entre la revalidacion de aca abajo
-        // y el chequeo de despues del progreso: `withProgress` solo devuelve el
-        // resultado de la invocacion, asi que la marca de "no se invoco" viaja
-        // por fuera de el.
+        // El testigo se comparte entre la revalidación de acá abajo y el chequeo
+        // después del progreso: `withProgress` sólo devuelve el resultado de la
+        // invocación, así que la marca de "no se invocó" viaja por fuera de él.
         let stale = false;
 
         const result = await vscode.window.withProgress(
@@ -72,17 +69,14 @@ export async function saveReview(
                     return undefined;
                 }
                 const invocation = await invokeGitReview("save", [], getInvokeOptions());
-                // Refrescar pase lo que pase: aunque el verbo falle, es lo que
-                // dice donde quedo el repositorio — la salida humana no se
-                // parsea nunca.
+                // Refrescar pase lo que pase (ver continueReview.ts): dice dónde
+                // quedó el repositorio; la salida humana no se parsea nunca.
                 await stateManager.refresh();
                 return invocation;
             }
         );
 
         if (stale) {
-            // Informativo, no error: nadie hizo nada mal, el mundo cambio
-            // debajo del dialogo mientras esperaba la confirmacion.
             void vscode.window.showInformationMessage(
                 STALE
             );
@@ -90,10 +84,10 @@ export async function saveReview(
         }
 
         if (result && result.exitCode !== 0) {
-            // El mensaje de la CLI se muestra tal cual, sin redactar aca
-            // (FR-024) — es la misma garantia que abortReview.ts. Si el exit
-            // no es 0 y no hay stderr (CLI matada / rota), un toast genérico
-            // evita el fallo silencioso.
+            // El mensaje de la CLI se muestra tal cual, sin redactar acá — es la
+            // misma garantía que abortReview.ts. Si el exit no es 0 y no hay
+            // stderr (CLI matada / rota), un toast genérico evita el fallo
+            // silencioso.
             const text = message(result.stderr);
             void vscode.window.showErrorMessage(
                 text.length > 0 ? text : "Could not pause the review."

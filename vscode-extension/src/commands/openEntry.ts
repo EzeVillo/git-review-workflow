@@ -177,22 +177,20 @@ function fileName(display: string): string {
  * Los cambios de UN archivo del rango. Se arman acá en vez de delegar en
  * `git.openChange`, que era lo que hacía antes (research.md Decisión 10).
  *
- * El motivo del cambio: `git.openChange` no resuelve un path, resuelve un
- * `Resource` de los grupos que la extensión de git tiene **escaneados** en ese
- * instante, y ese escaneo es asíncrono. `git review start` mueve `HEAD` y
- * stagea el PR entero de un saque, así que durante los segundos siguientes esos
- * grupos todavía describen el estado anterior; pedirle el diff de un archivo
- * que no figura ahí no falla, no abre nada, y nadie lo reintenta. Medido en
- * Linux: el escaneo llegaba hasta ~2,6 s tarde, y en ese hueco el botón
- * "Changes" no hacía absolutamente nada — con cualquier tipo de cambio, no sólo
- * con archivos agregados. Windows no lo mostraba por diferencias de timing.
+ * El motivo: `git.openChange` resuelve un `Resource` de los grupos que la
+ * extensión de git tiene **escaneados** en ese instante, no un path, y ese
+ * escaneo es asíncrono. `git review start` mueve `HEAD` y stagea el PR entero
+ * de un saque, así que esos grupos siguen describiendo el estado anterior
+ * durante los segundos siguientes; pedirle el diff de un archivo que no figura
+ * ahí no falla, no abre nada, y nadie lo reintenta. Medido en Linux: el escaneo
+ * llegaba hasta ~2,6 s tarde, y en ese hueco "Changes" no hacía nada — con
+ * cualquier tipo de cambio. Windows no lo mostraba, por diferencias de timing.
  *
- * Los lados salen del mismo `readRangeChanges` que ya usa `openAllChanges`, o
- * sea de git directo, que es la única fuente que está al día siempre. Con los
- * dos lados presentes el diff va contra el **working tree** y queda editable,
- * igual que el multi-diff del rango; con uno solo no hay dos versiones que
- * comparar y se abre la única que existe, como documento `git:` de sólo lectura
- * — nunca el `file:` del working tree, que es la otra acción (`openEntry`).
+ * Los lados salen de `readRangeChanges` (mismo que `openAllChanges`): git
+ * directo, la única fuente siempre al día. Con los dos lados el diff va contra
+ * el **working tree** y queda editable, igual que el multi-diff del rango; con
+ * uno solo se abre la única versión que existe, de sólo lectura — nunca el
+ * `file:` del working tree, que es la otra acción (`openEntry`).
  */
 async function openFileChange(rootUri: vscode.Uri, display: string): Promise<void> {
     const gitApi = await ensureGitApi();

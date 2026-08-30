@@ -1,26 +1,20 @@
 /**
- * Lo que queda del camino del borrador dentro del asistente (012,
- * contracts/client-draft-panel.md § 3): crear, y terminar.
+ * Lo que queda del camino del borrador dentro del asistente
+ * (contracts/client-draft-panel.md § 3): crear, y terminar. El asistente no
+ * espera nada — antes sí, y la espera dependía de una notificación que el
+ * revisor descartaba sin querer mientras editaba justamente el archivo que
+ * esa notificación pedía completar. Lo que hacían `build`, `reload` y
+ * `pickKeys` vive ahora en *Validate and start*, sobre un estado que sobrevive
+ * a cerrar el editor.
  *
- * Antes había un bucle: crear → abrir → **esperar** → validar → recargar
- * ofertas → elegir esenciales. La espera era una notificación que quedaba
- * abierta mientras el revisor escribía su orden de lectura, y todo lo que venía
- * después dependía de que esa notificación siguiera ahí — se descartaba sin
- * querer con un "clear all notifications" mientras se editaba justamente el
- * archivo que pedía editar. Lo que hacían `build`, `reload` y `pickKeys` vive
- * ahora en *Validate and start*, un control del panel, sobre un estado que
- * sobrevive a cerrar el editor. El asistente no espera nada.
+ * Tampoco abre el borrador: recién creado todavía no hay registro `draft` que
+ * traiga su ruta, así que abrir ahí exigiría una invocación extra o rearmarla
+ * a mano. El refresco post-mutación trae la fila con su `<path>` un instante
+ * después, y el revisor abre desde el panel.
  *
- * Tampoco abre el borrador, y por eso ya no necesita su ruta: en el instante
- * posterior a crearlo todavía no hay registro `draft` que la traiga, así que
- * abrir ahí exigiría o una invocación extra o volver a armar la ruta — que es
- * exactamente lo que esta feature retira. El refresco post-mutación que ya
- * existe trae la fila con su `<path>` un instante después, y el revisor abre
- * desde el panel.
- *
- * Lógica pura, sin `vscode`, por la misma razón que `layoutOffers` y
- * `reviewIntent`: el plugin de IntelliJ y la extensión de Visual Studio portan
- * esta misma máquina, y la paridad se sostiene si el estado vive acá.
+ * Lógica pura, sin `vscode`: el plugin de IntelliJ y la extensión de Visual
+ * Studio portan esta misma máquina, y la paridad se sostiene si el estado
+ * vive acá.
  */
 
 import {ReadingOffer} from "../cli/configPorcelain";
@@ -59,14 +53,11 @@ export type DraftFlowEvent =
  *   negarse, así que cada entrada cuyo archivo sigue en rango conserva su
  *   número, su why y su `> key`, y los que entraron llegan como placeholders.
  *
- * No hay `start-over`, y la ausencia es deliberada. Existió como la otra mitad
- * de un modal que preguntaba, sobre cualquier borrador ya usado, si reconciliar
- * o empezar de cero. Ese modal se retiró: la CLI ahora ofrece `draft-update`
- * sólo cuando hay algo que reconciliar, así que no queda pregunta que hacer.
- * Empezar de cero es lo único que destruye prosa escrita a mano y con el modal
- * quedaba a un clic de distancia en un paso por el que se pasaba de largo; sigue
- * disponible como lo que es —un acto deliberado— con Discard en la fila del
- * borrador, o con `walkthrough draft --force` desde la terminal.
+ * No hay `start-over` a propósito: existió como un modal que preguntaba
+ * reconciliar vs. empezar de cero, y se retiró porque destruir prosa escrita a
+ * mano no puede quedar a un clic en un paso por el que se pasa de largo. Sigue
+ * disponible como acto deliberado: Discard en la fila del borrador, o
+ * `walkthrough draft --force` desde la terminal.
  */
 export type DraftStep = "create" | "resume" | "update";
 
@@ -126,17 +117,13 @@ export function offersIncludeKeys(offers: readonly ReadingOffer[] | undefined): 
 
 /**
  * Los tres números de un `update`, leídos del registro `merged` que emite
- * `walkthrough draft --porcelain`.
+ * `walkthrough draft --porcelain` — la única fuente, porque ninguna fila los
+ * contesta (la del borrador sólo muestra el par annotated/total nuevo) y leer
+ * la frase humana sería parsear salida humana, lo que `contracts/cli-invocation.md`
+ * prohíbe.
  *
- * Este registro existe porque son lo ÚNICO que el verbo dice y ninguna fila
- * contesta: la del borrador muestra el par annotated/total nuevo, nunca lo que
- * se movió para llegar ahí. La frase humana los trae también, pero leerla sería
- * parsear salida humana — el camino que este archivo tenía y que
- * `contracts/cli-invocation.md` prohíbe.
- *
- * `undefined` cuando el registro no está (una CLI vieja, un `--build`, un
- * `--stdout`): el llamador se calla, que es la degradación correcta —una
- * mutación sin acuse molesta menos que un acuse inventado.
+ * `undefined` cuando el registro no está (CLI vieja, `--build`, `--stdout`):
+ * el llamador se calla — una mutación sin acuse molesta menos que uno inventado.
  */
 export function parseMergedRecord(
     stdout: string
@@ -160,10 +147,9 @@ export function parseMergedRecord(
  * abiertos el borrador que hay que guardar antes de que `draft --build` lo lea
  * del disco.
  *
- * No es `===`: la ruta llega de la CLI y el editor devuelve la suya pasada por
- * `Uri.file`, que normaliza separadores y baja la letra de unidad. En Windows
- * las dos cadenas nombran el mismo archivo y se comparan distinto, y de esa
- * comparación depende que el borrador llegue al disco: fallarla no da un error,
+ * No es `===`: la ruta de la CLI y la del editor (pasada por `Uri.file`, que
+ * normaliza separadores y baja la letra de unidad) nombran el mismo archivo en
+ * Windows pero se comparan distinto. Fallar esta comparación no da un error:
  * da una validación silenciosa del archivo sin guardar.
  *
  * El sistema se pasa en vez de leerse acá, como en `userDataDir`, para que la

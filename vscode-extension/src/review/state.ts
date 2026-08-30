@@ -20,6 +20,12 @@ import {
     StatusFinishRecord,
 } from "../cli/porcelain";
 import {isOutdated} from "../cli/version";
+import {
+    CLI_PROBE_RETRIES,
+    CLI_PROBE_RETRY_DELAY_MS,
+    cliLooksMissing,
+    versionVerdict,
+} from "./cliProbe";
 import {Situation, situationFor, situationForExitCode} from "./situation";
 
 export type {Situation} from "./situation";
@@ -141,21 +147,55 @@ const EMPTY_ARRAYS = {
     branches: [] as BranchRecord[],
 };
 
+/** Lo que el sondeo de `--version` encontró, cuando encontró algo que reportar. */
+interface VersionIssue {
+    situation: Situation;
+    stderr?: string;
+}
+
 /**
  * Corre `--version` y traduce el resultado a `cli-missing`/`cli-outdated`, o
  * `undefined` si la CLI está presente y al día (contracts/cli-invocation.md
  * § "git review --version").
+ *
+ * Declarar la ausencia pide EVIDENCIA de ausencia (`versionVerdict`), no un
+ * fallo cualquiera: durante el arranque del host la primera invocación es la
+ * que más chances tiene de salir mal por motivos que no son la CLI, y ahí el
+ * cartel de instalar aparecía arriba de una CLI instalada. Sin evidencia se
+ * reintenta, y el panel espera en vez de afirmar.
  */
-async function checkCliVersion(options: ReviewStateOptions): Promise<Situation | undefined> {
-    const result = await invokeGitReview("--version", [], options);
-    if (result.errorCode || result.exitCode !== 0) {
-        return "cli-missing";
+async function checkCliVersion(options: ReviewStateOptions): Promise<VersionIssue | undefined> {
+    let probe = await invokeGitReview("--version", [], options);
+    let verdict = versionVerdict(probe);
+    // Un veredicto sin evidencia se reintenta ANTES de publicar nada: el panel
+    // sigue sin modelo (su superficie de espera) y lo que el revisor ve es una
+    // demora, no un diagnóstico que hay que desmentir diez segundos después.
+    for (let attempt = 0; verdict === "unknown" && attempt < CLI_PROBE_RETRIES; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, CLI_PROBE_RETRY_DELAY_MS));
+        probe = await invokeGitReview("--version", [], options);
+        verdict = versionVerdict(probe);
     }
-    const version = result.stdout.trim();
-    if (isOutdated(version)) {
-        return "cli-outdated";
+    if (verdict === "ok") {
+        // Sin línea de versión no hay nada que comparar: la CLI contestó, y el
+        // `status` que sigue es mejor juez que `isOutdated("")`, que da `true`.
+        const version = probe.stdout.trim();
+        return version !== "" && isOutdated(version) ? {situation: "cli-outdated"} : undefined;
     }
-    return undefined;
+    // Una CLI que tarda es lo contrario de una CLI que no está — un proceso que
+    // no existe no demora en no existir. Ofrecer ahí "instalá con npm" manda a
+    // instalar lo que ya está instalado, así que la situación es `error` y lo
+    // que se dice es dónde mirar.
+    if (probe.timedOut) {
+        return {
+            situation: "error",
+            stderr:
+                "`git review --version` did not finish in time and was stopped. "
+                + "Run it in a terminal to see how long it takes. "
+                + "See the Git Review CLI output channel.",
+        };
+    }
+    const stderr = probe.stderr.trim();
+    return {situation: "cli-missing", ...(stderr === "" ? {} : {stderr})};
 }
 
 /**
@@ -230,6 +270,7 @@ export class ReviewStateManager {
     private versionCheckedGeneration = -1;
     private current: ReviewState = {situation: "no-review", ...EMPTY_ARRAYS};
     private inFlight: Promise<ReviewState> | undefined;
+    private resolved = false;
     private dirty = false;
     private waiters: Array<(state: ReviewState) => void> = [];
 
@@ -241,6 +282,17 @@ export class ReviewStateManager {
 
     get state(): ReviewState {
         return this.current;
+    }
+
+    /**
+     * `false` hasta que un refresco resolvió una situación. La semilla de
+     * arriba es un marcador de posición, no una respuesta: dibujarla le diría
+     * al revisor en qué situación está antes de que nadie haya mirado. Mismo
+     * papel que `hasResolvedState` en JetBrains y `HasResolved` en Visual
+     * Studio; del lado del webview es la superficie de espera.
+     */
+    get hasResolved(): boolean {
+        return this.resolved;
     }
 
     /**
@@ -285,6 +337,7 @@ export class ReviewStateManager {
     }
 
     private setState(next: ReviewState): ReviewState {
+        this.resolved = true;
         this.current = next;
         this.changeEmitter.fire(next);
         return next;
@@ -307,7 +360,11 @@ export class ReviewStateManager {
         if (this.versionCheckedGeneration !== generation || this.current.situation === "cli-missing") {
             const versionIssue = await checkCliVersion(options);
             if (versionIssue) {
-                return this.setState({situation: versionIssue, ...EMPTY_ARRAYS});
+                return this.setState({
+                    situation: versionIssue.situation,
+                    ...EMPTY_ARRAYS,
+                    ...(versionIssue.stderr === undefined ? {} : {stderr: versionIssue.stderr}),
+                });
             }
             // No marcar la generación como verificada si alguien invalidó
             // mientras este chequeo estaba en vuelo: ese resultado ya es
@@ -320,9 +377,14 @@ export class ReviewStateManager {
         const result = await invokeGitReview("status", ["--porcelain"], options);
         if (result.errorCode) {
             this.invalidateVersionCheck();
+            // Un spawn que falló no es por sí solo una CLI ausente: con el mismo
+            // criterio que el sondeo de versión, sin evidencia esto es un error
+            // con su diagnóstico, y el `--version` que acaba de invalidarse lo
+            // vuelve a mirar en el refresco siguiente.
             return this.setState({
-                situation: "cli-missing", ...EMPTY_ARRAYS,
-                stderr: result.stderr
+                situation: cliLooksMissing(result.errorCode, result.stderr) ? "cli-missing" : "error",
+                ...EMPTY_ARRAYS,
+                stderr: result.stderr,
             });
         }
         // Un timeout llega con exitCode null y sin errorCode, o sea que caería

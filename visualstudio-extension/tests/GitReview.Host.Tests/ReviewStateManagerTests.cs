@@ -151,6 +151,50 @@ public class ReviewStateManagerTests
         Assert.Equal(new[] { "--version" }, cli.Verbs);
     }
 
+    /// <summary>
+    /// A version probe that times out describes a CLI that is there and slow, which is
+    /// the opposite of one that is not there: the install screen would send the
+    /// reviewer to install what is already installed.
+    /// </summary>
+    [Fact]
+    public async Task A_version_probe_that_times_out_is_not_a_missing_cli()
+    {
+        var cli = new FakeCliInvoker()
+            .Answer("--version", new InvokeResult("", "", null, TimedOut: true));
+        var state = await Manager(cli, "/repo").RefreshAsync();
+        Assert.Equal(Situation.Error, state.Situation);
+        Assert.Contains("did not finish in time", state.Stderr);
+    }
+
+    /// <summary>
+    /// A failure that names nothing is not evidence of anything, and the first
+    /// invocation of a startup is the one most likely to produce one. It is retried
+    /// before the panel is told anything at all.
+    /// </summary>
+    [Fact]
+    public async Task A_failure_without_evidence_is_retried_before_it_is_believed()
+    {
+        var cli = new FakeCliInvoker().Fails("--version", "", exitCode: 127);
+        var state = await Manager(cli, "/repo").RefreshAsync();
+        Assert.Equal(Situation.CliMissing, state.Situation);
+        Assert.Equal(1 + CliProbe.CliProbeRetries, cli.Verbs.Count(v => v == "--version"));
+        // And it never got as far as asking for the status.
+        Assert.DoesNotContain("status", cli.Verbs);
+    }
+
+    /// <summary>
+    /// The other half: with evidence there is nothing to wait for, so the reviewer is
+    /// told at once instead of sitting through the retries.
+    /// </summary>
+    [Fact]
+    public async Task Evidence_of_absence_is_answered_on_the_first_probe()
+    {
+        var cli = new FakeCliInvoker().Fails("--version", "sh: git-review: not found", exitCode: 127);
+        var state = await Manager(cli, "/repo").RefreshAsync();
+        Assert.Equal(Situation.CliMissing, state.Situation);
+        Assert.Equal(new[] { "--version" }, cli.Verbs);
+    }
+
     [Fact]
     public async Task A_spawn_failure_is_a_missing_cli_too()
     {

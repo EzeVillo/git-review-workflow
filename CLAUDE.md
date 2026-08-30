@@ -179,6 +179,13 @@ CLI, cuyo público eligió la terminal y donde el vocabulario de git es el corre
   la lista es corta a propósito: un panel que salta siempre deja de significar que pasó algo. Misma
   forma que `confirms:` —una puerta por cliente que toma el id, y tres gates— porque nació con ellos:
   una tabla sin gate nace decorativa. No cubre el scroll.
+- **El panel no contesta antes de haber mirado.** Hasta la primera situación resuelta dice
+  «Reading the review state…» (`waiting_text` del canónico, con gate en los tres) y nada más — y en
+  VS Code el modelo que el webview guardó **no** repinta `cli-missing`/`cli-outdated`/`error`: son
+  respuestas sobre el entorno, y repintarlas de memoria es el cartel apareciendo «mientras carga».
+  Decir que la CLI no está pide **evidencia** de ausencia (un fallo que la nombre); un timeout, un
+  exit code cualquiera o un spawn que falló por otra cosa se **reintentan** antes de publicar nada.
+  Detalle en `decisiones.md` §15.5.
 - **Advice: en verde, un cliente no reenvía las notas que ya tiene.** La CLI las apaga en el origen
   —los tres invocadores exportan `GIT_REVIEW_ADVICE=0`, un lugar por cliente— porque distinguirlas
   del lado del panel sería parsear salida humana. **Advice es una pregunta, no una lista:** ¿quien

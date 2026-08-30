@@ -151,6 +151,35 @@ public class MiscDomainTests
         Assert.Equal(10_000, CliProbe.CliProbeIntervalMs);
     }
 
+    /// <summary>
+    /// Calling the CLI missing takes evidence of absence. Every other way a probe can
+    /// go wrong — and startup is full of them — is "could not tell", which is answered
+    /// by retrying, not by an install screen on top of an installed CLI.
+    /// </summary>
+    [Fact]
+    public void A_version_probe_reads_the_evidence_not_the_failure()
+    {
+        Assert.Equal(CliVerdict.Ok, CliProbe.VersionVerdict("", 0));
+        Assert.Equal(
+            CliVerdict.Missing,
+            CliProbe.VersionVerdict("git: 'review' is not a git command.", 1));
+        Assert.Equal(
+            CliVerdict.Missing,
+            CliProbe.VersionVerdict("", null, "Win32Exception"));
+        // A process that does not exist does not take long not to exist.
+        Assert.Equal(CliVerdict.Unknown, CliProbe.VersionVerdict("", null, null, timedOut: true));
+        Assert.Equal(CliVerdict.Unknown, CliProbe.VersionVerdict("fatal: dubious ownership", 128));
+        Assert.Equal(CliVerdict.Unknown, CliProbe.VersionVerdict("", 127));
+    }
+
+    [Fact]
+    public void The_probe_retries_before_answering_and_stays_under_its_own_interval()
+    {
+        Assert.True(CliProbe.CliProbeRetries >= 1);
+        Assert.True(CliProbe.CliProbeRetryDelayMs > 0);
+        Assert.True(CliProbe.CliProbeRetries * CliProbe.CliProbeRetryDelayMs < CliProbe.CliProbeIntervalMs);
+    }
+
     [Fact]
     public void Source_preference_prefers_the_workspace_then_the_user_then_remote()
     {

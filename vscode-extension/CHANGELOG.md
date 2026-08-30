@@ -12,6 +12,21 @@ Requires `git review` **0.8.0** or newer.
 
 ### Fixed
 
+- **The panel no longer announces a missing CLI while it is still looking for one.** Opening a
+  window could put "The git-review CLI was not found" — install button and all — on top of a CLI
+  that was installed, and take it back a few seconds later. The startup probe is where that came
+  from: the first `git review --version` of a session is the one most likely to fail for reasons
+  that are not the CLI, and any failure at all was read as absence. Saying the CLI is not there now
+  takes evidence that names it; a probe that times out reports a CLI that is slow, not one that is
+  gone, and anything else is retried before the panel is told anything at all. A version the CLI
+  prints somewhere else no longer comes out as an outdated one, either.
+
+- **And until there is an answer, the panel says so.** It used to sit blank while the first read was
+  in flight, and what filled that blank was the model the panel had saved when the window last
+  closed — so a "CLI not found" from an earlier session was redrawn before anything had been looked
+  at again. The panel now shows *Reading the review state…* until a situation is resolved, and never
+  repaints an answer about your environment from memory.
+
 - **The foot of the panel scrolls as one list, and no section clips itself.** With two or more of
   *Walkthrough*, *Edits you extracted*, *Compare*, *Settings* and *Support* open at once, the footer
   used to split its height between them: each open section got a slice of the band and a scrollbar

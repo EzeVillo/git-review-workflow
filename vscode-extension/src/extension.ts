@@ -262,7 +262,14 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
                 loadWhy(wanted.raw);
             }
         }
-        panelProvider.update(buildModel());
+        // Nada se dibuja antes de la primera situación resuelta: la semilla del
+        // manager es un marcador de posición y publicarla sería contestar por él
+        // (mismo gate que `hasResolvedState` en JetBrains y `HasResolved` en
+        // Visual Studio). Sin esto, un aviso de busy que llegue durante el
+        // arranque alcanza para pintarla.
+        if (stateManager.hasResolved) {
+            panelProvider.update(buildModel());
+        }
         updateContextKeys(state);
     }
 

@@ -13,6 +13,15 @@ Requires `git review` **0.8.0** or newer.
 
 ### Fixed
 
+- **The panel no longer announces a missing CLI while it is still looking for one.** Opening a
+  window could put "The git-review CLI was not found" — install button and all — on top of a CLI
+  that was installed, and take it back a few seconds later. The startup probe is where that came
+  from: the first `git review --version` of a session is the one most likely to fail for reasons
+  that are not the CLI, and any failure at all was read as absence. Saying the CLI is not there now
+  takes evidence that names it; a probe that times out reports a CLI that is slow, not one that is
+  gone, and anything else is retried before the panel is told anything at all. A version the CLI
+  prints somewhere else no longer comes out as an outdated one, either.
+
 - **The sections at the foot of the panel open and close where they are.** Opening *Walkthrough*,
   *Edits you extracted*, *Compare*, *Settings* or *Support* grew the section inside a band that
   never made room for it: the sections below it fell off the bottom edge, reachable only through a

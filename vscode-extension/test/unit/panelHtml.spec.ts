@@ -94,7 +94,29 @@ describe("panelHtml", () => {
 
     it("guarda el modelo recibido y redibuja el guardado al recargarse", () => {
         assert.ok(html.includes("vscode.setState(event.data.model)"));
-        assert.ok(/const saved = vscode\.getState\(\);\s*if \(saved\) \{ receive\(saved\); \}/.test(html));
+        assert.ok(/const saved = vscode\.getState\(\);\s*if \(saved && UNVERIFIED\.indexOf\(saved\.situation\) === -1\) \{ receive\(saved\); \}/.test(html));
+    });
+
+    it("lo que no se repinta de memoria son las respuestas sobre el entorno", () => {
+        // Repintar un cli-missing guardado es el cartel apareciendo "mientras
+        // carga": el host todavia no volvio a mirar y el panel ya lo afirma.
+        assert.ok(/const UNVERIFIED = \["cli-missing", "cli-outdated", "error"\];/.test(html));
+        assert.ok(/\} else \{ paintWaiting\(\); \}/.test(html), "sin modelo confiable se espera, no se afirma");
+    });
+
+    it("antes del primer modelo el panel dice que esta leyendo, no queda en blanco", () => {
+        // Los otros dos paneles ya esperan con esta misma frase; el webview se
+        // quedaba en blanco, que es donde el modelo guardado se colaba a llenar
+        // el hueco con lo que dijera la sesion anterior.
+        assert.ok(html.includes("Reading the review state"), "la espera usa la frase de los otros dos paneles");
+        assert.ok(
+            /function paintWaiting\(\) \{[^]*?painted = undefined;/.test(html),
+            "la espera no deja nada dibujado que un clic pueda tomar por vigente"
+        );
+        assert.ok(
+            /box\.setAttribute\("role", "status"\);\s*box\.setAttribute\("aria-busy", "true"\);/.test(html),
+            "la espera se anuncia a un lector de pantalla"
+        );
     });
 
     it("la carga es una sola fase: el why en vuelo tambien cuenta como pendiente", () => {

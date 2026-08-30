@@ -537,6 +537,8 @@ export function panelHtml(nonce: string): string {
     color: var(--vscode-descriptionForeground);
     font-size: .85em;
   }
+  /* La espera previa al primer modelo: un aviso, no contenido del panel. */
+  .empty p.waiting { margin: 0; color: var(--vscode-descriptionForeground); }
   a { color: var(--vscode-textLink-foreground); }
 </style>
 </head>
@@ -1755,6 +1757,38 @@ export function panelHtml(nonce: string): string {
     render(model);
   }
 
+  /*
+   * Antes del primer modelo el panel no sabe nada, y decirlo es distinto de
+   * quedarse en blanco: la vista se resuelve apenas se abre, el primer
+   * git review --version + status --porcelain tarda lo que tarda un par de
+   * procesos, y el hueco se ve sobre todo mientras el host arranca. Misma frase
+   * que los otros dos paneles ("Reading the review state…").
+   */
+  const WAITING_TEXT = "Reading the review state…";
+
+  /*
+   * Las tres situaciones que NO se repintan de memoria al reconstruirse el
+   * webview: son respuestas sobre el entorno —la CLI no está, es vieja, algo
+   * falló— y volver a dibujarlas antes de que nadie haya vuelto a mirar es
+   * exactamente el cartel que aparecía "mientras carga". El resto sí se
+   * repinta: evita el parpadeo y no afirma nada del entorno.
+   */
+  const UNVERIFIED = ["cli-missing", "cli-outdated", "error"];
+
+  function paintWaiting() {
+    // painted queda en undefined a propósito: no hay ningún control dibujado
+    // que un clic pueda tomar por vigente, y el primer modelo que llegue tiene
+    // que poder entrar directo al esqueleto sin esperar el delay antiparpadeo.
+    painted = undefined;
+    root.textContent = "";
+    root.className = "";
+    const box = el("div", "empty");
+    box.setAttribute("role", "status");
+    box.setAttribute("aria-busy", "true");
+    box.appendChild(el("p", "waiting", WAITING_TEXT));
+    root.appendChild(box);
+  }
+
   function paintSkeleton() {
     showTimer = 0;
     painted = SKELETON;
@@ -1806,7 +1840,7 @@ export function panelHtml(nonce: string): string {
   // de cero. Sin esto el panel arranca vacío hasta que llegue el primer modelo;
   // con el estado guardado se dibuja ya, y el modelo que sigue lo pisa.
   const saved = vscode.getState();
-  if (saved) { receive(saved); }
+  if (saved && UNVERIFIED.indexOf(saved.situation) === -1) { receive(saved); } else { paintWaiting(); }
 
   // El host no puede postear el modelo hasta acá: un mensaje que llegue antes
   // de que exista el listener de arriba se pierde, y el panel se queda en

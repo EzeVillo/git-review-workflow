@@ -54,6 +54,30 @@ class MiscDomainTest {
     }
 
     @Test
+    fun versionVerdictReadsEvidenceNotFailure() {
+        assertEquals(CliVerdict.OK, versionVerdict("", 0))
+        // The two shapes the absence of the executable takes here.
+        assertEquals(
+            CliVerdict.MISSING,
+            versionVerdict("git: 'review' is not a git command.", 1),
+        )
+        assertEquals(
+            CliVerdict.MISSING,
+            versionVerdict("Cannot run program \"git\": CreateProcess error=2", null, "ProcessNotCreatedException"),
+        )
+        // And the three that are not evidence of anything.
+        assertEquals(CliVerdict.UNKNOWN, versionVerdict("", null, null, timedOut = true))
+        assertEquals(CliVerdict.UNKNOWN, versionVerdict("fatal: dubious ownership", 128))
+    }
+
+    @Test
+    fun versionProbeRetriesBeforeAnswering() {
+        assertTrue(CLI_PROBE_RETRIES >= 1)
+        assertTrue(CLI_PROBE_RETRY_DELAY_MS > 0)
+        assertTrue(CLI_PROBE_RETRIES * CLI_PROBE_RETRY_DELAY_MS < CLI_PROBE_INTERVAL_MS)
+    }
+
+    @Test
     fun sourcePreference() {
         assertEquals(ReviewSource.REMOTE, resolveDefaultSource(SourcePreferenceLevels()))
         assertEquals(

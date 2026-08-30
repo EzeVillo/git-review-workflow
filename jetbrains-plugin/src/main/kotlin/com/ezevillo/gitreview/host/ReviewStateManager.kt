@@ -1,5 +1,8 @@
 package com.ezevillo.gitreview.host
 
+import com.ezevillo.gitreview.domain.CLI_PROBE_RETRIES
+import com.ezevillo.gitreview.domain.CLI_PROBE_RETRY_DELAY_MS
+import com.ezevillo.gitreview.domain.CliVerdict
 import com.ezevillo.gitreview.domain.ReviewState
 import com.ezevillo.gitreview.domain.Situation
 import com.ezevillo.gitreview.domain.isOutdated
@@ -8,6 +11,7 @@ import com.ezevillo.gitreview.domain.parseListFixes
 import com.ezevillo.gitreview.domain.parseListPorcelain
 import com.ezevillo.gitreview.domain.parsePorcelain
 import com.ezevillo.gitreview.domain.situationFor
+import com.ezevillo.gitreview.domain.versionVerdict
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -43,20 +47,47 @@ class ReviewStateManager(
         }
 
         if (versionCheckedGeneration != gen || current.situation == Situation.CLI_MISSING) {
-            val ver = invoker.invoke("--version", emptyList(), cwd)
-            if (ver.errorCode != null || ver.exitCode != 0 || ver.timedOut) {
-                val state = ReviewState(
-                    situation = Situation.CLI_MISSING,
-                    stderr = ver.stderr.ifBlank { "CLI not found" },
-                )
+            // Declaring the CLI missing takes EVIDENCE of absence, not any
+            // failure at all: the first invocation of a startup is the one most
+            // likely to go wrong for reasons that are not the CLI, and that is
+            // where the install screen landed on top of an installed CLI. With
+            // no evidence the probe is retried and the panel keeps waiting --
+            // it has published nothing yet -- instead of answering.
+            var ver = invoker.invoke("--version", emptyList(), cwd)
+            var verdict = versionVerdict(ver.stderr, ver.exitCode, ver.errorCode, ver.timedOut)
+            var attempt = 0
+            while (verdict == CliVerdict.UNKNOWN && attempt < CLI_PROBE_RETRIES) {
+                attempt++
+                Thread.sleep(CLI_PROBE_RETRY_DELAY_MS)
+                ver = invoker.invoke("--version", emptyList(), cwd)
+                verdict = versionVerdict(ver.stderr, ver.exitCode, ver.errorCode, ver.timedOut)
+            }
+            if (verdict != CliVerdict.OK) {
+                // A CLI that takes too long is the opposite of a CLI that is not
+                // there, and offering "install it with npm" there sends the
+                // reviewer to install what is already installed.
+                val state = if (ver.timedOut) {
+                    ReviewState(
+                        situation = Situation.ERROR,
+                        stderr = VERSION_TIMEOUT,
+                    )
+                } else {
+                    ReviewState(
+                        situation = Situation.CLI_MISSING,
+                        stderr = ver.stderr.ifBlank { "CLI not found" },
+                    )
+                }
                 if (gen == generation.get()) {
                     current = state
                     versionCheckedGeneration = gen
                 }
                 return state
             }
+            // No version line means nothing to compare: the CLI answered, and
+            // the status that follows judges better than isOutdated(""), which
+            // returns true.
             val version = ver.stdout.trim()
-            if (isOutdated(version)) {
+            if (version.isNotEmpty() && isOutdated(version)) {
                 val state = ReviewState(
                     situation = Situation.CLI_OUTDATED,
                     stderr = "installed version: $version",
@@ -182,6 +213,15 @@ class ReviewStateManager(
     }
 
     companion object {
+        /**
+         * A version probe that ran out of time: the CLI is there and slow, not
+         * absent, so what the panel says is where to look.
+         */
+        const val VERSION_TIMEOUT: String =
+            "`git review --version` did not finish in time and was stopped. " +
+                "Run it in a terminal to see how long it takes. " +
+                "See the git review log in Help > Show Log."
+
         const val MULTI_ROOT_ERROR: String =
             "Open a single-folder workspace that is a git repository. git review uses " +
                 "one root (like the CLI cwd); multi-root is not supported."

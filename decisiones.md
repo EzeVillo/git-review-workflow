@@ -1182,3 +1182,50 @@ sin preguntar; un reveal de más es exactamente el ruido que esta tabla existe p
 **Lo que no cubre:** el scroll. Un panel visible pero scrolleado en el pie tampoco muestra la fila
 nueva, que nace primero en `no-review`. Llevarlo al tope es otra superficie —un mensaje al webview en
 VS Code, otra cosa en cada host— y no entró acá.
+### 15.5 La espera: no contestar antes de haber mirado
+
+Al abrir el IDE, los tres paneles mostraban seguido «no se encontró la CLI» —con su botón de
+instalar— arriba de una CLI perfectamente instalada, y a los pocos segundos se corregían solos. Un
+cartel que se desmiente solo enseña a no leer ninguno, que es el mismo daño que hace un diálogo de
+confirmación que aparece siempre (§15).
+
+**El arranque no es una situación.** El panel tiene ocho, y ninguna significa «todavía no miré».
+Entre «la CLI está y contesta» y «la CLI no está» vive un tercer resultado —**no se pudo saber**— y
+el arranque es justo donde aparece: el host recién levanta, el disco está saturado, el proceso tarda
+o muere sin decir por qué. Leer ese tercero como ausencia es lo que ponía la pantalla de instalar
+sobre una instalación sana.
+
+**La ausencia pide evidencia, no un fallo cualquiera.** El veredicto de `git review --version` se
+decide con una sola tabla, igual en los tres clientes (`versionVerdict` / `VersionVerdict`):
+
+| Lo que volvió | Veredicto |
+|---|---|
+| exit 0 | la CLI contestó |
+| el fallo **nombra** la ausencia (`is not a git command`, `not found`, `no such file`, `ENOENT`, `CreateProcess error=2`) | no está |
+| timeout | no se pudo saber |
+| cualquier otro exit code o error de spawn | no se pudo saber |
+
+Dos consecuencias que no son obvias. Un **timeout es lo contrario** de una CLI ausente: un proceso
+que no existe no tarda en no existir, así que ahí lo que corresponde decir es que tardó y dónde
+mirar, no ofrecer instalar lo que ya está instalado. Y **`stdout` no entra en el veredicto**: un
+build que imprime su versión en otro lado sigue de largo al `status`, en vez de salir por el panel
+como una CLI vieja — `isOutdated("")` devuelve `true`, y esa era la otra mitad del mismo bug.
+
+**Lo que no es evidencia se reintenta antes de publicarse.** Dos reintentos de 400 ms, y el panel
+sigue en su superficie de espera porque todavía no se publicó nada. Una demora de menos de un
+segundo en el arranque cuesta bastante menos que un cartel que hay que desmentir diez segundos
+después, que es lo que hacía el sondeo de fondo (`CLI_PROBE_INTERVAL_MS`). Acotado a propósito: una
+respuesta que no llega nunca también tiene que terminar en algo.
+
+**Y hay una frase para el momento en que no se sabe nada.** «Reading the review state…», declarada
+en `strings.waiting_text` del canónico y verificada en los tres paneles. JetBrains y Visual Studio ya
+la tenían (`paintWaiting`, `RenderWaiting`); VS Code se quedaba en blanco, y ese blanco lo llenaba el
+modelo que el webview había guardado con `setState` — o sea, el `cli-missing` de la sesión anterior,
+repintado de memoria antes de que nadie hubiera vuelto a mirar. Por eso las tres situaciones que son
+**respuestas sobre el entorno** (`cli-missing`, `cli-outdated`, `error`) no se repintan al
+reconstruirse el webview: el resto sí, que evita el parpadeo sin afirmar nada.
+
+**El gate de que nada se dibuje antes de tiempo es el mismo en los tres**, y ya existía en dos:
+`hasResolvedState` en JetBrains, `HasResolved` en Visual Studio, y ahora `hasResolved` del
+`ReviewStateManager` de VS Code, que es lo que hace que un aviso de *busy* llegado durante el
+arranque no alcance para pintar la semilla.

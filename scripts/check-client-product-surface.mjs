@@ -124,6 +124,28 @@ if (existsSync(ijState)) {
   if (!s.includes(multi)) fail("intellij ReviewStateManager missing multi_root_error fragment");
 }
 
+// waiting_text — la frase de la espera previa a la primera situacion resuelta.
+// Vive en los tres paneles y en ninguna otra parte: no es un estado vacio, asi
+// que no tiene fila en panel_layout ni control que la dibuje, y sin este check
+// nada la ata. El drift que evita es el de siempre —tres frases distintas para
+// el mismo momento— con el agravante de que el momento es el arranque, que es
+// justo cuando el panel no puede decir nada mas.
+const waiting = "Reading the review state…";
+if (!text.includes(`waiting_text: "${waiting}"`)) {
+  fail("YAML missing waiting_text string");
+}
+const waitingSurfaces = [
+  ["vscode", join(root, "vscode-extension", "src", "views", "panelHtml.ts")],
+  ["intellij", join(root, "jetbrains-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "ui", "ReviewPanel.kt")],
+  ["visualstudio", join(root, "visualstudio-extension", "src", "GitReview.VS", "ToolWindows", "PanelView.cs")],
+];
+for (const [label, file] of waitingSurfaces) {
+  if (!existsSync(file)) continue;
+  if (!readText(file, "utf8").includes(waiting)) {
+    fail(`${label} panel missing waiting_text`);
+  }
+}
+
 // no_base_candidates
 if (!text.includes("No branches to pick a base from were found.")) {
   fail("YAML missing no_base_candidates string");

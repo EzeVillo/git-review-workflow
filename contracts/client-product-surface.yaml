@@ -35,6 +35,12 @@ strings:
   no_base_candidates: "No branches to pick a base from were found."
   reload_or_wait: "Reload the window after installing, or wait — the panel checks again every few seconds."
   other_install_options: "Other install options"
+  # Lo que el panel dice ANTES de su primera situacion resuelta, en los tres. No
+  # es un estado vacio ni una situacion: es la unica frase que se puede decir sin
+  # haber leido nada, y existe porque la alternativa —dibujar el estado semilla—
+  # anunciaba una CLI ausente antes de que nadie hubiera mirado. Verificado
+  # contra panelHtml.ts, ui/ReviewPanel.kt y ToolWindows/PanelView.cs.
+  waiting_text: "Reading the review state…"
   # verified: review/state.ts multi-root message
   multi_root_error: >-
     Open a single-folder workspace that is a git repository. git review uses

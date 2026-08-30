@@ -61,14 +61,32 @@ public sealed class ReviewStateManager
         }
 
         // Version probe: `git review --version` (verb is the flag after "review").
+        // Declaring the CLI missing takes EVIDENCE of absence, not any failure at all:
+        // the first invocation of a startup is the one most likely to go wrong for
+        // reasons that are not the CLI, and that is where the install screen landed on
+        // top of an installed CLI. With no evidence the probe is retried and the panel
+        // keeps waiting -- nothing has been published yet -- instead of answering.
         var ver = await _cli.InvokeAsync("--version", Array.Empty<string>(), sole, cancellationToken: ct)
             .ConfigureAwait(false);
-
-        if (IsMissing(ver))
+        var verdict = CliProbe.VersionVerdict(ver.Stderr, ver.ExitCode, ver.ErrorCode, ver.TimedOut);
+        for (var attempt = 0; verdict == CliVerdict.Unknown && attempt < CliProbe.CliProbeRetries; attempt++)
         {
-            return Publish(new ReviewState(
-                Situation.CliMissing,
-                Stderr: string.IsNullOrWhiteSpace(ver.Stderr) ? "not found" : ver.Stderr), gen);
+            await Task.Delay(CliProbe.CliProbeRetryDelayMs, ct).ConfigureAwait(false);
+            ver = await _cli.InvokeAsync("--version", Array.Empty<string>(), sole, cancellationToken: ct)
+                .ConfigureAwait(false);
+            verdict = CliProbe.VersionVerdict(ver.Stderr, ver.ExitCode, ver.ErrorCode, ver.TimedOut);
+        }
+
+        if (verdict != CliVerdict.Ok)
+        {
+            // A CLI that takes too long is the opposite of a CLI that is not there, and
+            // offering "install it with npm" there sends the reviewer to install what is
+            // already installed.
+            return Publish(ver.TimedOut
+                ? new ReviewState(Situation.Error, Stderr: VersionTimeout)
+                : new ReviewState(
+                    Situation.CliMissing,
+                    Stderr: string.IsNullOrWhiteSpace(ver.Stderr) ? "not found" : ver.Stderr), gen);
         }
 
         var versionLine = CliMessage.FirstCliLine(ver.Stdout);
@@ -210,6 +228,15 @@ public sealed class ReviewStateManager
 
         return Publish(next, gen);
     }
+
+    /// <summary>
+    /// A version probe that ran out of time: the CLI is there and slow, not absent, so
+    /// what the panel says is where to look.
+    /// </summary>
+    private const string VersionTimeout =
+        "`git review --version` did not finish in time and was stopped. "
+        + "Run it in a terminal to see how long it takes. "
+        + "See the git review pane of the Output window.";
 
     private static bool IsMissing(InvokeResult r) =>
         r.ErrorCode is not null

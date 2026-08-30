@@ -14,7 +14,7 @@
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <Deterministic>true</Deterministic>
     <!-- Keep in sync with contracts/client-product-surface.yaml and root VERSION clients. -->
-    <GitReviewClientVersion>0.1.0</GitReviewClientVersion>
+    <GitReviewClientVersion>0.2.0</GitReviewClientVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(TargetFramework)'=='net472'">

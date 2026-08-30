@@ -6,6 +6,43 @@ own [releases](https://github.com/EzeVillo/git-review-workflow/releases).
 This project follows [semantic versioning](https://semver.org/spec/v2.0.0.html)
 and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 
+## [0.3.0] — 2026-08-30
+
+Requires `git review` **0.8.0** or newer.
+
+### Fixed
+
+- **The foot of the panel scrolls as one list, and no section clips itself.** With two or more of
+  *Walkthrough*, *Edits you extracted*, *Compare*, *Settings* and *Support* open at once, the footer
+  used to split its height between them: each open section got a slice of the band and a scrollbar
+  of its own, so none of them could show its own content and the footer had no bar with which to
+  reach the rest. Every open section now asks for the height its content needs, and when they stop
+  fitting, the footer — still capped at 55% of the panel, so the body above never disappears —
+  scrolls as a single list, with one bar for all of them.
+
+### Changed
+
+- **The panel comes to the front when a block is born that was not there before.** Starting a
+  review, starting one from a reading order you had begun, continuing a saved one and finishing one
+  all draw something that was not on screen a moment ago — and the wizard that starts them runs
+  over the editor, so the panel could be closed or on another tab while the acknowledgement was
+  drawn where nobody could see it. Those four now bring the panel forward, and without taking focus:
+  your caret stays where it was. Every other mutation keeps refreshing in place, because a panel
+  that jumps every time stops meaning that something happened.
+
+- **Notes naming a command this panel already draws as a button no longer arrive.** Several CLI
+  notes end by spelling the verb that does the next thing. In a terminal that name is the answer; in
+  a panel it is a paragraph about a button already on screen. The panel now turns them off at the
+  source, the same way git's own `advice.*` settings work — `git config reviewworkflow.advice false`
+  does it for your terminal too. Notes about state still arrive in full: an entry the PR no longer
+  changes, a cursor that moved, a branch that differs from your local one.
+
+- **No more notifications repeating what the panel already shows.** Creating a reading order leaves its
+  row, *Build* leaves the badge up to date, and a finish that stayed pending leaves its banner:
+  none of them says it again in a notification. What the panel cannot answer still gets one —
+  copying to the clipboard, the residue of a finish that left no banner, and updating a reading
+  order, which now reports what the update actually did (`4 kept, 2 added, 1 no longer in the PR`).
+
 ## [0.2.0] — 2026-08-27
 
 Requires `git review` **0.7.0** or newer.

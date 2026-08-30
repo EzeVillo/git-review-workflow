@@ -749,12 +749,36 @@ class PanelRenderer(
             content.isVisible = next
             sectionOpen[section.title] = next
             toggle.text = (if (next) "▼ " else "▶ ") + section.title
-            box.revalidate()
-            box.repaint()
+            revalidatePanel(box)
         }
         box.add(toggle)
         box.add(content)
         return box
+    }
+
+    /**
+     * Re-lays out the whole panel after a section of the footer opened or
+     * closed.
+     *
+     * `revalidate()` only validates up to the nearest validate root, and a
+     * JScrollPane is one -- so revalidating the section stops inside the
+     * footer's own pane and the BorderLayout that hands SOUTH its height never
+     * runs again. The footer then keeps the height it had before the toggle:
+     * the section that just opened grows inside a band that never made room for
+     * it and pushes the sections under it off the bottom edge, and closing it
+     * again leaves the same band with its contents shuffled around. Neither
+     * settles until the tool window is resized by hand. The height is decided
+     * above that scroll pane, so that is where the toggle has to land.
+     */
+    private fun revalidatePanel(from: JComponent) {
+        var top: JComponent = from
+        var parent: Container? = from.parent
+        while (parent != null) {
+            if (parent is JComponent) top = parent
+            parent = parent.parent
+        }
+        top.revalidate()
+        top.repaint()
     }
 
     /** El icono de la plataforma para un nombre del canonico, si el chrome lo tiene. */

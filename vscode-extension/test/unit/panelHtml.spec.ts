@@ -173,26 +173,26 @@ describe("panelHtml", () => {
         assert.ok(!html.includes('button("Update the CLI"'));
     });
 
-    it("una seccion del pie scrollea en vez de recortarse", () => {
-        // El flex item de .tools no es .tools-body sino el ::details-content que
-        // Chrome interpone: sin darle el mismo min-height se planta en el alto de
-        // su contenido y el overflow:auto del inner nunca llega a activarse.
+    it("el pie scrollea entero y ninguna seccion abierta scrollea por dentro", () => {
+        // Una barra por seccion abierta partia el pie en cajas que se recortaban
+        // por separado, ninguna capaz de mostrar su seccion entera. La barra es
+        // una sola y es la del pie, como el JScrollPane del plugin de JetBrains
+        // y el ScrollViewer del de Visual Studio.
         assert.ok(
-            /grid-template-rows: minmax\(0, 1fr\)/.test(html),
-            "un track 1fr es minmax(auto, 1fr): nunca baja del min-content y no deja scrollear"
-        );
-        assert.ok(!/grid-template-rows: [01]fr;/.test(html));
-        assert.ok(
-            /\.tools\[open\]::details-content \{[^}]*min-height: 0;/.test(html),
-            "el wrapper que interpone Chrome tiene que ceder igual que .tools-body"
+            /\.pane-footer \{[^}]*max-height: 55%;[^}]*overflow-y: auto;/.test(html),
+            "el unico contenedor scrolleable del pie es el pie, y va capado al 55%"
         );
         assert.ok(
-            /\.pane-footer \{[^}]*overflow-y: auto;/.test(html),
-            "si ni los minimos entran, el pie se scrollea antes que esconder una seccion"
+            !/\.tools\[open\] \.tools-inner \{[^}]*overflow: auto/.test(html),
+            "una seccion abierta no se recorta a si misma"
         );
         assert.ok(
-            /\.pane-footer:has\(\.tools\[open\] ~ \.tools\[open\]\) \.tools\[open\] \{\s*min-height:/.test(html),
-            "con varias abiertas ninguna puede quedarse en su solo encabezado"
+            !/:has\(\.tools\[open\] ~ \.tools\[open\]\)/.test(html),
+            "sin reparto entre secciones: cada una pide el alto de su contenido"
+        );
+        assert.ok(
+            /\.tools\[open\] \.tools-body \{\s*grid-template-rows: 1fr;/.test(html),
+            "1fr es minmax(auto, 1fr): el track abierto nunca baja del min-content"
         );
     });
 

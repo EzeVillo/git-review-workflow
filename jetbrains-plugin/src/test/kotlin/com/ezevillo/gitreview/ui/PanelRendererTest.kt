@@ -327,6 +327,35 @@ class PanelRendererTest {
         assertTrue(body.height > 0, "the body keeps room above the footer")
     }
 
+    @Test
+    fun `opening a section re-lays out the panel from above the footer scroll pane`() {
+        // A JScrollPane is a validate root, so revalidating the section stops
+        // inside the footer's own pane and the BorderLayout that decides how
+        // tall that pane is never runs again: the footer kept the height it had
+        // before the toggle, and the sections under the one that just opened
+        // fell off the bottom edge.
+        val renderer = PanelRenderer(PreviewPanelChrome()) { _, _, _ -> false }
+        val root = renderer.render(panelLayout(PanelFixtures.noReviewFixes()))
+        var revalidations = 0
+        val host = object : JPanel(java.awt.BorderLayout()) {
+            override fun revalidate() {
+                revalidations++
+                super.revalidate()
+            }
+        }
+        host.add(root, java.awt.BorderLayout.CENTER)
+        val toggle = PanelRenderer.collectButtons(root)
+            .single { it.text?.endsWith(" Walkthrough") == true }
+        // A JPanel revalidates twice on its way out of its own constructor
+        // (setUI, then setFont); only what the toggle does is being counted.
+        revalidations = 0
+
+        toggle.doClick()
+        assertEquals(1, revalidations, "opening a section has to revalidate past the footer's scroll pane")
+        toggle.doClick()
+        assertEquals(2, revalidations, "and so does closing it: the footer has to give the height back")
+    }
+
     private fun collectScrollPanes(c: java.awt.Container): List<javax.swing.JScrollPane> {
         val found = mutableListOf<javax.swing.JScrollPane>()
         if (c is javax.swing.JScrollPane) found.add(c)

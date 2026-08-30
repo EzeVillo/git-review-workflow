@@ -470,14 +470,31 @@ los tres, con tres implementaciones: `max-height` + `overflow-y: auto` en `.pane
 `preferredSize` capado del `JScrollPane` que `BorderLayout.SOUTH` consulta, y el `MaxHeight` que
 `_root.SizeChanged` le pone al `ScrollViewer` del pie. Sin el tope, el pie **es** el panel: la banda
 inferior de los tres layouts pide el alto que quiere, empuja el cuerpo fuera de la vista y después
-se recorta ella misma contra el borde, sin barra con la que alcanzar el resto. En la extensión hay
-además un eslabón que no se ve en el DOM: el flex item de `.tools` no es `.tools-body` sino el
-`::details-content` que Chrome interpone, y el `overflow: auto` del cuerpo no se activa hasta que
-ese wrapper —y el track del grid, que va `minmax(0, 1fr)` porque `1fr` es `minmax(auto, 1fr)`—
-aceptan bajar del min-content. Los gates son `footer:capped` / `footer:scrolls` en el `--verify` de
-Visual Studio y el test del renderer de JetBrains, los dos sobre el render de verdad; del lado de la
-extensión, donde ni la suite de integración puede mirar el webview, es un assert estructural del
-CSS.
+se recorta ella misma contra el borde, sin barra con la que alcanzar el resto. Los gates son
+`footer:capped` / `footer:scrolls` en el `--verify` de Visual Studio y el test del renderer de
+JetBrains, los dos sobre el render de verdad; del lado de la extensión, donde ni la suite de
+integración puede mirar el webview, es un assert estructural del CSS.
+
+**Y la barra del pie es una sola: ninguna sección se recorta a sí misma.** El pie es una única caja
+scrolleable y cada sección abierta pide el alto de su contenido —un `JScrollPane` sobre la columna
+entera en JetBrains, un `ScrollViewer` sobre el `StackPanel` entero en Visual Studio—. La extensión
+hacía lo contrario: repartía el alto del pie entre las secciones abiertas (`flex: 1 1 auto`, más un
+`min-height` de cortesía cuando había dos o más) y le daba a cada una su propio `overflow: auto`,
+que a su vez obligaba al track del grid a ir `minmax(0, 1fr)` y a pedirle lo mismo al
+`::details-content` que Chrome interpone. Eran tres barras chiquitas, ninguna capaz de mostrar su
+sección entera, y el pie sin barra propia. Ahora el track abierto vuelve a ser `1fr` —o sea
+`minmax(auto, 1fr)`, que nunca baja del min-content— y el `overflow: hidden` del inner queda sólo
+para recortar durante la animación de apertura.
+
+**Abrir o cerrar una sección revalida el panel, no la sección (JetBrains).** `revalidate()` valida
+hasta el validate root más cercano y un `JScrollPane` es uno: revalidar la sección se quedaba
+adentro del scroll del pie, el `BorderLayout` que le da el alto a `SOUTH` no volvía a correr y el
+pie conservaba el alto que tenía antes del click. La sección recién abierta crecía adentro de una
+banda que nunca le hizo lugar y empujaba a las de abajo fuera del panel; al cerrarla, la misma banda
+quedaba con su contenido barajado adentro. Ninguna de las dos se acomodaba hasta redimensionar la
+tool window a mano. Por eso el listener sube hasta el `JComponent` más alto del árbol y revalida
+ahí, que es donde el alto se decide. El gate es el test del renderer que cuenta las revalidaciones
+sobre un host propio, en las dos direcciones: abrir y cerrar.
 
 **Una review no tiene pie: ninguna `tools_section`.** Todo lo que cuelga de `walkthrough` —los dos
 verbos del autor y las dos guías de autoría— es de quien está parado en **su** PR, y adentro de una

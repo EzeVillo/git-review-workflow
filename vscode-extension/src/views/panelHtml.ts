@@ -62,17 +62,19 @@ export function panelHtml(nonce: string): string {
     overflow: auto;
   }
   /* Secciones secundarias al pie: headers siempre visibles; abiertas, el
-     contenido crece dentro de un tope para no borrar el body. */
+     contenido crece dentro de un tope para no borrar el body.
+
+     El pie es UN solo contenedor scrolleable: cada seccion pide el alto de su
+     contenido y, cuando entre todas se pasan del tope, la barra que alcanza el
+     resto es la del pie —una sola para todas—. Es lo mismo que hacen el
+     JScrollPane del plugin de JetBrains y el ScrollViewer del de Visual
+     Studio. Antes cada seccion abierta se repartia el alto del pie y scrolleaba
+     por dentro: tres barras chiquitas, ninguna capaz de mostrar su seccion
+     entera, y el pie sin barra propia. */
   .pane-footer {
     flex: 0 1 auto;
-    display: flex;
-    flex-direction: column;
     min-height: 0;
     max-height: 55%;
-    /* Red de ultima instancia: con el reparto de abajo ninguna seccion se pasa
-       del tope, asi que esto solo entra cuando ni los minimos entran (varias
-       abiertas en un panel bajo). Recortar ahi dejaria una seccion entera sin
-       forma de alcanzarla. */
     overflow-y: auto;
     overflow-x: hidden;
   }
@@ -389,33 +391,13 @@ export function panelHtml(nonce: string): string {
   .empty.after-inv { border-top: 1px solid var(--vscode-panel-border); }
   /* Secciones del pie (Walkthrough / Compare / Support): mismo patrón que Outline y
      Timeline del Explorer — header fijo abajo, al abrir el body crece hacia
-     arriba (el .pane-body de arriba se achica y scrollea) y el contenido de
-     la sección scrollea si no entra. Nunca se "despegan" del fondo al abrir. */
+     arriba (el .pane-body de arriba se achica y scrollea). Nunca se "despegan"
+     del fondo al abrir, y ninguna se recorta a si misma: quien scrollea es el
+     pie entero. */
   .tools {
-    flex: 0 0 auto;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    overflow: hidden;
     border-top: 1px solid var(--vscode-sideBarSectionHeader-border, var(--vscode-panel-border));
   }
-  .tools[open] {
-    flex: 1 1 auto;
-    min-height: 0;
-  }
-  /* El reparto del pie encoge cada seccion en proporcion a lo que ocupa, asi
-     que con varias abiertas las mas chicas terminan exactamente en su summary
-     —abiertas y sin una linea de cuerpo visible—. Con dos o mas abiertas cada
-     una se queda con un par de lineas y el pie scrollea si no entran; con una
-     sola no aplica, para no inflar el pie con un hueco vacio cuando su
-     contenido es de dos lineas. Donde :has() no exista (un host viejo del
-     minimo que declara el package.json) se pierde este refinamiento y no el
-     scroll, que es lo de arriba. */
-  .pane-footer:has(.tools[open] ~ .tools[open]) .tools[open] {
-    min-height: 5.5em;
-  }
   .tools summary {
-    flex: 0 0 auto;
     cursor: pointer;
     font-size: .9em;
     font-weight: 600;
@@ -444,40 +426,19 @@ export function panelHtml(nonce: string): string {
   @media (prefers-reduced-motion: no-preference) {
     .tools summary::before { transition: transform .12s ease; }
   }
-  /* Cuerpo de la sección: grid 0fr→1fr anima la apertura como el twistie;
-     el inner scrollea cuando el footer toca su max-height.
+  /* Cuerpo de la sección: grid 0fr→1fr anima la apertura como el twistie.
 
-     Los dos tracks van como minmax(0, Nfr) y no como Nfr a secas: 1fr es
-     minmax(auto, 1fr), o sea que la fila nunca baja del min-content de su
-     contenido y el overflow:auto del inner no se activa nunca — la
-     sección crecía entera y el max-height del footer la recortaba, dejando
-     el final de una sección larga (y las secciones que van debajo)
-     inalcanzables. El cerrado también es un minmax para que la
-     interpolación de la apertura siga siendo entre dos valores de la misma
-     forma. */
+     El track abierto va 1fr —o sea minmax(auto, 1fr)— justamente porque nunca
+     baja del min-content: la sección se queda con el alto que pide su
+     contenido y no lo recorta. Lo que no entra en el pie lo alcanza la barra
+     del pie, que es una sola para todas las secciones. El overflow del inner
+     se queda en hidden y es lo que recorta durante la animación. */
   .tools-body {
     display: grid;
-    grid-template-rows: minmax(0, 0fr);
-    min-height: 0;
+    grid-template-rows: 0fr;
   }
   .tools[open] .tools-body {
-    grid-template-rows: minmax(0, 1fr);
-    flex: 1 1 auto;
-    min-height: 0;
-  }
-  /* El otro eslabon del mismo reparto, y el que no se ve en el DOM: Chrome
-     envuelve todo lo que no es el summary en un ::details-content propio, asi
-     que el flex item de .tools no es .tools-body sino ese wrapper anonimo
-     —block, flex 0 1 auto, min-height auto—, que se niega a bajar del alto de
-     su contenido y deja las reglas de arriba sin efecto. Se le pide lo mismo
-     que a .tools-body; donde el pseudo-elemento no existe, .tools-body vuelve
-     a ser el flex item directo y las reglas de arriba alcanzan solas. */
-  .tools[open]::details-content {
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow: hidden;
+    grid-template-rows: 1fr;
   }
   @media (prefers-reduced-motion: no-preference) {
     .tools-body { transition: grid-template-rows .12s ease; }
@@ -487,7 +448,6 @@ export function panelHtml(nonce: string): string {
     min-height: 0;
   }
   .tools[open] .tools-inner {
-    overflow: auto;
     padding: .15em .9em .55em;
   }
   .tools-inner > button {
@@ -1083,8 +1043,9 @@ export function panelHtml(nonce: string): string {
   let supportOpen = false;
 
   /**
-   * Envuelve el cuerpo de un <details> del pie para poder animar 0fr→1fr y
-   * scrollear cuando el footer toca max-height (Outline/Timeline).
+   * Envuelve el cuerpo de un <details> del pie para poder animar 0fr→1fr
+   * (Outline/Timeline). El scroll no es suyo: cuando lo abierto no entra, el
+   * que scrollea es el pie entero.
    */
   function toolsSection(summaryLabel, openFlag, setOpen, bodyChildren) {
     const box = el("details", "tools");

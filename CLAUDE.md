@@ -314,6 +314,11 @@ cada `./gradlew test`, y del lado Visual Studio `PanelLayoutContractTests` en ca
 - **El pie se queda con el 55% del panel y scrollea adentro; nunca lo recorta.** Sin el tope, el pie
   *es* el panel. Gates: `footer:capped` / `footer:scrolls` en el `--verify` de Visual Studio, el test
   del renderer de JetBrains, y un assert estructural del CSS en la extensión.
+- **Y la barra es una sola, la del pie.** Cada sección abierta pide el alto de su contenido y
+  ninguna scrollea por dentro: repartir el alto entre las abiertas daba una barra por sección,
+  ninguna capaz de mostrar la suya entera. En JetBrains, además, el toggle revalida desde el
+  `JComponent` más alto del árbol: un `JScrollPane` es validate root, y revalidando la sección el
+  alto del pie no se recalcula nunca.
 - **Una review no tiene pie: ninguna `tools_section`.** Todo lo que cuelga de `walkthrough` es de
   quien está parado en **su** PR, y adentro de una review estás parado en el de otro. Los registros
   ni llegan: son de `config --porcelain`, que adentro de una review no se invoca.

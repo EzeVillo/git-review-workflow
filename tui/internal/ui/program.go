@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"os"
+	"time"
 
 	"github.com/EzeVillo/git-review-workflow/tui/internal/domain"
 	"github.com/EzeVillo/git-review-workflow/tui/internal/host"
@@ -10,25 +11,51 @@ import (
 )
 
 // Model is the bubbletea program's whole state. It carries the drawn
-// PanelModel (comparable by value, per domain/panelmodel.go) plus the two
-// pieces of state that are NOT product state: the terminal Viewport and
-// which row currently has keyboard focus.
+// PanelModel (comparable by value, per domain/panelmodel.go) plus the
+// pieces of state that are NOT product state: the terminal Viewport, which
+// row currently has keyboard focus, and FR-039's opt-in poll floor
+// bookkeeping (pollFloor/pollGen — see scheduleRead).
 type Model struct {
 	Viewport   Viewport
 	Panel      domain.PanelModel
 	FocusIndex int
 	busy       bool
+	pollFloor  time.Duration
+	pollGen    int
 }
 
 // NewModel builds the program's initial state: waiting_text on the very
 // first frame (T046), before any invocation has even started, and the
-// mouse reporting on by default (contracts/tui-surface.md § Mouse).
+// mouse reporting on by default (contracts/tui-surface.md § Mouse). The
+// opt-in poll floor (FR-039) starts off, exactly as every existing test
+// that calls this constructor already relies on.
 func NewModel() Model {
-	return Model{
+	return NewModelWithPollFloor(0)
+}
+
+// NewModelWithPollFloor is NewModel plus contracts/refresh.md § El piso de
+// poll opt-in: seconds is `reviewui.pollseconds` as the composition root
+// (cmd/git-review-ui/main.go) already resolved it — 0 (its zero value)
+// means "off", which is what makes every OTHER caller of this package's
+// bare NewModel() unaffected by this existing at all.
+func NewModelWithPollFloor(seconds int) Model {
+	m := Model{
 		Viewport: Viewport{Cols: 80, Rows: 24, Color: true},
 		Panel:    domain.PanelModel{Situation: domain.SituationWaiting, MouseEnabled: true},
 	}
+	if seconds > 0 {
+		m.pollFloor = time.Duration(seconds) * time.Second
+	}
+	return m
 }
+
+// WatchTick constructs disparador 2's message as an opaque tea.Msg. It
+// exists so that whatever assembles the real Watcher and forwards its
+// channel (cmd/git-review-ui/main.go) can call tea.Program.Send(WatchTick())
+// without this package ever exporting watchMsg's own type — Update's
+// handling of it was already in place before Phase 5 built anything that
+// could send one.
+func WatchTick() tea.Msg { return watchMsg{} }
 
 // --- the six message classes (T045) -----------------------------------------
 
@@ -48,11 +75,26 @@ type readDoneMsg struct{ result host.ReadResult }
 // refresh.md), the same way a real mutation's own follow-up read will.
 type mutationDoneMsg struct{ result host.Result }
 
+// pollFloorMsg is FR-039's opt-in poll floor firing. gen ties it to the
+// exact scheduleRead() call that armed it: if a NEWER read has happened
+// since (from ANY of the four triggers), gen is stale against the model's
+// current pollGen and this tick is inert — the floor only ever acts when
+// nothing else has read more recently than Interval ago, which is what
+// keeps it from adding a single invocation while the watcher (or focus, or
+// the keyboard) is already doing its job.
+type pollFloorMsg struct{ gen int }
+
 // Init returns the FIRST read as a Cmd — never invoked synchronously — so
 // bubbletea renders the model's zero/waiting state at least once before any
-// process has even started (T046).
+// process has even started (T046). When the poll floor is configured, its
+// very first tick is armed here too (gen 0, matching the model's own zero
+// value): if nothing else re-arms it first, it is what covers the window
+// between startup and the first FocusMsg/watchMsg/keypress.
 func (m Model) Init() tea.Cmd {
-	return readCmd()
+	if m.pollFloor <= 0 {
+		return readCmd()
+	}
+	return tea.Batch(readCmd(), pollFloorTickCmd(m.pollFloor, m.pollGen))
 }
 
 func readCmd() tea.Cmd {
@@ -60,6 +102,29 @@ func readCmd() tea.Cmd {
 		cwd, _ := os.Getwd()
 		return readDoneMsg{result: host.ReadState(context.Background(), cwd, domain.MinCLIVersion)}
 	}
+}
+
+func pollFloorTickCmd(interval time.Duration, gen int) tea.Cmd {
+	return tea.Tick(interval, func(time.Time) tea.Msg {
+		return pollFloorMsg{gen: gen}
+	})
+}
+
+// scheduleRead is every path that means "go read now": disparadores 2
+// (watchMsg), 3 (FocusMsg), 4 (the refresh key), and the read a mutation's
+// own end triggers. It bumps the poll floor's generation — which makes any
+// tick armed by an EARLIER read inert — and, only when the opt-in floor is
+// configured, arms a fresh tick that fires the floor's own read if nothing
+// else does first. Routing every "go read now" site through this instead
+// of each calling readCmd() directly is what makes "re-arm on every read,
+// from wherever" true by construction (FR-039), rather than by remembering
+// to call something at N call sites.
+func (m Model) scheduleRead() (Model, tea.Cmd) {
+	m.pollGen++
+	if m.pollFloor <= 0 {
+		return m, readCmd()
+	}
+	return m, tea.Batch(readCmd(), pollFloorTickCmd(m.pollFloor, m.pollGen))
 }
 
 // Update never calls into internal/host itself — every branch either
@@ -80,15 +145,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Disparador 3: never suppressed by the mutation lock (contracts/
 		// refresh.md). Phase 6 adds the lock; today there is nothing to
 		// suppress against.
-		return m, readCmd()
+		return m.scheduleRead()
 
 	case tea.BlurMsg:
 		return m, nil
 
 	case watchMsg:
-		// Disparador 2: no sender exists before Phase 5. When one does, it
-		// reaches here exactly like FocusMsg does today.
-		return m, readCmd()
+		// Disparador 2, sent via WatchTick() by whatever forwards the real
+		// Watcher's channel (cmd/git-review-ui/main.go, Phase 5) — handled
+		// exactly like FocusMsg.
+		return m.scheduleRead()
+
+	case pollFloorMsg:
+		if msg.gen != m.pollGen {
+			return m, nil // superseded by a more recent read; staying quiet IS the point (FR-039)
+		}
+		return m.scheduleRead()
 
 	case readDoneMsg:
 		m.Panel = domain.Project(toProjectInput(msg.result, m.Panel.MouseEnabled, m.busy))
@@ -99,7 +171,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case mutationDoneMsg:
 		m.busy = false
-		return m, readCmd()
+		return m.scheduleRead()
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
@@ -136,7 +208,9 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case IntentBoundAction:
 		if intent.Action == "refresh" {
-			return m, readCmd()
+			// Disparador 4, FR-038: available in all eight situations, and
+			// the one trigger that is NEVER suppressed or degraded.
+			return m.scheduleRead()
 		}
 		return m, nil
 

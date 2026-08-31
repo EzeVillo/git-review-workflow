@@ -470,7 +470,7 @@ desde otro pane (`git review next`, escribir el borrador, `git pack-refs`, `git 
 `git checkout`) y verificar que el panel refleja cada cambio; medir que en reposo no se lanza ningún
 proceso.
 
-- [ ] T054 [US1] Implementar `tui/internal/host/watch.go`: la **interface** `Watcher`
+- [X] T054 [US1] Implementar `tui/internal/host/watch.go`: la **interface** `Watcher`
   (`Start`/`Rebuild`/`Stop`) y `nopWatcher`, con la elección hecha **una sola vez** en
   `tui/cmd/git-review-ui/main.go` desde la variable de entorno de soporte. **La suite corre con
   `nopWatcher` por default**, así que FR-063 y SC-016 se prueban **por construcción en todos los
@@ -479,7 +479,7 @@ proceso.
   del watcher; una interface con un no-op deja cero — y hay un test que afirma que la elección se
   hace en un solo archivo. **No es una clave `reviewui.*`**: apagar el motor no es una preferencia
   del revisor sino una palanca de suite y de soporte; se documenta en `tui/CONTRIBUTING.md`.
-- [ ] T055 [US1] Implementar `tui/internal/host/watchset.go`: `BuildWatchSet(gitDir, gitCommonDir,
+- [X] T055 [US1] Implementar `tui/internal/host/watchset.go`: `BuildWatchSet(gitDir, gitCommonDir,
   draftPaths) -> WatchSet` con las **seis raíces** de
   [contracts/refresh.md](./contracts/refresh.md) —`<git-common-dir>/` filtrada a `{config,
   packed-refs}`, `refs/`, `reftable/` si existe, los dos directorios de borradores filtrados a
@@ -491,21 +491,21 @@ proceso.
   arranque (FR-064). **Gate**: el test del dedup —fuera de un worktree enlazado, `<git-dir>` aparece
   **una sola vez** con el filtro unido `{config, packed-refs, HEAD}`—, que es barato y protege una
   propiedad fácil de romper sin que nada se note.
-- [ ] T056 [US1] Implementar `tui/internal/host/watch_fsnotify.go` —**el único archivo del árbol que
+- [X] T056 [US1] Implementar `tui/internal/host/watch_fsnotify.go` —**el único archivo del árbol que
   importa `fsnotify`**, activando el gate de T036— con **debounce trailing de 200 ms y techo de 1 s**
   y **coalescencia total**: N eventos de cualquier ruta producen **un** `watchMsg{}` **sin payload**
   (FR-062). El techo no es adorno: un debounce trailing puro se muere de hambre bajo un flujo
   continuo de escrituras, que es exactamente lo que hace un agente llenando el borrador. **Gate**: un
   test que afirma que el mensaje no lleva payload y que la vigilancia **nunca lee** el contenido de
   una ruta vigilada —no parsea un ref, no abre `config`, no lee un `.md`—.
-- [ ] T057 [US1] Implementar el orden `Rebuild` **antes** de emitir en el disparo del debounce, e
+- [X] T057 [US1] Implementar el orden `Rebuild` **antes** de emitir en el disparo del debounce, e
   incremental (agrega los watches nuevos, saca los que ya no están, **nunca tira el watcher entero**).
   Rehacer antes de pedir la lectura hace que la carrera sea inofensiva: un evento perdido durante el
   `Rebuild` está, por construcción, **antes** de la lectura que viene inmediatamente después, y esa
   lectura re-lee todo desde porcelain. Un evento perdido durante un rebuild puede duplicar trabajo;
   **no puede perder estado**. **Gate**: un test que crea un directorio dentro de una ruta vigilada y
   afirma que el conjunto se rehizo y que llegó **un** mensaje.
-- [ ] T058 [US1] Escribir `tui/internal/host/watch_fsnotify_test.go` con los **cuatro agujeros** de
+- [X] T058 [US1] Escribir `tui/internal/host/watch_fsnotify_test.go` con los **cuatro agujeros** de
   FR-058, cada uno con su test: (1) **rename atómico** —escribir `reviewworkflow.base` con
   `git config` y afirmar el evento, **dos veces**, porque el segundo prueba que el watch sobrevivió
   al primer rename—; (2) **refs empaquetados** —crear una review, `git pack-refs --all`, afirmar
@@ -515,14 +515,14 @@ proceso.
   --ref-format=reftable`, arrancar, afirmar que no hubo error de arranque y que una mutación
   dispara—. **Es el único paquete que instancia el watcher real** y corre con la vigilancia
   explícitamente encendida.
-- [ ] T059 [US1] Agregar a `tui/internal/host/watch_fsnotify_test.go` los dos tests de la **sexta
+- [X] T059 [US1] Agregar a `tui/internal/host/watch_fsnotify_test.go` los dos tests de la **sexta
   raíz** y el del **worktree enlazado**: dos `git checkout` seguidos disparan los dos (el segundo
   prueba que el watch sobrevivió al rename de `HEAD`, que git escribe con `HEAD.lock` igual que
   `config`); y en un `git worktree add`, los eventos del **directorio común** llegan, los del
   borrador salen del gitdir **del worktree**, y un `checkout` en **ese** worktree dispara mientras
   que uno en el principal **no** — que es lo que prueba que la raíz va sobre `<git-dir>` y no sobre
   el común.
-- [ ] T060 [US1] Implementar el **piso de poll opt-in** (FR-039): `reviewui.pollseconds`, clave
+- [X] T060 [US1] Implementar el **piso de poll opt-in** (FR-039): `reviewui.pollseconds`, clave
   `git config` bajo el namespace del cliente, **sin default** (ausente = apagado), leída
   defensivamente. Es un **piso**, no un poll: programa una lectura sólo si no hubo ninguna en los
   últimos N segundos y se re-arma en cada lectura venga de donde venga, así que con la vigilancia
@@ -530,10 +530,10 @@ proceso.
   barra de teclas, no tiene control en el panel y no aparece en ninguna copy. Existe para el agujero
   5 —inotify que no dispara en un bind mount Windows→WSL o en varios NFS/SMB—, que falla en silencio.
   **Gate**: un test que afirma cero invocaciones extra con la vigilancia viva.
-- [ ] T061 [US1] Escribir el test de **SC-002** en `tui/internal/host/idle_test.go`: con la TUI
+- [X] T061 [US1] Escribir el test de **SC-002** en `tui/internal/host/idle_test.go`: con la TUI
   abierta y sin tocarla, **cero invocaciones nuevas en el registro** durante una ventana de reposo. Es un número medido, no
   cualitativo, y hoy **ningún contrato le declara un gate** (ver § Huecos): éste lo instala.
-- [ ] T062 [US1] Documentar y afirmar la regla que la elección de `nopWatcher` por default le impone
+- [X] T062 [US1] Documentar y afirmar la regla que la elección de `nopWatcher` por default le impone
   a la suite: **ningún test puede esperar un evento de archivo como forma de sincronizarse**. Los
   tests de comportamiento disparan el refresco con el mensaje, no con el filesystem. **Gate**: FR-074
   y SC-016 — la suite entera pasa con la vigilancia apagada, que es la condición por default.

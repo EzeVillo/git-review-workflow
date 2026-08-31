@@ -1,21 +1,37 @@
+feat-y  1/3
+[#] [34mopen[0m  [x] [34mdiscard[0m
+[ [34mCopy for agent[0m ]  [ [2mValidate and start[0m ]
+[2mEvery file still needs a number and a line saying why it matters[0m
+
+[1mReviews in this repository[0m
+review-saved/other
+[2mwalk[0m
+[ [1;32mContinue[0m ]  [ [34mDelete[0m ]
+
 No active review on this branch.
 [ [1;32mStart a review[0m ]
 
 [1mWalkthrough[0m
-[ [34mInit[0m ]
-[ [34mBuild[0m ]
+[ [34mUpdate[0m ]  [ [34mBuild[0m ]
+feat-x  2/4  [2m(may be out of date)[0m
+[#] [34mopen[0m
+[ [34mCopy for agent[0m ]
+Repository guide  [2m(in force)[0m
+[#] [34mopen[0m
+[ [2mCreate[0m ]
+Your guide  [2m(empty)[0m
+[#] [34mopen[0m  [x] [34mdiscard[0m
+[ [2mCreate[0m ]
 
-[1mCompare[0m
-[ [34mCompare revisions[0m ]
+[1mReading orders you finished with[0m
+Their review is over; the files are still here
+feat-z  4/4
+[#] [34mopen[0m  [x] [34mdiscard[0m
 
-[1mSettings[0m
-Base: develop.
-[ [34mChange the base branch[0m ]
-Remote: origin.
-[ [34mChange remote[0m ]
-
-[1mSupport[0m
-[ [34mStar on GitHub[0m ]
-[ [34mReport a bug[0m ]
+[1mEdits you extracted[0m
+One branch per finish; commit and push them from Source Control, or drop them here
+review-fixes/old-one  [2m(merged)[0m
+[x] [34mdiscard[0m
+[2m… 15 more line(s) below — resize to see them[0m
 
 [2mj[0m:up  [2mk[0m:down  [2menter[0m:select  [2mr[0m:refresh  [2mm[0m:mouse on  [2mq[0m:quit

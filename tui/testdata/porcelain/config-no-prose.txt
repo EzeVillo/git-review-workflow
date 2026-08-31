@@ -1,0 +1,5 @@
+config	base	develop
+config	remote	origin
+guide	team	/home/x/repo/.review/walkthrough-guide.md	absent
+guide	own	/home/x/.git/review-walkthrough-guide.md	absent
+walkthrough	absent	/home/x/repo/.review/walkthrough.md	0	0	main

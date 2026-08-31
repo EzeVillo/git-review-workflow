@@ -34,6 +34,37 @@ func fixtureFor(sit domain.LayoutSituation) domain.PanelModel {
 			NoBaseConfigured: false,
 			ConfiguredBase:   "develop",
 			ConfiguredRemote: "origin",
+
+			// The footer (Phase 7): one row of each kind, so golden_test.go
+			// and reachability_keyboard_test.go both exercise every one of
+			// the five row-control maps, not just the fixed body controls
+			// Phase 4 already covered. Chosen to also hit two of
+			// draft_controls' disabled paths in the same fixture: feat-y is
+			// unfilled (1/3 -> startFromDraft off with tooltip_unfilled),
+			// feat-z is spent (loses its two labelled controls entirely).
+			HasWalkthroughRow:    true,
+			WalkthroughRow:       "feat-x",
+			WalkthroughState:     domain.WalkthroughStale,
+			WalkthroughAnnotated: 2,
+			WalkthroughTotal:     4,
+
+			HasGuideRows:   true,
+			TeamGuideRow:   "/repo/.review/walkthrough-guide.md",
+			TeamGuideState: domain.GuideInForce,
+			OwnGuideRow:    "/gitdir/review-walkthrough-guide.md",
+			OwnGuideState:  domain.GuideEmpty,
+
+			FreshDraftRows:  domain.FooterField("feat-y", "/gitdir/review-walkthrough/feat-y.md", "remote", "full", "1", "3"),
+			FreshDraftCount: 1,
+			SpentDraftRows:  domain.FooterField("feat-z", "/gitdir/review-walkthrough/feat-z.md", "local", "delta", "4", "4"),
+			SpentDraftCount: 1,
+
+			FixesRows:  domain.FooterField("review-fixes/old-one", "merged", "0", "0"),
+			FixesCount: 1,
+
+			InventoryRows:  domain.FooterField("review-saved/other", "1", "0", "0", "1", "walk"),
+			InventoryCount: 1,
+			HasReviews:     true,
 		}
 
 	case domain.LayoutReviewWalk:

@@ -318,6 +318,314 @@ func TestFinishReadyStatusLineIsNotTheVerbsRawStdout(t *testing.T) {
 	}
 }
 
+// --- T081/T082: the footer's mutations. Every handler below is reached in
+// the real program only through activateControl, dispatched from a control
+// noReviewControls (controls.go) built from the SAME footer rows these
+// tests hand-build with domain.FooterField — TestEveryDeclaredControl...
+// (reachability_keyboard_test.go) already proves the control ids/variants
+// are reachable and resolve to the right (id, variant) pair; these tests
+// prove what happens once activated: the right row gets found, the right
+// HousekeepingKind/argv gets built, and the confirmation copy names the
+// right thing.
+
+func TestBeginCleanReviewOpensConfirmWithKeepFixes(t *testing.T) {
+	m := Model{Panel: domain.PanelModel{Situation: domain.SituationFinishPending, Source: "feat-x", FinishDestination: "review-fixes/feat-x"}}
+	m2, cmd := m.beginCleanReview()
+	if cmd != nil {
+		t.Fatal("opening a confirmation must not itself return a Cmd")
+	}
+	if m2.confirm == nil {
+		t.Fatal("beginCleanReview must open the confirm overlay")
+	}
+	if m2.confirm.ID != "cleanReview" {
+		t.Fatalf("confirm.ID = %q, want cleanReview", m2.confirm.ID)
+	}
+	hk := m2.confirm.Pending.params.Housekeeping
+	if hk.Kind != domain.CleanKeepFixes || hk.Source != "feat-x" {
+		t.Fatalf("Housekeeping = %+v, want {CleanKeepFixes feat-x}", hk)
+	}
+	if !strings.Contains(m2.confirm.Title, "feat-x") {
+		t.Errorf("title %q should name the source branch", m2.confirm.Title)
+	}
+	if !strings.Contains(m2.confirm.Detail, "review-fixes/feat-x") {
+		t.Errorf("detail %q should name the finish destination", m2.confirm.Detail)
+	}
+}
+
+func TestBeginCleanReviewNoOpOutsideFinishPending(t *testing.T) {
+	m := Model{Panel: domain.PanelModel{Situation: domain.SituationNoReview, Source: "feat-x"}}
+	if m2, _ := m.beginCleanReview(); m2.confirm != nil {
+		t.Fatal("beginCleanReview must not open outside finish-pending")
+	}
+}
+
+func TestBeginContinueReviewResolvesTheNamedRowAndOpensConfirm(t *testing.T) {
+	m := Model{Panel: domain.PanelModel{
+		InventoryRows:  domain.FooterField("review-saved/feature", "1", "0", "0", "1", "walk"),
+		InventoryCount: 1,
+	}}
+	m2, cmd := m.beginContinueReview("review-saved/feature")
+	if cmd != nil {
+		t.Fatal("opening a confirmation must not itself return a Cmd")
+	}
+	if m2.confirm == nil {
+		t.Fatal("beginContinueReview must open the confirm overlay for a resumable row")
+	}
+	if m2.confirm.Pending.action != "continueReview" || m2.confirm.Pending.params.Source != "feature" {
+		t.Fatalf("pending = %+v, want continueReview with Source=feature", m2.confirm.Pending)
+	}
+}
+
+func TestBeginContinueReviewNoOpWhenNotResumableOrUnknown(t *testing.T) {
+	notResumable := Model{Panel: domain.PanelModel{
+		InventoryRows: domain.FooterField("review-saved/feature", "1", "0", "0", "0", "walk"),
+	}}
+	if m2, _ := notResumable.beginContinueReview("review-saved/feature"); m2.confirm != nil {
+		t.Fatal("a non-resumable saved row must not open a confirmation")
+	}
+	if m2, _ := notResumable.beginContinueReview("does-not-exist"); m2.confirm != nil {
+		t.Fatal("an unknown row name must not open a confirmation")
+	}
+}
+
+func TestBeginDiscardInventoryPicksForgetVsCleanBySavedBit(t *testing.T) {
+	saved := Model{Panel: domain.PanelModel{
+		InventoryRows: domain.FooterField("review-saved/feature", "1", "0", "0", "1", "walk"),
+	}}
+	m2, _ := saved.beginDiscardInventory("review-saved/feature")
+	if m2.confirm == nil {
+		t.Fatal("a saved row must open the confirm overlay")
+	}
+	hk := m2.confirm.Pending.params.Housekeeping
+	if hk.Kind != domain.ForgetSavedOne || hk.Source != "feature" {
+		t.Fatalf("saved row Housekeeping = %+v, want {ForgetSavedOne feature}", hk)
+	}
+
+	orphan := Model{Panel: domain.PanelModel{
+		InventoryRows: domain.FooterField("review/broken", "0", "1", "0", "0", "broken"),
+	}}
+	m3, _ := orphan.beginDiscardInventory("review/broken")
+	if m3.confirm == nil {
+		t.Fatal("an orphan (unsaved, broken) row must also open the confirm overlay")
+	}
+	hk2 := m3.confirm.Pending.params.Housekeeping
+	if hk2.Kind != domain.CleanOne || hk2.Source != "broken" {
+		t.Fatalf("orphan row Housekeeping = %+v, want {CleanOne broken}", hk2)
+	}
+}
+
+func TestBeginDiscardInventoryNoOpWhenNeitherSavedNorOrphan(t *testing.T) {
+	m := Model{Panel: domain.PanelModel{
+		InventoryRows: domain.FooterField("review/active", "0", "0", "1", "0", "walk . 1/3"),
+	}}
+	if m2, _ := m.beginDiscardInventory("review/active"); m2.confirm != nil {
+		t.Fatal("a plain active review row (not saved, not orphan) must not offer a discard")
+	}
+}
+
+func TestBeginDiscardDraftFindsRowInFreshOrSpentAndBuildsForgetArgv(t *testing.T) {
+	m := Model{Panel: domain.PanelModel{
+		FreshDraftRows: domain.FooterField("feat-y", "/gitdir/review-walkthrough/feat-y.md", "remote", "full", "1", "3"),
+		SpentDraftRows: domain.FooterField("feat-z", "/gitdir/review-walkthrough/feat-z.md", "local", "delta", "4", "4"),
+	}}
+	fresh, _ := m.beginDiscardDraft("feat-y")
+	if fresh.confirm == nil {
+		t.Fatal("a fresh draft row must open the confirm overlay")
+	}
+	if fresh.confirm.Pending.argv == nil || fresh.confirm.Pending.argv.Verb != "forget" {
+		t.Fatalf("fresh draft argv = %+v, want verb forget", fresh.confirm.Pending.argv)
+	}
+	if got := fresh.confirm.Pending.argv.Args; len(got) != 2 || got[0] != "--draft" || got[1] != "feat-y" {
+		t.Errorf("fresh draft args = %v, want [--draft feat-y]", got)
+	}
+	if !strings.Contains(fresh.confirm.Title, "feat-y") {
+		t.Errorf("title %q should name the source", fresh.confirm.Title)
+	}
+	if !strings.Contains(fresh.confirm.Detail, "/gitdir/review-walkthrough/feat-y.md") {
+		t.Errorf("detail %q should name the draft's own path", fresh.confirm.Detail)
+	}
+
+	// A spent draft keeps discardDraft (draft_controls' own comment: it only
+	// loses the two LABELLED controls, not the icons).
+	spent, _ := m.beginDiscardDraft("feat-z")
+	if spent.confirm == nil {
+		t.Fatal("a spent draft row must also open the confirm overlay")
+	}
+}
+
+func TestBeginDiscardDraftNoOpWhenRowNotFound(t *testing.T) {
+	m := Model{Panel: domain.PanelModel{}}
+	if m2, _ := m.beginDiscardDraft("nope"); m2.confirm != nil {
+		t.Fatal("an unknown draft src must not open a confirmation")
+	}
+}
+
+func TestBeginDiscardGuideOnlyEverActsOnOwn(t *testing.T) {
+	m := Model{Panel: domain.PanelModel{
+		HasGuideRows:   true,
+		TeamGuideState: domain.GuideInForce,
+		OwnGuideState:  domain.GuideInForce,
+		OwnGuideRow:    "/gitdir/review-walkthrough-guide.md",
+	}}
+	if m2, _ := m.beginDiscardGuide("team"); m2.confirm != nil {
+		t.Fatal("discardGuide must never act on the team row: the CLI itself refuses --delete --team")
+	}
+	own, _ := m.beginDiscardGuide("own")
+	if own.confirm == nil {
+		t.Fatal("discardGuide must open the confirm overlay for the own row when it exists")
+	}
+	if own.confirm.Pending.argv == nil || own.confirm.Pending.argv.Verb != "walkthrough" {
+		t.Fatalf("argv = %+v, want verb walkthrough", own.confirm.Pending.argv)
+	}
+	if got := own.confirm.Pending.argv.Args; len(got) != 2 || got[0] != "guide" || got[1] != "--delete" {
+		t.Errorf("args = %v, want [guide --delete]", got)
+	}
+	if !strings.Contains(own.confirm.Detail, "/gitdir/review-walkthrough-guide.md") {
+		t.Errorf("detail %q should name the guide's own path", own.confirm.Detail)
+	}
+}
+
+func TestBeginDiscardGuideNoOpWhenAbsent(t *testing.T) {
+	m := Model{Panel: domain.PanelModel{HasGuideRows: true, OwnGuideState: domain.GuideAbsent}}
+	if m2, _ := m.beginDiscardGuide("own"); m2.confirm != nil {
+		t.Fatal("an absent own guide has nothing to discard")
+	}
+}
+
+func TestBeginCreateGuideRunsOnlyWhenAbsentAndNeverConfirms(t *testing.T) {
+	m := Model{Panel: domain.PanelModel{TeamGuideState: domain.GuideAbsent, OwnGuideState: domain.GuideInForce}}
+	team, cmd := m.beginCreateGuide("team")
+	if cmd == nil {
+		t.Fatal("creating an absent team guide must run")
+	}
+	if team.confirm != nil {
+		t.Fatal("createGuide must never confirm: it is not confirms: true in the canonical")
+	}
+	if _, cmd2 := m.beginCreateGuide("own"); cmd2 != nil {
+		t.Fatal("createGuide on an already-existing own guide must be a no-op")
+	}
+	if _, cmd3 := m.beginCreateGuide("bogus"); cmd3 != nil {
+		t.Fatal("an unrecognized variant must be a no-op")
+	}
+}
+
+func TestBeginDiscardFixesSkipsTheCurrentBranch(t *testing.T) {
+	m := Model{Panel: domain.PanelModel{
+		FixesRows: domain.FooterField("review-fixes/old-one", "merged", "0", "0") + "\n" +
+			domain.FooterField("review-fixes/here", "empty", "1", "1"),
+	}}
+	other, _ := m.beginDiscardFixes("review-fixes/old-one")
+	if other.confirm == nil {
+		t.Fatal("a non-current fixes branch must open the confirm overlay")
+	}
+	if other.confirm.Pending.argv == nil || other.confirm.Pending.argv.Verb != "clean" {
+		t.Fatalf("argv = %+v, want verb clean", other.confirm.Pending.argv)
+	}
+	if got := other.confirm.Pending.argv.Args; len(got) != 2 || got[0] != "--fixes-only" || got[1] != "old-one" {
+		t.Errorf("args = %v, want [--fixes-only old-one]", got)
+	}
+	if m2, _ := m.beginDiscardFixes("review-fixes/here"); m2.confirm != nil {
+		t.Fatal("the branch currently checked out must never offer discardFixes (disabled_when: current)")
+	}
+}
+
+func TestBeginDiscardFixesDetailNamesTheOpenSessionWhenPresent(t *testing.T) {
+	withSession := Model{Panel: domain.PanelModel{
+		FixesRows: domain.FooterField("review-fixes/open", "unmerged", "1", "0"),
+	}}
+	m2, _ := withSession.beginDiscardFixes("review-fixes/open")
+	if m2.confirm == nil || !strings.Contains(m2.confirm.Detail, "undo the finish") {
+		t.Fatalf("detail %q must mention the still-open finish's undo", m2.confirm.Detail)
+	}
+
+	noSession := Model{Panel: domain.PanelModel{
+		FixesRows: domain.FooterField("review-fixes/closed", "unmerged", "0", "0"),
+	}}
+	m3, _ := noSession.beginDiscardFixes("review-fixes/closed")
+	if m3.confirm == nil || strings.Contains(m3.confirm.Detail, "undo the finish") {
+		t.Fatalf("detail %q must not mention undoing a finish that has no open session", m3.confirm.Detail)
+	}
+}
+
+func TestBeginDiscardAllFixesArgvNeverDependsOnPanelState(t *testing.T) {
+	m := Model{Panel: domain.PanelModel{FixesRows: "this-must-never-be-read"}}
+	m2, _ := m.beginDiscardAllFixes()
+	if m2.confirm == nil {
+		t.Fatal("discardAllFixes must open the confirm overlay")
+	}
+	if m2.confirm.Pending.argv == nil || m2.confirm.Pending.argv.Verb != "clean" {
+		t.Fatalf("argv = %+v, want verb clean", m2.confirm.Pending.argv)
+	}
+	if got := m2.confirm.Pending.argv.Args; len(got) != 1 || got[0] != "--fixes-only" {
+		t.Errorf("args = %v, want [--fixes-only] with no branch, regardless of what FixesRows carries", got)
+	}
+}
+
+func TestBeginWalkthroughBuildOpensAPlainConfirm(t *testing.T) {
+	m := Model{}
+	m2, cmd := m.beginWalkthroughBuild()
+	if cmd != nil {
+		t.Fatal("opening a confirmation must not itself return a Cmd")
+	}
+	if m2.confirm == nil || m2.confirm.ID != "walkthroughBuild" {
+		t.Fatal("beginWalkthroughBuild must open the confirm overlay")
+	}
+	if m2.confirm.Pending.action != "walkthroughBuild" {
+		t.Fatalf("pending action = %q, want walkthroughBuild", m2.confirm.Pending.action)
+	}
+}
+
+// TestBeginWalkthroughInitRunsDirectlyWhenNothingToReconcile covers
+// walkthroughInit's declared exception (confirms.go) from the OTHER side:
+// with nothing worth reconciling it runs straight through beginMutation,
+// opening neither the yes/no confirm NOR the picker.
+func TestBeginWalkthroughInitRunsDirectlyWhenNothingToReconcile(t *testing.T) {
+	for _, state := range []domain.WalkthroughState{domain.WalkthroughAbsent, domain.WalkthroughSuperseded} {
+		m := Model{Panel: domain.PanelModel{HasWalkthroughRow: true, WalkthroughState: state}}
+		m2, cmd := m.beginWalkthroughInit()
+		if m2.confirm != nil {
+			t.Fatalf("%v: walkthroughInit must never open the yes/no confirm", state)
+		}
+		if m2.selectOverlay != nil {
+			t.Fatalf("%v: nothing to reconcile must not open the picker either", state)
+		}
+		if cmd == nil {
+			t.Fatalf("%v: walkthroughInit must run directly when there is nothing to reconcile", state)
+		}
+	}
+	none := Model{Panel: domain.PanelModel{HasWalkthroughRow: false}}
+	if _, cmd := none.beginWalkthroughInit(); cmd == nil {
+		t.Fatal("with no walkthrough record at all, init must run directly, same as absent")
+	}
+}
+
+func TestBeginWalkthroughInitOpensThePickerWhenReconcilable(t *testing.T) {
+	for _, state := range []domain.WalkthroughState{domain.WalkthroughInSync, domain.WalkthroughStale, domain.WalkthroughUnknownState} {
+		m := Model{Panel: domain.PanelModel{HasWalkthroughRow: true, WalkthroughState: state}}
+		m2, cmd := m.beginWalkthroughInit()
+		if cmd != nil {
+			t.Fatalf("%v: opening the picker must not itself return a Cmd", state)
+		}
+		if m2.confirm != nil {
+			t.Fatalf("%v: this path is a choice, not a yes/no confirm", state)
+		}
+		if m2.selectOverlay == nil {
+			t.Fatalf("%v: a reconcilable walkthrough must open the Update/Start over picker", state)
+		}
+		if len(m2.selectOverlay.Items) != 2 {
+			t.Fatalf("%v: expected 2 items (Update/Start over), got %d", state, len(m2.selectOverlay.Items))
+		}
+		update := m2.selectOverlay.OnPick("update")
+		if update.done == nil || update.done.params.WalkthroughForce {
+			t.Fatalf("%v: Update must run with WalkthroughForce=false", state)
+		}
+		force := m2.selectOverlay.OnPick("force")
+		if force.done == nil || !force.done.params.WalkthroughForce {
+			t.Fatalf("%v: Start over must run with WalkthroughForce=true", state)
+		}
+	}
+}
+
 func TestHandleMutationDoneSetsPendingFinishOnlyOnSuccess(t *testing.T) {
 	m := Model{}
 	m.lock.Begin()

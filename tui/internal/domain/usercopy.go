@@ -139,6 +139,23 @@ const (
 	// a walkthrough (walkthrough_row.init_choice). Reuses the same two verb
 	// labels as the row's own action button.
 	WalkthroughInitChoiceTitle = "This branch already has a walkthrough."
+
+	// WalkthroughUpdateDetail / WalkthroughStartOverDetail: the picker's two
+	// items each carry one half of what used to be a single dialog body —
+	// the SelectOverlay shape draws a Detail line per item rather than one
+	// shared paragraph, so the choice and its consequence sit next to each
+	// other instead of above both options.
+	WalkthroughUpdateDetail    = "Update keeps everything you already wrote for files that are still in the PR, and adds the ones that are new."
+	WalkthroughStartOverDetail = "Start over replaces it with a blank list. The file is committed to the PR, so git checkout -- .review/walkthrough.md brings the old one back."
+
+	RepositoryGuideLabel = "Repository guide"
+	YourGuideLabel       = "Your guide"
+
+	ReviewsInThisRepositoryHeading = "Reviews in this repository"
+	ReadingOrdersFinishedHeading   = "Reading orders you finished with"
+	ReadingOrdersFinishedNote      = "Their review is over; the files are still here"
+	EditsExtractedHeading          = "Edits you extracted"
+	EditsExtractedNote             = "One branch per finish; commit and push them from Source Control, or drop them here"
 )
 
 // --- labels: review body -----------------------------------------------------
@@ -191,7 +208,107 @@ const (
 	StartFromDraftDisabledTooltip = "This file lost its header, so it cannot be checked. Delete it and write a new one."
 	StartFromDraftUnfilledTooltip = "Every file still needs a number and a line saying why it matters"
 	DiscardFixesTooltip           = "Delete this branch of edits"
+
+	// ContinueReviewDisabledOrphanTooltip / ContinueReviewDisabledActiveTooltip:
+	// the two reasons startFromDraft's sibling, continueReview, can be
+	// disabled on a saved row — a broken (orphan) saved review has nothing
+	// left to resume, and a review already active elsewhere for the same
+	// source is what `git review continue` itself refuses with "is already
+	// active".
+	ContinueReviewDisabledOrphanTooltip = "This review cannot be resumed — its details are gone"
+	ContinueReviewDisabledActiveTooltip = "You are already reviewing this branch"
+
+	DiscardSavedReviewTooltip    = "Delete this paused review and its edits"
+	DiscardLeftoverBranchTooltip = "Delete this leftover branch"
 )
+
+// --- badges: guide state, walkthrough state, fixes state --------------------
+//
+// Three small maps, one per `states:`/`badges:` block the canonical
+// declares next to guide_rows/walkthrough_row/fixes_rows. Kept as data
+// instead of a switch in render.go so the wording lives in exactly one
+// place, like every other string in this file.
+
+// GuideBadge mirrors `guide_rows.states:`. `absent` reads "none" rather than
+// "empty" on purpose (guide_rows.controls' own comment): the two are not
+// synonyms — "empty" is a file with nothing in it, "absent" is no file at
+// all, and that distinction is what decides whether the row's button opens
+// or creates.
+var GuideBadge = map[GuideState]string{
+	GuideInForce: "in force",
+	GuideEmpty:   "empty",
+	GuideAbsent:  "none",
+}
+
+// WalkthroughBadge mirrors `walkthrough_row.badges:`.
+var WalkthroughBadge = map[WalkthroughState]string{
+	WalkthroughInSync:       "up to date",
+	WalkthroughStale:        "may be out of date",
+	WalkthroughSuperseded:   "from a merged PR",
+	WalkthroughUnknownState: "state unknown",
+	WalkthroughAbsent:       "none",
+}
+
+// WalkthroughInitButtonLabel mirrors `walkthrough_row.action_labels:`: the
+// SAME verb creates and updates, so the button's own label is the only
+// thing that tells the reviewer which of the two is about to happen.
+func WalkthroughInitButtonLabel(state WalkthroughState) string {
+	switch state {
+	case WalkthroughSuperseded:
+		return WalkthroughStartOverLabel
+	case WalkthroughAbsent:
+		return WalkthroughInitLabel
+	default:
+		return WalkthroughUpdateLabel
+	}
+}
+
+// FixesBadge mirrors `fixes_rows.badges:`.
+var FixesBadge = map[FixesState]string{
+	FixesEmpty:    "empty",
+	FixesMerged:   "merged",
+	FixesUnmerged: "unmerged",
+	FixesUnknown:  "unknown",
+}
+
+// FixesCostSentence is the first half of discardFixes' confirmation detail:
+// what deleting THIS branch of extracted edits actually costs, per the
+// CLI's own report of it — never re-derived client-side, since only the CLI
+// can ask git whether those commits are integrated.
+func FixesCostSentence(state FixesState) string {
+	switch state {
+	case FixesEmpty:
+		return "Nothing was ever committed on it, so no work of yours is lost."
+	case FixesMerged:
+		return "Its commits are already in the base branch."
+	case FixesUnmerged:
+		return "It has commits the base branch does not have — deleting it loses them."
+	default:
+		return "There is no base branch configured, so git cannot tell whether its commits are integrated."
+	}
+}
+
+// DiscardFixesSessionSuffix is appended to FixesCostSentence when the
+// review-fixes/* branch's own review/* session is still open (FixesRecord.
+// Session): discarding the edits does not also give up the finish's undo,
+// and saying so is the difference between reading the warning and clicking
+// through it.
+const DiscardFixesSessionSuffix = " You can still undo the finish afterwards."
+
+// cannotBeUndoneSuffix closes discardFixes' confirmation the same way every
+// other destructive dialog in this file does.
+const cannotBeUndoneSuffix = " It cannot be undone."
+
+// DiscardFixesConfirmDetail assembles discardFixes' confirmation detail from
+// the CLI's own report of the branch (never re-derived): what it costs, plus
+// whether the finish it came from can still be undone.
+func DiscardFixesConfirmDetail(state FixesState, session bool) string {
+	detail := FixesCostSentence(state)
+	if session {
+		detail += DiscardFixesSessionSuffix
+	}
+	return detail + cannotBeUndoneSuffix
+}
 
 // --- mutation cycle (Phase 6): confirmations, discard/stale notices --------
 //
@@ -237,6 +354,60 @@ const (
 	DiscardWorkAndUndoLabel  = "Discard Work and Undo"
 
 	FinishReadySuffix = " is ready."
+)
+
+// --- confirmation copy: the row/footer mutations Phase 7 wires ------------
+//
+// Verbatim (translated to Go's "{placeholder}" + interpolate() convention)
+// from vscode-extension/src/review/housekeeping.ts's confirmCopyFor and the
+// three commands/*.ts files that build a discardDraft/discardGuide dialog
+// by hand — the fourth copy of the same text, same reasoning: name the real
+// verb, say what it costs, never a generic "are you sure?".
+const (
+	DiscardDraftConfirmTitle  = "Discard the reading order you wrote for {source}?"
+	DiscardDraftConfirmDetail = "This deletes {path}. It cannot be undone."
+	// DiscardConfirmLabel: the accept button on the discardDraft/discardGuide
+	// dialogs — "Discard", not "Delete" (DiscardLabel above): that one is
+	// discardInventory's ROW label, which VS Code's own confirmCopyFor keeps
+	// as "Delete" even in its confirmation, a different word for a different
+	// button.
+	DiscardConfirmLabel = "Discard"
+
+	DiscardGuideConfirmTitle  = "Discard the authoring guide you wrote?"
+	DiscardGuideConfirmDetail = "This deletes {path}. It cannot be undone."
+
+	// DiscardOneReview* / DiscardSavedReview*: discardInventory's two
+	// confirmation shapes, chosen by the row's own Saved bit — a leftover,
+	// orphaned review/<x> branch (clean) versus a paused review-saved/<x>
+	// one (forget --saved).
+	DiscardOneReviewConfirmTitle  = "Delete the leftovers from reviewing {source}?"
+	DiscardOneReviewConfirmDetail = "This removes the review branch and any edits you extracted from it. Anything you already committed elsewhere stays. It cannot be undone."
+
+	DiscardSavedReviewConfirmTitle  = "Delete the paused review of {source}?"
+	DiscardSavedReviewConfirmDetail = "This throws away the edits you had saved with it. It cannot be undone."
+
+	// CleanReviewConfirmTitle/Detail: the finish-pending banner's "Done,
+	// clean up" (`clean --keep-fixes <source>`). What is KEPT goes first —
+	// this dialog fires from the button that closes the whole cycle, and
+	// the one thing that stops a reviewer there is whether clean takes
+	// their edits with it. It does not, and saying so before naming what
+	// IS lost is the difference between reading the banner and clicking
+	// through it.
+	CleanReviewConfirmTitle  = "Done with the review of {source}?"
+	CleanReviewConfirmDetail = "Your edits stay on {destination} — commit and push them from Source Control. What goes away is being able to undo this finish."
+	DoneLabel                = "Done"
+
+	DiscardFixesConfirmTitle = "Delete the edits you extracted from {source}?"
+
+	DiscardAllFixesConfirmTitle  = "Delete every branch of extracted edits?"
+	DiscardAllFixesConfirmDetail = "They hold edits you made while reviewing and never committed anywhere else. Nothing you are reviewing right now is touched. It cannot be undone."
+	// DeleteAllLabel: the confirm dialog's accept button — "Delete all",
+	// distinct from DiscardAllFixesLabel ("Discard all"), the ROW button
+	// that opens it. Same split as DiscardConfirmLabel/DiscardLabel above.
+	DeleteAllLabel = "Delete all"
+
+	WalkthroughBuildConfirmTitle  = "Check and renumber the walkthrough?"
+	WalkthroughBuildConfirmDetail = "This puts the files in the order you wrote and numbers them 1 to N. If something is missing, nothing changes and you will see what to fix."
 )
 
 // --- start assistant / setBase / setRemote pickers --------------------------

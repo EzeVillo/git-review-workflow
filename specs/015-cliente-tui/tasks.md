@@ -631,46 +631,46 @@ deletrear rutas en una terminal. **Adentro de una review el pie no existe.**
 estados y al menos una rama de ediciones; recorrer cada fila y cada control; después entrar en una
 review y verificar que **ninguna** sección del pie se dibuja.
 
-- [ ] T075 [US6] Completar el parseo de `config --porcelain` en
+- [X] T075 [US6] Completar el parseo de `config --porcelain` en
   `tui/internal/domain/porcelain.go` para los registros del pie: `draft` (**sólo cuando hay**, con
   path, par annotated/total y estado), `guide` (**siempre las dos filas**, exista o no el archivo),
   `walkthrough` (**siempre**, con rama, estado y par de progreso) y `fixes` (una por rama
   `review-fixes/*`, con su badge). **Gate**: un test afirma que las dos guías y el walkthrough se
   emiten aunque el archivo no exista —**la ausencia se reporta, no se implica con el silencio**— y
   que `draft` sólo aparece cuando hay.
-- [ ] T076 [US6] Dibujar la **fila del walkthrough** con `walkthrough_row.controls:` completo:
+- [X] T076 [US6] Dibujar la **fila del walkthrough** con `walkthrough_row.controls:` completo:
   nombrada por su rama, con su badge de estado y sus dos verbos. **Gate**: el test de contrato de
   layout de T024.
-- [ ] T077 [US6] Dibujar las **dos filas de guías** con `guide_rows.controls:` completo
+- [X] T077 [US6] Dibujar las **dos filas de guías** con `guide_rows.controls:` completo
   (`openGuide`, `createGuide`, `discardGuide`), con badges distintos y el control correcto habilitado
   en cada una. `discardGuide` es **sólo para la propia**: la compartida es un archivo trackeado y la
   CLI niega `--delete --team`. **Gate**: lo que cambia con el estado es el `enabled`, **nunca la
   presencia** — dos filas que arman botoneras distintas no se alinean una con la otra.
-- [ ] T078 [US6] Dibujar el bloque de **borradores** con los cuatro `draft_controls:` en su orden y
+- [X] T078 [US6] Dibujar el bloque de **borradores** con los cuatro `draft_controls:` en su orden y
   en sus dos lugares de la fila —los dos con etiqueta en la botonera, los dos de icono pegados al
   par annotated/total de la cabecera—, con la regla de que los dos con etiqueta se dibujan **sólo en
   una fila fresca** y una fila gastada los pierde. **Gate**: un borrador a medio llenar muestra el
   par de progreso y `startFromDraft` **apagado con el motivo a mano** —apagado no adivina los flags
   más que ausente, y encima dice por qué, que un control que no está no puede decir—.
-- [ ] T079 [US6] Dibujar la sección de **ramas de ediciones** con `fixes_rows.controls:`
+- [X] T079 [US6] Dibujar la sección de **ramas de ediciones** con `fixes_rows.controls:`
   (`discardFixes` por fila, `discardAllFixes` en la sección). **Gate**: la rama en la que estás
   **no ofrece borrarse** (`disabled_when: current`), y `discardAllFixes` corre `--fixes-only`
   **siempre sin rama**, incluso con la sesión cerrada: el argv no puede depender de un dato que se
   relee en cada refresco, o un `clean <x>` que llegue tarde se llevaría puesta una review viva desde
   un control que promete borrar una rama de ediciones.
-- [ ] T080 [US6] Dibujar el bloque de **inventario** con `inventory_controls:` (`continueReview`,
+- [X] T080 [US6] Dibujar el bloque de **inventario** con `inventory_controls:` (`continueReview`,
   `discardInventory` con sus dos etiquetas) y las secciones de **configuración** y **soporte**.
   **Gate**: `inventory_controls:` es el mapa que la tabla de
   [contracts/tui-surface.md](./contracts/tui-surface.md) § 7 no enumera (ver § Huecos): esta tarea
   lo cubre y el test de contrato de layout lo ata.
-- [ ] T081 [US6] Implementar `walkthroughInit` (con sus **dos cursos**, "Update" / "Start over": es
+- [X] T081 [US6] Implementar `walkthroughInit` (con sus **dos cursos**, "Update" / "Start over": es
   la **única excepción declarada** de la puerta única, y sigue siendo `confirms: true` porque hay un
   modal entre el gesto y la mutación), `walkthroughBuild`, `createGuide` y `discardGuide`. **Gate**:
   el comentario que exime a `walkthroughInit` **lo lee CI**; reformularlo rompe el check.
-- [ ] T082 [US6] Implementar `cleanReview` (una, keep-fixes, todas), `forgetReview` (saved, delta
+- [X] T082 [US6] Implementar `cleanReview` (una, keep-fixes, todas), `forgetReview` (saved, delta
   —incluida `--stale`, que es **clase red**—, draft) y `discardFixes`/`discardAllFixes`, cada uno con
   su fila de confirmaciones. **Gate**: la tabla de argv de T030.
-- [ ] T083 [US6] Afirmar en el **proyector** que dentro de una review el `PanelModel` **no proyecta**
+- [X] T083 [US6] Afirmar en el **proyector** que dentro de una review el `PanelModel` **no proyecta**
   ninguna `tools_section` (FR-023) — no es que no se dibuje: no se proyecta —, y el **tope del 55%**
   del pie con **una sola barra de scroll**: cada sección abierta pide el alto de su contenido y
   ninguna scrollea por dentro. **Gate**: el test de contrato de layout y los golden del pie. Sin el

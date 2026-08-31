@@ -173,6 +173,104 @@ func (b *builder) iconButton(id domain.ControlID, icon domain.IconName, name str
 	b.hm.add(id, "", row, 0, lipgloss.Width(rendered))
 }
 
+// rowButton is one entry of buttonRow/iconRow: a control drawn as part of a
+// multi-control LINE (a footer row's icon pair, or its two even-columned
+// labelled actions — row_shape.actions: two_labelled: even_columns) rather
+// than on its own line the way button()/iconButton() draw a situation's
+// fixed body controls.
+type rowButton struct {
+	id      domain.ControlID
+	variant string
+	label   string
+	style   lipgloss.Style
+	enabled bool
+}
+
+// buttonRow draws N labelled controls on ONE line, each keeping its own hit
+// rectangle — the footer's row_shape.actions layout (even columns for
+// exactly two, left-at-label-width otherwise; this renderer treats both the
+// same way, since a fixed terminal font has no "stretch to fill" concept to
+// tell them apart visually).
+func (b *builder) buttonRow(btns ...rowButton) {
+	if len(btns) == 0 {
+		return
+	}
+	var line string
+	cols := make([]int, len(btns))
+	widths := make([]int, len(btns))
+	for i, bt := range btns {
+		s := bt.style
+		if !bt.enabled {
+			s = b.st.disabled
+		}
+		part := "[ " + s.Render(bt.label) + " ]"
+		if i > 0 {
+			line += "  "
+		}
+		cols[i] = lipgloss.Width(line)
+		widths[i] = lipgloss.Width(part)
+		line += part
+	}
+	row := len(b.lines)
+	b.lines = append(b.lines, line)
+	for i, bt := range btns {
+		b.hm.add(bt.id, bt.variant, row, cols[i], widths[i])
+	}
+}
+
+// rowIcon is one entry of iconRow.
+type rowIcon struct {
+	id      domain.ControlID
+	variant string
+	icon    domain.IconName
+	hint    string // short trailing word ("open", "discard") — not the full accessible name, which is a screen-reader affordance this renderer has no equivalent surface for
+	enabled bool
+}
+
+// iconRow draws N icon-only controls on ONE line, pegged together the way
+// row_shape.header describes ("icons" sit as one group before the badge).
+func (b *builder) iconRow(icons ...rowIcon) {
+	if len(icons) == 0 {
+		return
+	}
+	var line string
+	cols := make([]int, len(icons))
+	widths := make([]int, len(icons))
+	for i, ic := range icons {
+		s := b.st.secondary
+		if !ic.enabled {
+			s = b.st.disabled
+		}
+		part := "[" + glyph(b.vp, ic.icon) + "] " + s.Render(ic.hint)
+		if i > 0 {
+			line += "  "
+		}
+		cols[i] = lipgloss.Width(line)
+		widths[i] = lipgloss.Width(part)
+		line += part
+	}
+	row := len(b.lines)
+	b.lines = append(b.lines, line)
+	for i, ic := range icons {
+		b.hm.add(ic.id, ic.variant, row, cols[i], widths[i])
+	}
+}
+
+// rowHeader draws one footer row's name/progress/badge line — row_shape.
+// header's own order, minus icons: those are drawn separately by iconRow
+// right below, on their own line, so each keeps a clean hit rectangle
+// rather than one spliced into the middle of a longer styled string.
+func (b *builder) rowHeader(name, progress, badge string) {
+	line := name
+	if progress != "" {
+		line += "  " + progress
+	}
+	if badge != "" {
+		line += "  " + b.st.note.Render("("+badge+")")
+	}
+	b.text(line)
+}
+
 func (b *builder) stderrBlock(stderr string) {
 	if stderr == "" {
 		return
@@ -317,29 +415,267 @@ func renderNoReviewSetup(b *builder, m domain.PanelModel) {
 }
 
 func renderNoReview(b *builder, m domain.PanelModel) {
+	renderFreshDrafts(b, m)
+
+	if m.HasReviews {
+		b.heading(domain.ReviewsInThisRepositoryHeading)
+		renderInventoryRows(b, m)
+		b.blank()
+	}
+
 	b.text(domain.NoActiveReviewNote)
 	b.button("startReview", "", domain.StartReviewLabel, b.st.primary, true)
 	b.blank()
 
-	b.heading(domain.WalkthroughSectionTitle)
-	b.button("walkthroughInit", "", domain.WalkthroughInitLabel, b.st.secondary, true)
-	b.button("walkthroughBuild", "", domain.WalkthroughBuildLabel, b.st.secondary, true)
-	b.blank()
+	// The footer proper (FR-022): everything from here down is a
+	// tools_section, and the one thing capped to 55% of the panel's height.
+	// The draft block and the inventory above are NOT part of it — they sit
+	// directly in no-review's own body, same as "No active review..." and
+	// its button.
+	footerStart := len(b.lines)
 
+	b.heading(domain.WalkthroughSectionTitle)
+	renderWalkthroughRow(b, m)
+	renderGuideRows(b, m)
+
+	if m.SpentDraftCount > 0 {
+		b.blank()
+		b.heading(domain.ReadingOrdersFinishedHeading)
+		b.text(domain.ReadingOrdersFinishedNote)
+		renderSpentDrafts(b, m)
+	}
+
+	if m.FixesCount > 0 {
+		b.blank()
+		b.heading(domain.EditsExtractedHeading)
+		b.text(domain.EditsExtractedNote)
+		renderFixesRows(b, m)
+	}
+
+	b.blank()
 	b.heading(domain.CompareSectionTitle)
 	b.button("compareReview", "", domain.CompareRevisionsLabel, b.st.secondary, true)
-	b.blank()
 
+	b.blank()
 	b.heading(domain.SettingsSectionTitle)
 	b.text(interpolate(domain.BaseLine, "{base}", m.ConfiguredBase))
 	b.button("setBase", "", domain.ChangeBaseLabel, b.st.secondary, true)
 	b.text(interpolate(domain.RemoteLine, "{remote}", m.ConfiguredRemote))
 	b.button("setRemote", "", domain.ChangeRemoteLabel, b.st.secondary, true)
-	b.blank()
 
+	b.blank()
 	b.heading(domain.SupportSectionTitle)
 	b.button("openSupport", "star", domain.StarOnGitHubLabel, b.st.secondary, true)
 	b.button("openSupport", "bug", domain.ReportABugLabel, b.st.secondary, true)
+
+	b.capFooter(footerStart)
+}
+
+// progressPair formats an annotated/total pair the way every row that
+// carries one (drafts, the walkthrough row) shows it.
+func progressPair(annotated, total int) string {
+	return fmt.Sprintf("%d/%d", annotated, total)
+}
+
+func renderFreshDrafts(b *builder, m domain.PanelModel) {
+	for _, d := range decodeDraftRows(m.FreshDraftRows) {
+		b.rowHeader(d.src, progressPair(d.annotated, d.total), "")
+		b.iconRow(
+			rowIcon{id: "openDraft", variant: d.src, icon: domain.IconFile, hint: "open", enabled: true},
+			rowIcon{id: "discardDraft", variant: d.src, icon: domain.IconTrash, hint: "discard", enabled: true},
+		)
+		// copyDraftPrompt/startFromDraft's emphasis follows progress, not
+		// order (draft_controls' own comment): filled -> startFromDraft
+		// leads; anything else, including a still-loading 0/0 -> the copy
+		// prompt does.
+		copyStyle, startStyle := b.st.secondary, b.st.primary
+		filled := d.startable() && d.total > 0
+		if filled {
+			copyStyle, startStyle = b.st.primary, b.st.secondary
+		}
+		b.buttonRow(
+			rowButton{id: "copyDraftPrompt", variant: d.src, label: domain.CopyForAgentLabel, style: copyStyle, enabled: true},
+			rowButton{id: "startFromDraft", variant: d.src, label: domain.ValidateAndStartLabel, style: startStyle, enabled: d.startable()},
+		)
+		if !d.startable() {
+			b.note(draftDisabledReason(d))
+		}
+		b.blank()
+	}
+}
+
+// draftDisabledReason picks which of startFromDraft's two tooltips applies
+// — the flags reason wins when both would apply (draft_controls' own
+// comment: an unknown source/range breaks build regardless of how complete
+// the order looks).
+func draftDisabledReason(d draftRowView) string {
+	if d.source == string(domain.DraftSourceUnknown) || d.rrange == string(domain.DraftRangeUnknown) {
+		return domain.StartFromDraftDisabledTooltip
+	}
+	return domain.StartFromDraftUnfilledTooltip
+}
+
+func renderSpentDrafts(b *builder, m domain.PanelModel) {
+	for _, d := range decodeDraftRows(m.SpentDraftRows) {
+		b.rowHeader(d.src, progressPair(d.annotated, d.total), "")
+		b.iconRow(
+			rowIcon{id: "openDraft", variant: d.src, icon: domain.IconFile, hint: "open", enabled: true},
+			rowIcon{id: "discardDraft", variant: d.src, icon: domain.IconTrash, hint: "discard", enabled: true},
+		)
+	}
+}
+
+func renderWalkthroughRow(b *builder, m domain.PanelModel) {
+	// Without a `walkthrough` record at all (HasWalkthroughRow false — an
+	// older CLI, or this read never got that far) there is nothing to
+	// reconcile against, so the button reads exactly as it would for a
+	// freshly-absent file: "Init".
+	initLabel := domain.WalkthroughInitLabel
+	if m.HasWalkthroughRow {
+		initLabel = domain.WalkthroughInitButtonLabel(m.WalkthroughState)
+	}
+	b.buttonRow(
+		rowButton{id: "walkthroughInit", label: initLabel, style: b.st.secondary, enabled: true},
+		rowButton{id: "walkthroughBuild", label: domain.WalkthroughBuildLabel, style: b.st.secondary, enabled: true},
+	)
+	if !m.HasWalkthroughRow {
+		return
+	}
+	name := m.WalkthroughRow
+	if name == "" {
+		// label_detached: the file and its two verbs work with HEAD
+		// detached, only the branch name has no answer.
+		name = domain.WalkthroughSectionTitle
+	}
+	progress := ""
+	if m.WalkthroughState != domain.WalkthroughAbsent && m.WalkthroughTotal > 0 {
+		progress = progressPair(m.WalkthroughAnnotated, m.WalkthroughTotal)
+	}
+	b.rowHeader(name, progress, domain.WalkthroughBadge[m.WalkthroughState])
+	fileExists := m.WalkthroughState != domain.WalkthroughAbsent
+	b.iconRow(rowIcon{id: "openWalkthrough", icon: domain.IconFile, hint: "open", enabled: fileExists})
+	b.buttonRow(rowButton{id: "copyWalkthroughPrompt", label: domain.CopyForAgentLabel, style: b.st.secondary, enabled: fileExists})
+}
+
+func renderGuideRows(b *builder, m domain.PanelModel) {
+	if !m.HasGuideRows {
+		return
+	}
+	renderGuideRow(b, "team", domain.RepositoryGuideLabel, m.TeamGuideState, false)
+	renderGuideRow(b, "own", domain.YourGuideLabel, m.OwnGuideState, true)
+}
+
+func renderGuideRow(b *builder, variant, label string, state domain.GuideState, own bool) {
+	exists := state != domain.GuideAbsent
+	b.rowHeader(label, "", domain.GuideBadge[state])
+	icons := []rowIcon{{id: "openGuide", variant: variant, icon: domain.IconFile, hint: "open", enabled: exists}}
+	if own {
+		icons = append(icons, rowIcon{id: "discardGuide", variant: variant, icon: domain.IconTrash, hint: "discard", enabled: exists})
+	}
+	b.iconRow(icons...)
+	b.buttonRow(rowButton{id: "createGuide", variant: variant, label: domain.CreateGuideLabel, style: b.st.secondary, enabled: !exists})
+}
+
+func renderFixesRows(b *builder, m domain.PanelModel) {
+	for _, f := range decodeFixesRows(m.FixesRows) {
+		b.rowHeader(f.name, "", domain.FixesBadge[domain.FixesState(f.state)])
+		b.iconRow(rowIcon{id: "discardFixes", variant: f.name, icon: domain.IconTrash, hint: "discard", enabled: !f.current})
+		if f.current {
+			b.note(domain.CurrentBranchTooltip)
+		}
+	}
+	b.blank()
+	b.button("discardAllFixes", "", domain.DiscardAllFixesLabel, b.st.secondary, true)
+}
+
+func renderInventoryRows(b *builder, m domain.PanelModel) {
+	for _, r := range decodeInventoryRows(m.InventoryRows) {
+		badge := ""
+		switch {
+		case r.current:
+			badge = "current"
+		case r.orphan:
+			badge = "broken"
+		}
+		b.rowHeader(r.name, "", badge)
+		if r.status != "" {
+			b.note(r.status)
+		}
+		if !r.canDiscard() {
+			continue
+		}
+		var btns []rowButton
+		if r.saved {
+			btns = append(btns, rowButton{id: "continueReview", variant: r.name, label: domain.ContinueLabel, style: b.st.primary, enabled: r.resumable})
+		}
+		discardLabel := domain.DiscardLabel
+		if r.orphan {
+			discardLabel = domain.DiscardLeftoverLabel
+		}
+		btns = append(btns, rowButton{id: "discardInventory", variant: r.name, label: discardLabel, style: b.st.secondary, enabled: true})
+		b.buttonRow(btns...)
+		if r.saved && !r.resumable {
+			reason := domain.ContinueReviewDisabledActiveTooltip
+			if r.orphan {
+				reason = domain.ContinueReviewDisabledOrphanTooltip
+			}
+			b.note(reason)
+		}
+	}
+}
+
+// keyBarReserve is how many lines keyBar() adds below the frame this
+// function caps (a blank line plus the bar itself) — capFooter reserves
+// this much room so its own cut leaves the key bar standing rather than
+// handing it to frame()'s blunt final truncation to lose instead.
+const keyBarReserve = 2
+
+// capFooter enforces FR-022: the footer (everything from footerStart on)
+// never draws more than FooterCapPercent of the viewport's rows. Past that
+// budget the remainder is dropped and replaced with ONE marker line —
+// ScrollbarCount's "one bar for the whole footer", never a per-section
+// scroll, because the cut happens once, on the combined footer, not once
+// per tools_section. Unbounded viewports (vp.Rows <= 0, every non-golden
+// domain-only test) are left untouched: there is no budget to enforce
+// against.
+func (b *builder) capFooter(footerStart int) {
+	if b.vp.Rows <= 0 {
+		return
+	}
+	budget := b.vp.Rows * domain.FooterCapPercent / 100
+	// A 55% budget measured against the WHOLE viewport is meaningless once
+	// the head above the footer (the draft block, the inventory, "no active
+	// review" and its button — none of which this cap governs) has already
+	// spent part of it: without this, the cap could claim more room than is
+	// actually left, and the key bar drawn after View returns would be the
+	// thing frame()'s own final truncation silently drops instead.
+	if remaining := b.vp.Rows - footerStart - keyBarReserve; remaining < budget {
+		budget = remaining
+	}
+	if budget < 0 {
+		budget = 0
+	}
+	footerLen := len(b.lines) - footerStart
+	if footerLen <= budget {
+		return
+	}
+	cut := footerStart + budget - 1
+	if cut < footerStart {
+		cut = footerStart
+	}
+	hidden := len(b.lines) - cut
+	marker := b.st.note.Render(fmt.Sprintf("… %d more line(s) below — resize to see them", hidden))
+	b.lines = append(b.lines[:cut], marker)
+	// A control whose line was cut is no longer visible, so it is no longer
+	// clickable either: drop its rect rather than let a mouse coordinate
+	// resolve to a row nobody can see.
+	kept := b.hm.hits[:0]
+	for _, h := range b.hm.hits {
+		if h.rect.Row < cut {
+			kept = append(kept, h)
+		}
+	}
+	b.hm.hits = kept
 }
 
 func identityLine(m domain.PanelModel) string {

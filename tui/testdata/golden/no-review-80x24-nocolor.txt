@@ -1,21 +1,24 @@
+feat-y  1/3
+[☐] open  [✗] discard
+[ Copy for agent ]  [ Validate and start ]
+Every file still needs a number and a line saying why it matters
+
+Reviews in this repository
+review-saved/other
+walk
+[ Continue ]  [ Delete ]
+
 No active review on this branch.
 [ Start a review ]
 
 Walkthrough
-[ Init ]
-[ Build ]
-
-Compare
-[ Compare revisions ]
-
-Settings
-Base: develop.
-[ Change the base branch ]
-Remote: origin.
-[ Change remote ]
-
-Support
-[ Star on GitHub ]
-[ Report a bug ]
+[ Update ]  [ Build ]
+feat-x  2/4  (may be out of date)
+[☐] open
+[ Copy for agent ]
+Repository guide  (in force)
+[☐] open
+[ Create ]
+… 28 more line(s) below — resize to see them
 
 j:up  k:down  enter:select  r:refresh  m:mouse on  q:quit

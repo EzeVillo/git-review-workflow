@@ -20,7 +20,11 @@ type PanelModel struct {
 	// Inventory (no-review): the review/saved rows, one line per row,
 	// newline-joined, plus how many. HasReviews distinguishes zero rows
 	// from "no fresh drafts either", both of which are legal empty states
-	// with different footers.
+	// with different footers. Every review/review-saved branch gets a row
+	// here (not only the ones with a control — a row with neither Continue
+	// nor Delete still has to be listed), tab fields
+	// `name \t saved(0/1) \t orphan(0/1) \t current(0/1) \t resumable(0/1) \t status`,
+	// read back with FooterRows (rowdata.go).
 	InventoryRows  string
 	InventoryCount int
 	HasReviews     bool
@@ -63,17 +67,44 @@ type PanelModel struct {
 
 	// Footer rows (no-review only; a review never projects these —
 	// FR-023, enforced by the projector never filling them in rather than
-	// by render.go skipping them).
-	WalkthroughRow    string
-	HasWalkthroughRow bool
-	TeamGuideRow      string
-	OwnGuideRow       string
-	FreshDraftRows    string
-	FreshDraftCount   int
-	SpentDraftRows    string
-	SpentDraftCount   int
-	FixesRows         string
-	FixesCount        int
+	// by render.go skipping them). The three list-shaped fields
+	// (FreshDraftRows/SpentDraftRows/FixesRows/InventoryRows) stay flat
+	// strings for PanelModel's own comparability (no slices, no maps): each
+	// is a newline-joined list of TAB-separated rows, built by
+	// FooterField/read back by FooterRows (rowdata.go) — the same
+	// porcelain-flavored packing the CLI itself uses, adapted here for a
+	// list that must survive an `==` comparison rather than be printed.
+	WalkthroughRow       string // the branch this walkthrough annotates, or "" (detached, or no record at all)
+	HasWalkthroughRow    bool
+	WalkthroughState     WalkthroughState
+	WalkthroughAnnotated int
+	WalkthroughTotal     int
+
+	// HasGuideRows: false only when config could not be read at all, or an
+	// older CLI omitted the `guide` records — the two rows themselves are
+	// otherwise ALWAYS both present (CLAUDE.md: absence is reported, not
+	// implied by silence), never conditioned on one guide existing and not
+	// the other.
+	HasGuideRows   bool
+	TeamGuideRow   string // the team guide's reported path (never assembled client-side)
+	TeamGuideState GuideState
+	OwnGuideRow    string // the reviewer's own guide's reported path
+	OwnGuideState  GuideState
+
+	// FreshDraftRows / SpentDraftRows: one row per draft, tab fields
+	// `src \t path \t source \t range \t annotated \t total` — everything
+	// draft_controls' four controls and the row's own progress pair need,
+	// with Src doubling as each control's Variant (ControlsFor/mutation.go
+	// resolve the target row by matching it, never by position).
+	FreshDraftRows  string
+	FreshDraftCount int
+	SpentDraftRows  string
+	SpentDraftCount int
+
+	// FixesRows: one row per `review-fixes/*` branch, tab fields
+	// `name \t state \t session(0/1) \t current(0/1)`.
+	FixesRows  string
+	FixesCount int
 
 	// Note: a single derived, presentation-only line (STALE, a moved base,
 	// a branch that diverged locally). Empty when there is nothing to say.

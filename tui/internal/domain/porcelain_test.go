@@ -243,6 +243,38 @@ func TestParseConfigPorcelain(t *testing.T) {
 	}
 }
 
+// TestParseConfigPorcelainReportsAbsenceRatherThanOmittingTheRow is T075's
+// own gate: a branch with neither guide written nor a walkthrough on it
+// still gets the team guide row, the own guide row and the walkthrough row
+// — each carrying its `absent` state — exactly as many rows as a branch
+// with all three in force. Only `draft` is legitimately absent-as-in-no-row:
+// a loose draft only exists once a reviewer starts one, and this fixture has
+// none.
+func TestParseConfigPorcelainReportsAbsenceRatherThanOmittingTheRow(t *testing.T) {
+	out := ParseConfigPorcelain(readFixture("config-no-prose.txt"))
+	if len(out.Drafts) != 0 {
+		t.Fatalf("draft has no record here, so no draft row should appear: %+v", out.Drafts)
+	}
+	if len(out.Guides) != 2 {
+		t.Fatalf("the two guide rows must still be reported when both files are absent, got %d", len(out.Guides))
+	}
+	if out.Guides[0].Kind != GuideTeam || out.Guides[0].State != GuideAbsent {
+		t.Errorf("team guide row must report absent, not disappear: %+v", out.Guides[0])
+	}
+	if out.Guides[1].Kind != GuideOwn || out.Guides[1].State != GuideAbsent {
+		t.Errorf("own guide row must report absent, not disappear: %+v", out.Guides[1])
+	}
+	if out.Walkthrough == nil {
+		t.Fatal("the walkthrough row must still be reported when the file is absent, not omitted")
+	}
+	if out.Walkthrough.State != WalkthroughAbsent {
+		t.Errorf("walkthrough row must report absent, got %+v", out.Walkthrough)
+	}
+	if !out.Walkthrough.HasBranch || out.Walkthrough.Branch != "main" {
+		t.Errorf("walkthrough row must still name its branch: %+v", out.Walkthrough)
+	}
+}
+
 func TestParseConfigPorcelainDefaultsRemoteToOrigin(t *testing.T) {
 	out := ParseConfigPorcelain("")
 	if out.Config.HasBase {

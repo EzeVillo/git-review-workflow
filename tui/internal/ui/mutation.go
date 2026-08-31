@@ -15,9 +15,18 @@ import (
 // build its argv (domain.BuildArgv). Kept as data, not a closure, so
 // *ConfirmOverlay and SelectOverlay's OnPick results stay plain values a
 // test can construct and inspect directly.
+//
+// argv: pre-built, for the footer's row-only controls (createGuide,
+// discardGuide, discardDraft, discardFixes, discardAllFixes) — these are
+// not among the 26 product actions BuildArgv's own doc calls a closed list
+// (actions.go's "row controls with their own CLI call, not among the 27"),
+// so beginMutation uses this instead of BuildArgv(action, params) when it is
+// set. action still travels for genericFailureText and mutationDoneMsg's own
+// bookkeeping either way.
 type mutationRequest struct {
 	action string
 	params domain.ActionParams
+	argv   *domain.Argv
 }
 
 // silenceWindowMsg is the timer contracts/refresh.md's post-mutation grace
@@ -76,10 +85,16 @@ func (m Model) beginMutation(req mutationRequest, token domain.StateToken) (Mode
 		m.statusLine = domain.StaleNotice
 		return m, nil
 	}
-	argv, ok := domain.BuildArgv(req.action, req.params)
-	if !ok {
-		m.lock.Cancel()
-		return m, nil
+	var argv domain.Argv
+	if req.argv != nil {
+		argv = *req.argv
+	} else {
+		a, ok := domain.BuildArgv(req.action, req.params)
+		if !ok {
+			m.lock.Cancel()
+			return m, nil
+		}
+		argv = a
 	}
 	m.statusLine = ""
 	return m, mutationCmd(req, argv)
@@ -259,6 +274,26 @@ func (m Model) activateControl(id domain.ControlID, variant string) (Model, tea.
 		return m.beginCursor("next")
 	case "prev":
 		return m.beginCursor("prev")
+	case "cleanReview":
+		return m.beginCleanReview()
+	case "continueReview":
+		return m.beginContinueReview(variant)
+	case "discardInventory":
+		return m.beginDiscardInventory(variant)
+	case "discardDraft":
+		return m.beginDiscardDraft(variant)
+	case "discardGuide":
+		return m.beginDiscardGuide(variant)
+	case "createGuide":
+		return m.beginCreateGuide(variant)
+	case "discardFixes":
+		return m.beginDiscardFixes(variant)
+	case "discardAllFixes":
+		return m.beginDiscardAllFixes()
+	case "walkthroughBuild":
+		return m.beginWalkthroughBuild()
+	case "walkthroughInit":
+		return m.beginWalkthroughInit()
 	}
 	return m, nil
 }
@@ -429,6 +464,207 @@ func branchItems(candidates []domain.CandidateBranch) []SelectItem {
 		items = append(items, SelectItem{Label: c.Name, Value: c.Name})
 	}
 	return items
+}
+
+// --- the footer's mutations (Phase 7, T081-T082) ---------------------------
+//
+// Every row-targeted handler below re-reads its target from m.Panel's own
+// footer fields BY THE SAME NAME the control's Variant carries — never by
+// remembering a position — so a row that moved between the gesture and the
+// confirmation still names the one the reviewer actually meant.
+
+// beginCleanReview: finish-pending's "Done, clean up" (`clean --keep-fixes
+// <source>`). No row to resolve — the pending finish is the repository's
+// own, from PanelModel.Source/FinishDestination (project.go's own doc on
+// why Source is reused here instead of re-deriving it).
+func (m Model) beginCleanReview() (Model, tea.Cmd) {
+	if m.Panel.Situation != domain.SituationFinishPending || m.Panel.Source == "" {
+		return m, nil
+	}
+	source := m.Panel.Source
+	title := interpolate(domain.CleanReviewConfirmTitle, "{source}", source)
+	detail := interpolate(domain.CleanReviewConfirmDetail, "{destination}", m.Panel.FinishDestination)
+	hk := domain.HousekeepingAction{Kind: domain.CleanKeepFixes, Source: source}
+	req := mutationRequest{action: "cleanReview", params: domain.ActionParams{Housekeeping: hk}}
+	m.confirm = ConfirmMutation("cleanReview", title, detail, domain.DoneLabel, currentStateToken(m.Panel), req)
+	return m, nil
+}
+
+// beginContinueReview resumes the saved review named by variant.
+func (m Model) beginContinueReview(name string) (Model, tea.Cmd) {
+	row, ok := findInventoryRow(decodeInventoryRows(m.Panel.InventoryRows), name)
+	if !ok || !row.saved || !row.resumable {
+		return m, nil
+	}
+	source := domain.SourceOf(domain.BranchRecord{Name: row.name})
+	title := interpolate(domain.ContinueReviewConfirmTitle, "{source}", source)
+	req := mutationRequest{action: "continueReview", params: domain.ActionParams{Source: source}}
+	m.confirm = ConfirmMutation("continueReview", title, domain.ContinueReviewConfirmDetail, domain.ContinueLabel, currentStateToken(m.Panel), req)
+	return m, nil
+}
+
+// beginDiscardInventory deletes the review named by variant: `forget
+// --saved <source>` for a paused one, `clean <source>` for a leftover
+// active/broken one — the same split panelModel.ts's toPanelReviews and
+// forgetReview.ts's discardInventoryReview make.
+func (m Model) beginDiscardInventory(name string) (Model, tea.Cmd) {
+	row, ok := findInventoryRow(decodeInventoryRows(m.Panel.InventoryRows), name)
+	if !ok || !row.canDiscard() {
+		return m, nil
+	}
+	source := domain.SourceOf(domain.BranchRecord{Name: row.name})
+	var title, detail string
+	var kind domain.HousekeepingKind
+	if row.saved {
+		title = interpolate(domain.DiscardSavedReviewConfirmTitle, "{source}", source)
+		detail = domain.DiscardSavedReviewConfirmDetail
+		kind = domain.ForgetSavedOne
+	} else {
+		title = interpolate(domain.DiscardOneReviewConfirmTitle, "{source}", source)
+		detail = domain.DiscardOneReviewConfirmDetail
+		kind = domain.CleanOne
+	}
+	hk := domain.HousekeepingAction{Kind: kind, Source: source}
+	req := mutationRequest{action: "discardInventory", params: domain.ActionParams{Housekeeping: hk}}
+	m.confirm = ConfirmMutation("discardInventory", title, detail, domain.DiscardLabel, currentStateToken(m.Panel), req)
+	return m, nil
+}
+
+// beginDiscardDraft deletes the loose draft named by variant (`forget
+// --draft <src>`), fresh or spent alike — a spent row keeps this control
+// exactly because a review being over does not make its written-out reading
+// order disappear on its own (CLAUDE.md: forget is the one verb that does).
+func (m Model) beginDiscardDraft(src string) (Model, tea.Cmd) {
+	d, ok := findDraftRow(decodeDraftRows(m.Panel.FreshDraftRows), src)
+	if !ok {
+		d, ok = findDraftRow(decodeDraftRows(m.Panel.SpentDraftRows), src)
+	}
+	if !ok {
+		return m, nil
+	}
+	title := interpolate(domain.DiscardDraftConfirmTitle, "{source}", src)
+	detail := interpolate(domain.DiscardDraftConfirmDetail, "{path}", d.path)
+	argv := domain.Argv{
+		Verb: domain.VerbForHousekeeping(domain.ForgetDraftOne),
+		Args: domain.ArgsForHousekeeping(domain.HousekeepingAction{Kind: domain.ForgetDraftOne, Source: src}),
+	}
+	req := mutationRequest{action: "discardDraft", argv: &argv}
+	m.confirm = ConfirmMutation("discardDraft", title, detail, domain.DiscardConfirmLabel, currentStateToken(m.Panel), req)
+	return m, nil
+}
+
+// beginDiscardGuide deletes the REVIEWER'S OWN guide (`walkthrough guide
+// --delete`) — variant is always "own": guide_rows.controls declares
+// discardGuide only_in_row: own, and noReviewControls never emits it for
+// "team" (the shared guide is a tracked file; the CLI itself refuses
+// --delete --team).
+func (m Model) beginDiscardGuide(variant string) (Model, tea.Cmd) {
+	if variant != "own" || m.Panel.OwnGuideState == domain.GuideAbsent {
+		return m, nil
+	}
+	detail := interpolate(domain.DiscardGuideConfirmDetail, "{path}", m.Panel.OwnGuideRow)
+	argv := domain.Argv{Verb: "walkthrough", Args: domain.DiscardGuideArgs()}
+	req := mutationRequest{action: "discardGuide", argv: &argv}
+	m.confirm = ConfirmMutation("discardGuide", domain.DiscardGuideConfirmTitle, detail, domain.DiscardConfirmLabel, currentStateToken(m.Panel), req)
+	return m, nil
+}
+
+// beginCreateGuide asks the CLI to create the (empty) guide named by variant
+// ("team"/"own") — not confirms: true in the canonical (RequiresConfirmation
+// says so), so this goes straight to beginMutation, no overlay at all.
+func (m Model) beginCreateGuide(variant string) (Model, tea.Cmd) {
+	var exists bool
+	switch variant {
+	case "team":
+		exists = m.Panel.TeamGuideState != domain.GuideAbsent
+	case "own":
+		exists = m.Panel.OwnGuideState != domain.GuideAbsent
+	default:
+		return m, nil
+	}
+	if exists {
+		return m, nil
+	}
+	argv := domain.Argv{Verb: "walkthrough", Args: domain.CreateGuideArgs(variant == "team")}
+	req := mutationRequest{action: "createGuide", argv: &argv}
+	return m.beginMutation(req, currentStateToken(m.Panel))
+}
+
+// beginDiscardFixes deletes ONE review-fixes/* branch (`clean --fixes-only
+// <source>`) — never the row it is currently standing on
+// (fixes_rows.controls' disabled_when: current; noReviewControls already
+// disables the control there, this is the same guard repeated for a
+// gesture that bypasses focus entirely, the same defensive shape
+// beginCursor already uses for n/p at the extremes).
+func (m Model) beginDiscardFixes(name string) (Model, tea.Cmd) {
+	row, ok := findFixesRow(decodeFixesRows(m.Panel.FixesRows), name)
+	if !ok || row.current {
+		return m, nil
+	}
+	source := domain.FixesSourceOf(row.name)
+	title := interpolate(domain.DiscardFixesConfirmTitle, "{source}", source)
+	detail := domain.DiscardFixesConfirmDetail(domain.FixesState(row.state), row.session)
+	argv := domain.Argv{
+		Verb: domain.VerbForHousekeeping(domain.CleanFixesOne),
+		Args: domain.ArgsForHousekeeping(domain.HousekeepingAction{Kind: domain.CleanFixesOne, Source: source}),
+	}
+	req := mutationRequest{action: "discardFixes", argv: &argv}
+	m.confirm = ConfirmMutation("discardFixes", title, detail, domain.DiscardLabel, currentStateToken(m.Panel), req)
+	return m, nil
+}
+
+// beginDiscardAllFixes runs `clean --fixes-only` with NO branch — always,
+// even with a stale read: the argv cannot depend on a datum re-read on
+// every refresh (fixes_rows' own comment on why this is safe: clean's own
+// scoping never touches a live review/*), so there is nothing here to
+// re-resolve against m.Panel at all.
+func (m Model) beginDiscardAllFixes() (Model, tea.Cmd) {
+	argv := domain.Argv{
+		Verb: domain.VerbForHousekeeping(domain.CleanFixesOneAll),
+		Args: domain.ArgsForHousekeeping(domain.HousekeepingAction{Kind: domain.CleanFixesOneAll}),
+	}
+	req := mutationRequest{action: "discardAllFixes", argv: &argv}
+	m.confirm = ConfirmMutation("discardAllFixes", domain.DiscardAllFixesConfirmTitle, domain.DiscardAllFixesConfirmDetail, domain.DeleteAllLabel, currentStateToken(m.Panel), req)
+	return m, nil
+}
+
+// beginWalkthroughBuild: `walkthrough build`, a plain yes/no confirm (unlike
+// its sibling walkthroughInit below).
+func (m Model) beginWalkthroughBuild() (Model, tea.Cmd) {
+	req := mutationRequest{action: "walkthroughBuild"}
+	m.confirm = ConfirmMutation("walkthroughBuild", domain.WalkthroughBuildConfirmTitle, domain.WalkthroughBuildConfirmDetail, domain.WalkthroughBuildLabel, currentStateToken(m.Panel), req)
+	return m, nil
+}
+
+// beginWalkthroughInit is confirms.go's ONE declared exception to the
+// single confirmation gate: it never calls ConfirmMutation. With nothing to
+// preserve (no record at all, or the file is absent) or nothing worth
+// asking about (superseded — the CLI starts over on its own for a merged
+// PR's leftover file), `init` just runs; only a genuinely reconcilable file
+// (in-sync/stale/unknown) opens the two-course SelectOverlay picker
+// (walkthrough_row.init_choice) — a CHOICE, not a confirmation, which is
+// exactly why this is the one id confirms.go excuses from the gate.
+func (m Model) beginWalkthroughInit() (Model, tea.Cmd) {
+	reconcilable := m.Panel.HasWalkthroughRow &&
+		m.Panel.WalkthroughState != domain.WalkthroughAbsent &&
+		m.Panel.WalkthroughState != domain.WalkthroughSuperseded
+	if !reconcilable {
+		req := mutationRequest{action: "walkthroughInit", params: domain.ActionParams{WalkthroughForce: false}}
+		return m.beginMutation(req, currentStateToken(m.Panel))
+	}
+	overlay := SelectOverlay{
+		Title: domain.WalkthroughInitChoiceTitle,
+		Items: []SelectItem{
+			{Label: domain.WalkthroughUpdateLabel, Detail: domain.WalkthroughUpdateDetail, Value: "update"},
+			{Label: domain.WalkthroughStartOverLabel, Detail: domain.WalkthroughStartOverDetail, Value: "force"},
+		},
+		OnPick: func(v string) selectResult {
+			req := mutationRequest{action: "walkthroughInit", params: domain.ActionParams{WalkthroughForce: v == "force"}}
+			return selectResult{done: &req}
+		},
+	}
+	m.selectOverlay = &overlay
+	return m, nil
 }
 
 // handleConfirmKey routes a KeyMsg to the open ConfirmOverlay instead of the

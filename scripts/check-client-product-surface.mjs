@@ -1932,25 +1932,30 @@ if (existsSync(tuiUiDir)) {
   // arriba, adaptado a la sintaxis de una llamada Go.
   //
   // La direccion "todo confirms: true tiene un call site" NO se pide para
-  // los 13 ids completos todavia: de esos, sólo undoFinish/saveReview/
-  // abortReview son Phase 6 (T070-T071); continueReview/discardInventory/
-  // discardDraft/discardGuide/discardFixes/discardAllFixes/cleanReview son
-  // Phase 7 (T075-T082), compareReview es Phase 8 (T089, delegada a
-  // difftool) y walkthroughInit/walkthroughBuild son Phase 7 (T081) --
-  // walkthroughInit ademas via el picker, nunca ConfirmMutation (la EXCEPCION
-  // DECLARADA de confirms.go). Pedir el conjunto completo ahora rompería CI
-  // antes de que esas fases existan; TUI_CONFIRM_WIRED_SO_FAR es la lista que
-  // SE ACHICA a medida que cada fase agrega su propio call site -- vacía el
-  // día que las nueve restantes estén todas wireadas, momento en el que esta
-  // lista deja de hacer falta y el chequeo de abajo puede correr sobre
-  // canonicalConfirming directo, como ya hace VS Code.
+  // los 13 ids completos todavia: de esos, undoFinish/saveReview/abortReview
+  // son Phase 6 (T070-T071); continueReview/discardInventory/discardDraft/
+  // discardGuide/discardFixes/discardAllFixes/cleanReview/walkthroughBuild
+  // son Phase 7 (T075-T082); compareReview es Phase 8 (T089, delegada a
+  // difftool); y walkthroughInit es Phase 7 (T081) pero via el picker,
+  // nunca ConfirmMutation (la EXCEPCION DECLARADA de confirms.go), asi que
+  // nunca entra a este set aunque este wireado. Pedir el conjunto completo
+  // antes de que exista rompería CI; TUI_CONFIRM_WIRED_SO_FAR es la lista
+  // que CRECE a medida que cada fase agrega sus propios call sites -- llega
+  // a los 12 exigibles (los 13 menos walkthroughInit) el día que compareReview
+  // (Phase 8) se cablee, momento en el que esta lista deja de hacer falta y
+  // el chequeo de abajo puede correr sobre canonicalConfirming directo, como
+  // ya hace VS Code.
   //
   // La direccion inversa SÍ es completa ya: cualquier id pasado a
   // ConfirmMutation, sea de esta fase o de una futura, tiene que ser uno que
   // el canonico marque confirms: true -- es la mitad que SC-007 ejercita
   // (cambiar el id que un call site pasa pone CI en rojo) y no depende de
   // cuántas fases más existan.
-  const TUI_CONFIRM_WIRED_SO_FAR = new Set(["undoFinish", "saveReview", "abortReview"]);
+  const TUI_CONFIRM_WIRED_SO_FAR = new Set([
+    "undoFinish", "saveReview", "abortReview",
+    "continueReview", "discardInventory", "discardDraft", "discardGuide",
+    "discardFixes", "discardAllFixes", "cleanReview", "walkthroughBuild",
+  ]);
   const tuiPassedToGate = new Set();
   for (const [, body] of tuiUiSources) {
     for (const m of body.matchAll(/ConfirmMutation\(\s*"([A-Za-z][A-Za-z0-9]*)"/g)) {

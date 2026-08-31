@@ -109,6 +109,93 @@ func TestProjectFailureSituationsCarryOnlyStderrAndBusy(t *testing.T) {
 	}
 }
 
+// --- the footer (Phase 7, T075-T083) ---------------------------------------
+
+func TestProjectFooterWalkthroughAndGuideRows(t *testing.T) {
+	cfg := ParseConfigPorcelain(readFixture("config-basic.txt"))
+	m := Project(ProjectInput{Situation: SituationNoReview, Config: cfg, HasConfig: true})
+	if !m.HasWalkthroughRow || m.WalkthroughRow != "feature" || m.WalkthroughState != WalkthroughInSync {
+		t.Fatalf("walkthrough row mangled: %+v", m)
+	}
+	if m.WalkthroughAnnotated != 4 || m.WalkthroughTotal != 4 {
+		t.Fatalf("walkthrough progress mangled: %d/%d", m.WalkthroughAnnotated, m.WalkthroughTotal)
+	}
+	if !m.HasGuideRows {
+		t.Fatal("HasGuideRows must be true when config-basic.txt's two guide records were read")
+	}
+	if m.TeamGuideRow != "/home/x/repo/.review/walkthrough-guide.md" || m.TeamGuideState != GuideInForce {
+		t.Fatalf("team guide row mangled: %q / %q", m.TeamGuideRow, m.TeamGuideState)
+	}
+	if m.OwnGuideRow != "/home/x/.git/review-walkthrough-guide.md" || m.OwnGuideState != GuideAbsent {
+		t.Fatalf("own guide row mangled: %q / %q", m.OwnGuideRow, m.OwnGuideState)
+	}
+}
+
+func TestProjectFooterSplitsDraftsFreshVsSpent(t *testing.T) {
+	cfg := ConfigPorcelainResult{Drafts: []DraftRecord{
+		{Src: "feat-a", Path: "/g/feat-a.md", Annotated: 1, Total: 2, Source: DraftSourceRemote, Range: DraftRangeFull, State: DraftFresh},
+		{Src: "feat-b", Path: "/g/feat-b.md", Annotated: 3, Total: 3, Source: DraftSourceLocal, Range: DraftRangeDelta, State: DraftReviewed},
+	}}
+	m := Project(ProjectInput{Situation: SituationNoReview, Config: cfg, HasConfig: true})
+	if m.FreshDraftCount != 1 || m.SpentDraftCount != 1 {
+		t.Fatalf("expected 1 fresh + 1 spent, got %d/%d", m.FreshDraftCount, m.SpentDraftCount)
+	}
+	wantFresh := FooterField("feat-a", "/g/feat-a.md", "remote", "full", "1", "2")
+	if m.FreshDraftRows != wantFresh {
+		t.Errorf("fresh draft row = %q, want %q", m.FreshDraftRows, wantFresh)
+	}
+	wantSpent := FooterField("feat-b", "/g/feat-b.md", "local", "delta", "3", "3")
+	if m.SpentDraftRows != wantSpent {
+		t.Errorf("spent draft row = %q, want %q", m.SpentDraftRows, wantSpent)
+	}
+}
+
+func TestProjectFooterFixesRows(t *testing.T) {
+	fixes := ParseListFixes(readFixture("list-basic.txt"))
+	m := Project(ProjectInput{Situation: SituationNoReview, Fixes: fixes, HasList: true})
+	if m.FixesCount != 2 {
+		t.Fatalf("FixesCount = %d, want 2", m.FixesCount)
+	}
+	rows := FooterRows(m.FixesRows)
+	if len(rows) != 2 || rows[0][0] != "review-fixes/old-one" || rows[0][1] != string(FixesMerged) {
+		t.Fatalf("fixes rows mangled: %v", rows)
+	}
+}
+
+// TestProjectFooterInventoryResumability is panelModel.ts's own
+// toPanelReviews rule, ported: a saved review stops being resumable once
+// ANOTHER branch already has an active (non-saved) review for the same
+// source — the exact case `git review continue` itself refuses.
+func TestProjectFooterInventoryResumability(t *testing.T) {
+	branches := []BranchRecord{
+		{Name: "review-saved/feature", Saved: true},
+		{Name: "review/feature", Saved: false, Current: true, Mode: ModeWalk, Position: 2, Total: 5, HasPositionTotal: true},
+		{Name: "review-saved/other", Saved: true},
+		{Name: "review/broken", Orphan: true},
+	}
+	m := Project(ProjectInput{Situation: SituationNoReview, Branches: branches, HasList: true})
+	if !m.HasReviews || m.InventoryCount != 4 {
+		t.Fatalf("HasReviews/InventoryCount = %v/%d, want true/4", m.HasReviews, m.InventoryCount)
+	}
+	rows := FooterRows(m.InventoryRows)
+	if len(rows) != 4 {
+		t.Fatalf("expected 4 inventory rows, got %d", len(rows))
+	}
+	// review-saved/feature: saved, but review/feature is active for the same
+	// source -- NOT resumable.
+	if rows[0][0] != "review-saved/feature" || cellBool(rows[0][4]) {
+		t.Fatalf("review-saved/feature must not be resumable while review/feature is active: %v", rows[0])
+	}
+	// review-saved/other: saved, nothing else active for "other" -- resumable.
+	if rows[2][0] != "review-saved/other" || !cellBool(rows[2][4]) {
+		t.Fatalf("review-saved/other must be resumable: %v", rows[2])
+	}
+	// review/broken: orphan, never resumable regardless of Saved.
+	if rows[3][0] != "review/broken" || !cellBool(rows[3][2]) || cellBool(rows[3][4]) {
+		t.Fatalf("review/broken must be orphan and not resumable: %v", rows[3])
+	}
+}
+
 // FR-023: a review situation never projects a footer row, regardless of
 // what a caller happens to pass in Config/Branches — the projector never
 // even looks at them for SituationReview/SituationFinishConflict.

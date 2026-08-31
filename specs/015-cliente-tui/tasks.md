@@ -769,32 +769,32 @@ los terminales de Linux.
 **Independent Test**: renderizar el mismo estado a los dos tamaños fijos y comparar contra los
 archivos de referencia; repetir con el color apagado y con el fallback ASCII forzado.
 
-- [ ] T095 [US8] Implementar el respeto de **`NO_COLOR`**: sin secuencias de color, y todo legible
+- [X] T095 [US8] Implementar el respeto de **`NO_COLOR`**: sin secuencias de color, y todo legible
   sin ellas. **Gate**: el juego de golden `-nocolor` de T050.
-- [ ] T096 [US8] Implementar en `tui/cmd/git-review-ui/main.go` (con el `Viewport` de
+- [X] T096 [US8] Implementar en `tui/cmd/git-review-ui/main.go` (con el `Viewport` de
   `tui/internal/ui/`) la **decisión de arranque** del juego de glifos: el fallback ASCII lo
   dispara el locale/codepage —`LC_ALL`/`LC_CTYPE`/`LANG` sin UTF-8, o un codepage de consola de
   Windows distinto de 65001—, **no `NO_COLOR`**, que es color y no dibujo. Con un override de
   soporte para forzarlo, que es lo que hace posible el juego de golden `-ascii`. **Gate**: el juego
   `-ascii` de T050 y el test de que **ninguna fila se pierde** al caer al ASCII.
-- [ ] T097 [US8] Implementar el **resize en vivo**: `tea.WindowSizeMsg` rehace el layout sin
+- [X] T097 [US8] Implementar el **resize en vivo**: `tea.WindowSizeMsg` rehace el layout sin
   corromperlo, y un pane más chico que el mínimo dibujable **degrada a algo legible** en vez de
   romper el layout. **Gate**: tests a los dos tamaños de referencia más uno por debajo del mínimo,
   afirmando que ninguna línea se desborda ni se corta a mitad de columna en 80 columnas.
-- [ ] T098 [US8] Afirmar el **terminal restaurado ante un fallo inesperado** (FR-044): sin alt-screen
+- [X] T098 [US8] Afirmar el **terminal restaurado ante un fallo inesperado** (FR-044): sin alt-screen
   colgada ni cursor escondido. Bubble Tea lo hace en su `recover`; el **gate es un test que provoca
   un panic en `Update`** y afirma que el programa salió con el terminal restaurado — no alcanza con
   confiar en la librería.
-- [ ] T099 [US8] Afirmar la **alineación de columnas** con iconos: cada fila con icono cae en la
+- [X] T099 [US8] Afirmar la **alineación de columnas** con iconos: cada fila con icono cae en la
   misma columna, a los dos tamaños y en los dos juegos de glifos. **Gate**: los tests de ancho de
   celda de T027 más los golden — `Ambiguous` no lo detecta ningún ojo humano en la máquina donde se
   escribió.
-- [ ] T100 [US8] Implementar la situación de **`cwd` fuera de un repositorio**: error accionable con
+- [X] T100 [US8] Implementar la situación de **`cwd` fuera de un repositorio**: error accionable con
   la copy propia de `per_client_strings.no_single_root`, **no una pantalla en blanco**. Es la causa
   alcanzable desde una terminal —donde no hay multi-root— y es por lo que esa copy se declara por
   cliente: el próximo paso está fuera del panel y es distinto (en un IDE, abrir un workspace de una
   sola carpeta; en una terminal, pararse dentro de un repositorio).
-- [ ] T101 [US8] Escribir la **matriz smoke multi-SO** en `tui/CONTRIBUTING.md` y en
+- [X] T101 [US8] Escribir la **matriz smoke multi-SO** en `tui/CONTRIBUTING.md` y en
   [quickstart.md](./quickstart.md) § Matriz smoke, con los ocho casos: CLI vieja → `cli-outdated` y
   no `cli-missing`; path acentuado y con espacio; `start --offline`; un verbo de red con credenciales
   que pedirían prompt → **falla con diagnóstico, no cuelga el pane**; worktree enlazado; Windows con

@@ -60,6 +60,21 @@ func (m Model) WithPreferredStartSource(source string) Model {
 	return m
 }
 
+// WithViewportCapabilities sets the two startup-decided Viewport fields the
+// composition root (cmd/git-review-ui/main.go) resolves before the terminal
+// ever draws a frame: NO_COLOR's presence (T095) and the ASCII glyph
+// fallback (T096, driven by locale/codepage, never by NO_COLOR -- color and
+// drawing are two independent questions, contracts/tui-surface.md §
+// Iconos). Cols/Rows are deliberately left untouched here: bubbletea's own
+// first tea.WindowSizeMsg supplies the real terminal size moments later, and
+// Update's WindowSizeMsg branch never touches Color/ASCII, so setting them
+// once here is enough for both to survive every subsequent resize.
+func (m Model) WithViewportCapabilities(color, ascii bool) Model {
+	m.Viewport.Color = color
+	m.Viewport.ASCII = ascii
+	return m
+}
+
 // NewModel builds the program's initial state: waiting_text on the very
 // first frame (T046), before any invocation has even started, and the
 // mouse reporting on by default (contracts/tui-surface.md § Mouse). The

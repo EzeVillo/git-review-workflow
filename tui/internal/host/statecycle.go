@@ -40,9 +40,16 @@ type ReadResult struct {
 // pressing `r` has to be able to walk the panel out of cli-missing, and that
 // only works if the version probe runs again every time.
 func ReadState(ctx context.Context, cwd, minVersion string) ReadResult {
-	_, gdRes, ok := ResolveGitDirs(ctx, cwd)
+	_, _, ok := ResolveGitDirs(ctx, cwd)
 	if !ok {
-		return ReadResult{Situation: domain.SituationForMissingRepo(), Stderr: gdRes.Stderr}
+		// T100: the panel's own actionable copy (per_client_strings.
+		// no_single_root.tui), not git rev-parse's raw "fatal: not a git
+		// repository..." -- the same substitution the other three clients
+		// make (ReviewStateManager.cs / GitReviewService.kt / state.ts all
+		// write their own no_single_root text into Stderr rather than
+		// whatever the host layer originally reported), so the panel never
+		// draws a blank error screen.
+		return ReadResult{Situation: domain.SituationForMissingRepo(), Stderr: domain.NoSingleRoot}
 	}
 
 	outcome, vRes := ProbeVersion(ctx)

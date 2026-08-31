@@ -167,4 +167,11 @@ func TestReadStateOutsideARepositoryIsError(t *testing.T) {
 	if result.Situation != domain.SituationForMissingRepo() {
 		t.Fatalf("Situation = %q, want %q", result.Situation, domain.SituationForMissingRepo())
 	}
+	// T100: the panel's own actionable copy (per_client_strings.
+	// no_single_root.tui) lands in Stderr, never git rev-parse's raw "fatal:
+	// not a git repository..." -- that raw text would not tell a reader what
+	// to do, and the panel must never be a blank error screen.
+	if result.Stderr != domain.NoSingleRoot {
+		t.Fatalf("Stderr = %q, want the no_single_root copy %q", result.Stderr, domain.NoSingleRoot)
+	}
 }

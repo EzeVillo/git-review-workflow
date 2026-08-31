@@ -85,7 +85,18 @@ func main() {
 		pollSeconds = int(d.Seconds())
 	}
 
-	p := tea.NewProgram(ui.NewModelWithPollFloor(pollSeconds).WithPreferredStartSource(startSource),
+	// T095/T096: the two Viewport capabilities decided once at startup and
+	// never re-evaluated -- NO_COLOR's mere presence (contracts/tui-
+	// surface.md § El pane real) and the ASCII glyph fallback (locale/
+	// codepage, or the GIT_REVIEW_UI_ASCII override that makes the -ascii
+	// golden set possible). Cols/Rows are left at their construction-time
+	// placeholder: bubbletea's own first tea.WindowSizeMsg overwrites them
+	// with the real terminal size before the first real frame draws.
+	model := ui.NewModelWithPollFloor(pollSeconds).
+		WithPreferredStartSource(startSource).
+		WithViewportCapabilities(!noColorRequested(), asciiFallback())
+
+	p := tea.NewProgram(model,
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 		tea.WithReportFocus(),

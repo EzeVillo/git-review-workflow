@@ -1,5 +1,27 @@
 package domain
 
+// WhyState is showWhy's own state (T094): the four values
+// vscode-extension/src/views/panelModel.ts's WhyState already declares, for
+// the same reason. "loading" is the zero value on purpose — a hand-built or
+// not-yet-read PanelModel defaults to "asked, no answer yet" rather than
+// silently reading as "there is nothing to say" (WhyAbsent) or worse "we
+// asked and it failed" (WhyFailed): those are two DIFFERENT true things,
+// and collapsing either of them into "we have not asked" would be a lie in
+// the other direction. WhyAbsent and WhyFailed are themselves genuinely
+// distinct: an entry the walkthrough never annotates versus a `status
+// --why` invocation that could not answer at all (a timeout, a spawn
+// failure, a nonzero exit) — the old bool HasWhy could not tell them apart,
+// so no existing golden fixture exercises WhyFailed and none of them can
+// regress from this type replacing it.
+type WhyState string
+
+const (
+	WhyLoading WhyState = "loading"
+	WhyPresent WhyState = "present"
+	WhyAbsent  WhyState = "absent"
+	WhyFailed  WhyState = "failed"
+)
+
 // PanelModel is the flat projection of what gets drawn — nothing about how
 // it is drawn (data-model.md § PanelModel). It is COMPARABLE BY VALUE: no
 // maps, no slices, no pointers. That property is what SC-004 rests on — an
@@ -62,8 +84,22 @@ type PanelModel struct {
 	// inventory, one line per file, newline-joined.
 	Files string
 
-	HasWhy bool
-	Why    string
+	// WhyState / Why: showWhy's own state and text (T094). Why only carries
+	// text when WhyState == WhyPresent — see WhyState's own doc for why the
+	// other three states stay distinct instead of collapsing to a bool.
+	WhyState WhyState
+	Why      string
+
+	// EntryPickerRows: goToEntry's own list (T086), a picker SEPARATE from
+	// the action list overlay — it enumerates ENTRIES, not actions. One row
+	// per `entry` record `status --porcelain` reports for the review's
+	// current mode, in the CLI's own reading order, never re-sorted: tab
+	// fields `position \t raw \t display`. raw is what open.go's delegated
+	// commands need (a short SHA in step mode, PathRef.Raw otherwise) and
+	// display is what the picker draws — CLAUDE.md's rule that Raw never
+	// reaches the screen applies here exactly as everywhere else PathRef
+	// travels.
+	EntryPickerRows string
 
 	// Footer rows (no-review only; a review never projects these —
 	// FR-023, enforced by the projector never filling them in rather than

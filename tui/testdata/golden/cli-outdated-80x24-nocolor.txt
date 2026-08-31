@@ -7,4 +7,4 @@ Press r to refresh, or focus this pane again — the panel does not poll.
 
 [ Other install options ]
 
-j:up  k:down  enter:select  r:refresh  m:mouse on  q:quit
+j:up  k:down  enter:select  r:refresh  ::actions  m:mouse on  q:quit

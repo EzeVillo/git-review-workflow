@@ -37,8 +37,8 @@ type ProjectInput struct {
 	Config    ConfigPorcelainResult
 	HasConfig bool
 
-	Why    string
-	HasWhy bool
+	Why      string
+	WhyState WhyState
 
 	MouseEnabled bool
 	Busy         bool
@@ -83,6 +83,31 @@ func joinDisplayPaths(entries []EntryRecord) string {
 	return strings.Join(lines, "\n")
 }
 
+// entryPickerRows packs goToEntry's own list (T086) from the SAME `entry`
+// records status --porcelain already reported (in.Status.Entries) — never
+// re-derived from Files, which in step mode is the CURRENT commit's file
+// inventory, a different list entirely. subjects, when the CLI reports them
+// (step mode only), give a picked commit a human label instead of a bare
+// SHA; every other mode's raw/display already IS the human label (a path).
+func entryPickerRows(mode ReviewMode, entries []EntryRecord, subjects map[int]string) string {
+	rows := make([]string, len(entries))
+	for i, e := range entries {
+		var raw, display string
+		if mode == ModeStep {
+			raw = e.SHA
+			display = e.SHA
+			if s, ok := subjects[e.Position]; ok && s != "" {
+				display = s
+			}
+		} else {
+			raw = e.Path.Raw
+			display = e.Path.Display
+		}
+		rows[i] = FooterField(strconv.Itoa(e.Position), raw, display)
+	}
+	return strings.Join(rows, "\n")
+}
+
 // Project turns one read cycle's parsed pieces into the flat, comparable
 // PanelModel render.go draws. It is the ONE place FR-023 is enforced: for a
 // review-shaped situation this function never touches the footer fields at
@@ -113,8 +138,22 @@ func Project(in ProjectInput) PanelModel {
 		m.Tip = st.Tip
 		m.Readonly = in.Status.Readonly
 		m.KeysOnly = in.Status.KeysOnly
-		m.HasWhy = in.HasWhy
+		m.WhyState = in.WhyState
 		m.Why = in.Why
+
+		// Degraded (T094): the walkthrough this review asked for could not
+		// be applied (broken, stale, or otherwise unusable), so the CLI
+		// fell back to whole on its own — a walkthrough never fails a
+		// review, it degrades it, with a note (CLAUDE.md § Walk y
+		// walkthrough). st.Walkthrough carries this for BOTH whole and walk
+		// modes (data-model.md § StateRecord): a whole-mode review can
+		// still report "degraded" when THAT is how it got there.
+		if st.Walkthrough == WalkthroughDegraded {
+			m.Degraded = true
+			m.Note = WalkthroughDegradedToWholeNote
+		}
+
+		m.EntryPickerRows = entryPickerRows(st.Mode, in.Status.Entries, in.Status.Subjects)
 
 		switch st.Mode {
 		case ModeWhole:

@@ -11,4 +11,4 @@ Entry 2/4: abc1234
 [›] Next entry
 
 j:up  k:down  enter:select  n:next  p:prev  r:refresh  f:finish  s:save         
-a:cancel  m:mouse on  q:quit                                                    
+a:cancel  ::actions  g:entries  m:mouse on  q:quit                              

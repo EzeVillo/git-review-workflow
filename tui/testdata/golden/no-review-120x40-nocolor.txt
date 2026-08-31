@@ -34,4 +34,4 @@ review-fixes/old-one  (merged)
 [✗] discard
 … 15 more line(s) below — resize to see them
 
-j:up  k:down  enter:select  r:refresh  m:mouse on  q:quit
+j:up  k:down  enter:select  r:refresh  ::actions  m:mouse on  q:quit

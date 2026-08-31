@@ -691,7 +691,7 @@ exactamente lo que hace su tecla.
 acciones que esa situación habilita; y recorrer la secuencia de US3 una segunda vez **sólo con el
 mouse**.
 
-- [ ] T084 [US7] Implementar `tui/internal/ui/palette.go`: el **overlay de lista filtrable**
+- [X] T084 [US7] Implementar `tui/internal/ui/palette.go`: el **overlay de lista filtrable**
   (`bubbles/list` + `textinput`) que enumera las acciones que la situación actual habilita, con su
   tecla al lado donde la tenga. Es el equivalente de `surface: action` de los otros tres —paleta de
   comandos, menú *Tools*, `.vsct`— y las cuatro de `panel_excluded: [goToEntry, forgetReview,
@@ -699,22 +699,22 @@ mouse**.
   prohíbe otro modal hablando de **confirmaciones**, y esta lista no confirma, elige. **Gate**: el
   gate (e) de `keymap:` —toda acción de `panel_excluded:` alcanzable desde acá y **sin** tecla
   propia— más un test por situación.
-- [ ] T085 [US7] Cablear el despacho del overlay a **la misma** `ConfirmMutation` que el cuerpo: una
+- [X] T085 [US7] Cablear el despacho del overlay a **la misma** `ConfirmMutation` que el cuerpo: una
   acción destructiva elegida desde la lista pasa por la misma puerta que si se hubiera activado en el
   cuerpo (US7, escenario 3). **Gate**: el gate 2 de T067 lo verifica solo, porque el call site está
   en el mismo despachador — es lo que hace que la puerta única sea única de verdad.
-- [ ] T086 [US7] Implementar `goToEntry` como **picker aparte**, no la misma lista: enumera
+- [X] T086 [US7] Implementar `goToEntry` como **picker aparte**, no la misma lista: enumera
   **entradas**, no acciones, y abre la elegida **sin mover el cursor de la CLI** (US3, escenario 5).
   O sea: abre y punto, **no** invoca `next`/`prev` N veces. **Gate**: un test que afirma que el
   cursor de la CLI no se movió.
-- [ ] T087 [US7] Implementar `showCliLog` (overlay o `$PAGER`) sobre el registro de invocaciones de
+- [X] T087 [US7] Implementar `showCliLog` (overlay o `$PAGER`) sobre el registro de invocaciones de
   T039: comando, directorio, duración y error. **Gate**: es la **tercera capa** de la regla de copy
   —etiqueta → contexto → detalle técnico siempre a un gesto— y un test afirma que el argv **nunca**
   aparece en la primera capa; un tooltip dice qué le pasa al objeto de su fila, en imperativo, y no
   es lugar para un argv.
-- [ ] T088 [US7] Implementar `previewEditsStat` (`preview --stat`): es texto, o sea nativa —a
+- [X] T088 [US7] Implementar `previewEditsStat` (`preview --stat`): es texto, o sea nativa —a
   diferencia de `previewEdits` sin `--stat`, que es un diff y ahí sí gana el difftool del usuario—.
-- [ ] T089 [US4] Implementar `tui/internal/host/open.go` con las **cuatro delegadas**:
+- [X] T089 [US4] Implementar `tui/internal/host/open.go` con las **cuatro delegadas**:
   `openEntry`/`openChange` → `$EDITOR` con el path **mostrable**;
   `previewEdits`/`compareReview` → `git difftool` → `$PAGER` → `less`, con el color de git. Se lanzan
   con `tea.ExecProcess`, que suspende el programa, le entrega el TTY al hijo y lo recupera al volver,
@@ -725,17 +725,17 @@ mouse**.
   `code -w`. **Gate**: tests con paths con espacio y no-ASCII; un archivo eliminado en el rango **no
   es fatal** y el resultado es informativo; `$EDITOR` ausente o inexistente dice **qué no pasó**, no
   qué comando falló, y esos fallbacks aparecen **sólo** cuando la herramienta muere sin stderr.
-- [ ] T090 [US3] Implementar el **mouse**: reporte encendido por default, `MouseMsg` resuelto contra
+- [X] T090 [US3] Implementar el **mouse**: reporte encendido por default, `MouseMsg` resuelto contra
   la `HitMap` de T047, el control bajo el cursor distinguido del resto, y **una tecla que lo apaga**
   y devuelve la selección nativa por arrastre, con su estado visible en el panel (`mouseEnabled` del
   `PanelModel`, el único campo que no sale de porcelain, FR-067). **Gate**: un clic hace
   **exactamente lo mismo** que su tecla; y en un terminal que no entrega eventos de mouse la TUI
   dibuja los mismos controles **sin mensaje de error ni degradación visible** (US8, escenario 7).
-- [ ] T091 [US3] Escribir el test **sólo con el mouse** (SC-015) en
+- [X] T091 [US3] Escribir el test **sólo con el mouse** (SC-015) en
   `tui/internal/ui/reachability_mouse_test.go`: recorrer las situaciones con
   `MouseMsg` sintéticos contra la `HitMap` y afirmar que cada control que la situación **dibuja** se
   activa. **Gate**: sin la `HitMap` habría que adivinar coordenadas; con ella el test es honesto.
-- [ ] T092 [US2] Implementar `tui/internal/host/clipboard.go`: **OSC 52**, sin shellear a `pbcopy`,
+- [X] T092 [US2] Implementar `tui/internal/host/clipboard.go`: **OSC 52**, sin shellear a `pbcopy`,
   `xclip`, `wl-copy` ni `clip.exe` —por SSH y dentro de un multiplexor esas herramientas copian al
   portapapeles de la máquina equivocada o no existen, que es el escenario que la spec pone primero—.
   OSC 52 **no tiene acuse**, así que la degradación no se detecta, se **elige**: el control **nunca
@@ -745,14 +745,14 @@ mouse**.
   por arrastre, así que la tecla que apaga el mouse es la que habilita esa línea. **Gate**: un test
   que afirma que ninguna copy dice "Copied" (FR-068). **Cubrir los dos sujetos que se copian**: el
   comando de instalación de la CLI y el `draft_agent_prompt` de `copyDraftPrompt` (ver § Huecos).
-- [ ] T093 [US1] Instalar la **mitad simétrica del gate de `reveals: []`** (T004) en
+- [X] T093 [US1] Instalar la **mitad simétrica del gate de `reveals: []`** (T004) en
   `scripts/check-client-product-surface.mjs`: `tui/` **no emite** ninguna de las secuencias con las
   que un programa de terminal se trae al frente —BEL (`\a`), OSC 9 y OSC 777, `ESC [5t`— ni shellea a
   `tmux`, `wezterm` o `kitty`. Es una lista corta y nombrable, que es lo que la hace gateable.
   **Gate**: SC-008 en las dos direcciones — agregar un id a `reveals.tui` pide un call site que no
   existe (rojo), y darle al cliente una puerta de revelado dispara el barrido (rojo). Un pane lo
   abriste vos; robarle el foco a alguien en un multiplexor es agresión, no un acuse.
-- [ ] T094 [US4] Implementar `showWhy` en `tui/internal/ui/render.go` con el path **crudo** de la entrada y sus estados
+- [X] T094 [US4] Implementar `showWhy` en `tui/internal/ui/render.go` con el path **crudo** de la entrada y sus estados
   (loading / present / absent / failed), y la nota de un walkthrough **degradado a whole** —un
   walkthrough roto o stale nunca falla una review: degrada con nota y la review sigue usable—.
 

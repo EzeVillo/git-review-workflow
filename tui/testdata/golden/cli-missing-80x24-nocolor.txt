@@ -9,4 +9,4 @@ Press r to refresh, or focus this pane again — the panel does not poll.
 
 exec: "git-review": executable file not found in $PATH
 
-j:up  k:down  enter:select  r:refresh  m:mouse on  q:quit
+j:up  k:down  enter:select  r:refresh  ::actions  m:mouse on  q:quit

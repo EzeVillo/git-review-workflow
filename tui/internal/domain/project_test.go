@@ -24,7 +24,7 @@ func TestProjectReviewWalk(t *testing.T) {
 	if !ok {
 		t.Fatal("fixture must parse")
 	}
-	m := Project(ProjectInput{Situation: SituationReview, Status: status, HasStatus: true, Why: "because", HasWhy: true})
+	m := Project(ProjectInput{Situation: SituationReview, Status: status, HasStatus: true, Why: "because", WhyState: WhyPresent})
 	if m.Mode != ModeWalk {
 		t.Fatalf("Mode = %v", m.Mode)
 	}
@@ -37,8 +37,66 @@ func TestProjectReviewWalk(t *testing.T) {
 	if !m.HasCurrent || m.CurrentPath.Display != "src/core.ts" {
 		t.Fatalf("CurrentPath = %+v", m.CurrentPath)
 	}
-	if !m.HasWhy || m.Why != "because" {
+	if m.WhyState != WhyPresent || m.Why != "because" {
 		t.Fatalf("Why not carried through: %+v", m)
+	}
+}
+
+// TestProjectReviewWalkDegradedWalkthrough is T094's own gate: a review
+// whose walkthrough could not be applied degrades to whole, and the panel
+// says so with a note instead of failing outright (CLAUDE.md § Walk y
+// walkthrough: "un walkthrough roto o stale nunca falla una review").
+func TestProjectReviewWalkDegradedWalkthrough(t *testing.T) {
+	status := PorcelainResult{
+		State: StateRecord{
+			Branch: "review/feat-x", Mode: ModeWhole, Walkthrough: WalkthroughDegraded,
+		},
+	}
+	m := Project(ProjectInput{Situation: SituationReview, Status: status, HasStatus: true})
+	if !m.Degraded {
+		t.Fatalf("Degraded = false, want true for a degraded walkthrough: %+v", m)
+	}
+	if m.Note != WalkthroughDegradedToWholeNote {
+		t.Fatalf("Note = %q, want the degraded-to-whole note", m.Note)
+	}
+}
+
+// TestProjectReviewWalkNotDegraded is the negative case: an ordinary review
+// (walkthrough none/applied) never sets Degraded or Note on its own.
+func TestProjectReviewWalkNotDegraded(t *testing.T) {
+	status, ok := ParsePorcelain(readFixture("walk-basic.txt"))
+	if !ok {
+		t.Fatal("fixture must parse")
+	}
+	m := Project(ProjectInput{Situation: SituationReview, Status: status, HasStatus: true})
+	if m.Degraded || m.Note != "" {
+		t.Fatalf("an ordinary review must not set Degraded/Note: %+v", m)
+	}
+}
+
+// TestProjectEntryPickerRows is goToEntry's own gate (T086): the picker's
+// list comes from the SAME `entry` records status --porcelain reports,
+// never re-derived, and step mode's raw stays the SHA (never a subject)
+// even when a subject is available to use as the DISPLAY label.
+func TestProjectEntryPickerRows(t *testing.T) {
+	status, ok := ParsePorcelain(readFixture("walk-basic.txt"))
+	if !ok {
+		t.Fatal("fixture must parse")
+	}
+	m := Project(ProjectInput{Situation: SituationReview, Status: status, HasStatus: true})
+	if m.EntryPickerRows == "" {
+		t.Fatalf("EntryPickerRows must not be empty for a walk fixture with entries")
+	}
+	rows := FooterRows(m.EntryPickerRows)
+	if len(rows) != len(status.Entries) {
+		t.Fatalf("EntryPickerRows has %d rows, want %d (len(Entries))", len(rows), len(status.Entries))
+	}
+	first := rows[0]
+	if len(first) != 3 {
+		t.Fatalf("EntryPickerRows row shape = %v, want 3 cells", first)
+	}
+	if first[0] != "1" {
+		t.Fatalf("first entry position = %q, want \"1\"", first[0])
 	}
 }
 

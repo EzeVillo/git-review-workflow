@@ -69,6 +69,20 @@ func (h HitMap) ControlRow(id domain.ControlID, variant string) (int, bool) {
 	return 0, false
 }
 
+// Rect returns this control's own drawn rectangle, ok=false if it was
+// never drawn — the mouse reachability test's own need (T091): a row that
+// carries TWO controls side by side (a draft's copyDraftPrompt and
+// startFromDraft, say) puts them at the SAME row but different columns, so
+// a synthetic click needs the real column, not just the row.
+func (h HitMap) Rect(id domain.ControlID, variant string) (Rect, bool) {
+	for _, e := range h.hits {
+		if e.id == id && e.variant == variant {
+			return e.rect, true
+		}
+	}
+	return Rect{}, false
+}
+
 // --- styling -----------------------------------------------------------------
 
 // styles holds the handful of lipgloss styles render.go uses, all built off
@@ -682,15 +696,36 @@ func identityLine(m domain.PanelModel) string {
 	return m.Branch
 }
 
+// renderWhyBlock draws showWhy's own state (T094): present is exactly the
+// text-plus-button this client always drew for HasWhy==true, unchanged
+// byte for byte (so no golden fixture regresses — none of them exercise
+// anything but present or the zero value today); failed is new vocabulary
+// this client had no way to represent before (WhyFailedNote); absent and
+// loading draw nothing, the same silence the old `if m.HasWhy` already drew
+// for false. leadingBlank matches each call site's own pre-existing layout:
+// review-walk had a blank line before the block, finish-conflict's walk
+// branch did not.
+func renderWhyBlock(b *builder, m domain.PanelModel, leadingBlank bool) {
+	switch m.WhyState {
+	case domain.WhyPresent:
+		if leadingBlank {
+			b.blank()
+		}
+		b.text(m.Why)
+		b.button("showWhy", m.CurrentPath.Raw, domain.OpenInEditorLabel, b.st.link, true)
+	case domain.WhyFailed:
+		if leadingBlank {
+			b.blank()
+		}
+		b.note(domain.WhyFailedNote)
+	}
+}
+
 func renderReviewWalk(b *builder, m domain.PanelModel) {
 	b.heading(identityLine(m))
 	b.note(m.Note)
 	b.text(fmt.Sprintf("Entry %d/%d: %s", m.Position, m.Total, m.CurrentPath.Display))
-	if m.HasWhy {
-		b.blank()
-		b.text(m.Why)
-		b.button("showWhy", "", domain.OpenInEditorLabel, b.st.link, true)
-	}
+	renderWhyBlock(b, m, true)
 	b.blank()
 	b.button("openEntry", "", domain.FileLabel, b.st.secondary, true)
 	b.button("openChange", "", domain.DiffLabel, b.st.secondary, true)
@@ -742,10 +777,7 @@ func renderFinishConflict(b *builder, m domain.PanelModel) {
 	b.note(m.Note)
 
 	if m.Mode == domain.ModeWalk {
-		if m.HasWhy {
-			b.text(m.Why)
-			b.button("showWhy", "", domain.OpenInEditorLabel, b.st.link, true)
-		}
+		renderWhyBlock(b, m, false)
 		b.button("openEntry", "", domain.FileLabel, b.st.secondary, true)
 		b.button("openChange", "", domain.DiffLabel, b.st.secondary, true)
 		return

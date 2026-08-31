@@ -9,4 +9,4 @@ Press r to refresh, or focus this pane again — the panel does not poll.
 
 [31mexec: "git-review": executable file not found in $PATH[0m
 
-[2mj[0m:up  [2mk[0m:down  [2menter[0m:select  [2mr[0m:refresh  [2mm[0m:mouse on  [2mq[0m:quit
+[2mj[0m:up  [2mk[0m:down  [2menter[0m:select  [2mr[0m:refresh  [2m:[0m:actions  [2mm[0m:mouse on  [2mq[0m:quit

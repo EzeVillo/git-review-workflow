@@ -26,6 +26,37 @@ type selectResult struct {
 	next *SelectOverlay
 	cmd  tea.Cmd
 	done *mutationRequest
+	// status: set the status line directly and close the picker, with no
+	// mutation and nothing further to run — goToEntry's own "no editor is
+	// configured" (T086/T089) is the only user today.
+	status string
+	// nextPrompt / confirmNext: the two OTHER overlay kinds a chain can step
+	// into — compareReview's own free-text lower/upper questions (T089) are
+	// the only user of nextPrompt, and its own confirms:true gate (canonical)
+	// is the only user of confirmNext: the LAST step of that chain opens the
+	// SAME ConfirmMutation gate the body would, never runs the mutation
+	// directly the way startReview's own chain (done) does.
+	nextPrompt  *TextPrompt
+	confirmNext *ConfirmOverlay
+}
+
+// applySelectResult is the ONE place a selectResult (from either a
+// SelectOverlay.OnPick or a TextPrompt.OnSubmit — the two step kinds a
+// picker chain can produce) resolves into the next Model state: at most one
+// of next/nextPrompt/confirmNext ever ends up open, done runs a mutation
+// with no confirmation (startReview's own shape), and cmd is whatever must
+// run before the NEXT question can even be built (a fresh config probe).
+func (m Model) applySelectResult(r selectResult) (Model, tea.Cmd) {
+	m.selectOverlay = r.next
+	m.textPrompt = r.nextPrompt
+	m.confirm = r.confirmNext
+	if r.status != "" {
+		m.statusLine = r.status
+	}
+	if r.done != nil {
+		return m.beginMutation(*r.done, currentStateToken(m.Panel))
+	}
+	return m, r.cmd
 }
 
 // SelectOverlay is a MULTI-STEP, NON-CONFIRMING chooser (tasks.md T069:

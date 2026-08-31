@@ -3,4 +3,4 @@
   README.md
   src/quoting.ts
 
-[2mr[0m:refresh  [2mf[0m:finish  [2ms[0m:save  [2ma[0m:cancel  [2mm[0m:mouse on  [2mq[0m:quit
+[2mr[0m:refresh  [2mf[0m:finish  [2ms[0m:save  [2ma[0m:cancel  [2m:[0m:actions  [2mg[0m:entries  [2mm[0m:mouse on  [2mq[0m:quit

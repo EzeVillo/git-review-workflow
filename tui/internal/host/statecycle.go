@@ -26,8 +26,8 @@ type ReadResult struct {
 	Config    domain.ConfigPorcelainResult
 	HasConfig bool
 
-	Why    string
-	HasWhy bool
+	Why      string
+	WhyState domain.WhyState
 
 	Stderr string
 }
@@ -88,8 +88,8 @@ func ReadState(ctx context.Context, cwd, minVersion string) ReadResult {
 		result.Status = parsed
 		result.HasStatus = parseOK
 		if parseOK && parsed.State.Mode == domain.ModeWalk && parsed.State.CurrentPath.Raw != "" {
-			why, hasWhy := readWhy(ctx, parsed.State.CurrentPath.Raw)
-			result.Why, result.HasWhy = why, hasWhy
+			why, state := readWhy(ctx, parsed.State.CurrentPath.Raw)
+			result.Why, result.WhyState = why, state
 		}
 
 	case domain.SituationNoReview, domain.SituationFinishPending:
@@ -107,16 +107,21 @@ func ReadState(ctx context.Context, cwd, minVersion string) ReadResult {
 }
 
 // readWhy runs `status --why <raw>` with the entry's RAW path — never the
-// display form (data-model.md § PathRef) — and reports absence on any
-// failure or empty stdout, exactly as contracts/cli-invocation.md specifies.
-func readWhy(ctx context.Context, raw string) (string, bool) {
+// display form (data-model.md § PathRef) — and returns one of three states
+// (T094): WhyFailed for a timeout, a spawn failure or a nonzero exit —
+// the CLI itself could not answer, distinct from genuinely having nothing
+// to say — WhyAbsent for an ok exit with empty stdout, and WhyPresent
+// otherwise. WhyLoading is never returned here: by the time this function's
+// caller sees a result, the read already happened, which is exactly why
+// WhyLoading is the type's zero value instead (domain.WhyState's own doc).
+func readWhy(ctx context.Context, raw string) (string, domain.WhyState) {
 	res := InvokeReview(ctx, "status", []string{"--why", raw})
 	if res.TimedOut || res.SpawnFailed || res.ExitCode != 0 {
-		return "", false
+		return "", domain.WhyFailed
 	}
 	why := strings.TrimRight(res.Stdout, "\n")
 	if why == "" {
-		return "", false
+		return "", domain.WhyAbsent
 	}
-	return why, true
+	return why, domain.WhyPresent
 }

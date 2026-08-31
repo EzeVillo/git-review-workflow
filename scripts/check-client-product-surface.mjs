@@ -1951,10 +1951,15 @@ if (existsSync(tuiUiDir)) {
   // el canonico marque confirms: true -- es la mitad que SC-007 ejercita
   // (cambiar el id que un call site pasa pone CI en rojo) y no depende de
   // cuántas fases más existan.
+  // Phase 8 (T089) wires compareReview's own confirm call site (its free-text
+  // lower/upper questions end in the SAME ConfirmMutation gate the body
+  // uses) -- 12 of 13 now covered, everything canonicalConfirming marks
+  // except the one declared exception, walkthroughInit.
   const TUI_CONFIRM_WIRED_SO_FAR = new Set([
     "undoFinish", "saveReview", "abortReview",
     "continueReview", "discardInventory", "discardDraft", "discardGuide",
     "discardFixes", "discardAllFixes", "cleanReview", "walkthroughBuild",
+    "compareReview",
   ]);
   const tuiPassedToGate = new Set();
   for (const [, body] of tuiUiSources) {
@@ -2015,6 +2020,55 @@ if (tuiActionKeys.length + tuiNotInActions.size !== actionKeys.length) {
   fail(
     `tui: ${tuiActionKeys.length} offered + ${tuiNotInActions.size} not_in should cover all ${actionKeys.length} canonical actions`,
   );
+}
+
+// ---------------------------------------------------------------------------
+// TUI, `PaletteActions` en `palette.go` nunca incluye un id `surface: panel`
+// (Phase 8 fix): continueReview y discardInventory son surface: panel en el
+// canonico -- nunca surface: both -- porque los dos necesitan el nombre de
+// una fila especifica (que review guardada, que rama sobrante) que un
+// despacho generico "elegi una accion, correla" no puede darles. Mismo
+// precedente que vscode-extension/package.json's menus.commandPalette, que
+// fija los dos comandos en "when": "false". Regex sobre el PRIMER CAMPO de
+// cada `{ID: "..."` de PaletteActions, nunca un includes() suelto del id
+// (la misma leccion de siempre: un id aparece en comentarios y en
+// PaletteLabel tanto como en la tabla real).
+// ---------------------------------------------------------------------------
+const actionSurfacePanel = {};
+for (const id of actionKeys) {
+  const re = new RegExp(`^ {2}${id}:\\n(?: {4}.*\\n)*? {4}surface:\\s*panel\\s*$`, "m");
+  actionSurfacePanel[id] = re.test(actionsBlock);
+}
+const tuiPaletteGo = readText(join(root, "tui", "internal", "domain", "palette.go"), "utf8");
+const paletteBlock = tuiPaletteGo.split(/var PaletteActions = \[\]PaletteAction\{/)[1]?.split(/\n\}/)[0] ?? "";
+if (!paletteBlock) {
+  fail("tui palette.go has no PaletteActions table");
+}
+const tuiPaletteIds = [...paletteBlock.matchAll(/\{ID:\s*"([A-Za-z][A-Za-z0-9]*)"/g)].map((m) => m[1]);
+if (tuiPaletteIds.length === 0) {
+  fail("tui palette.go's PaletteActions table is empty");
+}
+for (const id of tuiPaletteIds) {
+  if (actionSurfacePanel[id]) {
+    fail(
+      `tui palette.go's PaletteActions declares ${id}, which the canonical marks surface: panel — ` +
+        `it must live in PanelOnlyActions instead, never the action list overlay`,
+    );
+  }
+}
+// La direccion inversa: los dos PanelOnlyActions declarados de verdad son
+// surface: panel en el canonico -- si alguno dejara de serlo (o si se
+// agregara un tercero que en realidad es surface: both), la lista dejaria
+// de ser una excepcion documentada y pasaria a ser una omision silenciosa.
+const panelOnlyMatch = tuiPaletteGo.match(/var PanelOnlyActions = \[\]string\{([^}]*)\}/);
+if (!panelOnlyMatch) {
+  fail("tui palette.go has no PanelOnlyActions list");
+}
+const tuiPanelOnlyIds = [...panelOnlyMatch[1].matchAll(/"([A-Za-z][A-Za-z0-9]*)"/g)].map((m) => m[1]);
+for (const id of tuiPanelOnlyIds) {
+  if (!actionSurfacePanel[id]) {
+    fail(`tui palette.go's PanelOnlyActions declares ${id}, which the canonical does NOT mark surface: panel`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2202,6 +2256,62 @@ for (const [file, body] of srcFiles) {
   if (file.endsWith("walkthroughViewProvider.ts") || file.endsWith("extension.ts")) continue;
   if (/\.reveal\(\)/.test(body)) {
     fail(`vscode: ${file} reveals the panel itself; it must go through revealPanel`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TUI, la mitad simetrica de reveals: [] (T093, SC-008). T004 ya prueba que
+// reveals.tui esta vacia y declarada (arriba, revealsTui.length !== 0); esto
+// prueba el lado del arbol -- que ningun archivo bajo tui/ EMITE una
+// secuencia de "traeme al frente" ni shellea a un multiplexor de terminal
+// para pedirselo. Un pane lo abriste vos; robarle el foco a alguien en un
+// multiplexor es agresion, no un acuse (contracts/tui-surface.md).
+//
+// Lista corta y NOMBRABLE, que es lo que la hace gateable (la propia idea
+// de T093). Las regex apuntan a los BYTES de escape reales -- BEL como
+// literal Go ("\a" / "\x07"), OSC 9, OSC 777, ESC[5t -- nunca al nombre del
+// mecanismo, para que un comentario que lo EXPLIQUE (como este) no dispare
+// el gate por casualidad.
+// ---------------------------------------------------------------------------
+if (existsSync(join(root, "tui", "go.mod"))) {
+  const tuiAllSources = goSources(join(root, "tui"));
+  if (tuiAllSources.length === 0) {
+    fail("tui: no sources found for the reveals sweep");
+  }
+  const REVEAL_SEQUENCES = [
+    { name: "BEL (\\a)", re: /\\a"/ },
+    { name: "BEL (\\x07)", re: /\\x07/ },
+    { name: "OSC 9", re: /\]9;/ },
+    { name: "OSC 777", re: /\]777;/ },
+    { name: "ESC[5t", re: /\\x1b\[5t/ },
+  ];
+  for (const [file, body] of tuiAllSources) {
+    for (const { name, re } of REVEAL_SEQUENCES) {
+      // clipboard.go's own BEL is OSC 52's STRING TERMINATOR (T092: `ESC ]
+      // 52 ; c ; <base64> BEL`), the standard clipboard escape -- a
+      // completely different byte-level use from the BARE bell this gate
+      // means to catch (a standalone alert some terminals turn into a
+      // window flash/attention request). Excluded by name, the same way
+      // confirm.go is excluded BY NAME from gate 3's ConfirmOverlay sweep:
+      // one legitimate, already-reviewed use, never a blanket exemption for
+      // BEL anywhere else in the tree.
+      if (name.startsWith("BEL") && basename(file) === "clipboard.go") continue;
+      if (re.test(body)) {
+        fail(`tui: ${file} emits a "bring to front" sequence (${name}) -- reveals.tui: [] forbids it`);
+      }
+    }
+  }
+  // Ni shellear a un multiplexor de terminal para pedirle lo mismo -- el
+  // PRIMER ARGUMENTO de un exec.Command/exec.CommandContext, nunca un
+  // includes() suelto del nombre (la misma leccion que confirms: dejo:
+  // un id/nombre aparece en comentarios y variables tanto como en un call
+  // site real).
+  const MULTIPLEXER_EXEC = /exec\.(?:Command|CommandContext)\([^)]*"(tmux|wezterm|kitty)"/;
+  for (const [file, body] of tuiAllSources) {
+    const m = body.match(MULTIPLEXER_EXEC);
+    if (m) {
+      fail(`tui: ${file} shells out to ${m[1]} -- reveals.tui: [] forbids asking a multiplexer for focus`);
+    }
   }
 }
 

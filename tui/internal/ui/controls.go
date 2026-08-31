@@ -54,8 +54,11 @@ func ControlsFor(m domain.PanelModel) []Control {
 
 	case domain.LayoutReviewWalk:
 		var cs []Control
-		if m.HasWhy {
-			cs = append(cs, Control{ID: "showWhy", Enabled: true})
+		if m.WhyState == domain.WhyPresent {
+			// Variant carries the entry's RAW path (T094) — same pattern
+			// every other row control uses (a draft's Src, a fixes branch's
+			// Name): the subject travels with the control, not by position.
+			cs = append(cs, Control{ID: "showWhy", Variant: m.CurrentPath.Raw, Enabled: true})
 		}
 		cs = append(cs,
 			Control{ID: "openEntry", Enabled: true},
@@ -84,8 +87,8 @@ func ControlsFor(m domain.PanelModel) []Control {
 			{ID: "resumeFinish", Enabled: true},
 		}
 		if m.Mode == domain.ModeWalk {
-			if m.HasWhy {
-				cs = append(cs, Control{ID: "showWhy", Enabled: true})
+			if m.WhyState == domain.WhyPresent {
+				cs = append(cs, Control{ID: "showWhy", Variant: m.CurrentPath.Raw, Enabled: true})
 			}
 			cs = append(cs, Control{ID: "openEntry", Enabled: true})
 		}

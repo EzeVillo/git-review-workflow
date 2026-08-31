@@ -34,4 +34,4 @@ review-fixes/old-one  [2m(merged)[0m
 [✗] [34mdiscard[0m
 [2m… 15 more line(s) below — resize to see them[0m
 
-[2mj[0m:up  [2mk[0m:down  [2menter[0m:select  [2mr[0m:refresh  [2mm[0m:mouse on  [2mq[0m:quit
+[2mj[0m:up  [2mk[0m:down  [2menter[0m:select  [2mr[0m:refresh  [2m:[0m:actions  [2mm[0m:mouse on  [2mq[0m:quit

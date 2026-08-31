@@ -160,11 +160,39 @@ func KeyBarFor(m domain.PanelModel) []KeyBarItem {
 			}
 		}
 	}
+	for _, entry := range domain.KeymapOverlays {
+		switch entry.Opens {
+		case "action_list":
+			// Always available: PaletteActionsFor's own "refresh" row alone
+			// covers all eight situations (its own situations: list is the
+			// same eight this client ever draws), so the palette this key
+			// opens is never empty.
+			bar = append(bar, KeyBarItem{Key: entry.Keys[0], Label: "actions"})
+		case "entry_picker":
+			// goToEntry's own situations: [review, finish-conflict], plus
+			// something to pick from — the same "only when meaningful"
+			// refinement KeymapActions' own finish/save/abort already add
+			// below on top of raw resolution (BoundActionFor, like
+			// OverlayFor, does not gate by situation either; KeyBarFor is
+			// where that extra layer has always lived).
+			hasEntries := m.Situation == domain.SituationReview || m.Situation == domain.SituationFinishConflict
+			if hasEntries && m.EntryPickerRows != "" {
+				bar = append(bar, KeyBarItem{Key: entry.Keys[0], Label: "entries"})
+			}
+		}
+	}
 	for _, entry := range domain.KeymapToggles {
 		if entry.Toggles == "mouse_reporting" {
-			label := "mouse off"
+			// U+00A0 (non-breaking space), not a plain " ": the key bar is
+			// one long string wrapLine() wraps by WIDTH, treating each
+			// space as an independent break opportunity — a plain space
+			// here risked the wrap point landing inside this one label,
+			// splitting "mouse" onto one line and "on"/"off" onto the
+			// next. A non-breaking space reads identically on screen and
+			// keeps the two words moving together.
+			label := "mouse off"
 			if !m.MouseEnabled {
-				label = "mouse on"
+				label = "mouse on"
 			}
 			bar = append(bar, KeyBarItem{Key: entry.Keys[0], Label: label})
 		}

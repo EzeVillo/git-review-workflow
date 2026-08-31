@@ -3,4 +3,4 @@ review/feat-x
   README.md
   src/quoting.ts
 
-r:refresh  f:finish  s:save  a:cancel  m:mouse on  q:quit
+r:refresh  f:finish  s:save  a:cancel  ::actions  g:entries  m:mouse on  q:quit

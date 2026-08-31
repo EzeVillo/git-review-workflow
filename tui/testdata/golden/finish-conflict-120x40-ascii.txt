@@ -8,4 +8,4 @@ conflicting hunk in a.go
 [ [34mFile[0m ]
 [ [34mDiff[0m ]
 
-[2mj[0m:up  [2mk[0m:down  [2menter[0m:select  [2mr[0m:refresh  [2ma[0m:cancel  [2mm[0m:mouse on  [2mq[0m:quit
+[2mj[0m:up  [2mk[0m:down  [2menter[0m:select  [2mr[0m:refresh  [2ma[0m:cancel  [2m:[0m:actions  [2mg[0m:entries  [2mm[0m:mouse on  [2mq[0m:quit

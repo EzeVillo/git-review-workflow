@@ -224,10 +224,5 @@ func (m Model) handleSelectKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if !picked {
 		return m, nil
 	}
-	result := m.selectOverlay.OnPick(value)
-	m.selectOverlay = result.next
-	if result.done != nil {
-		return m.beginMutation(*result.done, currentStateToken(m.Panel))
-	}
-	return m, result.cmd
+	return m.applySelectResult(m.selectOverlay.OnPick(value))
 }

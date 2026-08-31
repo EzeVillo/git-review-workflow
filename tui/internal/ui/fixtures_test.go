@@ -69,47 +69,50 @@ func fixtureFor(sit domain.LayoutSituation) domain.PanelModel {
 
 	case domain.LayoutReviewWalk:
 		return domain.PanelModel{
-			Situation:   domain.SituationReview,
-			Mode:        domain.ModeWalk,
-			Branch:      "review/feat-x",
-			Source:      "feat-x",
-			Tip:         "a1b2c3d",
-			Position:    3,
-			Total:       7,
-			AtFirst:     false,
-			AtLast:      false,
-			HasCurrent:  true,
-			CurrentPath: domain.NewPathRef("src/core.ts"),
-			HasWhy:      true,
-			Why:         "touches shared state other entries also read",
+			Situation:       domain.SituationReview,
+			Mode:            domain.ModeWalk,
+			Branch:          "review/feat-x",
+			Source:          "feat-x",
+			Tip:             "a1b2c3d",
+			Position:        3,
+			Total:           7,
+			AtFirst:         false,
+			AtLast:          false,
+			HasCurrent:      true,
+			CurrentPath:     domain.NewPathRef("src/core.ts"),
+			WhyState:        domain.WhyPresent,
+			Why:             "touches shared state other entries also read",
+			EntryPickerRows: domain.FooterField("3", "src/core.ts", "src/core.ts"),
 		}
 
 	case domain.LayoutReviewStep:
 		return domain.PanelModel{
-			Situation:  domain.SituationReview,
-			Mode:       domain.ModeStep,
-			Branch:     "review/feat-x",
-			Source:     "feat-x",
-			Position:   2,
-			Total:      4,
-			AtFirst:    false,
-			AtLast:     false,
-			HasCurrent: true,
-			CurrentSHA: "abc1234",
-			EntryCount: 2,
-			Files:      "a.go\nb.go",
+			Situation:       domain.SituationReview,
+			Mode:            domain.ModeStep,
+			Branch:          "review/feat-x",
+			Source:          "feat-x",
+			Position:        2,
+			Total:           4,
+			AtFirst:         false,
+			AtLast:          false,
+			HasCurrent:      true,
+			CurrentSHA:      "abc1234",
+			EntryCount:      2,
+			Files:           "a.go\nb.go",
+			EntryPickerRows: domain.FooterField("2", "abc1234", "abc1234"),
 		}
 
 	case domain.LayoutReviewWhole:
 		return domain.PanelModel{
-			Situation: domain.SituationReview,
-			Mode:      domain.ModeWhole,
-			Branch:    "review/feat-x",
-			Source:    "feat-x",
-			Base:      "develop",
-			HasBase:   true,
-			Total:     2,
-			Files:     "README.md\nsrc/quoting.ts",
+			Situation:       domain.SituationReview,
+			Mode:            domain.ModeWhole,
+			Branch:          "review/feat-x",
+			Source:          "feat-x",
+			Base:            "develop",
+			HasBase:         true,
+			Total:           2,
+			Files:           "README.md\nsrc/quoting.ts",
+			EntryPickerRows: domain.FooterField("1", "README.md", "README.md"),
 		}
 
 	case domain.LayoutFinishPending:
@@ -121,16 +124,17 @@ func fixtureFor(sit domain.LayoutSituation) domain.PanelModel {
 
 	case domain.LayoutFinishConflict:
 		return domain.PanelModel{
-			Situation:      domain.SituationFinishConflict,
-			Mode:           domain.ModeWalk,
-			Branch:         "review/feat-x",
-			FinishConflict: true,
-			Position:       1,
-			Total:          3,
-			HasCurrent:     true,
-			CurrentPath:    domain.NewPathRef("a.go"),
-			HasWhy:         true,
-			Why:            "conflicting hunk in a.go",
+			Situation:       domain.SituationFinishConflict,
+			Mode:            domain.ModeWalk,
+			Branch:          "review/feat-x",
+			FinishConflict:  true,
+			Position:        1,
+			Total:           3,
+			HasCurrent:      true,
+			CurrentPath:     domain.NewPathRef("a.go"),
+			WhyState:        domain.WhyPresent,
+			Why:             "conflicting hunk in a.go",
+			EntryPickerRows: domain.FooterField("1", "a.go", "a.go"),
 		}
 
 	case domain.LayoutOutOfRange:

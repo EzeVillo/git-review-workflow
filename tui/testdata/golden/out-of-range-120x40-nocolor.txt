@@ -3,4 +3,4 @@ The cursor is out of range: the base moved.
 
 the base moved past this review's recorded tip
 
-j:up  k:down  enter:select  r:refresh  m:mouse on  q:quit
+j:up  k:down  enter:select  r:refresh  ::actions  m:mouse on  q:quit

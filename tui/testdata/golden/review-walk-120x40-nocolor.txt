@@ -10,4 +10,5 @@ touches shared state other entries also read
 [‹] Previous entry
 [›] Next entry
 
-j:up  k:down  enter:select  n:next  p:prev  r:refresh  f:finish  s:save  a:cancel  m:mouse on  q:quit
+j:up  k:down  enter:select  n:next  p:prev  r:refresh  f:finish  s:save  a:cancel  ::actions  g:entries  m:mouse on     
+q:quit                                                                                                                  

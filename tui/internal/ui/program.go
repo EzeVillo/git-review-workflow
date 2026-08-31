@@ -23,14 +23,26 @@ import (
 // (domain.PanelModel.StatusLine's own doc), and the one finishReview
 // outcome still waiting on its next read to resolve.
 type Model struct {
-	Viewport             Viewport
-	Panel                domain.PanelModel
-	FocusIndex           int
-	pollFloor            time.Duration
-	pollGen              int
-	lock                 host.MutationLock
-	confirm              *ConfirmOverlay
-	selectOverlay        *SelectOverlay
+	Viewport      Viewport
+	Panel         domain.PanelModel
+	FocusIndex    int
+	pollFloor     time.Duration
+	pollGen       int
+	lock          host.MutationLock
+	confirm       *ConfirmOverlay
+	selectOverlay *SelectOverlay
+	// actionList / textOverlay: Phase 8's own two extra overlays — the
+	// action palette (T084, this client's `surface: action`) and the
+	// read-only text viewer showCliLog/previewEditsStat open (T087/T088).
+	// Mutually exclusive with confirm/selectOverlay and with each other, the
+	// same "at most one open at a time" shape those two already establish.
+	actionList  *ActionList
+	textOverlay *TextOverlay
+	// textPrompt: compareReview's own free-text lower/upper questions
+	// (T089) — the one flow that needs typed input rather than a picked
+	// item, chained via selectResult exactly like selectOverlay's own
+	// questions (applySelectResult in select.go).
+	textPrompt           *TextPrompt
 	lastRead             host.ReadResult
 	statusLine           string
 	pendingFinish        *pendingFinishOutcome
@@ -221,6 +233,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case assistantStepMsg:
 		return m.handleAssistantStep(msg)
 
+	case execDoneMsg:
+		// T089: "al volver dispara un refresco" -- the reviewer may have
+		// edited and saved inside the child process. err is deliberately
+		// not surfaced: a nonzero exit from $EDITOR or a diff tool is
+		// common (":cq" in vim, a diff tool's own exit code) and does not
+		// mean anything failed -- and there is no stderr to show anyway,
+		// since the child owned the terminal directly.
+		return m.scheduleRead()
+
+	case textActionDoneMsg:
+		m.textOverlay = &TextOverlay{Title: msg.title, Body: textOverlayBody(msg.title, msg.result)}
+		return m, nil
+
 	case tea.KeyMsg:
 		if m.confirm != nil {
 			return m.handleConfirmKey(msg)
@@ -228,9 +253,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.selectOverlay != nil {
 			return m.handleSelectKey(msg)
 		}
+		if m.textPrompt != nil {
+			return m.handleTextPromptKey(msg)
+		}
+		if m.actionList != nil {
+			return m.handleActionListKey(msg)
+		}
+		if m.textOverlay != nil {
+			if m.textOverlay.HandleKey(msg.String()) {
+				m.textOverlay = nil
+			}
+			return m, nil
+		}
 		return m.handleKey(msg)
 
 	case tea.MouseMsg:
+		if m.confirm != nil || m.selectOverlay != nil || m.textPrompt != nil || m.actionList != nil || m.textOverlay != nil {
+			// A stray event while an overlay is open must never resolve
+			// against the HIDDEN base panel underneath it (T090).
+			return m, nil
+		}
 		return m.handleMouse(msg)
 	}
 	return m, nil
@@ -247,6 +289,15 @@ func (m Model) View() string {
 	}
 	if m.selectOverlay != nil {
 		return m.selectOverlay.Render(m.Viewport)
+	}
+	if m.textPrompt != nil {
+		return m.textPrompt.Render(m.Viewport)
+	}
+	if m.actionList != nil {
+		return m.actionList.Render(m.Viewport)
+	}
+	if m.textOverlay != nil {
+		return m.textOverlay.Render(m.Viewport)
 	}
 	frame, _ := View(m.Panel, m.Viewport)
 	return frame
@@ -302,16 +353,27 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.activateControl(intent.Control, intent.Variant)
 
 	case IntentOverlay:
-		// action_list/entry_picker (Phase 8) are not wired yet; the correct
-		// Intent having been produced is what T053 checks for a control
-		// that lands here.
+		switch intent.Overlay {
+		case "action_list":
+			m.actionList = NewActionList(m.Panel.Situation, m.Panel.Busy, m.Panel.Readonly)
+		case "entry_picker":
+			m = m.openEntryPicker()
+		}
 		return m, nil
 	}
 	return m, nil
 }
 
+// handleMouse resolves a click against the base panel's own HitMap (T090):
+// the control under the cursor is focused, and — matching contracts/
+// tui-surface.md's "un clic hace exactamente lo mismo que su tecla" —
+// activated through the SAME activateControl call Enter resolves to
+// (keys.go's activateFocused), never a second, parallel path. Disabled
+// controls still have a rectangle (so hovering/clicking finds them and
+// focuses them, the same as tabbing onto one with the keyboard) but are
+// never activated — mirroring activateFocused's own guard.
 func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	if msg.Action != tea.MouseActionPress {
+	if !m.Panel.MouseEnabled || msg.Action != tea.MouseActionPress {
 		return m, nil
 	}
 	_, hm := View(m.Panel, m.Viewport)
@@ -320,10 +382,14 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	for i, c := range ControlsFor(m.Panel) {
-		if c.ID == id && c.Variant == variant {
-			m.FocusIndex = i
+		if c.ID != id || c.Variant != variant {
+			continue
+		}
+		m.FocusIndex = i
+		if !c.Enabled {
 			return m, nil
 		}
+		return m.activateControl(c.ID, c.Variant)
 	}
 	return m, nil
 }
@@ -344,7 +410,7 @@ func toProjectInput(r host.ReadResult, mouseEnabled, busy bool, statusLine strin
 		Config:       r.Config,
 		HasConfig:    r.HasConfig,
 		Why:          r.Why,
-		HasWhy:       r.HasWhy,
+		WhyState:     r.WhyState,
 		MouseEnabled: mouseEnabled,
 		Busy:         busy,
 		Stderr:       r.Stderr,

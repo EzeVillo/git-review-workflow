@@ -2,6 +2,9 @@ package ui
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -260,6 +263,16 @@ func undoFinishForceRetry(msg mutationDoneMsg, panel domain.PanelModel) (*Confir
 // same activation).
 func (m Model) activateControl(id domain.ControlID, variant string) (Model, tea.Cmd) {
 	switch id {
+	case "copyCliInstall":
+		return m.beginCopyCliInstall()
+	case "copyDraftPrompt":
+		return m.beginCopyDraftPrompt(variant)
+	case "openEntry":
+		return m.beginOpenEntry()
+	case "openChange":
+		return m.beginOpenChange()
+	case "compareReview":
+		return m.beginCompareReview()
 	case "undoFinish":
 		return m.beginUndoFinish()
 	case "resumeFinish":
@@ -672,6 +685,195 @@ func (m Model) beginWalkthroughInit() (Model, tea.Cmd) {
 // calling handleKey, so the base panel's own controls are inert while this
 // is open, which is what makes a full-frame Render() an honest substitute
 // for a real overlay.
+// --- the four delegated actions (Phase 8, T089) -----------------------------
+//
+// openEntry/openChange/previewEdits hand the terminal to a real child
+// process via tea.ExecProcess — the equivalent in this client of the
+// `watched: on_save` the canonical declares for the walkthrough and the
+// guides (research.md Decisión 12): the reviewer could have edited and
+// saved inside it, so returning always schedules a refresh.
+
+// execDoneMsg is what every tea.ExecProcess callback in this package
+// returns: err is deliberately never surfaced as a failure — a nonzero
+// exit from $EDITOR (":cq" in vim) or a diff tool is common and does not
+// mean anything went wrong, and there is no stderr to read anyway (the
+// child owned the terminal directly, nothing was captured).
+type execDoneMsg struct{ err error }
+
+func execCmd(cmd *exec.Cmd) tea.Cmd {
+	return tea.ExecProcess(cmd, func(err error) tea.Msg { return execDoneMsg{err: err} })
+}
+
+// beginOpenEntry: $EDITOR on the CURRENT walk entry's DISPLAY path (CLAUDE.md:
+// Raw never reaches a tool). Only meaningful in walk mode — ControlsFor
+// never draws openEntry outside it.
+func (m Model) beginOpenEntry() (Model, tea.Cmd) {
+	dir, _ := os.Getwd()
+	cmd, reason, ok := host.OpenInEditorCmd(m.Panel.CurrentPath.Display, dir)
+	if !ok {
+		m.statusLine = reason
+		return m, nil
+	}
+	return m, execCmd(cmd)
+}
+
+// beginOpenChange: the current entry's own diff — a single file in walk
+// mode, the whole commit in step mode (openChange's own two shapes,
+// contracts/cli-invocation.md).
+func (m Model) beginOpenChange() (Model, tea.Cmd) {
+	dir, _ := os.Getwd()
+	var cmd *exec.Cmd
+	switch m.Panel.Mode {
+	case domain.ModeStep:
+		cmd = host.DiffCommitCmd(m.Panel.CurrentSHA, dir)
+	default:
+		cmd = host.DiffPathCmd(m.Panel.CurrentPath.Display, dir)
+	}
+	return m, execCmd(cmd)
+}
+
+// beginPreviewEdits runs `git review preview` with an inherited terminal
+// (host.PreviewEditsCmd's own doc on why this is the one delegated action
+// that still is a `git review` invocation).
+func (m Model) beginPreviewEdits() (Model, tea.Cmd) {
+	dir, _ := os.Getwd()
+	return m, execCmd(host.PreviewEditsCmd(dir))
+}
+
+// --- copyCliInstall / copyDraftPrompt: OSC 52 (T092) ------------------------
+//
+// Huecos §5's own note: the design resolves OSC 52 for TWO subjects, the
+// CLI install command and copyDraftPrompt's draft_agent_prompt. Neither
+// control's acknowledgement ever claims to have copied (FR-068) — the
+// status line names what IS true (the line is drawn, selectable) instead.
+
+const copiedNothingToConfirm = "The command is on the line above — select it, or press m to select with the mouse."
+
+func (m Model) beginCopyCliInstall() (Model, tea.Cmd) {
+	kind := domain.CliInstall
+	if domain.LayoutSituationFor(m.Panel) == domain.LayoutCliOutdated {
+		kind = domain.CliUpdate
+	}
+	host.CopyOSC52(domain.NpmCommandFor(kind))
+	m.statusLine = copiedNothingToConfirm
+	return m, nil
+}
+
+func (m Model) beginCopyDraftPrompt(src string) (Model, tea.Cmd) {
+	d, ok := findDraftRow(decodeDraftRows(m.Panel.FreshDraftRows), src)
+	if !ok {
+		d, ok = findDraftRow(decodeDraftRows(m.Panel.SpentDraftRows), src)
+	}
+	if !ok {
+		return m, nil
+	}
+	host.CopyOSC52(domain.DraftAgentPromptBefore + d.path + domain.DraftAgentPromptAfter)
+	m.statusLine = copiedNothingToConfirm
+	return m, nil
+}
+
+// --- showCliLog / previewEditsStat: a read-only text overlay (T087/T088) ---
+
+// textActionDoneMsg carries a read-only `git review` invocation's result
+// back to be shown in a TextOverlay — never captured into m.statusLine,
+// which is one line: a diffstat needs more than that.
+type textActionDoneMsg struct {
+	title  string
+	result host.Result
+}
+
+func textActionCmd(title string, argv domain.Argv) tea.Cmd {
+	return func() tea.Msg {
+		result := host.InvokeReview(context.Background(), argv.Verb, argv.Args)
+		return textActionDoneMsg{title: title, result: result}
+	}
+}
+
+// textOverlayBody formats a read-only invocation's result: stdout on
+// success, the same failure vocabulary the mutation cycle uses otherwise
+// (FR-024's "qué no pasó, no qué comando falló" applies here just as much).
+func textOverlayBody(action string, r host.Result) string {
+	if mutationFailed(r) {
+		return failureMessage(action, r)
+	}
+	return strings.TrimRight(r.Stdout, "\n")
+}
+
+// beginPreviewEditsStat: `preview --stat` is TEXT, so it is native
+// (contracts/tui-surface.md: "previewEditsStat es --stat, o sea texto:
+// nativa" — unlike previewEdits itself, a full diff, where the difftool
+// wins).
+func (m Model) beginPreviewEditsStat() (Model, tea.Cmd) {
+	argv, _ := domain.BuildArgv("previewEditsStat", domain.ActionParams{})
+	return m, textActionCmd("Preview edits (summary)", argv)
+}
+
+// formatLogEntry is one showCliLog row: the exact argv (this overlay is
+// the ONLY place one is ever drawn, contracts/tui-surface.md's own rule on
+// tooltips not being the place for one), the directory, the duration and
+// how it ended.
+func formatLogEntry(e host.LogEntry) string {
+	line := strings.Join(e.Argv, " ") + "  (" + e.Cwd + ", " + e.Duration.Round(time.Millisecond).String() + ")"
+	switch {
+	case e.TimedOut:
+		line += " -- timed out"
+	case e.SpawnFailed:
+		line += " -- could not start"
+	case e.ExitCode != 0:
+		line += fmt.Sprintf(" -- exit %d", e.ExitCode)
+	}
+	if text := flattenStderr(e.Stderr); text != "" {
+		line += "\n  " + text
+	}
+	return line
+}
+
+func (m Model) beginShowCliLog() (Model, tea.Cmd) {
+	entries := host.InvocationLog()
+	var lines []string
+	for _, e := range entries {
+		lines = append(lines, formatLogEntry(e))
+	}
+	m.textOverlay = &TextOverlay{Title: "CLI log", Body: strings.Join(lines, "\n")}
+	return m, nil
+}
+
+// --- the action palette's own dispatch (T084/T085) --------------------------
+//
+// activatePaletteAction is the ONE place a picked palette entry resolves —
+// reusing activateControl/activateBoundAction WHEREVER one already exists,
+// which is what T085's own gate rests on: a destructive id picked from
+// here reaches the exact same ConfirmMutation call site pressing its body
+// control (or bound key) would, because it IS that same call site, not a
+// second one this function introduces.
+func (m Model) activatePaletteAction(action string) (Model, tea.Cmd) {
+	switch action {
+	case "refresh":
+		return m.scheduleRead()
+	case "finishReview", "saveReview", "abortReview":
+		return m.activateBoundAction(action)
+	case "next", "prev":
+		return m.beginCursor(action)
+	case "goToEntry":
+		return m.openEntryPicker(), nil
+	case "showCliLog":
+		return m.beginShowCliLog()
+	case "previewEditsStat":
+		return m.beginPreviewEditsStat()
+	case "openEntry":
+		return m.beginOpenEntry()
+	case "openChange":
+		return m.beginOpenChange()
+	case "previewEdits":
+		return m.beginPreviewEdits()
+	}
+	// Everything else that already has a body control (setBase, cleanReview,
+	// walkthroughInit, discardInventory's own row form is picker-only and
+	// stays out of this list, …) shares activateControl's own switch: no
+	// second ConfirmMutation call site is introduced for any of them.
+	return m.activateControl(domain.ControlID(action), "")
+}
+
 func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	choice, resolved := m.confirm.HandleKey(msg.String())
 	if !resolved {

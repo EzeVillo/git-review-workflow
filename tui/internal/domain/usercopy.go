@@ -158,6 +158,29 @@ const (
 	EditsExtractedNote             = "One branch per finish; commit and push them from Source Control, or drop them here"
 )
 
+// --- showWhy states / walkthrough-degraded note (T094) ----------------------
+//
+// Neither string is declared in the canonical: showWhy's own failed-state
+// text and the degraded-to-whole note are per-client UI copy, the same way
+// vscode-extension/src/views/panelHtml.ts's renderWhy() and renderNotes()
+// literals are — nothing here needs to be byte-for-byte with the other
+// three, only true.
+
+const (
+	// WhyFailedNote is shown ONLY when showWhy's own `status --why` call
+	// itself could not answer (a timeout, a spawn failure, a nonzero exit)
+	// — never for a genuinely empty answer, which is WhyAbsent and draws
+	// nothing at all (the same silence render.go always drew before this
+	// state existed).
+	WhyFailedNote = "Could not read the why for this entry."
+
+	// WalkthroughDegradedToWholeNote: a walkthrough that could not be
+	// applied (broken or stale) never fails a review — it degrades to
+	// whole, with this note, and the review stays usable (CLAUDE.md § Walk
+	// y walkthrough).
+	WalkthroughDegradedToWholeNote = "The walkthrough does not cover the review's current range; showing the full range diff."
+)
+
 // --- labels: review body -----------------------------------------------------
 
 const (
@@ -432,6 +455,17 @@ const (
 
 	SetBaseTitle   = "Which branch do pull requests land on?"
 	SetRemoteTitle = "Which remote should reviews fetch from?"
+
+	// CompareLowerTitle / CompareUpperTitle: compareReview's own two free-text
+	// questions (T089/T093) — compare has no `offer` record to pick from
+	// (unlike start's branch step), so the CLI's own rejection of a bad name
+	// is the validation, exactly as compareReview.ts's own comment notes.
+	CompareLowerTitle   = "Compare against which revision?"
+	CompareUpperTitle   = "Compare to which revision?"
+	RevisionPlaceholder = "branch, tag or commit"
+
+	CompareReviewConfirmTitle  = "Compare {lower}..{upper}?"
+	CompareReviewConfirmDetail = "This checks out a new branch to show the comparison, read-only. If you have unsaved edits elsewhere, save or finish first."
 
 	FinishDestinationTitle        = "Where should your edits go?"
 	FinishDestinationBranchLabel  = "A separate branch"

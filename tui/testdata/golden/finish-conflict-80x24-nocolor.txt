@@ -9,4 +9,5 @@ conflicting hunk in a.go
 [ File ]
 [ Diff ]
 
-j:up  k:down  enter:select  r:refresh  a:cancel  m:mouse on  q:quit
+j:up  k:down  enter:select  r:refresh  a:cancel  ::actions  g:entries           
+m:mouse on  q:quit                                                              

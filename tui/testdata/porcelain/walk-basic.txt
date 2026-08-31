@@ -1,0 +1,4 @@
+state	review/feat-x	origin/feat-x	a1b2c3d4e5f6	walk	applied	3	7	7	src/core.ts	1
+entry	1	src/a.ts	0	1
+entry	2	src/b.ts	1	1
+entry	3	"a\303\261o.txt"	0	0

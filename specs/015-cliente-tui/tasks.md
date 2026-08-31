@@ -220,40 +220,40 @@ el verificador del canónico leen; sin él no hay forma de afirmar nada.
 `existsSync` en el verificador, en la misma tarea.** Un archivo ausente que pasa en silencio es
 exactamente cómo un cuarto cliente entra al canónico y no se verifica nunca.
 
-- [ ] T017 Crear `tui/go.mod` y `tui/go.sum` con las **cuatro** dependencias directas y ninguna más
+- [X] T017 Crear `tui/go.mod` y `tui/go.sum` con las **cuatro** dependencias directas y ninguna más
   (`github.com/charmbracelet/bubbletea`, `.../lipgloss`, `.../bubbles`, `github.com/fsnotify/fsnotify`),
   más el árbol vacío `cmd/git-review-ui/`, `internal/{domain,host,ui}/`, `testdata/{porcelain,golden}/`.
   **Verificar primero la línea estable de Go del día** —el plan la fija en 1.25 *al planear*— y
   estampar ese número en `tui/go.mod`, que es la **única** fuente del pin: plan, quickstart y CI lo
   citan, no lo fijan.
-- [ ] T018 Agregar el job `tui` a `.github/workflows/ci.yml`: `gofmt -l .` (tiene que salir vacío),
+- [X] T018 Agregar el job `tui` a `.github/workflows/ci.yml`: `gofmt -l .` (tiene que salir vacío),
   `go vet ./...` y `go test ./...` en **ubuntu, macos y windows**, con
   `go-version-file: tui/go.mod` en vez de repetir el número. **Gate**: la suite corre con el
   apagado total de la vigilancia por default (T054), así que FR-063 y SC-016 quedan probados por
   construcción en cada corrida de este job. **El pin de bats no se toca**: este job es Go.
-- [ ] T019 [P] Implementar `tui/internal/domain/pathref.go` —el par `Raw` / `Display`, `struct` de
+- [X] T019 [P] Implementar `tui/internal/domain/pathref.go` —el par `Raw` / `Display`, `struct` de
   dos strings comparable— con sus tests: des-entrecomillado, paths con espacio, no-ASCII y bytes
   hostiles. **Gate**: un test que afirma que **ningún camino manda `Display` a la CLI ni `Raw` a la
   pantalla**; acá muerde más que en los otros tres porque el mismo string pasa por un terminal.
-- [ ] T020 [P] Implementar `tui/internal/domain/porcelain.go` (status, list y config) con la
+- [X] T020 [P] Implementar `tui/internal/domain/porcelain.go` (status, list y config) con la
   **tolerancia en las tres formas** de FR-015: campo libre al final del registro
   (`strings.SplitN(line, "\t", n)` con `n` = campos conocidos), sin asumir cantidad de campos, y un
   `switch` con `default:` vacío que ignora registros desconocidos sin error y sin nota. Fixtures en
   `tui/testdata/porcelain/` **copiadas de los casos de `tests/porcelain-bytes.bats`**, que es donde
   el emisor ya está gateado contra bytes hostiles. **Gate**: los tres tests de tolerancia fallan si
   el parser se vuelve estricto en cualquiera de las tres formas.
-- [ ] T021 [P] Implementar `tui/internal/domain/situation.go` con la derivación de
+- [X] T021 [P] Implementar `tui/internal/domain/situation.go` con la derivación de
   [data-model.md](./data-model.md) § Situation y las mismas reglas de prioridad del canónico, más el
   valor inicial `waiting`. **Gate**: un test por situación desde fixtures, y **uno específico para
   que un timeout NO sea `cli-missing`** (edge case de la spec, escenario 5 de US2); y otro para que
   `cli-missing`, `cli-outdated` y `error` **no se repinten de memoria**.
-- [ ] T022 Implementar `tui/internal/domain/panelmodel.go`: la proyección plana, **comparable por
+- [X] T022 Implementar `tui/internal/domain/panelmodel.go`: la proyección plana, **comparable por
   valor** —sin mapas, sin slices, sin punteros; las listas viajan como strings ya proyectados o
   arreglos de tamaño fijo con su largo—. **Gate**: un test que afirma la comparabilidad con `==` y
   falla en compilación si alguien agrega un campo no comparable. De esa propiedad depende SC-004:
   un modelo igual al anterior no produce frame, así que "exactamente un repintado" se afirma sin
   cronometrar nada.
-- [ ] T023 [P] Implementar `tui/internal/domain/layout.go` —los bloques por situación, espejo de
+- [X] T023 [P] Implementar `tui/internal/domain/layout.go` —los bloques por situación, espejo de
   `panel_layout:`— cubriendo **las once claves** del canónico (`cli-missing`, `cli-outdated`,
   `no-review-setup`, `no-review`, `review-walk`, `review-step`, `review-whole`, `finish-pending`,
   `finish-conflict`, `out-of-range`, `error`) y **los cinco mapas de controles de fila**:
@@ -261,14 +261,14 @@ exactamente cómo un cuarto cliente entra al canónico y no se verifica nunca.
   `fixes_rows.controls:`. **Gate**: el test de contrato de layout de T024. Nota: `inventory_controls:`
   no figura en la tabla de [contracts/tui-surface.md](./contracts/tui-surface.md) § 7 y es un mapa
   real del canónico — se cubre igual (ver § Huecos al final de este documento).
-- [ ] T024 Escribir el **test de contrato de layout** del cliente (FR-047),
+- [X] T024 Escribir el **test de contrato de layout** del cliente (FR-047),
   `tui/internal/domain/layout_contract_test.go`, equivalente de `PanelLayoutContractTest` de
   JetBrains y `PanelLayoutContractTests` de Visual Studio: lee
   `contracts/client-product-surface.yaml` y afirma la **secuencia** de controles por situación, el
   `row_shape:` (badge cerrando la línea, iconos antes, botonera abajo), el **tope del 55%** del pie
   y **una sola barra de scroll** (asserts estructurales sobre el layout, nunca sobre píxeles).
   **Gate**: corre en `go test ./...`, o sea en el job `tui` de los tres SO.
-- [ ] T025 [P] Implementar `tui/internal/domain/usercopy.go` con **toda** la copy del cliente
+- [X] T025 [P] Implementar `tui/internal/domain/usercopy.go` con **toda** la copy del cliente
   (FR-030): las cadenas compartidas de `strings:` que la TUI alcanza —y las alcanza todas—, su
   `per_client_strings.no_single_root` propia, su `per_client_strings.after_install` propia, el
   `waiting_text`, los textos de cada clave `tooltip*:` del canónico (FR-027) y las URLs de soporte.
@@ -277,14 +277,14 @@ exactamente cómo un cuarto cliente entra al canónico y no se verifica nunca.
   esas claves en tres paneles ahora las exige en cuatro; y el `perClientString` de T002/T003 compara
   la oración entera con `squash` —que ya normaliza backticks y `+`, o sea que cubre los raw strings
   de Go **sin tocarlo**—.
-- [ ] T026 Implementar `tui/internal/domain/confirms.go`: la tabla de confirmaciones y
+- [X] T026 Implementar `tui/internal/domain/confirms.go`: la tabla de confirmaciones y
   **`ConfirmMutation(id, …)`**, la **única** puerta del cliente, cuarto equivalente de
   `confirmMutation` / `UiMessages.confirm` / `GitReviewDialogs.Confirm`. **Gate 1 de los tres**:
   `collectConfirmingIds(yaml)` (línea 1528 del verificador) contra la tabla del cliente **en las dos
   direcciones**. La excepción declarada sigue siendo una sola: `walkthroughInit`, que elige entre
   dos cursos en vez de confirmar, y **el comentario que la exime lo lee CI — reformularlo rompe el
   check**. Los gates 2 y 3 llegan en T067 y T068, cuando hay call sites y overlay.
-- [ ] T027 [P] Implementar `tui/internal/domain/icons.go`: **un solo mapa** que contesta los cinco
+- [X] T027 [P] Implementar `tui/internal/domain/icons.go`: **un solo mapa** que contesta los cinco
   nombres de `icon_vocabulary:` (`prev`, `next`, `file`, `trash`, `diff`), cada entrada con **dos**
   glifos, Unicode y ASCII. **Gates, y ninguno es una lista de codepoints escrita a mano**: (1) cada
   glifo Unicode mide **exactamente una celda** —East Asian Width `Narrow` o `Neutral`, nunca `Wide`
@@ -293,19 +293,19 @@ exactamente cómo un cuarto cliente entra al canónico y no se verifica nunca.
   emoji no alcanza, porque `≡`, `▶` y media Geometric Shapes son `Ambiguous` sin ser emoji, y ése es
   el modo de falla real —una celda en un terminal, dos en otro, y las columnas de todas las filas se
   desalinean—.
-- [ ] T028 [P] Implementar `tui/internal/domain/version.go` (`Version` + `MinCLIVersion`) y
+- [X] T028 [P] Implementar `tui/internal/domain/version.go` (`Version` + `MinCLIVersion`) y
   `tui/internal/domain/installhint.go` (los comandos npm de **la CLI**, que son lo que dibuja el
   panel `cli-missing`/`cli-outdated` — la TUI no se instala por npm, la CLI sí). Cablear
   `minFor("tui")` contra `version.go` en el verificador y **borrar las dos guardas `existsSync`**.
   **Gate**: la comparación de versión es un **piso estricto**, sin techo, así que una CLI más nueva
   que el mínimo nunca se reporta desactualizada; un test lo afirma con una versión mayor.
-- [ ] T029 [P] Implementar `tui/internal/domain/keymap.go` —el par tecla → acción o movimiento— como
+- [X] T029 [P] Implementar `tui/internal/domain/keymap.go` —el par tecla → acción o movimiento— como
   espejo exacto del bloque `keymap:` del canónico, y **borrar su guarda `existsSync`**, activando el
   gate (d) de T007. **Gate propio**: un test del cliente que afirma que **la barra de teclas se
   dibuja de este mismo mapa** (una tecla que existe y no se muestra es imposible por construcción) y
   que `n`/`p` están reservadas para el cursor de la review y no aparecen en el movimiento de la
   lista.
-- [ ] T030 Implementar `tui/internal/domain/actions.go`: las **26** acciones que la TUI ofrece, con
+- [X] T030 Implementar `tui/internal/domain/actions.go`: las **26** acciones que la TUI ofrece, con
   su verbo y su argv exacto según [contracts/cli-invocation.md](./contracts/cli-invocation.md)
   § Mutaciones —incluido el orden fijo de flags de `start`, el `--` antes de la rama, el
   `--onto-source` **sólo** si el porcelain lo reporta, y el `discardAllFixes` que corre
@@ -315,34 +315,34 @@ exactamente cómo un cuarto cliente entra al canónico y no se verifica nunca.
   (líneas ~964-977) para las 26 en las dos direcciones, más el lado TUI de `not_in:` de T006 —la TUI
   no declara `openAllChanges` en **ninguna** de sus superficies—; (3) la clasificación 22 nativas /
   4 delegadas / 1 `not_in` cubre las 27 sin huecos ni sobrantes (SC-006).
-- [ ] T031 [P] Implementar `tui/internal/domain/intent.go`: `ReviewIntent` → argv del asistente, en
+- [X] T031 [P] Implementar `tui/internal/domain/intent.go`: `ReviewIntent` → argv del asistente, en
   el orden fijo `[flags de layout] [--delta] [--local|--offline] -- <branch>` (walk sin flag, keys
   `--keys`, step `--step`, whole `--no-walk`). **Gate**: tabla de casos que falla si el orden cambia
   o si el `--` se pierde.
-- [ ] T032 [P] Implementar `tui/internal/domain/watchrules.go`: las raíces, la allowlist de prefijos
+- [X] T032 [P] Implementar `tui/internal/domain/watchrules.go`: las raíces, la allowlist de prefijos
   de `refs/` (`heads/`, `remotes/`, `review-edits/`, `review-saved-edits/`), las profundidades por
   raíz y el presupuesto (`max_dirs`, valor inicial 512) como **datos puros**, sin filesystem.
   **Gate**: tests sobre los prefijos deliberadamente excluidos (`refs/tags/`, `refs/notes/`,
   `refs/stash`, `refs/bisect/`, `refs/rewritten/`) — `tags/` en un repo grande es la mitad del
   presupuesto.
-- [ ] T033 [P] Implementar `tui/internal/domain/` — `StateToken` (huella `{branch?, tip?, situation}`)
+- [X] T033 [P] Implementar `tui/internal/domain/` — `StateToken` (huella `{branch?, tip?, situation}`)
   e `InvocationClass` (las cuatro clases con sus timeouts: `Read` 15 s, `LocalMutation` 120 s,
   `Network` 300 s, `SupportGit` 30 s; verbo desconocido → `Read`, la misma regla que `invoke.ts`).
   **Gate**: un test que afirma que `config base|remote` cae en `Read` —es una escritura de config, no
   un movimiento de refs— igual que en los otros tres.
-- [ ] T034 Escribir `tui/internal/domain/purity_test.go`: **ningún** import de bubbletea, lipgloss,
+- [X] T034 Escribir `tui/internal/domain/purity_test.go`: **ningún** import de bubbletea, lipgloss,
   bubbles, fsnotify ni `os/exec` bajo `internal/domain/` (FR-045). Es el equivalente de la regla que
   en JetBrains impide `com.intellij` en el dominio.
-- [ ] T035 Escribir `tui/module_boundary_test.go`: `tui/go.mod` declara **exactamente** las cuatro
+- [X] T035 Escribir `tui/module_boundary_test.go`: `tui/go.mod` declara **exactamente** las cuatro
   dependencias previstas y ninguna más, y **ningún import del árbol nombra otro cliente del
   monorepo** (FR-075, SC-014). La frontera de lenguaje es el punto de haber elegido Go: se descartó
   Node/Ink precisamente porque compartir el parser con `vscode-extension/` estaría a un `import` de
   distancia. Un firewall que depende de disciplina no es un firewall.
-- [ ] T036 [P] Escribir `tui/internal/host/fsnotify_boundary_test.go`: **`fsnotify` se importa en un
+- [X] T036 [P] Escribir `tui/internal/host/fsnotify_boundary_test.go`: **`fsnotify` se importa en un
   solo archivo**, `internal/host/watch_fsnotify.go` (que todavía no existe; el test afirma "cero o
   uno, y si hay uno es ése"). **Gate**: es lo que impide que la vigilancia se filtre a otra capa
   cuando llegue T056.
-- [ ] T037 Agregar el **chequeo de cierre del andamio** a
+- [X] T037 Agregar el **chequeo de cierre del andamio** a
   `scripts/check-client-product-surface.mjs`: *si `tui/go.mod` existe, todas las rutas declaradas de
   la TUI tienen que existir*. Convierte el `existsSync` —que hace que un cliente sin archivos pase
   en silencio— en un error apenas el cliente es real. **Gate**: borrar un archivo del dominio pone CI

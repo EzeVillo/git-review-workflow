@@ -1,0 +1,12 @@
+config	base	develop
+config	remote	origin
+candidate	feature	remote	0
+candidate	feature	local	1
+remote-candidate	origin	1
+delta	feature	a1b2c3d	remote
+offer	walk	recommended
+offer	whole	available
+draft	feature	/home/x/.git/review-walkthrough/feature.md	2	5	local	delta	fresh
+guide	team	/home/x/repo/.review/walkthrough-guide.md	in-force
+guide	own	/home/x/.git/review-walkthrough-guide.md	absent
+walkthrough	in-sync	/home/x/repo/.review/walkthrough.md	4	4	feature

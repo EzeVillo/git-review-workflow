@@ -196,6 +196,24 @@ if (existsSync(ijInstall)) {
   if (!i.includes(npmUpdate)) fail(`intellij InstallHint.kt missing npm_update`);
 }
 
+// La cuarta punta (T028): sin existsSync, porque el archivo existe desde
+// esta misma tarea -- un andamio aca naceria vencido. minFor("tui") queda
+// cableado del mismo modo que los otros tres.
+//
+// Salteado contra --yaml: la fixture de T008 estampa tui a proposito en
+// "999.99.9" para probar la divergencia, y version.go sigue el numero REAL
+// (min_cli_version.tui en el canonico de disco) -- comparar contra la
+// fixture pondria este chequeo en rojo por la razon equivocada. Los otros
+// tres clientes no tienen este problema porque la fixture los deja en su
+// valor real.
+const tuiVersionGo = readText(join(root, "tui", "internal", "domain", "version.go"), "utf8");
+if (!yamlOverride && !tuiVersionGo.includes(`"${minFor("tui")}"`)) {
+  fail(`tui version.go missing min_cli_version ${minFor("tui")}`);
+}
+const tuiInstallHintGo = readText(join(root, "tui", "internal", "domain", "installhint.go"), "utf8");
+if (!tuiInstallHintGo.includes(npmInstall)) fail(`tui installhint.go missing npm_install`);
+if (!tuiInstallHintGo.includes(npmUpdate)) fail(`tui installhint.go missing npm_update`);
+
 // per_client_strings.no_single_root — antes un fragmento de cinco palabras
 // tipeado a mano en JS ("multi-root is not supported"); ahora la oracion
 // entera, leida del YAML y comparada plegada con squash. Se llamaba
@@ -209,6 +227,25 @@ if (existsSync(ijState)) {
   const s = readText(ijState, "utf8");
   if (!squash(s).includes(squash(perClientString("no_single_root", "intellij")))) {
     fail("intellij ReviewStateManager missing the no_single_root string");
+  }
+}
+// La cuarta punta (T025): sin existsSync -- el archivo ya existe para
+// cuando esta tarea termina, asi que la guarda seria un andamio que nace
+// vencido.
+//
+// Salteado contra --yaml: la fixture de T008 es una foto de antes de esta
+// tarea y todavia trae el placeholder de no_single_root.tui / after_install
+// .tui (nunca se edita: no es uno de los dos archivos que esta fase puede
+// tocar), asi que comparar usercopy.go contra ESE texto fallaria por un
+// motivo ajeno a la propiedad que la fixture existe para probar.
+const tuiUserCopyPath = join(root, "tui", "internal", "domain", "usercopy.go");
+const tuiUserCopy = readText(tuiUserCopyPath, "utf8");
+if (!yamlOverride) {
+  if (!squash(tuiUserCopy).includes(squash(perClientString("no_single_root", "tui")))) {
+    fail("tui usercopy.go missing the no_single_root string");
+  }
+  if (!squash(tuiUserCopy).includes(squash(perClientString("after_install", "tui")))) {
+    fail("tui usercopy.go missing the after_install string");
   }
 }
 
@@ -226,6 +263,7 @@ const waitingSurfaces = [
   ["vscode", join(root, "vscode-extension", "src", "views", "panelHtml.ts")],
   ["intellij", join(root, "jetbrains-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "ui", "ReviewPanel.kt")],
   ["visualstudio", join(root, "visualstudio-extension", "src", "GitReview.VS", "ToolWindows", "PanelView.cs")],
+  ["tui", tuiUserCopyPath],
 ];
 for (const [label, file] of waitingSurfaces) {
   if (!existsSync(file)) continue;
@@ -241,6 +279,9 @@ if (!text.includes("No branches to pick a base from were found.")) {
 const setBase = readText(join(root, "vscode-extension", "src", "commands", "setBase.ts"), "utf8");
 if (!setBase.includes("No branches to pick a base from were found.")) {
   fail("setBase.ts missing no_base_candidates");
+}
+if (!tuiUserCopy.includes("No branches to pick a base from were found.")) {
+  fail("tui usercopy.go missing no_base_candidates");
 }
 
 // draft_agent_prompt — lo que copyDraftPrompt pone en el portapapeles, byte por
@@ -258,13 +299,18 @@ const draftPrompt = (draftPromptBlock?.[1] ?? "")
 if (!draftPrompt.startsWith("Fill in the reading order at {path}.")) {
   fail(`draft_agent_prompt must name the row's path: ${draftPrompt}`);
 }
+// La cuarta punta (T025): usercopy.go lleva TODA la copy del cliente, asi
+// que es tambien donde viven draft_agent_prompt y la eleccion de
+// walkthroughInit -- las mismas dos cosas que userCopy.ts/UserCopy.kt/
+// UserCopy.cs cargan del lado de los otros tres.
 const userCopyFiles = [
   ["vscode", ["vscode-extension", "src", "review", "userCopy.ts"]],
   ["intellij", ["jetbrains-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "domain", "UserCopy.kt"]],
   ["visualstudio", ["visualstudio-extension", "src", "GitReview.Domain", "UserCopy.cs"]],
+  ["tui", ["tui", "internal", "domain", "usercopy.go"]],
 ];
 
-/** Una cadena que los tres UserCopy tienen que traer, entrecomillada. */
+/** Una cadena que los cuatro UserCopy tienen que traer, entrecomillada. */
 function requireUserCopy(what, copy) {
   for (const [label, rel] of userCopyFiles) {
     const p = join(root, ...rel);
@@ -276,11 +322,7 @@ function requireUserCopy(what, copy) {
   }
 }
 
-for (const [label, rel] of [
-  ["vscode", ["vscode-extension", "src", "review", "userCopy.ts"]],
-  ["intellij", ["jetbrains-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "domain", "UserCopy.kt"]],
-  ["visualstudio", ["visualstudio-extension", "src", "GitReview.Domain", "UserCopy.cs"]],
-]) {
+for (const [label, rel] of userCopyFiles) {
   const p = join(root, ...rel);
   if (!existsSync(p)) {
     fail(`${label} UserCopy module missing at ${rel.join("/")}`);
@@ -334,6 +376,8 @@ if (existsSync(ijSupport)) {
   if (!s.includes(starUrl)) fail(`intellij SupportLinks missing star_url ${starUrl}`);
   if (!s.includes(bugUrl)) fail(`intellij SupportLinks missing bug_url ${bugUrl}`);
 }
+if (!tuiUserCopy.includes(starUrl)) fail(`tui usercopy.go missing star_url ${starUrl}`);
+if (!tuiUserCopy.includes(bugUrl)) fail(`tui usercopy.go missing bug_url ${bugUrl}`);
 if (!existsSync(join(root, ".github", "ISSUE_TEMPLATE", "bug_report.yml"))) {
   fail("missing .github/ISSUE_TEMPLATE/bug_report.yml (support.bug_url template)");
 }
@@ -1495,6 +1539,86 @@ if (walkthroughBlock.length === 0) {
 }
 
 // ---------------------------------------------------------------------------
+// TUI (T025): la copy de guias, walkthrough y tooltips va TODA a
+// usercopy.go. No se suma tui a `layoutFiles`: ese barrido reusa el
+// `not_in:` escrito en la MISMA linea del layout, y hoy esa anotacion solo
+// nombra a visualstudio para el tooltip de openAllChanges (T006 declaro la
+// exclusion de la TUI a nivel de ACCION, no a nivel de fila). Los chequeos
+// de abajo son el equivalente de ese barrido con la exclusion resuelta
+// contra `actionsNotIn("tui")` en vez de contra el texto de la fila.
+// ---------------------------------------------------------------------------
+const tuiLayoutGo = readText(join(root, "tui", "internal", "domain", "layout.go"), "utf8");
+
+// La copy (labels, tooltips, nombres accesibles) vive en usercopy.go; los
+// ids de control DESNUDOS (sin comillas de por medio en el chequeo `exact`)
+// viven como claves de mapa en layout.go (GuideRowControls,
+// WalkthroughRowControls). Por eso este helper mira los DOS archivos: basta
+// con que el id o la copy aparezca en cualquiera de los dos.
+function requireTuiCopy(what, copy, exact) {
+  const hitIn = (src) => (exact ? src.includes(`"${copy}"`) : squash(src).includes(squash(copy)));
+  if (!hitIn(tuiUserCopy) && !hitIn(tuiLayoutGo)) {
+    fail(`tui usercopy.go/layout.go is missing the ${what}`);
+  }
+}
+
+{
+  // guide_rows: los tres ids (control-id token, no copy: se compara igual
+  // que "guide control ${id}" arriba, sin comillas), la etiqueta y los dos
+  // nombres accesibles. Ninguno esta en not_in para la TUI.
+  const guideIds = [...guideRowsBlock.matchAll(/^ {4}([A-Za-z][A-Za-z0-9]*):\s*\{/gm)].map((m) => m[1]);
+  for (const id of guideIds) requireTuiCopy(`guide control ${id}`, id, false);
+  const guideControlsSection = guideRowsBlock.split(/^ {2}controls:\s*$/m)[1] ?? "";
+  for (const label of [...guideControlsSection.matchAll(/label:\s*"([^"]+)"/g)].map((m) => m[1])) {
+    requireTuiCopy(`guide control label "${label}"`, label, true);
+  }
+  for (const name of [...guideControlsSection.matchAll(/accessible_name:\s*"([^"]+)"/g)].map((m) => m[1])) {
+    requireTuiCopy(`accessible name of a guide control ("${name}")`, name, true);
+  }
+}
+requireTuiCopy("Walkthrough tools section", "Walkthrough", true);
+requireTuiCopy("Compare tools section", "Compare", true);
+{
+  // walkthrough_row: los dos ids de fila, la etiqueta, el nombre accesible
+  // y las tres etiquetas de accion (Init/Update/Start over).
+  for (const id of ["openWalkthrough", "copyWalkthroughPrompt"]) {
+    requireTuiCopy(`walkthrough control ${id}`, id, false);
+  }
+  const wControlsSection = walkthroughBlock.split(/^ {2}controls:\s*$/m)[1] ?? "";
+  for (const label of [...wControlsSection.matchAll(/label:\s*"([^"]+)"/g)].map((m) => m[1])) {
+    requireTuiCopy(`walkthrough control label "${label}"`, label, true);
+  }
+  for (const name of [...wControlsSection.matchAll(/accessible_name:\s*"([^"]+)"/g)].map((m) => m[1])) {
+    requireTuiCopy(`accessible name of a walkthrough control ("${name}")`, name, true);
+  }
+  const actionLabelsSection = walkthroughBlock.split(/^ {2}action_labels:\s*$/m)[1]?.split(/^ {2}[a-z_]+:/m)[0] ?? "";
+  for (const m of actionLabelsSection.matchAll(/^ {4}[a-z-]+:\s*"([^"]+)"/gm)) {
+    requireTuiCopy(`walkthrough action label "${m[1]}"`, m[1], true);
+  }
+}
+
+// El barrido de tooltip*: de las tres GUI (arriba), reapuntado a usercopy.go
+// y con la exclusion resuelta contra actions: — openAllChanges no existe
+// para la TUI en ninguna superficie, asi que su tooltip no tiene por que
+// vivir en usercopy.go.
+{
+  const tuiNotIn = actionsNotIn("tui");
+  let tuiTooltipsChecked = 0;
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("#") || !/\btooltip/.test(trimmed)) continue;
+    const idOnLine = /\{id:\s*([A-Za-z][A-Za-z0-9]*)/.exec(line)?.[1] ?? null;
+    if (idOnLine && tuiNotIn.has(idOnLine)) continue;
+    const tuiTooltipRe = /\btooltip(?:_[a-z]+)?:\s*"((?:[^"\\]|\\.)+)"/g;
+    let tm;
+    while ((tm = tuiTooltipRe.exec(line)) !== null) {
+      requireTuiCopy(`tooltip "${tm[1].slice(0, 40)}…"`, tm[1], false);
+      tuiTooltipsChecked += 1;
+    }
+  }
+  if (tuiTooltipsChecked === 0) fail("tui tooltip sweep matched nothing (the regex broke)");
+}
+
+// ---------------------------------------------------------------------------
 // EL ALFABETO DE ICONOS: cada par (control, icono) del canonico, contra los tres
 // clientes.
 //
@@ -1747,6 +1871,59 @@ for (const [file, body] of srcFiles) {
 }
 
 // ---------------------------------------------------------------------------
+// TUI, gate 1 de `confirms:` (T026): la tabla ConfirmingIDs de confirms.go
+// contra el canonico, en las dos direcciones. Los gates 2 (el call site de
+// ConfirmMutation lee el primer argumento) y 3 (ningun otro modal) llegan en
+// T067/T068, cuando existen los call sites y el overlay — hoy no hay nada
+// bajo tui/internal/ui/ que barrer.
+// ---------------------------------------------------------------------------
+const tuiConfirmsGo = readText(join(root, "tui", "internal", "domain", "confirms.go"), "utf8");
+const tuiConfirmingBlock = tuiConfirmsGo.match(/ConfirmingIDs = map\[string\]bool\{([\s\S]*?)\n\}/);
+if (!tuiConfirmingBlock) {
+  fail("tui confirms.go has no ConfirmingIDs map");
+}
+const tuiConfirming = new Set(
+  [...(tuiConfirmingBlock?.[1] ?? "").matchAll(/"([A-Za-z][A-Za-z0-9]*)"/g)].map((m) => m[1]),
+);
+for (const id of canonicalConfirming) {
+  if (!tuiConfirming.has(id)) {
+    fail(`tui: ${id} is confirms: true in the canonical and missing from confirms.go's ConfirmingIDs`);
+  }
+}
+for (const id of tuiConfirming) {
+  if (!canonicalConfirming.has(id)) {
+    fail(`tui: confirms.go's ConfirmingIDs carries ${id}, which the canonical does not mark confirms: true`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TUI, `actions:` en las dos direcciones (T030), el mismo par de bucles que
+// ya tiene Visual Studio (arriba): las 26 que ofrece estan en actions.go, y
+// openAllChanges -- not_in: [tui] -- no esta en ninguna parte del arbol.
+// ---------------------------------------------------------------------------
+const tuiNotInActions = actionsNotIn("tui");
+const tuiActionKeys = actionKeys.filter((id) => !tuiNotInActions.has(id));
+const tuiActionsGo = readText(join(root, "tui", "internal", "domain", "actions.go"), "utf8");
+for (const id of tuiActionKeys) {
+  if (!tuiActionsGo.includes(`"${id}"`)) fail(`tui actions.go missing product action ${id}`);
+}
+for (const id of tuiNotInActions) {
+  if (tuiActionsGo.includes(`"${id}"`)) {
+    fail(
+      `tui actions.go declares ${id}, which the contract marks not_in: [tui] — ` +
+        `reponerla es editar el contrato primero`,
+    );
+  }
+}
+// La clasificacion 22 nativas / 4 delegadas / 1 not_in cubre las 27 sin
+// huecos ni sobrantes (SC-006): 26 ofrecidas + 1 excluida == 27.
+if (tuiActionKeys.length + tuiNotInActions.size !== actionKeys.length) {
+  fail(
+    `tui: ${tuiActionKeys.length} offered + ${tuiNotInActions.size} not_in should cover all ${actionKeys.length} canonical actions`,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // EL MAPA DE TECLAS DE LA TUI (FR-041). `only_in: [tui]`: los otros tres
 // clientes reciben sus atajos del IDE y no declaran keymap propio. La barra de
 // teclas del cliente se dibuja de este mismo mapa, asi que una tecla que existe
@@ -1846,17 +2023,14 @@ for (const id of panelExcluded) {
   }
 }
 
-// (d) el mapa del cliente declara exactamente estos pares. Con andamio
-// existsSync hasta que tui/internal/domain/keymap.go exista (T029 lo borra).
-const tuiKeymapGo = join(root, "tui", "internal", "domain", "keymap.go");
-if (existsSync(tuiKeymapGo)) {
-  const g = readText(tuiKeymapGo, "utf8");
-  for (const name of KEYMAP_SECTIONS) {
-    for (const e of keymapEntries[name]) {
-      for (const k of e.keys) {
-        if (!g.includes(`"${k}"`)) {
-          fail(`tui keymap.go missing key "${k}" declared in keymap.${name}`);
-        }
+// (d) el mapa del cliente declara exactamente estos pares. Andamio borrado
+// en T029: el archivo ya existe, asi que el chequeo corre siempre.
+const tuiKeymapGo = readText(join(root, "tui", "internal", "domain", "keymap.go"), "utf8");
+for (const name of KEYMAP_SECTIONS) {
+  for (const e of keymapEntries[name]) {
+    for (const k of e.keys) {
+      if (!tuiKeymapGo.includes(`"${k}"`)) {
+        fail(`tui keymap.go missing key "${k}" declared in keymap.${name}`);
       }
     }
   }
@@ -1956,6 +2130,35 @@ if (!yamlOverride) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// EL CHEQUEO DE CIERRE DEL ANDAMIO (T037). Las entradas de la TUI entraron
+// con `existsSync(archivo) && …`, el mismo andamio que ya usaron IntelliJ y
+// Visual Studio para poder declarar un cliente antes de que su arbol
+// exista — y con el mismo problema: un archivo ausente pasa en silencio,
+// que es exactamente como un cuarto cliente podria entrar al canonico y no
+// verificarse nunca.
+//
+// Esta regla lo cierra: SI `tui/go.mod` existe, TODAS las rutas de dominio
+// que el canonico y sus contratos declaran para la TUI tienen que existir
+// de verdad. Borrar un archivo del dominio pone CI en rojo en vez de volver
+// mudo el chequeo que lo cubria.
+// ---------------------------------------------------------------------------
+const tuiGoMod = join(root, "tui", "go.mod");
+if (existsSync(tuiGoMod)) {
+  const tuiDomainFiles = [
+    "pathref.go", "porcelain.go", "situation.go", "panelmodel.go", "layout.go",
+    "usercopy.go", "confirms.go", "icons.go", "keymap.go", "actions.go",
+    "intent.go", "watchrules.go", "version.go", "installhint.go",
+    "statetoken.go", "invocationclass.go",
+  ];
+  for (const name of tuiDomainFiles) {
+    const p = join(root, "tui", "internal", "domain", name);
+    if (!existsSync(p)) {
+      fail(`tui/go.mod exists but tui/internal/domain/${name} is missing (T037 closing check)`);
+    }
+  }
+}
+
 console.log(
-  `check-client-product-surface: ok (min.vscode=${minFor("vscode")}, actions=${actionKeys.length}, panel_controls=${canonicalControls.length}, icons=${canonicalIcons.size}, title_actions=${titleActionIds.length}, confirms=${canonicalConfirming.size}, vs=${existsSync(vsVersion) ? "yes" : "no"})`,
+  `check-client-product-surface: ok (min.vscode=${minFor("vscode")}, actions=${actionKeys.length}, panel_controls=${canonicalControls.length}, icons=${canonicalIcons.size}, title_actions=${titleActionIds.length}, confirms=${canonicalConfirming.size}, vs=${existsSync(vsVersion) ? "yes" : "no"}, tui=${existsSync(tuiGoMod) ? "yes" : "no"})`,
 );

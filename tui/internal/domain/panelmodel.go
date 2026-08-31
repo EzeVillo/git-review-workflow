@@ -1,0 +1,89 @@
+package domain
+
+// PanelModel is the flat projection of what gets drawn — nothing about how
+// it is drawn (data-model.md § PanelModel). It is COMPARABLE BY VALUE: no
+// maps, no slices, no pointers. That property is what SC-004 rests on — an
+// unchanged model produces no frame, so "exactly one repaint" is provable by
+// comparing two PanelModel values with `==`, never by timing anything.
+//
+// Whatever is naturally a variable-length list — the footer's rows, the
+// current commit's files — travels pre-rendered as a single already-joined
+// string plus its count, never as a slice. panelmodel_test.go fails to
+// compile the moment a field stops being comparable, which is the point:
+// the property is enforced by the compiler, not by a reviewer noticing a
+// slice in a diff.
+type PanelModel struct {
+	Situation Situation
+	Busy      bool
+	RepoLabel string
+
+	// Inventory (no-review): the review/saved rows, one line per row,
+	// newline-joined, plus how many. HasReviews distinguishes zero rows
+	// from "no fresh drafts either", both of which are legal empty states
+	// with different footers.
+	InventoryRows  string
+	InventoryCount int
+	HasReviews     bool
+
+	PendingFinish     bool
+	FinishDestination string // where the edits landed (finish-pending banner)
+	FinishConflict    bool
+
+	NoBaseConfigured bool
+	ConfiguredBase   string
+	ConfiguredRemote string
+
+	Mode      ReviewMode
+	Branch    string
+	Source    string
+	Tip       string
+	Base      string
+	HasBase   bool
+	Position  int
+	Total     int
+	BaseMoved bool
+	AtFirst   bool
+	AtLast    bool
+
+	NavigationLocked bool
+	Degraded         bool
+	Readonly         bool
+	KeysOnly         bool
+
+	HasCurrent  bool
+	CurrentSHA  string
+	CurrentPath PathRef
+	EntryCount  int
+	// Files: the current commit's (step) or the whole review's (whole)
+	// inventory, one line per file, newline-joined.
+	Files string
+
+	HasWhy bool
+	Why    string
+
+	// Footer rows (no-review only; a review never projects these —
+	// FR-023, enforced by the projector never filling them in rather than
+	// by render.go skipping them).
+	WalkthroughRow    string
+	HasWalkthroughRow bool
+	TeamGuideRow      string
+	OwnGuideRow       string
+	FreshDraftRows    string
+	FreshDraftCount   int
+	SpentDraftRows    string
+	SpentDraftCount   int
+	FixesRows         string
+	FixesCount        int
+
+	// Note: a single derived, presentation-only line (STALE, a moved base,
+	// a branch that diverged locally). Empty when there is nothing to say.
+	Note string
+
+	// MouseEnabled is the one field that does not come from porcelain at
+	// all: it is terminal state, not repository state (FR-067).
+	MouseEnabled bool
+
+	// Stderr: raw CLI stderr, present only in the failure situations
+	// (cli-missing, cli-outdated, out-of-range, error).
+	Stderr string
+}

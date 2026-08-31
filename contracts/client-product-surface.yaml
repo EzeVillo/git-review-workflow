@@ -97,7 +97,8 @@ per_client_strings:
       Open a single-folder workspace that is a git repository. git review uses
       one root (like the CLI cwd); multi-root is not supported.
     tui: >-
-      … (copy propia de la TUI, escrita en la tarea que crea su UserCopy)
+      Run git review ui from inside a git repository. A terminal has no
+      multi-root to open — cd into one and try again.
   # Se llamaba reload_or_wait. El texto prometia que el panel vuelve a chequear
   # cada pocos segundos -- un poll, que FR-032 prohibe hacer y FR-069 prohibe
   # decir --, y en una terminal no hay ventana que recargar.
@@ -112,7 +113,8 @@ per_client_strings:
       Reload the window after installing, or wait — the panel checks again
       every few seconds.
     tui: >-
-      … (copy propia de la TUI, escrita en la tarea que crea su UserCopy)
+      Press r to refresh, or focus this pane again — the panel does not
+      poll.
 situations:
   - cli-missing
   - cli-outdated

@@ -1,0 +1,155 @@
+package domain
+
+// This file carries EVERY string this client shows a person: the copy
+// shared with the other three clients (contracts/client-product-
+// surface.yaml `strings:`), this client's own two situational strings
+// (`per_client_strings:`), the tooltip on every control that has one, and
+// the two support URLs (FR-030). Nothing here is embedded in a command —
+// this is the fourth `UserCopy`, after userCopy.ts / UserCopy.kt /
+// UserCopy.cs.
+//
+// scripts/check-client-product-surface.mjs sweeps this file for every
+// tooltip*: and per_client_strings.tui value the canonical declares (T025);
+// bare control-id tokens (openGuide, openWalkthrough, ...) are checked
+// against layout.go instead, since that is where this client actually
+// declares them as map keys — repeating the identifier here would be the
+// same string checked twice against two different reasons to have it.
+
+// --- strings: (shared byte-for-byte with vscode/intellij/visualstudio) ----
+
+const (
+	// CliMissingTitle / CliOutdatedTitle carry a literal "{min}" — every
+	// client interpolates it itself; the canonical's floor is
+	// version.MinCLIVersion.
+	CliMissingTitle     = "The git-review CLI ({min} or newer) was not found."
+	CliOutdatedTitle    = "The installed git-review CLI is older than {min}."
+	NoBaseCandidates    = "No branches to pick a base from were found."
+	OtherInstallOptions = "Other install options"
+	WaitingText         = "Reading the review state…"
+)
+
+// DraftAgentPromptBefore / DraftAgentPromptAfter are the two halves of
+// `draft_agent_prompt`, split around the canonical's "{path}" placeholder —
+// what copyDraftPrompt puts on the clipboard. It is a POINTER, not the
+// instructions themselves: those live inside the draft file, in the
+// comment at its top.
+const (
+	DraftAgentPromptBefore = "Fill in the reading order at "
+	DraftAgentPromptAfter  = ". The instructions are inside the file, in the comment at the top. Do not change the file list or the numbering rules."
+)
+
+// --- per_client_strings: this client's own two rows -----------------------
+
+// NoSingleRoot answers the same question `state.ts` / `ReviewStateManager`
+// answer for the other three: what to do when the process is not standing
+// inside a git repository. A terminal has no multi-root to open — there is
+// no workspace to reconfigure, only a place to `cd` into.
+const NoSingleRoot = "Run git review ui from inside a git repository. A terminal has no multi-root to open — cd into one and try again."
+
+// AfterInstall replaces `reload_or_wait` for this client: that string
+// promises the panel "checks again every few seconds", which is a poll
+// (FR-032 forbids doing it, FR-069 forbids saying it), and there is no
+// window to reload in a terminal. This names the next step that actually
+// exists in a pane instead.
+const AfterInstall = "Press r to refresh, or focus this pane again — the panel does not poll."
+
+// --- support ----------------------------------------------------------------
+
+const (
+	SupportStarURL = "https://github.com/EzeVillo/git-review-workflow"
+	SupportBugURL  = "https://github.com/EzeVillo/git-review-workflow/issues/new?template=bug_report.yml"
+)
+
+// --- section titles ---------------------------------------------------------
+
+const (
+	WalkthroughSectionTitle = "Walkthrough"
+	CompareSectionTitle     = "Compare"
+)
+
+// --- labels: the no-review setup step ---------------------------------------
+
+const (
+	SetupQuestion      = "Which branch do pull requests land on in this repo?"
+	ChooseBranchLabel  = "Choose the branch"
+	ChangeRemoteLabel  = "Change remote"
+	NoActiveReviewNote = "No active review on this branch."
+	StartReviewLabel   = "Start a review"
+)
+
+// --- labels: the walkthrough row and the two guides -------------------------
+
+const (
+	// WalkthroughInitLabel / WalkthroughUpdateLabel / WalkthroughStartOverLabel
+	// mirror `walkthrough_row.action_labels:` — the single action's label
+	// depends on the file's state, because the same verb creates and
+	// updates.
+	WalkthroughInitLabel      = "Init"
+	WalkthroughUpdateLabel    = "Update"
+	WalkthroughStartOverLabel = "Start over"
+	WalkthroughBuildLabel     = "Build"
+
+	CopyForAgentLabel   = "Copy for agent"
+	OpenWalkthroughName = "Open the walkthrough"
+	OpenGuideName       = "Open the guide"
+	DiscardGuideName    = "Discard the guide"
+	CreateGuideLabel    = "Create"
+
+	// WalkthroughInitChoiceTitle / the two buttons: the reconcile-or-start-
+	// over question asked BEFORE invoking init on a branch that already has
+	// a walkthrough (walkthrough_row.init_choice). Reuses the same two verb
+	// labels as the row's own action button.
+	WalkthroughInitChoiceTitle = "This branch already has a walkthrough."
+)
+
+// --- labels: review body -----------------------------------------------------
+
+const (
+	OpenInEditorLabel = "open in editor"
+	FileLabel         = "File"
+	DiffLabel         = "Diff"
+	PreviousEntryName = "Previous entry"
+	NextEntryName     = "Next entry"
+)
+
+// --- labels: draft rows -------------------------------------------------------
+
+const (
+	ValidateAndStartLabel   = "Validate and start"
+	OpenReadingOrderName    = "Open the reading order"
+	DiscardReadingOrderName = "Discard the reading order"
+)
+
+// --- labels: inventory, fixes, finish ----------------------------------------
+
+const (
+	ContinueLabel         = "Continue"
+	DiscardLabel          = "Delete"
+	DiscardLeftoverLabel  = "Delete leftover"
+	DiscardExtractedName  = "Discard the extracted edits"
+	DiscardAllFixesLabel  = "Discard all"
+	CompareRevisionsLabel = "Compare revisions"
+	DoneCleanUpLabel      = "Done, clean up"
+	UndoLabel             = "Undo"
+	HowToFixItLabel       = "How to fix it"
+	StarOnGitHubLabel     = "Star on GitHub"
+	ReportABugLabel       = "Report a bug"
+	CopyInstallLabel      = "Copy"
+	CurrentBranchTooltip  = "You are on this branch; switch away first"
+)
+
+// --- tooltips (contracts/client-product-surface.yaml `tooltip*:`) -----------
+//
+// openAllChanges' tooltip ("Open every change in this review at once") is
+// deliberately NOT here: the action is not_in: [tui] (T006), so this client
+// never draws the control it would belong to.
+
+const (
+	OpenGuideDisabledTooltip      = "There is no guide yet"
+	DiscardGuideTooltip           = "Delete your guide"
+	DiscardDraftTooltip           = "Delete this reading order"
+	StartFromDraftTooltip         = "Check the order, then start reading"
+	StartFromDraftDisabledTooltip = "This file lost its header, so it cannot be checked. Delete it and write a new one."
+	StartFromDraftUnfilledTooltip = "Every file still needs a number and a line saying why it matters"
+	DiscardFixesTooltip           = "Delete this branch of edits"
+)

@@ -1,0 +1,13 @@
+[1mreview/feat-x[0m
+Entry 2/4: abc1234
+
+[ [34mDiff[0m ]
+
+[1m2 file(s) in this commit[0m
+  a.go
+  b.go
+
+[<] [34mPrevious entry[0m
+[>] [34mNext entry[0m
+
+[2mj[0m:up  [2mk[0m:down  [2menter[0m:select  [2mn[0m:next  [2mp[0m:prev  [2mr[0m:refresh  [2mm[0m:mouse on  [2mq[0m:quit

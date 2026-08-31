@@ -42,3 +42,13 @@ VERSION text eol=lf
 # this the documented Windows dev loop (bats in the Linux container over the
 # Windows working tree) fails on a repo that is green in CI.
 jetbrains-plugin/gradle.properties text eol=lf
+
+# The TUI's golden files are compared byte-for-byte against render.View()'s
+# output, which is always LF; a Windows checkout with autocrlf=true would
+# otherwise convert them to CRLF and break the comparison only on
+# windows-latest CI, invisibly from a Linux/macOS dev machine or container.
+# The porcelain fixtures need the same treatment: some of them (hostile-bytes,
+# non-ascii) exist specifically to pin exact bytes, which a line-ending
+# rewrite would silently corrupt regardless of platform.
+tui/testdata/golden/*.txt    text eol=lf
+tui/testdata/porcelain/*.txt text eol=lf

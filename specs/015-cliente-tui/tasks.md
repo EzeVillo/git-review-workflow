@@ -364,24 +364,24 @@ acelerador y no un cimiento.
 **Independent Test**: sandbox con review walk, step y whole; contrastar **cada campo** del panel
 contra `git review status --porcelain` en otro pane, y recorrer la secuencia entera sólo con teclado.
 
-- [ ] T038 [US3] Implementar `tui/internal/host/invoke.go`: **siempre `git review <verbo> …`**, argv
+- [X] T038 [US3] Implementar `tui/internal/host/invoke.go`: **siempre `git review <verbo> …`**, argv
   como arreglo y sin shell, `cwd` = el del proceso, `stdout`/`stderr` decodificados como **UTF-8
   explícito** en los tres SO, timeouts por clase con kill del árbol best-effort
   (`timedOut=true`, `exitCode=nil`), y `GIT_REVIEW_ADVICE=0` exportado **en este archivo y en
   ningún otro** (FR-009). **Nunca** resolver ni ejecutar el dispatcher por cuenta propia y **sin**
   ajuste de ruta configurable (FR-007, FR-008). **Gate**: un test que barre el árbol y falla si
   `GIT_REVIEW_ADVICE` aparece fuera de este archivo; otro que afirma que el único `command` es `git`.
-- [ ] T039 [US3] Agregar el **registro de invocaciones** en memoria a
+- [X] T039 [US3] Agregar el **registro de invocaciones** en memoria a
   `tui/internal/host/invoke.go`: comando, cwd, duración, exit, `timedOut` y `stderr` por cada
   start/end. Vive en memoria y muere con el proceso (FR-078: **cero archivos propios en disco**).
   **Gate**: es lo que hace medible SC-002 y lo que dibuja `showCliLog`; un test afirma que no se
   escribe ningún archivo.
-- [ ] T040 [P] [US3] Implementar `tui/internal/host/gitdata.go`: **una sola** invocación
+- [X] T040 [P] [US3] Implementar `tui/internal/host/gitdata.go`: **una sola** invocación
   `git rev-parse --git-dir --git-common-dir --show-toplevel`, con los relativos resueltos contra el
   `cwd`. **Sin `--path-format=absolute`**, que es de git 2.31 y el proyecto declara 2.23+. **Gate**:
   un test en un worktree enlazado que afirma que los dos directorios se distinguen — vigilar el
   equivocado deja media pantalla muerta.
-- [ ] T041 [P] [US2] Implementar `tui/internal/host/askpass.go` y el **centinela** en
+- [X] T041 [P] [US2] Implementar `tui/internal/host/askpass.go` y el **centinela** en
   `tui/cmd/git-review-ui/main.go`: para la clase red, el entorno lleva `GIT_TERMINAL_PROMPT=0` y
   `GIT_ASKPASS`/`SSH_ASKPASS` apuntando **al propio ejecutable** (`os.Executable()`) con la variable
   centinela puesta; `main` la detecta **como lo primero que hace, antes de tocar el terminal**, y
@@ -389,67 +389,67 @@ contra `git review status --porcelain` en otro pane, y recorrer la secuencia ent
   **Gate**: un test que invoca el binario con la centinela y afirma exit ≠ 0, salida vacía y —lo que
   importa— **que no se abrió alt-screen**: un askpass que inicializa el terminal le arruina la
   pantalla al `git` que lo llamó.
-- [ ] T042 [US2] Implementar el **probe de versión** en `tui/internal/host/`: `--version`, `stdout`
+- [X] T042 [US2] Implementar el **probe de versión** en `tui/internal/host/`: `--version`, `stdout`
   trim, comparación contra `min_cli_version.tui`. Error de spawn o exit ≠ 0 → `cli-missing`; no
   parsea o < mínimo → `cli-outdated`; ok → seguir a `status`. **Gate**: un test que afirma que un
   **timeout no es una CLI ausente** —se dice que tardó y dónde mirar— y otro que afirma el piso
   estricto sin techo.
-- [ ] T043 [US3] Implementar el ciclo de lectura de estado: `status --porcelain` primero; si exit 2,
+- [X] T043 [US3] Implementar el ciclo de lectura de estado: `status --porcelain` primero; si exit 2,
   `list --porcelain` y `config --porcelain`, y **que fallen no cambia la situación**; `status --why
   <raw>` con el path **crudo** de la entrada. **Nunca** parsear el `stdout` humano de una mutación
   para decidir la situación (FR-013), y **nunca** derivar situación leyendo refs, config de review o
   el working tree (FR-012). **Gate**: un test que afirma que `list`/`config` sólo se invocan en
   `no-review`/`finish-pending` — adentro de una review no se invoca `config --porcelain`, que es la
   razón por la que los registros del pie ni llegan.
-- [ ] T044 [US3] Implementar `tui/cmd/git-review-ui/main.go` como **composition root**: elección de
+- [X] T044 [US3] Implementar `tui/cmd/git-review-ui/main.go` como **composition root**: elección de
   watcher (T054 la usa), lectura de las claves `reviewui.*` con `git config` leídas
   **defensivamente** —error ignorado, como el `|| true` del lado sh— con `--global` como preferencia
   y local como override (FR-061), y arranque del programa. **La CLI no lee ninguna clave
   `reviewui.*` y la TUI no escribe ninguna `reviewworkflow.*` que no sea a través de un verbo**
   (FR-077). **Gate**: un `@test` en `tests/ui.bats` o un grep en CI que afirma que ningún verbo de
   `bin/` menciona `reviewui`.
-- [ ] T045 [US3] Implementar `tui/internal/ui/program.go`: `Model`, `Update` y `View` con las seis
+- [X] T045 [US3] Implementar `tui/internal/ui/program.go`: `Model`, `Update` y `View` con las seis
   clases de mensaje (`KeyMsg`/`MouseMsg` → intent tipado, `WindowSizeMsg` → `Viewport`,
   `FocusMsg`/`BlurMsg`, `watchMsg{}`, `readDoneMsg`, `mutationDoneMsg`). Las invocaciones salen como
   `tea.Cmd`, **nunca en línea**: un `Update` que bloquea es un pane congelado. **Gate**: un test que
   afirma que ningún `Update` llama al invocador de forma síncrona.
-- [ ] T046 [US3] Dibujar `waiting_text` en el **primer frame**, antes de la primera invocación
+- [X] T046 [US3] Dibujar `waiting_text` en el **primer frame**, antes de la primera invocación
   (superficie de espera). **Gate**: un test que afirma que el frame inicial no anuncia una CLI
   ausente antes de que nadie haya mirado — que es exactamente el bug que el `waiting_text` existe
   para evitar en los otros tres.
-- [ ] T047 [US3] Implementar `tui/internal/ui/render.go`: `View(PanelModel, Viewport) -> (frame,
+- [X] T047 [US3] Implementar `tui/internal/ui/render.go`: `View(PanelModel, Viewport) -> (frame,
   HitMap)`, **pura**. Cada control dibujado deja su rectángulo en la `HitMap`. **Gate**: sin
   `HitMap` no hay forma honesta de escribir el test "sólo con el mouse" de SC-015 —habría que
   adivinar coordenadas—, así que el test de T091 depende de esta estructura.
-- [ ] T048 [US3] Implementar `tui/internal/ui/keys.go`: `KeyMsg`/`MouseMsg` → **intent tipado**,
+- [X] T048 [US3] Implementar `tui/internal/ui/keys.go`: `KeyMsg`/`MouseMsg` → **intent tipado**,
   nunca una acción directa, resuelto desde el mapa de `keymap.go`. Dibujar la **barra de teclas** del
   mismo mapa. **Gate**: en `finish-conflict` las teclas del cursor **no están disponibles y la barra
   no las ofrece** (US3, escenario 4): un test por situación afirma que la barra refleja la situación
   y no un set fijo.
-- [ ] T049 [US3] Cablear los **disparadores 3 y 4**: focus-in pedido con `tea.WithReportFocus()`
+- [X] T049 [US3] Cablear los **disparadores 3 y 4**: focus-in pedido con `tea.WithReportFocus()`
   —si el terminal o el multiplexor no lo entregan **no llega ningún mensaje**, la degradación es
   silencio y no hay nada que detectar (FR-037)— y la tecla `r`, **disponible en las ocho
   situaciones** (FR-038). **La TUI no le dice al usuario que encienda `focus-events`**: sería copy
   nombrando un mecanismo, y la regla de copy lo prohíbe. **Gate**: un test por disparador que falla
   si ese disparador deja de funcionar (SC-003).
-- [ ] T050 [US3] Construir el juego de **golden files** en `tui/testdata/golden/`: las **once claves
+- [X] T050 [US3] Construir el juego de **golden files** en `tui/testdata/golden/`: las **once claves
   de `panel_layout:`** × **2 tamaños** (80×24 y 120×40) × **3 modos** (default, `NO_COLOR`, ASCII
   forzado) = **66 archivos**, más el frame de espera a los dos tamaños. Se rinden desde una
   `PanelModel` fija construida en `tui/testdata/porcelain/`, **no desde un repo real**: un golden que
   depende de un sandbox es un golden que cambia solo. **Gate**: SC-009 y SC-017 — cambiar un byte del
   dibujo de cualquier situación, a cualquier tamaño, pone en rojo un archivo de referencia.
-- [ ] T051 [US3] Implementar la bandera `-update` de los golden **bajo el build tag
+- [X] T051 [US3] Implementar la bandera `-update` de los golden **bajo el build tag
   `goldenupdate`**, no bajo un `if` (FR-070). En el binario que CI construye la bandera **no
   existe**, así que pasarla es un error de flag desconocido y no un no-op silencioso. Se regeneran a
   mano con `go test -tags goldenupdate ./internal/ui -update` y **se revisan como diff**. **Gate**: un
   guard por `os.Getenv("CI")` se descartó a propósito —depende de que el ejecutor setee `CI` y hay
   runners que no; un guard que se puede olvidar no es un guard—.
-- [ ] T052 [US2] Dibujar `cli-missing` y `cli-outdated` como **dos situaciones de panel completas**,
+- [X] T052 [US2] Dibujar `cli-missing` y `cli-outdated` como **dos situaciones de panel completas**,
   con los mismos seis bloques que en los otros tres clientes, incluido el bloque `code_command` con
   el control `copyCliInstall`. **`reload_or_wait` no se dibuja**: el panel usa su
   `per_client_strings.after_install` propia, que nombra el próximo paso que sí existe en un pane
   (FR-069). El copiado en sí llega en T092. **Gate**: los golden de esas dos claves.
-- [ ] T053 [US3] Escribir el test de **alcanzabilidad sólo con teclado** (FR-073, SC-015) en
+- [X] T053 [US3] Escribir el test de **alcanzabilidad sólo con teclado** (FR-073, SC-015) en
   `tui/internal/ui/reachability_keyboard_test.go`: recorrer las ocho situaciones con `KeyMsg`
   sintéticos y afirmar que **cada control declarado se alcanza y se activa**, sin excepción. **Nunca hay un control que sólo responda al mouse** — es lo
   que hace que agregar mouse no le saque nada a nadie.

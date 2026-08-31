@@ -1,0 +1,21 @@
+No active review on this branch.
+[ Start a review ]
+
+Walkthrough
+[ Init ]
+[ Build ]
+
+Compare
+[ Compare revisions ]
+
+Settings
+Base: develop.
+[ Change the base branch ]
+Remote: origin.
+[ Change remote ]
+
+Support
+[ Star on GitHub ]
+[ Report a bug ]
+
+j:up  k:down  enter:select  r:refresh  m:mouse on  q:quit

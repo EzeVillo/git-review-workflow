@@ -38,6 +38,16 @@ const (
 	DraftAgentPromptAfter  = ". The instructions are inside the file, in the comment at the top. Do not change the file list or the numbering rules."
 )
 
+// NpmInstallHint / NpmUpdateHint are the paragraph shown right before the
+// copyable command in cli-missing / cli-outdated (panel_layout: keys
+// npm_install_hint / npm_update_hint) — not part of `strings:` itself, but
+// verified byte-for-byte against vscode-extension/src/views/panelHtml.ts
+// cliInstallHint(), the fourth copy of the same two lines.
+const (
+	NpmInstallHint = "Install with npm (recommended):"
+	NpmUpdateHint  = "Update with npm (recommended):"
+)
+
 // --- per_client_strings: this client's own two rows -----------------------
 
 // NoSingleRoot answers the same question `state.ts` / `ReviewStateManager`
@@ -65,6 +75,8 @@ const (
 const (
 	WalkthroughSectionTitle = "Walkthrough"
 	CompareSectionTitle     = "Compare"
+	SettingsSectionTitle    = "Settings"
+	SupportSectionTitle     = "Support"
 )
 
 // --- labels: the no-review setup step ---------------------------------------
@@ -72,9 +84,36 @@ const (
 const (
 	SetupQuestion      = "Which branch do pull requests land on in this repo?"
 	ChooseBranchLabel  = "Choose the branch"
+	ChangeBaseLabel    = "Change the base branch"
 	ChangeRemoteLabel  = "Change remote"
 	NoActiveReviewNote = "No active review on this branch."
 	StartReviewLabel   = "Start a review"
+
+	// ReviewsCompareAgainstNote / BaseLine / RemoteLine / RemoteOptionalLine
+	// carry the canonical's own placeholder spelling ("{base}", "{remote}")
+	// rather than a Go verb, matching CliMissingTitle/CliOutdatedTitle's
+	// "{min}" — render.go interpolates with strings.ReplaceAll, never fmt.
+	ReviewsCompareAgainstNote = "Reviews compare the branch you are reading against it. Usually main or develop."
+	BaseLine                  = "Base: {base}."
+	RemoteLine                = "Remote: {remote}."
+	RemoteOptionalLine        = "Remote: {remote} (optional)."
+)
+
+// --- copy: finish-pending, finish-conflict, out-of-range, error -------------
+
+const (
+	FinishPendingLine1 = "Your edits are on {destination}, staged and ready to commit."
+	FinishPendingLine2 = "Commit and push them from Source Control. Until you clean up, this is still undoable."
+
+	FinishConflictBanner = "This finish stopped at a conflict. Resolve the markers, then continue — or undo it to go back to editing."
+
+	OutOfRangeMessage = "The cursor is out of range: the base moved."
+	ErrorMessage      = "Something went wrong reading the review state."
+
+	// FilesInCommitHeading / FilesInReviewHeading keep the canonical's "{n}"
+	// spelling too, for the same reason.
+	FilesInCommitHeading = "{n} file(s) in this commit"
+	FilesInReviewHeading = "{n} file(s) in this review"
 )
 
 // --- labels: the walkthrough row and the two guides -------------------------

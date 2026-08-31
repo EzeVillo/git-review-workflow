@@ -1,0 +1,8 @@
+Which branch do pull requests land on in this repo?
+[ Choose the branch ]
+
+Reviews compare the branch you are reading against it. Usually main or develop.
+Remote: origin (optional).
+[ Change remote ]
+
+j:up  k:down  enter:select  r:refresh  m:mouse on  q:quit

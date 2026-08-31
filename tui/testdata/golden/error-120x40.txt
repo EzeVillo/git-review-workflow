@@ -1,0 +1,6 @@
+Something went wrong reading the review state.
+[ [1;32mHow to fix it[0m ]
+
+[31munexpected exit status 128[0m
+
+[2mj[0m:up  [2mk[0m:down  [2menter[0m:select  [2mr[0m:refresh  [2mm[0m:mouse on  [2mq[0m:quit

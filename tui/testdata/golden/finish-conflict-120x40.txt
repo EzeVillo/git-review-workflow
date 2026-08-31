@@ -1,0 +1,11 @@
+This finish stopped at a conflict. Resolve the markers, then continue — or undo it to go back to editing.
+[ [34mUndo[0m ]
+[ [34mContinue[0m ]
+
+[1mreview/feat-x[0m
+conflicting hunk in a.go
+[ [36mopen in editor[0m ]
+[ [34mFile[0m ]
+[ [34mDiff[0m ]
+
+[2mj[0m:up  [2mk[0m:down  [2menter[0m:select  [2mr[0m:refresh  [2mm[0m:mouse on  [2mq[0m:quit

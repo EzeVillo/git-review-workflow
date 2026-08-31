@@ -1,0 +1,13 @@
+review/feat-x
+Entry 2/4: abc1234
+
+[ Diff ]
+
+2 file(s) in this commit
+  a.go
+  b.go
+
+[‹] Previous entry
+[›] Next entry
+
+j:up  k:down  enter:select  n:next  p:prev  r:refresh  m:mouse on  q:quit

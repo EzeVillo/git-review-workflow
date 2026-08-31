@@ -1,0 +1,7 @@
+Your edits are on review-fixes/feat-x, staged and ready to commit.
+Commit and push them from Source Control. Until you clean up, this is still undoable.
+
+[ [1;32mDone, clean up[0m ]
+[ [34mUndo[0m ]
+
+[2mj[0m:up  [2mk[0m:down  [2menter[0m:select  [2mr[0m:refresh  [2mm[0m:mouse on  [2mq[0m:quit

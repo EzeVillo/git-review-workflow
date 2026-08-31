@@ -1,0 +1,6 @@
+Something went wrong reading the review state.
+[ How to fix it ]
+
+unexpected exit status 128
+
+j:up  k:down  enter:select  r:refresh  m:mouse on  q:quit

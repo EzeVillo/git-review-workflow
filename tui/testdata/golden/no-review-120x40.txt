@@ -1,0 +1,21 @@
+No active review on this branch.
+[ [1;32mStart a review[0m ]
+
+[1mWalkthrough[0m
+[ [34mInit[0m ]
+[ [34mBuild[0m ]
+
+[1mCompare[0m
+[ [34mCompare revisions[0m ]
+
+[1mSettings[0m
+Base: develop.
+[ [34mChange the base branch[0m ]
+Remote: origin.
+[ [34mChange remote[0m ]
+
+[1mSupport[0m
+[ [34mStar on GitHub[0m ]
+[ [34mReport a bug[0m ]
+
+[2mj[0m:up  [2mk[0m:down  [2menter[0m:select  [2mr[0m:refresh  [2mm[0m:mouse on  [2mq[0m:quit

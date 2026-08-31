@@ -1,0 +1,6 @@
+The cursor is out of range: the base moved.
+[ [1;32mHow to fix it[0m ]
+
+[31mthe base moved past this review's recorded tip[0m
+
+[2mj[0m:up  [2mk[0m:down  [2menter[0m:select  [2mr[0m:refresh  [2mm[0m:mouse on  [2mq[0m:quit

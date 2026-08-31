@@ -1,0 +1,12 @@
+This finish stopped at a conflict. Resolve the markers, then continue — or undo 
+it to go back to editing.                                                       
+[ Undo ]
+[ Continue ]
+
+review/feat-x
+conflicting hunk in a.go
+[ open in editor ]
+[ File ]
+[ Diff ]
+
+j:up  k:down  enter:select  r:refresh  m:mouse on  q:quit

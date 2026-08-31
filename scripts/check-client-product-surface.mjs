@@ -6,7 +6,7 @@
  * package.json de la extension.
  */
 import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
@@ -1873,9 +1873,9 @@ for (const [file, body] of srcFiles) {
 // ---------------------------------------------------------------------------
 // TUI, gate 1 de `confirms:` (T026): la tabla ConfirmingIDs de confirms.go
 // contra el canonico, en las dos direcciones. Los gates 2 (el call site de
-// ConfirmMutation lee el primer argumento) y 3 (ningun otro modal) llegan en
-// T067/T068, cuando existen los call sites y el overlay — hoy no hay nada
-// bajo tui/internal/ui/ que barrer.
+// ConfirmMutation lee el primer argumento) y 3 (ningun otro modal) van
+// después de esto (T067/T068), ahora que confirm.go y sus call sites
+// existen bajo tui/internal/ui/.
 // ---------------------------------------------------------------------------
 const tuiConfirmsGo = readText(join(root, "tui", "internal", "domain", "confirms.go"), "utf8");
 const tuiConfirmingBlock = tuiConfirmsGo.match(/ConfirmingIDs = map\[string\]bool\{([\s\S]*?)\n\}/);
@@ -1893,6 +1893,95 @@ for (const id of canonicalConfirming) {
 for (const id of tuiConfirming) {
   if (!canonicalConfirming.has(id)) {
     fail(`tui: confirms.go's ConfirmingIDs carries ${id}, which the canonical does not mark confirms: true`);
+  }
+}
+
+// Los .go de tui/internal/ui/, para los gates 2 y 3 de abajo. Node no puede
+// parsear Go -- por eso ambos gates son regex sobre el texto fuente, igual
+// que el equivalente de VS Code lo es sobre .ts (ver el comentario de
+// passedToGate arriba): una regex sobre el PRIMER ARGUMENTO del call site,
+// nunca un `includes` suelto del id, que un id aparece como nombre de
+// funcion, de constante y de campo y por eso da verde con el call site
+// cambiado.
+// _test.go se excluye a propósito: en Go un test vive AL LADO del fuente que
+// prueba, nunca en un directorio aparte como src/ vs test/ de VS Code -- sin
+// filtrarlos, un test que construye ConfirmOverlay{} a mano para probar
+// HandleKey (legitimo: eso no es una segunda puerta de producción, es un
+// test de la puerta) dispararia el gate 3 igual que si fuera codigo real.
+function goSources(dir) {
+  const out = [];
+  for (const name of readdirSync(dir)) {
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) out.push(...goSources(full));
+    else if (name.endsWith(".go") && !name.endsWith("_test.go")) out.push([full, readText(full, "utf8")]);
+  }
+  return out;
+}
+const tuiUiDir = join(root, "tui", "internal", "ui");
+const tuiUiSources = existsSync(tuiUiDir) ? goSources(tuiUiDir) : [];
+
+if (existsSync(tuiUiDir)) {
+  if (tuiUiSources.length === 0) {
+    fail("tui: no sources found under internal/ui/");
+  }
+
+  // ---------------------------------------------------------------------------
+  // TUI, gate 2 de `confirms:` (T067): el PRIMER ARGUMENTO de cada llamada a
+  // ConfirmMutation(...) en todo tui/internal/ui, en las dos direcciones --
+  // el mismo molde que el gate de VS Code de confirmMutation(\s*"...") de
+  // arriba, adaptado a la sintaxis de una llamada Go.
+  //
+  // La direccion "todo confirms: true tiene un call site" NO se pide para
+  // los 13 ids completos todavia: de esos, sólo undoFinish/saveReview/
+  // abortReview son Phase 6 (T070-T071); continueReview/discardInventory/
+  // discardDraft/discardGuide/discardFixes/discardAllFixes/cleanReview son
+  // Phase 7 (T075-T082), compareReview es Phase 8 (T089, delegada a
+  // difftool) y walkthroughInit/walkthroughBuild son Phase 7 (T081) --
+  // walkthroughInit ademas via el picker, nunca ConfirmMutation (la EXCEPCION
+  // DECLARADA de confirms.go). Pedir el conjunto completo ahora rompería CI
+  // antes de que esas fases existan; TUI_CONFIRM_WIRED_SO_FAR es la lista que
+  // SE ACHICA a medida que cada fase agrega su propio call site -- vacía el
+  // día que las nueve restantes estén todas wireadas, momento en el que esta
+  // lista deja de hacer falta y el chequeo de abajo puede correr sobre
+  // canonicalConfirming directo, como ya hace VS Code.
+  //
+  // La direccion inversa SÍ es completa ya: cualquier id pasado a
+  // ConfirmMutation, sea de esta fase o de una futura, tiene que ser uno que
+  // el canonico marque confirms: true -- es la mitad que SC-007 ejercita
+  // (cambiar el id que un call site pasa pone CI en rojo) y no depende de
+  // cuántas fases más existan.
+  const TUI_CONFIRM_WIRED_SO_FAR = new Set(["undoFinish", "saveReview", "abortReview"]);
+  const tuiPassedToGate = new Set();
+  for (const [, body] of tuiUiSources) {
+    for (const m of body.matchAll(/ConfirmMutation\(\s*"([A-Za-z][A-Za-z0-9]*)"/g)) {
+      tuiPassedToGate.add(m[1]);
+    }
+  }
+  for (const id of TUI_CONFIRM_WIRED_SO_FAR) {
+    if (!canonicalConfirming.has(id)) {
+      fail(`tui: TUI_CONFIRM_WIRED_SO_FAR carries ${id}, which the canonical does not mark confirms: true`);
+    }
+    if (!tuiPassedToGate.has(id)) {
+      fail(`tui: ${id} is confirms: true and expected to be wired by now, but is never passed to ConfirmMutation`);
+    }
+  }
+  for (const id of tuiPassedToGate) {
+    if (!canonicalConfirming.has(id)) {
+      fail(`tui: ConfirmMutation is called with ${id}, which the canonical does not mark confirms: true`);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // TUI, gate 3 de `confirms:` (T068): sólo confirm.go construye el tipo de
+  // overlay que bloquea input (`ConfirmOverlay{` / `&ConfirmOverlay{`) --
+  // el equivalente del barrido de `showWarningMessage`/`modal: true` sueltos
+  // que destapó el agujero original en VS Code.
+  // ---------------------------------------------------------------------------
+  for (const [file, body] of tuiUiSources) {
+    if (basename(file) === "confirm.go") continue;
+    if (/&?ConfirmOverlay\{/.test(body)) {
+      fail(`tui: ${file} constructs ConfirmOverlay itself; it must go through ConfirmMutation`);
+    }
   }
 }
 

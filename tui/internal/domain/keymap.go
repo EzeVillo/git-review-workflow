@@ -33,11 +33,20 @@ var KeymapCursor = []KeymapEntry{
 }
 
 // KeymapActions is a product action bound to a key. `r`/refresh is
-// available in all eight situations (FR-038). More entries land here as
-// this client wires more actions to their own key — the canonical is the
-// list to extend, not this comment.
+// available in all eight situations (FR-038). finishReview/saveReview/
+// abortReview are `surface: both` in the canonical — a title-bar action in
+// the three IDE clients — but panel_layout: never draws them as a body row
+// (they are title_actions:, not panel_layout: entries), so a terminal
+// without a title bar exposes them the same way it exposes refresh: a
+// reserved key, shown in the key bar only when the situation allows it
+// (keys.go's KeyBarFor). Each resolves through Update's IntentBoundAction
+// exactly like refresh, and each is a no-op outside the situation its own
+// activation guard checks (mutation.go's beginFinish/beginSave/beginAbort).
 var KeymapActions = []KeymapEntry{
 	{Keys: []string{"r"}, Action: "refresh"},
+	{Keys: []string{"f"}, Action: "finishReview"},
+	{Keys: []string{"s"}, Action: "saveReview"},
+	{Keys: []string{"a"}, Action: "abortReview"},
 }
 
 // KeymapOverlays opens a full-screen or modal surface. action_list is the

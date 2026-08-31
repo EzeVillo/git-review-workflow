@@ -140,8 +140,24 @@ func KeyBarFor(m domain.PanelModel) []KeyBarItem {
 		)
 	}
 	for _, entry := range domain.KeymapActions {
-		if entry.Action == "refresh" {
+		switch entry.Action {
+		case "refresh":
 			bar = append(bar, KeyBarItem{Key: entry.Keys[0], Label: "refresh"})
+		case "finishReview":
+			// requires_not_readonly in the canonical: a read-only compare
+			// review has nothing to finish (finishReview.ts's own defensive
+			// check has the same shape).
+			if m.Situation == domain.SituationReview && !m.Readonly {
+				bar = append(bar, KeyBarItem{Key: entry.Keys[0], Label: "finish"})
+			}
+		case "saveReview":
+			if m.Situation == domain.SituationReview {
+				bar = append(bar, KeyBarItem{Key: entry.Keys[0], Label: "save"})
+			}
+		case "abortReview":
+			if m.Situation == domain.SituationReview || m.Situation == domain.SituationFinishConflict {
+				bar = append(bar, KeyBarItem{Key: entry.Keys[0], Label: "cancel"})
+			}
 		}
 	}
 	for _, entry := range domain.KeymapToggles {

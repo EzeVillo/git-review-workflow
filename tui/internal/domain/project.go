@@ -40,6 +40,9 @@ type ProjectInput struct {
 	MouseEnabled bool
 	Busy         bool
 	Stderr       string
+	// StatusLine: the UI layer's own sticky "toast" text (PanelModel.
+	// StatusLine's own doc) — not porcelain, carried through unchanged.
+	StatusLine string
 }
 
 // currentBranch returns the `list --porcelain` row marked current, if any —
@@ -88,6 +91,7 @@ func Project(in ProjectInput) PanelModel {
 		Busy:         in.Busy,
 		MouseEnabled: in.MouseEnabled,
 		Stderr:       in.Stderr,
+		StatusLine:   in.StatusLine,
 	}
 
 	switch in.Situation {

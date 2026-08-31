@@ -258,8 +258,22 @@ func View(m domain.PanelModel, vp Viewport) (string, HitMap) {
 		renderOutOfRangeOrError(b, m, domain.ErrorMessage)
 	}
 
+	b.statusLine(m.StatusLine)
 	b.keyBar(m)
 	return b.frame(), b.hm
+}
+
+// statusLine draws PanelModel.StatusLine (T074): what a toast would say in
+// the other three clients, and empty exactly when there is nothing to say
+// — "en un pane no hay toasts: el panel ES la superficie" (contracts/
+// tui-surface.md). None of golden_test.go's fixtures ever set it, so this
+// never touches a golden file; a mutation's own outcome is the only source.
+func (b *builder) statusLine(s string) {
+	if s == "" {
+		return
+	}
+	b.blank()
+	b.lines = append(b.lines, b.st.note.Render(s))
 }
 
 // keyBar draws the footer key bar (T048) from the SAME table KeyBarFor

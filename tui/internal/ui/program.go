@@ -13,15 +13,39 @@ import (
 // Model is the bubbletea program's whole state. It carries the drawn
 // PanelModel (comparable by value, per domain/panelmodel.go) plus the
 // pieces of state that are NOT product state: the terminal Viewport, which
-// row currently has keyboard focus, and FR-039's opt-in poll floor
-// bookkeeping (pollFloor/pollGen — see scheduleRead).
+// row currently has keyboard focus, FR-039's opt-in poll floor bookkeeping
+// (pollFloor/pollGen — see scheduleRead), and Phase 6's mutation cycle —
+// the depth-1 lock, the one confirmation overlay, the one selection
+// overlay (start assistant / setBase / setRemote / finish-destination),
+// the last full read (mutation.go's setBase/setRemote pickers read
+// Candidates/Remotes straight off it rather than spending a fresh probe on
+// data every regular refresh already fetched), the sticky status line
+// (domain.PanelModel.StatusLine's own doc), and the one finishReview
+// outcome still waiting on its next read to resolve.
 type Model struct {
-	Viewport   Viewport
-	Panel      domain.PanelModel
-	FocusIndex int
-	busy       bool
-	pollFloor  time.Duration
-	pollGen    int
+	Viewport             Viewport
+	Panel                domain.PanelModel
+	FocusIndex           int
+	pollFloor            time.Duration
+	pollGen              int
+	lock                 host.MutationLock
+	confirm              *ConfirmOverlay
+	selectOverlay        *SelectOverlay
+	lastRead             host.ReadResult
+	statusLine           string
+	pendingFinish        *pendingFinishOutcome
+	preferredStartSource string
+}
+
+// WithPreferredStartSource sets reviewui.startsource's resolved value
+// (FR-061): the start assistant's SOURCE question pre-positions its cursor
+// on it when present, and otherwise never hides an option the CLI itself
+// did not rule out. cmd/git-review-ui/main.go is the one caller — reading
+// the config key itself happens there, not here, the same split every other
+// piece of `reviewui.*` config already follows (pollFloor/pollGen above).
+func (m Model) WithPreferredStartSource(source string) Model {
+	m.preferredStartSource = source
+	return m
 }
 
 // NewModel builds the program's initial state: waiting_text on the very
@@ -69,11 +93,9 @@ type watchMsg struct{}
 // tea.Cmd that ran it.
 type readDoneMsg struct{ result host.ReadResult }
 
-// mutationDoneMsg carries one CLI mutation's result back. Real mutations are
-// Phase 6 (T070-T082); today nothing produces this message, but Update
-// already knows how to react to one: re-read (disparador 1, contracts/
-// refresh.md), the same way a real mutation's own follow-up read will.
-type mutationDoneMsg struct{ result host.Result }
+// mutationDoneMsg (Phase 6) is defined in mutation.go, alongside the rest of
+// the mutation cycle it feeds: handleMutationDone, the lock, the status
+// line and undoFinish's --force retry.
 
 // pollFloorMsg is FR-039's opt-in poll floor firing. gen ties it to the
 // exact scheduleRead() call that armed it: if a NEWER read has happened
@@ -152,8 +174,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case watchMsg:
 		// Disparador 2, sent via WatchTick() by whatever forwards the real
-		// Watcher's channel (cmd/git-review-ui/main.go, Phase 5) — handled
-		// exactly like FocusMsg.
+		// Watcher's channel (cmd/git-review-ui/main.go, Phase 5) — the ONE
+		// trigger the mutation lock suppresses (contracts/refresh.md's
+		// table): while a verb is running, or during its post-mutation
+		// silence window, this is discarded and remembered rather than
+		// acted on (host.MutationLock.Suppress).
+		if m.lock.Suppress() {
+			return m, nil
+		}
 		return m.scheduleRead()
 
 	case pollFloorMsg:
@@ -163,17 +191,43 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.scheduleRead()
 
 	case readDoneMsg:
-		m.Panel = domain.Project(toProjectInput(msg.result, m.Panel.MouseEnabled, m.busy))
+		m.lastRead = msg.result
+		m.Panel = domain.Project(toProjectInput(msg.result, m.Panel.MouseEnabled, m.lock.Busy(), m.statusLine))
+		if m.pendingFinish != nil {
+			// finishReview's own deferred outcome (T074): the fresh read's
+			// situation is the only honest answer to "did this land
+			// pending or not" — never the verb's own stdout (FR-013).
+			if m.Panel.Situation != domain.SituationFinishPending {
+				text := m.pendingFinish.destination() + domain.FinishReadySuffix
+				m.statusLine = text
+				m.Panel.StatusLine = text
+			}
+			m.pendingFinish = nil
+		}
 		if m.FocusIndex >= len(ControlsFor(m.Panel)) {
 			m.FocusIndex = 0
 		}
 		return m, nil
 
 	case mutationDoneMsg:
-		m.busy = false
-		return m.scheduleRead()
+		return m.handleMutationDone(msg)
+
+	case silenceWindowMsg:
+		if m.lock.WindowClosed(msg.gen) {
+			return m.scheduleRead()
+		}
+		return m, nil
+
+	case assistantStepMsg:
+		return m.handleAssistantStep(msg)
 
 	case tea.KeyMsg:
+		if m.confirm != nil {
+			return m.handleConfirmKey(msg)
+		}
+		if m.selectOverlay != nil {
+			return m.handleSelectKey(msg)
+		}
 		return m.handleKey(msg)
 
 	case tea.MouseMsg:
@@ -183,6 +237,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
+	// The confirm overlay and the select overlay are mutually exclusive by
+	// construction (handleConfirmKey/handleSelectKey each clear their own
+	// field before ever opening the other), and both take over the WHOLE
+	// frame while open — see ConfirmOverlay.Render's own comment on why a
+	// full replacement stands in for true on-top compositing here.
+	if m.confirm != nil {
+		return m.confirm.Render(m.Viewport)
+	}
+	if m.selectOverlay != nil {
+		return m.selectOverlay.Render(m.Viewport)
+	}
 	frame, _ := View(m.Panel, m.Viewport)
 	return frame
 }
@@ -212,14 +277,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// the one trigger that is NEVER suppressed or degraded.
 			return m.scheduleRead()
 		}
-		return m, nil
+		return m.activateBoundAction(intent.Action)
 
 	case IntentCursorAction:
-		// next/prev the review cursor: BuildArgv("next"/"prev", ...) exists
-		// in domain/actions.go, but wiring it to a real mutation (the lock,
-		// the confirmation-free path, the follow-up read) is T073 (Phase 6).
-		// The intent above is what T053's reachability test asserts on.
-		return m, nil
+		// next/prev the review cursor (T073): j/k move the focused ROW
+		// (IntentFocusMove above), n/p move the review's own cursor — two
+		// different concepts, and ResolveKey already keeps n/p from
+		// resolving at all outside a situation that has one
+		// (hasReviewCursor in keys.go), which is what the reservation of
+		// n/p exists to guarantee.
+		return m.beginCursor(intent.Action)
 
 	case IntentToggle:
 		if intent.Toggle == "mouse_reporting" {
@@ -231,10 +298,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case IntentOverlay, IntentActivate:
-		// action_list/entry_picker (Phase 8) and the body controls' real
-		// mutations (Phase 6+) are not wired yet; the correct Intent having
-		// been produced is what T053 checks for a control that lands here.
+	case IntentActivate:
+		return m.activateControl(intent.Control, intent.Variant)
+
+	case IntentOverlay:
+		// action_list/entry_picker (Phase 8) are not wired yet; the correct
+		// Intent having been produced is what T053 checks for a control
+		// that lands here.
 		return m, nil
 	}
 	return m, nil
@@ -263,7 +333,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 // — kept here (ui), not in host or domain, because it is neither I/O nor
 // pure derivation: it is wiring between the two, exactly like Visual
 // Studio's/JetBrains' host-side adapters.
-func toProjectInput(r host.ReadResult, mouseEnabled, busy bool) domain.ProjectInput {
+func toProjectInput(r host.ReadResult, mouseEnabled, busy bool, statusLine string) domain.ProjectInput {
 	return domain.ProjectInput{
 		Situation:    r.Situation,
 		Status:       r.Status,
@@ -278,5 +348,6 @@ func toProjectInput(r host.ReadResult, mouseEnabled, busy bool) domain.ProjectIn
 		MouseEnabled: mouseEnabled,
 		Busy:         busy,
 		Stderr:       r.Stderr,
+		StatusLine:   statusLine,
 	}
 }

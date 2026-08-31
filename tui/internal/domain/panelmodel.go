@@ -86,4 +86,13 @@ type PanelModel struct {
 	// Stderr: raw CLI stderr, present only in the failure situations
 	// (cli-missing, cli-outdated, out-of-range, error).
 	Stderr string
+
+	// StatusLine is what a toast would say in the other three clients
+	// (contracts/tui-surface.md § copy: "en un pane no hay toasts: el panel
+	// ES la superficie"): the last mutation's outcome, when the rest of the
+	// panel would not otherwise say it. Chosen by WHAT WAS ASKED, never by
+	// parsing a verb's stdout (FR-013) — internal/ui decides the text and
+	// merely carries it here for render.go to draw. Empty means nothing to
+	// say.
+	StatusLine string
 }

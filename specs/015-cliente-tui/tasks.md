@@ -552,7 +552,7 @@ deshacer pregunta; lo demás no.
 de lectura, guardar, continuar, cerrar, deshacer y abortar; contrastar **cada argv** contra
 [contracts/cli-invocation.md](./contracts/cli-invocation.md) usando el registro de invocaciones.
 
-- [ ] T063 [US5] Implementar `tui/internal/host/lock.go`: `MutationLock` de **profundidad 1** —una
+- [X] T063 [US5] Implementar `tui/internal/host/lock.go`: `MutationLock` de **profundidad 1** —una
   segunda mutación mientras hay una en curso **se descarta con aviso, no se encola**— más la
   **ventana de silencio**: mientras corre el verbo los `watchMsg{}` se descartan y se recuerda que
   hubo; al terminar, **una** lectura inmediata y una ventana de 600 ms; si hubo disparos
@@ -561,27 +561,27 @@ de lectura, guardar, continuar, cerrar, deshacer y abortar; contrastar **cada ar
   produce frame—, así que SC-004 se afirma sobre el **repintado**, no sobre el número de lecturas.
   Es el único lugar del diseño donde se gasta un proceso a propósito, y compra que la corrección no
   dependa de adivinar cuánto tarda inotify en callarse.
-- [ ] T064 [US5] Escribir el test de **SC-004** en `tui/internal/ui/repaint_test.go`: una mutación
+- [X] T064 [US5] Escribir el test de **SC-004** en `tui/internal/ui/repaint_test.go`: una mutación
   que escribe config y refs varias veces produce **exactamente un** repintado. Se afirma contando
   frames, no lecturas.
-- [ ] T065 [US5] Revalidar el `StateToken` **adentro del lock, antes del spawn**: es lo que impide
+- [X] T065 [US5] Revalidar el `StateToken` **adentro del lock, antes del spawn**: es lo que impide
   mutar sobre datos viejos cuando el estado cambió entre el gesto y el "sí". En una TUI con
   vigilancia esa ventana es más real que en un IDE, porque el panel puede haberse repintado mientras
   el overlay estaba abierto. **Gate**: un test que cambia el estado con el overlay abierto y afirma
   que la mutación **no** corre.
-- [ ] T066 [US5] Implementar `tui/internal/ui/confirm.go`: **el único overlay modal del cliente**,
+- [X] T066 [US5] Implementar `tui/internal/ui/confirm.go`: **el único overlay modal del cliente**,
   alimentado por `ConfirmMutation` de T026. En una TUI un modal es un overlay; que haya **uno solo**.
-- [ ] T067 [US5] Instalar el **gate 2 de `confirms:`** en
+- [X] T067 [US5] Instalar el **gate 2 de `confirms:`** en
   `scripts/check-client-product-surface.mjs`: una regex sobre el **primer argumento** de
   `ConfirmMutation(...)` en todo `tui/`. **No un `includes` del nombre**: un id aparece como nombre
   de función, de constante y de campo, así que un `includes` da verde con el call site cambiado —
   está probado que daba verde, y es lo que dejó a `confirms:` sin gobernar durante meses. **Gate**:
   se prueba **rompiéndolo** (SC-007): cambiar el id que un call site pasa tiene que poner CI en rojo.
-- [ ] T068 [US5] Instalar el **gate 3 de `confirms:`**: sólo `tui/internal/ui/confirm.go` construye
+- [X] T068 [US5] Instalar el **gate 3 de `confirms:`**: sólo `tui/internal/ui/confirm.go` construye
   el tipo de overlay que bloquea input, y **ningún otro archivo lo asigna**. Es el equivalente del
   barrido de `showWarningMessage` sueltos que destapó el agujero original. **Gate**: se prueba
   rompiéndolo — agregar un modal fuera de la puerta pone CI en rojo (SC-007, SC-018).
-- [ ] T069 [US5] Implementar el **asistente de inicio**: los tres sondeos de `config --porcelain`
+- [X] T069 [US5] Implementar el **asistente de inicio**: los tres sondeos de `config --porcelain`
   (siempre clase `Read`, nunca red), y ofrecer **sólo** las formas de lectura que la CLI reporta como
   viables (registro `offer`). Al terminar la última pregunta la review **arranca sin cartel de
   confirmación**, y vale para los **dos** caminos que llegan al start: el asistente y
@@ -589,24 +589,24 @@ de lectura, guardar, continuar, cerrar, deshacer y abortar; contrastar **cada ar
   cuando está (FR-061). **Gate**: un test que afirma que `startReview` **no** pasa por
   `ConfirmMutation` — un cartel que aparece siempre deja de leerse, y entonces tampoco se lee el que
   importa.
-- [ ] T070 [US5] Implementar `finishReview`, `undoFinish` (con `--force` **nunca como primera
+- [X] T070 [US5] Implementar `finishReview`, `undoFinish` (con `--force` **nunca como primera
   opción**, sólo tras el stderr que lo pide) y `resumeFinish` (con `--onto-source` **sólo si el
   porcelain de la review lo reporta**, US5 escenario 5), más sus banners de `finish-pending` y
   `finish-conflict`. **Gate**: la tabla de argv de T030 cubre las tres; un test afirma que el banner
   de cierre pendiente **no** trae ningún aviso en prosa que repita lo que sus dos controles ya
   dicen — es lo que hacía el banner viejo nombrando `finish --abort` y `clean --keep-fixes`.
-- [ ] T071 [US5] Implementar `abortReview`, `saveReview` y `continueReview`, cada uno con su fila de
+- [X] T071 [US5] Implementar `abortReview`, `saveReview` y `continueReview`, cada uno con su fila de
   la tabla de confirmaciones. **Gate**: se confirma lo que no se puede deshacer, **y nada más**.
-- [ ] T072 [P] [US5] Implementar `setBase` y `setRemote` (`config base|remote -- <name>`), dibujados
+- [X] T072 [P] [US5] Implementar `setBase` y `setRemote` (`config base|remote -- <name>`), dibujados
   en `no-review` como el paso de setup cuando no hay base. **Gate**: un repo sin base muestra
   **sólo** ese paso, sin un *Start* engañoso (US5, escenario 1); sin candidatas leídas degrada con
   el `no_base_candidates` del canónico.
-- [ ] T073 [P] [US3] Implementar `next` y `prev` cableados a las teclas **`n`/`p` reservadas**, con
+- [X] T073 [P] [US3] Implementar `next` y `prev` cableados a las teclas **`n`/`p` reservadas**, con
   la regla de situación: sólo con `situation == review`, y deshabilitados en los extremos
   (`atFirst`/`atLast`) y en `finish-conflict`. **Gate**: un test que afirma que `j`/`k` mueven la
   fila enfocada y **no** el cursor de la review, y otro que afirma lo simétrico — confundir los dos
   conceptos es el error que la reserva de `n`/`p` existe para impedir.
-- [ ] T074 [US5] Implementar la **línea de estado** del panel en `tui/internal/ui/render.go` (con su
+- [X] T074 [US5] Implementar la **línea de estado** del panel en `tui/internal/ui/render.go` (con su
   campo en `tui/internal/domain/panelmodel.go`) para lo que en los otros tres se
   notifica —el `update` de borrador con los tres números del registro `merged`, el copiado, y el
   residual de un `finish` sin banner—: en un pane no hay toasts, el panel **es** la superficie.

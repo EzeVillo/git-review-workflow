@@ -18,11 +18,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// bubbles has no functional use yet in this phase (textinput lands with
-// the start assistant in Phase 6) — referenced here only so `go mod tidy`
-// keeps it as a direct dependency, per module_boundary_test.go. lipgloss
-// and bubbletea already have real callers in internal/ui, and fsnotify's
-// sole caller is internal/host/watch_fsnotify.go as of Phase 5.
+// bubbles/textinput still has no functional use: Phase 6's start assistant
+// and setBase/setRemote/finish-destination pickers are all list choices
+// (internal/ui/select.go's SelectOverlay), never free text, so nothing
+// under internal/ui imports bubbles either. Referenced here only so `go mod
+// tidy` keeps it as a direct dependency, per module_boundary_test.go.
+// lipgloss and bubbletea already have real callers in internal/ui, and
+// fsnotify's sole caller is internal/host/watch_fsnotify.go as of Phase 5.
 var (
 	_ = textinput.New
 	_ = lipgloss.NewStyle
@@ -69,7 +71,10 @@ func main() {
 		watcher = host.NewNopWatcher()
 	}
 
-	_, _ = reviewUIConfig("startsource") // exercised for real starting Phase 6
+	// FR-061: the start assistant's SOURCE question pre-positions its
+	// cursor on this when present, and otherwise never hides an option the
+	// CLI itself did not rule out — see ui.Model.WithPreferredStartSource.
+	startSource, _ := reviewUIConfig("startsource")
 
 	// FR-039's opt-in poll floor: `reviewui.pollseconds` has no default, so
 	// an absent/invalid key leaves pollSeconds at 0, which
@@ -80,7 +85,7 @@ func main() {
 		pollSeconds = int(d.Seconds())
 	}
 
-	p := tea.NewProgram(ui.NewModelWithPollFloor(pollSeconds),
+	p := tea.NewProgram(ui.NewModelWithPollFloor(pollSeconds).WithPreferredStartSource(startSource),
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 		tea.WithReportFocus(),

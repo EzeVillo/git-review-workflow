@@ -192,3 +192,79 @@ const (
 	StartFromDraftUnfilledTooltip = "Every file still needs a number and a line saying why it matters"
 	DiscardFixesTooltip           = "Delete this branch of edits"
 )
+
+// --- mutation cycle (Phase 6): confirmations, discard/stale notices --------
+//
+// StaleNotice / MutationDiscardedNotice are NOT declared in the canonical's
+// strings: — neither is JetBrains' UserCopy.DISCARD_BUSY or Visual Studio's
+// MutationLock.DiscardReason. They are implementation-detail messages the
+// three IDE clients already share byte for byte purely by convention
+// (JetBrains' UserCopy.STALE / DISCARD_BUSY, Visual Studio's UserCopy.Stale /
+// MutationLock.DiscardReason); this is the fourth copy of the same two
+// lines.
+const (
+	StaleNotice             = "The repository changed while you were deciding, so nothing happened."
+	MutationDiscardedNotice = "Another operation is already in progress"
+)
+
+// --- confirmation copy: abort / save / undo-force --------------------------
+//
+// Titles carry the canonical's own "{source}" placeholder spelling, like
+// BaseLine/RemoteLine above — render.go's confirm overlay interpolates with
+// strings.ReplaceAll, never fmt.
+const (
+	AbortReviewConfirmTitle  = "Cancel the review of {source}?"
+	AbortReviewConfirmDetail = "This returns to the branch you started the review from; your uncommitted edits will be discarded."
+	CancelReviewLabel        = "Cancel Review"
+
+	SaveReviewConfirmTitle  = "Save the review of {source} for later?"
+	SaveReviewConfirmDetail = "This pauses the review and returns to the branch you started from; your edits are kept and you can resume later."
+	SaveForLaterLabel       = "Save for Later"
+
+	ContinueReviewConfirmTitle  = "Continue the saved review of {source}?"
+	ContinueReviewConfirmDetail = "This switches to review/{source} and restores your edits in the working tree."
+
+	UndoFinishConfirmTitleFinishPending  = "Undo this finish?"
+	UndoFinishConfirmDetailFinishPending = "This returns you to the review branch with your edits restored."
+	UndoFinishConfirmDetailConflict      = "This discards any in-progress resolution and returns you to editing the review."
+	UndoFinishLabel                      = "Undo Finish"
+
+	// DiscardWorkAndUndoDetail/Label: the SECOND, stronger confirmation
+	// undoFinish's own `--force` retry shows — never the first choice
+	// (contracts/cli-invocation.md prohibition 8) and only after the CLI's
+	// own stderr from a plain `--abort` names `--force` as the way out.
+	DiscardWorkAndUndoDetail = "This permanently discards the work made since the finish. It cannot be undone."
+	DiscardWorkAndUndoLabel  = "Discard Work and Undo"
+
+	FinishReadySuffix = " is ready."
+)
+
+// --- start assistant / setBase / setRemote pickers --------------------------
+
+const (
+	StartAssistantBranchTitle = "Which branch do you want to review?"
+	StartAssistantSourceTitle = "Where should its tip come from?"
+	StartAssistantRangeTitle  = "How much of it?"
+	StartAssistantLayoutTitle = "How do you want to read it?"
+
+	SourceRemoteLabel  = "Remote"
+	SourceLocalLabel   = "Local"
+	SourceOfflineLabel = "Offline (local, no fetch)"
+
+	RangeFullLabel  = "The whole PR"
+	RangeDeltaLabel = "Only what changed since your last review"
+
+	LayoutWalkLabel  = "Walkthrough order"
+	LayoutKeysLabel  = "Walkthrough order, keys only"
+	LayoutStepLabel  = "One commit at a time"
+	LayoutWholeLabel = "The whole diff at once"
+
+	SetBaseTitle   = "Which branch do pull requests land on?"
+	SetRemoteTitle = "Which remote should reviews fetch from?"
+
+	FinishDestinationTitle        = "Where should your edits go?"
+	FinishDestinationBranchLabel  = "A separate branch"
+	FinishDestinationBranchDetail = "review-fixes/<branch>, staged on top of the PR tip"
+	FinishDestinationOntoLabel    = "Onto the PR branch itself"
+	FinishDestinationOntoDetail   = "stage the edits directly on the PR branch"
+)

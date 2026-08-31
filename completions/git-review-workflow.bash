@@ -129,6 +129,10 @@ _git_review_preview() {
 	__gitcomp "--stat --h"
 }
 
+_git_review_ui() {
+	__gitcomp "--h"
+}
+
 _git_review_continue() {
 	case "$cur" in
 	--*)
@@ -179,7 +183,7 @@ _git_review_forget() {
 # dispatcher's own -h/--version). Otherwise dispatch to the verb's helper —
 # verbs with no options beyond --h fall through to the default.
 _git_review() {
-	local subcommands="start compare walkthrough config next prev status list preview finish save continue abort clean forget"
+	local subcommands="start compare walkthrough config next prev status list preview finish save continue abort clean forget ui"
 	local subcommand
 	subcommand="$(__git_find_on_cmdline "$subcommands")"
 
@@ -201,6 +205,7 @@ _git_review() {
 	continue) _git_review_continue ;;
 	clean) _git_review_clean ;;
 	forget) _git_review_forget ;;
+	ui) _git_review_ui ;;
 	*) __gitcomp "--h" ;;
 	esac
 }

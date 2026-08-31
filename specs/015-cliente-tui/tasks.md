@@ -148,7 +148,7 @@ máquina.
 **Independent Test**: máquina con la CLI y sin la TUI — `git review -h` la lista y `git review ui`
 se **niega** con un hint que instala; con la TUI presente, la reemplaza en el mismo proceso.
 
-- [ ] T009 [US2] **Verificar la separación de las dos variables** (la colisión ya está resuelta en
+- [X] T009 [US2] **Verificar la separación de las dos variables** (la colisión ya está resuelta en
   los artefactos). El verbo lee `${GIT_REVIEW_UI:-}` como **ruta al ejecutable** —conserva ese
   nombre porque es una ruta a un programa, igual que `GIT_EDITOR` o `GIT_PAGER`, y porque está en la
   spec a nivel de requisito—, y el flag opt-in del instalador es **`GIT_REVIEW_WITH_UI=1`**. Antes
@@ -158,7 +158,7 @@ se **niega** con un hint que instala; con la TUI presente, la reemplaza en el mi
   `GIT_REVIEW_WITH_UI=1` y afirma que `git review ui` **igual imprime el hint** y sale ≠ 0, y otro
   que exporta `GIT_REVIEW_UI=<ruta>` y afirma que **sí** gana sobre el `PATH`. Los dos juntos son lo
   que impide que alguien vuelva a unificar los nombres «por prolijidad».
-- [ ] T010 [US2] Crear `bin/git-review-verbs/ui`: shell POSIX puro, `set -eu`,
+- [X] T010 [US2] Crear `bin/git-review-verbs/ui`: shell POSIX puro, `set -eu`,
   `prog="git review ui"`, resolución en orden variable dedicada → `command -v git-review-ui`, y
   `exec` en los dos casos —es lo que hace que señales y exit code lleguen a la shell sin
   intermediarios—. `-h` imprime usage y sale 0; el resto de los argumentos pasa tal cual.
@@ -168,7 +168,7 @@ se **niega** con un hint que instala; con la TUI presente, la reemplaza en el mi
   afirman el job `lint` de CI y `tests/packaging.bats`—. **Gate**: `./lint-docker.sh
   bin/git-review-verbs/ui` limpio; `find bin -type f` del job `lint` ya lo alcanza sin tocar la
   lista.
-- [ ] T011 [US2] Escribir el **hint por plataforma** dentro de `bin/git-review-verbs/ui` (FR-081):
+- [X] T011 [US2] Escribir el **hint por plataforma** dentro de `bin/git-review-verbs/ui` (FR-081):
   macOS → `brew install` desde el tap del proyecto; Linux con `brew` en el `PATH` → lo mismo; Linux
   sin `brew` → `web-install.sh` con su flag; Windows → `web-install.ps1 -WithUi`; cualquier otro caso
   → la página del Release. Se decide con `uname` y con si `brew` está en el `PATH`, **sin salir a la
@@ -177,27 +177,27 @@ se **niega** con un hint que instala; con la TUI presente, la reemplaza en el mi
   el de la CLI lo sigue mencionando porque la CLI sí está ahí. **Gate**: `@test` por rama en
   `tests/ui.bats` con `uname` y `command -v brew` stubbeados en el `PATH` de prueba, afirmando el
   texto exacto y el exit ≠ 0.
-- [ ] T012 [P] [US2] Agregar la línea del verbo a `Commands:` en `bin/git-review` (bloque de la
+- [X] T012 [P] [US2] Agregar la línea del verbo a `Commands:` en `bin/git-review` (bloque de la
   línea 20) y su fila en la tabla de verbos (FR-005). **Gate**: `tests/usage.bats` compara la ayuda;
   sin esta línea el verbo existe y `git review -h` no lo lista, que es justamente lo que lo vuelve
   indescubrible.
-- [ ] T013 [P] [US2] Agregar `ui` a las **tres** completions:
+- [X] T013 [P] [US2] Agregar `ui` a las **tres** completions:
   `completions/git-review-workflow.bash`, `.zsh` y `.fish` (FR-005). Son tres archivos y FR-005 pide
   los tres. **Gate**: el `@test` de completions afirma que la lista de verbos de cada archivo
   coincide con la del dispatcher.
-- [ ] T014 [US2] Agregar `ui` a la lista `VERBS=` **hardcodeada en `tests/dispatcher-only.bats`
+- [X] T014 [US2] Agregar `ui` a la lista `VERBS=` **hardcodeada en `tests/dispatcher-only.bats`
   línea 12**. Sin esto, los cuatro `@test` que recorren `$VERBS` quedan **tautológicos para el verbo
   nuevo**: nadie afirmaría que `ui` no se filtró al `PATH` como ejecutable suelto. **Y el allowlist
   de `$PREFIX/*` (`git-review | git-review-lib.sh | git-review-verbs`, líneas ~71 y ~129) NO gana
   `git-review-ui`**: ese allowlist protege el camino **sin** el flag del instalador, que por FR-079
   tiene que seguir dejando exactamente lo que deja hoy. El camino con flag se prueba aparte (T112).
-- [ ] T015 [US2] Crear `tests/ui.bats` con nombres de `@test` en **ASCII puro** (lo verifica
+- [X] T015 [US2] Crear `tests/ui.bats` con nombres de `@test` en **ASCII puro** (lo verifica
   `tests/test-names.bats` sobre toda la suite): ejecutable ausente → exit ≠ 0 **y** el mensaje en
   `stderr` **y** que no se invocó nada; la variable dedicada gana sobre el `PATH`; con un
   `git-review-ui` de mentira en el `PATH`, el verbo **lo reemplaza** y el exit code que ve la shell
   es el del falso ejecutable (SC-011); `-h` sale 0 sin resolver nada. Afirmar el **status además de
   la salida** y el **efecto colateral que NO ocurrió** — nada de tests tautológicos.
-- [ ] T016 [US2] Correr la suite entera en el contenedor (`./tests/run-docker.sh`) y el lint
+- [X] T016 [US2] Correr la suite entera en el contenedor (`./tests/run-docker.sh`) y el lint
   (`./lint-docker.sh`) para confirmar que el verbo nuevo no rompió `dispatcher.bats`,
   `dispatcher-only.bats`, `usage.bats` ni `packaging.bats`. **El pin de `bats@1.13.0` no se toca en
   ninguno de sus cuatro lugares**: `tests/ui.bats` corre con el que ya está.

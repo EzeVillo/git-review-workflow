@@ -1,0 +1,75 @@
+#!/usr/bin/env sh
+#
+# git review ui — hand the terminal off to the git-review-ui TUI client.
+#
+# Resolves the executable in this order: $GIT_REVIEW_UI (a direct path to the
+# program — the same idiom as GIT_EDITOR/GIT_PAGER) then git-review-ui on the
+# PATH. exec's into whichever it finds — never a subshell — so signals and the
+# exit code reach the caller's shell without an intermediary.
+#
+# $GIT_REVIEW_UI is deliberately a different variable from the installer's
+# opt-in flag, GIT_REVIEW_WITH_UI=1 (read by web-install.sh / web-install.ps1):
+# the flag is not a path to a program, so leaving it exported must never make
+# this verb try to exec it. See specs/015-cliente-tui/tasks.md T009.
+#
+# With neither found, this verb refuses: it prints an install hint naming the
+# path that fits the platform it is running on, to stderr, and exits non-zero.
+# It never installs, prompts, or otherwise acts on your behalf.
+#
+set -eu
+
+prog="git review ui"
+
+usage() {
+	cat <<EOF
+usage: $prog [<args>]
+
+Hand off to the git-review-ui terminal UI. Resolved from \$GIT_REVIEW_UI (a
+direct path to the executable) or, failing that, git-review-ui on your PATH;
+every other argument is passed through unchanged. Refuses with an install
+hint on stderr if neither is found.
+EOF
+}
+
+case "${1:-}" in
+-h | --h)
+	usage
+	exit 0
+	;;
+esac
+
+ui="${GIT_REVIEW_UI:-}"
+if [ -z "$ui" ]; then
+	ui="$(command -v git-review-ui || true)"
+fi
+
+if [ -n "$ui" ]; then
+	exec "$ui" "$@"
+fi
+
+# Neither $GIT_REVIEW_UI nor a git-review-ui on PATH: name the install path
+# that fits this platform, decided from what the shell already knows (uname,
+# and whether brew is on the PATH) — a verb that refuses should not need the
+# network to explain why.
+case "$(uname 2>/dev/null || true)" in
+Darwin)
+	hint="install it with: brew install EzeVillo/git-review-workflow/git-review-ui"
+	;;
+MINGW* | MSYS* | CYGWIN*)
+	hint="install it on Windows: irm https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.ps1 -OutFile web-install.ps1; ./web-install.ps1 -WithUi"
+	;;
+Linux)
+	if [ -z "$(command -v brew 2>/dev/null || true)" ]; then
+		hint="install it with: curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.sh | GIT_REVIEW_WITH_UI=1 sh"
+	else
+		hint="install it with: brew install EzeVillo/git-review-workflow/git-review-ui"
+	fi
+	;;
+*)
+	hint="download it from https://github.com/EzeVillo/git-review-workflow/releases"
+	;;
+esac
+
+echo "error: the git review terminal UI (git-review-ui) is not installed." >&2
+echo "$hint" >&2
+exit 1

@@ -47,6 +47,7 @@ Commands:
                      delete review/* and review-fixes/* branches (all if no <branch>)
   git review forget (--delta | --saved) ...
                      discard a review's persistent state (delta markers or a saved review)
+  git review ui      hand off to the git-review-ui terminal UI, if installed
 
 Run '$prog <command> -h' for details on each command (git reserves
 '$prog <command> --help' for man pages, which this workflow does not install).

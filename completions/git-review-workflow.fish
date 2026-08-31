@@ -102,6 +102,7 @@ complete -c git -n '__grw_review_bare' -f -a continue -d 'resume a review paused
 complete -c git -n '__grw_review_bare' -f -a abort -d 'cancel the current review and return to where you started'
 complete -c git -n '__grw_review_bare' -f -a clean -d 'delete review/* and review-fixes/* branches'
 complete -c git -n '__grw_review_bare' -f -a forget -d "discard a review's persistent state (delta markers or a saved review)"
+complete -c git -n '__grw_review_bare' -f -a ui -d 'hand off to the git-review-ui terminal UI, if installed'
 
 # ── git review start ──────────────────────────────────────────────────────────
 complete -c git -n '__grw_review_using start' -f -r -l base -d 'base to diff against when the branch is omitted'
@@ -175,6 +176,9 @@ complete -c git -n '__grw_review_using forget' -f -l h -d 'show help'
 # Offer saved branches once --saved is on the line, marked branches otherwise.
 complete -c git -n '__grw_review_using forget; and __fish_contains_opt saved' -f -a '(__grw_saved_branches)'
 complete -c git -n '__grw_review_using forget; and not __fish_contains_opt saved' -f -a '(__grw_marked_branches)'
+
+# ── git review ui ──────────────────────────────────────────────────────────────
+complete -c git -n '__grw_review_using ui' -f -l h -d 'show help'
 
 # ── Verbs that take no arguments beyond --h ───────────────────────────────────
 for verb in next prev status list abort save

@@ -120,6 +120,11 @@ _git_review_preview() {
 		'--stat[show a diffstat summary instead of the full diff]'
 }
 
+_git_review_ui() {
+	_arguments -S \
+		'(-h --h)'{-h,--h}'[show help]'
+}
+
 _git_review_continue() {
 	local state
 	_arguments -S \
@@ -200,6 +205,7 @@ _git-review() {
 			'abort:cancel the current review and return to where you started'
 			'clean:delete review/* and review-fixes/* branches'
 			'forget:discard a review'\''s persistent state (delta markers or a saved review)'
+			'ui:hand off to the git-review-ui terminal UI, if installed'
 		)
 		_describe -t verbs 'git review verb' verbs
 		;;
@@ -215,6 +221,7 @@ _git-review() {
 		continue) _git_review_continue ;;
 		clean) _git_review_clean ;;
 		forget) _git_review_forget ;;
+		ui) _git_review_ui ;;
 		next|prev|status|list|save|abort)
 			_arguments '(-h --h)'{-h,--h}'[show help]'
 			;;

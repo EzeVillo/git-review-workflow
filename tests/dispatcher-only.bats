@@ -9,7 +9,7 @@
 # installer runs.
 
 # The verbs that live as private libexec, never on PATH as standalone names.
-VERBS="start compare walkthrough status list preview next prev finish save continue abort clean forget"
+VERBS="start compare walkthrough status list preview next prev finish save continue abort clean forget ui"
 
 setup() {
 	TMP="$(mktemp -d)"

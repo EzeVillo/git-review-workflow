@@ -36,10 +36,24 @@ func ResolveGitDirs(ctx context.Context, cwd string) (GitDirs, Result, bool) {
 		return GitDirs{}, res, false
 	}
 	resolve := func(p string) string {
+		var resolved string
 		if filepath.IsAbs(p) {
-			return filepath.Clean(p)
+			resolved = filepath.Clean(p)
+		} else {
+			resolved = filepath.Clean(filepath.Join(cwd, p))
 		}
-		return filepath.Clean(filepath.Join(cwd, p))
+		// Git may spell one physical Windows directory differently depending
+		// on the worktree from which rev-parse ran (a long path in one result,
+		// an equivalent DOS 8.3 alias in another). Watch roots and their
+		// de-duplication need one physical spelling, so canonicalize each
+		// existing rev-parse result at this host boundary. Keep the cleaned
+		// path if the filesystem cannot resolve it: rev-parse already answered
+		// successfully, and losing that useful result merely because a later
+		// filesystem lookup failed would misclassify a repository as missing.
+		if canonical, err := filepath.EvalSymlinks(resolved); err == nil {
+			return canonical
+		}
+		return resolved
 	}
 	return GitDirs{
 		GitDir:       resolve(lines[0]),

@@ -88,6 +88,22 @@ func TestResolveGitDirsDistinguishesLinkedWorktree(t *testing.T) {
 	if !ok {
 		t.Fatal("expected ok in the main worktree")
 	}
+	// A linked worktree and its main worktree can make Git emit the same
+	// common directory through different Windows spellings (long path vs.
+	// the DOS 8.3 alias). ResolveGitDirs is the boundary that turns Git's
+	// textual output into watcher roots, so both results must be the
+	// canonical physical .git directory rather than merely paths that happen
+	// to compare equal on the machine that created them.
+	wantCommonDir, err := filepath.EvalSymlinks(filepath.Join(main, ".git"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dirs.GitCommonDir != wantCommonDir {
+		t.Errorf("linked worktree GitCommonDir = %q, want canonical %q", dirs.GitCommonDir, wantCommonDir)
+	}
+	if mainDirs.GitCommonDir != wantCommonDir {
+		t.Errorf("main worktree GitCommonDir = %q, want canonical %q", mainDirs.GitCommonDir, wantCommonDir)
+	}
 	if dirs.GitCommonDir != mainDirs.GitCommonDir {
 		t.Errorf("the two worktrees must share one GitCommonDir: %q vs %q", dirs.GitCommonDir, mainDirs.GitCommonDir)
 	}

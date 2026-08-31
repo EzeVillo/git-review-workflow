@@ -62,7 +62,7 @@ andamio `existsSync(archivo) && …` que ya usaron IntelliJ y Visual Studio, **y
 en la tarea de fases posteriores que crea el archivo que protege** (T037 instala el chequeo de
 cierre que convierte el andamio en error apenas el cliente es real).
 
-- [ ] T001 Migrar `min_cli_version` de escalar a **valor por cliente** en
+- [X] T001 Migrar `min_cli_version` de escalar a **valor por cliente** en
   `contracts/client-product-surface.yaml`: mapa con `vscode`, `intellij`, `visualstudio` y `tui`,
   los cuatro sembrados en `"0.8.0"` (el valor de hoy), con el comentario que declara que **que los
   cuatro difieran no es drift sino el estado esperado** y que ningún gate, presente ni futuro, puede
@@ -74,7 +74,7 @@ cierre que convierte el andamio en error apenas el cliente es real).
   comparación entre dos clientes. `vscode-extension/src/cli/version.ts`,
   `jetbrains-plugin/.../domain/Version.kt` y
   `visualstudio-extension/src/GitReview.Domain/Version.cs` **no se tocan**.
-- [ ] T002 Sacar `multi_root_error` de `strings:` y declararlo como
+- [X] T002 Sacar `multi_root_error` de `strings:` y declararlo como
   `per_client_strings.no_single_root` con los **tres textos actuales copiados verbatim** más la
   entrada `tui` en placeholder, en `contracts/client-product-surface.yaml` (FR-076). En el
   verificador: borrar el literal de JS `const multi = "multi-root is not supported"` (línea 118) y
@@ -84,7 +84,7 @@ cierre que convierte el andamio en error apenas el cliente es real).
   JS; después verifica el valor declarado— y una clave `per_client_strings` sin uno de los cuatro
   clientes es `fail`. `state.ts` y los dos `ReviewStateManager` **no se tocan**: FR-076 exige que la
   copy se **declare** por cliente, no que se reescriba.
-- [ ] T003 Sacar `reload_or_wait` de `strings:` (línea 36) y declararlo como
+- [X] T003 Sacar `reload_or_wait` de `strings:` (línea 36) y declararlo como
   `per_client_strings.after_install` con los tres valores de hoy verbatim y `tui` en placeholder, en
   `contracts/client-product-surface.yaml`. El motivo va escrito al lado: el texto promete que el
   panel vuelve a chequear cada pocos segundos, que es **un poll** —FR-032 lo prohíbe hacer y FR-069
@@ -92,7 +92,7 @@ cierre que convierte el andamio en error apenas el cliente es real).
   `perClientString` de T002; las dos referencias de `panel_layout:` (líneas 220 y 229) siguen
   apuntando a la clave y ahora se resuelven por cliente. **`strings:` conserva su único
   significado**: copy compartida byte por byte, sin excepciones anotadas adentro.
-- [ ] T004 Convertir `reveals:` de lista plana a **mapa por cliente** en
+- [X] T004 Convertir `reveals:` de lista plana a **mapa por cliente** en
   `contracts/client-product-surface.yaml` (líneas 484-497): los tres publicados con sus cuatro ids
   de hoy (`startReview`, `startFromDraft`, `continueReview`, `finishReview`) y **`tui: []`, vacía y
   declarada, con su motivo** —un pane lo abriste vos y ya está a la vista; robarle el foco a alguien
@@ -101,19 +101,19 @@ cierre que convierte el andamio en error apenas el cliente es real).
   a leer la lista del cliente. **Gate**: que `reveals.tui` **falte** es `fail`, igual que un cliente
   ausente de `min_cli_version`; la mitad simétrica —el barrido del árbol de la TUI— llega en T093,
   cuando hay árbol que barrer.
-- [ ] T005 [P] Agregar `listing.applies_to: [vscode, intellij, visualstudio]` en
+- [X] T005 [P] Agregar `listing.applies_to: [vscode, intellij, visualstudio]` en
   `contracts/client-product-surface.yaml` (bloque de la línea 19) y hacer que el verificador
   **itere `applies_to`** en vez de tener los tres clientes escritos a mano (líneas ~1164-1206:
   `tagline`, `keywords`, `package.json`, `vsixmanifest`). **Gate**: sale gratis y es real —agregar
   `tui` a esa lista manda al verificador a buscar un artefacto de tienda en `tui/`, no lo encuentra
   y falla—, y `applies_to` sin `tui` es la declaración explícita que FR-029 pide en vez del hueco.
-- [ ] T006 [P] Agregar `tui` a `not_in:` de `openAllChanges` en
+- [X] T006 [P] Agregar `tui` a `not_in:` de `openAllChanges` en
   `contracts/client-product-surface.yaml` (queda `not_in: [visualstudio, tui]`) con el motivo al
   lado: abrir N diffs de golpe no existe como gesto en un multiplexor —no hay superficie que sostenga
   N ventanas, y N invocaciones seguidas del difftool del usuario es una avalancha, no una acción—
   (FR-019). `actionsNotIn(client)` (líneas 58-74) ya parte por coma: **no se toca**. **Gate**: la
   verificación en las **dos direcciones** del lado TUI llega con `actions.go` en T030.
-- [ ] T007 Agregar el bloque `keymap:` a `contracts/client-product-surface.yaml` con
+- [X] T007 Agregar el bloque `keymap:` a `contracts/client-product-surface.yaml` con
   `only_in: [tui]` y las cuatro secciones (`movement`, `cursor`, `actions`, `overlays`, `toggles`)
   según [contracts/client-product-surface.md](./contracts/client-product-surface.md) § 5, con el
   comentario que declara que **la barra de teclas se dibuja de este mismo mapa**, así que una tecla
@@ -124,7 +124,7 @@ cierre que convierte el andamio en error apenas el cliente es real).
   T029—; (e) toda acción de `panel_excluded:` está alcanzable desde `overlays.action_list` y **no**
   tiene tecla propia. Los gates (a), (b), (c) y (e) son internos al YAML y corren en verde desde este
   commit.
-- [ ] T008 Crear `specs/015-cliente-tui/contracts/fixtures/divergent-min.yaml` —cuatro
+- [X] T008 Crear `specs/015-cliente-tui/contracts/fixtures/divergent-min.yaml` —cuatro
   `min_cli_version` maximalmente distintos— y agregar la opción `--yaml <path>` a
   `scripts/check-client-product-surface.mjs`, más el test que lo corre contra esa fixture afirmando
   **exit 0**. **Gate**: es la segunda capa del "ningún gate exige que sean iguales". La primera es

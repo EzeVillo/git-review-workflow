@@ -6,11 +6,11 @@
  * package.json de la extension.
  */
 import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const yamlPath = join(root, "contracts", "client-product-surface.yaml");
 
 // Los blobs son LF, pero un checkout de Windows los materializa como CRLF: sin
 // normalizar, las regex ancladas en `:\n` no matchean y los chequeos se saltean
@@ -24,6 +24,20 @@ function fail(msg) {
   process.exit(1);
 }
 
+// --yaml <path>: corre el chequeo entero contra otro archivo en vez del
+// canonico del repo. Existe para la fixture de T008 -- un YAML con los cuatro
+// min_cli_version maximamente distintos -- que prueba que "ningun gate exige
+// que sean iguales" sigue probando algo el dia que los cuatro converjan por
+// casualidad en `main`.
+const yamlArgIndex = process.argv.indexOf("--yaml");
+const yamlOverride = yamlArgIndex === -1 ? null : process.argv[yamlArgIndex + 1];
+if (yamlArgIndex !== -1 && !yamlOverride) {
+  fail("--yaml requires a path argument");
+}
+const yamlPath = yamlOverride
+  ? resolve(process.cwd(), yamlOverride)
+  : join(root, "contracts", "client-product-surface.yaml");
+
 if (!existsSync(yamlPath)) {
   fail(`missing ${yamlPath}`);
 }
@@ -36,7 +50,75 @@ function scalar(key) {
   return m[1];
 }
 
-const min = scalar("min_cli_version");
+// Los cuatro clientes que todo mapa "por cliente" del canonico declara.
+// Ninguno hereda de otro -- un cliente ausente es un fail, no un default
+// silencioso --, el mismo criterio con el que las guias se emiten exista o no
+// el archivo y con el que `not_in:` se verifica en las dos direcciones.
+const REQUIRED_CLIENTS = ["vscode", "intellij", "visualstudio", "tui"];
+
+/** El bloque de nivel 0 bajo `key:`, hasta la proxima clave de nivel 0. */
+function topBlock(key) {
+  const block = text.split(new RegExp(`^${key}:\\s*$`, "m"))[1]?.split(/^[a-z_][a-z0-9_]*:\s*$/m)[0];
+  if (!block) fail(`missing ${key}: block`);
+  return block;
+}
+
+/** Que un mapa por-cliente declare los cuatro, ni uno de mas ni de menos. */
+function requireFourClients(block, where) {
+  for (const c of REQUIRED_CLIENTS) {
+    if (!new RegExp(`^ {2,4}${c}:`, "m").test(block)) {
+      fail(`${where} is missing client ${c}`);
+    }
+  }
+}
+
+// Cada cliente parte una cadena compartida en dos literales, y cada lenguaje
+// lo escribe distinto. Sacar comillas, backticks y el operador de
+// concatenacion compara el texto sin obligarlos a cortarlo en el mismo lugar
+// -- eso es formato, no copy.
+const squash = (s) => s.replace(/["`+]/g, " ").replace(/\s+/g, " ");
+
+// EL PISO DE CADA CLIENTE, Y NADA MAS. min_cli_version es un mapa y minFor es
+// la unica forma de leerlo: no queda ningun `min` global en scope, que es lo
+// que hace imposible escribir por accidente una comparacion entre dos
+// clientes. Que los cuatro difieran no es drift -- es el estado esperado --, y
+// la comparacion de cada cliente es un piso estricto: no hay techo, asi que
+// una CLI mas nueva que el minimo nunca se reporta desactualizada (FR-028).
+function minFor(client) {
+  const block = topBlock("min_cli_version");
+  requireFourClients(block, "min_cli_version");
+  const m = block.match(new RegExp(`^ {2}${client}:\\s*"([^"]*)"`, "m"));
+  if (!m) fail(`min_cli_version missing client ${client}`);
+  return m[1];
+}
+
+/** El sub-bloque `per_client_strings.<name>`, hasta la proxima clave de nivel 2. */
+function perClientStringBlock(name) {
+  const parent = topBlock("per_client_strings");
+  const parts = parent.split(new RegExp(`^ {2}${name}:\\s*$`, "m"));
+  if (parts.length < 2) fail(`missing per_client_strings.${name}`);
+  const after = parts[1];
+  const cut = after.search(/^ {2}[a-z_][a-z0-9_]*:\s*$/m);
+  return cut === -1 ? after : after.slice(0, cut);
+}
+
+// Lo que perClientString("no_single_root"|"after_install", client) contesta:
+// la misma situacion, con el proximo paso distinto por cliente. Se compara
+// plegada y normalizada con squash, la misma tecnica que ya usa
+// draft_agent_prompt, porque cada cliente parte la cadena en un literal propio
+// de su lenguaje.
+function perClientString(name, client) {
+  const block = perClientStringBlock(name);
+  requireFourClients(block, `per_client_strings.${name}`);
+  const m = block.match(new RegExp(`^ {4}${client}: >-\\n((?: {6}.*\\n)+)`, "m"));
+  if (!m) fail(`per_client_strings.${name} missing client ${client}`);
+  return m[1]
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
 const npmInstall = scalar("npm_install");
 const npmUpdate = scalar("npm_update");
 
@@ -91,8 +173,8 @@ for (const id of actionKeys) {
 // VS Code constants
 const versionTs = readText(join(root, "vscode-extension", "src", "cli", "version.ts"), "utf8");
 const installTs = readText(join(root, "vscode-extension", "src", "cli", "installHint.ts"), "utf8");
-if (!versionTs.includes(`"${min}"`)) {
-  fail(`vscode version.ts does not contain min_cli_version ${min}`);
+if (!versionTs.includes(`"${minFor("vscode")}"`)) {
+  fail(`vscode version.ts does not contain min_cli_version ${minFor("vscode")}`);
 }
 if (!installTs.includes(npmInstall)) {
   fail(`vscode installHint.ts missing npm_install`);
@@ -106,7 +188,7 @@ const ijVersion = join(root, "jetbrains-plugin", "src", "main", "kotlin", "com",
 const ijInstall = join(root, "jetbrains-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "domain", "InstallHint.kt");
 if (existsSync(ijVersion)) {
   const v = readText(ijVersion, "utf8");
-  if (!v.includes(`"${min}"`)) fail(`intellij Version.kt missing min ${min}`);
+  if (!v.includes(`"${minFor("intellij")}"`)) fail(`intellij Version.kt missing min ${minFor("intellij")}`);
 }
 if (existsSync(ijInstall)) {
   const i = readText(ijInstall, "utf8");
@@ -114,14 +196,20 @@ if (existsSync(ijInstall)) {
   if (!i.includes(npmUpdate)) fail(`intellij InstallHint.kt missing npm_update`);
 }
 
-// multi_root_error substring in both state managers
-const multi = "multi-root is not supported";
+// per_client_strings.no_single_root — antes un fragmento de cinco palabras
+// tipeado a mano en JS ("multi-root is not supported"); ahora la oracion
+// entera, leida del YAML y comparada plegada con squash. Se llamaba
+// multi_root_error.
 const vsState = readText(join(root, "vscode-extension", "src", "review", "state.ts"), "utf8");
-if (!vsState.includes(multi)) fail("vscode state.ts missing multi_root_error fragment");
+if (!squash(vsState).includes(squash(perClientString("no_single_root", "vscode")))) {
+  fail("vscode state.ts missing the no_single_root string");
+}
 const ijState = join(root, "jetbrains-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "host", "ReviewStateManager.kt");
 if (existsSync(ijState)) {
   const s = readText(ijState, "utf8");
-  if (!s.includes(multi)) fail("intellij ReviewStateManager missing multi_root_error fragment");
+  if (!squash(s).includes(squash(perClientString("no_single_root", "intellij")))) {
+    fail("intellij ReviewStateManager missing the no_single_root string");
+  }
 }
 
 // waiting_text — la frase de la espera previa a la primera situacion resuelta.
@@ -170,10 +258,6 @@ const draftPrompt = (draftPromptBlock?.[1] ?? "")
 if (!draftPrompt.startsWith("Fill in the reading order at {path}.")) {
   fail(`draft_agent_prompt must name the row's path: ${draftPrompt}`);
 }
-// Cada cliente parte la cadena en dos literales, y cada lenguaje lo escribe
-// distinto. Sacar comillas, backticks y el operador de concatenacion compara el
-// texto sin obligarlos a cortarlo en el mismo lugar -- eso es formato, no copy.
-const squash = (s) => s.replace(/["`+]/g, " ").replace(/\s+/g, " ");
 const userCopyFiles = [
   ["vscode", ["vscode-extension", "src", "review", "userCopy.ts"]],
   ["intellij", ["jetbrains-plugin", "src", "main", "kotlin", "com", "ezevillo", "gitreview", "domain", "UserCopy.kt"]],
@@ -940,7 +1024,7 @@ const vsActions = join(
 
 if (existsSync(vsVersion)) {
   const v = readText(vsVersion, "utf8");
-  if (!v.includes(`"${min}"`)) fail(`visualstudio Version.cs missing min ${min}`);
+  if (!v.includes(`"${minFor("visualstudio")}"`)) fail(`visualstudio Version.cs missing min ${minFor("visualstudio")}`);
 }
 if (existsSync(vsInstall)) {
   const i = readText(vsInstall, "utf8");
@@ -954,7 +1038,9 @@ if (existsSync(vsSupport)) {
 }
 if (existsSync(vsReviewState)) {
   const s = readText(vsReviewState, "utf8");
-  if (!s.includes(multi)) fail("visualstudio ReviewStateManager missing multi_root_error fragment");
+  if (!squash(s).includes(squash(perClientString("no_single_root", "visualstudio")))) {
+    fail("visualstudio ReviewStateManager missing the no_single_root string");
+  }
 }
 // Lo que este cliente ofrece: todas las acciones menos las que el contrato marca
 // not_in: [visualstudio]. La lista completa sigue siendo la de VS Code.
@@ -1132,6 +1218,18 @@ function nestedList(parent, key) {
   return [...m[1].matchAll(/"([^"]*)"/g)].map((x) => x[1]);
 }
 
+/**
+ * Como nestedList, pero para un array de identificadores sin comillas --
+ * `applies_to: [vscode, intellij, visualstudio]`, no `keywords: ["git", ...]`.
+ */
+function nestedIdentList(parent, key) {
+  const block = text.split(new RegExp(`^${parent}:\\s*$`, "m"))[1];
+  if (!block) fail(`missing ${parent}: block`);
+  const m = block.split(/^[a-z_][a-z0-9_]*:/m)[0].match(new RegExp(`^ +${key}:\\s*\\[([^\\]]*)\\]`, "m"));
+  if (!m) fail(`missing ${parent}.${key}`);
+  return m[1].split(",").map((s) => s.trim()).filter(Boolean);
+}
+
 // Same word, different house style per marketplace: "pull-request" (VS Code
 // package.json) and "pull request" (vsixmanifest Tags) are the same keyword.
 function normKeyword(k) {
@@ -1164,52 +1262,74 @@ function braceBlock(src, header) {
 const tagline = nestedScalar("listing", "tagline");
 const keywords = nestedList("listing", "keywords");
 
-// VS Code: the tagline *is* the description field (short by design).
-if (pkg.description !== tagline) {
-  fail(`vscode package.json description is not the canonical tagline\n  want: ${tagline}\n  got:  ${pkg.description}`);
-}
-if (!sameKeywordSet(pkg.keywords ?? [], keywords)) {
-  fail(`vscode package.json keywords drift from listing.keywords: ${(pkg.keywords ?? []).join(", ")}`);
-}
+// listing.applies_to: los clientes que tienen ficha de tienda. El verificador
+// itera esta lista en vez de tener los tres escritos a mano, asi que agregar
+// un cuarto cliente sin darle un chequeo de storefront es un fail inmediato --
+// es lo que hace que `applies_to` sin `tui` sea la declaracion explicita que
+// FR-029 pide, y no un hueco.
+const STOREFRONT_CHECKS = {
+  // VS Code: the tagline *is* the description field (short by design).
+  vscode() {
+    if (pkg.description !== tagline) {
+      fail(`vscode package.json description is not the canonical tagline\n  want: ${tagline}\n  got:  ${pkg.description}`);
+    }
+    if (!sameKeywordSet(pkg.keywords ?? [], keywords)) {
+      fail(`vscode package.json keywords drift from listing.keywords: ${(pkg.keywords ?? []).join(", ")}`);
+    }
+  },
+  // JetBrains: plugin.xml owns the listing body, and build.gradle.kts must not
+  // set `description` — that would silently overwrite it at package time with
+  // a copy no test asserts on.
+  intellij() {
+    const ijXml = join(root, "jetbrains-plugin", "src", "main", "resources", "META-INF", "plugin.xml");
+    if (existsSync(ijXml)) {
+      const x = readText(ijXml, "utf8");
+      if (!x.includes(tagline)) fail(`intellij plugin.xml <description> missing the tagline: ${tagline}`);
+    }
+    const ijGradle = join(root, "jetbrains-plugin", "build.gradle.kts");
+    if (existsSync(ijGradle)) {
+      const g = readText(ijGradle, "utf8");
+      const cfg = braceBlock(g, "pluginConfiguration");
+      if (!cfg) fail("intellij build.gradle.kts has no pluginConfiguration block");
+      if (/^\s*description\s*(=|\.set\()/m.test(cfg)) {
+        fail("intellij build.gradle.kts sets pluginConfiguration.description — it overwrites plugin.xml; keep one copy, in plugin.xml");
+      }
+      // Without this the Marketplace "What's New" tab and the IDE update
+      // dialog ship empty, which is how 0.1.0 through 0.1.3 were published.
+      if (!/^\s*changeNotes\s*(=|\.set\()/m.test(cfg)) {
+        fail("intellij build.gradle.kts does not set pluginConfiguration.changeNotes — the listing would have no release notes");
+      }
+    }
+  },
+  // Visual Studio: the tagline opens both the packaged manifest description
+  // and the overview pasted into the portal.
+  visualstudio() {
+    const vsManifest = join(root, "visualstudio-extension", "src", "GitReview.VS", "source.extension.vsixmanifest");
+    if (existsSync(vsManifest)) {
+      const m = readText(vsManifest, "utf8");
+      if (!m.includes(tagline)) fail(`visualstudio vsixmanifest <Description> missing the tagline: ${tagline}`);
+      const tags = m.match(/<Tags>([^<]*)<\/Tags>/)?.[1] ?? "";
+      if (!sameKeywordSet(tags.split(";").filter((t) => t.trim()), keywords)) {
+        fail(`visualstudio vsixmanifest Tags drift from listing.keywords: ${tags}`);
+      }
+    }
+    const vsOverview = join(root, "visualstudio-extension", "marketplace", "overview.md");
+    if (existsSync(vsOverview)) {
+      const o = readText(vsOverview, "utf8");
+      if (!o.includes(tagline)) fail(`visualstudio marketplace/overview.md missing the tagline: ${tagline}`);
+    }
+  },
+};
 
-// JetBrains: plugin.xml owns the listing body, and build.gradle.kts must not
-// set `description` — that would silently overwrite it at package time with a
-// copy no test asserts on.
-const ijXml = join(root, "jetbrains-plugin", "src", "main", "resources", "META-INF", "plugin.xml");
-if (existsSync(ijXml)) {
-  const x = readText(ijXml, "utf8");
-  if (!x.includes(tagline)) fail(`intellij plugin.xml <description> missing the tagline: ${tagline}`);
-}
-const ijGradle = join(root, "jetbrains-plugin", "build.gradle.kts");
-if (existsSync(ijGradle)) {
-  const g = readText(ijGradle, "utf8");
-  const cfg = braceBlock(g, "pluginConfiguration");
-  if (!cfg) fail("intellij build.gradle.kts has no pluginConfiguration block");
-  if (/^\s*description\s*(=|\.set\()/m.test(cfg)) {
-    fail("intellij build.gradle.kts sets pluginConfiguration.description — it overwrites plugin.xml; keep one copy, in plugin.xml");
+const listingAppliesTo = nestedIdentList("listing", "applies_to");
+if (listingAppliesTo.length === 0) fail("listing.applies_to is empty");
+for (const client of listingAppliesTo) {
+  const check = STOREFRONT_CHECKS[client];
+  if (!check) {
+    fail(`listing.applies_to declares ${client}, which has no storefront artifact check (no listing lives under ${client}/)`);
+    continue;
   }
-  // Without this the Marketplace "What's New" tab and the IDE update dialog
-  // ship empty, which is how 0.1.0 through 0.1.3 were published.
-  if (!/^\s*changeNotes\s*(=|\.set\()/m.test(cfg)) {
-    fail("intellij build.gradle.kts does not set pluginConfiguration.changeNotes — the listing would have no release notes");
-  }
-}
-
-// Visual Studio: the tagline opens both the packaged manifest description and
-// the overview pasted into the portal.
-const vsManifest = join(root, "visualstudio-extension", "src", "GitReview.VS", "source.extension.vsixmanifest");
-if (existsSync(vsManifest)) {
-  const m = readText(vsManifest, "utf8");
-  if (!m.includes(tagline)) fail(`visualstudio vsixmanifest <Description> missing the tagline: ${tagline}`);
-  const tags = m.match(/<Tags>([^<]*)<\/Tags>/)?.[1] ?? "";
-  if (!sameKeywordSet(tags.split(";").filter((t) => t.trim()), keywords)) {
-    fail(`visualstudio vsixmanifest Tags drift from listing.keywords: ${tags}`);
-  }
-}
-const vsOverview = join(root, "visualstudio-extension", "marketplace", "overview.md");
-if (existsSync(vsOverview)) {
-  const o = readText(vsOverview, "utf8");
-  if (!o.includes(tagline)) fail(`visualstudio marketplace/overview.md missing the tagline: ${tagline}`);
+  check();
 }
 
 // ── Authoring guides ─────────────────────────────────────────────────────────
@@ -1627,16 +1747,148 @@ for (const [file, body] of srcFiles) {
 }
 
 // ---------------------------------------------------------------------------
+// EL MAPA DE TECLAS DE LA TUI (FR-041). `only_in: [tui]`: los otros tres
+// clientes reciben sus atajos del IDE y no declaran keymap propio. La barra de
+// teclas del cliente se dibuja de este mismo mapa, asi que una tecla que existe
+// y no se muestra es imposible por construccion -- los gates de abajo son
+// sobre el YAML mismo y corren en verde antes de que exista una linea de Go.
+// ---------------------------------------------------------------------------
+
+const keymapBlock = topBlock("keymap");
+const keymapOnlyIn =
+  keymapBlock
+    .match(/^ {2}only_in:\s*\[([^\]]*)\]/m)?.[1]
+    ?.split(",")
+    .map((s) => s.trim())
+    .filter(Boolean) ?? [];
+if (keymapOnlyIn.length !== 1 || keymapOnlyIn[0] !== "tui") {
+  fail(`keymap.only_in must be exactly [tui], found [${keymapOnlyIn.join(", ")}]`);
+}
+
+/** El sub-bloque `keymap.<name>` (una lista `- {...}`), hasta la proxima clave de nivel 2. */
+function keymapSectionBlock(name) {
+  const re = new RegExp(`^ {2}${name}:\\s*$`, "m");
+  const idx = keymapBlock.search(re);
+  if (idx === -1) return "";
+  const nlIdx = keymapBlock.indexOf("\n", idx);
+  const after = nlIdx === -1 ? "" : keymapBlock.slice(nlIdx + 1);
+  const cut = after.search(/^ {2}[a-z_][a-z0-9_]*:/m);
+  return cut === -1 ? after : after.slice(0, cut);
+}
+
+/** Los `- {...}` de una seccion del keymap, ya parseados. */
+function parseKeymapEntries(block) {
+  return [...block.matchAll(/-\s*\{([^}]*)\}/g)].map((m) => {
+    const body = m[1];
+    const keysRaw = body.match(/keys:\s*\[([^\]]*)\]/)?.[1] ?? "";
+    const keys = keysRaw
+      .split(",")
+      .map((k) => k.trim().replace(/^"|"$/g, ""))
+      .filter(Boolean);
+    return {
+      keys,
+      does: body.match(/does:\s*([A-Za-z_][A-Za-z0-9_]*)/)?.[1],
+      action: body.match(/action:\s*([A-Za-z_][A-Za-z0-9_]*)/)?.[1],
+      opens: body.match(/opens:\s*([A-Za-z_][A-Za-z0-9_]*)/)?.[1],
+      toggles: body.match(/toggles:\s*([A-Za-z_][A-Za-z0-9_]*)/)?.[1],
+    };
+  });
+}
+
+const KEYMAP_SECTIONS = ["movement", "cursor", "actions", "overlays", "toggles"];
+const keymapEntries = Object.fromEntries(
+  KEYMAP_SECTIONS.map((name) => [name, parseKeymapEntries(keymapSectionBlock(name))]),
+);
+for (const name of KEYMAP_SECTIONS) {
+  if (keymapEntries[name].length === 0) fail(`keymap.${name} is empty or missing`);
+}
+
+// (a) todo id de keymap.actions existe en actions:
+for (const e of keymapEntries.actions) {
+  if (e.action && !actionKeys.includes(e.action)) {
+    fail(`keymap.actions references ${e.action}, which is not a declared action`);
+  }
+}
+
+// (b) ninguna tecla se declara dos veces en el mismo contexto
+for (const name of KEYMAP_SECTIONS) {
+  const seen = new Set();
+  for (const e of keymapEntries[name]) {
+    for (const k of e.keys) {
+      if (seen.has(k)) fail(`keymap.${name} declares key "${k}" twice`);
+      seen.add(k);
+    }
+  }
+}
+
+// (c) n/p reservadas para el cursor de la review, y para nada mas
+for (const name of KEYMAP_SECTIONS) {
+  if (name === "cursor") continue;
+  for (const e of keymapEntries[name]) {
+    for (const k of e.keys) {
+      if (k === "n" || k === "p") {
+        fail(`keymap.${name} uses "${k}", reserved for cursor: (next/prev)`);
+      }
+    }
+  }
+}
+
+// (e) todo panel_excluded es alcanzable desde el overlay action_list y no
+// tiene una tecla propia bajo keymap.actions -- goToEntry, por ejemplo, se
+// abre con un overlay dedicado (entry_picker), nunca con una tecla que la
+// invoque directamente bajo actions:.
+if (!keymapEntries.overlays.some((e) => e.opens === "action_list")) {
+  fail("keymap.overlays has no entry that opens action_list");
+}
+for (const id of panelExcluded) {
+  if (keymapEntries.actions.some((e) => e.action === id)) {
+    fail(`keymap.actions binds ${id} directly; panel_excluded actions must go through an overlay`);
+  }
+}
+
+// (d) el mapa del cliente declara exactamente estos pares. Con andamio
+// existsSync hasta que tui/internal/domain/keymap.go exista (T029 lo borra).
+const tuiKeymapGo = join(root, "tui", "internal", "domain", "keymap.go");
+if (existsSync(tuiKeymapGo)) {
+  const g = readText(tuiKeymapGo, "utf8");
+  for (const name of KEYMAP_SECTIONS) {
+    for (const e of keymapEntries[name]) {
+      for (const k of e.keys) {
+        if (!g.includes(`"${k}"`)) {
+          fail(`tui keymap.go missing key "${k}" declared in keymap.${name}`);
+        }
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // QUE `reveals:` GOBIERNE, con la leccion que dejo `confirms:`: una tabla que
 // nadie consulta no es un contrato, es un comentario. Los mismos tres chequeos.
 // ---------------------------------------------------------------------------
 
-const revealsBlock = text.split(/^reveals:\s*$/m)[1]?.split(/^[a-z_][a-z0-9_]*:/m)[0] ?? "";
-const canonicalRevealing = new Set(
-  [...revealsBlock.matchAll(/^\s*-\s+([A-Za-z][A-Za-z0-9]*)\s*$/gm)].map((m) => m[1]),
-);
+/** Los ids de reveals.<client>, como lista (posiblemente vacia). */
+function revealsForClient(client) {
+  const block = topBlock("reveals");
+  const m = block.match(new RegExp(`^ {2}${client}:\\s*\\[([^\\]]*)\\]`, "m"));
+  if (!m) fail(`reveals missing client ${client}`);
+  return m[1].split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+requireFourClients(topBlock("reveals"), "reveals");
+
+// tui: [] es la respuesta, no un hueco -- un pane que abriste vos ya esta a la
+// vista, y robarle el foco a alguien en un multiplexor es agresion. Que la
+// clave falte, o que deje de estar vacia, es un fail igual que un cliente
+// ausente de min_cli_version (FR-025).
+const revealsTui = revealsForClient("tui");
+if (revealsTui.length !== 0) {
+  fail(`reveals.tui must be empty (a terminal pane never steals focus), found: ${revealsTui.join(", ")}`);
+}
+
+const canonicalRevealing = new Set(revealsForClient("vscode"));
 if (canonicalRevealing.size === 0) {
-  fail("canonical: reveals: is empty or missing");
+  fail("canonical: reveals.vscode is empty or missing");
 }
 
 const revealTs = readText(join(root, "vscode-extension", "src", "views", "reveal.ts"), "utf8");
@@ -1685,6 +1937,25 @@ for (const [file, body] of srcFiles) {
   }
 }
 
+// La fixture de T008: un YAML con los cuatro min_cli_version maximamente
+// distintos. La primera capa del gate "ningun gate exige que sean iguales" es
+// gratis -- los cuatro ya difieren en `main` --, pero deja de probar algo el
+// dia que converjan por casualidad; por eso esta misma corrida, ademas de
+// chequear el canonico real, chequea que la fixture pase con exit 0. Se salta
+// cuando --yaml ya apunta a otro archivo, para no recursar.
+if (!yamlOverride) {
+  const fixturePath = join(root, "specs", "015-cliente-tui", "contracts", "fixtures", "divergent-min.yaml");
+  const selfCheck = spawnSync(process.execPath, [fileURLToPath(import.meta.url), "--yaml", fixturePath], {
+    encoding: "utf8",
+  });
+  if (selfCheck.status !== 0) {
+    fail(
+      `divergent-min.yaml fixture failed the check it exists to prove passes (exit ${selfCheck.status}):\n` +
+        `${selfCheck.stdout}${selfCheck.stderr}`,
+    );
+  }
+}
+
 console.log(
-  `check-client-product-surface: ok (min=${min}, actions=${actionKeys.length}, panel_controls=${canonicalControls.length}, icons=${canonicalIcons.size}, title_actions=${titleActionIds.length}, confirms=${canonicalConfirming.size}, vs=${existsSync(vsVersion) ? "yes" : "no"})`,
+  `check-client-product-surface: ok (min.vscode=${minFor("vscode")}, actions=${actionKeys.length}, panel_controls=${canonicalControls.length}, icons=${canonicalIcons.size}, title_actions=${titleActionIds.length}, confirms=${canonicalConfirming.size}, vs=${existsSync(vsVersion) ? "yes" : "no"})`,
 );

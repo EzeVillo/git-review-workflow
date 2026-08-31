@@ -14,11 +14,18 @@ schema_version: 1
 # lo que realmente necesita, y ningun gate -- presente ni futuro -- puede exigir
 # que sean iguales. La comparacion de cada cliente es un piso estricto: no hay
 # techo, asi que una CLI mas nueva que el minimo nunca se reporta desactualizada.
+# FIXTURE (specs/015-cliente-tui/contracts/fixtures/divergent-min.yaml): los
+# tres clientes ya publicados quedan en el valor que realmente esta hoy en
+# version.ts / Version.kt / Version.cs -- este archivo se corre con el
+# verificador ENTERO, que compara cada uno contra ese literal real y no puede
+# tocarlo -- y `tui` se estampa maximamente distinto de los tres. Alcanza para
+# probar la propiedad: si algun gate exigiera que los cuatro fueran iguales,
+# esta fixture lo pondria en rojo.
 min_cli_version:
   vscode: "0.8.0"        # verified: vscode-extension/src/cli/version.ts
   intellij: "0.8.0"      # verified: jetbrains-plugin/.../domain/Version.kt
   visualstudio: "0.8.0"  # verified: visualstudio-extension/src/GitReview.Domain/Version.cs
-  tui: "0.8.0"           # sube a la version que introduce el verbo `ui`, en su propio commit
+  tui: "999.99.9"        # deliberadamente distinto: nada lo compara todavia (T028)
 npm_install: "npm install -g git-review-workflow" # verified: src/cli/installHint.ts
 npm_update: "npm install -g git-review-workflow@latest" # verified: src/cli/installHint.ts
 docs_readme_url: "https://github.com/EzeVillo/git-review-workflow#readme"

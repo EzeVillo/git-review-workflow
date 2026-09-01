@@ -1,4 +1,4 @@
-The git-review CLI (0.8.0 or newer) was not found.
+The git-review CLI (0.9.0 or newer) was not found.
 Install with npm (recommended):
 
   npm install -g git-review-workflow

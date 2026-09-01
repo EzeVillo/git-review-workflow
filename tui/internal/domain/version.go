@@ -14,7 +14,7 @@ const TUIVersion = "0.1.0"
 // contracts/client-product-surface.yaml, FR-028). It is a floor and nothing
 // else: the four clients are expected to diverge, and no gate — here or in
 // scripts/check-client-product-surface.mjs — may require them to match.
-const MinCLIVersion = "0.8.0"
+const MinCLIVersion = "0.9.0"
 
 // Version is a parsed X.Y.Z.
 type Version struct {

@@ -63,6 +63,28 @@ var KeymapToggles = []KeymapEntry{
 	{Keys: []string{"m"}, Toggles: "mouse_reporting"},
 }
 
+// KeymapGlobal is the three keys that are not product actions and are
+// declared anyway: they activate whatever control already has the focus, or
+// leave. They used to live hardcoded in ui/keys.go behind a comment
+// explaining why the canonical did not declare them — a divergence declared
+// on the CLIENT side, which is the exact shape `reveals:` and `not_in:`
+// exist to forbid. Declared here, no key of this client is outside the
+// table the bidirectional gate compares.
+//
+// ctrl+c needs a handler of its own: bubbletea puts the terminal in raw
+// mode and does not translate it into a signal by itself.
+var KeymapGlobal = []KeymapEntry{
+	{Keys: []string{"enter"}, Does: "activate_focused"},
+	{Keys: []string{"q", "ctrl+c"}, Does: "quit"},
+}
+
+// GlobalFor resolves a key to a global verb ("activate_focused" | "quit"),
+// or ok=false.
+func GlobalFor(key string) (string, bool) {
+	e, ok := findKey(KeymapGlobal, key)
+	return e.Does, ok
+}
+
 func findKey(entries []KeymapEntry, key string) (KeymapEntry, bool) {
 	for _, e := range entries {
 		for _, k := range e.Keys {

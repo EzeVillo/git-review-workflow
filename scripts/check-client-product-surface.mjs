@@ -2120,7 +2120,7 @@ function parseKeymapEntries(block) {
   });
 }
 
-const KEYMAP_SECTIONS = ["movement", "cursor", "actions", "overlays", "toggles"];
+const KEYMAP_SECTIONS = ["movement", "cursor", "actions", "overlays", "toggles", "global"];
 const keymapEntries = Object.fromEntries(
   KEYMAP_SECTIONS.map((name) => [name, parseKeymapEntries(keymapSectionBlock(name))]),
 );
@@ -2173,12 +2173,87 @@ for (const id of panelExcluded) {
 
 // (d) el mapa del cliente declara exactamente estos pares. Andamio borrado
 // en T029: el archivo ya existe, asi que el chequeo corre siempre.
+//
+// EN LAS DOS DIRECCIONES, Y POR PAR, no por tecla suelta. Antes esto era un
+// `tuiKeymapGo.includes('"' + k + '"')` en una sola direccion: la misma forma
+// exacta que hacia decorativa a `confirms:` --buscar el nombre suelto en el
+// archivo en vez de leer el argumento, y no mirar nunca lo que el cliente
+// declara de mas--. Con ese gate, `f`/finishReview, `s`/saveReview,
+// `a`/abortReview y las tres de keymap.global: estuvieron cableadas en el
+// cliente sin estar declaradas aca, y sacar cualquiera de ellas del canonico
+// no ponia nada en rojo. Ahora cada seccion se compara contra SU variable de
+// keymap.go como conjunto de pares (teclas -> verbo), y sobra o falta es un
+// fail simetrico.
 const tuiKeymapGo = readText(join(root, "tui", "internal", "domain", "keymap.go"), "utf8");
+
+/** La seccion del canonico -> (variable Go, campo del struct que lleva su verbo). */
+const KEYMAP_GO_BINDING = {
+  movement: ["KeymapMovement", "Does"],
+  cursor: ["KeymapCursor", "Action"],
+  actions: ["KeymapActions", "Action"],
+  overlays: ["KeymapOverlays", "Opens"],
+  toggles: ["KeymapToggles", "Toggles"],
+  global: ["KeymapGlobal", "Does"],
+};
+
+/** El verbo de una entrada del canonico, sea cual sea la clave que lo lleva. */
+function keymapVerb(entry) {
+  return entry.does ?? entry.action ?? entry.opens ?? entry.toggles ?? "";
+}
+
+/** Los pares de una variable []KeymapEntry de keymap.go, como "k1+k2=verbo". */
+function goKeymapPairs(varName, field) {
+  const block = tuiKeymapGo.match(
+    new RegExp(`var ${varName} = \\[\\]KeymapEntry\\{([\\s\\S]*?)\\n\\}`),
+  );
+  if (!block) {
+    fail(`tui keymap.go has no ${varName}`);
+    return new Set();
+  }
+  const pairs = new Set();
+  for (const m of block[1].matchAll(/\{Keys:\s*\[\]string\{([^}]*)\},([^}]*)\}/g)) {
+    const keys = [...m[1].matchAll(/"([^"]*)"/g)].map((k) => k[1]);
+    const verb = m[2].match(new RegExp(`${field}:\\s*"([^"]*)"`))?.[1];
+    if (!verb) {
+      fail(`tui keymap.go: an entry of ${varName} has no ${field}`);
+      continue;
+    }
+    pairs.add(`${keys.join("+")}=${verb}`);
+  }
+  return pairs;
+}
+
 for (const name of KEYMAP_SECTIONS) {
-  for (const e of keymapEntries[name]) {
-    for (const k of e.keys) {
-      if (!tuiKeymapGo.includes(`"${k}"`)) {
-        fail(`tui keymap.go missing key "${k}" declared in keymap.${name}`);
+  const [varName, field] = KEYMAP_GO_BINDING[name];
+  const canonical = new Set(
+    keymapEntries[name].map((e) => `${e.keys.join("+")}=${keymapVerb(e)}`),
+  );
+  const client = goKeymapPairs(varName, field);
+  for (const pair of canonical) {
+    if (!client.has(pair)) {
+      fail(`tui ${varName} is missing "${pair}", declared in keymap.${name}`);
+    }
+  }
+  for (const pair of client) {
+    if (!canonical.has(pair)) {
+      fail(`tui ${varName} carries "${pair}", which keymap.${name} does not declare`);
+    }
+  }
+}
+
+// (f) ninguna tecla se declara en DOS secciones distintas. La reserva de n/p
+// en (c) es el caso particular que motivo la regla; esto la generaliza, que es
+// lo que hace que ResolveKey pueda consultar las seis tablas en cualquier
+// orden sin que el orden decida nada.
+{
+  const owner = new Map();
+  for (const name of KEYMAP_SECTIONS) {
+    for (const e of keymapEntries[name]) {
+      for (const k of e.keys) {
+        if (owner.has(k)) {
+          fail(`keymap: key "${k}" is declared in both ${owner.get(k)} and ${name}`);
+        }
+        owner.set(k, name);
       }
     }
   }

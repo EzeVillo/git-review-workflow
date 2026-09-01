@@ -38,24 +38,23 @@ type Intent struct {
 	Variant string
 }
 
-// quitKeys are handled directly rather than through domain/keymap.go: the
-// canonical's `keymap:` block declares movement, cursor, actions, overlays
-// and toggles, and deliberately nothing about quitting — every terminal
-// program needs SOME way out, and ctrl+c specifically needs a handler at
-// all, since bubbletea puts the terminal in raw mode and does not translate
-// it to a signal on its own.
-var quitKeys = map[string]bool{"ctrl+c": true, "q": true}
-
 // ResolveKey turns one key's string form (tea.KeyMsg.String()) into an
 // Intent, resolved from domain/keymap.go (T048) — the same map the key bar
 // is drawn from, so a key that exists and is not shown is impossible by
 // construction (KeyBarFor below reads the identical tables).
+//
+// EVERY branch below reads one of those tables, quit and Enter included:
+// they used to be a hardcoded pair here, which made this function's own
+// promise ("never a hardcoded parallel list") false for exactly the two keys
+// no gate was comparing. They are keymap.global: now.
 func ResolveKey(key string, m Model) Intent {
-	if quitKeys[key] {
-		return Intent{Kind: IntentQuit}
-	}
-	if key == "enter" {
-		return activateFocused(m)
+	if verb, ok := domain.GlobalFor(key); ok {
+		switch verb {
+		case "quit":
+			return Intent{Kind: IntentQuit}
+		case "activate_focused":
+			return activateFocused(m)
+		}
 	}
 	if move, ok := domain.MovementFor(key); ok {
 		return Intent{Kind: IntentFocusMove, Movement: move}
@@ -130,7 +129,7 @@ func KeyBarFor(m domain.PanelModel) []KeyBarItem {
 		bar = append(bar,
 			KeyBarItem{Key: domain.KeymapMovement[0].Keys[0], Label: "up"},
 			KeyBarItem{Key: domain.KeymapMovement[1].Keys[0], Label: "down"},
-			KeyBarItem{Key: "enter", Label: "select"},
+			KeyBarItem{Key: globalKey("activate_focused"), Label: "select"},
 		)
 	}
 	if hasReviewCursor(m) {
@@ -197,6 +196,19 @@ func KeyBarFor(m domain.PanelModel) []KeyBarItem {
 			bar = append(bar, KeyBarItem{Key: entry.Keys[0], Label: label})
 		}
 	}
-	bar = append(bar, KeyBarItem{Key: "q", Label: "quit"})
+	bar = append(bar, KeyBarItem{Key: globalKey("quit"), Label: "quit"})
 	return bar
+}
+
+// globalKey is the key the bar SHOWS for one keymap.global verb: the first
+// of its Keys, the same "first key is the one on screen" rule the movement,
+// cursor, action, overlay and toggle branches above already follow. ctrl+c
+// stays resolvable and off the bar because it is quit's second key.
+func globalKey(verb string) string {
+	for _, e := range domain.KeymapGlobal {
+		if e.Does == verb {
+			return e.Keys[0]
+		}
+	}
+	return ""
 }

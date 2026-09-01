@@ -12,6 +12,7 @@ func allKeymapSections() map[string][]KeymapEntry {
 		"actions":  KeymapActions,
 		"overlays": KeymapOverlays,
 		"toggles":  KeymapToggles,
+		"global":   KeymapGlobal,
 	}
 }
 
@@ -113,14 +114,60 @@ func TestPanelExcludedActionsHaveNoDirectKey(t *testing.T) {
 	}
 }
 
+func TestGlobalResolves(t *testing.T) {
+	if got, ok := GlobalFor("enter"); !ok || got != "activate_focused" {
+		t.Errorf("GlobalFor(enter) = %q, %v", got, ok)
+	}
+	for _, k := range []string{"q", "ctrl+c"} {
+		if got, ok := GlobalFor(k); !ok || got != "quit" {
+			t.Errorf("GlobalFor(%q) = %q, %v", k, got, ok)
+		}
+	}
+	if _, ok := GlobalFor("j"); ok {
+		t.Error("j must not resolve as a global key")
+	}
+}
+
+// A key may live in exactly ONE section. The n/p reservation above is the
+// case that motivated the rule; this generalises it, which is what lets
+// ResolveKey consult the six tables in any order without the order deciding
+// anything. Mirrors gate (f) of scripts/check-client-product-surface.mjs.
+func TestNoKeyIsBoundInTwoSections(t *testing.T) {
+	owner := map[string]string{}
+	for name, entries := range allKeymapSections() {
+		for _, e := range entries {
+			for _, k := range e.Keys {
+				if prev, seen := owner[k]; seen {
+					t.Errorf("key %q is bound in both keymap.%s and keymap.%s", k, prev, name)
+				}
+				owner[k] = name
+			}
+		}
+	}
+}
+
+// Every verb this file binds has to appear in the canonical's keymap: block.
+// The bidirectional pair-by-pair comparison lives in the Node checker (it is
+// the one that can parse both sides); this is the cheap Go-side mirror that
+// fails in `go test` alone when a verb is invented here and nowhere declared.
 func TestKeymapMirrorsCanonicalStructure(t *testing.T) {
 	yaml := readCanonicalYAML(t)
 	block := topLevelYAMLBlock(yaml, "keymap")
 	if block == "" {
 		t.Fatal("canonical has no keymap: block")
 	}
-	if !containsAll(block, "focus_next_row", "focus_prev_row", "action_list", "entry_picker", "mouse_reporting") {
-		t.Error("keymap.go's verbs do not all appear in the canonical keymap: block")
+	for name, entries := range allKeymapSections() {
+		for _, e := range entries {
+			verb := e.Does + e.Action + e.Opens + e.Toggles
+			if !strings.Contains(block, verb) {
+				t.Errorf("keymap.%s binds %q, which the canonical keymap: block does not name", name, verb)
+			}
+			for _, k := range e.Keys {
+				if !strings.Contains(block, k) {
+					t.Errorf("keymap.%s binds key %q, which the canonical keymap: block does not name", name, k)
+				}
+			}
+		}
 	}
 }
 

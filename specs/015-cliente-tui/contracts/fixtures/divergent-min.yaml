@@ -922,9 +922,32 @@ keymap:
     - {keys: [p], action: prev}
   actions:
     - {keys: [r], action: refresh}    # en las OCHO situaciones (FR-038)
-    # ... un renglon por accion con tecla, a medida que el cliente las cablea
+    # finishReview/saveReview/abortReview son `surface: both` y en los tres
+    # clientes de IDE viven en la barra de titulo (title_actions:), que una
+    # terminal no tiene. Aca son teclas reservadas, mostradas en la barra solo
+    # cuando la situacion las permite (keys.go KeyBarFor). Las tres pasan por
+    # el mismo IntentBoundAction que refresh, y las tres confirman: estan en
+    # confirms:, asi que la tecla abre el dialogo, nunca ejecuta de una.
+    - {keys: [f], action: finishReview}
+    - {keys: [s], action: saveReview}
+    - {keys: [a], action: abortReview}
   overlays:
     - {keys: [":"], opens: action_list}   # el equivalente de surface: action
     - {keys: [g], opens: entry_picker}    # goToEntry
   toggles:
     - {keys: [m], toggles: mouse_reporting}
+  # LAS TRES TECLAS QUE NO SON DE PRODUCTO, Y ESTAN ACA IGUAL.
+  #
+  # No abren una accion ni mueven nada del review: activan el control que ya
+  # tiene el foco, o salen. Vivian hardcodeadas en keys.go con un comentario
+  # que explicaba por que el canonico no las declaraba -- o sea, la divergencia
+  # declarada del lado del cliente, que es la forma exacta que `reveals:` y
+  # `not_in:` existen para prohibir. Una tecla que el canonico no nombra es una
+  # tecla que nadie puede sacar sin que algo se ponga en rojo.
+  #
+  # ctrl+c necesita handler propio: bubbletea pone la terminal en raw mode y no
+  # lo traduce a una senal por su cuenta.
+  global:
+    - {keys: [enter], does: activate_focused}
+    - {keys: [q, "ctrl+c"], does: quit}
+

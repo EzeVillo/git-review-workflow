@@ -49,7 +49,7 @@ func TestGoModDeclaresExactlyFourDirectDependencies(t *testing.T) {
 }
 
 func TestDirectRequirementsParsesBlockAndSingleLineFormats(t *testing.T) {
-	contents := "require example.com/block v1.2.3\n\nrequire (\r\n\t// a valid comment\r\n\texample.com/direct v2.3.4\r\n\texample.com/indirect v3.4.5 // indirect\r\n)\r\n"
+	contents := "require example.com/block v1.2.3\n\nrequire (\r\n\t// v1.2.3 is the pinned baseline\r\n\texample.com/direct v2.3.4\r\n\texample.com/indirect v3.4.5 // indirect\r\n)\r\n"
 	got := directRequirements(contents)
 	want := map[string]bool{"example.com/block": true, "example.com/direct": true}
 	if len(got) != len(want) {
@@ -75,7 +75,7 @@ func directRequirements(goMod string) []string {
 				inRequireBlock = false
 				continue
 			}
-			if len(fields) >= 2 && strings.HasPrefix(fields[1], "v") && !strings.Contains(line, "// indirect") {
+			if fields[0] != "//" && len(fields) >= 2 && strings.HasPrefix(fields[1], "v") && !strings.Contains(line, "// indirect") {
 				direct = append(direct, fields[0])
 			}
 			continue

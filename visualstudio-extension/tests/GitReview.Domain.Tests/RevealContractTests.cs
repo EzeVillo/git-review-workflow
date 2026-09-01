@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Xunit;
+using YamlDotNet.RepresentationModel;
 
 namespace GitReview.Domain.Tests;
 
@@ -13,6 +14,9 @@ namespace GitReview.Domain.Tests;
 /// </summary>
 public class RevealContractTests
 {
+    /// <summary>This client's key in the canonical.</summary>
+    private const string Client = "visualstudio";
+
     [Fact]
     public void Reveals_panel_matches_the_canonical_list()
     {
@@ -71,19 +75,33 @@ public class RevealContractTests
         }
     }
 
-    /// <summary>The ids under <c>reveals:</c>, read as a list of scalars.</summary>
+    /// <summary>
+    /// The ids under <c>reveals.visualstudio</c>, read as a list of scalars.
+    ///
+    /// <c>reveals:</c> is a PER-CLIENT map since the TUI came in (it declares its
+    /// own empty). Reading it as a flat block sequence matched nothing -- the
+    /// entries are flow lists under a client key -- so the set came back empty
+    /// and the gate stopped comparing anything. The client is named, and its
+    /// absence is a failure: renaming the key must not degrade to "reveals
+    /// nothing".
+    /// </summary>
     private static HashSet<string> CanonicalReveals()
     {
         var file = CanonicalFile();
         Assert.True(File.Exists(file), $"canonical missing at {file}");
-        var text = File.ReadAllText(file).Replace("\r\n", "\n");
-        var block = text.Split("\nreveals:\n");
-        Assert.True(block.Length > 1, "canonical: reveals: is missing");
-        var body = block[1].Split("\n#")[0];
-        return new Regex(@"^\s*-\s+([A-Za-z][A-Za-z0-9]*)\s*$", RegexOptions.Multiline)
-            .Matches(body)
-            .Cast<Match>()
-            .Select(m => m.Groups[1].Value)
+        var yaml = new YamlStream();
+        yaml.Load(new StringReader(File.ReadAllText(file)));
+        var root = (YamlMappingNode)yaml.Documents[0].RootNode;
+        Assert.True(
+            root.Children.TryGetValue(new YamlScalarNode("reveals"), out var node),
+            "canonical: reveals: is missing");
+        var byClient = Assert.IsType<YamlMappingNode>(node);
+        Assert.True(
+            byClient.Children.TryGetValue(new YamlScalarNode(Client), out var mine),
+            $"canonical: reveals: has no list for {Client}");
+        return Assert.IsType<YamlSequenceNode>(mine)
+            .OfType<YamlScalarNode>()
+            .Select(s => s.Value!)
             .ToHashSet();
     }
 

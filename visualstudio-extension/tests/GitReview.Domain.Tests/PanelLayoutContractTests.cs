@@ -185,7 +185,11 @@ public class PanelLayoutContractTests
     public void Min_cli_version_constant()
     {
         Assert.Equal("0.8.0", CliVersion.MinCliVersion);
-        Assert.Equal(CliVersion.MinCliVersion, CanonicalScalar("min_cli_version"));
+        // Per-client map since the TUI came in, and no client inherits from
+        // another: this one reads its own key or fails. Asking for the scalar
+        // threw a cast on the map, which is a failure and not a false green --
+        // but it also stopped checking the value.
+        Assert.Equal(CliVersion.MinCliVersion, CanonicalClientScalar("min_cli_version", "visualstudio"));
     }
 
     [Fact]
@@ -784,6 +788,20 @@ public class PanelLayoutContractTests
     {
         var root = (YamlMappingNode)LoadCanonical().Documents[0].RootNode;
         return ((YamlScalarNode)root.Children[new YamlScalarNode(key)]).Value!;
+    }
+
+    /// <summary>A scalar under a per-client map, e.g. <c>min_cli_version.visualstudio</c>.</summary>
+    private static string CanonicalClientScalar(string key, string client)
+    {
+        var root = (YamlMappingNode)LoadCanonical().Documents[0].RootNode;
+        Assert.True(
+            root.Children.TryGetValue(new YamlScalarNode(key), out var node),
+            $"canonical: {key}: is missing");
+        var byClient = Assert.IsType<YamlMappingNode>(node);
+        Assert.True(
+            byClient.Children.TryGetValue(new YamlScalarNode(client), out var mine),
+            $"canonical: {key}: has no entry for {client}");
+        return Assert.IsType<YamlScalarNode>(mine).Value!;
     }
 
     private static string? Scalar(YamlMappingNode map, string key)

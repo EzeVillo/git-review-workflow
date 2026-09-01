@@ -522,12 +522,18 @@ class PanelLayoutContractTest {
         @Suppress("UNCHECKED_CAST")
         val initLabels = (walkRow?.get("action_labels") as? Map<String, Any?>)
             ?.values?.mapNotNull { it as? String }?.toSet() ?: emptySet()
+        // Si la clave se renombra, este conjunto queda vacio y la comparacion de
+        // abajo se salta en silencio -- que es como una tabla deja de gobernar
+        // sin que nada se ponga rojo. Se reclama aca, donde se leyo.
+        require(initLabels.isNotEmpty()) {
+            "canonical: walkthrough_row.action_labels is empty or missing"
+        }
 
         // 3. Los declarados, en orden, con su label y su emphasis.
         var j = 0
         for (a in actual) {
             if (j < expected.size && a.first == expected[j].id) {
-                if (a.first == "walkthroughInit" && initLabels.isNotEmpty()) {
+                if (a.first == "walkthroughInit") {
                     assertTrue(
                         a.second in initLabels,
                         "situation $key walkthroughInit label ${a.second} not in $initLabels",

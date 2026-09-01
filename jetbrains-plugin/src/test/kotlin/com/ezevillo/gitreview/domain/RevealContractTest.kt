@@ -73,14 +73,26 @@ class RevealContractTest {
         }
     }
 
-    /** Los ids de `reveals:`, leidos como lista de escalares. */
+    /**
+     * Los ids de `reveals.intellij`, leidos como lista de escalares.
+     *
+     * `reveals:` es un mapa POR CLIENTE desde que entro la TUI, que declara la
+     * suya vacia. Leerlo como lista plana devolvia un set vacio y el gate se
+     * caia en el `assertFalse` de arriba en vez de comparar nada -- fallaba
+     * ruidosamente, que es lo que se queria, pero la tabla igual dejo de
+     * gobernar. El cliente se nombra, y su ausencia es un fallo: un renombre de
+     * la clave no puede degradar a "no revela nada".
+     */
     private fun canonicalReveals(): Set<String> {
         val file = File(monorepoRoot(), "contracts/client-product-surface.yaml")
         require(file.isFile) { "canonical missing at ${file.absolutePath}" }
         @Suppress("UNCHECKED_CAST")
         val yaml = Yaml().load(file.readText()) as Map<String, Any?>
-        val reveals = yaml["reveals"] as? List<String> ?: emptyList()
-        return reveals.toSet()
+        val reveals = yaml["reveals"] as? Map<String, Any?>
+        require(reveals != null) { "canonical: reveals: is missing or is not a per-client map" }
+        val mine = reveals[CLIENT]
+        require(mine is List<*>) { "canonical: reveals: has no list for $CLIENT" }
+        return mine.map { it as String }.toSet()
     }
 
     private fun uiSources(): List<Pair<File, String>> = sourcesUnder("ui")
@@ -94,6 +106,11 @@ class RevealContractTest {
         val files = dir.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
         require(files.isNotEmpty()) { "no sources found under ${dir.absolutePath}" }
         return files.map { it to it.readText() }
+    }
+
+    private companion object {
+        /** La clave de este cliente en el canonico. */
+        const val CLIENT = "intellij"
     }
 
     private fun monorepoRoot(): String =

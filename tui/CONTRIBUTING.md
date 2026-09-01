@@ -127,6 +127,10 @@ corresponden a macOS/Linux × ARM/Intel.
 1. Elegí la versión y ejecutá `./tui/bump-version.sh X.Y.Z` desde la raíz.
 2. Revisá que cambien sólo `tui/internal/domain/version.go` y la `version` de
    `Formula/git-review-ui.rb`; sus cuatro `sha256` deben seguir en placeholder.
+   Escribí a mano el heading `## [X.Y.Z]` y su sección en `CHANGELOG.md`: el
+   workflow la extrae al cuerpo del Release, y sin sección sale un puntero al
+   archivo. `tests/release-notes.bats` falla si `TUIVersion` nombra una versión
+   que el CHANGELOG no documenta.
 3. Corré `./lint-docker.sh tui/bump-version.sh`,
    `./tests/run-docker.sh version-consistency.bats`, los gates Go y el checker
    del canónico.

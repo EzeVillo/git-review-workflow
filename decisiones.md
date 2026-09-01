@@ -931,6 +931,21 @@ estampa todos los sitios que deben coincidir:
 Los headings del CHANGELOG de cada cliente se escriben a mano. Un
 `tests/version-consistency.bats` protege contra el drift de la CLI y de los cuatro clientes.
 
+**Y ahora son cinco CHANGELOG: la CLI también tiene el suyo.** No lo tenía —los releases salían con
+`--generate-notes`, que enumera todos los commits desde el tag anterior, y como los cuatro clientes
+comparten esta historia, un release de la CLI listaba los de ellos—. El de la CLI arranca en 0.2.1
+porque es hasta donde había material verificable; lo anterior queda en los Releases de GitHub.
+
+**El extractor de la sección matchea por prefijo, no por igualdad, y eso no es un detalle.** Los tres
+workflows sacan el cuerpo del Release con el mismo `awk`, y la primera versión comparaba
+`$0 == "## [X.Y.Z]"` contra un heading que lleva fecha (`## [0.3.0] — 2026-08-30`): no matcheaba
+nunca, así que el `if [ ! -s "$notes" ]` de abajo tapaba el fallo con su fallback y el release salía
+igual. Se descubrió mirando el body publicado de `jetbrains-v0.3.0`, que dice
+«See jetbrains-plugin/CHANGELOG.md» y nada más. Es la misma familia que §15.3 y §16.1 —un extractor
+que no hace lo que su comentario dice, con todos los gates en verde— y el gate correspondiente,
+`tests/release-notes.bats`, corre el `awk` **real** contra los cinco archivos **reales** en vez de
+inspeccionar el YAML: un heading que no extrae nada falla ahí, no en el release.
+
 **El piso de CLI de un cliente no puede adelantarse al release que lo satisface.** `min_cli_version`
 es un mapa por cliente y que los cuatro difieran es el estado esperado, pero un piso apunta a una
 versión **publicada**: `min_cli_version.tui` fue `0.8.0` mientras el verbo `ui` vivía sólo en `main`,

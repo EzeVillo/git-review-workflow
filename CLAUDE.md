@@ -434,10 +434,19 @@ Los clientes versionan **aparte** de la CLI y entre sí, con el mismo patrón:
 
 `tests/version-consistency.bats` protege contra el drift de la CLI y de los cuatro clientes.
 
-**El CHANGELOG del plugin de JetBrains no es solo documentación: es lo que se publica.** La sección
-de la versión que se está sacando se renderiza al `<change-notes>` del descriptor, o sea la pestaña
-*What's New* del Marketplace. El heading `## [X.Y.Z]` se escribe a mano **antes** de tagear, o el
-release publica notas vacías.
+**Los CINCO CHANGELOG son lo que se publica, no documentación.** La CLI, la TUI y los tres clientes
+tienen el suyo, y el heading `## [X.Y.Z]` se escribe a mano **antes** de tagear: los tres workflows
+extraen esa sección al cuerpo del GitHub Release, y en JetBrains además al `<change-notes>` del
+descriptor (la pestaña *What's New* del Marketplace). Sin heading, el release sale con un puntero al
+archivo. El extractor matchea por **prefijo** (`index($0, v) == 1`), nunca por igualdad: el heading
+lleva fecha, y con `$0 == v` no matcheaba nunca — así salió `jetbrains-v0.3.0`, con el fallback en
+lugar de sus notas y todos los gates en verde. `tests/release-notes.bats` lo corre contra los
+archivos reales y falla si `VERSION`/`TUIVersion` nombran una versión sin sección.
+
+**El piso de un cliente no puede nombrar una versión que no salió.** `min_cli_version.<cliente>`
+apunta a una CLI **publicada**: si el cliente necesita un verbo nuevo, el `v*` de la CLI se corta
+primero. Con el piso adelantado, quien instala tiene una CLI que el cliente da por al día y un verbo
+que no existe — y el cliente no puede reportar `cli-outdated`, porque la comparación da igual.
 
 **El plugin tiene su propio namespace de tags y su propio workflow:** un `jetbrains-v*` lo publica al
 Marketplace, mientras que `v*` sigue siendo solo la CLI. Su Release de GitHub va con

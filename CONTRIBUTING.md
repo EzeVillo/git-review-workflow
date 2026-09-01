@@ -367,6 +367,7 @@ Releases are cut by pushing a `v*` tag.
 
    ```sh
    ./bump-version.sh X.Y.Z
+   # write the ## [X.Y.Z] heading and its section in CHANGELOG.md
    git diff                       # review the stamped files
    git commit -am "Release X.Y.Z"
    git tag vX.Y.Z
@@ -376,10 +377,21 @@ Releases are cut by pushing a `v*` tag.
    The script leaves the formula's `sha256` untouched on purpose: it depends on the tarball GitHub
    builds for the tag, which does not exist until the tag is pushed.
 
+   **The CHANGELOG section is written by hand before tagging, and it is what gets published.** The
+   release body is that section, not `--generate-notes`, which enumerated every commit since the
+   previous tag — the four clients share this history, so a CLI release was listing their commits
+   too. A version with no section falls back to a pointer at the file, which is a floor, not the
+   intention. `tests/release-notes.bats` fails if `VERSION` names a version `CHANGELOG.md` does not
+   document.
+
+   **A client's `min_cli_version` may not name a version that has not shipped.** If a client needs a
+   verb this release introduces, this `v*` is cut *first* and the client's floor moves after — see
+   [`decisiones.md`](decisiones.md) §14.
+
 2. The release workflow ([`.github/workflows/release.yml`](.github/workflows/release.yml)) then pins
    that `sha256` (the one thing not known before the tag):
 
-    - creates a GitHub Release for the tag with auto-generated notes,
+    - creates a GitHub Release for the tag, with the matching `CHANGELOG.md` section as its body,
     - pins the Homebrew formula (`url`, `sha256`, `version`) to the tag on the default branch, so
       `brew install` (without `--HEAD`) installs that version, and
     - publishes the tagged version to npm via Trusted Publishing (OIDC). There is no `NPM_TOKEN`

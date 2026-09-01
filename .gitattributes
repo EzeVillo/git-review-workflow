@@ -52,3 +52,12 @@ jetbrains-plugin/gradle.properties text eol=lf
 # rewrite would silently corrupt regardless of platform.
 tui/testdata/golden/*.txt    text eol=lf
 tui/testdata/porcelain/*.txt text eol=lf
+
+# gofmt compares against LF and reports every CRLF file as unformatted, so a
+# Windows checkout with core.autocrlf=true fails `gofmt -l .` — the gate this
+# repo's own tui/CONTRIBUTING.md tells a developer to run — on files that are
+# LF in the tagged commit and green in CI. Same reasoning as the golden files
+# above: the bytes on disk are what the tool compares, not the bytes in git.
+tui/**/*.go text eol=lf
+tui/go.mod  text eol=lf
+tui/go.sum  text eol=lf

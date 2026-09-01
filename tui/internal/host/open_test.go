@@ -163,3 +163,24 @@ func TestPreviewEditsCmdBuildsExpectedArgv(t *testing.T) {
 		t.Fatalf("PreviewEditsCmd args = %#v, want %#v", cmd.Args, want)
 	}
 }
+
+// TestOpenURLCmdUsesThePlatformBrowserOpener proves that link controls hand
+// their allowlisted URL to the operating system's URL opener, rather than
+// displaying text that the reviewer must copy and paste themselves.
+func TestOpenURLCmdUsesThePlatformBrowserOpener(t *testing.T) {
+	url := "https://example.invalid/install#options"
+	cmd := OpenURLCmd(url)
+
+	var want []string
+	switch runtime.GOOS {
+	case "windows":
+		want = []string{"rundll32", "url.dll,FileProtocolHandler", url}
+	case "darwin":
+		want = []string{"open", url}
+	default:
+		want = []string{"xdg-open", url}
+	}
+	if !reflect.DeepEqual(cmd.Args, want) {
+		t.Fatalf("OpenURLCmd args = %#v, want %#v", cmd.Args, want)
+	}
+}

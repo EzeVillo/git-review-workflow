@@ -36,6 +36,13 @@ const (
 const (
 	DraftAgentPromptBefore = "Fill in the reading order at "
 	DraftAgentPromptAfter  = ". The instructions are inside the file, in the comment at the top. Do not change the file list or the numbering rules."
+
+	// WalkthroughAgentPromptBefore / WalkthroughAgentPromptAfter are the
+	// corresponding pointer for the author's walkthrough. It tells an agent
+	// to update unfinished entries in place, never to replace the completed
+	// reading order the CLI reported at this path.
+	WalkthroughAgentPromptBefore = "Update the reading order at "
+	WalkthroughAgentPromptAfter  = ". The instructions are inside the file, in the comment at the top. Entries that already have a number and a why are finished: leave them as they are, and fill in only the ones marked \"## ?.\"."
 )
 
 // NpmInstallHint / NpmUpdateHint are the paragraph shown right before the

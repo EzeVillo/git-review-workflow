@@ -1,12 +1,11 @@
-// open.go is the four delegated actions (T089, contracts/cli-invocation.md
-// § Herramientas del usuario): openEntry/openChange -> $EDITOR,
-// previewEdits -> `git review preview` run with an inherited terminal
-// instead of the captured-output/hard-timeout path every OTHER `git
-// review` invocation in this package goes through. None of the *Cmd
-// builders here run anything themselves — each returns a plain *exec.Cmd
-// for internal/ui to hand to tea.ExecProcess, which is what actually
-// suspends the program, gives the child the real TTY, and resumes it when
-// the child exits (internal/ui/mutation.go).
+// open.go holds the delegated actions (T089, contracts/cli-invocation.md
+// § Herramientas del usuario): file paths go through $EDITOR, previewEdits
+// runs `git review preview` with an inherited terminal, and external links go
+// through the operating system's browser opener. None of the *Cmd builders
+// here run anything themselves — each returns a plain *exec.Cmd for
+// internal/ui to hand to tea.ExecProcess, which is what actually suspends the
+// program, gives the child the real TTY, and resumes it when the child exits
+// (internal/ui/mutation.go).
 package host
 
 import (
@@ -14,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 )
 
@@ -177,4 +177,19 @@ func PreviewEditsCmd(dir string) *exec.Cmd {
 	c := exec.Command("git", "review", "preview")
 	c.Dir = dir
 	return c
+}
+
+// OpenURLCmd delegates an allowlisted web address to the native browser
+// launcher. Like the editor and diff helpers above, it only builds the child
+// command; ui hands it to tea.ExecProcess so the terminal remains coherent
+// while the launcher runs.
+func OpenURLCmd(url string) *exec.Cmd {
+	switch runtime.GOOS {
+	case "windows":
+		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	case "darwin":
+		return exec.Command("open", url)
+	default:
+		return exec.Command("xdg-open", url)
+	}
 }

@@ -140,6 +140,7 @@ var genericFailureText = map[string]string{
 	"next":           "Could not move to the next entry.",
 	"prev":           "Could not move to the previous entry.",
 	"startReview":    "Could not start the review.",
+	"startFromDraft": "Could not start the review.",
 }
 
 func failureMessage(action string, r host.Result) string {
@@ -265,12 +266,24 @@ func (m Model) activateControl(id domain.ControlID, variant string) (Model, tea.
 	switch id {
 	case "copyCliInstall":
 		return m.beginCopyCliInstall()
+	case "installCli", "openSupport":
+		return m.beginOpenExternal(id, variant)
 	case "copyDraftPrompt":
 		return m.beginCopyDraftPrompt(variant)
+	case "startFromDraft":
+		return m.beginStartFromDraft(variant)
+	case "openDraft", "openWalkthrough", "openGuide":
+		return m.beginOpenReportedPath(id, variant)
+	case "copyWalkthroughPrompt":
+		return m.beginCopyWalkthroughPrompt()
 	case "openEntry":
 		return m.beginOpenEntry()
 	case "openChange":
 		return m.beginOpenChange()
+	case "showWhy":
+		return m.beginShowWhy(variant)
+	case "outOfRangeHelp":
+		return m.beginOutOfRangeHelp()
 	case "compareReview":
 		return m.beginCompareReview()
 	case "undoFinish":
@@ -426,6 +439,36 @@ func (m Model) beginCursor(action string) (Model, tea.Cmd) {
 		return m, nil
 	}
 	return m.beginMutation(mutationRequest{action: action}, currentStateToken(m.Panel))
+}
+
+// startFromDraftRequest constructs the start invocation from the selected
+// fresh draft's OWN porcelain fields. Its source/range are records of how the
+// draft was made, not values inferred from the currently checked-out branch.
+func startFromDraftRequest(d draftRowView) mutationRequest {
+	intent := domain.ReviewIntent{
+		Branch: d.src,
+		Source: d.source,
+		Range:  d.rrange,
+		Layout: "walk",
+	}
+	argv := domain.Argv{Verb: "start", Args: domain.StartFromDraftArgs(intent)}
+	return mutationRequest{action: "startFromDraft", params: domain.ActionParams{Intent: intent}, argv: &argv}
+}
+
+// beginStartFromDraft starts only a CURRENT, complete draft: a variant is the
+// draft's raw source identifier, so re-resolving it against the fresh rows
+// protects against a moved or replaced footer row. This is a start, not a
+// destructive action, and therefore enters the existing mutation lock without
+// a confirmation overlay.
+func (m Model) beginStartFromDraft(src string) (Model, tea.Cmd) {
+	if m.Panel.Situation != domain.SituationNoReview {
+		return m, nil
+	}
+	draft, ok := findDraftRow(decodeDraftRows(m.Panel.FreshDraftRows), src)
+	if !ok || !draft.startable() {
+		return m, nil
+	}
+	return m.beginMutation(startFromDraftRequest(draft), currentStateToken(m.Panel))
 }
 
 func (m Model) beginSetBase() (Model, tea.Cmd) {
@@ -740,12 +783,106 @@ func (m Model) beginPreviewEdits() (Model, tea.Cmd) {
 	return m, execCmd(host.PreviewEditsCmd(dir))
 }
 
-// --- copyCliInstall / copyDraftPrompt: OSC 52 (T092) ------------------------
+// The browser-only controls deliberately resolve a small closed set here.
+// Their variants are UI identifiers, never a URL supplied by the terminal or
+// by porcelain, so no activation can cause an arbitrary external launch.
+const installOptionsURL = "https://github.com/EzeVillo/git-review-workflow#readme"
+
+func externalURLForControl(id domain.ControlID, variant string) (string, bool) {
+	switch id {
+	case "installCli":
+		return installOptionsURL, true
+	case "openSupport":
+		switch variant {
+		case "star":
+			return domain.SupportStarURL, true
+		case "bug":
+			return domain.SupportBugURL, true
+		}
+	}
+	return "", false
+}
+
+func (m Model) beginOpenExternal(id domain.ControlID, variant string) (Model, tea.Cmd) {
+	url, ok := externalURLForControl(id, variant)
+	if !ok {
+		return m, nil
+	}
+	return m, execCmd(host.OpenURLCmd(url))
+}
+
+// walkthroughPath reads the path the latest porcelain config record reported.
+// PanelModel keeps the branch this walkthrough annotates for display, not a
+// locally assembled filesystem path, so this preserves the CLI's authority
+// over where an existing walkthrough lives.
+func (m Model) walkthroughPath() (string, bool) {
+	if !m.Panel.HasWalkthroughRow || m.Panel.WalkthroughState == domain.WalkthroughAbsent {
+		return "", false
+	}
+	if !m.lastRead.HasConfig || m.lastRead.Config.Walkthrough == nil {
+		return "", false
+	}
+	w := m.lastRead.Config.Walkthrough
+	if w.State == domain.WalkthroughAbsent || w.Path == "" {
+		return "", false
+	}
+	return w.Path, true
+}
+
+// reportedEditorPath resolves an enabled row control's raw identifier to the
+// path porcelain reported for it. The raw source/kind selects the row; only
+// the reported display path reaches $EDITOR.
+func (m Model) reportedEditorPath(id domain.ControlID, variant string) (string, bool) {
+	switch id {
+	case "openDraft":
+		draft, ok := findDraftRow(decodeDraftRows(m.Panel.FreshDraftRows), variant)
+		if !ok {
+			draft, ok = findDraftRow(decodeDraftRows(m.Panel.SpentDraftRows), variant)
+		}
+		if !ok || draft.path == "" {
+			return "", false
+		}
+		return draft.path, true
+	case "openWalkthrough":
+		return m.walkthroughPath()
+	case "openGuide":
+		if !m.Panel.HasGuideRows {
+			return "", false
+		}
+		switch variant {
+		case "team":
+			if m.Panel.TeamGuideState != domain.GuideAbsent && m.Panel.TeamGuideRow != "" {
+				return m.Panel.TeamGuideRow, true
+			}
+		case "own":
+			if m.Panel.OwnGuideState != domain.GuideAbsent && m.Panel.OwnGuideRow != "" {
+				return m.Panel.OwnGuideRow, true
+			}
+		}
+	}
+	return "", false
+}
+
+func (m Model) beginOpenReportedPath(id domain.ControlID, variant string) (Model, tea.Cmd) {
+	display, ok := m.reportedEditorPath(id, variant)
+	if !ok {
+		return m, nil
+	}
+	dir, _ := os.Getwd()
+	cmd, reason, ok := host.OpenInEditorCmd(display, dir)
+	if !ok {
+		m.statusLine = reason
+		return m, nil
+	}
+	return m, execCmd(cmd)
+}
+
+// --- copyCliInstall / copyDraftPrompt / copyWalkthroughPrompt: OSC 52 -----
 //
-// Huecos §5's own note: the design resolves OSC 52 for TWO subjects, the
-// CLI install command and copyDraftPrompt's draft_agent_prompt. Neither
-// control's acknowledgement ever claims to have copied (FR-068) — the
-// status line names what IS true (the line is drawn, selectable) instead.
+// Huecos §5's own note: the design resolves OSC 52 for the CLI install
+// command and the two agent pointers (draft and walkthrough). Neither
+// control's acknowledgement ever claims to have copied (FR-068) — the status
+// line names what IS true (the line is drawn, selectable) instead.
 
 const copiedNothingToConfirm = "The command is on the line above — select it, or press m to select with the mouse."
 
@@ -768,6 +905,16 @@ func (m Model) beginCopyDraftPrompt(src string) (Model, tea.Cmd) {
 		return m, nil
 	}
 	host.CopyOSC52(domain.DraftAgentPromptBefore + d.path + domain.DraftAgentPromptAfter)
+	m.statusLine = copiedNothingToConfirm
+	return m, nil
+}
+
+func (m Model) beginCopyWalkthroughPrompt() (Model, tea.Cmd) {
+	path, ok := m.walkthroughPath()
+	if !ok {
+		return m, nil
+	}
+	host.CopyOSC52(domain.WalkthroughAgentPromptBefore + path + domain.WalkthroughAgentPromptAfter)
 	m.statusLine = copiedNothingToConfirm
 	return m, nil
 }
@@ -806,6 +953,25 @@ func textOverlayBody(action string, r host.Result) string {
 func (m Model) beginPreviewEditsStat() (Model, tea.Cmd) {
 	argv, _ := domain.BuildArgv("previewEditsStat", domain.ActionParams{})
 	return m, textActionCmd("Preview edits (summary)", argv)
+}
+
+func (m Model) beginShowWhy(rawPath string) (Model, tea.Cmd) {
+	if rawPath == "" {
+		return m, nil
+	}
+	argv, _ := domain.BuildArgv("showWhy", domain.ActionParams{Source: rawPath})
+	return m, textActionCmd("Why this entry", argv)
+}
+
+const outOfRangeHelpFallback = "Run 'git review status' in a terminal for the diagnosis and recovery command."
+
+func (m Model) beginOutOfRangeHelp() (Model, tea.Cmd) {
+	body := strings.TrimSpace(m.Panel.Stderr)
+	if body == "" {
+		body = outOfRangeHelpFallback
+	}
+	m.textOverlay = &TextOverlay{Title: domain.HowToFixItLabel, Body: body}
+	return m, nil
 }
 
 // formatLogEntry is one showCliLog row: the exact argv (this overlay is
@@ -860,6 +1026,8 @@ func (m Model) activatePaletteAction(action string) (Model, tea.Cmd) {
 		return m.beginShowCliLog()
 	case "previewEditsStat":
 		return m.beginPreviewEditsStat()
+	case "showWhy":
+		return m.beginShowWhy(m.Panel.CurrentPath.Raw)
 	case "openEntry":
 		return m.beginOpenEntry()
 	case "openChange":

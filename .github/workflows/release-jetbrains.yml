@@ -149,9 +149,14 @@ jobs:
             exit 1
           fi
 
+          # index($0, v) == 1, NOT $0 == v: the heading carries a date
+          # ("## [0.3.0] - 2026-08-30"), so an equality match never fired and
+          # every release so far published the fallback line instead of its
+          # notes. Prefix-matching with the closing bracket inside v keeps
+          # "## [0.1.0]" from matching "## [0.1.0-beta]".
           notes="$(mktemp)"
           awk -v v="## [${VERSION}]" '
-            $0 == v { on = 1; next }
+            index($0, v) == 1 { on = 1; next }
             on && /^## \[/ { exit }
             on { print }
           ' jetbrains-plugin/CHANGELOG.md >"$notes"

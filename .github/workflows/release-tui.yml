@@ -96,6 +96,10 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      # This job used to download the assets and nothing else. It needs the
+      # tagged tree now, for tui/CHANGELOG.md -- the release body comes from
+      # its section rather than from --generate-notes.
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: tui-release-assets
@@ -129,15 +133,33 @@ jobs:
             exit 1
           fi
           (cd dist && sha256sum --check SHA256SUMS)
+      # Notes come from tui/CHANGELOG.md, not --generate-notes, which listed
+      # every commit since the previous tag -- the four clients share this
+      # history, so a TUI release was enumerating the CLI's commits too.
+      #
+      # index($0, v) == 1, NOT $0 == v: the heading carries a date, so an
+      # equality match never fires. That exact bug shipped in jetbrains-v0.3.0,
+      # whose release body is the fallback line instead of its notes.
       - name: Create non-latest GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          version="${GITHUB_REF_NAME#tui-v}"
+          notes="$(mktemp)"
+          awk -v v="## [${version}]" '
+            index($0, v) == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' "$GITHUB_WORKSPACE/tui/CHANGELOG.md" >"$notes"
+          if [ ! -s "$notes" ]; then
+            echo "See tui/CHANGELOG.md" >"$notes"
+          fi
+
           gh release create "$GITHUB_REF_NAME" dist/* \
             --repo "$GITHUB_REPOSITORY" \
             --title "Terminal TUI ${GITHUB_REF_NAME#tui-v}" \
             --latest=false \
-            --generate-notes
+            --notes-file "$notes"
       - name: Pin Homebrew checksums on the default branch
         env:
           GH_TOKEN: ${{ github.token }}

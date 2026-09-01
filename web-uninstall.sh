@@ -17,7 +17,7 @@ set -eu
 BIN_DIR="${PREFIX:-$HOME/.local/bin}"
 
 removed=""
-for f in git-review git-review-lib.sh; do
+for f in git-review git-review-lib.sh git-review-ui git-review-ui.exe; do
 	if [ -e "$BIN_DIR/$f" ]; then
 		rm -f "$BIN_DIR/$f"
 		removed="$removed $f"

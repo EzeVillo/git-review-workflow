@@ -13,6 +13,10 @@
 # With no REF it installs the latest release, falling back to the default branch
 # (same policy as web-install.sh).
 #
+param(
+    [switch]$WithUi
+)
+
 $ErrorActionPreference = 'Stop'
 
 # User PATH accessors. In production these read and write the real user PATH.
@@ -116,6 +120,62 @@ try {
     }
 
     Write-Host "Installed: $($installed -join ', ')"
+
+    if ($WithUi) {
+        try {
+            $releases = @(Invoke-RestMethod "$api/releases?per_page=100")
+            $tuiRelease = $releases |
+                Where-Object { $_.tag_name -like 'tui-v*' } |
+                Select-Object -First 1
+            if (-not $tuiRelease) {
+                Write-Host 'note: no terminal TUI release is available; the CLI is installed.'
+            } else {
+                $tuiTag = $tuiRelease.tag_name
+                $tuiVersion = $tuiTag -replace '^tui-v', ''
+                $runtimeArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+                $tuiArch = switch ($runtimeArch) {
+                    'X64' { 'amd64' }
+                    'Arm64' { 'arm64' }
+                    default { $null }
+                }
+                if (-not $tuiArch) {
+                    Write-Host 'note: no terminal TUI asset is published for this platform; the CLI is installed.'
+                } else {
+                    $tuiAsset = "git-review-ui_${tuiVersion}_windows_${tuiArch}.zip"
+                    $tuiBase = "https://github.com/$repo/releases/download/$tuiTag"
+                    $sumPath = Join-Path $tmp 'SHA256SUMS'
+                    $tuiZip = Join-Path $tmp $tuiAsset
+                    Invoke-WebRequest "$tuiBase/SHA256SUMS" -OutFile $sumPath
+                    Invoke-WebRequest "$tuiBase/$tuiAsset" -OutFile $tuiZip
+                    $sumLine = Get-Content $sumPath |
+                        Where-Object { $_ -match "^[0-9a-fA-F]{64}\s+\*?$([regex]::Escape($tuiAsset))$" } |
+                        Select-Object -First 1
+                    if (-not $sumLine) {
+                        Write-Host 'note: the terminal TUI checksum list does not cover this platform; the CLI is installed.'
+                    } else {
+                        $want = ($sumLine -split '\s+')[0].ToLowerInvariant()
+                        $got = (Get-FileHash $tuiZip -Algorithm SHA256).Hash.ToLowerInvariant()
+                        if ($got -ne $want) {
+                            Write-Host 'note: terminal TUI checksum mismatch; the CLI is installed and the TUI was skipped.'
+                        } else {
+                            $tuiExtract = Join-Path $tmp 'tui'
+                            Expand-Archive $tuiZip -DestinationPath $tuiExtract
+                            $tuiBinary = Get-ChildItem $tuiExtract -Filter 'git-review-ui.exe' -Recurse |
+                                Select-Object -First 1
+                            if (-not $tuiBinary) {
+                                Write-Host 'note: the terminal TUI archive has an unexpected layout; the CLI is installed.'
+                            } else {
+                                Copy-Item $tuiBinary.FullName -Destination (Join-Path $installDir 'git-review-ui.exe') -Force
+                                Write-Host "Installed terminal TUI ($tuiTag): git-review-ui.exe"
+                            }
+                        }
+                    }
+                }
+            }
+        } catch {
+            Write-Host "note: terminal TUI installation failed; the CLI remains installed. $($_.Exception.Message)"
+        }
+    }
 
     # Add installDir to the user PATH if it isn't already there.
     $userPath = _grw_GetUserPath

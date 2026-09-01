@@ -42,7 +42,7 @@ jobs:
       - name: shellcheck
         # find recorre bin/ (incl. bin/git-review-verbs/, fuera del glob bin/*) y
         # excluye .gitkeep; cubre el dispatcher y todos los verbos.
-        run: shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh visualstudio-extension/bump-version.sh jetbrains-plugin/verification-report.sh tests/sandbox.sh tests/sandbox-min.sh
+        run: shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh tui/bump-version.sh vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh visualstudio-extension/bump-version.sh jetbrains-plugin/verification-report.sh tests/sandbox.sh tests/sandbox-min.sh
 
   test:
     strategy:

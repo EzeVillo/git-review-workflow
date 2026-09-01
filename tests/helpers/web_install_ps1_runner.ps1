@@ -15,6 +15,14 @@ Get-ChildItem (Join-Path $RepoPath "bin") |
 $_fakeZip = Join-Path $TestTmpDir "archive.zip"
 Compress-Archive -Path $_archiveDir -DestinationPath $_fakeZip -Force
 
+$_tuiDir = Join-Path $TestTmpDir 'tui-release'
+New-Item -ItemType Directory -Path $_tuiDir -Force | Out-Null
+Set-Content (Join-Path $_tuiDir 'git-review-ui.exe') 'tui-probe'
+$_fakeTuiZip = Join-Path $TestTmpDir 'git-review-ui_0.1.0_windows_amd64.zip'
+Compress-Archive -Path (Join-Path $_tuiDir 'git-review-ui.exe') -DestinationPath $_fakeTuiZip -Force
+$_tuiHash = (Get-FileHash $_fakeTuiZip -Algorithm SHA256).Hash.ToLowerInvariant()
+$script:_badTuiHash = $false
+
 $_installDir = Join-Path $TestTmpDir "install"
 New-Item -ItemType Directory -Path $_installDir -Force | Out-Null
 $env:PREFIX = $_installDir
@@ -45,6 +53,12 @@ function Invoke-RestMethod {
         }
         return [pscustomobject]@{ tag_name = 'v0.0.1' }
     }
+    if ($Uri -like '*/releases?per_page=100*') {
+        return @(
+            [pscustomobject]@{ tag_name = 'tui-v0.1.0' },
+            [pscustomobject]@{ tag_name = 'v0.0.1' }
+        )
+    }
     if ($Uri -match '/repos/[^/]+/[^/]+$') {
         return [pscustomobject]@{ default_branch = 'main' }
     }
@@ -54,6 +68,15 @@ function Invoke-RestMethod {
 function Invoke-WebRequest {
     param([string]$Uri, [string]$OutFile)
     $script:_webCalls.Add($Uri)
+    if ($Uri -like '*/releases/download/tui-v0.1.0/SHA256SUMS') {
+        $hash = if ($script:_badTuiHash) { '0' * 64 } else { $_tuiHash }
+        Set-Content $OutFile "$hash  git-review-ui_0.1.0_windows_amd64.zip"
+        return
+    }
+    if ($Uri -like '*/releases/download/tui-v0.1.0/git-review-ui_0.1.0_windows_amd64.zip') {
+        Copy-Item $_fakeTuiZip -Destination $OutFile -Force
+        return
+    }
     # Accept archive/$ref.zip, refs/tags/, and refs/heads/ layouts.
     if ($Uri -notmatch '/archive/') {
         throw "unexpected archive URL: $Uri"
@@ -63,12 +86,17 @@ function Invoke-WebRequest {
 
 # Read the installer with explicit UTF-8 so Windows PowerShell 5.1 handles
 # non-ASCII characters (e.g. em-dash) in the file correctly.
-function _invoke_installer {
+function _invoke_installer([switch]$WithUi) {
     $src = [System.IO.File]::ReadAllText(
         (Join-Path $RepoPath 'web-install.ps1'),
         [System.Text.Encoding]::UTF8
     )
-    Invoke-Expression $src
+    $block = [scriptblock]::Create($src)
+    if ($WithUi) {
+        & $block -WithUi
+    } else {
+        & $block
+    }
 }
 
 try {
@@ -129,6 +157,45 @@ try {
             }
             if (-not $arch) {
                 throw "REF=main must download an archive for main; got: $($script:_webCalls -join ', ')"
+            }
+        }
+
+        'default_skips_ui' {
+            _invoke_installer
+            if (Test-Path (Join-Path $_installDir 'git-review-ui.exe')) {
+                throw 'default install unexpectedly wrote git-review-ui.exe'
+            }
+            $hit = $script:_apiCalls + $script:_webCalls | Where-Object {
+                $_ -like '*/releases?per_page=100*' -or $_ -like '*/releases/download/tui-v*'
+            }
+            if ($hit) {
+                throw "default install unexpectedly requested TUI URLs: $hit"
+            }
+        }
+
+        'with_ui_installs_verified' {
+            _invoke_installer -WithUi
+            if (-not (Test-Path (Join-Path $_installDir 'git-review'))) {
+                throw 'CLI was not installed'
+            }
+            if (-not (Test-Path (Join-Path $_installDir 'git-review-ui.exe')) ) {
+                throw 'TUI was not installed'
+            }
+            $latest = $script:_apiCalls | Where-Object { $_ -like '*/releases/latest*' }
+            $tuiList = $script:_apiCalls | Where-Object { $_ -like '*/releases?per_page=100*' }
+            if (-not $latest -or -not $tuiList) {
+                throw 'CLI latest ref and TUI release list must be resolved independently'
+            }
+        }
+
+        'with_ui_checksum_mismatch' {
+            $script:_badTuiHash = $true
+            _invoke_installer -WithUi
+            if (-not (Test-Path (Join-Path $_installDir 'git-review'))) {
+                throw 'CLI install was lost after TUI checksum failure'
+            }
+            if (Test-Path (Join-Path $_installDir 'git-review-ui.exe')) {
+                throw 'TUI was installed despite checksum mismatch'
             }
         }
 

@@ -222,6 +222,34 @@ desinstalar (pasale el mismo `PREFIX` si lo cambiaste):
 curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-uninstall.sh | sh
 ```
 
+### Interfaz de terminal (opcional)
+
+La interfaz de terminal es un binario estático separado y necesita la CLI de
+arriba. Instalalo desde el mismo tap de Homebrew:
+
+```sh
+brew install EzeVillo/git-review-workflow/git-review-ui
+```
+
+O pedilo explícitamente al usar uno de los instaladores en una línea (sin el
+flag, esos instaladores siguen instalando solamente la CLI):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.sh | GIT_REVIEW_WITH_UI=1 sh
+```
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.ps1))) -WithUi
+```
+
+Los siete archivos por plataforma también están adjuntos directamente a cada
+[`tui-v*` release](https://github.com/EzeVillo/git-review-workflow/releases).
+Arrancala con `git review ui` desde adentro de un repositorio. En montajes de red
+cuyas notificaciones de archivos no sean confiables, configurá un intervalo
+mínimo de refresco, por ejemplo `git config reviewui.pollseconds 45`; cada
+refresco normal reinicia ese piso, así que no agrega polling mientras llegan
+notificaciones.
+
 <details>
 <summary>Desde una copia descargada</summary>
 
@@ -306,9 +334,12 @@ git config --global http.sslBackend openssl
 Cada comando es un verbo bajo `git review`. Corré `git review -h` para ver la
 lista, o `git review <verbo> -h` para el detalle de un verbo.
 
+`git review-ui` es el sinónimo cómodo para la shell de `git review ui`.
+
 | Comando                                                                                                                                    | Qué hace                                                                                                                                                                                                                                                                                                                                                                               |
 |--------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `git review [-h \| --version]`                                                                                                             | Lista todos los verbos o imprime la versión instalada.                                                                                                                                                                                                                                                                                                                                 |
+| `git review ui`                                                                                                                            | Abre la interfaz de terminal para el repositorio actual.                                                                                                                                                                                                                                                                                                                               |
 | `git review start [<rama>] [<base> \| --base <base> \| --delta \| --from <commit>] [--step \| --no-walk \| --keys] [--local \| --offline]` | Hace fetch de `origin` y deja el diff del PR staged en una nueva rama `review/<rama>` (omití `<rama>` para revisar la rama actual; entra en modo walk si el PR trae un walkthrough; `--keys` restringe el walk a las entradas marcadas `> key`; `--local` revisa tu rama local pero sigue comparando contra la base de origin; `--offline` además salta el fetch y usa tu base local). |
 | `git review compare <a> <b> [--step \| --no-walk \| --keys]`                                                                               | Deja staged el diff entre dos commit-ish (tags, commits, ramas) en modo lectura, para leerlo o recorrerlo. `git review finish` se niega — no hay a dónde escribir.                                                                                                                                                                                                                     |
 | `git review walkthrough (init [--base <base>] [--force] [--stdout] [--porcelain] \| build [--check] [--from <archivo> \| --from -])`                        | Escribe un walkthrough de lectura para el PR de la rama actual — un orden guiado de los archivos cambiados con una nota en cada uno, committeado como `.review/walkthrough.md`. Corré `init` de nuevo cuando el PR siga cambiando y **actualiza** lo que hay: las entradas cuyo archivo sigue en rango conservan su número, su porqué y su `> key`, los archivos que entraron al rango llegan como placeholders, y las entradas cuyo archivo salió se descartan y se nombran (`--force` descarta todo y escribe un esqueleto en blanco). `build` estampa un ancla `> at:` bajo cada entrada, con lo que un `build` posterior puede nombrar los porqués escritos contra una versión del archivo que ya no existe — una nota, nunca un fallo. `--stdout` imprime el esqueleto en vez de escribirlo y `--from` instala uno completado desde un archivo o la entrada estándar, para que un agente escriba el orden de lectura sin tocar tu working tree. |

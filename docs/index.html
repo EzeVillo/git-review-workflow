@@ -1199,6 +1199,10 @@ brew install git-review-workflow</pre>
                 <h3 data-i18n="nonode">No Node? One line</h3>
                 <pre>curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.sh | sh</pre>
             </div>
+            <div class="box">
+                <h3 data-i18n="terminalui">Terminal UI</h3>
+                <pre>brew install EzeVillo/git-review-workflow/git-review-ui</pre>
+            </div>
             <div class="box" style="grid-column: 1 / -1;">
                 <h3 data-i18n="thenonce">Then, once per repository</h3>
                 <pre data-i18n="baseline">git config reviewworkflow.base develop   # where your PRs get integrated</pre>
@@ -1312,6 +1316,7 @@ brew install git-review-workflow</pre>
             h2d: "Un comando, y después una línea de config por repo.",
             prose4: "Todo se enchufa a git como un único subcomando. Necesita git 2.23+ y una shell POSIX — en Windows eso es Git Bash (instalá Git for Windows; los instaladores ponen git-review en el PATH).",
             nonode: "¿Sin Node? Una línea",
+            terminalui: "Interfaz de terminal",
             thenonce: "Después, una vez por repositorio",
             baseline: "git config reviewworkflow.base develop   # donde se integran tus PRs",
             docs: "Documentación"

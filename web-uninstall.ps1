@@ -38,7 +38,7 @@ function _grw_SetUserPath([string]$Value) {
 $installDir = if ($env:PREFIX) { $env:PREFIX } else { "$env:USERPROFILE\.local\bin" }
 
 $cmds = @(
-    'git-review', 'git-review-lib.sh'
+    'git-review', 'git-review-lib.sh', 'git-review-ui', 'git-review-ui.exe'
 )
 
 $removed = @()

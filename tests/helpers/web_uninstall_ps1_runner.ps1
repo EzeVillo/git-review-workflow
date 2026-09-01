@@ -36,13 +36,13 @@ switch ($TestName) {
 
     'remove_all_commands' {
         _populate_install_dir
+		Set-Content (Join-Path $_installDir 'git-review-ui.exe') 'tui'
         # Guard against a false positive: the files must be present first.
         foreach ($cmd in $_commands) {
             if (-not (Test-Path (Join-Path $_installDir $cmd))) {
                 throw "setup failed: $cmd was not present before uninstall"
             }
         }
-
         _invoke_uninstaller
 
         foreach ($cmd in $_commands) {
@@ -50,6 +50,9 @@ switch ($TestName) {
                 throw "uninstaller left command behind: $cmd"
             }
         }
+		if (Test-Path (Join-Path $_installDir 'git-review-ui.exe')) {
+			throw "uninstaller left TUI behind: git-review-ui.exe"
+		}
     }
 
     'keep_unrelated' {

@@ -56,3 +56,18 @@ _run_ps1_test() {
 	run _run_ps1_test "ref_main_uses_heads_or_archive"
 	[ "$status" -eq 0 ]
 }
+
+@test "web-install.ps1 default does not request or install the TUI" {
+	run _run_ps1_test "default_skips_ui"
+	[ "$status" -eq 0 ]
+}
+
+@test "web-install.ps1 -WithUi installs a checksum-verified TUI" {
+	run _run_ps1_test "with_ui_installs_verified"
+	[ "$status" -eq 0 ]
+}
+
+@test "web-install.ps1 TUI checksum mismatch preserves CLI install" {
+	run _run_ps1_test "with_ui_checksum_mismatch"
+	[ "$status" -eq 0 ]
+}

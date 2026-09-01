@@ -69,6 +69,100 @@ done
 
 echo "Installed:$installed"
 
+install_ui() {
+	releases="$(curl -fsSL "$api/releases?per_page=100" 2>/dev/null || true)"
+	tui_tag="$(printf '%s\n' "$releases" | tr '{' '\n' |
+		sed -nE 's/.*"tag_name"[ ]*:[ ]*"([^"]+)".*/\1/p' |
+		grep '^tui-v' | head -1 || true)"
+	if [ -z "$tui_tag" ]; then
+		echo "note: no terminal TUI release is available; the CLI is installed."
+		return 0
+	fi
+
+	tui_os="$(uname -s)"
+	tui_arch="$(uname -m)"
+	case "$tui_os:$tui_arch" in
+	Darwin:arm64 | Darwin:aarch64) tui_target="darwin_arm64.tar.gz" ;;
+	Darwin:x86_64 | Darwin:amd64) tui_target="darwin_amd64.tar.gz" ;;
+	Linux:x86_64 | Linux:amd64) tui_target="linux_amd64.tar.gz" ;;
+	Linux:aarch64 | Linux:arm64) tui_target="linux_arm64.tar.gz" ;;
+	Linux:armv7* | Linux:armv6*) tui_target="linux_armv7.tar.gz" ;;
+	MINGW*:x86_64 | MSYS*:x86_64 | CYGWIN*:x86_64) tui_target="windows_amd64.zip" ;;
+	MINGW*:aarch64 | MSYS*:aarch64 | CYGWIN*:aarch64) tui_target="windows_arm64.zip" ;;
+	*)
+		echo "note: no terminal TUI asset is published for this platform; the CLI is installed."
+		return 0
+		;;
+	esac
+
+	tui_version="${tui_tag#tui-v}"
+	tui_asset="git-review-ui_${tui_version}_${tui_target}"
+	tui_base="https://github.com/$REPO/releases/download/$tui_tag"
+	tui_archive="$tmp/$tui_asset"
+	tui_sums="$tmp/SHA256SUMS"
+	if ! curl -fsSL "$tui_base/SHA256SUMS" >"$tui_sums" 2>/dev/null; then
+		echo "note: could not download the terminal TUI checksums; the CLI is installed."
+		return 0
+	fi
+	if ! curl -fsSL "$tui_base/$tui_asset" >"$tui_archive" 2>/dev/null; then
+		echo "note: no terminal TUI asset is available for this platform; the CLI is installed."
+		return 0
+	fi
+	want="$(awk -v name="$tui_asset" '$2 == name {print $1}' "$tui_sums")"
+	if [ -z "$want" ]; then
+		echo "note: the terminal TUI checksum list does not cover this platform; the CLI is installed."
+		return 0
+	fi
+	if command -v sha256sum >/dev/null 2>&1; then
+		got="$(sha256sum "$tui_archive" | awk '{print $1}')"
+	elif command -v shasum >/dev/null 2>&1; then
+		got="$(shasum -a 256 "$tui_archive" | awk '{print $1}')"
+	else
+		echo "note: no SHA-256 tool is available, so the terminal TUI was not installed."
+		return 0
+	fi
+	if [ "$got" != "$want" ]; then
+		echo "note: terminal TUI checksum mismatch; the CLI is installed and the TUI was skipped."
+		return 0
+	fi
+
+	tui_extract="$tmp/tui"
+	mkdir -p "$tui_extract"
+	case "$tui_target" in
+	*.zip)
+		if ! command -v unzip >/dev/null 2>&1; then
+			echo "note: unzip is required for the terminal TUI asset; the CLI is installed."
+			return 0
+		fi
+		if ! unzip -q "$tui_archive" -d "$tui_extract"; then
+			echo "note: the terminal TUI archive could not be unpacked; the CLI is installed."
+			return 0
+		fi
+		tui_binary="$tui_extract/git-review-ui.exe"
+		tui_dest="$BIN_DIR/git-review-ui.exe"
+		;;
+	*)
+		if ! tar -xzf "$tui_archive" -C "$tui_extract"; then
+			echo "note: the terminal TUI archive could not be unpacked; the CLI is installed."
+			return 0
+		fi
+		tui_binary="$tui_extract/git-review-ui"
+		tui_dest="$BIN_DIR/git-review-ui"
+		;;
+	esac
+	if [ ! -f "$tui_binary" ]; then
+		echo "note: the terminal TUI archive has an unexpected layout; the CLI is installed."
+		return 0
+	fi
+	cp "$tui_binary" "$tui_dest"
+	chmod +x "$tui_dest"
+	echo "Installed terminal TUI ($tui_tag): $(basename "$tui_dest")"
+}
+
+if [ "${GIT_REVIEW_WITH_UI:-}" = "1" ]; then
+	install_ui
+fi
+
 case ":$PATH:" in
 *":$BIN_DIR:"*) ;;
 *)

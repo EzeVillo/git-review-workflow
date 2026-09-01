@@ -1,44 +1,106 @@
-# Contributing to the terminal TUI
+# Contribuir a la interfaz de terminal
 
-This covers working *on* the TUI. For what it does and how to use it, see the
-[README](../README.md#tui) (once written) and the [project README](../README.md) and
-[CONTRIBUTING.md](../CONTRIBUTING.md) at the root; for the design, see
-[`../specs/015-cliente-tui/`](../specs/015-cliente-tui/), especially
-[`plan.md`](../specs/015-cliente-tui/plan.md) and
-[`contracts/tui-surface.md`](../specs/015-cliente-tui/contracts/tui-surface.md).
+Este documento cubre el desarrollo de la TUI. El uso del producto está en los
+[README](../README.es.md); las decisiones y contratos viven en
+[`../specs/015-cliente-tui/`](../specs/015-cliente-tui/). La CLI es la única
+fuente de verdad: la TUI reinvoca sus registros porcelain y nunca deriva estado
+del repositorio por su cuenta.
 
-## The CLI is the only source of truth
+## Build y tests
 
-Same rule as the other three clients: the TUI never derives review state on its own. Everything it
-shows comes from re-invoking `git review status --porcelain` / `--why` / `list --porcelain` /
-`config --porcelain` and reading the result. If the panel needs something the CLI does not report,
-it gets added to the CLI — never computed here.
+El módulo Go es independiente y fija su toolchain y dependencias en `go.mod` y
+`go.sum`:
 
-The canonical multi-client strings, action matrix and panel layout live in
-[`../contracts/client-product-surface.yaml`](../contracts/client-product-surface.yaml);
-`tui/internal/domain/layout_contract_test.go` checks this client against it on every `go test`.
+```sh
+cd tui
+gofmt -w .
+go vet ./...
+go test ./...
+go build ./cmd/git-review-ui
+```
 
-> The rest of this document — build, test, how the golden files are regenerated and reviewed, the
-> watcher's total-shutoff lever, the `reviewui.*` config keys, and the release runbook — lands
-> alongside packaging in a later pass. What follows is the one piece that ships now: the manual smoke
-> matrix a release walks through, matching
-> [`../specs/015-cliente-tui/quickstart.md`](../specs/015-cliente-tui/quickstart.md) § Matriz smoke.
+Desde la raíz, `node scripts/check-client-product-surface.mjs` compara las
+acciones, el layout, la copy y el mapa de teclas contra
+`contracts/client-product-surface.yaml`. Antes de entregar un cambio, los cuatro
+comandos deben quedar verdes y `gofmt -l .` no debe imprimir archivos.
 
-## Smoke matrix (before a release)
+La suite normal usa un watcher nulo para ser determinista. El watcher real se
+ejercita únicamente en `internal/host/watch_fsnotify_test.go`; para una prueba
+manual completa se habilita al arrancar:
 
-Eight cases, run by hand on Windows, macOS and Linux (a real terminal each time — not this repo's
-own `go test`, which runs everything with the watcher off and no real TTY). None of these are
-optional: each one is a failure mode that only shows up outside the golden files and the unit suite,
-either because it depends on a real terminal, a real network, or an environment this repo's CI
-cannot reproduce (an old CLI on `PATH`, a non-ASCII filesystem path, a real SSH credential prompt).
+```sh
+GIT_REVIEW_UI_WATCH=1 go run ./cmd/git-review-ui
+```
 
-| # | Case | OK if | Covered by an automated test? |
-|---|---|---|---|
-| 1 | `git review ui` with an old CLI on `PATH` | situation `cli-outdated`, never `cli-missing` | Yes — `tui/internal/domain/situation_test.go` (the version-probe cases) and `tui/internal/host/versionprobe_test.go` cover the derivation; this row is the end-to-end confirmation with a real old binary |
-| 2 | an accented, space-containing path inside the reviewed range | lists correctly and opens correctly | Partially — `tui/internal/domain/pathref_test.go` covers the raw/display split; this row is the end-to-end confirmation through a real `$EDITOR`/difftool |
-| 3 | `start --offline` from the start assistant | review becomes active | Partially — `tui/internal/domain/intent_test.go` covers the assistant's own argv; this row confirms the CLI actually accepts it end to end |
-| 4 | a network verb whose credentials would prompt (no cached credentials, no agent) | fails with a diagnostic, **never hangs the pane** | Yes, at the mechanism level — `tui/internal/host/askpass_test.go` (T041) proves the askpass sentinel exits non-zero and silent, without ever touching the terminal; this row is the one confirmation that a REAL `git fetch` under `GIT_TERMINAL_PROMPT=0` actually takes that path instead of blocking on stdin |
-| 5 | a linked worktree | the two guides come from the common gitdir; the draft comes from the worktree's own gitdir | Yes — `tui/internal/host/gitdata_test.go` and the linked-worktree cases in `tui/internal/host/watch_fsnotify_test.go` (T059); this row is the manual confirmation in a real terminal |
-| 6 | Windows: `git review ui` after installing the TUI via `web-install.ps1 -WithUi` | starts | No — this is an installer/packaging path with nothing to unit-test under `go test` |
-| 7 | a repository with the `reftable` ref backend | starts and refreshes | Yes — `tui/internal/host/watch_fsnotify_test.go`'s `reftable` case (T058); this row is the manual confirmation outside the watcher-focused test |
-| 8 | `cwd` outside any git repository | an actionable error situation (the `no_single_root` copy), never a blank screen | Yes — `tui/internal/host/statecycle_test.go`'s `TestReadStateOutsideARepositoryIsError` (T100) |
+`GIT_REVIEW_UI_WATCH=0` (o dejar la variable sin definir) es la palanca de
+apagado total para soporte y tests. Apaga sólo la aceleración por eventos: las
+teclas, el foco, las mutaciones y el refresco explícito siguen leyendo la CLI.
+
+## Golden files
+
+Los golden se comparan por bytes en dos tamaños y con glifos normales/ASCII.
+Sólo existe el flag de regeneración bajo el build tag deliberado:
+
+```sh
+cd tui
+go test -tags goldenupdate ./internal/ui -update
+git diff -- testdata/golden
+go test ./internal/ui
+```
+
+Revisá el diff como UI: jerarquía, truncado, foco, barra de teclas, anchos y la
+variante ASCII. No aceptes una regeneración masiva sin explicar qué decisión
+visual cambió. CI no conoce `-update`, por lo que nunca puede reescribir golden.
+
+## Configuración `reviewui.*`
+
+- `reviewui.startsource`: preselecciona la fuente del asistente de inicio; hoy
+  acepta `remote`, `local` u `offline` sin ocultar las demás opciones válidas.
+- `reviewui.pollseconds`: piso opt-in para montajes de red que pierden eventos.
+  Un entero positivo arma una lectura sólo cuando pasó ese intervalo sin ningún
+  otro refresco; ausente, inválido, cero o negativo significa apagado.
+
+Las claves se leen con `git config --get`: una local sobrescribe una global. La
+variable `GIT_REVIEW_UI_WATCH` no es configuración de producto y no debe
+convertirse en una clave `reviewui.*`.
+
+## Matriz smoke previa a un release
+
+Corré los ocho casos en Windows, macOS y Linux, en una terminal real. Usá
+`../tests/sandbox.sh` y `../tests/sandbox-min.sh`; las historias de refresco y
+pane se validan en dos panes de tmux/screen.
+
+| # | Caso | Resultado esperado |
+|---|---|---|
+| 1 | CLI anterior en `PATH` | `cli-outdated`, nunca `cli-missing` |
+| 2 | path con espacios y caracteres no ASCII | lista, abre y diffea el path exacto |
+| 3 | `start --offline` desde el asistente | inicia la review |
+| 4 | credenciales que intentarían prompt | diagnóstico sin colgar el pane |
+| 5 | worktree enlazado | guías desde common-dir y borrador desde git-dir |
+| 6 | Windows, instalación con `web-install.ps1 -WithUi` | `git review ui` arranca |
+| 7 | backend de refs `reftable` | arranca y refresca |
+| 8 | `cwd` fuera de un repositorio | error accionable, nunca pantalla vacía |
+
+La evidencia detallada SC-001…SC-018 y los pasos del recorrido están en
+[`../specs/015-cliente-tui/quickstart.md`](../specs/015-cliente-tui/quickstart.md).
+
+## Runbook de release
+
+La TUI versiona aparte. No se publica en npm ni en otra tienda; el GitHub
+Release publica siete binarios y la fórmula Homebrew consume los cuatro que
+corresponden a macOS/Linux × ARM/Intel.
+
+1. Elegí la versión y ejecutá `./tui/bump-version.sh X.Y.Z` desde la raíz.
+2. Revisá que cambien sólo `tui/internal/domain/version.go` y la `version` de
+   `Formula/git-review-ui.rb`; sus cuatro `sha256` deben seguir en placeholder.
+3. Corré `./lint-docker.sh tui/bump-version.sh`,
+   `./tests/run-docker.sh version-consistency.bats`, los gates Go y el checker
+   del canónico.
+4. Completá la matriz smoke y el quickstart de punta a punta.
+5. Taggeá el commit ya integrado como `tui-vX.Y.Z` y pusheá el tag.
+
+`.github/workflows/release-tui.yml` vuelve a verificar el commit taggeado en los
+tres sistemas, cross-compila los siete targets con `CGO_ENABLED=0`, comprueba
+existencia y `SHA256SUMS`, crea el Release con `--latest=false` y fija los cuatro
+checksums de la fórmula en la rama por default. No hay paso de publicación en
+un registro ni alta previa que realizar.

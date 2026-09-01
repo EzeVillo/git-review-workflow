@@ -38,6 +38,8 @@ _install_commands() {
 
 @test "web-uninstall.sh removes every installed command" {
 	_install_commands
+	printf '#!/bin/sh\n' > "$PREFIX/git-review-ui"
+	chmod +x "$PREFIX/git-review-ui"
 	# Guard against a false positive: the files must really be there first.
 	for c in $CMDS; do
 		[ -e "$PREFIX/$c" ]
@@ -49,6 +51,7 @@ _install_commands() {
 	for c in $CMDS; do
 		[ ! -e "$PREFIX/$c" ]
 	done
+	[ ! -e "$PREFIX/git-review-ui" ]
 }
 
 @test "web-uninstall.sh reports each command it removed" {

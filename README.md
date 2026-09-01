@@ -220,6 +220,33 @@ same `PREFIX` if you overrode it):
 curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-uninstall.sh | sh
 ```
 
+### Terminal UI (optional)
+
+The terminal UI is a separate static binary and needs the CLI above. Install it
+from the same Homebrew tap:
+
+```sh
+brew install EzeVillo/git-review-workflow/git-review-ui
+```
+
+Or opt into it when using a one-line installer (without the flag, those
+installers continue to install only the CLI):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.sh | GIT_REVIEW_WITH_UI=1 sh
+```
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.ps1))) -WithUi
+```
+
+The seven platform archives are also attached directly to each
+[`tui-v*` release](https://github.com/EzeVillo/git-review-workflow/releases).
+Run it with `git review ui` from inside a repository. On network mounts whose
+file notifications are unreliable, set a minimum refresh interval, for example
+`git config reviewui.pollseconds 45`; every normal refresh resets that floor, so
+it does not add polling while notifications are arriving.
+
 <details>
 <summary>From a downloaded copy</summary>
 
@@ -301,9 +328,12 @@ git config --global http.sslBackend openssl
 Every command is a verb under `git review`. Run `git review -h` for the list, or
 `git review <verb> -h` for one verb's details.
 
+`git review-ui` is the shell-friendly synonym for launching `git review ui`.
+
 | Command                                                                                                                                      | What it does                                                                                                                                                                                                                                                                                                                                                       |
 |----------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `git review [-h \| --version]`                                                                                                               | List all verbs or print the installed version.                                                                                                                                                                                                                                                                                                                     |
+| `git review ui`                                                                                                                              | Open the terminal interface for the current repository.                                                                                                                                                                                                                                                                                                           |
 | `git review start [<branch>] [<base> \| --base <base> \| --delta \| --from <commit>] [--step \| --no-walk \| --keys] [--local \| --offline]` | Fetch `origin`, then stage the PR diff on a new `review/<branch>` branch (omit `<branch>` to review the current branch; enters walk mode if the PR carries a walkthrough; `--keys` restricts walk to entries marked `> key`; `--local` reviews your local branch but still diffs against origin's base; `--offline` also skips fetching and uses your local base). |
 | `git review compare <a> <b> [--step \| --no-walk \| --keys]`                                                                                 | Stage the diff between two commit-ish (tags, commits, branches) read-only, to read or walk it. `git review finish` refuses — there is nothing to write back.                                                                                                                                                                                                       |
 | `git review walkthrough (init [--base <base>] [--force] [--stdout] [--porcelain] \| build [--check] [--from <file> \| --from -])`                                 | Author a reading walkthrough for the current branch's PR — a guided order of the changed files with a note on each, committed as `.review/walkthrough.md`. Run `init` again after the PR moves on and it **updates** what is there: entries whose file is still in range keep their number, their why and their `> key`, files that entered the range arrive as placeholders, and entries whose file left it are dropped and named (`--force` discards the lot and writes a blank skeleton instead). `build` stamps a `> at:` anchor under each entry, so a later `build` can name the whys written against a version of their file that no longer exists — a note, never a failure. `--stdout` prints the skeleton instead of writing it and `--from` installs a filled-in one from a file or standard input, so an agent can write the reading order without touching your working tree. |

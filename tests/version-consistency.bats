@@ -115,6 +115,57 @@ EOF
 	[ "$props" = "$pkg" ]
 }
 
+# --- Terminal TUI (versioned independently of the CLI) ----------------------
+
+tui_version() {
+	sed -nE 's#^const TUIVersion = "([^"]*)"#\1#p' "$REPO/tui/internal/domain/version.go"
+}
+
+@test "version: tui version.go is a bare semver" {
+	v="$(tui_version)"
+	[[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+		echo "tui/internal/domain/version.go has no bare-semver TUIVersion: $v"
+		false
+	}
+}
+
+@test "version: tui Homebrew formula matches version.go" {
+	tui="$(tui_version)"
+	formula="$(sed -nE 's#^  version "([^"]*)"#\1#p' "$REPO/Formula/git-review-ui.rb")"
+	[ "$formula" = "$tui" ] || {
+		echo "Formula/git-review-ui.rb version $formula != tui/internal/domain/version.go $tui"
+		false
+	}
+}
+
+@test "version: tui has no package.json" {
+	packages="$(find "$REPO/tui" -name package.json -type f -print)"
+	[ -z "$packages" ] || {
+		echo "tui must not gain a package.json: $packages"
+		false
+	}
+}
+
+@test "version: tui bump stamps version.go and formula but preserves checksums" {
+	work="$(mktemp -d)"
+	mkdir -p "$work/tui/internal/domain" "$work/Formula"
+	cp "$REPO/tui/bump-version.sh" "$work/tui/bump-version.sh"
+	cp "$REPO/tui/internal/domain/version.go" "$work/tui/internal/domain/version.go"
+	cp "$REPO/Formula/git-review-ui.rb" "$work/Formula/git-review-ui.rb"
+	before="$(sed -nE 's#^[ ]+sha256 "([^"]*)"#\1#p' "$work/Formula/git-review-ui.rb")"
+
+	run sh "$work/tui/bump-version.sh" 9.8.7
+	[ "$status" -eq 0 ]
+	[ "$(sed -nE 's#^const TUIVersion = "([^"]*)"#\1#p' "$work/tui/internal/domain/version.go")" = "9.8.7" ]
+	[ "$(sed -nE 's#^  version "([^"]*)"#\1#p' "$work/Formula/git-review-ui.rb")" = "9.8.7" ]
+	urls="$(sed -nE 's#^[ ]+url "([^"]*)"#\1#p' "$work/Formula/git-review-ui.rb")"
+	[ "$(printf '%s\n' "$urls" | grep -c '/tui-v9.8.7/git-review-ui_9.8.7_')" -eq 4 ]
+	! printf '%s\n' "$urls" | grep -q '0.1.0'
+	after="$(sed -nE 's#^[ ]+sha256 "([^"]*)"#\1#p' "$work/Formula/git-review-ui.rb")"
+	[ "$after" = "$before" ]
+	rm -rf "$work"
+}
+
 # --- Client CHANGELOGs name the version being shipped -----------------------
 #
 # Each client's CHANGELOG top section is what its store publishes (the JetBrains

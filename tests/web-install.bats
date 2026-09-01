@@ -32,6 +32,21 @@ setup() {
 	export FAKE_TARBALL="$TMP/release.tar.gz"
 	tar -czf "$FAKE_TARBALL" -C "$TMP/arc" git-review-workflow-v0.0.1
 
+	# Build the release-shaped TUI asset and checksum list used by opt-in tests.
+	TUI_DIR="$TMP/tui-asset"
+	mkdir -p "$TUI_DIR"
+	cat > "$TUI_DIR/git-review-ui" << 'TUISTUB'
+#!/bin/sh
+printf 'tui-probe\n'
+TUISTUB
+	chmod +x "$TUI_DIR/git-review-ui"
+	export FAKE_TUI_ASSET="$TMP/git-review-ui_0.1.0_linux_amd64.tar.gz"
+	tar -czf "$FAKE_TUI_ASSET" -C "$TUI_DIR" git-review-ui
+	export FAKE_TUI_SUMS="$TMP/SHA256SUMS"
+	printf '%s  %s\n' "$(sha256sum "$FAKE_TUI_ASSET" | cut -d' ' -f1)" \
+		"git-review-ui_0.1.0_linux_amd64.tar.gz" > "$FAKE_TUI_SUMS"
+	export FAKE_CALL_LOG="$TMP/curl-calls.log"
+
 	# Stub curl: serve local content for every URL pattern the installer uses.
 	MOCK_BIN="$TMP/mock-bin"
 	mkdir -p "$MOCK_BIN"
@@ -45,8 +60,12 @@ while [ $# -gt 0 ]; do
 		*)  url="$1"; shift ;;
 	esac
 done
+printf '%s\n' "$url" >> "$FAKE_CALL_LOG"
 case "$url" in
 	*/releases/latest)  printf '{"tag_name":"v0.0.1"}\n' ;;
+	*/releases\?per_page=100) printf '[{"tag_name":"tui-v0.1.0"},{"tag_name":"v0.0.1"}]\n' ;;
+	*/releases/download/tui-v0.1.0/SHA256SUMS) cat "$FAKE_TUI_SUMS" ;;
+	*/releases/download/tui-v0.1.0/git-review-ui_0.1.0_linux_amd64.tar.gz) cat "$FAKE_TUI_ASSET" ;;
 	*api.github.com/*)  printf '{"default_branch":"main"}\n' ;;
 	*.tar.gz)           cat "$FAKE_TARBALL" ;;
 	*)                  printf 'stub-curl: unhandled %s\n' "$url" >&2; exit 1 ;;
@@ -114,4 +133,52 @@ CURLSTUB
 	run "$PREFIX/git-review" start -h
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"usage: git review start"* ]]
+}
+
+@test "web-install.sh default does not request or install the TUI" {
+	run sh "$REPO/web-install.sh"
+	[ "$status" -eq 0 ]
+	[ ! -e "$PREFIX/git-review-ui" ]
+	! grep -q '/releases?per_page=100\|/releases/download/tui-v' "$FAKE_CALL_LOG"
+}
+
+@test "web-install.sh opt-in installs verified TUI beside dispatcher" {
+	run env GIT_REVIEW_WITH_UI=1 sh "$REPO/web-install.sh"
+	[ "$status" -eq 0 ]
+	[ -x "$PREFIX/git-review-ui" ]
+
+	# Own allowlist: the default dispatcher-only contract remains unchanged.
+	got="$(for f in "$PREFIX"/*; do basename "$f"; done | sort)"
+	want="$(printf '%s\n' git-review git-review-lib.sh git-review-ui git-review-verbs | sort)"
+	[ "$got" = "$want" ]
+
+	run env PATH="$PREFIX:$PATH" git review-ui --probe
+	[ "$status" -eq 0 ]
+	[ "$output" = "tui-probe" ]
+	grep -q '/releases/latest' "$FAKE_CALL_LOG"
+	grep -q '/releases?per_page=100' "$FAKE_CALL_LOG"
+}
+
+@test "web-install.sh checksum mismatch leaves CLI installed and skips TUI" {
+	printf '%064d  %s\n' 0 "git-review-ui_0.1.0_linux_amd64.tar.gz" > "$FAKE_TUI_SUMS"
+	run env GIT_REVIEW_WITH_UI=1 sh "$REPO/web-install.sh"
+	[ "$status" -eq 0 ]
+	[ -x "$PREFIX/git-review" ]
+	[ ! -e "$PREFIX/git-review-ui" ]
+	[[ "$output" == *"note:"* ]]
+	[[ "$output" == *"checksum"* ]]
+}
+
+@test "web-install.sh unsupported platform leaves CLI installed and notes skip" {
+	cat > "$MOCK_BIN/uname" << 'UNAMESTUB'
+#!/bin/sh
+printf 'Plan9\n'
+UNAMESTUB
+	chmod +x "$MOCK_BIN/uname"
+	run env GIT_REVIEW_WITH_UI=1 sh "$REPO/web-install.sh"
+	[ "$status" -eq 0 ]
+	[ -x "$PREFIX/git-review" ]
+	[ ! -e "$PREFIX/git-review-ui" ]
+	[[ "$output" == *"note:"* ]]
+	[[ "$output" == *"platform"* ]]
 }

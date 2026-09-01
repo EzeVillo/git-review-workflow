@@ -265,12 +265,12 @@ Cada `@test` de bats debe fallar de verdad cuando el comportamiento se rompe:
   **se deja como está** y solo se escribe en español lo que uno completa: los encabezados en inglés
   se conservan verbatim porque Spec Kit localiza las secciones por su nombre. Esto no aplica al
   *producto*: código, mensajes, los README y los nombres de los `@test` siguen sus propias reglas.
-- **El README es producto; el desarrollo va en `CONTRIBUTING.md`.** Vale para la raíz y para los tres
+- **El README es producto; el desarrollo va en `CONTRIBUTING.md`.** Vale para la raíz y para los cuatro
   clientes.
 
-## Clientes del monorepo (VS Code + IntelliJ + Visual Studio)
+## Clientes del monorepo (VS Code + IntelliJ + Visual Studio + terminal)
 
-La CLI es la única fuente de verdad. Los tres leen solo porcelain/argv; ninguno deriva estado por su
+La CLI es la única fuente de verdad. Los cuatro leen solo porcelain/argv; ninguno deriva estado por su
 cuenta.
 
 - **`vscode-extension/`** — proyecto npm aparte (TypeScript + esbuild). Nunca deriva estado: todo
@@ -289,6 +289,22 @@ cuenta.
   **`GitReview.Host`** (invocador, refresh, lock de mutación) y **`GitReview.VS`** (VSIX — WPF
   `PanelView` con el mismo orden y las mismas etiquetas en inglés; solo los colores siguen el tema
   del host).
+- **`tui/`** — módulo Go independiente. `internal/domain/` es puro; `internal/host/` contiene
+  procesos, git y vigilancia; `internal/ui/` dibuja Bubble Tea; `cmd/git-review-ui/` es el único
+  composition root. Se verifica con `gofmt -l .`, `go vet ./...`, `go test ./...` y los 68 golden.
+  `GIT_REVIEW_UI_WATCH=1` habilita la vigilancia real; `0` o ausente la apaga para soporte/tests sin
+  alterar la corrección del panel. Ver `tui/CONTRIBUTING.md`.
+
+```text
+tui/
+├── cmd/git-review-ui/       # composition root y binario
+├── internal/domain/         # dominio puro, sin os/exec ni filesystem
+├── internal/host/           # invocación, gitdirs, lock y fsnotify
+├── internal/ui/             # modelo, acciones, dibujo y golden
+├── testdata/golden/         # snapshots normales y ASCII, dos tamaños
+├── go.mod / go.sum
+└── bump-version.sh
+```
 
 El canónico anti-drift vive en **`contracts/client-product-surface.yaml`**: la matriz de **27
 acciones**, `panel_layout:`, `guide_rows:`, `draft_controls:`, `fixes_rows:`, `icon_vocabulary:`,
@@ -296,7 +312,13 @@ acciones**, `panel_layout:`, `guide_rows:`, `draft_controls:`, `fixes_rows:`, `i
 `min_cli_version`, npm, strings críticos, las 27 acciones vs el `package.json` de la extensión, las
 seis comprobaciones de layout vs `panelHtml.ts`, y los mismos escalares contra los archivos de
 dominio de `visualstudio-extension/`. Del lado IntelliJ lo ata además `PanelLayoutContractTest` en
-cada `./gradlew test`, y del lado Visual Studio `PanelLayoutContractTests` en cada `dotnet test`.
+cada `./gradlew test`, del lado Visual Studio `PanelLayoutContractTests` en cada `dotnet test` y del
+lado TUI los tests de contrato de `internal/domain`/`internal/ui` en cada `go test`.
+
+Las dos migraciones que incorporaron el cuarto cliente son parte del contrato: `min_cli_version`
+es un mapa por cliente (los valores pueden y deben divergir cuando cada release lo necesite), y la
+copy antes llamada `multi_root_error` vive como `per_client_strings.no_single_root`, porque una
+terminal fuera de un repositorio no tiene el concepto de workspace multi-root.
 
 **Las reglas que el contrato hace cumplir:**
 
@@ -311,7 +333,7 @@ cada `./gradlew test`, y del lado Visual Studio `PanelLayoutContractTests` en ca
   se verifica en las **dos** direcciones. Hoy hay una sola: `openAllChanges` no existe en Visual
   Studio. Reponerla sin tocar el contrato falla CI, que es lo que se quiere.
 - **La paridad es una regla del monorepo, no una promesa al usuario.** Ninguna superficie que le
-  llegue a quien instala nombra a los otros dos clientes ni dice «paridad con X». Se cuenta en los
+  llegue a quien instala nombra a los demás clientes ni dice «paridad con X». Se cuenta en los
   `CONTRIBUTING.md` y acá.
 - **De la ficha de cada tienda se comparte la copy corta, no el cuerpo:** el tagline (byte por byte)
   y los keywords (como conjunto normalizado). El cuerpo no se verifica.
@@ -408,8 +430,9 @@ Los clientes versionan **aparte** de la CLI y entre sí, con el mismo patrón:
 | `./vscode-extension/bump-version.sh X.Y.Z` | `package.json` + las entradas propias de `package-lock.json` |
 | `./jetbrains-plugin/bump-version.sh X.Y.Z` | `pluginVersion` en `gradle.properties` |
 | `./visualstudio-extension/bump-version.sh X.Y.Z` | `GitReview.VS.csproj`, `source.extension.vsixmanifest` y `Directory.Build.props` |
+| `./tui/bump-version.sh X.Y.Z` | `tui/internal/domain/version.go` + `Formula/git-review-ui.rb` (conserva sus cuatro `sha256`) |
 
-`tests/version-consistency.bats` protege contra el drift de la CLI y de los tres clientes.
+`tests/version-consistency.bats` protege contra el drift de la CLI y de los cuatro clientes.
 
 **El CHANGELOG del plugin de JetBrains no es solo documentación: es lo que se publica.** La sección
 de la versión que se está sacando se renderiza al `<change-notes>` del descriptor, o sea la pestaña
@@ -420,3 +443,10 @@ release publica notas vacías.
 Marketplace, mientras que `v*` sigue siendo solo la CLI. Su Release de GitHub va con
 **`--latest=false`** — los dos `web-install` resuelven `releases/latest` para elegir el ref de la
 CLI. Detalle en `decisiones.md` §13.
+
+**La TUI también tiene namespace y workflow propios:** `tui-v*` dispara
+`.github/workflows/release-tui.yml`, que verifica el commit taggeado en tres SO, cross-compila los
+siete binarios estáticos en Ubuntu y adjunta esos assets más `SHA256SUMS` al GitHub Release. Se crea
+con **`--latest=false`** para que `releases/latest` siga resolviendo sólo releases `v*` de la CLI;
+después fija los cuatro checksums de `Formula/git-review-ui.rb` en la rama por default. No hay
+registro de paquetes ni job de publicación adicional.

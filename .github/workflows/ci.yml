@@ -185,18 +185,32 @@ jobs:
         run: ./verification-report.sh verification.log
 
   visualstudio-extension:
-    # Windows only, and not out of convenience: the client is a Visual Studio
-    # extension. The default build is net8.0 / net8.0-windows (portable domain
-    # plus the WPF panel), and the VSIX is net472, built by the MSBuild of a
-    # Visual Studio installation because the VSSDK tasks are .NET Framework
-    # tasks. No other runner has either half.
-    runs-on: windows-latest
+    # The VSIX is Windows only, and not out of convenience: it is net472, built
+    # by the MSBuild of a Visual Studio installation because the VSSDK tasks are
+    # .NET Framework tasks, and the panel beside it is WPF. No other runner has
+    # either half, so those steps carry a guard.
+    #
+    # The two layers under them are not Windows at all: GitReview.Domain and
+    # GitReview.Host are net8.0 without a single Microsoft.VisualStudio import,
+    # and they are exactly where the OS gets a vote -- spawning processes,
+    # capturing UTF-8, path separators, watching a directory. Running them on
+    # windows-latest alone left the code with the most reason to differ between
+    # the three tested on one.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, macos-latest, windows-latest ]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-      - name: Build
+      # Windows only: the solution carries GitReview.VS, which is WPF, so only
+      # the runner that can build it is asked to. The two test projects below
+      # build themselves from their own references.
+      - name: Build (Windows only)
+        if: runner.os == 'Windows'
         working-directory: visualstudio-extension
         run: dotnet build GitReview.sln -v minimal
       # PanelLayoutContractTests compares the panel layout against
@@ -204,21 +218,23 @@ jobs:
       # JetBrains `./gradlew test` carries.
       - name: Domain unit tests
         working-directory: visualstudio-extension
-        run: dotnet test tests/GitReview.Domain.Tests --no-build -v minimal
+        run: dotnet test tests/GitReview.Domain.Tests -v minimal
       # The host layer: the refresh pipeline against a scripted CLI, plus the few
       # cases that need a real process (UTF-8 capture, the cwd, a missing
       # executable). Those spawn git, which every runner already has.
       - name: Host tests
         working-directory: visualstudio-extension
-        run: dotnet test tests/GitReview.Host.Tests --no-build -v minimal
-      - name: Layout smoke
+        run: dotnet test tests/GitReview.Host.Tests -v minimal
+      - name: Layout smoke (Windows only)
+        if: runner.os == 'Windows'
         working-directory: visualstudio-extension
         run: dotnet run --project src/GitReview.VS --no-build -- --verify
       # net472 is off by default (GitReviewPackVsix), so whatever only breaks
       # there — the Compat shims, the VSSDK wiring, the vsixmanifest — is
       # invisible to every step above. This is the gate for it, and the only
       # check that the artifact users install still packs at all.
-      - name: Build the VSIX (net472)
+      - name: Build the VSIX (net472, Windows only)
+        if: runner.os == 'Windows'
         working-directory: visualstudio-extension
         shell: pwsh
         run: ./build-vsix.ps1
@@ -256,3 +272,18 @@ jobs:
       - name: go test
         working-directory: tui
         run: go test ./...
+      # Los siete pares GOOS/GOARCH que release-tui.yml publica. `go test`
+      # arriba corre en tres hosts y cubre linux/amd64, darwin/arm64 y
+      # windows/amd64; linux/arm64, linux/armv7, darwin/amd64 y windows/arm64
+      # no los compila nadie hasta que existe el tag, y ahi el fallo llega con
+      # el Release a medio armar. Cross-compilar da lo mismo desde cualquier
+      # host, asi que va en uno solo.
+      - name: Cross-compile every released target (Linux only)
+        if: runner.os == 'Linux'
+        working-directory: tui
+        run: |
+          set -eu
+          for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64                         linux/arm windows/amd64 windows/arm64; do
+            echo "-> $target"
+            CGO_ENABLED=0 GOOS="${target%/*}" GOARCH="${target#*/}" GOARM=7               go build -trimpath -o /dev/null ./cmd/git-review-ui
+          done

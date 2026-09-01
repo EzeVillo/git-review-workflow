@@ -14,7 +14,8 @@ import (
 // PanelModel (comparable by value, per domain/panelmodel.go) plus the
 // pieces of state that are NOT product state: the terminal Viewport, which
 // row currently has keyboard focus, FR-039's opt-in poll floor bookkeeping
-// (pollFloor/pollGen — see scheduleRead), and Phase 6's mutation cycle —
+// (pollFloor/pollGen — see scheduleRead), the generation that prevents late
+// reads from repainting newer state, and Phase 6's mutation cycle —
 // the depth-1 lock, the one confirmation overlay, the one selection
 // overlay (start assistant / setBase / setRemote / finish-destination),
 // the last full read (mutation.go's setBase/setRemote pickers read
@@ -23,16 +24,17 @@ import (
 // (domain.PanelModel.StatusLine's own doc), and the one finishReview
 // outcome still waiting on its next read to resolve.
 type Model struct {
-	Viewport      Viewport
-	Panel         domain.PanelModel
-	FocusIndex    int
-	footerOffset  int
-	hover         *controlTarget
-	pollFloor     time.Duration
-	pollGen       int
-	lock          host.MutationLock
-	confirm       *ConfirmOverlay
-	selectOverlay *SelectOverlay
+	Viewport       Viewport
+	Panel          domain.PanelModel
+	FocusIndex     int
+	footerOffset   int
+	hover          *controlTarget
+	pollFloor      time.Duration
+	pollGen        int
+	readGeneration int
+	lock           host.MutationLock
+	confirm        *ConfirmOverlay
+	selectOverlay  *SelectOverlay
 	// actionList / textOverlay: Phase 8's own two extra overlays — the
 	// action palette (T084, this client's `surface: action`) and the
 	// read-only text viewer showCliLog/previewEditsStat open (T087/T088).
@@ -118,9 +120,12 @@ func WatchTick() tea.Msg { return watchMsg{} }
 // sender, never touch Update's shape.
 type watchMsg struct{}
 
-// readDoneMsg carries one full host.ReadState cycle's result back from the
-// tea.Cmd that ran it.
-type readDoneMsg struct{ result host.ReadResult }
+// readDoneMsg carries one full host.ReadState cycle's result and generation
+// back from the tea.Cmd that ran it.
+type readDoneMsg struct {
+	generation int
+	result     host.ReadResult
+}
 
 // mutationDoneMsg (Phase 6) is defined in mutation.go, alongside the rest of
 // the mutation cycle it feeds: handleMutationDone, the lock, the status
@@ -143,15 +148,15 @@ type pollFloorMsg struct{ gen int }
 // between startup and the first FocusMsg/watchMsg/keypress.
 func (m Model) Init() tea.Cmd {
 	if m.pollFloor <= 0 {
-		return readCmd()
+		return readCmd(m.readGeneration)
 	}
-	return tea.Batch(readCmd(), pollFloorTickCmd(m.pollFloor, m.pollGen))
+	return tea.Batch(readCmd(m.readGeneration), pollFloorTickCmd(m.pollFloor, m.pollGen))
 }
 
-func readCmd() tea.Cmd {
+func readCmd(generation int) tea.Cmd {
 	return func() tea.Msg {
 		cwd, _ := os.Getwd()
-		return readDoneMsg{result: host.ReadState(context.Background(), cwd, domain.MinCLIVersion)}
+		return readDoneMsg{generation: generation, result: host.ReadState(context.Background(), cwd, domain.MinCLIVersion)}
 	}
 }
 
@@ -172,10 +177,11 @@ func pollFloorTickCmd(interval time.Duration, gen int) tea.Cmd {
 // to call something at N call sites.
 func (m Model) scheduleRead() (Model, tea.Cmd) {
 	m.pollGen++
+	m.readGeneration++
 	if m.pollFloor <= 0 {
-		return m, readCmd()
+		return m, readCmd(m.readGeneration)
 	}
-	return m, tea.Batch(readCmd(), pollFloorTickCmd(m.pollFloor, m.pollGen))
+	return m, tea.Batch(readCmd(m.readGeneration), pollFloorTickCmd(m.pollFloor, m.pollGen))
 }
 
 // Update never calls into internal/host itself — every branch either
@@ -220,6 +226,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.scheduleRead()
 
 	case readDoneMsg:
+		if msg.generation != m.readGeneration {
+			return m, nil
+		}
 		m.lastRead = msg.result
 		m.Panel = domain.Project(toProjectInput(msg.result, m.Panel.MouseEnabled, m.lock.Busy(), m.statusLine))
 		if m.pendingFinish != nil {

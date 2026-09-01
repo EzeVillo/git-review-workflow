@@ -43,7 +43,7 @@ func TestMutationSilenceWindowProducesExactlyOneRepaint(t *testing.T) {
 	// Settle to a baseline no-review panel BEFORE the mutation itself —
 	// that first transition (waiting -> no-review) is not part of what
 	// this test measures.
-	baselineM, _ := m.Update(readDoneMsg{result: before})
+	baselineM, _ := m.Update(readDoneMsg{generation: m.readGeneration, result: before})
 	m = baselineM.(Model)
 
 	// Acquire the lock exactly as beginMutation would, so handleMutationDone
@@ -71,7 +71,7 @@ func TestMutationSilenceWindowProducesExactlyOneRepaint(t *testing.T) {
 	step(mutationDoneMsg{action: "setBase", params: domain.ActionParams{}, result: host.Result{ExitCode: 0}})
 	// The immediate read lands, reporting the NEW state — the one and only
 	// repaint this whole sequence should ever produce.
-	step(readDoneMsg{result: after})
+	step(readDoneMsg{generation: m.readGeneration, result: after})
 	// A watchMsg fires while the silence window is still open: suppressed
 	// and remembered, no read of its own.
 	step(watchMsg{})
@@ -80,7 +80,7 @@ func TestMutationSilenceWindowProducesExactlyOneRepaint(t *testing.T) {
 	step(silenceWindowMsg{gen: 1})
 	// That read lands, reporting the SAME (new) state yet again — same
 	// PanelModel value, so no further repaint.
-	step(readDoneMsg{result: after})
+	step(readDoneMsg{generation: m.readGeneration, result: after})
 
 	if repaints != 1 {
 		t.Fatalf("got %d repaints across the mutation's own refresh cycle, want exactly 1 (SC-004)", repaints)

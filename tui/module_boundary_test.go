@@ -10,7 +10,6 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -22,7 +21,7 @@ import (
 // lipgloss, bubbles, fsnotify — and nothing else, however many transitive
 // modules those four pull in.
 //
-// This parses go.mod with a small regex rather than importing
+// This parses go.mod with a small standard-library parser rather than importing
 // golang.org/x/mod/modfile: pulling in a parser library, even test-only,
 // would itself be a fifth dependency of this module — exactly the property
 // this test exists to guard.
@@ -31,27 +30,7 @@ func TestGoModDeclaresExactlyFourDirectDependencies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading go.mod: %v", err)
 	}
-	text := string(b)
-
-	reqBlockRe := regexp.MustCompile(`(?s)require \(\n(.*?)\n\)`)
-	blocks := reqBlockRe.FindAllStringSubmatch(text, -1)
-	if len(blocks) == 0 {
-		t.Fatal("go.mod has no require ( ... ) block — the format changed, update this test's parser")
-	}
-
-	lineRe := regexp.MustCompile(`^\s*(\S+)\s+v\S+(\s*//\s*indirect)?\s*$`)
-	var direct []string
-	for _, block := range blocks {
-		for _, line := range strings.Split(block[1], "\n") {
-			m := lineRe.FindStringSubmatch(line)
-			if m == nil {
-				continue
-			}
-			if m[2] == "" {
-				direct = append(direct, m[1])
-			}
-		}
-	}
+	direct := directRequirements(string(b))
 
 	want := map[string]bool{
 		"github.com/charmbracelet/bubbletea": true,
@@ -67,6 +46,52 @@ func TestGoModDeclaresExactlyFourDirectDependencies(t *testing.T) {
 			t.Errorf("go.mod declares unexpected direct dependency %q", d)
 		}
 	}
+}
+
+func TestDirectRequirementsParsesBlockAndSingleLineFormats(t *testing.T) {
+	contents := "require example.com/block v1.2.3\n\nrequire (\r\n\t// a valid comment\r\n\texample.com/direct v2.3.4\r\n\texample.com/indirect v3.4.5 // indirect\r\n)\r\n"
+	got := directRequirements(contents)
+	want := map[string]bool{"example.com/block": true, "example.com/direct": true}
+	if len(got) != len(want) {
+		t.Fatalf("direct requirements = %v, want %v", got, want)
+	}
+	for _, requirement := range got {
+		if !want[requirement] {
+			t.Errorf("direct requirements included %q, want only %v", requirement, want)
+		}
+	}
+}
+
+func directRequirements(goMod string) []string {
+	inRequireBlock := false
+	var direct []string
+	for _, line := range strings.Split(goMod, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		if inRequireBlock {
+			if fields[0] == ")" {
+				inRequireBlock = false
+				continue
+			}
+			if len(fields) >= 2 && strings.HasPrefix(fields[1], "v") && !strings.Contains(line, "// indirect") {
+				direct = append(direct, fields[0])
+			}
+			continue
+		}
+		if fields[0] != "require" {
+			continue
+		}
+		if len(fields) == 2 && fields[1] == "(" {
+			inRequireBlock = true
+			continue
+		}
+		if len(fields) >= 3 && strings.HasPrefix(fields[2], "v") && !strings.Contains(line, "// indirect") {
+			direct = append(direct, fields[1])
+		}
+	}
+	return direct
 }
 
 // TestNoImportNamesASiblingClient is FR-075/SC-014's second half. It is

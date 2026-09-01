@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/EzeVillo/git-review-workflow/tui/internal/domain"
+	"github.com/EzeVillo/git-review-workflow/tui/internal/host"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -108,6 +109,20 @@ func TestRefreshKeyTriggersACmd(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("the 'r' key must return a non-nil Cmd (disparador 4, FR-038)")
 	}
+}
+
+func TestOlderReadResultCannotOverwriteNewerState(t *testing.T) {
+	m := NewModel()
+	newer, _ := m.scheduleRead()
+	got, _ := newer.Update(readDoneMsg{generation: newer.readGeneration, result: readResult(domain.SituationReview)})
+	stale, _ := got.(Model).Update(readDoneMsg{generation: newer.readGeneration - 1, result: readResult(domain.SituationNoReview)})
+	if stale.(Model).Panel.Situation != domain.SituationReview {
+		t.Fatal("stale read repainted panel")
+	}
+}
+
+func readResult(situation domain.Situation) host.ReadResult {
+	return host.ReadResult{Situation: situation}
 }
 
 func TestWindowSizeMsgUpdatesViewport(t *testing.T) {

@@ -924,9 +924,20 @@ estampa todos los sitios que deben coincidir:
 - `./visualstudio-extension/bump-version.sh X.Y.Z` — `<Version>` en
   `GitReview.VS.csproj`, `Identity Version=` en `source.extension.vsixmanifest`
   y `GitReviewClientVersion` en `Directory.Build.props`
+- `./tui/bump-version.sh X.Y.Z` — `TUIVersion` en `tui/internal/domain/version.go` y la `version` de
+  `Formula/git-review-ui.rb`, **conservando sus cuatro `sha256`** en placeholder: dependen del
+  tarball que GitHub construye para el tag, que todavía no existe
 
 Los headings del CHANGELOG de cada cliente se escriben a mano. Un
-`tests/version-consistency.bats` protege contra el drift de la CLI y de los tres clientes.
+`tests/version-consistency.bats` protege contra el drift de la CLI y de los cuatro clientes.
+
+**El piso de CLI de un cliente no puede adelantarse al release que lo satisface.** `min_cli_version`
+es un mapa por cliente y que los cuatro difieran es el estado esperado, pero un piso apunta a una
+versión **publicada**: `min_cli_version.tui` fue `0.8.0` mientras el verbo `ui` vivía sólo en `main`,
+así que quien instalaba desde npm o brew tenía una CLI que el cliente consideraba al día y un
+`git review ui` que no existía —y la TUI no podía decir `cli-outdated`, porque `0.8.0 ≥ 0.8.0`—. El
+orden es siempre el mismo y no se puede acortar: se corta el `v*` de la CLI que trae el verbo, y
+recién ahí el piso del cliente sube a esa versión.
 
 **El CHANGELOG del plugin de JetBrains no es sólo documentación: es lo que se publica.** La sección
 de la versión que se está sacando se renderiza a HTML y va al `<change-notes>` del descriptor
@@ -936,6 +947,15 @@ New* del Marketplace y el diálogo que el IDE muestra antes de actualizar — la
 `## [X.Y.Z]` se escribe a mano **antes** de tagear, o el release publica notas vacías (cae a un link
 al CHANGELOG, que es un piso, no la intención). El check del contrato falla si `changeNotes`
 desaparece del `build.gradle.kts`.
+
+**La TUI también tiene namespace y workflow propios**, y ninguna tienda: `tui-v*` dispara
+`release-tui.yml`, que verifica el commit taggeado en los tres sistemas, cross-compila los siete
+binarios estáticos con `CGO_ENABLED=0` en Ubuntu, comprueba que existan los siete y que `SHA256SUMS`
+los cubra exactamente, crea el Release y fija los cuatro checksums de la fórmula en la rama por
+default. Va con **`--latest=false`** por el mismo motivo que el del plugin —los dos `web-install`
+resuelven `releases/latest` para elegir el ref de la CLI—, y sus notas salen de `--generate-notes`
+en vez de un CHANGELOG: no hay ficha de tienda que renderizarlas, que es la única razón por la que el
+de JetBrains se escribe a mano.
 
 **El plugin de JetBrains tiene su propio namespace de tags y su propio workflow**
 (`release-jetbrains.yml`): un `jetbrains-v*` lo publica al Marketplace (`publishPlugin`, con el
@@ -1229,3 +1249,87 @@ reconstruirse el webview: el resto sí, que evita el parpadeo sin afirmar nada.
 `hasResolvedState` en JetBrains, `HasResolved` en Visual Studio, y ahora `hasResolved` del
 `ReviewStateManager` de VS Code, que es lo que hace que un aviso de *busy* llegado durante el
 arranque no alcance para pintar la semilla.
+
+## 16. La TUI de terminal
+
+El cuarto cliente es un módulo Go independiente (`tui/`), y lo que sigue es lo que no se deduce
+leyendo su código.
+
+**Es un cliente más, no un puerto de la CLI.** Lee los mismos registros porcelain que los otros
+tres, respeta el mismo canónico y aparece en la matriz de `check-client-product-surface.mjs` con
+`tui=yes`. Lo que cambia es el host, y ahí cada divergencia se declara en el contrato y no en el
+cliente: `openAllChanges` es `not_in: [tui]` —abrir N diffs de golpe no es un gesto que un pane de
+multiplexor pueda sostener, y N invocaciones seguidas del difftool son una avalancha— y
+`reveals.tui` es `[]` con su gate propio, porque un pane lo abriste vos y robarle el foco a alguien
+en un multiplexor es agresión, no un acuse.
+
+**La copy propia se declara igual que la compartida.** `per_client_strings` existe para esto: la
+copy que antes se llamaba `multi_root_error` es `no_single_root`, porque una terminal fuera de un
+repositorio no tiene el concepto de workspace multi-root y la causa alcanzable es la otra. Lo mismo
+`after_install`: no hay ventana que recargar, y el texto viejo prometía un poll que FR-032 prohíbe
+hacer y FR-069 prohíbe decir.
+
+### 16.1 El mapa de teclas es un contrato, no una lista del cliente
+
+`keymap:` vive en el canónico por lo mismo que `icon_vocabulary:`: es lo último de un control que
+nadie declaraba, y un cliente que lo deriva solo se olvida de la mitad. La barra de teclas se dibuja
+de ese mismo mapa, así que una tecla que existe y no se muestra es imposible por construcción.
+
+**Y el gate tuvo la misma enfermedad que `confirms:`, por la misma causa.** Nació verificando en una
+sola dirección —que toda tecla declarada en el canónico apareciera en `keymap.go`— y encima
+buscándola como *string suelto* en el archivo, que es exactamente el `if` de cuerpo vacío de
+JetBrains con otro disfraz. Con ese gate en verde, `f`/`finishReview`, `s`/`saveReview` y
+`a`/`abortReview` estuvieron cableadas sin estar declaradas —dos de ellas destructivas—, y `enter`,
+`q` y `ctrl+c` vivían hardcodeadas en `ui/keys.go` detrás de un comentario que explicaba por qué el
+canónico no las declaraba: **una divergencia declarada del lado del cliente**, que es la forma que
+`not_in:` y `reveals:` existen para prohibir. Sacar cualquiera de las seis del canónico no ponía nada
+en rojo.
+
+Quedó así, y las tres piezas son inseparables:
+
+1. **Nada de teclas fuera del mapa.** `keymap.global:` declara las tres que no son acciones de
+   producto (`enter` activa el control con foco; `q` y `ctrl+c` salen — `ctrl+c` necesita handler
+   propio porque bubbletea pone la terminal en raw mode y no lo traduce a una señal). `ResolveKey`
+   las consulta como consulta las otras cinco tablas, así que su propia promesa —«never a hardcoded
+   parallel list»— dejó de ser falsa justo para las teclas que ningún gate comparaba.
+2. **La comparación es por PAR y en las dos direcciones.** Cada sección del canónico se compara
+   contra su variable de `keymap.go` como conjunto de `teclas → verbo`: lo que falta y lo que sobra
+   fallan igual. Reasignar `f` a `F` dejando el literal `"f"` en cualquier otro lado del archivo
+   —que el gate viejo aceptaba— ahora falla.
+3. **Una tecla pertenece a una sola sección.** La reserva de `n`/`p` para el cursor de la review era
+   el caso particular que motivó la regla; generalizada, es lo que permite que `ResolveKey` consulte
+   las seis tablas en cualquier orden sin que el orden decida nada. Con gate en el checker y espejo
+   en `keymap_test.go`.
+
+### 16.2 El binario contesta a `-h` y a `--version`
+
+`git review ui` pasa cada argumento sin tocarlo, y el binario no leía `os.Args` en absoluto: un
+`git review ui --setp` arrancaba la TUI como si no le hubieran pedido nada. Ahora refuta lo que no
+reconoce, con el mismo reparto que el dispatcher (`error:` a stderr, exit ≠ 0) y la misma disciplina
+que los verbos POSIX: se rechaza con una pista accionable, no se adivina.
+
+`--version` pesa más acá que en un cliente que viaja adentro de un IDE: la TUI se releasea con su
+propio tag y su propia fórmula, así que `git-review-ui --version` es la única forma que tiene un
+reporte de bug de decir qué build está corriendo. Los tres caminos (`-h`, `--version`, argumento
+desconocido) contestan **antes** de leer un solo byte de estado de terminal, para que funcionen en un
+pipe y sin TTY.
+
+### 16.3 El log de invocaciones tiene cota
+
+Una TUI no es un comando que termina: un pane abierto todo el día, con el watcher acelerando una
+lectura en cada cambio de ref y de config, agrega varias entradas por refresco para siempre. Los
+otros clientes ya tenían su cota —`CliLogSink` de Visual Studio es un ring de 500 líneas, y VS Code
+le entrega el texto a un `OutputChannel` que además recorta stderr a 2000 caracteres—; acá son las
+mismas dos, en los mismos dos lugares. Se descarta lo **más viejo**, que es el extremo correcto:
+`showCliLog` existe para contestar qué corrió lo que acabás de apretar. El recorte de stderr corta en
+un límite de rune, porque `decodeUTF8` se tomó el trabajo de garantizar UTF-8 válido y un corte por
+bytes le devolvería al renderer una cola rota.
+
+### 16.4 Los `.go` van LF en el checkout, no sólo en el commit
+
+`gofmt` compara contra LF y reporta como no formateado todo archivo con CRLF. Sin la regla de
+`.gitattributes`, un checkout de Windows con `core.autocrlf=true` falla `gofmt -l .` —el gate que el
+propio `tui/CONTRIBUTING.md` le manda correr a quien desarrolla— sobre archivos que están LF en el
+commit taggeado y verdes en CI. Es el mismo razonamiento que ya tenían los golden y las fixtures de
+porcelain, y la misma clase de bug: lo que la herramienta compara son los bytes en disco, no los
+bytes en git.

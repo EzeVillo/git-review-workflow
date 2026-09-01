@@ -36,6 +36,21 @@ GIT_REVIEW_UI_WATCH=1 go run ./cmd/git-review-ui
 apagado total para soporte y tests. Apaga sólo la aceleración por eventos: las
 teclas, el foco, las mutaciones y el refresco explícito siguen leyendo la CLI.
 
+En Windows, `gofmt -l .` reporta como no formateado todo archivo con CRLF, así
+que `.gitattributes` fija `tui/**/*.go text eol=lf`. Un checkout anterior a esa
+regla puede tener `.go` en CRLF: `git add --renormalize tui` arregla el índice,
+pero el working tree se convierte aparte, quitándole el retorno de carro final
+a cada archivo que `gofmt -l .` liste.
+
+## Superficie de argumentos
+
+El binario acepta `-h`/`--h`/`--help` y `-V`/`--version`, y **rechaza** todo lo
+demás con exit 2 — `git review ui` pasa cada argumento sin tocarlo, así que un
+typo llega hasta acá y tragárselo dejaría la TUI arrancando como si no le
+hubieran pedido nada. Los tres caminos contestan antes de leer estado de
+terminal, para que funcionen en un pipe y sin TTY. La lógica vive en
+`cmd/git-review-ui/args.go`, sin dependencias del sistema operativo.
+
 ## Golden files
 
 Los golden se comparan por bytes en dos tamaños y con glifos normales/ASCII.
@@ -63,6 +78,17 @@ visual cambió. CI no conoce `-update`, por lo que nunca puede reescribir golden
 Las claves se leen con `git config --get`: una local sobrescribe una global. La
 variable `GIT_REVIEW_UI_WATCH` no es configuración de producto y no debe
 convertirse en una clave `reviewui.*`.
+
+## El mapa de teclas
+
+Toda tecla que este cliente resuelve está declarada en `keymap:` del canónico y
+en `internal/domain/keymap.go`, incluidas las tres que no son acciones de
+producto (`keymap.global`: `enter`, `q`, `ctrl+c`). El checker las compara **por
+par y en las dos direcciones**: agregar un binding en Go sin declararlo, o
+declararlo sin cablearlo, falla igual. Ninguna tecla puede pertenecer a dos
+secciones. `internal/ui/keys.go` no tiene ni puede tener una tabla paralela: si
+necesitás una tecla nueva, se declara primero en el canónico. Ver
+`decisiones.md` §16.1.
 
 ## Matriz smoke previa a un release
 
@@ -92,6 +118,12 @@ La TUI versiona aparte. No se publica en npm ni en otra tienda; el GitHub
 Release publica siete binarios y la fórmula Homebrew consume los cuatro que
 corresponden a macOS/Linux × ARM/Intel.
 
+0. **Comprobá que `min_cli_version.tui` apunte a una versión de la CLI ya
+   publicada.** Un piso no es una promesa a futuro: mientras apunte a algo que
+   sólo existe en `main`, quien instale desde npm o brew tiene una CLI que este
+   cliente considera al día y un `git review ui` que no existe — y el cliente no
+   puede decir `cli-outdated`, porque la comparación da igual. Si el piso subió,
+   el `v*` de la CLI se corta **primero**. Ver `decisiones.md` §14.
 1. Elegí la versión y ejecutá `./tui/bump-version.sh X.Y.Z` desde la raíz.
 2. Revisá que cambien sólo `tui/internal/domain/version.go` y la `version` de
    `Formula/git-review-ui.rb`; sus cuatro `sha256` deben seguir en placeholder.

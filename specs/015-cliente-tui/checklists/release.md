@@ -1,6 +1,13 @@
 # Evidencia de pre-release: TUI 0.1.0
 
-**Fecha:** 2026-08-31  
+> **ESTA EVIDENCIA ES DE UN COMMIT ANTERIOR.** Todo lo de abajo se midió sobre `aed9e05`; desde
+> entonces entraron los overlays nuevos y el endurecimiento de release (ver § Corrida 2). El
+> recorrido manual **no** se repitió, así que las filas de *Recorrido manual* y los SC que dependen
+> de una terminal real describen `aed9e05`, no el commit que se va a taggear. Los gates automáticos
+> sí se volvieron a correr enteros.
+
+## Corrida 1 — 2026-08-31
+
 **Commit:** `aed9e05` (`main`)  
 **Alcance de esta corrida:** Windows nativo y Linux amd64 en Docker. macOS queda pendiente.
 
@@ -87,9 +94,57 @@ refrescos explícitos. En Linux se renderizó 120×40 con `NO_COLOR=1` y
 - [x] `docs/index.html` tiene la caja inglesa `data-i18n="terminalui"` y su valor español en `ES`.
 - [x] `tui/CONTRIBUTING.md` contiene build, tests, golden, watcher, `reviewui.*`, smoke y release.
 
+## Corrida 2 - 2026-09-01
+
+**Commit:** `main`, tras los commits de endurecimiento de release descritos abajo (el hash del que se
+va a taggear).  
+**Alcance:** **sólo gates automáticos**, en Windows nativo y Linux amd64 en Docker. No se repitió
+ningún recorrido manual en terminal: las filas de *Recorrido manual* de la Corrida 1 siguen siendo la
+única evidencia de esos ocho casos, y son de `aed9e05`.
+
+### Qué cambió desde la Corrida 1
+
+| Cambio | Por qué toca al release |
+|---|---|
+| **CLI estampada en `0.9.0` y `min_cli_version.tui` subido a `0.9.0`** | Cierra T114. El piso decía `0.8.0` —la última publicada, que **no** contiene `bin/git-review-verbs/ui`—, así que quien instalaba desde npm o brew tenía una CLI que este cliente daba por al día y un `git review ui` inexistente, sin poder reportar `cli-outdated`. **`v0.9.0` se corta antes que `tui-v0.1.0`.** |
+| **Doce golden regenerados** (`cli-missing`, `cli-outdated` × 2 tamaños × 3 capacidades) | Interpolan `MinCLIVersion`; una línea de diff cada uno, sin ningún otro cambio visual. |
+| **`tui/git-review-ui.test.exe` destrackeado** | Eran 7,2 MB de binario que viajaban en cada clone desde `14cffc2`. `tui/.gitignore` ahora cubre `*.test`/`*.test.exe`. |
+| **`keymap:` gobierna** (§16.1 de `decisiones.md`) | `f`/`s`/`a` estaban cableadas sin declarar y `enter`/`q`/`ctrl+c` vivían hardcodeadas en `ui/keys.go`. Ahora hay `keymap.global:`, la comparación es por par y en las dos direcciones, y ninguna tecla puede estar en dos secciones. |
+| **`-h` / `--version` en el binario** | No leía `os.Args`: cualquier argumento se tragaba en silencio. Ahora refuta con exit 2, y `--version` es lo único que puede identificar un build en un reporte de bug. |
+| **Cota del log de invocaciones** | Ring de 500 entradas y stderr recortado a 2000 caracteres en un límite de rune — las mismas dos cotas que ya tenían Visual Studio y VS Code. |
+| **`tui/**/*.go text eol=lf`** | Sin la regla, `gofmt -l .` falla en un checkout Windows sobre archivos que están LF en el commit. |
+
+### Gates ejecutados
+
+| Comando | Resultado |
+|---|---|
+| `gofmt -l .` | salida vacía (tras renormalizar el working tree a LF) |
+| `go vet ./...` | OK |
+| `go test ./...` | OK, los cinco paquetes |
+| `go test -race ./...` | OK, los cinco paquetes. No está en CI, y no corre en la máquina Windows de esta corrida (`-race` exige cgo y no hay `gcc`): se ejecutó en un contenedor `golang:1.25` sobre el mismo árbol. |
+| `node scripts/check-client-product-surface.mjs` | OK: `actions=27`, `confirms=13`, `vs=yes`, `tui=yes` |
+| Gate del keymap, probado a la inversa | Un par cableado y no declarado, y una tecla reasignada dejando su literal en el archivo, **fallan los dos**; con el gate anterior el segundo pasaba |
+| `./lint-docker.sh` | OK, la lista completa de CI |
+| `./tests/run-docker.sh tests/version-consistency.bats tests/ui.bats tests/release-tui.bats tests/web-install.bats` | 41/41 |
+| `./tests/run-docker.sh` | 1037/1037, 0 fallos, exit 0 |
+
+### Lo que esta corrida NO cubrió
+
+Los ocho casos de la matriz smoke en una terminal real, sobre este commit. Los cambios de arriba
+tocan la barra de teclas (`keymap.global`), el arranque del binario (`args.go`) y `showCliLog`, así
+que los casos 1, 3 y 8 y el recorrido sólo teclado deberían repetirse antes del tag aunque los
+golden estén verdes.
+
 ## Pendientes antes del tag
 
-- [ ] Ejecutar la misma matriz en una terminal macOS real.
-- [ ] Repetir manualmente en Windows el servidor `401`, el worktree enlazado y el repo `reftable` (los gates nativos ya están verdes).
-- [ ] Completar el recorrido manual sólo-mouse; el gate sintético de alcanzabilidad ya está verde.
-- [ ] Publicar el primer `tui-v0.1.0`, repetir `web-install.ps1 -WithUi` contra el zip público y comprobar que `releases/latest` sigue apuntando al release de la CLI.
+**En orden, y el primero condiciona al resto:**
+
+1. [ ] **Cortar `v0.9.0` de la CLI** y verificar que el release publicado contiene
+   `bin/git-review-verbs/ui`. Hasta que exista, `min_cli_version.tui` apunta a una versión que sólo
+   está en `main` y la TUI no puede salir.
+2. [ ] Repetir la matriz smoke sobre el commit que se va a taggear, al menos los casos que los
+   cambios de la Corrida 2 tocan (barra de teclas, arranque, `showCliLog`).
+3. [ ] Ejecutar la misma matriz en una terminal macOS real.
+4. [ ] Repetir manualmente en Windows el servidor `401`, el worktree enlazado y el repo `reftable` (los gates nativos ya están verdes).
+5. [ ] Completar el recorrido manual sólo-mouse; el gate sintético de alcanzabilidad ya está verde.
+6. [ ] Publicar el primer `tui-v0.1.0`, repetir `web-install.ps1 -WithUi` contra el zip público y comprobar que `releases/latest` sigue apuntando al release de la CLI.

@@ -812,24 +812,24 @@ previas que hacer, ni organizaciones que crear, ni órdenes de publicación que 
 silencio (FR-053). Los únicos artefactos son los siete binarios del Release y la fórmula que los
 apunta.
 
-- [ ] T102 Crear `tui/bump-version.sh` (POSIX, `set -eu`, `sed_i` por archivo temporal porque GNU y
+- [X] T102 Crear `tui/bump-version.sh` (POSIX, `set -eu`, `sed_i` por archivo temporal porque GNU y
   BSD difieren en `-i`, sin bashisms y **sin `A && B || C`**), que estampa **dos archivos**:
   `tui/internal/domain/version.go` y la `version` de `Formula/git-review-ui.rb`. Los siete `sha256`
   quedan **a propósito** —desconocidos hasta que existe el asset—, igual que hace `./bump-version.sh`
   con el de la CLI. **Es la simplificación que compra no publicar en ningún registro**: no hay
   `package.json` que mantener alineado ni pines por plataforma que queden atrás de a uno.
-- [ ] T103 Agregar `tui/bump-version.sh` a las **dos** listas de `shellcheck`:
+- [X] T103 Agregar `tui/bump-version.sh` a las **dos** listas de `shellcheck`:
   `.github/workflows/ci.yml` (línea 45) y `.github/workflows/release.yml` (línea 40). `find bin -type
   f` cubre el verbo solo; **este archivo no está cubierto por nada** hasta que se lo agrega a las
   dos. **Gate**: `./lint-docker.sh tui/bump-version.sh` limpio.
-- [ ] T104 [P] Crear `Formula/git-review-ui.rb`: `on_macos`/`on_linux` × `on_arm`/`on_intel`, cada
+- [X] T104 [P] Crear `Formula/git-review-ui.rb`: `on_macos`/`on_linux` × `on_arm`/`on_intel`, cada
   rama con su `url` y su `sha256` apuntando al asset del Release de `tui-v*`; instala el binario en
   `bin` y nada más. **`depends_on "git"` y nada más**: no declara `depends_on
   "git-review-workflow"` aunque la TUI la necesite, porque la CLI llega por cuatro vías y Homebrew
   sólo ve una, y una dependencia dura le instalaría una segunda copia a quien ya la tiene por npm o
   por un one-liner. `cli-missing` no es un error: es una situación de panel completa diseñada para
   este momento exacto. **`Formula/git-review-workflow.rb` no se toca** (FR-050).
-- [ ] T105 Crear `.github/workflows/release-tui.yml`, disparado por `tui-v*` —namespace propio: `v*`
+- [X] T105 Crear `.github/workflows/release-tui.yml`, disparado por `tui-v*` —namespace propio: `v*`
   sigue siendo **sólo** la CLI y `jetbrains-v*` sólo el plugin—, con **tres jobs, no cuatro** (no hay
   job de publicación: el Release *es* la publicación): `verify` en los tres SO (`gofmt -l` vacío,
   `go vet`, `go test`, `node scripts/check-client-product-surface.mjs`, **contra el commit
@@ -841,17 +841,17 @@ apunta.
   `linux/amd64` funcione en glibc y en musl, y lo que permite compilar los siete desde un runner. La
   versión **no** se inyecta por `-ldflags`: vive en `version.go` para que `version-consistency.bats`
   la pueda leer.
-- [ ] T106 Agregar al job `release` de `.github/workflows/release-tui.yml` los **dos asserts previos
+- [X] T106 Agregar al job `release` de `.github/workflows/release-tui.yml` los **dos asserts previos
   a subir**, que **fallan el release y no lo avisan**: (1) los **siete** archivos existen y no están
   vacíos; (2) el `SHA256SUMS` cubre los siete y cada suma coincide con su archivo. **Gate**: no hay
   orden de publicación que pueda fallar en silencio —el riesgo estructural de la vía descartada—
   porque hay un solo artefacto y un solo paso que lo sube.
-- [ ] T107 Verificar `--latest=false` con un test de **SC-013**: un release de la TUI **no altera qué
+- [X] T107 Verificar `--latest=false` con un test de **SC-013**: un release de la TUI **no altera qué
   ref instalan `web-install.sh` y `web-install.ps1`**, resolviendo `releases/latest` después del tag.
   No es cosmético: los dos instaladores resuelven ese endpoint para elegir el ref **de la CLI**, y un
   release de cliente marcado *latest* haría que el instalador de la CLI se pare en un tag ajeno. Es
   la misma razón exacta por la que `release-jetbrains.yml` lo lleva (líneas 133-134 y 166).
-- [ ] T108 [P] Agregar el flag **apagado** a `web-install.sh` —la misma forma que ya tienen `PREFIX`
+- [X] T108 [P] Agregar el flag **apagado** a `web-install.sh` —la misma forma que ya tienen `PREFIX`
   y `REF`— y a `web-install.ps1` (`-WithUi`; **`-SkipUi` no existe: no hay nada que saltear**).
   Sin el flag **no se descarga ni se escribe nada** de la TUI: ni una petición a la API, ni un
   archivo, ni una línea de salida distinta de la de hoy (FR-079). **Y no se prompt-ea por él**: el
@@ -859,52 +859,57 @@ apunta.
   TUI va **después** del de la CLI y **nunca** puede hacer fallar la instalación de la CLI: su fallo
   es una nota, no un `exit`. `web-install.sh` pasa por el mismo `shellcheck` de CI, así que valen las
   reglas de siempre.
-- [ ] T109 Implementar en el camino del flag las **tres cosas que el diseño del release impone**:
+- [X] T109 Implementar en el camino del flag las **tres cosas que el diseño del release impone**:
   (1) **no** resolver `releases/latest` —ese endpoint es de la CLI—, sino listar
   `releases?per_page=100` y quedarse con el primer tag que empieza con `tui-v`; (2) **verificar el
   `sha256`** del asset contra el `SHA256SUMS` publicado en el mismo Release, y **si no coincide, no
   instalar** —un instalador que baja un binario y no lo verifica es peor que no tener esa vía—;
   (3) sin asset para la plataforma, **saltear el paso con una nota** y dejar la CLI instalada igual,
   porque una plataforma fuera de la matriz es una vía degradada, no un usuario bloqueado (FR-081).
-- [ ] T110 [P] Hacer que `web-uninstall.sh` y `web-uninstall.ps1` **borren la TUI si está**. Un
+- [X] T110 [P] Hacer que `web-uninstall.sh` y `web-uninstall.ps1` **borren la TUI si está**. Un
   desinstalador que deja mitad de las cosas es otro problema, y ahí no hay sorpresa que evitar.
   **Gate**: `@test` en `tests/web-uninstall.bats` y `tests/web-uninstall-ps1.bats`, en ASCII puro.
-- [ ] T111 Escribir el **gate de FR-079** en `tests/web-install.bats`: correr el instalador **sin**
+- [X] T111 Escribir el **gate de FR-079** en `tests/web-install.bats`: correr el instalador **sin**
   el flag y afirmar que no quedó ningún archivo de la TUI en el `PREFIX` **y que no se pidió ninguna
   URL de la TUI**. Es la mitad que se rompe en silencio — agregar el paso «por comodidad» no falla
   nada por sí solo. **Y el allowlist de `tests/dispatcher-only.bats` no se relaja** (ver T014).
-- [ ] T112 Escribir el test del camino **con** el flag, en un `@test` propio y con su propio
+- [X] T112 Escribir el test del camino **con** el flag, en un `@test` propio y con su propio
   allowlist: el instalador deja `git-review-ui` en el `PREFIX` **además** de la tríada del
   dispatcher, y `git review-ui` funciona. **No reusar el allowlist de `dispatcher-only.bats`**:
   agregarle `git-review-ui` debilitaría en silencio el guard del camino sin flag.
-- [ ] T113 Agregar el bloque de la TUI a `tests/version-consistency.bats`, con `@test` en **ASCII
+- [X] T113 Agregar el bloque de la TUI a `tests/version-consistency.bats`, con `@test` en **ASCII
   puro** y cada uno afirmando **igualdad** y nombrando el archivo que quedó atrás: (1) el `version.go`
   de la TUI es semver pelado; (2) `Formula/git-review-ui.rb` coincide con `version.go`; (3) **no
   existe ningún `package.json` bajo `tui/`** — el gate que impide que la vía descartada vuelva por la
   ventana sin que nadie lo note (FR-049).
-- [ ] T114 Subir `min_cli_version.tui` en `contracts/client-product-surface.yaml` a **la versión de
+- [X] T114 Subir `min_cli_version.tui` en `contracts/client-product-surface.yaml` a **la versión de
   la CLI que introduce el verbo `ui`**, y llenar `per_client_strings.no_single_root.tui` y
   `per_client_strings.after_install.tui` con la copy propia de T025, en **commits separados e
   independientes** de la Phase 1. **Requiere que esa versión de la CLI exista**: el verbo llega en la
   Phase 2 pero el release `v*` que lo publica es un corte aparte que hoy nadie agenda (ver § Huecos).
   **Gate**: desde este commit los cuatro `min_cli_version` difieren en `main`, que es la primera capa
   del gate de FR-028 — cualquier chequeo que exigiera igualdad estaría rojo en `main`.
-- [ ] T115 Actualizar **los DOS README** en el mismo cambio (FR-054): `README.md` y `README.es.md`
+  **Resuelto:** el piso quedó en `0.9.0` (`version.go` y el canónico), la CLI está estampada en esa
+  versión y los doce golden de `cli-missing`/`cli-outdated` se regeneraron. El hueco que la tarea
+  anticipaba era real y llegó hasta acá: mientras el piso decía `0.8.0` —la última publicada, sin el
+  verbo— la TUI daba por al día una CLI que no podía arrancarla. **El tag `v0.9.0` se corta antes que
+  `tui-v0.1.0`**; hasta entonces el piso apunta a una versión que sólo existe en `main`.
+- [X] T115 Actualizar **los DOS README** en el mismo cambio (FR-054): `README.md` y `README.es.md`
   son traducciones espejo, así que el verbo `ui` en la tabla de verbos, el sinónimo `git review-ui`
   en **una línea** —sin pedir disculpas y sin convertirlo en una segunda forma documentada— y las
   vías de instalación de la TUI van en **ambos**. Más la línea sobre montajes de red que menciona el
   piso de poll. **Ninguna de las dos superficies nombra a los otros tres clientes ni dice «paridad
   con X»** (FR-031).
-- [ ] T116 Actualizar `docs/index.html` en sus **dos puntas** (FR-055): una caja más en
+- [X] T116 Actualizar `docs/index.html` en sus **dos puntas** (FR-055): una caja más en
   `install-grid` (línea ~1183) con su texto en el HTML **en inglés** y su clave en el diccionario
   `ES` del `<script>`, emparejados por `data-i18n` —el patrón que ya usan `nonode` y `thenonce`—. La
   landing es **pitch, no documentación**: no documenta flags ni la tabla de verbos. `docs/.nojekyll`,
   `docs/logo.svg` y `docs/og.png` **no se tocan**: son generados.
-- [ ] T117 [P] Escribir `tui/CONTRIBUTING.md` (FR-056): build, test, cómo se regeneran y se revisan
+- [X] T117 [P] Escribir `tui/CONTRIBUTING.md` (FR-056): build, test, cómo se regeneran y se revisan
   los golden, la palanca de apagado de la vigilancia, las claves `reviewui.*`, la matriz smoke de
   T101 y el runbook de release. **El README es producto; el desarrollo va acá**, para la raíz y para
   los cuatro clientes.
-- [ ] T118 Actualizar `CLAUDE.md`: el cuarto cliente en § Clientes del monorepo, el árbol `tui/`, los
+- [X] T118 Actualizar `CLAUDE.md`: el cuarto cliente en § Clientes del monorepo, el árbol `tui/`, los
   comandos (`gofmt`/`vet`/`go test`, los golden, el apagado de la vigilancia), la nota de que **la
   paridad es una regla del monorepo y no una promesa al usuario**, y las dos migraciones del
   canónico. Anotar también en § Release el namespace `tui-v*` y el `--latest=false`.

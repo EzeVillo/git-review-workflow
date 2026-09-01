@@ -1,4 +1,5 @@
 .idea/
+.worktrees/
 *.tmp
 demo/
 __pycache__/

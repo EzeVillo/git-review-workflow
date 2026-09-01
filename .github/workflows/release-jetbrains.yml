@@ -87,10 +87,6 @@ jobs:
         working-directory: jetbrains-plugin
         run: ./gradlew checkDomainNoIntellij --no-daemon
 
-      - name: Platform tests
-        working-directory: jetbrains-plugin
-        run: ./gradlew platformTest --no-daemon
-
       # The descriptor and project-configuration checks. They exit zero over
       # their findings, so what makes them worth a step is the report below.
       - name: Plugin configuration and structure

@@ -31,7 +31,15 @@ dependencies {
         // live in the .impl module (API jar alone is not enough).
         bundledModule("intellij.platform.vcs.dvcs")
         bundledModule("intellij.platform.vcs.dvcs.impl")
-        // Platform test framework is for platformTest (T030a), not domain unit tests.
+        // El harness headless de plataforma NUNCA se cableo, y esta linea es
+        // el unico lugar donde eso se dice. Mientras siga comentada, todo lo
+        // que consigue sus colaboradores de la plataforma --un `Project`, o un
+        // `getInstance()` estatico: MutationActions, GitReviewService,
+        // StartWizard, PanelActionDispatcher, OpenEntryActions y ui/actions--
+        // no lo cubre nadie. Lo que si se cubre es lo que RECIBE lo que usa:
+        // PanelRenderer toma un PanelChrome y ReviewStateManager un CliRunner,
+        // y los dos se prueban sin IDE. Descomentarla es el trabajo de wirear
+        // el harness, no un cambio de una linea.
         // testFramework(TestFrameworkType.Platform)
     }
 
@@ -182,12 +190,6 @@ intellijPlatform {
 tasks {
     test {
         useJUnitPlatform()
-    }
-
-    register("platformTest") {
-        group = "verification"
-        description = "Headless IntelliJ platform tests (wired in T030a)"
-        dependsOn(test)
     }
 }
 

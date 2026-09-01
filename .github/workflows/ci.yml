@@ -149,12 +149,6 @@ jobs:
         working-directory: jetbrains-plugin
         shell: bash
         run: ./gradlew checkDomainNoIntellij --no-daemon
-      - name: Platform tests (Linux only)
-        if: runner.os == 'Linux'
-        working-directory: jetbrains-plugin
-        shell: bash
-        run: ./gradlew platformTest --no-daemon
-
       # The verifications JetBrains ships, on every push instead of only at
       # release time. All three exit zero over findings that are warnings --
       # a since-build below the target platform, a name the Marketplace will
@@ -164,8 +158,8 @@ jobs:
       # their own; warnings only have to be visible before a version is
       # public, which is the one thing a release-only run cannot do.
       #
-      # Linux only, like platformTest: the findings are about the descriptor
-      # and the bytecode, and neither depends on the runner.
+      # Linux only: the findings are about the descriptor and the bytecode,
+      # and neither depends on the runner.
       - name: Plugin configuration and structure (Linux only)
         if: runner.os == 'Linux'
         working-directory: jetbrains-plugin

@@ -31,8 +31,7 @@ The Gradle wrapper lives **in this directory**, not at the monorepo root.
 
 ```sh
 # Git Bash / WSL / Linux / macOS (from this directory):
-./gradlew test              # domain unit tests (all OSes)
-./gradlew platformTest      # headless platform tests (Linux CI)
+./gradlew test              # domain, host and diff unit tests (all OSes)
 ./gradlew runIde            # sandbox IDE (IntelliJ IDEA host) with the plugin loaded
 ./gradlew runPanelPreview   # standalone Swing panel preview
 ./gradlew buildPlugin       # zip under build/distributions/
@@ -91,8 +90,7 @@ can reach without booting an IDE.
 ## Testing
 
 ```sh
-./gradlew test              # domain + PanelLayoutContractTest, every OS in CI
-./gradlew platformTest      # headless platform tests (Linux CI)
+./gradlew test              # domain + host + PanelLayoutContractTest, every OS in CI
 ./gradlew verifyPlugin -PverifierIdes=idea                       # what CI runs
 ./gradlew verifyPluginProjectConfiguration verifyPluginStructure # descriptor and configuration
 ```
@@ -101,6 +99,21 @@ can reach without booting an IDE.
 # from the monorepo root — all three client trees at once
 node scripts/check-client-product-surface.mjs
 ```
+
+**What `test` reaches, and what it does not.** Everything that *receives* what it
+uses is covered without an IDE: `PanelRenderer` takes a `PanelChrome` and
+`ReviewStateManager` takes a `CliRunner`, so both run against a fake in plain
+JUnit. Everything that *reaches for* what it uses is not covered at all —
+anything holding a `Project` or calling a static `getInstance()`:
+`MutationActions`, `GitReviewService`, `StartWizard`, `PanelActionDispatcher`,
+`OpenEntryActions` and every `AnAction` under `ui/actions/`. Constructing those
+needs a live IDE application, which means the platform test framework, and it
+has never been wired (the one commented line in
+[`build.gradle.kts`](build.gradle.kts) is where that is recorded). There used to
+be a `platformTest` task and a CI step by that name; the task only re-ran
+`test`, so a step promising platform coverage delivered a second run of these
+unit tests. It is gone — the way to cover that code is another seam or the
+harness, not a green step.
 
 **All three verifications run on every push, and none of their *warnings* fails
 the build:** a `since-build` below the platform being compiled against, a name the
@@ -126,7 +139,7 @@ full before anything is published.
 |----|--------|
 | Windows | start walk PR with non-ASCII path; open deleted file; finish |
 | macOS | same + tool window theme dark/light |
-| Linux | same + `platformTest` in CI |
+| Linux | same |
 
 Full checklist: [`specs/009-plugin-intellij/quickstart.md`](../specs/009-plugin-intellij/quickstart.md).
 

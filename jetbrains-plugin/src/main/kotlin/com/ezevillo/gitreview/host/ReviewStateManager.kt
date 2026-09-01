@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicLong
  * Coalesced refresh of review state from CLI porcelain. No UI dependency.
  */
 class ReviewStateManager(
-    private val invoker: CliInvoker,
+    private val invoker: CliRunner,
     private val gitReviewPath: () -> String?,
 ) {
     private val generation = AtomicLong(0)

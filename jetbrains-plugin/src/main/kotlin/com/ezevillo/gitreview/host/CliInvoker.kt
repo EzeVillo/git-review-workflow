@@ -23,6 +23,27 @@ data class InvokeResult(
 )
 
 /**
+ * La unica llamada que el pipeline de refresh y las mutaciones le hacen a la
+ * CLI, como interfaz.
+ *
+ * El unico implementador de produccion es [CliInvoker], que arranca un proceso
+ * de verdad. La costura existe para que lo que decide a partir de las respuestas
+ * --[ReviewStateManager], sobre todo-- se pueda ejercitar sin proceso: un
+ * proceso real por caso seria lento y, para un timeout o una CLI ausente,
+ * estaria probando la maquina y no el pipeline. Es la misma costura que el
+ * cliente de Visual Studio tiene desde el principio (`FakeCliInvoker`).
+ */
+interface CliRunner {
+    fun invoke(
+        verb: String,
+        args: List<String>,
+        cwd: String,
+        network: Boolean = false,
+        timeoutMs: Long = timeoutForClass(verb, args),
+    ): InvokeResult
+}
+
+/**
  * Spawns git-review via [GeneralCommandLine] with forced UTF-8 capture.
  * Domain-facing: no UI.
  */
@@ -30,13 +51,13 @@ class CliInvoker(
     private val gitReviewPath: () -> String?,
     private val askpassCommand: () -> String = { resolveAskpassCommand() },
     private val logger: Logger = Logger.getInstance(CliInvoker::class.java),
-) {
-    fun invoke(
+) : CliRunner {
+    override fun invoke(
         verb: String,
         args: List<String>,
         cwd: String,
-        network: Boolean = false,
-        timeoutMs: Long = timeoutForClass(verb, args),
+        network: Boolean,
+        timeoutMs: Long,
     ): InvokeResult {
         val resolved = resolveCommand(verb, args, gitReviewPath())
         return invokeResolved(resolved, cwd, network, timeoutMs)

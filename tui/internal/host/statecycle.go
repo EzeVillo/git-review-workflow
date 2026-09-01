@@ -72,8 +72,8 @@ func ReadState(ctx context.Context, cwd, minVersion string) ReadResult {
 	case 2:
 		// exit 2 needs `list` before the situation itself is final
 		// (finish-pending is a REFINEMENT of no-review, decided by whether
-		// list reports a pending finish for the current branch) — so list is
-		// read before SituationFromStatus, unlike every other exit code.
+		// list reports any repository-wide pending finish) — so list is read
+		// before SituationFromStatus, unlike every other exit code.
 		listRes := InvokeReview(ctx, "list", []string{"--porcelain"})
 		listOK := !listRes.TimedOut && !listRes.SpawnFailed && listRes.ExitCode == 0
 		if listOK {

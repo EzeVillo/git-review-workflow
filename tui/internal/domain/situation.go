@@ -23,25 +23,24 @@ const (
 	SituationError          Situation = "error"
 )
 
-// VersionProbeOutcome is what the host learned from invoking `--version`,
-// classified enough to derive a situation without this package spawning
-// anything itself (FR-012). A host-side retry of an ambiguous result (a
-// ENOENT that might be transient) happens BEFORE this type is built —
-// SituationFromVersionProbe sees only the settled verdict.
+// VersionProbeOutcome is the settled result of invoking `--version`, after
+// host-side retries. It distinguishes proven executable absence from a
+// generic invocation failure so only evidence can produce cli-missing.
 type VersionProbeOutcome struct {
 	// TimedOut takes priority over everything else: a CLI that is merely
 	// slow is the opposite of one that is absent, and reporting cli-missing
 	// there would send the user to install what is already installed
 	// (edge case of the spec, User Story 2 scenario 5).
 	TimedOut bool
-	// SpawnOrExitFailed: the process could not start, or it started and
-	// exited non-zero. Meaningless when TimedOut is true.
-	SpawnOrExitFailed bool
+	// ExecutableNotFound means the OS or git explicitly named executable
+	// absence. It is the only field that derives cli-missing.
+	ExecutableNotFound bool
+	// Failed covers every other spawn or nonzero-exit failure. It derives a
+	// generic error because the probe could not establish presence/absence.
+	Failed bool
 	// Version: `--version`'s trimmed stdout. Meaningful only when neither
-	// of the above is true. An empty string here is treated as "nothing to
-	// compare" and passes through to the next read, exactly like a version
-	// string that parses and is not below the minimum — inventing
-	// cli-outdated from silence would be worse than deferring to `status`.
+	// failure field is true. Empty output is invalid and therefore outdated,
+	// exactly like every other unparsable version.
 	Version string
 }
 
@@ -53,11 +52,11 @@ func SituationFromVersionProbe(outcome VersionProbeOutcome, minVersion string) (
 	if outcome.TimedOut {
 		return SituationError, false
 	}
-	if outcome.SpawnOrExitFailed {
-		return SituationCliMissing, false
+	if outcome.Failed {
+		return SituationError, false
 	}
-	if outcome.Version == "" {
-		return "", true
+	if outcome.ExecutableNotFound {
+		return SituationCliMissing, false
 	}
 	if IsOutdated(outcome.Version, minVersion) {
 		return SituationCliOutdated, false

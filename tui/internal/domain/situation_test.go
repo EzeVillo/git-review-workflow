@@ -15,14 +15,15 @@ func TestSituationFromVersionProbe(t *testing.T) {
 		want    Situation
 		wantOK  bool
 	}{
-		{"spawn failed", VersionProbeOutcome{SpawnOrExitFailed: true}, SituationCliMissing, false},
-		{"nonzero exit reported as spawn/exit failed", VersionProbeOutcome{SpawnOrExitFailed: true, Version: "0.1.0"}, SituationCliMissing, false},
+		{"executable missing", VersionProbeOutcome{ExecutableNotFound: true}, SituationCliMissing, false},
+		{"generic spawn failure", VersionProbeOutcome{Failed: true}, SituationError, false},
+		{"nonzero exit failure", VersionProbeOutcome{Failed: true, Version: "0.1.0"}, SituationError, false},
 		{"timed out", VersionProbeOutcome{TimedOut: true}, SituationError, false},
-		{"timed out beats spawn failed", VersionProbeOutcome{TimedOut: true, SpawnOrExitFailed: true}, SituationError, false},
+		{"timed out beats missing evidence", VersionProbeOutcome{TimedOut: true, ExecutableNotFound: true}, SituationError, false},
 		{"outdated", VersionProbeOutcome{Version: "0.1.0"}, SituationCliOutdated, false},
 		{"current", VersionProbeOutcome{Version: "0.8.0"}, "", true},
 		{"newer than floor", VersionProbeOutcome{Version: "9.9.9"}, "", true},
-		{"empty version defers to status, not treated as outdated", VersionProbeOutcome{Version: ""}, "", true},
+		{"empty successful version is invalid and outdated", VersionProbeOutcome{Version: ""}, SituationCliOutdated, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -37,7 +38,7 @@ func TestSituationFromVersionProbe(t *testing.T) {
 // Edge case of the spec, User Story 2 scenario 5: a version probe that is
 // merely slow must never be reported as an absent CLI.
 func TestVersionProbeTimeoutIsNeverCliMissing(t *testing.T) {
-	got, ok := SituationFromVersionProbe(VersionProbeOutcome{TimedOut: true, SpawnOrExitFailed: true}, "0.8.0")
+	got, ok := SituationFromVersionProbe(VersionProbeOutcome{TimedOut: true, ExecutableNotFound: true}, "0.8.0")
 	if got == SituationCliMissing {
 		t.Fatal("a timed-out probe must never resolve to cli-missing")
 	}
@@ -90,7 +91,7 @@ func TestStatusTimeoutIsNeverCliMissing(t *testing.T) {
 // fresh, healthy read right after a failing one must not carry anything
 // over from it.
 func TestSituationsAreNeverRepaintedFromMemory(t *testing.T) {
-	_, _ = SituationFromVersionProbe(VersionProbeOutcome{SpawnOrExitFailed: true}, "0.8.0")
+	_, _ = SituationFromVersionProbe(VersionProbeOutcome{ExecutableNotFound: true}, "0.8.0")
 	// A brand-new read with no relation to the call above.
 	fresh, ok := SituationFromVersionProbe(VersionProbeOutcome{Version: "0.8.0"}, "0.8.0")
 	if !ok {

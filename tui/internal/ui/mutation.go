@@ -178,6 +178,21 @@ func (o pendingFinishOutcome) destination() string {
 	return "review-fixes/" + o.source
 }
 
+// matchesPending reports whether the accepted repository-wide list result
+// still contains the pending finish for this exact source. Another review's
+// pending record is real global UI state, but not this outcome's result.
+func (o pendingFinishOutcome) matchesPending(result host.ReadResult) bool {
+	if result.Situation != domain.SituationFinishPending || !result.HasList {
+		return false
+	}
+	for _, branch := range result.Branches {
+		if branch.Finish != nil && branch.Finish.State == "pending" && domain.SourceOf(branch) == o.source {
+			return true
+		}
+	}
+	return false
+}
+
 // mutationDoneMsg carries one CLI mutation's result back, tagged with WHAT
 // was asked (action+params) rather than just the raw host.Result: deciding
 // the status line, and undoFinish's --force follow-up, depends on what was
@@ -775,12 +790,15 @@ func (m Model) beginOpenChange() (Model, tea.Cmd) {
 	return m, execCmd(cmd)
 }
 
-// beginPreviewEdits runs `git review preview` with an inherited terminal
-// (host.PreviewEditsCmd's own doc on why this is the one delegated action
-// that still is a `git review` invocation).
+// beginPreviewEdits runs `git review preview` with an inherited terminal and
+// records its completion through the central interactive-review policy.
 func (m Model) beginPreviewEdits() (Model, tea.Cmd) {
 	dir, _ := os.Getwd()
-	return m, execCmd(host.PreviewEditsCmd(dir))
+	invocation := host.InteractiveReviewCmd("preview", nil, dir)
+	return m, tea.ExecProcess(invocation.Cmd, func(err error) tea.Msg {
+		invocation.Complete(err)
+		return execDoneMsg{err: err}
+	})
 }
 
 // The browser-only controls deliberately resolve a small closed set here.

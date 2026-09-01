@@ -48,14 +48,10 @@ type Watcher interface {
 
 // nopWatcher is disparador 2 turned off entirely: Start hands back a
 // channel that is never sent to and never closed, Rebuild and Stop do
-// nothing. This is the DEFAULT for the whole test suite — main.go only
-// swaps in the real fsnotifyWatcher when GIT_REVIEW_UI_WATCH=1 — which is
-// what proves FR-063/SC-016 ("the watcher's absence never changes
-// correctness") BY CONSTRUCTION: every Phase 3/4 test that exists today,
-// and everything Phase 6+ adds, runs against exactly this implementation,
-// never a dedicated "watcher off" test. If any of them needed the watcher
-// to fire in order to pass, the whole suite would go red, not one test
-// (tasks.md T054/T062).
+// nothing. main.go selects it only for the explicit
+// GIT_REVIEW_UI_WATCH=0 deterministic support/test opt-out; release runtime
+// defaults to fsnotify. Correctness still comes from the other three
+// triggers and the optional poll floor when this acceleration is disabled.
 //
 // GIT_REVIEW_UI_WATCH is a support/suite lever, not a `reviewui.*` key:
 // turning the acceleration mechanism off is not a reviewer preference, and

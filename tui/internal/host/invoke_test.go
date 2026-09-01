@@ -3,7 +3,9 @@ package host
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -12,6 +14,9 @@ func TestRunProcessReportsSpawnFailedForAMissingBinary(t *testing.T) {
 	res := runProcess(context.Background(), "definitely-not-a-real-binary-xyz", nil, nil)
 	if !res.SpawnFailed {
 		t.Fatalf("expected SpawnFailed for a binary that does not exist, got %+v", res)
+	}
+	if !res.ExecutableNotFound {
+		t.Fatalf("expected unequivocal executable-not-found evidence, got %+v", res)
 	}
 	if res.TimedOut {
 		t.Fatal("a missing binary is not a timeout")
@@ -80,6 +85,55 @@ func TestInvocationLogRecordsStartAndEnd(t *testing.T) {
 	}
 	if !entries[0].TimedOut {
 		t.Fatal("the logged entry must record the timeout")
+	}
+}
+
+func TestInteractiveReviewCmdSharesEnvironmentWorkingDirectoryAndLogging(t *testing.T) {
+	t.Setenv("GIT_REVIEW_ADVICE", "1")
+	ResetInvocationLogForTest()
+	invocation := InteractiveReviewCmd("preview", nil, "/repo")
+
+	if want := []string{"git", "review", "preview"}; !reflect.DeepEqual(invocation.Cmd.Args, want) {
+		t.Fatalf("interactive argv = %v, want %v", invocation.Cmd.Args, want)
+	}
+	if invocation.Cmd.Dir != "/repo" {
+		t.Fatalf("interactive cwd = %q, want /repo", invocation.Cmd.Dir)
+	}
+	var advice string
+	for _, entry := range invocation.Cmd.Env {
+		if strings.HasPrefix(entry, "GIT_REVIEW_ADVICE=") {
+			advice = entry
+		}
+	}
+	if advice != "GIT_REVIEW_ADVICE=0" {
+		t.Fatalf("interactive advice environment = %q, want disabled through central review policy", advice)
+	}
+	if len(InvocationLog()) != 0 {
+		t.Fatal("building an interactive command must not log it before the terminal child completes")
+	}
+
+	result := invocation.Complete(nil)
+	entries := InvocationLog()
+	if result.ExitCode != 0 || len(entries) != 1 {
+		t.Fatalf("completion result=%+v entries=%+v, want one successful logged invocation", result, entries)
+	}
+	if !reflect.DeepEqual(entries[0].Argv, []string{"git", "review", "preview"}) || entries[0].Cwd != "/repo" {
+		t.Fatalf("interactive log entry = %+v, want shared argv/cwd policy", entries[0])
+	}
+}
+
+func TestInteractiveReviewCmdSharesSpawnErrorPolicy(t *testing.T) {
+	ResetInvocationLogForTest()
+	invocation := InteractiveReviewCmd("preview", nil, "/repo")
+	err := &exec.Error{Name: "git", Err: exec.ErrNotFound}
+	result := invocation.Complete(err)
+
+	if !result.SpawnFailed || !result.ExecutableNotFound || result.TimedOut {
+		t.Fatalf("interactive spawn result = %+v, want the central not-found classification", result)
+	}
+	entries := InvocationLog()
+	if len(entries) != 1 || !entries[0].SpawnFailed {
+		t.Fatalf("interactive spawn log = %+v, want one shared-policy failure entry", entries)
 	}
 }
 

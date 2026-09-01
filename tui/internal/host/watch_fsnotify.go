@@ -35,6 +35,10 @@ type fsnotifyWatcher struct {
 	gitDir       string
 	gitCommonDir string
 	draftPaths   []string
+	// ignoreDirWriteUntil absorbs the Windows backend's synthetic directory
+	// WRITE immediately after a self-rebuild adds a newly created directory.
+	// Child CREATE/REMOVE events remain visible through their own watches.
+	ignoreDirWriteUntil map[string]time.Time
 }
 
 // NewFsnotifyWatcher constructs the real, fsnotify-backed Watcher.
@@ -52,11 +56,12 @@ func (w *fsnotifyWatcher) Start(ctx context.Context, gitDir, gitCommonDir string
 	w.watched = map[string]string{}
 	w.out = make(chan struct{})
 	w.cancel = cancel
+	w.ignoreDirWriteUntil = map[string]time.Time{}
 	w.gitDir, w.gitCommonDir, w.draftPaths = gitDir, gitCommonDir, append([]string(nil), draftPaths...)
 	out := w.out
 	w.mu.Unlock()
 
-	w.applySet(BuildWatchSet(gitDir, gitCommonDir, draftPaths))
+	w.applySet(BuildWatchSet(gitDir, gitCommonDir, draftPaths), false)
 
 	w.wg.Add(1)
 	go w.loop(runCtx)
@@ -77,7 +82,7 @@ func (w *fsnotifyWatcher) Rebuild(gitDir, gitCommonDir string, draftPaths []stri
 	w.gitDir, w.gitCommonDir, w.draftPaths = gitDir, gitCommonDir, append([]string(nil), draftPaths...)
 	w.mu.Unlock()
 
-	w.applySet(BuildWatchSet(gitDir, gitCommonDir, draftPaths))
+	w.applySet(BuildWatchSet(gitDir, gitCommonDir, draftPaths), false)
 	return nil
 }
 
@@ -91,7 +96,7 @@ func (w *fsnotifyWatcher) selfRebuild() {
 	w.mu.Lock()
 	gitDir, gitCommonDir, draftPaths := w.gitDir, w.gitCommonDir, w.draftPaths
 	w.mu.Unlock()
-	w.applySet(BuildWatchSet(gitDir, gitCommonDir, draftPaths))
+	w.applySet(BuildWatchSet(gitDir, gitCommonDir, draftPaths), true)
 }
 
 // applySet diffs set against whatever is currently registered on the OS
@@ -100,7 +105,7 @@ func (w *fsnotifyWatcher) selfRebuild() {
 // fsw — that is the "incremental, nunca tira el watcher entero" guarantee
 // (T057), shared by Start's initial application, the external Rebuild, and
 // the watcher's own selfRebuild.
-func (w *fsnotifyWatcher) applySet(set domain.WatchSet) {
+func (w *fsnotifyWatcher) applySet(set domain.WatchSet, suppressInitialDirWrite bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.fsw == nil {
@@ -116,6 +121,7 @@ func (w *fsnotifyWatcher) applySet(set domain.WatchSet) {
 		if _, ok := want[path]; !ok {
 			_ = w.fsw.Remove(path) // best-effort: a directory already gone errors harmlessly
 			delete(w.watched, path)
+			delete(w.ignoreDirWriteUntil, path)
 		}
 	}
 	for path, filter := range want {
@@ -127,6 +133,9 @@ func (w *fsnotifyWatcher) applySet(set domain.WatchSet) {
 			continue // FR-064: a root gone between BuildWatchSet and Add is not fatal
 		}
 		w.watched[path] = filter
+		if suppressInitialDirWrite {
+			w.ignoreDirWriteUntil[path] = time.Now().Add(domain.DebounceCeilingMillis * time.Millisecond)
+		}
 	}
 }
 
@@ -256,6 +265,18 @@ func (w *fsnotifyWatcher) loop(ctx context.Context) {
 // never reads the file's content, only its name and, for Create, whether
 // the path IS now a directory.
 func (w *fsnotifyWatcher) classify(ev fsnotify.Event) (relevant, dirChange bool) {
+	if ev.Op == fsnotify.Write {
+		w.mu.Lock()
+		ignoreUntil, freshlyAdded := w.ignoreDirWriteUntil[filepath.Clean(ev.Name)]
+		if freshlyAdded {
+			delete(w.ignoreDirWriteUntil, filepath.Clean(ev.Name))
+		}
+		w.mu.Unlock()
+		if freshlyAdded && time.Now().Before(ignoreUntil) {
+			return false, false
+		}
+	}
+
 	dir := filepath.Dir(ev.Name)
 	name := filepath.Base(ev.Name)
 

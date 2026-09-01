@@ -34,7 +34,11 @@ type Result struct {
 	// plain value type.
 	TimedOut    bool
 	SpawnFailed bool
-	Duration    time.Duration
+	// ExecutableNotFound is the narrow SpawnFailed subtype backed by the
+	// operating system's not-found error. Permission and other start errors
+	// leave it false so a version probe cannot mistake them for CLI absence.
+	ExecutableNotFound bool
+	Duration           time.Duration
 }
 
 // decodeUTF8 is the "UTF-8 explícito en los tres sistemas operativos"
@@ -87,7 +91,12 @@ func runProcess(ctx context.Context, name string, argv []string, extraEnv []stri
 		res.TimedOut = true
 		return res
 	}
+	return resultFromProcessError(res, err)
+}
 
+// resultFromProcessError applies the exit and spawn-error policy shared by
+// buffered invocations and terminal-owned interactive commands.
+func resultFromProcessError(res Result, err error) Result {
 	if err == nil {
 		res.ExitCode = 0
 		return res
@@ -99,6 +108,7 @@ func runProcess(ctx context.Context, name string, argv []string, extraEnv []stri
 	}
 	// Could not even start: binary not found, permission denied, and so on.
 	res.SpawnFailed = true
+	res.ExecutableNotFound = errors.Is(err, exec.ErrNotFound) || errors.Is(err, os.ErrNotExist)
 	return res
 }
 
@@ -107,6 +117,51 @@ func runProcess(ctx context.Context, name string, argv []string, extraEnv []stri
 // unconditional is what makes "one file, one export" a single line to
 // verify instead of two call sites that both need to remember it.
 const gitReviewAdviceEnv = "GIT_REVIEW_ADVICE=0"
+
+// InteractiveReviewInvocation is a terminal-owned `git review` command. Cmd
+// goes to tea.ExecProcess so the child gets the real TTY; Complete must be
+// called with ExecProcess's error once the child exits to apply the normal
+// invocation-result and logging policy.
+type InteractiveReviewInvocation struct {
+	Cmd       *exec.Cmd
+	startedAt time.Time
+}
+
+// InteractiveReviewCmd builds an interactive `git review <verb> <args...>`
+// invocation. Unlike InvokeReview it deliberately has no buffered output or
+// timeout, because the terminal UI owns its streams and lifetime. Its command
+// environment, working directory, completion classification, and log entry
+// otherwise share the central process policy.
+func InteractiveReviewCmd(verb string, args []string, dir string) InteractiveReviewInvocation {
+	argv := make([]string, 0, len(args)+2)
+	argv = append(argv, "review", verb)
+	argv = append(argv, args...)
+	cmd := exec.Command("git", argv...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), gitReviewAdviceEnv)
+	return InteractiveReviewInvocation{Cmd: cmd, startedAt: time.Now()}
+}
+
+// Complete records the terminal child's completion using the same exit and
+// spawn-error policy as runProcess. Tea's ExecProcess already ran Cmd, so
+// there is intentionally no second execution here.
+func (i InteractiveReviewInvocation) Complete(err error) Result {
+	res := resultFromProcessError(Result{
+		Argv:     append([]string(nil), i.Cmd.Args...),
+		Cwd:      i.Cmd.Dir,
+		Duration: time.Since(i.startedAt),
+	}, err)
+	appendResultLog(res, i.startedAt)
+	return res
+}
+
+func appendResultLog(res Result, startedAt time.Time) {
+	appendLog(LogEntry{
+		Argv: res.Argv, Cwd: res.Cwd, Duration: res.Duration,
+		ExitCode: res.ExitCode, TimedOut: res.TimedOut, SpawnFailed: res.SpawnFailed,
+		Stderr: res.Stderr, StartedAt: startedAt,
+	})
+}
 
 // InvokeReview runs `git review <verb> <args...>` — never the dispatcher
 // directly (FR-007) and never with a configurable path to it (FR-008): the
@@ -129,11 +184,7 @@ func InvokeReview(ctx context.Context, verb string, args []string) Result {
 	}
 
 	res := runProcess(runCtx, "git", argv, extraEnv)
-	appendLog(LogEntry{
-		Argv: res.Argv, Cwd: res.Cwd, Duration: res.Duration,
-		ExitCode: res.ExitCode, TimedOut: res.TimedOut, SpawnFailed: res.SpawnFailed,
-		Stderr: res.Stderr, StartedAt: time.Now().Add(-res.Duration),
-	})
+	appendResultLog(res, time.Now().Add(-res.Duration))
 	return res
 }
 
@@ -145,11 +196,7 @@ func InvokeSupportGit(ctx context.Context, args []string) Result {
 	defer cancel()
 
 	res := runProcess(runCtx, "git", args, []string{gitReviewAdviceEnv})
-	appendLog(LogEntry{
-		Argv: res.Argv, Cwd: res.Cwd, Duration: res.Duration,
-		ExitCode: res.ExitCode, TimedOut: res.TimedOut, SpawnFailed: res.SpawnFailed,
-		Stderr: res.Stderr, StartedAt: time.Now().Add(-res.Duration),
-	})
+	appendResultLog(res, time.Now().Add(-res.Duration))
 	return res
 }
 

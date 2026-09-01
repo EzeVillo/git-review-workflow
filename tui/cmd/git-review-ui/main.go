@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/EzeVillo/git-review-workflow/tui/internal/domain"
 	"github.com/EzeVillo/git-review-workflow/tui/internal/host"
 	"github.com/EzeVillo/git-review-workflow/tui/internal/ui"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -29,6 +28,25 @@ var (
 	_ = textinput.New
 	_ = lipgloss.NewStyle
 )
+
+const watcherEnv = "GIT_REVIEW_UI_WATCH"
+
+type watcherKind uint8
+
+const (
+	watcherFsnotify watcherKind = iota
+	watcherNop
+)
+
+// watcherKindFromEnv keeps the real watcher as the runtime default. The
+// explicit zero value is the deterministic support/test opt-out; no missing
+// or malformed environment value can silently disable release behavior.
+func watcherKindFromEnv() watcherKind {
+	if os.Getenv(watcherEnv) == "0" {
+		return watcherNop
+	}
+	return watcherFsnotify
+}
 
 // reviewUIConfig reads one `reviewui.<name>` key defensively — the Go
 // mirror of the shell verbs' `git config --get ... || true`: an absent key
@@ -58,14 +76,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Watcher choice (T054): made exactly ONCE, here. "1" turns disparador
-	// 2 on; anything else — including absence, which is the whole test
-	// suite's default — is nopWatcher. This is a support/suite lever, not a
-	// `reviewui.*` key: see internal/host/watch.go's comment on nopWatcher
-	// for why turning the acceleration mechanism off is not reviewer
-	// product surface.
+	// Watcher choice (T054): made exactly ONCE, here. The real watcher is the
+	// runtime default; GIT_REVIEW_UI_WATCH=0 is the explicit deterministic
+	// support/test opt-out. This is a support/suite lever, not a `reviewui.*`
+	// key: see internal/host/watch.go's comment on nopWatcher for why turning
+	// the acceleration mechanism off is not reviewer product surface.
 	var watcher host.Watcher
-	if os.Getenv("GIT_REVIEW_UI_WATCH") == "1" {
+	if watcherKindFromEnv() == watcherFsnotify {
 		watcher = host.NewFsnotifyWatcher()
 	} else {
 		watcher = host.NewNopWatcher()
@@ -92,9 +109,13 @@ func main() {
 	// golden set possible). Cols/Rows are left at their construction-time
 	// placeholder: bubbletea's own first tea.WindowSizeMsg overwrites them
 	// with the real terminal size before the first real frame draws.
+	acceptedReads := make(chan host.ReadResult, 16)
 	model := ui.NewModelWithPollFloor(pollSeconds).
 		WithPreferredStartSource(startSource).
-		WithViewportCapabilities(!noColorRequested(), asciiFallback())
+		WithViewportCapabilities(!noColorRequested(), asciiFallback()).
+		WithAcceptedReadCallback(func(result host.ReadResult) {
+			acceptedReads <- result
+		})
 
 	p := tea.NewProgram(model,
 		tea.WithAltScreen(),
@@ -103,7 +124,7 @@ func main() {
 	)
 
 	watchCtx, stopWatching := context.WithCancel(context.Background())
-	go forwardWatchTicks(watchCtx, watcher, p)
+	go forwardWatchTicks(watchCtx, watcher, p, acceptedReads)
 
 	_, runErr := p.Run()
 	stopWatching()
@@ -114,28 +135,12 @@ func main() {
 	}
 }
 
-// forwardWatchTicks resolves the gitdir pair once, runs ONE read purely to
-// learn whatever draft paths the CLI already reports (initialDraftPaths),
-// and starts disparador 2 pointed at all of that — forwarding every
-// coalesced signal into the running program as ui.WatchTick(), the one
-// function outside internal/ui allowed to know that message exists at all
-// (it deliberately does not export watchMsg's own type).
-//
-// Keeping draftPaths in sync as a SESSION progresses (a draft born after
-// the TUI started, for a branch that had none at launch) needs a place
-// that already sees every subsequent host.ReadResult — Phase 6's mutation
-// cycle, not this one-shot startup path. A review whose draft association
-// predates the TUI's own start (`reviewdraft` is written by
-// `start`/`compare` long before any .md content exists) is already covered
-// by the one-shot read below (contracts/refresh.md § Cómo se arma y se
-// rearma); the anidamiento scenario itself — a brand-new draft appearing
-// under a directory that already exists — is exactly what T058's own test
-// exercises directly against the watcher, without this composition root.
-//
-// With the default nopWatcher, w.Start's channel is never sent to, so this
-// goroutine simply parks on ctx.Done() for the program's whole lifetime —
-// no extra process, no extra wakeup (T061/SC-002).
-func forwardWatchTicks(ctx context.Context, w host.Watcher, p *tea.Program) {
+// forwardWatchTicks resolves the gitdir pair once, starts disparador 2,
+// forwards every coalesced filesystem signal into Bubble Tea, and rebuilds
+// the watch closure after every read the model accepted. Draft paths enter
+// only through the status/config porcelain fields in that accepted result;
+// no startup-only duplicate ReadState call or guessed draft root exists.
+func forwardWatchTicks(ctx context.Context, w host.Watcher, p *tea.Program, acceptedReads <-chan host.ReadResult) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return
@@ -144,7 +149,7 @@ func forwardWatchTicks(ctx context.Context, w host.Watcher, p *tea.Program) {
 	if !ok {
 		return
 	}
-	ch, err := w.Start(ctx, dirs.GitDir, dirs.GitCommonDir, initialDraftPaths(ctx, cwd))
+	ch, err := w.Start(ctx, dirs.GitDir, dirs.GitCommonDir, nil)
 	if err != nil {
 		return
 	}
@@ -157,18 +162,15 @@ func forwardWatchTicks(ctx context.Context, w host.Watcher, p *tea.Program) {
 				return
 			}
 			p.Send(ui.WatchTick())
+		case result := <-acceptedReads:
+			_ = rebuildWatcher(w, dirs, result)
 		}
 	}
 }
 
-// initialDraftPaths runs one best-effort read cycle purely to seed the
-// watcher's D/E roots with whatever the CLI already reports at startup
-// (FR-036: never guessed, only ever what was reported). Any failure here
-// just means the watcher starts without a D/E root — exactly how FR-064
-// already treats a root that plain does not exist yet — and disparadores
-// 1/3/4 still cover it from there.
-func initialDraftPaths(ctx context.Context, cwd string) []string {
-	result := host.ReadState(ctx, cwd, domain.MinCLIVersion)
+// rebuildWatcher is the testable accepted-read boundary. Its only draft
+// inputs are the two porcelain result families ReadState retained.
+func rebuildWatcher(w host.Watcher, dirs host.GitDirs, result host.ReadResult) error {
 	var paths []string
 	if result.HasStatus && result.Status.DraftPath != "" {
 		paths = append(paths, result.Status.DraftPath)
@@ -180,5 +182,5 @@ func initialDraftPaths(ctx context.Context, cwd string) []string {
 			}
 		}
 	}
-	return paths
+	return w.Rebuild(dirs.GitDir, dirs.GitCommonDir, paths)
 }

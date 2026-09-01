@@ -156,29 +156,6 @@ func DiffCommitCmd(sha, dir string) *exec.Cmd {
 	return c
 }
 
-// PreviewEditsCmd builds `git review preview` — the one delegated action
-// that IS still a `git review` invocation. contracts/cli-invocation.md's
-// own "no son invocaciones de la CLI" describes the MACHINERY every other
-// invocation in this package goes through (InvokeReview's captured
-// buffers, its class-based hard timeout, the advice env var) — never
-// applying here, not the argv itself (this file never sets that env var
-// either — invoke_test.go's own sweep confirms it):
-// the reviewer's own edits are a throwaway-index computation (a 3-way
-// merge simulation over banked edits in step mode) only
-// bin/git-review-verbs/preview knows how to build, and
-// reimplementing that in Go would be a second copy that could silently
-// drift from the first. Run through tea.ExecProcess instead, so the verb's
-// own internal `git diff` gets a REAL terminal — which is what makes it
-// color and page itself exactly as any git command does when run
-// interactively: the "-> $PAGER -> less" the contract names is git's own
-// well-known pager fallback (core.pager, then $PAGER, then less), not
-// something this client implements.
-func PreviewEditsCmd(dir string) *exec.Cmd {
-	c := exec.Command("git", "review", "preview")
-	c.Dir = dir
-	return c
-}
-
 // OpenURLCmd delegates an allowlisted web address to the native browser
 // launcher. Like the editor and diff helpers above, it only builds the child
 // command; ui hands it to tea.ExecProcess so the terminal remains coherent

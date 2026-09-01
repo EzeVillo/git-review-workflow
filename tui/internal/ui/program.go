@@ -51,6 +51,11 @@ type Model struct {
 	statusLine           string
 	pendingFinish        *pendingFinishOutcome
 	preferredStartSource string
+	// onAcceptedRead is the composition root's watcher boundary. Update
+	// invokes it only after the generation guard accepts a read; callers
+	// must keep it to an in-memory enqueue so filesystem work stays outside
+	// Bubble Tea's event loop.
+	onAcceptedRead func(host.ReadResult)
 }
 
 // WithPreferredStartSource sets reviewui.startsource's resolved value
@@ -61,6 +66,14 @@ type Model struct {
 // piece of `reviewui.*` config already follows (pollFloor/pollGen above).
 func (m Model) WithPreferredStartSource(source string) Model {
 	m.preferredStartSource = source
+	return m
+}
+
+// WithAcceptedReadCallback installs the one-way boundary used by the
+// composition root to keep watcher roots synchronized with accepted
+// porcelain reads. A stale read never crosses it.
+func (m Model) WithAcceptedReadCallback(callback func(host.ReadResult)) Model {
+	m.onAcceptedRead = callback
 	return m
 }
 
@@ -230,12 +243,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.lastRead = msg.result
+		if m.onAcceptedRead != nil {
+			m.onAcceptedRead(msg.result)
+		}
 		m.Panel = domain.Project(toProjectInput(msg.result, m.Panel.MouseEnabled, m.lock.Busy(), m.statusLine))
 		if m.pendingFinish != nil {
 			// finishReview's own deferred outcome (T074): the fresh read's
-			// situation is the only honest answer to "did this land
-			// pending or not" — never the verb's own stdout (FR-013).
-			if m.Panel.Situation != domain.SituationFinishPending {
+			// matching list record is the only honest answer to "did THIS
+			// source land pending or not" — never the verb's own stdout or
+			// another review's repository-wide pending state (FR-013).
+			if !m.pendingFinish.matchesPending(msg.result) {
 				text := m.pendingFinish.destination() + domain.FinishReadySuffix
 				m.statusLine = text
 				m.Panel.StatusLine = text

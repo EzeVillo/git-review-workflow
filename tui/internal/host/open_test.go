@@ -156,14 +156,6 @@ func TestDiffCommitCmdBuildsExpectedArgv(t *testing.T) {
 	}
 }
 
-func TestPreviewEditsCmdBuildsExpectedArgv(t *testing.T) {
-	cmd := PreviewEditsCmd("/repo")
-	want := []string{"git", "review", "preview"}
-	if !reflect.DeepEqual(cmd.Args, want) {
-		t.Fatalf("PreviewEditsCmd args = %#v, want %#v", cmd.Args, want)
-	}
-}
-
 // TestOpenURLCmdUsesThePlatformBrowserOpener proves that link controls hand
 // their allowlisted URL to the operating system's URL opener, rather than
 // displaying text that the reviewer must copy and paste themselves.

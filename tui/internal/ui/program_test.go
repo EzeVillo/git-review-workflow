@@ -121,6 +121,63 @@ func TestOlderReadResultCannotOverwriteNewerState(t *testing.T) {
 	}
 }
 
+func TestOnlyAcceptedReadResultsCrossTheWatcherBoundary(t *testing.T) {
+	var accepted []host.ReadResult
+	m := NewModel().WithAcceptedReadCallback(func(result host.ReadResult) {
+		accepted = append(accepted, result)
+	})
+	newer, _ := m.scheduleRead()
+	got, _ := newer.Update(readDoneMsg{generation: newer.readGeneration, result: readResult(domain.SituationReview)})
+	_, _ = got.(Model).Update(readDoneMsg{generation: newer.readGeneration - 1, result: readResult(domain.SituationNoReview)})
+
+	if len(accepted) != 1 {
+		t.Fatalf("accepted callback calls = %d, want exactly the current read", len(accepted))
+	}
+	if accepted[0].Situation != domain.SituationReview {
+		t.Fatalf("accepted situation = %q, want review", accepted[0].Situation)
+	}
+}
+
+func TestPendingForAnotherSourceKeepsGlobalPanelAndReportsFinishedReviewReady(t *testing.T) {
+	m := NewModel()
+	m.pendingFinish = &pendingFinishOutcome{source: "feat-a"}
+	result := host.ReadResult{
+		Situation: domain.SituationFinishPending,
+		HasList:   true,
+		Branches: []domain.BranchRecord{
+			{Name: "review/feat-b", Finish: &domain.ListFinish{State: "pending"}},
+		},
+	}
+
+	updated, _ := m.Update(readDoneMsg{generation: m.readGeneration, result: result})
+	got := updated.(Model)
+	if got.Panel.Situation != domain.SituationFinishPending || !got.Panel.PendingFinish || got.Panel.Source != "feat-b" {
+		t.Fatalf("global pending panel = %+v, want the unrelated feat-b pending review to remain visible", got.Panel)
+	}
+	want := "review-fixes/feat-a" + domain.FinishReadySuffix
+	if got.statusLine != want || got.Panel.StatusLine != want {
+		t.Fatalf("finished feat-a outcome = status %q panel %q, want %q", got.statusLine, got.Panel.StatusLine, want)
+	}
+}
+
+func TestPendingForFinishedSourceSuppressesRedundantReadyOutcome(t *testing.T) {
+	m := NewModel()
+	m.pendingFinish = &pendingFinishOutcome{source: "feat-a"}
+	result := host.ReadResult{
+		Situation: domain.SituationFinishPending,
+		HasList:   true,
+		Branches: []domain.BranchRecord{
+			{Name: "review/feat-a", Finish: &domain.ListFinish{State: "pending"}},
+		},
+	}
+
+	updated, _ := m.Update(readDoneMsg{generation: m.readGeneration, result: result})
+	got := updated.(Model)
+	if got.statusLine != "" || got.Panel.StatusLine != "" {
+		t.Fatalf("matching pending outcome must rely on its banner, got status %q panel %q", got.statusLine, got.Panel.StatusLine)
+	}
+}
+
 func readResult(situation domain.Situation) host.ReadResult {
 	return host.ReadResult{Situation: situation}
 }

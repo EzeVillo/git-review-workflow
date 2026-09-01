@@ -55,9 +55,10 @@ func watcherKindFromEnv() watcherKind {
 // FR-061's "global as the preference, local as the override" means in
 // practice — there is no separate two-step merge to write here.
 //
-// No `reviewui.*` key exists yet: this client's config surface starts
-// empty on purpose. The mechanism exists now so the start assistant's
-// `reviewui.startsource` (Phase 6) and the rest have somewhere to call.
+// Two keys read through here today: `reviewui.startsource` (the start
+// assistant's preselected source) and `reviewui.pollseconds` (the opt-in
+// read floor), both below. `GIT_REVIEW_UI_WATCH` is deliberately NOT one of
+// them — it is a support/suite lever, not reviewer product surface.
 func reviewUIConfig(name string) (string, bool) {
 	out, err := exec.Command("git", "config", "--get", "reviewui."+name).Output()
 	if err != nil {
@@ -74,6 +75,19 @@ func main() {
 	// spawned it (contracts/cli-invocation.md § Entorno de red).
 	if host.IsAskpassSentinel() {
 		os.Exit(1)
+	}
+
+	// argv SECOND, still before any terminal state is read: -h and --version
+	// have to answer on a pipe, in CI, and with no TTY at all. Everything
+	// this binary does not recognise is refused here rather than swallowed
+	// (see args.go).
+	switch res := parseArgs(os.Args[1:]); res.Outcome {
+	case argsPrint:
+		fmt.Println(res.Text)
+		return
+	case argsReject:
+		fmt.Fprintln(os.Stderr, res.Text)
+		os.Exit(2)
 	}
 
 	// Watcher choice (T054): made exactly ONCE, here. The real watcher is the

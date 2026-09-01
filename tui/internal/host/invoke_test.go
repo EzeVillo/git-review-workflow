@@ -2,12 +2,14 @@ package host
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestRunProcessReportsSpawnFailedForAMissingBinary(t *testing.T) {
@@ -206,5 +208,69 @@ func TestGitReviewAdviceExportedNowhereElse(t *testing.T) {
 	}
 	if len(offenders) != 0 {
 		t.Fatalf("GIT_REVIEW_ADVICE referenced outside internal/host/invoke.go: %v", offenders)
+	}
+}
+
+// --- the invocation log's two bounds -----------------------------------------
+
+// A pane is not a command that exits: left open all day with the watcher
+// accelerating a read on every ref change, the log would otherwise grow
+// forever. Same bound the other clients already have (Visual Studio's
+// CliLogSink is a 500-line ring).
+func TestInvocationLogKeepsOnlyTheNewestEntries(t *testing.T) {
+	ResetInvocationLogForTest()
+	t.Cleanup(ResetInvocationLogForTest)
+
+	total := logMax + 250
+	for i := 0; i < total; i++ {
+		appendLog(LogEntry{Argv: []string{"git", "review", "status", fmt.Sprint(i)}})
+	}
+
+	entries := InvocationLog()
+	if len(entries) != logMax {
+		t.Fatalf("InvocationLog() has %d entries, want the %d cap", len(entries), logMax)
+	}
+	// Oldest-first order survives, and the window is the NEWEST slice: what
+	// showCliLog exists to answer is always "what did the thing I just
+	// pressed run".
+	firstKept := total - logMax
+	if got := entries[0].Argv[3]; got != fmt.Sprint(firstKept) {
+		t.Errorf("oldest kept entry = %q, want %q", got, fmt.Sprint(firstKept))
+	}
+	if got := entries[len(entries)-1].Argv[3]; got != fmt.Sprint(total-1) {
+		t.Errorf("newest entry = %q, want %q", got, fmt.Sprint(total-1))
+	}
+}
+
+func TestInvocationLogTruncatesLongStderrAtARuneBoundary(t *testing.T) {
+	ResetInvocationLogForTest()
+	t.Cleanup(ResetInvocationLogForTest)
+
+	// Multi-byte runes chosen so the cap lands mid-sequence: a naive byte
+	// slice would leave a broken tail the renderer draws as U+FFFD.
+	long := strings.Repeat("é", logStderrMax)
+	appendLog(LogEntry{Argv: []string{"git"}, Stderr: long})
+
+	got := InvocationLog()[0].Stderr
+	if len(got) >= len(long) {
+		t.Fatalf("stderr of %d bytes was not truncated (got %d)", len(long), len(got))
+	}
+	if !strings.HasSuffix(got, logTruncated) {
+		t.Errorf("truncated stderr does not say so: %q", got[max(0, len(got)-40):])
+	}
+	if !utf8.ValidString(got) {
+		t.Error("truncation cut mid-rune: the result is not valid UTF-8")
+	}
+}
+
+// Short stderr is left exactly as it came: the cap is a bound, not a filter.
+func TestInvocationLogKeepsShortStderrVerbatim(t *testing.T) {
+	ResetInvocationLogForTest()
+	t.Cleanup(ResetInvocationLogForTest)
+
+	const msg = "error: no base configured"
+	appendLog(LogEntry{Argv: []string{"git"}, Stderr: msg})
+	if got := InvocationLog()[0].Stderr; got != msg {
+		t.Errorf("stderr = %q, want it verbatim", got)
 	}
 }

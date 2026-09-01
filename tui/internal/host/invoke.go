@@ -216,13 +216,53 @@ type LogEntry struct {
 	StartedAt   time.Time
 }
 
+// logMax and logStderrMax bound what a long-lived pane can accumulate. A
+// TUI is not a command that exits: a pane left open all day, with the
+// watcher accelerating a read on every ref and config change, appends
+// several entries per refresh forever. The other clients already have their
+// bound — Visual Studio's CliLogSink is a 500-line ring, VS Code hands the
+// text to an OutputChannel that trims and caps stderr at 2000 chars — and
+// this is the same bound in the same two places.
+//
+// Dropping the OLDEST is the right end to drop: showCliLog exists to answer
+// "what did the thing I just pressed run", and the entry that answers it is
+// always the newest.
+const (
+	logMax       = 500
+	logStderrMax = 2000
+	logTruncated = "\n… (truncated)"
+)
+
+// truncateStderr cuts at a RUNE boundary, never mid-sequence: decodeUTF8
+// went to the trouble of guaranteeing the string is valid UTF-8, and a naive
+// byte slice would hand the renderer a broken tail it would draw as U+FFFD.
+func truncateStderr(s string) string {
+	if len(s) <= logStderrMax {
+		return s
+	}
+	cut := logStderrMax
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + logTruncated
+}
+
 var logMu sync.Mutex
 var log []LogEntry
 
 func appendLog(e LogEntry) {
+	e.Stderr = truncateStderr(e.Stderr)
 	logMu.Lock()
 	defer logMu.Unlock()
 	log = append(log, e)
+	if len(log) > logMax {
+		// Re-slice into a fresh backing array rather than log[1:]: the latter
+		// keeps the whole original array alive behind a moving window, so the
+		// bound would cap what is VISIBLE without capping what is retained.
+		trimmed := make([]LogEntry, logMax)
+		copy(trimmed, log[len(log)-logMax:])
+		log = trimmed
+	}
 }
 
 // InvocationLog returns a copy of every invocation recorded so far, oldest

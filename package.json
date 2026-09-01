@@ -1,6 +1,6 @@
 {
   "name": "git-review-workflow",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Git commands to review a pull request branch locally as one staged diff - great for auditing AI-generated PRs and fixing code smells",
   "keywords": [
     "git",

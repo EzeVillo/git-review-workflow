@@ -181,9 +181,17 @@ class ReviewStateManager(
                         draftPath = porcelain.draftPath,
                     )
                 } catch (e: Exception) {
+                    // Lo que dijo la CLI le gana a lo que dice el parser: una
+                    // porcelain ilegible es mas seguido una CLI que ya se
+                    // explico que un bug del tokenizador, y sobre lo primero el
+                    // revisor puede hacer algo. Los otros dos clientes ya
+                    // preferian el stderr; este publicaba el mensaje del parser
+                    // y se comia la unica frase accionable.
                     ReviewState(
                         situation = Situation.ERROR,
-                        stderr = e.message ?: "failed to parse status porcelain",
+                        stderr = status.stderr.trim().ifEmpty {
+                            e.message ?: "failed to parse status porcelain"
+                        },
                     )
                 }
             }

@@ -27,6 +27,26 @@ type Viewport struct {
 // Rect is one control's drawn rectangle, 0-based rows/cols.
 type Rect struct{ Row, Col, Width, Height int }
 
+// controlTarget is the concrete body control the presentation layer marks.
+// Variant matters for repeated row actions such as the two Support links.
+type controlTarget struct {
+	id      domain.ControlID
+	variant string
+}
+
+// renderState is ephemeral UI state. It deliberately stays outside
+// domain.PanelModel: porcelain decides product state; focus, hover, and a
+// terminal viewport offset belong solely to this client presentation.
+type renderState struct {
+	focus, hover *controlTarget
+	footerOffset int
+}
+
+type renderMetrics struct {
+	footerOffset int
+	footerMax    int
+}
+
 type hit struct {
 	id      domain.ControlID
 	variant string
@@ -128,19 +148,54 @@ func glyph(vp Viewport, name domain.IconName) string {
 // --- the builder ---------------------------------------------------------
 
 type builder struct {
-	vp    Viewport
-	st    styles
-	lines []string
-	hm    HitMap
+	vp      Viewport
+	st      styles
+	state   renderState
+	lines   []string
+	hm      HitMap
+	metrics renderMetrics
 }
 
-func newBuilder(vp Viewport) *builder {
-	return &builder{vp: vp, st: stylesFor(vp.Color)}
+func newBuilder(vp Viewport, state renderState) *builder {
+	return &builder{vp: vp, st: stylesFor(vp.Color), state: state}
 }
 
 func (b *builder) text(s string)    { b.lines = append(b.lines, s) }
 func (b *builder) blank()           { b.lines = append(b.lines, "") }
 func (b *builder) heading(s string) { b.lines = append(b.lines, b.st.heading.Render(s)) }
+
+// marker is deliberately textual rather than color-only: NO_COLOR and the
+// ASCII fallback must leave keyboard focus just as legible as a full-color
+// terminal. Hover is distinct but secondary to focus when both name a row.
+func (b *builder) marker(targets ...controlTarget) string {
+	for _, target := range targets {
+		if b.state.focus != nil && *b.state.focus == target {
+			return "> "
+		}
+	}
+	for _, target := range targets {
+		if b.state.hover != nil && *b.state.hover == target {
+			return "~ "
+		}
+	}
+	if b.state.focus == nil && b.state.hover == nil {
+		return ""
+	}
+	return "  "
+}
+
+func (b *builder) controlPrefix(target controlTarget) string {
+	if b.state.focus != nil && *b.state.focus == target {
+		return ">"
+	}
+	if b.state.hover != nil && *b.state.hover == target {
+		return "~"
+	}
+	if b.state.focus == nil && b.state.hover == nil {
+		return ""
+	}
+	return " "
+}
 
 // note draws PanelModel.Note — a single derived, presentation-only line —
 // and does nothing at all when there is none, rather than emitting a styled
@@ -167,7 +222,7 @@ func (b *builder) button(id domain.ControlID, variant, label string, style lipgl
 	if !enabled {
 		s = b.st.disabled
 	}
-	rendered := prefix + s.Render(label) + suffix
+	rendered := b.marker(controlTarget{id: id, variant: variant}) + prefix + s.Render(label) + suffix
 	row := len(b.lines)
 	b.lines = append(b.lines, rendered)
 	b.hm.add(id, variant, row, 0, lipgloss.Width(rendered))
@@ -181,7 +236,7 @@ func (b *builder) iconButton(id domain.ControlID, icon domain.IconName, name str
 	if !enabled {
 		s = b.st.disabled
 	}
-	rendered := "[" + glyph(b.vp, icon) + "] " + s.Render(name)
+	rendered := b.marker(controlTarget{id: id}) + "[" + glyph(b.vp, icon) + "] " + s.Render(name)
 	row := len(b.lines)
 	b.lines = append(b.lines, rendered)
 	b.hm.add(id, "", row, 0, lipgloss.Width(rendered))
@@ -217,7 +272,7 @@ func (b *builder) buttonRow(btns ...rowButton) {
 		if !bt.enabled {
 			s = b.st.disabled
 		}
-		part := "[ " + s.Render(bt.label) + " ]"
+		part := b.controlPrefix(controlTarget{id: bt.id, variant: bt.variant}) + "[ " + s.Render(bt.label) + " ]"
 		if i > 0 {
 			line += "  "
 		}
@@ -255,7 +310,7 @@ func (b *builder) iconRow(icons ...rowIcon) {
 		if !ic.enabled {
 			s = b.st.disabled
 		}
-		part := "[" + glyph(b.vp, ic.icon) + "] " + s.Render(ic.hint)
+		part := b.controlPrefix(controlTarget{id: ic.id, variant: ic.variant}) + "[" + glyph(b.vp, ic.icon) + "] " + s.Render(ic.hint)
 		if i > 0 {
 			line += "  "
 		}
@@ -338,11 +393,19 @@ func interpolate(template string, pairs ...string) string {
 // control left behind. Pure: no I/O, no package-level mutable state besides
 // the deterministic, explicitly-profiled styles built fresh each call.
 func View(m domain.PanelModel, vp Viewport) (string, HitMap) {
-	b := newBuilder(vp)
+	frame, hm, _ := viewWithState(m, vp, renderState{})
+	return frame, hm
+}
+
+// viewWithState is the model-facing panel renderer. View remains the pure,
+// state-free API used by golden/domain tests; this narrow sibling adds only
+// presentation state that a real terminal interaction owns.
+func viewWithState(m domain.PanelModel, vp Viewport, state renderState) (string, HitMap, renderMetrics) {
+	b := newBuilder(vp, state)
 
 	if m.Situation == domain.SituationWaiting || m.Situation == "" {
 		b.text(domain.WaitingText)
-		return b.frame(), b.hm
+		return b.frame(), b.hm, b.metrics
 	}
 
 	switch domain.LayoutSituationFor(m) {
@@ -372,7 +435,7 @@ func View(m domain.PanelModel, vp Viewport) (string, HitMap) {
 
 	b.statusLine(m.StatusLine)
 	b.keyBar(m)
-	return b.frame(), b.hm
+	return b.frame(), b.hm, b.metrics
 }
 
 // statusLine draws PanelModel.StatusLine (T074): what a toast would say in
@@ -408,7 +471,11 @@ func renderCliInstall(b *builder, title, hint, cmd, stderr string) {
 	b.text(interpolate(title, "{min}", domain.MinCLIVersion))
 	b.text(hint)
 	b.blank()
-	line := "  " + cmd
+	prefix := b.marker(controlTarget{id: "copyCliInstall"})
+	if prefix == "" {
+		prefix = "  "
+	}
+	line := prefix + cmd
 	row := len(b.lines)
 	b.lines = append(b.lines, line)
 	b.hm.add("copyCliInstall", "", row, 0, lipgloss.Width(line))
@@ -645,13 +712,12 @@ func renderInventoryRows(b *builder, m domain.PanelModel) {
 const keyBarReserve = 2
 
 // capFooter enforces FR-022: the footer (everything from footerStart on)
-// never draws more than FooterCapPercent of the viewport's rows. Past that
-// budget the remainder is dropped and replaced with ONE marker line —
-// ScrollbarCount's "one bar for the whole footer", never a per-section
-// scroll, because the cut happens once, on the combined footer, not once
-// per tools_section. Unbounded viewports (vp.Rows <= 0, every non-golden
-// domain-only test) are left untouched: there is no budget to enforce
-// against.
+// never draws more than FooterCapPercent of the viewport's rows. When it
+// overflows, ONE movable window plus ONE track replaces the old destructive
+// cutoff — never a per-section scroll, because the range is calculated once
+// for the combined footer. Unbounded viewports (vp.Rows <= 0, every
+// non-golden domain-only test) are left untouched: there is no budget to
+// enforce against.
 func (b *builder) capFooter(footerStart int) {
 	if b.vp.Rows <= 0 {
 		return
@@ -673,23 +739,57 @@ func (b *builder) capFooter(footerStart int) {
 	if footerLen <= budget {
 		return
 	}
-	cut := footerStart + budget - 1
-	if cut < footerStart {
-		cut = footerStart
+	visibleLines := budget - 1 // one shared scrollbar/status line for the whole footer
+	if visibleLines < 1 {
+		visibleLines = 1
 	}
-	hidden := len(b.lines) - cut
-	marker := b.st.note.Render(fmt.Sprintf("… %d more line(s) below — resize to see them", hidden))
-	b.lines = append(b.lines[:cut], marker)
-	// A control whose line was cut is no longer visible, so it is no longer
-	// clickable either: drop its rect rather than let a mouse coordinate
-	// resolve to a row nobody can see.
+	maxOffset := footerLen - visibleLines
+	offset := b.state.footerOffset
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > maxOffset {
+		offset = maxOffset
+	}
+	b.metrics.footerOffset = offset
+	b.metrics.footerMax = maxOffset
+
+	windowStart := footerStart + offset
+	windowEnd := windowStart + visibleLines
+	lines := append([]string{}, b.lines[:footerStart]...)
+	lines = append(lines, b.lines[windowStart:windowEnd]...)
+	above, below := offset, maxOffset-offset
+	marker := b.st.note.Render(fmt.Sprintf("… footer %s: %d line(s) above, %d below — j/k or mouse wheel", footerScrollbar(offset, maxOffset), above, below))
+	b.lines = append(lines, marker)
+
 	kept := b.hm.hits[:0]
 	for _, h := range b.hm.hits {
-		if h.rect.Row < cut {
+		if h.rect.Row < footerStart {
 			kept = append(kept, h)
+			continue
 		}
+		if h.rect.Row < windowStart || h.rect.Row >= windowEnd {
+			continue
+		}
+		h.rect.Row -= offset
+		kept = append(kept, h)
 	}
 	b.hm.hits = kept
+}
+
+// footerScrollbar is the one visual scroll track promised for the entire
+// tools footer. It uses ASCII only so it remains meaningful in every terminal
+// mode; its single thumb moves over the same offset that keyboard and wheel
+// input update.
+func footerScrollbar(offset, maxOffset int) string {
+	const width = 10
+	track := []byte("..........")
+	thumb := 0
+	if maxOffset > 0 {
+		thumb = offset * (width - 1) / maxOffset
+	}
+	track[thumb] = '#'
+	return "[" + string(track) + "]"
 }
 
 func identityLine(m domain.PanelModel) string {

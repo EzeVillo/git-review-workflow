@@ -1,0 +1,24 @@
+Something went wrong reading the review state.
+[ How to fix it ]
+
+error: review step 99 out of range (1..4) — corrupt metadata? Discard the review
+with 'git review abort'.
+
+j:up  k:down  enter:select  r:refresh  ::actions  m:mouse off  q:quit
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

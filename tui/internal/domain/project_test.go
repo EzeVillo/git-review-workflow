@@ -157,6 +157,21 @@ func TestProjectFinishPendingDestination(t *testing.T) {
 	}
 }
 
+func TestPendingFinishDoesNotRequireCurrentCheckout(t *testing.T) {
+	branches := []BranchRecord{
+		{Name: "review/feature", Finish: &ListFinish{State: "pending"}},
+		{Name: "review/other", Current: true},
+	}
+
+	pending, ok := PendingFinish(branches)
+	if !ok {
+		t.Fatal("a pending finish in list porcelain must be visible outside its checkout")
+	}
+	if pending.Name != "review/feature" {
+		t.Fatalf("pending branch = %q, want review/feature", pending.Name)
+	}
+}
+
 func TestProjectFailureSituationsCarryOnlyStderrAndBusy(t *testing.T) {
 	for _, sit := range []Situation{SituationCliMissing, SituationCliOutdated, SituationOutOfRange, SituationError} {
 		m := Project(ProjectInput{Situation: sit, Stderr: "boom", Busy: true, MouseEnabled: true})

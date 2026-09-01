@@ -1,0 +1,24 @@
+Go to entry
+
+> src/discounts.js
+  src/pricing.js
+  src/cart.js
+  src/café.js
+  docs/guía de estilo.md
+  .review/walkthrough.md
+
+j/k:move  enter:pick  esc:cancel
+
+
+
+
+
+
+
+
+
+
+
+
+
+

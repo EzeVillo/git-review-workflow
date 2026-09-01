@@ -19,6 +19,6 @@ feat-x  2/4  (may be out of date)
 Repository guide  (in force)
 [☐] open
 [ Create ]
-… 28 more line(s) below — resize to see them
+… footer [#.........]: 0 line(s) above, 28 below — j/k or mouse wheel
 
 j:up  k:down  enter:select  r:refresh  ::actions  m:mouse on  q:quit

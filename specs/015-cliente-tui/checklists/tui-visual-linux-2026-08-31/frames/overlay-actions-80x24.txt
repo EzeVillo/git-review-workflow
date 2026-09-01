@@ -1,0 +1,24 @@
+Actions
+> Type to filter…
+
+> Open file
+  Open diff
+  open in editor
+  Next entry  n
+  Previous entry  p
+  Go to entry…
+  Refresh  r
+  Change the base branch
+  Change remote
+  Cancel review  a
+  Save for later  s
+  Finish review  f
+  Done, clean up
+  Forget a saved review…
+  Preview edits
+  Preview edits (summary)
+  Compare revisions
+  Init
+  Build
+  Show CLI log
+

@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+
+if [ "$#" -eq 2 ] && [ "$1" = "review" ] && [ "$2" = "--version" ]; then
+	sleep 4
+fi
+
+exec /usr/bin/git "$@"

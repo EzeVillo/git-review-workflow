@@ -80,11 +80,7 @@ func ReadState(ctx context.Context, cwd, minVersion string) ReadResult {
 			result.Branches = domain.ParseListPorcelain(listRes.Stdout)
 			result.Fixes = domain.ParseListFixes(listRes.Stdout)
 			result.HasList = true
-			for _, b := range result.Branches {
-				if b.Current && b.Finish != nil && b.Finish.State == "pending" {
-					statusOutcome.ListFinishPending = true
-				}
-			}
+			_, statusOutcome.ListFinishPending = domain.PendingFinish(result.Branches)
 		}
 	}
 

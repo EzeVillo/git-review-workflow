@@ -1,0 +1,24 @@
+CLI log
+
+git rev-parse --git-dir --git-common-dir --show-toplevel  (/tmp/t119-visual-
+full/work, 2ms)
+git rev-parse --git-dir --git-common-dir --show-toplevel  (/tmp/t119-visual-
+full/work, 2ms)
+git rev-parse --git-dir --git-common-dir --show-toplevel  (/tmp/t119-visual-
+full/work, 2ms)
+git review --version  (/tmp/t119-visual-full/work, 8ms)
+git review --version  (/tmp/t119-visual-full/work, 7ms)
+git review status --porcelain  (/tmp/t119-visual-full/work, 86ms)
+git review status --porcelain  (/tmp/t119-visual-full/work, 87ms)
+git review status --why src/discounts.js  (/tmp/t119-visual-full/work, 71ms)
+git review status --why src/discounts.js  (/tmp/t119-visual-full/work, 72ms)
+
+esc:close
+
+
+
+
+
+
+
+

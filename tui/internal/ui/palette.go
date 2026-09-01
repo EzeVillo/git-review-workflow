@@ -140,13 +140,36 @@ func (a *ActionList) HandleKey(msg tea.KeyMsg) (action string, picked, cancelled
 // document, for the same ANSI-safety reason.
 func (a *ActionList) Render(vp Viewport) string {
 	st := stylesFor(vp.Color)
-	var lines []string
-	lines = append(lines, st.heading.Render("Actions"), a.Filter.View(), "")
+	header := []string{st.heading.Render("Actions"), a.Filter.View(), ""}
+	help := []string{"", st.keybar.Render("up/down") + ":move  " + st.keybar.Render("enter") + ":run  " + st.keybar.Render("esc") + ":close"}
 	items := a.filtered()
+	listStart, listEnd := 0, len(items)
+	if vp.Rows > 0 {
+		listRows := vp.Rows - len(header) - len(help)
+		if listRows < 1 {
+			listRows = 1
+		}
+		if len(items) > listRows {
+			cursor := a.Cursor
+			if cursor < 0 || cursor >= len(items) {
+				cursor = 0
+			}
+			listStart = cursor - listRows + 1
+			if listStart < 0 {
+				listStart = 0
+			}
+			if maxStart := len(items) - listRows; listStart > maxStart {
+				listStart = maxStart
+			}
+			listEnd = listStart + listRows
+		}
+	}
+	lines := append([]string{}, header...)
 	if len(items) == 0 {
 		lines = append(lines, st.note.Render("(no matching action)"))
 	}
-	for i, it := range items {
+	for i := listStart; i < listEnd; i++ {
+		it := items[i]
 		prefix := "  "
 		style := st.secondary
 		if i == a.Cursor {
@@ -159,8 +182,7 @@ func (a *ActionList) Render(vp Viewport) string {
 		}
 		lines = append(lines, line)
 	}
-	lines = append(lines, "",
-		st.keybar.Render("up/down")+":move  "+st.keybar.Render("enter")+":run  "+st.keybar.Render("esc")+":close")
+	lines = append(lines, help...)
 	return capOverlay(lines, vp)
 }
 

@@ -1,0 +1,24 @@
+How do you want to read it?
+
+> One commit at a time
+  The whole diff at once
+
+j/k:move  enter:pick  esc:cancel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

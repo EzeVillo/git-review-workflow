@@ -1,0 +1,24 @@
+Something went wrong reading the review state.
+[ How to fix it ]
+
+Run git review ui from inside a git repository. A terminal has no multi-root to
+open — cd into one and try again.
+
+j:up  k:down  enter:select  r:refresh  ::actions  m:mouse off  q:quit
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

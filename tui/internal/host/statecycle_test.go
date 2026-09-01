@@ -117,6 +117,42 @@ func TestReadStateReviewNeverInvokesListOrConfig(t *testing.T) {
 	}
 }
 
+// A successful finish leaves HEAD on review-fixes/<source>, while list keeps
+// the authoritative pending record on review/<source>. ReadState must derive
+// the post-finish screen from that porcelain record rather than from HEAD.
+func TestReadStateRecognizesPendingFinishFromPorcelain(t *testing.T) {
+	work := sandboxWithOrigin(t)
+	runGit(t, work, "switch", "--quiet", "feature/x")
+	t.Chdir(work)
+
+	if res := InvokeReview(context.Background(), "start", nil); res.ExitCode != 0 {
+		t.Fatalf("git review start failed: exit=%d stderr=%s", res.ExitCode, res.Stderr)
+	}
+	if err := os.WriteFile(filepath.Join(work, "a.txt"), []byte("reviewer edit\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if res := InvokeReview(context.Background(), "finish", nil); res.ExitCode != 0 {
+		t.Fatalf("git review finish failed: exit=%d stderr=%s", res.ExitCode, res.Stderr)
+	}
+
+	result := ReadState(context.Background(), work, domain.MinCLIVersion)
+	if result.Situation != domain.SituationFinishPending {
+		t.Fatalf("Situation = %q, want finish-pending (stderr=%q branches=%+v fixes=%+v)", result.Situation, result.Stderr, result.Branches, result.Fixes)
+	}
+	if !result.HasList {
+		t.Fatal("finish-pending must retain the list porcelain that proved it")
+	}
+	panel := domain.Project(domain.ProjectInput{
+		Situation: result.Situation,
+		Branches:  result.Branches,
+		Fixes:     result.Fixes,
+		HasList:   result.HasList,
+	})
+	if !panel.PendingFinish || panel.FinishDestination != "review-fixes/feature/x" {
+		t.Fatalf("finish panel = %+v, want pending destination review-fixes/feature/x", panel)
+	}
+}
+
 // TestReadWhyStates is T094's own gate at the host layer: readWhy tells
 // apart an entry with nothing to say (WhyAbsent — `status --why` exits 0
 // with empty stdout, the walkthrough never annotates a.txt) from one it

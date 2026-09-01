@@ -914,7 +914,9 @@ apunta.
   [contracts/packaging-release.md](./contracts/packaging-release.md): fórmula en la rama por default
   con la `version` estampada y los `sha256` en placeholder; `version-consistency.bats` verde con el
   bloque de la TUI; `tui/bump-version.sh` en las dos listas de `shellcheck`; los dos README y las dos
-  puntas de la landing; `tui/CONTRIBUTING.md` escrito.
+  puntas de la landing; `tui/CONTRIBUTING.md` escrito. Evidencia Windows/Linux del 2026-08-31:
+  [checklists/release.md](./checklists/release.md). Sigue abierta hasta completar los pasos manuales
+  pendientes que enumera la evidencia, macOS y el smoke contra el primer release público.
 
 ---
 

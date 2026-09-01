@@ -1,0 +1,24 @@
+[1mActions[0m
+> [7mT[0m[38;5;240mype to filter…[39m
+
+> [1m[32mOpen file[0m
+  [34mOpen diff[39m
+  [34mopen in editor[39m
+  [34mNext entry[39m  [2mn[0m
+  [34mPrevious entry[39m  [2mp[0m
+  [34mGo to entry…[39m
+  [34mRefresh[39m  [2mr[0m
+  [34mChange the base branch[39m
+  [34mChange remote[39m
+  [34mCancel review[39m  [2ma[0m
+  [34mSave for later[39m  [2ms[0m
+  [34mFinish review[39m  [2mf[0m
+  [34mDone, clean up[39m
+  [34mForget a saved review…[39m
+  [34mPreview edits[39m
+  [34mPreview edits (summary)[39m
+  [34mCompare revisions[39m
+  [34mInit[39m
+  [34mBuild[39m
+  [34mShow CLI log[39m
+

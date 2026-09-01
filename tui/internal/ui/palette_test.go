@@ -46,6 +46,25 @@ func TestActionListOffersPanelExcludedWhenApplicable(t *testing.T) {
 	}
 }
 
+// A compact terminal must keep the palette's interaction contract on screen:
+// moving to an action below the fold reveals that action without dropping the
+// keyboard help that explains how to run it.
+func TestActionPaletteScrollKeepsHelpVisibleAt80x24(t *testing.T) {
+	al := NewActionList(domain.SituationReview, false, false)
+	if len(al.all) < 20 {
+		t.Fatalf("review palette needs the evaluated 20 actions, got %d", len(al.all))
+	}
+	al.Cursor = len(al.all) - 1
+	last := al.all[al.Cursor].label
+	frame := al.Render(Viewport{Cols: 80, Rows: 24, Color: false})
+	if !strings.Contains(frame, last) {
+		t.Fatalf("selected last action %q must be visible:\n%s", last, frame)
+	}
+	if !strings.Contains(frame, "up/down:move") {
+		t.Fatalf("palette help must stay visible at 80x24:\n%s", frame)
+	}
+}
+
 // TestActionListFiltersByLabelSubstring: typing narrows the visible items,
 // case-insensitively, and Enter picks the item under the (possibly reset)
 // cursor within the FILTERED set, never the unfiltered one.

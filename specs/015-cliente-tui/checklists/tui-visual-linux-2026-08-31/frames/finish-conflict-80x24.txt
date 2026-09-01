@@ -1,0 +1,24 @@
+This finish stopped at a conflict. Resolve the markers, then continue — or undo
+it to go back to editing.
+[ Undo ]
+[ Continue ]
+
+review/feature/conflict
+[ Diff ]
+1 file(s) in this commit
+  cfa.txt
+
+j:up  k:down  enter:select  r:refresh  a:cancel  ::actions  g:entries
+m:mouse off  q:quit
+
+
+
+
+
+
+
+
+
+
+
+

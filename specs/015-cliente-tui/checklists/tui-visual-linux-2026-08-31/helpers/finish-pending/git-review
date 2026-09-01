@@ -1,0 +1,27 @@
+#!/bin/sh
+set -eu
+
+verb="${1:-}"
+shift || true
+
+case "$verb" in
+--version)
+	printf '%s\n' '0.8.0'
+	;;
+status)
+	exit 2
+	;;
+list)
+	printf 'branch\treview/feature/shipping\t0\t1\t0\twhole\n'
+	printf 'finish\treview/feature/shipping\tpending\t0\n'
+	printf 'fixes\treview-fixes/feature/shipping\t1\t1\tempty\n'
+	;;
+config)
+	printf 'config\tbase\tdevelop\n'
+	printf 'config\tremote\torigin\n'
+	;;
+*)
+	printf 'error: unsupported visual-fixture verb: %s\n' "$verb" >&2
+	exit 1
+	;;
+esac

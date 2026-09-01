@@ -1,0 +1,24 @@
+The git-review CLI (0.8.0 or newer) was not found.
+Install with npm (recommended):
+
+  npm install -g git-review-workflow
+
+Press r to refresh, or focus this pane again — the panel does not poll.
+
+[ [36mOther install options[39m ]
+
+[31mgit: 'review' is not a git command. See 'git --help'.[39m
+
+[2mj[0m:up  [2mk[0m:down  [2menter[0m:select  [2mr[0m:refresh  [2m:[0m:actions  [2mm[0m:mouse off  [2mq[0m:quit
+
+
+
+
+
+
+
+
+
+
+
+

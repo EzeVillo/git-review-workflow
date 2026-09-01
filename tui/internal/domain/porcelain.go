@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -879,5 +880,11 @@ func BranchPickerItems(candidates []CandidateBranch) []CandidateBranch {
 	for _, name := range order {
 		out = append(out, byName[name])
 	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Current != out[j].Current {
+			return out[i].Current
+		}
+		return out[i].Name < out[j].Name
+	})
 	return out
 }

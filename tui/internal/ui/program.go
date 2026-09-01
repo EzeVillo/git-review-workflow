@@ -26,6 +26,8 @@ type Model struct {
 	Viewport      Viewport
 	Panel         domain.PanelModel
 	FocusIndex    int
+	footerOffset  int
+	hover         *controlTarget
 	pollFloor     time.Duration
 	pollGen       int
 	lock          host.MutationLock
@@ -314,8 +316,43 @@ func (m Model) View() string {
 	if m.textOverlay != nil {
 		return m.textOverlay.Render(m.Viewport)
 	}
-	frame, _ := View(m.Panel, m.Viewport)
+	frame, _, _ := viewWithState(m.Panel, m.Viewport, m.presentationState())
 	return frame
+}
+
+func (m Model) presentationState() renderState {
+	state := renderState{hover: m.hover, footerOffset: m.footerOffset}
+	controls := ControlsFor(m.Panel)
+	if len(controls) == 0 || m.FocusIndex < 0 || m.FocusIndex >= len(controls) {
+		return state
+	}
+	state.focus = &controlTarget{id: controls[m.FocusIndex].ID, variant: controls[m.FocusIndex].Variant}
+	return state
+}
+
+// keepFocusedControlVisible adjusts the one footer viewport only when the
+// newly focused control lies outside it. The renderer remains the authority
+// for real row geometry, so wrapped text and future footer rows cannot make
+// a parallel scrolling calculation disagree with the HitMap.
+func (m Model) keepFocusedControlVisible(direction int) Model {
+	state := m.presentationState()
+	if state.focus == nil || direction == 0 {
+		return m
+	}
+	for attempt := 0; attempt < 512; attempt++ {
+		_, hm, metrics := viewWithState(m.Panel, m.Viewport, state)
+		m.footerOffset = metrics.footerOffset
+		if _, ok := hm.Rect(state.focus.id, state.focus.variant); ok {
+			return m
+		}
+		next := metrics.footerOffset + direction
+		if next < 0 || next > metrics.footerMax {
+			return m
+		}
+		m.footerOffset = next
+		state.footerOffset = next
+	}
+	return m
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -332,8 +369,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch intent.Movement {
 		case "focus_next_row":
 			m.FocusIndex = (m.FocusIndex + 1) % n
+			m = m.keepFocusedControlVisible(1)
 		case "focus_prev_row":
 			m.FocusIndex = (m.FocusIndex - 1 + n) % n
+			m = m.keepFocusedControlVisible(-1)
 		}
 		return m, nil
 
@@ -388,14 +427,43 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // focuses them, the same as tabbing onto one with the keyboard) but are
 // never activated — mirroring activateFocused's own guard.
 func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	if !m.Panel.MouseEnabled || msg.Action != tea.MouseActionPress {
+	if !m.Panel.MouseEnabled {
 		return m, nil
 	}
-	_, hm := View(m.Panel, m.Viewport)
+	_, hm, metrics := viewWithState(m.Panel, m.Viewport, m.presentationState())
+	m.footerOffset = metrics.footerOffset
+	if msg.Button == tea.MouseButtonWheelDown {
+		m.footerOffset += 3
+		if m.footerOffset > metrics.footerMax {
+			m.footerOffset = metrics.footerMax
+		}
+		return m, nil
+	}
+	if msg.Button == tea.MouseButtonWheelUp {
+		m.footerOffset -= 3
+		if m.footerOffset < 0 {
+			m.footerOffset = 0
+		}
+		return m, nil
+	}
+	if msg.Action == tea.MouseActionMotion {
+		id, variant, ok := hm.At(msg.X, msg.Y)
+		if !ok {
+			m.hover = nil
+			return m, nil
+		}
+		m.hover = &controlTarget{id: id, variant: variant}
+		return m, nil
+	}
+	if msg.Action != tea.MouseActionPress {
+		return m, nil
+	}
 	id, variant, ok := hm.At(msg.X, msg.Y)
 	if !ok {
+		m.hover = nil
 		return m, nil
 	}
+	m.hover = &controlTarget{id: id, variant: variant}
 	for i, c := range ControlsFor(m.Panel) {
 		if c.ID != id || c.Variant != variant {
 			continue

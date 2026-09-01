@@ -61,6 +61,19 @@ func currentBranch(branches []BranchRecord) (BranchRecord, bool) {
 	return BranchRecord{}, false
 }
 
+// PendingFinish returns the unresolved finish reported by list porcelain. A
+// finish is repository state: list retains its record on review/<source> even
+// after HEAD moves to review-fixes/<source> or elsewhere, so checkout does not
+// affect whether the panel must offer its undo/clean flow.
+func PendingFinish(branches []BranchRecord) (BranchRecord, bool) {
+	for _, branch := range branches {
+		if branch.Finish != nil && branch.Finish.State == "pending" {
+			return branch, true
+		}
+	}
+	return BranchRecord{}, false
+}
+
 // finishDestination names where a finish-pending branch's edits landed:
 // review-fixes/<source> normally, or the source branch itself when the
 // finish ran --onto-source (list --porcelain's `onto` bit).
@@ -196,7 +209,7 @@ func Project(in ProjectInput) PanelModel {
 			m.NoBaseConfigured = true
 		}
 		if in.HasList {
-			if b, ok := currentBranch(in.Branches); ok && in.Situation == SituationFinishPending {
+			if b, ok := PendingFinish(in.Branches); ok && in.Situation == SituationFinishPending {
 				m.PendingFinish = true
 				m.FinishDestination = finishDestination(b)
 				// Source: the bare branch name, reused from the same field

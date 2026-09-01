@@ -1,0 +1,24 @@
+Cancel the review of feature/checkout?
+
+This returns to the branch you started the review from; your uncommitted edits
+will be discarded.
+
+[ Cancel Review ]  (y / enter)
+[ Cancel ]  (n / esc)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

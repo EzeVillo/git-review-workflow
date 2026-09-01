@@ -1,0 +1,24 @@
+Reviews in this repository
+review/feature/conflict
+Finish stopped mid-conflict -- switch to this branch to resolve or undo.
+review/feature/i18n  (broken)
+details are gone
+[ Delete leftover ]
+review/feature/shipping
+Finish waiting on review-fixes/feature/shipping -- use Undo above.
+review-saved/feature/i18n
+whole
+[ Continue ]  [ Delete ]
+You are already reviewing this branch
+review-saved/feature/refunds  (broken)
+details are gone
+[ Continue ]  [ Delete leftover ]
+This review cannot be resumed — its details are gone
+review-saved/feature/search
+walk . 2/3
+[ Continue ]  [ Delete ]
+
+No active review on this branch.
+[ Start a review ]
+
+… 45 more line(s) below — resize to see them

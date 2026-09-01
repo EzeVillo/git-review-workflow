@@ -1,0 +1,24 @@
+review/feature/telemetry
+3 file(s) in this review
+  src/metrics.js
+  src/métricas de sesión.js
+  src/sampler.js
+
+r:refresh  f:finish  s:save  a:cancel  ::actions  g:entries  m:mouse off  q:quit
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

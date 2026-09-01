@@ -1,0 +1,24 @@
+Where should its tip come from?
+
+  Remote
+  Local
+> Offline (local, no fetch)
+
+j/k:move  enter:pick  esc:cancel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

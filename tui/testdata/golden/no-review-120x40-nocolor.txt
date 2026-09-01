@@ -32,6 +32,6 @@ Edits you extracted
 One branch per finish; commit and push them from Source Control, or drop them here
 review-fixes/old-one  (merged)
 [✗] discard
-… 15 more line(s) below — resize to see them
+… footer [#.........]: 0 line(s) above, 15 below — j/k or mouse wheel
 
 j:up  k:down  enter:select  r:refresh  ::actions  m:mouse on  q:quit

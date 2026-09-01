@@ -5,7 +5,88 @@ import (
 	"testing"
 
 	"github.com/EzeVillo/git-review-workflow/tui/internal/domain"
+	tea "github.com/charmbracelet/bubbletea"
 )
+
+// Breaking the focus marker must make this test fail: the next keyboard
+// control has to be identifiable before Enter acts on it, including without
+// terminal color.
+func TestFocusMovementChangesRenderedControl(t *testing.T) {
+	m := Model{
+		Panel:    fixtureFor(domain.LayoutNoReview),
+		Viewport: Viewport{Cols: 80, Rows: 24, Color: false},
+	}
+	before := m.View()
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	after := updated.(Model).View()
+	if before == after {
+		t.Fatal("moving keyboard focus must visibly mark a different control")
+	}
+}
+
+// Breaking focus-following scroll must make the last visible action
+// unreachable again: j/k owns both focus and the one footer viewport.
+func TestFooterFocusScrollsIntoView(t *testing.T) {
+	m := Model{
+		Panel:    fixtureFor(domain.LayoutNoReview),
+		Viewport: Viewport{Cols: 80, Rows: 24, Color: false},
+	}
+	controls := ControlsFor(m.Panel)
+	if len(controls) == 0 {
+		t.Fatal("no-review fixture needs controls")
+	}
+	for range controls[:len(controls)-1] {
+		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+		m = updated.(Model)
+	}
+	if got := m.View(); !strings.Contains(got, domain.ReportABugLabel) {
+		t.Fatalf("focused final footer control must be visible at 80x24:\n%s", got)
+	}
+	intent := ResolveKey("enter", m)
+	if intent.Kind != IntentActivate || intent.Control != "openSupport" || intent.Variant != "bug" {
+		t.Fatalf("Enter = %+v, want the visible Report a bug control", intent)
+	}
+}
+
+// Breaking wheel handling must make the compact footer stay frozen. The wheel
+// moves the exact same scroll range used by focus, not a second per-section
+// offset.
+func TestFooterMouseWheelScrollsSharedViewport(t *testing.T) {
+	panel := fixtureFor(domain.LayoutNoReview)
+	panel.MouseEnabled = true
+	m := Model{
+		Panel:    panel,
+		Viewport: Viewport{Cols: 80, Rows: 24, Color: false},
+	}
+	before := m.View()
+	updated, _ := m.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown})
+	after := updated.(Model).View()
+	if before == after {
+		t.Fatal("mouse wheel must move the same compact footer viewport")
+	}
+	if !strings.Contains(after, "[#") {
+		t.Fatalf("the shared footer viewport must expose its one scrollbar:\n%s", after)
+	}
+}
+
+// Hover is presentation-only, but it must still identify the same concrete
+// control the next click would resolve through the HitMap.
+func TestMouseMotionMarksHoveredControl(t *testing.T) {
+	panel := fixtureFor(domain.LayoutNoReview)
+	panel.MouseEnabled = true
+	vp := Viewport{Cols: 80, Rows: 24, Color: false}
+	_, hm := View(panel, vp)
+	control := ControlsFor(panel)[0]
+	rect, ok := hm.Rect(control.ID, control.Variant)
+	if !ok {
+		t.Fatalf("fixture has no rectangle for %s/%s", control.ID, control.Variant)
+	}
+	m := Model{Panel: panel, Viewport: vp, FocusIndex: -1}
+	updated, _ := m.Update(tea.MouseMsg{X: rect.Col, Y: rect.Row, Action: tea.MouseActionMotion})
+	if got := updated.(Model).View(); !strings.Contains(got, "~") {
+		t.Fatalf("hovered control must be visibly marked:\n%s", got)
+	}
+}
 
 // NO_COLOR / -nocolor means ZERO escape sequences, not merely dimmer ones.
 func TestNoColorProducesNoEscapeSequences(t *testing.T) {

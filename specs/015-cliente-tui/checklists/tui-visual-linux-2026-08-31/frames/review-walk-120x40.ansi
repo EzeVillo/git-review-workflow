@@ -1,0 +1,40 @@
+[1mreview/feature/checkout[0m
+Entry 1/6: src/discounts.js
+
+Start here: this is the new unit. Basis points instead of percentages, so the
+0.1% steps the pricing team asked for are representable without floats.
+[ [36mopen in editor[39m ]
+
+[ [34mFile[39m ]
+[ [34mDiff[39m ]
+
+[‹] [2mPrevious entry[0m
+[›] [34mNext entry[39m
+
+[2mj[0m:up  [2mk[0m:down  [2menter[0m:select  [2mn[0m:next  [2mp[0m:prev  [2mr[0m:refresh  [2mf[0m:finish  [2ms[0m:save  [2ma[0m:cancel  [2m:[0m:actions  [2mg[0m:entries  [2mm[0m:mouse off
+[2mq[0m:quit
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

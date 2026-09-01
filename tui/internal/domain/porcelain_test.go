@@ -314,3 +314,25 @@ func TestBranchPickerItemsCollapsesByNamePreferringCurrent(t *testing.T) {
 		t.Errorf("feature row should be the current one: %+v", items[0])
 	}
 }
+
+// The start wizard must present the same deterministic default as VS Code,
+// JetBrains, and Visual Studio: current first, then branch name. A porcelain
+// producer changing its arrival order must not silently choose another branch.
+func TestBranchPickerItemsOrdersCurrentThenName(t *testing.T) {
+	items := BranchPickerItems([]CandidateBranch{
+		{Name: "zebra", Origin: "remote"},
+		{Name: "feature/checkout", Origin: "remote"},
+		{Name: "develop", Origin: "local", Current: true},
+		{Name: "feature/checkout", Origin: "local"},
+		{Name: "alpha", Origin: "remote"},
+	})
+	want := []string{"develop", "alpha", "feature/checkout", "zebra"}
+	if len(items) != len(want) {
+		t.Fatalf("got %d candidates, want %d: %+v", len(items), len(want), items)
+	}
+	for i, name := range want {
+		if items[i].Name != name {
+			t.Fatalf("item %d = %q, want %q (all=%+v)", i, items[i].Name, name, items)
+		}
+	}
+}

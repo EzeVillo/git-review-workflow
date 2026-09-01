@@ -1,0 +1,24 @@
+Your edits are on review-fixes/feature/shipping, staged and ready to commit.
+Commit and push them from Source Control. Until you clean up, this is still
+undoable.
+
+[ Done, clean up ]
+[ Undo ]
+
+j:up  k:down  enter:select  r:refresh  ::actions  m:mouse off  q:quit
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,24 @@
+The installed git-review CLI is older than 0.8.0.
+Update with npm (recommended):
+
+  npm install -g git-review-workflow@latest
+
+Press r to refresh, or focus this pane again — the panel does not poll.
+
+[ [36mOther install options[39m ]
+
+[2mj[0m:up  [2mk[0m:down  [2menter[0m:select  [2mr[0m:refresh  [2m:[0m:actions  [2mm[0m:mouse off  [2mq[0m:quit
+
+
+
+
+
+
+
+
+
+
+
+
+
+

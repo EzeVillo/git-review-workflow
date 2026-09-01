@@ -31,7 +31,9 @@ files, alcanzabilidad sólo-teclado y sólo-mouse, y las dos fronteras de import
 ### La suite con la vigilancia encendida
 
 ```sh
-GIT_REVIEW_UI_WATCH=1 go test ./internal/host -run TestWatch
+go test ./internal/host \
+  -run 'Test(RenameAtomic|PackedRefs|Nested|Reftable|HeadCheckout|LinkedWorktree)' \
+  -count=1 -v
 ```
 
 Es el **único** paquete que instancia `fsnotify`. Cubre los cinco escenarios de FR-058 —crear y
@@ -77,13 +79,14 @@ de que exista un binario.
 cd tui && go build -o /tmp/git-review-ui ./cmd/git-review-ui
 
 # el punto de entrada canónico:
-GIT_REVIEW_UI=/tmp/git-review-ui git review ui
+GIT_REVIEW_UI_WATCH=1 GIT_REVIEW_UI=/tmp/git-review-ui git review ui
 
 # o poniéndolo en el PATH, que es lo que hacen los paquetes:
-PATH="/tmp:$PATH" git review ui       # y también: git review-ui
+GIT_REVIEW_UI_WATCH=1 PATH="/tmp:$PATH" git review ui  # y también: git review-ui
 ```
 
-Desde el sandbox, en un pane; el editor en otro.
+Desde el sandbox, en un pane; el editor en otro. La vigilancia es opt-in: el recorrido 1 la activa
+explícitamente y su caso 8 la apaga para probar la vía sin eventos.
 
 ## Recorrido de validación
 
@@ -215,6 +218,10 @@ En Windows, macOS y Linux:
 | 6 | Windows: `git review ui` con la TUI instalada por `web-install.ps1 -WithUi` | arranca |
 | 7 | repo con backend `reftable` | arranca y refresca |
 | 8 | `cwd` fuera de un repositorio | situación de error accionable, no pantalla en blanco |
+
+La evidencia fechada de cada corrida vive en
+[checklists/release.md](./checklists/release.md); la tarea T119 no se marca completa mientras una
+plataforma obligatoria o un caso que requiere un release publicado siga pendiente.
 
 ## Empaquetado
 

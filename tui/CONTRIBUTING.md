@@ -81,8 +81,10 @@ pane se validan en dos panes de tmux/screen.
 | 7 | backend de refs `reftable` | arranca y refresca |
 | 8 | `cwd` fuera de un repositorio | error accionable, nunca pantalla vacía |
 
-La evidencia detallada SC-001…SC-018 y los pasos del recorrido están en
-[`../specs/015-cliente-tui/quickstart.md`](../specs/015-cliente-tui/quickstart.md).
+Los pasos del recorrido están en
+[`../specs/015-cliente-tui/quickstart.md`](../specs/015-cliente-tui/quickstart.md) y la evidencia
+fechada SC-001…SC-018 en
+[`../specs/015-cliente-tui/checklists/release.md`](../specs/015-cliente-tui/checklists/release.md).
 
 ## Runbook de release
 

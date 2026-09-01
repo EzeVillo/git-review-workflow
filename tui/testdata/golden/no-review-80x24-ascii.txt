@@ -19,6 +19,6 @@ feat-x  2/4  [2m(may be out of date)[0m
 Repository guide  [2m(in force)[0m
 [#] [34mopen[0m
 [ [2mCreate[0m ]
-[2m… 28 more line(s) below — resize to see them[0m
+[2m… footer [#.........]: 0 line(s) above, 28 below — j/k or mouse wheel[0m
 
 [2mj[0m:up  [2mk[0m:down  [2menter[0m:select  [2mr[0m:refresh  [2m:[0m:actions  [2mm[0m:mouse on  [2mq[0m:quit

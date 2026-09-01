@@ -1,0 +1,24 @@
+[1mReviews in this repository[0m
+review/feature/conflict
+[2mFinish stopped mid-conflict -- switch to this branch to resolve or undo.[0m
+review/feature/i18n  [2m(broken)[0m
+[2mdetails are gone[0m
+[ [34mDelete leftover[39m ]
+review/feature/shipping
+[2mFinish waiting on review-fixes/feature/shipping -- use Undo above.[0m
+review-saved/feature/i18n
+[2mwhole[0m
+[ [2mContinue[0m ]  [ [34mDelete[39m ]
+[2mYou are already reviewing this branch[0m
+review-saved/feature/refunds  [2m(broken)[0m
+[2mdetails are gone[0m
+[ [2mContinue[0m ]  [ [34mDelete leftover[39m ]
+[2mThis review cannot be resumed — its details are gone[0m
+review-saved/feature/search
+[2mwalk . 2/3[0m
+[ [1m[32mContinue[0m ]  [ [34mDelete[39m ]
+
+No active review on this branch.
+[ [1m[32mStart a review[0m ]
+
+[2m… 45 more line(s) below — resize to see them[0m

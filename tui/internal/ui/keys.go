@@ -48,6 +48,7 @@ type Intent struct {
 // promise ("never a hardcoded parallel list") false for exactly the two keys
 // no gate was comparing. They are keymap.global: now.
 func ResolveKey(key string, m Model) Intent {
+	panel := m.presentationPanel()
 	if verb, ok := domain.GlobalFor(key); ok {
 		switch verb {
 		case "quit":
@@ -56,25 +57,25 @@ func ResolveKey(key string, m Model) Intent {
 			return activateFocused(m)
 		}
 	}
-	if move, ok := domain.MovementFor(key); ok {
+	if move, ok := domain.MovementFor(key); ok && !panel.Busy {
 		return Intent{Kind: IntentFocusMove, Movement: move}
 	}
 	// Cursor keys (n/p) only resolve inside a situation that actually has a
 	// review cursor — pressing them anywhere else (finish-conflict included,
 	// User Story 3 scenario 4) must not silently invoke next/prev.
-	if action, ok := domain.CursorActionFor(key); ok && !m.Panel.Busy && hasReviewCursor(m.Panel) {
+	if action, ok := domain.CursorActionFor(key); ok && !panel.Busy && hasReviewCursor(panel) {
 		return Intent{Kind: IntentCursorAction, Action: action}
 	}
 	if action, ok := domain.BoundActionFor(key); ok {
-		if m.Panel.Busy && action != "refresh" {
+		if panel.Busy && action != "refresh" {
 			return Intent{Kind: IntentNone}
 		}
 		return Intent{Kind: IntentBoundAction, Action: action}
 	}
-	if toggle, ok := domain.ToggleFor(key); ok {
+	if toggle, ok := domain.ToggleFor(key); ok && !panel.Busy {
 		return Intent{Kind: IntentToggle, Toggle: toggle}
 	}
-	if overlay, ok := domain.OverlayFor(key); ok {
+	if overlay, ok := domain.OverlayFor(key); ok && !panel.Busy {
 		return Intent{Kind: IntentOverlay, Overlay: overlay}
 	}
 	return Intent{Kind: IntentNone}
@@ -94,7 +95,7 @@ func hasReviewCursor(m domain.PanelModel) bool {
 // with nothing focusable at all resolves to IntentNone: a safe no-op, never
 // a crash and never a fabricated action.
 func activateFocused(m Model) Intent {
-	cs := ControlsFor(m.Panel)
+	cs := ControlsFor(m.presentationPanel())
 	if len(cs) == 0 {
 		return Intent{Kind: IntentNone}
 	}
@@ -128,7 +129,7 @@ type KeyBarItem struct {
 // set".
 func KeyBarFor(m domain.PanelModel) []KeyBarItem {
 	var bar []KeyBarItem
-	if len(ControlsFor(m)) > 0 {
+	if hasEnabledControl(ControlsFor(m)) {
 		bar = append(bar,
 			KeyBarItem{Key: domain.KeymapMovement[0].Keys[0], Label: "up"},
 			KeyBarItem{Key: domain.KeymapMovement[1].Keys[0], Label: "down"},
@@ -210,6 +211,15 @@ func KeyBarFor(m domain.PanelModel) []KeyBarItem {
 	}
 	bar = append(bar, KeyBarItem{Key: globalKey("quit"), Label: "quit"})
 	return bar
+}
+
+func hasEnabledControl(controls []Control) bool {
+	for _, control := range controls {
+		if control.Enabled {
+			return true
+		}
+	}
+	return false
 }
 
 // globalKey is the key the bar SHOWS for one keymap.global verb: the first

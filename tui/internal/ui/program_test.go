@@ -76,6 +76,29 @@ func TestUpdateNeverImportsOSExecOrCallsHostSynchronously(t *testing.T) {
 	}
 }
 
+func TestProgressOverlayInterceptsMouseInput(t *testing.T) {
+	panel := fixtureFor(domain.LayoutNoReview)
+	panel.MouseEnabled = true
+	vp := Viewport{Cols: 80, Rows: 24}
+	_, hm := View(panel, vp)
+	control := ControlsFor(panel)[0]
+	rect, ok := hm.Rect(control.ID, control.Variant)
+	if !ok {
+		t.Fatalf("fixture has no rectangle for %s/%s", control.ID, control.Variant)
+	}
+	m := Model{
+		Panel:           panel,
+		Viewport:        vp,
+		progressOverlay: &ProgressOverlay{Text: domain.ReadOptionsProgress},
+		FocusIndex:      -1,
+	}
+	updated, cmd := m.Update(tea.MouseMsg{X: rect.Col, Y: rect.Row, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	after := updated.(Model)
+	if cmd != nil || after.FocusIndex != -1 || after.statusLine != "" {
+		t.Fatalf("mouse reached the hidden base panel: cmd=%v focus=%d status=%q", cmd != nil, after.FocusIndex, after.statusLine)
+	}
+}
+
 // T046: the very first frame — a Model fresh from NewModel(), with no Msg
 // processed at all — draws waiting_text and nothing that names a resolved
 // situation. This is the exact bug waiting_text exists to prevent in the

@@ -115,6 +115,20 @@ func TestGoToEntryNeverBuildsAMutation(t *testing.T) {
 	}
 }
 
+func TestOrdinarySelectCommandIsNotWrappedAsAnAssistantProbe(t *testing.T) {
+	type ordinaryMsg struct{}
+	m, cmd := (Model{}).applySelectResult(selectResult{cmd: func() tea.Msg { return ordinaryMsg{} }})
+	if cmd == nil {
+		t.Fatal("ordinary select command was dropped")
+	}
+	if m.progressOverlay != nil {
+		t.Fatal("ordinary select command was misclassified as an assistant probe")
+	}
+	if _, ok := cmd().(ordinaryMsg); !ok {
+		t.Fatal("ordinary select command was wrapped or replaced")
+	}
+}
+
 // TestGoToEntryEmptyIsInert: no entries, nothing to pick from — the picker
 // must not open onto a blank list.
 func TestGoToEntryEmptyIsInert(t *testing.T) {

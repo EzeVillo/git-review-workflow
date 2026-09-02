@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -778,11 +779,14 @@ func (m Model) beginWalkthroughInit() (Model, tea.Cmd) {
 // saved inside it, so returning always schedules a refresh.
 
 // execDoneMsg is what every tea.ExecProcess callback in this package
-// returns: err is deliberately never surfaced as a failure — a nonzero
-// exit from $EDITOR (":cq" in vim) or a diff tool is common and does not
-// mean anything went wrong, and there is no stderr to read anyway (the
-// child owned the terminal directly, nothing was captured).
-type execDoneMsg struct{ err error }
+// returns. A normal child exit remains non-fatal (":cq" in vim and diff
+// tool exit codes are common), while a launch failure is surfaced because
+// the delegated surface never appeared. completion acknowledges work that
+// succeeded before delegation, such as creating a guide.
+type execDoneMsg struct {
+	err        error
+	completion string
+}
 
 type createdGuideOpenMsg struct {
 	path   string
@@ -801,6 +805,25 @@ func createdGuideOpenCmd(path string) tea.Cmd {
 
 func execCmd(cmd *exec.Cmd) tea.Cmd {
 	return tea.ExecProcess(cmd, func(err error) tea.Msg { return execDoneMsg{err: err} })
+}
+
+func execCmdWithCompletion(cmd *exec.Cmd, completion string) tea.Cmd {
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+		return execDoneMsg{err: err, completion: completion}
+	})
+}
+
+func (m Model) handleExecDone(msg execDoneMsg) (Model, tea.Cmd) {
+	if msg.completion != "" {
+		m.statusLine = msg.completion
+	}
+	if msg.err != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(msg.err, &exitErr) {
+			m.statusLine = domain.DelegatedLaunchFailed(msg.completion, msg.err.Error())
+		}
+	}
+	return m.scheduleRead()
 }
 
 // beginOpenEntry: $EDITOR on the CURRENT walk entry's DISPLAY path (CLAUDE.md:

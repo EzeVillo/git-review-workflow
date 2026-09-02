@@ -57,7 +57,11 @@ func (m Model) presentationPanel() domain.PanelModel {
 		panel.Busy = true
 	}
 	if m.activity.active && m.activity.visible {
-		panel.StatusLine = m.activity.text
+		if panel.StatusLine != "" && m.activity.phase == activityReading {
+			panel.StatusLine += " · " + m.activity.text
+		} else {
+			panel.StatusLine = m.activity.text
+		}
 	}
 	return panel
 }

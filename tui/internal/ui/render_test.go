@@ -149,6 +149,25 @@ func TestHitMapResolvesMouseClicksToDrawnControls(t *testing.T) {
 	}
 }
 
+func TestFixedTailRemapsAndClipsHitMapAfterWrapping(t *testing.T) {
+	b := newBuilder(Viewport{Cols: 10, Rows: 5}, renderState{})
+	b.text(strings.Repeat("x", 20))
+	b.button("startReview", "", "Start", b.st.primary, true)
+	b.frameWithTail([]string{"", "q:quit"})
+	rect, ok := b.hm.Rect("startReview", "")
+	if !ok || rect.Row != 2 {
+		t.Fatalf("wrapped control rect = %+v, ok=%v; want row 2", rect, ok)
+	}
+
+	clipped := newBuilder(Viewport{Cols: 10, Rows: 4}, renderState{})
+	clipped.text(strings.Repeat("x", 20))
+	clipped.button("startReview", "", "Start", clipped.st.primary, true)
+	clipped.frameWithTail([]string{"", "q:quit"})
+	if _, ok := clipped.hm.Rect("startReview", ""); ok {
+		t.Fatal("control clipped by wrapping retained a stale hit rectangle")
+	}
+}
+
 // Every icon this client uses is exactly one terminal cell wide in both
 // glyph sets (contracts/tui-surface.md § Iconos) — checked with the same
 // table icons_test.go already validates the vocabulary against, not a

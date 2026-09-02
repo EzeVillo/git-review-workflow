@@ -31,9 +31,9 @@ import (
 // function that turns it into the NEXT question — the same "what to build
 // next" pattern SelectOverlay.OnPick uses for a step that needs no probe.
 type assistantStepMsg struct {
-	activityGeneration int
-	result             host.Result
-	build              func(domain.ConfigPorcelainResult) SelectOverlay
+	assistantGeneration int
+	result              host.Result
+	build               func(domain.ConfigPorcelainResult) SelectOverlay
 }
 
 // configProbeCmd runs one `config --porcelain <extra...>` probe. Always
@@ -54,13 +54,13 @@ func (m Model) startAssistant() (Model, tea.Cmd) {
 }
 
 func (m Model) beginAssistantProbe(probe tea.Cmd) (Model, tea.Cmd) {
-	m.activityGeneration++
-	generation := m.activityGeneration
+	m.assistantGeneration++
+	generation := m.assistantGeneration
 	m.progressOverlay = &ProgressOverlay{Text: domain.ReadOptionsProgress}
 	m.selectOverlay = nil
 	return m, func() tea.Msg {
 		msg := probe().(assistantStepMsg)
-		msg.activityGeneration = generation
+		msg.assistantGeneration = generation
 		return msg
 	}
 }
@@ -70,7 +70,7 @@ func (m Model) beginAssistantProbe(probe tea.Cmd) (Model, tea.Cmd) {
 // and leaves the picker closed; a successful one builds and opens the next
 // SelectOverlay.
 func (m Model) handleAssistantStep(msg assistantStepMsg) (Model, tea.Cmd) {
-	if msg.activityGeneration != 0 && msg.activityGeneration != m.activityGeneration {
+	if msg.assistantGeneration != 0 && msg.assistantGeneration != m.assistantGeneration {
 		return m, nil
 	}
 	m.progressOverlay = nil
@@ -95,7 +95,7 @@ func buildBranchStep(preferredSource string) func(domain.ConfigPorcelainResult) 
 			Title: domain.StartAssistantBranchTitle,
 			Items: branchItems(domain.BranchPickerItems(candidates)),
 			OnPick: func(branch string) selectResult {
-				return selectResult{cmd: configProbeCmd(
+				return selectResult{probe: configProbeCmd(
 					[]string{"--", branch},
 					buildSourceStep(branch, preferredSource, candidates),
 				)}
@@ -163,7 +163,7 @@ func buildRangeStep(branch, source string, deltas []domain.DeltaRecord) *SelectO
 		Title: domain.StartAssistantRangeTitle,
 		Items: items,
 		OnPick: func(rng string) selectResult {
-			return selectResult{cmd: configProbeCmd(
+			return selectResult{probe: configProbeCmd(
 				sourceRangeProbeArgs(source, rng, branch),
 				buildLayoutStep(branch, source, rng),
 			)}

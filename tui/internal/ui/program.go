@@ -53,6 +53,7 @@ type Model struct {
 	pendingOpenPath      string
 	preferredStartSource string
 	activityGeneration   int
+	assistantGeneration  int
 	activity             activityState
 	progressOverlay      *ProgressOverlay
 	// onAcceptedRead is the composition root's watcher boundary. Update
@@ -301,17 +302,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleAssistantStep(msg)
 
 	case execDoneMsg:
-		// T089: "al volver dispara un refresco" -- the reviewer may have
-		// edited and saved inside the child process. err is deliberately
-		// not surfaced: a nonzero exit from $EDITOR or a diff tool is
-		// common (":cq" in vim, a diff tool's own exit code) and does not
-		// mean anything failed -- and there is no stderr to show anyway,
-		// since the child owned the terminal directly.
-		return m.scheduleRead()
+		return m.handleExecDone(msg)
 
 	case createdGuideOpenMsg:
 		if msg.ok {
-			return m, execCmd(msg.cmd)
+			return m, execCmdWithCompletion(msg.cmd, domain.GuideCreated(msg.path))
 		}
 		m.statusLine = domain.GuideCreated(msg.path)
 		m.Panel.StatusLine = m.statusLine
@@ -346,7 +341,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case tea.MouseMsg:
-		if m.confirm != nil || m.selectOverlay != nil || m.textPrompt != nil || m.actionList != nil || m.textOverlay != nil {
+		if m.confirm != nil || m.selectOverlay != nil || m.textPrompt != nil || m.actionList != nil || m.textOverlay != nil || m.progressOverlay != nil {
 			// A stray event while an overlay is open must never resolve
 			// against the HIDDEN base panel underneath it (T090).
 			return m, nil
@@ -473,7 +468,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case IntentOverlay:
 		switch intent.Overlay {
 		case "action_list":
-			m.actionList = NewActionList(m.Panel.Situation, m.Panel.Busy, m.Panel.Readonly)
+			panel := m.presentationPanel()
+			m.actionList = NewActionList(panel.Situation, panel.Busy, panel.Readonly)
 		case "entry_picker":
 			m = m.openEntryPicker()
 		}

@@ -465,10 +465,13 @@ func (b *builder) frameWithTail(tail []string) string {
 	body := b.lines
 	if b.vp.Cols > 0 {
 		var wrapped []string
-		for _, line := range body {
+		rowStarts := make([]int, len(body))
+		for i, line := range body {
+			rowStarts[i] = len(wrapped)
 			wrapped = append(wrapped, wrapLine(line, b.vp.Cols)...)
 		}
 		body = wrapped
+		b.hm.hits = remapWrappedHits(b.hm.hits, rowStarts, b.vp.Cols)
 	}
 	limit := len(body)
 	if b.vp.Rows > 0 {
@@ -492,6 +495,33 @@ func (b *builder) frameWithTail(tail []string) string {
 		lines = lines[len(lines)-b.vp.Rows:]
 	}
 	return strings.Join(lines, "\n")
+}
+
+func remapWrappedHits(hits []hit, rowStarts []int, cols int) []hit {
+	if cols <= 0 {
+		return hits
+	}
+	remapped := make([]hit, 0, len(hits))
+	for _, h := range hits {
+		if h.rect.Row < 0 || h.rect.Row >= len(rowStarts) {
+			continue
+		}
+		remaining := h.rect.Width
+		offset := h.rect.Col
+		for remaining > 0 {
+			col := offset % cols
+			width := cols - col
+			if width > remaining {
+				width = remaining
+			}
+			segment := h
+			segment.rect = Rect{Row: rowStarts[h.rect.Row] + offset/cols, Col: col, Width: width, Height: 1}
+			remapped = append(remapped, segment)
+			offset += width
+			remaining -= width
+		}
+	}
+	return remapped
 }
 
 // statusLine draws PanelModel.StatusLine (T074): what a toast would say in

@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"errors"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -420,6 +422,26 @@ func TestMutationActivityShowsProgressThenVisibleDirtyTreeFailure(t *testing.T) 
 	failed := failedModel.(Model)
 	if !strings.Contains(failed.View(), "error: you have local changes; commit or stash them first") {
 		t.Fatalf("dirty-tree failure is not visible:\n%s", failed.View())
+	}
+	readingModel, _ := failed.Update(activityVisibleMsg{generation: failed.activity.generation})
+	reading := readingModel.(Model)
+	presented := reading.presentationPanel().StatusLine
+	if !strings.Contains(presented, "error: you have local changes; commit or stash them first") || !strings.Contains(presented, domain.WaitingText) {
+		t.Fatalf("refresh hid the mutation failure instead of showing both states:\n%s", reading.View())
+	}
+}
+
+func TestDelegatedLaunchFailureIsVisibleButExitStatusIsNonFatal(t *testing.T) {
+	failedModel, _ := (Model{}).Update(execDoneMsg{err: errors.New("executable disappeared"), completion: "Created .review/guide.md."})
+	failed := failedModel.(Model)
+	if !strings.Contains(failed.statusLine, "Created .review/guide.md.") || !strings.Contains(failed.statusLine, "Could not launch") {
+		t.Fatalf("delegated launch failure was not acknowledged: %q", failed.statusLine)
+	}
+
+	exitedModel, _ := (Model{}).Update(execDoneMsg{err: &exec.ExitError{}, completion: "Created .review/guide.md."})
+	exited := exitedModel.(Model)
+	if exited.statusLine != "Created .review/guide.md." {
+		t.Fatalf("ordinary editor exit became a failure: %q", exited.statusLine)
 	}
 }
 

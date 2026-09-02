@@ -57,7 +57,7 @@ func TestStartAssistantFullHappyPathNeverConfirms(t *testing.T) {
 		t.Fatalf("branch items = %+v, want one collapsed feat-x entry", branchStep.Items)
 	}
 	pick1 := branchStep.OnPick("feat-x")
-	if pick1.cmd == nil || pick1.next != nil || pick1.done != nil {
+	if pick1.probe == nil || pick1.cmd != nil || pick1.next != nil || pick1.done != nil {
 		t.Fatal("picking the branch must run the second probe, and nothing else")
 	}
 
@@ -77,7 +77,7 @@ func TestStartAssistantFullHappyPathNeverConfirms(t *testing.T) {
 	if pick2.next == nil {
 		t.Fatal("picking a source must build the range step directly — no probe needed, the deltas are already known")
 	}
-	if pick2.cmd != nil || pick2.done != nil {
+	if pick2.probe != nil || pick2.cmd != nil || pick2.done != nil {
 		t.Fatal("the source step must not run a probe or finish the flow")
 	}
 
@@ -89,7 +89,7 @@ func TestStartAssistantFullHappyPathNeverConfirms(t *testing.T) {
 		t.Fatalf("got %d range items, want 2 (full + delta, since a local delta marker exists)", len(rangeStep.Items))
 	}
 	pick3 := rangeStep.OnPick("delta")
-	if pick3.cmd == nil {
+	if pick3.probe == nil || pick3.cmd != nil {
 		t.Fatal("picking a range must run the third, scoped probe")
 	}
 
@@ -232,15 +232,33 @@ func TestAssistantKeepsProgressBetweenQuestions(t *testing.T) {
 }
 
 func TestStaleAssistantProbeCannotReplaceTheCurrentProgress(t *testing.T) {
-	m := Model{activityGeneration: 2, progressOverlay: &ProgressOverlay{Text: domain.ReadOptionsProgress}}
+	m := Model{assistantGeneration: 2, progressOverlay: &ProgressOverlay{Text: domain.ReadOptionsProgress}}
 	updated, _ := m.handleAssistantStep(assistantStepMsg{
-		activityGeneration: 1,
-		result:             host.Result{ExitCode: 0},
+		assistantGeneration: 1,
+		result:              host.Result{ExitCode: 0},
 		build: func(domain.ConfigPorcelainResult) SelectOverlay {
 			return SelectOverlay{Title: "stale"}
 		},
 	})
 	if updated.progressOverlay == nil || updated.selectOverlay != nil {
 		t.Fatal("a stale assistant result replaced the current progress surface")
+	}
+}
+
+func TestRefreshCannotInvalidateAnAssistantProbe(t *testing.T) {
+	probe := func() tea.Msg {
+		return assistantStepMsg{
+			result: host.Result{ExitCode: 0},
+			build: func(domain.ConfigPorcelainResult) SelectOverlay {
+				return SelectOverlay{Title: "current"}
+			},
+		}
+	}
+	m, probeCmd := (Model{}).beginAssistantProbe(probe)
+	refreshing, _ := m.scheduleRead()
+	msg := probeCmd().(assistantStepMsg)
+	updated, _ := refreshing.handleAssistantStep(msg)
+	if updated.progressOverlay != nil || updated.selectOverlay == nil || updated.selectOverlay.Title != "current" {
+		t.Fatalf("refresh invalidated the active assistant probe: progress=%v select=%+v", updated.progressOverlay != nil, updated.selectOverlay)
 	}
 }

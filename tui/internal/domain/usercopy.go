@@ -76,6 +76,13 @@ const ReadOptionsProgress = "Reading the available review options…"
 
 func GuideCreated(path string) string { return fmt.Sprintf("Created %s.", path) }
 
+func DelegatedLaunchFailed(completion, detail string) string {
+	if completion != "" {
+		return fmt.Sprintf("%s Could not launch the external tool: %s", completion, detail)
+	}
+	return fmt.Sprintf("Could not launch the external tool: %s", detail)
+}
+
 func ProgressText(action string, p ActionParams) string {
 	switch action {
 	case "startReview", "startFromDraft":

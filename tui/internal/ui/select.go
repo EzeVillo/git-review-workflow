@@ -18,14 +18,17 @@ type SelectItem struct {
 }
 
 // selectResult is what answering one SelectOverlay question leads to:
-// either another question (multi-step flows), a Cmd that must run first
-// (a fresh config probe, before the NEXT question can even be built), or
-// the finished mutationRequest once the LAST question has been answered.
-// At most one of the three is ever set.
+// either another question (multi-step flows), a typed config probe, an
+// ordinary delegated Cmd, or the finished mutationRequest once the LAST
+// question has been answered. At most one outcome is ever set.
 type selectResult struct {
 	next *SelectOverlay
-	cmd  tea.Cmd
-	done *mutationRequest
+	// probe is reserved for the Start assistant's config reads. Ordinary
+	// commands (editor/diff delegation) must stay in cmd because their
+	// Bubble Tea messages have a different type and lifecycle.
+	probe tea.Cmd
+	cmd   tea.Cmd
+	done  *mutationRequest
 	// status: set the status line directly and close the picker, with no
 	// mutation and nothing further to run — goToEntry's own "no editor is
 	// configured" (T086/T089) is the only user today.
@@ -56,8 +59,8 @@ func (m Model) applySelectResult(r selectResult) (Model, tea.Cmd) {
 	if r.done != nil {
 		return m.beginMutation(*r.done, currentStateToken(m.Panel))
 	}
-	if r.cmd != nil {
-		return m.beginAssistantProbe(r.cmd)
+	if r.probe != nil {
+		return m.beginAssistantProbe(r.probe)
 	}
 	return m, r.cmd
 }

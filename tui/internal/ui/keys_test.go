@@ -6,6 +6,27 @@ import (
 	"github.com/EzeVillo/git-review-workflow/tui/internal/domain"
 )
 
+func TestActivityBusyStateBlocksStalePanelInteractions(t *testing.T) {
+	panel := fixtureFor(domain.LayoutNoReview)
+	m := Model{
+		Panel:    panel,
+		activity: activityState{active: true, blocksControls: true},
+	}
+	for _, key := range []string{"enter", "j", "n", ":", "g"} {
+		if got := ResolveKey(key, m); got.Kind != IntentNone {
+			t.Errorf("busy activity resolved %q to %+v", key, got)
+		}
+	}
+	if got := ResolveKey("r", m); got.Kind != IntentBoundAction || got.Action != "refresh" {
+		t.Fatalf("refresh must remain available while busy, got %+v", got)
+	}
+	for _, item := range KeyBarFor(m.presentationPanel()) {
+		if item.Key == "j" || item.Key == "k" || item.Key == "enter" {
+			t.Errorf("busy key bar advertised disabled control key %q", item.Key)
+		}
+	}
+}
+
 // T048's named gate: in finish-conflict, the cursor keys (n/p) are neither
 // available nor shown — the bar reflects the situation, not a fixed set.
 func TestFinishConflictHidesAndDisablesCursorKeys(t *testing.T) {

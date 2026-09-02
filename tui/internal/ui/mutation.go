@@ -50,10 +50,10 @@ func silenceWindowCmd(gen int) tea.Cmd {
 // method on Model, so program_test.go's AST sweep (Update/handleKey/
 // handleMouse must never call host.* directly) stays satisfied by
 // construction, exactly like readCmd().
-func mutationCmd(req mutationRequest, argv domain.Argv) tea.Cmd {
+func mutationCmd(req mutationRequest, argv domain.Argv, activityGeneration int) tea.Cmd {
 	return func() tea.Msg {
 		result := host.InvokeReview(context.Background(), argv.Verb, argv.Args)
-		return mutationDoneMsg{action: req.action, params: req.params, result: result}
+		return mutationDoneMsg{action: req.action, params: req.params, result: result, activityGeneration: activityGeneration}
 	}
 }
 
@@ -100,7 +100,9 @@ func (m Model) beginMutation(req mutationRequest, token domain.StateToken) (Mode
 		argv = a
 	}
 	m.statusLine = ""
-	return m, mutationCmd(req, argv)
+	var activityCmd tea.Cmd
+	m, activityCmd = m.startActivity(activityMutation, domain.ProgressText(req.action, req.params), true)
+	return m, tea.Batch(mutationCmd(req, argv, m.activity.generation), activityCmd)
 }
 
 // mutationFailed reports whether a mutation's result counts as a failure
@@ -198,9 +200,10 @@ func (o pendingFinishOutcome) matchesPending(result host.ReadResult) bool {
 // the status line, and undoFinish's --force follow-up, depends on what was
 // requested — never on parsing the verb's own stdout (FR-013).
 type mutationDoneMsg struct {
-	action string
-	params domain.ActionParams
-	result host.Result
+	action             string
+	params             domain.ActionParams
+	result             host.Result
+	activityGeneration int
 }
 
 // handleMutationDone is the mutation cycle's own end: the lock's End()
@@ -212,6 +215,9 @@ type mutationDoneMsg struct {
 // silence-window timer are both scheduled — SC-004's own mechanism, not
 // re-implemented here.
 func (m Model) handleMutationDone(msg mutationDoneMsg) (Model, tea.Cmd) {
+	if msg.activityGeneration != 0 {
+		m = m.clearActivity(msg.activityGeneration)
+	}
 	gen := m.lock.End()
 
 	// Cleared UNCONDITIONALLY for every action but finishReview's own — the
@@ -401,7 +407,7 @@ func (m Model) beginSave() (Model, tea.Cmd) {
 		return m, nil
 	}
 	title := interpolate(domain.SaveReviewConfirmTitle, "{source}", m.Panel.Source)
-	req := mutationRequest{action: "saveReview", params: domain.ActionParams{}}
+	req := mutationRequest{action: "saveReview", params: domain.ActionParams{Source: m.Panel.Source}}
 	m.confirm = ConfirmMutation("saveReview", title, domain.SaveReviewConfirmDetail, domain.SaveForLaterLabel, currentStateToken(m.Panel), req)
 	return m, nil
 }
@@ -411,7 +417,7 @@ func (m Model) beginAbort() (Model, tea.Cmd) {
 		return m, nil
 	}
 	title := interpolate(domain.AbortReviewConfirmTitle, "{source}", m.Panel.Source)
-	req := mutationRequest{action: "abortReview", params: domain.ActionParams{}}
+	req := mutationRequest{action: "abortReview", params: domain.ActionParams{Source: m.Panel.Source}}
 	m.confirm = ConfirmMutation("abortReview", title, domain.AbortReviewConfirmDetail, domain.CancelReviewLabel, currentStateToken(m.Panel), req)
 	return m, nil
 }
@@ -570,7 +576,8 @@ func (m Model) beginContinueReview(name string) (Model, tea.Cmd) {
 	source := domain.SourceOf(domain.BranchRecord{Name: row.name})
 	title := interpolate(domain.ContinueReviewConfirmTitle, "{source}", source)
 	req := mutationRequest{action: "continueReview", params: domain.ActionParams{Source: source}}
-	m.confirm = ConfirmMutation("continueReview", title, domain.ContinueReviewConfirmDetail, domain.ContinueLabel, currentStateToken(m.Panel), req)
+	detail := interpolate(domain.ContinueReviewConfirmDetail, "{source}", source)
+	m.confirm = ConfirmMutation("continueReview", title, detail, domain.ContinueLabel, currentStateToken(m.Panel), req)
 	return m, nil
 }
 
@@ -619,7 +626,7 @@ func (m Model) beginDiscardDraft(src string) (Model, tea.Cmd) {
 		Verb: domain.VerbForHousekeeping(domain.ForgetDraftOne),
 		Args: domain.ArgsForHousekeeping(domain.HousekeepingAction{Kind: domain.ForgetDraftOne, Source: src}),
 	}
-	req := mutationRequest{action: "discardDraft", argv: &argv}
+	req := mutationRequest{action: "discardDraft", params: domain.ActionParams{Source: src}, argv: &argv}
 	m.confirm = ConfirmMutation("discardDraft", title, detail, domain.DiscardConfirmLabel, currentStateToken(m.Panel), req)
 	return m, nil
 }

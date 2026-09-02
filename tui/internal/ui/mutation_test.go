@@ -6,6 +6,7 @@ import (
 
 	"github.com/EzeVillo/git-review-workflow/tui/internal/domain"
 	"github.com/EzeVillo/git-review-workflow/tui/internal/host"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func reviewPanel() domain.PanelModel {
@@ -373,6 +374,52 @@ func TestBeginContinueReviewResolvesTheNamedRowAndOpensConfirm(t *testing.T) {
 	}
 	if m2.confirm.Pending.action != "continueReview" || m2.confirm.Pending.params.Source != "feature" {
 		t.Fatalf("pending = %+v, want continueReview with Source=feature", m2.confirm.Pending)
+	}
+}
+
+func TestContinueDetailInterpolatesTheSavedSource(t *testing.T) {
+	m := Model{Panel: domain.PanelModel{
+		Situation:     domain.SituationNoReview,
+		InventoryRows: domain.FooterField("review-saved/feature/search", "1", "0", "0", "1", "walk"),
+	}}
+	after, _ := m.beginContinueReview("review-saved/feature/search")
+	if after.confirm == nil {
+		t.Fatal("continue did not open its confirmation")
+	}
+	if strings.Contains(after.confirm.Detail, "{source}") || !strings.Contains(after.confirm.Detail, "review/feature/search") {
+		t.Fatalf("continue detail was not interpolated: %q", after.confirm.Detail)
+	}
+}
+
+func TestMutationActivityShowsProgressThenVisibleDirtyTreeFailure(t *testing.T) {
+	m := Model{
+		Viewport: Viewport{Cols: 80, Rows: 24},
+		Panel: domain.PanelModel{
+			Situation:     domain.SituationNoReview,
+			HasReviews:    true,
+			InventoryRows: domain.FooterField("review-saved/feature/search", "1", "0", "0", "1", "walk"),
+		},
+	}
+	confirming, _ := m.beginContinueReview("review-saved/feature/search")
+	startedModel, cmd := confirming.handleConfirmKey(tea.KeyMsg{Type: tea.KeyEnter})
+	started := startedModel.(Model)
+	if cmd == nil || !started.presentationPanel().Busy {
+		t.Fatalf("accepted continue did not start visible activity: cmd=%v busy=%v", cmd != nil, started.presentationPanel().Busy)
+	}
+	shownModel, _ := started.Update(activityVisibleMsg{generation: started.activity.generation})
+	shown := shownModel.(Model)
+	if !strings.Contains(shown.View(), "Continuing the review of feature/search…") {
+		t.Fatalf("progress is not visible:\n%s", shown.View())
+	}
+
+	failedModel, _ := shown.Update(mutationDoneMsg{
+		action:             "continueReview",
+		activityGeneration: shown.activity.generation,
+		result:             host.Result{ExitCode: 1, Stderr: "error: you have local changes; commit or stash them first\n"},
+	})
+	failed := failedModel.(Model)
+	if !strings.Contains(failed.View(), "error: you have local changes; commit or stash them first") {
+		t.Fatalf("dirty-tree failure is not visible:\n%s", failed.View())
 	}
 }
 

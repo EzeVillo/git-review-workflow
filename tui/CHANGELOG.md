@@ -69,6 +69,14 @@ introduces the `ui` verb.
   evidence that names it, so a timeout or a spawn failure for some other reason is
   retried rather than published as "not installed".
 
+- **Every wait has a visible, stable surface.** Refreshes and mutations keep the
+  last truthful panel in place, disable stale controls immediately, and show
+  action-specific progress after a short anti-flicker delay. The Start assistant
+  keeps a loading surface between questions; failures and acknowledgements stay
+  fixed above the key bar instead of being clipped by a long inventory. Creating
+  an authoring guide refreshes the panel and opens its reported path, or names the
+  created file when no editor is configured.
+
 - **Confirmation only for what cannot be undone.** Starting a review does not
   confirm; discarding edits, deleting a reading order and the rest do, from
   wherever you reach them — the body, a key or the action list all arrive at the

@@ -72,13 +72,28 @@ func ResolveKey(key string, m Model) Intent {
 		}
 		return Intent{Kind: IntentBoundAction, Action: action}
 	}
-	if toggle, ok := domain.ToggleFor(key); ok && !panel.Busy {
+	if toggle, ok := domain.ToggleFor(key); ok {
 		return Intent{Kind: IntentToggle, Toggle: toggle}
 	}
-	if overlay, ok := domain.OverlayFor(key); ok && !panel.Busy {
+	if overlay, ok := domain.OverlayFor(key); ok && (!panel.Busy || overlay == "action_list") {
 		return Intent{Kind: IntentOverlay, Overlay: overlay}
 	}
 	return Intent{Kind: IntentNone}
+}
+
+func safeDuringProgress(intent Intent) bool {
+	switch intent.Kind {
+	case IntentQuit:
+		return true
+	case IntentBoundAction:
+		return intent.Action == "refresh"
+	case IntentOverlay:
+		return intent.Overlay == "action_list"
+	case IntentToggle:
+		return intent.Toggle == "mouse_reporting"
+	default:
+		return false
+	}
 }
 
 // hasReviewCursor reports whether m's situation is one of the two that walk
@@ -188,7 +203,7 @@ func KeyBarFor(m domain.PanelModel) []KeyBarItem {
 			// OverlayFor, does not gate by situation either; KeyBarFor is
 			// where that extra layer has always lived).
 			hasEntries := m.Situation == domain.SituationReview || m.Situation == domain.SituationFinishConflict
-			if hasEntries && m.EntryPickerRows != "" {
+			if !m.Busy && hasEntries && m.EntryPickerRows != "" {
 				bar = append(bar, KeyBarItem{Key: entry.Keys[0], Label: "entries"})
 			}
 		}

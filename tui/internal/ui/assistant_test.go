@@ -216,6 +216,32 @@ func TestStartAssistantShowsProgressBeforeTheFirstProbeReturns(t *testing.T) {
 	if after.progressOverlay == nil || !strings.Contains(after.View(), domain.ReadOptionsProgress) {
 		t.Fatalf("assistant did not replace the base panel with progress:\n%s", after.View())
 	}
+	if !strings.Contains(after.View(), "q:quit") || !strings.Contains(after.View(), "::actions") {
+		t.Fatalf("assistant progress hid its safe key bar:\n%s", after.View())
+	}
+}
+
+func TestAssistantProgressKeepsOnlySafeKeysAvailable(t *testing.T) {
+	m := Model{
+		Panel:           fixtureFor(domain.LayoutNoReview),
+		progressOverlay: &ProgressOverlay{Text: domain.ReadOptionsProgress},
+	}
+	quitModel, quitCmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	if quitCmd == nil || quitModel.(Model).progressOverlay == nil {
+		t.Fatal("quit was swallowed by assistant progress")
+	}
+	paletteModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{':'}})
+	if paletteModel.(Model).actionList == nil {
+		t.Fatal("action palette was swallowed by assistant progress")
+	}
+	mouseModel, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	if !mouseModel.(Model).Panel.MouseEnabled {
+		t.Fatal("mouse toggle was swallowed by assistant progress")
+	}
+	bodyModel, bodyCmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if bodyCmd != nil || bodyModel.(Model).progressOverlay == nil {
+		t.Fatal("assistant progress allowed a hidden body control")
+	}
 }
 
 func TestAssistantKeepsProgressBetweenQuestions(t *testing.T) {

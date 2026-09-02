@@ -8,6 +8,7 @@ import (
 
 	"github.com/EzeVillo/git-review-workflow/tui/internal/domain"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 )
 
@@ -155,6 +156,7 @@ type builder struct {
 	hm          HitMap
 	metrics     renderMetrics
 	tailReserve int
+	busy        bool
 }
 
 func newBuilder(vp Viewport, state renderState) *builder {
@@ -217,6 +219,7 @@ func (b *builder) note(s string) {
 // labelled control that isn't already naturally alone, and prev/next are
 // icon-only).
 func (b *builder) button(id domain.ControlID, variant, label string, style lipgloss.Style, enabled bool) {
+	enabled = enabled && !b.busy
 	s := style
 	prefix := "[ "
 	suffix := " ]"
@@ -233,6 +236,7 @@ func (b *builder) button(id domain.ControlID, variant, label string, style lipgl
 // name as a trailing hint — there is no visible label to click on top of,
 // so the WHOLE line is the hit target.
 func (b *builder) iconButton(id domain.ControlID, icon domain.IconName, name string, style lipgloss.Style, enabled bool) {
+	enabled = enabled && !b.busy
 	s := style
 	if !enabled {
 		s = b.st.disabled
@@ -270,7 +274,7 @@ func (b *builder) buttonRow(btns ...rowButton) {
 	widths := make([]int, len(btns))
 	for i, bt := range btns {
 		s := bt.style
-		if !bt.enabled {
+		if !bt.enabled || b.busy {
 			s = b.st.disabled
 		}
 		part := b.controlPrefix(controlTarget{id: bt.id, variant: bt.variant}) + "[ " + s.Render(bt.label) + " ]"
@@ -308,7 +312,7 @@ func (b *builder) iconRow(icons ...rowIcon) {
 	widths := make([]int, len(icons))
 	for i, ic := range icons {
 		s := b.st.secondary
-		if !ic.enabled {
+		if !ic.enabled || b.busy {
 			s = b.st.disabled
 		}
 		part := b.controlPrefix(controlTarget{id: ic.id, variant: ic.variant}) + "[" + glyph(b.vp, ic.icon) + "] " + s.Render(ic.hint)
@@ -403,6 +407,7 @@ func View(m domain.PanelModel, vp Viewport) (string, HitMap) {
 // presentation state that a real terminal interaction owns.
 func viewWithState(m domain.PanelModel, vp Viewport, state renderState) (string, HitMap, renderMetrics) {
 	b := newBuilder(vp, state)
+	b.busy = m.Busy
 
 	if m.Situation == domain.SituationWaiting || m.Situation == "" {
 		b.text(domain.WaitingText)
@@ -468,7 +473,11 @@ func (b *builder) frameWithTail(tail []string) string {
 		rowStarts := make([]int, len(body))
 		for i, line := range body {
 			rowStarts[i] = len(wrapped)
-			wrapped = append(wrapped, wrapLine(line, b.vp.Cols)...)
+			parts := wrapLine(line, b.vp.Cols)
+			if hasHitOnRow(b.hm.hits, i) {
+				parts = hardWrapLine(line, b.vp.Cols)
+			}
+			wrapped = append(wrapped, parts...)
 		}
 		body = wrapped
 		b.hm.hits = remapWrappedHits(b.hm.hits, rowStarts, b.vp.Cols)
@@ -495,6 +504,22 @@ func (b *builder) frameWithTail(tail []string) string {
 		lines = lines[len(lines)-b.vp.Rows:]
 	}
 	return strings.Join(lines, "\n")
+}
+
+func hasHitOnRow(hits []hit, row int) bool {
+	for _, h := range hits {
+		if h.rect.Row == row {
+			return true
+		}
+	}
+	return false
+}
+
+func hardWrapLine(line string, cols int) []string {
+	if cols <= 0 || lipgloss.Width(line) <= cols {
+		return []string{line}
+	}
+	return strings.Split(ansi.Hardwrap(line, cols, true), "\n")
 }
 
 func remapWrappedHits(hits []hit, rowStarts []int, cols int) []hit {
@@ -561,7 +586,11 @@ func renderCliInstall(b *builder, title, hint, cmd, stderr string) {
 	if prefix == "" {
 		prefix = "  "
 	}
-	line := prefix + cmd
+	renderedCmd := cmd
+	if b.busy {
+		renderedCmd = b.st.disabled.Render(cmd)
+	}
+	line := prefix + renderedCmd
 	row := len(b.lines)
 	b.lines = append(b.lines, line)
 	b.hm.add("copyCliInstall", "", row, 0, lipgloss.Width(line))

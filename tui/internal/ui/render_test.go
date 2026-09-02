@@ -168,6 +168,55 @@ func TestFixedTailRemapsAndClipsHitMapAfterWrapping(t *testing.T) {
 	}
 }
 
+func TestInteractiveRowsHardWrapInTheSameGeometryAsTheirHitMap(t *testing.T) {
+	b := newBuilder(Viewport{Cols: 20, Rows: 5}, renderState{})
+	b.buttonRow(
+		rowButton{id: "continueReview", label: "First action", style: b.st.primary, enabled: true},
+		rowButton{id: "discardInventory", label: "Second action", style: b.st.secondary, enabled: true},
+	)
+	frame := b.frameWithTail(nil)
+	lines := strings.Split(frame, "\n")
+	if len(lines) != 2 || lines[0] != "[ First action ]  [ " || lines[1] != "Second action ]" {
+		t.Fatalf("interactive row did not hard-wrap predictably: %#v", lines)
+	}
+	var second []Rect
+	for _, h := range b.hm.hits {
+		if h.id == "discardInventory" {
+			second = append(second, h.rect)
+		}
+	}
+	if len(second) != 2 || second[0] != (Rect{Row: 0, Col: 18, Width: 2, Height: 1}) || second[1] != (Rect{Row: 1, Col: 0, Width: 15, Height: 1}) {
+		t.Fatalf("second control hit segments = %+v", second)
+	}
+}
+
+func TestBusyBuilderStylesNominallyEnabledBodyControlsAsDisabled(t *testing.T) {
+	b := newBuilder(Viewport{Cols: 80, Rows: 24, Color: true}, renderState{})
+	b.busy = true
+	b.button("openEntry", "", domain.FileLabel, b.st.secondary, true)
+	want := "[ " + b.st.disabled.Render(domain.FileLabel) + " ]"
+	if b.lines[0] != want {
+		t.Fatalf("busy control rendered as enabled: %q, want %q", b.lines[0], want)
+	}
+}
+
+func TestBusyBuilderStylesIconRowsAndInstallCopyAsDisabled(t *testing.T) {
+	b := newBuilder(Viewport{Cols: 80, Rows: 24, Color: true}, renderState{})
+	b.busy = true
+	b.iconRow(rowIcon{id: "openGuide", icon: domain.IconFile, hint: "open", enabled: true})
+	wantIcon := "[" + glyph(b.vp, domain.IconFile) + "] " + b.st.disabled.Render("open")
+	if b.lines[0] != wantIcon {
+		t.Fatalf("busy icon row rendered as enabled: %q, want %q", b.lines[0], wantIcon)
+	}
+
+	install := newBuilder(Viewport{Cols: 80, Rows: 24, Color: true}, renderState{})
+	install.busy = true
+	renderCliInstall(install, "title", "hint", "npm install tool", "")
+	if got := strings.Join(install.lines, "\n"); !strings.Contains(got, install.st.disabled.Render("npm install tool")) {
+		t.Fatalf("busy install copy rendered as enabled:\n%s", got)
+	}
+}
+
 // Every icon this client uses is exactly one terminal cell wide in both
 // glyph sets (contracts/tui-surface.md § Iconos) — checked with the same
 // table icons_test.go already validates the vocabulary against, not a

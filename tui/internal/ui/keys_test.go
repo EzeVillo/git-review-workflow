@@ -12,7 +12,7 @@ func TestActivityBusyStateBlocksStalePanelInteractions(t *testing.T) {
 		Panel:    panel,
 		activity: activityState{active: true, blocksControls: true},
 	}
-	for _, key := range []string{"enter", "j", "n", ":", "g"} {
+	for _, key := range []string{"enter", "j", "n", "g"} {
 		if got := ResolveKey(key, m); got.Kind != IntentNone {
 			t.Errorf("busy activity resolved %q to %+v", key, got)
 		}
@@ -20,9 +20,29 @@ func TestActivityBusyStateBlocksStalePanelInteractions(t *testing.T) {
 	if got := ResolveKey("r", m); got.Kind != IntentBoundAction || got.Action != "refresh" {
 		t.Fatalf("refresh must remain available while busy, got %+v", got)
 	}
+	if got := ResolveKey(":", m); got.Kind != IntentOverlay || got.Overlay != "action_list" {
+		t.Fatalf("action palette must remain available while busy, got %+v", got)
+	}
+	if got := ResolveKey("m", m); got.Kind != IntentToggle || got.Toggle != "mouse_reporting" {
+		t.Fatalf("mouse toggle must remain available while busy, got %+v", got)
+	}
 	for _, item := range KeyBarFor(m.presentationPanel()) {
 		if item.Key == "j" || item.Key == "k" || item.Key == "enter" {
 			t.Errorf("busy key bar advertised disabled control key %q", item.Key)
+		}
+		if item.Key == "g" {
+			t.Error("busy key bar advertised the disabled entry picker")
+		}
+	}
+	review := fixtureFor(domain.LayoutReviewWalk)
+	review.EntryPickerRows = domain.FooterField("1", "a.go", "a.go")
+	busyReview := Model{Panel: review, activity: activityState{active: true, blocksControls: true}}
+	if got := ResolveKey("g", busyReview); got.Kind != IntentNone {
+		t.Fatalf("busy review resolved entry picker: %+v", got)
+	}
+	for _, item := range KeyBarFor(busyReview.presentationPanel()) {
+		if item.Key == "g" {
+			t.Error("busy review key bar advertised the disabled entry picker")
 		}
 	}
 }

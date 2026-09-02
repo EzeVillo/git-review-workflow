@@ -53,7 +53,7 @@ func (m Model) clearActivity(generation int) Model {
 func (m Model) presentationPanel() domain.PanelModel {
 	panel := m.Panel
 	panel.StatusLine = m.statusLine
-	if m.activity.active && m.activity.blocksControls {
+	if m.progressOverlay != nil || (m.activity.active && m.activity.blocksControls) {
 		panel.Busy = true
 	}
 	if m.activity.active && m.activity.visible {
@@ -78,4 +78,14 @@ func (o ProgressOverlay) Render(vp Viewport) string {
 		lines = lines[:vp.Rows]
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (o ProgressOverlay) RenderWithPanel(panel domain.PanelModel, vp Viewport) string {
+	panel.Busy = true
+	panel.StatusLine = ""
+	b := newBuilder(vp, renderState{})
+	b.heading(o.Text)
+	tail := fixedTailLines(panel, vp, b.st)
+	b.tailReserve = len(tail)
+	return b.frameWithTail(tail)
 }

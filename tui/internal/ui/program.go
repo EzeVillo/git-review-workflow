@@ -336,6 +336,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.progressOverlay != nil {
+			if safeDuringProgress(ResolveKey(msg.String(), m)) {
+				return m.handleKey(msg)
+			}
 			return m, nil
 		}
 		return m.handleKey(msg)
@@ -373,7 +376,7 @@ func (m Model) View() string {
 		return m.textOverlay.Render(m.Viewport)
 	}
 	if m.progressOverlay != nil {
-		return m.progressOverlay.Render(m.Viewport)
+		return m.progressOverlay.RenderWithPanel(m.presentationPanel(), m.Viewport)
 	}
 	frame, _, _ := viewWithState(m.presentationPanel(), m.Viewport, m.presentationState())
 	return frame

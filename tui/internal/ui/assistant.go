@@ -31,8 +31,9 @@ import (
 // function that turns it into the NEXT question — the same "what to build
 // next" pattern SelectOverlay.OnPick uses for a step that needs no probe.
 type assistantStepMsg struct {
-	result host.Result
-	build  func(domain.ConfigPorcelainResult) SelectOverlay
+	activityGeneration int
+	result             host.Result
+	build              func(domain.ConfigPorcelainResult) SelectOverlay
 }
 
 // configProbeCmd runs one `config --porcelain <extra...>` probe. Always
@@ -49,7 +50,19 @@ func configProbeCmd(extra []string, build func(domain.ConfigPorcelainResult) Sel
 // startAssistant is startReview's entry point (activateControl): the FIRST
 // probe, unscoped, whose candidates seed the branch question.
 func (m Model) startAssistant() (Model, tea.Cmd) {
-	return m, configProbeCmd(nil, buildBranchStep(m.preferredStartSource))
+	return m.beginAssistantProbe(configProbeCmd(nil, buildBranchStep(m.preferredStartSource)))
+}
+
+func (m Model) beginAssistantProbe(probe tea.Cmd) (Model, tea.Cmd) {
+	m.activityGeneration++
+	generation := m.activityGeneration
+	m.progressOverlay = &ProgressOverlay{Text: domain.ReadOptionsProgress}
+	m.selectOverlay = nil
+	return m, func() tea.Msg {
+		msg := probe().(assistantStepMsg)
+		msg.activityGeneration = generation
+		return msg
+	}
 }
 
 // handleAssistantStep resolves one assistantStepMsg: a failed probe reports
@@ -57,6 +70,10 @@ func (m Model) startAssistant() (Model, tea.Cmd) {
 // and leaves the picker closed; a successful one builds and opens the next
 // SelectOverlay.
 func (m Model) handleAssistantStep(msg assistantStepMsg) (Model, tea.Cmd) {
+	if msg.activityGeneration != 0 && msg.activityGeneration != m.activityGeneration {
+		return m, nil
+	}
+	m.progressOverlay = nil
 	if mutationFailed(msg.result) {
 		m.statusLine = failureMessage("startReview", msg.result)
 		m.selectOverlay = nil

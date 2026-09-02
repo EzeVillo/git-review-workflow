@@ -56,6 +56,9 @@ func (m Model) applySelectResult(r selectResult) (Model, tea.Cmd) {
 	if r.done != nil {
 		return m.beginMutation(*r.done, currentStateToken(m.Panel))
 	}
+	if r.cmd != nil {
+		return m.beginAssistantProbe(r.cmd)
+	}
 	return m, r.cmd
 }
 

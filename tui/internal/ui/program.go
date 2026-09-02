@@ -317,6 +317,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if m.progressOverlay != nil {
+			return m, nil
+		}
 		return m.handleKey(msg)
 
 	case tea.MouseMsg:

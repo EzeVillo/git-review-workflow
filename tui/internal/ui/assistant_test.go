@@ -206,3 +206,41 @@ func TestHandleAssistantStepReportsAProbeFailureOnTheStatusLine(t *testing.T) {
 		t.Fatal("a failed probe schedules nothing further")
 	}
 }
+
+func TestStartAssistantShowsProgressBeforeTheFirstProbeReturns(t *testing.T) {
+	m := Model{Panel: domain.PanelModel{Situation: domain.SituationNoReview}, Viewport: Viewport{Cols: 80, Rows: 24}}
+	after, cmd := m.startAssistant()
+	if cmd == nil {
+		t.Fatal("start assistant must run its config probe")
+	}
+	if after.progressOverlay == nil || !strings.Contains(after.View(), domain.ReadOptionsProgress) {
+		t.Fatalf("assistant did not replace the base panel with progress:\n%s", after.View())
+	}
+}
+
+func TestAssistantKeepsProgressBetweenQuestions(t *testing.T) {
+	overlay := buildBranchStep("")(domain.ConfigPorcelainResult{Candidates: []domain.CandidateBranch{{Name: "feature/x", Origin: "local"}}})
+	m := Model{
+		Panel:         domain.PanelModel{Situation: domain.SituationNoReview},
+		selectOverlay: &overlay,
+	}
+	updated, cmd := m.handleSelectKey(tea.KeyMsg{Type: tea.KeyEnter})
+	after := updated.(Model)
+	if cmd == nil || after.progressOverlay == nil || after.selectOverlay != nil {
+		t.Fatalf("between-question state: cmd=%v progress=%v select=%v", cmd != nil, after.progressOverlay != nil, after.selectOverlay != nil)
+	}
+}
+
+func TestStaleAssistantProbeCannotReplaceTheCurrentProgress(t *testing.T) {
+	m := Model{activityGeneration: 2, progressOverlay: &ProgressOverlay{Text: domain.ReadOptionsProgress}}
+	updated, _ := m.handleAssistantStep(assistantStepMsg{
+		activityGeneration: 1,
+		result:             host.Result{ExitCode: 0},
+		build: func(domain.ConfigPorcelainResult) SelectOverlay {
+			return SelectOverlay{Title: "stale"}
+		},
+	})
+	if updated.progressOverlay == nil || updated.selectOverlay != nil {
+		t.Fatal("a stale assistant result replaced the current progress surface")
+	}
+}

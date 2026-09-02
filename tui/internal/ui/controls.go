@@ -30,7 +30,15 @@ type Control struct {
 // LayoutNoReview — one Control per draft/guide/fixes/inventory row, built in
 // noReviewControls below — on top of the fixed body controls Phase 4 already
 // drew.
-func ControlsFor(m domain.PanelModel) []Control {
+func ControlsFor(m domain.PanelModel) (controls []Control) {
+	defer func() {
+		if !m.Busy {
+			return
+		}
+		for i := range controls {
+			controls[i].Enabled = false
+		}
+	}()
 	switch domain.LayoutSituationFor(m) {
 	case domain.LayoutCliMissing, domain.LayoutCliOutdated:
 		return []Control{

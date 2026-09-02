@@ -148,12 +148,13 @@ func glyph(vp Viewport, name domain.IconName) string {
 // --- the builder ---------------------------------------------------------
 
 type builder struct {
-	vp      Viewport
-	st      styles
-	state   renderState
-	lines   []string
-	hm      HitMap
-	metrics renderMetrics
+	vp          Viewport
+	st          styles
+	state       renderState
+	lines       []string
+	hm          HitMap
+	metrics     renderMetrics
+	tailReserve int
 }
 
 func newBuilder(vp Viewport, state renderState) *builder {
@@ -407,6 +408,8 @@ func viewWithState(m domain.PanelModel, vp Viewport, state renderState) (string,
 		b.text(domain.WaitingText)
 		return b.frame(), b.hm, b.metrics
 	}
+	tail := fixedTailLines(m, vp, b.st)
+	b.tailReserve = len(tail)
 
 	switch domain.LayoutSituationFor(m) {
 	case domain.LayoutCliMissing:
@@ -433,9 +436,62 @@ func viewWithState(m domain.PanelModel, vp Viewport, state renderState) (string,
 		renderOutOfRangeOrError(b, m, domain.ErrorMessage)
 	}
 
-	b.statusLine(m.StatusLine)
-	b.keyBar(m)
-	return b.frame(), b.hm, b.metrics
+	return b.frameWithTail(tail), b.hm, b.metrics
+}
+
+func fixedTailLines(m domain.PanelModel, vp Viewport, st styles) []string {
+	var raw []string
+	if m.StatusLine != "" {
+		raw = append(raw, st.note.Render(m.StatusLine))
+	}
+	raw = append(raw, "")
+	items := KeyBarFor(m)
+	parts := make([]string, len(items))
+	for i, it := range items {
+		parts[i] = st.keybar.Render(it.Key) + ":" + it.Label
+	}
+	raw = append(raw, strings.Join(parts, "  "))
+	if vp.Cols <= 0 {
+		return raw
+	}
+	var lines []string
+	for _, line := range raw {
+		lines = append(lines, wrapLine(line, vp.Cols)...)
+	}
+	return lines
+}
+
+func (b *builder) frameWithTail(tail []string) string {
+	body := b.lines
+	if b.vp.Cols > 0 {
+		var wrapped []string
+		for _, line := range body {
+			wrapped = append(wrapped, wrapLine(line, b.vp.Cols)...)
+		}
+		body = wrapped
+	}
+	limit := len(body)
+	if b.vp.Rows > 0 {
+		limit = b.vp.Rows - len(tail)
+		if limit < 0 {
+			limit = 0
+		}
+		if len(body) > limit {
+			body = body[:limit]
+		}
+		kept := b.hm.hits[:0]
+		for _, h := range b.hm.hits {
+			if h.rect.Row < limit {
+				kept = append(kept, h)
+			}
+		}
+		b.hm.hits = kept
+	}
+	lines := append(append([]string{}, body...), tail...)
+	if b.vp.Rows > 0 && len(lines) > b.vp.Rows {
+		lines = lines[len(lines)-b.vp.Rows:]
+	}
+	return strings.Join(lines, "\n")
 }
 
 // statusLine draws PanelModel.StatusLine (T074): what a toast would say in
@@ -705,12 +761,6 @@ func renderInventoryRows(b *builder, m domain.PanelModel) {
 	}
 }
 
-// keyBarReserve is how many lines keyBar() adds below the frame this
-// function caps (a blank line plus the bar itself) — capFooter reserves
-// this much room so its own cut leaves the key bar standing rather than
-// handing it to frame()'s blunt final truncation to lose instead.
-const keyBarReserve = 2
-
 // capFooter enforces FR-022: the footer (everything from footerStart on)
 // never draws more than FooterCapPercent of the viewport's rows. When it
 // overflows, ONE movable window plus ONE track replaces the old destructive
@@ -729,7 +779,7 @@ func (b *builder) capFooter(footerStart int) {
 	// spent part of it: without this, the cap could claim more room than is
 	// actually left, and the key bar drawn after View returns would be the
 	// thing frame()'s own final truncation silently drops instead.
-	if remaining := b.vp.Rows - footerStart - keyBarReserve; remaining < budget {
+	if remaining := b.vp.Rows - footerStart - b.tailReserve; remaining < budget {
 		budget = remaining
 	}
 	if budget < 0 {

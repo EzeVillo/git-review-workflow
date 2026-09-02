@@ -62,10 +62,13 @@ func ResolveKey(key string, m Model) Intent {
 	// Cursor keys (n/p) only resolve inside a situation that actually has a
 	// review cursor — pressing them anywhere else (finish-conflict included,
 	// User Story 3 scenario 4) must not silently invoke next/prev.
-	if action, ok := domain.CursorActionFor(key); ok && hasReviewCursor(m.Panel) {
+	if action, ok := domain.CursorActionFor(key); ok && !m.Panel.Busy && hasReviewCursor(m.Panel) {
 		return Intent{Kind: IntentCursorAction, Action: action}
 	}
 	if action, ok := domain.BoundActionFor(key); ok {
+		if m.Panel.Busy && action != "refresh" {
+			return Intent{Kind: IntentNone}
+		}
 		return Intent{Kind: IntentBoundAction, Action: action}
 	}
 	if toggle, ok := domain.ToggleFor(key); ok {
@@ -132,7 +135,7 @@ func KeyBarFor(m domain.PanelModel) []KeyBarItem {
 			KeyBarItem{Key: globalKey("activate_focused"), Label: "select"},
 		)
 	}
-	if hasReviewCursor(m) {
+	if !m.Busy && hasReviewCursor(m) {
 		bar = append(bar,
 			KeyBarItem{Key: domain.KeymapCursor[0].Keys[0], Label: "next"},
 			KeyBarItem{Key: domain.KeymapCursor[1].Keys[0], Label: "prev"},
@@ -143,6 +146,9 @@ func KeyBarFor(m domain.PanelModel) []KeyBarItem {
 		case "refresh":
 			bar = append(bar, KeyBarItem{Key: entry.Keys[0], Label: "refresh"})
 		case "finishReview":
+			if m.Busy {
+				continue
+			}
 			// requires_not_readonly in the canonical: a read-only compare
 			// review has nothing to finish (finishReview.ts's own defensive
 			// check has the same shape).
@@ -150,10 +156,16 @@ func KeyBarFor(m domain.PanelModel) []KeyBarItem {
 				bar = append(bar, KeyBarItem{Key: entry.Keys[0], Label: "finish"})
 			}
 		case "saveReview":
+			if m.Busy {
+				continue
+			}
 			if m.Situation == domain.SituationReview {
 				bar = append(bar, KeyBarItem{Key: entry.Keys[0], Label: "save"})
 			}
 		case "abortReview":
+			if m.Busy {
+				continue
+			}
 			if m.Situation == domain.SituationReview || m.Situation == domain.SituationFinishConflict {
 				bar = append(bar, KeyBarItem{Key: entry.Keys[0], Label: "cancel"})
 			}

@@ -120,3 +120,23 @@ func TestMouseToggleResolves(t *testing.T) {
 		t.Fatalf("m = %+v, want IntentToggle/mouse_reporting", intent)
 	}
 }
+
+func TestBusyPanelDisablesBodyControlsAndCursorKeys(t *testing.T) {
+	panel := domain.PanelModel{
+		Situation: domain.SituationReview,
+		Mode:      domain.ModeWalk,
+		WhyState:  domain.WhyPresent,
+		Busy:      true,
+	}
+	for _, c := range ControlsFor(panel) {
+		if c.Enabled {
+			t.Fatalf("%s stayed enabled while busy", c.ID)
+		}
+	}
+	if got := ResolveKey("n", Model{Panel: panel}); got.Kind != IntentNone {
+		t.Fatalf("n resolved while busy: %+v", got)
+	}
+	if got := ResolveKey("r", Model{Panel: panel}); got.Kind != IntentBoundAction || got.Action != "refresh" {
+		t.Fatalf("refresh must remain available while busy: %+v", got)
+	}
+}

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -159,6 +160,34 @@ func TestIconsRenderAtExactlyOneCellWide(t *testing.T) {
 		}
 		if !domain.IsASCIIGlyph(icon.ASCII) {
 			t.Errorf("icon %q ASCII glyph %q is not a plain printable ASCII character", name, icon.ASCII)
+		}
+	}
+}
+
+func TestFixedTailKeepsFailureAndKeyBarVisibleBelowLongInventory(t *testing.T) {
+	var rows []string
+	for i := 0; i < 12; i++ {
+		rows = append(rows, domain.FooterField(
+			fmt.Sprintf("review-saved/feature-%02d", i), "1", "0", "0", "1", "walk . 1/3",
+		))
+	}
+	panel := domain.PanelModel{
+		Situation:     domain.SituationNoReview,
+		HasReviews:    true,
+		InventoryRows: strings.Join(rows, "\n"),
+		StatusLine:    "error: you have local changes; commit or stash them first",
+		MouseEnabled:  true,
+	}
+	for _, vp := range []Viewport{{Cols: 80, Rows: 24}, {Cols: 120, Rows: 40}} {
+		frame, _ := View(panel, vp)
+		if !strings.Contains(frame, panel.StatusLine) {
+			t.Fatalf("%dx%d clipped the failure:\n%s", vp.Cols, vp.Rows, frame)
+		}
+		if !strings.Contains(frame, "q:quit") {
+			t.Fatalf("%dx%d clipped the key bar:\n%s", vp.Cols, vp.Rows, frame)
+		}
+		if lines := strings.Count(frame, "\n") + 1; lines > vp.Rows {
+			t.Fatalf("%dx%d rendered %d rows", vp.Cols, vp.Rows, lines)
 		}
 	}
 }

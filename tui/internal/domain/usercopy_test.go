@@ -71,3 +71,26 @@ func TestNoSingleRootTalksAboutARepositoryNotAWorkspace(t *testing.T) {
 		t.Error("no_single_root.tui should name the actual fix: run from inside a git repository")
 	}
 }
+
+func TestProgressTextNamesTheOperationWithoutExposingArgv(t *testing.T) {
+	cases := []struct {
+		action string
+		params ActionParams
+		want   string
+	}{
+		{"startReview", ActionParams{Intent: ReviewIntent{Branch: "feature/x"}}, "Starting the review of feature/x…"},
+		{"continueReview", ActionParams{Source: "feature/x"}, "Continuing the review of feature/x…"},
+		{"createGuide", ActionParams{}, "Creating the authoring guide…"},
+	}
+	for _, tc := range cases {
+		if got := ProgressText(tc.action, tc.params); got != tc.want {
+			t.Errorf("ProgressText(%q) = %q, want %q", tc.action, got, tc.want)
+		}
+	}
+}
+
+func TestGuideCreatedNamesTheReportedPath(t *testing.T) {
+	if got := GuideCreated("C:/repo/.review/walkthrough-guide.md"); got != "Created C:/repo/.review/walkthrough-guide.md." {
+		t.Fatalf("GuideCreated = %q", got)
+	}
+}

@@ -51,6 +51,9 @@ type Model struct {
 	statusLine           string
 	pendingFinish        *pendingFinishOutcome
 	preferredStartSource string
+	activityGeneration   int
+	activity             activityState
+	progressOverlay      *ProgressOverlay
 	// onAcceptedRead is the composition root's watcher boundary. Update
 	// invokes it only after the generation guard accepts a read; callers
 	// must keep it to an in-memory enqueue so filesystem work stays outside
@@ -238,6 +241,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.scheduleRead()
 
+	case activityVisibleMsg:
+		if m.activity.active && msg.generation == m.activity.generation {
+			m.activity.visible = true
+		}
+		return m, nil
+
 	case readDoneMsg:
 		if msg.generation != m.readGeneration {
 			return m, nil
@@ -342,13 +351,16 @@ func (m Model) View() string {
 	if m.textOverlay != nil {
 		return m.textOverlay.Render(m.Viewport)
 	}
-	frame, _, _ := viewWithState(m.Panel, m.Viewport, m.presentationState())
+	if m.progressOverlay != nil {
+		return m.progressOverlay.Render(m.Viewport)
+	}
+	frame, _, _ := viewWithState(m.presentationPanel(), m.Viewport, m.presentationState())
 	return frame
 }
 
 func (m Model) presentationState() renderState {
 	state := renderState{hover: m.hover, footerOffset: m.footerOffset}
-	controls := ControlsFor(m.Panel)
+	controls := ControlsFor(m.presentationPanel())
 	if len(controls) == 0 || m.FocusIndex < 0 || m.FocusIndex >= len(controls) {
 		return state
 	}
@@ -366,7 +378,7 @@ func (m Model) keepFocusedControlVisible(direction int) Model {
 		return m
 	}
 	for attempt := 0; attempt < 512; attempt++ {
-		_, hm, metrics := viewWithState(m.Panel, m.Viewport, state)
+		_, hm, metrics := viewWithState(m.presentationPanel(), m.Viewport, state)
 		m.footerOffset = metrics.footerOffset
 		if _, ok := hm.Rect(state.focus.id, state.focus.variant); ok {
 			return m
@@ -456,7 +468,8 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if !m.Panel.MouseEnabled {
 		return m, nil
 	}
-	_, hm, metrics := viewWithState(m.Panel, m.Viewport, m.presentationState())
+	panel := m.presentationPanel()
+	_, hm, metrics := viewWithState(panel, m.Viewport, m.presentationState())
 	m.footerOffset = metrics.footerOffset
 	if msg.Button == tea.MouseButtonWheelDown {
 		m.footerOffset += 3
@@ -490,7 +503,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.hover = &controlTarget{id: id, variant: variant}
-	for i, c := range ControlsFor(m.Panel) {
+	for i, c := range ControlsFor(panel) {
 		if c.ID != id || c.Variant != variant {
 			continue
 		}

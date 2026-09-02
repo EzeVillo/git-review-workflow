@@ -1,5 +1,7 @@
 package domain
 
+import "fmt"
+
 // This file carries EVERY string this client shows a person: the copy
 // shared with the other three clients (contracts/client-product-
 // surface.yaml `strings:`), this client's own two situational strings
@@ -69,6 +71,59 @@ const NoSingleRoot = "Run git review ui from inside a git repository. A terminal
 // window to reload in a terminal. This names the next step that actually
 // exists in a pane instead.
 const AfterInstall = "Press r to refresh, or focus this pane again — the panel does not poll."
+
+const ReadOptionsProgress = "Reading the available review options…"
+
+func GuideCreated(path string) string { return fmt.Sprintf("Created %s.", path) }
+
+func ProgressText(action string, p ActionParams) string {
+	switch action {
+	case "startReview", "startFromDraft":
+		return fmt.Sprintf("Starting the review of %s…", p.Intent.Branch)
+	case "continueReview":
+		return fmt.Sprintf("Continuing the review of %s…", p.Source)
+	case "abortReview":
+		return fmt.Sprintf("Cancelling the review of %s…", p.Source)
+	case "saveReview":
+		return fmt.Sprintf("Saving the review of %s for later…", p.Source)
+	case "finishReview":
+		return fmt.Sprintf("Finishing the review of %s…", p.Source)
+	case "undoFinish":
+		if p.Force {
+			return "Force-undoing the finish…"
+		}
+		return "Undoing the finish…"
+	case "resumeFinish":
+		return "Resuming the finish…"
+	case "createGuide":
+		return "Creating the authoring guide…"
+	case "discardGuide":
+		return "Discarding your authoring guide…"
+	case "discardDraft":
+		return fmt.Sprintf("Discarding the reading order for %s…", p.Source)
+	case "compareReview":
+		return fmt.Sprintf("Comparing %s..%s…", p.CompareLower, p.CompareUpper)
+	case "walkthroughInit":
+		if p.WalkthroughForce {
+			return "Overwriting walkthrough…"
+		}
+		return "Initializing walkthrough…"
+	case "walkthroughBuild":
+		return "Building walkthrough…"
+	case "next":
+		return "Moving to the next entry…"
+	case "prev":
+		return "Moving to the previous entry…"
+	case "setBase":
+		return "Changing the base branch…"
+	case "setRemote":
+		return "Changing the remote…"
+	case "cleanReview", "discardInventory", "discardFixes", "discardAllFixes":
+		return "Cleaning review leftovers…"
+	default:
+		return "Working…"
+	}
+}
 
 // --- support ----------------------------------------------------------------
 

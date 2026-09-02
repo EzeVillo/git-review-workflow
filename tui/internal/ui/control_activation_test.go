@@ -207,6 +207,28 @@ func TestOpenReportedFileControlsDelegateToTheConfiguredEditor(t *testing.T) {
 	}
 }
 
+func TestOpenWithoutEditorReportsTheFailureInTheCurrentFrame(t *testing.T) {
+	t.Setenv("EDITOR", "")
+	m := Model{
+		Viewport: Viewport{Cols: 80, Rows: 24},
+		Panel: domain.PanelModel{
+			Situation:         domain.SituationNoReview,
+			HasWalkthroughRow: true,
+			WalkthroughState:  domain.WalkthroughInSync,
+		},
+		lastRead: host.ReadResult{HasConfig: true, Config: domain.ConfigPorcelainResult{
+			Walkthrough: &domain.WalkthroughRecord{Path: "C:/repo/.review/walkthrough.md", State: domain.WalkthroughInSync},
+		}},
+	}
+	after, cmd := m.activateControl("openWalkthrough", "")
+	if cmd != nil {
+		t.Fatal("missing editor must not dispatch a child")
+	}
+	if !strings.Contains(after.View(), "No editor is configured: set $EDITOR and try again.") {
+		t.Fatalf("missing-editor feedback is not visible:\n%s", after.View())
+	}
+}
+
 func TestCopyWalkthroughPromptWritesTheDocumentedPointerWithTheHonestAcknowledgement(t *testing.T) {
 	var wire string
 	restore := host.SetOSC52WriterForTest(func(s string) { wire = s })

@@ -27,9 +27,10 @@ import (
 // set. action still travels for genericFailureText and mutationDoneMsg's own
 // bookkeeping either way.
 type mutationRequest struct {
-	action string
-	params domain.ActionParams
-	argv   *domain.Argv
+	action          string
+	params          domain.ActionParams
+	argv            *domain.Argv
+	successOpenPath string
 }
 
 // silenceWindowMsg is the timer contracts/refresh.md's post-mutation grace
@@ -53,7 +54,7 @@ func silenceWindowCmd(gen int) tea.Cmd {
 func mutationCmd(req mutationRequest, argv domain.Argv, activityGeneration int) tea.Cmd {
 	return func() tea.Msg {
 		result := host.InvokeReview(context.Background(), argv.Verb, argv.Args)
-		return mutationDoneMsg{action: req.action, params: req.params, result: result, activityGeneration: activityGeneration}
+		return mutationDoneMsg{action: req.action, params: req.params, result: result, activityGeneration: activityGeneration, successOpenPath: req.successOpenPath}
 	}
 }
 
@@ -204,6 +205,7 @@ type mutationDoneMsg struct {
 	params             domain.ActionParams
 	result             host.Result
 	activityGeneration int
+	successOpenPath    string
 }
 
 // handleMutationDone is the mutation cycle's own end: the lock's End()
@@ -237,6 +239,9 @@ func (m Model) handleMutationDone(msg mutationDoneMsg) (Model, tea.Cmd) {
 		m.statusLine = failureMessage(msg.action, msg.result)
 	} else {
 		m.statusLine = ""
+		if msg.successOpenPath != "" {
+			m.pendingOpenPath = msg.successOpenPath
+		}
 		if msg.action == "finishReview" {
 			outcome := pendingFinishOutcome{source: msg.params.Source, onto: msg.params.OntoSource}
 			m.pendingFinish = &outcome
@@ -651,21 +656,35 @@ func (m Model) beginDiscardGuide(variant string) (Model, tea.Cmd) {
 // ("team"/"own") — not confirms: true in the canonical (RequiresConfirmation
 // says so), so this goes straight to beginMutation, no overlay at all.
 func (m Model) beginCreateGuide(variant string) (Model, tea.Cmd) {
-	var exists bool
+	req, ok := createGuideRequest(m.Panel, variant)
+	if !ok {
+		return m, nil
+	}
+	return m.beginMutation(req, currentStateToken(m.Panel))
+}
+
+func createGuideRequest(panel domain.PanelModel, variant string) (mutationRequest, bool) {
+	var path string
+	var team bool
 	switch variant {
 	case "team":
-		exists = m.Panel.TeamGuideState != domain.GuideAbsent
+		if panel.TeamGuideState != domain.GuideAbsent {
+			return mutationRequest{}, false
+		}
+		path, team = panel.TeamGuideRow, true
 	case "own":
-		exists = m.Panel.OwnGuideState != domain.GuideAbsent
+		if panel.OwnGuideState != domain.GuideAbsent {
+			return mutationRequest{}, false
+		}
+		path = panel.OwnGuideRow
 	default:
-		return m, nil
+		return mutationRequest{}, false
 	}
-	if exists {
-		return m, nil
-	}
-	argv := domain.Argv{Verb: "walkthrough", Args: domain.CreateGuideArgs(variant == "team")}
-	req := mutationRequest{action: "createGuide", argv: &argv}
-	return m.beginMutation(req, currentStateToken(m.Panel))
+	argv := domain.Argv{Verb: "walkthrough", Args: domain.CreateGuideArgs(team)}
+	return mutationRequest{
+		action: "createGuide", params: domain.ActionParams{Team: team}, argv: &argv,
+		successOpenPath: path,
+	}, true
 }
 
 // beginDiscardFixes deletes ONE review-fixes/* branch (`clean --fixes-only
@@ -764,6 +783,21 @@ func (m Model) beginWalkthroughInit() (Model, tea.Cmd) {
 // mean anything went wrong, and there is no stderr to read anyway (the
 // child owned the terminal directly, nothing was captured).
 type execDoneMsg struct{ err error }
+
+type createdGuideOpenMsg struct {
+	path   string
+	cmd    *exec.Cmd
+	reason string
+	ok     bool
+}
+
+func createdGuideOpenCmd(path string) tea.Cmd {
+	return func() tea.Msg {
+		dir, _ := os.Getwd()
+		cmd, reason, ok := host.OpenInEditorCmd(path, dir)
+		return createdGuideOpenMsg{path: path, cmd: cmd, reason: reason, ok: ok}
+	}
+}
 
 func execCmd(cmd *exec.Cmd) tea.Cmd {
 	return tea.ExecProcess(cmd, func(err error) tea.Msg { return execDoneMsg{err: err} })

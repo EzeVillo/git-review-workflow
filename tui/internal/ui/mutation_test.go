@@ -556,6 +556,48 @@ func TestBeginCreateGuideRunsOnlyWhenAbsentAndNeverConfirms(t *testing.T) {
 	}
 }
 
+func TestCreateGuideRequestCarriesTheReportedPathToOpenAfterRefresh(t *testing.T) {
+	panel := domain.PanelModel{
+		HasGuideRows:   true,
+		TeamGuideState: domain.GuideAbsent,
+		TeamGuideRow:   "C:/repo/.review/walkthrough-guide.md",
+		OwnGuideState:  domain.GuideAbsent,
+		OwnGuideRow:    "C:/gitdir/review-walkthrough-guide.md",
+	}
+	for _, tc := range []struct{ variant, want string }{
+		{"team", panel.TeamGuideRow},
+		{"own", panel.OwnGuideRow},
+	} {
+		req, ok := createGuideRequest(panel, tc.variant)
+		if !ok || req.successOpenPath != tc.want {
+			t.Fatalf("createGuideRequest(%q) path = %q, %v; want %q", tc.variant, req.successOpenPath, ok, tc.want)
+		}
+	}
+}
+
+func TestCreatedGuideWithoutEditorIsAcknowledgedAfterAcceptedRead(t *testing.T) {
+	t.Setenv("EDITOR", "")
+	path := "C:/repo/.review/walkthrough-guide.md"
+	m := Model{
+		Viewport:        Viewport{Cols: 80, Rows: 24},
+		Panel:           domain.PanelModel{Situation: domain.SituationNoReview},
+		readGeneration:  1,
+		pendingOpenPath: path,
+	}
+	updated, cmd := m.Update(readDoneMsg{generation: 1, result: host.ReadResult{Situation: domain.SituationNoReview}})
+	if cmd == nil {
+		t.Fatal("accepted read must resolve the editor outside Update")
+	}
+	resolved, child := updated.(Model).Update(cmd())
+	after := resolved.(Model)
+	if child != nil {
+		t.Fatal("missing editor must not dispatch a child after guide creation")
+	}
+	if after.pendingOpenPath != "" || !strings.Contains(after.View(), domain.GuideCreated(path)) {
+		t.Fatalf("created-guide acknowledgement is not visible:\n%s", after.View())
+	}
+}
+
 func TestBeginDiscardFixesSkipsTheCurrentBranch(t *testing.T) {
 	m := Model{Panel: domain.PanelModel{
 		FixesRows: domain.FooterField("review-fixes/old-one", "merged", "0", "0") + "\n" +

@@ -50,6 +50,7 @@ type Model struct {
 	lastRead             host.ReadResult
 	statusLine           string
 	pendingFinish        *pendingFinishOutcome
+	pendingOpenPath      string
 	preferredStartSource string
 	activityGeneration   int
 	activity             activityState
@@ -268,10 +269,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.pendingFinish = nil
 		}
+		var openCmd tea.Cmd
+		if m.pendingOpenPath != "" {
+			path := m.pendingOpenPath
+			m.pendingOpenPath = ""
+			openCmd = createdGuideOpenCmd(path)
+		}
 		if m.FocusIndex >= len(ControlsFor(m.Panel)) {
 			m.FocusIndex = 0
 		}
-		return m, nil
+		return m, openCmd
 
 	case mutationDoneMsg:
 		return m.handleMutationDone(msg)
@@ -293,6 +300,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// mean anything failed -- and there is no stderr to show anyway,
 		// since the child owned the terminal directly.
 		return m.scheduleRead()
+
+	case createdGuideOpenMsg:
+		if msg.ok {
+			return m, execCmd(msg.cmd)
+		}
+		m.statusLine = domain.GuideCreated(msg.path)
+		m.Panel.StatusLine = m.statusLine
+		return m, nil
 
 	case textActionDoneMsg:
 		m.textOverlay = &TextOverlay{Title: msg.title, Body: textOverlayBody(msg.title, msg.result)}

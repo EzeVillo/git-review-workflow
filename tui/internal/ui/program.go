@@ -195,10 +195,15 @@ func pollFloorTickCmd(interval time.Duration, gen int) tea.Cmd {
 func (m Model) scheduleRead() (Model, tea.Cmd) {
 	m.pollGen++
 	m.readGeneration++
+	var readWork tea.Cmd
 	if m.pollFloor <= 0 {
-		return m, readCmd(m.readGeneration)
+		readWork = readCmd(m.readGeneration)
+	} else {
+		readWork = tea.Batch(readCmd(m.readGeneration), pollFloorTickCmd(m.pollFloor, m.pollGen))
 	}
-	return m, tea.Batch(readCmd(m.readGeneration), pollFloorTickCmd(m.pollFloor, m.pollGen))
+	var activityCmd tea.Cmd
+	m, activityCmd = m.startActivity(activityReading, domain.WaitingText, true)
+	return m, tea.Batch(readWork, activityCmd)
 }
 
 // Update never calls into internal/host itself — every branch either
@@ -251,6 +256,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case readDoneMsg:
 		if msg.generation != m.readGeneration {
 			return m, nil
+		}
+		if m.activity.active && m.activity.phase == activityReading {
+			m = m.clearActivity(m.activity.generation)
 		}
 		m.lastRead = msg.result
 		if m.onAcceptedRead != nil {

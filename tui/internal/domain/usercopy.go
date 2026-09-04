@@ -198,7 +198,7 @@ const (
 
 const (
 	FinishPendingLine1 = "Your edits are on {destination}, staged and ready to commit."
-	FinishPendingLine2 = "Commit and push them from Source Control. Until you clean up, this is still undoable."
+	FinishPendingLine2 = "Commit and push them from Source Control. You can still undo this finish."
 
 	FinishConflictBanner = "This finish stopped at a conflict. Resolve the markers, then continue — or undo it to go back to editing."
 
@@ -303,8 +303,9 @@ const (
 	DiscardExtractedName  = "Discard the extracted edits"
 	DiscardAllFixesLabel  = "Discard all"
 	CompareRevisionsLabel = "Compare revisions"
-	DoneCleanUpLabel      = "Done, clean up"
-	UndoLabel             = "Undo"
+	DoneCleanUpLabel      = "Keep edits & remove Undo"
+	UndoLabel             = "Undo Finish"
+	UndoConflictLabel     = "Undo"
 	HowToFixItLabel       = "How to fix it"
 	StarOnGitHubLabel     = "Star on GitHub"
 	ReportABugLabel       = "Report a bug"
@@ -504,16 +505,16 @@ const (
 	DiscardSavedReviewConfirmTitle  = "Delete the paused review of {source}?"
 	DiscardSavedReviewConfirmDetail = "This throws away the edits you had saved with it. It cannot be undone."
 
-	// CleanReviewConfirmTitle/Detail: the finish-pending banner's "Done,
-	// clean up" (`clean --keep-fixes <source>`). What is KEPT goes first —
+	// CleanReviewConfirmTitle/Detail: the finish-pending banner's "Keep
+	// edits & remove Undo" (`clean --keep-fixes <source>`). What is KEPT goes first —
 	// this dialog fires from the button that closes the whole cycle, and
 	// the one thing that stops a reviewer there is whether clean takes
 	// their edits with it. It does not, and saying so before naming what
 	// IS lost is the difference between reading the banner and clicking
 	// through it.
-	CleanReviewConfirmTitle  = "Done with the review of {source}?"
+	CleanReviewConfirmTitle  = "Keep your edits & remove Undo?"
 	CleanReviewConfirmDetail = "Your edits stay on {destination} — commit and push them from Source Control. What goes away is being able to undo this finish."
-	DoneLabel                = "Done"
+	DoneLabel                = "Keep edits & remove Undo"
 
 	DiscardFixesConfirmTitle = "Delete the edits you extracted from {source}?"
 

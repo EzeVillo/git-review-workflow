@@ -979,7 +979,7 @@ func renderFinishPending(b *builder, m domain.PanelModel) {
 
 func renderFinishConflict(b *builder, m domain.PanelModel) {
 	b.text(domain.FinishConflictBanner)
-	b.button("undoFinish", "", domain.UndoLabel, b.st.secondary, true)
+	b.button("undoFinish", "", domain.UndoConflictLabel, b.st.secondary, true)
 	b.button("resumeFinish", "", domain.ContinueLabel, b.st.secondary, true)
 	b.blank()
 	b.heading(identityLine(m))

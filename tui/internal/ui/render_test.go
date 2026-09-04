@@ -25,6 +25,37 @@ func TestFocusMovementChangesRenderedControl(t *testing.T) {
 	}
 }
 
+// The finish-pending frame must tell reviewers that they can commit and push
+// now while keeping the remaining finish cleanup and undo choices explicit.
+func TestFinishPendingRendersClarifiedFinishActions(t *testing.T) {
+	m := Model{
+		Panel:    fixtureFor(domain.LayoutFinishPending),
+		Viewport: Viewport{Cols: 80, Rows: 24, Color: false},
+	}
+	rendered := m.View()
+	for _, want := range []string{
+		"Commit and push them from Source Control. You can still undo this finish.",
+		"[ Keep edits & remove Undo ]",
+		"[ Undo Finish ]",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("finish-pending frame did not render %q:\n%s", want, rendered)
+		}
+	}
+}
+
+// Finish-conflict keeps its compact recovery actions; the clarified pending
+// finish action is not shared with this separate recovery screen.
+func TestFinishConflictKeepsCompactUndoAction(t *testing.T) {
+	m := Model{
+		Panel:    fixtureFor(domain.LayoutFinishConflict),
+		Viewport: Viewport{Cols: 80, Rows: 24, Color: false},
+	}
+	if rendered := m.View(); !strings.Contains(rendered, "[ Undo ]") {
+		t.Fatalf("finish-conflict frame did not retain its compact Undo action:\n%s", rendered)
+	}
+}
+
 // Breaking focus-following scroll must make the last visible action
 // unreachable again: j/k owns both focus and the one footer viewport.
 func TestFooterFocusScrollsIntoView(t *testing.T) {

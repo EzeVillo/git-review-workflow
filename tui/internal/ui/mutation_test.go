@@ -233,18 +233,6 @@ func TestBeginFinishRefusesReadonlyOrOutsideReview(t *testing.T) {
 	}
 }
 
-func TestFinishPendingBannerNamesNoOtherCommand(t *testing.T) {
-	// The old banner named `finish --abort` and `clean --keep-fixes` in
-	// prose, duplicating what its own two controls already say (CLAUDE.md
-	// § "El próximo paso se dice sólo si está FUERA del panel"). Its
-	// replacement copy must not repeat either.
-	for _, forbidden := range []string{"finish --abort", "clean --keep-fixes", "--keep-fixes"} {
-		if strings.Contains(domain.FinishPendingLine1, forbidden) || strings.Contains(domain.FinishPendingLine2, forbidden) {
-			t.Errorf("finish-pending banner copy mentions %q, which its own controls already say", forbidden)
-		}
-	}
-}
-
 // --- T070: undoFinish's --force retry, offered ONLY after the CLI's own
 // stderr from a plain attempt names it, and never as the first choice.
 
@@ -348,11 +336,17 @@ func TestBeginCleanReviewOpensConfirmWithKeepFixes(t *testing.T) {
 	if hk.Kind != domain.CleanKeepFixes || hk.Source != "feat-x" {
 		t.Fatalf("Housekeeping = %+v, want {CleanKeepFixes feat-x}", hk)
 	}
-	if !strings.Contains(m2.confirm.Title, "feat-x") {
-		t.Errorf("title %q should name the source branch", m2.confirm.Title)
-	}
 	if !strings.Contains(m2.confirm.Detail, "review-fixes/feat-x") {
 		t.Errorf("detail %q should name the finish destination", m2.confirm.Detail)
+	}
+	rendered := m2.View()
+	for _, want := range []string{
+		"Keep your edits & remove Undo?",
+		"[ Keep edits & remove Undo ]  (y / enter)",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("clean-review confirmation did not render %q:\n%s", want, rendered)
+		}
 	}
 }
 

@@ -1,7 +1,7 @@
 Your edits are on review-fixes/feat-x, staged and ready to commit.
-Commit and push them from Source Control. Until you clean up, this is still undoable.
+Commit and push them from Source Control. You can still undo this finish.
 
-[ Done, clean up ]
-[ Undo ]
+[ Keep edits & remove Undo ]
+[ Undo Finish ]
 
 j:up  k:down  enter:select  r:refresh  ::actions  m:mouse on  q:quit

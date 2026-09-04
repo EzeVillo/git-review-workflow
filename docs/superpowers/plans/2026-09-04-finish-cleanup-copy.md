@@ -1,35 +1,35 @@
-# Finish Cleanup Copy Implementation Plan
+# Plan de implementación del texto de limpieza al finalizar
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Para agentes:** SUBHABILIDAD OBLIGATORIA: usa superpowers:subagent-driven-development (recomendado) o superpowers:executing-plans para implementar este plan tarea por tarea. Los pasos usan la sintaxis de casillas (`- [ ]`) para el seguimiento.
 
-**Goal:** Make every finished-review surface plainly state that the reviewer keeps their edits while removing the option to undo.
+**Objetivo:** Hacer que cada superficie de una revisión finalizada indique claramente que la persona revisora conserva sus ediciones mientras se elimina la opción de deshacer.
 
-**Architecture:** The finish-pending state, `clean --keep-fixes` invocation, controls, and state transitions remain intact. Each client changes only its visible banner, control, and confirmation copy; client-local unit tests assert that exact contract. The TUI regenerates its deterministic finish-pending golden frames.
+**Arquitectura:** El estado de finalización pendiente, la invocación `clean --keep-fixes`, los controles y las transiciones de estado permanecen intactos. Cada cliente cambia únicamente su banner visible, sus controles y su texto de confirmación; las pruebas unitarias locales de cada cliente comprueban ese contrato exacto. La TUI regenera sus marcos dorados deterministas de finalización pendiente.
 
-**Tech Stack:** TypeScript/Mocha, C#/.NET/xUnit, Kotlin/JUnit/Gradle, Go/Bubble Tea.
+**Pila tecnológica:** TypeScript/Mocha, C#/.NET/xUnit, Kotlin/JUnit/Gradle, Go/Bubble Tea.
 
-## Global Constraints
+## Restricciones globales
 
-- Banner line 2 is exactly `Commit and push them from Source Control. You can still undo this finish.`
-- Primary action and its confirmation accept button are exactly `Keep edits & remove Undo`.
-- Secondary action is exactly `Undo Finish`.
-- Primary confirmation title is exactly `Keep your edits & remove Undo?`.
-- Primary confirmation detail is exactly `Your edits stay on {destination} — commit and push them from Source Control. What goes away is the option to undo this finish.`
-- Do not expose `review/<source>` or alter command arguments, state transitions, or layout behavior beyond natural text wrapping.
+- La línea 2 del banner es exactamente `Commit and push them from Source Control. You can still undo this finish.`
+- La acción principal y su botón de aceptación de confirmación son exactamente `Keep edits & remove Undo`.
+- La acción secundaria es exactamente `Undo Finish`.
+- El título de confirmación principal es exactamente `Keep your edits & remove Undo?`.
+- El detalle de confirmación principal es exactamente `Your edits stay on {destination} — commit and push them from Source Control. What goes away is the option to undo this finish.`
+- No expongas `review/<source>` ni alteres los argumentos de comandos, las transiciones de estado o el comportamiento del diseño más allá del ajuste natural de líneas.
 
 ---
 
-### Task 1: VS Code
+### Tarea 1: VS Code
 
-**Files:**
-- Modify: `vscode-extension/src/views/panelHtml.ts:1366-1375`
-- Modify: `vscode-extension/src/review/housekeeping.ts:177-191`
-- Test: `vscode-extension/test/unit/panelHtml.spec.ts:544-575`
-- Test: `vscode-extension/test/unit/housekeeping.spec.ts:98-146`
+**Archivos:**
+- Modificar: `vscode-extension/src/views/panelHtml.ts:1366-1375`
+- Modificar: `vscode-extension/src/review/housekeeping.ts:177-191`
+- Prueba: `vscode-extension/test/unit/panelHtml.spec.ts:544-575`
+- Prueba: `vscode-extension/test/unit/housekeeping.spec.ts:98-146`
 
-**Interfaces:** Uses `renderEmptyState` and `confirmCopyFor`; preserves `cleanReview`, `undoFinish`, and `clean-keep-fixes`.
+**Interfaces:** Usa `renderEmptyState` y `confirmCopyFor`; conserva `cleanReview`, `undoFinish` y `clean-keep-fixes`.
 
-- [ ] **Step 1: Write failing tests**
+- [ ] **Paso 1: Escribir pruebas fallidas**
 
 ```ts
 assert.ok(pendingBranch.includes('"Keep edits & remove Undo", "cleanReview"'));
@@ -40,40 +40,40 @@ assert.strictEqual(c.button, "Keep edits & remove Undo");
 assert.ok(c.detail.includes("What goes away is the option to undo this finish."));
 ```
 
-- [ ] **Step 2: Verify RED**
+- [ ] **Paso 2: Verificar RED**
 
-Run: `npm run test:unit -- --grep "finish-pending|clean-keep-fixes"`
+Ejecuta: `npm run test:unit -- --grep "finish-pending|clean-keep-fixes"`
 
-Expected: fails on the existing `Done, clean up`, `Undo`, and old confirmation text.
+Esperado: falla con las etiquetas existentes `Done, clean up`, `Undo` y el texto de confirmación anterior.
 
-- [ ] **Step 3: Implement minimal copy changes**
+- [ ] **Paso 3: Implementar cambios mínimos de texto**
 
-Replace only the banner, control labels, and `clean-keep-fixes` confirmation literals with the global contract.
+Reemplaza únicamente el banner, las etiquetas de los controles y los literales de confirmación de `clean-keep-fixes` por el contrato global.
 
-- [ ] **Step 4: Verify GREEN**
+- [ ] **Paso 4: Verificar GREEN**
 
-Run: `npm run test:unit -- --grep "finish-pending|clean-keep-fixes"`
+Ejecuta: `npm run test:unit -- --grep "finish-pending|clean-keep-fixes"`
 
-Expected: all focused tests pass.
+Esperado: todas las pruebas enfocadas pasan.
 
-- [ ] **Step 5: Commit**
+- [ ] **Paso 5: Hacer commit**
 
 ```bash
 git add vscode-extension/src/views/panelHtml.ts vscode-extension/src/review/housekeeping.ts vscode-extension/test/unit/panelHtml.spec.ts vscode-extension/test/unit/housekeeping.spec.ts
 git commit -m "fix(vscode): clarify finish cleanup"
 ```
 
-### Task 2: Visual Studio
+### Tarea 2: Visual Studio
 
-**Files:**
-- Modify: `visualstudio-extension/src/GitReview.Domain/PanelLayout.cs:700-714`
-- Modify: `visualstudio-extension/src/GitReview.Domain/Housekeeping.cs:126-130`
-- Test: `visualstudio-extension/tests/GitReview.Domain.Tests/PanelLayoutFinishTests.cs:8-35`
-- Test: `visualstudio-extension/tests/GitReview.Domain.Tests/HousekeepingTests.cs:168-183`
+**Archivos:**
+- Modificar: `visualstudio-extension/src/GitReview.Domain/PanelLayout.cs:700-714`
+- Modificar: `visualstudio-extension/src/GitReview.Domain/Housekeeping.cs:126-130`
+- Prueba: `visualstudio-extension/tests/GitReview.Domain.Tests/PanelLayoutFinishTests.cs:8-35`
+- Prueba: `visualstudio-extension/tests/GitReview.Domain.Tests/HousekeepingTests.cs:168-183`
 
-**Interfaces:** Uses `PanelLayoutBuilder.PanelLayout` and `HousekeepingLogic.ConfirmCopyFor`; retains `ControlId.CleanReview`, `ControlId.UndoFinish`, and `--keep-fixes` argv.
+**Interfaces:** Usa `PanelLayoutBuilder.PanelLayout` y `HousekeepingLogic.ConfirmCopyFor`; conserva `ControlId.CleanReview`, `ControlId.UndoFinish` y los argumentos `--keep-fixes`.
 
-- [ ] **Step 1: Write failing tests**
+- [ ] **Paso 1: Escribir pruebas fallidas**
 
 ```csharp
 Assert.Equal("Keep edits & remove Undo", controls[0].Label);
@@ -83,40 +83,40 @@ Assert.Equal("Keep your edits & remove Undo?", separate.Title);
 Assert.Equal("Keep edits & remove Undo", separate.Button);
 ```
 
-- [ ] **Step 2: Verify RED**
+- [ ] **Paso 2: Verificar RED**
+
+Ejecuta: `dotnet test tests/GitReview.Domain.Tests/GitReview.Domain.Tests.csproj --filter "FullyQualifiedName~PanelLayoutFinishTests|FullyQualifiedName~HousekeepingTests" --no-restore`
+
+Esperado: falla con las etiquetas y el texto anteriores.
+
+- [ ] **Paso 3: Implementar cambios mínimos de texto**
+
+Reemplaza únicamente los literales de texto de finalización pendiente y `CleanKeepFixes` por el contrato global.
+
+- [ ] **Paso 4: Verificar GREEN**
 
 Run: `dotnet test tests/GitReview.Domain.Tests/GitReview.Domain.Tests.csproj --filter "FullyQualifiedName~PanelLayoutFinishTests|FullyQualifiedName~HousekeepingTests" --no-restore`
 
-Expected: fails on prior labels and copy.
+Esperado: las pruebas seleccionadas pasan.
 
-- [ ] **Step 3: Implement minimal copy changes**
-
-Replace only the finish-pending and `CleanKeepFixes` string literals with the global contract.
-
-- [ ] **Step 4: Verify GREEN**
-
-Run: `dotnet test tests/GitReview.Domain.Tests/GitReview.Domain.Tests.csproj --filter "FullyQualifiedName~PanelLayoutFinishTests|FullyQualifiedName~HousekeepingTests" --no-restore`
-
-Expected: selected tests pass.
-
-- [ ] **Step 5: Commit**
+- [ ] **Paso 5: Hacer commit**
 
 ```bash
 git add visualstudio-extension/src/GitReview.Domain/PanelLayout.cs visualstudio-extension/src/GitReview.Domain/Housekeeping.cs visualstudio-extension/tests/GitReview.Domain.Tests/PanelLayoutFinishTests.cs visualstudio-extension/tests/GitReview.Domain.Tests/HousekeepingTests.cs
 git commit -m "fix(visualstudio): clarify finish cleanup"
 ```
 
-### Task 3: JetBrains
+### Tarea 3: JetBrains
 
-**Files:**
-- Modify: `jetbrains-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/PanelLayout.kt:700-716`
-- Modify: `jetbrains-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/Housekeeping.kt:114-126`
-- Test: `jetbrains-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/PanelLayoutFinishTest.kt:10-33`
-- Test: `jetbrains-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/HousekeepingTest.kt:158-174`
+**Archivos:**
+- Modificar: `jetbrains-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/PanelLayout.kt:700-716`
+- Modificar: `jetbrains-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/Housekeeping.kt:114-126`
+- Prueba: `jetbrains-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/PanelLayoutFinishTest.kt:10-33`
+- Prueba: `jetbrains-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/HousekeepingTest.kt:158-174`
 
-**Interfaces:** Uses `panelLayout` and `confirmCopyFor`; preserves `CLEAN_REVIEW`, `UNDO_FINISH`, and `CLEAN_KEEP_FIXES`.
+**Interfaces:** Usa `panelLayout` y `confirmCopyFor`; conserva `CLEAN_REVIEW`, `UNDO_FINISH` y `CLEAN_KEEP_FIXES`.
 
-- [ ] **Step 1: Write failing tests**
+- [ ] **Paso 1: Escribir pruebas fallidas**
 
 ```kotlin
 assertEquals("Keep edits & remove Undo", banner.row.controls[0].label)
@@ -126,40 +126,40 @@ assertEquals("Keep your edits & remove Undo?", separate.title)
 assertEquals("Keep edits & remove Undo", separate.button)
 ```
 
-- [ ] **Step 2: Verify RED**
+- [ ] **Paso 2: Verificar RED**
 
-Run: `./gradlew.bat test --tests "com.ezevillo.gitreview.domain.PanelLayoutFinishTest" --tests "com.ezevillo.gitreview.domain.HousekeepingTest"`
+Ejecuta: `./gradlew.bat test --tests "com.ezevillo.gitreview.domain.PanelLayoutFinishTest" --tests "com.ezevillo.gitreview.domain.HousekeepingTest"`
 
-Expected: fails on the current strings.
+Esperado: falla con los textos actuales.
 
-- [ ] **Step 3: Implement minimal copy changes**
+- [ ] **Paso 3: Implementar cambios mínimos de texto**
 
-Change only the finish-pending banner and `CLEAN_KEEP_FIXES` confirmation strings.
+Cambia únicamente el banner de finalización pendiente y los textos de confirmación de `CLEAN_KEEP_FIXES`.
 
-- [ ] **Step 4: Verify GREEN**
+- [ ] **Paso 4: Verificar GREEN**
 
-Run: `./gradlew.bat test --tests "com.ezevillo.gitreview.domain.PanelLayoutFinishTest" --tests "com.ezevillo.gitreview.domain.HousekeepingTest"`
+Ejecuta: `./gradlew.bat test --tests "com.ezevillo.gitreview.domain.PanelLayoutFinishTest" --tests "com.ezevillo.gitreview.domain.HousekeepingTest"`
 
-Expected: selected tests pass.
+Esperado: las pruebas seleccionadas pasan.
 
-- [ ] **Step 5: Commit**
+- [ ] **Paso 5: Hacer commit**
 
 ```bash
 git add jetbrains-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/PanelLayout.kt jetbrains-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/Housekeeping.kt jetbrains-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/PanelLayoutFinishTest.kt jetbrains-plugin/src/test/kotlin/com/ezevillo/gitreview/domain/HousekeepingTest.kt
 git commit -m "fix(jetbrains): clarify finish cleanup"
 ```
 
-### Task 4: TUI
+### Tarea 4: TUI
 
-**Files:**
-- Modify: `tui/internal/domain/usercopy.go:200-201,306-307,514-516`
-- Test: `tui/internal/ui/mutation_test.go:232-247`
-- Test: `tui/internal/ui/render_test.go`
-- Modify: six `tui/testdata/golden/finish-pending-*.txt` files
+**Archivos:**
+- Modificar: `tui/internal/domain/usercopy.go:200-201,306-307,514-516`
+- Prueba: `tui/internal/ui/mutation_test.go:232-247`
+- Prueba: `tui/internal/ui/render_test.go`
+- Modificar: seis archivos `tui/testdata/golden/finish-pending-*.txt`
 
-**Interfaces:** Uses the finish-pending copy constants and `beginCleanReview`; preserves `CleanKeepFixes` and the deterministic golden fixture.
+**Interfaces:** Usa las constantes de texto de finalización pendiente y `beginCleanReview`; conserva `CleanKeepFixes` y el fixture golden determinista.
 
-- [ ] **Step 1: Write failing tests**
+- [ ] **Paso 1: Escribir pruebas fallidas**
 
 ```go
 if domain.FinishPendingLine2 != "Commit and push them from Source Control. You can still undo this finish." { t.Fatal("unexpected finish-pending line") }
@@ -169,13 +169,13 @@ if domain.CleanReviewConfirmTitle != "Keep your edits & remove Undo?" { t.Fatal(
 if domain.DoneLabel != "Keep edits & remove Undo" { t.Fatal("unexpected confirmation label") }
 ```
 
-- [ ] **Step 2: Verify RED**
+- [ ] **Paso 2: Verificar RED**
 
-Run: `go test ./internal/ui -run "TestFinishPending"`
+Ejecuta: `go test ./internal/ui -run "TestFinishPending"`
 
-Expected: the new copy assertions fail.
+Esperado: las nuevas aserciones de texto fallan.
 
-- [ ] **Step 3: Implement copy and regenerate goldens**
+- [ ] **Paso 3: Implementar el texto y regenerar los goldens**
 
 Update the five constants, then run:
 
@@ -183,42 +183,42 @@ Update the five constants, then run:
 go test -tags goldenupdate ./internal/ui -update
 ```
 
-Confirm only the six finish-pending golden files change.
+Confirma que solo cambien los seis archivos golden de finalización pendiente.
 
-- [ ] **Step 4: Verify GREEN**
+- [ ] **Paso 4: Verificar GREEN**
 
-Run: `go test ./internal/ui`
+Ejecuta: `go test ./internal/ui`
 
-Expected: all 68 golden frames and TUI unit tests pass.
+Esperado: pasan los 68 marcos golden y las pruebas unitarias de la TUI.
 
-- [ ] **Step 5: Commit**
+- [ ] **Paso 5: Hacer commit**
 
 ```bash
 git add tui/internal/domain/usercopy.go tui/internal/ui/mutation_test.go tui/internal/ui/render_test.go tui/testdata/golden/finish-pending-80x24.txt tui/testdata/golden/finish-pending-80x24-nocolor.txt tui/testdata/golden/finish-pending-80x24-ascii.txt tui/testdata/golden/finish-pending-120x40.txt tui/testdata/golden/finish-pending-120x40-nocolor.txt tui/testdata/golden/finish-pending-120x40-ascii.txt
 git commit -m "fix(tui): clarify finish cleanup"
 ```
 
-### Task 5: Cross-client verification
+### Tarea 5: Verificación entre clientes
 
-**Files:**
-- Verify: files from Tasks 1-4.
+**Archivos:**
+- Verificar: archivos de las tareas 1-4.
 
-**Interfaces:** Consumes the approved copy contract and each client test suite; proves behavior remains unchanged.
+**Interfaces:** Consume el contrato de texto aprobado y la suite de pruebas de cada cliente; demuestran que el comportamiento permanece sin cambios.
 
-- [ ] **Step 1: Check that new copy has no technical branch detail**
+- [ ] **Paso 1: Comprobar que el texto nuevo no tenga detalles técnicos de ramas**
 
 Run: `rg -n "temporary review branch|temporary undo branch" vscode-extension/src/views/panelHtml.ts vscode-extension/src/review/housekeeping.ts visualstudio-extension/src/GitReview.Domain/PanelLayout.cs visualstudio-extension/src/GitReview.Domain/Housekeeping.cs jetbrains-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/PanelLayout.kt jetbrains-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/Housekeeping.kt tui/internal/domain/usercopy.go`
 
-Expected: no matches.
+Esperado: ninguna coincidencia.
 
-- [ ] **Step 2: Run the targeted client suites**
+- [ ] **Paso 2: Ejecutar las suites de cliente específicas**
 
-Run the green commands from Tasks 1-4.
+Ejecuta los comandos en verde de las tareas 1-4.
 
-Expected: every command exits 0.
+Esperado: cada comando termina con código 0.
 
-- [ ] **Step 3: Inspect the worktree**
+- [ ] **Paso 3: Inspeccionar el worktree**
 
 Run: `git diff --check && git status --short`
 
-Expected: no whitespace errors; only intentional, committed work remains.
+Esperado: ningún error de espacios en blanco; solo quedan cambios intencionales y confirmados.

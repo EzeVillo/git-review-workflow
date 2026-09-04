@@ -174,11 +174,11 @@ public class HousekeepingTests
             new HousekeepingAction(HousekeepingKind.CleanKeepFixes, "feature/x", Onto: false));
         Assert.Equal("Keep your edits & remove Undo?", separate.Title);
         Assert.Equal("Keep edits & remove Undo", separate.Button);
-        Assert.Contains("Your edits stay on review-fixes/feature/x", separate.Detail);
+        Assert.Equal("Your edits stay on review-fixes/feature/x — commit and push them from Source Control. What goes away is the option to undo this finish.", separate.Detail);
 
         var onto = HousekeepingLogic.ConfirmCopyFor(
             new HousekeepingAction(HousekeepingKind.CleanKeepFixes, "feature/x", Onto: true));
-        Assert.Contains("Your edits stay on feature/x", onto.Detail);
+        Assert.Equal("Your edits stay on feature/x — commit and push them from Source Control. What goes away is the option to undo this finish.", onto.Detail);
         Assert.DoesNotContain("review-fixes/feature/x", onto.Detail);
     }
 }

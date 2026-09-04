@@ -1365,12 +1365,12 @@ export function panelHtml(nonce: string): string {
         notice.appendChild(el("p", null,
           "Your edits are on " + destination + ", staged and ready to commit."));
         notice.appendChild(el("p", null,
-          "Commit and push them from Source Control. Until you clean up, this is still undoable."));
+          "Commit and push them from Source Control. You can still undo this finish."));
         const actions = el("div", "row");
-        const clean = button("Done, clean up", "cleanReview", "primary");
+        const clean = button("Keep edits & remove Undo", "cleanReview", "primary");
         clean.disabled = model.busy;
         clean.title = "Delete the review branch; keep your edits";
-        const undo = button("Undo", "undoFinish", null);
+        const undo = button("Undo Finish", "undoFinish", null);
         undo.disabled = model.busy;
         undo.title = "Put the edits back and keep reviewing";
         actions.appendChild(clean);

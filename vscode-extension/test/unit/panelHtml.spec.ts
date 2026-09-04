@@ -558,9 +558,11 @@ describe("panelHtml", () => {
         );
         assert.ok(pendingBranch.includes("undoFinish"));
         assert.ok(
-            pendingBranch.includes('"Done, clean up", "cleanReview"'),
+            pendingBranch.includes('"Keep edits & remove Undo", "cleanReview"'),
             "el que cierra el limbo del undo dice que cierra el ciclo, no solo Clean"
         );
+        assert.ok(pendingBranch.includes('"Undo Finish", "undoFinish"'));
+        assert.ok(pendingBranch.includes("You can still undo this finish."));
         // El copy no nombra --abort ni --keep-fixes: son los dos botones dibujados
         // debajo (ver CLAUDE.md, "La copy de los paneles").
         assert.ok(

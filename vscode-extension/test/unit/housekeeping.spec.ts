@@ -97,7 +97,9 @@ describe("pendingFinishSource", () => {
 
     it("confirm clean-keep-fixes sin onto nombra review-fixes y pide commit/push", () => {
         const c = confirmCopyFor({kind: "clean-keep-fixes", source: "feature/shipping"});
-        assert.strictEqual(c.button, "Done");
+        assert.strictEqual(c.title, "Keep your edits & remove Undo?");
+        assert.strictEqual(c.button, "Keep edits & remove Undo");
+        assert.ok(c.detail.includes("What goes away is the option to undo this finish."));
         assert.ok(
             c.detail.includes("review-fixes/feature/shipping"),
             "sin onto las edits staged viven en review-fixes"
@@ -129,7 +131,9 @@ describe("pendingFinishSource", () => {
             source: "feature/shipping",
             onto: true,
         });
-        assert.strictEqual(c.button, "Done");
+        assert.strictEqual(c.title, "Keep your edits & remove Undo?");
+        assert.strictEqual(c.button, "Keep edits & remove Undo");
+        assert.ok(c.detail.includes("What goes away is the option to undo this finish."));
         assert.ok(
             c.detail.includes("feature/shipping"),
             "con onto las edits staged viven en la rama del PR"

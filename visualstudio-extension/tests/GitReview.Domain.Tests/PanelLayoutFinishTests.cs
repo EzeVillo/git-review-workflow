@@ -18,9 +18,9 @@ public class PanelLayoutFinishTests
         Assert.Equal(Emphasis.Primary, controls[0].Emphasis);
         // "Clean" solo no decia que limpia -- podia leerse como que se lleva las
         // ediciones. Ahora dice ademas cual de los dos cierra el ciclo.
-        Assert.Equal("Done, clean up", controls[0].Label);
+        Assert.Equal("Keep edits & remove Undo", controls[0].Label);
         Assert.Equal(ControlId.UndoFinish, controls[1].Id);
-        Assert.Equal("Undo", controls[1].Label);
+        Assert.Equal("Undo Finish", controls[1].Label);
     }
 
     /// <summary>
@@ -61,7 +61,7 @@ public class PanelLayoutFinishTests
         var banner = PanelLayoutBuilder.PanelLayout(PanelFixtures.FinishPending())
             .Blocks.OfType<Block.Banner>().First();
         Assert.Contains("Commit and push them from Source Control", banner.Paragraphs[1]);
-        Assert.Contains("still undoable", banner.Paragraphs[1]);
+        Assert.Contains("You can still undo this finish.", banner.Paragraphs[1]);
         Assert.DoesNotContain("--abort", banner.Paragraphs[1]);
         Assert.DoesNotContain("--keep-fixes", banner.Paragraphs[1]);
     }

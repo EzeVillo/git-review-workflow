@@ -172,6 +172,8 @@ public class HousekeepingTests
     {
         var separate = HousekeepingLogic.ConfirmCopyFor(
             new HousekeepingAction(HousekeepingKind.CleanKeepFixes, "feature/x", Onto: false));
+        Assert.Equal("Keep your edits & remove Undo?", separate.Title);
+        Assert.Equal("Keep edits & remove Undo", separate.Button);
         Assert.Contains("Your edits stay on review-fixes/feature/x", separate.Detail);
 
         var onto = HousekeepingLogic.ConfirmCopyFor(

@@ -124,9 +124,9 @@ public static class HousekeepingLogic
             // que no, y decirla antes de nombrar lo que si se pierde es la
             // diferencia entre leer el cartel y apretar a ciegas.
             HousekeepingKind.CleanKeepFixes => new ConfirmCopy(
-                $"Done with the review of {src}?",
-                $"Your edits stay on {(action.Onto == true ? src : $"review-fixes/{src}")} - commit and push them from Source Control. What goes away is being able to undo this finish.",
-                "Done"),
+                "Keep your edits & remove Undo?",
+                $"Your edits stay on {(action.Onto == true ? src : $"review-fixes/{src}")} — commit and push them from Source Control. What goes away is the option to undo this finish.",
+                "Keep edits & remove Undo"),
             HousekeepingKind.CleanFixesOne => new ConfirmCopy(
                 $"Delete the edits you extracted from {src}?",
                 FixesCostSentence(action.FixesState)

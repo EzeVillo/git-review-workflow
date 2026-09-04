@@ -704,12 +704,12 @@ public static class PanelLayoutBuilder
                 new[]
                 {
                     $"Your edits are on {destination}, staged and ready to commit.",
-                    "Commit and push them from Source Control. Until you clean up, this is still undoable.",
+                    "Commit and push them from Source Control. You can still undo this finish.",
                 },
                 new Block.Row(new[]
                 {
-                    Ctrl(ControlId.CleanReview, "Done, clean up", Emphasis.Primary, enabled),
-                    Ctrl(ControlId.UndoFinish, "Undo", Emphasis.Secondary, enabled),
+                    Ctrl(ControlId.CleanReview, "Keep edits & remove Undo", Emphasis.Primary, enabled),
+                    Ctrl(ControlId.UndoFinish, "Undo Finish", Emphasis.Secondary, enabled),
                 })),
         };
     }

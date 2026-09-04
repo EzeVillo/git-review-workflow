@@ -301,6 +301,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case assistantStepMsg:
 		return m.handleAssistantStep(msg)
 
+	case draftConfigDoneMsg:
+		return m.handleDraftConfigDone(msg)
+
 	case execDoneMsg:
 		return m.handleExecDone(msg)
 

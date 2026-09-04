@@ -32,6 +32,18 @@ type mutationRequest struct {
 	params          domain.ActionParams
 	argv            *domain.Argv
 	successOpenPath string
+	progressText    string
+	// draftStart marks the first half of Validate and start. A green
+	// walkthrough draft --build continues with a read-only config probe;
+	// only that probe may produce the final start request.
+	draftStart *domain.ReviewIntent
+	draftFlow  *draftFlowContinuation
+}
+
+type draftFlowContinuation struct {
+	intent domain.ReviewIntent
+	offers []domain.ReadingOffer
+	update bool
 }
 
 // silenceWindowMsg is the timer contracts/refresh.md's post-mutation grace
@@ -55,7 +67,7 @@ func silenceWindowCmd(gen int) tea.Cmd {
 func mutationCmd(req mutationRequest, argv domain.Argv, activityGeneration int) tea.Cmd {
 	return func() tea.Msg {
 		result := host.InvokeReview(context.Background(), argv.Verb, argv.Args)
-		return mutationDoneMsg{action: req.action, params: req.params, result: result, activityGeneration: activityGeneration, successOpenPath: req.successOpenPath}
+		return mutationDoneMsg{action: req.action, params: req.params, result: result, activityGeneration: activityGeneration, successOpenPath: req.successOpenPath, draftStart: req.draftStart, draftFlow: req.draftFlow}
 	}
 }
 
@@ -103,7 +115,11 @@ func (m Model) beginMutation(req mutationRequest, token domain.StateToken) (Mode
 	}
 	m.statusLine = ""
 	var activityCmd tea.Cmd
-	m, activityCmd = m.startActivity(activityMutation, domain.ProgressText(req.action, req.params), true)
+	progressText := req.progressText
+	if progressText == "" {
+		progressText = domain.ProgressText(req.action, req.params)
+	}
+	m, activityCmd = m.startActivity(activityMutation, progressText, true)
 	return m, tea.Batch(mutationCmd(req, argv, m.activity.generation), activityCmd)
 }
 
@@ -145,6 +161,7 @@ var genericFailureText = map[string]string{
 	"prev":           "Could not move to the previous entry.",
 	"startReview":    "Could not start the review.",
 	"startFromDraft": "Could not start the review.",
+	"draftFlow":      "Could not prepare the reading order.",
 }
 
 func failureMessage(action string, r host.Result) string {
@@ -207,6 +224,20 @@ type mutationDoneMsg struct {
 	result             host.Result
 	activityGeneration int
 	successOpenPath    string
+	draftStart         *domain.ReviewIntent
+	draftFlow          *draftFlowContinuation
+}
+
+type draftConfigDoneMsg struct {
+	intent domain.ReviewIntent
+	result host.Result
+}
+
+func draftConfigCmd(intent domain.ReviewIntent) tea.Cmd {
+	return func() tea.Msg {
+		result := host.InvokeReview(context.Background(), "config", domain.DraftConfigArgs(intent))
+		return draftConfigDoneMsg{intent: intent, result: result}
+	}
 }
 
 // handleMutationDone is the mutation cycle's own end: the lock's End()
@@ -232,6 +263,33 @@ func (m Model) handleMutationDone(msg mutationDoneMsg) (Model, tea.Cmd) {
 	// pending outcome by accident.
 	if msg.action != "finishReview" {
 		m.pendingFinish = nil
+	}
+
+	// A green draft build is only the validation half of startFromDraft.
+	// Release the mutation lock, schedule its guaranteed refresh, then ask the
+	// CLI whether this exact source and range has keys.
+	if msg.draftStart != nil && !mutationFailed(msg.result) {
+		m.statusLine = ""
+		m.progressOverlay = &ProgressOverlay{Text: domain.ReadOptionsProgress}
+		m2, readCmd := m.scheduleRead()
+		return m2, tea.Batch(draftConfigCmd(*msg.draftStart), readCmd, silenceWindowCmd(gen))
+	}
+	if msg.draftFlow != nil {
+		if mutationFailed(msg.result) {
+			m.statusLine = failureMessage("draftFlow", msg.result)
+			overlay := buildLayoutOverlay(msg.draftFlow.intent, msg.draftFlow.offers)
+			overlay.Notice = m.statusLine
+			m.selectOverlay = &overlay
+		} else {
+			m.statusLine = ""
+			if msg.draftFlow.update {
+				if merged, ok := domain.ParseMergedRecord(msg.result.Stdout); ok {
+					m.statusLine = domain.DraftUpdated(merged.Kept, merged.Added, merged.Dropped)
+				}
+			}
+		}
+		m2, readCmd := m.scheduleRead()
+		return m2, tea.Batch(readCmd, silenceWindowCmd(gen))
 	}
 
 	if overlay, ok := undoFinishForceRetry(msg, m.Panel); ok {
@@ -471,15 +529,27 @@ func (m Model) beginCursor(action string) (Model, tea.Cmd) {
 // startFromDraftRequest constructs the start invocation from the selected
 // fresh draft's OWN porcelain fields. Its source/range are records of how the
 // draft was made, not values inferred from the currently checked-out branch.
-func startFromDraftRequest(d draftRowView) mutationRequest {
+func startFromDraftRequest(d draftRowView, layout string) mutationRequest {
 	intent := domain.ReviewIntent{
 		Branch: d.src,
 		Source: d.source,
 		Range:  d.rrange,
-		Layout: "walk",
+		Layout: layout,
 	}
 	argv := domain.Argv{Verb: "start", Args: domain.StartFromDraftArgs(intent)}
 	return mutationRequest{action: "startFromDraft", params: domain.ActionParams{Intent: intent}, argv: &argv}
+}
+
+func startFromDraftBuildRequest(d draftRowView) mutationRequest {
+	intent := domain.ReviewIntent{Branch: d.src, Source: d.source, Range: d.rrange, Layout: "walk"}
+	argv := domain.Argv{Verb: "walkthrough", Args: domain.DraftBuildArgs(intent)}
+	return mutationRequest{
+		action:       "startFromDraft",
+		params:       domain.ActionParams{Intent: intent},
+		argv:         &argv,
+		progressText: domain.DraftValidationProgress(d.src),
+		draftStart:   &intent,
+	}
 }
 
 // beginStartFromDraft starts only a CURRENT, complete draft: a variant is the
@@ -495,7 +565,43 @@ func (m Model) beginStartFromDraft(src string) (Model, tea.Cmd) {
 	if !ok || !draft.startable() {
 		return m, nil
 	}
-	return m.beginMutation(startFromDraftRequest(draft), currentStateToken(m.Panel))
+	return m.beginMutation(startFromDraftBuildRequest(draft), currentStateToken(m.Panel))
+}
+
+func (m Model) handleDraftConfigDone(msg draftConfigDoneMsg) (Model, tea.Cmd) {
+	m.progressOverlay = nil
+	draft, ok := findDraftRow(decodeDraftRows(m.Panel.FreshDraftRows), msg.intent.Branch)
+	if !ok || !draft.startable() || draft.source != msg.intent.Source || draft.rrange != msg.intent.Range {
+		m.statusLine = domain.StaleNotice
+		return m, nil
+	}
+
+	request := func(layout string) mutationRequest {
+		return startFromDraftRequest(draft, layout)
+	}
+	if !mutationFailed(msg.result) {
+		cfg := domain.ParseConfigPorcelain(msg.result.Stdout)
+		for _, offer := range cfg.Offers {
+			if offer.ID != domain.OfferKeys {
+				continue
+			}
+			overlay := SelectOverlay{
+				Title: domain.StartLayoutTitle(draft.src),
+				Items: []SelectItem{
+					{Label: domain.LayoutWalkLabel, Value: "walk"},
+					{Label: domain.LayoutKeysLabel, Value: "keys"},
+				},
+				OnPick: func(layout string) selectResult {
+					req := request(layout)
+					return selectResult{done: &req}
+				},
+			}
+			m.selectOverlay = &overlay
+			return m, nil
+		}
+	}
+	req := request("walk")
+	return m.beginMutation(req, currentStateToken(m.Panel))
 }
 
 func (m Model) beginSetBase() (Model, tea.Cmd) {

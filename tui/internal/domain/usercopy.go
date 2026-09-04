@@ -132,6 +132,32 @@ func ProgressText(action string, p ActionParams) string {
 	}
 }
 
+func DraftValidationProgress(branch string) string {
+	return fmt.Sprintf("Validating your draft for %s…", branch)
+}
+
+func StartLayoutTitle(branch string) string {
+	return fmt.Sprintf("Start reviewing %s — how do you want to read it?", branch)
+}
+
+func DraftWritingProgress(branch string) string {
+	return fmt.Sprintf("Preparing the reading order for %s…", branch)
+}
+
+func DraftUpdated(kept, added, dropped int) string {
+	if added == 0 && dropped == 0 {
+		return fmt.Sprintf("Reading order updated: nothing moved, %d kept.", kept)
+	}
+	text := fmt.Sprintf("Reading order updated: %d kept", kept)
+	if added > 0 {
+		text += fmt.Sprintf(", %d added", added)
+	}
+	if dropped > 0 {
+		text += fmt.Sprintf(", %d no longer in the PR", dropped)
+	}
+	return text + "."
+}
+
 // --- support ----------------------------------------------------------------
 
 const (
@@ -509,6 +535,7 @@ const (
 	StartAssistantSourceTitle = "Where should its tip come from?"
 	StartAssistantRangeTitle  = "How much of it?"
 	StartAssistantLayoutTitle = "How do you want to read it?"
+	NoBranchesForReview       = "No branches to pick a review from were found."
 
 	SourceRemoteLabel  = "Remote"
 	SourceLocalLabel   = "Local"
@@ -521,6 +548,13 @@ const (
 	LayoutKeysLabel  = "Walkthrough order, keys only"
 	LayoutStepLabel  = "One commit at a time"
 	LayoutWholeLabel = "The whole diff at once"
+
+	LayoutDraftLabel        = "Build a reading order first"
+	LayoutDraftDetail       = "nobody wrote one for this PR; otherwise you read the whole diff"
+	LayoutDraftResumeLabel  = "Finish the reading order you started"
+	LayoutDraftResumeDetail = "pick up the one you left half-written"
+	LayoutDraftUpdateLabel  = "Update the reading order you wrote"
+	LayoutDraftUpdateDetail = "the PR moved on; keeps the whys whose files are still in range"
 
 	SetBaseTitle   = "Which branch do pull requests land on?"
 	SetRemoteTitle = "Which remote should reviews fetch from?"

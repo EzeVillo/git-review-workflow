@@ -41,3 +41,45 @@ func IntentToArgs(intent ReviewIntent) []string {
 	args = append(args, "--", intent.Branch)
 	return args
 }
+
+// draftOriginAndRangeArgs is shared by the two preparatory calls behind
+// "Validate and start". Their flags must describe the exact same range as
+// the final start; unlike IntentToArgs, these verbs document source before
+// range and have no layout flag.
+func draftOriginAndRangeArgs(intent ReviewIntent) []string {
+	var args []string
+	switch intent.Source {
+	case "local":
+		args = append(args, "--local")
+	case "offline":
+		args = append(args, "--offline")
+	}
+	if intent.Range == "delta" {
+		args = append(args, "--delta")
+	}
+	return args
+}
+
+// DraftBuildArgs builds `walkthrough draft --build <flags> -- <branch>`.
+func DraftBuildArgs(intent ReviewIntent) []string {
+	args := []string{"draft", "--build"}
+	args = append(args, draftOriginAndRangeArgs(intent)...)
+	return append(args, "--", intent.Branch)
+}
+
+// DraftConfigArgs builds the read-only probe that follows a green draft
+// build and decides whether the keys-only choice exists.
+func DraftConfigArgs(intent ReviewIntent) []string {
+	args := []string{"--porcelain"}
+	args = append(args, draftOriginAndRangeArgs(intent)...)
+	return append(args, "--", intent.Branch)
+}
+
+// DraftWriteArgs builds the assistant's create/update invocation. Porcelain
+// keeps human output (including an absolute path and next command) out of the
+// status line and supplies the optional merged counts for an update.
+func DraftWriteArgs(intent ReviewIntent) []string {
+	args := []string{"draft", "--porcelain"}
+	args = append(args, draftOriginAndRangeArgs(intent)...)
+	return append(args, "--", intent.Branch)
+}

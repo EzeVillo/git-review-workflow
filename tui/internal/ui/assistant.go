@@ -11,10 +11,11 @@ import (
 // The start assistant: contracts/cli-invocation.md's three config probes —
 //
 //	config --porcelain
-//	config --porcelain -- <branch>
+//	config --porcelain [--local|--offline] -- <branch>
 //	config --porcelain [--local|--offline] [--delta] -- <branch>
 //
-// — walked as four SelectOverlay questions (branch, source, range, layout),
+// — walked as up to four SelectOverlay questions (branch, source, optional
+// range, layout),
 // each one offering ONLY what the CLI reports as viable for that exact
 // combination (the `offer`/`candidate`/`delta` records, never a fixed list
 // this client invents). All three probes are `config`, always class Read
@@ -23,9 +24,9 @@ import (
 //
 // The LAST question's answer runs startReview directly: no confirmation in
 // between (T069's own gate — startReview is not confirms: true, and this
-// file never calls ConfirmMutation for it), matching "the assistant already
-// asks four questions" in confirms.go's own comment on why startReview is
-// absent from ConfirmingIDs.
+// file never calls ConfirmMutation for it), matching the multi-step intent
+// choice in confirms.go's own comment on why startReview is absent from
+// ConfirmingIDs.
 
 // assistantStepMsg carries one config probe's result back, tagged with the
 // function that turns it into the NEXT question — the same "what to build
@@ -34,6 +35,7 @@ type assistantStepMsg struct {
 	assistantGeneration int
 	result              host.Result
 	build               func(domain.ConfigPorcelainResult) SelectOverlay
+	advance             func(domain.ConfigPorcelainResult) selectResult
 }
 
 // configProbeCmd runs one `config --porcelain <extra...>` probe. Always
@@ -47,10 +49,18 @@ func configProbeCmd(extra []string, build func(domain.ConfigPorcelainResult) Sel
 	}
 }
 
+func configAdvanceCmd(extra []string, advance func(domain.ConfigPorcelainResult) selectResult) tea.Cmd {
+	args := append([]string{"--porcelain"}, extra...)
+	return func() tea.Msg {
+		res := host.InvokeReview(context.Background(), "config", args)
+		return assistantStepMsg{result: res, advance: advance}
+	}
+}
+
 // startAssistant is startReview's entry point (activateControl): the FIRST
 // probe, unscoped, whose candidates seed the branch question.
 func (m Model) startAssistant() (Model, tea.Cmd) {
-	return m.beginAssistantProbe(configProbeCmd(nil, buildBranchStep(m.preferredStartSource)))
+	return m.beginAssistantProbe(configAdvanceCmd(nil, buildBranchResult(m.preferredStartSource)))
 }
 
 func (m Model) beginAssistantProbe(probe tea.Cmd) (Model, tea.Cmd) {
@@ -80,6 +90,9 @@ func (m Model) handleAssistantStep(msg assistantStepMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	cfg := domain.ParseConfigPorcelain(msg.result.Stdout)
+	if msg.advance != nil {
+		return m.applySelectResult(msg.advance(cfg))
+	}
 	overlay := msg.build(cfg)
 	m.selectOverlay = &overlay
 	return m, nil
@@ -95,60 +108,81 @@ func buildBranchStep(preferredSource string) func(domain.ConfigPorcelainResult) 
 			Title: domain.StartAssistantBranchTitle,
 			Items: branchItems(domain.BranchPickerItems(candidates)),
 			OnPick: func(branch string) selectResult {
-				return selectResult{probe: configProbeCmd(
-					[]string{"--", branch},
-					buildSourceStep(branch, preferredSource, candidates),
-				)}
+				next := buildSourceStep(branch, preferredSource, candidates)
+				return selectResult{next: &next}
 			},
 		}
 	}
 }
 
+func buildBranchResult(preferredSource string) func(domain.ConfigPorcelainResult) selectResult {
+	return func(cfg domain.ConfigPorcelainResult) selectResult {
+		overlay := buildBranchStep(preferredSource)(cfg)
+		if len(overlay.Items) == 0 {
+			return selectResult{status: domain.NoBranchesForReview}
+		}
+		return selectResult{next: &overlay}
+	}
+}
+
 // buildSourceStep is question 2: where the tip comes from. Viability comes
 // from the FIRST probe's candidates for this branch (does a remote row
-// exist? a local one?) — the second, branch-scoped probe's own job is the
-// `delta` records the range question needs, not re-answering "remote or
-// local", which the unscoped probe already knows. reviewui.startsource
-// (FR-061) only pre-positions the cursor; it never hides an option the CLI
-// did not itself rule out.
-func buildSourceStep(branch, preferredSource string, candidates []domain.CandidateBranch) func(domain.ConfigPorcelainResult) SelectOverlay {
-	return func(cfg domain.ConfigPorcelainResult) SelectOverlay {
-		var hasRemote, hasLocal bool
-		for _, c := range candidates {
-			if c.Name != branch {
-				continue
-			}
-			switch c.Origin {
-			case "remote":
-				hasRemote = true
-			case "local":
-				hasLocal = true
-			}
+// exist? a local one?). No branch-scoped probe runs until this choice is
+// made: without a source, validating the default remote tip would reject a
+// perfectly valid local-only branch before the reviewer can choose Local or
+// Offline. The selected source scopes the second probe, whose `delta` records
+// seed the range question. reviewui.startsource (FR-061) only pre-positions
+// the cursor; it never hides an option the CLI did not itself rule out.
+func buildSourceStep(branch, preferredSource string, candidates []domain.CandidateBranch) SelectOverlay {
+	var hasRemote, hasLocal bool
+	for _, c := range candidates {
+		if c.Name != branch {
+			continue
 		}
-		var items []SelectItem
-		if hasRemote {
-			items = append(items, SelectItem{Label: domain.SourceRemoteLabel, Value: "remote"})
-		}
-		if hasLocal {
-			items = append(items, SelectItem{Label: domain.SourceLocalLabel, Value: "local"})
-			items = append(items, SelectItem{Label: domain.SourceOfflineLabel, Value: "offline"})
-		}
-		cursor := 0
-		for i, it := range items {
-			if it.Value == preferredSource {
-				cursor = i
-			}
-		}
-		deltas := cfg.Deltas
-		return SelectOverlay{
-			Title:  domain.StartAssistantSourceTitle,
-			Items:  items,
-			Cursor: cursor,
-			OnPick: func(source string) selectResult {
-				return selectResult{next: buildRangeStep(branch, source, deltas)}
-			},
+		switch c.Origin {
+		case "remote":
+			hasRemote = true
+		case "local":
+			hasLocal = true
 		}
 	}
+	var items []SelectItem
+	if hasRemote {
+		items = append(items, SelectItem{Label: domain.SourceRemoteLabel, Value: "remote"})
+	}
+	if hasLocal {
+		items = append(items, SelectItem{Label: domain.SourceLocalLabel, Value: "local"})
+		items = append(items, SelectItem{Label: domain.SourceOfflineLabel, Value: "offline"})
+	}
+	cursor := 0
+	for i, it := range items {
+		if it.Value == preferredSource {
+			cursor = i
+		}
+	}
+	return SelectOverlay{
+		Title:  domain.StartAssistantSourceTitle,
+		Items:  items,
+		Cursor: cursor,
+		OnPick: func(source string) selectResult {
+			return selectResult{probe: configAdvanceCmd(
+				sourceRangeProbeArgs(source, "full", branch),
+				func(cfg domain.ConfigPorcelainResult) selectResult {
+					return buildRangeResult(branch, source, cfg.Deltas)
+				},
+			)}
+		},
+	}
+}
+
+func buildRangeResult(branch, source string, deltas []domain.DeltaRecord) selectResult {
+	if _, ok := domain.DeltaForSource(deltas, source); !ok {
+		return selectResult{probe: configProbeCmd(
+			sourceRangeProbeArgs(source, "full", branch),
+			buildLayoutStep(branch, source, "full"),
+		)}
+	}
+	return selectResult{next: buildRangeStep(branch, source, deltas)}
 }
 
 // buildRangeStep is question 3: full or delta. No new probe — the second
@@ -172,10 +206,10 @@ func buildRangeStep(branch, source string, deltas []domain.DeltaRecord) *SelectO
 	return &overlay
 }
 
-// sourceRangeProbeArgs builds the THIRD probe's scoping flags — the same
-// order IntentToArgs uses for the real `start` invocation (source flag,
-// then --delta, then `-- branch`), so the offers it reports are for the
-// EXACT combination the final start will run.
+// sourceRangeProbeArgs builds the branch-scoped probes' flags in config's
+// documented order (source flag, then --delta, then `-- branch`). The second probe passes full because it
+// only needs source-specific delta records; the third passes the chosen range
+// so its offers describe the exact combination the final start will run.
 func sourceRangeProbeArgs(source, rng, branch string) []string {
 	var args []string
 	switch source {
@@ -197,32 +231,90 @@ func sourceRangeProbeArgs(source, rng, branch string) []string {
 // startReview with no confirmation in between (T069's gate).
 func buildLayoutStep(branch, source, rng string) func(domain.ConfigPorcelainResult) SelectOverlay {
 	return func(cfg domain.ConfigPorcelainResult) SelectOverlay {
-		offered := map[domain.OfferID]bool{}
-		for _, o := range cfg.Offers {
-			offered[o.ID] = true
+		return buildLayoutOverlay(domain.ReviewIntent{Branch: branch, Source: source, Range: rng}, cfg.Offers)
+	}
+}
+
+type layoutOfferMeta struct {
+	label, detail string
+}
+
+var layoutOfferOrder = []domain.OfferID{
+	domain.OfferWalk, domain.OfferKeys, domain.OfferDraft,
+	domain.OfferDraftResume, domain.OfferDraftUpdate,
+	domain.OfferStep, domain.OfferWhole,
+}
+
+var layoutOfferCopy = map[domain.OfferID]layoutOfferMeta{
+	domain.OfferWalk:        {label: domain.LayoutWalkLabel},
+	domain.OfferKeys:        {label: domain.LayoutKeysLabel},
+	domain.OfferDraft:       {label: domain.LayoutDraftLabel, detail: domain.LayoutDraftDetail},
+	domain.OfferDraftResume: {label: domain.LayoutDraftResumeLabel, detail: domain.LayoutDraftResumeDetail},
+	domain.OfferDraftUpdate: {label: domain.LayoutDraftUpdateLabel, detail: domain.LayoutDraftUpdateDetail},
+	domain.OfferStep:        {label: domain.LayoutStepLabel},
+	domain.OfferWhole:       {label: domain.LayoutWholeLabel},
+}
+
+func effectiveLayoutOffers(offers []domain.ReadingOffer) []domain.ReadingOffer {
+	if len(offers) == 0 {
+		return []domain.ReadingOffer{
+			{ID: domain.OfferStep, Rank: "available"},
+			{ID: domain.OfferWhole, Rank: "available"},
 		}
-		var items []SelectItem
-		if offered[domain.OfferWalk] {
-			items = append(items, SelectItem{Label: domain.LayoutWalkLabel, Value: "walk"})
+	}
+	return offers
+}
+
+func buildLayoutOverlay(intent domain.ReviewIntent, offers []domain.ReadingOffer) SelectOverlay {
+	effective := effectiveLayoutOffers(offers)
+	byID := make(map[domain.OfferID]string, len(effective))
+	for _, offer := range effective {
+		byID[offer.ID] = offer.Rank
+	}
+	var ordered []domain.OfferID
+	for _, rank := range []string{"recommended", "available"} {
+		for _, id := range layoutOfferOrder {
+			if byID[id] == rank {
+				ordered = append(ordered, id)
+			}
 		}
-		if offered[domain.OfferKeys] {
-			items = append(items, SelectItem{Label: domain.LayoutKeysLabel, Value: "keys"})
+	}
+	items := make([]SelectItem, 0, len(ordered))
+	for _, id := range ordered {
+		copy := layoutOfferCopy[id]
+		if byID[id] == "recommended" {
+			copy.label += " (recommended)"
 		}
-		if offered[domain.OfferStep] {
-			items = append(items, SelectItem{Label: domain.LayoutStepLabel, Value: "step"})
-		}
-		if offered[domain.OfferWhole] {
-			items = append(items, SelectItem{Label: domain.LayoutWholeLabel, Value: "whole"})
-		}
-		return SelectOverlay{
-			Title: domain.StartAssistantLayoutTitle,
-			Items: items,
-			OnPick: func(layout string) selectResult {
-				intent := domain.ReviewIntent{Branch: branch, Source: source, Range: rng, Layout: layout}
+		items = append(items, SelectItem{Label: copy.label, Detail: copy.detail, Value: string(id)})
+	}
+	return SelectOverlay{
+		Title: domain.StartLayoutTitle(intent.Branch),
+		Items: items,
+		OnPick: func(value string) selectResult {
+			id := domain.OfferID(value)
+			switch id {
+			case domain.OfferDraftResume:
+				return selectResult{}
+			case domain.OfferDraft, domain.OfferDraftUpdate:
+				req := draftFlowRequest(intent, offers, id == domain.OfferDraftUpdate)
+				return selectResult{done: &req}
+			default:
+				intent.Layout = value
 				req := mutationRequest{action: "startReview", params: domain.ActionParams{Intent: intent}}
 				return selectResult{done: &req}
-			},
-		}
+			}
+		},
+	}
+}
+
+func draftFlowRequest(intent domain.ReviewIntent, offers []domain.ReadingOffer, update bool) mutationRequest {
+	argv := domain.Argv{Verb: "walkthrough", Args: domain.DraftWriteArgs(intent)}
+	return mutationRequest{
+		action:       "draftFlow",
+		params:       domain.ActionParams{Intent: intent},
+		argv:         &argv,
+		progressText: domain.DraftWritingProgress(intent.Branch),
+		draftFlow:    &draftFlowContinuation{intent: intent, offers: offers, update: update},
 	}
 }
 

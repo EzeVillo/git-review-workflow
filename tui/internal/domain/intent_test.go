@@ -78,3 +78,16 @@ func TestIntentToArgsAlwaysSeparatesTheBranchWithDoubleDash(t *testing.T) {
 		t.Errorf("argv = %v, branch must be passed through unmodified", got)
 	}
 }
+
+func TestDraftValidationAndConfigRepeatTheRecordedSourceAndRange(t *testing.T) {
+	intent := ReviewIntent{Branch: `feature/\303\261o`, Source: "offline", Range: "delta", Layout: "walk"}
+	if got, want := DraftBuildArgs(intent), []string{"draft", "--build", "--offline", "--delta", "--", `feature/\303\261o`}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("DraftBuildArgs() = %#v, want %#v", got, want)
+	}
+	if got, want := DraftConfigArgs(intent), []string{"--porcelain", "--offline", "--delta", "--", `feature/\303\261o`}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("DraftConfigArgs() = %#v, want %#v", got, want)
+	}
+	if got, want := DraftWriteArgs(intent), []string{"draft", "--porcelain", "--offline", "--delta", "--", `feature/\303\261o`}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("DraftWriteArgs() = %#v, want %#v", got, want)
+	}
+}

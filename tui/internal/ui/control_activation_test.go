@@ -93,7 +93,7 @@ func TestOutOfRangeHelpDisplaysTheCLIRecoveryTextOrAFallback(t *testing.T) {
 	}
 }
 
-func TestStartFromDraftUsesTheFreshRawSourceAndRecordedIntent(t *testing.T) {
+func TestStartFromDraftValidatesTheFreshRawSourceBeforeStarting(t *testing.T) {
 	raw := `feature/\303\261o`
 	panel := domain.PanelModel{
 		Situation: domain.SituationNoReview,
@@ -109,7 +109,7 @@ func TestStartFromDraftUsesTheFreshRawSourceAndRecordedIntent(t *testing.T) {
 	m := Model{Panel: panel}
 	after, cmd := m.activateControl("startFromDraft", raw)
 	if cmd == nil {
-		t.Fatal("a complete fresh draft must start through the mutation lock")
+		t.Fatal("a complete fresh draft must validate through the mutation lock")
 	}
 	if after.confirm != nil {
 		t.Fatal("startFromDraft must not open a confirmation")
@@ -118,13 +118,16 @@ func TestStartFromDraftUsesTheFreshRawSourceAndRecordedIntent(t *testing.T) {
 		t.Fatal("startFromDraft must acquire the mutation lock before dispatch")
 	}
 
-	got := startFromDraftRequest(draftRowView{src: raw, source: "offline", rrange: "delta"})
-	if got.action != "startFromDraft" || got.argv == nil || got.argv.Verb != "start" {
-		t.Fatalf("start request = %+v, want a startFromDraft git review start request", got)
+	got := startFromDraftBuildRequest(draftRowView{src: raw, source: "offline", rrange: "delta"})
+	if got.action != "startFromDraft" || got.argv == nil || got.argv.Verb != "walkthrough" {
+		t.Fatalf("validation request = %+v, want a walkthrough draft --build request", got)
 	}
-	want := []string{"--delta", "--offline", "--", raw}
+	want := []string{"draft", "--build", "--offline", "--delta", "--", raw}
 	if !reflect.DeepEqual(got.argv.Args, want) {
-		t.Fatalf("startFromDraft args = %#v, want %#v", got.argv.Args, want)
+		t.Fatalf("draft validation args = %#v, want %#v", got.argv.Args, want)
+	}
+	if got.draftStart == nil || got.draftStart.Branch != raw || got.draftStart.Source != "offline" || got.draftStart.Range != "delta" {
+		t.Fatalf("validation continuation = %+v, want the draft's recorded intent", got.draftStart)
 	}
 }
 

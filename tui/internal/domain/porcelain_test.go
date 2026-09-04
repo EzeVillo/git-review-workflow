@@ -301,6 +301,18 @@ func TestDeltaForSourceMapsLocalAndOfflineToTheLocalRow(t *testing.T) {
 	}
 }
 
+func TestParseMergedRecordAcceptsOnlyThreeNonNegativeCounts(t *testing.T) {
+	got, ok := ParseMergedRecord("noise\nmerged\t4\t2\t1\n")
+	if !ok || got.Kept != 4 || got.Added != 2 || got.Dropped != 1 {
+		t.Fatalf("ParseMergedRecord(valid) = %+v, %v", got, ok)
+	}
+	for _, bad := range []string{"merged\t4\t-1\t0\n", "merged\tx\t1\t0\n", "merged\t1\t2\n"} {
+		if _, ok := ParseMergedRecord(bad); ok {
+			t.Fatalf("ParseMergedRecord(%q) accepted malformed counts", bad)
+		}
+	}
+}
+
 func TestBranchPickerItemsCollapsesByNamePreferringCurrent(t *testing.T) {
 	items := BranchPickerItems([]CandidateBranch{
 		{Name: "feature", Origin: "remote", Current: false},

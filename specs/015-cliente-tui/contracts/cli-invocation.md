@@ -161,7 +161,9 @@ queda sin la única frase que contesta qué pasó.
 | `walkthroughBuild` | `walkthrough` | `["build"]` |
 | `createGuide` | `walkthrough` | `["guide"]` o `["guide","--team"]` |
 | `discardGuide` | `walkthrough` | `["guide","--delete"]` — sólo la propia; la compartida es un archivo trackeado y la CLI niega `--delete --team` |
-| `startFromDraft` | `start` | como `start`, con la forma de lectura del borrador |
+| oferta `draft` / `draft-update` | `walkthrough` | `["draft","--porcelain", source?, range?, "--", branch]` |
+| `startFromDraft` (validar) | `walkthrough` | `["draft","--build", source?, range?, "--", branch]` |
+| `startFromDraft` (arrancar) | `start` | como `start`, con la forma de lectura elegida |
 
 `discardAllFixes` **siempre** corre `--fixes-only`, incluso con la sesión cerrada: el argv no puede
 depender de un dato que se relee en cada refresco, y un `clean <x>` que llegue tarde —la sesión
@@ -181,16 +183,25 @@ Orden fijo:
 
 ```text
 config --porcelain
-config --porcelain -- <branch>
+config --porcelain [--local|--offline] -- <branch>
 config --porcelain [--local|--offline] [--delta] -- <branch>
 ```
 
 Siempre `class == Read` (nunca red).
 
+La rama se elige antes que el origen, pero el segundo sondeo corre **después** de elegir el origen
+y lleva su flag. Una rama que sólo existe localmente no se valida implícitamente contra el remoto
+antes de que el revisor pueda elegir `local` u `offline`.
+
 El asistente **sólo ofrece las formas de lectura que la CLI reporta como viables** (registro `offer`)
 y al terminar la última pregunta **arranca sin cartel de confirmación** — `startReview` no confirma,
 y vale para los **dos** caminos que llegan al start: el asistente y `startFromDraft` (User Story 5,
 escenario 2).
+
+`startFromDraft` no salta directo a `start`: primero corre `walkthrough draft --build`, y sólo si
+queda verde hace `config --porcelain` con los mismos flags para decidir si hay que ofrecer recorrido
+completo o sólo esenciales. Los tres pasos repiten el origen y el rango grabados en la fila; un fallo
+del build muestra el `stderr` y corta la secuencia.
 
 ---
 

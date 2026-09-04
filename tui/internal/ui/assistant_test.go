@@ -57,13 +57,11 @@ func TestStartAssistantFullHappyPathNeverConfirms(t *testing.T) {
 		t.Fatalf("branch items = %+v, want one collapsed feat-x entry", branchStep.Items)
 	}
 	pick1 := branchStep.OnPick("feat-x")
-	if pick1.probe == nil || pick1.cmd != nil || pick1.next != nil || pick1.done != nil {
-		t.Fatal("picking the branch must run the second probe, and nothing else")
+	if pick1.next == nil || pick1.probe != nil || pick1.cmd != nil || pick1.done != nil {
+		t.Fatal("picking the branch must open the source question without probing")
 	}
 
-	sourceStep := buildSourceStep("feat-x", "local", probe1Candidates)(domain.ConfigPorcelainResult{
-		Deltas: []domain.DeltaRecord{{Name: "feat-x", Tip: "abc1234", Origin: "local"}},
-	})
+	sourceStep := *pick1.next
 	if sourceStep.Title != domain.StartAssistantSourceTitle {
 		t.Fatalf("source step title = %q", sourceStep.Title)
 	}
@@ -74,14 +72,14 @@ func TestStartAssistantFullHappyPathNeverConfirms(t *testing.T) {
 		t.Errorf("reviewui.startsource=local should pre-position the cursor there, got %q", sourceStep.Items[sourceStep.Cursor].Value)
 	}
 	pick2 := sourceStep.OnPick("local")
-	if pick2.next == nil {
-		t.Fatal("picking a source must build the range step directly — no probe needed, the deltas are already known")
+	if pick2.probe == nil {
+		t.Fatal("picking a source must run the source-scoped delta probe")
 	}
-	if pick2.probe != nil || pick2.cmd != nil || pick2.done != nil {
-		t.Fatal("the source step must not run a probe or finish the flow")
+	if pick2.next != nil || pick2.cmd != nil || pick2.done != nil {
+		t.Fatal("the source step must only run its probe")
 	}
 
-	rangeStep := *pick2.next
+	rangeStep := *buildRangeStep("feat-x", "local", []domain.DeltaRecord{{Name: "feat-x", Tip: "abc1234", Origin: "local"}})
 	if rangeStep.Title != domain.StartAssistantRangeTitle {
 		t.Fatalf("range step title = %q", rangeStep.Title)
 	}
@@ -99,7 +97,7 @@ func TestStartAssistantFullHappyPathNeverConfirms(t *testing.T) {
 			{ID: domain.OfferWhole, Rank: "available"},
 		},
 	})
-	if layoutStep.Title != domain.StartAssistantLayoutTitle {
+	if layoutStep.Title != domain.StartLayoutTitle("feat-x") {
 		t.Fatalf("layout step title = %q", layoutStep.Title)
 	}
 	if len(layoutStep.Items) != 2 {
@@ -118,13 +116,69 @@ func TestStartAssistantFullHappyPathNeverConfirms(t *testing.T) {
 	}
 }
 
-// TestRangeStepOffersOnlyFullWhenNoDeltaExists — the "full" option is
-// always there; "delta" only when the CLI actually reported a marker for
-// the chosen source.
-func TestRangeStepOffersOnlyFullWhenNoDeltaExists(t *testing.T) {
-	step := buildRangeStep("feat-x", "remote", nil)
-	if len(step.Items) != 1 || step.Items[0].Value != "full" {
-		t.Fatalf("items = %+v, want only 'full' with no delta records", step.Items)
+func TestRangeQuestionIsSkippedWhenNoDeltaExists(t *testing.T) {
+	result := buildRangeResult("feat-x", "remote", nil)
+	if result.next != nil {
+		t.Fatal("without a delta marker, the assistant must not ask a one-option range question")
+	}
+	if result.probe == nil {
+		t.Fatal("without delta, the assistant must continue to the full-range layout probe")
+	}
+}
+
+func TestLayoutOffersHonorRankFallbackAndDraftRows(t *testing.T) {
+	step := buildLayoutStep("feat-x", "remote", "full")(domain.ConfigPorcelainResult{Offers: []domain.ReadingOffer{
+		{ID: domain.OfferWhole, Rank: "available"},
+		{ID: domain.OfferDraft, Rank: "available"},
+		{ID: domain.OfferWalk, Rank: "recommended"},
+		{ID: domain.OfferKeys, Rank: "available"},
+	}})
+	if step.Title != domain.StartLayoutTitle("feat-x") {
+		t.Fatalf("layout title = %q, want the branch named at the commit point", step.Title)
+	}
+	if len(step.Items) != 4 {
+		t.Fatalf("layout items = %+v, want every CLI offer", step.Items)
+	}
+	wantValues := []string{"walk", "keys", "draft", "whole"}
+	for i, want := range wantValues {
+		if step.Items[i].Value != want {
+			t.Fatalf("layout item %d = %+v, want value %q", i, step.Items[i], want)
+		}
+	}
+	if !strings.Contains(step.Items[0].Label, "recommended") {
+		t.Fatalf("recommended offer lost its rank in %+v", step.Items[0])
+	}
+
+	fallback := buildLayoutStep("feat-x", "remote", "full")(domain.ConfigPorcelainResult{})
+	if len(fallback.Items) != 2 || fallback.Items[0].Value != "step" || fallback.Items[1].Value != "whole" {
+		t.Fatalf("empty offers fallback = %+v, want step then whole", fallback.Items)
+	}
+}
+
+func TestDraftLayoutOffersCreateResumeOrUpdateWithoutStartingAReview(t *testing.T) {
+	for _, tc := range []struct {
+		offer        domain.OfferID
+		wantMutation bool
+	}{
+		{domain.OfferDraft, true},
+		{domain.OfferDraftResume, false},
+		{domain.OfferDraftUpdate, true},
+	} {
+		step := buildLayoutStep("feat-x", "offline", "delta")(domain.ConfigPorcelainResult{Offers: []domain.ReadingOffer{{ID: tc.offer, Rank: "available"}}})
+		picked := step.OnPick(string(tc.offer))
+		if tc.wantMutation {
+			if picked.done == nil || picked.done.argv == nil || picked.done.argv.Verb != "walkthrough" {
+				t.Fatalf("%s pick = %+v, want walkthrough draft mutation", tc.offer, picked.done)
+			}
+			if picked.done.action != "draftFlow" || picked.done.argv.Args[0] != "draft" || picked.done.argv.Args[1] != "--porcelain" {
+				t.Fatalf("%s request = %+v", tc.offer, picked.done)
+			}
+			if picked.done.draftFlow == nil || picked.done.draftFlow.update != (tc.offer == domain.OfferDraftUpdate) {
+				t.Fatalf("%s continuation = %+v", tc.offer, picked.done.draftFlow)
+			}
+		} else if picked.done != nil || picked.probe != nil || picked.next != nil || picked.cmd != nil {
+			t.Fatalf("resume must close the assistant without recreating the draft: %+v", picked)
+		}
 	}
 }
 
@@ -132,7 +186,7 @@ func TestRangeStepOffersOnlyFullWhenNoDeltaExists(t *testing.T) {
 // locally must not offer "remote".
 func TestSourceStepOffersOnlyWhatCandidatesReport(t *testing.T) {
 	localOnly := []domain.CandidateBranch{{Name: "feat-x", Origin: "local"}}
-	step := buildSourceStep("feat-x", "", localOnly)(domain.ConfigPorcelainResult{})
+	step := buildSourceStep("feat-x", "", localOnly)
 	for _, it := range step.Items {
 		if it.Value == "remote" {
 			t.Fatal("a branch with no remote candidate row must not offer 'remote'")
@@ -140,6 +194,41 @@ func TestSourceStepOffersOnlyWhatCandidatesReport(t *testing.T) {
 	}
 	if len(step.Items) != 2 {
 		t.Fatalf("got %d items, want 2 (local + offline)", len(step.Items))
+	}
+}
+
+// TestLocalOnlyBranchAsksForSourceBeforeProbingBranch protects the ordering
+// shared by the editor clients: choosing a branch is not enough context to
+// validate a remote tip. A local-only branch must reach the source question
+// before any branch-scoped config probe can fail against origin.
+func TestLocalOnlyBranchAsksForSourceBeforeProbingBranch(t *testing.T) {
+	localOnly := []domain.CandidateBranch{{Name: "feat/local-only", Origin: "local"}}
+	branchStep := buildBranchStep("")(domain.ConfigPorcelainResult{Candidates: localOnly})
+
+	afterBranch := branchStep.OnPick("feat/local-only")
+	if afterBranch.next == nil {
+		t.Fatal("choosing a branch must open the source question immediately")
+	}
+	if afterBranch.probe != nil {
+		t.Fatal("choosing a branch must not probe it before the source is known")
+	}
+	if len(afterBranch.next.Items) != 2 || afterBranch.next.Items[0].Value != "local" || afterBranch.next.Items[1].Value != "offline" {
+		t.Fatalf("source items = %+v, want local and offline for a local-only branch", afterBranch.next.Items)
+	}
+
+	afterSource := afterBranch.next.OnPick("local")
+	if afterSource.probe == nil {
+		t.Fatal("choosing the source must run the first branch-scoped probe")
+	}
+}
+
+func TestStartAssistantStopsCleanlyWhenThereAreNoBranches(t *testing.T) {
+	result := buildBranchResult("")(domain.ConfigPorcelainResult{})
+	if result.next != nil || result.probe != nil || result.done != nil {
+		t.Fatalf("empty branch result opened a dead-end flow: %+v", result)
+	}
+	if result.status != domain.NoBranchesForReview {
+		t.Fatalf("empty branch status = %q, want %q", result.status, domain.NoBranchesForReview)
 	}
 }
 
@@ -244,7 +333,7 @@ func TestAssistantProgressKeepsOnlySafeKeysAvailable(t *testing.T) {
 	}
 }
 
-func TestAssistantKeepsProgressBetweenQuestions(t *testing.T) {
+func TestAssistantOnlyShowsProgressWhenAQuestionNeedsAProbe(t *testing.T) {
 	overlay := buildBranchStep("")(domain.ConfigPorcelainResult{Candidates: []domain.CandidateBranch{{Name: "feature/x", Origin: "local"}}})
 	m := Model{
 		Panel:         domain.PanelModel{Situation: domain.SituationNoReview},
@@ -252,8 +341,14 @@ func TestAssistantKeepsProgressBetweenQuestions(t *testing.T) {
 	}
 	updated, cmd := m.handleSelectKey(tea.KeyMsg{Type: tea.KeyEnter})
 	after := updated.(Model)
+	if cmd != nil || after.progressOverlay != nil || after.selectOverlay == nil || after.selectOverlay.Title != domain.StartAssistantSourceTitle {
+		t.Fatalf("branch-to-source state: cmd=%v progress=%v select=%v", cmd != nil, after.progressOverlay != nil, after.selectOverlay != nil)
+	}
+
+	updated, cmd = after.handleSelectKey(tea.KeyMsg{Type: tea.KeyEnter})
+	after = updated.(Model)
 	if cmd == nil || after.progressOverlay == nil || after.selectOverlay != nil {
-		t.Fatalf("between-question state: cmd=%v progress=%v select=%v", cmd != nil, after.progressOverlay != nil, after.selectOverlay != nil)
+		t.Fatalf("source-probe state: cmd=%v progress=%v select=%v", cmd != nil, after.progressOverlay != nil, after.selectOverlay != nil)
 	}
 }
 

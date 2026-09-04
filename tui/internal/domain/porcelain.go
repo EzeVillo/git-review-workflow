@@ -505,6 +505,31 @@ type ReadingOffer struct {
 	Rank string // "recommended" | "available"
 }
 
+type MergedRecord struct {
+	Kept, Added, Dropped int
+}
+
+// ParseMergedRecord reads the one machine record emitted by walkthrough
+// draft --porcelain after reconciling an existing order.
+func ParseMergedRecord(stdout string) (MergedRecord, bool) {
+	for _, line := range strings.Split(stdout, "\n") {
+		fields := strings.Split(strings.TrimSpace(line), "\t")
+		if len(fields) < 4 || fields[0] != "merged" {
+			continue
+		}
+		values := make([]int, 3)
+		for i, field := range fields[1:4] {
+			value, err := strconv.Atoi(field)
+			if err != nil || value < 0 {
+				return MergedRecord{}, false
+			}
+			values[i] = value
+		}
+		return MergedRecord{Kept: values[0], Added: values[1], Dropped: values[2]}, true
+	}
+	return MergedRecord{}, false
+}
+
 // DraftSource / DraftRange / DraftState mirror the CLI's own vocabulary for
 // a loose draft record; "unknown" is legal in the first two (the
 // instructions block was deleted by hand) and decides which controls a

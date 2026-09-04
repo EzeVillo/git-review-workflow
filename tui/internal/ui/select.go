@@ -83,6 +83,7 @@ func (m Model) applySelectResult(r selectResult) (Model, tea.Cmd) {
 // flows is SUPPOSED to end at a confirmation at all.
 type SelectOverlay struct {
 	Title  string
+	Notice string
 	Items  []SelectItem
 	Cursor int
 	// OnPick is called with the CHOSEN item's Value once Enter picks it.
@@ -120,6 +121,9 @@ func (o *SelectOverlay) Render(vp Viewport) string {
 	st := stylesFor(vp.Color)
 	var lines []string
 	lines = append(lines, st.heading.Render(o.Title), "")
+	if o.Notice != "" {
+		lines = append(lines, st.note.Render(o.Notice), "")
+	}
 	if len(o.Items) == 0 {
 		lines = append(lines, st.note.Render("(nothing to choose from)"))
 	}

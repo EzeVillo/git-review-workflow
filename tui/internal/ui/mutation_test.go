@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"os/exec"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -761,5 +762,125 @@ func TestHandleMutationDoneSetsPendingFinishOnlyOnSuccess(t *testing.T) {
 	})
 	if m4.pendingFinish != nil {
 		t.Fatal("a FAILED finishReview must not arm pendingFinish")
+	}
+}
+
+func TestSuccessfulDraftBuildContinuesWithAConfigProbe(t *testing.T) {
+	intent := domain.ReviewIntent{Branch: "feature/x", Source: "local", Range: "delta", Layout: "walk"}
+	m := Model{Panel: domain.PanelModel{Situation: domain.SituationNoReview}}
+	m.lock.Begin()
+	after, cmd := m.handleMutationDone(mutationDoneMsg{
+		action:     "startFromDraft",
+		result:     host.Result{ExitCode: 0},
+		draftStart: &intent,
+	})
+	if cmd == nil {
+		t.Fatal("a green draft build must continue with config --porcelain")
+	}
+	if after.progressOverlay == nil {
+		t.Fatal("the config probe must replace the panel with progress")
+	}
+	if after.lock.Busy() {
+		t.Fatal("the build's mutation lock must be released before the read-only config probe")
+	}
+}
+
+func TestFailedDraftBuildStopsBeforeConfigOrStart(t *testing.T) {
+	intent := domain.ReviewIntent{Branch: "feature/x", Source: "remote", Range: "full", Layout: "walk"}
+	m := Model{Panel: domain.PanelModel{Situation: domain.SituationNoReview}}
+	m.lock.Begin()
+	after, _ := m.handleMutationDone(mutationDoneMsg{
+		action:     "startFromDraft",
+		result:     host.Result{ExitCode: 1, Stderr: "error: reading order drifted"},
+		draftStart: &intent,
+	})
+	if after.progressOverlay != nil {
+		t.Fatal("a rejected draft must not continue to config")
+	}
+	if after.statusLine != "error: reading order drifted" {
+		t.Fatalf("status = %q, want the CLI's validation error", after.statusLine)
+	}
+}
+
+func TestDraftConfigOffersKeysBeforeStarting(t *testing.T) {
+	raw := `feature/\303\261o`
+	intent := domain.ReviewIntent{Branch: raw, Source: "offline", Range: "delta", Layout: "walk"}
+	m := Model{Panel: domain.PanelModel{
+		Situation:      domain.SituationNoReview,
+		FreshDraftRows: domain.FooterField(raw, "C:/draft.md", "offline", "delta", "4", "4"),
+	}}
+	after, cmd := m.handleDraftConfigDone(draftConfigDoneMsg{
+		intent: intent,
+		result: host.Result{ExitCode: 0, Stdout: "offer\twalk\trecommended\noffer\tkeys\tavailable\n"},
+	})
+	if cmd != nil || after.selectOverlay == nil {
+		t.Fatalf("keys-capable draft must pause for the layout choice: cmd=%v overlay=%v", cmd != nil, after.selectOverlay != nil)
+	}
+	if len(after.selectOverlay.Items) != 2 {
+		t.Fatalf("keys picker items = %+v, want full walkthrough and keys only", after.selectOverlay.Items)
+	}
+	picked := after.selectOverlay.OnPick("keys")
+	if picked.done == nil || picked.done.argv == nil || picked.done.argv.Verb != "start" {
+		t.Fatalf("keys pick = %+v, want final start request", picked.done)
+	}
+	if got, want := picked.done.argv.Args, []string{"--keys", "--delta", "--offline", "--", raw}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("keys start args = %#v, want %#v", got, want)
+	}
+}
+
+func TestDraftConfigWithoutKeysStartsWalkImmediately(t *testing.T) {
+	intent := domain.ReviewIntent{Branch: "feature/x", Source: "remote", Range: "full", Layout: "walk"}
+	m := Model{Panel: domain.PanelModel{
+		Situation:      domain.SituationNoReview,
+		FreshDraftRows: domain.FooterField("feature/x", "C:/draft.md", "remote", "full", "2", "2"),
+	}}
+	after, cmd := m.handleDraftConfigDone(draftConfigDoneMsg{
+		intent: intent,
+		result: host.Result{ExitCode: 0, Stdout: "offer\twalk\trecommended\n"},
+	})
+	if cmd == nil || !after.lock.Busy() {
+		t.Fatal("a draft without keys must proceed directly to start")
+	}
+	if after.selectOverlay != nil || after.confirm != nil {
+		t.Fatal("a draft without keys must not add another question or confirmation")
+	}
+}
+
+func TestDraftFlowFailureReturnsToTheLayoutChoice(t *testing.T) {
+	intent := domain.ReviewIntent{Branch: "feature/x", Source: "remote", Range: "full"}
+	m := Model{Panel: domain.PanelModel{Situation: domain.SituationNoReview}}
+	m.lock.Begin()
+	after, cmd := m.handleMutationDone(mutationDoneMsg{
+		action: "draftFlow",
+		result: host.Result{ExitCode: 1, Stderr: "error: could not write the draft"},
+		draftFlow: &draftFlowContinuation{
+			intent: intent,
+			offers: []domain.ReadingOffer{{ID: domain.OfferDraft, Rank: "available"}, {ID: domain.OfferWhole, Rank: "available"}},
+		},
+	})
+	if cmd == nil {
+		t.Fatal("a failed local mutation must still schedule its refresh")
+	}
+	if after.selectOverlay == nil || after.selectOverlay.Title != domain.StartLayoutTitle("feature/x") {
+		t.Fatal("a failed draft creation must return to the same layout choice")
+	}
+	if after.statusLine != "error: could not write the draft" {
+		t.Fatalf("failure status = %q", after.statusLine)
+	}
+	if !strings.Contains(after.selectOverlay.Render(Viewport{Cols: 80, Rows: 24}), "error: could not write the draft") {
+		t.Fatal("returning to the layout picker hid the draft creation error")
+	}
+}
+
+func TestDraftUpdateUsesMergedCountsForTheStatusLine(t *testing.T) {
+	m := Model{Panel: domain.PanelModel{Situation: domain.SituationNoReview}}
+	m.lock.Begin()
+	after, _ := m.handleMutationDone(mutationDoneMsg{
+		action:    "draftFlow",
+		result:    host.Result{ExitCode: 0, Stdout: "merged\t4\t2\t1\n"},
+		draftFlow: &draftFlowContinuation{update: true},
+	})
+	if after.statusLine != "Reading order updated: 4 kept, 2 added, 1 no longer in the PR." {
+		t.Fatalf("update status = %q", after.statusLine)
 	}
 }

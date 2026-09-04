@@ -164,13 +164,18 @@ class HousekeepingTest {
         val separate = confirmCopyFor(HousekeepingAction(HousekeepingKind.CLEAN_KEEP_FIXES, "feature/x"))
         assertEquals("Keep your edits & remove Undo?", separate.title)
         assertEquals("Keep edits & remove Undo", separate.button)
-        assertTrue(separate.detail.startsWith("Your edits stay on review-fixes/feature/x"), separate.detail)
+        assertEquals(
+            "Your edits stay on review-fixes/feature/x — commit and push them from Source Control. What goes away is the option to undo this finish.",
+            separate.detail,
+        )
 
         val onto = confirmCopyFor(
             HousekeepingAction(HousekeepingKind.CLEAN_KEEP_FIXES, "feature/x", onto = true),
         )
-        assertTrue(onto.detail.startsWith("Your edits stay on feature/x -"), onto.detail)
-        assertFalse(onto.detail.contains("review-fixes/"))
+        assertEquals(
+            "Your edits stay on feature/x — commit and push them from Source Control. What goes away is the option to undo this finish.",
+            onto.detail,
+        )
     }
 
     @Test

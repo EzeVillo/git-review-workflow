@@ -120,7 +120,7 @@ fun confirmCopyFor(action: HousekeepingAction): ConfirmCopy {
             val destination = if (action.onto == true) src else "review-fixes/$src"
             ConfirmCopy(
                 title = "Keep your edits & remove Undo?",
-                detail = "Your edits stay on $destination - commit and push them from Source Control. What goes away is being able to undo this finish.",
+                detail = "Your edits stay on $destination — commit and push them from Source Control. What goes away is the option to undo this finish.",
                 button = "Keep edits & remove Undo",
             )
         }

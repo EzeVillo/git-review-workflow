@@ -113,7 +113,7 @@ class HousekeepingTest {
     @Test
     fun theButtonsUseOneVerbPerConcept() {
         assertEquals(
-            setOf("Delete", "Delete all", "Done", "Forget", "Forget all"),
+            setOf("Delete", "Delete all", "Keep edits & remove Undo", "Forget", "Forget all"),
             HousekeepingKind.entries.map { confirmCopyFor(HousekeepingAction(it, "f")).button }.toSet(),
         )
     }
@@ -162,6 +162,8 @@ class HousekeepingTest {
     @Test
     fun theClosingConfirmationNamesWhereTheEditsStayed() {
         val separate = confirmCopyFor(HousekeepingAction(HousekeepingKind.CLEAN_KEEP_FIXES, "feature/x"))
+        assertEquals("Keep your edits & remove Undo?", separate.title)
+        assertEquals("Keep edits & remove Undo", separate.button)
         assertTrue(separate.detail.startsWith("Your edits stay on review-fixes/feature/x"), separate.detail)
 
         val onto = confirmCopyFor(

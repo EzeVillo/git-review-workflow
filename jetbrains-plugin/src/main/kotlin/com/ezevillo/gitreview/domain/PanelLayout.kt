@@ -704,12 +704,12 @@ private fun finishPendingBlocks(model: PanelModel): List<Block> {
         Block.Banner(
             paragraphs = listOf(
                 "Your edits are on $destination, staged and ready to commit.",
-                "Commit and push them from Source Control. Until you clean up, this is still undoable.",
+                "Commit and push them from Source Control. You can still undo this finish.",
             ),
             row = Block.Row(
                 listOf(
-                    ctrl(ControlId.CLEAN_REVIEW, "Done, clean up", Emphasis.PRIMARY, enabled),
-                    ctrl(ControlId.UNDO_FINISH, "Undo", Emphasis.SECONDARY, enabled),
+                    ctrl(ControlId.CLEAN_REVIEW, "Keep edits & remove Undo", Emphasis.PRIMARY, enabled),
+                    ctrl(ControlId.UNDO_FINISH, "Undo Finish", Emphasis.SECONDARY, enabled),
                 ),
             ),
         ),

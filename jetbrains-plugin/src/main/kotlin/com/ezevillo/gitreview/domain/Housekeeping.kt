@@ -119,9 +119,9 @@ fun confirmCopyFor(action: HousekeepingAction): ConfirmCopy {
             // diferencia entre leer el cartel y apretar a ciegas.
             val destination = if (action.onto == true) src else "review-fixes/$src"
             ConfirmCopy(
-                title = "Done with the review of $src?",
+                title = "Keep your edits & remove Undo?",
                 detail = "Your edits stay on $destination - commit and push them from Source Control. What goes away is being able to undo this finish.",
-                button = "Done",
+                button = "Keep edits & remove Undo",
             )
         }
         HousekeepingKind.CLEAN_FIXES_ONE -> {

@@ -24,9 +24,10 @@ class PanelLayoutFinishTest {
         assertEquals(Emphasis.PRIMARY, ids[0].second)
         // "Clean" solo no decia que limpia; ahora dice ademas cual de los dos
         // cierra el ciclo.
-        assertEquals("Done, clean up", banner.row.controls[0].label)
+        assertEquals("Keep edits & remove Undo", banner.row.controls[0].label)
         assertEquals(ControlId.UNDO_FINISH, ids[1].first)
-        assertEquals("Undo", banner.row.controls[1].label)
+        assertEquals("Undo Finish", banner.row.controls[1].label)
+        assertTrue(banner.paragraphs[1].contains("You can still undo this finish."))
     }
 
     @Test

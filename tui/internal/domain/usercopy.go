@@ -513,7 +513,7 @@ const (
 	// IS lost is the difference between reading the banner and clicking
 	// through it.
 	CleanReviewConfirmTitle  = "Keep your edits & remove Undo?"
-	CleanReviewConfirmDetail = "Your edits stay on {destination} — commit and push them from Source Control. What goes away is being able to undo this finish."
+	CleanReviewConfirmDetail = "Your edits stay on {destination} — commit and push them from Source Control. What goes away is the option to undo this finish."
 	DoneLabel                = "Keep edits & remove Undo"
 
 	DiscardFixesConfirmTitle = "Delete the edits you extracted from {source}?"

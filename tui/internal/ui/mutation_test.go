@@ -342,6 +342,7 @@ func TestBeginCleanReviewOpensConfirmWithKeepFixes(t *testing.T) {
 	rendered := m2.View()
 	for _, want := range []string{
 		"Keep your edits & remove Undo?",
+		"Your edits stay on review-fixes/feat-x — commit and push them from Source Control. What goes away is the option to undo this finish.",
 		"[ Keep edits & remove Undo ]  (y / enter)",
 	} {
 		if !strings.Contains(rendered, want) {

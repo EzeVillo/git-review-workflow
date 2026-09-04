@@ -429,17 +429,17 @@ panel_layout:
       # sea fuera de este panel, y esta es la unica superficie que puede
       # senalarlo.
       #
-      # "Clean" solo no dice que limpia -- podia leerse como que se lleva las
-      # ediciones. "Done, clean up" dice ademas cual de los dos cierra el
-      # ciclo, que es la pregunta real de esta pantalla.
+      # El cierre explicita que conserva las ediciones y solamente quita la
+      # posibilidad de deshacer el finish. Asi no puede leerse como si fuera
+      # a borrar el trabajo que acaba de preparar la revision.
       - block: banner
         paragraphs:
           - "Your edits are on {destination}, staged and ready to commit."
-          - "Commit and push them from Source Control. Until you clean up, this is still undoable."
+          - "Commit and push them from Source Control. You can still undo this finish."
         row:
           controls:
-            - {id: cleanReview, label: "Done, clean up", emphasis: primary, confirms: true}
-            - {id: undoFinish, label: "Undo", emphasis: secondary, confirms: true}
+            - {id: cleanReview, label: "Keep edits & remove Undo", emphasis: primary, confirms: true}
+            - {id: undoFinish, label: "Undo Finish", emphasis: secondary, confirms: true}
   out-of-range:
     source_fns: [render]
     blocks:

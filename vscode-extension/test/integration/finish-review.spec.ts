@@ -576,7 +576,7 @@ describe("US4 (005): deshacer un cierre o destrabar uno a mitad", function () {
         const deltaKey = `reviewworkflow.${branch}.reviewed`;
         const deltaBefore = configGet(repo, deltaKey);
 
-        await withScriptedConfirms(["Done"], () =>
+        await withScriptedConfirms(["Keep edits & remove Undo"], () =>
             vscode.commands.executeCommand("gitReview.cleanReview")
         );
 
@@ -629,7 +629,7 @@ describe("US4 (005): deshacer un cierre o destrabar uno a mitad", function () {
         assert.ok(branchExists(repo, `review-fixes/${branch}`));
         assert.ok(reviewBranchExists(repo, branch));
 
-        await withScriptedConfirms(["Done"], () =>
+        await withScriptedConfirms(["Keep edits & remove Undo"], () =>
             vscode.commands.executeCommand("gitReview.cleanReview")
         );
 

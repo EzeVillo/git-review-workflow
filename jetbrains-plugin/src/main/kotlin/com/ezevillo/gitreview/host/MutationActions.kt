@@ -20,6 +20,7 @@ import com.ezevillo.gitreview.domain.tokenStillValid
 import com.ezevillo.gitreview.settings.GitReviewSettings
 import com.ezevillo.gitreview.ui.UiMessages
 import com.ezevillo.gitreview.vcs.pickSoleGitRoot
+import com.ezevillo.gitreview.vcs.refreshIdeRepository
 import com.intellij.openapi.project.Project
 
 /**
@@ -58,6 +59,7 @@ class MutationActions(
                     }
                     val argv = actionToArgv("startReview", ActionParams.Start(intent, branch))
                     val result = service.cliInvoker.invoke(argv.verb, argv.args, cwd, network = true)
+                    refreshIdeRepository(project)
                     service.refreshNow()
                     if (result.exitCode == 0 && !result.timedOut) {
                         val note = flattenCliMessage(result.stderr)
@@ -110,6 +112,7 @@ class MutationActions(
                         cwd,
                         network = argv.network,
                     )
+                    refreshIdeRepository(project)
                     service.refreshNow()
                     SimpleOutcome.Done(
                         MutationDone(

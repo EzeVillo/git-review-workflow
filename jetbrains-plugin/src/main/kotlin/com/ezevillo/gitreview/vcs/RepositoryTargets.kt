@@ -20,3 +20,12 @@ fun listGitRoots(project: Project): List<RepositoryTarget> {
 
 fun pickSoleGitRoot(project: Project): RepositoryTarget? =
     pickSoleTarget(listGitRoots(project))
+
+/**
+ * Re-read Git4Idea's repository model after a CLI mutation. Repository.update()
+ * publishes the change event consumed by IntelliJ's native branch widget and
+ * must run off the EDT; MutationActions provides that background-thread boundary.
+ */
+fun refreshIdeRepository(project: Project) {
+    pickSoleGitRoot(project)?.repository?.update()
+}

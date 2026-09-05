@@ -117,7 +117,9 @@ export interface GitReviewTestApi {
      * de borradores, `copyCliInstall`, `openSupport`— no son comandos de la
      * paleta y no se pueden disparar con `executeCommand`. Probarlos llamando
      * a la función exportada saltearía justamente el despacho, que es donde se
-     * valida el índice contra el estado del host.
+     * valida el índice contra el estado del host. La promesa termina recién
+     * cuando terminó la acción y su refresco, para que una spec no entregue el
+     * fixture al test siguiente mientras todavía hay trabajo en curso.
      */
     sendPanelMessage(message: PanelMessage, extra?: unknown): Promise<void>;
 }

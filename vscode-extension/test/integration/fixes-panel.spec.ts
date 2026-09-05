@@ -103,11 +103,7 @@ describe("la seccion de ramas de ediciones", function () {
                 return undefined;
             };
         try {
-            api.sendPanelMessage("discardFixes", index);
-            for (let i = 0; i < 60 && asked === 0; i++) {
-                await new Promise((resolve) => setTimeout(resolve, 50));
-            }
-            await new Promise((resolve) => setTimeout(resolve, 300));
+            await api.sendPanelMessage("discardFixes", index);
         } finally {
             (vscode.window as unknown as {showWarningMessage: unknown}).showWarningMessage = original;
         }

@@ -51,22 +51,6 @@ function canonical(p: string): string {
     return process.platform === "win32" ? slashed.toLowerCase() : slashed;
 }
 
-async function settle(api: Awaited<ReturnType<typeof getTestApi>>): Promise<void> {
-    for (let i = 0; i < 40; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 50));
-        await api.refresh();
-    }
-}
-
-/** Espera hasta que `check` se cumpla, refrescando; devuelve si se cumplió. */
-async function waitFor(check: () => boolean, tries = 100): Promise<boolean> {
-    for (let i = 0; i < tries; i++) {
-        if (check()) return true;
-        await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-    return check();
-}
-
 describe("el bloque de guias de autoria del panel", function () {
     this.timeout(120000);
     const repo = sharedFixtureRepo();
@@ -112,13 +96,12 @@ describe("el bloque de guias de autoria del panel", function () {
         const file = ownGuidePath(repo.dir);
         assert.strictEqual(fs.existsSync(file), false);
 
-        api.sendPanelMessage("createGuide", index);
-        assert.ok(await waitFor(() => fs.existsSync(file)), "la CLI creo el archivo");
+        await api.sendPanelMessage("createGuide", index);
+        assert.ok(fs.existsSync(file), "la CLI creo el archivo");
         // Vacio a proposito: un esqueleto con placeholders lo leeria el proximo
         // agente como si las instrucciones fueran las convenciones.
         assert.strictEqual(fs.readFileSync(file, "utf8"), "");
 
-        await settle(api);
         model = await api.getPanelModel();
         const own = model.guides.find((g) => g.kind === "own");
         // Creada pero sin contenido: `empty`, que no es `absent` — lo que se
@@ -168,9 +151,7 @@ describe("el bloque de guias de autoria del panel", function () {
                 return undefined;
             };
         try {
-            api.sendPanelMessage("discardGuide", index);
-            await waitFor(() => asked > 0);
-            await new Promise((resolve) => setTimeout(resolve, 300));
+            await api.sendPanelMessage("discardGuide", index);
         } finally {
             (vscode.window as unknown as {showWarningMessage: unknown}).showWarningMessage = original;
         }
@@ -184,9 +165,7 @@ describe("el bloque de guias de autoria del panel", function () {
                 return "Discard";
             };
         try {
-            api.sendPanelMessage("discardGuide", index);
-            await waitFor(() => !fs.existsSync(file));
-            await settle(api);
+            await api.sendPanelMessage("discardGuide", index);
         } finally {
             (vscode.window as unknown as {showWarningMessage: unknown}).showWarningMessage = original;
         }
@@ -205,8 +184,7 @@ describe("el bloque de guias de autoria del panel", function () {
         await api.refresh();
         const index = (await api.getPanelModel()).guides.findIndex((g) => g.kind === "own");
 
-        api.sendPanelMessage("createGuide", index);
-        await settle(api);
+        await api.sendPanelMessage("createGuide", index);
         assert.strictEqual(fs.readFileSync(file, "utf8"), "mis reglas\n");
     });
 

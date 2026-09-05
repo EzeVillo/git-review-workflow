@@ -56,40 +56,6 @@ function clearDrafts(repoDir: string): void {
     }
 }
 
-/**
- * Espera a que el estado converja: los controles refrescan en background y no
- * hay otra señal cuando lo que se afirma es que NO pasa nada.
- *
- * `until` corta apenas se cumple; sin esa condición son las cuarenta pasadas
- * fijas, que en Windows (cada refresh es un `status --porcelain` real, nueve
- * procesos git a ~50 ms cada uno contra ~1 ms en Linux) se comen el timeout de
- * dos minutos de la suite — así se caían los dos tests de `startFromDraft` ahí,
- * verdes en Linux.
- */
-async function settle(
-    api: Awaited<ReturnType<typeof getTestApi>>,
-    until?: (state: Awaited<ReturnType<typeof api.refresh>>) => boolean
-): Promise<void> {
-    for (let i = 0; i < 40; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 50));
-        const state = await api.refresh();
-        if (until?.(state)) {
-            return;
-        }
-    }
-}
-
-type TestApi = Awaited<ReturnType<typeof getTestApi>>;
-type RefreshedState = Awaited<ReturnType<TestApi["refresh"]>>;
-
-function draftReviewStarted(branch: string): (state: RefreshedState) => boolean {
-    return (state) =>
-        state.situation === "review" &&
-        state.state?.branch === `review/${branch}` &&
-        state.state.mode === "walk" &&
-        state.draft === true;
-}
-
 describe("US3: el bloque de borradores del panel", function () {
     this.timeout(120000);
     const repo = sharedFixtureRepo();
@@ -235,18 +201,14 @@ describe("US3: el bloque de borradores del panel", function () {
             (d) => d.branch === branch
         )?.path;
         assert.ok(reported, "la CLI reportó una fila para esta rama");
-        api.sendPanelMessage("openDraft", 0);
+        await api.sendPanelMessage("openDraft", 0);
 
         // sameDraftFile y no `===`: es la misma comparación que hace el producto
         // para encontrar el documento abierto, separadores y mayúsculas
         // incluidos.
-        const opened = (): boolean =>
-            vscode.window.visibleTextEditors.some((editor) =>
-                sameDraftFile(editor.document.uri.fsPath, reported)
-            );
-        for (let i = 0; i < 60 && !opened(); i++) {
-            await new Promise((resolve) => setTimeout(resolve, 50));
-        }
+        const opened = (): boolean => vscode.window.visibleTextEditors.some((editor) =>
+            sameDraftFile(editor.document.uri.fsPath, reported)
+        );
         assert.ok(
             opened(),
             `no se abrió ${reported}: ${vscode.window.visibleTextEditors
@@ -269,16 +231,9 @@ describe("US3: el bloque de borradores del panel", function () {
         const file = (await api.getPanelModel()).drafts.find((d) => d.branch === branch)?.path;
         assert.ok(file, "la CLI reportó una fila para esta rama");
         await vscode.env.clipboard.writeText("");
-        api.sendPanelMessage("copyDraftPrompt", 0);
+        await api.sendPanelMessage("copyDraftPrompt", 0);
 
-        let clip = "";
-        for (let i = 0; i < 60; i++) {
-            clip = await vscode.env.clipboard.readText();
-            if (clip.length > 0) {
-                break;
-            }
-            await new Promise((resolve) => setTimeout(resolve, 50));
-        }
+        const clip = await vscode.env.clipboard.readText();
         assert.strictEqual(
             clip,
             `Fill in the reading order at ${file}. The instructions are inside the file,` +
@@ -304,10 +259,7 @@ describe("US3: el bloque de borradores del panel", function () {
             return undefined;
         };
         try {
-            api.sendPanelMessage("startFromDraft", 0);
-            for (let i = 0; i < 100 && errors.length === 0; i++) {
-                await new Promise((resolve) => setTimeout(resolve, 50));
-            }
+            await api.sendPanelMessage("startFromDraft", 0);
         } finally {
             (vscode.window as unknown as {
                 showErrorMessage: unknown
@@ -346,9 +298,7 @@ describe("US3: el bloque de borradores del panel", function () {
             assert.ok(index >= 0, `no hay fila para ${branch}`);
 
             let asked = 0;
-            let started = false;
             const originalQuickPick = vscode.window.showQuickPick;
-            const originalWarning = vscode.window.showWarningMessage;
             (vscode.window as unknown as { showQuickPick: unknown }).showQuickPick = async (
                 items: readonly { keysOnly?: boolean }[]
             ) => {
@@ -358,25 +308,12 @@ describe("US3: el bloque de borradores del panel", function () {
                 }
                 return undefined;
             };
-            (vscode.window as unknown as {
-                showWarningMessage: unknown
-            }).showWarningMessage = async () => {
-                started = true;
-                return "Start the review";
-            };
             try {
-                api.sendPanelMessage("startFromDraft", index);
-                for (let i = 0; i < 200 && !started; i++) {
-                    await new Promise((resolve) => setTimeout(resolve, 50));
-                }
-                await settle(api, draftReviewStarted(branch));
+                await api.sendPanelMessage("startFromDraft", index);
             } finally {
                 (vscode.window as unknown as {
                     showQuickPick: unknown
                 }).showQuickPick = originalQuickPick;
-                (vscode.window as unknown as {
-                    showWarningMessage: unknown
-                }).showWarningMessage = originalWarning;
             }
             assert.strictEqual((await api.refresh()).situation, "review");
             abortReview(repo);
@@ -412,15 +349,8 @@ describe("US3: el bloque de borradores del panel", function () {
         assert.ok(index >= 0);
         assert.strictEqual(model.drafts[index].startable, true);
 
-        let started = false;
         const errors: string[] = [];
-        const originalWarning = vscode.window.showWarningMessage;
         const originalError = vscode.window.showErrorMessage;
-        (vscode.window as unknown as { showWarningMessage: unknown }).showWarningMessage =
-            async () => {
-                started = true;
-                return "Start the review";
-            };
         (vscode.window as unknown as { showErrorMessage: unknown }).showErrorMessage = async (
             message: string
         ) => {
@@ -428,15 +358,8 @@ describe("US3: el bloque de borradores del panel", function () {
             return undefined;
         };
         try {
-            api.sendPanelMessage("startFromDraft", index);
-            for (let i = 0; i < 200 && !started && errors.length === 0; i++) {
-                await new Promise((resolve) => setTimeout(resolve, 50));
-            }
-            await settle(api, draftReviewStarted(branch));
+            await api.sendPanelMessage("startFromDraft", index);
         } finally {
-            (vscode.window as unknown as {
-                showWarningMessage: unknown
-            }).showWarningMessage = originalWarning;
             (vscode.window as unknown as {
                 showErrorMessage: unknown
             }).showErrorMessage = originalError;
@@ -499,11 +422,7 @@ describe("US3: el bloque de borradores del panel", function () {
             return undefined;
         };
         try {
-            api.sendPanelMessage("startFromDraft", model.drafts.indexOf(row));
-            // `settle` y no un sleep suelto: lo que se afirma es que NO pasa
-            // nada, y eso no tiene señal que esperar, así que el único margen es
-            // el tiempo. El de settle es cuatro veces el que había.
-            await settle(api);
+            await api.sendPanelMessage("startFromDraft", model.drafts.indexOf(row));
         } finally {
             (vscode.window as unknown as {
                 showErrorMessage: unknown
@@ -543,11 +462,7 @@ describe("US3: el bloque de borradores del panel", function () {
                 return undefined;
             };
         try {
-            api.sendPanelMessage("discardDraft", index);
-            for (let i = 0; i < 60 && asked === 0; i++) {
-                await new Promise((resolve) => setTimeout(resolve, 50));
-            }
-            await new Promise((resolve) => setTimeout(resolve, 300));
+            await api.sendPanelMessage("discardDraft", index);
         } finally {
             (vscode.window as unknown as {
                 showWarningMessage: unknown
@@ -566,11 +481,7 @@ describe("US3: el bloque de borradores del panel", function () {
                 return "Discard";
             };
         try {
-            api.sendPanelMessage("discardDraft", index);
-            for (let i = 0; i < 100 && fs.existsSync(fileOne); i++) {
-                await new Promise((resolve) => setTimeout(resolve, 50));
-            }
-            await settle(api);
+            await api.sendPanelMessage("discardDraft", index);
         } finally {
             (vscode.window as unknown as {
                 showWarningMessage: unknown

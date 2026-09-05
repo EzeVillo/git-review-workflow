@@ -94,3 +94,10 @@ func TestGuideCreatedNamesTheReportedPath(t *testing.T) {
 		t.Fatalf("GuideCreated = %q", got)
 	}
 }
+
+func TestFinishPendingCopySaysEditsJoinTheBranchOnlyWhenCommitted(t *testing.T) {
+	const want = "Your edits are staged and ready to commit to {destination}. Commit them before switching branches."
+	if FinishPendingLine1 != want {
+		t.Fatalf("FinishPendingLine1 = %q, want %q", FinishPendingLine1, want)
+	}
+}

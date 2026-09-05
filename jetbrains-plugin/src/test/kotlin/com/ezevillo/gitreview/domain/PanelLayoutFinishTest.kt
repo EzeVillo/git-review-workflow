@@ -8,11 +8,11 @@ import org.junit.jupiter.api.Test
 
 class PanelLayoutFinishTest {
     @Test
-    fun `finish-pending banner leads with where the edits are, not with the verb`() {
+    fun `finish-pending banner explains when the edits join the branch`() {
         val layout = panelLayout(PanelFixtures.finishPending())
         val banner = layout.blocks.filterIsInstance<Block.Banner>().first()
-        assertTrue(banner.paragraphs.first().startsWith("Your edits are on"))
-        assertTrue(banner.paragraphs.first().endsWith("staged and ready to commit."))
+        assertTrue(banner.paragraphs.first().startsWith("Your edits are staged and ready to commit to"))
+        assertTrue(banner.paragraphs.first().endsWith("Commit them before switching branches."))
         // Commit y push se quedan -- ese paso vive en Source Control, o sea
         // fuera del panel --, pero los dos comandos que este texto nombraba son
         // los dos botones dibujados debajo de el.

@@ -6,12 +6,12 @@ namespace GitReview.Domain.Tests;
 public class PanelLayoutFinishTests
 {
     [Fact]
-    public void Finish_pending_banner_leads_with_where_the_edits_are()
+    public void Finish_pending_banner_explains_when_the_edits_join_the_branch()
     {
         var layout = PanelLayoutBuilder.PanelLayout(PanelFixtures.FinishPending());
         var banner = layout.Blocks.OfType<Block.Banner>().First();
-        Assert.StartsWith("Your edits are on", banner.Paragraphs[0]);
-        Assert.EndsWith("staged and ready to commit.", banner.Paragraphs[0]);
+        Assert.StartsWith("Your edits are staged and ready to commit to", banner.Paragraphs[0]);
+        Assert.EndsWith("Commit them before switching branches.", banner.Paragraphs[0]);
 
         var controls = banner.ControlsRow.Controls;
         Assert.Equal(ControlId.CleanReview, controls[0].Id);
@@ -24,12 +24,12 @@ public class PanelLayoutFinishTests
     }
 
     /// <summary>
-    /// The banner names the branch the edits actually landed on, which is the branch
-    /// itself for a finish with --onto-source and review-fixes/ otherwise. Sending
-    /// someone to the wrong branch to commit is how work gets lost.
+    /// The banner names the intended commit destination. Staged edits are not part
+    /// of a branch until they are committed, so it also warns that a branch switch
+    /// can carry them elsewhere.
     /// </summary>
     [Fact]
-    public void The_banner_names_where_the_edits_went()
+    public void The_banner_names_the_intended_commit_destination()
     {
         static string FirstParagraph(bool onto)
         {
@@ -42,8 +42,8 @@ public class PanelLayoutFinishTests
             return PanelLayoutBuilder.PanelLayout(model).Blocks.OfType<Block.Banner>().First().Paragraphs[0];
         }
 
-        Assert.Equal("Your edits are on review-fixes/feature/x, staged and ready to commit.", FirstParagraph(false));
-        Assert.Equal("Your edits are on feature/x, staged and ready to commit.", FirstParagraph(true));
+        Assert.Equal("Your edits are staged and ready to commit to review-fixes/feature/x. Commit them before switching branches.", FirstParagraph(false));
+        Assert.Equal("Your edits are staged and ready to commit to feature/x. Commit them before switching branches.", FirstParagraph(true));
     }
 
     /// <summary>

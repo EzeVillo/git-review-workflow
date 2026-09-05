@@ -1,4 +1,5 @@
-Your edits are on review-fixes/feat-x, staged and ready to commit.
+Your edits are staged and ready to commit to review-fixes/feat-x. Commit them   
+before switching branches.                                                      
 Commit and push them from Source Control. You can still undo this finish.
 
 [ [1;32mKeep edits & remove Undo[0m ]

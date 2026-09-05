@@ -703,7 +703,7 @@ public static class PanelLayoutBuilder
             new Block.Banner(
                 new[]
                 {
-                    $"Your edits are on {destination}, staged and ready to commit.",
+                    $"Your edits are staged and ready to commit to {destination}. Commit them before switching branches.",
                     "Commit and push them from Source Control. You can still undo this finish.",
                 },
                 new Block.Row(new[]

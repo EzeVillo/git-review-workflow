@@ -543,14 +543,14 @@ describe("panelHtml", () => {
         );
     });
 
-    it("finish-pending es pantalla propia: staged edits, Undo finish y Clean, sin empty state", () => {
+    it("finish-pending explains that staged edits need a commit before a branch switch", () => {
         const pendingBranch = /case "finish-pending": \{([^]*?)\n {6}case "out-of-range"/.exec(html)?.[1] ?? "";
         assert.ok(pendingBranch.length > 0, "no se encontro el caso finish-pending en renderEmptyState");
         // Cierre ya hecho: el panel ancla al destino de las edits y al undo,
         // no a un empty state de "empezá otra cosa".
         assert.ok(
-            pendingBranch.includes("staged") || pendingBranch.includes("Source Control"),
-            "el copy tiene que anclar a edits staged / SCM"
+            pendingBranch.includes('"Your edits are staged and ready to commit to " + destination + ". Commit them before switching branches."'),
+            "el copy debe decir que las edits staged no pertenecen al destino hasta el commit"
         );
         assert.ok(
             pendingBranch.includes("Commit and push"),

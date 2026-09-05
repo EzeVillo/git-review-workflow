@@ -1363,7 +1363,7 @@ export function panelHtml(nonce: string): string {
         }
         const notice = el("div", "note finish-banner");
         notice.appendChild(el("p", null,
-          "Your edits are on " + destination + ", staged and ready to commit."));
+          "Your edits are staged and ready to commit to " + destination + ". Commit them before switching branches."));
         notice.appendChild(el("p", null,
           "Commit and push them from Source Control. You can still undo this finish."));
         const actions = el("div", "row");

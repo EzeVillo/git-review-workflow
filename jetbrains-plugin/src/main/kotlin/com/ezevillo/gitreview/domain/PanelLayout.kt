@@ -703,7 +703,7 @@ private fun finishPendingBlocks(model: PanelModel): List<Block> {
     return listOf(
         Block.Banner(
             paragraphs = listOf(
-                "Your edits are on $destination, staged and ready to commit.",
+                "Your edits are staged and ready to commit to $destination. Commit them before switching branches.",
                 "Commit and push them from Source Control. You can still undo this finish.",
             ),
             row = Block.Row(

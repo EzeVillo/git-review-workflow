@@ -197,7 +197,7 @@ const (
 // --- copy: finish-pending, finish-conflict, out-of-range, error -------------
 
 const (
-	FinishPendingLine1 = "Your edits are on {destination}, staged and ready to commit."
+	FinishPendingLine1 = "Your edits are staged and ready to commit to {destination}. Commit them before switching branches."
 	FinishPendingLine2 = "Commit and push them from Source Control. You can still undo this finish."
 
 	FinishConflictBanner = "This finish stopped at a conflict. Resolve the markers, then continue — or undo it to go back to editing."

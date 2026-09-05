@@ -14,7 +14,7 @@ and TUI clients. The CLI invocation and branch-cleanup behavior do not change.
 
 When a finish has completed, every client shows:
 
-1. `Your edits are on {destination}, staged and ready to commit.`
+1. `Your edits are staged and ready to commit to {destination}. Commit them before switching branches.`
 2. `Commit and push them from Source Control. You can still undo this finish.`
 3. Primary action: `Keep edits & remove Undo`
 4. Secondary action: `Undo Finish`

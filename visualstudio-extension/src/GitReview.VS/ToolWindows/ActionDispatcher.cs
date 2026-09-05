@@ -1001,10 +1001,7 @@ public sealed class ActionDispatcher
 
         if (baseBranch)
         {
-            var candidates = parsed.Candidates
-                .OrderByDescending(c => c.Current)
-                .ThenBy(c => c.Name, StringComparer.Ordinal)
-                .ToList();
+            var candidates = ConfigPorcelain.BranchPickerItems(parsed.Candidates);
             if (candidates.Count == 0)
             {
                 GitReviewDialogs.Error(UserCopy.NoBranchesForBase);

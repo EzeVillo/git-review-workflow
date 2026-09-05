@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import {invokeGitReview, InvokeOptions} from "../cli/invoke";
-import {CandidateBranch} from "../cli/configPorcelain";
+import {branchPickerItems, CandidateBranch} from "../cli/configPorcelain";
 import {MutationLock} from "../review/mutationLock";
 import {ReviewStateManager} from "../review/state";
 
@@ -39,7 +39,7 @@ export async function setBase(
     // La actual primero (research.md Decisión 9), igual que el primer paso del
     // asistente de inicio: es casi siempre la que se quiere comparar contra, y
     // la búsqueda incremental del QuickPick cubre el resto.
-    const items = [...list]
+    const items = branchPickerItems(list)
         .sort((a, b) => (a.current === b.current ? 0 : a.current ? -1 : 1))
         .map((candidate) => ({label: label(candidate), candidate}));
 

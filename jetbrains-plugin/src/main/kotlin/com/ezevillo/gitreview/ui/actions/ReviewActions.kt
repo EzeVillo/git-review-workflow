@@ -8,6 +8,7 @@ import com.ezevillo.gitreview.domain.HousekeepingKind
 import com.ezevillo.gitreview.domain.ReviewLayout
 import com.ezevillo.gitreview.domain.Situation
 import com.ezevillo.gitreview.domain.UserCopy
+import com.ezevillo.gitreview.domain.branchPickerItems
 import com.ezevillo.gitreview.domain.branchPickerLabel
 import com.ezevillo.gitreview.domain.confirmCopyFor
 import com.ezevillo.gitreview.domain.currentEntry
@@ -339,10 +340,7 @@ class SetBaseAction : AnAction(), DumbAware {
             UiMessages.error(project, UserCopy.NO_BRANCHES_FOR_BASE)
             return
         }
-        val sorted = list.sortedWith(
-            compareByDescending<com.ezevillo.gitreview.domain.CandidateBranch> { it.current }
-                .thenBy { it.name },
-        )
+        val sorted = branchPickerItems(list)
         val names = sorted.map { branchPickerLabel(it) }.toTypedArray()
         val idx = UiMessages.choose(
             project,

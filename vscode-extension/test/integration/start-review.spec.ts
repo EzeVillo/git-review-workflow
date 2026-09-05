@@ -401,4 +401,32 @@ describe("US1: empezar a revisar sin escribir el comando", function () {
             "el asistente resolvio la base inline, sin bloquear el resto del flujo"
         );
     });
+
+    it("set base muestra una sola fila cuando la rama existe local y remota", async () => {
+        const branch = "us1-set-base-dedup";
+        createBranchWithChanges(repo, branch, {"src/base-picker.ts": "x\n"});
+
+        const api = await getTestApi();
+        assert.strictEqual((await api.refresh()).situation, "no-review");
+
+        const originalQuickPick = vscode.window.showQuickPick;
+        let offered: readonly WizardItem[] = [];
+        (vscode.window as unknown as {showQuickPick: unknown}).showQuickPick = async (
+            items: readonly WizardItem[]
+        ) => {
+            offered = [...items];
+            return undefined;
+        };
+        try {
+            await vscode.commands.executeCommand("gitReview.setBase");
+        } finally {
+            (vscode.window as unknown as {showQuickPick: unknown}).showQuickPick = originalQuickPick;
+        }
+
+        assert.strictEqual(
+            offered.filter((item) => item.candidate?.name === branch).length,
+            1,
+            "el picker de base debe colapsar las filas local y remote del mismo nombre"
+        );
+    });
 });

@@ -16,6 +16,9 @@
 
 Clients: [VS Code extension](vscode-extension/README.md) · [JetBrains IDE plugin](jetbrains-plugin/README.md) · [Visual Studio extension](visualstudio-extension/README.md)
 
+Use it from the terminal, or from its VS Code, JetBrains, and Visual Studio panels—without leaving
+the IDE you use to navigate, run, and edit the code.
+
 [![Watch the demo](demo-poster.png)](https://youtu.be/LsSQtNFnjRQ)
 
 ---

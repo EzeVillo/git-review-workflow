@@ -943,19 +943,99 @@
             you can edit and run. If the branch ships a walkthrough, it takes you file by file — in
             the
             order the author chose, with the reason for each. Your fixes come back out on a separate
-            branch.
+            branch. Review it in the IDE you already use.
         </p>
         <div class="cta-row">
-            <div class="cmd">
-                <span class="prompt">$</span>
-                <code id="install-cmd">npm install -g git-review-workflow</code>
-                <button class="copy" data-copy="#install-cmd" data-i18n="copy" type="button">Copy
-                </button>
-            </div>
+            <a class="btn" data-i18n="chooseide" href="#editors">Choose your IDE →</a>
             <a class="ghost" data-i18n="watch" href="https://youtu.be/LsSQtNFnjRQ">Watch the
                 90-second demo →</a>
         </div>
     </header>
+
+    <section class="section" id="editors">
+        <p class="eyebrow" data-i18n="eyebrowide">Your IDE</p>
+        <h2 class="h2" data-i18n="h2ide">Review in the IDE you already use.</h2>
+        <p class="prose" data-i18n="ideprose">
+            The reading order lives in the sidebar while you navigate the full project, inspect code beyond
+            the diff, edit, and run it. Requires the git-review-workflow CLI.
+        </p>
+        <div class="ide-grid">
+            <div class="vsc" id="vscode">
+                <svg aria-hidden="true" class="vsc-logo vsc-mark" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M23.15 2.587 18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/>
+                </svg>
+                <div class="vsc-copy">
+                    <p class="vsc-name">VS Code</p>
+                    <p class="vsc-note">1.75+</p>
+                </div>
+                <a class="btn" data-i18n="ideget"
+                   href="https://marketplace.visualstudio.com/items?itemName=EzeVillo.git-review-workflow"
+                   target="_blank" rel="noopener noreferrer">Install →</a>
+            </div>
+            <div class="vsc" id="intellij">
+                <!-- Full-color IntelliJ IDEA mark (Devicon original; gradient ids scoped). -->
+                <svg aria-hidden="true" class="vsc-logo" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+                    <defs>
+                        <linearGradient id="jb-grad-a" gradientUnits="userSpaceOnUse" x1="11.16" y1="59.21" x2="58.94" y2="56.78" gradientTransform="rotate(.104) scale(1.21905)">
+                            <stop offset=".09" stop-color="#fc801d"/>
+                            <stop offset=".23" stop-color="#b07f61"/>
+                            <stop offset=".41" stop-color="#577db3"/>
+                            <stop offset=".53" stop-color="#1e7ce6"/>
+                            <stop offset=".59" stop-color="#087cfa"/>
+                        </linearGradient>
+                        <linearGradient id="jb-grad-b" gradientUnits="userSpaceOnUse" x1="89.05" y1="54.12" x2="73.12" y2="6.52" gradientTransform="rotate(.104) scale(1.21905)">
+                            <stop offset="0" stop-color="#fe2857"/>
+                            <stop offset=".08" stop-color="#cb3979"/>
+                            <stop offset=".16" stop-color="#9e4997"/>
+                            <stop offset=".25" stop-color="#7557b2"/>
+                            <stop offset=".34" stop-color="#5362c8"/>
+                            <stop offset=".44" stop-color="#386cda"/>
+                            <stop offset=".54" stop-color="#2373e8"/>
+                            <stop offset=".66" stop-color="#1478f2"/>
+                            <stop offset=".79" stop-color="#0b7bf8"/>
+                            <stop offset="1" stop-color="#087cfa"/>
+                        </linearGradient>
+                        <linearGradient id="jb-grad-c" gradientUnits="userSpaceOnUse" x1="18.72" y1="26.61" x2="78.8" y2="125.99" gradientTransform="rotate(.104) scale(1.21905)">
+                            <stop offset="0" stop-color="#fe2857"/>
+                            <stop offset=".08" stop-color="#fe295f"/>
+                            <stop offset=".21" stop-color="#ff2d76"/>
+                            <stop offset=".3" stop-color="#ff318c"/>
+                            <stop offset=".38" stop-color="#ea3896"/>
+                            <stop offset=".55" stop-color="#b248ae"/>
+                            <stop offset=".79" stop-color="#5a63d6"/>
+                            <stop offset="1" stop-color="#087cfa"/>
+                        </linearGradient>
+                    </defs>
+                    <path fill="url(#jb-grad-a)" d="M23.492 88.027 6.277 74.434 16.41 55.676l15.223 5.094Zm0 0"/>
+                    <path fill="#087cfa" d="m121.988 36.68-2.105 67.78L74.8 122.517l-24.55-15.849Zm0 0"/>
+                    <path fill="url(#jb-grad-b)" d="M121.988 36.68 99.68 58.44 71.035 23.297l14.14-15.899Zm0 0"/>
+                    <path fill="url(#jb-grad-c)" d="m50.25 106.668-35.852 12.957 7.508-26.293 9.727-32.562L4.96 51.848 21.906 5.484l38.301 4.524L99.68 58.44Zm0 0"/>
+                    <path fill="#000" d="M27.43 27.43h73.14v73.14H27.43Zm0 0"/>
+                    <path fill="#fff" d="M36.547 86.746h27.43v4.574h-27.43Zm13.691-45.152v-4.996h-13.64v4.996h3.824v17.261h-3.824v5h13.64v-5h-3.816V41.594Zm13.078 22.648a10.802 10.802 0 0 1-5.351-1.219 12.299 12.299 0 0 1-3.559-2.875l3.766-4.207c.687.778 1.484 1.45 2.367 2a4.849 4.849 0 0 0 2.621.73 3.46 3.46 0 0 0 2.668-1.058 5.07 5.07 0 0 0 .977-3.449V36.57h6.093v17.86a12.384 12.384 0 0 1-.668 4.254 7.919 7.919 0 0 1-4.964 4.879 12.097 12.097 0 0 1-4.036.632"/>
+                </svg>
+                <div class="vsc-copy">
+                    <p class="vsc-name" data-i18n="idejetbrains">JetBrains IDEs</p>
+                    <p class="vsc-note" data-i18n="idejetbrainsnote">2026.1+</p>
+                </div>
+                <a class="btn" data-i18n="ideget"
+                   href="https://plugins.jetbrains.com/plugin/33490-git-review-workflow"
+                   target="_blank" rel="noopener noreferrer">Install →</a>
+            </div>
+            <div class="vsc" id="visualstudio">
+                <!-- Visual Studio mark (Simple Icons, CC0). -->
+                <svg aria-hidden="true" class="vsc-logo vsc-mark-vs" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M17.583.063a1.5 1.5 0 00-1.032.392 1.5 1.5 0 00-.001 0A.88.88 0 0016.5.5L8.528 9.316 3.875 5.5l-.407-.35a1 1 0 00-1.024-.154 1 1 0 00-.012.005l-1.817.75a1 1 0 00-.077.036 1 1 0 00-.047.028 1 1 0 00-.038.022 1 1 0 00-.048.034 1 1 0 00-.03.024 1 1 0 00-.044.036 1 1 0 00-.036.033 1 1 0 00-.032.035 1 1 0 00-.033.038 1 1 0 00-.035.044 1 1 0 00-.024.034 1 1 0 00-.032.05 1 1 0 00-.02.035 1 1 0 00-.024.05 1 1 0 00-.02.045 1 1 0 00-.016.044 1 1 0 00-.016.047 1 1 0 00-.015.055 1 1 0 00-.01.04 1 1 0 00-.008.054 1 1 0 00-.006.05A1 1 0 000 6.668v10.666a1 1 0 00.615.917l1.817.764a1 1 0 001.035-.164l.408-.35 4.653-3.815 7.973 8.815a1.5 1.5 0 00.072.065 1.5 1.5 0 00.057.05 1.5 1.5 0 00.058.042 1.5 1.5 0 00.063.044 1.5 1.5 0 00.065.038 1.5 1.5 0 00.065.036 1.5 1.5 0 00.068.031 1.5 1.5 0 00.07.03 1.5 1.5 0 00.073.025 1.5 1.5 0 00.066.02 1.5 1.5 0 00.08.02 1.5 1.5 0 00.068.014 1.5 1.5 0 00.075.01 1.5 1.5 0 00.075.008 1.5 1.5 0 00.073.003 1.5 1.5 0 00.077 0 1.5 1.5 0 00.078-.005 1.5 1.5 0 00.067-.007 1.5 1.5 0 00.087-.015 1.5 1.5 0 00.06-.012 1.5 1.5 0 00.08-.022 1.5 1.5 0 00.068-.02 1.5 1.5 0 00.07-.028 1.5 1.5 0 00.09-.037l4.944-2.377a1.5 1.5 0 00.476-.362 1.5 1.5 0 00.09-.112 1.5 1.5 0 00.004-.007 1.5 1.5 0 00.08-.125 1.5 1.5 0 00.062-.12 1.5 1.5 0 00.009-.017 1.5 1.5 0 00.04-.108 1.5 1.5 0 00.015-.037 1.5 1.5 0 00.03-.107 1.5 1.5 0 00.009-.037 1.5 1.5 0 00.017-.1 1.5 1.5 0 00.008-.05 1.5 1.5 0 00.006-.09 1.5 1.5 0 00.004-.08V3.942a1.5 1.5 0 000-.003 1.5 1.5 0 000-.032 1.5 1.5 0 00-.01-.15 1.5 1.5 0 00-.84-1.17L18.206.21a1.5 1.5 0 00-.622-.146zM18 6.92v10.163l-6.198-5.08zM3 8.574l3.099 3.427-3.1 3.426z"/>
+                </svg>
+                <div class="vsc-copy">
+                    <p class="vsc-name">Visual Studio</p>
+                    <p class="vsc-note">2022+</p>
+                </div>
+                <a class="btn" data-i18n="ideget"
+                   href="https://marketplace.visualstudio.com/items?itemName=EzeVillo.gitreviewworkflow"
+                   target="_blank" rel="noopener noreferrer">Install →</a>
+            </div>
+        </div>
+    </section>
 
     <section class="section">
         <p class="eyebrow" data-i18n="eyebrow1">The reading order</p>
@@ -1087,91 +1167,6 @@
         <div class="compare-compact" id="compare-compact"></div>
     </section>
 
-    <section class="section" id="editors">
-        <p class="eyebrow" data-i18n="eyebrowide">Editors</p>
-        <h2 class="h2" data-i18n="h2ide">Also in your IDE</h2>
-        <p class="prose" data-i18n="ideprose">
-            The same review in the sidebar: the reading order, the why for the file you are on, and
-            the diff one click away. Needs the CLI.
-        </p>
-        <div class="ide-grid">
-            <div class="vsc" id="vscode">
-                <svg aria-hidden="true" class="vsc-logo vsc-mark" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M23.15 2.587 18.21.21a1.494 1.494 0 0 0-1.705.29l-9.46 8.63-4.12-3.128a.999.999 0 0 0-1.276.057L.327 7.261A1 1 0 0 0 .326 8.74L3.899 12 .326 15.26a1 1 0 0 0 .001 1.479L1.65 17.94a.999.999 0 0 0 1.276.057l4.12-3.128 9.46 8.63a1.492 1.492 0 0 0 1.704.29l4.942-2.377A1.5 1.5 0 0 0 24 20.06V3.939a1.5 1.5 0 0 0-.85-1.352zm-5.146 14.861L10.826 12l7.178-5.448v10.896z"/>
-                </svg>
-                <div class="vsc-copy">
-                    <p class="vsc-name">VS Code</p>
-                    <p class="vsc-note">1.75+</p>
-                </div>
-                <a class="btn" data-i18n="ideget"
-                   href="https://marketplace.visualstudio.com/items?itemName=EzeVillo.git-review-workflow"
-                   target="_blank" rel="noopener noreferrer">Install →</a>
-            </div>
-            <div class="vsc" id="intellij">
-                <!-- Full-color IntelliJ IDEA mark (Devicon original; gradient ids scoped). -->
-                <svg aria-hidden="true" class="vsc-logo" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
-                    <defs>
-                        <linearGradient id="jb-grad-a" gradientUnits="userSpaceOnUse" x1="11.16" y1="59.21" x2="58.94" y2="56.78" gradientTransform="rotate(.104) scale(1.21905)">
-                            <stop offset=".09" stop-color="#fc801d"/>
-                            <stop offset=".23" stop-color="#b07f61"/>
-                            <stop offset=".41" stop-color="#577db3"/>
-                            <stop offset=".53" stop-color="#1e7ce6"/>
-                            <stop offset=".59" stop-color="#087cfa"/>
-                        </linearGradient>
-                        <linearGradient id="jb-grad-b" gradientUnits="userSpaceOnUse" x1="89.05" y1="54.12" x2="73.12" y2="6.52" gradientTransform="rotate(.104) scale(1.21905)">
-                            <stop offset="0" stop-color="#fe2857"/>
-                            <stop offset=".08" stop-color="#cb3979"/>
-                            <stop offset=".16" stop-color="#9e4997"/>
-                            <stop offset=".25" stop-color="#7557b2"/>
-                            <stop offset=".34" stop-color="#5362c8"/>
-                            <stop offset=".44" stop-color="#386cda"/>
-                            <stop offset=".54" stop-color="#2373e8"/>
-                            <stop offset=".66" stop-color="#1478f2"/>
-                            <stop offset=".79" stop-color="#0b7bf8"/>
-                            <stop offset="1" stop-color="#087cfa"/>
-                        </linearGradient>
-                        <linearGradient id="jb-grad-c" gradientUnits="userSpaceOnUse" x1="18.72" y1="26.61" x2="78.8" y2="125.99" gradientTransform="rotate(.104) scale(1.21905)">
-                            <stop offset="0" stop-color="#fe2857"/>
-                            <stop offset=".08" stop-color="#fe295f"/>
-                            <stop offset=".21" stop-color="#ff2d76"/>
-                            <stop offset=".3" stop-color="#ff318c"/>
-                            <stop offset=".38" stop-color="#ea3896"/>
-                            <stop offset=".55" stop-color="#b248ae"/>
-                            <stop offset=".79" stop-color="#5a63d6"/>
-                            <stop offset="1" stop-color="#087cfa"/>
-                        </linearGradient>
-                    </defs>
-                    <path fill="url(#jb-grad-a)" d="M23.492 88.027 6.277 74.434 16.41 55.676l15.223 5.094Zm0 0"/>
-                    <path fill="#087cfa" d="m121.988 36.68-2.105 67.78L74.8 122.517l-24.55-15.849Zm0 0"/>
-                    <path fill="url(#jb-grad-b)" d="M121.988 36.68 99.68 58.44 71.035 23.297l14.14-15.899Zm0 0"/>
-                    <path fill="url(#jb-grad-c)" d="m50.25 106.668-35.852 12.957 7.508-26.293 9.727-32.562L4.96 51.848 21.906 5.484l38.301 4.524L99.68 58.44Zm0 0"/>
-                    <path fill="#000" d="M27.43 27.43h73.14v73.14H27.43Zm0 0"/>
-                    <path fill="#fff" d="M36.547 86.746h27.43v4.574h-27.43Zm13.691-45.152v-4.996h-13.64v4.996h3.824v17.261h-3.824v5h13.64v-5h-3.816V41.594Zm13.078 22.648a10.802 10.802 0 0 1-5.351-1.219 12.299 12.299 0 0 1-3.559-2.875l3.766-4.207c.687.778 1.484 1.45 2.367 2a4.849 4.849 0 0 0 2.621.73 3.46 3.46 0 0 0 2.668-1.058 5.07 5.07 0 0 0 .977-3.449V36.57h6.093v17.86a12.384 12.384 0 0 1-.668 4.254 7.919 7.919 0 0 1-4.964 4.879 12.097 12.097 0 0 1-4.036.632"/>
-                </svg>
-                <div class="vsc-copy">
-                    <p class="vsc-name" data-i18n="idejetbrains">JetBrains IDEs</p>
-                    <p class="vsc-note" data-i18n="idejetbrainsnote">2026.1+</p>
-                </div>
-                <a class="btn" data-i18n="ideget"
-                   href="https://plugins.jetbrains.com/plugin/33490-git-review-workflow"
-                   target="_blank" rel="noopener noreferrer">Install →</a>
-            </div>
-            <div class="vsc" id="visualstudio">
-                <!-- Visual Studio mark (Simple Icons, CC0). -->
-                <svg aria-hidden="true" class="vsc-logo vsc-mark-vs" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M17.583.063a1.5 1.5 0 00-1.032.392 1.5 1.5 0 00-.001 0A.88.88 0 0016.5.5L8.528 9.316 3.875 5.5l-.407-.35a1 1 0 00-1.024-.154 1 1 0 00-.012.005l-1.817.75a1 1 0 00-.077.036 1 1 0 00-.047.028 1 1 0 00-.038.022 1 1 0 00-.048.034 1 1 0 00-.03.024 1 1 0 00-.044.036 1 1 0 00-.036.033 1 1 0 00-.032.035 1 1 0 00-.033.038 1 1 0 00-.035.044 1 1 0 00-.024.034 1 1 0 00-.032.05 1 1 0 00-.02.035 1 1 0 00-.024.05 1 1 0 00-.02.045 1 1 0 00-.016.044 1 1 0 00-.016.047 1 1 0 00-.015.055 1 1 0 00-.01.04 1 1 0 00-.008.054 1 1 0 00-.006.05A1 1 0 000 6.668v10.666a1 1 0 00.615.917l1.817.764a1 1 0 001.035-.164l.408-.35 4.653-3.815 7.973 8.815a1.5 1.5 0 00.072.065 1.5 1.5 0 00.057.05 1.5 1.5 0 00.058.042 1.5 1.5 0 00.063.044 1.5 1.5 0 00.065.038 1.5 1.5 0 00.065.036 1.5 1.5 0 00.068.031 1.5 1.5 0 00.07.03 1.5 1.5 0 00.073.025 1.5 1.5 0 00.066.02 1.5 1.5 0 00.08.02 1.5 1.5 0 00.068.014 1.5 1.5 0 00.075.01 1.5 1.5 0 00.075.008 1.5 1.5 0 00.073.003 1.5 1.5 0 00.077 0 1.5 1.5 0 00.078-.005 1.5 1.5 0 00.067-.007 1.5 1.5 0 00.087-.015 1.5 1.5 0 00.06-.012 1.5 1.5 0 00.08-.022 1.5 1.5 0 00.068-.02 1.5 1.5 0 00.07-.028 1.5 1.5 0 00.09-.037l4.944-2.377a1.5 1.5 0 00.476-.362 1.5 1.5 0 00.09-.112 1.5 1.5 0 00.004-.007 1.5 1.5 0 00.08-.125 1.5 1.5 0 00.062-.12 1.5 1.5 0 00.009-.017 1.5 1.5 0 00.04-.108 1.5 1.5 0 00.015-.037 1.5 1.5 0 00.03-.107 1.5 1.5 0 00.009-.037 1.5 1.5 0 00.017-.1 1.5 1.5 0 00.008-.05 1.5 1.5 0 00.006-.09 1.5 1.5 0 00.004-.08V3.942a1.5 1.5 0 000-.003 1.5 1.5 0 000-.032 1.5 1.5 0 00-.01-.15 1.5 1.5 0 00-.84-1.17L18.206.21a1.5 1.5 0 00-.622-.146zM18 6.92v10.163l-6.198-5.08zM3 8.574l3.099 3.427-3.1 3.426z"/>
-                </svg>
-                <div class="vsc-copy">
-                    <p class="vsc-name">Visual Studio</p>
-                    <p class="vsc-note">2022+</p>
-                </div>
-                <a class="btn" data-i18n="ideget"
-                   href="https://marketplace.visualstudio.com/items?itemName=EzeVillo.gitreviewworkflow"
-                   target="_blank" rel="noopener noreferrer">Install →</a>
-            </div>
-        </div>
-    </section>
-
     <section class="section">
         <p class="eyebrow" data-i18n="eyebrow4">Install</p>
         <h2 class="h2" data-i18n="h2d">One command, then one line of config per repo.</h2>
@@ -1276,7 +1271,7 @@ brew install git-review-workflow</pre>
         var ES = {
             h1a: "Un agente escribió el cambio.",
             h1b: "Que escriba también el orden de lectura.",
-            lede: '<code>git review</code> pone el pull request entero en tu working tree como un único diff staged que podés editar y correr. Si la rama trae un walkthrough, te lleva archivo por archivo — en el orden que eligió el autor y con el motivo de cada uno. Tus correcciones salen después a una rama aparte.',
+            lede: '<code>git review</code> pone el pull request entero en tu working tree como un único diff staged que podés editar y correr. Si la rama trae un walkthrough, te lleva archivo por archivo — en el orden que eligió el autor y con el motivo de cada uno. Tus correcciones salen después a una rama aparte. Revisalo en el IDE que ya usás.',
             copy: "Copiar",
             watch: "Mirá la demo de 90 segundos →",
 
@@ -1305,9 +1300,10 @@ brew install git-review-workflow</pre>
             rowweb: "Web de GitHub / GitLab",
             inide: "solo en el IDE",
 
-            eyebrowide: "Editores",
-            h2ide: "También en tu IDE",
-            ideprose: "La misma review en la barra lateral: el orden de lectura, el porqué del archivo en el que estás y el diff a un clic. Necesita la CLI.",
+            chooseide: "Elegí tu IDE →",
+            eyebrowide: "Tu IDE",
+            h2ide: "Revisá en el IDE que ya usás.",
+            ideprose: "El orden de lectura vive en la barra lateral mientras navegás el proyecto completo, inspeccionás código fuera del diff, editás y lo corrés. Necesita la CLI de git-review-workflow.",
             idejetbrains: "IDEs de JetBrains",
             idejetbrainsnote: "2026.1+",
             ideget: "Instalar →",

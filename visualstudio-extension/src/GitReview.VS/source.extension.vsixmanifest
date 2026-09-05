@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Id="git-review-workflow-vs" Version="0.2.0" Language="en-US" Publisher="Ezequiel Villordo" />
+    <Identity Id="git-review-workflow-vs" Version="0.3.0" Language="en-US" Publisher="Ezequiel Villordo" />
     <DisplayName>git review workflow</DisplayName>
     <!-- Reader-facing copy, not a summary of the monorepo: no sibling clients, no
          restating the supported-VS list the gallery already shows. Opens with the

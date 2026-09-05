@@ -144,7 +144,7 @@ export class WalkthroughViewProvider implements vscode.WebviewViewProvider {
      * para `openSupport`, y `kind` para `copyCliInstall` — el host discrimina
      * por `type`.
      */
-    constructor(private readonly onMessage: (message: PanelMessage, extra?: unknown) => void) {
+    constructor(private readonly onMessage: (message: PanelMessage, extra?: unknown) => Promise<void>) {
     }
 
     get isVisible(): boolean {
@@ -183,7 +183,7 @@ export class WalkthroughViewProvider implements vscode.WebviewViewProvider {
                 } else if (type === "copyCliInstall") {
                     extra = (msg as { kind?: unknown }).kind;
                 }
-                this.onMessage(type, extra);
+                void this.onMessage(type, extra);
             }
         });
         const visibility = view.onDidChangeVisibility(() => {

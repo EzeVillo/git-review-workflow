@@ -119,7 +119,7 @@ export interface GitReviewTestApi {
      * a la función exportada saltearía justamente el despacho, que es donde se
      * valida el índice contra el estado del host.
      */
-    sendPanelMessage(message: PanelMessage, extra?: unknown): void;
+    sendPanelMessage(message: PanelMessage, extra?: unknown): Promise<void>;
 }
 
 export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
@@ -277,12 +277,12 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
      * El webview no ejecuta comandos: postea uno de un conjunto cerrado y acá se
      * decide (contracts/extension-surface.md § Protocolo).
      */
-    function handlePanelMessage(message: PanelMessage, extra?: unknown): void {
+    async function handlePanelMessage(message: PanelMessage, extra?: unknown): Promise<void> {
         // Support: no hay comando de paleta; el host resuelve el id contra el
         // allowlist y abre el browser. Un id desconocido se ignora.
         if (message === "openSupport") {
             if (typeof extra === "string" && extra in SUPPORT_URLS) {
-                void vscode.env.openExternal(
+                await vscode.env.openExternal(
                     vscode.Uri.parse(SUPPORT_URLS[extra as SupportLinkId]),
                 );
             }
@@ -291,7 +291,7 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
         // Copy del empty state cli-*: el webview manda kind; el host resuelve
         // el string npm allowlisteado (no se confía texto del panel).
         if (message === "copyCliInstall") {
-            void copyCliInstallCommand(extra);
+            await copyCliInstallCommand(extra);
             return;
         }
         // Bloque de borradores: controles del cuerpo del panel, no acciones. No
@@ -299,53 +299,53 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
         // teniendo 27 acciones— así que se despachan acá directamente, como
         // copyCliInstall, y no por executeCommand.
         if (message === "openDraft") {
-            void openDraft(extra, stateManager);
+            await openDraft(extra, stateManager);
             return;
         }
         if (message === "copyDraftPrompt") {
-            void copyDraftPrompt(extra, stateManager);
+            await copyDraftPrompt(extra, stateManager);
             return;
         }
         if (message === "startFromDraft") {
-            void startFromDraft(extra, lock, stateManager, getInvokeOptions, revealPanelView);
+            await startFromDraft(extra, lock, stateManager, getInvokeOptions, revealPanelView);
             return;
         }
         if (message === "discardDraft") {
-            void discardDraft(extra, lock, stateManager, getInvokeOptions);
+            await discardDraft(extra, lock, stateManager, getInvokeOptions);
             return;
         }
         // Bloque de guías de autoría: mismo reparto que el de borradores.
         if (message === "openGuide") {
-            void openGuide(extra, stateManager);
+            await openGuide(extra, stateManager);
             return;
         }
         if (message === "createGuide") {
-            void createGuide(extra, lock, stateManager, getInvokeOptions);
+            await createGuide(extra, lock, stateManager, getInvokeOptions);
             return;
         }
         if (message === "discardGuide") {
-            void discardGuide(extra, lock, stateManager, getInvokeOptions);
+            await discardGuide(extra, lock, stateManager, getInvokeOptions);
             return;
         }
         // Fila del walkthrough del autor: ninguno de los dos muta nada, así que
         // ninguno toma el lock. Actualizarlo es walkthroughInit, que sí es una
         // acción y va por executeCommand como siempre.
         if (message === "openWalkthrough") {
-            void openWalkthrough(stateManager);
+            await openWalkthrough(stateManager);
             return;
         }
         if (message === "copyWalkthroughPrompt") {
-            void copyWalkthroughPrompt(stateManager);
+            await copyWalkthroughPrompt(stateManager);
             return;
         }
         // Sección "Edits you extracted": mismo reparto que los bloques de
         // arriba — control del cuerpo, fila → índice, fuera de la paleta.
         if (message === "discardFixes") {
-            void discardFixes(extra, lock, stateManager, getInvokeOptions);
+            await discardFixes(extra, lock, stateManager, getInvokeOptions);
             return;
         }
         if (message === "discardAllFixes") {
-            void discardAllFixes(lock, stateManager, getInvokeOptions);
+            await discardAllFixes(lock, stateManager, getInvokeOptions);
             return;
         }
         const commands: Record<
@@ -395,7 +395,7 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
         // cleanReview desde finish-pending no lleva índice: el comando resuelve
         // el source del pending desde state.
         if (message === "continueReview" || message === "discardInventory") {
-            void vscode.commands.executeCommand(commands[message], extra);
+            await vscode.commands.executeCommand(commands[message], extra);
             return;
         }
         if (message === "openEntry" || message === "openChange") {
@@ -410,12 +410,12 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
                         : state.entries;
                 const entry = currentEntry(list, extra);
                 if (entry) {
-                    void vscode.commands.executeCommand(commands[message], entry);
+                    await vscode.commands.executeCommand(commands[message], entry);
                     return;
                 }
             }
         }
-        void vscode.commands.executeCommand(commands[message]);
+        await vscode.commands.executeCommand(commands[message]);
     }
 
     /** Ver `resolveEntryArg`: la paleta no pasa nada, y ahí la entrada es la actual. */

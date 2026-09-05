@@ -123,12 +123,11 @@ describe("la seccion de ramas de ediciones", function () {
             async () => {
                 confirmed++;
                 return "Delete";
-            };
+        };
         try {
-            api.sendPanelMessage("discardFixes", index);
-            for (let i = 0; i < 100 && branchExists(repo.dir, `review-fixes/${BRANCH}`); i++) {
-                await new Promise((resolve) => setTimeout(resolve, 50));
-            }
+            const completion: unknown = api.sendPanelMessage("discardFixes", index);
+            assert.ok(completion instanceof Promise, "el despacho expone su finalizacion");
+            await completion;
         } finally {
             (vscode.window as unknown as {showWarningMessage: unknown}).showWarningMessage = original;
         }

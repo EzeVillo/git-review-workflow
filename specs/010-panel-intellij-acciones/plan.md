@@ -89,7 +89,7 @@ evaluar, así que no hay gate constitucional que pueda pasar o fallar. Se deja
 constancia en lugar de inventar principios.
 
 En su lugar, los gates que este repositorio sí tiene escritos y son vinculantes
-(`CLAUDE.md`), evaluados contra el diseño:
+(`../../AGENTS.md`), evaluados contra el diseño:
 
 | Gate del proyecto | Estado | Cómo lo cumple |
 |---|---|---|

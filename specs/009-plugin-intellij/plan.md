@@ -70,7 +70,7 @@ la extensión al 2026-08-08) + 8 situaciones + asistentes start/compare;
 `.specify/memory/constitution.md` está **sin ratificar** (es la plantilla con
 placeholders `[PRINCIPLE_N_NAME]`), así que no hay principios MUST que violar.
 Los gates de abajo **no** son principios constitucionales: son las reglas
-vigentes de `CLAUDE.md` y de los contratos de la CLI, usadas como sustituto
+vigentes de `../../AGENTS.md` y de los contratos de la CLI, usadas como sustituto
 explícito. Si algún día se ratifica una constitución, esta tabla se rehace
 contra ella:
 

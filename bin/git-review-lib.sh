@@ -17,7 +17,7 @@
 # output. Advice is one question — does the caller already have this? An offer of
 # a command or a flag (it has the button) and state that already travels as a
 # porcelain record (it has the row) are advice; everything else the verb has to
-# say prints either way. See CLAUDE.md "Advice" and decisiones.md §15.2.
+# say prints either way. See AGENTS.md "Advice" and decisiones.md §15.2.
 #
 # Precedence is git's: GIT_REVIEW_ADVICE (what the clients export, one place per
 # client) wins over the config key, and unset means on, so a terminal keeps every
@@ -854,7 +854,7 @@ walk_reviewed_draft_list() {
 
 # walk_draft_path <src>
 # Where the reviewer's own walkthrough for <src> lives while a review is in play:
-# inside the working tree's gitdir, per CLAUDE.md's prose-files table (invisible
+# inside the working tree's gitdir, per AGENTS.md's prose-files table (invisible
 # to git status, start's dirty check and finish's git add -A). Same idiom as
 # COMMIT_EDITMSG/MERGE_MSG. A branch name holding '/' becomes a subdirectory, as
 # it does under refs/; callers that write must mkdir -p.
@@ -1090,7 +1090,7 @@ walk_read() {
 # crash it.
 #
 # Trims trailing whitespace off the path, one of the two normalization points
-# CLAUDE.md's "Walk y walkthrough" describes (see also walk_normalize): an
+# AGENTS.md's "Walk y walkthrough" describes (see also walk_normalize): an
 # invisible trailing space makes the entry compare unequal to git's path and
 # silently drops it from the reading order. Costs the ability to annotate a file
 # whose name really ends in a space (legal on Linux, unwritable on Windows).
@@ -1189,7 +1189,7 @@ walk_preamble() {
 # that datum — config --porcelain reads it back out of the file. <delta-branch>,
 # when non-empty, names the branch the range is incremental over.
 #
-# Two hard, measured prohibitions on the content (CLAUDE.md, "Walk y
+# Two hard, measured prohibitions on the content (AGENTS.md, "Walk y
 # walkthrough"): never <lower>..<tip> as ONE argument (Windows deep-cwd stat,
 # "fatal: ... Filename too long", exit 128), and never
 # git log/rev-list/shortlog/range-diff (a tree <lower> makes them print the whole
@@ -1936,7 +1936,7 @@ goto_walk_entry() {
 # why, what belongs in the heads-up — team's (.review/walkthrough-guide.md,
 # committed) and your own (<git-common-dir>/review-walkthrough-guide.md,
 # outside the work tree, never staged/committed/swept into review-fixes/); see
-# CLAUDE.md's prose-files table. Both apply when both are in force, and the
+# AGENTS.md's prose-files table. Both apply when both are in force, and the
 # skeleton says which wins on a contradiction: yours, same precedence walk_read
 # applies between draft and sidecar.
 #
@@ -2215,7 +2215,7 @@ emit_walkthrough_record() {
 	_ewr_tip="$(walk_sidecar_block_tip "$_ewr_path" || true)"
 	if [ -n "$_ewr_tip" ]; then
 		# Two revisions as two arguments, never "A..B" (see walk_emit_prompt_block
-		# / CLAUDE.md "Walk y walkthrough" for the Windows deep-cwd trap avoided).
+		# / AGENTS.md "Walk y walkthrough" for the Windows deep-cwd trap avoided).
 		#
 		# The pathspec excludes the sidecar and the guide. :(exclude) is git
 		# 2.13; this project's floor is 2.23.

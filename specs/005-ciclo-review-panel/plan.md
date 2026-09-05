@@ -78,7 +78,7 @@ operación que ya empezó a mutar el repositorio puede interrumpirse.
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
 `.specify/memory/constitution.md` está sin ratificar (es la plantilla con sus
-placeholders). En su lugar rigen las convenciones de `CLAUDE.md`, que este plan
+placeholders). En su lugar rigen las convenciones de `../../AGENTS.md`, que este plan
 trata como gates duros:
 
 | Gate | Estado | Cómo lo cumple este plan |

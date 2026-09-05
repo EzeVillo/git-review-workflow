@@ -57,7 +57,7 @@ tests + 2 README.
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-`.specify/memory/constitution.md` está vacío (plantilla). Gates = `CLAUDE.md`
+`.specify/memory/constitution.md` está vacío (plantilla). Gates = `../../AGENTS.md`
 
 + contratos `001`/`002`/`005`:
 

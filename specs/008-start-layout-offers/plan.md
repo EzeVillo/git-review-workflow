@@ -55,7 +55,7 @@ extensión, tests bats + unit/integration, contratos 005 enmendados.
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-`.specify/memory/constitution.md` es plantilla vacía. Gates = `CLAUDE.md` +
+`.specify/memory/constitution.md` es plantilla vacía. Gates = `../../AGENTS.md` +
 contratos `001`/`002`/`005`:
 
 | Gate | Estado | Nota |

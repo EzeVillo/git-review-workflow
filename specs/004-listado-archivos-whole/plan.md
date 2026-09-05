@@ -63,7 +63,7 @@ CLI y extensión, cinco archivos de tests, dos README y el contrato consolidado.
 
 `.specify/memory/constitution.md` está sin completar (es la plantilla original), así
 que no aporta gates. Los gates aplicables son las reglas vigentes del proyecto,
-tomadas de `CLAUDE.md` y de los contratos de `001`/`002`:
+tomadas de `../../AGENTS.md` y de los contratos de `001`/`002`:
 
 | Gate | Estado | Nota |
 |------|--------|------|

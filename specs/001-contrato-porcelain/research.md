@@ -7,7 +7,7 @@ documento resuelve esas decisiones. No hay dependencias externas que
 investigar (no se agrega ninguna biblioteca ni herramienta): las preguntas son
 todas de diseño interno, resueltas leyendo el código existente
 (`bin/git-review-verbs/status`, `bin/git-review-verbs/list`,
-`bin/git-review-lib.sh`) y las convenciones de `CLAUDE.md`.
+`bin/git-review-lib.sh`) y las convenciones de `../../AGENTS.md`.
 
 ## Decisión 1: formato de la salida porcelain
 
@@ -30,7 +30,7 @@ mezclada.
   veces con paths (CRLF, BOM, whitespace; ver las tres "Pending release note"
   en la memoria del proyecto). Evitarlo por diseño es más barato que
   detectarlo después.
-- **Mirror git idioms** (regla explícita de `CLAUDE.md`, "principio rector del
+- **Mirror git idioms** (regla explícita de `../../AGENTS.md`, "principio rector del
   proyecto"): `git status --porcelain=v2` usa exactamente este esquema —
   líneas etiquetadas, campos de ancho fijo, aditividad documentada ("ignorar
   campos nuevos al final"). `git for-each-ref --format=...` resuelve la

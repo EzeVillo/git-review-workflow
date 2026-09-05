@@ -136,7 +136,7 @@ export async function finishReview(
         const destination = picked.ontoSource ? source : `review-fixes/${source}`;
         // `pending` (caso normal) no se notifica: el banner de finish-pending ya
         // dice lo mismo con más contexto (ver "Lo que el panel muestra no se
-        // notifica" en CLAUDE.md). `no-edits` sí, porque sin registro pending no
+        // notifica" en AGENTS.md). `no-edits` sí, porque sin registro pending no
         // hay banner y un finish exitoso no dejaría ninguna señal. El reveal hace
         // falta porque Finish también se invoca desde la paleta, donde el panel
         // puede no estar a la vista.

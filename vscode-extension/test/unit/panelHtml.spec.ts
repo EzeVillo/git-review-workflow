@@ -564,7 +564,7 @@ describe("panelHtml", () => {
         assert.ok(pendingBranch.includes('"Undo Finish", "undoFinish"'));
         assert.ok(pendingBranch.includes("You can still undo this finish."));
         // El copy no nombra --abort ni --keep-fixes: son los dos botones dibujados
-        // debajo (ver CLAUDE.md, "La copy de los paneles").
+        // debajo (ver AGENTS.md, "La copy de los paneles").
         assert.ok(
             !pendingBranch.includes("--keep-fixes") && !pendingBranch.includes("--abort"),
             "el copy no nombra los comandos que sus propios botones corren"

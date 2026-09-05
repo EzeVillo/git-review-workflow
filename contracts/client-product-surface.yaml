@@ -522,7 +522,7 @@ title_actions:
 
 # LAS MUTACIONES QUE TRAEN EL PANEL A LA VISTA.
 #
-# «Lo que el panel muestra no se notifica» (CLAUDE.md § La copy de los paneles)
+# «Lo que el panel muestra no se notifica» (AGENTS.md § La copy de los paneles)
 # tiene un supuesto que nadie garantizaba: que el panel esté A LA VISTA. El
 # borrador nace en el asistente de inicio, que corre sobre el editor, y si la
 # vista está cerrada o el sidebar está en otra pestaña, la fila nueva se dibuja

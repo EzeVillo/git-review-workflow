@@ -354,7 +354,7 @@ fi
 
 # A step review records reviewmode=step alongside reviewstart/reviewcount/
 # reviewstep; a whole review records none of them (walk's mirror keys are
-# reviewwalk* — see CLAUDE.md's state model for why the two never share a key). If
+# reviewwalk* — see AGENTS.md's state model for why the two never share a key). If
 # reviewmode were lost to a hand-edit but the step keys survived, falling through
 # to the whole-mode tail below would diff the step commit — not the tip — against
 # the tip, silently reversing later commits into the extracted fix. Report the

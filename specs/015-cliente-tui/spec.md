@@ -172,7 +172,7 @@ Son tres cosas distintas y conviene no confundirlas:
   `git-*` que encuentre en el `PATH`.
 
 **Esto no es una excepción a ninguna regla del proyecto.** La regla de
-`CLAUDE.md` dice que **los verbos** son privados y no van al `PATH`, para que git
+`../../AGENTS.md` dice que **los verbos** son privados y no van al `PATH`, para que git
 no los descubra como `git <verbo>` y el único punto de entrada sea el dispatcher.
 La TUI **no es un verbo**: es un programa aparte, instalado aparte, que git expone
 por la convención `git-*` de terceros, igual que `git lfs`. La regla queda
@@ -442,7 +442,7 @@ la TUI no hereda.
 - **`CONTRIBUTING.md` propio del cliente**, como los otros tres.
 - **Ninguna superficie que le llegue a quien instala nombra a los otros tres
   clientes ni dice «paridad con X».** Eso se cuenta en `CONTRIBUTING.md` y en
-  `CLAUDE.md`.
+  `../../AGENTS.md`.
 
 ## Compatibilidad de terminal
 

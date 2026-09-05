@@ -2,7 +2,7 @@
 
 Por qué cada cosa de este repo es como es: el bug que la motivó, la alternativa que se descartó y
 lo que cuesta. Nada de acá hace falta para trabajar en el proyecto — las reglas vinculantes están
-en `CLAUDE.md`, los comandos en los `CONTRIBUTING.md` y el rationale por función en los comentarios
+en `AGENTS.md`, los comandos en los `CONTRIBUTING.md` y el rationale por función en los comentarios
 del propio código, que es donde se lee justo cuando lo vas a romper.
 
 Esto es el otro archivo: la memoria de las decisiones que ningún comentario alcanza a contar

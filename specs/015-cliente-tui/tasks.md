@@ -6,7 +6,7 @@
 [data-model.md](./data-model.md), [contracts/](./contracts/), [quickstart.md](./quickstart.md)
 
 **Tests**: sí, y no son opcionales. La spec los pide por requisito (FR-057 a FR-060, FR-070 a FR-075)
-y `CLAUDE.md` los pide por regla. Cada tarea que agrega una tabla, una clave del canónico, una lista
+y `../../AGENTS.md` los pide por regla. Cada tarea que agrega una tabla, una clave del canónico, una lista
 o un archivo de referencia **trae el chequeo que la hace fallar cuando driftea**: en este proyecto
 una tabla sin gate nace decorativa. Los `@test` de bats van en **ASCII puro**.
 
@@ -909,7 +909,7 @@ apunta.
   los golden, la palanca de apagado de la vigilancia, las claves `reviewui.*`, la matriz smoke de
   T101 y el runbook de release. **El README es producto; el desarrollo va acá**, para la raíz y para
   los cuatro clientes.
-- [X] T118 Actualizar `CLAUDE.md`: el cuarto cliente en § Clientes del monorepo, el árbol `tui/`, los
+- [X] T118 Actualizar `../../AGENTS.md`: el cuarto cliente en § Clientes del monorepo, el árbol `tui/`, los
   comandos (`gofmt`/`vet`/`go test`, los golden, el apagado de la vigilancia), la nota de que **la
   paridad es una regla del monorepo y no una promesa al usuario**, y las dos migraciones del
   canónico. Anotar también en § Release el namespace `tui-v*` y el `--latest=false`.

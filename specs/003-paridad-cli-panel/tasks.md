@@ -281,7 +281,7 @@ modos.
   modo se emiten, la regla de "texto libre siempre último campo, a lo sumo uno por registro" (Decisión
   1) y que un consumidor los lee como "resto de línea desde el n-ésimo tab", no como campo por índice
 - [X] T028 [P] Mismo cambio, mismo alcance, en [README.es.md](../../README.es.md) (~líneas 544-600) —
-  regla de `CLAUDE.md`: los dos README se actualizan juntos, en el mismo cambio
+  regla de `../../AGENTS.md`: los dos README se actualizan juntos, en el mismo cambio
 - [X] T029 Correr
   `shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh tests/sandbox.sh`
   sobre el estado final y corregir cualquier hallazgo introducido por esta feature

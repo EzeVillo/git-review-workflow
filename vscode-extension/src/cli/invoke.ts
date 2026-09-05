@@ -96,7 +96,7 @@ function askpassCommand(): string {
  * El entorno de TODA invocación: `process.env` completo (perder `PATH` rompería
  * la resolución de `git`) más `GIT_REVIEW_ADVICE=0`, apagado en este único lugar
  * porque filtrar del lado del panel exigiría parsear salida humana (ver
- * "Advice" en CLAUDE.md y `advice_enabled` en `bin/git-review-lib.sh`). Una CLI
+ * "Advice" en AGENTS.md y `advice_enabled` en `bin/git-review-lib.sh`). Una CLI
  * vieja ignora la variable y sigue imprimiendo todo: la degradación es más
  * ruido, nunca un fallo.
  */

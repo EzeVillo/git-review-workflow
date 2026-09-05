@@ -237,7 +237,7 @@ así que `bump-version.sh` lo deja **a propósito** y lo fija el workflow despu�
 | `README.md` **y** `README.es.md` | el verbo `ui` en la tabla; el sinónimo `git review-ui` en **una línea**, sin pedir disculpas y sin volverlo una segunda forma documentada; las vías de instalación de la TUI | FR-054 — **los dos, en el mismo cambio** |
 | `docs/index.html` | una caja más en `install-grid` | FR-055 — bilingüe en **un solo archivo**: el texto va en el HTML en inglés **y** en el diccionario `ES`, emparejados por `data-i18n`. Las cajas existentes ya usan ese patrón (`nonode`, `thenonce`), así que la nueva necesita su clave en las **dos** puntas |
 | `tui/CONTRIBUTING.md` | build, test, golden, `GIT_REVIEW_UI_WATCH`, `reviewui.*`, el runbook de release | FR-056 |
-| `CLAUDE.md` | el cuarto cliente en § Clientes del monorepo; el árbol `tui/`; los comandos | la paridad se cuenta acá y en los `CONTRIBUTING.md` |
+| `../../../AGENTS.md` | el cuarto cliente en § Clientes del monorepo; el árbol `tui/`; los comandos | la paridad se cuenta acá y en los `CONTRIBUTING.md` |
 
 **Ninguna de esas superficies nombra a los otros tres clientes ni dice «paridad con X»** (FR-031). La
 paridad es una regla del monorepo, no una promesa al usuario.

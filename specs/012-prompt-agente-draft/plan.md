@@ -93,7 +93,7 @@ admite N); PRs de hasta unos cientos de archivos anotados.
 
 `.specify/memory/constitution.md` sigue sin instanciar (es la plantilla en
 blanco), así que no impone puertas. Las normas efectivas del proyecto son las de
-`CLAUDE.md`; el diseño se evalúa contra ellas:
+`../../AGENTS.md`; el diseño se evalúa contra ellas:
 
 | Principio (CLAUDE.md) | Estado | Cómo lo cumple |
 | --- | --- | --- |

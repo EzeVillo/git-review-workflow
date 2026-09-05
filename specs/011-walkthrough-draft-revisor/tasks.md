@@ -9,7 +9,7 @@ description: "Task list for 011-walkthrough-draft-revisor"
 
 **Prerequisites**: [plan.md](plan.md), [spec.md](spec.md), [research.md](research.md), [data-model.md](data-model.md), [contracts/](contracts/)
 
-**Tests**: incluidos y **no opcionales**. `CLAUDE.md` los exige como estándar del
+**Tests**: incluidos y **no opcionales**. `../../AGENTS.md` los exige como estándar del
 proyecto (asserts fuertes, sin falsos positivos, efecto real sobre el estado de
 git verificado) y CI corre las suites en ubuntu, macOS y Windows.
 
@@ -183,7 +183,7 @@ estabilizado.
 - [X] T055 [P] Agregar la entrada correspondiente a `vscode-extension/CHANGELOG.md`
 - [X] T056 Revisar `contracts/client-product-surface.yaml`: subir `min_cli_version` porque los clientes pasan a depender de los ids nuevos, y **confirmar que `panel_layout` no cambió** (si cambió, el diseño se desvió del plan)
 - [X] T057 Verificar que `node scripts/check-client-product-surface.mjs` sigue en verde (27 acciones, sin acciones nuevas)
-- [X] T058 [P] Actualizar `CLAUDE.md` § Modelo de estado con el borrador del revisor y su ciclo de vida, en el párrafo del modo walk
+- [X] T058 [P] Actualizar `../../AGENTS.md` § Modelo de estado con el borrador del revisor y su ciclo de vida, en el párrafo del modo walk
 - [ ] T059 Correr las cinco suites en verde: `./lint-docker.sh`, `./tests/run-docker.sh`, `npm run test:unit`, `./vscode-extension/test/run-docker.sh`, `cd jetbrains-plugin && ./gradlew test`
   - **Cuatro de cinco en verde**: shellcheck; 713 bats; 368 unit de la extensión;
     69 de integración (66 previos + 3 nuevos). Más

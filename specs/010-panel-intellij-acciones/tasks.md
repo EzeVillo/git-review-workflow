@@ -11,7 +11,7 @@ description: "Task list template for feature implementation"
 
 **Tests**: se incluyen tareas de test. No es TDD ceremonial: el invariante rector
 de la spec sólo es afirmable con tests estructurales (FR-036, SC-001), y el
-repositorio exige asserts fuertes sin falsos positivos (`CLAUDE.md`).
+repositorio exige asserts fuertes sin falsos positivos (`../../AGENTS.md`).
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
@@ -275,7 +275,7 @@ parpadeo.
 - [x] T060 [P] Verificar el panel en tema claro, oscuro y alto contraste y con escalado de fuente al 200%, corrigiendo en `ui/PanelChrome.kt` cualquier color o métrica fija (SC-009)
 - [x] T061 [P] Actualizar `jetbrains-plugin/README.md` con la superficie del panel: qué ofrece cada situación y qué vive en el menú. Cerrar SC-011 constatando que el resto de la documentación de producto no necesita aclaraciones por cliente: `README.md` / `README.es.md` de la raíz sólo linkean los README de cliente, y `docs/index.html` no nombra al plugin — si el texto nuevo introduce alguna asimetría, se arregla acá y no con una nota del tipo "en IntelliJ está en otro lado"
 - [x] T062 [P] Actualizar la sección *The IntelliJ IDEA plugin* de `CONTRIBUTING.md` con la comparación lado a lado (`runPanelPreview` contra `npm run preview`) como forma de validar la paridad
-- [x] T063 [P] Actualizar la sección de clientes del monorepo en `CLAUDE.md` para nombrar el canónico de disposición del panel y qué lo verifica de cada lado
+- [x] T063 [P] Actualizar la sección de clientes del monorepo en `../../AGENTS.md` para nombrar el canónico de disposición del panel y qué lo verifica de cada lado
 - [x] T064 Correr la guía completa de `specs/010-panel-intellij-acciones/quickstart.md` sobre el sandbox, incluidos los cinco recorridos manuales y la regresión del menú (las 27 acciones siguen ahí)
 - [x] T065 Correr la verificación completa: `cd jetbrains-plugin && ./gradlew check` y `node scripts/check-client-product-surface.mjs`, y confirmar que el CI del plugin cubre los tres sistemas operativos
 

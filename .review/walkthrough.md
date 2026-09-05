@@ -43,7 +43,7 @@ el que lo dice primero.
 ## 2. specs/002-extension-vscode/plan.md
 El resumen técnico y la estructura de directorios que el resto del PR sigue
 al pie. Fijate en "Constitution Check": no hay principios ratificados en este
-repo todavía, así que el gate real es `CLAUDE.md`, y acá se documenta por qué
+repo todavía, así que el gate real es `../AGENTS.md`, y acá se documenta por qué
 casi ninguna de sus reglas (pensadas para la CLI en `sh`) aplica a este
 subproyecto en TypeScript salvo la de espejar los idioms del host.
 

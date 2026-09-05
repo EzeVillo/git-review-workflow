@@ -1,7 +1,7 @@
 # Research: Extensión de VS Code para revisar con walkthrough
 
 Decisiones técnicas previas al diseño. El principio que ordena casi todas es el
-mismo que `CLAUDE.md` fija para la CLI —**espejar los idioms del host**—
+mismo que `../../AGENTS.md` fija para la CLI —**espejar los idioms del host**—
 trasladado de git a VS Code: cuando el editor ya tiene una forma nativa de
 resolver algo, se usa ésa antes que inventar una propia. La otra restricción
 transversal es FR-001/SC-005: ningún camino deriva estado de review fuera de la

@@ -68,7 +68,7 @@ así que corregís inline lo que encontrás y `git review finish` te devuelve tu
 correcciones en una rama aparte.
 
 Para que salga automático, poné la instrucción donde tu agente la vaya a leer —
-su `CLAUDE.md`, su `AGENTS.md`, o tu template de prompt:
+su `AGENTS.md`, su `AGENTS.md`, o tu template de prompt:
 
 > Después de hacer el cambio y commitearlo, corré `git review walkthrough init`,
 > completá el orden de lectura y un *por qué* de una línea en cada entrada, la

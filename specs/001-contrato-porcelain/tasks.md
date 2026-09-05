@@ -12,7 +12,7 @@ description: "Task list template for feature implementation"
 
 **Tests**: Incluidos. No los pide explícitamente el spec, pero son la práctica
 estándar ya vigente en el repo (cada verbo tiene cobertura bats con asserts
-fuertes — regla de `CLAUDE.md`); tratarlos como opcionales acá sería una
+fuertes — regla de `../../AGENTS.md`); tratarlos como opcionales acá sería una
 excepción sin justificación. Los tests nuevos van a `tests/status-porcelain.bats`
 (archivo nuevo) y a `tests/list.bats` / `tests/errors.bats` (existentes).
 **Los nombres de `@test` van en ASCII puro** —sin acentos, sin `ñ`, sin em
@@ -110,7 +110,7 @@ verificar que `status --porcelain` devuelve los campos y valores exactos de
   no `total`
 - [X] T008 [P] [US1] bats: tests de salida exacta para la línea `state` en modo whole/step/walk en
   tests/status-porcelain.bats (archivo nuevo; nombres de `@test` en ASCII puro — regla de
-  `CLAUDE.md`), incluido un caso donde `total` ≠ `recorded` con el cursor todavía en rango
+  `../../AGENTS.md`), incluido un caso donde `total` ≠ `recorded` con el cursor todavía en rango
 - [X] T009 [US1] bats: test de no-regresión — reescribir un mensaje humano de `status` y verificar
   que la salida de `--porcelain` no cambia un solo byte (FR-003/SC-004) en
   tests/status-porcelain.bats
@@ -302,7 +302,7 @@ la actual.
   el contrato, en tests/status-porcelain.bats
 - [X] T026 [P] Documentar `--porcelain`, `--why` y el contrato de exit codes (0/1/2/3) de `status` y
   `list` en README.md y README.es.md, incluida la nota de que `2` y `3` valen para todos los verbos
-  que detectan esas situaciones, no sólo para las superficies porcelain (regla de `CLAUDE.md`: los
+  que detectan esas situaciones, no sólo para las superficies porcelain (regla de `../../AGENTS.md`: los
   dos README se actualizan juntos)
 - [X] T027 Correr
   `shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh`

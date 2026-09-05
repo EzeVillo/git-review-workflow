@@ -275,7 +275,7 @@ async function invokeDraft(
     // todo lo que el verbo diría (archivo, Validate and start, walkthrough
     // tapado, guías faltantes). `update` sí, porque qué se conservó/entró/cayó
     // no está en ninguna fila (ver "Lo que el panel muestra no se notifica" en
-    // CLAUDE.md); los tres números salen del registro `merged`, y sin él (CLI
+    // AGENTS.md); los tres números salen del registro `merged`, y sin él (CLI
     // vieja) el acuse se cae entero antes que reenviar prosa de la CLI.
     if (!update) {
         return {ok, text: ""};
@@ -323,7 +323,7 @@ async function runDraftFlow(
                     // El caso que motivó `reveals:` en el contrato: nace el bloque
                     // de borradores pero la situación no cambia, y el asistente
                     // corrió sobre el editor — sin esto no quedaba acuse en ningún
-                    // lado (ver "El panel se revela..." en CLAUDE.md).
+                    // lado (ver "El panel se revela..." en AGENTS.md).
                     revealPanel("startReview", reveal);
                 }
                 state = advanceDraftFlow(state, {

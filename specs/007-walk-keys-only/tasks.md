@@ -8,7 +8,7 @@
 [contracts/cli-invocation-keys.md](./contracts/cli-invocation-keys.md),
 [quickstart.md](./quickstart.md)
 
-**Tests**: sÃ­ â€” `CLAUDE.md` exige asserts fuertes; el proyecto usa
+**Tests**: sÃ­ â€” `../../AGENTS.md` exige asserts fuertes; el proyecto usa
 test-first en cambios de porcelain/CLI. Cada historia incluye tests que
 deben fallar antes de la implementaciÃ³n de esa historia.
 
@@ -201,7 +201,7 @@ keys-only; start pasa `--keys`.
 - [x] T033 [P] Fusionar o enlazar la enmienda porcelain en la docs de
   contrato que el repo trate como vigente (`001` o Ã­ndice) para que no
   queden dos verdades contradictorias sobre `status --porcelain`.
-- [x] T034 Correr shellcheck completo segÃºn `CLAUDE.md` y
+- [x] T034 Correr shellcheck completo segÃºn `../../AGENTS.md` y
   `./tests/run-docker.sh` (suite o subset keys+walk+status+save).
 - [x] T035 Recorrer [quickstart.md](./quickstart.md) una vez en sandbox y
   anotar desviaciones si las hay.

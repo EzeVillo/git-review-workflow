@@ -33,7 +33,7 @@ async function pickInitMode(
     if (walkthrough.state === "superseded") {
         return "update";
     }
-    // EXCEPCION DECLARADA a la puerta unica (ver review/confirm.ts y CLAUDE.md).
+    // EXCEPCION DECLARADA a la puerta unica (ver review/confirm.ts y AGENTS.md).
     // La frase de arriba la lee scripts/check-client-product-surface.mjs, literal
     // y sin acentos: es lo que exime a este modal del gate. No la reformules.
     //

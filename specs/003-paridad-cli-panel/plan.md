@@ -84,7 +84,7 @@ secuencia y las fixtures del preview.
 
 `.specify/memory/constitution.md` sigue siendo la plantilla sin completar de
 Spec Kit — no hay principios ratificados para este repo, así que no hay gate
-formal que evaluar. El gobierno de facto es `CLAUDE.md`, y esta feature toca
+formal que evaluar. El gobierno de facto es `../../AGENTS.md`, y esta feature toca
 directamente tres de sus reglas:
 
 - **Espejar los idioms de git.** Los registros nuevos siguen el esquema que ya

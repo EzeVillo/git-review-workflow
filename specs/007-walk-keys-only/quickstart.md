@@ -81,4 +81,4 @@ cd vscode-extension && npm test
 shellcheck $(find bin -type f ! -name '.gitkeep') …
 ```
 
-Ver `CLAUDE.md` para la línea exacta de shellcheck del repo.
+Ver `../../AGENTS.md` para la línea exacta de shellcheck del repo.

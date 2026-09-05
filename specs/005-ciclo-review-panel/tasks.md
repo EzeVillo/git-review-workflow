@@ -9,7 +9,7 @@
 [contracts/cli-invocation.md](./contracts/cli-invocation.md),
 [quickstart.md](./quickstart.md)
 
-**Tests**: la spec pide "controlÃ¡ los errores de la mejor manera" y `CLAUDE.md`
+**Tests**: la spec pide "controlÃ¡ los errores de la mejor manera" y `../../AGENTS.md`
 manda asserts fuertes para todo comportamiento observable; `003`/`004` fijaron el
 precedente test-first para cambios de porcelain y se mantiene acÃ¡ â€” se incluyen
 en cada historia.

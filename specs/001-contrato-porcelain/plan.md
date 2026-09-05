@@ -53,7 +53,7 @@ mensaje humano y verifica que la salida porcelain no cambia un solo byte
 (FR-003/SC-004). Los tests nuevos van a `tests/status-porcelain.bats` (archivo
 nuevo) y a `tests/list.bats` / `tests/errors.bats` (existentes); `extras.bats`
 ya mezcla cuatro verbos y no conviene engordarlo más. Los nombres de `@test`
-van en ASCII puro, sin acentos ni em dashes — regla de `CLAUDE.md`: bats
+van en ASCII puro, sin acentos ni em dashes — regla de `../../AGENTS.md`: bats
 convierte cada nombre en nombre de función y el bats de Windows en CI se rompe
 con los bytes UTF-8.
 
@@ -86,7 +86,7 @@ nuevos, sin cambios al dispatcher.
 
 `.specify/memory/constitution.md` no está ratificado en este repo (conserva
 los placeholders de la plantilla, sin principios reales que evaluar). En su
-lugar, las restricciones operativas vinculantes son las de `CLAUDE.md`:
+lugar, las restricciones operativas vinculantes son las de `../../AGENTS.md`:
 espejar los idiomas de git, actualizar los dos README en el mismo cambio,
 sólo shell POSIX con `set -eu`, shellcheck limpio, tests bats con asserts
 fuertes, y no tocar la landing salvo que el cambio toque alguno de sus cuatro

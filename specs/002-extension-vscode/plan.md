@@ -74,9 +74,9 @@ Historia 5.
 
 `.specify/memory/constitution.md` sigue siendo la plantilla sin completar de
 Spec Kit — no hay principios ratificados para este repo. No hay gate que
-evaluar; el gobierno de facto del proyecto es lo que documenta `CLAUDE.md`
+evaluar; el gobierno de facto del proyecto es lo que documenta `../../AGENTS.md`
 (espejar idioms del host, dos READMEs sincronizados, sólo POSIX `sh` para la
-CLI). Ninguna de esas reglas de `CLAUDE.md` aplica a un proyecto TypeScript en
+CLI). Ninguna de esas reglas de `../../AGENTS.md` aplica a un proyecto TypeScript en
 su propio subdirectorio salvo la primera — mirroreada acá hacia los idioms de
 VS Code (ver `research.md`, Decisiones 4 y 5). Sin violaciones que registrar.
 

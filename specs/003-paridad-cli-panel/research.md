@@ -127,7 +127,7 @@ proyecto ya usa con `sed -n "${step}p"`.
 **Rationale**: SC-008 y FR-014 piden que una review de 50 commits no se sienta
 lenta, y el riesgo concreto es el bucle ingenuo — un `git log -1` por commit
 dentro del `while` que ya recorre las posiciones, o sea 2N procesos. En Windows,
-donde el `fork` es emulado y caro (el propio `CLAUDE.md` documenta que por eso
+donde el `fork` es emulado y caro (el propio `../../AGENTS.md` documenta que por eso
 los tests no se corren bajo Git Bash), 2N procesos es la diferencia entre
 instantáneo y perceptible. Dos procesos fijos lo vuelven independiente de N.
 

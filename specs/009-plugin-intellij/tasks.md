@@ -317,7 +317,7 @@ verde en Linux.
 - [X] T064 `verifyPlugin` / pluginVerifier en Gradle; artefact zip.
 - [X] T065 Iconos tool window (reusar o adaptar `vscode-extension/media`).
 - [X] T066 CHANGELOG del plugin + mención versión en monorepo si aplica.
-- [X] T067 Actualizar `CLAUDE.md`: sección del plugin con los comandos Gradle
+- [X] T067 Actualizar `../../AGENTS.md`: sección del plugin con los comandos Gradle
   (`test`, `platformTest`, `runIde`, `runPanelPreview`), la regla “CLI y
   extensión en contenedor / plugin con Gradle”, y el nuevo `contracts/` de la
   raíz como fuente canónica multi-cliente (junto a la regla de los dos README).

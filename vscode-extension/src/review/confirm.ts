@@ -3,7 +3,7 @@ import * as vscode from "vscode";
 /**
  * Los controles que abren un diálogo antes de mutar: el `confirms:` del
  * canónico (`contracts/client-product-surface.yaml`), que sin esta puerta
- * existía pero nadie lo consultaba (ver CLAUDE.md, "La copy de los paneles").
+ * existía pero nadie lo consultaba (ver AGENTS.md, "La copy de los paneles").
  *
  * `startReview` y `startFromDraft` NO están, a propósito y en los dos caminos
  * que llegan al start: el asistente ya pregunta cuatro cosas y `start` no

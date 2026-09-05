@@ -91,7 +91,7 @@ que tocan a los tres clientes ya publicados.
 `.specify/memory/constitution.md` sigue **sin ratificar** (es la plantilla con placeholders
 `[PRINCIPLE_N_NAME]`), igual que cuando se planeó `009-plugin-intellij`, así que no hay principios
 MUST que violar. Los gates de abajo **no** son constitucionales: son las reglas vigentes de
-`CLAUDE.md` y de los contratos del repo, usadas como sustituto explícito.
+`../../AGENTS.md` y de los contratos del repo, usadas como sustituto explícito.
 
 | Gate | Estado | Nota |
 |------|--------|------|

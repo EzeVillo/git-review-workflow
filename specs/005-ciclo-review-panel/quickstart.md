@@ -13,7 +13,7 @@ ve usándolo, más las dos rutas que no tienen cobertura automática posible
 
 La extensión invoca la CLI del `PATH`, así que este checkout tiene que estar
 instalado —o hay que apuntar el ajuste `gitReview.path` a `bin/git-review`—.
-Ojo con el detalle que ya está documentado en `CLAUDE.md`: el Extension
+Ojo con el detalle que ya está documentado en `../../AGENTS.md`: el Extension
 Development Host hereda el `PATH` del VS Code que lo lanzó, no el del `env.sh`
 del sandbox.
 

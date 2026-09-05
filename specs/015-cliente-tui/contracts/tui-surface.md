@@ -246,4 +246,4 @@ Idioma: **inglés en los strings de producto**, igual que los otros tres. Los do
 siguen en español.
 
 **Y ninguna superficie que le llegue a quien instala nombra a los otros tres clientes ni dice
-«paridad con X»** (FR-031). Eso se cuenta en `CONTRIBUTING.md` y en `CLAUDE.md`.
+«paridad con X»** (FR-031). Eso se cuenta en `CONTRIBUTING.md` y en `../../../AGENTS.md`.

@@ -6,7 +6,7 @@
 [data-model.md](./data-model.md), [contracts/consolidacion-porcelain.md](./contracts/consolidacion-porcelain.md),
 [quickstart.md](./quickstart.md)
 
-**Tests**: la spec (`review con asserts fuertes` en `CLAUDE.md`) manda tests para
+**Tests**: la spec (`review con asserts fuertes` en `../../AGENTS.md`) manda tests para
 todo comportamiento observable, y `003` fijó el precedente de test-first para
 cambios de porcelain — se incluyen.
 
@@ -258,7 +258,7 @@ que la CLI no emite todavía.
 - [X] T031 [P] [US2] `fixtures.ts`: los dos estados `whole`/`whole-with-base`
   ganaron registros `entry` (3 archivos); se agregó un tercer estado
   `whole-empty` para el rango vacío (14→15 estados totales — la cifra "nueve
-  estados" de `CLAUDE.md` ya estaba desactualizada antes de este cambio, no se
+  estados" de `../../AGENTS.md` ya estaba desactualizada antes de este cambio, no se
   tocó). Verificado visualmente con el navegador: las tres tarjetas renderizan
   correctamente.
 - [X] T032 [US2] `npm run compile` limpio. `npm run test:unit`: 142/142.

@@ -68,7 +68,7 @@ you fix what you find inline and `git review finish` hands your corrections back
 on a separate branch.
 
 To make it automatic, put the instruction where your agent will read it — its
-`CLAUDE.md`, `AGENTS.md`, or your prompt template:
+`AGENTS.md`, `AGENTS.md`, or your prompt template:
 
 > After making the change and committing it, run `git review walkthrough init`,
 > fill in the reading order and a one-line *why* for every entry, the `## Heads-up`

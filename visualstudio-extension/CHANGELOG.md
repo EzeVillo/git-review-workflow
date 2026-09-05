@@ -7,6 +7,22 @@ has its own
 This project follows [semantic versioning](https://semver.org/spec/v2.0.0.html)
 and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 
+## [0.3.0] — 2026-09-05
+
+### Fixed
+
+- **Choosing a base branch lists each branch once.** The current branch could be added again when it
+  was already among the candidates, making one destination look like two different choices. The
+  picker now presents one row per branch.
+
+- **Finishing a review says exactly what cleanup removes.** The confirmation makes clear that your
+  staged edits stay on their destination branch and that *Keep edits & remove Undo* removes only the
+  option to undo the finish, rather than implying that the edits themselves will be cleaned up.
+
+- **The post-finish banner now tells the truth about staged edits.** It names the branch the edits
+  are staged for, asks you to commit them before switching branches, and leaves the available undo
+  path explicit.
+
 ## [0.2.0] — 2026-08-30
 
 Requires `git review` **0.8.0** or newer.

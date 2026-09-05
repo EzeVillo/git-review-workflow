@@ -7,6 +7,27 @@ The CLI it drives has its own
 This project follows [semantic versioning](https://semver.org/spec/v2.0.0.html)
 and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 
+## [0.4.0] — 2026-09-05
+
+### Fixed
+
+- **A CLI failure the panel cannot parse now keeps the CLI's own explanation.** Instead of replacing
+  useful stderr with the parser's generic complaint about unreadable porcelain, the panel shows the
+  detail the command supplied; the parser message remains the fallback when there is no CLI detail.
+
+- **The current branch refreshes after review-changing actions.** Starting, finishing, undoing, and
+  other mutations now refresh the IDE repository before the panel refreshes, so the branch shown by
+  Source Control and the review state agree immediately.
+
+- **Choosing a base branch lists each branch once.** The current branch could be added again when it
+  was already among the candidates, making one destination look like two different choices. The
+  picker now presents one row per branch.
+
+- **Finish and undo cleanup copy now names the exact tradeoff.** The confirmation says your edits
+  stay on their destination branch while *Keep edits & remove Undo* removes the option to undo this
+  finish; the pending-finish banner says the edits are staged for that branch, must be committed
+  before switching branches, and can still be undone.
+
 ## [0.3.0] — 2026-08-30
 
 Requires `git review` **0.8.0** or newer.

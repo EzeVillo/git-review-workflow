@@ -51,6 +51,19 @@ TUISTUB
 	MOCK_BIN="$TMP/mock-bin"
 	mkdir -p "$MOCK_BIN"
 	export MOCK_BIN
+	# The fixture below is a Linux tarball. Pin the platform seen by the
+	# installer so this test exercises the install path, rather than the host
+	# runner's asset selection (macOS ARM and Git Bash use different assets).
+	cat > "$MOCK_BIN/uname" << 'UNAMESTUB'
+#!/bin/sh
+case "$1" in
+-s) printf 'Linux\n' ;;
+-m) printf 'x86_64\n' ;;
+*) exit 1 ;;
+esac
+UNAMESTUB
+	chmod +x "$MOCK_BIN/uname"
+
 	cat > "$MOCK_BIN/curl" << 'CURLSTUB'
 #!/bin/sh
 url=""

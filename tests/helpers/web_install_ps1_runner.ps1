@@ -18,7 +18,14 @@ Compress-Archive -Path $_archiveDir -DestinationPath $_fakeZip -Force
 $_tuiDir = Join-Path $TestTmpDir 'tui-release'
 New-Item -ItemType Directory -Path $_tuiDir -Force | Out-Null
 Set-Content (Join-Path $_tuiDir 'git-review-ui.exe') 'tui-probe'
-$_fakeTuiZip = Join-Path $TestTmpDir 'git-review-ui_0.1.0_windows_amd64.zip'
+$runtimeArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+$_tuiArch = switch ($runtimeArch) {
+    'X64' { 'amd64' }
+    'Arm64' { 'arm64' }
+    default { throw "Unsupported test architecture: $runtimeArch" }
+}
+$_tuiAsset = "git-review-ui_0.1.0_windows_$($_tuiArch).zip"
+$_fakeTuiZip = Join-Path $TestTmpDir $_tuiAsset
 Compress-Archive -Path (Join-Path $_tuiDir 'git-review-ui.exe') -DestinationPath $_fakeTuiZip -Force
 $_tuiHash = (Get-FileHash $_fakeTuiZip -Algorithm SHA256).Hash.ToLowerInvariant()
 $script:_badTuiHash = $false
@@ -70,10 +77,10 @@ function Invoke-WebRequest {
     $script:_webCalls.Add($Uri)
     if ($Uri -like '*/releases/download/tui-v0.1.0/SHA256SUMS') {
         $hash = if ($script:_badTuiHash) { '0' * 64 } else { $_tuiHash }
-        Set-Content $OutFile "$hash  git-review-ui_0.1.0_windows_amd64.zip"
+        Set-Content $OutFile "$hash  $_tuiAsset"
         return
     }
-    if ($Uri -like '*/releases/download/tui-v0.1.0/git-review-ui_0.1.0_windows_amd64.zip') {
+    if ($Uri -like "*/releases/download/tui-v0.1.0/$_tuiAsset") {
         Copy-Item $_fakeTuiZip -Destination $OutFile -Force
         return
     }

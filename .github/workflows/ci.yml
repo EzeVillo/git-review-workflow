@@ -22,10 +22,17 @@ jobs:
       # 100644 y sólo muere en los runners POSIX (`./gradlew: Permission
       # denied`) — así entró visualstudio-extension/bump-version.sh, que
       # CONTRIBUTING.md manda correr como `./visualstudio-extension/...`.
-      # .specify/ queda afuera: es vendoreado, no nuestro.
+      # La lista es cerrada: sólo scripts propios que CI invoca o que la
+      # documentación manda ejecutar. Los artefactos y capturas de specs no
+      # son ejecutables distribuidos.
       - name: Check bin scripts are executable
         run: |
-          missing=$(git ls-files -s bin/ jetbrains-plugin/gradlew '*.sh' ':(exclude).specify/**' | awk '$1 != "100755" && $4 !~ /\/\.gitkeep$/ {print $4}')
+          missing=$(git ls-files -s bin/ jetbrains-plugin/gradlew \
+            install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh \
+            tui/bump-version.sh vscode-extension/bump-version.sh \
+            jetbrains-plugin/bump-version.sh visualstudio-extension/bump-version.sh \
+            jetbrains-plugin/verification-report.sh tests/sandbox.sh tests/sandbox-min.sh \
+            | awk '$1 != "100755" && $4 !~ /\/\.gitkeep$/ {print $4}')
           if [ -n "$missing" ]; then
             echo "These files are missing the executable bit (100755):" >&2
             echo "$missing" >&2

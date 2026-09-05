@@ -10,10 +10,10 @@ and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 
 ### Fixed
 
-- **Panel actions now wait until the work they started is actually finished.** A click could return
-  before its command had completed, leaving a second click or the next panel action to race the
-  first one. Actions now stay in order through the command and the following refresh, so the panel
-  always draws the result of the action you chose.
+- **Command handlers now wait for panel actions to finish.** A handler could continue before the
+  panel had completed the command it started, making completion-sensitive flows advance too early.
+  Panel message handling is now awaitable through the command and its following refresh, so callers
+  can continue only after that action has completed.
 
 - **Choosing a base branch lists each branch once.** The current branch could be added again when it
   was already among the candidates, making one destination look like two different choices. The

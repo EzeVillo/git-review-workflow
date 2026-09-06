@@ -213,6 +213,107 @@ in `preview/build.ts` approximate VS Code's. A `--vscode-*`
 variable the panel starts using must be added there too, or it will look wrong in the preview and
 fine in the editor. For behaviour, use F5.
 
+## Marketing video and GIFs
+
+La campaña tiene una demo de 40 segundos y tres GIF por cliente: VS Code,
+JetBrains y Visual Studio. Cada toma usa el IDE real, este checkout del cliente
+y la CLI real sobre un repositorio descartable. El guion comparte el mismo
+límite de cinco intentos: leer la política y el motivo del autor, corregir
+`>` por `>=`, correr tres tests y extraer únicamente esa corrección a
+`review-fixes/rate-limit`.
+
+### Captura por cliente
+
+| Cliente | Captura | Material sin editar |
+|---|---|---|
+| VS Code | `launch.cjs` prepara JavaScript y `capture.cjs` acciona un Extension Development Host real | `demo/marketing/` |
+| JetBrains | `jetbrains/prepare.cjs` prepara el mismo JavaScript; `CaptureActivity.kt` acciona el plugin y la consola Run dentro de IntelliJ IDEA | `demo/marketing/jetbrains/` |
+| Visual Studio | `visualstudio/prepare.cjs` prepara C# y xUnit; `record.ps1` captura la ventana real y `mark.ps1` registra sus capítulos | `demo/marketing/visualstudio/` |
+
+Las rutas de scripts de esta sección son relativas a `scripts/marketing/`.
+Para crear la imagen de herramientas y grabar VS Code desde cero, ejecutar desde
+Git Bash en Windows:
+
+```sh
+sh scripts/marketing/run.sh
+```
+
+Ese comando captura **VS Code solamente**: usa VS Code 1.136.1, un usuario sin
+privilegios, un perfil aislado y Xvfb en Docker. La primera corrida descarga las
+dependencias. Para JetBrains, seguir el procedimiento de
+[su harness de captura](scripts/marketing/jetbrains/README.md): el helper se agrega
+sólo a una copia del plugin en el contenedor, nunca al paquete publicable.
+
+Visual Studio necesita Windows y una instalación real del IDE. Preparar el
+fixture con `node scripts/marketing/visualstudio/prepare.cjs <directorio-nuevo>`,
+compilar el VSIX según [su guía](visualstudio-extension/CONTRIBUTING.md) y abrir
+el proyecto en un hive de captura separado. `record.ps1` recibe la ruta del
+FFmpeg local y el título observado de la ventana; no adivinar ese título.
+Las acciones de review y la edición se ejecutan dentro del IDE. Los tests de
+C# corren en Docker con .NET 8; su salida sin modificar se abre en el editor.
+El [procedimiento de Visual Studio](scripts/marketing/visualstudio/README.md)
+documenta esa distinción y las comprobaciones. `mark.ps1` registra los
+hitos durante la grabación; el recorte depende de la geometría de esa ventana.
+Estos scripts asisten una toma real, no constituyen un runner automático del IDE.
+
+Las tres capturas producen `raw.mp4` a 1440 × 900, `chapters.json`, los PNG
+`reason`/`tests`/`finish` y `verification.json`. Los capítulos son
+`before`, `reading`, `reason`, `edit`, `tests`, `finish` y `result`.
+La evidencia debe incluir el test que falla antes de la corrección, los tres
+que pasan después y el diff staged que queda al terminar. No reemplazar salida
+de tests, estados ni controles por una reconstrucción gráfica del panel.
+
+### Composición compartida
+
+El compositor escribe el MP4 en inglés, el poster y los tres GIF publicables en
+`docs/media/`, con prefijos `vscode`, `jetbrains` y `visualstudio`.
+Las tomas, los capítulos, los frames de QA y las pruebas del estado de git quedan
+en `demo/marketing/`, ignorado por git. La captura y el render no pushean ni
+publican; GitHub Pages publica `docs/` cuando se pushea a `main`.
+
+Para recomponer el material existente sin grabar otra review:
+
+```sh
+sh scripts/marketing/run.sh --render vscode
+sh scripts/marketing/run.sh --render jetbrains
+sh scripts/marketing/run.sh --render visualstudio
+```
+
+`clients.mjs` concentra los nombres y CTA; `render.mjs` contiene los títulos,
+la duración de escenas y los encuadres. Un `cuts.json` junto a la toma puede
+reemplazar los cinco recortes por listas `[inicio, duración_original,
+duración_final]`; conservar el montaje de 40 segundos y los hitos verificables.
+El panel de JetBrains está a la derecha: sus escenas conservan todo el ancho.
+Los posters de JetBrains y Visual Studio también encajan la captura completa;
+el recorte de VS Code conserva su encuadre original.
+
+`music.mjs` sintetiza la misma partitura instrumental original de 120 BPM
+para los tres clientes, sin samples ni grabaciones externas. El render la mezcla
+como AAC estéreo a 48 kHz, aproximadamente −18 LUFS, con cierre suave. Sólo se
+publican videos y posters en inglés; la landing mantiene el texto y la
+transcripción en ambos idiomas. Los GIF son silenciosos y el video empieza
+únicamente cuando el visitante lo reproduce.
+
+### Verificación e integración
+
+Con los assets de **los tres clientes** presentes:
+
+```sh
+sh scripts/marketing/run.sh --verify
+```
+
+El verificador comprueba decodificación, dimensiones, duración, audio,
+reproducción en el navegador, selección de cliente, idiomas y página responsive.
+Revisar además el poster, los frames de lectura/edición/tests/cierre y los
+screenshots desktop/mobile: un archivo válido puede cortar el panel o esconder
+el resultado que la escena debe mostrar.
+
+La landing selecciona la demo con `data-demo-client` y admite los enlaces
+`#demo-vscode`, `#demo-jetbrains` y `#demo-visualstudio`. Los dos README de
+la raíz enlazan a los tres; cada README de cliente muestra su propio póster y
+GIF mediante URLs absolutas para mantener válidos los enlaces empaquetados.
+El recorrido de terminal sigue enlazado por separado.
+
 ## The JetBrains IDE plugin
 
 [`jetbrains-plugin/`](jetbrains-plugin/) is a separate Gradle module (Kotlin + IntelliJ Platform

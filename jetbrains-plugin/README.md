@@ -15,6 +15,27 @@
 
 [Project README](../README.md) · [Website](https://ezevillo.github.io/git-review-workflow/) · [Changelog](./CHANGELOG.md)
 
+[![AI wrote it. You own the review. Watch the JetBrains demo.](https://ezevillo.github.io/git-review-workflow/media/jetbrains-poster-en.png)](https://ezevillo.github.io/git-review-workflow/#demo-jetbrains)
+
+**[Watch the 40-second JetBrains demo](https://ezevillo.github.io/git-review-workflow/#demo-jetbrains)** (in English, with music) — follow the reading order, fix the boundary, run the tests, and extract your correction onto its own branch. Captured in IntelliJ IDEA.
+
+<details>
+<summary>See the workflow in action</summary>
+
+**Follow the author's reading order.**
+
+![The JetBrains tool window moves from the policy to the limiter and shows the author's reason for the change.](https://ezevillo.github.io/git-review-workflow/media/jetbrains-reading-order.gif)
+
+**Edit the code and run the tests.**
+
+![The reviewer corrects the boundary in IntelliJ IDEA and runs the three tests.](https://ezevillo.github.io/git-review-workflow/media/jetbrains-edit-and-test.gif)
+
+**Take only your fix to a separate branch.**
+
+![Finishing the review stages the correction on review-fixes/rate-limit.](https://ezevillo.github.io/git-review-workflow/media/jetbrains-finish-review.gif)
+
+</details>
+
 ---
 
 This is the IntelliJ Platform surface of

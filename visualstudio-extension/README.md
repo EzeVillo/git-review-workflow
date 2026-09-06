@@ -19,6 +19,27 @@
 
 [Project README](../README.md) · [Website](https://ezevillo.github.io/git-review-workflow/) · [Changelog](./CHANGELOG.md)
 
+[![AI wrote it. You own the review. Watch the Visual Studio demo.](https://ezevillo.github.io/git-review-workflow/media/visualstudio-poster-en.png)](https://ezevillo.github.io/git-review-workflow/#demo-visualstudio)
+
+**[Watch the 40-second Visual Studio demo](https://ezevillo.github.io/git-review-workflow/#demo-visualstudio)** (in English, with music) — follow the reading order, fix the boundary, run the tests, and extract your correction onto its own branch. Captured in Visual Studio.
+
+<details>
+<summary>See the workflow in action</summary>
+
+**Follow the author's reading order.**
+
+![The Visual Studio tool window moves from the policy to the limiter and shows the author's reason for the change.](https://ezevillo.github.io/git-review-workflow/media/visualstudio-reading-order.gif)
+
+**See the correction and the passing tests.**
+
+![The reviewer corrects the boundary in Visual Studio and views the successful results of all three tests.](https://ezevillo.github.io/git-review-workflow/media/visualstudio-edit-and-test.gif)
+
+**Take only your fix to a separate branch.**
+
+![Finishing the review stages the correction on review-fixes/rate-limit.](https://ezevillo.github.io/git-review-workflow/media/visualstudio-finish-review.gif)
+
+</details>
+
 ---
 
 This is the Visual Studio surface of

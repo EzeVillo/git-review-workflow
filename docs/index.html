@@ -339,6 +339,28 @@
             font-weight: 500;
         }
 
+        /* Real IDE footage; playback is always initiated by the visitor. */
+        .film { scroll-margin-top: 2rem; margin: 0 0 5rem; }
+        .film-heading { display: flex; align-items: end; justify-content: space-between; gap: 1.5rem; margin-bottom: 1.5rem; }
+        .film-heading h2 { margin-bottom: 0; }
+        .film-duration { color: var(--muted); font: .75rem var(--mono); white-space: nowrap; }
+        .film-clients { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+        .film-clients button { padding: .55rem .9rem; border: 1px solid var(--rule); border-radius: 6px; background: transparent; color: var(--muted); font: inherit; font-size: .85rem; cursor: pointer; scroll-margin-top: 2rem; }
+        .film-clients button[aria-pressed="true"] { color: var(--text); border-color: var(--why); background: var(--panel-2); }
+        .film-clients button:focus-visible { outline: 2px solid var(--why); outline-offset: 3px; }
+        .film video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border: 1px solid var(--rule); border-radius: 8px; background: var(--ink); }
+        .film video:focus-visible, .film summary:focus-visible { outline: 2px solid var(--why); outline-offset: 5px; }
+        .film-links { display: flex; align-items: start; gap: 2rem; justify-content: space-between; margin-top: 1rem; font-size: .85rem; }
+        .film-links p { margin: 0; max-width: 65ch; color: var(--muted); }
+        .film-links a { flex-shrink: 0; }
+        .film-transcript { margin-top: 1.25rem; font-size: .85rem; color: var(--muted); }
+        .film-transcript summary { cursor: pointer; width: fit-content; color: var(--text); }
+        .film-transcript p { max-width: 85ch; }
+        @media (max-width: 700px) {
+            .film-heading, .film-links { flex-direction: column; align-items: start; gap: .75rem; }
+            .film { margin-bottom: 3rem; }
+        }
+
         /* --------------------------------------------------- walkthrough demo */
 
         .walk {
@@ -947,10 +969,37 @@
         </p>
         <div class="cta-row">
             <a class="btn" data-i18n="chooseide" href="#editors">Choose your IDE →</a>
-            <a class="ghost" data-i18n="watch" href="https://youtu.be/LsSQtNFnjRQ">Watch the
-                90-second demo →</a>
+            <a class="ghost" data-i18n="watch" href="#demo">Watch the 40-second IDE demo →</a>
         </div>
     </header>
+
+    <section class="film" id="demo" aria-labelledby="film-title">
+        <div class="film-heading">
+            <div>
+                <p class="eyebrow" data-i18n="filmeyebrow">See it in your IDE</p>
+                <h2 id="film-title" data-i18n="filmtitle">AI wrote it. You own the review.</h2>
+            </div>
+            <span class="film-duration" data-i18n="filmduration">40 seconds · English · music on</span>
+        </div>
+        <div class="film-clients" id="demo-chooser" role="group" aria-label="Choose an IDE demo">
+            <button type="button" id="demo-vscode" data-demo-client="vscode" aria-pressed="true" aria-controls="ide-film">VS Code</button>
+            <button type="button" id="demo-jetbrains" data-demo-client="jetbrains" aria-pressed="false" aria-controls="ide-film">JetBrains</button>
+            <button type="button" id="demo-visualstudio" data-demo-client="visualstudio" aria-pressed="false" aria-controls="ide-film">Visual Studio</button>
+        </div>
+        <video id="ide-film" controls playsinline preload="none" width="1920" height="1080"
+               poster="media/vscode-poster-en.png" src="media/vscode-demo-en.mp4"
+               aria-label="Review a pull request in VS Code">
+            <a href="media/vscode-demo-en.mp4">Watch the VS Code demo</a>
+        </video>
+        <div class="film-links">
+            <p data-i18n="filmcaption">Follow the reading order, fix a boundary error, run the tests, and take your correction to a separate branch. Captured in the real IDE.</p>
+            <a href="https://youtu.be/LsSQtNFnjRQ" data-i18n="filmterminal">The terminal walkthrough · 90 seconds →</a>
+        </div>
+        <details class="film-transcript">
+            <summary data-i18n="filmtranscripttitle">Read the demo</summary>
+            <p data-i18n="filmtranscript">A login rate limiter allows five attempts. The reviewer starts a guided review, reads the policy, then follows the author's note to the boundary check. They fix the comparison so that the request is blocked when the limit is reached and run the tests: all three pass. Finishing the review puts only that correction on <code>review-fixes/rate-limit</code>, staged and ready to commit.</p>
+        </details>
+    </section>
 
     <section class="section" id="editors">
         <p class="eyebrow" data-i18n="eyebrowide">Your IDE</p>
@@ -1273,7 +1322,14 @@ brew install git-review-workflow</pre>
             h1b: "Que escriba también el orden de lectura.",
             lede: '<code>git review</code> pone el pull request entero en tu working tree como un único diff staged que podés editar y correr. Si la rama trae un walkthrough, te lleva archivo por archivo — en el orden que eligió el autor y con el motivo de cada uno. Tus correcciones salen después a una rama aparte. Revisalo en el IDE que ya usás.',
             copy: "Copiar",
-            watch: "Mirá la demo de 90 segundos →",
+            watch: "Mirá la demo de 40 segundos en el IDE →",
+            filmeyebrow: "Miralo en tu IDE",
+            filmtitle: "Lo escribió la IA. Lo revisás vos.",
+            filmduration: "40 segundos · en inglés · con música",
+            filmcaption: "Seguí el orden de lectura, corregí un error de límite, corré los tests y llevate tu corrección a una rama aparte. Capturado en el IDE real.",
+            filmterminal: "El recorrido en terminal · 90 segundos →",
+            filmtranscripttitle: "Leer la demo",
+            filmtranscript: "Un limitador de login permite cinco intentos. El revisor inicia una review guiada, lee la política y sigue la nota del autor hasta la comparación del límite. Corrige la comparación para bloquear la solicitud cuando se alcanza el límite y corre los tests: pasan los tres. Al terminar la review, solamente esa corrección queda en <code>review-fixes/rate-limit</code>, staged y lista para commitear.",
 
             eyebrow1: "El orden de lectura",
             h2a: "Quien escribió el código escribe el orden en que lo leés.",
@@ -1501,6 +1557,44 @@ brew install git-review-workflow</pre>
 
         /* ------------------------------------------------------------- i18n */
 
+        var demoNames = { vscode: "VS Code", jetbrains: "JetBrains", visualstudio: "Visual Studio" };
+        var demoClient = "vscode";
+
+        function setDemoClient(client) {
+            if (!demoNames[client]) return;
+            demoClient = client;
+            var film = document.getElementById("ide-film");
+            var source = "media/" + client + "-demo-en.mp4";
+            if (film.getAttribute("src") !== source) {
+                film.pause();
+                film.setAttribute("poster", "media/" + client + "-poster-en.png");
+                film.setAttribute("src", source);
+                film.load();
+            }
+            film.setAttribute("aria-label", (lang === "es" ? "Revisar un pull request en " : "Review a pull request in ") + demoNames[client]);
+            var fallback = film.querySelector("a");
+            fallback.href = source;
+            fallback.textContent = lang === "es" ? "Ver la demo de " + demoNames[client] : "Watch the " + demoNames[client] + " demo";
+            document.getElementById("demo-chooser").setAttribute("aria-label", lang === "es" ? "Elegí una demo de IDE" : "Choose an IDE demo");
+            Array.prototype.forEach.call(document.querySelectorAll("[data-demo-client]"), function (button) {
+                button.setAttribute("aria-pressed", String(button.getAttribute("data-demo-client") === client));
+            });
+        }
+
+        function selectDemoFromHash() {
+            var client = window.location.hash.replace(/^#demo-/, "");
+            if (demoNames[client]) setDemoClient(client);
+        }
+
+        Array.prototype.forEach.call(document.querySelectorAll("[data-demo-client]"), function (button) {
+            button.addEventListener("click", function () {
+                var client = button.getAttribute("data-demo-client");
+                setDemoClient(client);
+                window.history.replaceState(null, "", "#demo-" + client);
+            });
+        });
+        window.addEventListener("hashchange", selectDemoFromHash);
+
         function setLang(next) {
             lang = next === "es" ? "es" : "en";
             var dict = lang === "es" ? ES : EN;
@@ -1511,6 +1605,7 @@ brew install git-review-workflow</pre>
             });
 
             document.documentElement.lang = lang;
+            setDemoClient(demoClient);
             Array.prototype.forEach.call(document.querySelectorAll(".langs button"), function (b) {
                 b.setAttribute("aria-pressed", String(b.getAttribute("data-lang") === lang));
             });
@@ -1538,6 +1633,7 @@ brew install git-review-workflow</pre>
         }
         if (!saved && /^es\b/i.test(navigator.language || "")) saved = "es";
         setLang(saved || "en");
+        selectDemoFromHash();
 
         /* ------------------------------------------------------------- copy */
 

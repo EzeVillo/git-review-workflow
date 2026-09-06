@@ -1,0 +1,12 @@
+const fs = require('node:fs');
+const file = '/work/jetbrains-plugin/src/main/resources/META-INF/plugin.xml';
+const descriptor = fs.readFileSync(file, 'utf8');
+if (!descriptor.includes('marketing.CaptureActivity')) fs.writeFileSync(file, descriptor.replace('<extensions defaultExtensionNs="com.intellij">','<extensions defaultExtensionNs="com.intellij"><postStartupActivity implementation="com.ezevillo.gitreview.marketing.CaptureActivity"/>'));
+let fixture=fs.readFileSync('/src/scripts/marketing/launch.cjs','utf8');
+fixture=fixture.slice(fixture.indexOf('const root ='),fixture.indexOf('fs.writeFileSync(`${user}/User/settings.json`'));
+fixture=fixture.replace("const root = fs.mkdtempSync('/tmp/grv-film-');", "const root = '/film'; fs.mkdirSync(root,{recursive:true});");
+fixture=fixture.replace('export function checkRateLimit(attempts, limit = MAX_ATTEMPTS) {', 'export function checkRateLimit(\n  attempts, limit = MAX_ATTEMPTS\n) {');
+fs.writeFileSync('/tmp/fixture.cjs', "const fs=require('node:fs'),cp=require('node:child_process'),path=require('node:path');\n"+fixture+`\nfs.mkdirSync(repo+'/.idea',{recursive:true});
+fs.writeFileSync(repo+'/.idea/vcs.xml','<project version="4"><component name="VcsDirectoryMappings"><mapping directory="$PROJECT_DIR$" vcs="Git"/></component></project>');
+fs.appendFileSync(repo+'/.git/info/exclude','\\n.idea/\\n');
+`);

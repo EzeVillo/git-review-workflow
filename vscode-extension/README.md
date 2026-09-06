@@ -15,6 +15,12 @@
 
 [Project README](https://github.com/EzeVillo/git-review-workflow#readme) · [Website](https://ezevillo.github.io/git-review-workflow/) · [Changelog](https://github.com/EzeVillo/git-review-workflow/blob/main/vscode-extension/CHANGELOG.md)
 
+[![AI wrote it. You own the review.](https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/docs/media/vscode-poster-en.png)](https://ezevillo.github.io/git-review-workflow/#demo)
+
+**[Watch the 40-second demo](https://ezevillo.github.io/git-review-workflow/#demo)** — follow the reasoning, fix a boundary error, run the tests, and keep your correction on a separate branch.
+
+![Follow the author's reading order in the VS Code panel.](https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/docs/media/vscode-reading-order.gif)
+
 ---
 
 This is the editor surface of

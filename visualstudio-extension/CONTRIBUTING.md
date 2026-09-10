@@ -237,6 +237,20 @@ Bump the version (stamps `GitReview.VS.csproj`, `source.extension.vsixmanifest`,
 ./build-vsix.ps1        # src/GitReview.VS/bin/Release/net472/GitReview.VS.vsix
 ```
 
+Pushing the matching tag runs the tests, builds that net472 VSIX on a Windows
+runner, publishes it to the Visual Studio Marketplace and attaches it to a
+non-latest GitHub Release:
+
+```sh
+git tag visualstudio-vX.Y.Z
+git push origin visualstudio-vX.Y.Z
+```
+
+The tagged commit must already carry the three matching version stamps and its
+CHANGELOG section. GitHub Actions reads the repository secret
+`VS_MARKETPLACE_TOKEN` only while publishing; never put that token in the
+checkout or a command line.
+
 Two things travel inside that package and are therefore user-facing: the
 [README](README.md) (rendered as `GettingStartedGuide`) and the [CHANGELOG](CHANGELOG.md)
 (`ReleaseNotes`) referenced from `source.extension.vsixmanifest`. The **tagline** — the opening

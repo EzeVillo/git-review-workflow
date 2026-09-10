@@ -1,0 +1,117 @@
+name: release-visualstudio
+
+# Visual Studio versions independently of every other client. The tagged tree
+# is the only source of the VSIX uploaded to both Marketplace and GitHub.
+on:
+  push:
+    tags:
+      - "visualstudio-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve the version and check every stamped source
+        id: ver
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.Substring('visualstudio-v'.Length)
+          $csproj = [regex]::Match(
+            (Get-Content -Raw 'visualstudio-extension/src/GitReview.VS/GitReview.VS.csproj'),
+            '<Version>([0-9]+\.[0-9]+\.[0-9]+)</Version>').Groups[1].Value
+          $manifest = [regex]::Match(
+            (Get-Content -Raw 'visualstudio-extension/src/GitReview.VS/source.extension.vsixmanifest'),
+            '<Identity [^>]*Version="([0-9]+\.[0-9]+\.[0-9]+)"').Groups[1].Value
+          $props = [regex]::Match(
+            (Get-Content -Raw 'visualstudio-extension/Directory.Build.props'),
+            '<GitReviewClientVersion>([0-9]+\.[0-9]+\.[0-9]+)</GitReviewClientVersion>').Groups[1].Value
+          foreach ($stamped in @($csproj, $manifest, $props)) {
+            if ($version -ne $stamped) {
+              throw "tag is $env:GITHUB_REF_NAME but a Visual Studio version stamp is $stamped. Run ./visualstudio-extension/bump-version.sh $version and tag that commit."
+            }
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Check the Marketplace token is configured
+        shell: pwsh
+        env:
+          PUBLISH_TOKEN: ${{ secrets.VS_MARKETPLACE_TOKEN }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:PUBLISH_TOKEN)) {
+            throw 'VS_MARKETPLACE_TOKEN is not set. Create a Marketplace (Manage) token and add it under Settings -> Secrets and variables -> Actions.'
+          }
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Run the Visual Studio client tests
+        working-directory: visualstudio-extension
+        run: dotnet test GitReview.sln -v minimal
+
+      - name: Build and verify the VSIX
+        id: package
+        working-directory: visualstudio-extension
+        shell: pwsh
+        run: |
+          ./build-vsix.ps1
+          $vsix = Resolve-Path -LiteralPath 'src/GitReview.VS/bin/Release/net472/GitReview.VS.vsix' -ErrorAction SilentlyContinue
+          if ($null -eq $vsix -or (Get-Item -LiteralPath $vsix).Length -eq 0) {
+            throw 'expected the built VSIX at src/GitReview.VS/bin/Release/net472/GitReview.VS.vsix.'
+          }
+          "vsix=$vsix" >> $env:GITHUB_OUTPUT
+
+      - name: Publish the built VSIX to the Visual Studio Marketplace
+        working-directory: visualstudio-extension
+        shell: pwsh
+        env:
+          PUBLISH_TOKEN: ${{ secrets.VS_MARKETPLACE_TOKEN }}
+          VSIX: ${{ steps.package.outputs.vsix }}
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          $installation = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
+          if ([string]::IsNullOrWhiteSpace($installation)) {
+            throw 'Visual Studio with MSBuild is not installed on the release runner.'
+          }
+          $publisher = Join-Path $installation 'VSSDK\VisualStudioIntegration\Tools\Bin\VsixPublisher.exe'
+          if (-not (Test-Path -LiteralPath $publisher)) {
+            throw "VsixPublisher.exe was not found at $publisher."
+          }
+          $publishManifest = Resolve-Path -LiteralPath 'marketplace/publishmanifest.json'
+          & $publisher publish `
+            -payload $env:VSIX `
+            -publishManifest $publishManifest `
+            -personalAccessToken $env:PUBLISH_TOKEN
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Create the GitHub release with the VSIX attached
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -eu
+          vsix="visualstudio-extension/src/GitReview.VS/bin/Release/net472/GitReview.VS.vsix"
+          if [ ! -s "$vsix" ]; then
+            echo "expected the built VSIX at ${vsix}." >&2
+            exit 1
+          fi
+          notes="$(mktemp)"
+          awk -v v="## [${VERSION}]" '
+            index($0, v) == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' visualstudio-extension/CHANGELOG.md >"$notes"
+          if [ ! -s "$notes" ]; then
+            echo "See visualstudio-extension/CHANGELOG.md" >"$notes"
+          fi
+          gh release create "$GITHUB_REF_NAME" "$vsix" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Visual Studio extension ${VERSION}" \
+            --notes-file "$notes" \
+            --latest=false

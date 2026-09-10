@@ -1,7 +1,7 @@
 # git review workflow — Visual Studio extension
 
 <p align="center">
-  <img src="media/icon.png" width="128" height="128" alt="git review workflow icon" />
+  <img src="https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/visualstudio-extension/media/icon.png" width="128" height="128" alt="git review workflow icon" />
 </p>
 
 > Review a pull request by **editing and running** it, not just reading it. The
@@ -17,7 +17,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Requires git review 0.7.0+](https://img.shields.io/badge/requires-git%20review%200.7.0%2B-blue.svg)](https://github.com/EzeVillo/git-review-workflow#installation)
 
-[Project README](../README.md) · [Website](https://ezevillo.github.io/git-review-workflow/) · [Changelog](./CHANGELOG.md)
+[Project README](https://github.com/EzeVillo/git-review-workflow#readme) · [Website](https://ezevillo.github.io/git-review-workflow/) · [Changelog](./CHANGELOG.md)
 
 [![AI wrote it. You own the review. Watch the Visual Studio demo.](https://ezevillo.github.io/git-review-workflow/media/visualstudio-poster-en.png)](https://ezevillo.github.io/git-review-workflow/#demo-visualstudio)
 
@@ -103,7 +103,7 @@ because what these rows hold is work you wrote by hand.
    ```
 
    Homebrew, a native Windows (PowerShell) installer and a no-Node one-liner are
-   all in the [installation guide](../README.md#installation).
+   all in the [installation guide](https://github.com/EzeVillo/git-review-workflow#installation).
 
 2. **Tell it where PRs are integrated,** once per repository — from the panel
    (**Set the base branch**) or on the command line:
@@ -191,12 +191,12 @@ GitHub in your browser.
 
 ## Learn more
 
-- [Project README](../README.md) — the full command surface, the walkthrough
+- [Project README](https://github.com/EzeVillo/git-review-workflow#readme) — the full command surface, the walkthrough
   format, and how the workflow fits together. Also in
-  [Spanish](../README.es.md).
+  [Spanish](https://github.com/EzeVillo/git-review-workflow/blob/main/README.es.md).
 - [Website](https://ezevillo.github.io/git-review-workflow/)
 - [Report a bug](https://github.com/EzeVillo/git-review-workflow/issues/new?template=bug_report.yml)
-- [Contributing to the extension](CONTRIBUTING.md) — building it, running it in
+- [Contributing to the extension](https://github.com/EzeVillo/git-review-workflow/blob/main/visualstudio-extension/CONTRIBUTING.md) — building it, running it in
   Visual Studio, the tests and the VSIX.
 
 ## License

@@ -7,7 +7,7 @@ ejecutándolo**. Todo cuelga del dispatcher `git review <verbo>`, al estilo de `
 `git stash`. `git review start` materializa el diff completo del PR como cambios *staged y sin
 commitear* sobre una rama `review/<branch>` cuyo `HEAD` queda en el merge-base; editás/ejecutás en
 tu working tree y después `git review finish` extrae *tus* ediciones a una rama aparte
-`review-fixes/<branch>`. Ver `README.md` para la superficie completa de comandos.
+`review-fixes/<branch>`. Ver `CLI.md` para la superficie completa de comandos.
 
 ## Dónde está cada cosa
 
@@ -18,7 +18,8 @@ tu working tree y después `git review finish` extrae *tus* ediciones a una rama
 | `decisiones.md` | Por qué cada cosa es como es: el bug que la motivó, la alternativa descartada. |
 | Comentarios del código | El rationale por función. `bin/git-review-lib.sh` es 50% comentario. |
 | `contracts/client-product-surface.yaml` | El canónico anti-drift de los tres clientes. |
-| `README.md` / `README.es.md` | El producto, para quien lo usa. |
+| `README.md` / `README.es.md` | Presentación, instalación e inicio rápido del producto. |
+| `CLI.md` / `CLI.es.md` | Referencia completa de comandos y flujos avanzados. |
 
 **Ante una duda genuina, preguntá.** Si hay una decisión de diseño o una ambigüedad real que no se
 resuelve leyendo el código, preguntarle al usuario suele ser más certero y económico que explorar a
@@ -258,8 +259,10 @@ Cada `@test` de bats debe fallar de verdad cuando el comportamiento se rompe:
 ### Documentación
 
 - **Hay DOS README y siempre se actualizan los dos.** `README.md` (inglés) y `README.es.md`
-  (español) son traducciones espejo. Cualquier cambio de comportamiento —flags, superficie de
-  comandos, tabla de verbos, ejemplos— tiene que reflejarse en *ambos* en el mismo cambio.
+  (español) son traducciones espejo para la presentación, la instalación y el inicio rápido.
+- **La referencia de la CLI también es bilingüe.** `CLI.md` (inglés) y `CLI.es.md` (español) son
+  traducciones espejo. Cualquier cambio de comportamiento —flags, superficie de comandos, tabla de
+  verbos, ejemplos o flujos avanzados— tiene que reflejarse en *ambos* en el mismo cambio.
 - **Los documentos de trabajo se escriben en español**, con ortografía completa (acentos, `ñ`,
   `¿`/`¡`). Cuando se parte de una plantilla en inglés (p. ej. `.specify/templates/`), la plantilla
   **se deja como está** y solo se escribe en español lo que uno completa: los encabezados en inglés

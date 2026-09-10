@@ -1,0 +1,1089 @@
+# Referencia de la CLI de git-review-workflow
+
+Referencia completa de la línea de comandos de git-review-workflow.
+
+[Volver al README](README.es.md) · [English](CLI.md)
+
+## Comandos
+
+> **Cómo leer la sintaxis:** `<x>` es **obligatorio**, `[x]` es **opcional**, y
+> `a | b` significa **elegí uno, no los dos**.
+
+Cada comando es un verbo bajo `git review`. Corré `git review -h` para ver la
+lista, o `git review <verbo> -h` para el detalle de un verbo.
+
+`git review-ui` es el sinónimo cómodo para la shell de `git review ui`.
+
+| Comando                                                                                                                                    | Qué hace                                                                                                                                                                                                                                                                                                                                                                               |
+|--------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `git review [-h \| --version]`                                                                                                             | Lista todos los verbos o imprime la versión instalada.                                                                                                                                                                                                                                                                                                                                 |
+| `git review ui`                                                                                                                            | Abre la interfaz de terminal para el repositorio actual.                                                                                                                                                                                                                                                                                                                               |
+| `git review start [<rama>] [<base> \| --base <base> \| --delta \| --from <commit>] [--step \| --no-walk \| --keys] [--local \| --offline]` | Hace fetch de `origin` y deja el diff del PR staged en una nueva rama `review/<rama>` (omití `<rama>` para revisar la rama actual; entra en modo walk si el PR trae un walkthrough; `--keys` restringe el walk a las entradas marcadas `> key`; `--local` revisa tu rama local pero sigue comparando contra la base de origin; `--offline` además salta el fetch y usa tu base local). |
+| `git review compare <a> <b> [--step \| --no-walk \| --keys]`                                                                               | Deja staged el diff entre dos commit-ish (tags, commits, ramas) en modo lectura, para leerlo o recorrerlo. `git review finish` se niega — no hay a dónde escribir.                                                                                                                                                                                                                     |
+| `git review walkthrough (init [--base <base>] [--force] [--stdout] [--porcelain] \| build [--check] [--from <archivo> \| --from -])`                        | Escribe un walkthrough de lectura para el PR de la rama actual — un orden guiado de los archivos cambiados con una nota en cada uno, committeado como `.review/walkthrough.md`. Corré `init` de nuevo cuando el PR siga cambiando y **actualiza** lo que hay: las entradas cuyo archivo sigue en rango conservan su número, su porqué y su `> key`, los archivos que entraron al rango llegan como placeholders, y las entradas cuyo archivo salió se descartan y se nombran (`--force` descarta todo y escribe un esqueleto en blanco). `build` estampa un ancla `> at:` bajo cada entrada, con lo que un `build` posterior puede nombrar los porqués escritos contra una versión del archivo que ya no existe — una nota, nunca un fallo. `--stdout` imprime el esqueleto en vez de escribirlo y `--from` instala uno completado desde un archivo o la entrada estándar, para que un agente escriba el orden de lectura sin tocar tu working tree. |
+| `git review walkthrough draft [--local \| --offline] [--delta] [--force] [--stdout] [--porcelain] [--] [<rama>]`<br>`git review walkthrough draft --build [--from <archivo> \| --from -] [--local \| --offline] [--delta] [--force] [--] [<rama>]`                                               | Escribí tu propio orden de lectura para el PR de otra persona, fuera del working tree — no se stagea, commitea ni deshace nada, y correrlo de nuevo actualiza lo que ya está en vez de negarse. `git review start` lo lee en lugar del walkthrough del PR. `--build` lo valida y renumera. `--stdout` imprime el esqueleto en vez de escribirlo (no crea nada en ninguna parte), `--porcelain` reemplaza la línea de resumen por un registro `merged` con lo que se conservó, entró y salió, para que quien lo invoca escriba su propia frase, y `--build --from` instala uno ya completado desde un archivo o la entrada estándar, para que un agente pueda escribir el orden de lectura sin tocar tu gitdir.                                                                                                                                                             |
+| `git review walkthrough guide [--team] [--delete]`                                                            | Creá o borrá una guía de autoría: prosa sobre el **contenido** — qué entradas merecen `> key`, cómo escribir un porqué, qué va en el heads-up. Sin flags crea **la tuya** (`<git-common-dir>/review-walkthrough-guide.md`), fuera del working tree, así que nunca se stagea, commitea ni la extrae `finish`. `--team` crea la compartida del repositorio (`.review/walkthrough-guide.md`, committeada con el código) y se niega adentro de una review. `--delete` borra la tuya; la compartida es un archivo trackeado, así que eso es `git rm` más un commit. Las dos se crean **vacías** — el comando imprime qué escribir, para que nada que quede en el archivo se confunda con las convenciones. |
+| `git review next` / `git review prev`                                                                                                      | Mueve una review `--step` o walkthrough a la entrada siguiente / anterior.                                                                                                                                                                                                                                                                                                             |
+| `git review status [--porcelain \| --why <path>]`                                                                                          | Muestra el estado de la review en la rama actual (`--porcelain` para salida legible por programas, incluido un registro `finish` cuando un cierre quedó trabado por conflicto; `--why <path>` para el porqué de una entrada del walkthrough).                                                                                                                                          |
+| `git review list [--porcelain]`                                                                                                            | Lista todas las reviews en curso y las guardadas (la rama actual marcada con `*`; `--porcelain` también reporta cierres sin resolver como `pending` o `conflict`).                                                                                                                                                                                                                     |
+| `git review save`                                                                                                                          | Pausa la review actual como `review-saved/<rama>` y vuelve a donde empezaste.                                                                                                                                                                                                                                                                                                          |
+| `git review continue [rama]`                                                                                                               | Retoma una review guardada con `git review save`.                                                                                                                                                                                                                                                                                                                                      |
+| `git review finish [--onto-source] [--resume \| --abort [--force]]`                                                                        | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR); `--abort` deshace el último finish.                                                                                                                                                                                                                                                        |
+| `git review preview [--stat]`                                                                                                              | Muestra las ediciones que hiciste hasta ahora — el diff que `finish` extraería — sin commitear ni cambiar de rama.                                                                                                                                                                                                                                                                     |
+| `git review abort`                                                                                                                         | Cancela la review actual y vuelve a donde empezaste.                                                                                                                                                                                                                                                                                                                                   |
+| `git review clean [--keep-fixes \| --fixes-only] [rama]`                                                                                   | Borra las ramas `review/*` (y por defecto también `review-fixes/*`) de `<rama>`, o todas; `--keep-fixes` deja `review-fixes/*` intactas, `--fixes-only` se lleva sólo esas.                                                                                                                                                                                                            |
+| `git review forget --delta ([--] <rama> \| --all \| --stale [--dry-run])`                                                                  | Descarta el marcador de `--delta` de una rama, de todas, o solo de las obsoletas.                                                                                                                                                                                                                                                                                                      |
+| `git review forget --saved ([--] <rama> \| --all) [--dry-run]`                                                                             | Descarta una review guardada con `git review save`.                                                                                                                                                                                                                                                                                                                                    |
+| `git review forget --draft ([--] <rama> \| --all \| --reviewed) [--dry-run]`                                                                             | Borra un walkthrough que escribiste para el PR de otra persona.                                                                                                                                                                                                                                                                                                                        |
+| `git review config [<clave> [<valor>]] [--unset <clave>] [--porcelain [<rama>]]`                                                           | Lee o escribe la config del producto (`base`, `remote`); `--porcelain` también lista las ramas candidatas a revisar.                                                                                                                                                                                                                                                                   |
+
+## Interfaz de terminal
+
+Abrí la interfaz visual de terminal desde adentro de un repositorio:
+
+```sh
+git review ui
+```
+
+En montajes de red cuyas notificaciones de archivos no sean confiables,
+configurá un intervalo mínimo de refresco. Cada refresco normal reinicia ese
+piso, así que no agrega polling mientras llegan notificaciones:
+
+```sh
+git config reviewui.pollseconds 45
+```
+
+## Autocompletado
+
+Homebrew configura el autocompletado automáticamente. En una instalación
+manual, decile a tu shell que cargue el archivo correspondiente al arrancar.
+Reemplazá `/ruta/a/git-review-workflow` por la carpeta donde descargaste el
+proyecto.
+
+```sh
+# bash — en ~/.bashrc
+source /ruta/a/git-review-workflow/completions/git-review-workflow.bash
+
+# zsh — en ~/.zshrc
+source /ruta/a/git-review-workflow/completions/git-review-workflow.zsh
+
+# fish — copiá el archivo a la carpeta de completions de fish (sin línea de config)
+cp /ruta/a/git-review-workflow/completions/git-review-workflow.fish \
+    ~/.config/fish/completions/
+```
+
+Después abrí una terminal nueva. Al escribir `git review ` y apretar **Tab**
+aparecen los verbos; `git review start ` ofrece los nombres de tus ramas.
+
+<details>
+<summary id="git-review-start"><code>git review start</code></summary>
+
+Tiene dos ejes independientes — **rango** (desde dónde empieza) y **layout**
+(`--step` o no), que se combinan libremente.
+
+- `<rama>` — la rama a revisar. **Omitila para revisar la rama que tenés
+  checkouteada** — el default propio de git (como `push`, `status`, `log`). Solo
+  resuelve el nombre; el modo lo siguen eligiendo los flags, así que combiná la
+  rama omitida con `--local` para revisar tu trabajo local. Sin `--local`/`--offline`
+  revisa `origin/<rama>` — si difiere de tu rama checkouteada te avisa, porque estarías
+  revisando un snapshot distinto al que tenés. Con la rama omitida, falla con HEAD
+  detached o estando sobre una rama `review/*`.
+- `base` — commit-ish contra el que comparar: una rama, un **tag** o un commit.
+  Tomada de `reviewworkflow.base` (ver abajo); el argumento posicional la
+  sobreescribe. **Obligatoria para una review completa** — no hay default, así que
+  una review completa sin base configurada falla y te pide que la configures. No se
+  usa con `--delta` ni `--from`, que ya traen su propio punto de inicio — pasar una
+  base explícita junto con ellos es un error (una base que viene de config
+  simplemente se ignora).
+- `--base <base>` — la base contra la que comparar, como flag. Usala para pasar
+  una base dejando que `<rama>` defaultee a la rama actual — ej.
+  `git review start --base develop` revisa la rama en la que estás contra
+  `develop` (el posicional solitario siempre se toma como `<rama>`, así que el
+  flag es la forma de llegar a la base sin nombrar la rama). No se puede combinar
+  con una base posicional.
+- `--delta` — revisar solo los commits agregados **desde tu última review** de
+  esta rama, en vez de todo el PR. Ideal para re-revisar un PR actualizado. Una
+  review **completada** conserva el tip a través de `git review clean`; un start
+  **abandonado** (clean o abort sin finish) revierte el marcador para que
+  `--delta` no se saltee commits que nunca revisaste. Descartalo a mano con
+  `git review forget --delta`.
+- `--from <commit>` — revisar solo los commits **después de `<commit>`**. Útil
+  cuando no hay review registrada para usar `--delta`, o para elegir un punto de
+  inicio exacto. Mutuamente excluyente con `--delta`.
+- `--step` — revisar el rango **de a un commit por vez** (combinalo con `--delta`
+  o `--from` para recorrer solo esos commits). Arrancás en el primer commit
+  después del merge-base y el comando imprime el mensaje del autor. Editás y
+  corrés `git review next` para bancar tus cambios y pasar al siguiente commit
+  con el árbol limpio. Cuando se acaban los commits, corrés `git review finish` y
+  todas tus ediciones bancadas se re-aplican sobre el tip del PR — igual que en
+  una review completa.
+- **Modo walk (automático).** Si el PR trae un walkthrough
+  (`.review/walkthrough.md`, escrito por el autor con
+  [`git review walkthrough`](#git-review-walkthrough)), `git review start` entra
+  en **modo walk**: la misma review completa staged y editable, más un cursor de
+  lectura guiado por encima. Imprime el heads-up del autor — qué es delicado en
+  este PR, se lee una vez antes del primer archivo — y después la primera entrada:
+  un archivo y la nota del autor sobre por qué importa, etiquetada `(key)` cuando
+  es una de las pocas que el autor marcó como esenciales. Te movés por el orden de
+  lectura con `git review next` / `git review prev`. El cursor es *solo* una
+  posición de lectura: nunca stagea, resetea ni esconde nada, así que editás y
+  hacés `git review finish` exactamente como en una review completa. Las entradas
+  se filtran al rango real de la review, así un walkthrough que ya no coincide
+  (ej. uno viejo con `--delta`) simplemente degrada — un walkthrough roto o
+  desactualizado **nunca** falla una review; a lo sumo cae a una review completa
+  normal con una nota. Un archivo que cambia en el rango pero no tiene entrada
+  propia — el caso típico es un walkthrough desactualizado — tampoco queda
+  afuera: se agrega al final del orden de lectura, marcado `(uncovered)` en vez
+  de `(key)`, así una review nunca llega a `git review finish` con archivos del
+  PR que nunca viste — incluido el propio walkthrough committeado, que entra en
+  esa misma cola sin anotar: un walkthrough nunca puede anotarse a sí mismo,
+  pero es contenido que el PR agrega como cualquier otro archivo, así que nunca
+  es el único archivo que ninguna review muestra.
+- `--no-walk` — ignorar cualquier walkthrough y revisar el diff completo a secas.
+  `--step` también tiene prioridad sobre walk (son dos formas del mismo eje de
+  layout), así que `--step` gana sin error — solo imprime una nota avisando que
+  ignora el walkthrough del PR (se silencia pasando además `--no-walk`).
+- `--keys` — modo walk restringido a las entradas marcadas `> key`. El cursor
+  de lectura, `next`/`prev` y el status listan solo esos archivos esenciales
+  (en el orden del walkthrough). Requiere un walkthrough con al menos una key
+  en rango; no se combina con `--step` ni `--no-walk`. El PR completo sigue
+  staged — solo se acorta el recorrido guiado. Es un primer pase enfocado, no
+  un reclamo de que el resto del PR no importe.
+- `--local` — revisar tu `<rama>` **local**, incluidos los commits sin pushear,
+  en vez de la copia de `origin`. La base es otra cosa —es el punto de merge
+  compartido—, así que se sigue haciendo fetch y se sigue comparando contra la
+  copia de `origin` incluso con `--local`; solo cambia tu rama. Te deja revisar
+  tu propio trabajo antes de pushear. Mantiene su propio marcador de `--delta`,
+  separado del remoto, así una review local y una remota de la misma rama nunca
+  se pisan el progreso.
+- `--offline` — como `--local`, pero además salta el fetch por completo y
+  resuelve la base desde tus ramas locales también, para el caso raro en que no
+  tenés acceso a la red. Implica `--local`.
+- Siempre actualiza desde `origin` primero y **falla** si no puede (salvo con
+  `--offline`). Sin `--local`/`--offline` la revisión se arma desde
+  `origin/<rama>`, nunca desde una copia local vieja. Si una rama local con el
+  mismo nombre apunta a otro lado, te avisa: la review refleja el remoto, no tu
+  checkout, y un `git review finish --onto-source` posterior se va a negar hasta
+  que tu rama local coincida.
+- No corre si tenés cambios locales (tracked **o** untracked no ignorados) —
+  arrancá desde una rama limpia.
+- **Los merges de la rama base se excluyen.** Si el autor mergeó la base (ej.
+  `develop`) dentro del PR, ese contenido mergeado queda afuera de la review en
+  todos los modos, así ves solo los cambios del autor.
+- `--` termina el parseo de opciones, la convención habitual de git: todo lo que
+  va después se trata como argumento posicional, así una rama cuyo nombre empieza
+  con `-` igual se puede revisar (ej. `git review start -- --weird develop`).
+
+</details>
+
+<details>
+<summary><code>git review compare</code></summary>
+
+Deja staged el diff entre dos commit-ish — dos tags, dos commits, dos ramas —
+como una review de solo lectura, para leerlo inline o recorrerlo commit por
+commit con la misma UX que una review real, sin `git diff | less`.
+
+```sh
+git review compare v1.0 v2.0          # dejar staged el diff entre dos releases
+git review compare v1.0 v2.0 --step   # ...y recorrerlo commit por commit
+```
+
+- Compara `<a>..<b>`: `<a>` es el límite inferior (donde empieza la review),
+  `<b>` el tip cuyo contenido llena el working tree. Ambos se resuelven a commits,
+  así que andan tags y SHAs crudos, no solo nombres de rama.
+- Es **de solo lectura por diseño**. Toda la mitad editar→finish del workflow
+  necesita una rama escribible a la cual devolver, y un tag o un commit no lo es —
+  así que `git review finish` sobre un compare se niega explícitamente ("esta
+  review es de solo lectura, no hay a dónde escribir"). Usá `git review abort`
+  para terminarlo.
+- `--step` lo recorre de a un commit, igual que `git review start --step`, con
+  `git review next` / `git review prev`.
+- Si el árbol de `<b>` trae un walkthrough, `compare` también entra en modo walk,
+  igual que `git review start`, y sigue siendo de solo lectura. `--no-walk` opta
+  por salir.
+
+</details>
+
+<details>
+<summary id="git-review-walkthrough"><code>git review walkthrough</code></summary>
+
+Lo único que ni git ni GitHub ofrecen: un **orden de lectura escrito por el
+autor** sobre un PR. Como autor (a menudo un agente de IA), curás el orden en que
+conviene leer los archivos cambiados y anotás cada uno con *por qué* importa; un
+reviewer que corre `git review start` sobre el PR entra entonces en
+[modo walk](#git-review-start) y lo lee en ese orden.
+
+El walkthrough es un sidecar committeado, `.review/walkthrough.md` — Markdown
+plano, legible en GitHub, que se mergea con el PR. Hay dos subcomandos:
+
+```sh
+git review walkthrough init     # escribe un esqueleto con cada archivo cambiado
+# ...completás el orden y los porqués...
+git review walkthrough build    # valida, ordena por tus números y renumera 1..N
+```
+
+- `init` escribe un esqueleto determinístico con **todos los archivos** cambiados
+  vs la base (el mismo rango que verá un reviewer), cada uno como `## ?. <path>`
+  más un placeholder `<!-- why: -->`, encabezado por una sección `## Heads-up` con
+  su propio placeholder. `--base <base>` sobreescribe `reviewworkflow.base`.
+- **Un walkthrough que llegó con un merge no se reconcilia, se reemplaza.** Tu PR
+  se mergea, el sidecar viaja a la base con él, arrancás la rama siguiente y tocás
+  uno de los mismos archivos: esa entrada sigue con un porqué sobre un cambio que
+  ya salió. `init` le pregunta a git si el tip que lo escribió ya está en la base
+  y, cuando lo está, escribe un esqueleto nuevo y lo dice — sin `--force`, porque
+  el archivo es trackeado y el anterior está a un `git checkout --`. El panel
+  llama a ese estado *from a merged PR* y no *may be out of date*: no quedó atrás,
+  es de un rango que cerró.
+- **Corré `init` de nuevo cada vez que el PR se mueva.** Un walkthrough se escribe
+  cuando el PR está terminado, y después el PR sigue cambiando — vuelven los
+  comentarios del review y cambian tres archivos más. `init` sobre un walkthrough
+  existente lo **actualiza**: cada entrada cuyo archivo sigue en rango conserva su
+  número, su porqué y su `> key`, los archivos que entraron al rango llegan como
+  placeholders `## ?.` para completar, y las entradas cuyo archivo salió se
+  descartan y se nombran por stderr (están en git; `git checkout --
+  .review/walkthrough.md` las trae de vuelta). `--force` es la otra dirección:
+  descartar todo y escribir un esqueleto en blanco.
+- Vos (el autor) hacés solo la parte no mecánica: reemplazás cada `?` por un
+  número de orden y cada placeholder por una nota corta.
+- **`## Heads-up`** es lo único que un reviewer lee antes de abrir un archivo: los
+  invariantes que este PR puede romper, las partes sutiles o riesgosas, de qué
+  desconfiar. `git review start` lo imprime al entrar. Borrá la sección entera si
+  el PR no tiene nada delicado — una sección vacía es peor que ninguna.
+- **`> key`** marca las entradas esenciales. Escribilo en una línea propia, como
+  primera línea del porqué, en los pocos archivos que llevan el cambio — los que
+  un reviewer no puede leer por arriba — y dejá el resto sin marcar; los archivos
+  generados, los lockfiles y los renames mecánicos son justamente lo que queda sin
+  marca. No lleva valor: el porqué dice el resto. El modo walk etiqueta esas
+  entradas con `(key)` y las cuenta al entrar. El revisor puede arrancar con
+  `git review start --keys` para recorrer solo esas entradas. El marcador solo
+  sirve mientras sea selectivo, así que `build` avisa si están todas marcadas (o
+  si un walkthrough largo no marca ninguna).
+- **`> at:`** lo escribe `build`, no vos: un ancla que registra contra qué versión
+  de cada archivo se escribió su porqué. En el `build` siguiente (o
+  `build --check`), toda entrada cuyo archivo cambió desde entonces se nombra —
+  los porqués que conviene releer. La deriva compara el *conjunto* de paths, así
+  que sin esto un PR que sigue cambiando los archivos que ya anota pasa en verde
+  con prosa que describe la primera versión de cada uno. Es una **nota, nunca un
+  fallo**: tocar un archivo sin reescribir su porqué suele estar bien, y una
+  verificación que se pone roja por eso es de las que la gente termina apagando.
+  El reviewer nunca ve el marcador.
+- **Guías de autoría (opcionales):** convenciones solo de **contenido** — qué
+  marcar `> key`, cómo escribir los porqués y el Heads-up, costumbres locales.
+  **No** cambian el formato del walkthrough y `build` no las valida: la CLI las
+  detecta y las nombra, y el que las lee es el agente que completa el walkthrough.
+  Son dos, y contestan preguntas distintas:
+
+  |             | De quién                                        | Dónde                                                                       |
+  |-------------|-------------------------------------------------|-----------------------------------------------------------------------------|
+  | compartida  | cómo **este proyecto** quiere que se anoten sus PRs | `.review/walkthrough-guide.md`, committeada con el código                 |
+  | tuya        | cómo **vos** anotás                             | `<git-common-dir>/review-walkthrough-guide.md`, fuera del working tree      |
+
+  La tuya vive en el gitdir por las mismas tres razones que el borrador del
+  revisor: nunca aparece en `git status`, nunca se stagea ni se commitea, y
+  `finish` no puede llevársela a `review-fixes/` — cosa que haría, porque la
+  extracción es `git add -A`. Creá cualquiera de las dos con
+  [`git review walkthrough guide`](#git-review-walkthrough).
+
+  **Las dos aplican cuando las dos tienen contenido, y la tuya gana donde se
+  contradicen** — la misma precedencia que un borrador tiene sobre el walkthrough
+  del autor. `init` y `draft` nombran las que están en vigor en el esqueleto mismo
+  y las reportan por stderr — y `build` también, que es el verbo que hace cumplir la
+  regla que una guía más suele llevar («marcá pocas key»). El esqueleto las nombra de
+  dos formas: escrito a un archivo da los **paths**, y con `--stdout` **inlinea el
+  contenido**, porque ese esqueleto viaja por un pipe y el path absoluto de un gitdir
+  no es algo que el agente del otro lado pueda abrir necesariamente. Una guía vacía o de puro whitespace no es una guía: se
+  reporta como vacía y no se aplica nada. Las dos se resuelven en el repositorio
+  donde estás parado, `draft` incluido — las convenciones de quien anota, no una
+  guía del tip del PR. `clean` no toca ninguna de las dos.
+- `build` valida el archivo, ordena las entradas por tus números, las renumera
+  `1..N` y lo reescribe, preservando el heads-up. `--check` valida **sin escribir**
+  y sale con código distinto de cero ante cualquier problema — pensado para CI.
+  Falla si queda algún placeholder `?.`, `<!-- why` o `<!-- heads-up`, si `> key`
+  lleva un valor, si un path aparece dos veces, si el encabezado de una entrada no
+  tiene exactamente la forma `## <N>. <path>`, o ante **drift**: el conjunto de
+  paths tiene que coincidir exactamente con los archivos cambiados del PR
+  (excluyendo `.review/`).
+
+Completar el orden y los porqués es una tarea perfecta para delegarle a un
+agente de IA — apuntalo al diff y dejá que escriba los placeholders. Funciona
+de los dos lados: el autor del PR puede hacer que un agente redacte el
+walkthrough junto con el cambio, y puede ser **todavía más útil del lado del
+reviewer** — un reviewer humano necesitaría ya entender el PR para curar a
+mano un orden de lectura sobre él, lo cual es circular, mientras que un agente
+que lee todo el diff puede escribir ese orden *antes* de que hayas leído un
+solo archivo (mirá el caso de review individual en
+[Flujo típico](#flujo-típico)).
+
+### Escribir uno para el PR de otra persona
+
+La mayoría de los PRs no traen walkthrough, y no podés commitear uno en una rama
+que no es tuya. `git review walkthrough draft` escribe el mismo esqueleto para la
+rama que le indiques, **fuera del working tree** — bajo `$GIT_DIR`, donde
+`git status` no lo ve, `git review start` no se tropieza con él y `git review
+finish` no puede arrastrarlo a tus ediciones extraídas. No hay nada que stagear,
+y nada que deshacer:
+
+```sh
+git review walkthrough draft feature/checkout          # esqueleto para el PR de otro
+# ...completás el orden y los porqués (a mano, o se lo pasás a un agente)...
+git review walkthrough draft --build feature/checkout  # valida, ordena y renumera
+git review start feature/checkout                      # entra en walk con tu orden
+```
+
+- Toma la rama como argumento, igual que `git review start` — estás parado en la
+  base, no en el PR — y por defecto usa la rama en la que estás o, si lo corrés
+  desde adentro de una review, la rama que esa review está leyendo. `--local`, `--offline` y
+  `--delta` resuelven el rango exactamente como lo hace `start`, así que el
+  esqueleto lista precisamente los archivos que tu review va a cubrir. Nunca
+  hace fetch.
+- `--build` aplica la misma validación que `build` sobre el sidecar del autor:
+  placeholders, drift, paths duplicados, `> key` con valor. Es un control de
+  calidad, no una compuerta: un borrador sin validar ya se puede leer.
+- **Corrélo de nuevo cada vez que el PR avanza.** Un borrador no se puede
+  desfasar *durante* una review —`start` congela el tip— pero sobrevive a esa
+  review, y la siguiente es sobre un rango que se movió. Correr `draft` sobre uno
+  que ya existe lo **actualiza** en los mismos términos que `init`: cada entrada
+  cuyo archivo sigue en rango conserva su número, su why y su `> key`, los
+  archivos que el PR cambió desde entonces llegan como placeholders `## ?.`, y
+  las entradas cuyo archivo **el PR ya no cambia** se descartan y se nombran.
+  `--delta` angosta lo que una review *lee*, nunca lo que tu orden puede
+  contener: las entradas de archivos que el PR cambia en commits que ya leíste
+  se conservan, así que apuntarlo a un orden que escribiste para el PR entero no
+  te cuesta nada de él. `--force` es la vuelta al esqueleto en blanco — y a
+  diferencia del sidecar del autor, este archivo no está en git, así que esa no
+  tiene vuelta atrás.
+- Tu borrador **tiene precedencia** sobre el walkthrough del propio PR mientras
+  tenga algo adentro, y `git review status` marca la review como `walk (draft)`
+  para que un orden de lectura que escribiste vos nunca se confunda con el del
+  autor. Un borrador vacío no es un orden de lectura: la review cae al walkthrough
+  del PR, y te dice cuál de los dos usó. Escribir uno sobre un PR que ya tiene te
+  lo avisa; borrá el borrador para volver al de ellos.
+- **Editalo con la review abierta.** Es un archivo, no un sidecar congelado, así
+  que podés reescribir tu orden (o sacarle un `> key`) mientras la review está en
+  curso. Si eso deja el cursor pasado la última entrada, `git review` lo vuelve a
+  poner sobre la última y te lo dice: nunca confunde que hayas editado con un
+  `git commit` de más.
+- Es tuyo y es local, así que nada lo tira a tus espaldas: sobrevive a `abort`, a
+  `finish` y a `git review clean` (arrancá la rama de nuevo y tu orden de lectura
+  sigue ahí), `git review save` lo archiva junto con la review pausada, y los dos
+  comandos que lo descartan son los que le apuntás vos — `git review forget
+  --draft <rama>` (o `--all`), y `git review forget --saved`, que se lleva junto
+  con la review la copia que esa review archivó, y lo dice — el borrador es de la
+  rama, así que dos reviews pausadas de una misma rama comparten el nombre, y sólo
+  la que lo escribió se lo lleva, de vuelta o al tacho. Si escribís un
+  borrador nuevo para una rama mientras su review está pausada, `git review
+  continue` se niega en vez de pisar uno de los dos: descartá el que no quieras y
+  retomá. `git review save` se niega en el caso espejo — cuando tenés un borrador
+  para archivar y otra review pausada ya tiene uno archivado con ese nombre — y
+  avisa cuando el que reemplaza no lo puede reclamar ninguna review.
+
+#### Pasarle el borrador a un agente
+
+`--stdout` y `--build --from` son las dos puntas de un mismo circuito: dejan que
+alguien que no sos vos complete el orden de lectura **sin escribir nunca en tu
+gitdir**.
+
+```sh
+git review walkthrough draft --stdout feature/checkout > order.md   # no crea nada
+# ...un agente completa order.md, donde le quede cómodo...
+git review walkthrough draft --build --from order.md feature/checkout
+# o leyéndolo de la entrada estándar:
+git review walkthrough draft --build --from - feature/checkout < order.md
+```
+
+- **`--stdout`** imprime exactamente lo que el archivo hubiera tenido y no crea
+  nada — ni borrador, ni directorio, ni siquiera un temporal; `git status` es
+  idéntico antes y después. Todas las notas van a stderr, así que redirigir
+  stdout te deja un archivo válido y nada más. También imprime sobre un borrador
+  existente, y lo deja intacto: imprimir no destruye nada. Lo único que difiere
+  de la forma escrita es la línea de cierre, que bajo `--stdout` nombra
+  `--build --from` — el comando que instala *lo que te acaban de dar*, en vez de
+  uno que reconstruiría en silencio otro archivo.
+- **`--build --from <archivo>`** (o `-` para la entrada estándar) valida ese
+  contenido con **las mismas ocho reglas** que cualquier otro borrador, contra el
+  mismo rango resuelto por los mismos `--local` / `--offline` / `--delta`, y lo
+  instala en la ubicación canónica. De ahí en más es un borrador como cualquier
+  otro: `status` dice `walk (draft)`, `save` lo archiva con la review pausada y
+  `forget --draft` lo descarta. Los finales CRLF y el BOM UTF-8 —lo que produce
+  un agente que escribe desde PowerShell— se normalizan, no se toman como deriva.
+- **No se escribe nada salvo que haya pasado todo.** Si ya existe un borrador se
+  decide *antes* de leer la fuente, así que un rechazo nunca te cuesta lo que
+  pipeaste; y un archivo ilegible, una entrada vacía o cualquier regla de
+  validación dejan el borrador que ya tenías byte por byte como estaba.
+- `--force` es lo que le permite a `--build --from` reemplazar un borrador que ya
+  habías escrito. Las combinaciones que no pueden significar nada (`--stdout` con
+  `--build` o `--force`, `--from` sin `--build`, `--from` dos veces) se rechazan
+  de entrada, antes de tocar nada.
+
+El autor tiene el mismo circuito de su lado, y existe por el mismo motivo: la
+consigna del propio esqueleto dice que quien completa un walkthrough suele ser un
+agente.
+
+```sh
+git review walkthrough init --stdout > order.md   # no crea nada
+# ...un agente completa order.md...
+git review walkthrough build --from order.md      # o --from - para leer stdin
+```
+
+`init --stdout` imprime el esqueleto —la actualización, si ya hay un walkthrough—
+y no toca nada; `build --from` lo valida con las mismas reglas que cualquier otro
+build y lo instala. A diferencia del lado del borrador no toma `--force`: `build`
+ya reescribe `.review/walkthrough.md` en cada corrida ordinaria, así que pedir
+consentimiento acá volvería el flag un reflejo, y el sidecar es un archivo
+trackeado — `git checkout --` es la vuelta atrás.
+
+**git review nunca escribe el walkthrough por vos y nunca habla con ningún
+servicio.** Te da el esqueleto con la consigna ya escrita adentro, y valida lo
+que vuelve. Quién lo completa —vos, un agente, lo que prefieras— es enteramente
+decisión tuya.
+
+El walkthrough se arma sobre **historia commiteada** (`base..HEAD`), no sobre el
+working tree: commiteá los cambios del PR antes de autorearlo. `init` y `build`
+no ven lo que está sin commitear — se niegan con una pista si no hay nada
+commiteado, y avisan si hay cambios sin commitear al costado.
+
+El formato del archivo que `build` produce y `start` lee:
+
+```markdown
+# Walkthrough
+
+## Heads-up
+
+Las sesiones ahora expiran; todo lo que cacheaba un token queda bajo sospecha.
+
+## 1. src/auth/session.c
+
+> key
+Leé esto primero: define la forma del token de la que depende todo lo demás.
+
+## 2. src/auth/login.c
+
+Después el flujo de login que lo consume — fijate el nuevo camino de error.
+```
+
+Cada entrada es una línea `## <N>. <path>` (el path tal cual lo reporta git,
+escrito en limpio — un nombre con caracteres no-ASCII va tal cual, nunca
+C-escapado) seguida de su *porqué* en texto libre, hasta la próxima entrada,
+opcionalmente encabezada por el marcador reservado `> key`. Todo lo que
+está arriba de la primera entrada es el preámbulo (la sección `## Heads-up`); el
+parser lo ignora y `build` lo preserva tal cual, menos los comentarios HTML. La
+granularidad es por archivo en v1.
+
+**El bloque de instrucciones.** Los dos esqueletos —el del autor y el del
+revisor— abren con un comentario HTML cuya primera línea empieza con
+`<!-- git-review-range:`. Nombra el rango en **objetos resueltos** (el SHA del
+tip, el OID del límite inferior y su tipo, `commit` o `tree`), registra los flags
+de origen y de rango con los que se generó el esqueleto, dice desde qué working
+tree se generó, y lista los cuatro comandos `git` que muestran, para cualquier
+archivo de la lista, qué le hace el PR y cómo se ve de cada lado.
+
+Está ahí porque quien completa un esqueleto —muchas veces un agente— está parado
+en un working tree que tiene los bytes equivocados para la tarea: desde la rama
+base los archivos listados siguen con su contenido anterior al PR, así que leerlos
+ahí produce prosa segura sobre el código viejo, sin que nada falle para avisarlo.
+
+- Se **regenera** en cada `build` / `draft --build`, con el rango que esa corrida
+  acaba de validar, así que nunca describe un rango que ya se movió.
+- **Nunca se le muestra al revisor**: `git review start` y
+  `git review status --why` no lo imprimen, y no se renderiza en el PR — es un
+  comentario HTML.
+- Es **neutro para la validación**: ninguna de las reglas de arriba lo mira, y
+  borrarlo a mano deja un walkthrough perfectamente válido (sólo perdés el
+  registro del rango la próxima vez que lo reanotes).
+- **No se ejecuta nada.** Son comandos para que los corra quien anota; git review
+  no los ejecuta, ni antes ni después, y no se comunica con ningún servicio.
+
+</details>
+
+<details>
+<summary><code>git review next</code> / <code>git review prev</code></summary>
+
+Mueven una review `--step` o walkthrough para adelante o para atrás. En modo
+`--step` cada movimiento banca las ediciones del commit actual y restaura las que
+tenías bancadas en el commit al que vas, así podés ir y venir sin perder trabajo.
+En modo walk solo mueven el cursor de lectura — tus ediciones viven en el working
+tree todo el tiempo y nunca se tocan.
+
+</details>
+
+<details>
+<summary id="git-review-status"><code>git review status</code></summary>
+
+Muestra la review actual: PR de origen, modo, y — en modo `--step` — en qué
+commit estás (`[k/N]`) y qué pasos tienen ediciones bancadas. En modo walk muestra
+el cursor de lectura: `walk  [k/N] on <path>`. En modo whole (sin walkthrough —
+el default) lista los archivos que toca el rango, numerados, sin cursor; un
+rango vacío lo dice explícitamente en vez de no imprimir nada.
+
+- `--porcelain` — salida legible por programas para scripts e integraciones de
+  editor: líneas estables separadas por tab (ver abajo). De sólo lectura, igual
+  que la salida humana — nunca muta config, refs ni el working tree.
+- `--why <path>` — imprime *sólo* el texto explicativo del walkthrough para
+  `<path>`, nada más en el stream: sin etiqueta, sin ningún otro dato. Sólo en
+  modo walk.
+
+**Códigos de salida** — no sólo bajo `--porcelain`: los mismos códigos salen de
+todo verbo que detecte la situación (`status`, `list`, `abort`, `finish`,
+`preview`, `save`, y `next`/`prev` para el `3`), así que un script nunca tiene
+que distinguir según qué comando corrió:
+
+| Código | Significado                                                                                                                      |
+|--------|----------------------------------------------------------------------------------------------------------------------------------|
+| `0`    | éxito                                                                                                                            |
+| `1`    | error — metadata de review ausente o corrupta, uso inválido, no es un repositorio git                                            |
+| `2`    | HEAD no está en una rama de review (el caso común, sin nada raro)                                                                |
+| `3`    | el cursor del walkthrough quedó fuera de rango porque HEAD se movió de la base de la review — se recupera con `git reset --soft` |
+
+**Formato de `--porcelain`** — una línea por registro, campos separados por
+tab, primero el tipo de registro y, si tiene, un path o id **inmediatamente
+después** — nunca al final, así los campos nuevos siempre se agregan al final
+de la línea. Un consumidor debe ignorar cualquier campo final que no reconozca
+en una línea de un tipo que sí conoce, y cualquier línea cuya etiqueta no
+reconozca: el formato sólo crece.
+
+```
+state	<branch>	<source>	<tip>	<mode>	<walkthrough>[	<position>	<total>	<recorded>	<current>[	<essential>]]
+finish	conflict	<onto>
+draft	<path>
+entry	<position>	<id>[	<essential>	<annotated>|<banked>]
+subject	<position>	<asunto>
+author	<position>	<autor>
+base	<base>
+```
+
+- `state` — exactamente una línea, siempre la primera. `mode` es
+  `whole` \| `step` \| `walk`. `walkthrough` es `none` \| `applied` \| `degraded`
+  (siempre `none` en modo step, porque ahí el campo es posicional).
+  `position`/`total`/`recorded`/`current` aparecen sólo con cursor (modo
+  `step`/`walk`); `current` es un SHA corto en step, un path en walk. `total` es
+  el total vigente, derivado en el momento; `recorded` es el registrado al
+  iniciar la review — difieren cuando la base se movió, aunque el cursor siga en
+  rango. `essential` (`1`/`0`) aparece sólo en modo walk.
+- `finish` — sólo mientras un `git review finish` está **trabado por conflicto**
+  en esta rama de review (`state` es siempre `conflict` acá; un cierre completo
+  ya sacó a `HEAD` de `review/*`, así que `status` nunca lo ve — usá `list` para
+  eso). `onto` es `1` si el finish usó `--onto-source`, `0` si no. Se omite el
+  registro entero cuando no hay ningún cierre en curso. Con este registro
+  presente, el consumidor no debe ofrecer navegación por la secuencia.
+- `draft` — cero o uno: está exactamente cuando esta review lee **tu propio**
+  borrador de walkthrough y no el del autor del PR, que es la misma condición que
+  marca el `walk (draft)` legible. `<path>` es la ruta absoluta de ese borrador,
+  ya resuelta — el cliente la abre y nunca arma una. Los borradores sueltos, sin
+  review propia, no se reportan acá: eso es
+  [`config --porcelain`](#git-review-config).
+- `entry` — cero o más. En step/walk, uno por posición en el orden de lectura
+  (paths de walk o commits de step, el mismo orden que recorren `next`/`prev`),
+  incluida una entrada de walk que el walkthrough no anota — se agrega al final
+  del orden en vez de omitirse. En modo whole, uno por archivo que el rango
+  toca — un listado, no una secuencia: `state` sigue sin
+  `position`/`total`/`recorded`/`current` en whole. En modo walk los campos
+  finales son `essential` (`1`/`0`) y `annotated` (`1`/`0`, `0` en un archivo
+  sin entrada propia en el walkthrough — el walkthrough committeado mismo
+  siempre cae en este grupo, porque nunca puede anotarse a sí mismo); en modo
+  step es sólo `banked` (`1`/`0`, existe una edición bancada bajo
+  `refs/review-edits/`); en modo whole ninguno de los dos grupos está presente,
+  así que el registro termina en el path. Un rango vacío produce cero registros
+  `entry` y sigue terminando en éxito.
+- `subject` y `author` — sólo en modo step, uno de cada uno por posición, con el
+  asunto del commit y su autor en la forma `Nombre <correo>`. Se emparejan con
+  `entry` por `position`, nunca por orden de aparición. Un asunto puede estar
+  vacío (un commit cuyo mensaje no tiene primera línea): el registro se emite
+  igual, con el campo vacío, para que "sin asunto" se distinga de "este
+  git-review no reporta asuntos".
+- `file` — sólo en modo step: cero o más líneas del commit **actual** (el del
+  cursor / `state.current`), no de todos los commits del rango. Cada línea es
+  `file<TAB>position<TAB>path` con posición 1-based *dentro de ese commit* y un
+  path con las mismas reglas de bytes que el resto de paths. Los clientes usan
+  esta lista para dibujar el inventario de archivos del paso; abrir el diff de
+  un archivo queda del lado del host (git / el editor), no en el porcelain. Un
+  commit que no toca archivos emite cero líneas `file`. Walk y whole no emiten
+  ninguna (en whole los paths ya van como `entry`). `state.total` sigue contando
+  sólo las líneas `entry` (commits).
+- `base` — sólo en modo whole, y sólo si la review tiene una base registrada: el
+  ref contra el que se armó su rango. Registro único y sin posición — la base es
+  de la review, no de una entrada. Sin base registrada la línea se omite entera,
+  nunca se emite en blanco.
+
+**Campos de texto libre.** `subject`, `author` y `base` llevan texto escrito por
+una *persona*, no producido por git, y a diferencia de un path **puede contener
+un tab literal**. De ahí la regla para estos registros —y para cualquier registro
+futuro con texto libre—: el texto libre es siempre el **último campo** de su
+registro, y hay a lo sumo uno por registro. Se emite byte a byte, sin escapar y
+sin citar. Se lee como *"todo lo que sigue al N-ésimo tab, hasta el fin de
+línea"*, no como *"el campo N-ésimo"* — un `split` por tab truncaría en silencio
+un asunto que contenga uno. Por ese mismo motivo estos registros no admiten
+campos nuevos al final: lo que haya que agregar va en un registro propio. Un
+newline nunca puede aparecer en ellos.
+
+Un path siempre sale exactamente como lo devuelve `git diff --name-only` (con
+`core.quotePath=false`): bytes literales, sin escapar, para espacios y
+caracteres no-ASCII; la cita propia de git, intacta, para el caso raro de un
+path con `"` o `\`. El límite de campo siempre es el tab, nunca el espacio — un
+path de git nunca contiene un tab literal.
+
+</details>
+
+<details>
+<summary><code>git review list</code></summary>
+
+Muestra *todas* las ramas `review/*` en curso a la vez (con su PR de origen, modo
+y posición `[k/N]` para reviews `--step` y walk). Las reviews pausadas con
+`git review save` también aparecen, bajo `saved`. La rama en la que estás parado
+se marca con un `*`.
+
+Las ramas `review-fixes/*` que dejó un `finish` van al final, bajo `fixes`, con
+lo que git puede decir de cada una: `nothing committed on it` (sigue apuntando
+donde la creó el `finish`, así que no contiene nada tuyo — `finish` *stagea* tus
+ediciones, no las commitea), `already in the base`, o `has commits the base does
+not have`. Se descarta una con `git review clean --fixes-only <rama>`.
+
+- `--porcelain` — inventario legible por programas, el mismo formato separado
+  por tab que [`status --porcelain`](#git-review-status):
+
+  ```
+  branch	<name>	<saved>	<current>	<orphan>[	<mode>[	<position>	<total>]]
+  branch-draft	<name>
+  finish	<branch>	pending|conflict	<onto>
+  fixes	<name>	<current>	<session>	empty|merged|unmerged|unknown
+  ```
+
+  `branch-draft` va detrás de su fila `branch`, cero o una vez por fila, cuando esa
+  review carga un borrador de walkthrough — la misma condición que el sufijo
+  `(draft)` de la salida legible, en **todos** los modos y no sólo en walk, y
+  sobre custodia (el archivo existe) y no sobre qué se está leyendo. Es un
+  registro propio y no un campo porque `branch` termina en dos campos opcionales
+  que se omiten juntos, así que un sexto campo no se podría distinguir de
+  `position`.
+
+  `saved`, `current` y `orphan` son `1`/`0` (`orphan` significa que la rama no
+  tiene metadata de review — hecha a mano, o dejada por un comando que murió
+  antes de escribirla). Cuando `orphan` es `1` no hay `mode`/`position`/`total`
+  que reportar. `position` y `total` son los valores registrados al iniciar la
+  review, no re-derivados — para los números vigentes y derivados de una review
+  puntual, corré `status --porcelain` parado en ella. Cualquiera de los dos
+  campos se omite, nunca se rellena con el `?` que usa la salida humana, si la
+  clave de config correspondiente falta. Sale con `0` incluso con el inventario
+  vacío (que no haya reviews no es un error); `1` sólo si corre fuera de un
+  repositorio git.
+
+  Se emite una línea `fixes` por cada rama `review-fixes/<x>` que exista, detrás
+  de todos los registros `branch`. `current` es `1` si es la rama en la que estás
+  parado (la única que `clean` nunca va a borrar). `session` es `1` si `review/<x>`
+  todavía existe, que es lo que separa un `clean <x>` alcanzando con necesitar
+  `--fixes-only` para no llevarse la sesión. El último campo contesta cuánto
+  trabajo tuyo cuesta descartarla:
+
+  | estado     | significado                                                                  |
+  |------------|------------------------------------------------------------------------------|
+  | `empty`    | la punta sigue siendo la de su rama de origen — nunca commiteaste nada encima |
+  | `merged`   | contenida en `reviewworkflow.base`                                            |
+  | `unmerged` | tiene commits que la base no tiene                                            |
+  | `unknown`  | no hay `reviewworkflow.base` utilizable, así que no hay contra qué comparar   |
+
+  `empty` se pregunta primero y sin mirar la base: una rama de fixes intacta está
+  parada en la punta del PR, que la base normalmente *no* contiene, así que el
+  test de merged por sí solo la reportaría como trabajo a punto de perderse
+  cuando no hay ninguno.
+  Se emite una línea `finish` por cada `review/<x>` con un cierre sin resolver:
+  `pending` tras un finish completo que aún espera confirmación/aborto (las
+  ediciones están en `review-fixes/<x>` o en la rama del PR; `HEAD` puede haber
+  salido ya de `review/*`), y `conflict` cuando un finish se detuvo a mitad del
+  replay. `onto` es `1` si ese finish usó `--onto-source`, `0` si no. Se
+  empareja con la fila `branch` del mismo nombre. Las reviews sin cierre en
+  curso no emiten registro `finish`.
+
+</details>
+
+<details>
+<summary><code>git review save</code> / <code>git review continue</code></summary>
+
+`git review save` te deja apartar una review y retomarla después. Convierte la
+`review/<rama>` actual en `review-saved/<rama>` y te devuelve a la rama desde la
+que empezaste, llevándose todo lo necesario para retomar justo donde lo dejaste:
+
+- En modo PR completo, el diff del PR staged y tus ediciones sin commitear.
+- En modo walk, lo mismo, más el cursor de lectura — `git review continue` te deja
+  de vuelta en la entrada exacta en la que estabas.
+- En modo `--step`, el commit en el que estás, sus ediciones y todas las
+  ediciones que tengas bancadas en los otros commits. Los refs de ediciones se
+  mueven de `refs/review-edits/` (que `git review clean` poda) a
+  `refs/review-saved-edits/`, así un `git review clean` nunca toca una review
+  guardada.
+
+`git review continue` convierte `review-saved/<rama>` de nuevo en la
+`review/<rama>` activa y restaura ese estado exacto — en modo `--step` te deja de
+vuelta en el mismo commit, con `git review next` / `git review prev` funcionando
+como antes. Sin argumento retoma la única review guardada, o las lista si hay más
+de una; nombrá una rama para elegir cuál.
+
+Empezar un `git review start` nuevo sobre una rama que ya tiene una review
+guardada se rechaza, para que no pierdas la pausada sin querer — retomala o
+descartala con `git review forget --saved` primero.
+
+</details>
+
+<details>
+<summary id="git-review-config"><code>git review config</code></summary>
+
+Lee o escribe la configuración propia de git-review-workflow — la base contra la
+que se arma el rango de una review completa, y el remoto del que se trae la
+copia a revisar. Espeja `git config` a propósito: clave sola lee, clave más valor
+escribe. Válido en cualquier repositorio git, con o sin review activa (no hay
+exit `2`).
+
+```
+git review config                         # config efectiva, para leer
+git review config <clave>                 # una clave (base | remote)
+git review config <clave> <valor>         # fija <clave>
+git review config --unset <clave>         # borra <clave>
+git review config --porcelain [<rama>]    # legible por máquina + candidatas
+```
+
+- `base` — el commit-ish contra el que se arma el rango. Sin default de producto:
+  una review completa sin ella falla y pide configurarla. Es el mismo valor que
+  `git config reviewworkflow.base` (la clave cruda queda como detalle de
+  implementación).
+- `remote` — de dónde se traen las reviews (default `origin`).
+- `--porcelain` — registros separados por tab para scripts y el panel del
+  editor:
+
+  ```
+  config	<clave>	<valor>
+  candidate	<name>	remote|local	<current>
+  draft	<src>	<path>	<annotated>	<total>	<source>	<range>
+  delta	<rama>	<tip>	remote|local
+  ```
+
+  Una clave sin valor efectivo omite su línea `config` entera (así `base` no
+  aparece hasta configurarla; `remote` siempre está). `candidate` lista cada
+  rama elegible para empezar una review; `current` es `1`/`0`. Con una
+  `<rama>` opcional también emite filas `delta` si esa rama tiene un
+  marcador `--delta` previo — cero, una o dos: las reviews remotas y locales
+  guardan markers separados, y cada eje presente emite su fila (`origin` es
+  `remote` o `local`).
+  `draft` lista todos los borradores de walkthrough que empezaste y no pausaste,
+  un registro por cada uno, **con y sin argumento de rama** — un borrador es un
+  hecho del working tree, no de la rama que consultaste. `<path>` es absoluta y
+  ya resuelta, así que el cliente la abre y nunca la arma;
+  `<annotated>`/`<total>` es el avance contado sobre el archivo: una unidad por
+  encabezado de entrada más la sección `## Heads-up` cuando tiene algo escrito,
+  así que un esqueleto recién generado sobre N archivos es `0/N+1`. Borrar la
+  sección entera es legal, y ahí el total baja en vez de quedar fuera de
+  alcance. `<annotated> == <total>` dice que no queda ningún placeholder de los
+  que `--build` rechaza — sigue sin prometer que `--build` vaya a pasar, porque
+  el rango pudo haber derivado por debajo. `<source>` (`remote` \| `local` \|
+  `offline`) y `<range>`
+  (`full` \| `delta`) son los flags con los que se generó el borrador, leídos de
+  su bloque de instrucciones, y valen `unknown` si ese bloque se borró a mano. El
+  borrador de una review pausada no aparece — no por una regla, sino porque
+  `git review save` movió el archivo al namespace archivado.
+- `--` termina el parseo de opciones, así un valor que empieza con `-` (un
+  nombre de rama legal) no se toma como flag: `git review config base -- -foo`.
+
+</details>
+
+<details>
+<summary><code>git review finish</code></summary>
+
+- Por defecto — crea `review-fixes/<rama>` sobre el tip del PR con tus ediciones
+  staged, para que las revises y commitees vos. Si no hiciste ediciones, la rama
+  se crea igual (en el tip, sin nada staged) para que la sesión se cierre del
+  mismo modo — `git review finish --abort` la deshace, o `git review clean`
+  tira el leftover.
+- `--onto-source` — en su lugar deja tus ediciones staged sobre la rama del PR
+  misma, para que las revises y commitees vos ahí. Sin ediciones, igual aterrizás
+  en la rama del PR en el tip (y se conserva el mismo punto de undo).
+- En cualquiera de los dos casos el resultado queda local — revisalo y pusheá a
+  mano cuando estés listo.
+- `--resume` — en modo `--step`, si las ediciones bancadas chocan con el tip del
+  PR, el replay deja marcadores de conflicto y se detiene. Resolvélos en el árbol
+  y corré `git review finish --resume` (con los mismos flags) para seguir.
+- `--abort` — deshace el último finish y te devuelve a `review/<rama>` justo donde
+  estabas editando, igual que `git merge --abort` revierte un merge. Se niega si
+  cambiaste la rama del finish desde entonces, para que no pierdas trabajo; agregá
+  `--force` para descartar esos cambios y abortar de todas formas.
+- Se niega sobre un `git review compare` de solo lectura — no hay una rama
+  escribible a la cual devolver tus ediciones.
+
+</details>
+
+<details>
+<summary><code>git review preview</code></summary>
+
+Muestra las ediciones que hiciste hasta ahora — el mismo diff que `git review
+finish` extraería, tus ediciones sobre el tip del PR — pero **nunca commitea,
+nunca cambia de rama y nunca toca tu árbol de trabajo ni el índice**, así volvés
+directo a editar donde lo dejaste. Pensalo como "¿qué me daría `finish` ahora
+mismo?".
+
+- `--stat` — muestra un resumen tipo diffstat en lugar del diff completo.
+- En modo `--step` re-aplica las ediciones del commit actual más cada edición
+  bancada sobre el tip, igual que `finish`. Una edición que choca de verdad con el
+  tip es el único caso que difiere: un preview de solo lectura no puede dejarte
+  marcadores de conflicto, así que omite esa edición e imprime una nota
+  apuntándote a `finish`.
+
+</details>
+
+<details>
+<summary><code>git review abort</code></summary>
+
+Cancela la review actual en un paso: te devuelve a la rama desde la que empezaste
+y borra la rama `review/<rama>` y sus ediciones bancadas. Como la review se
+canceló (no se completó), vuelve el marcador de `--delta` a tu última review
+real, así un `--delta` posterior no se saltea commits que nunca revisaste.
+
+</details>
+
+<details>
+<summary><code>git review clean</code></summary>
+
+- Sin `<rama>`, borra todos los leftovers que correspondan (`review/*` y, por
+  defecto, `review-fixes/*`).
+- `--keep-fixes` — borra solo `review/*` (el undo del finish / leftover de la
+  sesión) y deja `review-fixes/*`. Útil después de un `finish` exitoso cuando
+  querés soltar el punto de undo y quedarte con las edits staged.
+- `--fixes-only` — su espejo: borra solo `review-fixes/*` y deja la sesión de
+  review en pie, hasta los edit refs bancados, el punto de undo del finish y los
+  marcadores de `--delta`. Para cuando terminaste con las ediciones que extrajo
+  un `finish` —commiteadas y pusheadas, o no valen la pena— pero todavía querés
+  poder hacer `git review finish --abort`. Pasar los dos flags es un error.
+- Nunca borra la rama en la que estás parado.
+- También descarta los edit refs bancados commit-a-commit y los registros de
+  undo del finish (incluido el flag mid-conflict `reviewresume`), incluso cuando
+  no queda ninguna rama de review.
+- Revierte el marcador de `--delta` al borrar un `review/*` **incompleto** (igual
+  que `git review abort`). Un finish completado conserva el marcador. Borrá
+  marcadores a mano con `git review forget --delta`.
+- Deja intactas las reviews guardadas (`review-saved/*`) — para descartar una usá
+  `git review forget --saved`.
+- Deja intactos también tus borradores de walkthrough, por la misma razón: los
+  escribiste a mano y sobreviven a la review para la que los escribiste. Para
+  borrar uno, `git review forget --draft`.
+
+</details>
+
+<details>
+<summary><code>git review forget --delta</code></summary>
+
+Descarta el tip de la última review que usa `--delta`. Las reviews completadas
+conservan ese marcador a través de `git review clean`; usá este comando cuando
+quieras olvidarlo vos.
+
+- `<rama>` — olvidar el/los marcador(es) de una rama de origen: el remoto y el de
+  `--local` si existe.
+- `--all` — olvidar todos los marcadores (no toca `reviewworkflow.base`).
+- `--stale` — hace fetch y prune de `origin`, y olvida solo los marcadores cuya
+  rama ya no existe: los remotos cuya `origin/<rama>` se fue (PRs mergeados y
+  borrados) y los de `--local` cuya `<rama>` local se fue. Si el fetch falla,
+  aborta sin borrar nada.
+- `--dry-run` — con `--stale`, lista lo que olvidaría sin hacerlo. Se rechaza con
+  los otros modos, donde el objetivo ya es explícito.
+
+</details>
+
+<details>
+<summary><code>git review forget --saved</code></summary>
+
+Descarta una review apartada con `git review save`: borra `review-saved/<rama>`,
+sus ediciones bancadas y su metadata. Como una review guardada quedó pausada (no
+completada), también vuelve el marcador de `--delta` a tu última review real, igual
+que hace `git review abort`.
+
+- `<rama>` — descartar la review guardada de una rama de origen.
+- `--all` — descartar todas las reviews guardadas.
+- `--dry-run` — listar lo que se descartaría sin descartarlo.
+
+</details>
+
+<details>
+<summary><code>git review forget --draft</code></summary>
+
+Borra un walkthrough que escribiste para el PR de otra persona con
+[`git review walkthrough draft`](#git-review-walkthrough). `git review clean`
+nunca los toca —son prosa que escribiste a mano, y una re-review de la rama los
+vuelve a leer—, así que este es el comando para tirar uno.
+
+- `<rama>` — borrar el borrador escrito para una rama.
+- `--all` — borrar todos los borradores, más los que hayan quedado archivados
+  por una review pausada que ya no existe (una cuya `review-saved/<rama>`
+  borraste a mano): a esos no los alcanza ningún otro comando.
+- `--reviewed` — borrar sólo los que ya cumplieron: los escritos contra un tip
+  que tu última review completa de esa rama cubrió. Es la escoba de los que no
+  podés nombrar —un borrador se deletrea por su rama, y después de unas cuantas
+  reviews nadie recuerda cuáles todavía guardan prosa—. El borrador que una
+  review viva está leyendo se saltea y se nombra en vez de borrarse: pedirlo por
+  nombre está bien, que pase adentro de un barrido que no enumeraste no.
+- `--dry-run` — listar lo que se borraría sin borrarlo.
+- Borrar el borrador de una review que sigue viva está permitido (volver al orden
+  del autor es algo legítimo de querer) y nombra la review que lo estaba leyendo
+  —incluida una review de `git review compare`, que lee un borrador archivado bajo
+  un nombre distinto del suyo.
+- Toma un nombre de rama, y rechaza cualquier cosa que no lo sea.
+- Un borrador que viajó con una review pausada es de esa review, y se va con ella
+  con `git review forget --saved`.
+
+</details>
+
+## Configurar la rama base
+
+La rama base es donde se integran los PRs (`develop`, `main`, `master`, …) y
+varía por equipo, así que no hay default — configurala una vez por repositorio,
+como se muestra en [Inicio rápido](#inicio-rápido):
+
+```sh
+git config reviewworkflow.base develop
+```
+
+<details>
+<summary>Orden de resolución, y configurar el remoto</summary>
+
+Orden de resolución: argumento posicional `base` (o `--base <base>`) →
+`reviewworkflow.base`. Si no hay ninguno, una review completa falla y te pide que
+la configures. La base es cualquier commit-ish — una rama, un tag (`v1.0`) o un
+commit — no solo un nombre de rama.
+
+### Configurar el remoto
+
+Por defecto los comandos hacen fetch y push contra `origin`. Si revisás un
+repositorio que no es tuyo (un `upstream` con tu `origin` como fork, por
+ejemplo), apuntá el flujo a ese remoto:
+
+```sh
+git config reviewworkflow.remote upstream
+```
+
+Afecta a `git review start` y `git review forget --delta --stale`. Una review
+`--offline` ignora el remoto por completo; `--local` todavía lo usa para
+resolver la base.
+
+### Silenciar las notas que ofrecen un comando
+
+Varias notas terminan nombrando el comando que hace lo que sigue — `use --local
+to review what you have checked out`, `then run git review walkthrough
+draft --build`, `no authoring guide. Create one with: …`. En una terminal ese
+nombre *es* la respuesta. Donde ya hay un botón que lo corre, es ruido sobre un
+control que está en pantalla:
+
+```sh
+git config reviewworkflow.advice false
+```
+
+Eso deja todas las notas que dicen qué *pasó* — una entrada que el PR ya no
+cambia, una rama que difiere de la que tenés checkouteada, un cursor que se
+movió — y saca las que quien tiene su propia interfaz no necesita: las ofertas
+de un comando, y el estado que ya viaja como registro porcelain (qué guía de
+autoría está en vigor, que tu borrador tapa el walkthrough del autor).
+
+`GIT_REVIEW_ADVICE=0` en el entorno hace lo mismo para una invocación y gana
+sobre la config, como los knobs de git. Sin definir significa encendido, así que
+una terminal conserva todas las notas de siempre. Las extensiones de editor
+setean la variable por su cuenta —ellas tienen los botones—, así que ahí no hay
+nada que configurar.
+
+### Es por repositorio por diseño
+
+Tanto `reviewworkflow.base` como `reviewworkflow.remote` son simples claves de
+`git config`, así que se guardan **por repositorio** (en el `.git/config` de cada
+uno). No hay perfiles ni un archivo de config compartido: cada repositorio en el
+que trabajás mantiene su propia base y su propio remoto de forma independiente, y
+nunca se mezclan entre sí:
+
+```sh
+# repo A: los PRs se integran en main, traídos desde origin (el default)
+cd ~/proyecto-a && git config reviewworkflow.base main
+
+# repo B: los PRs se integran en develop, revisados desde un upstream ajeno
+cd ~/proyecto-b
+git config reviewworkflow.base develop
+git config reviewworkflow.remote upstream
+```
+
+Lo mismo aplica a los marcadores de `--delta`: también viven en la config de cada
+repo. Si querés un valor de respaldo para *todos* tus repos, configuralo de forma
+global (`git config --global reviewworkflow.base main`); un valor por repo lo
+sobrescribe, y un argumento posicional `base` sobrescribe a ambos.
+
+</details>
+
+## Flujo típico
+
+```sh
+git config reviewworkflow.base develop      # una vez por repo
+
+# Lado autor: shippear un walkthrough de lectura con el PR (a menudo escrito
+# por un agente de IA como autor), curando el orden en que conviene leer los
+# archivos y un porqué en cada uno:
+git review walkthrough init                  # esqueleto de cada archivo cambiado
+# ...completar el orden, un porqué en cada uno, el heads-up y los marcadores > key...
+git review walkthrough build                 # ordenar, renumerar y validar
+git add .review/walkthrough.md && git commit # viaja con el PR
+
+# Lado reviewer: no hay nada especial que correr — un PR que trae un
+# walkthrough se detecta solo:
+git review start feature/login              # heads-up + entrada 1; entra en modo walk
+# ...leer la primera entrada y su porqué, editar inline si querés, correr tests...
+git review next                              # pasar a la siguiente entrada
+git review next                              # ...hasta recorrer todo el orden...
+git review finish                            # extraer tus ediciones a review-fixes/feature/login
+git diff --cached && git commit -m "address review comments"
+git review clean feature/login              # limpiar
+
+# Re-revisar después de que el autor pushea más commits:
+git review start feature/login --delta       # solo los commits nuevos
+git review start feature/login --delta --step  # ...y recorrerlos de a uno
+
+# O recorrer el PR commit por commit desde el principio:
+git review start feature/login --step        # arrancar en el primer commit
+# ...editar, y después...
+git review next                              # bancar cambios, pasar al siguiente
+git review next                              # ...hasta "no more commits"
+git review finish                            # re-aplicar todos tus cambios sobre el tip
+
+# Elegir un commit de inicio explícito:
+git review start feature/login --from a1b2c3d
+
+# Revisar la rama en la que ya estás (omitiendo el nombre):
+git switch feature/login && git review start         # contra la base configurada
+git review start --base develop                       # ...o contra una base explícita
+
+# Comparar contra un tag en vez de una rama:
+git review start feature/login v1.0
+
+# Comparar dos releases en modo lectura:
+git review compare v1.0 v2.0
+
+# Revisar tu propia rama local antes de pushear, contra la base de origin:
+git review start feature/login --local
+
+# Lo mismo, pero sin acceso a la red:
+git review start feature/login --offline
+```
+
+<details>
+<summary>¿El PR no tiene walkthrough? Generá el tuyo, solo para esta review</summary>
+
+Este es un buen lugar para delegarle a un agente de IA el paso de "completar
+el orden y los porqués" en vez de hacerlo a mano: todavía no leíste el PR, así
+que curar el orden de lectura vos mismo es circular — un agente que lee todo
+el diff puede escribir ese orden antes de que mires un solo archivo.
+
+```sh
+# No hace falta que el equipo se suba: escribí tu propio orden de lectura para
+# cualquier PR que estés revisando. Vive fuera del working tree — no hay nada
+# que stagear, commitear ni deshacer — y start lo lee en lugar del walkthrough
+# del PR (si trae uno):
+git review walkthrough draft feature/login
+# ...completar el orden y un porqué en cada uno (o apuntarle un agente al diff)...
+git review walkthrough draft --build feature/login
+git review start feature/login               # recorre tu orden; status dice walk (draft)
+# ...leer, editar, finish o abort como siempre...
+# El borrador sobrevive a clean/abort — borralo solo cuando quieras:
+# git review forget --draft feature/login
+```
+
+Mirá [`git review walkthrough`](#git-review-walkthrough) → *Escribir uno para
+el PR de otra persona* para precedencia, ediciones a mitad de review, y cómo
+`save`/`continue` llevan el borrador con una review pausada.
+
+</details>

@@ -49,7 +49,10 @@
     "completions/",
     "VERSION",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "README.es.md",
+    "CLI.md",
+    "CLI.es.md"
   ],
   "publishConfig": {
     "access": "public",

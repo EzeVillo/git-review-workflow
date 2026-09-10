@@ -206,31 +206,6 @@ same `PREFIX` if you overrode it):
 curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-uninstall.sh | sh
 ```
 
-### Terminal UI (optional)
-
-The terminal UI is a separate static binary and needs the CLI above. Install it
-from the same Homebrew tap:
-
-```sh
-brew install EzeVillo/git-review-workflow/git-review-ui
-```
-
-Or opt into it when using a one-line installer (without the flag, those
-installers continue to install only the CLI):
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.sh | GIT_REVIEW_WITH_UI=1 sh
-```
-
-```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.ps1))) -WithUi
-```
-
-The seven platform archives are also attached directly to each
-[`tui-v*` release](https://github.com/EzeVillo/git-review-workflow/releases).
-The [terminal UI guide](tui/README.md) covers launching it, its controls and the
-fallback refresh setting for network mounts.
-
 <details>
 <summary>From a downloaded copy</summary>
 

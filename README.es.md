@@ -204,29 +204,6 @@ desinstalar (pasale el mismo `PREFIX` si lo cambiaste):
 curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-uninstall.sh | sh
 ```
 
-### Interfaz de terminal (opcional)
-
-La interfaz de terminal es un binario estático separado y necesita la CLI de
-arriba. Instalalo desde el mismo tap de Homebrew:
-
-```sh
-brew install EzeVillo/git-review-workflow/git-review-ui
-```
-
-O pedilo explícitamente al usar uno de los instaladores en una línea (sin el
-flag, esos instaladores siguen instalando solamente la CLI):
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.sh | GIT_REVIEW_WITH_UI=1 sh
-```
-
-```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.ps1))) -WithUi
-```
-
-La [guía de la interfaz de terminal](tui/README.md) explica cómo abrirla, sus
-controles y la configuración de refresco alternativa para montajes de red.
-
 <details>
 <summary>Desde una copia descargada</summary>
 

@@ -2,7 +2,7 @@
   "$schema": "http://json.schemastore.org/vsix-publish",
   "categories": ["Source Control", "Other"],
   "identity": {
-    "internalName": "git-review-workflow-vs"
+    "internalName": "gitreviewworkflow"
   },
   "overview": "overview.md",
   "priceCategory": "free",

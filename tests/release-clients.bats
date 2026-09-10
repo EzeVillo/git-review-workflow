@@ -103,7 +103,7 @@ setup() {
 	manifest="$REPO/visualstudio-extension/marketplace/publishmanifest.json"
 	[ -f "$manifest" ]
 	grep -Fq '"publisher": "EzeVillo"' "$manifest"
-	grep -Fq '"internalName": "git-review-workflow-vs"' "$manifest"
+	grep -Fq '"internalName": "gitreviewworkflow"' "$manifest"
 	grep -Fq '"overview": "overview.md"' "$manifest"
 	grep -Fq '"private": false' "$manifest"
 }

@@ -450,6 +450,10 @@ archivos reales y falla si `VERSION`/`TUIVersion` nombran una versión sin secci
 apunta a una CLI **publicada**: si el cliente necesita un verbo nuevo, el `v*` de la CLI se corta
 primero. Con el piso adelantado, quien instala tiene una CLI que el cliente da por al día y un verbo
 que no existe — y el cliente no puede reportar `cli-outdated`, porque la comparación da igual.
+**Cuando cambie lo que necesita un cliente de la CLI, recalculá y actualizá en el mismo cambio su
+`min_cli_version.<cliente>` en `contracts/client-product-surface.yaml` y su constante local.** No
+copies el piso de otro cliente: cada uno declara sólo la primera versión publicada que satisface sus
+propias invocaciones.
 
 **El plugin tiene su propio namespace de tags y su propio workflow:** un `jetbrains-v*` lo publica al
 Marketplace, mientras que `v*` sigue siendo solo la CLI. Su Release de GitHub va con

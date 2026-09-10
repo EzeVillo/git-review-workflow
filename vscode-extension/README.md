@@ -11,11 +11,9 @@
 > that order, instead of alphabetically.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/EzeVillo/git-review-workflow/blob/main/LICENSE)
-[![Requires git review 0.7.0+](https://img.shields.io/badge/requires-git%20review%200.7.0%2B-blue.svg)](https://github.com/EzeVillo/git-review-workflow#installation)
+[![Requires git review 0.8.0+](https://img.shields.io/badge/requires-git%20review%200.7.0%2B-blue.svg)](https://github.com/EzeVillo/git-review-workflow#installation)
 
 [Project README](https://github.com/EzeVillo/git-review-workflow#readme) · [Website](https://ezevillo.github.io/git-review-workflow/) · [Changelog](https://github.com/EzeVillo/git-review-workflow/blob/main/vscode-extension/CHANGELOG.md)
-
-[![AI wrote it. You own the review.](https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/docs/media/vscode-poster-en.png)](https://ezevillo.github.io/git-review-workflow/#demo)
 
 **[Watch the 40-second demo](https://ezevillo.github.io/git-review-workflow/#demo)** — follow the reasoning, fix a boundary error, run the tests, and keep your correction on a separate branch.
 

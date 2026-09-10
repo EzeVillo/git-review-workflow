@@ -15,11 +15,9 @@
 > that order, instead of alphabetically.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
-[![Requires git review 0.7.0+](https://img.shields.io/badge/requires-git%20review%200.7.0%2B-blue.svg)](https://github.com/EzeVillo/git-review-workflow#installation)
+[![Requires git review 0.8.0+](https://img.shields.io/badge/requires-git%20review%200.7.0%2B-blue.svg)](https://github.com/EzeVillo/git-review-workflow#installation)
 
 [Project README](https://github.com/EzeVillo/git-review-workflow#readme) · [Website](https://ezevillo.github.io/git-review-workflow/) · [Changelog](./CHANGELOG.md)
-
-[![AI wrote it. You own the review. Watch the Visual Studio demo.](https://ezevillo.github.io/git-review-workflow/media/visualstudio-poster-en.png)](https://ezevillo.github.io/git-review-workflow/#demo-visualstudio)
 
 **[Watch the 40-second Visual Studio demo](https://ezevillo.github.io/git-review-workflow/#demo-visualstudio)** (in English, with music) — follow the reading order, fix the boundary, run the tests, and extract your correction onto its own branch. Captured in Visual Studio.
 

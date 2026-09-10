@@ -59,7 +59,7 @@ contienen `LsSQtNFnjRQ`.
 
 - [x] **Step 1: Reemplazar el hero de ambos README raíz**
 
-Usar `docs/media/vscode-reading-order.gif` como imagen del enlace existente a
+Usar `docs/media/vscode-edit-and-test.gif` como imagen del enlace existente a
 la landing, con alt text equivalente en inglés y español. Eliminar el párrafo
 que enlaza al recorrido de terminal.
 
@@ -67,7 +67,7 @@ que enlaza al recorrido de terminal.
 
 Renombrar el resumen a `See the workflow in each IDE` / `Mirá el flujo en cada
 IDE`. Reemplazar solamente la muestra de VS Code dentro del desplegable por
-`vscode-edit-and-test.gif`; conservar las muestras actuales de JetBrains y
+`vscode-reading-order.gif`; conservar las muestras actuales de JetBrains y
 Visual Studio.
 
 - [x] **Step 3: Completar el README propio de VS Code**

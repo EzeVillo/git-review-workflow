@@ -9,17 +9,17 @@ completas de cada IDE.
 ## Diseño aprobado
 
 Los README raíz en inglés y español reemplazarán el póster estático visible por
-el GIF corto de VS Code sobre el orden de lectura. El GIF seguirá siendo un
-enlace a la demo completa en la landing. Así, la primera pieza visual comunica
-el comportamiento del producto inmediatamente, incluso cuando el bloque
+el GIF corto de VS Code donde se edita el código y corren los tests. El GIF
+seguirá siendo un enlace a la demo completa en la landing. Así, la primera
+pieza visual comunica el comportamiento del producto inmediatamente, incluso cuando el bloque
 desplegable de ejemplos permanece cerrado.
 
 Debajo se conservarán los enlaces directos para elegir VS Code, JetBrains o
 Visual Studio en la landing. El bloque desplegable seguirá alojando muestras de
 los tres clientes para quien quiera compararlos, sin cargar la cabecera con tres
 animaciones simultáneas. Para evitar repetir el GIF hero dentro del mismo README,
-la muestra de VS Code del desplegable se reemplazará por uno de sus otros
-momentos del flujo; JetBrains y Visual Studio conservarán sus muestras actuales.
+la muestra de VS Code del desplegable usará el orden de lectura; JetBrains y
+Visual Studio conservarán sus muestras actuales.
 
 Los README propios de las extensiones mantendrán su identidad por cliente. El
 de VS Code completará el mismo bloque desplegable de tres momentos que ya usan

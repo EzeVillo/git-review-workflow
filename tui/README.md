@@ -21,45 +21,54 @@ without leaving the terminal pane.
 
 ## Getting started
 
-1. **Install the CLI** (`git review` 0.9.0 or newer):
+The terminal UI needs the `git review` CLI. Choose **one** installation below:
+each one-line installer installs both the CLI and the terminal UI.
 
-   ```sh
-   npm install -g git-review-workflow
-   ```
+### Windows (PowerShell)
 
-   Homebrew, native Windows and no-Node alternatives are in the project
-   [installation guide](../README.md#installation).
+Open PowerShell and run:
 
-2. **Install the terminal UI.** With Homebrew on macOS or Linux:
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.ps1))) -WithUi
+```
 
-   ```sh
-   brew tap EzeVillo/git-review-workflow https://github.com/EzeVillo/git-review-workflow
-   brew install EzeVillo/git-review-workflow/git-review-ui
-   ```
+Open a new terminal when it finishes.
 
-   Or install the CLI and terminal UI together with a one-line installer:
+### macOS, Linux, WSL, or Git Bash
 
-   ```sh
-   curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.sh | GIT_REVIEW_WITH_UI=1 sh
-   ```
+Run:
 
-   ```powershell
-   & ([scriptblock]::Create((irm https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.ps1))) -WithUi
-   ```
+```sh
+curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.sh | GIT_REVIEW_WITH_UI=1 sh
+```
 
-   Static binaries for macOS, Linux and Windows are also attached to every
-   [`tui-v*` release](https://github.com/EzeVillo/git-review-workflow/releases).
+### Homebrew (macOS or Linux)
 
-3. **Open a repository and launch the interface:**
+If you already installed the CLI with Homebrew, install only the terminal UI:
 
-   ```sh
-   cd path/to/repository
-   git review ui
-   ```
+```sh
+brew tap EzeVillo/git-review-workflow https://github.com/EzeVillo/git-review-workflow
+brew install EzeVillo/git-review-workflow/git-review-ui
+```
 
-   `git review-ui` is an equivalent shortcut. If the repository has no base
-   branch configured yet, the interface asks you to choose one before starting
-   a review.
+### Download a binary
+
+Static binaries for macOS, Linux and Windows are attached to every
+[`tui-v*` release](https://github.com/EzeVillo/git-review-workflow/releases).
+This option requires the CLI to be installed separately; see the project
+[installation guide](../README.md#installation).
+
+### Start the interface
+
+Open a repository and run:
+
+```sh
+cd path/to/repository
+git review ui
+```
+
+`git review-ui` is an equivalent shortcut. If the repository has no base branch
+configured yet, the interface asks you to choose one before starting a review.
 
 ## Using the interface
 
@@ -104,8 +113,9 @@ set `reviewui.startsource` to `remote`, `local` or `offline` with `git config`.
 
 With Homebrew, use `brew upgrade git-review-ui` or
 `brew uninstall git-review-ui`. Re-run either one-line installer to update its
-installation; the matching project uninstaller removes both the CLI and the
-terminal UI it installed.
+installation. The project uninstaller removes both the CLI and terminal UI it
+installed. To remove only the terminal UI installed by the PowerShell installer,
+delete `git-review-ui.exe` from `~\.local\bin` (or from the `PREFIX` you chose).
 
 The terminal client and CLI version independently. Check them with
 `git-review-ui --version` and `git review --version`.

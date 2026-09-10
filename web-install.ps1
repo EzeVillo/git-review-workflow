@@ -108,7 +108,7 @@ try {
         $dest = Join-Path $installDir $f.Name
         if ($f.PSIsContainer) {
             # Private verbs directory: copy it whole into a subdirectory of the
-            # install dir (libexec, NOT on PATH — git must not discover a verb as
+            # install dir (libexec, NOT on PATH - git must not discover a verb as
             # `git <verb>`). The dispatcher finds it, and git-review-lib.sh,
             # beside itself once installed here.
             if (Test-Path $dest) { Remove-Item $dest -Recurse -Force }
@@ -181,7 +181,7 @@ try {
     $userPath = _grw_GetUserPath
     if ($userPath -notlike "*$installDir*") {
         _grw_SetUserPath "$installDir;$userPath"
-        Write-Host "note: added $installDir to your PATH — open a new terminal for the change to take effect"
+        Write-Host "note: added $installDir to your PATH - open a new terminal for the change to take effect"
     }
 } finally {
     Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue

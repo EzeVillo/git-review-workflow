@@ -71,3 +71,8 @@ _run_ps1_test() {
 	run _run_ps1_test "with_ui_checksum_mismatch"
 	[ "$status" -eq 0 ]
 }
+
+@test "web-install.ps1 parses when Windows PowerShell reads it as CP1252" {
+	run _run_ps1_test "legacy_windows_powershell_parse"
+	[ "$status" -eq 0 ]
+}

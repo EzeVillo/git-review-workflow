@@ -206,6 +206,24 @@ try {
             }
         }
 
+        'legacy_windows_powershell_parse' {
+            # Windows PowerShell 5.1 treats a UTF-8 script without a BOM as
+            # CP1252. Keep this source ASCII so its parser sees the same valid
+            # program whether the script is saved locally or run from memory.
+            $bytes = [System.IO.File]::ReadAllBytes((Join-Path $RepoPath 'web-install.ps1'))
+            $legacyText = [System.Text.Encoding]::GetEncoding(1252).GetString($bytes)
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseInput(
+                $legacyText,
+                [ref]$tokens,
+                [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -ne 0) {
+                throw "web-install.ps1 does not parse after CP1252 decoding: $($errors.Message -join '; ')"
+            }
+        }
+
         default {
             throw "Unknown test name: $TestName"
         }

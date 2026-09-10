@@ -1,0 +1,13 @@
+{
+  "versions": [
+    {
+      "version": "0.3.0",
+      "properties": [
+        {
+          "key": "Microsoft.VisualStudio.Services.VsixSha256",
+          "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ]
+    }
+  ]
+}

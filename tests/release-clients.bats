@@ -19,8 +19,28 @@ setup() {
 
 @test "release-clients: workflows reject a missing Marketplace token before packaging" {
 	for workflow in "$VSCODE" "$VISUALSTUDIO"; do
-		grep -Fq 'secrets.VS_MARKETPLACE_TOKEN' "$workflow"
+		grep -Fq 'PUBLISH_TOKEN_CONFIGURED: ${{ secrets.VS_MARKETPLACE_TOKEN !=' "$workflow"
 		grep -Fq 'VS_MARKETPLACE_TOKEN is not set.' "$workflow"
+	done
+}
+
+@test "release-clients: the raw Marketplace token reaches only each publish step" {
+	for workflow in "$VSCODE" "$VISUALSTUDIO"; do
+		count="$(grep -Fc 'PUBLISH_TOKEN: ${{ secrets.VS_MARKETPLACE_TOKEN }}' "$workflow")"
+		[ "$count" -eq 1 ] || {
+			echo "$workflow exposes the raw token $count times"
+			return 1
+		}
+	done
+}
+
+@test "release-clients: token preflights precede dependency setup" {
+	for workflow in "$VSCODE" "$VISUALSTUDIO"; do
+		preflight="$(grep -n 'Check the Marketplace token is configured' "$workflow" | cut -d: -f1)"
+		setup="$(grep -n 'actions/setup-' "$workflow" | head -n1 | cut -d: -f1)"
+		[ -n "$preflight" ]
+		[ -n "$setup" ]
+		[ "$preflight" -lt "$setup" ]
 	done
 }
 
@@ -40,6 +60,37 @@ setup() {
 	grep -Fq 'publishmanifest.json' "$VISUALSTUDIO"
 	grep -Fq 'gh release create' "$VISUALSTUDIO"
 	grep -Fq -- '--latest=false' "$VISUALSTUDIO"
+}
+
+@test "release-clients: retries recover the Marketplace and GitHub release separately" {
+	grep -Fq 'vsce show EzeVillo.git-review-workflow --json' "$VSCODE"
+	grep -Fq 'marketplace-vsix-status.mjs' "$VSCODE"
+	grep -Fq 'sha256sum "$vsix"' "$VSCODE"
+	grep -Fq 'gh release download' "$VSCODE"
+	grep -Fq 'gh release create "$GITHUB_REF_NAME" "$vsix"' "$VSCODE"
+	grep -Fq -- '--draft=false' "$VSCODE"
+	grep -Fq -- '--draft' "$VSCODE"
+	grep -Fq 'gh release view' "$VSCODE"
+	grep -Fq 'gh release view' "$VISUALSTUDIO"
+	grep -Fq 'gh release upload' "$VISUALSTUDIO"
+}
+
+@test "release-clients: VS Code recovery publishes the draft asset before finalizing it" {
+	download="$(grep -n 'gh release download' "$VSCODE" | cut -d: -f1)"
+	output="$(grep -n 'echo "vsix=${vsix}" >>"$GITHUB_OUTPUT"' "$VSCODE" | cut -d: -f1)"
+	marketplace="$(grep -n 'VSIX: ${{ steps.release_asset.outputs.vsix }}' "$VSCODE" | cut -d: -f1)"
+	finalize="$(grep -n 'gh release edit "$GITHUB_REF_NAME"' "$VSCODE" | tail -n1 | cut -d: -f1)"
+
+	[ -n "$download" ]
+	[ -n "$output" ]
+	[ -n "$marketplace" ]
+	[ -n "$finalize" ]
+	[ "$download" -lt "$output" ]
+	[ "$output" -lt "$marketplace" ]
+	[ "$marketplace" -lt "$finalize" ]
+	block="$(sed -n "${marketplace},${finalize}p" "$VSCODE")"
+	[[ "$block" == *'vsix="$VSIX"'* ]]
+	[[ "$block" == *'exit "$status"'* ]]
 }
 
 @test "release-clients: Visual Studio publish manifest exposes the intended listing" {

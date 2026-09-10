@@ -40,9 +40,9 @@ jobs:
       - name: Check the Marketplace token is configured
         shell: pwsh
         env:
-          PUBLISH_TOKEN: ${{ secrets.VS_MARKETPLACE_TOKEN }}
+          PUBLISH_TOKEN_CONFIGURED: ${{ secrets.VS_MARKETPLACE_TOKEN != '' }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:PUBLISH_TOKEN)) {
+          if ($env:PUBLISH_TOKEN_CONFIGURED -ne 'true') {
             throw 'VS_MARKETPLACE_TOKEN is not set. Create a Marketplace (Manage) token and add it under Settings -> Secrets and variables -> Actions.'
           }
 
@@ -110,8 +110,18 @@ jobs:
           if [ ! -s "$notes" ]; then
             echo "See visualstudio-extension/CHANGELOG.md" >"$notes"
           fi
-          gh release create "$GITHUB_REF_NAME" "$vsix" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Visual Studio extension ${VERSION}" \
-            --notes-file "$notes" \
-            --latest=false
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$vsix" --clobber \
+              --repo "$GITHUB_REPOSITORY"
+            gh release edit "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Visual Studio extension ${VERSION}" \
+              --notes-file "$notes" \
+              --latest=false
+          else
+            gh release create "$GITHUB_REF_NAME" "$vsix" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Visual Studio extension ${VERSION}" \
+              --notes-file "$notes" \
+              --latest=false
+          fi

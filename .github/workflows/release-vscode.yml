@@ -26,7 +26,7 @@ jobs:
         run: |
           set -eu
           version="${GITHUB_REF_NAME#vscode-v}"
-          stamped="$(node -p "require('./vscode-extension/package.json').version")"
+          stamped="$(sed -nE 's#^  "version": "([^"]*)".*#\1#p' vscode-extension/package.json)"
           if [ "$version" != "$stamped" ]; then
             echo "tag is ${GITHUB_REF_NAME} but vscode-extension/package.json has version ${stamped}." >&2
             echo "Run ./vscode-extension/bump-version.sh ${version} and tag that commit." >&2
@@ -36,10 +36,10 @@ jobs:
 
       - name: Check the Marketplace token is configured
         env:
-          PUBLISH_TOKEN: ${{ secrets.VS_MARKETPLACE_TOKEN }}
+          PUBLISH_TOKEN_CONFIGURED: ${{ secrets.VS_MARKETPLACE_TOKEN != '' }}
         run: |
           set -eu
-          if [ -z "${PUBLISH_TOKEN:-}" ]; then
+          if [ "$PUBLISH_TOKEN_CONFIGURED" != true ]; then
             echo "VS_MARKETPLACE_TOKEN is not set." >&2
             echo "Create a Marketplace (Manage) token and add it under Settings -> Secrets and variables -> Actions." >&2
             exit 1
@@ -80,20 +80,14 @@ jobs:
             exit 1
           fi
 
-      - name: Publish the packaged VSIX to the VS Code Marketplace
-        working-directory: vscode-extension
+      # A draft is the durable copy of the first VSIX this tag built. If the
+      # Marketplace upload or final publication fails, a retry downloads this
+      # exact archive rather than rebuilding a ZIP with different timestamps.
+      - name: Create or recover the GitHub release artifact
+        id: release_asset
         env:
           VERSION: ${{ steps.ver.outputs.version }}
-          PUBLISH_TOKEN: ${{ secrets.VS_MARKETPLACE_TOKEN }}
-        run: |
-          set -eu
-          vsix="git-review-workflow-${VERSION}.vsix"
-          npx vsce publish --packagePath "$vsix" --pat "$PUBLISH_TOKEN"
-
-      - name: Create the GitHub release with the VSIX attached
-        env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.ver.outputs.version }}
         run: |
           set -eu
           vsix="vscode-extension/git-review-workflow-${VERSION}.vsix"
@@ -110,8 +104,69 @@ jobs:
           if [ ! -s "$notes" ]; then
             echo "See vscode-extension/CHANGELOG.md" >"$notes"
           fi
-          gh release create "$GITHUB_REF_NAME" "$vsix" \
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            recovery_dir="$(mktemp -d)"
+            gh release download "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --pattern "$(basename "$vsix")" \
+              --dir "$recovery_dir"
+            vsix="$recovery_dir/$(basename "$vsix")"
+            if [ ! -s "$vsix" ]; then
+              echo "existing GitHub release ${GITHUB_REF_NAME} has no recoverable VSIX." >&2
+              exit 1
+            fi
+          else
+            gh release create "$GITHUB_REF_NAME" "$vsix" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "VS Code extension ${VERSION}" \
+              --notes-file "$notes" \
+              --draft \
+              --latest=false
+          fi
+          echo "vsix=${vsix}" >>"$GITHUB_OUTPUT"
+
+      - name: Publish the release VSIX to the VS Code Marketplace
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          PUBLISH_TOKEN: ${{ secrets.VS_MARKETPLACE_TOKEN }}
+          VSIX: ${{ steps.release_asset.outputs.vsix }}
+        run: |
+          set -eu
+          vsix="$VSIX"
+          checksum="$(sha256sum "$vsix" | awk '{ print tolower($1) }')"
+          if metadata="$(npx vsce show EzeVillo.git-review-workflow --json 2>/dev/null)"; then
+            if printf '%s' "$metadata" | node vscode-extension/scripts/marketplace-vsix-status.mjs "$VERSION" "$checksum"; then
+              echo "VS Code Marketplace already has the matching VSIX for version ${VERSION}; continuing the release recovery."
+            else
+              status=$?
+              if [ "$status" -eq 3 ]; then
+                npx vsce publish --packagePath "$vsix" --pat "$PUBLISH_TOKEN"
+              else
+                exit "$status"
+              fi
+            fi
+          else
+            npx vsce publish --packagePath "$vsix" --pat "$PUBLISH_TOKEN"
+          fi
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -eu
+          notes="$(mktemp)"
+          awk -v v="## [${VERSION}]" '
+            index($0, v) == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' vscode-extension/CHANGELOG.md >"$notes"
+          if [ ! -s "$notes" ]; then
+            echo "See vscode-extension/CHANGELOG.md" >"$notes"
+          fi
+          gh release edit "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --title "VS Code extension ${VERSION}" \
             --notes-file "$notes" \
+            --draft=false \
             --latest=false

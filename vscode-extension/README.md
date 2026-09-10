@@ -19,7 +19,22 @@
 
 **[Watch the 40-second demo](https://ezevillo.github.io/git-review-workflow/#demo)** — follow the reasoning, fix a boundary error, run the tests, and keep your correction on a separate branch.
 
-![Follow the author's reading order in the VS Code panel.](https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/docs/media/vscode-reading-order.gif)
+<details>
+<summary>See the workflow in action</summary>
+
+**Follow the author's reading order.**
+
+![The VS Code panel moves from the policy to the limiter and shows the author's reason for the change.](https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/docs/media/vscode-reading-order.gif)
+
+**Edit the code and run the tests.**
+
+![The reviewer corrects the boundary in VS Code and runs the three tests.](https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/docs/media/vscode-edit-and-test.gif)
+
+**Take only your fix to a separate branch.**
+
+![Finishing the review stages the correction on review-fixes/rate-limit.](https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/docs/media/vscode-finish-review.gif)
+
+</details>
 
 ---
 

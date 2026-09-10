@@ -310,9 +310,10 @@ el resultado que la escena debe mostrar.
 
 La landing selecciona la demo con `data-demo-client` y admite los enlaces
 `#demo-vscode`, `#demo-jetbrains` y `#demo-visualstudio`. Los dos README de
-la raíz enlazan a los tres; cada README de cliente muestra su propio póster y
-GIF mediante URLs absolutas para mantener válidos los enlaces empaquetados.
-El recorrido de terminal sigue enlazado por separado.
+la raíz muestran un GIF de VS Code como muestra inmediata y enlazan a los tres;
+cada README de cliente muestra su propio póster y sus tres GIF mediante URLs
+absolutas para mantener válidos los enlaces empaquetados. El recorrido antiguo
+de terminal no se promociona en los README ni en la landing.
 
 ## The JetBrains IDE plugin
 

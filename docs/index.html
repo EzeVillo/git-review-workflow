@@ -350,14 +350,13 @@
         .film-clients button:focus-visible { outline: 2px solid var(--why); outline-offset: 3px; }
         .film video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border: 1px solid var(--rule); border-radius: 8px; background: var(--ink); }
         .film video:focus-visible, .film summary:focus-visible { outline: 2px solid var(--why); outline-offset: 5px; }
-        .film-links { display: flex; align-items: start; gap: 2rem; justify-content: space-between; margin-top: 1rem; font-size: .85rem; }
+        .film-links { margin-top: 1rem; font-size: .85rem; }
         .film-links p { margin: 0; max-width: 65ch; color: var(--muted); }
-        .film-links a { flex-shrink: 0; }
         .film-transcript { margin-top: 1.25rem; font-size: .85rem; color: var(--muted); }
         .film-transcript summary { cursor: pointer; width: fit-content; color: var(--text); }
         .film-transcript p { max-width: 85ch; }
         @media (max-width: 700px) {
-            .film-heading, .film-links { flex-direction: column; align-items: start; gap: .75rem; }
+            .film-heading { flex-direction: column; align-items: start; gap: .75rem; }
             .film { margin-bottom: 3rem; }
         }
 
@@ -993,7 +992,6 @@
         </video>
         <div class="film-links">
             <p data-i18n="filmcaption">Follow the reading order, fix a boundary error, run the tests, and take your correction to a separate branch. Captured in the real IDE.</p>
-            <a href="https://youtu.be/LsSQtNFnjRQ" data-i18n="filmterminal">The terminal walkthrough · 90 seconds →</a>
         </div>
         <details class="film-transcript">
             <summary data-i18n="filmtranscripttitle">Read the demo</summary>
@@ -1327,7 +1325,6 @@ brew install git-review-workflow</pre>
             filmtitle: "Lo escribió la IA. Lo revisás vos.",
             filmduration: "40 segundos · en inglés · con música",
             filmcaption: "Seguí el orden de lectura, corregí un error de límite, corré los tests y llevate tu corrección a una rama aparte. Capturado en el IDE real.",
-            filmterminal: "El recorrido en terminal · 90 segundos →",
             filmtranscripttitle: "Leer la demo",
             filmtranscript: "Un limitador de login permite cinco intentos. El revisor inicia una review guiada, lee la política y sigue la nota del autor hasta la comparación del límite. Corrige la comparación para bloquear la solicitud cuando se alcanza el límite y corre los tests: pasan los tres. Al terminar la review, solamente esa corrección queda en <code>review-fixes/rate-limit</code>, staged y lista para commitear.",
 

@@ -19,18 +19,16 @@ Clients: [VS Code extension](vscode-extension/README.md) · [JetBrains IDE plugi
 Use it from the terminal, or from its VS Code, JetBrains, and Visual Studio panels—without leaving
 the IDE you use to navigate, run, and edit the code.
 
-[![AI wrote it. You own the review. Watch the VS Code demo.](docs/media/vscode-poster-en.png)](https://ezevillo.github.io/git-review-workflow/#demo)
+[![AI wrote it. You own the review. Watch the VS Code demo.](docs/media/vscode-reading-order.gif)](https://ezevillo.github.io/git-review-workflow/#demo)
 
 **[Watch the 40-second IDE demo](https://ezevillo.github.io/git-review-workflow/#demo)** (in English, with music) — follow the reading order, fix the code, run the tests, and take your correction to a separate branch.
 
 Choose your IDE: [VS Code](https://ezevillo.github.io/git-review-workflow/#demo-vscode) · [JetBrains](https://ezevillo.github.io/git-review-workflow/#demo-jetbrains) · [Visual Studio](https://ezevillo.github.io/git-review-workflow/#demo-visualstudio).
 
-[Watch the terminal walkthrough (90 seconds)](https://youtu.be/LsSQtNFnjRQ).
-
 <details>
-<summary>See the reading order in action</summary>
+<summary>See the workflow in each IDE</summary>
 
-![The VS Code panel advances from the policy to the limiter and explains the boundary to check.](docs/media/vscode-reading-order.gif)
+![The reviewer corrects the boundary in VS Code and runs the three tests.](docs/media/vscode-edit-and-test.gif)
 
 ![The JetBrains tool window follows the author's reading order and explains the boundary to check.](docs/media/jetbrains-reading-order.gif)
 

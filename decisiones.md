@@ -892,8 +892,9 @@ minutos. Para previsualizarlo, abrilo directo en el navegador — no necesita se
   escala es además la única forma de que salga nítido en un paso, ya que remuestrear en JavaScript
   pediría un códec PNG y el navegador headless ya está ahí. Fue **copia de `demo-poster.png`** y dejó de serlo a propósito: un
   archivo hacía dos trabajos distintos —la carátula del video de YouTube de los dos README y la
-  tarjeta social de la landing— y actualizar uno mentía sobre el otro. `demo-poster.png` sigue
-  representando el video tal como se grabó; la tarjeta representa el producto de hoy. Su contenido
+  tarjeta social de la landing— y actualizar uno mentía sobre el otro. Cuando las demos reales de
+  los IDE reemplazaron la promoción del recorrido de terminal, `demo-poster.png` quedó sin
+  consumidores y se eliminó; la tarjeta sigue representando el producto de hoy. Su contenido
   es **el demo walk de la landing verbatim** (la misma paleta, la misma IBM Plex Mono, las mismas
   cuatro entradas de `rate-limit`) — copiarlo en vez de inventar copy nueva es lo que evita una
   cuarta superficie que mantener sincronizada; si los tokens de la landing se mueven, se mueven

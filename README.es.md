@@ -20,18 +20,16 @@ Clientes: [extensión VS Code](vscode-extension/README.md) · [plugin JetBrains 
 Usalo desde la terminal o desde sus paneles de VS Code, JetBrains y Visual Studio, sin salir del IDE
 donde navegás, corrés y editás el código.
 
-[![Lo escribió la IA. Lo revisás vos. Mirá la demo de VS Code.](docs/media/vscode-poster-en.png)](https://ezevillo.github.io/git-review-workflow/#demo)
+[![Lo escribió la IA. Lo revisás vos. Mirá la demo de VS Code.](docs/media/vscode-reading-order.gif)](https://ezevillo.github.io/git-review-workflow/#demo)
 
 **[Mirá la demo de 40 segundos en el IDE](https://ezevillo.github.io/git-review-workflow/#demo)** (en inglés, con música) — seguí el orden de lectura, corregí el código, corré los tests y llevate tu corrección a una rama aparte.
 
 Elegí tu IDE: [VS Code](https://ezevillo.github.io/git-review-workflow/#demo-vscode) · [JetBrains](https://ezevillo.github.io/git-review-workflow/#demo-jetbrains) · [Visual Studio](https://ezevillo.github.io/git-review-workflow/#demo-visualstudio).
 
-[Mirá el recorrido en terminal (90 segundos)](https://youtu.be/LsSQtNFnjRQ).
-
 <details>
-<summary>Mirá el orden de lectura en acción</summary>
+<summary>Mirá el flujo en cada IDE</summary>
 
-![El panel de VS Code avanza de la política al limitador y explica el límite que hay que comprobar.](docs/media/vscode-reading-order.gif)
+![El revisor corrige el límite en VS Code y corre los tres tests.](docs/media/vscode-edit-and-test.gif)
 
 ![El panel de JetBrains sigue el orden de lectura del autor y explica el límite que hay que comprobar.](docs/media/jetbrains-reading-order.gif)
 

@@ -41,14 +41,17 @@ Se eliminarán de ambos README raíz y de la landing todos los enlaces de
 marketing al recorrido antiguo de terminal. Esto no elimina ni oculta la CLI o
 la TUI de la documentación funcional; solamente evita que una pieza visual
 inferior compita con las demos nuevas de los IDE. El video puede permanecer en
-YouTube sin referencias desde estas superficies.
+YouTube sin referencias desde estas superficies. El póster raíz
+`demo-poster.png`, creado para esa pieza y ya sin consumidores, se eliminará.
 
 ## Alcance y verificación
 
-Se modificarán `README.md`, `README.es.md`, `vscode-extension/README.md` y
-`docs/index.html`. No se cambiarán los videos, GIF, scripts de captura ni el
-comportamiento del producto. La implementación comprobará que ambos README raíz
-se mantengan como traducciones espejo, que no queden enlaces públicos al video
-de terminal en esas superficies, que todos los assets referenciados existan y
-que la landing conserve sus tres demos y su selector bilingüe.
-
+Se modificarán `README.md`, `README.es.md`, `vscode-extension/README.md`,
+`docs/index.html`, la descripción de la campaña en `CONTRIBUTING.md` y la nota
+histórica correspondiente en `decisiones.md`; también se eliminará el póster
+raíz obsoleto. No se cambiarán los videos, GIF, scripts de captura ni el
+comportamiento del producto. La implementación comprobará que
+ambos README raíz se mantengan como traducciones espejo, que no queden enlaces
+públicos al video de terminal en esas superficies, que todos los assets
+referenciados existan y que la landing conserve sus tres demos y su selector
+bilingüe.

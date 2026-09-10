@@ -458,7 +458,7 @@ and `dotnet test`.
 
 > Maintainers only.
 
-Releases are cut by pushing a `v*` tag.
+CLI releases are cut by pushing a `vX.Y.Z` tag.
 
 1. Bump the version everywhere it must agree, then tag that commit. The version lives in several
    files on purpose — `VERSION`, `bin/git-review` and
@@ -487,7 +487,7 @@ Releases are cut by pushing a `v*` tag.
    document.
 
    **A client's `min_cli_version` may not name a version that has not shipped.** If a client needs a
-   verb this release introduces, this `v*` is cut *first* and the client's floor moves after — see
+   verb this release introduces, this `vX.Y.Z` is cut *first* and the client's floor moves after — see
    [`decisiones.md`](decisiones.md) §14.
 
 2. The release workflow ([`.github/workflows/release.yml`](.github/workflows/release.yml)) then pins
@@ -517,7 +517,7 @@ cd vscode-extension && npm run package   # then publish the .vsix as usual
 ### JetBrains IDE plugin
 
 Versioned independently of the CLI, and released by its own tag namespace:
-`v*` cuts a CLI release, `jetbrains-v*` publishes the plugin. The sole source of truth for the
+`vX.Y.Z` cuts a CLI release, `jetbrains-v*` publishes the plugin. The sole source of truth for the
 number is `pluginVersion` in
 [`jetbrains-plugin/gradle.properties`](jetbrains-plugin/gradle.properties)
 (Gradle patches `plugin.xml` and the zip name from it at build time). Stamp it with [

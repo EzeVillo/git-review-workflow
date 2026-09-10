@@ -6,8 +6,14 @@
 
 setup() {
 	REPO="$BATS_TEST_DIRNAME/.."
+	CLI="$REPO/.github/workflows/release.yml"
 	VSCODE="$REPO/.github/workflows/release-vscode.yml"
 	VISUALSTUDIO="$REPO/.github/workflows/release-visualstudio.yml"
+}
+
+@test "release-clients: CLI tags start with a semver digit" {
+	[ -f "$CLI" ]
+	grep -Fq '"v[0-9]*"' "$CLI"
 }
 
 @test "release-clients: workflows use isolated client tag namespaces" {

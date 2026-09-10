@@ -422,7 +422,7 @@ La versión de la **CLI** está duplicada a propósito en `VERSION`, `bin/git-re
 (los tres viajan en el tarball; npm publica la de `package.json`);
 `Formula/git-review-workflow.rb` apunta al tarball. `./bump-version.sh X.Y.Z` estampa los tres desde
 un solo argumento y deja **a propósito** el `sha256` de la fórmula, desconocido hasta que existe el
-tarball del tag: lo fija el workflow de release. Los releases se cortan pusheando un tag `v*`, que
+tarball del tag: lo fija el workflow de release. Los releases se cortan pusheando un tag `vX.Y.Z`, que
 crea el GitHub Release, fija la fórmula y publica a npm vía Trusted Publishing (OIDC, sin
 `NPM_TOKEN`).
 
@@ -447,7 +447,7 @@ lugar de sus notas y todos los gates en verde. `tests/release-notes.bats` lo cor
 archivos reales y falla si `VERSION`/`TUIVersion` nombran una versión sin sección.
 
 **El piso de un cliente no puede nombrar una versión que no salió.** `min_cli_version.<cliente>`
-apunta a una CLI **publicada**: si el cliente necesita un verbo nuevo, el `v*` de la CLI se corta
+apunta a una CLI **publicada**: si el cliente necesita un verbo nuevo, el `vX.Y.Z` de la CLI se corta
 primero. Con el piso adelantado, quien instala tiene una CLI que el cliente da por al día y un verbo
 que no existe — y el cliente no puede reportar `cli-outdated`, porque la comparación da igual.
 **Cuando cambie lo que necesita un cliente de la CLI, recalculá y actualizá en el mismo cambio su
@@ -456,13 +456,13 @@ copies el piso de otro cliente: cada uno declara sólo la primera versión publi
 propias invocaciones.
 
 **El plugin tiene su propio namespace de tags y su propio workflow:** un `jetbrains-v*` lo publica al
-Marketplace, mientras que `v*` sigue siendo solo la CLI. Su Release de GitHub va con
+Marketplace, mientras que `vX.Y.Z` sigue siendo solo la CLI. Su Release de GitHub va con
 **`--latest=false`** — los dos `web-install` resuelven `releases/latest` para elegir el ref de la
 CLI. Detalle en `decisiones.md` §13.
 
 **La TUI también tiene namespace y workflow propios:** `tui-v*` dispara
 `.github/workflows/release-tui.yml`, que verifica el commit taggeado en tres SO, cross-compila los
 siete binarios estáticos en Ubuntu y adjunta esos assets más `SHA256SUMS` al GitHub Release. Se crea
-con **`--latest=false`** para que `releases/latest` siga resolviendo sólo releases `v*` de la CLI;
+con **`--latest=false`** para que `releases/latest` siga resolviendo sólo releases `vX.Y.Z` de la CLI;
 después fija los cuatro checksums de `Formula/git-review-ui.rb` en la rama por default. No hay
 registro de paquetes ni job de publicación adicional.

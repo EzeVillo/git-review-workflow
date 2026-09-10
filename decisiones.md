@@ -911,7 +911,7 @@ minutos. Para previsualizarlo, abrilo directo en el navegador — no necesita se
 
 ## 14. Release y versionado
 
-Los releases de la CLI se cortan pusheando un tag `v*`: el workflow crea el GitHub Release, fija la
+Los releases de la CLI se cortan pusheando un tag `vX.Y.Z`: el workflow crea el GitHub Release, fija la
 fórmula y publica a npm vía Trusted Publishing (OIDC, sin `NPM_TOKEN`: el repo está registrado como
 trusted publisher en npmjs.com).
 
@@ -952,7 +952,7 @@ es un mapa por cliente y que los cuatro difieran es el estado esperado, pero un 
 versión **publicada**: `min_cli_version.tui` fue `0.8.0` mientras el verbo `ui` vivía sólo en `main`,
 así que quien instalaba desde npm o brew tenía una CLI que el cliente consideraba al día y un
 `git review ui` que no existía —y la TUI no podía decir `cli-outdated`, porque `0.8.0 ≥ 0.8.0`—. El
-orden es siempre el mismo y no se puede acortar: se corta el `v*` de la CLI que trae el verbo, y
+orden es siempre el mismo y no se puede acortar: se corta el `vX.Y.Z` de la CLI que trae el verbo, y
 recién ahí el piso del cliente sube a esa versión.
 
 **El CHANGELOG del plugin de JetBrains no es sólo documentación: es lo que se publica.** La sección
@@ -975,7 +975,7 @@ de JetBrains se escribe a mano.
 
 **El plugin de JetBrains tiene su propio namespace de tags y su propio workflow**
 (`release-jetbrains.yml`): un `jetbrains-v*` lo publica al Marketplace (`publishPlugin`, con el
-secret `JETBRAINS_MARKETPLACE_TOKEN`), mientras que `v*` sigue siendo sólo la CLI. El trigger es un
+secret `JETBRAINS_MARKETPLACE_TOKEN`), mientras que `vX.Y.Z` sigue siendo sólo la CLI. El trigger es un
 tag y no un push con `paths:` porque el Marketplace rechaza una versión que ya tiene: «cambió el
 plugin» sólo es publicable cuando cambió `pluginVersion`, y el tag lo dice explícito (el workflow
 aborta si los dos no coinciden). Dos cosas de ahí que no son obvias: el Release de GitHub que crea

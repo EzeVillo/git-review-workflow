@@ -1,6 +1,6 @@
 name: release
 
-# Cut a release by pushing a tag, e.g.:
+# Cut a CLI release by pushing a semantic-version tag, e.g.:
 #   git tag v0.0.1 && git push origin v0.0.1
 #
 # This creates a GitHub Release with auto-generated notes, pins the Homebrew
@@ -10,7 +10,9 @@ name: release
 on:
   push:
     tags:
-      - "v*"
+      # A client namespace such as vscode-v* also starts with v. CLI tags
+      # always put a semver digit immediately after it.
+      - "v[0-9]*"
 
 permissions:
   contents: write

@@ -5,7 +5,7 @@
 > the whole PR stays available as staged, editable changes in your working tree.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](../LICENSE)
-[![Requires git review 0.9.0+](https://img.shields.io/badge/requires-git%20review-0.9.0%2B-blue.svg)](../README.md#installation)
+[![Requires git review 0.9.0+](https://img.shields.io/badge/requires-git%20review%200.9.0%2B-blue.svg)](../README.md#installation)
 
 [Project README](../README.md) · [CLI reference](../CLI.md) · [Changelog](CHANGELOG.md)
 

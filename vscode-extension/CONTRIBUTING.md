@@ -188,6 +188,19 @@ npm run package           # esbuild --production, then vsce package
 Produces a `.vsix` you can install with
 `code --install-extension git-review-workflow-<version>.vsix`.
 
+Pushing the matching tag publishes the same VSIX to the VS Code Marketplace and
+attaches it to a non-latest GitHub Release:
+
+```sh
+git tag vscode-vX.Y.Z
+git push origin vscode-vX.Y.Z
+```
+
+The tagged commit must already carry the bumped version and its CHANGELOG
+section. The repository secret `VS_MARKETPLACE_TOKEN` authenticates the
+Marketplace upload; it is configured in GitHub Actions and never belongs in the
+checkout or a command line.
+
 Two things travel into that package and are therefore user-facing: the
 [README](README.md), which the Marketplace renders as the extension's *Details*
 tab, and the [CHANGELOG](CHANGELOG.md), which it renders as *Changelog*. Keep

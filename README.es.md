@@ -21,7 +21,7 @@ para scripts y usos avanzados.
 
 ![Lo escribió la IA. Lo revisás vos. Mirá la demo de VS Code.](docs/media/vscode-edit-and-test.gif)
 
-**Mirá la demo de 40 segundos de arriba** — seguí el orden de lectura,
+**[Mirá la demo de 40 segundos en la web](https://ezevillo.github.io/git-review-workflow/#demo-vscode)** — seguí el orden de lectura,
 corregí el código, corré los tests y llevate tu corrección a una rama aparte.
 
 <details>

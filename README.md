@@ -22,7 +22,7 @@ and advanced use.
 
 ![AI wrote it. You own the review. See the VS Code demo.](docs/media/vscode-edit-and-test.gif)
 
-**See the 40-second IDE demo above** — follow the reading order, fix the code,
+**[Watch the 40-second IDE demo on the website](https://ezevillo.github.io/git-review-workflow/#demo-vscode)** — follow the reading order, fix the code,
 run the tests, and take your correction to a separate branch.
 
 <details>

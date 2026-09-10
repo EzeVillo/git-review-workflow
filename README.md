@@ -25,17 +25,6 @@ and advanced use.
 **[Watch the 40-second IDE demo on the website](https://ezevillo.github.io/git-review-workflow/#demo-vscode)** — follow the reading order, fix the code,
 run the tests, and take your correction to a separate branch.
 
-<details>
-<summary>See the workflow in each IDE</summary>
-
-![The VS Code panel advances from the policy to the limiter and explains the boundary to check.](docs/media/vscode-reading-order.gif)
-
-![The JetBrains tool window follows the author's reading order and explains the boundary to check.](docs/media/jetbrains-reading-order.gif)
-
-![The Visual Studio tool window follows the author's reading order and explains the boundary to check.](docs/media/visualstudio-reading-order.gif)
-
-</details>
-
 ---
 
 Reviewing in a web UI is fine for leaving comments, but poor for actually

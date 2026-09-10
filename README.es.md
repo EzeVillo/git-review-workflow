@@ -24,17 +24,6 @@ para scripts y usos avanzados.
 **[Mirá la demo de 40 segundos en la web](https://ezevillo.github.io/git-review-workflow/#demo-vscode)** — seguí el orden de lectura,
 corregí el código, corré los tests y llevate tu corrección a una rama aparte.
 
-<details>
-<summary>Mirá el flujo en cada IDE</summary>
-
-![El panel de VS Code avanza de la política al limitador y explica el límite que hay que comprobar.](docs/media/vscode-reading-order.gif)
-
-![El panel de JetBrains sigue el orden de lectura del autor y explica el límite que hay que comprobar.](docs/media/jetbrains-reading-order.gif)
-
-![El panel de Visual Studio sigue el orden de lectura del autor y explica el límite que hay que comprobar.](docs/media/visualstudio-reading-order.gif)
-
-</details>
-
 ---
 
 Revisar en una web está bien para dejar comentarios, pero es malo para realmente

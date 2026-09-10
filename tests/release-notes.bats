@@ -94,8 +94,9 @@ the body" ]
 	[ -z "$(extract_section 99.99.99 "$REPO/CHANGELOG.md")" ]
 }
 
-@test "release-notes: all three workflows use the prefix match, never equality" {
-	for w in release.yml release-tui.yml release-jetbrains.yml; do
+@test "release-notes: every workflow uses the prefix match, never equality" {
+	for w in release.yml release-tui.yml release-jetbrains.yml \
+		release-vscode.yml release-visualstudio.yml; do
 		f="$REPO/.github/workflows/$w"
 		grep -Fq 'index($0, v) == 1' "$f" || {
 			echo "$w does not use the prefix match"

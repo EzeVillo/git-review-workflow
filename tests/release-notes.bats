@@ -126,6 +126,12 @@ the body" ]
 	[[ "$block" == *"tui/CHANGELOG.md"* ]]
 }
 
+@test "release-notes: the CLI release job checks out the tree it reads" {
+	block="$(sed -n '/^  release:/,/^  npm:/p' "$REPO/.github/workflows/release.yml")"
+	[[ "$block" == *"actions/checkout@v4"* ]]
+	[[ "$block" == *"CHANGELOG.md"* ]]
+}
+
 @test "release-notes: the CLI changelog documents the version being shipped" {
 	version="$(tr -d '[:space:]' <"$REPO/VERSION")"
 	body="$(extract_section "$version" "$REPO/CHANGELOG.md")"

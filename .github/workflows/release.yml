@@ -56,6 +56,7 @@ jobs:
     needs: verify
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Resolve version from the tag
         id: ver
         run: |

@@ -658,6 +658,10 @@
             color: #68217A;
         }
 
+        .vsc-logo.vsc-mark-terminal {
+            color: #E6C36A;
+        }
+
         .vsc-copy {
             flex: 1 1 8rem;
             min-width: 0;
@@ -815,6 +819,8 @@
         }
 
         .box {
+            display: flex;
+            flex-direction: column;
             border: 1px solid var(--rule);
             border-radius: 5px;
             background: var(--panel);
@@ -825,12 +831,33 @@
             font-family: var(--mono);
             font-weight: 500;
             font-size: .88rem;
-            margin: 0 0 .7rem;
+            margin: 0;
             color: var(--muted);
         }
 
+        .install-copy {
+            align-self: flex-start;
+            display: block;
+            margin-top: auto;
+            font-family: var(--mono);
+            font-size: .82rem;
+            text-decoration: none;
+            color: var(--add);
+            background: var(--add-dim);
+            border: 1px solid rgba(76, 196, 107, .35);
+            border-radius: 4px;
+            padding: .55rem .8rem;
+            cursor: pointer;
+            transition: background .15s, border-color .15s;
+        }
+
+        .install-copy:hover, .install-copy[data-copied="true"] {
+            background: rgba(76, 196, 107, .16);
+            border-color: var(--add);
+        }
+
         .box pre {
-            margin: 0;
+            margin: 0 0 .9rem;
             font-family: var(--mono);
             font-size: .82rem;
             line-height: 1.6;
@@ -964,10 +991,10 @@
             you can edit and run. If the branch ships a walkthrough, it takes you file by file — in
             the
             order the author chose, with the reason for each. Your fixes come back out on a separate
-            branch. Review it in the IDE you already use.
+            branch. Review it where you already work.
         </p>
         <div class="cta-row">
-            <a class="btn" data-i18n="chooseide" href="#editors">Choose your IDE →</a>
+            <a class="btn" data-i18n="chooseide" href="#editors">Choose your interface →</a>
             <a class="ghost" data-i18n="watch" href="#demo">Watch the 40-second IDE demo →</a>
         </div>
     </header>
@@ -1000,10 +1027,10 @@
     </section>
 
     <section class="section" id="editors">
-        <p class="eyebrow" data-i18n="eyebrowide">Your IDE</p>
-        <h2 class="h2" data-i18n="h2ide">Review in the IDE you already use.</h2>
+        <p class="eyebrow" data-i18n="eyebrowide">Your interface</p>
+        <h2 class="h2" data-i18n="h2ide">Review where you already work.</h2>
         <p class="prose" data-i18n="ideprose">
-            The reading order lives in the sidebar while you navigate the full project, inspect code beyond
+            The reading order stays beside your work while you navigate the full project, inspect code beyond
             the diff, edit, and run it. Requires the git-review-workflow CLI.
         </p>
         <div class="ide-grid">
@@ -1079,6 +1106,18 @@
                 </div>
                 <a class="btn" data-i18n="ideget"
                    href="https://marketplace.visualstudio.com/items?itemName=EzeVillo.gitreviewworkflow"
+                   target="_blank" rel="noopener noreferrer">Install →</a>
+            </div>
+            <div class="vsc" id="terminal-ui">
+                <svg aria-hidden="true" class="vsc-logo vsc-mark-terminal" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M3 3h18v18H3V3Zm2 2v14h14V5H5Zm2.2 3.1L11.1 12l-3.9 3.9 1.4 1.4L13.9 12 8.6 6.7 7.2 8.1ZM14 15h3v2h-3v-2Z"/>
+                </svg>
+                <div class="vsc-copy">
+                    <p class="vsc-name">Terminal UI</p>
+                    <p class="vsc-note" data-i18n="terminaluinote">macOS · Linux · Windows</p>
+                </div>
+                <a class="btn" data-i18n="terminaluiinstall"
+                   href="https://github.com/EzeVillo/git-review-workflow/blob/main/tui/README.md#getting-started"
                    target="_blank" rel="noopener noreferrer">Install →</a>
             </div>
         </div>
@@ -1225,29 +1264,30 @@
         <div class="install-grid">
             <div class="box">
                 <h3>npm</h3>
-                <pre>npm install -g git-review-workflow</pre>
+                <pre id="install-npm">npm install -g git-review-workflow</pre>
+                <button class="install-copy" data-copy="#install-npm" data-i18n="copycommand" type="button">Copy command</button>
             </div>
             <div class="box">
-                <h3>Homebrew</h3>
-                <pre>brew tap EzeVillo/git-review-workflow \
+                <h3>Homebrew (macOS / Linux)</h3>
+                <pre id="install-homebrew">brew tap EzeVillo/git-review-workflow \
   https://github.com/EzeVillo/git-review-workflow
 brew install git-review-workflow</pre>
+                <button class="install-copy" data-copy="#install-homebrew" data-i18n="copycommand" type="button">Copy command</button>
             </div>
             <div class="box">
                 <h3>Windows (PowerShell)</h3>
-                <pre>irm https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.ps1 | iex</pre>
+                <pre id="install-windows">irm https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.ps1 | iex</pre>
+                <button class="install-copy" data-copy="#install-windows" data-i18n="copycommand" type="button">Copy command</button>
             </div>
             <div class="box">
-                <h3 data-i18n="nonode">No Node? One line</h3>
-                <pre>curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.sh | sh</pre>
+                <h3 data-i18n="nonode">Linux, macOS, WSL, or Git Bash</h3>
+                <pre id="install-curl">curl -fsSL https://raw.githubusercontent.com/EzeVillo/git-review-workflow/main/web-install.sh | sh</pre>
+                <button class="install-copy" data-copy="#install-curl" data-i18n="copycommand" type="button">Copy command</button>
             </div>
             <div class="box">
-                <h3 data-i18n="terminalui">Terminal UI</h3>
-                <pre>brew install EzeVillo/git-review-workflow/git-review-ui</pre>
-            </div>
-            <div class="box" style="grid-column: 1 / -1;">
                 <h3 data-i18n="thenonce">Then, once per repository</h3>
-                <pre data-i18n="baseline">git config reviewworkflow.base develop   # where your PRs get integrated</pre>
+                <pre id="install-baseline" data-i18n="baseline">git config reviewworkflow.base develop   # where your PRs get integrated</pre>
+                <button class="install-copy" data-copy="#install-baseline" data-i18n="copycommand" type="button">Copy command</button>
             </div>
         </div>
     </section>
@@ -1318,7 +1358,7 @@ brew install git-review-workflow</pre>
         var ES = {
             h1a: "Un agente escribió el cambio.",
             h1b: "Que escriba también el orden de lectura.",
-            lede: '<code>git review</code> pone el pull request entero en tu working tree como un único diff staged que podés editar y correr. Si la rama trae un walkthrough, te lleva archivo por archivo — en el orden que eligió el autor y con el motivo de cada uno. Tus correcciones salen después a una rama aparte. Revisalo en el IDE que ya usás.',
+            lede: '<code>git review</code> pone el pull request entero en tu working tree como un único diff staged que podés editar y correr. Si la rama trae un walkthrough, te lleva archivo por archivo — en el orden que eligió el autor y con el motivo de cada uno. Tus correcciones salen después a una rama aparte. Revisalo donde ya trabajás.',
             copy: "Copiar",
             watch: "Mirá la demo de 40 segundos en el IDE →",
             filmeyebrow: "Miralo en tu IDE",
@@ -1353,19 +1393,21 @@ brew install git-review-workflow</pre>
             rowweb: "Web de GitHub / GitLab",
             inide: "solo en el IDE",
 
-            chooseide: "Elegí tu IDE →",
-            eyebrowide: "Tu IDE",
-            h2ide: "Revisá en el IDE que ya usás.",
-            ideprose: "El orden de lectura vive en la barra lateral mientras navegás el proyecto completo, inspeccionás código fuera del diff, editás y lo corrés. Necesita la CLI de git-review-workflow.",
+            chooseide: "Elegí tu interfaz →",
+            eyebrowide: "Tu interfaz",
+            h2ide: "Revisá donde ya trabajás.",
+            ideprose: "El orden de lectura vive al lado de tu proyecto mientras navegás el código completo, inspeccionás fuera del diff, editás y lo corrés. Necesita la CLI de git-review-workflow.",
             idejetbrains: "IDEs de JetBrains",
             idejetbrainsnote: "2026.1+",
             ideget: "Instalar →",
+            terminaluinote: "macOS · Linux · Windows",
+            terminaluiinstall: "Instalar →",
 
             eyebrow4: "Instalación",
             h2d: "Un comando, y después una línea de config por repo.",
             prose4: "Todo se enchufa a git como un único subcomando. Necesita git 2.23+ y una shell POSIX — en Windows eso es Git Bash (instalá Git for Windows; los instaladores ponen git-review en el PATH).",
-            nonode: "¿Sin Node? Una línea",
-            terminalui: "Interfaz de terminal",
+            nonode: "Linux, macOS, WSL o Git Bash",
+            copycommand: "Copiar comando",
             thenonce: "Después, una vez por repositorio",
             baseline: "git config reviewworkflow.base develop   # donde se integran tus PRs",
             docs: "Documentación"

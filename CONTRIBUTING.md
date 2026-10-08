@@ -225,6 +225,7 @@ Importar `EzeVillo/git-review-workflow` en Netlify, **en el mismo equipo que el 
 | Ajuste | Valor |
 |---|---|
 | Rama de producción | `main` |
+| Nombre del sitio | `ezevillo-git-review-workflow` |
 | Configuración | `netlify.toml`, en la raíz del repositorio |
 | Base directory | `docs` |
 | Build command | Vacío |

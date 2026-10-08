@@ -255,4 +255,4 @@ paridad es una regla del monorepo, no una promesa al usuario.
 5. **El pin de `bats@1.13.0` en sus cuatro lugares** (los tres runners de CI, `release.yml`,
    `tests/Dockerfile`). El job nuevo es Go; la suite bats no cambia de versión. `tests/ui.bats` corre
    con el bats que ya está.
-6. `docs/.nojekyll`, `docs/logo.svg`, `docs/og.png` — generados, nunca a mano.
+6. `docs/logo.svg`, `docs/og.png` — generados, nunca a mano.

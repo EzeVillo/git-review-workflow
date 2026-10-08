@@ -32,7 +32,7 @@ las fichas empaquetadas de las tiendas.
 Los tres MP4 seguirán alojados y reproducidos en la landing mediante el selector
 existente. No se requiere YouTube: la landing ofrece reproducción directa sin
 branding ni salida a otro sitio, y los archivos actuales son suficientemente
-pequeños para servirse desde GitHub Pages. Los pósteres estáticos continúan como
+pequeños para servirse desde Netlify. Los pósteres estáticos continúan como
 estado previo a la reproducción dentro de la landing.
 
 ## Recorrido de terminal

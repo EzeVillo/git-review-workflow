@@ -900,11 +900,11 @@ path original, conserva los parámetros y deja pasar la URL que ya tiene barra. 
 sigue siendo estática y no necesita funciones ni variables. El gate son los tests de
 `scripts/project-slash.test.ts` en `ibit-to-btc` y la comprobación HTTP sobre el dominio público.
 
-La publicación original de GitHub Pages (`main`, `/docs`) puede permanecer como copia compatible
-durante la transición; su canonical ya señala la dirección nueva. No se presenta esa copia como
-una redirección HTTP. El detalle de configuración externa y comprobación está en `CONTRIBUTING.md`.
+GitHub Pages quedó desactivado después de comprobar la publicación nueva, por decisión del
+usuario: la landing debe tener una única publicación pública. Se eliminó el marcador de Jekyll,
+que Netlify no necesita. Los pushes futuros sólo publican la landing en Netlify. El detalle de
+configuración externa y comprobación está en `CONTRIBUTING.md`.
 
-- `docs/.nojekyll` evita que Pages lo pase por Jekyll.
 - `docs/logo.svg` es el favicon: copia generada del maestro (ver *Assets del logo*), nunca a mano.
 - `docs/og.png` es la preview de los links, y **la genera `scripts/og/render.mjs` desde
   `scripts/og/card.html`** (Chrome headless, un solo disparo del viewport): como el logo, no se

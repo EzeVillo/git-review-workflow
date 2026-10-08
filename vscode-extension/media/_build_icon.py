@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw
 ROOT = Path(__file__).resolve().parent
 REPO = ROOT.parents[1]
 ASSETS = REPO / "assets"
-DOCS = REPO / "docs"  # GitHub Pages publishes /docs only, so the site needs its own copy
+DOCS = REPO / "docs"  # Netlify publishes /docs only, so the site needs its own copy
 INTELLIJ_RESOURCES = REPO / "jetbrains-plugin" / "src" / "main" / "resources"
 VS_MEDIA = REPO / "visualstudio-extension" / "media"
 VS_RESOURCES = REPO / "visualstudio-extension" / "src" / "GitReview.VS" / "Resources"

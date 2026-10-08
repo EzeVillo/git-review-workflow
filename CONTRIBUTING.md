@@ -267,17 +267,17 @@ No configurar `ezevillo.com` en el hijo ni crear `docs/CNAME`: el dominio y el D
 siguen apuntando al principal. La portada `/` se mantiene en ese sitio y puede tener su propio
 repositorio; no hace falta juntar los proyectos en un monorepo.
 
-### Comprobación y dirección anterior
+### Comprobación
 
 Verificar primero el hijo y después la ruta pública: HTML, favicon, tarjeta social, los tres
 videos, GIFs, selector de idioma y enlaces `#demo-vscode`, `#demo-jetbrains` y
 `#demo-visualstudio`. Confirmar que `/ibit-to-btc/` y `/ibit-to-btc/ar/` siguen funcionando.
 
-GitHub Pages puede seguir sirviendo `docs/` en la dirección anterior durante la transición.
-La página declara el dominio nuevo en `canonical`, `og:url` y las tarjetas sociales; esa copia
-no es una redirección HTTP. No desactivar Pages hasta verificar la publicación nueva y los
-enlaces externos. Los enlaces de los README y las homepages de los paquetes apuntan al dominio
-nuevo; los metadatos que viajan dentro de una extensión o paquete publicado se actualizan con
+GitHub Pages está desactivado en la configuración del repositorio. La landing se publica sólo
+en Netlify: los próximos pushes no crean una segunda publicación en GitHub. No volver a activar
+Pages ni agregar un workflow de publicación allí. La página declara el dominio público en
+`canonical`, `og:url` y las tarjetas sociales. Los enlaces de los README y las homepages de los
+paquetes apuntan al dominio nuevo; los metadatos que viajan dentro de una extensión o paquete publicado se actualizan con
 su próxima versión. Las fichas de tienda editables por portal se revisan por separado.
 
 Las demos muestran la dirección en su cierre: al cambiarla en `scripts/marketing/render.mjs`,

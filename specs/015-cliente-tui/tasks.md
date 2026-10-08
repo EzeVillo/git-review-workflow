@@ -903,7 +903,7 @@ apunta.
 - [X] T116 Actualizar `docs/index.html` en sus **dos puntas** (FR-055): una caja más en
   `install-grid` (línea ~1183) con su texto en el HTML **en inglés** y su clave en el diccionario
   `ES` del `<script>`, emparejados por `data-i18n` —el patrón que ya usan `nonode` y `thenonce`—. La
-  landing es **pitch, no documentación**: no documenta flags ni la tabla de verbos. `docs/.nojekyll`,
+  landing es **pitch, no documentación**: no documenta flags ni la tabla de verbos.
   `docs/logo.svg` y `docs/og.png` **no se tocan**: son generados.
 - [X] T117 [P] Escribir `tui/CONTRIBUTING.md` (FR-056): build, test, cómo se regeneran y se revisan
   los golden, la palanca de apagado de la vigilancia, las claves `reviewui.*`, la matriz smoke de
@@ -1004,7 +1004,7 @@ Phase1 Canónico (capa 1) — primera y SOLA, un commit, value-preserving
   `tests/ui.bats` corre con el bats que ya está; `Formula/git-review-workflow.rb`;
   `.github/workflows/release.yml` (`v*` sigue siendo sólo la CLI); el `package.json` de la CLI, que
   conserva **cero dependencias** y **no gana ninguna mención de la TUI**; lo que instalar la CLI deja
-  en la máquina; y `docs/.nojekyll`, `docs/logo.svg`, `docs/og.png`, que son generados.
+  en la máquina; y `docs/logo.svg`, `docs/og.png`, que son generados.
 - **Ninguna tarea de npm, de altas de publicación, de organizaciones en un registro ni de paquetes
   por plataforma.** Esa vía fue descartada entera y el motivo está en [research.md](./research.md)
   § Decisión 14: `bin` en un `package.json` mapea a **un** archivo, así que un paquete con varios

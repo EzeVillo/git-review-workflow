@@ -423,8 +423,8 @@ diccionario `ES` del `<script>`, emparejados por `data-i18n`. Si editás un text
 editá las dos puntas. La vista mobile del cuadro comparativo se **genera desde la propia `<table>`**:
 no la dupliques a mano.
 
-GitHub Pages puede conservar la dirección anterior como copia compatible: su canonical apunta al
-dominio nuevo y `docs/.nojekyll` evita Jekyll. `docs/logo.svg` y `docs/og.png` son generados
+GitHub Pages está desactivado: la landing se publica únicamente en Netlify. No volver a activar
+la publicación desde `/docs` en GitHub. `docs/logo.svg` y `docs/og.png` son generados
 (ver *Assets del logo* y `decisiones.md` §13), nunca a mano. `docs/` no está en `files` de
 `package.json`, así que no viaja en el tarball de npm.
 

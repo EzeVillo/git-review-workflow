@@ -391,10 +391,19 @@ multi-cliente) verifica el contrato entero: el maestro sin tamaño fijo ni raste
 geometría contra `media/icon.svg`, la copia de `docs/` idéntica al maestro, que la landing la use de
 favicon, y los 40×40 / 16×16 que exige JetBrains.
 
-## Landing (GitHub Pages)
+## Landing (Netlify)
 
-`docs/index.html` se publica desde `main`, carpeta `/docs`. **No hay build ni workflow**: es un HTML
-estático autocontenido, así que cada push que toque `docs/` lo republica solo.
+`docs/index.html` se publica en **`https://ezevillo.com/git-review-workflow/`** desde `main`.
+`netlify.toml` usa `docs/` como base y publica su contenido **sin build, dependencias ni secretos**.
+El comando `ignore` sólo permite despliegues cuando cambian `docs/` o `netlify.toml`; los cambios de
+la CLI y los clientes no gastan una publicación de la landing.
+
+El dominio pertenece al **sitio principal** de Netlify, que deriva cada path al sitio de su
+proyecto. La landing hija sirve los archivos desde `/`; el proxy del principal quita el prefijo
+`/git-review-workflow/`. Las reglas están en `hosting/netlify-hub.example.toml` y se aplican en el
+principal, conservando las de `/ibit-to-btc/`. **No agregar `docs/CNAME` ni asignar `ezevillo.com`
+al sitio hijo.** Los dos sitios deben estar en el mismo equipo de Netlify. El procedimiento y la
+configuración externa están en `CONTRIBUTING.md`.
 
 **Es pitch, no documentación.** A propósito no documenta flags ni la tabla de verbos: para eso
 linkea a los README. Pero duplica cuatro cosas, y solo esas hay que revisar cuando el cambio las
@@ -412,7 +421,8 @@ diccionario `ES` del `<script>`, emparejados por `data-i18n`. Si editás un text
 editá las dos puntas. La vista mobile del cuadro comparativo se **genera desde la propia `<table>`**:
 no la dupliques a mano.
 
-`docs/.nojekyll` evita que Pages lo pase por Jekyll. `docs/logo.svg` y `docs/og.png` son generados
+GitHub Pages puede conservar la dirección anterior como copia compatible: su canonical apunta al
+dominio nuevo y `docs/.nojekyll` evita Jekyll. `docs/logo.svg` y `docs/og.png` son generados
 (ver *Assets del logo* y `decisiones.md` §13), nunca a mano. `docs/` no está en `files` de
 `package.json`, así que no viaja en el tarball de npm.
 

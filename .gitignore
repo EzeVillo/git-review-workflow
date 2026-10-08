@@ -21,6 +21,7 @@ Thumbs.db
 
 # Node (existing extension / root)
 node_modules/
+.netlify/
 dist/
 .env*
 *.egg-info/

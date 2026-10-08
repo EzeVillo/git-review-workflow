@@ -1,0 +1,18 @@
+# Add these rules to the main Netlify site that owns ezevillo.com.
+# Replace REPLACE-WITH-LANDING-SITE with this landing's actual Netlify site name.
+# Both sites must belong to the same Netlify team.
+# Keep the existing /ibit-to-btc/ rules and place these before any catch-all.
+
+[[redirects]]
+  from = "/git-review-workflow"
+  to = "/git-review-workflow/"
+  status = 301
+
+[[redirects]]
+  from = "/git-review-workflow/*"
+  to = "https://REPLACE-WITH-LANDING-SITE.netlify.app/:splat"
+  status = 200
+  force = true
+
+# Unlike ibit-to-btc, this child site serves its files at /, so strip the prefix.
+# Use its .netlify.app origin here, never ezevillo.com (which would loop).

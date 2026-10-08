@@ -13,24 +13,24 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../LICENSE)
 [![Requires git review 0.8.0+](https://img.shields.io/badge/requires-git%20review%200.7.0%2B-blue.svg)](https://github.com/EzeVillo/git-review-workflow#installation)
 
-[Project README](../README.md) · [Website](https://ezevillo.github.io/git-review-workflow/) · [Changelog](./CHANGELOG.md)
+[Project README](../README.md) · [Website](https://ezevillo.com/git-review-workflow/) · [Changelog](./CHANGELOG.md)
 
-**[Watch the 40-second JetBrains demo](https://ezevillo.github.io/git-review-workflow/#demo-jetbrains)** (in English, with music) — follow the reading order, fix the boundary, run the tests, and extract your correction onto its own branch. Captured in IntelliJ IDEA.
+**[Watch the 40-second JetBrains demo](https://ezevillo.com/git-review-workflow/#demo-jetbrains)** (in English, with music) — follow the reading order, fix the boundary, run the tests, and extract your correction onto its own branch. Captured in IntelliJ IDEA.
 
 <details>
 <summary>See the workflow in action</summary>
 
 **Follow the author's reading order.**
 
-![The JetBrains tool window moves from the policy to the limiter and shows the author's reason for the change.](https://ezevillo.github.io/git-review-workflow/media/jetbrains-reading-order.gif)
+![The JetBrains tool window moves from the policy to the limiter and shows the author's reason for the change.](https://ezevillo.com/git-review-workflow/media/jetbrains-reading-order.gif)
 
 **Edit the code and run the tests.**
 
-![The reviewer corrects the boundary in IntelliJ IDEA and runs the three tests.](https://ezevillo.github.io/git-review-workflow/media/jetbrains-edit-and-test.gif)
+![The reviewer corrects the boundary in IntelliJ IDEA and runs the three tests.](https://ezevillo.com/git-review-workflow/media/jetbrains-edit-and-test.gif)
 
 **Take only your fix to a separate branch.**
 
-![Finishing the review stages the correction on review-fixes/rate-limit.](https://ezevillo.github.io/git-review-workflow/media/jetbrains-finish-review.gif)
+![Finishing the review stages the correction on review-fixes/rate-limit.](https://ezevillo.com/git-review-workflow/media/jetbrains-finish-review.gif)
 
 </details>
 
@@ -177,7 +177,7 @@ prints every invocation the plugin made and what came back.
 - [Project README](../README.md) — the full command surface, the walkthrough
   format, and how the workflow fits together. Also in
   [Spanish](../README.es.md).
-- [Website](https://ezevillo.github.io/git-review-workflow/)
+- [Website](https://ezevillo.com/git-review-workflow/)
 - [Issues](https://github.com/EzeVillo/git-review-workflow/issues)
 - [Contributing to the plugin](CONTRIBUTING.md) — building it, running it in a
   sandbox IDE, the tests and the release flow.

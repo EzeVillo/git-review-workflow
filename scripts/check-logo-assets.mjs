@@ -56,7 +56,7 @@ if (logo && colorIcon && JSON.stringify(shapesOf(logo)) !== JSON.stringify(shape
   fail('assets/logo.svg geometry must match vscode-extension/media/icon.svg');
 }
 
-// GitHub Pages publishes /docs only, so the landing page cannot reference
+// Hosting publishes /docs only, so the landing page cannot reference
 // assets/logo.svg and carries its own copy. Same generator writes both; drift
 // between them would only show up as a stale favicon nobody looks at.
 const siteLogo = readSvg('docs/logo.svg');

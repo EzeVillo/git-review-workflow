@@ -213,6 +213,73 @@ in `preview/build.ts` approximate VS Code's. A `--vscode-*`
 variable the panel starts using must be added there too, or it will look wrong in the preview and
 fine in the editor. For behaviour, use F5.
 
+## Publicación de la landing
+
+La dirección pública es **`https://ezevillo.com/git-review-workflow/`**. La landing sigue siendo
+HTML estático con sus imágenes, videos y GIFs en `docs/`; Netlify publica esos archivos tal cual.
+
+### Sitio de este repositorio
+
+Importar `EzeVillo/git-review-workflow` en Netlify, **en el mismo equipo que el sitio principal**:
+
+| Ajuste | Valor |
+|---|---|
+| Rama de producción | `main` |
+| Configuración | `netlify.toml`, en la raíz del repositorio |
+| Base directory | `docs` |
+| Build command | Vacío |
+| Publish directory | `.` (relativo a `docs`) |
+| Variables de entorno propias | Ninguna |
+| Funciones, plugins de build y secretos | Ninguno |
+| Dominio | La dirección `*.netlify.app` del sitio hijo |
+
+Los ajustes de build están versionados en `netlify.toml`, que prevalece sobre la UI. La base
+`docs` evita instalar dependencias o compilar la CLI y los clientes. `ignore` compara el commit
+actual con el último publicado y sólo permite publicar cuando cambian `docs/` o `netlify.toml`.
+La primera publicación siempre continúa. `CACHED_COMMIT_REF` y `COMMIT_REF` los provee Netlify;
+**no se cargan como secretos ni variables del usuario**. Los build hooks manuales no respetan
+`ignore`, así que no hacen falta para este sitio.
+
+No agregar un job de deploy a `.github/workflows/`: Netlify se conecta directamente a GitHub.
+Los pipelines de CI, releases, npm, Homebrew y las tiendas siguen usando sus canales actuales;
+no requieren `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID`, `SITE_URL` ni `APP_BASE_PATH`.
+
+### Ruta en el sitio principal
+
+El sitio principal de Netlify conserva `ezevillo.com` y las reglas existentes de `/ibit-to-btc/`.
+Actualmente es `neon-macaron-a52e5c`, conectado al repositorio `EzeVillo/ibit-to-btc`: las reglas
+nuevas se agregan a su `netlify.toml`. No hace falta mover el dominio para sumar esta landing.
+Agregar las de [`hosting/netlify-hub.example.toml`](hosting/netlify-hub.example.toml) a **su**
+configuración, reemplazando `REPLACE-WITH-LANDING-SITE` por el nombre real del sitio hijo. Deben
+estar antes de cualquier regla comodín `/*`:
+
+- `/git-review-workflow` redirige con 301 a `/git-review-workflow/`.
+- `/git-review-workflow/*` sirve `https://<sitio-hijo>.netlify.app/:splat` con 200: el navegador
+  conserva el dominio y el path públicos.
+
+La landing hija publica en `/`, por lo que el destino **no repite** `/git-review-workflow/`.
+Sus assets usan rutas relativas y el proxy sirve también `media/`, `logo.svg` y `og.png`.
+No configurar `ezevillo.com` en el hijo ni crear `docs/CNAME`: el dominio y el DNS de DonWeb
+siguen apuntando al principal. La portada `/` se mantiene en ese sitio y puede tener su propio
+repositorio; no hace falta juntar los proyectos en un monorepo.
+
+### Comprobación y dirección anterior
+
+Verificar primero el hijo y después la ruta pública: HTML, favicon, tarjeta social, los tres
+videos, GIFs, selector de idioma y enlaces `#demo-vscode`, `#demo-jetbrains` y
+`#demo-visualstudio`. Confirmar que `/ibit-to-btc/` y `/ibit-to-btc/ar/` siguen funcionando.
+
+GitHub Pages puede seguir sirviendo `docs/` en la dirección anterior durante la transición.
+La página declara el dominio nuevo en `canonical`, `og:url` y las tarjetas sociales; esa copia
+no es una redirección HTTP. No desactivar Pages hasta verificar la publicación nueva y los
+enlaces externos. Los enlaces de los README y las homepages de los paquetes apuntan al dominio
+nuevo; los metadatos que viajan dentro de una extensión o paquete publicado se actualizan con
+su próxima versión. Las fichas de tienda editables por portal se revisan por separado.
+
+Las demos muestran la dirección en su cierre: al cambiarla en `scripts/marketing/render.mjs`,
+recomponer los tres MP4 con el procedimiento siguiente. Videos y GIFs consumen transferencia;
+el filtro de despliegues evita gastar créditos por cambios ajenos a la web.
+
 ## Marketing video and GIFs
 
 La campaña tiene una demo de 40 segundos y tres GIF por cliente: VS Code,
@@ -269,7 +336,7 @@ El compositor escribe el MP4 en inglés, el poster y los tres GIF publicables en
 `docs/media/`, con prefijos `vscode`, `jetbrains` y `visualstudio`.
 Las tomas, los capítulos, los frames de QA y las pruebas del estado de git quedan
 en `demo/marketing/`, ignorado por git. La captura y el render no pushean ni
-publican; GitHub Pages publica `docs/` cuando se pushea a `main`.
+publican; Netlify publica `docs/` cuando se pushea a `main` y cambia la landing o su configuración.
 
 Para recomponer el material existente sin grabar otra review:
 

@@ -2,7 +2,7 @@
 <idea-plugin>
     <id>com.ezevillo.gitreview</id>
     <name>git review workflow</name>
-    <vendor email="ezevi@users.noreply.github.com" url="https://github.com/EzeVillo/git-review-workflow">EzeVillo</vendor>
+    <vendor email="ezevi@users.noreply.github.com" url="https://ezevillo.com/git-review-workflow/">EzeVillo</vendor>
 
     <!--
       This is the Marketplace listing body (HTML), and the only copy of it:

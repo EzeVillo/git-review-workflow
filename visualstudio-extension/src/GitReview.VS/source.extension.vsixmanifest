@@ -7,7 +7,7 @@
          restating the supported-VS list the gallery already shows. Opens with the
          shared tagline (contracts/client-product-surface.yaml → listing.tagline). -->
     <Description xml:space="preserve">Walk a PR in order, then edit and run it — not just read the diff.</Description>
-    <MoreInfo>https://github.com/EzeVillo/git-review-workflow/tree/main/visualstudio-extension#readme</MoreInfo>
+    <MoreInfo>https://ezevillo.com/git-review-workflow/#demo-visualstudio</MoreInfo>
     <!-- Flat names: these travel inside the .vsix (see the Content items in the csproj). -->
     <License>LICENSE</License>
     <GettingStartedGuide>README.md</GettingStartedGuide>

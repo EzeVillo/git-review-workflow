@@ -869,7 +869,7 @@ se cambia el generador y se regenera** (`python
 vscode-extension/media/_build_icon.py`) — los comentarios que le pongas a un SVG los borra la
 próxima corrida, y los `_preview-*.png` que deja al lado son hojas de control, están gitignoreadas.
 
-`docs/logo.svg` es byte por byte igual al maestro y existe sólo porque Pages publica **únicamente
+`docs/logo.svg` es byte por byte igual al maestro y existe sólo porque el hosting publica **únicamente
 `/docs`**: la landing no puede referenciar `../assets/`.
 `npm run check:logo-assets` (`scripts/check-logo-assets.mjs`, en CI junto al check del contrato
 multi-cliente) verifica el contrato entero: el maestro sin tamaño fijo y sin raster embebido, su
@@ -878,10 +878,24 @@ favicon, y los 40×40 / 16×16 que exige JetBrains.
 
 ### La landing
 
-`docs/index.html` se publica en GitHub Pages desde la rama `main`, carpeta
-`/docs` (Settings → Pages → *Deploy from a branch*). **No hay build ni workflow**: es un HTML
-estático autocontenido, así que cada push a `main` que toque `docs/` lo republica solo en un par de
-minutos. Para previsualizarlo, abrilo directo en el navegador — no necesita servidor.
+`docs/index.html` se publica con Netlify en `https://ezevillo.com/git-review-workflow/`, desde
+`main`. **No hay build ni workflow de publicación en GitHub Actions**: `netlify.toml` usa `docs/`
+como base y publica `.` sin instalar dependencias ni pedir variables propias. El filtro `ignore`
+sólo compara `docs/` y `netlify.toml`; publicar por cada cambio de la CLI gastaría créditos sin
+cambiar la web. En la primera publicación, sin un commit previo, el filtro permite continuar.
+Para previsualizarlo, abrilo directo en el navegador — no necesita servidor.
+
+El dominio se comparte con otros proyectos y ya sirve `/ibit-to-btc/` desde un sitio principal de
+Netlify (`neon-macaron-a52e5c`, conectado hoy a `EzeVillo/ibit-to-btc`). Ese sitio mantiene el dominio y deriva `/git-review-workflow/*` a la dirección
+`*.netlify.app` de esta landing, quitando el prefijo porque el hijo publica en `/`. La configuración
+de ejemplo está en `hosting/netlify-hub.example.toml`; se aplica en el principal y conserva las
+reglas existentes. Asignar el dominio al hijo, cambiar el DNS o agregar `docs/CNAME` se descartó:
+le quitaría al principal la dirección que necesitan los demás proyectos. Ambos sitios pertenecen
+al mismo equipo, como exige Netlify para proxies entre sitios.
+
+La publicación original de GitHub Pages (`main`, `/docs`) puede permanecer como copia compatible
+durante la transición; su canonical ya señala la dirección nueva. No se presenta esa copia como
+una redirección HTTP. El detalle de configuración externa y comprobación está en `CONTRIBUTING.md`.
 
 - `docs/.nojekyll` evita que Pages lo pase por Jekyll.
 - `docs/logo.svg` es el favicon: copia generada del maestro (ver *Assets del logo*), nunca a mano.
@@ -901,8 +915,8 @@ minutos. Para previsualizarlo, abrilo directo en el navegador — no necesita se
   también en `card.html`. El `<head>` declara `og:image:width`/`height` porque Slack y Discord
   dibujan la card chica hasta que bajan y miden la imagen ellos mismos, y un `…:alt` en las dos
   puntas para quien tiene las imágenes apagadas. Las URLs de `og:image` y `canonical` están
-  hardcodeadas a `ezevillo.github.io/git-review-workflow/` — si algún día se le pone dominio propio,
-  hay que tocar esas líneas del `<head>` (y agregar un `docs/CNAME`).
+  hardcodeadas a `ezevillo.com/git-review-workflow/`, junto a `og:url` y `twitter:image`. Las rutas
+  de los assets son relativas para que funcionen tanto en el sitio hijo como bajo el path público.
 - `docs/` **no** está en `files` de `package.json`, así que no viaja en el tarball de npm ni infla
   el paquete.
 

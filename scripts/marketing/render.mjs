@@ -29,7 +29,7 @@ function card(lang, ending) {
     *{box-sizing:border-box}body{margin:0;width:1920px;height:1080px;overflow:hidden;background:#0B0E14;color:#DCE2ED;font-family:'DejaVu Sans',sans-serif}
     .rail{position:absolute;left:92px;top:74px;font-size:24px;letter-spacing:5px;color:#7A8699}h1{position:absolute;left:92px;top:170px;margin:0;font-size:${ending ? 100 : 94}px;line-height:1.12;letter-spacing:-5px;font-weight:700}em{font-style:normal;color:#4CC46B}.sub{position:absolute;left:96px;top:650px;font-size:30px;line-height:1.6;color:#AAB6C9}.shot{position:absolute;${shotLayout};border:1px solid #354154;border-radius:12px;box-shadow:0 30px 90px #0008}.logo{position:absolute;left:96px;bottom:75px;width:84px;height:84px}.brand{position:absolute;left:204px;bottom:96px;font-family:'DejaVu Sans Mono';font-size:32px}.meta{position:absolute;right:96px;bottom:82px;letter-spacing:3px;font-size:20px;color:#7A8699}.line{position:absolute;left:96px;top:135px;width:85px;height:5px;background:#4CC46B}.cta{position:absolute;left:100px;top:535px;background:#4CC46B;color:#0B0E14;padding:23px 34px;font-size:30px;border-radius:6px}.url{position:absolute;left:102px;top:660px;font-size:24px;color:#AAB6C9}.mark{position:absolute;right:210px;top:310px;width:360px;height:360px;opacity:.95}
     </style><div class="rail">${c.kicker}</div><div class="line"></div>
-    ${ending ? `<h1>${c.end}</h1><div class="cta">${c.cta}</div><div class="url">ezevillo.github.io/git-review-workflow</div><img class="mark" src="data:image/svg+xml;base64,${logo}">` : `<img class="shot" src="data:image/png;base64,${shot}"><h1>${c.hook}</h1><div class="sub">${c.sub}</div>`}
+    ${ending ? `<h1>${c.end}</h1><div class="cta">${c.cta}</div><div class="url">ezevillo.com/git-review-workflow</div><img class="mark" src="data:image/svg+xml;base64,${logo}">` : `<img class="shot" src="data:image/png;base64,${shot}"><h1>${c.hook}</h1><div class="sub">${c.sub}</div>`}
     <img class="logo" src="data:image/svg+xml;base64,${logo}"><div class="brand">git review</div><div class="meta">${c.time}</div>`;
     const base = `${source}/${ending ? 'end' : 'poster'}-${lang}`;
     fs.writeFileSync(`${base}.html`, html);
@@ -76,11 +76,11 @@ for (const lang of ['en']) {
         '-af', 'loudnorm=I=-18:TP=-1.5:LRA=9,afade=t=out:st=38.2:d=1.8',
         '-t', '40', '-movflags', '+faststart', `${dest}/${clientId}-demo-${lang}.mp4`]);
 }
-for (const [name, start, duration] of [['reading-order', at('reason') - 1.1, 6], ['edit-and-test', at('edit') + .6, 9], ['finish-review', at('finish') - 3.3, 8]]) {
+for (const [name, chapter, offset, duration] of [['reading-order', 'reason', -1.1, 6], ['edit-and-test', 'edit', .6, 9], ['finish-review', 'finish', -3.3, 8]]) {
     // Interactive Windows capture has pauses between actions. Reuse the edited
     // scenes so the excerpt includes both the correction and real test output.
     const assembled = clientId === 'visualstudio';
-    const seek = assembled ? {'reading-order': 9, 'edit-and-test': 17, 'finish-review': 27}[name] : start;
+    const seek = assembled ? {'reading-order': 9, 'edit-and-test': 17, 'finish-review': 27}[name] : at(chapter) + offset;
     const input = assembled ? `${dest}/${clientId}-demo-en.mp4` : `${source}/raw.mp4`;
     const crop = assembled ? 'crop=1440:870:240:160' : 'crop=1440:870:0:30';
     ffmpeg(['-ss', String(seek), '-t', String(assembled && name === 'finish-review' ? 7 : duration), '-i', input, '-filter_complex', `fps=10,${crop},scale=960:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3`, '-loop', '0', `${dest}/${clientId}-${name}.gif`]);

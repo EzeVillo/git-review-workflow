@@ -17,24 +17,24 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![Requires git review 0.8.0+](https://img.shields.io/badge/requires-git%20review%200.7.0%2B-blue.svg)](https://github.com/EzeVillo/git-review-workflow#installation)
 
-[Project README](https://github.com/EzeVillo/git-review-workflow#readme) · [Website](https://ezevillo.github.io/git-review-workflow/) · [Changelog](./CHANGELOG.md)
+[Project README](https://github.com/EzeVillo/git-review-workflow#readme) · [Website](https://ezevillo.com/git-review-workflow/) · [Changelog](./CHANGELOG.md)
 
-**[Watch the 40-second Visual Studio demo](https://ezevillo.github.io/git-review-workflow/#demo-visualstudio)** (in English, with music) — follow the reading order, fix the boundary, run the tests, and extract your correction onto its own branch. Captured in Visual Studio.
+**[Watch the 40-second Visual Studio demo](https://ezevillo.com/git-review-workflow/#demo-visualstudio)** (in English, with music) — follow the reading order, fix the boundary, run the tests, and extract your correction onto its own branch. Captured in Visual Studio.
 
 <details>
 <summary>See the workflow in action</summary>
 
 **Follow the author's reading order.**
 
-![The Visual Studio tool window moves from the policy to the limiter and shows the author's reason for the change.](https://ezevillo.github.io/git-review-workflow/media/visualstudio-reading-order.gif)
+![The Visual Studio tool window moves from the policy to the limiter and shows the author's reason for the change.](https://ezevillo.com/git-review-workflow/media/visualstudio-reading-order.gif)
 
 **See the correction and the passing tests.**
 
-![The reviewer corrects the boundary in Visual Studio and views the successful results of all three tests.](https://ezevillo.github.io/git-review-workflow/media/visualstudio-edit-and-test.gif)
+![The reviewer corrects the boundary in Visual Studio and views the successful results of all three tests.](https://ezevillo.com/git-review-workflow/media/visualstudio-edit-and-test.gif)
 
 **Take only your fix to a separate branch.**
 
-![Finishing the review stages the correction on review-fixes/rate-limit.](https://ezevillo.github.io/git-review-workflow/media/visualstudio-finish-review.gif)
+![Finishing the review stages the correction on review-fixes/rate-limit.](https://ezevillo.com/git-review-workflow/media/visualstudio-finish-review.gif)
 
 </details>
 
@@ -192,7 +192,7 @@ GitHub in your browser.
 - [Project README](https://github.com/EzeVillo/git-review-workflow#readme) — the full command surface, the walkthrough
   format, and how the workflow fits together. Also in
   [Spanish](https://github.com/EzeVillo/git-review-workflow/blob/main/README.es.md).
-- [Website](https://ezevillo.github.io/git-review-workflow/)
+- [Website](https://ezevillo.com/git-review-workflow/)
 - [Report a bug](https://github.com/EzeVillo/git-review-workflow/issues/new?template=bug_report.yml)
 - [Contributing to the extension](https://github.com/EzeVillo/git-review-workflow/blob/main/visualstudio-extension/CONTRIBUTING.md) — building it, running it in
   Visual Studio, the tests and the VSIX.

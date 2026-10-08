@@ -254,7 +254,10 @@ Agregar las de [`hosting/netlify-hub.example.toml`](hosting/netlify-hub.example.
 configuración, reemplazando `REPLACE-WITH-LANDING-SITE` por el nombre real del sitio hijo. Deben
 estar antes de cualquier regla comodín `/*`:
 
-- `/git-review-workflow` redirige con 301 a `/git-review-workflow/`.
+- La edge function `netlify/edge-functions/project-slash.ts` del sitio principal redirige
+  `/git-review-workflow` con 301 a `/git-review-workflow/`, conservando los parámetros. No usa
+  variables ni dependencias propias. **No reemplazarla por una regla 301 en `netlify.toml`**:
+  Netlify matchea las dos variantes del path contra esa regla y provoca un bucle.
 - `/git-review-workflow/*` sirve `https://<sitio-hijo>.netlify.app/:splat` con 200: el navegador
   conserva el dominio y el path públicos.
 

@@ -3,10 +3,10 @@
 # Both sites must belong to the same Netlify team.
 # Keep the existing /ibit-to-btc/ rules and place these before any catch-all.
 
-[[redirects]]
-  from = "/git-review-workflow"
-  to = "/git-review-workflow/"
-  status = 301
+# The main site's project-slash edge function adds the final slash when needed.
+# A 301 rule from /git-review-workflow to /git-review-workflow/ would loop:
+# Netlify matches both forms of the path against the same redirect rule.
+# See EzeVillo/ibit-to-btc/netlify/edge-functions/project-slash.ts.
 
 [[redirects]]
   from = "/git-review-workflow/*"

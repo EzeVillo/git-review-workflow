@@ -893,6 +893,13 @@ reglas existentes. Asignar el dominio al hijo, cambiar el DNS o agregar `docs/CN
 le quitaría al principal la dirección que necesitan los demás proyectos. Ambos sitios pertenecen
 al mismo equipo, como exige Netlify para proxies entre sitios.
 
+La barra final se agrega en una edge function del principal, antes del proxy: las reglas 301 de
+Netlify no distinguen `/git-review-workflow` de `/git-review-workflow/`, así que la regla directa
+que se probó primero también matcheaba el destino y lo redirigía a sí mismo. La función mira el
+path original, conserva los parámetros y deja pasar la URL que ya tiene barra. La landing hija
+sigue siendo estática y no necesita funciones ni variables. El gate son los tests de
+`scripts/project-slash.test.ts` en `ibit-to-btc` y la comprobación HTTP sobre el dominio público.
+
 La publicación original de GitHub Pages (`main`, `/docs`) puede permanecer como copia compatible
 durante la transición; su canonical ya señala la dirección nueva. No se presenta esa copia como
 una redirección HTTP. El detalle de configuración externa y comprobación está en `CONTRIBUTING.md`.

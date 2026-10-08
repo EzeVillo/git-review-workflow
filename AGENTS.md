@@ -400,7 +400,9 @@ la CLI y los clientes no gastan una publicación de la landing.
 
 El dominio pertenece al **sitio principal** de Netlify, que deriva cada path al sitio de su
 proyecto. La landing hija sirve los archivos desde `/`; el proxy del principal quita el prefijo
-`/git-review-workflow/`. Las reglas están en `hosting/netlify-hub.example.toml` y se aplican en el
+`/git-review-workflow/`. La barra final se agrega en la edge function del principal, nunca con
+una regla 301 que Netlify también matchearía contra su propio destino. Las reglas de proxy están
+en `hosting/netlify-hub.example.toml` y se aplican en el
 principal, conservando las de `/ibit-to-btc/`. **No agregar `docs/CNAME` ni asignar `ezevillo.com`
 al sitio hijo.** Los dos sitios deben estar en el mismo equipo de Netlify. El procedimiento y la
 configuración externa están en `CONTRIBUTING.md`.

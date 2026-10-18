@@ -90,10 +90,14 @@ working tree**. El detalle de cada pieza está en `decisiones.md` §2-§8; esto 
 | `reviewwalkstep`, `reviewwalkcount`, `reviewwalkbase` | `walk` | Cursor de lectura (1-based), guard y lower bound |
 | `reviewwalkfromdraft` | `walk` | El orden caminado salió del borrador del revisor |
 | `reviewdraft` | **todos** | Bajo qué nombre vive el borrador de esta review |
+| `reviewcommentscontext`, `reviewcommentssession`, `reviewcommentsowner` | **todos** | Contexto opaco, sesión exclusiva y gitdir propietario de los comentarios |
 
 El guard de metadata de `finish` **aborta si hay claves de step sin `reviewmode=step`**, y hay un
 guard espejo para las de walk. Por eso las claves de walk son propias y nunca se reusan las de step.
-`reviewdraft` es la excepción deliberada al guard: existe en todos los modos.
+`reviewdraft` y las tres claves de comments son comunes a todos los modos y no
+se interpretan como metadata de step o walk. El owner de comments es el
+`--absolute-git-dir`: encontrar config compartida desde otro worktree no permite
+adoptar sus archivos.
 
 **Otros refs y claves**
 
@@ -108,7 +112,7 @@ guard espejo para las de walk. Por eso las claves de walk son propias y nunca se
   `reviewworkflow.advice` (default **encendido**; ver *Advice* abajo). Las tres son claves
   `git config` por repo, por diseño.
 
-**Archivos de prosa** — dos son del **autor** y van trackeados al PR; los tres del **revisor** viven
+**Archivos del walkthrough** — dos son del **autor** y van trackeados al PR; los tres del **revisor** viven
 en el gitdir, así que no se commitean, no se stagean, `git status` no cambia en ningún momento y
 `finish` no se los puede llevar a `review-fixes/`:
 
@@ -124,6 +128,35 @@ en el gitdir, así que no se commitean, no se stagean, `git status` no cambia en
 `status --porcelain` emite `draft` de presencia; `list --porcelain` emite `branch-draft`. Las guías
 y el walkthrough se emiten **siempre**, exista o no el archivo: la ausencia se reporta, no se
 implica con el silencio. Los `draft` solo cuando hay. Detalle en `decisiones.md` §8.
+
+**Comentarios de revisión** — `git review comments` mantiene Local y Shared
+independientes en `<gitdir>/review-comments/`. `contexts/<token>/manifest`
+registra la identidad; `sessions/<token>/` guarda preparación y baselines;
+`results/<context>/<generation>/` conserva el par completo y `current` lo
+publica por rename. Ausente y vacío son distintos. Los tokens se validan antes
+de construir rutas y las observaciones nunca se usan como nombres internos.
+
+Cada start/compare obtiene una sesión exclusiva, incluso antes de confirmar
+contexto. Consultar una sesión antigua no inicializa custodia. Save/continue
+transfieren el custodio del mismo directorio; perder sus claves no permite borrar
+una preparación cuyo manifest todavía reclama la rama. Los documentos no entran
+en el banco de ediciones. Comments save de compare conserva sólo prosa local y
+su puntero de resultado es el checkpoint de descarte.
+
+Finish conserva ambos documentos y entrega sólo Shared modificado, después del
+código, como `.review/comments.md` sin stage/commit/push adicional. Un fallo
+posterior al código registra el cierre parcial y deja una preparación recuperable.
+Prepare reintenta sólo prosa, sin adoptar un destino concurrente como baseline.
+Undo incorpora únicamente la escritura propia al guard de salida; vuelve con
+la prosa actual y se niega a sobrescribir una preparación editada desde un
+editor antiguo. Las revisiones de publicación quedan en el manifest del resultado.
+
+Comments tiene consultas porcelain propias: no amplía los registros existentes
+de status/config/list. Status informa ambas rutas, revisiones y diagnósticos sin
+cuerpos ni resolución histórica por entrada. `unreadable` no habilita escritura.
+Entries/diff usan ordinal físico y revisión, nunca número visible como identidad;
+los diffs usan sus OID originales y paths literales desde la raíz, sin fetch
+implícito, ext-diff, textconv ni sustitución por HEAD. Ver `decisiones.md` §17.
 
 ## Reglas duras
 

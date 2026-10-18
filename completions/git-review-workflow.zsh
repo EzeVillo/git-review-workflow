@@ -114,6 +114,52 @@ _git_review_finish() {
 		'--force[with --abort, discard changes made to the finish branch]'
 }
 
+_git_review_comments() {
+	local state line
+	_arguments -S \
+		'(-h --help)'{-h,--help}'[show help]' \
+		':comments command:->commentsub' \
+		'*::comments arguments:->commentargs'
+	case "$state" in
+	commentsub)
+		local -a comment_commands
+		comment_commands=('status:inspect comments' 'init:create one document' 'add:compose a comment'
+			'renumber:number entries in physical order' 'entries:list physical entries'
+			'diff:show the captured historical code' 'save:retain compare comments locally'
+			'prepare:prepare pending Shared comments')
+		_describe 'comments command' comment_commands
+		;;
+	commentargs)
+		local -a comment_options
+		comment_options=('(-h --help)'{-h,--help}'[show help]')
+		case "$line[1]" in
+		status|entries|diff|prepare) comment_options+=('--porcelain[machine-readable output]') ;;
+		esac
+		if [[ "$line[1]" != save ]]; then comment_options+=('--context[select an existing context]:context:'); fi
+		case "$line[1]" in
+		init|add|renumber|entries|diff) comment_options+=('--document[choose the document]:document:(local shared)') ;;
+		esac
+		case "$line[1]" in
+		init|add) comment_options+=('(--use-context)--new-context[declare a different context]' '(--new-context)--use-context[choose a known context]:context:') ;;
+		esac
+		case "$line[1]" in
+		init|add|renumber|diff|prepare) comment_options+=('--expect-context[guard the original session]:token:' '--expect-document[guard document bytes and presence]:revision:') ;;
+		esac
+		case "$line[1]" in
+		add) comment_options+=('(--stdin)--text[comment body]:text:' '(--text)--stdin[read text from standard input]'
+			'--path[captured file]:path:' '--side[selected side]:side:(base head)'
+			'--start-line[first selected line]:line:' '--end-line[last selected line]:line:'
+			'--base[full base object ID]:OID:' '--head[full head object ID]:OID:'
+			'--base-path[path at base]:path:' '--head-path[path at head]:path:' '--unversioned[location came from a dirty buffer]') ;;
+		diff) comment_options+=('--entry[physical ordinal]:ordinal:') ;;
+		save) comment_options+=('--expect-context[guard the original session]:token:' '--expect-local[guard Local]:revision:' '--expect-shared[guard Shared]:revision:') ;;
+		prepare) comment_options+=('--check[inspect delivery without writing]') ;;
+		esac
+		_arguments -S "$comment_options[@]"
+		;;
+	esac
+}
+
 _git_review_preview() {
 	_arguments -S \
 		'(-h --h)'{-h,--h}'[show help]' \
@@ -193,6 +239,7 @@ _git-review() {
 			'start:stage a PR diff on a new review/<branch> branch'
 			'compare:stage the diff between two commit-ish, read-only'
 			'walkthrough:author a reading walkthrough for the current PR'
+			'comments:write and revisit Local or Shared review comments'
 			'config:read or write the base branch and remote'
 			'next:advance a commit-by-commit or walkthrough review one entry'
 			'prev:step a commit-by-commit or walkthrough review back one entry'
@@ -215,6 +262,7 @@ _git-review() {
 		start) _git_review_start ;;
 		compare) _git_review_compare ;;
 		walkthrough) _git_review_walkthrough ;;
+		comments) _git_review_comments ;;
 		config) _git_review_config ;;
 		finish) _git_review_finish ;;
 		preview) _git_review_preview ;;

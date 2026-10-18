@@ -61,3 +61,7 @@ tui/testdata/porcelain/*.txt text eol=lf
 tui/**/*.go text eol=lf
 tui/go.mod  text eol=lf
 tui/go.sum  text eol=lf
+
+# Comments fixtures pin BOM, mixed EOL and missing final LF byte-for-byte.
+# These byte oracles deliberately include CRLF, trailing spaces and blank EOF.
+tests/fixtures/comments/** -text -whitespace

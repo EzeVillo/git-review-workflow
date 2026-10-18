@@ -98,6 +98,27 @@ _git_review_finish() {
 	__gitcomp "--onto-source --resume --abort --force --h"
 }
 
+_git_review_comments() {
+	local comments_command
+	comments_command="$(__git_find_on_cmdline "status init add renumber entries diff save prepare")"
+	case "$prev" in
+	--document) __gitcomp "local shared"; return ;;
+	--side) __gitcomp "base head"; return ;;
+	--text|--context|--use-context|--expect-context|--expect-document|--expect-local|--expect-shared|--entry|--start-line|--end-line) return ;;
+	esac
+	case "$comments_command" in
+	status) __gitcomp "--porcelain --context --help" ;;
+	init) __gitcomp "--document --context --new-context --use-context --expect-context --expect-document --help" ;;
+	add) __gitcomp "--document --context --new-context --use-context --text --stdin --path --side --start-line --end-line --base --head --base-path --head-path --unversioned --expect-context --expect-document --help" ;;
+	renumber) __gitcomp "--document --context --expect-context --expect-document --help" ;;
+	entries) __gitcomp "--document --context --porcelain --help" ;;
+	diff) __gitcomp "--document --context --entry --porcelain --expect-context --expect-document --help" ;;
+	save) __gitcomp "--expect-context --expect-local --expect-shared --help" ;;
+	prepare) __gitcomp "--context --check --porcelain --expect-context --expect-document --help" ;;
+	*) __gitcomp "status init add renumber entries diff save prepare --help" ;;
+	esac
+}
+
 # config [<key> [<value>]] [--unset <key>] [--porcelain [<branch>]]: keys after
 # a bare word or --unset, candidate branches for base's value and for
 # --porcelain's optional <branch> (contracts/config-porcelain.md).
@@ -183,7 +204,7 @@ _git_review_forget() {
 # dispatcher's own -h/--version). Otherwise dispatch to the verb's helper —
 # verbs with no options beyond --h fall through to the default.
 _git_review() {
-	local subcommands="start compare walkthrough config next prev status list preview finish save continue abort clean forget ui"
+	local subcommands="start compare walkthrough comments config next prev status list preview finish save continue abort clean forget ui"
 	local subcommand
 	subcommand="$(__git_find_on_cmdline "$subcommands")"
 
@@ -199,6 +220,7 @@ _git_review() {
 	start) _git_review_start ;;
 	compare) _git_review_compare ;;
 	walkthrough) _git_review_walkthrough ;;
+	comments) _git_review_comments ;;
 	config) _git_review_config ;;
 	finish) _git_review_finish ;;
 	preview) _git_review_preview ;;

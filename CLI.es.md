@@ -37,6 +37,85 @@ lista, o `git review <verbo> -h` para el detalle de un verbo.
 | `git review forget --draft ([--] <rama> \| --all \| --reviewed) [--dry-run]`                                                                             | Borra un walkthrough que escribiste para el PR de otra persona.                                                                                                                                                                                                                                                                                                                        |
 | `git review config [<clave> [<valor>]] [--unset <clave>] [--porcelain [<rama>]]`                                                           | Lee o escribe la config del producto (`base`, `remote`); `--porcelain` también lista las ramas candidatas a revisar.                                                                                                                                                                                                                                                                   |
 
+## Comentarios de revisión
+
+Durante una review o comparación, mantené documentos Markdown independientes para
+observaciones **Local** y comentarios **Shared** destinados al PR. Las dos
+preparaciones viven en el gitdir de la review: escribir un comentario no stagea
+ni guarda código. Elegí el documento en cada captura; no se recuerda un destino.
+
+```sh
+git review comments add --document local --text '¿Por qué reintentar esta operación?'
+git review comments add --document shared --path src/api.ts --side head \
+  --start-line 12 --end-line 16 --stdin < preguntas.md
+git review comments status
+git review comments renumber --document shared
+```
+
+Sin `--text` ni `--stdin`, `add` abre el editor configurado en Git
+(`git var GIT_EDITOR`). Un texto vacío o sólo whitespace cancela. Comillas,
+backticks y `$()` dentro del texto son datos. Para crear un documento antes de
+escribir, usá `init --document local` o `init --document shared`; repetirlo no
+trunca un archivo existente. Abrí la ruta absoluta informada por `status` en
+tu editor Markdown habitual para editar, mover o borrar entradas.
+
+| Comando después de `git review comments` | Propósito |
+|------------------------------------------|-----------|
+| `status [--porcelain] [--context <id>]` | Consultar identidad, ambos documentos, recuentos, diagnósticos y entrega. Fuera de sesión, enumera resultados conservados y preparaciones guardadas. |
+| `init --document <local\|shared> [context-options] [guards]` | Crear sólo el documento elegido, si está ausente. |
+| `add --document <local\|shared> [context-options] [location-options] [--text <text>\|--stdin] [guards]` | Añadir una entrada; las ubicaciones repetidas siguen siendo entradas distintas. |
+| `renumber --document <local\|shared> [--context <id>] [guards]` | Numerar las entradas reales `## N. Título` en orden físico, conservando cuerpos, metadata y finales de línea. |
+| `entries --document <local\|shared> [--context <id>] --porcelain` | Listar entradas por ordinal físico y revisión del documento, sin sus cuerpos. |
+| `diff --document <local\|shared> --entry <ordinal> [--context <id>] [--porcelain] [guards]` | Mostrar el código capturado por los OID originales de la entrada; porcelain devuelve árboles, blobs y coordenadas. |
+| `save [--expect-context <token>] [--expect-local <revision>] [--expect-shared <revision>]` | En una comparación, conservar ambos documentos localmente y seguir comparando. |
+| `prepare --context <id> [--check [--porcelain]] [guards]` | Inspeccionar o reintentar una entrega Shared pendiente después de extraer código. |
+
+`context-options` son `--context <id>`, `--new-context` o `--use-context <id>`;
+elegí sólo una. Se puede declarar otro contexto antes de hacer ediciones nuevas
+sin conservar. Si la identidad es ambigua, creá o elegí un contexto explícitamente.
+Si hay varios contextos conservados, requieren selección; la CLI nunca elige
+el más reciente.
+
+`location-options` son `--path <path>`, `--side base|head`,
+`--start-line <n> --end-line <n>`, `--base <OID> --head <OID>`,
+`--base-path <path> --head-path <path>` y `--unversioned`. Las rutas son relativas
+a la raíz del repositorio. Las líneas exigen ruta y lado; los extremos de línea
+y los OID explícitos se proporcionan por pares. Los OID deben ser completos, de
+commit o tree. Sin OID explícitos, la CLI registra el rango real de la review o
+del paso seleccionado. El contenido sucio se marca como unversioned; su código
+nunca se conserva dentro del comentario. Los comentarios generales no necesitan
+ruta ni líneas.
+
+`guards` son `--expect-context <token>` y `--expect-document <revision>`, obtenidos
+de `status --porcelain` o `entries --porcelain`. Protegen sesión, cursor y
+bytes/presencia originales del documento, incluido `absent`. Un documento ilegible
+informa `unreadable` y un diagnóstico; resolvé el error de lectura antes de escribir.
+Todos aceptan `-h`/`--help` y `--`; los valores son argumentos separados y pueden
+empezar con guion. Desde terminal podés omitir guards para usar el estado actual.
+
+`save`/`continue` conservan las dos preparaciones al pausar una review. `abort`
+de sesión descarta la preparación nueva y respeta los resultados anteriores;
+`comments save` en compare avanza ese límite de descarte. Un `finish` exitoso
+conserva ambos documentos localmente y deja sólo la prosa Shared modificada en
+`.review/comments.md` sobre la rama de salida, sin stagearla, commitearla ni
+pushearla. Local permanece en el gitdir. La limpieza de una review completada
+conserva los resultados; `renumber`, `entries` y `diff` también funcionan después
+de cerrar.
+
+Si hay conflicto de entrega Shared después de extraer el código, `finish`
+retorna `1` y registra la salida de código. Inspeccioná
+`prepare --context <id> --check` y editá preparado y destino hasta que tengan
+el mismo contenido deseado. Reintentá con `prepare --context <id>` o
+`finish --resume`; no se repite la extracción de código. No hay reemplazo forzado
+de prosa concurrente. `finish --abort` restaura el código de la review y mantiene
+los comentarios disponibles.
+
+Estos comandos retornan `0` por éxito/cancelación, `1` por uso, I/O o conflicto de
+prosa, `2` sin sesión compatible, `4` por guards obsoletos y `5` si falta código
+histórico requerido. Las consultas históricas nunca sustituyen código actual
+ni descargan objetos faltantes. Un archivo ausente del working tree no impide
+abrir historia disponible. Los diagnósticos no bloquean la navegación del código.
+
 ## Interfaz de terminal
 
 Abrí la interfaz visual de terminal desde adentro de un repositorio:

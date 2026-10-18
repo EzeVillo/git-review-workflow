@@ -1370,3 +1370,63 @@ propio `tui/CONTRIBUTING.md` le manda correr a quien desarrolla— sobre archivo
 commit taggeado y verdes en CI. Es el mismo razonamiento que ya tenían los golden y las fixtures de
 porcelain, y la misma clase de bug: lo que la herramienta compara son los bytes en disco, no los
 bytes en git.
+
+## 17. Comentarios portables de revisión
+
+### 17.1 Dos documentos y una identidad completa
+
+Local y Shared son Markdown editable e independiente. Elegir uno no recuerda
+un destino para la próxima captura ni copia contenido del otro. El marcador
+portable identifica el trabajo; no hay ids, estados ni respuestas obligatorias
+por entrada. Las referencias son OID de base/head y ubicación opcional, sin
+instantáneas de código ni refs de retención para hacer disponible una historia
+que el clon no tiene.
+
+La identidad usa el merge-base completo, separado de delta/`--from` y del cursor.
+Un marcador heredado desde la base no convierte comentarios del PR anterior en
+los del nuevo. Linaje incompatible o base incompleta exige elección explícita.
+Cada inicio tiene una sesión distinta: la misma rama y el mismo rango no hacen
+válido un formulario abierto en una pasada que ya se abortó.
+
+### 17.2 Custodia y publicación del par
+
+Preparación y resultados viven en el gitdir propio. Save/continue cambian el
+custodio de un directorio exclusivo; nunca mueven dos archivos separadamente.
+El owner absoluto evita que config compartida adopte archivos de otro worktree.
+Si desaparecen las claves pero un manifest sigue reclamando la rama, los verbos
+que la moverían o borrarían se detienen antes de tocar Git o prosa.
+
+Se publica una generación completa y se cambia después `current`. En compare,
+ese puntero también es el checkpoint: mantener otro permitiría fallar después
+de conservar el par y anunciar un descarte distinto del resultado publicado.
+Ausente no se reemplaza por vacío. Source, resultado y baseline se comparan por
+bytes/presencia; si ambos cambiaron se conservan, sin merge automático.
+
+### 17.3 El cierre de código y la entrega pueden tener resultados distintos
+
+Shared se entrega después de extraer código y sin stage, commit ni push propios.
+Si el destino cambió, se preservan preparado y destino. El cierre registra igual
+su salida de código, retorna error y permite inspeccionar/reintentar sólo prosa.
+Una falla de publicación del resultado tampoco oculta la preparación ni permite
+que clean la elimine antes de conservarla. La igualdad deliberada de preparado
+y destino resuelve la entrega; no existe un reemplazo forzado de prosa concurrente.
+
+El retry modifica el snapshot de undo sólo para el path entregado. Recalcularlo
+desde todo el working tree absorbería código editado después del cierre y haría
+que abort lo descartara sin advertir. Undo vuelve a preparado, respeta borrado y
+vacío, y conserva el trabajo de editores antiguos: el manifest registra hashes
+de publicación para no sobrescribir una preparación que cambió después.
+
+### 17.4 Una observación no se identifica por su número visible
+
+El parser común cuenta límites físicos, respeta fences y comentarios HTML y
+renumera sólo dígitos. Conserva BOM, EOL, EOF, cuerpos y metadata futura como
+bytes. Entries/diff seleccionan ordinal más revisión: mover o editar un bloque
+invalida el picker anterior aunque su número siga igual.
+
+Los diffs históricos usan extremos separados y `:(top,literal)`: desde un cwd
+profundo el path sigue siendo relativo a la raíz. Se deshabilitan fetch perezoso,
+ext-diff y textconv. Un blob faltante también invalida un diff general; emitir
+árboles antes de comprobar el contenido daría una receta inutilizable. La falta
+de historia devuelve 5 y conserva el comentario. Un archivo actual ausente no
+impide consultar los objetos originales que todavía estén disponibles.

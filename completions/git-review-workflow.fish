@@ -90,6 +90,7 @@ complete -c git -n '__grw_review_bare' -f -s V -l version -d 'print the installe
 complete -c git -n '__grw_review_bare' -f -a start -d 'stage a PR diff on a new review/<branch> branch'
 complete -c git -n '__grw_review_bare' -f -a compare -d 'stage the diff between two commit-ish, read-only'
 complete -c git -n '__grw_review_bare' -f -a walkthrough -d 'author a reading walkthrough for the current PR'
+complete -c git -n '__grw_review_bare' -f -a comments -d 'write and revisit Local or Shared review comments'
 complete -c git -n '__grw_review_bare' -f -a config -d 'read or write the base branch and remote'
 complete -c git -n '__grw_review_bare' -f -a next -d 'advance a commit-by-commit or walkthrough review one entry'
 complete -c git -n '__grw_review_bare' -f -a prev -d 'step a commit-by-commit or walkthrough review back one entry'
@@ -103,6 +104,40 @@ complete -c git -n '__grw_review_bare' -f -a abort -d 'cancel the current review
 complete -c git -n '__grw_review_bare' -f -a clean -d 'delete review/* and review-fixes/* branches'
 complete -c git -n '__grw_review_bare' -f -a forget -d "discard a review's persistent state (delta markers or a saved review)"
 complete -c git -n '__grw_review_bare' -f -a ui -d 'hand off to the git-review-ui terminal UI, if installed'
+
+# Comments values are data; never inspect Markdown or run a mutation to complete.
+function __grw_comments_using -a subcommand
+    __grw_review_using comments; or return 1
+    set -l tokens (commandline -opc)
+    test (count $tokens) -ge 4; and contains -- $tokens[4] (string split ' ' -- $subcommand)
+end
+
+function __grw_comments_bare
+    __grw_review_using comments; or return 1
+    set -l tokens (commandline -opc)
+    test (count $tokens) -eq 3
+end
+
+complete -c git -n '__grw_comments_bare' -f -a 'status init add renumber entries diff save prepare'
+complete -c git -n '__grw_review_using comments' -f -s h -l help -d 'show help'
+complete -c git -n '__grw_comments_using "status entries diff prepare"' -f -l porcelain -d 'machine-readable output'
+complete -c git -n '__grw_comments_using "status init add renumber entries diff prepare"' -f -r -l context -d 'select an existing context'
+complete -c git -n '__grw_comments_using "init add renumber entries diff"' -f -r -l document -a 'local shared' -d 'choose the document'
+complete -c git -n '__grw_comments_using "init add"' -f -l new-context -d 'declare a different context'
+complete -c git -n '__grw_comments_using "init add"' -f -r -l use-context -d 'choose a known context'
+complete -c git -n '__grw_comments_using "init add renumber diff prepare save"' -f -r -l expect-context -d 'guard the original session'
+complete -c git -n '__grw_comments_using "init add renumber diff prepare"' -f -r -l expect-document -d 'guard document bytes and presence'
+complete -c git -n '__grw_comments_using save' -f -r -l expect-local -d 'guard Local'
+complete -c git -n '__grw_comments_using save' -f -r -l expect-shared -d 'guard Shared'
+complete -c git -n '__grw_comments_using diff' -f -r -l entry -d 'physical ordinal'
+complete -c git -n '__grw_comments_using prepare' -f -l check -d 'inspect delivery without writing'
+complete -c git -n '__grw_comments_using add' -f -r -l text -d 'comment body'
+complete -c git -n '__grw_comments_using add' -f -l stdin -d 'read text from standard input'
+complete -c git -n '__grw_comments_using add' -f -r -l side -a 'base head' -d 'selected side'
+complete -c git -n '__grw_comments_using add' -f -l unversioned -d 'location came from a dirty buffer'
+for option in path base-path head-path base head start-line end-line
+    complete -c git -n '__grw_comments_using add' -f -r -l $option
+end
 
 # ── git review start ──────────────────────────────────────────────────────────
 complete -c git -n '__grw_review_using start' -f -r -l base -d 'base to diff against when the branch is omitted'

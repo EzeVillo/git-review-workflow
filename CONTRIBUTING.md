@@ -68,6 +68,21 @@ git review --version
 
 ### Running the tests
 
+La familia de comentarios se puede ejecutar por separado desde un shell POSIX:
+
+```sh
+./tests/run-docker.sh tests/comments-*.bats
+```
+
+Sus fixtures de Markdown conservan bytes con `-text`: BOM, EOL mixtos y EOF sin
+LF son parte del contrato. Los helpers comparan presencia, contenido y estado
+de Git fuera del working tree; las consultas no deben escribir objetos ni
+refrescar el índice. Las barreras de concurrencia usan FIFO con timeout en los
+dos extremos, y los fallos de I/O se inyectan por operación para que funcionen
+también como root. No sustituir esas comprobaciones por `chmod` ni por sleeps.
+La evidencia de GNU/BSD/BusyBox awk y los controles negativos está en
+[`specs/016-comentarios-review/quickstart.md`](specs/016-comentarios-review/quickstart.md).
+
 ```sh
 ./tests/run-docker.sh                 # whole suite
 ./tests/run-docker.sh review.bats     # a single file

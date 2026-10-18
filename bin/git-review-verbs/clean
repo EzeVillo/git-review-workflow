@@ -85,6 +85,9 @@ if [ "$keep_fixes" -eq 1 ] && [ "$fixes_only" -eq 1 ]; then
 	exit 1
 fi
 
+# shellcheck source=../git-review-lib.sh
+. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
+
 cur="$(git symbolic-ref --quiet --short HEAD || true)"
 
 if [ -n "$arg" ]; then
@@ -120,6 +123,9 @@ if [ -n "$list" ]; then
 		fi
 		case "$b" in
 		review/*)
+			_clean_comments_completed=0
+			if [ -n "$(git config "branch.$b.reviewundoouthead" || true)" ]; then _clean_comments_completed=1; fi
+			comments_remove_custody "$b" "$_clean_comments_completed" || exit 1
 			# Before the delete: the keys stay readable after branch -D, but read first.
 			restore_delta_if_incomplete "${b#review/}"
 			;;

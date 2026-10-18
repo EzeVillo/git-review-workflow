@@ -531,9 +531,9 @@ comments_status() {
 	_cs_output=$(
 		if [ "$cm_active" -eq 1 ]; then porcelain_row comments-guard "$cm_guard"; fi
 		case "$cm_identity" in
-			resolved) porcelain_row comments-identity resolved 'Comments context selected.' ;;
-			ambiguous) porcelain_row comments-identity ambiguous 'Choose a comments context before writing.' ;;
-			fresh) porcelain_row comments-identity fresh 'No comments context yet.' ;;
+			(resolved) porcelain_row comments-identity resolved 'Comments context selected.' ;;
+			(ambiguous) porcelain_row comments-identity ambiguous 'Choose a comments context before writing.' ;;
+			(fresh) porcelain_row comments-identity fresh 'No comments context yet.' ;;
 		esac
 		if [ -n "$cm_context" ]; then comments_emit_context || exit 1
 		elif [ "$cm_active" -eq 0 ]; then

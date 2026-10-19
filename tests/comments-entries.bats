@@ -11,6 +11,19 @@ setup() {
 }
 teardown() { comments_teardown; }
 
+@test "comments entries reports general metadata without inventing optional location fields" {
+	printf '## 12. General\n<!-- git-review-comment v1\nbase 1111111111111111111111111111111111111111\nhead 2222222222222222222222222222222222222222\n-->\nPrivate body.\n' >"$COMMENTS_LOCAL"
+	local revision
+	revision=$(git hash-object --no-filters "$COMMENTS_LOCAL")
+	comments_snapshot "$COMMENTS_TMP/before"
+	run --separate-stderr git review comments entries --document local --porcelain
+	[ "$status" -eq 0 ]
+	[ "$stderr" = '' ]
+	[ "$output" = "$(printf 'comments-document\t%s\t%s\tlocal\tpresent\t%s\ncomment-entry\t1\t12\t1\tGeneral\ncomment-version\t1\t1111111111111111111111111111111111111111\t2222222222222222222222222222222222222222' "$COMMENTS_LOCAL" "$COMMENTS_CONTEXT" "$revision")" ]
+	comments_snapshot "$COMMENTS_TMP/after"
+	comments_assert_snapshot "$COMMENTS_TMP/before" "$COMMENTS_TMP/after"
+}
+
 invalid_metadata() {
 	printf '## 9. Question\n\n<!-- git-review-comment v1\nbase %s\nhead %s\n%s\n-->\nBody.\n' "$COMMENTS_BASE" "$COMMENTS_TIP" "$1" >"$COMMENTS_LOCAL"
 	comments_snapshot "$COMMENTS_TMP/before"

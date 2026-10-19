@@ -292,7 +292,9 @@ comments_contours() {
 				if(!positive(values["start"]) || !positive(values["end"]) || !ordered(values["start"],values["end"]) || values["side"]=="") badmeta=1
 			}
 			if(keys["unversioned"] && values["unversioned"]!="1") badmeta=1
-			if(!encoded_path(values["base-path"]) || !encoded_path(values["head-path"])) badmeta=1
+			# Materialize optional fields as strings: gawk 5.2.1 can double-free
+			# an unset array element passed directly to the path predicate.
+			if(!encoded_path(values["base-path"] "") || !encoded_path(values["head-path"] "")) badmeta=1
 			if(badmeta) printf "comment-diagnostic\t%d\tmetadata\tComment location metadata is incomplete or invalid.\n",count
 			else {
 				if(values["base"]!="") printf "comment-version\t%d\t%s\t%s\n",count,values["base"],values["head"]

@@ -302,7 +302,10 @@ comments_assert_baseline() {
 # shellcheck disable=SC2154,SC2034 # bats assigns status/output; callers consume the paths and guard.
 comments_refresh_paths() {
 	run --separate-stderr git review comments status --porcelain
-	[ "$status" -eq 0 ] || return 1
+	if [ "$status" -ne 0 ]; then
+		printf 'comments status failed with exit %s\nstdout:\n%s\nstderr:\n%s\n' "$status" "$output" "$stderr" >&2
+		return 1
+	fi
 	COMMENTS_LOCAL=$(printf '%s\n' "$output" | awk -F '\t' '$1=="comments-document" && $4=="local" {print $2}')
 	COMMENTS_SHARED=$(printf '%s\n' "$output" | awk -F '\t' '$1=="comments-document" && $4=="shared" {print $2}')
 	COMMENTS_GUARD=$(printf '%s\n' "$output" | awk -F '\t' '$1=="comments-guard" {print $2}')

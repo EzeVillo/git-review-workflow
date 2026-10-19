@@ -37,6 +37,81 @@ Every command is a verb under `git review`. Run `git review -h` for the list, or
 | `git review forget --draft ([--] <branch> \| --all \| --reviewed) [--dry-run]`                                                                             | Delete a walkthrough you drafted for someone else's PR.                                                                                                                                                                                                                                                                                                            |
 | `git review config [<key> [<value>]] [--unset <key>] [--porcelain [<branch>]]`                                                               | Read or write the product's config (`base`, `remote`); `--porcelain` also lists candidate branches to review.                                                                                                                                                                                                                                                      |
 
+## Review comments
+
+During a review or comparison, keep independent Markdown documents for **Local**
+observations and **Shared** comments intended for the PR. Both preparations live
+under the review's gitdir: writing a comment does not stage or save code.
+Choose the document on every capture; there is no remembered destination.
+
+```sh
+git review comments add --document local --text 'Why retry this operation?'
+git review comments add --document shared --path src/api.ts --side head \
+  --start-line 12 --end-line 16 --stdin < questions.md
+git review comments status
+git review comments renumber --document shared
+```
+
+Without `--text` or `--stdin`, `add` opens the configured Git editor
+(`git var GIT_EDITOR`). Empty or whitespace-only text cancels. Shell quotes,
+backticks and `$()` inside text are data. To create a document before writing,
+use `init --document local` or `init --document shared`; repeating it does not
+truncate an existing file. Open the absolute path reported by `status` in your
+usual Markdown editor to edit, move or delete entries.
+
+| Command after `git review comments` | Purpose |
+|-------------------------------------|---------|
+| `status [--porcelain] [--context <id>]` | Inspect identity, both documents, counts, diagnostics and delivery state. Outside a session, enumerate retained results and saved preparations. |
+| `init --document <local\|shared> [context-options] [guards]` | Create only the chosen document, if absent. |
+| `add --document <local\|shared> [context-options] [location-options] [--text <text>\|--stdin] [guards]` | Append one entry; repeated locations remain separate entries. |
+| `renumber --document <local\|shared> [--context <id>] [guards]` | Number real `## N. Title` entries in physical order, preserving bodies, metadata and line endings. |
+| `entries --document <local\|shared> [--context <id>] --porcelain` | List entries by physical ordinal and document revision, without their bodies. |
+| `diff --document <local\|shared> --entry <ordinal> [--context <id>] [--porcelain] [guards]` | Show the code captured by that entry's original object IDs; porcelain returns trees, blobs and coordinates. |
+| `save [--expect-context <token>] [--expect-local <revision>] [--expect-shared <revision>]` | In a comparison, retain both documents locally and continue comparing. |
+| `prepare --context <id> [--check [--porcelain]] [guards]` | Inspect or retry a pending Shared delivery after code extraction. |
+
+`context-options` are `--context <id>`, `--new-context` or `--use-context <id>`;
+choose only one. A new context can be declared before making new unsaved edits.
+When identity is ambiguous, explicitly create or choose a context. Multiple
+retained contexts require selection; the CLI never chooses the newest one.
+
+`location-options` are `--path <path>`, `--side base|head`,
+`--start-line <n> --end-line <n>`, `--base <OID> --head <OID>`,
+`--base-path <path> --head-path <path>` and `--unversioned`. Paths are relative
+to the repository root. Lines require a path and side; line endpoints and
+explicit object IDs must be supplied in pairs. OIDs must be full commit/tree
+IDs. Without explicit OIDs, the CLI records the actual review range or selected
+step. Dirty working content is marked unversioned; its code is never retained
+as part of a comment. General comments need no path or lines.
+
+`guards` are `--expect-context <token>` and `--expect-document <revision>`, from
+`status --porcelain` or `entries --porcelain`. They protect the original session,
+cursor and document bytes/presence, including `absent`. An unreadable document
+reports `unreadable` and a diagnostic; resolve the read error before writing.
+All commands support `-h`/`--help` and `--`; option values are separate arguments
+and may start with a dash. The terminal user may omit guards to use current state.
+
+`save`/`continue` preserve both preparations while pausing a review. Session
+`abort` discards new preparation and keeps previous retained results; comparison
+`comments save` advances that discard boundary. A successful `finish` retains
+both documents locally and leaves only changed Shared prose at
+`.review/comments.md` on the output branch, without staging, committing or
+pushing it. Local prose stays private to the gitdir. Completed-review cleanup
+keeps results accessible; `renumber`, `entries` and `diff` also work after closing.
+
+If Shared delivery conflicts after code extraction, `finish` returns `1` and
+records the code output. Inspect `prepare --context <id> --check`, then edit
+prepared and destination prose to the same desired content. Retry with
+`prepare --context <id>` or `finish --resume`; code extraction is not repeated.
+There is no forced overwrite of concurrent prose. `finish --abort` restores the
+review's code and keeps comments available.
+
+Comments commands return `0` on success/cancellation, `1` for usage, I/O or a
+prose conflict, `2` without a compatible session, `4` for stale guards, and `5`
+when required historical code is missing. Historical queries never substitute
+current code or fetch missing objects. A missing working file does not prevent
+opening available history. Diagnostics do not block code navigation.
+
 ## Terminal UI
 
 Run the visual terminal interface from inside a repository:

@@ -6,6 +6,1504 @@
 # libexec directory where it, this lib and git-review-verbs/ live together (never
 # on PATH). It only defines functions, so sourcing it has no side effects.
 
+# shellcheck disable=SC2030,SC2031
+# Porcelain emitters deliberately stage records in a subshell; mutations reload
+# their own state and never depend on assignments made while staging output.
+
+# ── Comments: identidad y almacenamiento privado ─────────────────────────────
+
+# Tokens are opaque SHA-sized lowercase hex. Validate BEFORE joining any path;
+# document paths never come from a branch name, label or source-code location.
+comments_token_valid() {
+	case "$1" in ''|*[!0-9a-f]*) return 1 ;; esac
+	[ "${#1}" -eq 40 ] || [ "${#1}" -eq 64 ]
+}
+
+comments_require_token() {
+	comments_token_valid "$1" || {
+		printf 'error: invalid comments context token\n' >&2
+		return 1
+	}
+}
+
+comments_error() { printf 'error: %s\n' "$*" >&2; return 1; }
+
+# Check every existing component, including the root, without following links.
+# Missing components are allowed for lazy creation; special files are never read.
+comments_safe_path() {
+	case "$1" in
+		"$cm_root"|"$cm_root/"*) ;;
+		*) comments_error "unsafe comments path: $1"; return 1 ;;
+	esac
+	case "$1/" in *'/../'*|*'/./'*|*'//'*) comments_error "unsafe comments path: $1"; return 1 ;; esac
+	_csp_at=$cm_root
+	_csp_rest=${1#"$cm_root"}
+	_csp_rest=${_csp_rest#/}
+	while :; do
+		if [ -L "$_csp_at" ] || { [ -e "$_csp_at" ] && [ ! -f "$_csp_at" ] && [ ! -d "$_csp_at" ]; }; then
+			comments_error "unsafe comments path: $_csp_at"; return 1
+		fi
+		[ -n "$_csp_rest" ] || break
+		if [ -e "$_csp_at" ] && [ ! -d "$_csp_at" ]; then
+			comments_error "unsafe comments path: $_csp_at"; return 1
+		fi
+		_csp_part=${_csp_rest%%/*}
+		_csp_at=$_csp_at/$_csp_part
+		if [ "$_csp_part" = "$_csp_rest" ]; then _csp_rest=''; else _csp_rest=${_csp_rest#*/}; fi
+	done
+}
+
+# Manifests are data, never shell. Duplicate keys and unsafe file types fail.
+comments_field() {
+	comments_safe_path "$1" || return 1
+	if [ -e "$1" ] && [ ! -f "$1" ]; then comments_error "unsafe comments path: $1"; return 1; fi
+	[ -f "$1" ] || return 0
+	awk -F '\t' -v key="$2" '$1 == key { n++; value=substr($0, length(key)+2) }
+		END { if(n > 1) exit 1; if(n == 1) print value }' "$1"
+}
+
+comments_revision() {
+	comments_safe_path "$1" || return 1
+	if [ -f "$1" ]; then
+		git hash-object --no-filters -- "$1"
+	elif [ -e "$1" ]; then
+		comments_error "unsafe comments path: $1"
+	else
+		printf 'absent\n'
+	fi
+}
+
+# Read the capture state defensively, without materializing a context/session.
+# Whole/walk use the real lower, step uses the selected commit and its parent.
+# Identity always has its OWN full merge-base, independent of delta/--from.
+comments_state() {
+	cm_gitdir=$(git rev-parse --absolute-git-dir 2>/dev/null) || { comments_error 'not a git repository'; return 1; }
+	cm_root=$cm_gitdir/review-comments
+	comments_safe_path "$cm_root" || return 1
+	cm_branch=$(git symbolic-ref --quiet --short HEAD || true)
+	cm_active=0 cm_source='' cm_target='' cm_tip='' cm_full_base=''
+	cm_capture_base='' cm_capture_head='' cm_cursor='' cm_mode=whole cm_kind=review
+	cm_context='' cm_session='' cm_dir='' cm_candidates='' cm_seed=0 cm_provisional=0 cm_recovery=0
+	cm_identity=fresh cm_label='' cm_guard='' cm_capture_guard='' cm_scope=result
+	case "$cm_branch" in
+		review/*)
+			cm_source=$(git config "branch.$cm_branch.reviewsource" || true)
+			cm_tip=$(git config "branch.$cm_branch.reviewtip" || true)
+			if [ -n "$cm_source" ] && [ -n "$cm_tip" ]; then cm_active=1; fi
+			;;
+	esac
+	[ "$cm_active" -eq 1 ] || return 0
+	comments_token_valid "$cm_tip" || { comments_error 'comments capture tip is not a full object ID'; return 1; }
+	cm_scope=active cm_label=$cm_source
+	cm_mode=$(git config "branch.$cm_branch.reviewmode" || true)
+	cm_mode=${cm_mode:-whole}
+	cm_target=$(git config "branch.$cm_branch.reviewbase" || true)
+	_cm_lower=$(git rev-parse HEAD)
+	if [ "$(git config "branch.$cm_branch.reviewreadonly" || true)" = 1 ]; then
+		cm_kind=compare
+		cm_full_base=$(git config "branch.$cm_branch.reviewstart" || true)
+		cm_full_base=${cm_full_base:-$_cm_lower}
+	elif [ -n "$cm_target" ]; then
+		_cm_base_ref=$cm_target
+		if ! git rev-parse --verify --quiet "$_cm_base_ref^{commit}" >/dev/null; then
+			_cm_remote=$(git config reviewworkflow.remote || true)
+			_cm_base_ref=${_cm_remote:-origin}/$cm_target
+		fi
+		cm_full_base=$(git merge-base "$_cm_base_ref" "$cm_tip" 2>/dev/null || true)
+	fi
+	cm_capture_base=$_cm_lower cm_capture_head=$cm_tip
+	case "$cm_mode" in
+		step)
+			cm_cursor=$(git config "branch.$cm_branch.reviewstep" || true)
+			_cm_start=$(git config "branch.$cm_branch.reviewstart" || true)
+			case "$cm_cursor" in
+				''|*[!0-9]*) cm_capture_base='' cm_capture_head='' ;;
+				*)
+					# rev-list is safe here: the step lower is required to be a commit.
+					if git cat-file -e "$_cm_start^{commit}" 2>/dev/null; then
+						cm_capture_head=$(git rev-list --reverse --first-parent --no-merges "$_cm_start..$cm_tip" | sed -n "${cm_cursor}p")
+						cm_capture_base=$(git rev-parse --verify "$cm_capture_head^" 2>/dev/null || true)
+					else cm_capture_base='' cm_capture_head=''
+					fi
+					;;
+			esac
+			;;
+		walk) cm_cursor=$(git config "branch.$cm_branch.reviewwalkstep" || true) ;;
+	esac
+	_cm_phase=$(git config "branch.$cm_branch.reviewresume" || true)
+	if [ "$_cm_phase" = conflict ]; then cm_capture_base='' cm_capture_head=''; fi
+	cm_session=$(git config "branch.$cm_branch.reviewcommentssession" || true)
+	cm_context=$(git config "branch.$cm_branch.reviewcommentscontext" || true)
+	_cm_owner=$(git config "branch.$cm_branch.reviewcommentsowner" || true)
+	if [ -n "$_cm_owner" ] && [ "$_cm_owner" != "$cm_gitdir" ]; then
+		comments_error 'comments session belongs to another gitdir'; return 1
+	fi
+	if [ -z "$cm_session" ] && [ -n "$cm_context$_cm_owner" ]; then
+		comments_error 'comments session ownership metadata is incomplete'; return 1
+	fi
+	if [ -n "$cm_session" ]; then
+		comments_require_token "$cm_session" || return 1
+		if [ -n "$cm_context" ]; then comments_require_token "$cm_context" || return 1; fi
+		cm_dir=$cm_root/sessions/$cm_session
+		_cm_manifest=$cm_dir/manifest
+		_cm_manifest_owner=$(comments_field "$_cm_manifest" owner_gitdir) || return 1
+		_cm_manifest_context=$(comments_field "$_cm_manifest" context) || return 1
+		_cm_custodian=$(comments_field "$_cm_manifest" custodian) || return 1
+		_cm_manifest_session=$(comments_field "$_cm_manifest" session) || return 1
+		if [ "$_cm_manifest_session" != "$cm_session" ] || [ "$_cm_manifest_owner" != "$cm_gitdir" ] || [ "$_cm_manifest_context" != "$cm_context" ] || [ "$_cm_custodian" != "$cm_branch" ]; then
+			comments_error 'comments session ownership does not match'; return 1
+		fi
+		if [ -n "$cm_context" ]; then cm_identity=resolved
+		else
+			cm_provisional=1
+			if [ -n "$cm_full_base" ]; then cm_full_base=$(comments_field "$_cm_manifest" full_base) || return 1; fi
+			comments_context_resolve || return 1
+		fi
+	else
+		comments_context_resolve || return 1
+	fi
+	cm_capture_guard=$(comments_capture_signature) || return 1
+	cm_guard=$(printf '%s\000' "$cm_capture_guard" "$cm_context" "$cm_session" "$_cm_owner" | git hash-object --stdin)
+	if [ -z "$cm_session" ] && [ "$cm_identity" = resolved ]; then
+		# A legacy review has not copied its discard boundary yet. Report only
+		# absent prospective preparation paths; never let an editor change the
+		# retained result which abort is required to preserve.
+		cm_dir=$cm_root/sessions/$cm_guard
+	fi
+}
+
+# Own initialization changes context/session metadata, never the capture state.
+# Keep the latter separately so a cursor move during lazy copying is detected.
+comments_capture_signature() {
+	printf '%s\000' "$cm_gitdir" "$cm_branch" "$cm_source" "$cm_target" "$cm_tip" "$cm_full_base" "$cm_kind" "$cm_mode" "$cm_cursor" "$cm_capture_base" "$cm_capture_head" "$_cm_phase" | git hash-object --stdin
+}
+
+# Portable identity is read from the preamble only. The contour parser handles
+# entry fences; this marker reader refuses duplicates instead of guessing.
+comments_marker() {
+	git show "$1:.review/comments.md" 2>/dev/null | walk_normalize | comments_contours marker
+}
+
+comments_context_resolve() {
+	cm_context='' cm_candidates='' cm_seed=0 cm_identity=fresh
+	[ -n "$cm_full_base" ] || { cm_identity=ambiguous; return 0; }
+	_cm_portable=''
+	if [ "$cm_kind" = review ]; then
+		_cm_tip_marker=$(comments_marker "$cm_tip")
+		_cm_base_marker=$(comments_marker "$cm_full_base")
+		if [ -n "$_cm_tip_marker" ] && ! comments_token_valid "$_cm_tip_marker"; then
+			cm_identity=ambiguous; return 0
+		fi
+		if [ -n "$_cm_tip_marker" ] && [ "$_cm_tip_marker" != "$_cm_base_marker" ]; then
+			_cm_portable=$_cm_tip_marker
+		fi
+		_cm_tip_blob=$(git rev-parse --verify "$cm_tip:.review/comments.md" 2>/dev/null || true)
+		_cm_base_blob=$(git rev-parse --verify "$cm_full_base:.review/comments.md" 2>/dev/null || true)
+		# shellcheck disable=SC2034 # Seed selection is consumed by init/add.
+		if [ -n "$_cm_tip_blob" ] && [ "$_cm_tip_blob" != "$_cm_base_blob" ] && { [ -z "$_cm_tip_marker" ] || [ -n "$_cm_portable" ]; }; then cm_seed=1; fi
+	fi
+	_cm_continuations='' _cm_incompatible=0 _cm_count=0
+	comments_safe_path "$cm_root/contexts" || return 1
+	for _cm_manifest in "$cm_root"/contexts/*/manifest; do
+		[ -e "$_cm_manifest" ] || [ -L "$_cm_manifest" ] || continue
+		_cm_token=${_cm_manifest%/manifest}; _cm_token=${_cm_token##*/}
+		comments_require_token "$_cm_token" || return 1
+		_cm_kind=$(comments_field "$_cm_manifest" kind) || return 1
+		_cm_source=$(comments_field "$_cm_manifest" source) || return 1
+		_cm_target=$(comments_field "$_cm_manifest" target) || return 1
+		if [ "$_cm_kind" != "$cm_kind" ] || [ "$_cm_source" != "$cm_source" ] || [ "$_cm_target" != "$cm_target" ]; then continue; fi
+		_cm_last=$(comments_field "$_cm_manifest" last_tip) || return 1
+		_cm_full=$(comments_field "$_cm_manifest" full_base) || return 1
+		_cm_retained=$(comments_result_dir "$_cm_token") || return 1
+		if [ -n "$_cm_retained" ]; then
+			_cm_retained_tip=$(comments_field "$_cm_retained/manifest" last_tip) || return 1
+			_cm_retained_base=$(comments_field "$_cm_retained/manifest" full_base) || return 1
+			if [ -n "$_cm_retained_tip" ]; then _cm_last=$_cm_retained_tip; fi
+			if [ -n "$_cm_retained_base" ]; then _cm_full=$_cm_retained_base; fi
+		fi
+		if [ "$cm_kind" = compare ]; then
+			if [ "$_cm_last" != "$cm_tip" ] || [ "$_cm_full" != "$cm_full_base" ]; then continue; fi
+		else
+			if git merge-base --is-ancestor "$_cm_last" "$cm_full_base" 2>/dev/null; then continue; fi
+		fi
+		cm_candidates="${cm_candidates}${cm_candidates:+
+}$_cm_token"
+		if [ "$cm_kind" = compare ] || git merge-base --is-ancestor "$_cm_last" "$cm_tip" 2>/dev/null; then
+			_cm_continuations=$_cm_token
+			_cm_count=$((_cm_count + 1))
+		else _cm_incompatible=1
+		fi
+	done
+	if [ -n "$_cm_portable" ]; then
+		cm_context=$_cm_portable cm_identity=resolved
+		if [ "$_cm_incompatible" -eq 1 ] || [ "$_cm_count" -gt 1 ] || { [ "$_cm_count" -eq 1 ] && [ "$_cm_continuations" != "$_cm_portable" ]; }; then
+			cm_identity=ambiguous cm_context=''
+		fi
+	elif [ "$_cm_count" -eq 1 ] && [ "$_cm_incompatible" -eq 0 ]; then
+		cm_context=$_cm_continuations cm_identity=resolved
+	elif [ "$_cm_count" -gt 0 ] || [ "$_cm_incompatible" -eq 1 ]; then cm_identity=ambiguous
+	fi
+}
+
+# A single contour reader shared by count and the later entry transformations.
+# No object resolution per entry, and no assumption that visible numbers are IDs.
+comments_scan() {
+	comments_safe_path "$1" || return 1
+	[ -f "$1" ] || return 1
+	walk_normalize <"$1" | comments_contours count
+}
+
+comments_contours() {
+	awk -v operation="$1" -v original="${2:-}" -v final_lf="${3:-1}" '
+		BEGIN { if(original!="") {while((getline rawline < original)>0) raw[++rawcount]=rawline; close(original)} }
+		function oid(s) {return (length(s)==40 || length(s)==64) && s !~ /[^0-9a-f]/}
+		function positive(s) {return s ~ /^[0-9]+$/ && s !~ /^0+$/}
+		function ordered(a,b) {
+			sub(/^0+/,"",a);sub(/^0+/,"",b)
+			return length(a)<length(b) || (length(a)==length(b) && ("x" a)<=("x" b))
+		}
+		function encoded_path(s,    i,e) {
+			if(s ~ /[\t\r\n>]/) return 0
+			if(s ~ /^\// || s ~ /\/\// || s ~ /(^|\/)\.\.?($|\/)/) return 0
+			for(i=1;i<=length(s);i++) if(substr(s,i,1)=="%") {
+				e=substr(s,i,3)
+				if(e!="%25" && e!="%09" && e!="%0D" && e!="%0A" && e!="%3E") return 0
+				i+=2
+			}
+			return 1
+		}
+		function emitraw(isentry,    emit,start,digits) {
+			if(operation!="renumber") return
+			emit=raw[NR]
+			if(isentry) {
+				start=index(emit,"## ")+3; digits=substr(emit,start)
+				match(digits,/^[0-9]+/)
+				emit=substr(emit,1,start-1) count substr(digits,RLENGTH+1)
+			}
+			printf "%s",emit; if(NR<rawcount || final_lf==1) printf "\n"
+		}
+		function flushmeta(    key) {
+			if(!metadata) return
+			if((values["base"]!="" || values["head"]!="") && (!oid(values["base"]) || !oid(values["head"]))) badmeta=1
+			if(values["side"]!="" && values["side"]!="base" && values["side"]!="head") badmeta=1
+			if(values["side"]=="base" && values["base-path"]=="") badmeta=1
+			if(values["side"]=="head" && values["head-path"]=="") badmeta=1
+			if(keys["start"] || keys["end"]) {
+				if(!positive(values["start"]) || !positive(values["end"]) || !ordered(values["start"],values["end"]) || values["side"]=="") badmeta=1
+			}
+			if(keys["unversioned"] && values["unversioned"]!="1") badmeta=1
+			# Materialize optional fields as strings: gawk 5.2.1 can double-free
+			# an unset array element passed directly to the path predicate.
+			if(!encoded_path(values["base-path"] "") || !encoded_path(values["head-path"] "")) badmeta=1
+			if(badmeta) printf "comment-diagnostic\t%d\tmetadata\tComment location metadata is incomplete or invalid.\n",count
+			else {
+				if(values["base"]!="") printf "comment-version\t%d\t%s\t%s\n",count,values["base"],values["head"]
+				if(values["base-path"]!="") printf "comment-path\t%d\tbase\t%s\n",count,values["base-path"]
+				if(values["head-path"]!="") printf "comment-path\t%d\thead\t%s\n",count,values["head-path"]
+				if(values["start"]!="" && values["end"]!="") printf "comment-location\t%d\t%s\t%s\t%s\n",count,values["side"],values["start"],values["end"]
+				if(values["unversioned"]=="1") printf "comment-unversioned\t%d\n",count
+			}
+			for(key in values) delete values[key]
+			for(key in keys) delete keys[key]
+			metadata=0; badmeta=0
+		}
+		function fence(s,    c,i) {
+			# The caller stripped at most three spaces explicitly; interval
+			# expression support differs across POSIX awk implementations.
+			c=substr(s,1,1); if(c!="`" && c!="~") return 0
+			for(i=1; substr(s,i,1)==c; i++) {}
+			fc=c; fl=i-1; rest=substr(s,i)
+			return fl>=3
+		}
+		{
+			line=$0; s=line; isentry=0
+			for(sp=0; sp<3 && substr(s,1,1)==" "; sp++) s=substr(s,2)
+			if(infence) {
+				if(fence(s) && fc==openchar && fl>=openlen && rest ~ /^[ \t]*$/) infence=0
+				emitraw(0); next
+			}
+			if(!html && fence(s) && (fc!="`" || index(rest,"`")==0)) {
+				infence=1; openchar=fc; openlen=fl; emitraw(0); next
+			}
+			if(operation=="marker" && count==0) {
+				if(!html && line=="<!-- git-review-comments v1") marker=1
+				else if(!html && line ~ /^<!-- git-review-comments /) badmarker=1
+				else if(marker && line ~ /^context /) {markers++; token=substr(line,9)}
+				if(marker && line=="-->") marker=0
+			}
+			if(!html && line ~ /^## [0-9]+\.[ \t]*/) {
+				count++; isentry=1; headingline=NR; metadata_allowed=1
+				if(operation=="entries") {
+					number=line; sub(/^## /,"",number); sub(/\..*$/,"",number)
+					title=line; sub(/^## [0-9]+\.[ \t]*/,"",title)
+					printf "comment-entry\t%d\t%s\t%d\t%s\n",count,number,NR,title
+				}
+			}
+			if(operation=="entries") {
+				if(!html && metadata_allowed && (NR==headingline+1 || NR==headingline+2) && line ~ /^<!-- git-review-comment /) {
+					metadata=1; if(line!="<!-- git-review-comment v1") badmeta=1
+				}
+				else if(metadata && line=="-->") flushmeta()
+				else if(metadata) {
+					p=index(line," "); if(p<2) badmeta=1
+					else {key=substr(line,1,p-1); if(keys[key]++) badmeta=1; values[key]=substr(line,p+1)}
+				}
+				else if(NR==headingline+1 && line !~ /^[ \t]*$/) metadata_allowed=0
+			}
+			while(length(s)) {
+				if(html) {
+					p=index(s,"-->"); if(!p) break
+					s=substr(s,p+3); html=0
+				} else {
+					p=index(s,"<!--"); if(!p) break
+					s=substr(s,p+4); html=1
+				}
+			}
+			emitraw(isentry)
+		}
+		END {
+			if(operation=="marker") {
+				if(badmarker || markers>1 || marker) print "invalid"
+				else if(markers==1 && !html) print token
+			} else if(operation=="entries" || operation=="renumber") {
+				if(html) exit 1
+			} else {
+				if(html) exit 1
+				if(operation=="append" && infence) exit 1
+				if(operation=="input" && (infence || count>0)) exit 1
+				print count+0
+			}
+		}
+	'
+}
+
+comments_result_dir() {
+	comments_require_token "$1" || return 1
+	_crd_current=$cm_root/results/$1/current
+	comments_safe_path "$_crd_current" || return 1
+	[ -f "$_crd_current" ] || return 0
+	_crd_generation=$(cat "$_crd_current") || return 1
+	comments_require_token "$_crd_generation" || return 1
+	comments_safe_path "$cm_root/results/$1/$_crd_generation/manifest" || return 1
+	[ -f "$cm_root/results/$1/$_crd_generation/manifest" ] || { comments_error 'incomplete comments generation'; return 1; }
+	printf '%s\n' "$cm_root/results/$1/$_crd_generation"
+}
+
+comments_emit_document() {
+	_ced_path=$cm_dir/$1.md
+	if ! _ced_revision=$(comments_revision "$_ced_path" 2>/dev/null); then
+		# An unavailable byte revision must not look like an empty document.
+		# It is deliberately unusable as a write guard; the other row survives.
+		porcelain_row comments-document "$_ced_path" "$cm_context" "$1" present unreadable
+		porcelain_row comments-diagnostic "$_ced_path" read 'The comments document could not be read safely.'
+		return 0
+	fi
+	_ced_presence=present
+	if [ "$_ced_revision" = absent ]; then _ced_presence=absent; fi
+	porcelain_row comments-document "$_ced_path" "$cm_context" "$1" "$_ced_presence" "$_ced_revision"
+	if [ "$_ced_presence" = present ]; then
+		if _ced_count=$(comments_scan "$_ced_path"); then
+			porcelain_row comments-count "$_ced_path" "$_ced_count"
+			_ced_entries=$(walk_normalize <"$_ced_path" | comments_contours entries) || return 1
+			printf '%s\n' "$_ced_entries" | COMMENTS_DIAGNOSTIC_PATH="$_ced_path" awk -F '\t' '$1=="comment-diagnostic" {printf "comments-diagnostic\t%s\t%s\t%s\n",ENVIRON["COMMENTS_DIAGNOSTIC_PATH"],$3,$4}'
+		else
+			porcelain_row comments-diagnostic "$_ced_path" format 'The document could not be read without ambiguous entry boundaries.'
+		fi
+	fi
+	if [ "$1" = shared ] && [ -f "$cm_dir/source-conflict" ]; then
+		porcelain_row comments-diagnostic "$_ced_path" source-conflict 'The source and retained Shared comments changed separately; both versions were preserved.'
+	fi
+}
+
+# Enumerate retained results and paused preparations; never infer recency.
+comments_stored_contexts() {
+	comments_safe_path "$cm_root/results" || return 1
+	for _csc_pointer in "$cm_root"/results/*/current; do
+		[ -e "$_csc_pointer" ] || [ -L "$_csc_pointer" ] || continue
+		_csc_token=${_csc_pointer%/current}; _csc_token=${_csc_token##*/}
+		comments_require_token "$_csc_token" || return 1
+		printf '%s\n' "$_csc_token"
+	done
+	_csc_branches=$(git for-each-ref --format='%(refname:short)' refs/heads/review-saved/) || return 1
+	while IFS= read -r _csc_branch; do
+		[ -n "$_csc_branch" ] || continue
+		_csc_token=$(git config "branch.$_csc_branch.reviewcommentscontext" || true)
+		[ -n "$_csc_token" ] || continue
+		comments_require_token "$_csc_token" || return 1
+		printf '%s\n' "$_csc_token"
+	done <<EOF
+$_csc_branches
+EOF
+	_csc_branches=$(git for-each-ref --format='%(refname:short)' refs/heads/review/) || return 1
+	while IFS= read -r _csc_branch; do
+		[ -n "$_csc_branch" ] || continue
+		[ -n "$(git config "branch.$_csc_branch.reviewundoouthead" || true)" ] || continue
+		_csc_token=$(git config "branch.$_csc_branch.reviewcommentscontext" || true)
+		[ -n "$_csc_token" ] || continue
+		comments_require_token "$_csc_token" || return 1
+		printf '%s\n' "$_csc_token"
+	done <<EOF
+$_csc_branches
+EOF
+}
+
+# A paused preparation is the editable version of its context. Its previous
+# retained generation remains the discard boundary, not another editable row.
+comments_load_stored() {
+	cm_dir='' cm_scope=result cm_label=$cm_context cm_recovery=0
+	_cstored_count=0
+	_cstored_branches=$(git for-each-ref --format='%(refname:short)' refs/heads/review-saved/) || return 1
+	while IFS= read -r _cstored_branch; do
+		[ -n "$_cstored_branch" ] || continue
+		[ "$(git config "branch.$_cstored_branch.reviewcommentscontext" || true)" = "$cm_context" ] || continue
+		comments_preflight_branch "$_cstored_branch" || return 1
+		cm_dir=$cc_dir cm_scope=saved cm_label=${_cstored_branch#review-saved/}
+		_cstored_count=$((_cstored_count + 1))
+	done <<EOF
+$_cstored_branches
+EOF
+	_cstored_result=$(comments_result_dir "$cm_context") || return 1
+	_cstored_retained_session=''
+	if [ -n "$_cstored_result" ]; then _cstored_retained_session=$(comments_field "$_cstored_result/manifest" session) || return 1; fi
+	if [ "$_cstored_count" -eq 0 ]; then
+		_cstored_branches=$(git for-each-ref --format='%(refname:short)' refs/heads/review/) || return 1
+		while IFS= read -r _cstored_branch; do
+			[ -n "$_cstored_branch" ] || continue
+			[ "$(git config "branch.$_cstored_branch.reviewcommentscontext" || true)" = "$cm_context" ] || continue
+			[ -n "$(git config "branch.$_cstored_branch.reviewundoouthead" || true)" ] || continue
+			_cstored_session=$(git config "branch.$_cstored_branch.reviewcommentssession" || true)
+			[ "$_cstored_session" != "$_cstored_retained_session" ] || continue
+			comments_preflight_branch "$_cstored_branch" || return 1
+			cm_dir=$cc_dir cm_label=${_cstored_branch#review/} cm_recovery=1
+			_cstored_count=$((_cstored_count + 1))
+		done <<EOF
+$_cstored_branches
+EOF
+	fi
+	[ "$_cstored_count" -le 1 ] || { comments_error 'multiple preparations own this comments context'; return 1; }
+	if [ -z "$cm_dir" ]; then cm_dir=$_cstored_result; fi
+	[ -n "$cm_dir" ] || { comments_error 'comments context has no retained documents'; return 1; }
+	cm_kind=$(comments_field "$cm_root/contexts/$cm_context/manifest" kind) || return 1
+	if [ "$(comments_field "$cm_root/contexts/$cm_context/manifest" owner_gitdir)" != "$cm_gitdir" ]; then
+		comments_error 'comments context belongs to another gitdir'; return 1
+	fi
+	cm_guard=$(printf '%s\000' "$cm_gitdir" "$cm_context" "$cm_dir" "$cm_scope" "$cm_label" | git hash-object --stdin)
+}
+
+comments_emit_context() {
+	comments_require_token "$cm_context" || return 1
+	comments_safe_path "$cm_root/contexts/$cm_context/manifest" || return 1
+	if [ -z "$cm_dir" ]; then
+		cm_dir=$(comments_result_dir "$cm_context") || return 1
+		if [ -z "$cm_dir" ]; then
+			# Known portable contexts have no local preparation yet. No directory
+			# is created by reporting the future document locations.
+			cm_dir=$cm_root/contexts/$cm_context
+		fi
+	fi
+	if [ -z "$cm_guard" ]; then cm_guard=$(printf '%s\000' "$cm_gitdir" "$cm_context" "$cm_dir" | git hash-object --stdin); fi
+	porcelain_row comments-context "$cm_context" "$cm_kind" "$cm_scope" "$cm_guard" "$cm_label"
+	comments_emit_document local || return 1
+	comments_emit_document shared || return 1
+	if [ "$cm_recovery" -eq 1 ]; then
+		porcelain_row comments-diagnostic "$cm_dir/shared.md" result-write 'The comments result could not be retained; its complete preparation remains available.'
+	fi
+	_cec_delivery=$(comments_field "$cm_dir/delivery" state) || return 1
+	if [ -z "$_cec_delivery" ] && [ "$cm_scope" = active ] && [ "$cm_kind" = review ] && [ -f "$cm_dir/shared.md" ]; then
+		comments_safe_path "$cm_dir/source-baseline.md" || return 1
+		if ! comments_same_file "$cm_dir/shared.md" "$cm_dir/source-baseline.md"; then _cec_delivery=prepared; fi
+	fi
+	if [ -n "$_cec_delivery" ]; then porcelain_row comments-delivery "$cm_context" "$_cec_delivery" 'Shared comments delivery.'; fi
+}
+
+comments_status() {
+	comments_state || return 1
+	_cs_requested=$1 _cs_porcelain=$2
+	if [ -n "$_cs_requested" ]; then
+		comments_require_token "$_cs_requested" || return 1
+		comments_revision "$cm_root/contexts/$_cs_requested/manifest" >/dev/null || return 1
+		if [ "$_cs_requested" != "$cm_context" ]; then
+			cm_context=$_cs_requested
+			comments_load_stored || return 1
+			cm_identity=resolved
+		fi
+	fi
+	# Stage output in the shell, so unsafe metadata cannot yield a partial record
+	# stream a client might mistakenly consume. No temporary file for a query.
+	_cs_output=$(
+		if [ "$cm_active" -eq 1 ]; then porcelain_row comments-guard "$cm_guard"; fi
+		case "$cm_identity" in
+			(resolved) porcelain_row comments-identity resolved 'Comments context selected.' ;;
+			(ambiguous) porcelain_row comments-identity ambiguous 'Choose a comments context before writing.' ;;
+			(fresh) porcelain_row comments-identity fresh 'No comments context yet.' ;;
+		esac
+		if [ -n "$cm_context" ]; then comments_emit_context || exit 1
+		elif [ "$cm_active" -eq 0 ]; then
+			_cs_contexts=$(comments_stored_contexts) || exit 1
+			_cs_contexts=$(printf '%s\n' "$_cs_contexts" | sort -u)
+			while IFS= read -r cm_context; do
+				[ -n "$cm_context" ] || continue
+				comments_load_stored || exit 1
+				comments_emit_context || exit 1
+			done <<EOF
+$_cs_contexts
+EOF
+		fi
+		if [ "$cm_identity" = ambiguous ]; then
+			printf '%s\n' "$cm_candidates" | while IFS= read -r _cs_candidate; do
+				[ -n "$_cs_candidate" ] || continue
+				porcelain_row comments-candidate "$_cs_candidate" "$cm_label"
+			done
+		fi
+		if [ "$cm_active" -eq 1 ] && [ "$cm_scope" = active ] && [ -n "$cm_capture_base" ] && [ -n "$cm_capture_head" ]; then
+			porcelain_row comments-capture "$cm_guard" "$cm_capture_base" "$cm_capture_head"
+		fi
+	) || return 1
+	if [ "$_cs_porcelain" -eq 1 ]; then printf '%s\n' "$_cs_output"
+	else
+		printf '%s\n' "$_cs_output" | awk -F '\t' '
+			$1=="comments-identity" { print $3 }
+			$1=="comments-context" { print "Context: " $2 " (" $3 ", " $4 ")" }
+			$1=="comments-document" { print $4 ": " $5 " — " $2 }
+			$1=="comments-count" { print "Entries: " $3 }
+			$1=="comments-diagnostic" { print $4 }
+		'
+	fi
+}
+
+# Mutation doors are shared by public handlers and the focused test driver.
+# Ownership is not inferred from a lock's pid: unknown locks are never stolen.
+comments_lock() {
+	comments_require_token "$1" || return 1
+	cm_lock=$cm_root/locks/$1.lock
+	cm_lock_root=$cm_root cm_lock_parent=$cm_root/locks
+	cm_lock_root_created=0 cm_lock_parent_created=0
+	if [ ! -e "$cm_root" ]; then cm_lock_root_created=1; fi
+	if [ ! -e "$cm_root/locks" ]; then cm_lock_parent_created=1; fi
+	comments_safe_path "$cm_lock/owner" || return 1
+	mkdir -p "$cm_root/locks" || { comments_error 'could not create comments lock directory'; return 1; }
+	if ! mkdir "$cm_lock" 2>/dev/null; then comments_error 'comments context is locked'; return 1; fi
+	cm_lock_owned=1
+	if ! printf 'pid\t%s\nowner_gitdir\t%s\n' "$$" "$cm_gitdir" >"$cm_lock/owner"; then
+		rmdir "$cm_lock" 2>/dev/null || true
+		cm_lock_owned=0
+		comments_error 'could not record comments lock owner'; return 1
+	fi
+}
+
+comments_unlock() {
+	if [ "${cm_lock_owned:-0}" -eq 1 ]; then
+		# The path and file were created by this invocation; never recursively
+		# remove a directory whose contents may now belong to somebody else.
+		if [ ! -L "$cm_lock" ] && [ ! -L "$cm_lock/owner" ] && [ "$(comments_field "$cm_lock/owner" pid)" = "$$" ]; then
+			rm -f "$cm_lock/owner"
+			rmdir "$cm_lock" 2>/dev/null || true
+		fi
+		cm_lock_owned=0
+		if [ "$cm_lock_parent_created" -eq 1 ]; then rmdir "$cm_lock_parent" 2>/dev/null || true; fi
+		if [ "$cm_lock_root_created" -eq 1 ]; then rmdir "$cm_lock_root" 2>/dev/null || true; fi
+	fi
+}
+
+comments_check_guards() {
+	if [ -n "$1" ] && [ "$1" != "$cm_guard" ]; then
+		printf 'error: comments context is stale\n' >&2; return 4
+	fi
+	if [ -n "$2" ]; then
+		_ccg_revision=$(comments_revision "$3") || return 1
+		if [ "$2" != "$_ccg_revision" ]; then
+			printf 'error: comments document is stale\n' >&2; return 4
+		fi
+	fi
+}
+
+comments_remove_document() {
+	comments_safe_path "$1" || return 1
+	comments_check_guards "${3:-}" "$2" "$1" || return $?
+	rm -f "$1"
+}
+
+# All candidates are siblings. Recheck inside the lock immediately before rename
+# and retain candidates on any detected conflict (external editors use no lock).
+comments_replace() {
+	_cr_path=$1 _cr_source=$2 _cr_expected=$3 _cr_guard=${4:-}
+	_cr_context=${cm_context:-} _cr_scope=${cm_scope:-active}
+	comments_safe_path "$_cr_path" || return 1
+	if [ ! -f "$_cr_source" ] || [ -L "$_cr_source" ]; then comments_error 'comments candidate is not a readable regular file'; return 1; fi
+	comments_state || return 1
+	if [ "$_cr_scope" != active ] && [ -n "$_cr_context" ] && [ -n "$_cr_guard" ]; then comments_select_context "$_cr_context" || return 1; fi
+	comments_check_guards "$_cr_guard" "$_cr_expected" "$_cr_path" || return $?
+	_cr_candidate=$(mktemp "$_cr_path.candidate.XXXXXX") || { comments_error 'could not create comments candidate'; return 1; }
+	if ! cp "$_cr_source" "$_cr_candidate"; then
+		comments_error "could not write comments candidate: $_cr_candidate"; return 1
+	fi
+	comments_state || return 1
+	if [ "$_cr_scope" != active ] && [ -n "$_cr_context" ] && [ -n "$_cr_guard" ]; then comments_select_context "$_cr_context" || return 1; fi
+	comments_safe_path "$_cr_path" || return 1
+	if ! comments_check_guards "$_cr_guard" "$_cr_expected" "$_cr_path" 2>/dev/null; then
+		printf 'error: comments document is stale; candidate preserved at %s\n' "$_cr_candidate" >&2; return 4
+	fi
+	if ! mv "$_cr_candidate" "$_cr_path"; then comments_error "could not replace comments document; candidate preserved at $_cr_candidate"; return 1; fi
+}
+
+comments_publish() {
+	_cp_context=$1 _cp_source=$2 _cp_guard=${3:-}
+	comments_require_token "$_cp_context" || return 1
+	_cp_parent=$cm_root/results/$_cp_context
+	comments_safe_path "$_cp_parent/current" || return 1
+	_cp_previous=$(comments_revision "$_cp_parent/current") || return 1
+	mkdir -p "$_cp_parent" || { comments_error 'could not create comments result directory'; return 1; }
+	_cp_temporary=$(mktemp -d "$_cp_parent/.generation.XXXXXX") || { comments_error 'could not create comments generation'; return 1; }
+	_cp_generation=$(printf '%s\000' "$_cp_temporary" "$$" | git hash-object --stdin)
+	_cp_destination=$_cp_parent/$_cp_generation
+	comments_safe_path "$_cp_destination" || return 1
+	[ ! -e "$_cp_destination" ] || { comments_error 'comments generation already exists'; return 1; }
+	_cp_local=absent _cp_shared=absent
+	for _cp_document in local shared; do
+		if [ -L "$_cp_source/$_cp_document.md" ] || { [ -e "$_cp_source/$_cp_document.md" ] && [ ! -f "$_cp_source/$_cp_document.md" ]; }; then
+			comments_error 'unsafe comments generation source'; return 1
+		fi
+		if [ -f "$_cp_source/$_cp_document.md" ]; then
+			if ! cp "$_cp_source/$_cp_document.md" "$_cp_temporary/$_cp_document.md"; then
+				comments_error "could not copy comments document: $_cp_document"; return 1
+			fi
+			case "$_cp_document" in local) _cp_local=present ;; shared) _cp_shared=present ;; esac
+		fi
+	done
+	for _cp_auxiliary in source-baseline.md source-current.md source-previous.md source-conflict delivery; do
+		if [ -f "$_cp_source/$_cp_auxiliary" ]; then
+			comments_safe_path "$_cp_source/$_cp_auxiliary" || return 1
+			cp "$_cp_source/$_cp_auxiliary" "$_cp_temporary/$_cp_auxiliary" || return 1
+		fi
+	done
+	if ! printf 'context\t%s\nlocal\t%s\nshared\t%s\n' "$_cp_context" "$_cp_local" "$_cp_shared" >"$_cp_temporary/manifest.candidate"; then
+		comments_error 'could not write comments generation manifest'; return 1
+	fi
+	# Preserve the publication boundary independently of later edits to the
+	# retained files. Undo must not overwrite an older editor's session edits.
+	for _cp_document in local shared; do
+		_cp_bytes=$(comments_revision "$_cp_temporary/$_cp_document.md") || return 1
+		printf '%s_revision\t%s\n' "$_cp_document" "$_cp_bytes" >>"$_cp_temporary/manifest.candidate" || return 1
+	done
+	if [ -f "$_cp_source/manifest" ]; then
+		_cp_session=$(comments_field "$_cp_source/manifest" session) || return 1
+		if [ -n "$_cp_session" ]; then
+			comments_require_token "$_cp_session" || return 1
+			printf 'session\t%s\n' "$_cp_session" >>"$_cp_temporary/manifest.candidate" || return 1
+		fi
+		for _cp_statefield in kind full_base last_tip; do
+			_cp_statevalue=$(comments_field "$_cp_source/manifest" "$_cp_statefield") || return 1
+			if [ -n "$_cp_statevalue" ]; then printf '%s\t%s\n' "$_cp_statefield" "$_cp_statevalue" >>"$_cp_temporary/manifest.candidate" || return 1; fi
+		done
+	fi
+	if ! mv "$_cp_temporary/manifest.candidate" "$_cp_temporary/manifest"; then comments_error 'could not publish comments generation manifest'; return 1; fi
+	# Recheck the source pair after copying. Any concurrent source edit keeps
+	# the old current generation reachable; never publish a mixed pair.
+	for _cp_document in local shared; do
+		if [ -f "$_cp_temporary/$_cp_document.md" ]; then
+			if ! cmp -s "$_cp_source/$_cp_document.md" "$_cp_temporary/$_cp_document.md"; then
+				printf 'error: comments document is stale\n' >&2; return 4
+			fi
+		elif [ -e "$_cp_source/$_cp_document.md" ] || [ -L "$_cp_source/$_cp_document.md" ]; then
+			printf 'error: comments document is stale\n' >&2; return 4
+		fi
+	done
+	if ! mv "$_cp_temporary" "$_cp_destination"; then comments_error 'could not publish comments generation'; return 1; fi
+	_cp_pointer=$(mktemp "$_cp_parent/current.candidate.XXXXXX") || { comments_error 'could not create comments generation pointer'; return 1; }
+	if ! printf '%s\n' "$_cp_generation" >"$_cp_pointer"; then comments_error 'could not write comments generation pointer'; return 1; fi
+	if [ -n "$_cp_guard" ]; then
+		comments_state || return 1
+		comments_check_guards "$_cp_guard" '' '' || return $?
+	fi
+	comments_safe_path "$_cp_parent/current" || return 1
+	_cp_now=$(comments_revision "$_cp_parent/current") || return 1
+	if [ "$_cp_now" != "$_cp_previous" ]; then
+		printf 'error: comments result is stale; candidate preserved at %s\n' "$_cp_pointer" >&2; return 4
+	fi
+	if ! mv "$_cp_pointer" "$_cp_parent/current"; then comments_error 'could not publish comments generation pointer'; return 1; fi
+}
+
+comments_header() {
+	printf '# Comments\n\n<!-- git-review-comments v1\ncontext %s\n-->\n' "$cm_context"
+}
+
+comments_select_context() {
+	_cselect_requested=$1
+	comments_state || return 1
+	if [ -n "$_cselect_requested" ]; then
+		comments_require_token "$_cselect_requested" || return 1
+		if [ "$cm_context" != "$_cselect_requested" ]; then
+			cm_context=$_cselect_requested
+			comments_load_stored || return 1
+		fi
+	elif [ -z "$cm_context" ] && [ "$cm_active" -eq 0 ]; then
+		_cselect_count=0
+		_cselect_contexts=$(comments_stored_contexts) || return 1
+		_cselect_contexts=$(printf '%s\n' "$_cselect_contexts" | sort -u)
+		while IFS= read -r _cselect_token; do
+			[ -n "$_cselect_token" ] || continue
+			cm_context=$_cselect_token
+			_cselect_count=$((_cselect_count + 1))
+		done <<EOF
+$_cselect_contexts
+EOF
+		if [ "$_cselect_count" -gt 1 ]; then comments_error 'select a comments context with --context'; return 1; fi
+		if [ "$_cselect_count" -eq 1 ]; then comments_load_stored || return 1; fi
+	fi
+	[ -n "$cm_context" ] || { comments_error 'comments context not found'; return 1; }
+	comments_require_token "$cm_context" || return 1
+	if [ -z "$cm_dir" ]; then cm_dir=$(comments_result_dir "$cm_context") || return 1; fi
+	[ -n "$cm_dir" ] || { comments_error 'comments context has no retained documents'; return 1; }
+}
+
+comments_entries() {
+	_ce_path=$cm_dir/$1.md
+	_ce_revision=$(comments_revision "$_ce_path") || return 1
+	[ "$_ce_revision" != absent ] || { comments_error 'comments document is absent'; return 1; }
+	if ! _ce_rows=$(walk_normalize <"$_ce_path" | comments_contours entries); then
+		comments_error 'comment boundaries could not be preserved; document unchanged'; return 1
+	fi
+	porcelain_row comments-document "$_ce_path" "$cm_context" "$1" present "$_ce_revision"
+	if [ -n "$_ce_rows" ]; then printf '%s\n' "$_ce_rows"; fi
+}
+
+comments_renumber() {
+	_cn_path=$cm_dir/$1.md
+	_cn_guard=$cm_guard
+	_cn_revision=$(comments_revision "$_cn_path") || return 1
+	[ "$_cn_revision" != absent ] || { comments_error 'comments document is absent'; return 1; }
+	comments_check_guards "$2" "$3" "$_cn_path" || return $?
+	_cn_candidate=$(mktemp "$_cn_path.candidate.XXXXXX") || return 1
+	_cn_final_lf=0
+	if [ -z "$(tail -c 1 "$_cn_path")" ] && [ -s "$_cn_path" ]; then _cn_final_lf=1; fi
+	# shellcheck disable=SC2094 # Both views read the original; output is a sibling.
+	if ! walk_normalize <"$_cn_path" | comments_contours renumber "$_cn_path" "$_cn_final_lf" >"$_cn_candidate"; then
+		rm -f "$_cn_candidate"
+		comments_error 'comment boundaries could not be preserved; document unchanged'; return 1
+	fi
+	if cmp -s "$_cn_candidate" "$_cn_path"; then rm -f "$_cn_candidate"; return 0; fi
+	comments_replace "$_cn_path" "$_cn_candidate" "$_cn_revision" "$_cn_guard" || return $?
+	rm -f "$_cn_candidate"
+}
+
+comments_same_file() {
+	if [ -f "$1" ] && [ -f "$2" ]; then cmp -s "$1" "$2"
+	elif [ ! -e "$1" ] && [ ! -e "$2" ]; then return 0
+	else return 1
+	fi
+}
+
+# An existing retained document must be copied BEFORE its editable path reaches
+# the panel; otherwise manual edits would change the result that abort preserves.
+# Every review gets a nonce, including a provisional session without documents.
+# Thus a form opened during an earlier identical review cannot write to this one.
+comments_begin_session() (
+	comments_state || exit 1
+	_cb_guard=$cm_guard
+	comments_lock "${cm_context:-$cm_guard}" || exit 1
+	trap 'comments_unlock' 0
+	trap 'exit 1' 1 2 15
+	comments_state || exit 1
+	comments_check_guards "$_cb_guard" '' '' || exit $?
+	if [ "$cm_identity" = resolved ]; then comments_materialize '' 0 ''
+	else
+		comments_safe_path "$cm_root/sessions" || exit 1
+		mkdir -p "$cm_root/sessions" || exit 1
+		_cb_allocate=$(mktemp -d "$cm_root/sessions/.new.XXXXXX") || exit 1
+		_cb_session=$(printf '%s\000' "$_cb_allocate" "$$" | git hash-object --stdin) || exit 1
+		printf 'session\t%s\ncontext\t\nowner_gitdir\t%s\ncustodian\t%s\nkind\t%s\nfull_base\t%s\nlast_tip\t%s\n' \
+			"$_cb_session" "$cm_gitdir" "$cm_branch" "$cm_kind" "$cm_full_base" "$cm_tip" >"$_cb_allocate/manifest" || exit 1
+		mv "$_cb_allocate" "$cm_root/sessions/$_cb_session" || exit 1
+		git config "branch.$cm_branch.reviewcommentssession" "$_cb_session" || exit 1
+		git config "branch.$cm_branch.reviewcommentsowner" "$cm_gitdir"
+	fi
+)
+
+# Separate document baselines from retained results. These copies contain prose
+# only; no git object, index, worktree snapshot or code retention is involved.
+comments_materialize() {
+	_cmat_requested=$1 _cmat_new=$2 _cmat_use=$3
+	_cmat_previous=$cm_context
+	_cmat_provisional=''
+	if [ "$cm_provisional" -eq 1 ]; then _cmat_provisional=$cm_dir; cm_session=''; fi
+	if [ -n "$_cmat_requested" ]; then
+		if [ -n "$cm_context" ] && [ "$_cmat_requested" != "$cm_context" ]; then
+			comments_error 'comments context does not match the current session'; return 1
+		fi
+		if [ -z "$cm_context" ] && [ ! -f "$cm_root/contexts/$_cmat_requested/manifest" ]; then
+			comments_error 'comments context not found'; return 1
+		fi
+		cm_context=$_cmat_requested
+	fi
+	if [ -n "$_cmat_use" ]; then
+		comments_require_token "$_cmat_use" || return 1
+		[ -f "$cm_root/contexts/$_cmat_use/manifest" ] || { comments_error 'comments context not found'; return 1; }
+		cm_context=$_cmat_use
+	fi
+	if [ "$_cmat_new" -eq 1 ]; then cm_context=''; fi
+	if [ -n "$cm_session" ] && { [ "$_cmat_new" -eq 1 ] || [ "$cm_context" != "$_cmat_previous" ]; }; then
+		for _cmat_doc in local shared; do
+			comments_safe_path "$cm_dir/$_cmat_doc.md" || return 1
+			if ! comments_same_file "$cm_dir/$_cmat_doc.md" "$cm_dir/baseline/$_cmat_doc.md"; then
+				comments_error 'preserve or discard the current comments preparation before changing context'; return 1
+			fi
+		done
+		cm_session=''
+	fi
+	if [ -n "$cm_session" ]; then return 0; fi
+	if [ "$cm_identity" = ambiguous ] && [ "$_cmat_new" -eq 0 ] && [ -z "$_cmat_use" ] && [ -z "$_cmat_requested" ]; then
+		comments_error 'choose --new-context or --use-context before writing comments'; return 1
+	fi
+	comments_safe_path "$cm_root/contexts" || return 1
+	comments_safe_path "$cm_root/sessions" || return 1
+	mkdir -p "$cm_root/contexts" "$cm_root/sessions" || { comments_error 'could not create comments storage'; return 1; }
+	if [ -z "$cm_context" ]; then
+		_cmat_allocate=$(mktemp -d "$cm_root/contexts/.new.XXXXXX") || return 1
+		cm_context=$(printf '%s\000' "$_cmat_allocate" "$$" | git hash-object --stdin)
+		if ! mv "$_cmat_allocate" "$cm_root/contexts/$cm_context"; then comments_error 'could not allocate comments context'; return 1; fi
+		if [ "$_cmat_new" -eq 1 ]; then cm_seed=0; fi
+	fi
+	comments_require_token "$cm_context" || return 1
+	_cmat_manifest=$cm_root/contexts/$cm_context/manifest
+	comments_safe_path "$_cmat_manifest" || return 1
+	if [ -f "$_cmat_manifest" ]; then
+		_cmat_owner=$(comments_field "$_cmat_manifest" owner_gitdir) || return 1
+		if [ "$_cmat_owner" != "$cm_gitdir" ]; then comments_error 'comments context belongs to another gitdir'; return 1; fi
+	else
+		mkdir -p "$cm_root/contexts/$cm_context" || return 1
+		if ! printf 'context\t%s\nkind\t%s\nsource\t%s\ntarget\t%s\nfull_base\t%s\nlast_tip\t%s\nowner_gitdir\t%s\n' \
+			"$cm_context" "$cm_kind" "$cm_source" "$cm_target" "$cm_full_base" "$cm_tip" "$cm_gitdir" >"$_cmat_manifest.candidate"; then return 1; fi
+		mv "$_cmat_manifest.candidate" "$_cmat_manifest" || return 1
+	fi
+	_cmat_allocate=$(mktemp -d "$cm_root/sessions/.new.XXXXXX") || return 1
+	cm_session=$(printf '%s\000' "$_cmat_allocate" "$$" | git hash-object --stdin)
+	cm_dir=$cm_root/sessions/$cm_session
+	comments_safe_path "$cm_dir/manifest" || return 1
+	[ ! -e "$cm_dir" ] || { comments_error 'comments session already exists'; return 1; }
+	mkdir "$_cmat_allocate/baseline" || return 1
+	_cmat_result=$(comments_result_dir "$cm_context") || return 1
+	# Source presence is independent of seed selection: inherited Markdown is
+	# still the destination baseline, even when it does not seed this context.
+	if git cat-file -e "$cm_tip:.review/comments.md" 2>/dev/null; then
+		git show "$cm_tip:.review/comments.md" >"$_cmat_allocate/source-baseline.md" || return 1
+	fi
+	for _cmat_doc in local shared; do
+		if [ -n "$_cmat_result" ]; then
+			comments_safe_path "$_cmat_result/$_cmat_doc.md" || return 1
+			_cmat_copy=$_cmat_result/$_cmat_doc.md
+			if [ "$_cmat_doc" = shared ]; then
+				comments_safe_path "$_cmat_result/source-baseline.md" || return 1
+				if comments_same_file "$_cmat_allocate/source-baseline.md" "$_cmat_result/source-baseline.md" ||
+					comments_same_file "$_cmat_allocate/source-baseline.md" "$_cmat_result/shared.md"; then :
+				elif comments_same_file "$_cmat_result/shared.md" "$_cmat_result/source-baseline.md"; then
+					_cmat_copy=$_cmat_allocate/source-baseline.md
+				else
+					printf 'Source and retained Shared changed separately.\n' >"$_cmat_allocate/source-conflict" || return 1
+					if [ -f "$_cmat_allocate/source-baseline.md" ]; then cp "$_cmat_allocate/source-baseline.md" "$_cmat_allocate/source-current.md" || return 1; fi
+					if [ -f "$_cmat_result/source-baseline.md" ]; then cp "$_cmat_result/source-baseline.md" "$_cmat_allocate/source-previous.md" || return 1; fi
+				fi
+			fi
+			if [ -f "$_cmat_copy" ]; then cp "$_cmat_copy" "$_cmat_allocate/$_cmat_doc.md" || return 1; fi
+		elif [ "$_cmat_doc" = shared ] && [ "$cm_seed" -eq 1 ]; then
+			git show "$cm_tip:.review/comments.md" >"$_cmat_allocate/shared.md" || return 1
+		fi
+		if [ -f "$_cmat_allocate/$_cmat_doc.md" ]; then cp "$_cmat_allocate/$_cmat_doc.md" "$_cmat_allocate/baseline/$_cmat_doc.md" || return 1; fi
+	done
+	if ! printf 'session\t%s\ncontext\t%s\nowner_gitdir\t%s\ncustodian\t%s\nkind\t%s\nfull_base\t%s\nlast_tip\t%s\n' \
+		"$cm_session" "$cm_context" "$cm_gitdir" "$cm_branch" "$cm_kind" "$cm_full_base" "$cm_tip" >"$_cmat_allocate/manifest"; then return 1; fi
+	{
+		for _cmat_doc in local shared; do
+			_cmat_presence=absent
+			if [ -f "$_cmat_allocate/baseline/$_cmat_doc.md" ]; then _cmat_presence=present; fi
+			printf '%s\t%s\n' "$_cmat_doc" "$_cmat_presence"
+		done
+	} >"$_cmat_allocate/baseline/manifest" || return 1
+	mv "$_cmat_allocate" "$cm_dir" || return 1
+	git config "branch.$cm_branch.reviewcommentscontext" "$cm_context" || return 1
+	git config "branch.$cm_branch.reviewcommentssession" "$cm_session" || return 1
+	git config "branch.$cm_branch.reviewcommentsowner" "$cm_gitdir" || return 1
+	if [ -n "$_cmat_provisional" ]; then
+		comments_safe_path "$_cmat_provisional/manifest" || return 1
+		rm -f "$_cmat_provisional/manifest"
+		rmdir "$_cmat_provisional" || return 1
+	fi
+	cm_provisional=0
+}
+
+# Path codec transports bytes exactly once; it is not URI decoding or path
+# normalization. The wire format cannot carry literal TAB/CR/LF path bytes.
+comments_encode_path() {
+	# A final sentinel keeps a trailing LF distinguishable from EOF in awk.
+	printf '%sX' "$1" | awk '{lines[NR]=$0} END {
+		for(i=1;i<=NR;i++) {
+			line=lines[i]; if(i==NR) line=substr(line,1,length(line)-1)
+			gsub(/%/,"%25",line);gsub(/\t/,"%09",line);gsub(/\r/,"%0D",line);gsub(/>/,"%3E",line)
+			if(i>1) printf "%%0A"; printf "%s",line
+		}
+	}'
+}
+
+# Compare decimal coordinates as strings: shell integers and awk floats cannot
+# represent every value accepted by a decimal wire field. Leading zeroes are OK.
+comments_positive_le() {
+	awk -v first="$1" -v last="$2" 'BEGIN {
+		sub(/^0+/,"",first); sub(/^0+/,"",last)
+		if(first=="" || last=="") exit 1
+		if(length(first)<length(last)) exit 0
+		if(length(first)>length(last)) exit 1
+		exit !("x" first <= "x" last)
+	}'
+}
+
+# shellcheck disable=SC2154 # Options are assigned by the comments dispatcher.
+comments_capture_location() {
+	if [ "${_cm_phase:-}" = conflict ] && [ -n "$path$base_path$head_path$side$start_line$end_line" ]; then
+		comments_error 'only general comments can be captured during a finish conflict'; return 1
+	fi
+	cm_loc_base=$base cm_loc_head=$head
+	cm_loc_base_path=$base_path cm_loc_head_path=$head_path
+	cm_loc_side=$side cm_loc_start=$start_line cm_loc_end=$end_line
+	cm_loc_unversioned=$unversioned
+	if { [ -n "$base" ] && [ -z "$head" ]; } || { [ -z "$base" ] && [ -n "$head" ]; }; then comments_error '--base and --head must be provided together'; return 1; fi
+	if { [ -n "$start_line" ] && [ -z "$end_line" ]; } || { [ -z "$start_line" ] && [ -n "$end_line" ]; }; then comments_error 'start and end lines must be provided together'; return 1; fi
+	if [ -n "$cm_loc_side" ]; then
+		case "$cm_loc_side" in base|head) ;; *) comments_error 'comment side must be base or head'; return 1 ;; esac
+	fi
+	if [ -n "$start_line" ]; then
+		case "$start_line:$end_line" in *[!0-9:]*|:*|*:) comments_error 'comment lines must be positive integers'; return 1 ;; esac
+		if ! comments_positive_le "$start_line" "$end_line" || [ -z "$cm_loc_side" ]; then comments_error 'comment range must be positive, ordered and have a side'; return 1; fi
+	fi
+	if [ -z "$base" ]; then cm_loc_base=$cm_capture_base cm_loc_head=$cm_capture_head; fi
+	if [ -n "$cm_loc_base" ] && [ -n "$cm_loc_head" ]; then
+		for _ccl_object in "$cm_loc_base" "$cm_loc_head"; do
+			comments_token_valid "$_ccl_object" || { comments_error 'comment references must be full object IDs'; return 1; }
+			_ccl_type=$(git cat-file -t "$_ccl_object" 2>/dev/null || true)
+			case "$_ccl_type" in commit|tree) ;; *) comments_error 'comment reference is not an available commit or tree'; return 1 ;; esac
+		done
+	fi
+	for _ccl_path in "$path" "$base_path" "$head_path"; do
+		[ -n "$_ccl_path" ] || continue
+		case "$_ccl_path/" in /*|*'/../'*|../*|*'/./'*|./*|*'//'*) comments_error 'comment path must be relative to the repository root'; return 1 ;; esac
+		case "$_ccl_path" in *"$(printf '\t')"*|*"$(printf '\r')"*|*'
+'*) comments_error 'comment path cannot be represented in porcelain'; return 1 ;; esac
+	done
+	if [ -n "$path" ]; then
+		if [ -z "$cm_loc_base" ] || [ -z "$cm_loc_head" ]; then comments_error 'code location has no resolved capture range'; return 1; fi
+		# Route Git/text comparisons through the established normalization doors.
+		_ccl_name=$(printf '%s\n' "$path" | walk_normalize)
+		_ccl_rename=$(COMMENTS_LOCATION_PATH="$_ccl_name" changed_paths "$cm_loc_base" "$cm_loc_head" --name-status | COMMENTS_LOCATION_PATH="$_ccl_name" awk -F '\t' '$1 ~ /^R/ && ($2==ENVIRON["COMMENTS_LOCATION_PATH"] || $3==ENVIRON["COMMENTS_LOCATION_PATH"]) {print $2;print $3}')
+		if [ -n "$_ccl_rename" ]; then
+			cm_loc_base_path=$(printf '%s\n' "$_ccl_rename" | sed -n 1p)
+			cm_loc_head_path=$(printf '%s\n' "$_ccl_rename" | sed -n 2p)
+		else
+			if git cat-file -e "$cm_loc_base:$path" 2>/dev/null; then cm_loc_base_path=$path; fi
+			if git cat-file -e "$cm_loc_head:$path" 2>/dev/null; then cm_loc_head_path=$path; fi
+			if [ "$cm_loc_unversioned" -eq 1 ] && [ -z "$cm_loc_head_path" ]; then cm_loc_head_path=$path; fi
+		fi
+		if [ -z "$cm_loc_base_path$cm_loc_head_path" ]; then
+			comments_error 'comment path is absent from the captured range; use --unversioned for a working file'; return 1
+		fi
+	fi
+	# A changed buffer/working file is never attributed to a historical blob.
+	if [ -n "$cm_loc_side" ]; then
+		_ccl_selected=$cm_loc_head_path
+		if [ "$cm_loc_side" = base ]; then _ccl_selected=$cm_loc_base_path; fi
+		[ -n "$_ccl_selected" ] || { comments_error 'comment side requires a path on the selected side'; return 1; }
+	fi
+	if [ -z "$base" ] && [ -n "$cm_loc_head_path" ] && [ "$cm_loc_side" != base ]; then
+		_ccl_root=$(git rev-parse --show-toplevel)
+		_ccl_blob=$(git rev-parse --verify "$cm_loc_head:$cm_loc_head_path" 2>/dev/null || true)
+		_ccl_work=$(git hash-object --no-filters -- "$_ccl_root/$cm_loc_head_path" 2>/dev/null || true)
+		if [ "$_ccl_blob" != "$_ccl_work" ]; then cm_loc_unversioned=1; fi
+	fi
+	if [ -n "$cm_loc_start" ]; then
+		case "$cm_loc_side" in base) _ccl_selected=$cm_loc_base_path; _ccl_ref=$cm_loc_base ;; head) _ccl_selected=$cm_loc_head_path; _ccl_ref=$cm_loc_head ;; esac
+		[ -n "$_ccl_selected" ] || { comments_error 'comment lines require a path on the selected side'; return 1; }
+		if [ "$cm_loc_unversioned" -eq 0 ]; then
+			_ccl_lines=$(git cat-file blob "$_ccl_ref:$_ccl_selected" | awk 'END {print NR}') || return 1
+			comments_positive_le "$cm_loc_end" "$_ccl_lines" || { comments_error 'comment line range exceeds the captured blob'; return 1; }
+		fi
+	fi
+}
+
+comments_append() {
+	_ca_path=$1 _ca_body=$2 _ca_revision=$3 _ca_guard=$4
+	_ca_count=0
+	if [ -f "$_ca_path" ]; then
+		if ! _ca_count=$(walk_normalize <"$_ca_path" | comments_contours append); then
+			comments_error 'close the open code fence or HTML comment before adding a comment'; return 1
+		fi
+	fi
+	_ca_candidate=$(mktemp "$_ca_path.candidate.XXXXXX") || return 1
+	if [ -f "$_ca_path" ]; then cat "$_ca_path" >"$_ca_candidate" || return 1
+	else comments_header >"$_ca_candidate" || return 1
+	fi
+	_ca_title=General
+	if [ -n "$cm_loc_head_path" ]; then _ca_title=$cm_loc_head_path
+	elif [ -n "$cm_loc_base_path" ]; then _ca_title=$cm_loc_base_path
+	fi
+	_ca_separator=1
+	if [ -n "$(tail -c 1 "$_ca_candidate")" ]; then _ca_separator=2; fi
+	{
+		if [ "$_ca_separator" -eq 2 ]; then printf '\n\n'; else printf '\n'; fi
+		printf '## %s. %s\n' "$((_ca_count + 1))" "$_ca_title"
+		if [ -n "$cm_loc_base" ] || [ -n "$cm_loc_head_path" ] || [ -n "$cm_loc_base_path" ]; then
+			printf '\n<!-- git-review-comment v1\n'
+			if [ -n "$cm_loc_base" ] && [ -n "$cm_loc_head" ]; then printf 'base %s\nhead %s\n' "$cm_loc_base" "$cm_loc_head"; fi
+			if [ -n "$cm_loc_base_path" ]; then printf 'base-path %s\n' "$(comments_encode_path "$cm_loc_base_path")"; fi
+			if [ -n "$cm_loc_head_path" ]; then printf 'head-path %s\n' "$(comments_encode_path "$cm_loc_head_path")"; fi
+			if [ -n "$cm_loc_side" ]; then printf 'side %s\n' "$cm_loc_side"; fi
+			if [ -n "$cm_loc_start" ]; then printf 'start %s\nend %s\n' "$cm_loc_start" "$cm_loc_end"; fi
+			if [ "$cm_loc_unversioned" -eq 1 ]; then printf 'unversioned 1\n'; fi
+			printf -- '-->\n'
+		fi
+		printf '\n'
+		cat "$_ca_body"
+		# Preserve stdin bodies including their final LF, add one only if absent.
+		if [ -n "$(tail -c 1 "$_ca_body")" ]; then printf '\n'; fi
+	} >>"$_ca_candidate" || return 1
+	_ca_new_count=$(comments_scan "$_ca_candidate") || return 1
+	[ "$_ca_new_count" -eq "$((_ca_count + 1))" ] || { comments_error 'comment would create ambiguous entry boundaries'; return 1; }
+	comments_replace "$_ca_path" "$_ca_candidate" "$_ca_revision" "$_ca_guard" || return $?
+	rm -f "$_ca_candidate"
+}
+
+comments_decode_path() {
+	COMMENTS_ENCODED_PATH=$1 awk 'BEGIN {
+		s=ENVIRON["COMMENTS_ENCODED_PATH"]
+		for(i=1;i<=length(s);i++) {
+			c=substr(s,i,1)
+			if(c!="%") {printf "%s",c;continue}
+			escape=substr(s,i,3); i+=2
+			if(escape=="%25") printf "%%"
+			else if(escape=="%09") printf "\t"
+			else if(escape=="%0D") printf "\r"
+			else if(escape=="%0A") printf "\n"
+			else if(escape=="%3E") printf ">"
+			else exit 1
+		}
+	}'
+}
+
+comments_diff() {
+	_cd_document=$1 _cd_entry=$2 _cd_porcelain=$3
+	case "$_cd_entry" in ''|*[!0-9]*) comments_error '--entry requires a positive physical ordinal'; return 1 ;; esac
+	comments_positive_le "$_cd_entry" "$_cd_entry" || { comments_error '--entry requires a positive physical ordinal'; return 1; }
+	_cd_path=$cm_dir/$_cd_document.md
+	comments_check_guards "$4" "$5" "$_cd_path" || return $?
+	_cd_rows=$(comments_entries "$_cd_document") || return 1
+	_cd_selected=$(printf '%s\n' "$_cd_rows" | awk -F '\t' -v ordinal="$_cd_entry" '$2==ordinal && $1!="comments-document" {print}')
+	if ! printf '%s\n' "$_cd_selected" | grep -q '^comment-entry'; then comments_error 'comment entry not found'; return 1; fi
+	_cd_version=$(printf '%s\n' "$_cd_selected" | awk -F '\t' '$1=="comment-version" {print $3 " " $4}')
+	if [ -z "$_cd_version" ]; then printf 'error: comment has no reproducible historical range\n' >&2; return 5; fi
+	_cd_base=${_cd_version% *} _cd_head=${_cd_version#* }
+	_cd_base_tree=$(git rev-parse --verify "$_cd_base^{tree}" 2>/dev/null || true)
+	_cd_head_tree=$(git rev-parse --verify "$_cd_head^{tree}" 2>/dev/null || true)
+	if [ -z "$_cd_base_tree" ] || [ -z "$_cd_head_tree" ]; then printf 'error: historical revision or content not found\n' >&2; return 5; fi
+	_cd_base_path='' _cd_head_path='' _cd_base_blob='' _cd_head_blob=''
+	for _cd_side in base head; do
+		_cd_encoded=$(printf '%s\n' "$_cd_selected" | awk -F '\t' -v side="$_cd_side" '$1=="comment-path" && $3==side {print $4}')
+		[ -n "$_cd_encoded" ] || continue
+		_cd_decoded=$(if comments_decode_path "$_cd_encoded"; then printf x; else exit 1; fi) || { comments_error 'comment path encoding is invalid'; return 1; }
+		_cd_decoded=${_cd_decoded%x}
+		case "$_cd_decoded" in *"$(printf '\t')"*|*"$(printf '\r')"*|*'
+'*) comments_error 'comment path cannot be represented in porcelain'; return 1 ;; esac
+		case "$_cd_side" in base) _cd_tree=$_cd_base_tree ;; head) _cd_tree=$_cd_head_tree ;; esac
+		_cd_blob=$(git rev-parse --verify "$_cd_tree:$_cd_decoded" 2>/dev/null || true)
+		if [ -z "$_cd_blob" ] || [ "$(git cat-file -t "$_cd_blob" 2>/dev/null || true)" != blob ]; then printf 'error: historical revision or content not found\n' >&2; return 5; fi
+		case "$_cd_side" in base) _cd_base_path=$_cd_decoded; _cd_base_blob=$_cd_blob ;; head) _cd_head_path=$_cd_decoded; _cd_head_blob=$_cd_blob ;; esac
+	done
+	if printf '%s\n' "$_cd_selected" | grep -q '^comment-unversioned'; then
+		printf 'note: the captured location was unversioned; this range shows only the recorded Git objects\n' >&2
+	fi
+	set --
+	if [ -n "$_cd_base_path" ]; then set -- "$@" ":(top,literal)$_cd_base_path"; fi
+	if [ -n "$_cd_head_path" ] && [ "$_cd_head_path" != "$_cd_base_path" ]; then set -- "$@" ":(top,literal)$_cd_head_path"; fi
+	# A general entry needs the changed blobs too, not merely both root tree
+	# objects. Stage human output so missing content cannot leak a partial diff.
+	if [ "$_cd_porcelain" -eq 0 ]; then
+		if ! _cd_rendered=$(git --no-pager diff --no-ext-diff --no-textconv "$_cd_base_tree" "$_cd_head_tree" -- "$@" 2>/dev/null); then
+			printf 'error: historical revision or content not found\n' >&2; return 5
+		fi
+	elif [ -z "$_cd_base_path$_cd_head_path" ]; then
+		if ! git --no-pager diff --no-ext-diff --no-textconv "$_cd_base_tree" "$_cd_head_tree" -- >/dev/null 2>&1; then
+			printf 'error: historical revision or content not found\n' >&2; return 5
+		fi
+	fi
+	if [ "$_cd_porcelain" -eq 1 ]; then
+		porcelain_row comment-diff "$_cd_entry" "$_cd_base_tree" "$_cd_head_tree"
+		if [ -n "$_cd_base_path$_cd_head_path" ]; then
+			if [ -n "$_cd_base_path" ]; then porcelain_row comment-blob "$(comments_encode_path "$_cd_base_path")" base present "$_cd_base_blob"
+			else porcelain_row comment-blob "$(comments_encode_path "$_cd_head_path")" base absent
+			fi
+			if [ -n "$_cd_head_path" ]; then porcelain_row comment-blob "$(comments_encode_path "$_cd_head_path")" head present "$_cd_head_blob"
+			else porcelain_row comment-blob "$(comments_encode_path "$_cd_base_path")" head absent
+			fi
+		fi
+		printf '%s\n' "$_cd_selected" | awk -F '\t' '$1=="comment-location" {print}'
+	else
+		if [ -n "$_cd_rendered" ]; then printf '%s\n' "$_cd_rendered"; fi
+	fi
+}
+
+# Custody checks do not parse Markdown: broken prose never blocks code
+# navigation. They validate storage and its owner before a code verb can move
+# branches or remove the config that identifies a session.
+comments_check_orphan_claim() {
+	comments_safe_path "$cm_root/sessions" || return 1
+	for _cco_manifest in "$cm_root"/sessions/*/manifest; do
+		[ -e "$_cco_manifest" ] || [ -L "$_cco_manifest" ] || continue
+		_cco_dir=${_cco_manifest%/manifest}
+		_cco_token=${_cco_dir##*/}
+		# Incomplete mktemp candidates are recovery data, never custodians.
+		comments_token_valid "$_cco_token" || continue
+		_cco_owner=$(comments_field "$_cco_manifest" owner_gitdir) || return 1
+		_cco_branch=$(comments_field "$_cco_manifest" custodian) || return 1
+		if [ "$_cco_owner" != "$cm_gitdir" ] || [ "$_cco_branch" != "$1" ]; then continue; fi
+		_cco_context=$(comments_field "$_cco_manifest" context) || return 1
+		if [ -n "$_cco_context" ] || [ -e "$_cco_dir/local.md" ] || [ -L "$_cco_dir/local.md" ] ||
+			[ -e "$_cco_dir/shared.md" ] || [ -L "$_cco_dir/shared.md" ]; then
+			comments_error 'comments session ownership metadata is incomplete'; return 1
+		fi
+	done
+}
+
+comments_preflight_branch() {
+	_cc_branch=$1
+	cm_gitdir=$(git rev-parse --absolute-git-dir) || return 1
+	cm_root=$cm_gitdir/review-comments
+	cc_session=$(git config "branch.$_cc_branch.reviewcommentssession" || true)
+	cc_context=$(git config "branch.$_cc_branch.reviewcommentscontext" || true)
+	cc_owner=$(git config "branch.$_cc_branch.reviewcommentsowner" || true)
+	cc_dir=''
+	if [ -z "$cc_session$cc_context$cc_owner" ]; then comments_check_orphan_claim "$_cc_branch"; return $?; fi
+	if [ "$cc_owner" != "$cm_gitdir" ]; then comments_error 'comments session belongs to another gitdir'; return 1; fi
+	comments_require_token "$cc_session" || return 1
+	if [ -n "$cc_context" ]; then comments_require_token "$cc_context" || return 1; fi
+	if [ -n "$cc_context" ] && [ "$(comments_field "$cm_root/contexts/$cc_context/manifest" owner_gitdir)" != "$cm_gitdir" ]; then
+		comments_error 'comments context belongs to another gitdir'; return 1
+	fi
+	cc_dir=$cm_root/sessions/$cc_session
+	comments_safe_path "$cc_dir/manifest" || return 1
+	if [ "$(comments_field "$cc_dir/manifest" session)" != "$cc_session" ] ||
+		[ "$(comments_field "$cc_dir/manifest" context)" != "$cc_context" ] ||
+		[ "$(comments_field "$cc_dir/manifest" owner_gitdir)" != "$cm_gitdir" ] ||
+		[ "$(comments_field "$cc_dir/manifest" custodian)" != "$_cc_branch" ]; then
+		comments_error 'comments session ownership does not match'; return 1
+	fi
+	comments_safe_path "$cc_dir/local.md" || return 1
+	comments_safe_path "$cc_dir/shared.md" || return 1
+}
+
+comments_lock_branch() {
+	comments_preflight_branch "$1" || return 1
+	[ -n "$cc_session" ] || return 0
+	comments_lock "${cc_context:-$cc_session}" || return 1
+	comments_preflight_branch "$1"
+}
+
+comments_transfer_preflight() {
+	comments_preflight_branch "$1" || return 1
+	[ -n "$cc_session" ] || return 0
+	_ct_target=$2
+	_ct_existing=$(git config "branch.$_ct_target.reviewcommentssession" || true)
+	_ct_owner=$(git config "branch.$_ct_target.reviewcommentsowner" || true)
+	_ct_context=$(git config "branch.$_ct_target.reviewcommentscontext" || true)
+	if [ -n "$_ct_existing$_ct_owner$_ct_context" ] &&
+		{ [ "$_ct_existing" != "$cc_session" ] || [ "$_ct_owner" != "$cc_owner" ] || [ "$_ct_context" != "$cc_context" ]; }; then
+		comments_error 'another comments session owns the destination'; return 1
+	fi
+}
+
+comments_transfer() {
+	comments_transfer_preflight "$1" "$2" || return 1
+	[ -n "$cc_session" ] || return 0
+	_ct_candidate=$(mktemp "$cc_dir/manifest.candidate.XXXXXX") || return 1
+	_ct_original_revision=$(comments_revision "$cc_dir/manifest") || return 1
+	COMMENTS_CUSTODIAN=$_ct_target awk -F '\t' 'BEGIN {OFS="\t"} $1=="custodian" {$0="custodian\t" ENVIRON["COMMENTS_CUSTODIAN"]} {print}' "$cc_dir/manifest" >"$_ct_candidate" || return 1
+	comments_replace "$cc_dir/manifest" "$_ct_candidate" "$_ct_original_revision" || return $?
+	rm -f "$_ct_candidate"
+	if [ -n "$cc_context" ]; then git config "branch.$_ct_target.reviewcommentscontext" "$cc_context" || return 1
+	else git config --unset "branch.$_ct_target.reviewcommentscontext" || true
+	fi
+	git config "branch.$_ct_target.reviewcommentssession" "$cc_session" || return 1
+	git config "branch.$_ct_target.reviewcommentsowner" "$cc_owner"
+}
+
+comments_discard_branch() {
+	comments_preflight_branch "$1" || return 1
+	[ -n "$cc_session" ] || return 0
+	# The only recursively removed path is the validated, owned session token;
+	# retained generations and other sessions are deliberately outside it.
+	comments_safe_path "$cc_dir" || return 1
+	rm -rf "$cc_dir"
+}
+
+comments_save_compare() {
+	comments_state || return 1
+	if [ "$cm_active" -ne 1 ] || [ "$cm_kind" != compare ]; then printf 'error: saving comments requires an active compare\n' >&2; return 2; fi
+	if [ -z "$cm_session" ] || [ "$cm_provisional" -ne 0 ]; then comments_error 'there are no comments to save'; return 1; fi
+	_csc_context=$cm_context
+	comments_check_guards "$1" "$2" "$cm_dir/local.md" || return $?
+	comments_check_guards "$1" "$3" "$cm_dir/shared.md" || return $?
+	comments_lock "$cm_context" || return 1
+	comments_state || return 1
+	comments_check_guards "$1" "$2" "$cm_dir/local.md" || return $?
+	comments_check_guards "$1" "$3" "$cm_dir/shared.md" || return $?
+	comments_publish "$_csc_context" "$cm_dir" "$cm_guard" || return $?
+	# The result's current pointer IS the discard checkpoint. A second pointer
+	# could fail after publication and report failure after advancing the limit.
+	# Abort drops only this session; the complete published pair stays reachable.
+	printf 'Comments saved.\n'
+}
+
+comments_delivery_state() {
+	_cds_dir=$1 _cds_state=$2
+	_cds_revision=$(comments_revision "$_cds_dir/delivery") || return 1
+	_cds_temp=$(mktemp "$_cds_dir/delivery.candidate.XXXXXX") || return 1
+	printf 'state\t%s\nbranch\t%s\nsource_branch\t%s\nroot\t%s\n' \
+		"$_cds_state" "$cm_delivery_branch" "$cm_delivery_source" "$cm_delivery_root" >"$_cds_temp" || return 1
+	comments_replace "$_cds_dir/delivery" "$_cds_temp" "$_cds_revision" || return $?
+	rm -f "$_cds_temp"
+}
+
+comments_delivery_load() {
+	_cdl_dir=$1
+	comments_safe_path "$_cdl_dir/delivery" || return 1
+	[ -f "$_cdl_dir/delivery" ] || { printf 'error: there is no pending Shared delivery for this context\n' >&2; return 2; }
+	cm_delivery_branch=$(comments_field "$_cdl_dir/delivery" branch) || return 1
+	cm_delivery_source=$(comments_field "$_cdl_dir/delivery" source_branch) || return 1
+	cm_delivery_root=$(comments_field "$_cdl_dir/delivery" root) || return 1
+	if [ "$cm_delivery_root" != "$(git rev-parse --show-toplevel)" ] ||
+		{ [ "${2:-0}" -eq 0 ] && [ "$cm_delivery_branch" != "$(git symbolic-ref --quiet --short HEAD || true)" ]; }; then
+		comments_error 'Shared delivery belongs to another branch or destination'; return 1
+	fi
+	if git show-ref --verify --quiet "refs/heads/$cm_delivery_source"; then
+		comments_preflight_branch "$cm_delivery_source" || return 1
+		_cdl_session=$(comments_field "$_cdl_dir/manifest" session) || return 1
+		_cdl_context=$(comments_field "$_cdl_dir/manifest" context) || return 1
+		if [ "$cc_session" != "$_cdl_session" ] || [ "$cc_context" != "$_cdl_context" ]; then
+			comments_error 'Shared delivery source custody changed'; return 1
+		fi
+	fi
+	cm_delivery_path=$cm_delivery_root/.review/comments.md
+	if [ -L "$cm_delivery_root/.review" ] || [ -L "$cm_delivery_path" ] ||
+		{ [ -e "$cm_delivery_root/.review" ] && [ ! -d "$cm_delivery_root/.review" ]; } ||
+		{ [ -e "$cm_delivery_path" ] && [ ! -f "$cm_delivery_path" ]; }; then
+		comments_error 'Shared delivery destination is not a safe regular file'; return 1
+	fi
+}
+
+# Delivery has exactly one allowed destination outside the private store. The
+# fixed root is recorded after code extraction and checked on every retry.
+comments_delivery_apply() {
+	_cda_dir=$1
+	comments_delivery_load "$_cda_dir" || return $?
+	comments_revision "$_cda_dir/shared.md" >/dev/null || return 1
+	comments_revision "$_cda_dir/source-baseline.md" >/dev/null || return 1
+	[ -f "$_cda_dir/shared.md" ] || { comments_error 'prepared Shared comments are absent'; return 1; }
+	if comments_same_file "$_cda_dir/shared.md" "$cm_delivery_path"; then
+		comments_delivery_state "$_cda_dir" delivered || return 1
+		comments_safe_path "$_cda_dir/source-conflict" || return 1
+		rm -f "$_cda_dir/source-conflict" || return 1
+		return 0
+	fi
+	if [ -f "$_cda_dir/source-conflict" ]; then
+		comments_delivery_state "$_cda_dir" pending || return 1
+		comments_error 'source and retained Shared changed separately; compare and resolve both versions before delivery'; return 1
+	fi
+	if ! comments_same_file "$_cda_dir/source-baseline.md" "$cm_delivery_path"; then
+		comments_delivery_state "$_cda_dir" pending || return 1
+		comments_error 'Shared destination changed; prepared comments and destination were preserved'; return 1
+	fi
+	_cda_revision=absent
+	if [ -f "$cm_delivery_path" ]; then _cda_revision=$(git hash-object --no-filters -- "$cm_delivery_path") || return 1; fi
+	mkdir -p "$cm_delivery_root/.review" || return 1
+	_cda_temp=$(mktemp "$cm_delivery_path.candidate.XXXXXX") || return 1
+	if ! cp "$_cda_dir/shared.md" "$_cda_temp"; then comments_error "could not write Shared candidate: $_cda_temp"; return 1; fi
+	comments_delivery_load "$_cda_dir" || return 1
+	_cda_now=absent
+	if [ -f "$cm_delivery_path" ]; then _cda_now=$(git hash-object --no-filters -- "$cm_delivery_path") || return 1; fi
+	if [ "$_cda_revision" != "$_cda_now" ]; then comments_error "Shared destination changed; candidate preserved at $_cda_temp"; return 1; fi
+	if ! mv "$_cda_temp" "$cm_delivery_path"; then comments_error "could not prepare Shared comments; candidate preserved at $_cda_temp"; return 1; fi
+	comments_delivery_state "$_cda_dir" delivered
+}
+
+comments_finish_complete() {
+	_cfc_review=$1 _cfc_output=$2
+	comments_preflight_branch "$_cfc_review" || return 1
+	if [ -z "$cc_session" ] || [ -z "$cc_context" ]; then return 0; fi
+	cm_context=$cc_context cm_dir=$cc_dir
+	_cfc_failed=0 _cfc_publish_failed=0
+	cm_delivery_branch=$_cfc_output cm_delivery_source=$_cfc_review
+	cm_delivery_root=$(git rev-parse --show-toplevel)
+	if [ ! -f "$cc_dir/shared.md" ] || comments_same_file "$cc_dir/shared.md" "$cc_dir/source-baseline.md"; then
+		comments_delivery_state "$cc_dir" unchanged || return 1
+	else
+		comments_delivery_state "$cc_dir" pending || return 1
+		comments_delivery_apply "$cc_dir" || _cfc_failed=1
+	fi
+	comments_publish "$cc_context" "$cc_dir" || _cfc_publish_failed=1
+	if [ "$_cfc_failed" -ne 0 ]; then
+		comments_error 'code was extracted but Shared comments could not be prepared; the comments remain recoverable'; return 1
+	fi
+	if [ "$_cfc_publish_failed" -ne 0 ]; then
+		comments_error 'code was extracted but comments results could not be retained; the preparation remains recoverable'; return 1
+	fi
+}
+
+comments_prepare() {
+	_cprep_context=$1 _cprep_check=$2 _cprep_porcelain=$3
+	comments_select_context "$_cprep_context" || return 1
+	_cprep_dir=$cm_dir
+	comments_delivery_load "$cm_dir" || return $?
+	_cprep_state=$(comments_field "$cm_dir/delivery" state) || return 1
+	case "$_cprep_state" in
+		pending|delivered) ;;
+		*) printf 'error: there is no pending Shared delivery for this context\n' >&2; return 2 ;;
+	esac
+	comments_safe_path "$cm_dir/source-baseline.md" || return 1
+	comments_safe_path "$cm_dir/shared.md" || return 1
+	comments_check_guards "$4" "$5" "$cm_dir/shared.md" || return $?
+	if [ "$_cprep_check" -eq 1 ]; then
+		# Validate every role before emitting a stream a native comparison could
+		# consume. Unsafe/unreadable private data is not an absent baseline.
+		_cprep_baseline=$(comments_revision "$cm_dir/source-baseline.md") || return 1
+		_cprep_prepared=$(comments_revision "$cm_dir/shared.md") || return 1
+		_cprep_destination=absent
+		if [ -f "$cm_delivery_path" ]; then _cprep_destination=$(git hash-object --no-filters -- "$cm_delivery_path") || return 1; fi
+		if [ "$_cprep_porcelain" -eq 1 ]; then porcelain_row comments-delivery "$cm_context" "$_cprep_state" 'Shared comments delivery.'; fi
+		for _cprep_role in baseline prepared destination; do
+			case "$_cprep_role" in
+				baseline) _cprep_path=$cm_dir/source-baseline.md; _cprep_revision=$_cprep_baseline ;;
+				prepared) _cprep_path=$cm_dir/shared.md; _cprep_revision=$_cprep_prepared ;;
+				destination) _cprep_path=$cm_delivery_path; _cprep_revision=$_cprep_destination ;;
+			esac
+			_cprep_presence=present
+			if [ "$_cprep_revision" = absent ]; then _cprep_presence=absent; fi
+			if [ "$_cprep_porcelain" -eq 1 ]; then porcelain_row comments-delivery-file "$_cprep_path" "$_cprep_role" "$_cprep_presence" "$_cprep_revision"
+			else printf '%s: %s (%s)\n' "$_cprep_role" "$_cprep_path" "$_cprep_presence"
+			fi
+		done
+		if [ "$_cprep_porcelain" -eq 0 ]; then
+			_cprep_left=$cm_dir/shared.md _cprep_right=$cm_delivery_path
+			if [ ! -f "$_cprep_left" ]; then _cprep_left=/dev/null; fi
+			if [ ! -f "$_cprep_right" ]; then _cprep_right=/dev/null; fi
+			_cprep_diff_status=0
+			git --no-pager diff --no-index --no-ext-diff --no-textconv -- "$_cprep_left" "$_cprep_right" || _cprep_diff_status=$?
+			if [ "$_cprep_diff_status" -gt 1 ]; then return 1; fi
+		fi
+		return 0
+	fi
+	comments_lock "$cm_context" || return 1
+	comments_select_context "$_cprep_context" || return 1
+	comments_check_guards "$4" "$5" "$cm_dir/shared.md" || return $?
+	_cprep_dir=$cm_dir
+	comments_delivery_apply "$cm_dir" || return $?
+	case "$_cprep_dir" in
+		"$cm_root/sessions/"*) comments_publish "$_cprep_context" "$_cprep_dir" || return $? ;;
+	esac
+	# Update only the delivered path in the original exit snapshot. Reading the
+	# whole worktree here would absorb code edited after the partial finish.
+	_cprep_oldtree=$(git config "branch.$cm_delivery_source.reviewundoouttree" || true)
+	if [ -n "$_cprep_oldtree" ]; then
+		_cprep_index=$(mktemp "$cm_gitdir/comments-undo-index.XXXXXX") || return 1
+		rm -f "$_cprep_index"
+		_cprep_blob=$(git hash-object -w --no-filters -- "$cm_delivery_path") || return 1
+		GIT_INDEX_FILE=$_cprep_index git read-tree "$_cprep_oldtree" || return 1
+		GIT_INDEX_FILE=$_cprep_index git update-index --add --cacheinfo "100644,$_cprep_blob,.review/comments.md" || return 1
+		_cprep_newtree=$(GIT_INDEX_FILE=$_cprep_index git write-tree) || return 1
+		rm -f "$_cprep_index"
+		git config "branch.$cm_delivery_source.reviewundoouttree" "$_cprep_newtree" || return 1
+	fi
+	printf 'Shared comments prepared.\n'
+}
+
+comments_finish_undo() {
+	comments_preflight_branch "$1" || return 1
+	if [ -z "$cc_session" ] || [ -z "$cc_context" ]; then return 0; fi
+	_cfu_result=$(comments_result_dir "$cc_context") || return 1
+	_cfu_delivered_revision=$(comments_revision "$cc_dir/shared.md") || return 1
+	if [ -n "$_cfu_result" ] && [ "$(comments_field "$_cfu_result/manifest" session)" = "$cc_session" ]; then
+		# Preflight both documents before changing either. A stale editor may
+		# still own the original session path after the retained result opens.
+		for _cfu_doc in local shared; do
+			_cfu_revision=$(comments_revision "$_cfu_result/$_cfu_doc.md") || return 1
+			_cfu_destination=$(comments_revision "$cc_dir/$_cfu_doc.md") || return 1
+			_cfu_boundary=$(comments_field "$_cfu_result/manifest" "${_cfu_doc}_revision") || return 1
+			if [ -z "$_cfu_boundary" ] && [ "$_cfu_revision" != "$_cfu_destination" ]; then
+				comments_error 'comments finish baseline is missing; preserve both versions before undoing it'; return 1
+			fi
+			if [ -n "$_cfu_boundary" ] && [ "$_cfu_destination" != "$_cfu_boundary" ] && [ "$_cfu_destination" != "$_cfu_revision" ]; then
+				comments_error 'comments preparation changed after finish; preserve both versions before undoing it'; return 1
+			fi
+			if [ "$_cfu_doc" = local ]; then _cfu_local_revision=$_cfu_revision; _cfu_local_destination=$_cfu_destination
+			else _cfu_shared_revision=$_cfu_revision; _cfu_shared_destination=$_cfu_destination
+			fi
+		done
+		for _cfu_doc in local shared; do
+			if [ "$_cfu_doc" = local ]; then _cfu_revision=$_cfu_local_revision; _cfu_destination=$_cfu_local_destination
+			else _cfu_revision=$_cfu_shared_revision; _cfu_destination=$_cfu_shared_destination
+			fi
+			if [ "$_cfu_revision" != absent ]; then
+				_cfu_tmp=$(mktemp "$cc_dir/$_cfu_doc.md.candidate.XXXXXX") || return 1
+				cp "$_cfu_result/$_cfu_doc.md" "$_cfu_tmp" || return 1
+			fi
+			_cfu_current=$(comments_revision "$_cfu_result/$_cfu_doc.md") || return 1
+			if [ "$_cfu_current" != "$_cfu_revision" ]; then printf 'error: comments document is stale\n' >&2; return 4; fi
+			if [ "$_cfu_revision" = absent ]; then
+				comments_remove_document "$cc_dir/$_cfu_doc.md" "$_cfu_destination" || return $?
+			else
+				comments_replace "$cc_dir/$_cfu_doc.md" "$_cfu_tmp" "$_cfu_destination" || return $?
+				rm -f "$_cfu_tmp"
+			fi
+		done
+		comments_safe_path "$_cfu_result/source-conflict" || return 1
+		if [ ! -e "$_cfu_result/source-conflict" ]; then
+			comments_safe_path "$cc_dir/source-conflict" || return 1
+			rm -f "$cc_dir/source-conflict" || return 1
+		fi
+	fi
+	if [ -f "$cc_dir/delivery" ] && [ "$(comments_field "$cc_dir/delivery" state)" = delivered ] && [ ! -f "$cc_dir/source-baseline.md" ]; then
+		comments_delivery_load "$cc_dir" 1 || return 1
+		# The caller already applied finish's divergence/--force guard.
+		# When undo was requested elsewhere, remove only our carried, unchanged
+		# untracked delivery. A tracked file belongs to that other branch.
+		if [ "$(git symbolic-ref --quiet --short HEAD || true)" = "$cm_delivery_branch" ]; then
+			rm -f "$cm_delivery_path" || return 1
+		elif ! git -C "$cm_delivery_root" ls-files --error-unmatch -- .review/comments.md >/dev/null 2>&1; then
+			if [ -f "$cm_delivery_path" ]; then
+				_cfu_carried_revision=$(git hash-object --no-filters -- "$cm_delivery_path") || return 1
+				if [ "$_cfu_carried_revision" != "$_cfu_delivered_revision" ]; then
+					comments_error 'Shared prose changed on another branch; preserve it before undoing the finish'; return 1
+				fi
+			fi
+			rm -f "$cm_delivery_path" || return 1
+		fi
+	fi
+	# Code undo returns to a preparation, including when delivery was pending.
+	# Its previous output branch is no longer a delivery destination.
+	comments_revision "$cc_dir/delivery" >/dev/null || return 1
+	rm -f "$cc_dir/delivery"
+}
+
+comments_remove_custody() (
+	_crc_branch=$1 _crc_completed=$2
+	comments_lock_branch "$_crc_branch" || exit 1
+	trap 'comments_unlock' 0
+	trap 'exit 1' 1 2 15
+	[ -n "$cc_session" ] || exit 0
+	if [ "$_crc_completed" -eq 1 ] && [ -n "$cc_context" ]; then
+		_crc_result=$(comments_result_dir "$cc_context") || exit 1
+		# The editable retained generation may be newer than the session kept
+		# for undo. Never replace those edits with the stale session copy.
+		_crc_session=''
+		if [ -n "$_crc_result" ]; then _crc_session=$(comments_field "$_crc_result/manifest" session) || exit 1; fi
+		if [ -z "$_crc_result" ] || [ "$_crc_session" != "$cc_session" ]; then comments_publish "$cc_context" "$cc_dir" || exit 1; fi
+	fi
+	comments_discard_branch "$_crc_branch"
+)
+
 # ── Advice: lo que quien tiene el porcelain no necesita ──────────────────────
 
 # advice_enabled
@@ -462,7 +1960,7 @@ fold_lower() {
 # vanishingly rare elsewhere, and unquoting them here would mean re-implementing
 # git's C escaping in awk.
 changed_paths() {
-	git -c core.quotePath=false diff --name-only "$1" "$2"
+	git -c core.quotePath=false diff "${3:---name-only}" "$1" "$2"
 }
 
 # range_files <tip> <lower>

@@ -131,6 +131,14 @@ En un panel o en la interfaz de terminal, configurá una vez la rama base y eleg
 Editá y corré el cambio staged con tus herramientas habituales; después elegí
 **Finish** para extraer tus correcciones a una rama aparte.
 
+Desde la CLI, `git review comments add --document local` abre tu editor Git para
+una observación privada; elegí `--document shared` para prosa destinada al PR.
+Ambos documentos siguen siendo Markdown editable fuera del working tree durante
+la revisión. `finish` deja el Shared modificado como `.review/comments.md` en
+la rama de salida. Ver [comentarios de revisión](CLI.es.md#comentarios-de-revisión)
+para renumerar, consultar diffs históricos y conservar comentarios de comparación
+localmente.
+
 ## Instalación
 
 Los clientes visuales comparten una pequeña base de línea de comandos. El

@@ -134,6 +134,13 @@ does not need Node? See [Installation](#installation). If you prefer scripting
 or working directly from a shell, the [CLI reference](CLI.md) documents that
 separate interface.
 
+From the CLI, `git review comments add --document local` opens your Git editor
+for a private observation; choose `--document shared` for prose intended for
+the PR. Both documents remain editable Markdown outside the working tree while
+reviewing. `finish` leaves changed Shared comments as `.review/comments.md` on
+the output branch. See [review comments](CLI.md#review-comments) for renumbering,
+historical diffs and keeping comparison comments locally.
+
 ## Installation
 
 The visual clients share a small command-line foundation. The

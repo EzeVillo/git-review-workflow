@@ -69,6 +69,8 @@ jobs:
       # Keep in sync with tests/Dockerfile, which runs the same suite locally.
       - name: Install bats
         run: npm install -g bats@1.13.0
+      - name: Comments status contract
+        run: bats tests/comments-status.bats
       - name: Run tests
         run: bats tests/
 

@@ -69,7 +69,13 @@ fi
 	exit 1
 }
 
+# shellcheck source=../git-review-lib.sh
+. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
+comments_lock_branch "$cur" || exit 1
+trap 'comments_unlock' 0
+trap 'exit 1' 1 2 15
 git switch -q --discard-changes "$target"
+comments_discard_branch "$cur" || exit 1
 git branch -D "$cur" >/dev/null
 
 # Cancelled, not completed: restore the tip of your last actual review (or clear

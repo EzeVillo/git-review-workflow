@@ -12,6 +12,28 @@ and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 This file starts at 0.2.1. Earlier versions are only in the
 [GitHub Releases](https://github.com/EzeVillo/git-review-workflow/releases).
 
+## [0.10.0] — 2026-10-18
+
+### Added
+
+- **Portable review comments.** `git review comments` captures observations in
+  independent Local and Shared Markdown documents. Choose the document for each
+  capture; use text, stdin or your Git editor, with an optional file, side and
+  line range. Local stays in Git's private storage. A changed Shared document is
+  prepared as `.review/comments.md` after finish, without staging, committing or
+  pushing it. Whole, walk and step reviews preserve both documents through
+  navigation, pause, continuation and finish undo.
+- **Editing, saved results and historical code.** `status`, `init`, `add`,
+  `renumber`, `entries`, `diff`, `save` and `prepare` provide guarded porcelain
+  interfaces as well as terminal output. Renumber changes only entry digits and
+  preserves Markdown bytes. Compare can checkpoint both documents without
+  extracting code. Historical diffs use the captured objects and literal paths;
+  missing objects produce a diagnostic without fetching or substituting HEAD.
+- **Recoverable Shared delivery.** Concurrent destination changes and I/O errors
+  retain the prepared document and report a partial result after code extraction.
+  Inspect baseline, prepared and destination with `prepare --check`, resolve
+  the prose and retry without repeating the code extraction.
+
 ## [0.9.0] — 2026-09-01
 
 ### Added

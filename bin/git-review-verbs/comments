@@ -1,0 +1,203 @@
+#!/usr/bin/env sh
+set -eu
+
+prog="git review comments"
+usage() {
+	cat <<EOF
+usage: $prog <command> [options]
+
+Commands:
+  status [--porcelain] [--context <id>]   inspect comments without writing
+  init --document <local|shared>          create the chosen document
+  add --document <local|shared>           compose a comment
+  renumber --document <local|shared>      number entries in physical order
+  entries --document <local|shared> --porcelain
+  diff --document <local|shared> --entry <ordinal>
+  save                                  preserve compare comments locally
+  prepare --context <id> [--check]        prepare a pending shared result
+
+Run '$prog <command> -h' for command options.
+
+Document/context: --document local|shared, --context <id>,
+                 --new-context or --use-context <id> (init/add)
+Composition:     --text <text> or --stdin; otherwise use Git's editor
+Location (add):  --path <path>, --side base|head, --start-line <n> --end-line <n>,
+                 --base <OID> --head <OID>, --base-path <path>, --head-path <path>,
+                 --unversioned
+Guards:          --expect-context <token>, --expect-document <revision>
+Save guards:     --expect-context <token>, --expect-local <revision>,
+                 --expect-shared <revision>
+Queries:         --porcelain (status/entries/diff), --entry <ordinal> (diff),
+                 --check [--porcelain] (prepare)
+
+Each subcommand accepts only its applicable options. Empty text cancels.
+Exit: 0 completed/cancelled; 1 usage/I/O/conflict; 2 incompatible session;
+      4 stale context/document; 5 historical revision or content missing.
+EOF
+}
+
+case "${1:-}" in
+	''|-h|--help) usage; exit 0 ;;
+	status|init|add|renumber|entries|diff|save|prepare) command=$1; shift ;;
+	*) printf 'error: unknown comments command: %s\n' "$1" >&2; exit 1 ;;
+esac
+# shellcheck source=../git-review-lib.sh
+. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
+
+# Historical queries in a partial clone must report missing content locally,
+# rather than causing cat-file/show/diff to fetch promised objects implicitly.
+GIT_NO_LAZY_FETCH=1
+export GIT_NO_LAZY_FETCH
+
+porcelain=0 stdin=0 new_context=0 unversioned=0 check=0
+context='' document='' use_context='' text='' path='' side='' start_line='' end_line=''
+base='' head='' base_path='' head_path='' entry=''
+expect_context='' expect_document='' expect_local='' expect_shared=''
+seen=''
+case "$command" in
+	status) allowed=' --porcelain --context ' ;;
+	init) allowed=' --document --context --new-context --use-context --expect-context --expect-document ' ;;
+	add) allowed=' --document --context --new-context --use-context --path --side --start-line --end-line --base --head --base-path --head-path --unversioned --text --stdin --expect-context --expect-document ' ;;
+	renumber) allowed=' --document --context --expect-context --expect-document ' ;;
+	entries) allowed=' --document --context --porcelain ' ;;
+	diff) allowed=' --document --context --entry --porcelain --expect-context --expect-document ' ;;
+	save) allowed=' --expect-context --expect-local --expect-shared ' ;;
+	prepare) allowed=' --context --check --porcelain --expect-context --expect-document ' ;;
+esac
+while [ "$#" -gt 0 ]; do
+	case "$1" in -h|--help) usage; exit 0 ;; --) shift; break ;; esac
+	option=$1
+	case "$allowed" in *" $option "*) ;; *) comments_error "unexpected comments argument: $option"; exit 1 ;; esac
+	case " $seen " in *" $option "*) comments_error "repeated $option"; exit 1 ;; esac
+	seen="$seen $option"
+	case "$option" in
+		--porcelain|--stdin|--new-context|--unversioned|--check) ;;
+		*)
+			shift
+			[ "$#" -gt 0 ] || { comments_error "$option requires a value"; exit 1; }
+			if [ "$option" != --text ] && [ -z "$1" ]; then comments_error "$option requires a nonempty value"; exit 1; fi
+			;;
+	esac
+	case "$option" in
+		--porcelain) porcelain=1 ;; --stdin) stdin=1 ;; --new-context) new_context=1 ;;
+		--unversioned) unversioned=1 ;; --check) check=1 ;;
+		--context) context=$1; comments_require_token "$context" || exit 1 ;;
+		--use-context) use_context=$1; comments_require_token "$use_context" || exit 1 ;;
+		--document) document=$1 ;; --text) text=$1 ;; --path) path=$1 ;; --side) side=$1 ;;
+		--start-line) start_line=$1 ;; --end-line) end_line=$1 ;;
+		--base) base=$1 ;; --head) head=$1 ;; --base-path) base_path=$1 ;; --head-path) head_path=$1 ;;
+		--entry) entry=$1 ;;
+		--expect-context) expect_context=$1 ;; --expect-document) expect_document=$1 ;;
+		--expect-local) expect_local=$1 ;; --expect-shared) expect_shared=$1 ;;
+	esac
+	shift
+done
+[ "$#" -eq 0 ] || { printf 'error: unexpected comments argument: %s\n' "$1" >&2; exit 1; }
+if [ -n "$context" ] && { [ "$new_context" -eq 1 ] || [ -n "$use_context" ]; }; then comments_error 'context options are mutually exclusive'; exit 1; fi
+if [ "$new_context" -eq 1 ] && [ -n "$use_context" ]; then comments_error 'context options are mutually exclusive'; exit 1; fi
+case "$command" in
+	init|add|renumber|entries|diff)
+		case "$document" in local|shared) ;; *) comments_error '--document requires local or shared'; exit 1 ;; esac
+		;;
+esac
+if [ "$stdin" -eq 1 ]; then
+	case " $seen " in *' --text '*) comments_error '--text and --stdin are mutually exclusive'; exit 1 ;; esac
+fi
+if [ "$command" = entries ] && [ "$porcelain" -ne 1 ]; then comments_error 'entries requires --porcelain'; exit 1; fi
+if [ "$command" = prepare ] && { [ -z "$context" ] || { [ "$porcelain" -eq 1 ] && [ "$check" -ne 1 ]; }; }; then comments_error 'prepare requires --context; --porcelain requires --check'; exit 1; fi
+input_file=''
+trap 'comments_unlock; if [ -n "$input_file" ]; then rm -f "$input_file"; fi' 0
+trap 'exit 1' 1 2 15
+case "$command" in
+	status)
+		comments_status "$context" "$porcelain"
+		;;
+	init|add)
+		comments_state || exit 1
+		[ "$cm_active" -eq 1 ] || { printf 'error: comments capture requires an active review or compare\n' >&2; exit 2; }
+		if [ "$command" = add ]; then
+			input_file=$(mktemp "${TMPDIR:-/tmp}/git-review-comment.XXXXXX")
+			case " $seen " in
+				*' --text '*) printf '%s' "$text" >"$input_file" ;;
+				*)
+					if [ "$stdin" -eq 1 ]; then cat >"$input_file"
+					else
+						editor=$(git var GIT_EDITOR) || exit 1
+						# Only Git's configured editor is interpreted as a command.
+						# The filename is a positional argument; comment text is data.
+						if ! sh -c "$editor \"\$@\"" sh "$input_file"; then
+							comments_error 'comment could not be composed with the configured editor'; exit 1
+						fi
+					fi
+					;;
+			esac
+			if ! LC_ALL=C grep -q '[^[:space:]]' "$input_file"; then exit 0; fi
+			if ! walk_normalize <"$input_file" | comments_contours input >/dev/null; then
+				comments_error 'fence or quote reserved headings and close code or HTML containers in the comment text'; exit 1
+			fi
+		fi
+		if [ -n "$expect_document" ]; then
+			if [ -n "$cm_dir" ]; then comments_check_guards '' "$expect_document" "$cm_dir/$document.md" || exit $?
+			elif [ "$expect_document" != absent ]; then printf 'error: comments document is stale\n' >&2; exit 4
+			fi
+		fi
+		initial_guard=$cm_guard
+		initial_preparation=0
+		if [ -n "$cm_session" ] && [ "$cm_provisional" -eq 0 ]; then initial_preparation=1; fi
+		lock_context=${use_context:-${context:-${cm_context:-$cm_guard}}}
+		comments_lock "$lock_context" || exit 1
+		comments_state || exit 1
+		# Always recheck the state observed before locking, including a first
+		# composition whose context did not exist when its form was opened.
+		comments_check_guards "$initial_guard" '' '' || exit $?
+		comments_check_guards "$expect_context" '' '' || exit $?
+		initial_capture_guard=$cm_capture_guard
+		if [ "$command" = add ]; then comments_capture_location || exit 1; fi
+		comments_materialize "$context" "$new_context" "$use_context" || exit 1
+		target=$cm_dir/$document.md
+		revision=$(comments_revision "$target") || exit 1
+		materialized_session=$cm_session
+		if [ "$cm_lock" != "$cm_root/locks/$cm_context.lock" ]; then
+			comments_unlock
+			comments_lock "$cm_context" || exit 1
+		fi
+		comments_state || exit 1
+		if [ "$cm_session" != "$materialized_session" ] || [ "$cm_capture_guard" != "$initial_capture_guard" ]; then
+			printf 'error: comments context is stale\n' >&2; exit 4
+		fi
+		comments_check_guards '' "$revision" "$target" || exit $?
+		if [ "$initial_preparation" -eq 1 ]; then comments_check_guards '' "$expect_document" "$target" || exit $?; fi
+		if [ "$command" = init ]; then
+			if [ "$revision" = absent ]; then
+				input_file=$(mktemp "${TMPDIR:-/tmp}/git-review-comment.XXXXXX")
+				comments_header >"$input_file"
+				comments_replace "$target" "$input_file" absent "$cm_guard" || exit $?
+			fi
+		else comments_append "$target" "$input_file" "$revision" "$cm_guard" || exit $?
+		fi
+		printf '%s\n' "$target"
+		;;
+	entries)
+		comments_select_context "$context" || exit 1
+		comments_entries "$document"
+		;;
+	diff)
+		comments_select_context "$context" || exit 1
+		comments_diff "$document" "$entry" "$porcelain" "$expect_context" "$expect_document"
+		;;
+	renumber)
+		comments_select_context "$context" || exit 1
+		initial_context=$cm_context
+		comments_check_guards "$expect_context" "$expect_document" "$cm_dir/$document.md" || exit $?
+		[ -f "$cm_dir/$document.md" ] || { comments_error 'comments document is absent'; exit 1; }
+		comments_lock "$cm_context" || exit 1
+		comments_select_context "$initial_context" || exit 1
+		comments_renumber "$document" "$expect_context" "$expect_document"
+		;;
+	save)
+		comments_save_compare "$expect_context" "$expect_local" "$expect_shared"
+		;;
+	prepare)
+		comments_prepare "$context" "$check" "$porcelain" "$expect_context" "$expect_document"
+		;;
+esac

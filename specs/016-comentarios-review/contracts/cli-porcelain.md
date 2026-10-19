@@ -1,7 +1,8 @@
 # Contrato: `git review comments` y registros v1
 
-Diseño pendiente de implementación. Amplía las listas cerradas de invocación
-de los cuatro clientes; no cambia los campos existentes de `status/config/list`.
+Contrato v1 implementado en la CLI candidata; la integración de los cuatro
+clientes sigue pendiente. Amplía sus listas cerradas de invocación y no cambia
+los campos existentes de `status/config/list`.
 
 ## Argv
 

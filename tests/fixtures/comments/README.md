@@ -1,8 +1,9 @@
 # Fixtures de comentarios
 
 Los `.md` de este directorio son datos, no documentación a normalizar. La regla
-`-text` de `.gitattributes` conserva sus bytes también en Windows. No regenerar
-los esperados con el parser o renumerador del producto.
+`-text` de `.gitattributes` conserva sus bytes también en Windows; `-whitespace`
+permite los espacios, CRLF y EOF deliberados de los oráculos. No regenerar los
+esperados con el parser o renumerador del producto.
 
 | Fuente | Esperado | Propósito |
 |--------|----------|-----------|

@@ -203,6 +203,63 @@ Las tareas CLI ejecutadas se marcan completas en `tasks.md`; T040 y T096
 mantienen pendiente su requisito de CI real. T099 todavía requiere un release
 publicado: no hay pisos nuevos ni integración de clientes anticipada.
 
+### 2026-10-18 — Candidato CLI y empaquetado
+
+Se preparó `codex/comments-cli` en un worktree administrado separado, conservando
+`main` y sus cambios. `bump-version.sh 0.10.0` se ejecutó en contenedor y agregó
+el heading correspondiente al changelog; el SHA de Homebrew queda para el flujo
+de release. [PR borrador #12](https://github.com/EzeVillo/git-review-workflow/pull/12).
+No se creó un tag, release ni publicación npm.
+
+`npm pack --ignore-scripts --json` desde un clon Linux del candidato produjo
+`git-review-workflow-0.10.0.tgz`, 29 archivos, con el verbo privado `comments`
+en modo 0755. Instalación local con `npm install --ignore-scripts --no-audit
+--no-fund`: exit 0. Las ayudas y un smoke operativo de los ocho subcomandos
+pasaron desde ese paquete instalado: captura UTF-8 multilínea, renumeración,
+receta histórica, checkpoint de compare y entrega pendiente resuelta con
+prepare. El reintento mantiene las entradas originales del índice; no stagea
+la resolución de Shared.
+
+CI macOS detectó un error de sintaxis de Bash 3.2 al sourcear la biblioteca.
+Se reprodujo con `bash:3.2 bash -n bin/git-review-lib.sh` (exit 1 en el `case`
+de comments_status), se balancearon los patrones dentro de la sustitución y
+el mismo comando pasó (exit 0). La regresión status/context/legacy/results
+descubrió 31 tests y terminó con exit 0. El commit de corrección es
+`671ade0ffc800055c7745371079233ab8b749c86`; la nueva matriz CI está en curso.
+Las ejecuciones CI del commit anterior fueron canceladas por estar superadas.
+
+La suite completa sobre `f91b8d98bb28dcda215bb36375c750608e7ac9e4`, clonada
+dentro del contenedor, descubrió **1.340 tests y terminó con exit 0**. Se
+conservan los skips de capacidad explícitos de la suite; npm se comprobó por
+el smoke separado anterior. Shellcheck sobre toda la lista vigente de CI,
+incluido el bump de TUI, terminó con exit 0 después de la corrección de Bash.
+La lista binaria de fixtures conserva `-text` y desactiva sólo en ese directorio
+el control de whitespace deliberado (CRLF, espacios y EOF de los oráculos).
+`git diff --check` del candidato pasó sin normalizar esos datos.
+
+Auditoría adicional en copia desechable: añadir LF al EOF falló por EOF en
+`cmp`; cerrar una fence con delimitador insuficiente falló en byte 35/línea 4;
+emitir count cero falló en la igualdad exacta del stream de status; alterar
+un cuerpo falló en byte 33/línea 5; ordenar bloques por su número visible
+falló en byte 30/línea 3 del esperado de cien entradas. Los cuatro casos
+restaurados (dos mutantes usan el mismo caso de cien entradas) pasaron, exit 0.
+
+Ubuntu CI todavía falla en lecturas de status; no se atribuye verde de CI al
+resultado del contenedor. El arnés ahora informa stdout/stderr al fallar esa
+lectura para aislar la diferencia. Los mismos 15 casos de status/add pasaron
+con dash y One True AWK y luego con dash y mawk 1.3.4.
+
+T097 se comenzó fuera de la rama candidata de CLI: los tests de versión de
+VS Code, Visual Studio y TUI compilaron y fallaron por su assert de aceptar
+0.9.x como compatible. Es el rojo esperado antes de elevar los pisos, no
+una suite de clientes aprobada. El intento de JetBrains falló por una caché
+inmutable de Gradle alterada antes de ejecutar el test; se reintenta en una
+caché propia, sin borrar la anterior. El reintento compiló y ejecutó
+`VersionTest.commentsRequiresUpdatingAnOlderCli`: 1 test, 1 fallo en
+`VersionTest.kt:12`, el assert previsto. Quedan acreditados los cuatro rojos
+de clasificación de versión. Falta integrar su gate antes de invocar comments
+y verificar el piso publicado/canónico; T097 permanece pendiente.
+
 ### Matriz de ejecución
 
 | Alcance | Evidencia requerida | Estado |

@@ -373,8 +373,8 @@ git review compare v1.0 v2.0 --step   # ...y recorrerlo commit por commit
   así que `git review finish` sobre un compare se niega explícitamente ("esta
   review es de solo lectura, no hay a dónde escribir"). Usá `git review abort`
   para terminarlo.
-- `--step` lo recorre de a un commit, igual que `git review start --step`, con
-  `git review next` / `git review prev`.
+- `--step` lee los commits alcanzables desde `<b>` pero no desde `<a>`, siguiendo el primer padre y omitiendo los merges y sus ramas laterales. Cada paso compara un commit con su padre. Si las revisiones divergieron, esto puede diferir del diff completo entre sus contenidos. Navegá con `git review next` / `git review prev`.
+- Whole diff y walkthrough comparan los contenidos exactos de `<a>` y `<b>`, sin sustituirlos por su merge-base. Compare no hace fetch ni usa `reviewworkflow.base`; una revisión remota refleja el último fetch.
 - Si el árbol de `<b>` trae un walkthrough, `compare` también entra en modo walk,
   igual que `git review start`, y sigue siendo de solo lectura. `--no-walk` opta
   por salir.

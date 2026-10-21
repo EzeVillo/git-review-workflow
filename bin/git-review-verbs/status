@@ -105,9 +105,15 @@ fi
 
 # These are the original comparison endpoints, independent of the cursor and
 # of refs moving after start. Older sessions may not carry this additive data.
-cmpbase="$(git config "branch.$cur.reviewcomparebase" || true)"
-cmpfrom="$(git config "branch.$cur.reviewbase" || true)"
-cmpto="$(git config "branch.$cur.reviewcomparetarget" || true)"
+is_readonly="$(git config "branch.$cur.reviewreadonly" || true)"
+cmpbase=""
+cmpfrom=""
+cmpto=""
+if [ "$is_readonly" = "1" ]; then
+	cmpbase="$(git config "branch.$cur.reviewcomparebase" || true)"
+	cmpfrom="$(git config "branch.$cur.reviewbase" || true)"
+	cmpto="$(git config "branch.$cur.reviewcomparetarget" || true)"
+fi
 
 if [ "$porcelain" -eq 1 ]; then
 	tab="$(printf '\t')"
@@ -243,7 +249,7 @@ if [ "$porcelain" -eq 1 ]; then
 	fi
 	# compare (git review compare): reviewreadonly=1 means finish will refuse.
 	# Separate record, omitted when not set — additive, same pattern as base/finish.
-	if [ "$(git config "branch.$cur.reviewreadonly" || true)" = "1" ]; then
+	if [ "$is_readonly" = "1" ]; then
 		porcelain_row readonly
 		if [ -n "$cmpbase" ] && [ -n "$cmpfrom" ] && [ -n "$cmpto" ]; then
 			porcelain_row comparison "$cmpbase" "$tip"
@@ -276,8 +282,6 @@ fi
 
 printf 'review of %s (tip %s)\n' "$src" "$(git rev-parse --short "$tip")"
 printf '  branch  %s\n' "$cur"
-# Not named "readonly": that is a shell special builtin and would break assignment.
-is_readonly="$(git config "branch.$cur.reviewreadonly" || true)"
 if [ "$is_readonly" = "1" ]; then
 	if [ -n "$cmpbase" ] && [ -n "$cmpfrom" ] && [ -n "$cmpto" ]; then
 		printf '  from    %s (%s)\n  to      %s (%s)\n' "$cmpfrom" "$cmpbase" "$cmpto" "$tip"

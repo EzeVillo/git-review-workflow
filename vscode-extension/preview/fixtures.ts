@@ -48,6 +48,8 @@ function review(rows: string[][], inputs: PanelInputs = {busy: false}): PanelMod
     if (parsed.authors) {
         state.authors = parsed.authors;
     }
+    if (parsed.comparison) state.comparison = parsed.comparison;
+    if (parsed.readonly) state.readonly = true;
     if (parsed.base !== undefined) {
         state.base = parsed.base;
     }
@@ -153,6 +155,8 @@ function finishConflict(rows: string[][]): PanelModel {
     if (parsed.authors) {
         state.authors = parsed.authors;
     }
+    if (parsed.comparison) state.comparison = parsed.comparison;
+    if (parsed.readonly) state.readonly = true;
     if (parsed.base !== undefined) {
         state.base = parsed.base;
     }
@@ -255,6 +259,20 @@ function commentsReview(target: string, documents = false): PanelModel {
 }
 
 export const PREVIEW_PANES: PreviewPane[] = [
+    ...(["whole", "walk", "step"] as const).map((mode) => ({
+        name: "compare-" + mode,
+        caption: "Compare — los dos extremos fijados, también al navegar",
+        model: review([
+            ["state", "review/origin/feature/checkout", "origin/feature/checkout", "b".repeat(40), mode, mode === "walk" ? "applied" : "none", "1", "1", "1", mode === "step" ? "bbbbbbb" : "src/checkout.ts", "0"],
+            ["entry", "1", mode === "step" ? "bbbbbbb" : "src/checkout.ts", "0", "1"],
+            ["comparison", "a".repeat(40), "b".repeat(40)],
+            ["comparison-base", "refs/heads/develop"],
+            ["comparison-target", "refs/remotes/origin/feature/checkout"],
+            ["readonly"],
+            ...(mode === "step" ? [["file", "1", "src/checkout.ts"], ["subject", "1", "Apply checkout discount"]] : []),
+        ], {busy: false, why: mode === "walk" ? {state: "present", text: "Apply the discount before rounding the final price."} : undefined}),
+    })),
+    {name: "no-review-setup", caption: "Sin base configurada — Compare sigue disponible", model: drafts([["config", "remote", "origin"]])},
     {name: "comments-file", caption: "Comentarios — archivo abierto, sin documentos todavía", model: commentsReview("File · src/pricing.js (New version)")},
     {name: "comments-general", caption: "Comentarios — al cerrar el archivo queda disponible el comentario general", model: commentsReview(COMMENTS_COPY.general)},
     {name: "comments-documents", caption: "Comentarios — selección larga y documentos Local y Shared", model: commentsReview("Selected code · src/pricing/discount-calculation.js:12:1–18:24 (New version)", true)},

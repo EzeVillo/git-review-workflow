@@ -15,8 +15,9 @@ import (
 // cli-invocation.md: compare has none), and the CLI's own rejection of a
 // bad name is the validation, not this overlay.
 type TextPrompt struct {
-	Title string
-	Input textinput.Model
+	Title   string
+	Context string
+	Input   textinput.Model
 	// OnSubmit is called with the TRIMMED value once Enter is pressed on a
 	// non-empty input.
 	OnSubmit func(value string) selectResult
@@ -55,6 +56,7 @@ func (p *TextPrompt) Render(vp Viewport) string {
 	st := stylesFor(vp.Color)
 	lines := []string{
 		st.heading.Render(p.Title), "",
+		p.Context, "",
 		p.Input.View(), "",
 		st.keybar.Render("enter") + ":next  " + st.keybar.Render("esc") + ":cancel",
 	}
@@ -113,10 +115,13 @@ func compareLayoutFlags(layout string) []string {
 func (m Model) beginCompareReview() (Model, tea.Cmd) {
 	token := currentStateToken(m.Panel)
 	m.textPrompt = NewTextPrompt(domain.CompareLowerTitle, domain.RevisionPlaceholder, func(lower string) selectResult {
-		return selectResult{nextPrompt: NewTextPrompt(domain.CompareUpperTitle, domain.RevisionPlaceholder, func(upper string) selectResult {
+		prompt := NewTextPrompt(domain.CompareUpperTitle, domain.RevisionPlaceholder, func(upper string) selectResult {
 			return selectResult{next: compareLayoutStep(lower, upper, token)}
-		})}
+		})
+		prompt.Context = domain.CompareTargetPromptText(lower)
+		return selectResult{nextPrompt: prompt}
 	})
+	m.textPrompt.Context = domain.CompareBasePrompt
 	return m, nil
 }
 
@@ -128,12 +133,13 @@ func (m Model) beginCompareReview() (Model, tea.Cmd) {
 // the exact same door the body's Compare revisions button would.
 func compareLayoutStep(lower, upper string, token domain.StateToken) *SelectOverlay {
 	overlay := SelectOverlay{
-		Title: domain.StartAssistantLayoutTitle,
+		Title:  domain.CompareLayoutTitle,
+		Notice: domain.ComparisonSummary(lower, upper),
 		Items: []SelectItem{
-			{Label: domain.LayoutWalkLabel, Value: "walk"},
-			{Label: domain.LayoutKeysLabel, Value: "keys"},
-			{Label: domain.LayoutStepLabel, Value: "step"},
-			{Label: domain.LayoutWholeLabel, Value: "whole"},
+			{Label: domain.CompareWalkLabel, Detail: domain.CompareWalkDetail, Value: "walk"},
+			{Label: domain.CompareKeysLabel, Detail: domain.CompareKeysDetail, Value: "keys"},
+			{Label: domain.CompareStepLabel, Detail: domain.CompareStepDetail, Value: "step"},
+			{Label: domain.CompareWholeLabel, Detail: domain.CompareWholeDetail, Value: "whole"},
 		},
 		OnPick: func(layout string) selectResult {
 			params := domain.ActionParams{
@@ -142,7 +148,7 @@ func compareLayoutStep(lower, upper string, token domain.StateToken) *SelectOver
 				CompareUpper:  upper,
 			}
 			req := mutationRequest{action: "compareReview", params: params}
-			title := interpolate(domain.CompareReviewConfirmTitle, "{lower}", lower, "{upper}", upper)
+			title := interpolate(domain.CompareReviewConfirmTitle, "{lower}", domain.RevisionLabel(lower), "{upper}", domain.RevisionLabel(upper))
 			overlay := ConfirmMutation("compareReview", title, domain.CompareReviewConfirmDetail, domain.CompareRevisionsLabel, token, req)
 			return selectResult{confirmNext: overlay}
 		},

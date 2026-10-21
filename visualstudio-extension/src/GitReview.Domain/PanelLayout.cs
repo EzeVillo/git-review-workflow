@@ -549,7 +549,7 @@ public static class PanelLayoutBuilder
         var outList = new List<Block>();
         if (model.Comparison is not null) outList.AddRange(UserCopy.ComparisonLines(model.Comparison).Select(line => new Block.Note(line)));
         if (model.Readonly)
-            outList.Add(new Block.Note("Read-only compare: finish is not available. Use Cancel when done."));
+            outList.Add(new Block.Note(UserCopy.CompareReadonlyNote));
         if (model.KeysOnly)
             outList.Add(new Block.Note("Keys-only: reading order is restricted to walkthrough entries marked key."));
         if (model.BaseMoved)
@@ -766,6 +766,8 @@ public static class PanelLayoutBuilder
                 "Reviews compare the branch you are reading against it. Usually main or develop."),
             new Block.Paragraph($"Remote: {remote} (optional)."),
             new Block.Row(new[] { Ctrl(ControlId.SetRemote, "Change remote", Emphasis.Secondary, enabled) }),
+            new Block.Paragraph(UserCopy.CompareSetupNote),
+            new Block.ToolsSection("Compare", new Block[] { new Block.Row(new[] { Ctrl(ControlId.CompareReview, "Compare revisions", Emphasis.Secondary, enabled) }) }),
         };
     }
 

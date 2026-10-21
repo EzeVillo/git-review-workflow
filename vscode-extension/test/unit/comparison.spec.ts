@@ -28,3 +28,19 @@ describe("Comparison context", () => {
         assert.doesNotThrow(() => new Script(script));
     });
 });
+
+import {COMPARE_COPY, comparisonSummary, compareTargetPrompt} from "../../src/review/userCopy";
+describe("Compare UX", () => {
+    it("preserves the base and keeps literal ref names literal", () => {
+        assert.strictEqual(compareTargetPrompt("refs/heads/main"), "Base: main. Choose the revision to inspect.");
+        assert.strictEqual(comparisonSummary("refs/heads/{target}$&", "refs/remotes/upstream/f"), "Base: {target}$& → Inspect: upstream/f");
+        assert.strictEqual(COMPARE_COPY.baseTitle, "Base revision");
+        assert.strictEqual(COMPARE_COPY.targetTitle, "Revision to inspect");
+    });
+    it("keeps Compare accessible before base configuration", () => {
+        const html = panelHtml("test");
+        const setup = html.slice(html.indexOf("function renderSetup("), html.indexOf("function renderEmptyStartBlock("));
+        assert.ok(setup.includes("renderCompareSection(model)"));
+        assert.ok(!html.includes("finish will refuse"));
+    });
+});

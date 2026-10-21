@@ -239,13 +239,14 @@ public class UserCopyTests
     }
 
     [Fact]
-    public void Compare_confirm_says_it_creates_a_read_only_review()
+    public void Compare_confirm_identifies_direction_and_reading_layout()
     {
         var title = UserCopy.CompareConfirmTitle("a", "b", ReviewLayout.Step);
         Assert.Equal(
-            "Compare a..b commit by commit? This creates a read-only review (finish will refuse).",
+            "Compare a → b commit by commit?",
             title);
-        Assert.Equal("Comparing a..b…", UserCopy.ComparingProgress("a", "b"));
+        Assert.Equal("Comparing a → b…", UserCopy.ComparingProgress("a", "b"));
+        Assert.Equal("Opens a separate review for reading. Your working tree must be clean.", UserCopy.CompareConfirmDetail);
     }
 
     [Fact]

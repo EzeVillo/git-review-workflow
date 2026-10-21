@@ -573,22 +573,22 @@ class CompareReviewAction : AnAction(), DumbAware {
         val revisions = com.ezevillo.gitreview.domain.compareRevisionItems(service(e)?.currentState()?.candidates.orEmpty())
         val candidates = revisions.map { it.label }.toTypedArray()
         val lower = UiMessages.chooseOrType(
-            project, "Branch, tag or commit", UserCopy.COMPARE_LOWER_TITLE, candidates,
-        ) ?: return
-        val upper = UiMessages.chooseOrType(
-            project, "Branch, tag or commit", UserCopy.COMPARE_UPPER_TITLE, candidates,
+            project, UserCopy.COMPARE_BASE_PROMPT + " " + UserCopy.COMPARE_REVISION_PROMPT, UserCopy.COMPARE_LOWER_TITLE, candidates,
         ) ?: return
         val lowerRef = revisions.find { it.label == lower }?.value ?: lower
+        val upper = UiMessages.chooseOrType(
+            project, UserCopy.compareTargetPrompt(lowerRef) + " " + UserCopy.COMPARE_REVISION_PROMPT, UserCopy.COMPARE_UPPER_TITLE, candidates,
+        ) ?: return
         val upperRef = revisions.find { it.label == upper }?.value ?: upper
         val layoutOptions = arrayOf(
-            "Walkthrough — guided reading order if the upper tip has a walkthrough",
-            "Walkthrough — keys only — only entries marked key",
-            "Commit by commit — one commit at a time",
-            "Whole diff — entire diff at once",
+            UserCopy.COMPARE_WALK_LABEL + " — " + UserCopy.COMPARE_WALK_DETAIL,
+            UserCopy.COMPARE_KEYS_LABEL + " — " + UserCopy.COMPARE_KEYS_DETAIL,
+            UserCopy.COMPARE_STEP_LABEL + " — " + UserCopy.COMPARE_STEP_DETAIL,
+            UserCopy.COMPARE_WHOLE_LABEL + " — " + UserCopy.COMPARE_WHOLE_DETAIL,
         )
         val layoutIdx = UiMessages.choose(
             project,
-            UserCopy.COMPARE_LAYOUT_PLACEHOLDER,
+            UserCopy.comparisonSummary(lowerRef, upperRef),
             UserCopy.COMPARE_LAYOUT_TITLE,
             layoutOptions,
         )
@@ -602,7 +602,7 @@ class CompareReviewAction : AnAction(), DumbAware {
         if (!UiMessages.confirm(
                 project,
                 ControlId.COMPARE_REVIEW,
-                UserCopy.compareConfirmTitle(lower, upper, layout),
+                UserCopy.compareConfirmTitle(lowerRef, upperRef, layout),
                 UserCopy.COMPARE_CONFIRM_DETAIL,
                 UserCopy.COMPARE_BUTTON,
             )
@@ -618,7 +618,7 @@ class CompareReviewAction : AnAction(), DumbAware {
         mutations(e)?.runSimple(
             "compareReview",
             ActionParams.Compare(flags, lowerRef, upperRef),
-            progressTitle = UserCopy.comparingProgress(lower, upper),
+            progressTitle = UserCopy.comparingProgress(lowerRef, upperRef),
         )
     }
 }

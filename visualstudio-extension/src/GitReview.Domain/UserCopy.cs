@@ -285,21 +285,21 @@ public static class UserCopy
     public const string ResumeProgress = "Resuming the finish…";
     public const string ResumeFailed = "Could not continue the finish.";
 
-    public const string CompareLowerTitle = "Compare: lower bound (from)";
-    public const string CompareUpperTitle = "Compare: upper bound (to)";
+    public const string CompareLowerTitle = CompareBaseTitle;
+    public const string CompareUpperTitle = CompareTargetTitle;
     public const string CompareLayoutTitle = "How to read the comparison";
     public const string CompareLayoutPlaceholder =
         "Walkthrough, keys only, commit by commit, or whole diff";
     public const string CompareConfirmDetail =
-        "Your working tree must be clean to start it.";
+        "Opens a separate review for reading. Your working tree must be clean.";
     public const string CompareButton = "Compare";
     public const string CompareFailed = "Could not compare those two revisions.";
 
     public static string CompareConfirmTitle(string lower, string upper, ReviewLayout layout) =>
-        $"Compare {lower}..{upper} {LayoutOffers.LayoutSummary(layout)}? This creates a read-only review (finish will refuse).";
+        $"Compare {RevisionLabel(lower)} → {RevisionLabel(upper)} {LayoutOffers.LayoutSummary(layout)}?";
 
     public static string ComparingProgress(string lower, string upper) =>
-        $"Comparing {lower}..{upper}…";
+        $"Comparing {RevisionLabel(lower)} → {RevisionLabel(upper)}…";
 
     /// <summary>
     /// The choice between reconciling a walkthrough and starting it over, asked
@@ -406,10 +406,35 @@ public static class UserCopy
         string Line(string template, string label, string oid)
         {
             var prefix = new[] { "refs/heads/", "refs/remotes/", "refs/tags/" }.FirstOrDefault(p => label.StartsWith(p, StringComparison.Ordinal));
-            return template.Replace("{revision}", prefix is null ? label : label.Substring(prefix.Length)).Replace("{oid}", oid.Substring(0, Math.Min(7, oid.Length)));
+            return template.Replace("{oid}", oid.Substring(0, Math.Min(7, oid.Length))).Replace("{revision}", prefix is null ? label : label.Substring(prefix.Length));
         }
         return new[] { Line(ComparisonBase, c.BaseLabel, c.BaseOid), Line(ComparisonTarget, c.TargetLabel, c.TargetOid) };
     }
+
+    public const string CompareWalkLabel = "Walkthrough";
+    public const string CompareKeysLabel = "Walkthrough — keys only";
+    public const string CompareStepLabel = "Commit by commit";
+    public const string CompareWholeLabel = "Whole diff";
+    public const string CompareBaseTitle = "Base revision";
+    public const string CompareBasePrompt = "Choose the starting content for the comparison.";
+    public const string CompareTargetTitle = "Revision to inspect";
+    public const string CompareTargetPrompt = "Base: {base}. Choose the revision to inspect.";
+    public const string CompareRevisionPrompt = "Branch, tag or commit";
+    public const string CompareSummary = "Base: {base} → Inspect: {target}";
+    public const string CompareWalkDetail = "Your draft or the author's order; whole diff if neither applies.";
+    public const string CompareKeysDetail = "Only entries marked key; requires a draft or walkthrough with keys.";
+    public const string CompareStepDetail = "Commits unique to the destination; skips merges and side branches.";
+    public const string CompareWholeDetail = "Changes from the base's content to the revision to inspect.";
+    public const string CompareReadonlyNote = "Read-only comparison. Local comments are kept when you close it.";
+    public const string CompareSetupNote = "Compare any two revisions without configuring a base.";
+
+    public static string RevisionLabel(string value)
+    {
+        var prefix = new[] { "refs/heads/", "refs/remotes/", "refs/tags/" }.FirstOrDefault(p => value.StartsWith(p, StringComparison.Ordinal));
+        return prefix is null ? value : value.Substring(prefix.Length);
+    }
+    public static string ComparisonSummary(string bas, string target) => System.Text.RegularExpressions.Regex.Replace(CompareSummary, @"\{(base|target)\}", match => RevisionLabel(match.Groups[1].Value == "base" ? bas : target));
+    public static string CompareTargetPromptText(string bas) => CompareTargetPrompt.Replace("{base}", RevisionLabel(bas));
 }
 
 public static class CommentsCopy

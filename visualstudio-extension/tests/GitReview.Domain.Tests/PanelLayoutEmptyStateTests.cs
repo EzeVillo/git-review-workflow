@@ -9,13 +9,14 @@ public class PanelLayoutEmptyStateTests
         b is Block.Row r ? r.Controls : Array.Empty<Control>();
 
     [Fact]
-    public void Setup_without_a_base_is_five_blocks_with_set_base_primary_and_no_inventory()
+    public void Setup_without_a_base_offers_compare_but_requires_setup_for_start()
     {
         var layout = PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewSetup());
         Assert.False(layout.FillsHeight);
-        Assert.Equal(5, layout.Blocks.Count);
+        Assert.Equal(7, layout.Blocks.Count);
         Assert.DoesNotContain(layout.Blocks, b => b is Block.InventoryRows);
-        Assert.DoesNotContain(layout.Blocks, b => b is Block.ToolsSection);
+        Assert.Equal("Compare", Assert.Single(layout.Blocks.OfType<Block.ToolsSection>()).Title);
+        Assert.Contains(layout.CollectControls(), c => c.Id == ControlId.CompareReview && c.Enabled);
         // Nothing to start until there is a base to compare against.
         Assert.DoesNotContain(layout.CollectControls(), c => c.Id == ControlId.StartReview);
 

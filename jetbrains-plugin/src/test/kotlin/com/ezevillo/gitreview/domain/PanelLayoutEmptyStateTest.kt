@@ -8,12 +8,13 @@ import org.junit.jupiter.api.Test
 
 class PanelLayoutEmptyStateTest {
     @Test
-    fun `setup without base is five blocks primary set base no inventory`() {
+    fun `setup without base offers compare but requires setup for start`() {
         val layout = panelLayout(PanelFixtures.noReviewSetup())
         assertFalse(layout.fillsHeight)
-        assertEquals(5, layout.blocks.size)
+        assertEquals(7, layout.blocks.size)
         assertTrue(layout.blocks.none { it is Block.InventoryRows })
-        assertTrue(layout.blocks.none { it is Block.ToolsSection })
+        assertEquals("Compare", layout.blocks.filterIsInstance<Block.ToolsSection>().single().title)
+        assertTrue(layout.collectControls().any { it.id == ControlId.COMPARE_REVIEW && it.enabled })
         assertFalse(layout.collectControls().any { it.id == ControlId.START_REVIEW })
         val primary = layout.collectControls().filter { it.emphasis == Emphasis.PRIMARY }
         assertEquals(1, primary.size)

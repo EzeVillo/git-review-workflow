@@ -279,21 +279,39 @@ object UserCopy {
 
     // --- Compare / walkthrough / preview / housekeeping -------------------------
 
-    const val COMPARE_LOWER_TITLE = "Compare: lower bound (from)"
-    const val COMPARE_UPPER_TITLE = "Compare: upper bound (to)"
+    const val COMPARE_WALK_LABEL = "Walkthrough"
+    const val COMPARE_KEYS_LABEL = "Walkthrough — keys only"
+    const val COMPARE_STEP_LABEL = "Commit by commit"
+    const val COMPARE_WHOLE_LABEL = "Whole diff"
+    const val COMPARE_BASE_TITLE = "Base revision"
+    const val COMPARE_BASE_PROMPT = "Choose the starting content for the comparison."
+    const val COMPARE_TARGET_TITLE = "Revision to inspect"
+    const val COMPARE_TARGET_PROMPT = "Base: {base}. Choose the revision to inspect."
+    const val COMPARE_REVISION_PROMPT = "Branch, tag or commit"
+    const val COMPARE_SUMMARY = "Base: {base} → Inspect: {target}"
+    const val COMPARE_WALK_DETAIL = "Your draft or the author's order; whole diff if neither applies."
+    const val COMPARE_KEYS_DETAIL = "Only entries marked key; requires a draft or walkthrough with keys."
+    const val COMPARE_STEP_DETAIL = "Commits unique to the destination; skips merges and side branches."
+    const val COMPARE_WHOLE_DETAIL = "Changes from the base's content to the revision to inspect."
+    const val COMPARE_READONLY_NOTE = "Read-only comparison. Local comments are kept when you close it."
+    const val COMPARE_SETUP_NOTE = "Compare any two revisions without configuring a base."
+
+
+    const val COMPARE_LOWER_TITLE = COMPARE_BASE_TITLE
+    const val COMPARE_UPPER_TITLE = COMPARE_TARGET_TITLE
     const val COMPARE_LAYOUT_TITLE = "How to read the comparison"
     const val COMPARE_LAYOUT_PLACEHOLDER =
         "Walkthrough, keys only, commit by commit, or whole diff"
     const val COMPARE_CONFIRM_DETAIL =
-        "Your working tree must be clean to start it."
+        "Opens a separate review for reading. Your working tree must be clean."
     const val COMPARE_BUTTON = "Compare"
     const val COMPARE_FAILED = "Could not compare those two revisions."
 
     fun compareConfirmTitle(lower: String, upper: String, layout: ReviewLayout): String =
-        "Compare $lower..$upper ${layoutSummary(layout)}? This creates a read-only review (finish will refuse)."
+        "Compare ${revisionLabel(lower)} → ${revisionLabel(upper)} ${layoutSummary(layout)}?"
 
     fun comparingProgress(lower: String, upper: String): String =
-        "Comparing $lower..$upper…"
+        "Comparing ${revisionLabel(lower)} → ${revisionLabel(upper)}…"
 
     /**
      * The choice between reconciling a walkthrough and starting it over, asked
@@ -412,10 +430,18 @@ object UserCopy {
     fun comparisonLines(c: ComparisonRecord): List<String> {
         fun line(template: String, label: String, oid: String): String {
             val prefix = listOf("refs/heads/", "refs/remotes/", "refs/tags/").firstOrNull { label.startsWith(it) }
-            return template.replace("{revision}", if (prefix == null) label else label.removePrefix(prefix)).replace("{oid}", oid.take(7))
+            return template.replace("{oid}", oid.take(7)).replace("{revision}", if (prefix == null) label else label.removePrefix(prefix))
         }
         return listOf(line(COMPARISON_BASE, c.baseLabel, c.baseOid), line(COMPARISON_TARGET, c.targetLabel, c.targetOid))
     }
+
+    fun revisionLabel(value: String): String {
+        val prefix = listOf("refs/heads/", "refs/remotes/", "refs/tags/").firstOrNull { value.startsWith(it) }
+        return if (prefix == null) value else value.removePrefix(prefix)
+    }
+    fun comparisonSummary(base: String, target: String): String =
+        COMPARE_SUMMARY.replace(Regex("""\{(base|target)\}""")) { revisionLabel(if (it.groupValues[1] == "base") base else target) }
+    fun compareTargetPrompt(base: String): String = COMPARE_TARGET_PROMPT.replace("{base}", revisionLabel(base))
 }
 
 object CommentsCopy {

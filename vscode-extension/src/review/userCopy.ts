@@ -203,3 +203,47 @@ export const COMPARISON_COPY = {
     base: "Base: {revision} ({oid})",
     target: "Inspect: {revision} ({oid})",
 } as const;
+
+export const COMPARE_COPY = {
+    walkLabel: "Walkthrough",
+    keysLabel: "Walkthrough — keys only",
+    stepLabel: "Commit by commit",
+    wholeLabel: "Whole diff",
+    "baseTitle": "Base revision",
+    "basePrompt": "Choose the starting content for the comparison.",
+    "targetTitle": "Revision to inspect",
+    "targetPrompt": "Base: {base}. Choose the revision to inspect.",
+    "revisionPrompt": "Branch, tag or commit",
+    "summary": "Base: {base} → Inspect: {target}",
+    "layoutTitle": "How to read the comparison",
+    "walkDetail": "Your draft or the author's order; whole diff if neither applies.",
+    "keysDetail": "Only entries marked key; requires a draft or walkthrough with keys.",
+    "stepDetail": "Commits unique to the destination; skips merges and side branches.",
+    "wholeDetail": "Changes from the base's content to the revision to inspect.",
+    "confirmDetail": "Opens a separate review for reading. Your working tree must be clean.",
+    "readonlyNote": "Read-only comparison. Local comments are kept when you close it.",
+    "setupNote": "Compare any two revisions without configuring a base.",
+    "button": "Compare",
+    "failed": "Could not compare those two revisions."
+} as const;
+
+export function revisionLabel(value: string): string {
+    return value.replace(/^refs\/(heads|remotes|tags)\//, "");
+}
+export function comparisonSummary(base: string, target: string): string {
+    return COMPARE_COPY.summary.replace(/\{(base|target)\}/g, (_, role) => revisionLabel(role === "base" ? base : target));
+}
+export function compareTargetPrompt(base: string): string {
+    return COMPARE_COPY.targetPrompt.replace("{base}", () => revisionLabel(base));
+}
+
+export function compareConfirmTitle(base: string, target: string, layout: string): string {
+    return `Compare ${revisionLabel(base)} → ${revisionLabel(target)} ${layout}?`;
+}
+export function comparingProgress(base: string, target: string): string {
+    return `Comparing ${revisionLabel(base)} → ${revisionLabel(target)}…`;
+}
+
+export function compareTargetTitle(base: string): string {
+    return `${COMPARE_COPY.targetTitle} (${COMPARE_COPY.baseTitle}: ${revisionLabel(base)})`;
+}

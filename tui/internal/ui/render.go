@@ -653,6 +653,10 @@ func renderNoReviewSetup(b *builder, m domain.PanelModel) {
 	b.text(domain.ReviewsCompareAgainstNote)
 	b.text(interpolate(domain.RemoteOptionalLine, "{remote}", m.ConfiguredRemote))
 	b.button("setRemote", "", domain.ChangeRemoteLabel, b.st.secondary, true)
+	b.blank()
+	b.text(domain.CompareSetupNote)
+	b.heading(domain.CompareSectionTitle)
+	b.button("compareReview", "", domain.CompareRevisionsLabel, b.st.secondary, true)
 }
 
 func renderNoReview(b *builder, m domain.PanelModel) {
@@ -986,6 +990,9 @@ func renderReviewWalk(b *builder, m domain.PanelModel) {
 	for _, line := range domain.ComparisonLines(m.Comparison) {
 		b.note(line)
 	}
+	if m.Readonly {
+		b.note(domain.CompareReadonlyNote)
+	}
 	b.note(m.Note)
 	b.text(fmt.Sprintf("Entry %d/%d: %s", m.Position, m.Total, m.CurrentPath.Display))
 	renderWhyBlock(b, m, true)
@@ -1001,6 +1008,9 @@ func renderReviewStep(b *builder, m domain.PanelModel) {
 	b.heading(identityLine(m))
 	for _, line := range domain.ComparisonLines(m.Comparison) {
 		b.note(line)
+	}
+	if m.Readonly {
+		b.note(domain.CompareReadonlyNote)
 	}
 	b.note(m.Note)
 	b.text(fmt.Sprintf("Entry %d/%d: %s", m.Position, m.Total, m.CurrentSHA))
@@ -1020,6 +1030,9 @@ func renderReviewWhole(b *builder, m domain.PanelModel) {
 	b.heading(identityLine(m))
 	for _, line := range domain.ComparisonLines(m.Comparison) {
 		b.note(line)
+	}
+	if m.Readonly {
+		b.note(domain.CompareReadonlyNote)
 	}
 	b.note(m.Note)
 	b.heading(interpolate(domain.FilesInReviewHeading, "{n}", strconv.Itoa(m.Total)))
@@ -1045,6 +1058,9 @@ func renderFinishConflict(b *builder, m domain.PanelModel) {
 	b.heading(identityLine(m))
 	for _, line := range domain.ComparisonLines(m.Comparison) {
 		b.note(line)
+	}
+	if m.Readonly {
+		b.note(domain.CompareReadonlyNote)
 	}
 	b.note(m.Note)
 

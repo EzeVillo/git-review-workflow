@@ -362,8 +362,8 @@ git review compare v1.0 v2.0 --step   # ...and walk it commit by commit
   a writable branch to write back to, and a tag or a commit is not one — so
   `git review finish` on a compare refuses explicitly ("this review is read-only,
   there is nothing to write back"). Use `git review abort` to end it.
-- `--step` walks it one commit at a time, exactly like `git review start --step`,
-  with `git review next` / `git review prev`.
+- `--step` reads commits reachable from `<b>` but not `<a>`, following the first-parent history and skipping merges and their side branches. Each step compares a commit with its parent. For diverged revisions, this can differ from the whole diff between their contents. Navigate with `git review next` / `git review prev`.
+- Whole diff and walkthrough compare the exact contents of `<a>` and `<b>`, without substituting their merge-base. Compare does not fetch or use `reviewworkflow.base`; a remote-tracking revision reflects the last fetch.
 - If `<b>`'s tree carries a walkthrough, `compare` enters walk mode too, just like
   `git review start`, and stays read-only. `--no-walk` opts out.
 

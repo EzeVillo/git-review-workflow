@@ -50,7 +50,7 @@ var AllLayoutSituations = []LayoutSituation{
 var Layout = map[LayoutSituation][]ControlID{
 	LayoutCliMissing:    {"copyCliInstall", "installCli"},
 	LayoutCliOutdated:   {"copyCliInstall", "installCli"},
-	LayoutNoReviewSetup: {"setBase", "setRemote"},
+	LayoutNoReviewSetup: {"setBase", "setRemote", "compareReview"},
 	LayoutNoReview: {
 		"startReview",
 		"walkthroughInit", "walkthroughBuild",

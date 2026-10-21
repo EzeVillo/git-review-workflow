@@ -571,12 +571,12 @@ const (
 	// questions (T089/T093) — compare has no `offer` record to pick from
 	// (unlike start's branch step), so the CLI's own rejection of a bad name
 	// is the validation, exactly as compareReview.ts's own comment notes.
-	CompareLowerTitle   = "Compare against which revision?"
-	CompareUpperTitle   = "Compare to which revision?"
-	RevisionPlaceholder = "branch, tag or commit"
+	CompareLowerTitle   = CompareBaseTitle
+	CompareUpperTitle   = CompareTargetTitle
+	RevisionPlaceholder = CompareRevisionPrompt
 
-	CompareReviewConfirmTitle  = "Compare {lower}..{upper}?"
-	CompareReviewConfirmDetail = "This checks out a new branch to show the comparison, read-only. If you have unsaved edits elsewhere, save or finish first."
+	CompareReviewConfirmTitle  = "Compare {lower} → {upper}?"
+	CompareReviewConfirmDetail = CompareConfirmDetail
 
 	FinishDestinationTitle        = "Where should your edits go?"
 	FinishDestinationBranchLabel  = "A separate branch"
@@ -698,3 +698,44 @@ func ComparisonLines(c *ComparisonRecord) []string {
 	}
 	return []string{line(ComparisonBaseLine, c.BaseLabel, c.BaseOid), line(ComparisonTargetLine, c.TargetLabel, c.TargetOid)}
 }
+
+const (
+	CompareBaseTitle      = "Base revision"
+	CompareBasePrompt     = "Choose the starting content for the comparison."
+	CompareTargetTitle    = "Revision to inspect"
+	CompareTargetPrompt   = "Base: {base}. Choose the revision to inspect."
+	CompareRevisionPrompt = "Branch, tag or commit"
+	CompareSummary        = "Base: {base} → Inspect: {target}"
+	CompareLayoutTitle    = "How to read the comparison"
+	CompareWalkDetail     = "Your draft or the author's order; whole diff if neither applies."
+	CompareKeysDetail     = "Only entries marked key; requires a draft or walkthrough with keys."
+	CompareStepDetail     = "Commits unique to the destination; skips merges and side branches."
+	CompareWholeDetail    = "Changes from the base's content to the revision to inspect."
+	CompareConfirmDetail  = "Opens a separate review for reading. Your working tree must be clean."
+	CompareReadonlyNote   = "Read-only comparison. Local comments are kept when you close it."
+	CompareSetupNote      = "Compare any two revisions without configuring a base."
+	CompareButton         = "Compare"
+	CompareFailed         = "Could not compare those two revisions."
+)
+
+func RevisionLabel(value string) string {
+	for _, prefix := range []string{"refs/heads/", "refs/remotes/", "refs/tags/"} {
+		if strings.HasPrefix(value, prefix) {
+			return strings.TrimPrefix(value, prefix)
+		}
+	}
+	return value
+}
+func ComparisonSummary(base, target string) string {
+	return strings.NewReplacer("{base}", RevisionLabel(base), "{target}", RevisionLabel(target)).Replace(CompareSummary)
+}
+func CompareTargetPromptText(base string) string {
+	return strings.ReplaceAll(CompareTargetPrompt, "{base}", RevisionLabel(base))
+}
+
+const (
+	CompareWalkLabel  = "Walkthrough"
+	CompareKeysLabel  = "Walkthrough — keys only"
+	CompareStepLabel  = "Commit by commit"
+	CompareWholeLabel = "Whole diff"
+)

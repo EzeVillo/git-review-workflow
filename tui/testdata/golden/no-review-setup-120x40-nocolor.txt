@@ -5,4 +5,8 @@ Reviews compare the branch you are reading against it. Usually main or develop.
 Remote: origin (optional).
 [ Change remote ]
 
+Compare any two revisions without configuring a base.
+Compare
+[ Compare revisions ]
+
 j:up  k:down  enter:select  r:refresh  ::actions  m:mouse on  q:quit

@@ -1,6 +1,6 @@
 import {NPM_INSTALL_CMD, NPM_UPDATE_CMD} from "../cli/installHint";
 import {MIN_CLI_VERSION} from "../cli/version";
-import {COMMENTS_COPY, SUPPORT_COPY, COMPARISON_COPY} from "../review/userCopy";
+import {COMMENTS_COPY, SUPPORT_COPY, COMPARISON_COPY, COMPARE_COPY} from "../review/userCopy";
 
 /**
  * HTML del panel, separado del provider y sin depender de `vscode`: así se abre
@@ -1199,6 +1199,8 @@ export function panelHtml(nonce: string): string {
     const changeRemote = button("Change remote", "setRemote", null);
     changeRemote.disabled = model.busy;
     box.appendChild(changeRemote);
+    box.appendChild(el("p", null, COMPARE.setupNote));
+    box.appendChild(renderCompareSection(model));
     return box;
   }
 
@@ -1726,15 +1728,16 @@ export function panelHtml(nonce: string): string {
   // review, no la entrada, así que no cambian al navegar. Sacarlas mientras
   // carga haría saltar el panel dos veces por cada paso.
   const COMPARISON = ${JSON.stringify(COMPARISON_COPY)};
+  const COMPARE = ${JSON.stringify(COMPARE_COPY)};
   function renderNotes(model) {
     if (model.comparison) {
       const c = model.comparison;
       const label = function (value) { return value.replace(/^refs\\/(heads|remotes|tags)\\//, ""); };
-      root.appendChild(note(COMPARISON.base.replace("{revision}", function () { return label(c.baseLabel); }).replace("{oid}", c.baseOid.slice(0, 7))));
-      root.appendChild(note(COMPARISON.target.replace("{revision}", function () { return label(c.targetLabel); }).replace("{oid}", c.targetOid.slice(0, 7))));
+      root.appendChild(note(COMPARISON.base.replace("{oid}", c.baseOid.slice(0, 7)).replace("{revision}", function () { return label(c.baseLabel); })));
+      root.appendChild(note(COMPARISON.target.replace("{oid}", c.targetOid.slice(0, 7)).replace("{revision}", function () { return label(c.targetLabel); })));
     }
     if (model.readonly) {
-      root.appendChild(note("Read-only compare: finish is not available. Use Cancel when done."));
+      root.appendChild(note(COMPARE.readonlyNote));
     }
     if (model.keysOnly) {
       root.appendChild(note("Keys-only: reading order is restricted to walkthrough entries marked key."));

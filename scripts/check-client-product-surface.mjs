@@ -331,7 +331,7 @@ function requireUserCopy(what, copy) {
   }
 }
 
-for (const line of topBlock("comparison_context").split("\n")) {
+for (const line of (topBlock("comparison_context") + topBlock("compare_flow")).split("\n")) {
   const match = /^  \w+: "([^"]*)"/.exec(line);
   if (match) requireUserCopy("comparison context", match[1]);
 }

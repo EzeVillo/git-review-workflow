@@ -194,7 +194,7 @@ public class PanelLayoutReviewTests
         };
         var notes = PanelLayoutBuilder.PanelLayout(flagged).Blocks.OfType<Block.Note>().ToList();
         Assert.Equal(4, notes.Count);
-        Assert.StartsWith("Read-only compare", notes[0].Text);
+        Assert.Equal(UserCopy.CompareReadonlyNote, notes[0].Text);
         Assert.StartsWith("Keys-only", notes[1].Text);
         Assert.StartsWith("The base moved", notes[2].Text);
         Assert.StartsWith("The walkthrough does not cover", notes[3].Text);

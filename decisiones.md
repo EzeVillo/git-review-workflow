@@ -1783,3 +1783,13 @@ registra el OID inferior y la etiqueta original del destino junto al tip existen
 Save/Continue transfieren ambos. Status publica nombres y OID en registros aditivos,
 sin ensanchar `state`, en Whole, Walk y Step. Así los cuatro paneles muestran la
 misma base y el mismo destino incluso si sus refs avanzan después de abrirlos.
+
+### Compare: roles visibles antes y después de abrir
+
+El selector nombra Base revision y Revision to inspect. La segunda pregunta conserva
+la base elegida, y el paso de lectura muestra ambos extremos. El panel mantiene los
+OID originales y explica la conservación de Local sin anunciar el rechazo de Finish.
+Compare queda accesible antes de configurar la base de Start porque no depende de
+ella. Walkthrough sigue usando el draft del revisor antes que el del autor; Keys
+conserva su requisito de entradas marcadas. Se aclara la diferencia entre snapshots
+y la historia de primer padre de Step sin cambiar ninguna de las dos operaciones.

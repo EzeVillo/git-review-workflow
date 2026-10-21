@@ -91,15 +91,13 @@ public class PanelLayoutFooterTests
     }
 
     /// <summary>
-    /// A repository with no base configured has nothing to put in Settings, so the
-    /// setup screen carries no sections at all rather than an empty one.
+    /// Compare is independent of the PR base; it is the only setup section.
     /// </summary>
     [Fact]
-    public void The_setup_screen_has_no_sections()
+    public void The_setup_screen_offers_only_the_independent_compare_section()
     {
-        Assert.DoesNotContain(
-            PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewSetup()).Blocks,
-            b => b is Block.ToolsSection);
+        var section = Assert.Single(PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewSetup()).Blocks.OfType<Block.ToolsSection>());
+        Assert.Equal("Compare", section.Title);
     }
 
     [Fact]

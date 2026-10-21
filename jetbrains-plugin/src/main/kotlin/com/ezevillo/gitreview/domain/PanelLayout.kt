@@ -501,7 +501,7 @@ private fun notes(model: PanelModel): List<Block.Note> {
     val out = ArrayList<Block.Note>()
     model.comparison?.let { c -> out.addAll(UserCopy.comparisonLines(c).map { Block.Note(it) }) }
     if (model.readonly) {
-        out.add(Block.Note("Read-only compare: finish is not available. Use Cancel when done."))
+        out.add(Block.Note(UserCopy.COMPARE_READONLY_NOTE))
     }
     if (model.keysOnly) {
         out.add(Block.Note("Keys-only: reading order is restricted to walkthrough entries marked key."))
@@ -783,6 +783,8 @@ private fun setupBlocks(model: PanelModel): List<Block> {
         ),
         Block.Paragraph("Remote: $remote (optional)."),
         Block.Row(listOf(ctrl(ControlId.SET_REMOTE, "Change remote", Emphasis.SECONDARY, enabled))),
+        Block.Paragraph(UserCopy.COMPARE_SETUP_NOTE),
+        Block.ToolsSection("Compare", listOf(Block.Row(listOf(ctrl(ControlId.COMPARE_REVIEW, "Compare revisions", Emphasis.SECONDARY, enabled))))),
     )
 }
 

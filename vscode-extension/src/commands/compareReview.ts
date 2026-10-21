@@ -6,6 +6,7 @@ import {layoutSummary} from "../review/layoutOffers";
 import {ReviewLayout} from "../review/reviewIntent";
 import {ReviewStateManager} from "../review/state";
 import {confirmMutation} from "../review/confirm";
+import {COMPARE_COPY, comparisonSummary, compareTargetPrompt, compareTargetTitle, compareConfirmTitle, comparingProgress} from "../review/userCopy";
 
 interface LayoutItem extends vscode.QuickPickItem {
     layout: ReviewLayout;
@@ -18,23 +19,23 @@ interface LayoutItem extends vscode.QuickPickItem {
  */
 const LAYOUT_ITEMS: LayoutItem[] = [
     {
-        label: "Walkthrough",
-        description: "guided reading order if the upper tip has a walkthrough",
+        label: COMPARE_COPY.walkLabel,
+        description: COMPARE_COPY.walkDetail,
         layout: "walk",
     },
     {
-        label: "Walkthrough — keys only",
-        description: "only entries marked key",
+        label: COMPARE_COPY.keysLabel,
+        description: COMPARE_COPY.keysDetail,
         layout: "keys",
     },
     {
-        label: "Commit by commit",
-        description: "one commit at a time",
+        label: COMPARE_COPY.stepLabel,
+        description: COMPARE_COPY.stepDetail,
         layout: "step",
     },
     {
-        label: "Whole diff",
-        description: "entire diff at once",
+        label: COMPARE_COPY.wholeLabel,
+        description: COMPARE_COPY.wholeDetail,
         layout: "whole",
     },
 ];
@@ -49,29 +50,29 @@ export async function compareReview(
     getInvokeOptions: () => InvokeOptions
 ): Promise<void> {
     const candidates = await loadCandidates(stateManager, getInvokeOptions());
-    const lower = await pickCommitIsh(candidates, "Compare: lower bound (from)");
+    const lower = await pickCommitIsh(candidates, COMPARE_COPY.baseTitle, COMPARE_COPY.basePrompt);
     if (!lower) {
         return;
     }
-    const upper = await pickCommitIsh(candidates, "Compare: upper bound (to)");
+    const upper = await pickCommitIsh(candidates, compareTargetTitle(lower), compareTargetPrompt(lower));
     if (!upper) {
         return;
     }
 
     const layoutPick = await vscode.window.showQuickPick(LAYOUT_ITEMS, {
-        title: "How to read the comparison",
-        placeHolder: "Walkthrough, keys only, commit by commit, or whole diff",
+        title: comparisonSummary(lower, upper),
+        placeHolder: COMPARE_COPY.layoutTitle,
     });
     if (!layoutPick) {
         return;
     }
 
-    const summary = `Compare ${lower}..${upper} ${layoutSummary(layoutPick.layout)}? This creates a read-only review (finish will refuse).`;
+    const summary = compareConfirmTitle(lower, upper, layoutSummary(layoutPick.layout));
     const confirmed = await confirmMutation(
         "compareReview",
         summary,
-        "Your working tree must be clean to start it.",
-        "Compare"
+        COMPARE_COPY.confirmDetail,
+        COMPARE_COPY.button
     );
     if (!confirmed) {
         return;
@@ -94,7 +95,7 @@ export async function compareReview(
         const result = await vscode.window.withProgress(
             {
                 location: vscode.ProgressLocation.Notification,
-                title: `Comparing ${lower}..${upper}…`,
+                title: comparingProgress(lower, upper),
             },
             async () => {
                 const invocation = await invokeGitReview("compare", args, getInvokeOptions());
@@ -103,7 +104,7 @@ export async function compareReview(
             }
         );
         if (result && result.exitCode !== 0) {
-            const text = result.stderr.trim() || "Could not compare those two revisions.";
+            const text = result.stderr.trim() || COMPARE_COPY.failed;
             void vscode.window.showErrorMessage(text);
         }
     });
@@ -135,17 +136,18 @@ async function loadCandidates(
  */
 async function pickCommitIsh(
     candidates: CandidateBranch[],
-    title: string
+    title: string,
+    context: string
 ): Promise<string | undefined> {
     const branches = compareRevisionItems(candidates);
     if (branches.length === 0) {
-        return inputCommitIsh(title);
+        return inputCommitIsh(title, context);
     }
 
     return await new Promise<string | undefined>((resolve) => {
         const quickPick = vscode.window.createQuickPick<vscode.QuickPickItem & {value?: string}>();
         quickPick.title = title;
-        quickPick.placeholder = "Branch, tag or commit";
+        quickPick.placeholder = context + " " + COMPARE_COPY.revisionPrompt;
         quickPick.items = branches;
         quickPick.onDidChangeValue((value) => {
             const typed = value.trim();
@@ -170,10 +172,11 @@ async function pickCommitIsh(
     });
 }
 
-async function inputCommitIsh(title: string): Promise<string | undefined> {
+async function inputCommitIsh(title: string, context: string): Promise<string | undefined> {
     const typed = await vscode.window.showInputBox({
         title,
-        prompt: "Branch, tag or commit",
+        prompt: context,
+        placeHolder: COMPARE_COPY.revisionPrompt,
         validateInput: (v) => (v.trim() === "" ? "Required" : undefined),
     });
     return typed?.trim();

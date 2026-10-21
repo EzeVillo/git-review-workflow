@@ -31,6 +31,9 @@ func TestBeginCompareReviewChainsToAConfirmWithTheRightArgv(t *testing.T) {
 		t.Fatalf("second question title = %q, want %q", lowerResult.nextPrompt.Title, domain.CompareUpperTitle)
 	}
 
+	if lowerResult.nextPrompt.Context != "Base: develop. Choose the revision to inspect." {
+		t.Fatalf("base context lost: %q", lowerResult.nextPrompt.Context)
+	}
 	upperResult := lowerResult.nextPrompt.OnSubmit("feature/x")
 	if upperResult.next == nil {
 		t.Fatal("submitting the upper revision must open the layout picker")
@@ -39,6 +42,12 @@ func TestBeginCompareReviewChainsToAConfirmWithTheRightArgv(t *testing.T) {
 		t.Fatalf("layout picker has %d items, want 4 (no offer filtering for compare)", len(upperResult.next.Items))
 	}
 
+	if upperResult.next.Notice != "Base: develop → Inspect: feature/x" {
+		t.Fatalf("range summary lost: %q", upperResult.next.Notice)
+	}
+	if upperResult.next.Items[2].Detail != domain.CompareStepDetail {
+		t.Fatal("step semantics must be visible")
+	}
 	stepResult := upperResult.next.OnPick("step")
 	if stepResult.confirmNext == nil {
 		t.Fatal("picking a layout must open the SAME confirm gate the body uses, not run directly")

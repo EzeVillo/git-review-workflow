@@ -958,10 +958,10 @@ public sealed partial class ActionDispatcher
     /// outside its list, because the CLI takes a commit-ish there — a tag or a SHA is a
     /// real answer. With no candidates to show it degrades to the plain input.
     /// </summary>
-    private static string? PickCommitIsh(string title, IReadOnlyList<string> candidates) =>
+    private static string? PickCommitIsh(string title, string context, IReadOnlyList<string> candidates) =>
         candidates.Count == 0
-            ? GitReviewDialogs.Input(title, "Branch, tag or commit")
-            : GitReviewDialogs.ChooseOrType(title, "Branch, tag or commit", candidates);
+            ? GitReviewDialogs.Input(title, context)
+            : GitReviewDialogs.ChooseOrType(title, context, candidates);
 
     /// <param name="id">
     /// The control the reviewer actually pressed — discardInventory, discardFixes,
@@ -1061,20 +1061,22 @@ public sealed partial class ActionDispatcher
         // el caso común (una rama) haya que escribirlo de memoria.
         var revisions = ConfigPorcelain.CompareRevisionItems(State.Candidates ?? Array.Empty<CandidateBranch>());
         var candidates = revisions.Select(c => c.Label).ToList();
-        var lower = PickCommitIsh(UserCopy.CompareLowerTitle, candidates);
+        var lower = PickCommitIsh(UserCopy.CompareLowerTitle, UserCopy.CompareBasePrompt + " " + UserCopy.CompareRevisionPrompt, candidates);
         if (lower is null) return;
-        var upper = PickCommitIsh(UserCopy.CompareUpperTitle, candidates);
+        var lowerRef = revisions.FirstOrDefault(c => c.Label == lower)?.Value ?? lower;
+        var upper = PickCommitIsh(UserCopy.CompareUpperTitle, UserCopy.CompareTargetPromptText(lowerRef) + " " + UserCopy.CompareRevisionPrompt, candidates);
         if (upper is null) return;
+        var upperRef = revisions.FirstOrDefault(c => c.Label == upper)?.Value ?? upper;
 
         var idx = GitReviewDialogs.Choose(
             UserCopy.CompareLayoutTitle,
-            UserCopy.CompareLayoutPlaceholder,
+            UserCopy.ComparisonSummary(lowerRef, upperRef),
             new[]
             {
-                "Walkthrough — guided reading order if the upper tip has a walkthrough",
-                "Walkthrough — keys only — only entries marked key",
-                "Commit by commit — one commit at a time",
-                "Whole diff — entire diff at once",
+                UserCopy.CompareWalkLabel + " — " + UserCopy.CompareWalkDetail,
+                UserCopy.CompareKeysLabel + " — " + UserCopy.CompareKeysDetail,
+                UserCopy.CompareStepLabel + " — " + UserCopy.CompareStepDetail,
+                UserCopy.CompareWholeLabel + " — " + UserCopy.CompareWholeDetail,
             });
         if (idx < 0) return;
         var layout = idx switch
@@ -1085,7 +1087,7 @@ public sealed partial class ActionDispatcher
             _ => ReviewLayout.Whole,
         };
         if (!GitReviewDialogs.Confirm(ControlId.CompareReview,
-                UserCopy.CompareConfirmTitle(lower, upper, layout),
+                UserCopy.CompareConfirmTitle(lowerRef, upperRef, layout),
                 UserCopy.CompareConfirmDetail,
                 UserCopy.CompareButton))
         {
@@ -1100,10 +1102,9 @@ public sealed partial class ActionDispatcher
         };
         await RunAsync(
             "compareReview",
-            new ActionParams.Compare(flags, revisions.FirstOrDefault(c => c.Label == lower)?.Value ?? lower,
-                revisions.FirstOrDefault(c => c.Label == upper)?.Value ?? upper),
+            new ActionParams.Compare(flags, lowerRef, upperRef),
             network: true,
-            progress: UserCopy.ComparingProgress(lower, upper)).ConfigureAwait(true);
+            progress: UserCopy.ComparingProgress(lowerRef, upperRef)).ConfigureAwait(true);
     }
 
     /// <summary>

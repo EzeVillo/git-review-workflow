@@ -50,7 +50,15 @@ export interface StatusFinishRecord {
     onto: boolean;
 }
 
+export interface ComparisonRecord {
+    baseOid: string;
+    targetOid: string;
+    baseLabel: string;
+    targetLabel: string;
+}
+
 export interface PorcelainResult {
+    comparison?: ComparisonRecord;
     state: StateRecord;
     entries: EntryRecord[];
     /** Sólo si hay un cierre trabado en curso sobre esta review. */
@@ -250,6 +258,9 @@ export function parsePorcelain(stdout: string): PorcelainResult {
     let subjects: Map<number, string> | undefined;
     let authors: Map<number, string> | undefined;
     let base: string | undefined;
+    let comparisonOids: string[] | undefined;
+    let comparisonBase: string | undefined;
+    let comparisonTarget: string | undefined;
     let finish: StatusFinishRecord | undefined;
     let isReadonly: true | undefined;
     let isKeysOnly: true | undefined;
@@ -346,6 +357,12 @@ export function parsePorcelain(stdout: string): PorcelainResult {
             }
             // Registro único y sin posición: la base es de la review, no de una
             // entrada. Un solo tab que saltar, y el texto libre es el resto.
+            case "comparison": {
+                if (fields.slice(1, 3).length === 2 && fields.slice(1, 3).every((s) => /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(s))) comparisonOids = fields.slice(1, 3);
+                break;
+            }
+            case "comparison-base": comparisonBase = restAfterTab(line, 1); break;
+            case "comparison-target": comparisonTarget = restAfterTab(line, 1); break;
             case "base": {
                 const text = restAfterTab(line, 1);
                 if (text !== undefined) {
@@ -393,6 +410,9 @@ export function parsePorcelain(stdout: string): PorcelainResult {
     }
 
     const result: PorcelainResult = {state, entries, files};
+    if (comparisonOids && comparisonBase && comparisonTarget) {
+        result.comparison = {baseOid: comparisonOids[0], targetOid: comparisonOids[1], baseLabel: comparisonBase, targetLabel: comparisonTarget};
+    }
     if (subjects) {
         result.subjects = subjects;
     }

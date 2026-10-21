@@ -983,6 +983,9 @@ func renderWhyBlock(b *builder, m domain.PanelModel, leadingBlank bool) {
 
 func renderReviewWalk(b *builder, m domain.PanelModel) {
 	b.heading(identityLine(m))
+	for _, line := range domain.ComparisonLines(m.Comparison) {
+		b.note(line)
+	}
 	b.note(m.Note)
 	b.text(fmt.Sprintf("Entry %d/%d: %s", m.Position, m.Total, m.CurrentPath.Display))
 	renderWhyBlock(b, m, true)
@@ -996,6 +999,9 @@ func renderReviewWalk(b *builder, m domain.PanelModel) {
 
 func renderReviewStep(b *builder, m domain.PanelModel) {
 	b.heading(identityLine(m))
+	for _, line := range domain.ComparisonLines(m.Comparison) {
+		b.note(line)
+	}
 	b.note(m.Note)
 	b.text(fmt.Sprintf("Entry %d/%d: %s", m.Position, m.Total, m.CurrentSHA))
 	b.blank()
@@ -1012,6 +1018,9 @@ func renderReviewStep(b *builder, m domain.PanelModel) {
 
 func renderReviewWhole(b *builder, m domain.PanelModel) {
 	b.heading(identityLine(m))
+	for _, line := range domain.ComparisonLines(m.Comparison) {
+		b.note(line)
+	}
 	b.note(m.Note)
 	b.heading(interpolate(domain.FilesInReviewHeading, "{n}", strconv.Itoa(m.Total)))
 	// openAllChanges is not_in: [tui] (T006) — no control drawn here.
@@ -1034,6 +1043,9 @@ func renderFinishConflict(b *builder, m domain.PanelModel) {
 	b.button("resumeFinish", "", domain.ContinueLabel, b.st.secondary, true)
 	b.blank()
 	b.heading(identityLine(m))
+	for _, line := range domain.ComparisonLines(m.Comparison) {
+		b.note(line)
+	}
 	b.note(m.Note)
 
 	if m.Mode == domain.ModeWalk {

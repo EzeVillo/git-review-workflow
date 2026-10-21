@@ -61,17 +61,18 @@ type PanelModel struct {
 	ConfiguredBase   string
 	ConfiguredRemote string
 
-	Mode      ReviewMode
-	Branch    string
-	Source    string
-	Tip       string
-	Base      string
-	HasBase   bool
-	Position  int
-	Total     int
-	BaseMoved bool
-	AtFirst   bool
-	AtLast    bool
+	Mode       ReviewMode
+	Branch     string
+	Source     string
+	Tip        string
+	Base       string
+	Comparison *ComparisonRecord
+	HasBase    bool
+	Position   int
+	Total      int
+	BaseMoved  bool
+	AtFirst    bool
+	AtLast     bool
 
 	NavigationLocked bool
 	Degraded         bool

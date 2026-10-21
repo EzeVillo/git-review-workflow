@@ -1052,3 +1052,7 @@ keymap:
   global:
     - {keys: [enter], does: activate_focused}
     - {keys: [q, "ctrl+c"], does: quit}
+
+comparison_context:
+  base: "Base: {revision} ({oid})"
+  target: "Inspect: {revision} ({oid})"

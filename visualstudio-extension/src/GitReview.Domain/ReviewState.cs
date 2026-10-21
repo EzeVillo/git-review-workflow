@@ -41,6 +41,7 @@ public sealed record ReviewState(
     IReadOnlyDictionary<int, string>? Subjects = null,
     IReadOnlyDictionary<int, string>? Authors = null,
     string? Base = null,
+    ComparisonRecord? Comparison = null,
     StatusFinishRecord? Finish = null,
     bool? Readonly = null,
     bool? KeysOnly = null,

@@ -1775,3 +1775,11 @@ una fila remota abriera la rama local o fallara si sólo existía en el remoto.
 `candidate-ref` conserva la referencia exacta sin alterar el registro anterior ni
 sumar procesos. Los selectores presentan nombres legibles y envían esa ref; los
 nombres de rama de review y la custodia del draft normalizan refs completas.
+
+### Compare: extremos fijados, independientes del cursor
+
+El destino solo no alcanza para reconocer una comparación al retomarla. La sesión
+registra el OID inferior y la etiqueta original del destino junto al tip existente;
+Save/Continue transfieren ambos. Status publica nombres y OID en registros aditivos,
+sin ensanchar `state`, en Whole, Walk y Step. Así los cuatro paneles muestran la
+misma base y el mismo destino incluso si sus refs avanzan después de abrirlos.

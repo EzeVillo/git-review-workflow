@@ -90,6 +90,7 @@ working tree**. El detalle de cada pieza está en `decisiones.md` §2-§8; esto 
 | `reviewwalkstep`, `reviewwalkcount`, `reviewwalkbase` | `walk` | Cursor de lectura (1-based), guard y lower bound |
 | `reviewwalkfromdraft` | `walk` | El orden caminado salió del borrador del revisor |
 | `reviewdraft` | **todos** | Bajo qué nombre vive el borrador de esta review |
+| `reviewcomparebase`, `reviewcomparetarget` | `compare` | OID inferior fijado y etiqueta original del destino, independientes del cursor |
 | `reviewcommentscontext`, `reviewcommentssession`, `reviewcommentsowner` | **todos** | Contexto opaco, sesión exclusiva y gitdir propietario de los comentarios |
 
 El guard de metadata de `finish` **aborta si hay claves de step sin `reviewmode=step`**, y hay un

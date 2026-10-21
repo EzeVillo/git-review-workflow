@@ -169,6 +169,7 @@ func Project(in ProjectInput) PanelModel {
 			m.Note = WalkthroughDegradedToWholeNote
 		}
 
+		m.Comparison = in.Status.Comparison
 		m.EntryPickerRows = entryPickerRows(st.Mode, in.Status.Entries, in.Status.Subjects)
 
 		switch st.Mode {

@@ -174,6 +174,7 @@ class ReviewStateManager(
                         subjects = porcelain.subjects,
                         authors = porcelain.authors,
                         base = porcelain.base,
+                        comparison = porcelain.comparison,
                         finish = porcelain.finish,
                         readonly = porcelain.readonly,
                         keysOnly = porcelain.keysOnly,

@@ -367,6 +367,8 @@ git review compare v1.0 v2.0 --step   # ...and walk it commit by commit
 - If `<b>`'s tree carries a walkthrough, `compare` enters walk mode too, just like
   `git review start`, and stays read-only. `--no-walk` opts out.
 
+Compare keeps both original revision names and their resolved commit IDs in `status`, in every reading mode and after saving/resuming. Moving a branch later does not change the comparison already opened.
+
 </details>
 
 <details>

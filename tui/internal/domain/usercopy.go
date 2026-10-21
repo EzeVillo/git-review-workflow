@@ -1,6 +1,9 @@
 package domain
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // This file carries EVERY string this client shows a person: the copy
 // shared with the other three clients (contracts/client-product-
@@ -673,3 +676,25 @@ const (
 const CommentsOriginalUnversioned = "The captured lines included unsaved changes; this view shows the recorded Git version."
 
 const ReviewScrollPosition = "Review {track}: {above} above, {below} below"
+
+const ComparisonBaseLine = "Base: {revision} ({oid})"
+const ComparisonTargetLine = "Inspect: {revision} ({oid})"
+
+func ComparisonLines(c *ComparisonRecord) []string {
+	if c == nil {
+		return nil
+	}
+	line := func(template, label, oid string) string {
+		for _, prefix := range []string{"refs/heads/", "refs/remotes/", "refs/tags/"} {
+			if strings.HasPrefix(label, prefix) {
+				label = strings.TrimPrefix(label, prefix)
+				break
+			}
+		}
+		if len(oid) > 7 {
+			oid = oid[:7]
+		}
+		return strings.NewReplacer("{revision}", label, "{oid}", oid).Replace(template)
+	}
+	return []string{line(ComparisonBaseLine, c.BaseLabel, c.BaseOid), line(ComparisonTargetLine, c.TargetLabel, c.TargetOid)}
+}

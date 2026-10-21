@@ -1,6 +1,6 @@
 import {NPM_INSTALL_CMD, NPM_UPDATE_CMD} from "../cli/installHint";
 import {MIN_CLI_VERSION} from "../cli/version";
-import {COMMENTS_COPY, SUPPORT_COPY} from "../review/userCopy";
+import {COMMENTS_COPY, SUPPORT_COPY, COMPARISON_COPY} from "../review/userCopy";
 
 /**
  * HTML del panel, separado del provider y sin depender de `vscode`: así se abre
@@ -1725,7 +1725,14 @@ export function panelHtml(nonce: string): string {
   // Las notas van tanto en el dibujo normal como en el de carga: describen el
   // review, no la entrada, así que no cambian al navegar. Sacarlas mientras
   // carga haría saltar el panel dos veces por cada paso.
+  const COMPARISON = ${JSON.stringify(COMPARISON_COPY)};
   function renderNotes(model) {
+    if (model.comparison) {
+      const c = model.comparison;
+      const label = function (value) { return value.replace(/^refs\\/(heads|remotes|tags)\\//, ""); };
+      root.appendChild(note(COMPARISON.base.replace("{revision}", function () { return label(c.baseLabel); }).replace("{oid}", c.baseOid.slice(0, 7))));
+      root.appendChild(note(COMPARISON.target.replace("{revision}", function () { return label(c.targetLabel); }).replace("{oid}", c.targetOid.slice(0, 7))));
+    }
     if (model.readonly) {
       root.appendChild(note("Read-only compare: finish is not available. Use Cancel when done."));
     }
@@ -1739,7 +1746,7 @@ export function panelHtml(nonce: string): string {
     // Sólo llega en whole, que es donde reemplaza a la secuencia como respuesta
     // a "¿contra qué estoy comparando?". Sin base registrada no se dibuja nada
     // en su lugar: ni un hueco, ni un vacío, ni un error (FR-009).
-    if (model.base !== undefined) { root.appendChild(note("Range built against " + model.base + ".")); }
+    if (!model.comparison && model.base !== undefined) { root.appendChild(note("Range built against " + model.base + ".")); }
   }
 
   const COMMENTS = ${JSON.stringify(COMMENTS_COPY)};

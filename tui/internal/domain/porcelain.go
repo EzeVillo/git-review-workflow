@@ -65,9 +65,15 @@ type StatusFinishRecord struct {
 }
 
 // PorcelainResult is the parsed output of `status --porcelain`.
+type ComparisonRecord struct {
+	BaseOid, TargetOid     string
+	BaseLabel, TargetLabel string
+}
+
 type PorcelainResult struct {
-	State   StateRecord
-	Entries []EntryRecord
+	Comparison *ComparisonRecord
+	State      StateRecord
+	Entries    []EntryRecord
 	// Files: the CURRENT commit's file inventory in step mode (`file`
 	// records), position 1-based within that commit. Always a non-nil slice,
 	// empty when there are no `file` lines.
@@ -160,6 +166,8 @@ func restAfterTab(line string, skip int) (string, bool) {
 // Unknown tags and extra trailing fields on a known record are ignored
 // (FR-015).
 func ParsePorcelain(stdout string) (PorcelainResult, bool) {
+	var comparisonBase, comparisonTarget string
+	var comparisonOids []string
 	lines := splitLines(stdout)
 
 	var (
@@ -249,6 +257,14 @@ func ParsePorcelain(stdout string) (PorcelainResult, bool) {
 				result.Authors[pos] = text
 			}
 
+		case "comparison":
+			if len(fields) >= 3 && validComparisonOid(fields[1]) && validComparisonOid(fields[2]) {
+				comparisonOids = fields[1:3]
+			}
+		case "comparison-base":
+			comparisonBase, _ = restAfterTab(line, 1)
+		case "comparison-target":
+			comparisonTarget, _ = restAfterTab(line, 1)
 		case "base":
 			if text, ok := restAfterTab(line, 1); ok {
 				result.Base = text
@@ -284,6 +300,9 @@ func ParsePorcelain(stdout string) (PorcelainResult, bool) {
 	}
 	if result.Files == nil {
 		result.Files = []EntryRecord{}
+	}
+	if len(comparisonOids) == 2 && comparisonBase != "" && comparisonTarget != "" {
+		result.Comparison = &ComparisonRecord{BaseOid: comparisonOids[0], TargetOid: comparisonOids[1], BaseLabel: comparisonBase, TargetLabel: comparisonTarget}
 	}
 	return result, true
 }
@@ -923,4 +942,16 @@ func BranchPickerItems(candidates []CandidateBranch) []CandidateBranch {
 		return out[i].Name < out[j].Name
 	})
 	return out
+}
+
+func validComparisonOid(s string) bool {
+	if len(s) != 40 && len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if !(c >= '0' && c <= '9') && !(c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
 }

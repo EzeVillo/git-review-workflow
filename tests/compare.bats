@@ -11,6 +11,7 @@
 # So v1.0..v2.0 spans two commits (c1, then the v2.0 commit).
 
 setup() {
+	bats_require_minimum_version 1.5.0
 	TMP="$(mktemp -d)"
 	export HOME="$TMP/home"
 	mkdir -p "$HOME"
@@ -284,4 +285,58 @@ EOF
     [ "$(git config branch.review/origin/remote-only.reviewdraft)" = remote-only ]
     [ "$(git config branch.review/origin/remote-only.reviewtip)" = "$(git rev-parse v2.0)" ]
     [ "$(git diff --cached --name-only)" = app.txt ]
+}
+
+check_comparison_context() {
+    target="$1"
+    shift
+    git branch chosen-base v1.0
+    lower="$(git rev-parse chosen-base)"
+    upper="$(git rev-parse "$target")"
+    run --separate-stderr git review compare "$@" -- chosen-base "$target"
+    [ "$status" -eq 0 ]
+    git update-ref refs/heads/chosen-base "$upper"
+    expected="$(printf 'comparison\t%s\t%s\ncomparison-base\tchosen-base\ncomparison-target\t%s' "$lower" "$upper" "$target")"
+    run --separate-stderr git review status --porcelain
+    [ "$status" -eq 0 ]
+    [ -z "$stderr" ]
+    [ "$(printf '%s\n' "$output" | awk -F'\t' '$1 ~ /^comparison/')" = "$expected" ]
+    run --separate-stderr git review status
+    [ "$status" -eq 0 ]
+    [ "$(printf '%s\n' "$output" | sed -n '/^  from /p; /^  to /p')" = "$(printf '  from    chosen-base (%s)\n  to      %s (%s)' "$lower" "$target" "$upper")" ]
+    run --separate-stderr git review save
+    [ "$status" -eq 0 ]
+    [ "$(git config "branch.review-saved/$target.reviewcomparebase")" = "$lower" ]
+    run --separate-stderr git review continue "$target"
+    [ "$status" -eq 0 ]
+    [ "$(git config "branch.review/$target.reviewcomparebase")" = "$lower" ]
+    run --separate-stderr git review status --porcelain
+    [ "$status" -eq 0 ]
+    [ "$(printf '%s\n' "$output" | awk -F'\t' '$1 ~ /^comparison/')" = "$expected" ]
+    [ "$(git branch --show-current)" = "review/$target" ]
+}
+
+@test "compare whole retains its original endpoints after refs move and save continue" {
+    check_comparison_context v2.0 --no-walk
+}
+
+@test "compare step retains its original endpoints after refs move and save continue" {
+    check_comparison_context v2.0 --step
+    run --separate-stderr git review next
+    [ "$status" -eq 0 ]
+    [ "$(git config branch.review/v2.0.reviewstep)" = 2 ]
+    run --separate-stderr git review status --porcelain
+    [ "$status" -eq 0 ]
+    [ "$(printf '%s\n' "$output" | awk -F'\t' '$1 ~ /^comparison/')" = "$expected" ]
+}
+
+@test "compare walk retains its original endpoints after refs move and save continue" {
+    git switch --quiet -c walk-context v2.0
+    mkdir -p .review
+    printf '# Walkthrough\n\n## 1. app.txt\nwhy\n' >.review/walkthrough.md
+    git add .review/walkthrough.md
+    git commit --quiet -m walkthrough
+    git switch --quiet develop
+    check_comparison_context walk-context
+    [ "$(git config branch.review/walk-context.reviewmode)" = walk ]
 }

@@ -379,6 +379,8 @@ git review compare v1.0 v2.0 --step   # ...y recorrerlo commit por commit
   igual que `git review start`, y sigue siendo de solo lectura. `--no-walk` opta
   por salir.
 
+Compare conserva los nombres de ambas revisiones y sus commits resueltos en `status`, en todos los modos y después de guardar/retomar. Mover una rama después no cambia la comparación ya abierta.
+
 </details>
 
 <details>

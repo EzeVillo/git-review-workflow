@@ -175,6 +175,8 @@ if [ "$step" -eq 1 ]; then
 	git config "branch.$rb.reviewsource" "$name"
 	git config "branch.$rb.reviewbase" "$a"
 	git config "branch.$rb.reviewtip" "$bcommit"
+	git config "branch.$rb.reviewcomparebase" "$acommit"
+	git config "branch.$rb.reviewcomparetarget" "$b"
 	git config "branch.$rb.reviewstart" "$acommit"
 	git config "branch.$rb.reviewmode" "step"
 	git config "branch.$rb.reviewcount" "$count"
@@ -245,6 +247,8 @@ git reset -q --soft "$acommit"
 git config "branch.$rb.reviewsource" "$name"
 git config "branch.$rb.reviewbase" "$a"
 git config "branch.$rb.reviewtip" "$bcommit"
+git config "branch.$rb.reviewcomparebase" "$acommit"
+git config "branch.$rb.reviewcomparetarget" "$b"
 git config "branch.$rb.reviewreadonly" "1"
 # Where this review's draft lives, from the single derivation above. Recorded in
 # every mode and whether or not a draft exists yet, because the surfaces that need

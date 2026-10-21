@@ -398,6 +398,18 @@ public static class UserCopy
             _ => "Something went wrong.",
         };
     }
+
+    public const string ComparisonBase = "Base: {revision} ({oid})";
+    public const string ComparisonTarget = "Inspect: {revision} ({oid})";
+    public static IReadOnlyList<string> ComparisonLines(ComparisonRecord c)
+    {
+        string Line(string template, string label, string oid)
+        {
+            var prefix = new[] { "refs/heads/", "refs/remotes/", "refs/tags/" }.FirstOrDefault(p => label.StartsWith(p, StringComparison.Ordinal));
+            return template.Replace("{revision}", prefix is null ? label : label.Substring(prefix.Length)).Replace("{oid}", oid.Substring(0, Math.Min(7, oid.Length)));
+        }
+        return new[] { Line(ComparisonBase, c.BaseLabel, c.BaseOid), Line(ComparisonTarget, c.TargetLabel, c.TargetOid) };
+    }
 }
 
 public static class CommentsCopy

@@ -311,6 +311,7 @@ export interface PanelModel {
      * "no es readonly").
      */
     readonly: boolean;
+    comparison?: ReviewState["comparison"];
     /**
      * Walk keys-only (`status --porcelain` → registro `keys`). Siempre
      * booleano en el modelo (ausencia en porcelain = false).
@@ -705,6 +706,7 @@ export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelM
     base.tip = review.tip;
     base.degraded = review.walkthrough === "degraded";
     base.readonly = state.readonly === true;
+    base.comparison = state.comparison;
     base.keysOnly = state.keysOnly === true;
     base.draft = state.draft === true;
     base.entryCount = state.entries.length;

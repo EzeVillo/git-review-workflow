@@ -499,6 +499,7 @@ private fun inventoryHelp(r: PanelReview): String {
 
 private fun notes(model: PanelModel): List<Block.Note> {
     val out = ArrayList<Block.Note>()
+    model.comparison?.let { c -> out.addAll(UserCopy.comparisonLines(c).map { Block.Note(it) }) }
     if (model.readonly) {
         out.add(Block.Note("Read-only compare: finish is not available. Use Cancel when done."))
     }
@@ -511,7 +512,7 @@ private fun notes(model: PanelModel): List<Block.Note> {
     if (model.degraded) {
         out.add(Block.Note("The walkthrough does not cover the review's current range; showing the full range diff."))
     }
-    model.base?.let { out.add(Block.Note("Range built against $it.")) }
+    if (model.comparison == null) model.base?.let { out.add(Block.Note("Range built against $it.")) }
     return out
 }
 

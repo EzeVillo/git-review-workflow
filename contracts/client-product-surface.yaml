@@ -1053,3 +1053,8 @@ keymap:
   global:
     - {keys: [enter], does: activate_focused}
     - {keys: [q, "ctrl+c"], does: quit}
+
+# Los extremos fijados por Compare aparecen en todos los modos y clientes.
+comparison_context:
+  base: "Base: {revision} ({oid})"
+  target: "Inspect: {revision} ({oid})"

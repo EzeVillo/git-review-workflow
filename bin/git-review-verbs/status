@@ -103,6 +103,12 @@ if [ -n "$why" ]; then
 	exit 0
 fi
 
+# These are the original comparison endpoints, independent of the cursor and
+# of refs moving after start. Older sessions may not carry this additive data.
+cmpbase="$(git config "branch.$cur.reviewcomparebase" || true)"
+cmpfrom="$(git config "branch.$cur.reviewbase" || true)"
+cmpto="$(git config "branch.$cur.reviewcomparetarget" || true)"
+
 if [ "$porcelain" -eq 1 ]; then
 	tab="$(printf '\t')"
 	case "$mode" in
@@ -239,6 +245,11 @@ if [ "$porcelain" -eq 1 ]; then
 	# Separate record, omitted when not set — additive, same pattern as base/finish.
 	if [ "$(git config "branch.$cur.reviewreadonly" || true)" = "1" ]; then
 		porcelain_row readonly
+		if [ -n "$cmpbase" ] && [ -n "$cmpfrom" ] && [ -n "$cmpto" ]; then
+			porcelain_row comparison "$cmpbase" "$tip"
+			porcelain_row comparison-base "$cmpfrom"
+			porcelain_row comparison-target "$cmpto"
+		fi
 	fi
 	# keys-only walk submode (start/compare --keys): presence record, like readonly.
 	if [ "$(git config "branch.$cur.reviewwalkkeys" || true)" = "1" ]; then
@@ -268,6 +279,9 @@ printf '  branch  %s\n' "$cur"
 # Not named "readonly": that is a shell special builtin and would break assignment.
 is_readonly="$(git config "branch.$cur.reviewreadonly" || true)"
 if [ "$is_readonly" = "1" ]; then
+	if [ -n "$cmpbase" ] && [ -n "$cmpfrom" ] && [ -n "$cmpto" ]; then
+		printf '  from    %s (%s)\n  to      %s (%s)\n' "$cmpfrom" "$cmpbase" "$cmpto" "$tip"
+	fi
 	printf '  note    read-only compare — git review finish will refuse; abort or clean when done\n'
 fi
 # Whole/walk mid-finish conflict (rare for whole; step is the usual path) still

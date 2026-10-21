@@ -42,6 +42,7 @@ data class ReviewState(
     val subjects: Map<Int, String>? = null,
     val authors: Map<Int, String>? = null,
     val base: String? = null,
+    val comparison: ComparisonRecord? = null,
     val finish: StatusFinishRecord? = null,
     val readonly: Boolean? = null,
     val keysOnly: Boolean? = null,

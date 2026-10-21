@@ -184,6 +184,8 @@ if [ "$mode" = "step" ]; then
 	restore_meta reviewprevreviewed
 	restore_meta reviewlocal
 	restore_meta reviewreadonly
+	restore_meta reviewcomparebase
+	restore_meta reviewcomparetarget
 	restore_meta reviewreturn
 	# The name the draft was filed under, restored in every mode for the same reason
 	# save copies it in every mode: the resumed review has to look the file up under
@@ -220,6 +222,8 @@ else
 	restore_meta reviewprevreviewed
 	restore_meta reviewlocal
 	restore_meta reviewreadonly
+	restore_meta reviewcomparebase
+	restore_meta reviewcomparetarget
 	restore_meta reviewreturn
 	# The name the draft was filed under (see the step path above).
 	restore_meta reviewdraft

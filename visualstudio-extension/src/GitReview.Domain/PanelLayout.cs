@@ -547,6 +547,7 @@ public static class PanelLayoutBuilder
     private static List<Block> Notes(PanelModel model)
     {
         var outList = new List<Block>();
+        if (model.Comparison is not null) outList.AddRange(UserCopy.ComparisonLines(model.Comparison).Select(line => new Block.Note(line)));
         if (model.Readonly)
             outList.Add(new Block.Note("Read-only compare: finish is not available. Use Cancel when done."));
         if (model.KeysOnly)
@@ -555,7 +556,7 @@ public static class PanelLayoutBuilder
             outList.Add(new Block.Note("The base moved: fewer entries remain in range than when the review started."));
         if (model.Degraded)
             outList.Add(new Block.Note("The walkthrough does not cover the review's current range; showing the full range diff."));
-        if (model.Base is not null)
+        if (model.Comparison is null && model.Base is not null)
             outList.Add(new Block.Note($"Range built against {model.Base}."));
         return outList;
     }

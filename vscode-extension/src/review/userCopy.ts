@@ -198,3 +198,8 @@ export function draftUpdated(kept: number, added: number, dropped: number): stri
 
 export const WALKTHROUGH_UPDATE_BUTTON = "Update";
 export const WALKTHROUGH_START_OVER_BUTTON = "Start over";
+
+export const COMPARISON_COPY = {
+    base: "Base: {revision} ({oid})",
+    target: "Inspect: {revision} ({oid})",
+} as const;

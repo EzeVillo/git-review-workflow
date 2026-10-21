@@ -145,6 +145,7 @@ public sealed class ReviewStateManager
                     Subjects: parsed.Subjects,
                     Authors: parsed.Authors,
                     Base: parsed.Base,
+                    Comparison: parsed.Comparison,
                     Finish: parsed.Finish,
                     Readonly: parsed.Readonly,
                     KeysOnly: parsed.KeysOnly,

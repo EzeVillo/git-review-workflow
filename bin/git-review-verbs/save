@@ -225,6 +225,8 @@ copy_meta reviewlocal
 copy_meta reviewdraft
 # compare reviews: finish must keep refusing after save → continue.
 copy_meta reviewreadonly
+copy_meta reviewcomparebase
+copy_meta reviewcomparetarget
 git config "branch.$saved.reviewreturn" "$target"
 comments_transfer "$cur" "$saved" || exit 1
 

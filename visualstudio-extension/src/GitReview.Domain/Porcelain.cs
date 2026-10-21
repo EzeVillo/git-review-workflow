@@ -77,6 +77,8 @@ public sealed record StatusFinishRecord(
     string State = "conflict",
     bool Onto = false);
 
+public sealed record ComparisonRecord(string BaseOid, string TargetOid, string BaseLabel, string TargetLabel);
+
 public sealed record PorcelainResult(
     StateRecord State,
     IReadOnlyList<EntryRecord> Entries,
@@ -93,7 +95,8 @@ public sealed record PorcelainResult(
     string? DraftPath = null,
     IReadOnlyDictionary<int, string>? Subjects = null,
     IReadOnlyDictionary<int, string>? Authors = null,
-    string? Base = null)
+    string? Base = null,
+    ComparisonRecord? Comparison = null)
 {
     public IReadOnlyList<EntryRecord> FilesList => Files ?? Array.Empty<EntryRecord>();
 }
@@ -180,6 +183,9 @@ public static class Porcelain
         Dictionary<int, string>? subjects = null;
         Dictionary<int, string>? authors = null;
         string? bas = null;
+        string[]? comparisonOids = null;
+        string? comparisonBase = null;
+        string? comparisonTarget = null;
         StatusFinishRecord? finish = null;
         bool? isReadonly = null;
         bool? isKeysOnly = null;
@@ -275,6 +281,14 @@ public static class Porcelain
                     }
                     break;
                 }
+                case "comparison":
+                {
+                    var oids = fields.Skip(1).Take(2).ToArray();
+                    if (oids.Length == 2 && oids.All(s => System.Text.RegularExpressions.Regex.IsMatch(s, "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"))) comparisonOids = oids;
+                    break;
+                }
+                case "comparison-base": comparisonBase = RestAfterTab(line, 1); break;
+                case "comparison-target": comparisonTarget = RestAfterTab(line, 1); break;
                 case "base":
                 {
                     var text = RestAfterTab(line, 1);
@@ -313,7 +327,9 @@ public static class Porcelain
             DraftPath: draftPath,
             Subjects: subjects,
             Authors: authors,
-            Base: bas);
+            Base: bas,
+            Comparison: comparisonOids is not null && !string.IsNullOrEmpty(comparisonBase) && !string.IsNullOrEmpty(comparisonTarget)
+                ? new ComparisonRecord(comparisonOids[0], comparisonOids[1], comparisonBase!, comparisonTarget!) : null);
     }
 
     /// <summary>Source name of a review branch: strips review-saved/ or review/ prefix.</summary>

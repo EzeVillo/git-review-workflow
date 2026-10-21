@@ -18,6 +18,7 @@ import {
     parseListPorcelain,
     parsePorcelain,
     StateRecord,
+    ComparisonRecord,
     StatusFinishRecord,
 } from "../cli/porcelain";
 import {isOutdated} from "../cli/version";
@@ -122,6 +123,7 @@ export interface ReviewState {
      * Ausente cuando la CLI no lo emitió; no se inventa `false`.
      */
     readonly?: true;
+    comparison?: ComparisonRecord;
     /**
      * Walk solo-keys (`status --porcelain` → registro `keys`). Ausente cuando
      * la CLI no lo emitió; no se inventa `false`.
@@ -482,6 +484,7 @@ export class ReviewStateManager {
         if (parsed.authors) {
             next.authors = parsed.authors;
         }
+        if (parsed.comparison) next.comparison = parsed.comparison;
         if (parsed.base !== undefined) {
             next.base = parsed.base;
         }

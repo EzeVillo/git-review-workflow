@@ -314,3 +314,13 @@ expone, con su motivo:
 | Diffstat de un commit                                                               | El consumidor ya alcanza esos mismos archivos por la superficie de diff de su host; duplicarlo chocaría con la exclusión de interfaz de diff propia (`002-extension-vscode`). |
 | Textos de ayuda (`next`, `banked …`)                                                | Son la guía al usuario humano sobre qué comando correr, no estado de la review.                                                                                               |
 | Tipo de cambio de un archivo del listado de `whole` (agregado/modificado/eliminado) | `walk` tampoco lo emite para sus entradas; agregarlo es una decisión separable que ninguna feature tomó todavía.                                                              |
+
+## Contexto original de Compare
+
+En los tres modos, las comparaciones nuevas emiten `comparison<TAB>base-oid<TAB>target-oid`,
+`comparison-base<TAB>revisión` y `comparison-target<TAB>revisión`.
+Los OID completos se fijan al abrir, no cambian al navegar, mover las refs ni
+Guardar/Retomar. Las etiquetas son texto libre desde el primer tab; se mantienen
+en registros propios para tolerar tabs en expresiones de revisión. Los clientes
+asocian los tres registros sin depender de su orden y no inventan un contexto
+incompleto. Las sesiones anteriores pueden omitirlos. No se amplía `state`.

@@ -68,6 +68,8 @@ data class StatusFinishRecord(
     val onto: Boolean,
 )
 
+data class ComparisonRecord(val baseOid: String, val targetOid: String, val baseLabel: String, val targetLabel: String)
+
 data class PorcelainResult(
     val state: StateRecord,
     val entries: List<EntryRecord>,
@@ -94,6 +96,7 @@ data class PorcelainResult(
     val subjects: Map<Int, String>? = null,
     val authors: Map<Int, String>? = null,
     val base: String? = null,
+    val comparison: ComparisonRecord? = null,
 )
 
 data class BranchFinish(
@@ -187,6 +190,9 @@ fun parsePorcelain(stdout: String): PorcelainResult {
     var subjects: MutableMap<Int, String>? = null
     var authors: MutableMap<Int, String>? = null
     var base: String? = null
+    var comparisonOids: List<String>? = null
+    var comparisonBase: String? = null
+    var comparisonTarget: String? = null
     var finish: StatusFinishRecord? = null
     var isReadonly: Boolean? = null
     var isKeysOnly: Boolean? = null
@@ -271,6 +277,12 @@ fun parsePorcelain(stdout: String): PorcelainResult {
                     authors = (authors ?: mutableMapOf()).also { it[position] = text }
                 }
             }
+            "comparison" -> {
+                val oids = fields.drop(1).take(2)
+                if (oids.size == 2 && oids.all { it.matches(Regex("(?:[0-9a-f]{40}|[0-9a-f]{64})")) }) comparisonOids = oids
+            }
+            "comparison-base" -> comparisonBase = restAfterTab(line, 1)
+            "comparison-target" -> comparisonTarget = restAfterTab(line, 1)
             "base" -> {
                 val text = restAfterTab(line, 1)
                 if (text != null) base = text
@@ -303,6 +315,9 @@ fun parsePorcelain(stdout: String): PorcelainResult {
         subjects = subjects,
         authors = authors,
         base = base,
+        comparison = comparisonOids?.let { oids ->
+            if (!comparisonBase.isNullOrEmpty() && !comparisonTarget.isNullOrEmpty()) ComparisonRecord(oids[0], oids[1], comparisonBase, comparisonTarget) else null
+        },
     )
 }
 

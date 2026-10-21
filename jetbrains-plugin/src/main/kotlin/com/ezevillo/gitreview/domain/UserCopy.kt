@@ -406,6 +406,16 @@ object UserCopy {
             }
             else -> "Something went wrong."
         }
+
+    const val COMPARISON_BASE = "Base: {revision} ({oid})"
+    const val COMPARISON_TARGET = "Inspect: {revision} ({oid})"
+    fun comparisonLines(c: ComparisonRecord): List<String> {
+        fun line(template: String, label: String, oid: String): String {
+            val prefix = listOf("refs/heads/", "refs/remotes/", "refs/tags/").firstOrNull { label.startsWith(it) }
+            return template.replace("{revision}", if (prefix == null) label else label.removePrefix(prefix)).replace("{oid}", oid.take(7))
+        }
+        return listOf(line(COMPARISON_BASE, c.baseLabel, c.baseOid), line(COMPARISON_TARGET, c.targetLabel, c.targetOid))
+    }
 }
 
 object CommentsCopy {

@@ -27,9 +27,14 @@ class PanelLayoutFooterTest {
         assertTrue(compare.blocks.flatMap { controlsOf(it) }.none { it.id == ControlId.WALKTHROUGH_INIT })
         val support = sections[3]
         val supportControls = support.blocks.flatMap { controlsOf(it) }
-        assertTrue(supportControls.any { it.id == ControlId.OPEN_SUPPORT && it.label == "Star on GitHub" && it.supportLinkId == SupportLinks.STAR })
-        assertTrue(supportControls.any { it.id == ControlId.OPEN_SUPPORT && it.label == "Report a bug" && it.supportLinkId == SupportLinks.BUG })
-        assertEquals(2, supportControls.count { it.id == ControlId.OPEN_SUPPORT })
+        assertEquals(listOf(1, 1, 1, 1), support.blocks.map { controlsOf(it).size })
+        assertEquals(listOf("Star on GitHub", "Report a bug", "Sponsor", "Contact"), supportControls.map { it.label })
+        assertEquals(listOf(SupportLinks.STAR, SupportLinks.BUG, SupportLinks.SPONSOR, SupportLinks.CONTACT),
+            supportControls.map { it.supportLinkId })
+        assertTrue(supportControls.all { it.id == ControlId.OPEN_SUPPORT })
+        assertEquals("https://github.com/sponsors/EzeVillo", SupportLinks.urlFor(SupportLinks.SPONSOR))
+        assertEquals("mailto:ezevillodev@gmail.com", SupportLinks.urlFor(SupportLinks.CONTACT))
+        assertEquals(null, SupportLinks.urlFor("unknown"))
     }
 
     /**

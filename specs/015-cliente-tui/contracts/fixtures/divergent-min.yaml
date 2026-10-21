@@ -27,6 +27,8 @@ support:
   star_url: "https://github.com/EzeVillo/git-review-workflow"
   # openSupport id "bug" — issue form lives at .github/ISSUE_TEMPLATE/bug_report.yml
   bug_url: "https://github.com/EzeVillo/git-review-workflow/issues/new?template=bug_report.yml"
+  sponsor_url: "https://github.com/sponsors/EzeVillo"
+  contact_url: "mailto:ezevillodev@gmail.com"
 # Storefront copy. Only what has to read the same in all three marketplaces
 # lives here: the tagline (the one-liner under the plugin name in search results
 # and on the listing) and the search keywords. The listing *body* is not shared
@@ -431,7 +433,10 @@ panel_layout:
       - block: tools_section
         title: "Support"
         blocks:
-          - {block: row, controls: [{id: openSupport, label: "Star on GitHub", emphasis: secondary, raw_button: true, confirms: false}, {id: openSupport, label: "Report a bug", emphasis: secondary, raw_button: true, confirms: false}]}
+          - {block: row, controls: [{id: openSupport, label: "Star on GitHub", emphasis: secondary, raw_button: true, confirms: false}]}
+          - {block: row, controls: [{id: openSupport, label: "Report a bug", emphasis: secondary, raw_button: true, confirms: false}]}
+          - {block: row, controls: [{id: openSupport, label: "Sponsor", emphasis: secondary, raw_button: true, confirms: false}]}
+          - {block: row, controls: [{id: openSupport, label: "Contact", emphasis: secondary, raw_button: true, confirms: false}]}
   finish-pending:
     source_fns: [renderEmptyState]
     blocks:

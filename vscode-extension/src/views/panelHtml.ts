@@ -1,6 +1,6 @@
 import {NPM_INSTALL_CMD, NPM_UPDATE_CMD} from "../cli/installHint";
 import {MIN_CLI_VERSION} from "../cli/version";
-import {COMMENTS_COPY} from "../review/userCopy";
+import {COMMENTS_COPY, SUPPORT_COPY} from "../review/userCopy";
 
 /**
  * HTML del panel, separado del provider y sin depender de `vscode`: así se abre
@@ -1151,9 +1151,8 @@ export function panelHtml(nonce: string): string {
 
   /**
    * Links externos de apoyo al proyecto. El webview manda un id del conjunto
-   * cerrado y el host abre la URL allowlisteada con openExternal. Hoy: star
-   * (repo) y bug (issue form). Sumar linkedin / donate / rate es un par de
-   * filas acá + el allowlist del host.
+   * cerrado y el host abre el destino declarado con openExternal. Cada botón
+   * ocupa su propia fila, también cuando el panel tiene espacio horizontal.
    */
   function supportButton(label, id) {
     const node = el("button", null);
@@ -1166,12 +1165,20 @@ export function panelHtml(nonce: string): string {
   }
 
   function renderSupport() {
-    const row = el("div", "row");
-    row.appendChild(supportButton("Star on GitHub", "star"));
-    row.appendChild(supportButton("Report a bug", "bug"));
-    return toolsSection("Support", supportOpen, function (open) {
+    const supportCopy = ${JSON.stringify(SUPPORT_COPY)};
+    const rows = [
+      supportButton(supportCopy.star, "star"),
+      supportButton(supportCopy.bug, "bug"),
+      supportButton(supportCopy.sponsor, "sponsor"),
+      supportButton(supportCopy.contact, "contact")
+    ].map(function (node) {
+      const row = el("div", "row");
+      row.appendChild(node);
+      return row;
+    });
+    return toolsSection(supportCopy.title, supportOpen, function (open) {
       supportOpen = open;
-    }, [row]);
+    }, rows);
   }
 
   /**

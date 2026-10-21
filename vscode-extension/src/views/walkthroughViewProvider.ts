@@ -78,10 +78,9 @@ export type PanelMessage = (typeof PANEL_MESSAGES)[number];
 /**
  * Ids de link de Support que el webview puede pedir. El host es el único que
  * conoce las URLs: un id desconocido se ignora (nada del webview se abre a
- * ciegas). Sumar LinkedIn / donate / rate = una entrada acá + en el mapa del
- * host + un botón en `renderSupport`.
+ * ciegas). Cada destino se declara acá, en el mapa del host y en el contrato.
  */
-export const SUPPORT_LINK_IDS = ["star", "bug"] as const;
+export const SUPPORT_LINK_IDS = ["star", "bug", "sponsor", "contact"] as const;
 export type SupportLinkId = (typeof SUPPORT_LINK_IDS)[number];
 
 export const SUPPORT_URLS: Record<SupportLinkId, string> = {
@@ -90,6 +89,8 @@ export const SUPPORT_URLS: Record<SupportLinkId, string> = {
     star: "https://github.com/EzeVillo/git-review-workflow",
     // Issue form: .github/ISSUE_TEMPLATE/bug_report.yml (canónico support.bug_url).
     bug: "https://github.com/EzeVillo/git-review-workflow/issues/new?template=bug_report.yml",
+    sponsor: "https://github.com/sponsors/EzeVillo",
+    contact: "mailto:ezevillodev@gmail.com",
 };
 
 /**

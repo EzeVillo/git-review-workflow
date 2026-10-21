@@ -1120,15 +1120,28 @@ public static class PanelLayoutBuilder
         }
         outList.Add(new Block.ToolsSection("Settings", settingsKids));
         outList.Add(new Block.ToolsSection(
-            "Support",
+            UserCopy.SupportTitle,
             new Block[]
             {
                 new Block.Row(new[]
                 {
-                    Ctrl(ControlId.OpenSupport, "Star on GitHub", Emphasis.Secondary,
+                    Ctrl(ControlId.OpenSupport, UserCopy.SupportStar, Emphasis.Secondary,
                         supportLinkId: SupportLinks.Star),
-                    Ctrl(ControlId.OpenSupport, "Report a bug", Emphasis.Secondary,
+                }),
+                new Block.Row(new[]
+                {
+                    Ctrl(ControlId.OpenSupport, UserCopy.SupportBug, Emphasis.Secondary,
                         supportLinkId: SupportLinks.Bug),
+                }),
+                new Block.Row(new[]
+                {
+                    Ctrl(ControlId.OpenSupport, UserCopy.SupportSponsor, Emphasis.Secondary,
+                        supportLinkId: SupportLinks.Sponsor),
+                }),
+                new Block.Row(new[]
+                {
+                    Ctrl(ControlId.OpenSupport, UserCopy.SupportContact, Emphasis.Secondary,
+                        supportLinkId: SupportLinks.Contact),
                 }),
             }));
         return outList;

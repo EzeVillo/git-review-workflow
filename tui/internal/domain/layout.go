@@ -42,9 +42,9 @@ var AllLayoutSituations = []LayoutSituation{
 // declare them. Only controls are recorded — prose, headings and other
 // non-control blocks are not verifiable structure
 // (contracts/client-product-surface.yaml `panel_unverified:`) and carry no
-// entry here. A control that appears twice in the canonical (openSupport's
-// two buttons; openChange's two `when:` branches in finish-conflict) is
-// listed twice, in the order it is declared: this is a textual mirror of
+// entry here. Repeated controls (openSupport's four buttons; openChange's
+// two `when:` branches in finish-conflict) are listed in the order they are
+// declared: this is a textual mirror of
 // the YAML's blocks, not a simulation of which `when:` branch a given
 // PanelModel would take.
 var Layout = map[LayoutSituation][]ControlID{
@@ -56,6 +56,7 @@ var Layout = map[LayoutSituation][]ControlID{
 		"walkthroughInit", "walkthroughBuild",
 		"compareReview",
 		"setBase", "setRemote",
+		"openSupport", "openSupport",
 		"openSupport", "openSupport",
 	},
 	// openAllChanges is not_in: [tui] (T006): the only control review-whole

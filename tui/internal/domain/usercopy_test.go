@@ -28,16 +28,17 @@ func TestDraftAgentPromptReconstructsTheSharedSentence(t *testing.T) {
 
 func TestSupportURLsMatchCanonical(t *testing.T) {
 	yaml := readCanonicalYAML(t)
-	star := regexp.MustCompile(`star_url:\s*"([^"]+)"`).FindStringSubmatch(yaml)
-	bug := regexp.MustCompile(`bug_url:\s*"([^"]+)"`).FindStringSubmatch(yaml)
-	if star == nil || bug == nil {
-		t.Fatal("canonical support URLs not found")
-	}
-	if SupportStarURL != star[1] {
-		t.Errorf("SupportStarURL = %q, canonical = %q", SupportStarURL, star[1])
-	}
-	if SupportBugURL != bug[1] {
-		t.Errorf("SupportBugURL = %q, canonical = %q", SupportBugURL, bug[1])
+	for id, got := range map[string]string{
+		"star": SupportStarURL, "bug": SupportBugURL,
+		"sponsor": SupportSponsorURL, "contact": SupportContactURL,
+	} {
+		match := regexp.MustCompile(id + `_url:\s*"([^"]+)"`).FindStringSubmatch(yaml)
+		if match == nil {
+			t.Fatalf("canonical support.%s_url not found", id)
+		}
+		if got != match[1] {
+			t.Errorf("support %s URL = %q, canonical = %q", id, got, match[1])
+		}
 	}
 }
 

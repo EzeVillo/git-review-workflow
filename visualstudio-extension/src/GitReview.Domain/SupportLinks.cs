@@ -8,15 +8,21 @@ public static class SupportLinks
 {
     public const string Star = "star";
     public const string Bug = "bug";
+    public const string Sponsor = "sponsor";
+    public const string Contact = "contact";
 
     public const string StarUrl = "https://github.com/EzeVillo/git-review-workflow";
     public const string BugUrl =
         "https://github.com/EzeVillo/git-review-workflow/issues/new?template=bug_report.yml";
+    public const string SponsorUrl = "https://github.com/sponsors/EzeVillo";
+    public const string ContactUrl = "mailto:ezevillodev@gmail.com";
 
     private static readonly Dictionary<string, string> Urls = new()
     {
         [Star] = StarUrl,
         [Bug] = BugUrl,
+        [Sponsor] = SponsorUrl,
+        [Contact] = ContactUrl,
     };
 
     public static string? UrlFor(string? linkId) =>

@@ -22,5 +22,6 @@ Remote: .
 Support
   [ Star on GitHub ]
   [ Report a bug ]
+… footer [#.........]: 0 line(s) above, 2 below — j/k or mouse wheel
 
 j:up  k:down  enter:select  r:refresh  ::actions  m:mouse on  q:quit

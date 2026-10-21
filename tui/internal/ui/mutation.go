@@ -1068,6 +1068,10 @@ func externalURLForControl(id domain.ControlID, variant string) (string, bool) {
 			return domain.SupportStarURL, true
 		case "bug":
 			return domain.SupportBugURL, true
+		case "sponsor":
+			return domain.SupportSponsorURL, true
+		case "contact":
+			return domain.SupportContactURL, true
 		}
 	}
 	return "", false

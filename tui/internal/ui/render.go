@@ -29,7 +29,7 @@ type Viewport struct {
 type Rect struct{ Row, Col, Width, Height int }
 
 // controlTarget is the concrete body control the presentation layer marks.
-// Variant matters for repeated row actions such as the two Support links.
+// Variant matters for repeated row actions such as the Support links.
 type controlTarget struct {
 	id      domain.ControlID
 	variant string
@@ -712,6 +712,8 @@ func renderNoReview(b *builder, m domain.PanelModel) {
 	b.heading(domain.SupportSectionTitle)
 	b.button("openSupport", "star", domain.StarOnGitHubLabel, b.st.secondary, true)
 	b.button("openSupport", "bug", domain.ReportABugLabel, b.st.secondary, true)
+	b.button("openSupport", "sponsor", domain.SponsorLabel, b.st.secondary, true)
+	b.button("openSupport", "contact", domain.ContactLabel, b.st.secondary, true)
 
 	b.capFooter(footerStart)
 }

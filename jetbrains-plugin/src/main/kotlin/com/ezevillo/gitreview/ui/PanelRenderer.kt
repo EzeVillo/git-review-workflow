@@ -48,7 +48,7 @@ private const val FOOTER_MAX_FRACTION = 0.55
 /**
  * Generic Swing renderer of [PanelLayout]. No Project / GitReviewService.
  * @param onAction callback with control id, optional inventory/file index, and
- *   optional openSupport link id (`star` / `bug`)
+ *   optional openSupport link id
  * @return true from onAction if the control should show transient "Copied" feedback
  */
 class PanelRenderer(

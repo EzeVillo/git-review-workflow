@@ -62,23 +62,25 @@ public class PanelLayoutFooterTests
     }
 
     /// <summary>
-    /// The two support links are the same control id, told apart only by the link id
+    /// The support links are the same control id, told apart only by the link id
     /// the host resolves to a URL — mixing them up sends "Report a bug" to the repo
     /// front page.
     /// </summary>
     [Fact]
-    public void The_support_section_carries_both_links_with_their_own_ids()
+    public void The_support_section_stacks_four_links_with_their_own_ids()
     {
         var support = PanelLayoutBuilder.PanelLayout(PanelFixtures.NoReviewReady())
             .Blocks.OfType<Block.ToolsSection>().First(s => s.Title == "Support");
         var controls = support.NestedBlocks.SelectMany(ControlsOf).ToList();
 
-        Assert.Equal(2, controls.Count(c => c.Id == ControlId.OpenSupport));
-        Assert.Contains(controls, c =>
-            c.Id == ControlId.OpenSupport && c.Label == "Star on GitHub" && c.SupportLinkId == SupportLinks.Star);
-        Assert.Contains(controls, c =>
-            c.Id == ControlId.OpenSupport && c.Label == "Report a bug" && c.SupportLinkId == SupportLinks.Bug);
-        Assert.NotEqual(SupportLinks.Star, SupportLinks.Bug);
+        Assert.Equal(new[] { 1, 1, 1, 1 }, support.NestedBlocks.Select(b => ControlsOf(b).Count()));
+        Assert.Equal(new[] { "Star on GitHub", "Report a bug", "Sponsor", "Contact" }, controls.Select(c => c.Label));
+        Assert.Equal(new[] { SupportLinks.Star, SupportLinks.Bug, SupportLinks.Sponsor, SupportLinks.Contact },
+            controls.Select(c => c.SupportLinkId));
+        Assert.All(controls, c => Assert.Equal(ControlId.OpenSupport, c.Id));
+        Assert.Equal("https://github.com/sponsors/EzeVillo", SupportLinks.UrlFor(SupportLinks.Sponsor));
+        Assert.Equal("mailto:ezevillodev@gmail.com", SupportLinks.UrlFor(SupportLinks.Contact));
+        Assert.Null(SupportLinks.UrlFor("unknown"));
     }
 
     [Fact]

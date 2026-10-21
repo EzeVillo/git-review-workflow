@@ -13,6 +13,6 @@ No shared comments.
 Compare
   [ Compare revisions ]
 
-… footer [#.........]: 0 line(s) above, 9 below — j/k or mouse wheel
+… footer [#.........]: 0 line(s) above, 11 below — j/k or mouse wheel
 
 j:up  k:down  enter:select  r:refresh  ::actions  m:mouse on  q:quit

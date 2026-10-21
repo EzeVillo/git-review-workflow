@@ -9,6 +9,11 @@ public sealed record UnopenedDraft(string? File);
 public static class UserCopy
 {
     public const string ProductTitle = "git review";
+    public const string SupportTitle = "Support";
+    public const string SupportStar = "Star on GitHub";
+    public const string SupportBug = "Report a bug";
+    public const string SupportSponsor = "Sponsor";
+    public const string SupportContact = "Contact";
     public const string DiscardBusy = MutationLock.DiscardReason;
 
     /// <summary>

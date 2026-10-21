@@ -379,7 +379,7 @@ describe("panelHtml", () => {
         );
     });
 
-    it("no-review ofrece Support con Star on GitHub y Report a bug; finish-pending no", () => {
+    it("no-review ofrece cuatro enlaces de Support; finish-pending no", () => {
         // Orden fijo del footer: Walkthrough -> ordenes terminados -> Compare
         // -> Settings -> Support.
         assert.ok(html.includes("function renderSupport("));
@@ -390,6 +390,8 @@ describe("panelHtml", () => {
         assert.ok(html.includes('"bug"') || html.includes("'bug'"));
         assert.ok(html.includes("Star on GitHub"));
         assert.ok(html.includes("Report a bug"));
+        assert.ok(html.includes('"sponsor":"Sponsor"'));
+        assert.ok(html.includes('"contact":"Contact"'));
         assert.ok(!html.includes("GitHub repository"), "repo y star eran la misma URL: solo star");
         assert.ok(html.includes("renderPaneFooter") && html.includes("renderSupport"));
         const footer = /function renderPaneFooter\(model\) \{([^]*?)\n {2}\}/.exec(html)?.[1] ?? "";

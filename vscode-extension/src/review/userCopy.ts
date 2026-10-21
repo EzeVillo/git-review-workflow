@@ -1,4 +1,12 @@
 // User-facing copy that is shared with the other clients, byte for byte.
+export const SUPPORT_COPY = {
+    title: "Support",
+    star: "Star on GitHub",
+    bug: "Report a bug",
+    sponsor: "Sponsor",
+    contact: "Contact",
+} as const;
+
 export const COMMENTS_COPY = {
     originalUnversioned: "The captured lines included unsaved changes; this view shows the recorded Git version.",
     details: "Details", close: "Close",

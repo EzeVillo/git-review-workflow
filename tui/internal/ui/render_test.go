@@ -71,12 +71,12 @@ func TestFooterFocusScrollsIntoView(t *testing.T) {
 		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 		m = updated.(Model)
 	}
-	if got := m.View(); !strings.Contains(got, domain.ReportABugLabel) {
+	if got := m.View(); !strings.Contains(got, domain.ContactLabel) {
 		t.Fatalf("focused final footer control must be visible at 80x24:\n%s", got)
 	}
 	intent := ResolveKey("enter", m)
-	if intent.Kind != IntentActivate || intent.Control != "openSupport" || intent.Variant != "bug" {
-		t.Fatalf("Enter = %+v, want the visible Report a bug control", intent)
+	if intent.Kind != IntentActivate || intent.Control != "openSupport" || intent.Variant != "contact" {
+		t.Fatalf("Enter = %+v, want the visible Contact control", intent)
 	}
 }
 

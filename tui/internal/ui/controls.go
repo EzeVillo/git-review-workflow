@@ -211,6 +211,8 @@ func noReviewControls(m domain.PanelModel) []Control {
 		Control{ID: "setRemote", Enabled: true},
 		Control{ID: "openSupport", Variant: "star", Enabled: true},
 		Control{ID: "openSupport", Variant: "bug", Enabled: true},
+		Control{ID: "openSupport", Variant: "sponsor", Enabled: true},
+		Control{ID: "openSupport", Variant: "contact", Enabled: true},
 	)
 	return cs
 }

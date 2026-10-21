@@ -185,7 +185,7 @@ so a slow refresh looks like a refresh, not a hang.
 
 No telemetry. No network calls except the ones you trigger through the CLI
 (`start` may fetch; `forget --delta --stale` may fetch). Support links open
-GitHub in your browser.
+GitHub in your browser or your email application.
 
 ## Learn more
 

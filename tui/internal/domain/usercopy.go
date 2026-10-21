@@ -6,7 +6,7 @@ import "fmt"
 // shared with the other three clients (contracts/client-product-
 // surface.yaml `strings:`), this client's own two situational strings
 // (`per_client_strings:`), the tooltip on every control that has one, and
-// the two support URLs (FR-030). Nothing here is embedded in a command —
+// the support URLs (FR-030). Nothing here is embedded in a command —
 // this is the fourth `UserCopy`, after userCopy.ts / UserCopy.kt /
 // UserCopy.cs.
 //
@@ -161,8 +161,10 @@ func DraftUpdated(kept, added, dropped int) string {
 // --- support ----------------------------------------------------------------
 
 const (
-	SupportStarURL = "https://github.com/EzeVillo/git-review-workflow"
-	SupportBugURL  = "https://github.com/EzeVillo/git-review-workflow/issues/new?template=bug_report.yml"
+	SupportStarURL    = "https://github.com/EzeVillo/git-review-workflow"
+	SupportBugURL     = "https://github.com/EzeVillo/git-review-workflow/issues/new?template=bug_report.yml"
+	SupportSponsorURL = "https://github.com/sponsors/EzeVillo"
+	SupportContactURL = "mailto:ezevillodev@gmail.com"
 )
 
 // --- section titles ---------------------------------------------------------
@@ -309,6 +311,8 @@ const (
 	HowToFixItLabel       = "How to fix it"
 	StarOnGitHubLabel     = "Star on GitHub"
 	ReportABugLabel       = "Report a bug"
+	SponsorLabel          = "Sponsor"
+	ContactLabel          = "Contact"
 	CopyInstallLabel      = "Copy"
 	CurrentBranchTooltip  = "You are on this branch; switch away first"
 )

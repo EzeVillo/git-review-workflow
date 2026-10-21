@@ -8,6 +8,11 @@ package com.ezevillo.gitreview.domain
  */
 object UserCopy {
     const val PRODUCT_TITLE = "git review"
+    const val SUPPORT_TITLE = "Support"
+    const val SUPPORT_STAR = "Star on GitHub"
+    const val SUPPORT_BUG = "Report a bug"
+    const val SUPPORT_SPONSOR = "Sponsor"
+    const val SUPPORT_CONTACT = "Contact"
 
     const val DISCARD_BUSY = MutationLock.DISCARD_REASON
 

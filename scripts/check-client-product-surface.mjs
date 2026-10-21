@@ -354,22 +354,24 @@ if (!text.includes("The installed git-review CLI is older than")) {
   fail('cli_outdated_title must include "installed"');
 }
 
-// support URLs: star + bug (openSupport allowlist)
-const starUrlMatch = text.match(/^\s*star_url:\s*"([^"]+)"/m);
-const bugUrlMatch = text.match(/^\s*bug_url:\s*"([^"]+)"/m);
-if (!starUrlMatch) fail("missing support.star_url");
-if (!bugUrlMatch) fail("missing support.bug_url");
-const starUrl = starUrlMatch[1];
-const bugUrl = bugUrlMatch[1];
+// Support: destinos cerrados y copy compartida por los cuatro clientes.
+const supportUrls = new Map();
+for (const id of ["star", "bug", "sponsor", "contact"]) {
+  const match = text.match(new RegExp(`^\\s*${id}_url:\\s*"([^"]+)"`, "m"));
+  if (!match) fail(`missing support.${id}_url`);
+  supportUrls.set(id, match[1]);
+}
+for (const copy of ["Support", "Star on GitHub", "Report a bug", "Sponsor", "Contact"]) {
+  requireUserCopy("support", copy);
+}
 const providerSupport = readText(
   join(root, "vscode-extension", "src", "views", "walkthroughViewProvider.ts"),
   "utf8",
 );
-if (!providerSupport.includes(`star: "${starUrl}"`)) {
-  fail(`vscode SUPPORT_URLS.star missing or drifted from support.star_url`);
-}
-if (!providerSupport.includes(`bug: "${bugUrl}"`)) {
-  fail(`vscode SUPPORT_URLS.bug missing or drifted from support.bug_url`);
+for (const [id, url] of supportUrls) {
+  if (!providerSupport.includes(`${id}: "${url}"`)) {
+    fail(`vscode SUPPORT_URLS.${id} missing or drifted from support.${id}_url`);
+  }
 }
 const ijSupport = join(
   root,
@@ -385,11 +387,13 @@ const ijSupport = join(
 );
 if (existsSync(ijSupport)) {
   const s = readText(ijSupport, "utf8");
-  if (!s.includes(starUrl)) fail(`intellij SupportLinks missing star_url ${starUrl}`);
-  if (!s.includes(bugUrl)) fail(`intellij SupportLinks missing bug_url ${bugUrl}`);
+  for (const [id, url] of supportUrls) {
+    if (!s.includes(url)) fail(`intellij SupportLinks missing ${id}_url ${url}`);
+  }
 }
-if (!tuiUserCopy.includes(starUrl)) fail(`tui usercopy.go missing star_url ${starUrl}`);
-if (!tuiUserCopy.includes(bugUrl)) fail(`tui usercopy.go missing bug_url ${bugUrl}`);
+for (const [id, url] of supportUrls) {
+  if (!tuiUserCopy.includes(url)) fail(`tui usercopy.go missing ${id}_url ${url}`);
+}
 if (!existsSync(join(root, ".github", "ISSUE_TEMPLATE", "bug_report.yml"))) {
   fail("missing .github/ISSUE_TEMPLATE/bug_report.yml (support.bug_url template)");
 }
@@ -716,13 +720,15 @@ function extractPanelCalls(src) {
         pos: im.index,
       });
     }
-    // supportButton("Label", "star"|"bug") → wire id openSupport (host allowlist)
-    const supportRe = /supportButton\(\s*"([^"]*)"\s*,\s*"([A-Za-z][A-Za-z0-9]*)"\s*\)/g;
+    // supportButton(supportCopy.star, "star") → wire id openSupport.
+    const supportRe = /supportButton\(\s*supportCopy\.(\w+)\s*,\s*"([A-Za-z][A-Za-z0-9]*)"\s*\)/g;
     let sm;
     while ((sm = supportRe.exec(line)) !== null) {
       calls.push({
         kind: "button",
-        label: sm[1],
+        label: new RegExp(`\\b${sm[1]}: "([^"]*)"`).exec(
+          readText(join(root, "vscode-extension/src/review/userCopy.ts"), "utf8"),
+        )?.[1],
         accessible: null,
         id: "openSupport",
         emphasis: "secondary",
@@ -782,7 +788,10 @@ const panelCalls = extractPanelCalls(panelHtml);
 // (1) each canonical control with fixed label matches a call (or raw literal)
 for (const c of canonicalControls) {
   if (c.raw) {
-    if (c.label && !panelHtml.includes(c.label)) {
+    const labelFound = c.id === "openSupport"
+      ? panelCalls.some((p) => p.id === c.id && p.label === c.label)
+      : panelHtml.includes(c.label);
+    if (c.label && !labelFound) {
       fail(`raw control ${c.id} label "${c.label}" not found in panelHtml.ts`);
     }
     continue;
@@ -1105,8 +1114,9 @@ if (existsSync(vsInstall)) {
 }
 if (existsSync(vsSupport)) {
   const s = readText(vsSupport, "utf8");
-  if (!s.includes(starUrl)) fail(`visualstudio SupportLinks missing star_url ${starUrl}`);
-  if (!s.includes(bugUrl)) fail(`visualstudio SupportLinks missing bug_url ${bugUrl}`);
+  for (const [id, url] of supportUrls) {
+    if (!s.includes(url)) fail(`visualstudio SupportLinks missing ${id}_url ${url}`);
+  }
 }
 if (existsSync(vsReviewState)) {
   const s = readText(vsReviewState, "utf8");

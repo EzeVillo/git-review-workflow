@@ -176,7 +176,7 @@ data class Control(
     val enabled: Boolean = true,
     val tooltip: String? = null,
     val index: Int? = null,
-    /** openSupport allowlist id (`star`, `bug`); null for every other control. */
+    /** openSupport allowlist id; null for every other control. */
     val supportLinkId: String? = null,
 ) {
     init {
@@ -1197,21 +1197,45 @@ private fun noReviewReadyBlocks(model: PanelModel): List<Block> {
     out.add(Block.ToolsSection(title = "Settings", blocks = settingsKids))
     out.add(
         Block.ToolsSection(
-            title = "Support",
+            title = UserCopy.SUPPORT_TITLE,
             blocks = listOf(
                 Block.Row(
                     listOf(
                         ctrl(
                             ControlId.OPEN_SUPPORT,
-                            "Star on GitHub",
+                            UserCopy.SUPPORT_STAR,
                             Emphasis.SECONDARY,
                             supportLinkId = SupportLinks.STAR,
                         ),
+                    ),
+                ),
+                Block.Row(
+                    listOf(
                         ctrl(
                             ControlId.OPEN_SUPPORT,
-                            "Report a bug",
+                            UserCopy.SUPPORT_BUG,
                             Emphasis.SECONDARY,
                             supportLinkId = SupportLinks.BUG,
+                        ),
+                    ),
+                ),
+                Block.Row(
+                    listOf(
+                        ctrl(
+                            ControlId.OPEN_SUPPORT,
+                            UserCopy.SUPPORT_SPONSOR,
+                            Emphasis.SECONDARY,
+                            supportLinkId = SupportLinks.SPONSOR,
+                        ),
+                    ),
+                ),
+                Block.Row(
+                    listOf(
+                        ctrl(
+                            ControlId.OPEN_SUPPORT,
+                            UserCopy.SUPPORT_CONTACT,
+                            Emphasis.SECONDARY,
+                            supportLinkId = SupportLinks.CONTACT,
                         ),
                     ),
                 ),

@@ -274,6 +274,8 @@ func TestExternalLinkControlsUseOnlyTheirDocumentedURLs(t *testing.T) {
 		{"installCli", "", "https://github.com/EzeVillo/git-review-workflow#readme"},
 		{"openSupport", "star", domain.SupportStarURL},
 		{"openSupport", "bug", domain.SupportBugURL},
+		{"openSupport", "sponsor", domain.SupportSponsorURL},
+		{"openSupport", "contact", domain.SupportContactURL},
 	}
 	for _, tc := range cases {
 		t.Run(tc.id+"/"+tc.variant, func(t *testing.T) {
@@ -297,6 +299,8 @@ func TestExternalLinkControlsDispatchTheNativeBrowserOpener(t *testing.T) {
 		{"installCli", "", domain.PanelModel{Situation: domain.SituationCliMissing}},
 		{"openSupport", "star", domain.PanelModel{Situation: domain.SituationNoReview}},
 		{"openSupport", "bug", domain.PanelModel{Situation: domain.SituationNoReview}},
+		{"openSupport", "sponsor", domain.PanelModel{Situation: domain.SituationNoReview}},
+		{"openSupport", "contact", domain.PanelModel{Situation: domain.SituationNoReview}},
 	} {
 		t.Run(string(tc.id)+"/"+tc.variant, func(t *testing.T) {
 			_, cmd := (Model{Panel: tc.panel}).activateControl(tc.id, tc.variant)

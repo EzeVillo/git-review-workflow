@@ -37,7 +37,7 @@ The extension never invents review state: every refresh is `git review status --
 
 ## Privacy
 
-No telemetry. No network calls except the ones you trigger through the CLI (`start` may fetch; `forget --delta --stale` may fetch). Support links open GitHub in your browser.
+No telemetry. No network calls except the ones you trigger through the CLI (`start` may fetch; `forget --delta --stale` may fetch). Support links open GitHub in your browser or your email application.
 
 ## Links
 

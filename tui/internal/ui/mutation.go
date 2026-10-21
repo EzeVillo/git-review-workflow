@@ -353,9 +353,11 @@ func (m Model) handleMutationDone(msg mutationDoneMsg) (Model, tea.Cmd) {
 	if msg.draftFlow != nil {
 		if mutationFailed(msg.result) {
 			m.statusLine = failureMessage("draftFlow", msg.result)
-			overlay := buildLayoutOverlay(msg.draftFlow.intent, msg.draftFlow.offers)
-			overlay.Notice = m.statusLine
-			m.selectOverlay = &overlay
+			if msg.draftFlow.intent.Source != "compare" {
+				overlay := buildLayoutOverlay(msg.draftFlow.intent, msg.draftFlow.offers)
+				overlay.Notice = m.statusLine
+				m.selectOverlay = &overlay
+			}
 		} else {
 			m.statusLine = ""
 			if msg.draftFlow.update {
@@ -618,7 +620,11 @@ func startFromDraftRequest(d draftRowView, layout string) mutationRequest {
 		Range:  d.rrange,
 		Layout: layout,
 	}
-	argv := domain.Argv{Verb: "start", Args: domain.StartFromDraftArgs(intent)}
+	verb := "start"
+	if intent.Source == "compare" {
+		verb = "compare"
+	}
+	argv := domain.Argv{Verb: verb, Args: domain.StartFromDraftArgs(intent)}
 	return mutationRequest{action: "startFromDraft", params: domain.ActionParams{Intent: intent}, argv: &argv}
 }
 

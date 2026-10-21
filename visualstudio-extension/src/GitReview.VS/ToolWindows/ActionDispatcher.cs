@@ -1068,24 +1068,55 @@ public sealed partial class ActionDispatcher
         if (upper is null) return;
         var upperRef = revisions.FirstOrDefault(c => c.Label == upper)?.Value ?? upper;
 
-        var idx = GitReviewDialogs.Choose(
-            UserCopy.CompareLayoutTitle,
-            UserCopy.ComparisonSummary(lowerRef, upperRef),
-            new[]
-            {
-                UserCopy.CompareWalkLabel + " — " + UserCopy.CompareWalkDetail,
-                UserCopy.CompareKeysLabel + " — " + UserCopy.CompareKeysDetail,
-                UserCopy.CompareStepLabel + " — " + UserCopy.CompareStepDetail,
-                UserCopy.CompareWholeLabel + " — " + UserCopy.CompareWholeDetail,
-            });
-        if (idx < 0) return;
-        var layout = idx switch
+        var cwd = Cwd;
+        if (cwd is null) return;
+        var report = await _panel.Cli.InvokeAsync("config", new[] { "--porcelain", "--compare", "--", lowerRef, upperRef }, cwd, network: false).ConfigureAwait(true);
+        if (report.ExitCode != 0 || report.TimedOut)
         {
-            0 => ReviewLayout.Walk,
-            1 => ReviewLayout.Keys,
-            2 => ReviewLayout.Step,
-            _ => ReviewLayout.Whole,
-        };
+            GitReviewDialogs.CliError(report.Stderr, UserCopy.CompareFailed, report.Stdout);
+            return;
+        }
+        var items = LayoutOffers.BuildLayoutItems(ConfigPorcelain.ParseConfigPorcelain(report.Stdout).Offers);
+        var labels = items.Select(item =>
+        {
+            var detail = item.Draft switch
+            {
+                LayoutOffers.DraftStep.Create => UserCopy.CompareDraftDetail,
+                LayoutOffers.DraftStep.Update => UserCopy.CompareDraftUpdateDetail,
+                LayoutOffers.DraftStep.Resume => item.Description,
+                _ => item.Layout switch
+                {
+                    ReviewLayout.Walk => UserCopy.CompareWalkDetail,
+                    ReviewLayout.Keys => UserCopy.CompareKeysDetail,
+                    ReviewLayout.Step => UserCopy.CompareStepDetail,
+                    _ => UserCopy.CompareWholeDetail,
+                },
+            };
+            return item.Label + " — " + detail;
+        }).ToList();
+        var idx = GitReviewDialogs.Choose(UserCopy.CompareLayoutTitle, UserCopy.ComparisonSummary(lowerRef, upperRef), labels);
+        if (idx < 0) return;
+        var picked = items[idx];
+        if (picked.Draft is not null)
+        {
+            if (picked.Draft != LayoutOffers.DraftStep.Resume)
+            {
+                var result = await _panel.Mutations.RunArgvAsync("walkthrough", new[] { "draft", "--porcelain", "--compare", "--", lowerRef, upperRef }, network: false).ConfigureAwait(true);
+                await _panel.RefreshAsync().ConfigureAwait(true);
+                if (result is null) return;
+                if (result.ExitCode != 0 || result.TimedOut)
+                {
+                    GitReviewDialogs.CliError(result.Stderr, UserCopy.DraftFailed, result.Stdout);
+                    return;
+                }
+                if (picked.Draft == LayoutOffers.DraftStep.Update && DraftFlow.ParseMergedRecord(result.Stdout) is { } merged)
+                    GitReviewDialogs.Info(UserCopy.DraftUpdated(merged.Kept, merged.Added, merged.Dropped));
+            }
+            else await _panel.RefreshAsync().ConfigureAwait(true);
+            PanelReveal.Reveal(ControlId.CompareReview, _host);
+            return;
+        }
+        var layout = picked.Layout;
         if (!GitReviewDialogs.Confirm(ControlId.CompareReview,
                 UserCopy.CompareConfirmTitle(lowerRef, upperRef, layout),
                 UserCopy.CompareConfirmDetail,

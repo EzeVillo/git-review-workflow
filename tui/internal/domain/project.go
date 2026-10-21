@@ -309,7 +309,11 @@ func projectGuideRows(m *PanelModel, guides []GuideRecord) {
 // cells for both lists means one decoder serves both, never two slightly
 // different formats a future reader has to keep straight.
 func draftRow(d DraftRecord) string {
-	return FooterField(d.Src, d.Path, string(d.Source), string(d.Range), strconv.Itoa(d.Annotated), strconv.Itoa(d.Total))
+	row := FooterField(d.Src, d.Path, string(d.Source), string(d.Range), strconv.Itoa(d.Annotated), strconv.Itoa(d.Total))
+	if d.Title != "" {
+		row += "\t" + FooterField(d.Title)
+	}
+	return row
 }
 
 // projectDraftRows splits the CLI's own draft list into fresh/spent by

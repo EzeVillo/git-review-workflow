@@ -188,7 +188,7 @@ export async function startFromDraft(
         vscode.window.withProgress(
             {
                 location: vscode.ProgressLocation.Notification,
-                title: `Validating your draft for ${draft.src}…`,
+                title: `Validating your draft for ${draft.title ?? draft.src}…`,
             },
             async () =>
                 invokeGitReview("walkthrough", draftArgs(draft.src, source, range, true), {
@@ -222,7 +222,7 @@ export async function startFromDraft(
     if (!report.errorCode && report.exitCode === 0) {
         const offers = parseConfigPorcelain(report.stdout).offers;
         if (offersIncludeKeys(offers)) {
-            const keysOnly = await pickDraftKeys(draft.src);
+            const keysOnly = await pickDraftKeys(draft.title ?? draft.src);
             if (keysOnly === undefined) {
                 return;
             }
@@ -247,10 +247,10 @@ export async function startFromDraft(
         const result = await vscode.window.withProgress(
             {
                 location: vscode.ProgressLocation.Notification,
-                title: `Starting the review of ${draft.src}…`,
+                title: `Starting the review of ${draft.title ?? draft.src}…`,
             },
             async () => {
-                const invocation = await invokeGitReview("start", args, options);
+                const invocation = await invokeGitReview(source === "compare" ? "compare" : "start", args, options);
                 await stateManager.refresh();
                 return invocation;
             }

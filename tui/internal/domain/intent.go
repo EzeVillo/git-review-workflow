@@ -38,6 +38,9 @@ func IntentToArgs(intent ReviewIntent) []string {
 	case "remote":
 		// No flag: remote is the default source.
 	}
+	if intent.Source == "compare" {
+		args = append(args, "--draft")
+	}
 	args = append(args, "--", intent.Branch)
 	return args
 }
@@ -47,6 +50,9 @@ func IntentToArgs(intent ReviewIntent) []string {
 // the final start; unlike IntentToArgs, these verbs document source before
 // range and have no layout flag.
 func draftOriginAndRangeArgs(intent ReviewIntent) []string {
+	if intent.Source == "compare" {
+		return []string{"--compare"}
+	}
 	var args []string
 	switch intent.Source {
 	case "local":

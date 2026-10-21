@@ -381,6 +381,17 @@ git review compare v1.0 v2.0 --step   # ...y recorrerlo commit por commit
 
 Compare conserva los nombres de ambas revisiones y sus commits resueltos en `status`, en todos los modos y después de guardar/retomar. Mover una rama después no cambia la comparación ya abierta.
 
+Los clientes consultan `config --porcelain --compare -- <a> <b>` antes de ofrecer una forma de lectura. Sólo aparecen walkthroughs y esenciales utilizables, junto con crear, retomar o actualizar tu propio orden de lectura cuando corresponde. Estos borradores son independientes de los de Start y funcionan con ramas, tags y commits, sin base configurada ni fetch.
+
+```sh
+git review walkthrough draft --compare -- v1.0 v2.0
+# Completá el borrador indicado; <draft-id> es su identidad de comparación.
+git review walkthrough draft --build --compare -- <draft-id>
+git review compare --draft -- <draft-id>
+```
+
+El borrador guarda ambos commits resueltos. **Validate and start** usa esos extremos fijados, aunque las referencias hayan avanzado. Volvé a abrir Compare con los selectores originales para actualizar el borrador a sus extremos actuales; se conservan las anotaciones de archivos que siguen en rango. Invertir los extremos crea otro orden de lectura. `config --porcelain --compare -- <draft-id>` informa las ofertas del rango guardado.
+
 </details>
 
 <details>

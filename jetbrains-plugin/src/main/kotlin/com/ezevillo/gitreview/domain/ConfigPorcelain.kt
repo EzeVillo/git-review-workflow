@@ -110,6 +110,7 @@ enum class DraftSource {
     REMOTE,
     LOCAL,
     OFFLINE,
+    COMPARE,
     UNKNOWN,
     ;
 
@@ -118,6 +119,7 @@ enum class DraftSource {
             "remote" -> REMOTE
             "local" -> LOCAL
             "offline" -> OFFLINE
+            "compare" -> COMPARE
             else -> UNKNOWN
         }
     }
@@ -177,6 +179,7 @@ data class DraftRecord(
     val range: DraftRange,
     /** Whether its review is over. See [DraftState]. */
     val state: DraftState,
+    val title: String? = null,
 )
 
 /** Which of the two authoring guides a `guide` record is about. */
@@ -385,6 +388,7 @@ fun parseConfigPorcelain(stdout: String): ConfigPorcelainResult {
     val deltas = ArrayList<DeltaRecord>()
     val offers = ArrayList<ReadingOffer>()
     val drafts = ArrayList<DraftRecord>()
+    val draftTitles = HashMap<String, String>()
     val guides = ArrayList<GuideRecord>()
     var walkthrough: WalkthroughRecord? = null
 
@@ -455,6 +459,9 @@ fun parseConfigPorcelain(stdout: String): ConfigPorcelainResult {
             "walkthrough" -> if (walkthrough == null) {
                 walkthrough = parseWalkthroughRecord(fields)
             }
+            "draft-title" -> {
+                if (fields.size >= 3) draftTitles[fields[1]] = fields.drop(2).joinToString("\t")
+            }
             "offer" -> {
                 val id = OfferId.parse(fields.getOrNull(1))
                 val rank = OfferRank.parse(fields.getOrNull(2))
@@ -473,7 +480,7 @@ fun parseConfigPorcelain(stdout: String): ConfigPorcelainResult {
         remotes = remotes,
         deltas = deltas.takeIf { it.isNotEmpty() },
         offers = offers.takeIf { it.isNotEmpty() },
-        drafts = drafts,
+        drafts = drafts.map { it.copy(title = draftTitles[it.src]) },
         guides = guides,
         walkthrough = walkthrough,
     )

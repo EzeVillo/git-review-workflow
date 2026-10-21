@@ -45,7 +45,7 @@ fun actionToArgv(action: String, params: ActionParams = ActionParams.Empty): Act
         "addComment" -> ActionArgv("", emptyList()) // Guarded multi-step host flows.
         "startReview" -> {
             val p = params as ActionParams.Start
-            ActionArgv("start", intentToArgs(p.intent, p.currentBranch), network = true)
+            ActionArgv(if (p.intent.source == ReviewSource.COMPARE) "compare" else "start", intentToArgs(p.intent, p.currentBranch), network = p.intent.source != ReviewSource.COMPARE)
         }
         "continueReview" -> {
             val p = params as ActionParams.Continue

@@ -58,7 +58,7 @@ class MutationActions(
                         return@run StartRunResult.Stale
                     }
                     val argv = actionToArgv("startReview", ActionParams.Start(intent, branch))
-                    val result = service.cliInvoker.invoke(argv.verb, argv.args, cwd, network = true)
+                    val result = service.cliInvoker.invoke(argv.verb, argv.args, cwd, network = argv.network)
                     refreshIdeRepository(project)
                     service.refreshNow()
                     if (result.exitCode == 0 && !result.timedOut) {

@@ -277,7 +277,7 @@ public static class PanelModelBuilder
         foreach (var d in drafts)
         {
             out_.Add(new PanelDraft(
-                Branch: d.Src,
+                Branch: d.Title ?? d.Src,
                 Path: d.Path,
                 Annotated: d.Annotated,
                 Total: d.Total,

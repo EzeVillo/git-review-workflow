@@ -34,7 +34,7 @@ public class ActionArgvParityTests
         foreach (var source in Enum.GetValues<ReviewSource>())
         {
             var intent = new ReviewIntent("f", ReviewLayout.Walk, ReviewRange.Full, source);
-            Assert.True(ActionArgvMap.ActionToArgv("startReview", new ActionParams.Start(intent, "main")).Network);
+            Assert.Equal(source != ReviewSource.Compare, ActionArgvMap.ActionToArgv("startReview", new ActionParams.Start(intent, "main")).Network);
         }
     }
 

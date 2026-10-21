@@ -385,6 +385,7 @@ object StartWizard {
             return
         }
         val source = when (draft.source) {
+            DraftSource.COMPARE -> ReviewSource.COMPARE
             DraftSource.LOCAL -> ReviewSource.LOCAL
             DraftSource.OFFLINE -> ReviewSource.OFFLINE
             else -> ReviewSource.REMOTE

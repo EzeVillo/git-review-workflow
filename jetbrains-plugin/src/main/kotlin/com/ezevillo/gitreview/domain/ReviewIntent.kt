@@ -22,13 +22,14 @@ enum class ReviewRange {
 }
 
 enum class ReviewSource {
-    REMOTE, LOCAL, OFFLINE;
+    REMOTE, LOCAL, OFFLINE, COMPARE;
 
     val id: String
         get() = when (this) {
             REMOTE -> "remote"
             LOCAL -> "local"
             OFFLINE -> "offline"
+            COMPARE -> "compare"
         }
 
     companion object {
@@ -36,6 +37,7 @@ enum class ReviewSource {
             "remote" -> REMOTE
             "local" -> LOCAL
             "offline" -> OFFLINE
+            "compare" -> COMPARE
             else -> null
         }
     }
@@ -82,8 +84,10 @@ fun intentToArgs(intent: ReviewIntent, currentBranch: String): List<String> {
     when (intent.source) {
         ReviewSource.LOCAL -> args.add("--local")
         ReviewSource.OFFLINE -> args.add("--offline")
+        ReviewSource.COMPARE -> { /* stored comparison context */ }
         ReviewSource.REMOTE -> { /* default */ }
     }
+    if (intent.source == ReviewSource.COMPARE) args.add("--draft")
     args.add("--")
     args.add(intent.branch ?: currentBranch)
     return args
@@ -140,10 +144,12 @@ fun draftArgs(
  * exactly the same ones: if they differ, the three speak about different ranges.
  */
 private fun originAndRangeFlags(source: ReviewSource, range: ReviewRange): List<String> {
+    if (source == ReviewSource.COMPARE) return listOf("--compare")
     val args = ArrayList<String>()
     when (source) {
         ReviewSource.LOCAL -> args.add("--local")
         ReviewSource.OFFLINE -> args.add("--offline")
+        ReviewSource.COMPARE -> { /* stored comparison context */ }
         ReviewSource.REMOTE -> { /* default */ }
     }
     if (range == ReviewRange.DELTA) args.add("--delta")

@@ -647,6 +647,7 @@ func renderCliInstall(b *builder, title, hint, cmd, stderr string) {
 }
 
 func renderNoReviewSetup(b *builder, m domain.PanelModel) {
+	renderFreshDrafts(b, m)
 	b.text(domain.SetupQuestion)
 	b.button("setBase", "", domain.ChooseBranchLabel, b.st.primary, true)
 	b.blank()
@@ -730,7 +731,11 @@ func progressPair(annotated, total int) string {
 
 func renderFreshDrafts(b *builder, m domain.PanelModel) {
 	for _, d := range decodeDraftRows(m.FreshDraftRows) {
-		b.rowHeader(d.src, progressPair(d.annotated, d.total), "")
+		title := d.title
+		if title == "" {
+			title = d.src
+		}
+		b.rowHeader(title, progressPair(d.annotated, d.total), "")
 		b.iconRow(
 			rowIcon{id: "openDraft", variant: d.src, icon: domain.IconFile, hint: "open", enabled: true},
 			rowIcon{id: "discardDraft", variant: d.src, icon: domain.IconTrash, hint: "discard", enabled: true},
@@ -768,7 +773,11 @@ func draftDisabledReason(d draftRowView) string {
 
 func renderSpentDrafts(b *builder, m domain.PanelModel) {
 	for _, d := range decodeDraftRows(m.SpentDraftRows) {
-		b.rowHeader(d.src, progressPair(d.annotated, d.total), "")
+		title := d.title
+		if title == "" {
+			title = d.src
+		}
+		b.rowHeader(title, progressPair(d.annotated, d.total), "")
 		b.iconRow(
 			rowIcon{id: "openDraft", variant: d.src, icon: domain.IconFile, hint: "open", enabled: true},
 			rowIcon{id: "discardDraft", variant: d.src, icon: domain.IconTrash, hint: "discard", enabled: true},

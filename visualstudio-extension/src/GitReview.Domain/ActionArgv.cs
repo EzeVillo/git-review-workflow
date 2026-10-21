@@ -60,7 +60,7 @@ public static class ActionArgvMap
         return action switch
         {
             "startReview" => params_ is ActionParams.Start p
-                ? new ActionArgv("start", ReviewIntentLogic.IntentToArgs(p.Intent, p.CurrentBranch), Network: true)
+                ? new ActionArgv(p.Intent.Source == ReviewSource.Compare ? "compare" : "start", ReviewIntentLogic.IntentToArgs(p.Intent, p.CurrentBranch), Network: p.Intent.Source != ReviewSource.Compare)
                 : throw new ArgumentException("startReview requires Start params"),
             "continueReview" => params_ is ActionParams.Continue c
                 ? new ActionArgv("continue", new[] { c.Source })

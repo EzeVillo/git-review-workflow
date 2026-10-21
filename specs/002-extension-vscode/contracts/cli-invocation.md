@@ -240,3 +240,9 @@ La captura usa `comments-capability <init|add> <local|shared>` de `comments stat
 --porcelain`: compare ofrece sólo Local. Un único destino se envía explícitamente
 sin selector; varios requieren elección por captura. No hay acción Save comments: las
 notas de compare se conservan automáticamente al cerrar o limpiar la comparación.
+
+### Ofertas y borradores de Compare
+
+Se permiten `config --porcelain --compare -- <a> <b>` y `config --porcelain --compare -- <draft-id>` (lecturas, sin red). El primero resuelve el par literal actual; el segundo consulta los commits guardados. La CLI decide walk, keys, step, whole y draft/draft-resume/draft-update. No se reutilizan ofertas de Start ni se enumeran layouts fijos.
+
+Crear/actualizar usa `walkthrough draft --porcelain --compare -- <a> <b>`. Retomar sólo revela el bloque de borradores. El registro `draft` admite `source=compare` y `range=full`; `draft-title<TAB>src<TAB>texto` es aditivo, se asocia por `src` sin depender del orden y no reemplaza la identidad. Validate and start usa `walkthrough draft --build --compare -- <src>`, luego el probe del draft y finalmente `compare [--keys] --draft -- <src>`. Ningún paso deriva revisiones en el cliente. Crear y retomar no notifican lo que ya muestra el panel; actualizar sí informa los números del registro `merged`.

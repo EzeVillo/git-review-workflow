@@ -2,43 +2,13 @@ import * as vscode from "vscode";
 import {parseConfigPorcelain, CandidateBranch, compareRevisionItems} from "../cli/configPorcelain";
 import {invokeGitReview, InvokeOptions} from "../cli/invoke";
 import {MutationLock} from "../review/mutationLock";
-import {layoutSummary} from "../review/layoutOffers";
-import {ReviewLayout} from "../review/reviewIntent";
+import {buildLayoutItems, layoutSummary} from "../review/layoutOffers";
 import {ReviewStateManager} from "../review/state";
 import {confirmMutation} from "../review/confirm";
+import {PanelRevealer, revealPanel} from "../views/reveal";
+import {parseMergedRecord} from "../review/draftFlow";
+import {draftUpdated} from "../review/userCopy";
 import {COMPARE_COPY, comparisonSummary, compareTargetPrompt, compareTargetTitle, compareConfirmTitle, comparingProgress} from "../review/userCopy";
-
-interface LayoutItem extends vscode.QuickPickItem {
-    layout: ReviewLayout;
-}
-
-/**
- * Layouts de compare: mismos nombres honestos que start (sin Automatic).
- * Compare no tiene informe `offer` por tip de rama; se listan las cuatro
- * formas de la CLI y el rechazo de --keys / degradación de walk queda en la CLI.
- */
-const LAYOUT_ITEMS: LayoutItem[] = [
-    {
-        label: COMPARE_COPY.walkLabel,
-        description: COMPARE_COPY.walkDetail,
-        layout: "walk",
-    },
-    {
-        label: COMPARE_COPY.keysLabel,
-        description: COMPARE_COPY.keysDetail,
-        layout: "keys",
-    },
-    {
-        label: COMPARE_COPY.stepLabel,
-        description: COMPARE_COPY.stepDetail,
-        layout: "step",
-    },
-    {
-        label: COMPARE_COPY.wholeLabel,
-        description: COMPARE_COPY.wholeDetail,
-        layout: "whole",
-    },
-];
 
 /**
  * `gitReview.compareReview`: monta `git review compare <a> <b> [--step|--no-walk|--keys]`
@@ -47,7 +17,8 @@ const LAYOUT_ITEMS: LayoutItem[] = [
 export async function compareReview(
     lock: MutationLock,
     stateManager: ReviewStateManager,
-    getInvokeOptions: () => InvokeOptions
+    getInvokeOptions: () => InvokeOptions,
+    reveal: PanelRevealer
 ): Promise<void> {
     const candidates = await loadCandidates(stateManager, getInvokeOptions());
     const lower = await pickCommitIsh(candidates, COMPARE_COPY.baseTitle, COMPARE_COPY.basePrompt);
@@ -59,11 +30,43 @@ export async function compareReview(
         return;
     }
 
-    const layoutPick = await vscode.window.showQuickPick(LAYOUT_ITEMS, {
+    const options = getInvokeOptions();
+    const report = await invokeGitReview("config", ["--porcelain", "--compare", "--", lower, upper], {...options, network: false});
+    if (report.errorCode || report.exitCode !== 0) {
+        void vscode.window.showErrorMessage(report.stderr.trim() || COMPARE_COPY.failed);
+        return;
+    }
+    const items = buildLayoutItems(parseConfigPorcelain(report.stdout).offers).map(item => ({
+        ...item,
+        description: item.draft === "create" ? COMPARE_COPY.draftDetail
+            : item.draft === "update" ? COMPARE_COPY.draftUpdateDetail
+            : item.draft ? item.description : COMPARE_COPY[`${item.layout}Detail`],
+    }));
+    const layoutPick = await vscode.window.showQuickPick(items, {
         title: comparisonSummary(lower, upper),
         placeHolder: COMPARE_COPY.layoutTitle,
     });
-    if (!layoutPick) {
+    if (!layoutPick) return;
+    if (layoutPick.draft) {
+        if (layoutPick.draft !== "resume") {
+            const result = await lock.run(async () => {
+                const invocation = await invokeGitReview("walkthrough", ["draft", "--porcelain", "--compare", "--", lower, upper], {...options, network: false});
+                await stateManager.refresh();
+                return invocation;
+            });
+            if (!result) return;
+            if (result.errorCode || result.exitCode !== 0) {
+                void vscode.window.showErrorMessage(result.stderr.trim() || COMPARE_COPY.failed);
+                return;
+            }
+            if (layoutPick.draft === "update") {
+                const merged = parseMergedRecord(result.stdout);
+                if (merged) void vscode.window.showInformationMessage(draftUpdated(merged.kept, merged.added, merged.dropped));
+            }
+        } else {
+            await stateManager.refresh();
+        }
+        revealPanel("compareReview", reveal);
         return;
     }
 

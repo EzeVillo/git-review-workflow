@@ -1196,6 +1196,8 @@ export function panelHtml(nonce: string): string {
       "Reviews compare the branch you are reading against it. Usually main or develop."));
     const remote = model.configuredRemote !== undefined ? model.configuredRemote : "origin";
     box.appendChild(el("p", null, "Remote: " + remote + " (optional)."));
+    const drafts = draftRows(model, false);
+    if (drafts.length > 0) box.prepend(renderDrafts(model, drafts, "Reading orders you started"));
     const changeRemote = button("Change remote", "setRemote", null);
     changeRemote.disabled = model.busy;
     box.appendChild(changeRemote);

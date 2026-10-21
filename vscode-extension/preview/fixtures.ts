@@ -478,6 +478,15 @@ export const PREVIEW_PANES: PreviewPane[] = [
         ]),
     },
     {
+        name: "no-base-compare-draft",
+        caption: "Compare — borrador completo, sin base configurada para Start",
+        model: drafts([
+            ["config", "remote", "origin"],
+            ["draft", "compare/0123456789012345678901234567890123456789", "/repo/.git/review-walkthrough/compare/order.md", "2", "2", "compare", "full", "fresh"],
+            ["draft-title", "compare/0123456789012345678901234567890123456789", "v1.0 → v2.0"],
+        ]),
+    },
+    {
         // Tres borradores con avances distintos, más el inventario debajo: es
         // el estado donde se ve que el bloque NO reemplaza el cuerpo. La
         // segunda fila no ofrece "Validate and start" — su bloque de

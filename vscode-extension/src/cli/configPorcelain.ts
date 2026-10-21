@@ -98,6 +98,7 @@ export interface ReadingOffer {
  * reconstruyendo el gitdir es la trampa que este campo evita.
  */
 export interface DraftRecord {
+    title?: string;
     /** La rama a la que pertenece, verbatim (puede traer `/`). */
     src: string;
     /** Ruta absoluta, ya resuelta por la CLI. */
@@ -118,7 +119,7 @@ export interface DraftRecord {
     state: DraftState;
 }
 
-export type DraftSource = "remote" | "local" | "offline" | "unknown";
+export type DraftSource = "remote" | "local" | "offline" | "compare" | "unknown";
 export type DraftRange = "full" | "delta" | "unknown";
 
 /**
@@ -339,7 +340,7 @@ function parseOfferId(raw: string | undefined): OfferId | undefined {
 }
 
 function parseDraftSource(raw: string | undefined): DraftSource {
-    if (raw === "remote" || raw === "local" || raw === "offline") {
+    if (raw === "remote" || raw === "local" || raw === "offline" || raw === "compare") {
         return raw;
     }
     // Incluye el `unknown` que la CLI emite cuando el bloque no está, y
@@ -394,6 +395,7 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
     const deltas: DeltaRecord[] = [];
     const offers: ReadingOffer[] = [];
     const drafts: DraftRecord[] = [];
+    const draftTitles = new Map<string, string>();
     const guides: GuideRecord[] = [];
     let walkthrough: WalkthroughRecord | undefined;
 
@@ -498,6 +500,10 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
                 }
                 break;
             }
+            case "draft-title": {
+                if (fields[1] && fields[2]) draftTitles.set(fields[1], fields.slice(2).join("\t"));
+                break;
+            }
             case "offer": {
                 const id = parseOfferId(fields[1]);
                 const rank = parseOfferRank(fields[2]);
@@ -512,6 +518,10 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
         }
     }
 
+    for (const draft of drafts) {
+        const title = draftTitles.get(draft.src);
+        if (title) draft.title = title;
+    }
     for (const candidate of candidates) {
         const ref = candidateRefs.get(`${candidate.origin}\t${candidate.name}`);
         if (ref !== undefined) candidate.ref = ref;
@@ -539,11 +549,12 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
  */
 export function deltaForSource(
     deltas: readonly DeltaRecord[] | undefined,
-    source: "remote" | "local" | "offline"
+    source: "remote" | "local" | "offline" | "compare"
 ): DeltaRecord | undefined {
     if (deltas === undefined || deltas.length === 0) {
         return undefined;
     }
+    if (source === "compare") return undefined;
     const origin: DeltaOrigin = source === "remote" ? "remote" : "local";
     return deltas.find((d) => d.origin === origin);
 }

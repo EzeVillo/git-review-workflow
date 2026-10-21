@@ -78,7 +78,8 @@ func (m Model) handleTextPromptKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m.applySelectResult(result)
 }
 
-// --- compareReview: two free-text questions, a fixed layout picker, then
+// --- Compare: two revisions, an exact-range offer probe, then a layout picker.
+// The final reading choice uses
 // the SAME confirming door the body uses (T089/T093) --------------------
 //
 // compareReview is confirms:true in the canonical (the row control that
@@ -92,9 +93,7 @@ func (m Model) handleTextPromptKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // compareLayoutFlags mirrors IntentToArgs' own layout switch (start and
 // compare share the exact same flag vocabulary — cli-invocation.md's
-// "flags de layout" — with no `offer` filtering: compare lists all four
-// unconditionally, and the CLI's own rejection of --keys on a review
-// without a walkthrough is the validation, not this client).
+// "flags de layout"). Viability comes from the exact-range config probe.
 func compareLayoutFlags(layout string) []string {
 	switch layout {
 	case "keys":
@@ -116,7 +115,9 @@ func (m Model) beginCompareReview() (Model, tea.Cmd) {
 	token := currentStateToken(m.Panel)
 	m.textPrompt = NewTextPrompt(domain.CompareLowerTitle, domain.RevisionPlaceholder, func(lower string) selectResult {
 		prompt := NewTextPrompt(domain.CompareUpperTitle, domain.RevisionPlaceholder, func(upper string) selectResult {
-			return selectResult{next: compareLayoutStep(lower, upper, token)}
+			return selectResult{probe: configProbeCmd([]string{"--compare", "--", lower, upper}, func(cfg domain.ConfigPorcelainResult) SelectOverlay {
+				return *compareLayoutStep(lower, upper, token, cfg.Offers)
+			})}
 		})
 		prompt.Context = domain.CompareTargetPromptText(lower)
 		return selectResult{nextPrompt: prompt}
@@ -125,23 +126,43 @@ func (m Model) beginCompareReview() (Model, tea.Cmd) {
 	return m, nil
 }
 
-// compareLayoutStep is the chain's last question: the SAME four labels
-// startReview's own layout step uses, listed unconditionally. Picking one
+// compareLayoutStep projects CLI offers through the shared Start labels. Picking a reading layout
 // does NOT run the mutation directly (unlike startReview) — it opens
 // ConfirmMutation, the compareReview id's own literal first argument (gate
 // 2, T067/T085): a destructive-enough pick from this chain passes through
 // the exact same door the body's Compare revisions button would.
-func compareLayoutStep(lower, upper string, token domain.StateToken) *SelectOverlay {
+func compareLayoutStep(lower, upper string, token domain.StateToken, offers []domain.ReadingOffer) *SelectOverlay {
+	intent := domain.ReviewIntent{Source: "compare", Range: "full"}
+	items := buildLayoutOverlay(intent, offers).Items
+	for i := range items {
+		switch items[i].Value {
+		case "draft":
+			items[i].Detail = domain.CompareDraftDetail
+		case "draft-update":
+			items[i].Detail = domain.CompareDraftUpdateDetail
+		case "walk":
+			items[i].Detail = domain.CompareWalkDetail
+		case "keys":
+			items[i].Detail = domain.CompareKeysDetail
+		case "step":
+			items[i].Detail = domain.CompareStepDetail
+		case "whole":
+			items[i].Detail = domain.CompareWholeDetail
+		}
+	}
 	overlay := SelectOverlay{
 		Title:  domain.CompareLayoutTitle,
 		Notice: domain.ComparisonSummary(lower, upper),
-		Items: []SelectItem{
-			{Label: domain.CompareWalkLabel, Detail: domain.CompareWalkDetail, Value: "walk"},
-			{Label: domain.CompareKeysLabel, Detail: domain.CompareKeysDetail, Value: "keys"},
-			{Label: domain.CompareStepLabel, Detail: domain.CompareStepDetail, Value: "step"},
-			{Label: domain.CompareWholeLabel, Detail: domain.CompareWholeDetail, Value: "whole"},
-		},
+		Items:  items,
 		OnPick: func(layout string) selectResult {
+			if layout == "draft-resume" {
+				return selectResult{}
+			}
+			if layout == "draft" || layout == "draft-update" {
+				req := draftFlowRequest(intent, offers, layout == "draft-update")
+				req.argv = &domain.Argv{Verb: "walkthrough", Args: []string{"draft", "--porcelain", "--compare", "--", lower, upper}}
+				return selectResult{done: &req}
+			}
 			params := domain.ActionParams{
 				CompareLayout: compareLayoutFlags(layout),
 				CompareLower:  lower,

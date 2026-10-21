@@ -411,6 +411,8 @@ public static class UserCopy
         return new[] { Line(ComparisonBase, c.BaseLabel, c.BaseOid), Line(ComparisonTarget, c.TargetLabel, c.TargetOid) };
     }
 
+    public const string CompareDraftDetail = "Write your own reading order for this comparison.";
+    public const string CompareDraftUpdateDetail = "The comparison changed; keeps the whys whose files are still in range.";
     public const string CompareWalkLabel = "Walkthrough";
     public const string CompareKeysLabel = "Walkthrough — keys only";
     public const string CompareStepLabel = "Commit by commit";

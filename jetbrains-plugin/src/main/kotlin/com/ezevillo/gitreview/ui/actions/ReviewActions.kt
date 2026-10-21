@@ -580,25 +580,56 @@ class CompareReviewAction : AnAction(), DumbAware {
             project, UserCopy.compareTargetPrompt(lowerRef) + " " + UserCopy.COMPARE_REVISION_PROMPT, UserCopy.COMPARE_UPPER_TITLE, candidates,
         ) ?: return
         val upperRef = revisions.find { it.label == upper }?.value ?: upper
-        val layoutOptions = arrayOf(
-            UserCopy.COMPARE_WALK_LABEL + " — " + UserCopy.COMPARE_WALK_DETAIL,
-            UserCopy.COMPARE_KEYS_LABEL + " — " + UserCopy.COMPARE_KEYS_DETAIL,
-            UserCopy.COMPARE_STEP_LABEL + " — " + UserCopy.COMPARE_STEP_DETAIL,
-            UserCopy.COMPARE_WHOLE_LABEL + " — " + UserCopy.COMPARE_WHOLE_DETAIL,
-        )
-        val layoutIdx = UiMessages.choose(
-            project,
-            UserCopy.comparisonSummary(lowerRef, upperRef),
-            UserCopy.COMPARE_LAYOUT_TITLE,
-            layoutOptions,
-        )
-        if (layoutIdx < 0) return
-        val layout = when (layoutIdx) {
-            0 -> ReviewLayout.WALK
-            1 -> ReviewLayout.KEYS
-            2 -> ReviewLayout.STEP
-            else -> ReviewLayout.WHOLE
+        val service = GitReviewService.getInstance(project)
+        val cwd = pickSoleGitRoot(project)?.rootPath ?: return
+        val report = Bg.sync(project, UserCopy.COMPARE_LAYOUT_TITLE) {
+            service.cliInvoker.invoke("config", listOf("--porcelain", "--compare", "--", lowerRef, upperRef), cwd)
         }
+        if (report.exitCode != 0 || report.timedOut) {
+            UiMessages.error(project, UiMessages.flatten(report.stderr).ifEmpty { UserCopy.COMPARE_FAILED })
+            return
+        }
+        val offers = com.ezevillo.gitreview.domain.parseConfigPorcelain(report.stdout).offers
+        val items = com.ezevillo.gitreview.domain.buildLayoutItems(offers)
+        val layoutOptions = items.map { item ->
+            val detail = when (item.draft) {
+                com.ezevillo.gitreview.domain.DraftStep.CREATE -> UserCopy.COMPARE_DRAFT_DETAIL
+                com.ezevillo.gitreview.domain.DraftStep.UPDATE -> UserCopy.COMPARE_DRAFT_UPDATE_DETAIL
+                com.ezevillo.gitreview.domain.DraftStep.RESUME -> item.description
+                null -> when (item.layout) {
+                    ReviewLayout.WALK -> UserCopy.COMPARE_WALK_DETAIL
+                    ReviewLayout.KEYS -> UserCopy.COMPARE_KEYS_DETAIL
+                    ReviewLayout.STEP -> UserCopy.COMPARE_STEP_DETAIL
+                    ReviewLayout.WHOLE -> UserCopy.COMPARE_WHOLE_DETAIL
+                }
+            }
+            "${item.label} — $detail"
+        }.toTypedArray()
+        val layoutIdx = UiMessages.choose(project, UserCopy.comparisonSummary(lowerRef, upperRef), UserCopy.COMPARE_LAYOUT_TITLE, layoutOptions)
+        if (layoutIdx < 0) return
+        val picked = items[layoutIdx]
+        if (picked.draft != null) {
+            if (picked.draft != com.ezevillo.gitreview.domain.DraftStep.RESUME) {
+                val result = service.mutationLock.run {
+                    Bg.sync(project, UserCopy.COMPARE_LAYOUT_TITLE) {
+                        service.cliInvoker.invoke("walkthrough", listOf("draft", "--porcelain", "--compare", "--", lowerRef, upperRef), cwd)
+                    }
+                } ?: return
+                Bg.sync(project, UserCopy.COMPARE_LAYOUT_TITLE) { service.refreshNow() }
+                if (result.exitCode != 0 || result.timedOut) {
+                    UiMessages.error(project, UiMessages.flatten(result.stderr).ifEmpty { UserCopy.DRAFT_FAILED })
+                    return
+                }
+                if (picked.draft == com.ezevillo.gitreview.domain.DraftStep.UPDATE) {
+                    com.ezevillo.gitreview.domain.parseMergedRecord(result.stdout)?.let {
+                        UiMessages.info(project, UserCopy.draftUpdated(it.kept, it.added, it.dropped))
+                    }
+                }
+            } else Bg.sync(project, UserCopy.COMPARE_LAYOUT_TITLE) { service.refreshNow() }
+            revealPanel(project, ControlId.COMPARE_REVIEW)
+            return
+        }
+        val layout = picked.layout
         if (!UiMessages.confirm(
                 project,
                 ControlId.COMPARE_REVIEW,

@@ -485,6 +485,7 @@ public static class PanelLayoutBuilder
     private static readonly HashSet<ControlId> RevealingIds = new()
     {
         ControlId.AddComment,
+        ControlId.CompareReview,
         ControlId.StartReview,
         ControlId.StartFromDraft,
         ControlId.ContinueReview,
@@ -758,7 +759,13 @@ public static class PanelLayoutBuilder
     {
         var remote = model.ConfiguredRemote ?? "origin";
         var enabled = !model.Busy;
-        return new List<Block>
+        var blocks = new List<Block>();
+        if (model.DraftsList.Any(d => !d.Spent))
+        {
+            blocks.Add(new Block.Heading("Reading orders you started"));
+            blocks.Add(DraftRows(model));
+        }
+        blocks.AddRange(new Block[]
         {
             new Block.Paragraph("Which branch do pull requests land on in this repo?"),
             new Block.Row(new[] { Ctrl(ControlId.SetBase, "Choose the branch", Emphasis.Primary, enabled) }),
@@ -768,7 +775,8 @@ public static class PanelLayoutBuilder
             new Block.Row(new[] { Ctrl(ControlId.SetRemote, "Change remote", Emphasis.Secondary, enabled) }),
             new Block.Paragraph(UserCopy.CompareSetupNote),
             new Block.ToolsSection("Compare", new Block[] { new Block.Row(new[] { Ctrl(ControlId.CompareReview, "Compare revisions", Emphasis.Secondary, enabled) }) }),
-        };
+        });
+        return blocks;
     }
 
     private static Block.InventoryRows InventoryRows(PanelModel model)

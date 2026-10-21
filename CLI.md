@@ -369,6 +369,17 @@ git review compare v1.0 v2.0 --step   # ...and walk it commit by commit
 
 Compare keeps both original revision names and their resolved commit IDs in `status`, in every reading mode and after saving/resuming. Moving a branch later does not change the comparison already opened.
 
+The clients query `config --porcelain --compare -- <a> <b>` before offering a layout. Only usable walkthroughs and keys appear, alongside creating, resuming or updating your own reading order when needed. These drafts are independent of Start drafts and work with branches, tags and commits, without a configured base or fetch.
+
+```sh
+git review walkthrough draft --compare -- v1.0 v2.0
+# Fill the reported draft; <draft-id> is its comparison identity.
+git review walkthrough draft --build --compare -- <draft-id>
+git review compare --draft -- <draft-id>
+```
+
+The draft stores both resolved commits. **Validate and start** uses those pinned endpoints, even if the named refs have moved. Reopen Compare with the original selectors to update the draft for their current endpoints; annotations for files still in range are preserved. Swapping the endpoints creates a separate reading order. `config --porcelain --compare -- <draft-id>` reports the stored range's offers.
+
 </details>
 
 <details>

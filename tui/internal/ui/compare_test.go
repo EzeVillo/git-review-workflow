@@ -9,7 +9,7 @@ import (
 
 // TestBeginCompareReviewChainsToAConfirmWithTheRightArgv is T089's own
 // gate for compareReview: two free-text questions (lower, upper), a fixed
-// four-item layout picker (no `offer` filtering — cli-invocation.md), and
+// layout picker from the exact range offers, and
 // the LAST step opens ConfirmMutation with the literal id "compareReview"
 // (gate 2, T067/T085) rather than running the mutation directly the way
 // startReview's own chain does.
@@ -35,12 +35,16 @@ func TestBeginCompareReviewChainsToAConfirmWithTheRightArgv(t *testing.T) {
 		t.Fatalf("base context lost: %q", lowerResult.nextPrompt.Context)
 	}
 	upperResult := lowerResult.nextPrompt.OnSubmit("feature/x")
-	if upperResult.next == nil {
-		t.Fatal("submitting the upper revision must open the layout picker")
+	if upperResult.probe == nil {
+		t.Fatal("submitting the upper revision must query exact comparison offers")
 	}
-	if len(upperResult.next.Items) != 4 {
-		t.Fatalf("layout picker has %d items, want 4 (no offer filtering for compare)", len(upperResult.next.Items))
-	}
+	cfg := domain.ConfigPorcelainResult{Offers: []domain.ReadingOffer{
+		{ID: domain.OfferWalk, Rank: "recommended"},
+		{ID: domain.OfferKeys, Rank: "available"},
+		{ID: domain.OfferStep, Rank: "available"},
+		{ID: domain.OfferWhole, Rank: "available"},
+	}}
+	upperResult.next = compareLayoutStep("develop", "feature/x", currentStateToken(m.Panel), cfg.Offers)
 
 	if upperResult.next.Notice != "Base: develop → Inspect: feature/x" {
 		t.Fatalf("range summary lost: %q", upperResult.next.Notice)
@@ -140,5 +144,45 @@ func TestTextPromptEmptyValueDoesNotSubmit(t *testing.T) {
 	_, submitted, cancelled, _ := p.HandleKey(tea.KeyMsg{Type: tea.KeyEnter})
 	if submitted || cancelled || called {
 		t.Fatalf("Enter on an empty input must be inert: submitted=%v cancelled=%v called=%v", submitted, cancelled, called)
+	}
+}
+
+func TestComparisonOffersAndDraftContinuation(t *testing.T) {
+	id := "compare/0123456789012345678901234567890123456789"
+	row := "draft\t" + id + "\t/repo/.git/order.md\t2\t2\tcompare\tfull\tfresh"
+	title := "draft-title\t" + id + "\tmain → release"
+	cfg := domain.ParseConfigPorcelain(title + "\n" + row)
+	if len(cfg.Drafts) != 1 || cfg.Drafts[0].Title != "main → release" || cfg.Drafts[0].Source != domain.DraftSourceCompare {
+		t.Fatalf("draft context lost: %+v", cfg.Drafts)
+	}
+	panel := domain.PanelModel{Situation: domain.SituationNoReview, NoBaseConfigured: true, FreshDraftRows: domain.FooterField(id, "/draft.md", "compare", "full", "2", "2", "main → release")}
+	haveStart, haveCompare := false, false
+	for _, control := range ControlsFor(panel) {
+		if control.ID == "startFromDraft" && control.Variant == id && control.Enabled {
+			haveStart = true
+		}
+		if control.ID == "compareReview" && control.Enabled {
+			haveCompare = true
+		}
+	}
+	if !haveStart || !haveCompare {
+		t.Fatalf("setup hides comparison continuation: %+v", ControlsFor(panel))
+	}
+	req := startFromDraftRequest(draftRowView{src: id, source: "compare", rrange: "full"}, "keys")
+	if req.argv == nil || req.argv.Verb != "compare" || len(req.argv.Args) != 4 || req.argv.Args[0] != "--keys" || req.argv.Args[1] != "--draft" || req.argv.Args[3] != id {
+		t.Fatalf("draft starts another review: %+v", req.argv)
+	}
+	offers := []domain.ReadingOffer{{ID: domain.OfferDraft, Rank: "available"}, {ID: domain.OfferWhole, Rank: "available"}}
+	overlay := compareLayoutStep("a", "b", domain.StateToken{}, offers)
+	if len(overlay.Items) != 2 || overlay.Items[0].Value != "draft" || overlay.Items[1].Value != "whole" {
+		t.Fatalf("invented unsupported layouts: %+v", overlay.Items)
+	}
+	result := overlay.OnPick("draft")
+	if result.confirmNext != nil || result.done == nil || result.done.argv == nil || result.done.argv.Verb != "walkthrough" {
+		t.Fatalf("draft must prepare reading order without a confirmation: %+v", result)
+	}
+	args := result.done.argv.Args
+	if len(args) != 6 || args[2] != "--compare" || args[4] != "a" || args[5] != "b" {
+		t.Fatalf("wrong range: %v", args)
 	}
 }

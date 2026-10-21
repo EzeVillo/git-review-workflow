@@ -41,6 +41,7 @@ public enum ReviewSource
     Remote,
     Local,
     Offline,
+    Compare,
 }
 
 public static class ReviewSourceExt
@@ -50,6 +51,7 @@ public static class ReviewSourceExt
         ReviewSource.Remote => "remote",
         ReviewSource.Local => "local",
         ReviewSource.Offline => "offline",
+        ReviewSource.Compare => "compare",
         _ => throw new ArgumentOutOfRangeException(nameof(s)),
     };
 
@@ -58,6 +60,7 @@ public static class ReviewSourceExt
         "remote" => ReviewSource.Remote,
         "local" => ReviewSource.Local,
         "offline" => ReviewSource.Offline,
+        "compare" => ReviewSource.Compare,
         _ => null,
     };
 }
@@ -112,6 +115,7 @@ public static class ReviewIntentLogic
             case ReviewSource.Offline: args.Add("--offline"); break;
             case ReviewSource.Remote: break;
         }
+        if (intent.Source == ReviewSource.Compare) args.Add("--draft");
         args.Add("--");
         args.Add(intent.Branch ?? currentBranch);
         return args;
@@ -164,6 +168,7 @@ public static class ReviewIntentLogic
     /// </summary>
     private static List<string> OriginAndRangeFlags(ReviewSource source, ReviewRange range)
     {
+        if (source == ReviewSource.Compare) return new List<string> { "--compare" };
         var args = new List<string>();
         switch (source)
         {

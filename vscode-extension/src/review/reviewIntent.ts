@@ -11,7 +11,7 @@ import {DeltaRecord} from "../cli/configPorcelain";
 
 export type ReviewLayout = "walk" | "keys" | "step" | "whole";
 export type ReviewRange = "full" | "delta";
-export type ReviewSource = "remote" | "local" | "offline";
+export type ReviewSource = "remote" | "local" | "offline" | "compare";
 
 export interface ReviewIntent {
     /** Ausente = la rama actual (el default de data-model.md); ver `intentToArgs`. */
@@ -92,6 +92,7 @@ export function intentToArgs(intent: ReviewIntent, currentBranch: string): strin
         args.push("--offline");
     }
 
+    if (intent.source === "compare") args.push("--draft");
     args.push("--", intent.branch ?? currentBranch);
     return args;
 }
@@ -150,6 +151,7 @@ export function draftArgs(
  */
 function originAndRangeFlags(source: ReviewSource, range: ReviewRange): string[] {
     const args: string[] = [];
+    if (source === "compare") return ["--compare"];
     if (source === "local") {
         args.push("--local");
     } else if (source === "offline") {

@@ -279,6 +279,8 @@ object UserCopy {
 
     // --- Compare / walkthrough / preview / housekeeping -------------------------
 
+    const val COMPARE_DRAFT_DETAIL = "Write your own reading order for this comparison."
+    const val COMPARE_DRAFT_UPDATE_DETAIL = "The comparison changed; keeps the whys whose files are still in range."
     const val COMPARE_WALK_LABEL = "Walkthrough"
     const val COMPARE_KEYS_LABEL = "Walkthrough — keys only"
     const val COMPARE_STEP_LABEL = "Commit by commit"

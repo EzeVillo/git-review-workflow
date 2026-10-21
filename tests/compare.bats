@@ -340,3 +340,175 @@ check_comparison_context() {
     check_comparison_context walk-context
     [ "$(git config branch.review/walk-context.reviewmode)" = walk ]
 }
+
+# Fill a generated comparison draft without removing its pinned context.
+fill_compare_draft() {
+	_draft="$(find .git/review-walkthrough/compare -name '*.md')"
+	awk '/^## Heads-up/ { exit } { print }' "$_draft" >"$_draft.filled"
+	printf '## Heads-up\n\nRead the app first.\n\n## 1. app.txt\n> key\nApplication change.\n\n## 2. more.txt\nSupporting file.\n' >>"$_draft.filled"
+	mv "$_draft.filled" "$_draft"
+	DRAFT_ID="${_draft#.git/review-walkthrough/}"
+	DRAFT_ID="${DRAFT_ID%.md}"
+}
+
+@test "compare offers are resolved for exact endpoints without configured base or writes" {
+	before="$(git count-objects -v)"
+	run git review config --porcelain --compare -- v1.0 v2.0
+	[ "$status" -eq 0 ]
+	[[ "$output" == *$'offer\tdraft\tavailable'* ]]
+	[[ "$output" == *$'offer\tstep\tavailable'* ]]
+	[[ "$output" != *$'offer\tkeys\t'* ]]
+	[ ! -e .git/review-walkthrough ]
+	[ "$(git count-objects -v)" = "$before" ]
+	[ -z "$(git status --porcelain)" ]
+	[ "$(git branch --show-current)" = develop ]
+}
+
+@test "compare draft creates resumes builds and starts the pinned comparison" {
+	run git review walkthrough draft --compare -- v1.0 v2.0
+	[ "$status" -eq 0 ]
+	[ -z "$(git status --porcelain)" ]
+	run git review config --porcelain --compare -- v1.0 v2.0
+	[ "$status" -eq 0 ]
+	[[ "$output" == *$'offer\tdraft-resume\tavailable'* ]]
+	[[ "$output" == *$'\tcompare\tfull\tfresh'* ]]
+	fill_compare_draft
+	run git review walkthrough draft --build --compare -- "$DRAFT_ID"
+	[ "$status" -eq 0 ]
+	run git review config --porcelain --compare -- "$DRAFT_ID"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *$'offer\twalk\trecommended'* ]]
+	[[ "$output" == *$'offer\tkeys\tavailable'* ]]
+	[[ "$output" != *$'offer\tdraft-resume\t'* ]]
+	base_oid="$(git rev-parse v1.0)"
+	target_oid="$(git rev-parse v2.0)"
+	git tag -f v2.0 v1.0
+	run git review compare --draft -- "$DRAFT_ID"
+	[ "$status" -eq 0 ]
+	[ "$(git config branch.review/v2.0.reviewreadonly)" = 1 ]
+	[ "$(git config branch.review/v2.0.reviewcomparebase)" = "$base_oid" ]
+	[ "$(git config branch.review/v2.0.reviewtip)" = "$target_oid" ]
+	[ "$(git config branch.review/v2.0.reviewdraft)" = "$DRAFT_ID" ]
+	[ "$(git config branch.review/v2.0.reviewmode)" = walk ]
+}
+
+@test "compare draft updates when either endpoint moves without touching branch drafts" {
+	git branch target v2.0
+	git branch from v1.0
+	mkdir -p .git/review-walkthrough
+	printf 'private branch order\n' >.git/review-walkthrough/target.md
+	run git review walkthrough draft --compare -- from target
+	[ "$status" -eq 0 ]
+	fill_compare_draft
+	git branch -f from v1.0~0
+	git branch -f from v2.0~1
+	run git review config --porcelain --compare -- from target
+	[ "$status" -eq 0 ]
+	[[ "$output" == *$'offer\tdraft-update\tavailable'* ]]
+	run git review walkthrough draft --compare -- from target
+	[ "$status" -eq 0 ]
+	[ "$(cat .git/review-walkthrough/target.md)" = 'private branch order' ]
+	[[ "$(cat "$_draft")" == *'Supporting file.'* ]]
+	[[ "$(cat "$_draft")" != *'## 1. app.txt'* ]]
+	run git review config --porcelain --compare -- target from
+	[ "$status" -eq 0 ]
+	[[ "$output" != *$'offer\tstep\t'* ]]
+	[ "$(git branch --show-current)" = develop ]
+}
+
+@test "invalid compare probes and draft contexts fail without changing git state" {
+	run git review config --porcelain --compare -- v1.0 missing
+	[ "$status" -ne 0 ]
+	[[ "$output" == *'error: unknown commit: missing'* ]]
+	run git review walkthrough draft --compare --local -- v1.0 v2.0
+	[ "$status" -ne 0 ]
+	[[ "$output" == *'--compare cannot be combined'* ]]
+	run git review compare --draft -- ../outside
+	[ "$status" -ne 0 ]
+	[[ "$output" == *'not a comparison draft'* ]]
+	[ ! -e .git/review-walkthrough ]
+	[ -z "$(git status --porcelain)" ]
+	[ "$(git branch --show-current)" = develop ]
+}
+
+
+@test "compare draft survives save continue and CRLF without false update offers" {
+	git review walkthrough draft --compare -- v1.0 v2.0
+	fill_compare_draft
+	git review walkthrough draft --build --compare -- "$DRAFT_ID"
+	awk '{ printf "%s\r\n", $0 }' "$_draft" >"$_draft.crlf"
+	mv "$_draft.crlf" "$_draft"
+	run git review config --porcelain --compare -- v1.0 v2.0
+	[ "$status" -eq 0 ]
+	[[ "$output" == *$'draft-title\t'"$DRAFT_ID"$'\tv1.0 → v2.0'* ]]
+	[[ "$output" != *$'offer\tdraft-update\t'* ]]
+	run git review compare --draft -- "$DRAFT_ID"
+	[ "$status" -eq 0 ]
+	run git review walkthrough draft --local
+	[ "$status" -ne 0 ]
+	[[ "$output" == *'--compare cannot be combined'* ]]
+	run git review walkthrough draft --build
+	[ "$status" -eq 0 ]
+	run git review save
+	[ "$status" -eq 0 ]
+	[ ! -e "$_draft" ]
+	[ -f ".git/review-saved-walkthrough/$DRAFT_ID.md" ]
+	run git review continue v2.0
+	[ "$status" -eq 0 ]
+	[ -f "$_draft" ]
+	[ "$(git config branch.review/v2.0.reviewdraft)" = "$DRAFT_ID" ]
+	[ "$(git config branch.review/v2.0.reviewmode)" = walk ]
+}
+
+@test "compare offers use exact base file set and author keys in that range only" {
+	mkdir .review
+	printf '# Walkthrough\n\n## 1. app.txt\n> key\nApp.\n' >.review/walkthrough.md
+	git add .review/walkthrough.md
+	git commit --quiet -m walkthrough
+	git tag guided
+	run git review config --porcelain --compare -- v1.0 guided
+	[ "$status" -eq 0 ]
+	[[ "$output" == *$'offer\tkeys\tavailable'* ]]
+	[[ "$output" != *$'offer\tdraft\t'* ]]
+	run git review config --porcelain --compare -- v2.0~1 guided
+	[ "$status" -eq 0 ]
+	[[ "$output" != *$'offer\tkeys\t'* ]]
+	[[ "$output" != *$'offer\twalk\t'* ]]
+	[[ "$output" == *$'offer\tdraft\tavailable'* ]]
+	[ -z "$(git status --porcelain)" ]
+	[ ! -e .git/review-walkthrough ]
+}
+
+
+@test "compare prepares an independent copy of an unfinished branch reading order" {
+	git branch target v2.0
+	mkdir -p .git/review-walkthrough
+	printf '# Walkthrough\n\n## 1. app.txt\nMy existing why.\n\n## ?. more.txt\n<!-- why -->\n' >.git/review-walkthrough/target.md
+	original="$(cat .git/review-walkthrough/target.md)"
+	run git review config --porcelain --compare -- v1.0 target
+	[ "$status" -eq 0 ]
+	[[ "$output" == *$'offer\twalk\trecommended'* ]]
+	[[ "$output" == *$'offer\tdraft\tavailable'* ]]
+	run git review walkthrough draft --compare -- v1.0 target
+	[ "$status" -eq 0 ]
+	[ "$(cat .git/review-walkthrough/target.md)" = "$original" ]
+	copied="$(find .git/review-walkthrough/compare -name '*.md')"
+	[[ "$(cat "$copied")" == *'My existing why.'* ]]
+	[[ "$(cat "$copied")" == *'## ?. more.txt'* ]]
+	run git review config --porcelain --compare -- v1.0 target
+	[ "$status" -eq 0 ]
+	[[ "$output" == *$'offer\tdraft-resume\tavailable'* ]]
+	[ -z "$(git status --porcelain)" ]
+}
+
+
+@test "compare does not offer a draft for an empty content difference" {
+	git commit --quiet --allow-empty -m same-content
+	git tag same-content
+	run git review config --porcelain --compare -- v2.0 same-content
+	[ "$status" -eq 0 ]
+	[[ "$output" != *$'offer\tdraft'* ]]
+	[[ "$output" == *$'offer\twhole\tavailable'* ]]
+	[ ! -e .git/review-walkthrough ]
+	[ -z "$(git status --porcelain)" ]
+}

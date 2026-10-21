@@ -160,6 +160,7 @@ fun requiresConfirmation(id: ControlId): Boolean = id in CONFIRMING_IDS
  */
 private val REVEALING_IDS: Set<ControlId> = setOf(
     ControlId.ADD_COMMENT,
+    ControlId.COMPARE_REVIEW,
     ControlId.START_REVIEW,
     ControlId.START_FROM_DRAFT,
     ControlId.CONTINUE_REVIEW,
@@ -773,9 +774,10 @@ private fun cliBlocks(model: PanelModel, missing: Boolean): List<Block> {
 }
 
 private fun setupBlocks(model: PanelModel): List<Block> {
+    val drafts = if (model.drafts.any { !it.spent }) listOf(Block.Heading("Reading orders you started"), draftRows(model)) else emptyList()
     val remote = model.configuredRemote ?: "origin"
     val enabled = !model.busy
-    return listOf(
+    return drafts + listOf(
         Block.Paragraph("Which branch do pull requests land on in this repo?"),
         Block.Row(listOf(ctrl(ControlId.SET_BASE, "Choose the branch", Emphasis.PRIMARY, enabled))),
         Block.Paragraph(

@@ -85,3 +85,19 @@ La viabilidad de los dos ids se decide con un test de existencia de archivo
 dura y no una preferencia — `config --porcelain` se invoca en cada apertura del
 asistente, y el proyecto ya sufrió regresiones de segundos bajo Git Bash por
 agregar procesos en caminos calientes.
+
+
+### Ampliación para Compare
+
+`draft` admite `source=compare`, con `range=full`. El `src` es una identidad
+opaca `compare/<hash de los dos selectores>`; nunca se interpreta como una rama
+ni se usa la etiqueta visible como argv. El registro aditivo
+`draft-title<TAB>src<TAB>texto` aporta el par legible y se asocia por `src`,
+independientemente del orden de emisión. Los campos anteriores no cambian.
+
+`config --porcelain --compare -- <a> <b>` calcula ofertas sobre los extremos
+literales actuales, sin merge-base, base configurada ni fetch. Con un solo
+`<draft-id>` consulta los extremos fijados del borrador. Los borradores se
+custodian con las mismas reglas de guardado, continuación y borrado que los
+anteriores. Su estado es `fresh`: Compare no publica un marcador de revisión
+completada que vuelva gastado un orden de lectura.

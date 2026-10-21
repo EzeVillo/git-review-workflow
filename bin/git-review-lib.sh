@@ -2804,6 +2804,7 @@ walk_draft_progress() {
 			src[cur] = "unknown"
 			rng[cur] = "unknown"
 			tp[cur] = ""
+			cmpfrom[cur] = ""; cmpto[cur] = ""
 			inblock = 0
 			preamble = 1
 			if (index($0, bom) == 1) $0 = substr($0, length(bom) + 1)
@@ -2824,10 +2825,13 @@ walk_draft_progress() {
 			tp[cur] = $2
 			next
 		}
+		inblock && $1 == "compare-from" { line = $0; sub(/^[ \t]*compare-from /, "", line); cmpfrom[cur] = line; next }
+		inblock && $1 == "compare-to" { line = $0; sub(/^[ \t]*compare-to /, "", line); cmpto[cur] = line; next }
 		inblock && $0 ~ /^[ \t]*Generated with: / {
 			flags = $0
 			sub(/^[ \t]*Generated with: /, "", flags)
-			if (index(flags, "--offline")) src[cur] = "offline"
+			if (index(flags, "--compare")) src[cur] = "compare"
+			else if (index(flags, "--offline")) src[cur] = "offline"
 			else if (index(flags, "--local")) src[cur] = "local"
 			else src[cur] = "remote"
 			if (index(flags, "--delta")) rng[cur] = "delta"
@@ -2883,10 +2887,16 @@ walk_draft_progress() {
 			close_file()
 			for (i = 1; i < ARGC; i++) {
 				f = ARGV[i]
-				if (f in seen)
-					printf "%s\t%d\t%d\t%s\t%s\t%s\n", f, ann[f], tot[f], src[f], rng[f], tp[f]
-				else
+				if (f in seen) {
+					title = ""
+					if (src[f] == "compare" && cmpfrom[f] != "" && cmpto[f] != "") {
+						title = cmpfrom[f] " → " cmpto[f]
+						gsub(/%2D%2D%3E/, "-->", title); gsub(/%25/, "%", title)
+					}
+					printf "%s\t%d\t%d\t%s\t%s\t%s\t%s\n", f, ann[f], tot[f], src[f], rng[f], tp[f], title
+				} else {
 					printf "%s\t0\t0\tunknown\tunknown\t\n", f
+				}
 			}
 		}
 	' "$@"
@@ -3001,14 +3011,14 @@ EOF
 	# of awk: peeling the gitdir prefix and the .md inside awk would mean doing it
 	# for a <src> that can hold '/', where here it is free and exact -- this is
 	# the very prefix the loop above glued on.
-	walk_draft_progress "$@" | while IFS="$(printf '\t')" read -r _wed_path _wed_ann _wed_tot _wed_source _wed_range _wed_tip; do
+	walk_draft_progress "$@" | while IFS="$(printf '\t')" read -r _wed_path _wed_ann _wed_tot _wed_source _wed_range _wed_tip _wed_title; do
 		[ -n "$_wed_path" ] || continue
 		_wed_name="${_wed_path#"$_walk_gitdir_abs/review-walkthrough/"}"
 		_wed_name="${_wed_name%.md}"
 		walk_draft_state "$_wed_name" "$_wed_source" "$_wed_tip" \
 			"$_wed_ann" "$_wed_tot" "$_wed_marks"
 		"$_wed_cb" "$_wed_name" "$_wed_path" "$_wed_ann" "$_wed_tot" \
-			"$_wed_source" "$_wed_range" "$_wds_out"
+			"$_wed_source" "$_wed_range" "$_wds_out" "$_wed_title"
 	done
 }
 
@@ -3017,6 +3027,7 @@ EOF
 # walked, what it costs and why the empty case returns early.
 _emit_draft_row() {
 	porcelain_row draft "$1" "$2" "$3" "$4" "$5" "$6" "$7"
+	[ -z "${8:-}" ] || porcelain_row draft-title "$1" "$8"
 }
 
 emit_draft_records() {
@@ -3398,6 +3409,7 @@ walk_emit_prompt_block() {
 	printf '       base  %s  (%s)\n\n' "$_wepb_lower" "$_wepb_kind"
 
 	printf '     Generated with: %s\n\n' "$_wepb_flags"
+	compare_emit_draft_context
 
 	if [ -n "$_wepb_delta" ]; then
 		printf '     This is an incremental range: it covers only what was added since your\n'
@@ -3767,6 +3779,12 @@ emit_reading_offers() {
 	# the offers describe the review that start would actually create.
 	walk_use_draft "$_ero_branch"
 
+	emit_range_reading_offers
+}
+
+# Offers for an already resolved lower/tip and selected draft. Shared by Start
+# and Compare; neither client guesses which layouts or draft actions apply.
+emit_range_reading_offers() {
 	_ero_walk=0
 	if wtcontent="$(walk_read "$_ero_tip")" && [ -n "$wtcontent" ]; then
 		_ero_guided="$(walk_sequence "$_ero_tip" "$_ero_lower")"
@@ -3807,21 +3825,32 @@ emit_reading_offers() {
 	# The first question is ZERO processes (a builtin read of the block
 	# walk_use_draft already located); the count only runs once it answers
 	# "up to date", and never at all without a branch argument.
-	if walk_has_draft_file "$_ero_branch"; then
-		_ero_dpath="$(walk_draft_path "$_ero_branch")"
-		_ero_dtip="$(walk_sidecar_block_tip "$_ero_dpath" || true)"
-		if [ -n "$_ero_dtip" ] && [ "$_ero_dtip" != "$_ero_tip" ]; then
-			porcelain_row offer draft-update available
-		elif [ "$_ero_walk" -eq 0 ] || ! walk_draft_filled "$_ero_dpath"; then
-			# _ero_walk == 0 is the safety net, not a nicety: a complete draft
-			# whose paths no longer meet the range leaves walk unoffered, and
-			# silence here would be a reading order with no way to reach it.
-			porcelain_row offer draft-resume available
-		fi
-	elif [ "$_ero_walk" -eq 0 ]; then
-		porcelain_row offer draft available
+	_ero_can_draft=1
+	if [ "${compare_mode:-0}" -eq 1 ] &&
+		[ -z "$(changed_paths "$_ero_lower" "$_ero_tip" | grep -v '^\.review/' || true)" ]; then
+		_ero_can_draft=0
 	fi
-	porcelain_row offer step available
+	if [ "$_ero_can_draft" -eq 1 ]; then
+		if walk_has_draft_file "$_ero_branch"; then
+			_ero_dpath="$(walk_draft_path "$_ero_branch")"
+			_ero_dtip="$(walk_sidecar_block_tip "$_ero_dpath" || true)"
+			if { [ -n "$_ero_dtip" ] && [ "$_ero_dtip" != "$_ero_tip" ]; } ||
+				{ [ "${compare_mode:-0}" -eq 1 ] && ! walk_normalize <"$_ero_dpath" | grep -Fqx "     compare-base $_ero_lower"; }; then
+				porcelain_row offer draft-update available
+			elif [ "$_ero_walk" -eq 0 ] || ! walk_draft_filled "$_ero_dpath"; then
+				# _ero_walk == 0 is the safety net, not a nicety: a complete draft
+				# whose paths no longer meet the range leaves walk unoffered, and
+				# silence here would be a reading order with no way to reach it.
+				porcelain_row offer draft-resume available
+			fi
+		elif [ "$_ero_walk" -eq 0 ] || compare_has_unfinished_fallback; then
+			porcelain_row offer draft available
+		fi
+	fi
+	if [ "${compare_mode:-0}" -eq 0 ] ||
+		[ -n "$(git rev-list -1 --first-parent --no-merges "$_ero_lower..$_ero_tip")" ]; then
+		porcelain_row offer step available
+	fi
 	porcelain_row offer whole available
 	return 0
 }
@@ -4453,4 +4482,95 @@ emit_walkthrough_row() {
 	else
 		porcelain_row walkthrough "$1" "$2" "$3" "$4"
 	fi
+}
+
+# Shared, read-only resolution for Compare, its offers and its reading drafts.
+compare_resolve() {
+	a="$1"
+	b="$2"
+	# Selectors are stored inside an HTML comment. Reject record separators;
+	# escape the comment terminator and percent without changing the selector.
+	case "$a$b" in
+	*"
+"* | *"$(printf '\r')"* | *"$(printf '\t')"*) die "comparison revisions cannot contain tabs or newlines" ;;
+	esac
+	acommit="$(git rev-parse --verify --quiet "$a^{commit}")" || die "unknown commit: $a"
+	bcommit="$(git rev-parse --verify --quiet "$b^{commit}")" || die "unknown commit: $b"
+	[ "$acommit" != "$bcommit" ] || die "$a and $b are the same commit; nothing to compare"
+	compare_draft_id="compare/$(printf '%s\n%s\n' "$a" "$b" | git hash-object --stdin)"
+}
+
+compare_load_draft() {
+	compare_draft_id="$1"
+	case "$compare_draft_id" in compare/*) ;; *) die "not a comparison draft: $1" ;; esac
+	git check-ref-format "refs/heads/$compare_draft_id" >/dev/null 2>&1 || die "invalid comparison draft: $1"
+	_cmp_path="$(walk_draft_path "$compare_draft_id")"
+	[ -f "$_cmp_path" ] || die "no comparison draft: $1"
+	_cmp_fields="$(walk_normalize <"$_cmp_path" | awk '
+		/^<!-- git-review-range:/ { block = 1; next }
+		block && /-->/ { exit }
+		block && $1 == "compare-base" { print $2 }
+		block && $1 == "compare-target" { print $2 }
+		block && $1 == "compare-from" { sub(/^[ \t]*compare-from /, ""); print }
+		block && $1 == "compare-to" { sub(/^[ \t]*compare-to /, ""); print }
+	')"
+	acommit="$(printf '%s\n' "$_cmp_fields" | sed -n '1p')"
+	bcommit="$(printf '%s\n' "$_cmp_fields" | sed -n '2p')"
+	a="$(printf '%s\n' "$_cmp_fields" | sed -n '3p' | compare_decode_selector)"
+	b="$(printf '%s\n' "$_cmp_fields" | sed -n '4p' | compare_decode_selector)"
+	[ -n "$a" ] && [ -n "$b" ] || die "comparison draft has no revision context: $1"
+	_cmp_expected="compare/$(printf '%s\n%s\n' "$a" "$b" | git hash-object --stdin)"
+	[ "$compare_draft_id" = "$_cmp_expected" ] || die "comparison draft has a mismatched revision context: $1"
+	# Require complete object IDs, not a user-edited ref that could move later.
+	for _cmp_oid in "$acommit" "$bcommit"; do
+		case "$_cmp_oid" in *[!0-9a-f]* | '') die "invalid comparison draft endpoint: $1" ;; esac
+		[ "${#_cmp_oid}" -eq 40 ] || die "invalid comparison draft endpoint: $1"
+		git cat-file -e "$_cmp_oid^{commit}" 2>/dev/null || die "comparison draft endpoint is unavailable: $_cmp_oid"
+	done
+	[ "$acommit" != "$bcommit" ] || die "comparison draft endpoints are identical"
+}
+
+compare_encode_selector() { sed 's/%/%25/g; s/-->/%2D%2D%3E/g'; }
+compare_decode_selector() { sed 's/%2D%2D%3E/-->/g; s/%25/%/g'; }
+
+compare_emit_draft_context() {
+	[ "${compare_mode:-0}" -eq 1 ] || return 0
+	printf '     compare-base %s\n     compare-target %s\n' "$acommit" "$bcommit"
+	printf '     compare-from %s\n' "$(printf '%s' "$a" | compare_encode_selector)"
+	printf '     compare-to %s\n\n' "$(printf '%s' "$b" | compare_encode_selector)"
+}
+
+# A scoped draft wins; otherwise preserve Compare's existing branch-draft
+# fallback. Only the scoped file can be created or updated by this flow.
+compare_use_draft() {
+	draftsrc="$compare_draft_id"
+	if walk_has_draft_file "$draftsrc"; then
+		walk_use_draft "$draftsrc"
+		return
+	fi
+	_cmp_ref="$(git rev-parse --symbolic-full-name "$b" 2>/dev/null || true)"
+	case "$_cmp_ref" in
+	refs/heads/*) draftsrc="${_cmp_ref#refs/heads/}"; walk_use_draft "$draftsrc" ;;
+	refs/remotes/*) draftsrc="${_cmp_ref#refs/remotes/}"; draftsrc="${draftsrc#*/}"; walk_use_draft "$draftsrc" ;;
+	*) draftsrc="${name:-$(git rev-parse --short "$bcommit")}"; walk_draft_src="" ;;
+	esac
+}
+
+emit_compare_offers() {
+	compare_use_draft
+	_ero_branch="$compare_draft_id"
+	_ero_tip="$bcommit"
+	_ero_lower="$acommit"
+	emit_range_reading_offers
+}
+
+# A partially written branch draft can guide a few files, but it must still
+# offer a way to finish. Compare copies its prose into its independent draft;
+# the original remains available to Start.
+compare_has_unfinished_fallback() {
+	[ "${compare_mode:-0}" -eq 1 ] || return 1
+	[ -n "${walk_draft_src:-}" ] || return 1
+	[ "$walk_draft_src" != "$compare_draft_id" ] || return 1
+	walk_has_draft_file "$walk_draft_src" || return 1
+	! walk_draft_filled "$(walk_draft_path "$walk_draft_src")"
 }

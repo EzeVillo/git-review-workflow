@@ -14,6 +14,7 @@ prog="git review compare"
 usage() {
 	cat <<EOF
 usage: $prog <a> <b> [--step | --no-walk | --keys]
+       $prog --draft <comparison-draft> [--step | --no-walk | --keys]
 
 Stage the diff between two commit-ish on a review/<b> branch for inline reading.
 This is a read-only review: there is no branch to write back to, so git review
@@ -21,6 +22,7 @@ finish refuses on it.
 
   <a>        the lower bound (a branch, tag or commit) — what to diff from
   <b>        the upper bound — what to diff to; names the review branch
+  --draft    use the endpoints pinned in a comparison reading draft
   --step     read one commit at a time; advance with git review next
   --no-walk  ignore any walkthrough on <b>; read the whole diff
   --keys     walk mode restricted to entries marked > key (requires a
@@ -41,6 +43,8 @@ have_b=0
 step=0
 no_walk=0
 keys_only=0
+from_draft=0
+compare_mode=1
 # Collect the two positional commit-ish; mirror start's parser, including -- as the
 # end-of-options separator so a commit-ish that starts with "-" stays positional.
 add_positional() {
@@ -60,6 +64,7 @@ while [ $# -gt 0 ]; do
 		usage
 		exit 0
 		;;
+	--draft) from_draft=1 ;;
 	--step) step=1 ;;
 	--no-walk) no_walk=1 ;;
 	--keys) keys_only=1 ;;
@@ -83,7 +88,9 @@ while [ $# -gt 0 ]; do
 	shift
 done
 
-if [ "$have_a" -ne 1 ] || [ "$have_b" -ne 1 ]; then
+if [ "$from_draft" -eq 1 ]; then
+	[ "$have_a$have_b" = 10 ] || die "--draft requires one comparison draft"
+elif [ "$have_a" -ne 1 ] || [ "$have_b" -ne 1 ]; then
 	die "need two commit-ish to compare: $prog <a> <b>"
 fi
 
@@ -101,9 +108,7 @@ git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
-acommit="$(git rev-parse --verify --quiet "$a^{commit}")" || die "unknown commit: $a"
-bcommit="$(git rev-parse --verify --quiet "$b^{commit}")" || die "unknown commit: $b"
-[ "$acommit" != "$bcommit" ] || die "$a and $b are the same commit; nothing to compare"
+if [ "$from_draft" -eq 1 ]; then compare_load_draft "$a"; else compare_resolve "$a" "$b"; fi
 
 require_clean_work_tree
 
@@ -133,34 +138,8 @@ git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null &&
 git rev-parse --verify --quiet "refs/heads/review-saved/$name" >/dev/null &&
 	die "you have a saved review of $name; resume it with git review continue $name or discard it with git review forget --saved $name"
 
-# The draft context, set only when <b> actually names a branch the reviewer has
-# drafted for: compare is the one reader that works with revisions, and two SHAs
-# or tags have no reading order but the PR's own. A local branch is its own source
-# name; a remote-tracking one is the name minus its remote's first segment —
-# stripping to the last segment would look up "checkout" for feature/checkout.
-#
-# This is the SINGLE derivation of a draft name in the suite. It is recorded below
-# (reviewdraft) and read back from there ever after, so the name a draft is written
-# under and the name it is looked up under cannot come from two computations: they
-# used to, invisibly — the draft written from inside this review went to
-# origin/feature/x while every other entry point looked under feature/x.
-#
-# Above the --step branch, because that branch exits: below it, a compare --step of
-# a remote-tracking branch recorded no name at all and every reader fell back to
-# the review's source.
-draftsrc="$name"
-bref="$(git rev-parse --symbolic-full-name "$b" 2>/dev/null || true)"
-case "$bref" in
-refs/heads/*)
-	draftsrc="${bref#refs/heads/}"
-	walk_use_draft "$draftsrc"
-	;;
-refs/remotes/*)
-	draftsrc="${bref#refs/remotes/}"
-	draftsrc="${draftsrc#*/}"
-	walk_use_draft "$draftsrc"
-	;;
-esac
+# Share draft precedence with the exact-range offer probe.
+compare_use_draft
 
 if [ "$step" -eq 1 ]; then
 	# --first-parent --no-merges: walk only the range's own commits, skipping merge

@@ -20,6 +20,7 @@ export const REVEALING_IDS = [
     "continueReview",
     "finishReview",
     "addComment",
+    "compareReview",
 ] as const;
 
 export type RevealingId = (typeof REVEALING_IDS)[number];

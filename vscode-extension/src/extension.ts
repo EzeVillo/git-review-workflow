@@ -742,7 +742,7 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
         vscode.commands.registerCommand("gitReview.previewEditsStat", () =>
             previewEdits(stateManager, getInvokeOptions, true)),
         vscode.commands.registerCommand("gitReview.compareReview", () =>
-            compareReview(lock, stateManager, getInvokeOptions)),
+            compareReview(lock, stateManager, getInvokeOptions, revealPanelView)),
         vscode.commands.registerCommand("gitReview.walkthroughInit", () =>
             walkthroughInit(lock, stateManager, getInvokeOptions)),
         vscode.commands.registerCommand("gitReview.walkthroughBuild", () =>

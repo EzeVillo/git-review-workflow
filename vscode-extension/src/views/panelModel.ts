@@ -480,7 +480,7 @@ function toPanelReviews(branches: BranchRecord[]): PanelReview[] {
  */
 function toPanelDrafts(drafts: readonly DraftRecord[]): PanelDraft[] {
     return drafts.map((draft) => ({
-        branch: draft.src,
+        branch: draft.title ?? draft.src,
         path: draft.path,
         annotated: draft.annotated,
         total: draft.total,

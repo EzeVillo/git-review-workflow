@@ -564,6 +564,7 @@ const (
 	DraftSourceRemote  DraftSource = "remote"
 	DraftSourceLocal   DraftSource = "local"
 	DraftSourceOffline DraftSource = "offline"
+	DraftSourceCompare DraftSource = "compare"
 	DraftSourceUnknown DraftSource = "unknown"
 
 	DraftRangeFull    DraftRange = "full"
@@ -579,6 +580,7 @@ const (
 // paused the review (`draft` record of `config --porcelain`). Path comes
 // verbatim from the CLI and is only ever opened, never assembled.
 type DraftRecord struct {
+	Title     string
 	Src       string
 	Path      string
 	Annotated int
@@ -751,6 +753,8 @@ func parseDraftSource(s string) DraftSource {
 		return DraftSourceRemote
 	case "local":
 		return DraftSourceLocal
+	case "compare":
+		return DraftSourceCompare
 	case "offline":
 		return DraftSourceOffline
 	default:
@@ -802,6 +806,7 @@ func ParseConfigPorcelain(stdout string) ConfigPorcelainResult {
 		haveBase      bool
 		result        ConfigPorcelainResult
 		candidateRefs = make(map[string]string)
+		draftTitles   = make(map[string]string)
 	)
 
 	for _, line := range splitLines(stdout) {
@@ -863,6 +868,10 @@ func ParseConfigPorcelain(stdout string) ConfigPorcelainResult {
 					result.Walkthrough = &rec
 				}
 			}
+		case "draft-title":
+			if len(fields) >= 3 {
+				draftTitles[fields[1]] = strings.Join(fields[2:], "\t")
+			}
 		case "offer":
 			id, okID := parseOfferID(field(fields, 1))
 			rank, okRank := parseOfferRank(field(fields, 2))
@@ -880,6 +889,9 @@ func ParseConfigPorcelain(stdout string) ConfigPorcelainResult {
 	for i := range result.Candidates {
 		c := &result.Candidates[i]
 		c.Ref = candidateRefs[c.Origin+"\t"+c.Name]
+	}
+	for i := range result.Drafts {
+		result.Drafts[i].Title = draftTitles[result.Drafts[i].Src]
 	}
 	result.Config = EffectiveConfig{Base: base, HasBase: haveBase, Remote: remote}
 	if result.Candidates == nil {

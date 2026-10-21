@@ -33,6 +33,8 @@ usage: $prog init [--base <base>] [--force] [--stdout] [--porcelain]
                    [--porcelain] [--] [<branch>]
        $prog draft --build [--from <file> | --from -] [--local | --offline]
                    [--delta] [--force] [--] [<branch>]
+       $prog draft [--build] --compare <a> <b>
+       $prog draft [--build] --compare <comparison-draft>
        $prog guide [--team] [--delete]
 
 Author a reading walkthrough for the current branch's PR, committed as
@@ -64,6 +66,8 @@ Review someone else's PR in a reading order of your own, without committing:
     --build         validate and renumber the draft, as build does for the PR's
     --from <file>   with --build: read the draft from <file> instead of the
                     stored one, and install it ("-" reads standard input)
+    --compare       prepare an independent draft for two exact revisions; a
+                    stored comparison draft ID reuses its pinned endpoints
     --local         draft against your local <branch>, not origin's copy
     --offline       like --local, and resolve the base locally too
     --delta         cover only the commits added since your last review
@@ -93,6 +97,9 @@ die() {
 
 sub=""
 branch=""
+compare_target=""
+compare_mode=0
+compare_seed=""
 base=""
 base_explicit=0
 force=0
@@ -114,6 +121,8 @@ take_positional() {
 		sub="$1"
 	elif [ -z "$branch" ]; then
 		branch="$1"
+	elif [ -z "$compare_target" ]; then
+		compare_target="$1"
 	else
 		die "unexpected argument $1"
 	fi
@@ -135,6 +144,7 @@ while [ $# -gt 0 ]; do
 		[ -n "$base" ] || die "--base requires a base"
 		base_explicit=1
 		;;
+	--compare) compare_mode=1 ;;
 	--force) force=1 ;;
 	--check) check=1 ;;
 	--build) build_draft=1 ;;
@@ -192,6 +202,14 @@ case "$sub" in
 init | build | draft | guide) ;;
 *) die "unknown subcommand '$sub'; use init, build, draft or guide" ;;
 esac
+
+if [ "$compare_mode" -eq 1 ]; then
+	[ "$sub" = draft ] || die "--compare applies only to walkthrough draft"
+	[ "$local_only$offline$delta_mode$base_explicit" = 0000 ] || die "--compare cannot be combined with --local, --offline, --delta or --base"
+	[ -n "$branch" ] || die "--compare requires two revisions or a comparison draft"
+fi
+
+[ "$compare_mode" -eq 1 ] || [ -z "$compare_target" ] || die "unexpected argument $compare_target"
 
 # Flag/subcommand compatibility, up front, so a misused flag never silently no-ops.
 if [ "$sub" = build ] && { [ "$base_explicit" -eq 1 ] || [ "$force" -eq 1 ]; }; then
@@ -431,6 +449,31 @@ fi
 # use, flags included, or the draft would list the file set of some review other
 # than the one start is about to create.
 if [ "$sub" = draft ]; then
+	if [ "$compare_mode" -eq 0 ] && [ -z "$branch" ] && [ "$head_in_review" -eq 1 ]; then
+		_cmp_active="$(walk_review_draft_src "$(git symbolic-ref --quiet --short HEAD)")"
+		case "$_cmp_active" in compare/*)
+			if walk_has_draft_file "$_cmp_active"; then
+				[ "$local_only$offline$delta_mode$base_explicit" = 0000 ] || die "--compare cannot be combined with --local, --offline, --delta or --base"
+				compare_mode=1
+				branch="$_cmp_active"
+			fi
+			;;
+		esac
+	fi
+	if [ "$compare_mode" -eq 1 ]; then
+		if [ -n "$compare_target" ]; then compare_resolve "$branch" "$compare_target"; else compare_load_draft "$branch"; fi
+		compare_use_draft
+		if [ "$force" -eq 0 ] && [ -n "${walk_draft_src:-}" ] && [ "$walk_draft_src" != "$compare_draft_id" ] && walk_has_draft_file "$walk_draft_src"; then
+			compare_seed="$(walk_draft_path "$walk_draft_src")"
+		fi
+		branch="$compare_draft_id"
+		tip="$bcommit"
+		lower="$acommit"
+		pr_lower="$lower"
+		base="$a"
+		srclabel="$bcommit"
+		from_review=0
+	else
 	# Standing inside the review is the likeliest moment to want a draft, and the
 	# branch you are on is not one anybody drafts for: review/feature/x has no
 	# remote copy, so the bare command died with "origin/review/feature/x not
@@ -533,6 +576,8 @@ if [ "$sub" = draft ]; then
 		[ -n "$pr_lower" ] || pr_lower="$lower"
 	fi
 
+	fi
+
 	draftpath="$(walk_draft_path "$branch")"
 	# Reported instead of the absolute path: shorter, and it is where the reviewer
 	# will look. The absolute one is what gets opened, either way.
@@ -569,6 +614,10 @@ if [ "$sub" = draft ]; then
 		else
 			genflags="--delta"
 		fi
+	fi
+	if [ "$compare_mode" -eq 1 ]; then
+		draftflags=" --compare"
+		genflags="--compare"
 	fi
 	[ -n "$genflags" ] || genflags="(defaults)"
 
@@ -683,7 +732,9 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 	# filesystem -- falls through to the write path, which fails with the message
 	# that names the real problem instead of an awk that cannot read it.
 	update=0
-	if [ -f "$targetpath" ] && [ "$force" -eq 0 ]; then
+	previous_path="$targetpath"
+	[ -z "$compare_seed" ] || previous_path="$compare_seed"
+	if [ -f "$previous_path" ] && [ "$force" -eq 0 ]; then
 		update=1
 	fi
 	# A walkthrough that came in WITH a merge is not this PR's: the entry for a file
@@ -741,7 +792,7 @@ if [ "$sub" = init ] || { [ "$sub" = draft ] && [ "$build_draft" -eq 0 ]; }; the
 	merged_added=0
 	merged_removed=""
 	if [ "$update" -eq 1 ]; then
-		prev_content="$(walk_normalize <"$targetpath")"
+		prev_content="$(walk_normalize <"$previous_path")"
 		plan="$({
 			printf '%s\n' "$pr_files"
 			printf '\t\n'
@@ -1706,7 +1757,9 @@ fi
 } >"$tmp"
 mv "$tmp" "$targetpath"
 
-if [ "$sub" = draft ]; then
+if [ "$sub" = draft ] && [ "$compare_mode" -eq 1 ]; then
+	echo "built $targetrel: $count $(entry_noun "$count")$keysuffix, ordered and renumbered; git review compare --draft $branch now reads it"
+elif [ "$sub" = draft ]; then
 	echo "built $targetrel: $count $(entry_noun "$count")$keysuffix, ordered and renumbered; git review start$draftflags $branch now reads it"
 else
 	echo "built $targetrel: $count $(entry_noun "$count")$keysuffix, ordered and renumbered"

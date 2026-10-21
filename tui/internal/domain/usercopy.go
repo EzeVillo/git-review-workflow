@@ -734,8 +734,10 @@ func CompareTargetPromptText(base string) string {
 }
 
 const (
-	CompareWalkLabel  = "Walkthrough"
-	CompareKeysLabel  = "Walkthrough — keys only"
-	CompareStepLabel  = "Commit by commit"
-	CompareWholeLabel = "Whole diff"
+	CompareDraftDetail       = "Write your own reading order for this comparison."
+	CompareDraftUpdateDetail = "The comparison changed; keeps the whys whose files are still in range."
+	CompareWalkLabel         = "Walkthrough"
+	CompareKeysLabel         = "Walkthrough — keys only"
+	CompareStepLabel         = "Commit by commit"
+	CompareWholeLabel        = "Whole diff"
 )

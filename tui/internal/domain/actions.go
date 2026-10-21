@@ -180,7 +180,11 @@ func BuildArgv(action string, p ActionParams) (Argv, bool) {
 		}
 		return Argv{Verb: "continue", Args: []string{p.Source}}, true
 	case "startReview":
-		return Argv{Verb: "start", Args: IntentToArgs(p.Intent)}, true
+		verb := "start"
+		if p.Intent.Source == "compare" {
+			verb = "compare"
+		}
+		return Argv{Verb: verb, Args: IntentToArgs(p.Intent)}, true
 	case "setBase":
 		return Argv{Verb: "config", Args: []string{"base", "--", p.Name}}, true
 	case "setRemote":

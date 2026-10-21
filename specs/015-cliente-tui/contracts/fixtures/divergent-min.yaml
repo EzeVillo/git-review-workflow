@@ -312,8 +312,9 @@ panel_layout:
       - {block: row, controls: [{id: installCli, label: "Other install options", emphasis: link, confirms: false}]}
       - {block: stderr, when: present}
   no-review-setup:
-    source_fns: [renderSetup, renderCompareSection]
+    source_fns: [renderSetup, renderDrafts, renderCompareSection]
     blocks:
+      - {block: draft_block, when: has_fresh_drafts}
       - {block: paragraph, text: "Which branch do pull requests land on in this repo?"}
       - {block: row, controls: [{id: setBase, label: "Choose the branch", emphasis: primary, confirms: false}]}
       - {block: paragraph, text: "Reviews compare the branch you are reading against it. Usually main or develop."}
@@ -584,9 +585,9 @@ reveals:
   # paleta, donde el panel puede no estar a la vista. Los tres clientes de IDE
   # comparten el mecanismo: un panel que puede quedar fuera de vista y un
   # asistente que corre sobre el editor.
-  vscode: [startReview, startFromDraft, continueReview, finishReview, addComment]
-  intellij: [startReview, startFromDraft, continueReview, finishReview, addComment]
-  visualstudio: [startReview, startFromDraft, continueReview, finishReview, addComment]
+  vscode: [startReview, startFromDraft, continueReview, finishReview, addComment, compareReview]
+  intellij: [startReview, startFromDraft, continueReview, finishReview, addComment, compareReview]
+  visualstudio: [startReview, startFromDraft, continueReview, finishReview, addComment, compareReview]
   # VACIA, Y DECLARADA. No es una ausencia: es la respuesta.
   #
   # Un pane lo abriste vos y ya esta a la vista, asi que no hay nada que
@@ -1079,6 +1080,8 @@ compare_flow:
   stepDetail: "Commits unique to the destination; skips merges and side branches."
   wholeDetail: "Changes from the base's content to the revision to inspect."
   confirmDetail: "Opens a separate review for reading. Your working tree must be clean."
+  draftDetail: "Write your own reading order for this comparison."
+  draftUpdateDetail: "The comparison changed; keeps the whys whose files are still in range."
   readonlyNote: "Read-only comparison. Local comments are kept when you close it."
   setupNote: "Compare any two revisions without configuring a base."
   button: "Compare"

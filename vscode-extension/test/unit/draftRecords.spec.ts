@@ -332,3 +332,25 @@ describe("draftAgentPrompt", () => {
         }
     });
 });
+
+
+describe("comparison reading drafts", () => {
+    it("joins the readable title independently of record order and keeps the opaque ID", () => {
+        const id = "compare/0123456789012345678901234567890123456789";
+        const row = `draft\t${id}\t/repo/.git/order.md\t2\t2\tcompare\tfull\tfresh`;
+        const title = `draft-title\t${id}\tmain → release`;
+        for (const text of [title + "\n" + row, row + "\n" + title]) {
+            const draft = parseConfigPorcelain(text).drafts[0];
+            assert.strictEqual(draft.src, id);
+            assert.strictEqual(draft.title, "main → release");
+            assert.strictEqual(draft.source, "compare");
+            const model = buildPanelModel({situation: "no-review", entries: [], files: [], branches: [], config: {remote: "origin"}, drafts: [draft]}, {busy: false});
+            assert.strictEqual(model.noBaseConfigured, true);
+            assert.strictEqual(model.drafts[0].branch, "main → release");
+            assert.strictEqual(model.drafts[0].startable, true);
+            assert.deepStrictEqual(draftArgs(id, "compare", "full", true), ["draft", "--build", "--compare", "--", id]);
+            assert.deepStrictEqual(draftConfigArgs(id, "compare", "full"), ["--porcelain", "--compare", "--", id]);
+            assert.deepStrictEqual(intentToArgs({branch: id, source: "compare", range: "full", layout: "keys"}, "main"), ["--keys", "--draft", "--", id]);
+        }
+    });
+});

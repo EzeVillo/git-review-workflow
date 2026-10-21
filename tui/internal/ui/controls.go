@@ -55,10 +55,11 @@ func coreControlsFor(m domain.PanelModel) (controls []Control) {
 		}
 
 	case domain.LayoutNoReviewSetup:
-		return []Control{
-			{ID: "setBase", Enabled: true},
-			{ID: "setRemote", Enabled: true},
-		}
+		return append(freshDraftControls(m),
+			Control{ID: "setBase", Enabled: true},
+			Control{ID: "setRemote", Enabled: true},
+			Control{ID: "compareReview", Enabled: true},
+		)
 
 	case domain.LayoutNoReview:
 		return noReviewControls(m)
@@ -139,14 +140,7 @@ func coreControlsFor(m domain.PanelModel) (controls []Control) {
 func noReviewControls(m domain.PanelModel) []Control {
 	var cs []Control
 
-	for _, d := range decodeDraftRows(m.FreshDraftRows) {
-		cs = append(cs,
-			Control{ID: "copyDraftPrompt", Variant: d.src, Enabled: true},
-			Control{ID: "startFromDraft", Variant: d.src, Enabled: d.startable()},
-			Control{ID: "openDraft", Variant: d.src, Enabled: true},
-			Control{ID: "discardDraft", Variant: d.src, Enabled: true},
-		)
-	}
+	cs = append(cs, freshDraftControls(m)...)
 
 	for _, r := range decodeInventoryRows(m.InventoryRows) {
 		if !r.canDiscard() {
@@ -225,8 +219,8 @@ func noReviewControls(m domain.PanelModel) []Control {
 // the other instead of a silently-misread column.
 
 type draftRowView struct {
-	src, path, source, rrange string
-	annotated, total          int
+	src, path, source, rrange, title string
+	annotated, total                 int
 }
 
 // startable mirrors draft_controls' own comment on startFromDraft: disabled
@@ -250,7 +244,11 @@ func decodeDraftRows(joined string) []draftRowView {
 		}
 		ann, _ := strconv.Atoi(r[4])
 		tot, _ := strconv.Atoi(r[5])
-		out = append(out, draftRowView{src: r[0], path: r[1], source: r[2], rrange: r[3], annotated: ann, total: tot})
+		d := draftRowView{src: r[0], path: r[1], source: r[2], rrange: r[3], annotated: ann, total: tot}
+		if len(r) > 6 {
+			d.title = r[6]
+		}
+		out = append(out, d)
 	}
 	return out
 }
@@ -325,4 +323,18 @@ func findInventoryRow(rows []inventoryRowView, name string) (inventoryRowView, b
 		}
 	}
 	return inventoryRowView{}, false
+}
+
+func freshDraftControls(m domain.PanelModel) []Control {
+	var cs []Control
+	for _, d := range decodeDraftRows(m.FreshDraftRows) {
+		cs = append(cs,
+			Control{ID: "copyDraftPrompt", Variant: d.src, Enabled: true},
+			Control{ID: "startFromDraft", Variant: d.src, Enabled: d.startable()},
+			Control{ID: "openDraft", Variant: d.src, Enabled: true},
+			Control{ID: "discardDraft", Variant: d.src, Enabled: true},
+		)
+	}
+
+	return cs
 }

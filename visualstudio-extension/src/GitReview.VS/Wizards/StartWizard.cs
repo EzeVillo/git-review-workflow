@@ -347,6 +347,7 @@ public static class StartWizard
 
         var source = draft.Source switch
         {
+            DraftSource.Compare => ReviewSource.Compare,
             DraftSource.Local => ReviewSource.Local,
             DraftSource.Offline => ReviewSource.Offline,
             _ => ReviewSource.Remote,
@@ -482,7 +483,7 @@ public static class StartWizard
         var result = await ctx.Mutations.RunActionAsync(
             "startReview",
             new ActionParams.Start(intent, ctx.Branch),
-            network: true,
+            network: ctx.Source != ReviewSource.Compare,
             ct: ct).ConfigureAwait(true);
 
         // Discarded: the lock's own listener says so, for every surface at once.
@@ -500,7 +501,7 @@ public static class StartWizard
         {
             // Credentials cannot be typed into a dialog the CLI never prompts to: the
             // reviewer gets the exact command line to re-run in a terminal.
-            var resolved = ResolveCommand.Resolve("start", args, ctx.Cli.GitReviewPath);
+            var resolved = ResolveCommand.Resolve(ctx.Source == ReviewSource.Compare ? "compare" : "start", args, ctx.Cli.GitReviewPath);
             GitReviewDialogs.Error(
                 $"{text}\n\nTo retry with credentials, run in a terminal:\n" +
                 CliLog.FormatCommandLine(resolved.Command, resolved.Args));

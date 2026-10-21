@@ -1793,3 +1793,11 @@ Compare queda accesible antes de configurar la base de Start porque no depende d
 ella. Walkthrough sigue usando el draft del revisor antes que el del autor; Keys
 conserva su requisito de entradas marcadas. Se aclara la diferencia entre snapshots
 y la historia de primer padre de Step sin cambiar ninguna de las dos operaciones.
+
+### Compare: ofertas y borradores del rango exacto
+
+Compare consulta las mismas reglas de ofertas que Start después de resolver sus dos revisiones literales. No reutiliza las ofertas de una rama contra la base configurada: ni los archivos ni los esenciales tienen por qué coincidir. Un rango inverso sin commits propios no ofrece Step y un diff sin archivos anotables no ofrece crear un borrador.
+
+Los borradores propios de Compare llevan `source=compare`, una identidad estable `compare/<hash de los selectores>` y los dos commits fijados en su bloque de instrucciones. Viven en el mismo almacén privado y siguen su custodia de Save/Continue/Forget, pero no sobrescriben el borrador de Start. El lector conserva el fallback anterior al borrador de la rama cuando no existe uno específico de Compare. Si ese borrador está a medio escribir, se ofrece preparar una copia independiente y se conservan sus anotaciones, sin modificar el original. Una actualización por los selectores originales detecta tanto cambios de base como de destino y conserva la prosa pertinente. La continuación desde el panel valida y abre Compare con los commits guardados, sin resolver otra vez referencias móviles.
+
+`draft-title` aporta la etiqueta legible del par sin usarla como identidad ni reconstruir contexto en los clientes. Se extrae durante la enumeración de borradores existente, sin procesos extra por archivo. Los cuatro clientes consumen las ofertas, ofrecen el mismo circuito crear/retomar/actualizar y el botón del borrador conserva `compare --draft`.

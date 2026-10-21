@@ -274,3 +274,15 @@ y sus tests unitarios se mueven con ellas. `OFFER_ORDER` no cambia.
 | `npm run test:unit` | Parseo del registro, `PanelDraft`, argv de los cuatro controles, texto del portapapeles |
 | `./vscode-extension/test/run-docker.sh` | El bloque se dibuja con N filas; el cuerpo de siempre sigue debajo; cada control invoca lo suyo; el asistente cierra sin dejar aviso |
 | `npm run preview` | El estado nuevo entra en `preview/fixtures.ts` |
+
+
+### Continuación de Compare
+
+Las filas con `source=compare` viven también en la pantalla sin base configurada,
+encima del setup. Se dibujan con su `draft-title`, si llegó, conservando el `src`
+para todos los controles. Crear, retomar o actualizar desde Compare revela el
+panel sin robar foco; sólo actualizar notifica los números del registro `merged`.
+Validate and start valida el archivo, consulta sus ofertas y abre `compare
+--draft`, manteniendo los dos commits guardados incluso si los selectores se
+movieron. La viabilidad sigue viniendo de la CLI; no se recrea un intent de Start
+contra la base del repositorio.

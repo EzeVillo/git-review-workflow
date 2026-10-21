@@ -110,7 +110,7 @@ public sealed record ReadingOffer(OfferId Id, OfferRank Rank);
 /// deleted by hand, which is allowed: the flags cannot be replicated then, so
 /// the row does not offer "Validate and start" rather than guessing them.
 /// </summary>
-public enum DraftSource { Remote, Local, Offline, Unknown }
+public enum DraftSource { Remote, Local, Offline, Compare, Unknown }
 
 public enum DraftRange { Full, Delta, Unknown }
 
@@ -143,6 +143,7 @@ public static class DraftSourceExt
         "remote" => DraftSource.Remote,
         "local" => DraftSource.Local,
         "offline" => DraftSource.Offline,
+        "compare" => DraftSource.Compare,
         _ => DraftSource.Unknown,
     };
 }
@@ -171,7 +172,8 @@ public sealed record DraftRecord(
     int Total,
     DraftSource Source,
     DraftRange Range,
-    DraftState State);
+    DraftState State,
+    string? Title = null);
 
 /// <summary>Which of the two authoring guides a <c>guide</c> record is about.</summary>
 public enum GuideKind
@@ -341,6 +343,7 @@ public static class ConfigPorcelain
         var deltas = new List<DeltaRecord>();
         var offers = new List<ReadingOffer>();
         var drafts = new List<DraftRecord>();
+        var draftTitles = new Dictionary<string, string>();
         var guides = new List<GuideRecord>();
         WalkthroughRecord? walkthrough = null;
 
@@ -426,6 +429,9 @@ public static class ConfigPorcelain
                     if (walkthrough is null) walkthrough = ParseWalkthroughRecord(fields);
                     break;
                 }
+                case "draft-title":
+                    if (fields.Length >= 3) draftTitles[fields[1]] = string.Join("\t", fields.Skip(2));
+                    break;
                 case "offer":
                 {
                     var id = OfferIdExt.Parse(Get(fields, 1));
@@ -444,7 +450,7 @@ public static class ConfigPorcelain
             remotes,
             deltas.Count > 0 ? deltas : null,
             offers.Count > 0 ? offers : null,
-            drafts,
+            drafts.Select(d => d with { Title = draftTitles.TryGetValue(d.Src, out var title) ? title : null }).ToList(),
             guides,
             walkthrough);
     }

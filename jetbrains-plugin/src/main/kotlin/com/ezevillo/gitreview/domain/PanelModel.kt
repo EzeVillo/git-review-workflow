@@ -304,7 +304,7 @@ private fun toPanelReviews(branches: List<BranchRecord>): List<PanelReview> {
 fun toPanelDrafts(drafts: List<DraftRecord>): List<PanelDraft> =
     drafts.map { draft ->
         PanelDraft(
-            branch = draft.src,
+            branch = draft.title ?: draft.src,
             path = draft.path,
             annotated = draft.annotated,
             total = draft.total,

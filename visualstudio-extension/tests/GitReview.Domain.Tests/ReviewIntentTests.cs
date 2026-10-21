@@ -154,7 +154,7 @@ public class ReviewIntentTests
             Enum.GetValues<ReviewLayout>().Select(l => l.Id()));
         Assert.Equal(new[] { "full", "delta" },
             Enum.GetValues<ReviewRange>().Select(r => r.Id()));
-        Assert.Equal(new[] { "remote", "local", "offline" },
+        Assert.Equal(new[] { "remote", "local", "offline", "compare" },
             Enum.GetValues<ReviewSource>().Select(s => s.Id()));
         foreach (var s in Enum.GetValues<ReviewSource>())
             Assert.Equal(s, ReviewSourceExt.Parse(s.Id()));

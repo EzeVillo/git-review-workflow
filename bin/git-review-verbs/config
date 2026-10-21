@@ -18,6 +18,8 @@ prog="git review config"
 usage() {
 	cat <<EOF
 usage: $prog [<key> [<value>]] [--unset <key>] [--porcelain [--local | --offline] [--delta] [<branch>]]
+       $prog --porcelain --compare <a> <b>
+       $prog --porcelain --compare <comparison-draft>
 
 Read or write git-review-workflow's own configuration: the base branch a full
 review compares against, and the remote a review is fetched from.
@@ -31,6 +33,8 @@ review compares against, and the remote a review is fetched from.
                         the format); with <branch>, also report whether it
                         has a prior review to diff against (--delta) and the
                         reading layouts viable for that tip/range (offer rows)
+  --compare <a> <b>     with --porcelain: offers for the exact comparison;
+                        use one comparison draft ID to read its pinned range
   --local               with --porcelain <branch>: offers for the local tip
   --offline             with --porcelain <branch>: offers for local tip + base
   --delta               with --porcelain <branch>: offers for the incremental
@@ -57,6 +61,7 @@ config_key() {
 }
 
 porcelain=0
+compare_mode=0
 unset_key=""
 local_mode=0
 offline_mode=0
@@ -85,6 +90,7 @@ while [ $# -gt 0 ]; do
 		usage
 		exit 0
 		;;
+	--compare) compare_mode=1 ;;
 	--porcelain)
 		porcelain=1
 		;;
@@ -150,6 +156,11 @@ if [ "$offline_mode" -eq 1 ]; then
 	local_mode=1
 fi
 
+if [ "$compare_mode" -eq 1 ]; then
+	[ "$porcelain" -eq 1 ] || die "--compare requires --porcelain"
+	[ "$local_mode$offline_mode$delta_mode" = 000 ] || die "--compare cannot be combined with --local, --offline or --delta"
+fi
+
 mode=""
 key=""
 value=""
@@ -159,7 +170,11 @@ if [ -n "$unset_key" ]; then
 	key="$unset_key"
 	mode="unset"
 elif [ "$porcelain" -eq 1 ]; then
-	[ "$pos_count" -le 1 ] || die "unexpected argument $pos2"
+	if [ "$compare_mode" -eq 1 ]; then
+		[ "$pos_count" -ge 1 ] || die "--compare requires two revisions or a comparison draft"
+	else
+		[ "$pos_count" -le 1 ] || die "unexpected argument $pos2"
+	fi
 	branch="$pos1"
 	mode="porcelain"
 else
@@ -224,6 +239,10 @@ porcelain)
 	# shellcheck source=../git-review-lib.sh
 	. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
+	if [ "$compare_mode" -eq 1 ]; then
+		if [ "$pos_count" -eq 2 ]; then compare_resolve "$pos1" "$pos2"; else compare_load_draft "$pos1"; fi
+	fi
+
 	remote_val="$(git config reviewworkflow.remote || echo origin)"
 	base_val="$(git config reviewworkflow.base || true)"
 
@@ -257,7 +276,9 @@ porcelain)
 	# tree, not a property of whatever branch the caller asked about.
 	emit_walkthrough_record "$base_val" "$remote_val"
 
-	if [ -n "$branch" ]; then
+	if [ "$compare_mode" -eq 1 ]; then
+		emit_compare_offers
+	elif [ -n "$branch" ]; then
 		# Same pair of keys start reads for --delta: reviewworkflow.<branch>.reviewed
 		# for a remote review, reviewworkflowlocal.<branch>.reviewed for --local/
 		# --offline. Zero, one or two rows — never OR'd into a single tip — so a

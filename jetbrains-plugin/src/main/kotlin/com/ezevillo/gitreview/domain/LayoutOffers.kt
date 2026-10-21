@@ -138,6 +138,7 @@ fun offerConfigFlags(source: ReviewSource, range: ReviewRange): List<String> {
     when (source) {
         ReviewSource.LOCAL -> flags.add("--local")
         ReviewSource.OFFLINE -> flags.add("--offline")
+        ReviewSource.COMPARE -> flags.add("--compare")
         ReviewSource.REMOTE -> {}
     }
     if (range == ReviewRange.DELTA) flags.add("--delta")

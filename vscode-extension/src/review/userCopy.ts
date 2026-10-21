@@ -221,6 +221,8 @@ export const COMPARE_COPY = {
     "stepDetail": "Commits unique to the destination; skips merges and side branches.",
     "wholeDetail": "Changes from the base's content to the revision to inspect.",
     "confirmDetail": "Opens a separate review for reading. Your working tree must be clean.",
+    "draftDetail": "Write your own reading order for this comparison.",
+    "draftUpdateDetail": "The comparison changed; keeps the whys whose files are still in range.",
     "readonlyNote": "Read-only comparison. Local comments are kept when you close it.",
     "setupNote": "Compare any two revisions without configuring a base.",
     "button": "Compare",

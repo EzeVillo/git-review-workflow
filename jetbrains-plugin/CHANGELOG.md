@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.5.0] — 2026-10-19
+
+### Changed
+
+- Explain the previous-review choice through its effect on private Local notes,
+  state that Shared comes from the branch in either case, and describe each new
+  comment destination as private or intended for the PR.
+- Place Comments between Walkthrough and Compare on the main panel. Read
+  delivered Shared from the repository and keep its controls read-only outside
+  reviews; Save/Continue retains the private preparation until Finish.
+- Use CLI comment destinations, omit the selector for a sole option, and
+  remove Save comments: comparison notes are retained automatically.
+- Distinguish previous comment reviews with dates, counts and reviewed subjects.
+- Hide Open diff for general comments. Delete individual comments from the
+  browser without renumbering or changing other entries, and keep the browser open.
+- Preserve and highlight exact selected code, including unified diff captures,
+  with line and column endpoints. Existing line-only comments remain supported.
+- Simplified comment browsing: one compact location, an ellipsized preview and
+  scrollable full prose. Historical revisions are collapsed under Details;
+  unsaved-capture warnings remain visible.
+- Open review and comment diffs in editor tabs within the current IDE.
+
+### Added
+
+- Copy the absolute path of an existing Local comment document from its row,
+  during a review or from retained results.
+- Comment browsing with excerpts, full prose, original file/side/line context and
+  marked historical ranges. Comment fields now have a visible label.
+- Delete retained Local or Shared documents after Finish while keeping delivered prose.
+
+- Local and Shared review comments with an explicit destination for every capture,
+  selective Markdown saves, historical changes and pending Shared delivery.
+- Comment state, guards and document ownership supplied by CLI 0.10.0.
+
+
+
 Notable changes to the **git review** JetBrains IDE plugin (IntelliJ Platform).
 The CLI it drives has its own
 [releases](https://github.com/EzeVillo/git-review-workflow/releases).
@@ -53,6 +89,8 @@ Requires `git review` **0.8.0** or newer.
 
 ### Changed
 
+- Use CLI comment destinations, omit the selector for a sole option, and
+  remove Save comments: comparison notes are retained automatically.
 - **The panel comes to the front when a block is born that was not there before.** Starting a
   review, starting one from a reading order you had begun, continuing a saved one and finishing one
   all draw something that was not on screen a moment ago — and the wizard that starts them runs
@@ -165,6 +203,8 @@ Requires `git review` **0.7.0** or newer.
 
 ### Changed
 
+- Use CLI comment destinations, omit the selector for a sole option, and
+  remove Save comments: comparison notes are retained automatically.
 - **Branch pickers have a search box.** Every picker in the plugin — the start wizard's
   branch step, the base and remote settings, *Clean*, *Forget*, *Discard*, *Continue* —
   was a drop-down you could only walk with the mouse or the arrow keys. It is now a filter
@@ -237,6 +277,8 @@ Requires `git review` **0.7.0** or newer.
 
 ### Changed
 
+- Use CLI comment destinations, omit the selector for a sole option, and
+  remove Save comments: comparison notes are retained automatically.
 - **The Marketplace listing says what the plugin does.** It used to open by
   claiming parity with the other editors' clients and then spend its second
   paragraph listing the JetBrains IDEs it runs on — one fact about how the
@@ -272,6 +314,8 @@ warning the JetBrains Marketplace plugin verifier raised against 0.1.0.
 
 ### Changed
 
+- Use CLI comment destinations, omit the selector for a sole option, and
+  remove Save comments: comparison notes are retained automatically.
 - The single-choice pickers (branch, origin, range, layout) are a plugin dialog
   now that the platform deprecated `Messages.showChooseDialog`. Same shape and
   the same prompts — one combo, cancel still cancels.

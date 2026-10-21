@@ -19,7 +19,7 @@ package com.ezevillo.gitreview.domain
  */
 fun draftWatchDirs(state: ReviewState): List<String> {
     val dirs = LinkedHashSet<String>()
-    (listOf(state.draftPath) + (state.drafts.orEmpty().map { it.path })).forEach { file ->
+    (listOf(state.draftPath) + (state.drafts.orEmpty().map { it.path }) + state.comments?.documents.orEmpty().map { it.path }).forEach { file ->
         containerOf(file)?.let { dirs.add(it) }
     }
     // Sorted, not in order of appearance: the caller compares two results to

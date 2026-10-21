@@ -24,10 +24,12 @@ import (
 // (domain.PanelModel.StatusLine's own doc), and the one finishReview
 // outcome still waiting on its next read to resolve.
 type Model struct {
+	commentsForm   *CommentsForm
 	Viewport       Viewport
 	Panel          domain.PanelModel
 	FocusIndex     int
 	footerOffset   int
+	bodyOffset     int
 	hover          *controlTarget
 	pollFloor      time.Duration
 	pollGen        int
@@ -40,8 +42,10 @@ type Model struct {
 	// read-only text viewer showCliLog/previewEditsStat open (T087/T088).
 	// Mutually exclusive with confirm/selectOverlay and with each other, the
 	// same "at most one open at a time" shape those two already establish.
-	actionList  *ActionList
-	textOverlay *TextOverlay
+	actionList      *ActionList
+	textOverlay     *TextOverlay
+	commentsBrowser *CommentsBrowser
+	commentsDiff    *CommentsBrowser // A single comment and its diff, with no list to return to.
 	// textPrompt: compareReview's own free-text lower/upper questions
 	// (T089) — the one flow that needs typed input rather than a picked
 	// item, chained via selectResult exactly like selectOverlay's own
@@ -216,9 +220,17 @@ func (m Model) scheduleRead() (Model, tea.Cmd) {
 // helpers that themselves return Cmds).
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case commentsQueryDone:
+		return m.handleCommentsQuery(msg)
+	case commentsEditorDone:
+		if msg.err != nil {
+			m.statusLine = msg.err.Error()
+		}
+		return m.scheduleRead()
 	case tea.WindowSizeMsg:
 		m.Viewport.Cols = msg.Width
 		m.Viewport.Rows = msg.Height
+		m = m.keepFocusedControlVisible(1)
 		return m, nil
 
 	case tea.FocusMsg:
@@ -265,7 +277,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.onAcceptedRead != nil {
 			m.onAcceptedRead(msg.result)
 		}
+		previous := m.Panel
 		m.Panel = domain.Project(toProjectInput(msg.result, m.Panel.MouseEnabled, m.lock.Busy(), m.statusLine))
+		if m.Panel.Situation != previous.Situation || m.Panel.Branch != previous.Branch || m.Panel.Position != previous.Position {
+			m.bodyOffset = 0
+		}
 		if m.pendingFinish != nil {
 			// finishReview's own deferred outcome (T074): the fresh read's
 			// matching list record is the only honest answer to "did THIS
@@ -320,6 +336,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.commentsForm != nil {
+			return m.handleCommentsKey(msg)
+		}
 		if m.confirm != nil {
 			return m.handleConfirmKey(msg)
 		}
@@ -338,6 +357,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if m.commentsBrowser != nil || m.commentsDiff != nil {
+			return m.handleCommentsBrowserKey(msg)
+		}
 		if m.progressOverlay != nil {
 			if safeDuringProgress(ResolveKey(msg.String(), m)) {
 				return m.handleKey(msg)
@@ -347,7 +369,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case tea.MouseMsg:
-		if m.confirm != nil || m.selectOverlay != nil || m.textPrompt != nil || m.actionList != nil || m.textOverlay != nil || m.progressOverlay != nil {
+		if m.commentsForm != nil || m.confirm != nil || m.selectOverlay != nil || m.textPrompt != nil || m.actionList != nil || m.textOverlay != nil || m.commentsBrowser != nil || m.commentsDiff != nil || m.progressOverlay != nil {
 			// A stray event while an overlay is open must never resolve
 			// against the HIDDEN base panel underneath it (T090).
 			return m, nil
@@ -358,6 +380,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
+	if m.commentsForm != nil {
+		return m.commentsForm.render(m.Viewport)
+	}
 	// The confirm overlay and the select overlay are mutually exclusive by
 	// construction (handleConfirmKey/handleSelectKey each clear their own
 	// field before ever opening the other), and both take over the WHOLE
@@ -378,6 +403,12 @@ func (m Model) View() string {
 	if m.textOverlay != nil {
 		return m.textOverlay.Render(m.Viewport)
 	}
+	if m.commentsBrowser != nil {
+		return m.commentsBrowser.Render(m.Viewport)
+	}
+	if m.commentsDiff != nil {
+		return m.commentsDiff.Render(m.Viewport)
+	}
 	if m.progressOverlay != nil {
 		return m.progressOverlay.RenderWithPanel(m.presentationPanel(), m.Viewport)
 	}
@@ -386,7 +417,7 @@ func (m Model) View() string {
 }
 
 func (m Model) presentationState() renderState {
-	state := renderState{hover: m.hover, footerOffset: m.footerOffset}
+	state := renderState{hover: m.hover, footerOffset: m.footerOffset, bodyOffset: m.bodyOffset}
 	controls := ControlsFor(m.presentationPanel())
 	if len(controls) == 0 || m.FocusIndex < 0 || m.FocusIndex >= len(controls) {
 		return state
@@ -395,18 +426,20 @@ func (m Model) presentationState() renderState {
 	return state
 }
 
-// keepFocusedControlVisible adjusts the one footer viewport only when the
+// keepFocusedControlVisible adjusts the review or footer viewport only when the
 // newly focused control lies outside it. The renderer remains the authority
 // for real row geometry, so wrapped text and future footer rows cannot make
 // a parallel scrolling calculation disagree with the HitMap.
 func (m Model) keepFocusedControlVisible(direction int) Model {
 	state := m.presentationState()
+	state.revealFocus = true
 	if state.focus == nil || direction == 0 {
 		return m
 	}
 	for attempt := 0; attempt < 512; attempt++ {
 		_, hm, metrics := viewWithState(m.presentationPanel(), m.Viewport, state)
 		m.footerOffset = metrics.footerOffset
+		m.bodyOffset = metrics.bodyOffset
 		if _, ok := hm.Rect(state.focus.id, state.focus.variant); ok {
 			return m
 		}
@@ -499,6 +532,17 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	panel := m.presentationPanel()
 	_, hm, metrics := viewWithState(panel, m.Viewport, m.presentationState())
 	m.footerOffset = metrics.footerOffset
+	m.bodyOffset = metrics.bodyOffset
+	if metrics.bodyMax > 0 {
+		switch msg.Button {
+		case tea.MouseButtonWheelDown:
+			m.bodyOffset = min(metrics.bodyMax, m.bodyOffset+3)
+			return m, nil
+		case tea.MouseButtonWheelUp:
+			m.bodyOffset = max(0, m.bodyOffset-3)
+			return m, nil
+		}
+	}
 	if msg.Button == tea.MouseButtonWheelDown {
 		m.footerOffset += 3
 		if m.footerOffset > metrics.footerMax {
@@ -551,6 +595,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 // Studio's/JetBrains' host-side adapters.
 func toProjectInput(r host.ReadResult, mouseEnabled, busy bool, statusLine string) domain.ProjectInput {
 	return domain.ProjectInput{
+		Comments: r.Comments, CommentsError: r.CommentsError,
 		Situation:    r.Situation,
 		Status:       r.Status,
 		HasStatus:    r.HasStatus,

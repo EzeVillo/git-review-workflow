@@ -131,6 +131,44 @@ En un panel o en la interfaz de terminal, configurá una vez la rama base y eleg
 Editá y corré el cambio staged con tus herramientas habituales; después elegí
 **Finish** para extraer tus correcciones a una rama aparte.
 
+Las comparaciones ofrecen sólo comentarios Local y los conservan automáticamente al cerrarlas. Los formularios omiten el selector de destino cuando la CLI permite una sola opción.
+
+Las notas Local son privadas; los comentarios Shared se preparan para el PR. Ambos
+documentos conviven y el destino sólo se aplica al comentario nuevo. Si se pregunta
+si querés continuar una review anterior, elegís si recuperar sus notas Local o
+mantenerlas separadas. Shared viene de la rama actual en ambos casos.
+
+Desde la CLI, `git review comments add --document local` abre tu editor Git para
+una observación privada; elegí `--document shared` para prosa destinada al PR.
+Ambos documentos siguen siendo Markdown editable fuera del working tree durante
+la revisión. `finish` deja el Shared modificado como `.review/comments.md` en
+la rama de salida, staged junto con tus correcciones y listo para commitear.
+Después se elimina la preparación privada de Shared. Save/Continue la conserva
+hasta Finish, incluidos los comentarios borrados. Undo la devuelve a la review;
+Cancel descarta esa pasada y respeta los comentarios originales de la rama.
+Fuera de una review, Comments está entre Walkthrough y Compare y lee Shared de
+la rama actual, incluso en un clon nuevo. Los comentarios heredados de un PR
+integrado no se copian a una review nueva. Agregar comentarios requiere una sesión activa.
+Los comentarios Local siguen privados. **Copy path** copia la ruta absoluta de un documento
+Local existente desde su fila del panel, incluidos los resultados conservados. Ver [comentarios de revisión](CLI.es.md#comentarios-de-revisión)
+para renumerar, consultar diffs históricos y conservar comentarios de comparación
+localmente.
+
+Los formularios de comentarios de los IDE ofrecen el fragmento exacto seleccionado, archivo actual y General, con el alcance más específico disponible seleccionado. Podés cambiarlo antes de guardar. Las preparaciones Local y Shared existentes aparecen por separado y se pueden eliminar durante la review. Los resultados Local siguen siendo editables después de Finish.
+
+El formulario identifica explícitamente el campo del comentario. El explorador de
+Diff muestra una ubicación compacta y un fragmento de una línea, con `…` cuando
+se recorta. El comentario completo se desplaza debajo; los identificadores de
+revisión quedan plegados en Details y los avisos sobre capturas sin guardar
+siguen visibles. Los diffs se abren dentro del IDE y el comentario queda accesible.
+En terminal, `d` alterna Details y Tab vuelve al comentario completo. Las líneas
+seleccionadas se marcan sobre la versión registrada. Local conservado y las
+preparaciones Shared pendientes se pueden borrar después de Finish; Shared
+entregado se lee de `.review/comments.md`.
+
+El explorador de comentarios también permite borrar un comentario individual sin
+cambiar los demás ni sus números. Los comentarios generales no ofrecen un diff.
+
 ## Instalación
 
 Los clientes visuales comparten una pequeña base de línea de comandos. El

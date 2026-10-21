@@ -1370,3 +1370,399 @@ propio `tui/CONTRIBUTING.md` le manda correr a quien desarrolla— sobre archivo
 commit taggeado y verdes en CI. Es el mismo razonamiento que ya tenían los golden y las fixtures de
 porcelain, y la misma clase de bug: lo que la herramienta compara son los bytes en disco, no los
 bytes en git.
+
+## 17. Comentarios portables de revisión
+
+### 17.1 Dos documentos y una identidad completa
+
+Local y Shared son Markdown editable e independiente. Elegir uno no recuerda
+un destino para la próxima captura ni copia contenido del otro. El marcador
+portable identifica el trabajo; no hay ids, estados ni respuestas obligatorias
+por entrada. Las referencias son OID de base/head y ubicación opcional, sin
+instantáneas de código ni refs de retención para hacer disponible una historia
+que el clon no tiene.
+
+La identidad usa el merge-base completo, separado de delta/`--from` y del cursor.
+Un marcador heredado desde la base no convierte comentarios del PR anterior en
+los del nuevo. Linaje incompatible o base incompleta exige elección explícita.
+Cada inicio tiene una sesión distinta: la misma rama y el mismo rango no hacen
+válido un formulario abierto en una pasada que ya se abortó.
+
+### 17.2 Custodia y publicación del par
+
+Preparación y resultados viven en el gitdir propio. Save/continue cambian el
+custodio de un directorio exclusivo; nunca mueven dos archivos separadamente.
+El owner absoluto evita que config compartida adopte archivos de otro worktree.
+Si desaparecen las claves pero un manifest sigue reclamando la rama, los verbos
+que la moverían o borrarían se detienen antes de tocar Git o prosa.
+
+Se publica una generación completa y se cambia después `current`. En compare,
+ese puntero también es el checkpoint: mantener otro permitiría fallar después
+de conservar el par y anunciar un descarte distinto del resultado publicado.
+Ausente no se reemplaza por vacío. Source, resultado y baseline se comparan por
+bytes/presencia; si ambos cambiaron se conservan, sin merge automático.
+
+La identidad conserva el merge-base completo que Start resolvió para su origen,
+en el manifest de la sesión. Volver a preferir una base local atrasada después
+de un fetch podía adoptar el contexto heredado del PR ya integrado; recalcularlo
+con una base que avanzó también invalidaba el guard de una sesión materializada.
+Aceptar deliberadamente el Shared entrante resuelve el conflicto de origen aun
+cuando Finish no necesite entregar otra copia. Las regresiones y el alcance de
+las pruebas están en `specs/016-comentarios-review/auditoria-flujos-2026-10-19.md`.
+
+### 17.3 El cierre de código y la entrega pueden tener resultados distintos
+
+Shared se entrega después de extraer código y queda staged, sin commit ni push propios.
+El usuario cambió explícitamente la decisión el 2026-10-19: el banner promete
+trabajo listo para commitear y una entrega fuera del índice podía omitir el feedback.
+La publicación del índice toma su lock, compara la entrada original de ese path
+y modifica sólo `.review/comments.md`, con los bytes preparados sin clean filters.
+Un retry conserva las demás entradas y rechaza comentarios stageados concurrentemente.
+Si el destino cambió, se preservan preparado y destino. El cierre registra igual
+su salida de código, retorna error y permite inspeccionar/reintentar sólo prosa.
+Una falla de publicación del resultado tampoco oculta la preparación ni permite
+que clean la elimine antes de conservarla. La igualdad deliberada de preparado
+y destino resuelve la entrega; no existe un reemplazo forzado de prosa concurrente.
+
+El retry modifica el snapshot de undo sólo para el path entregado. Recalcularlo
+desde todo el working tree absorbería código editado después del cierre y haría
+que abort lo descartara sin advertir. Undo vuelve a preparado, respeta borrado y
+vacío, y conserva el trabajo de editores antiguos: el manifest registra hashes
+de publicación para no sobrescribir una preparación que cambió después.
+
+Undo también revierte la publicación del resultado de ese Finish. Cada generación
+de revisión registra el resultado anterior (o su ausencia) en su manifest; los
+reintentos de prosa conservan ese mismo límite. Primero vuelve el texto actual a
+la preparación y después se restaura el puntero anterior bajo el lock de comentarios.
+Dejar publicado el resultado del cierre deshecho hacía que Cancel descartara la
+preparación pero conservara una copia de todos los comentarios nuevos. La secuencia
+Finish → Undo → Cancel ahora respeta el contenido previo, incluidos documentos
+vacíos o ausentes, y descarta la pasada deshecha.
+
+### 17.4 Una observación no se identifica por su número visible
+
+El parser común cuenta límites físicos, respeta fences y comentarios HTML y
+renumera sólo dígitos. Conserva BOM, EOL, EOF, cuerpos y metadata futura como
+bytes. Entries/diff seleccionan ordinal más revisión: mover o editar un bloque
+invalida el picker anterior aunque su número siga igual.
+
+Los diffs históricos usan extremos separados y `:(top,literal)`: desde un cwd
+profundo el path sigue siendo relativo a la raíz. Se deshabilitan fetch perezoso,
+ext-diff y textconv. Un blob faltante también invalida un diff general; emitir
+árboles antes de comprobar el contenido daría una receta inutilizable. La falta
+de historia devuelve 5 y conserva el comentario. Un archivo actual ausente no
+impide consultar los objetos originales que todavía estén disponibles.
+
+
+## 18. Comentarios en los clientes
+
+La relación de custodia viaja en comments-owner, junto con la rama que aún reclama el contexto. Un label humano o una ruta no identifica quién debe guardar un buffer. status --all enumera contextos retenidos cuando hace falta descartar otra sesión, sin cambiar el guard de captura activo. Los seis controles de documento viven fuera de las 28 acciones; sólo Add comment revela el panel cuando nace el bloque. El desarrollo local usa la CLI candidata por autorización del usuario, sin acreditar el release pendiente.
+
+### 18.1 Alcance visible y captura estable
+
+Cada compositor prioriza líneas seleccionadas, archivo y comentario general, en ese orden,
+y permite ampliar el alcance sin perder el texto ni la selección capturada. El destino Local o
+Shared sigue siendo una elección independiente y explícita por captura. Los clientes muestran
+el contexto antes de abrir el compositor y lo congelan al abrirlo. En un diff se conserva el lado
+original; el visor unificado traduce sus coordenadas al documento de origen y rechaza rangos
+que cruzan lados incompatibles. IntelliJ conserva el último editor de código con foco cuando
+el revisor entra al panel: el editor de archivos seleccionado no identifica al editor del diff.
+
+En VS Code esa retención dura sólo mientras el editor siga visible: cerrar una pestaña no
+descarga necesariamente su `TextDocument`, así que `isClosed` solo no alcanza. Se observan
+también los cambios de editores visibles y se actualiza la copia persistida del contexto;
+sin editor se vuelve a General comment y Add comment sigue disponible. El bloque comparte
+el margen del contenido y la acción secundaria ocupa el ancho, como en los otros IDE.
+
+Guardar bloquea controles, edición y cancelación hasta recibir el resultado. El éxito cierra
+el compositor; el fallo conserva texto, alcance y destino. En IntelliJ se cierra por el código de
+salida: doOKAction ignora el cierre mientras su acción está deshabilitada.
+
+Las filas se muestran por presencia del documento, nunca por cantidad de entradas. La excepción
+es Shared pendiente: la recuperación de una entrega sigue visible aunque falte el preparado.
+Delete es un control de documento, pasa por la puerta de confirmación de cada cliente y usa una
+operación de CLI con guardas dentro del lock. Solo borra preparaciones activas; los resultados y
+las copias ya entregadas conservan su custodia. No se borra un path desde el cliente.
+
+### 18.2 Compositor sin contexto duplicado
+
+Choose a destination es un placeholder del control cerrado; el menú ofrece únicamente
+Local y Shared. La selección nula sigue impidiendo guardar. El alcance ya identifica
+archivo, versión y líneas: no se repite en un cuadro. La vista previa existe sólo para
+texto seleccionado y se colapsa al elegir archivo o General. Selectores, vista previa
+y cuerpo comparten ambos bordes, también al cambiar el ancho del formulario.
+
+El indicador de alcance en tiempo real pertenece al grupo de Add comment dentro del
+cuerpo del panel. No ocupa la cabecera de la ventana: moverlo allí lo separaba de la
+acción y lo hacía difícil de encontrar. Las actualizaciones conservan el mismo control
+para no perder la ubicación ni el foco del revisor.
+
+### 17.1. Leer comentarios desde el panel y descartarlos después del cierre
+
+El primer selector sólo mostraba número y título: dos observaciones sobre el
+mismo archivo resultaban indistinguibles y el diff perdía la prosa que explicaba
+su apertura. El rango ya viajaba en la receta, pero no se utilizaba al dibujar.
+
+`entries` añade cuerpo por líneas escapadas y alcance/lado, con la misma lectura
+de contornos que identifica ordinales físicos. Se revalida la revisión tras
+leerlos. `status` sigue sin cuerpos ni resolución histórica. Los clientes unen
+esa instantánea con una receta guardada por ordinal y revisión: lista con
+fragmento y ubicación, texto completo desplazable y apertura explícita del diff.
+El explorador se cierra tras abrir correctamente el diff; si falla, conserva
+la selección y muestra el error para reintentar. Los visores señalan las líneas
+en los objetos originales; la TUI también muestra un extracto con números y
+contexto aunque el rango esté fuera de los hunks. No se traslada una ubicación
+histórica al working tree actual.
+
+El campo de entrada tiene etiqueta visible y asociada al control. El destino
+Local/Shared y el alcance son preguntas independientes de la prosa.
+
+Delete conserva su confirmación única y amplía el alcance a resultados locales
+posteriores a Finish. Borra sólo el documento elegido, mantiene guards y lock,
+y conserva tanto el otro documento como `.review/comments.md` ya entregado.
+Un Shared eliminado con entrega pendiente se informa como `discarded`; Prepare
+rechaza su ausencia en lugar de convertirla en una solicitud de borrar destino.
+Una preparación pausada requiere Continue, igual que antes.
+
+### 17.2. Un solo contexto visible y diffs dentro del editor
+
+La lista y el detalle repetían alcance, archivo y lado; los hashes ocupaban la
+primera pantalla aunque rara vez ayudaban a leer la observación. La fila ahora
+combina título y ubicación sin duplicar el path cuando el título ya lo identifica.
+La preview ocupa una línea y avisa con `…` cuando supera 160 caracteres; la prosa
+completa sigue disponible en un área desplazable independiente. Los hashes quedan
+plegados en Details. El aviso de captura sin guardar vive separado, siempre visible.
+En terminal, `d` abre y cierra Details y Tab muestra la prosa completa del
+comentario abierto. Enter vuelve a su diff y Esc cierra esa vista directamente,
+sin regresar al explorador de comentarios.
+
+IntelliJ abría el diff desde un DialogWrapper sin modalidad. DiffManager detecta
+ese origen y puede crear otra ventana aunque el IDE prefiera pestañas. La apertura
+común usa un archivo virtual de diff y solicita explícitamente una pestaña del
+editor actual, manteniendo Prev/Next para cadenas de archivos. El explorador usa
+componentes del IDE sin bordes de scroll y un separador de un píxel.
+
+### Selecciones exactas con línea y columna
+
+La preview del compositor mostraba el fragmento seleccionado, pero la captura
+lo reducía a líneas inclusivas. Reabrir el comentario ampliaba una palabra a
+toda la línea. Se añaden `start-column` y `end-column` opcionales a v1, en
+unidades UTF-16 1-based, con fin exclusivo. Cuando están presentes, `start`
+y `end` son las líneas de ambos extremos, incluso si el fin está en columna
+1 de la siguiente línea. Sin columnas se conserva el significado inclusivo
+anterior; no se migra ni reescribe la prosa existente.
+
+`entries` y la receta de `diff` añaden `comment-columns`, asociado por ordinal
+y lado. Los tres IDE conservan las coordenadas reales del editor y las usan
+al resaltar el objeto histórico; la TUI acepta `línea:columna` en ambos campos
+y señala los caracteres con carets incluso sin color. UTF-16 evita depender
+de bytes UTF-8 o del ancho visual de tabuladores; la CLI valida los límites
+del blob antes de crear la preparación. Cambiar a archivo/general omite las
+columnas. La etiqueta Selected code describe el alcance que se guarda.
+
+
+### Borrado individual desde el explorador de comentarios
+
+Un comentario general no señala un archivo: ofrecerle Open diff abría el rango
+completo y atribuía al comentario una ubicación que no tiene. Los cuatro clientes
+ocultan esa acción en General y en entradas sin ubicación. El explorador permite
+borrar una entrada, con confirmación, sin reescribir las otras ni renumerarlas.
+La CLI extiende `comments delete` con `--entry`: usa el ordinal físico y la revisión
+que el explorador leyó, nunca el número visible. El lector de contornos conserva
+los bytes originales, incluidos BOM, EOL mixtos y EOF sin LF. Un cambio concurrente
+rechaza el borrado; una publicación fallida conserva su candidato recuperable.
+Tras borrar, el explorador recarga `entries --porcelain`, conserva el índice de
+selección o el anterior al borrar la última, y permanece abierto incluso vacío.
+El documento no se elimina y su entrega pendiente sigue vigente. El borrado de
+una entrada retenida no cambia la copia entregada en `.review/comments.md`.
+
+### 17.1. Compare: captura Local y conservación automática
+
+Shared representa prosa destinada al PR y se entrega con Finish. Un compare de
+revisiones arbitrarias no tiene ese destino ni Finish; crear Shared allí prometía
+un resultado que no podía entregar. `init/add` rechazan Shared antes de componer
+o materializar. Una función de la CLI gobierna tanto esa validación como los
+registros `comments-capability` por operación y destino, incluso sin documentos.
+
+Los cuatro clientes consumen esas capacidades: con varias opciones exigen elegir
+en cada captura; con una sola ocultan el selector y envían el valor permitido,
+sin recordar preferencias. Los Shared antiguos se conservan y siguen consultables.
+
+Local en compare se conserva automáticamente antes de abortar o limpiar su sesión;
+un fallo de publicación mantiene la preparación recuperable. Esto incluye las
+ediciones del Markdown guardadas en un editor. Se retira Save comments de los
+cuatro clientes y la matriz queda en 28 acciones. `comments save` permanece como
+checkpoint opcional de la CLI para compatibilidad, sin ser necesario para retener
+las notas. Las reviews normales mantienen su descarte y entrega anteriores.
+
+### 18.4 Shared pertenece a la rama; la preparación dura hasta Finish
+
+La decisión de custodia cambia el 2026-10-19 y se precisa el 2026-10-20: el
+revisor no debe seguir leyendo una copia privada vieja después de descargar
+respuestas del autor. Fuera de una review, Shared sale del `.review/comments.md`
+del working tree actual. Comments se ubica entre Walkthrough y Compare en el
+pie del panel principal. Si hay también una preparación guardada, el panel
+muestra Shared del repositorio; Continue retoma la preparación de Save.
+
+Start copia sólo el Shared propio del PR. La identidad y la comparación con el
+merge-base completo siguen evitando adoptar comentarios de un PR ya integrado.
+Un resultado Shared privado anterior no participa en la elección del documento.
+Esto sustituye la reconciliación fuente/resultado de las secciones anteriores
+para las reviews nuevas; los compare antiguos conservan su lectura compatible.
+
+Finish entrega el documento completo y lo stagea, incluidas sus eliminaciones.
+Después de entregar y publicar la recuperación elimina la preparación editable
+de Shared. Local queda privado. Una entrega o publicación fallida conserva la
+preparación y permite reintentar sin volver a extraer código. El resultado
+publicado identifica Shared como perteneciente al repositorio y conserva su
+revisión; el blob ya escrito por staging permite recuperarlo al deshacer desde
+otra rama sin copiar el documento de esa otra rama.
+
+Undo vuelve a la preparación actual, incluidos borrados y documentos vacíos,
+y revierte la entrega. Cancel descarta la pasada completa, respetando el
+documento que traía el origen. Save/Continue conserva ambas preparaciones y
+el límite original de descarte. Ninguno de estos ciclos convierte Finish en
+una nueva baseline para Cancel. Las baselines son snapshots de recuperación,
+no otra copia editable de Shared ni una fuente para una review nueva.
+
+### 18.5 Comments permanece visible aunque todavía no haya comentarios
+
+Ocultar la sección vacía del panel principal impedía descubrir la funcionalidad
+y confundía la ausencia de comentarios con la ausencia de una consulta. Después
+de leer el estado, Comments conserva su lugar entre Walkthrough y Compare. Cada
+tipo sin documento visible muestra su propia fila: Local con «No local comments.»
+y Shared con «No shared comments.». Si sólo existe uno, la otra fila sigue visible.
+Las filas vacías no crean documentos ni ofrecen controles sobre rutas inventadas.
+
+La consulta pendiente no anticipa el vacío, y los diagnósticos de lectura se
+muestran sin afirmar ausencia. Los documentos existentes, incluidos los vacíos,
+ilegibles y Shared pendientes de entrega, conservan sus controles y su índice
+físico. La captura dentro de una review mantiene su disposición actual.
+
+
+### 18.6 Copiar la ubicación de los comentarios Local
+
+Local vive fuera del árbol del repositorio y su ubicación es difícil de descubrir.
+La fila del documento ofrece «Copy path» inmediatamente después de Abrir en todas
+las situaciones donde aparece: review, compare y resultados conservados. Shared
+no lo ofrece: su destino de entrega es `.review/comments.md`.
+
+El control copia la ruta absoluta que la CLI reporta para el documento actual,
+sin reconstruir directorios ni guardar buffers. Exige Local presente, incluso si
+su prosa es ilegible; los estados ausentes no ofrecen una ruta para copiar.
+Es un control de fila, no una acción de producto ni una invocación nueva de la CLI.
+En los IDE confirma la copia con feedback breve; la TUI usa OSC 52 e informa que
+se envió al portapapeles de la terminal, sin afirmar una aceptación que no puede
+comprobar. El contrato declara el icono y la diferencia de feedback por cliente.
+
+### 18.7 La entrega identifica bytes y la consulta elige cada documento
+
+La auditoría del 2026-10-20 reprodujo dos fallos que la suite anterior no cubría.
+Después de renombrar Shared al destino, staging lo volvía a leer: otro editor
+podía reemplazarlo y Finish borraba la preparación pese a haber entregado otros
+bytes. Ahora se escribe primero el blob de la preparación; su OID determina la
+entrada del índice y la revisión publicada. El destino y la preparación se
+comprueban bajo el lock del índice y se revalidan antes de liberar la copia
+privada. Una edición posterior a staging conserva la preparación pendiente y
+consultable, incluso si el resultado anterior ya se había publicado. El reintento
+usa ese mismo OID para el guard de Undo, sin absorber prosa ajena del working tree.
+
+El otro fallo era elegir por contexto completo: al mostrar Shared del repositorio,
+un token coincidente ocultaba el Local de la sesión guardada o mostraba un resultado
+anterior. La resolución mantiene el custodio guardado para Local y sustituye sólo
+el origen de Shared por el repositorio. La consulta habitual emite un contexto,
+con su estado guardado y sus permisos; `--all` conserva además la preparación
+privada de Shared para la custodia de buffers. Entries y Diff usan la misma
+resolución. Continue recupera ambos documentos privados sin reinterpretarlos.
+
+Los gates son `tests/comments-delivery-race.bats` (barreras FIFO antes de staging,
+publicación y liberación) y `tests/comments-saved-repository.bats` (Local actual,
+vacío o ausente, consultas históricas, permisos y ciclo de cierre).
+
+### 18.8 Flujos entre revisores, conversión de texto y merges pendientes
+
+La matriz `specs/016-comentarios-review/matriz-equipos-2026-10-20.md` distingue
+integración real con clones y remoto bare, pruebas de host y pruebas de interfaz.
+Los nuevos flujos parten de una discusión Shared existente: cada revisor conserva
+su snapshot, entrega sobre el tip revisado y la integración explícita de Git elige
+qué prosa queda. Los números visibles repetidos no son identidad de entrada.
+Resolver una eliminación frente a una respuesta no agrega reconciliación semántica
+a la CLI: la siguiente review respeta exactamente el documento integrado.
+
+Una reproducción con `core.autocrlf=true` reveló que Finish comparaba el blob LF
+entrante con el checkout CRLF como si fuera prosa concurrente. La comparación de
+baseline acepta únicamente esa conversión cuando `text`, `eol` o `core.autocrlf`
+la habilitan, y `-text` la desactiva. Conserva todos los demás bytes, incluida la
+presencia del salto final. Se comparan líneas sin pasar por filtros de contenido:
+incluso `git diff --no-index --no-textconv` puede ejecutar filtros clean, y su
+opción `--ignore-cr-at-eol` también omite cambios del salto final. Por eso ninguna
+de esas opciones sirve como guard. Staging y publicación siguen ligados al blob
+inmutable de la preparación, y el destino se revalida antes de sobrescribirlo.
+Una barrera después de la comparación reprodujo además una ventana que adoptaba
+una escritura concurrente como revisión esperada del destino. La revisión raw se
+captura ahora antes de comparar y se vuelve a comprobar antes del rename. El caso
+fallaba entregando y sobrescribiendo la prosa ajena; ahora conserva ambas versiones
+y deja la entrega pendiente. Los documentos con NUL usan comparación estricta:
+algunos awk POSIX truncan la línea y no pueden validar el sufijo binario.
+
+El otro fallo era leer los marcadores de un merge sin resolver como Markdown
+normal. La puerta de lectura del Shared del repositorio consulta las entradas
+unmerged del índice: status informa revisión `unreadable`, conserva presencia
+y emite el diagnóstico existente de lectura, sin conteo; Entries/Diff rechazan.
+Al resolver y stagear el archivo, vuelven a leerlo. Las preparaciones privadas
+no se bloquean por un conflicto de código del working tree.
+
+Los gates nuevos son `comments-team-collaboration.bats`,
+`comments-team-history-transfer.bats`, `comments-team-branch-reuse.bats`,
+`comments-team-restart.bats` y `comments-delivery-eol.bats`. El caso de SIGKILL
+interrumpe después de staging y antes de publicar el resultado: la preparación
+y el código quedan recuperables. El lock no se roba por un PID aparentemente
+muerto; la prueba verifica ese rechazo y simula su retirada explícita por un
+operador antes de Undo/Finish. No promete recuperación automática ante SIGKILL.
+
+### 18.9 Copiar una identidad no prueba continuidad de la historia
+
+El usuario eligió exigir una elección cuando un marcador portable ya conocido
+aparece en una historia incompatible, incluso con otro nombre de rama. Antes,
+el filtro por nombre descartaba el manifest conocido antes de comparar ascendencia:
+copiar Shared a otro PR podía recuperar automáticamente Local de la review anterior.
+La identidad portable ahora participa de ese mismo guard y del selector ya presente
+en los cuatro clientes. Un renombre compatible no agrega interacción; un clon nuevo
+sin antecedentes privados tampoco presenta una incompatibilidad inventada.
+
+Elegir New context desde esa ambigüedad conserva Shared del tip revisado, incluidos
+prosa, ordinales y OID históricos, y cambia sólo la identidad real del preámbulo.
+El lector de contornos conserva BOM, CRLF, EOF sin salto final y ejemplos con tokens
+viejos en el cuerpo. Local empieza separado y el resultado anterior sigue accesible.
+Elegir continuar recupera Local anterior y toma Shared de la rama, sin traer un
+Shared privado viejo. El ciclo Finish/Undo/Cancel conserva esas dos fronteras.
+
+Los gates son `comments-team-context-choice.bats` y `comments-sandbox-team.bats`.
+`tests/sandbox.sh` construye además cuatro repositorios independientes bajo
+`comments-team/`: dos elecciones, renombre compatible y un revisor desactualizado
+frente a una entrega concurrente. El helper usa la CLI real para crear Local y deja
+`LEEME.md` con el recorrido de los clientes. `sandbox-min.sh` conserva el setup vacío.
+
+### 18.10 Elegir notas anteriores y elegir destino son preguntas distintas
+
+La conversación posterior mostró una ambigüedad de producto: «Choose the comment
+context» y «New context» no explicaban qué se elegía. Se podían interpretar como
+una elección entre cargar Local o Shared, o entre Shared de la rama y una copia
+privada vieja. La lógica ya mantenía ambos documentos independientes, pero eso no
+alcanzaba para que quien usa el selector pudiera anticipar su resultado.
+
+Los cuatro clientes preguntan ahora «Continue a previous review?». La opción
+«Start a new review» aclara que las notas Local anteriores quedan separadas;
+cada continuación dice que las recupera y conserva fecha, counts y asunto del
+candidato para distinguirlo. El selector dice además que Shared viene de la rama
+en ambos casos. Después, el formulario ofrece «Local (only for you)» y «Shared
+(to share with the PR)»: ese destino sólo afecta al comentario nuevo.
+
+La identidad opaca y los argv no cambian. No se agregan modales ni acciones;
+se reutilizan los selectores existentes. La copy vive en `UserCopy` y sus nueve
+escalares en `comments_composer` pasan por el gate compartido de los cuatro
+clientes. Los seis golden de ambigüedad de la TUI muestran las consecuencias;
+los demás frames quedan iguales. La guía del generador y la del sandbox ya
+creado explican las dos elecciones por separado, y la referencia y los README
+lo explican en ambos idiomas. Si la CLI permite sólo Local, el selector se limita
+a las notas Local y no afirma que exista un destino Shared para esa comparación.

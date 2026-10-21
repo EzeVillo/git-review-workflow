@@ -106,6 +106,10 @@ class MutationActions(
                     }
                     val argv = actionToArgv(action, params)
                     if (argv.verb.isEmpty()) return@run SimpleOutcome.Done(MutationDone(false))
+                    if (!saveSessionCommentDocuments(service, cwd, action, params)) {
+                        service.refreshNow()
+                        return@run SimpleOutcome.Done(MutationDone(false, stderr = com.ezevillo.gitreview.domain.CommentsCopy.saveFailed))
+                    }
                     val result = service.cliInvoker.invoke(
                         argv.verb,
                         argv.args,

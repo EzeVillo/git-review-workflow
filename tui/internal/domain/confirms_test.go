@@ -2,9 +2,9 @@ package domain
 
 import "testing"
 
-func TestConfirmingIDsHasThirteenEntries(t *testing.T) {
-	if len(ConfirmingIDs) != 13 {
-		t.Fatalf("expected 13 confirming ids, got %d: %v", len(ConfirmingIDs), ConfirmingIDs)
+func TestConfirmingIDsHasFifteenEntries(t *testing.T) {
+	if len(ConfirmingIDs) != 15 {
+		t.Fatalf("expected 15 confirming ids, got %d: %v", len(ConfirmingIDs), ConfirmingIDs)
 	}
 }
 

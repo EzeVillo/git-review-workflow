@@ -14,7 +14,9 @@ import (
 // read Branches/Config and assume they are populated just because the field
 // exists on the struct.
 type ReadResult struct {
-	Situation domain.Situation
+	Comments      string
+	CommentsError string
+	Situation     domain.Situation
 
 	Status    domain.PorcelainResult
 	HasStatus bool
@@ -106,6 +108,13 @@ func ReadState(ctx context.Context, cwd, minVersion string) ReadResult {
 		}
 	}
 
+	if statusRes.ExitCode == 0 || statusRes.ExitCode == 2 {
+		comments := InvokeReview(ctx, "comments", []string{"status", "--porcelain"})
+		result.Comments = comments.Stdout
+		if comments.ExitCode != 0 || comments.TimedOut || comments.SpawnFailed {
+			result.CommentsError = comments.Stderr
+		}
+	}
 	return result
 }
 

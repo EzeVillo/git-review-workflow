@@ -19,6 +19,7 @@ export const REVEALING_IDS = [
     "startFromDraft",
     "continueReview",
     "finishReview",
+    "addComment",
 ] as const;
 
 export type RevealingId = (typeof REVEALING_IDS)[number];
@@ -46,7 +47,8 @@ export type PanelRevealer = () => void;
  *
  * El gate estático lo corre `scripts/check-client-product-surface.mjs`.
  */
-export function revealPanel(id: RevealingId, reveal: PanelRevealer): void {
+export function revealPanel(id: RevealingId, reveal: PanelRevealer, commentsBlockBorn = false): void {
+    if (id === "addComment" && !commentsBlockBorn) return;
     if (!revealsPanel(id)) {
         // Un id que el canónico no declara no revela: acá la degradación segura
         // es la contraria a la de confirmMutation — de más, el panel salta

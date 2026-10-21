@@ -110,6 +110,13 @@ borrador —el escenario 3 de la User Story 1, el agente llenándolo— sólo es
 **Presupuesto** (`max_dirs`, valor inicial 512): al pasarse, se conservan las semillas y las entradas
 más someras, y se deja una nota en el registro de invocaciones. **Nunca es un error** (FR-064).
 
+Los documentos de comentarios informados por la CLI agregan su directorio padre
+exacto al conjunto, dentro del mismo presupuesto y sin cierre recursivo adicional.
+Esto incluye Shared del repositorio, que vive fuera del gitdir. En ese caso el
+filtro acepta sólo el nombre informado, de modo que un walkthrough o una guía
+vecina no dispara refrescos de Comments. Los documentos privados conservan el
+filtro Markdown de sus directorios de sesión.
+
 ### Prefijos deliberadamente excluidos
 
 `refs/tags/`, `refs/notes/`, `refs/stash`, `refs/bisect/`, `refs/rewritten/`. Ninguno participa del
@@ -134,7 +141,8 @@ lo que este contrato ya trata como best-effort por diseño:
 
 - **inotify que no dispara** (bind mount Windows→WSL, varios NFS/SMB): el agujero 5, que falla en
   silencio y se compensa con los otros tres disparadores y con el piso de poll opt-in.
-- **El índice y el working tree**: no se vigilan, y no hace falta — el panel no reporta estado del
+- **El índice y el working tree en general**: no se vigilan — salvo el documento Shared informado
+  por la CLI —, y no hace falta: el panel no reporta estado del
   árbol, y lo que sí depende de él (que `finish` se niegue con el árbol sucio) lo contesta la CLI
   cuando se la invoca, no el panel de antemano.
 

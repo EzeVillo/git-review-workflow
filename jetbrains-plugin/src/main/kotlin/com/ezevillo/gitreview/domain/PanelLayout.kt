@@ -26,6 +26,7 @@ enum class Emphasis {
  * Excluded palette-only actions are intentionally not representable here.
  */
 enum class ControlId {
+    DELETE_COMMENT_ENTRY, DELETE_COMMENTS, ADD_COMMENT, INIT_COMMENTS, OPEN_COMMENTS, COPY_COMMENT_PATH, RENUMBER_COMMENTS, OPEN_COMMENT_DIFF, PREPARE_SHARED_COMMENTS,
     // Body (21)
     OPEN_ENTRY,
     OPEN_CHANGE,
@@ -75,6 +76,15 @@ enum class ControlId {
 
     val wire: String
         get() = when (this) {
+            DELETE_COMMENT_ENTRY -> "deleteCommentEntry"
+            DELETE_COMMENTS -> "deleteComments"
+            ADD_COMMENT -> "addComment"
+            INIT_COMMENTS -> "initComments"
+            OPEN_COMMENTS -> "openComments"
+            COPY_COMMENT_PATH -> "copyCommentPath"
+            RENUMBER_COMMENTS -> "renumberComments"
+            OPEN_COMMENT_DIFF -> "openCommentDiff"
+            PREPARE_SHARED_COMMENTS -> "prepareSharedComments"
             OPEN_ENTRY -> "openEntry"
             OPEN_CHANGE -> "openChange"
             OPEN_ALL_CHANGES -> "openAllChanges"
@@ -124,6 +134,8 @@ enum class ControlId {
 // destruye nada -- se niega solo con el arbol sucio, y una review empezada se
 // cancela con un boton del panel. Ver el canonico, bloque no-review.
 private val CONFIRMING_IDS: Set<ControlId> = setOf(
+    ControlId.DELETE_COMMENTS,
+    ControlId.DELETE_COMMENT_ENTRY,
     ControlId.CONTINUE_REVIEW,
     ControlId.DISCARD_INVENTORY,
     ControlId.DISCARD_DRAFT,
@@ -147,6 +159,7 @@ fun requiresConfirmation(id: ControlId): Boolean = id in CONFIRMING_IDS
  * los paneles".
  */
 private val REVEALING_IDS: Set<ControlId> = setOf(
+    ControlId.ADD_COMMENT,
     ControlId.START_REVIEW,
     ControlId.START_FROM_DRAFT,
     ControlId.CONTINUE_REVIEW,
@@ -1327,8 +1340,53 @@ fun panelLayout(model: PanelModel, loading: Boolean = false): PanelLayout {
     }
     return PanelLayout(
         situation = model.situation,
-        blocks = blocks,
+        blocks = if (model.situation == Situation.NO_REVIEW) {
+            val content = commentsBlocks(model, heading = false)
+            val section = if (content.isEmpty()) emptyList() else listOf(Block.ToolsSection(CommentsCopy.title, content))
+            if (model.noBaseConfigured) blocks + section else blocks.flatMap { b ->
+                if (b is Block.ToolsSection && b.title == "Walkthrough") listOf(b) + section else listOf(b)
+            }
+        } else blocks.takeWhile { it !is Block.ToolsSection } + commentsBlocks(model) + blocks.dropWhile { it !is Block.ToolsSection },
         titleActions = title,
         fillsHeight = fills,
     )
+}
+
+private fun commentsBlocks(model: PanelModel, heading: Boolean = true): List<Block> {
+    val report = model.comments ?: return emptyList()
+    val capture = isReviewReadable(model.situation) && report.guard != null
+    fun visibleDocument(doc: CommentDocument) = doc.presence == "present" || doc.kind == "shared" && report.records("comments-delivery").any { it[0] == doc.context && it[1] == "pending" }
+    val visible = report.documents.any(::visibleDocument)
+    val out = mutableListOf<Block>()
+    fun control(id: ControlId, label: String, tooltip: String? = null, index: Int? = null, enabled: Boolean = true) =
+        if (id in setOf(ControlId.OPEN_COMMENTS, ControlId.COPY_COMMENT_PATH, ControlId.RENUMBER_COMMENTS, ControlId.OPEN_COMMENT_DIFF, ControlId.DELETE_COMMENTS))
+            Control(id, null, label, Emphasis.ICON, !model.busy && enabled, tooltip, index)
+        else Control(id, label, label, Emphasis.SECONDARY, !model.busy && enabled, tooltip, index)
+    if (visible && heading) out += Block.Heading(CommentsCopy.title)
+    if (capture) out += Block.Row(listOf(control(ControlId.ADD_COMMENT, CommentsCopy.add)))
+    fun emptyRow(kind: String, label: String, text: String) {
+        if (model.situation == Situation.NO_REVIEW && report.records("comments-diagnostic").isEmpty() && report.documents.none { it.kind == kind && visibleDocument(it) }) {
+            out += Block.GuideRows(listOf(GuideRow(label, text, emptyList())))
+        }
+    }
+    emptyRow("local", CommentsCopy.local, CommentsCopy.emptyLocal)
+    if (visible) report.documents.forEachIndexed { index, doc ->
+        if (!visibleDocument(doc)) return@forEachIndexed
+        val context = report.records("comments-context").firstOrNull { it[0] == doc.context }
+        val label = (if (context?.get(2) != "active") context?.get(4)?.plus(" · ").orEmpty() else "") + (if (doc.kind == "local") CommentsCopy.local else CommentsCopy.shared)
+        val controls = mutableListOf<Control>()
+        if (doc.presence == "present") {
+            val editable = context?.get(2) in setOf("active", "result") || context?.get(2) == "repository" && doc.kind == "local"
+            controls += control(ControlId.OPEN_COMMENTS, CommentsCopy.open, CommentsCopy.tooltipOpen, index)
+            if (doc.kind == "local") controls += control(ControlId.COPY_COMMENT_PATH, CommentsCopy.copyPath, CommentsCopy.tooltipCopyPath, index)
+            if (editable) controls += control(ControlId.RENUMBER_COMMENTS, CommentsCopy.renumber, CommentsCopy.tooltipRenumber, index, doc.revision != "unreadable")
+            controls += control(ControlId.OPEN_COMMENT_DIFF, CommentsCopy.diff, CommentsCopy.tooltipDiff, index, doc.revision != "unreadable")
+            if (editable) controls += control(ControlId.DELETE_COMMENTS, CommentsCopy.delete, CommentsCopy.tooltipDelete, index, doc.revision != "unreadable")
+        } else if (capture && context?.get(2) == "active") controls += control(ControlId.INIT_COMMENTS, CommentsCopy.create, CommentsCopy.tooltipCreate, index)
+        if (doc.kind == "shared" && context?.get(1) == "review" && context[2] == "result" && report.records("comments-delivery").any { it[0] == doc.context && it[1] == "pending" }) controls += control(ControlId.PREPARE_SHARED_COMMENTS, CommentsCopy.prepare, CommentsCopy.tooltipPrepare, index)
+        out += Block.GuideRows(listOf(GuideRow(label, doc.count?.toString() ?: "", controls)))
+    }
+    emptyRow("shared", CommentsCopy.shared, CommentsCopy.emptyShared)
+    report.records("comments-diagnostic").forEach { out += Block.Stderr(it[2]) }
+    return out
 }

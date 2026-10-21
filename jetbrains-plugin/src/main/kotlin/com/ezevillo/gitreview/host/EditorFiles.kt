@@ -5,6 +5,32 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import java.io.File
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.fileEditor.FileDocumentManager
+
+fun openCommentText(project: Project, text: String) {
+    val file = com.intellij.testFramework.LightVirtualFile(com.ezevillo.gitreview.domain.CommentsCopy.diff, com.intellij.openapi.fileTypes.PlainTextFileType.INSTANCE, text)
+    file.isWritable = false
+    FileEditorManager.getInstance(project).openFile(file, true)
+}
+
+/** Called off EDT: VFS resolution here, selective save and verification on EDT. */
+fun saveCommentFiles(paths: List<String>): Boolean {
+    check(!ApplicationManager.getApplication().isDispatchThread)
+    val files = paths.mapNotNull { refreshAndFind(File(it)) }
+    var saved = true
+    ApplicationManager.getApplication().invokeAndWait {
+        val manager = FileDocumentManager.getInstance()
+        for (file in files) {
+            val document = manager.getCachedDocument(file) ?: continue
+            if (!manager.isDocumentUnsaved(document)) continue
+            try { manager.saveDocument(document) } catch (_: Exception) { saved = false }
+            if (manager.isDocumentUnsaved(document)) saved = false
+            if (!saved) break
+        }
+    }
+    return saved
+}
 
 /**
  * The plugin's only door to the VFS, and the reason there is exactly one: resolving a

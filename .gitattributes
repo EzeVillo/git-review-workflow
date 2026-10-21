@@ -51,6 +51,7 @@ jetbrains-plugin/gradle.properties text eol=lf
 # non-ascii) exist specifically to pin exact bytes, which a line-ending
 # rewrite would silently corrupt regardless of platform.
 tui/testdata/golden/*.txt    text eol=lf
+tui/testdata/golden/comments/*.txt text eol=lf -whitespace
 tui/testdata/porcelain/*.txt text eol=lf
 
 # gofmt compares against LF and reports every CRLF file as unformatted, so a
@@ -61,3 +62,7 @@ tui/testdata/porcelain/*.txt text eol=lf
 tui/**/*.go text eol=lf
 tui/go.mod  text eol=lf
 tui/go.sum  text eol=lf
+
+# Comments fixtures pin BOM, mixed EOL and missing final LF byte-for-byte.
+# These byte oracles deliberately include CRLF, trailing spaces and blank EOF.
+tests/fixtures/comments/** -text -whitespace

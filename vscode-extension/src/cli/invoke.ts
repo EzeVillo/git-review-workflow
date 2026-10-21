@@ -4,6 +4,8 @@ import spawn from "cross-spawn";
 import {logCliEnd, logCliStart} from "./cliLog";
 
 export interface InvokeOptions {
+    /** UTF-8 body, never included in argv or CLI logs. */
+    stdin?: string;
     cwd: string;
     /** Valor crudo del ajuste `gitReview.path`; vacío = invocar `git review`. */
     gitReviewPath?: string;
@@ -65,6 +67,7 @@ const NETWORK_MUTATION_VERBS = new Set(["start"]);
  * Un verbo desconocido se trata como lectura, el default más conservador.
  */
 export function timeoutForClass(verb: string, args: string[]): number {
+    if (verb === "comments" && ["init", "add", "renumber", "save", "prepare"].includes(args[0]) && !args.includes("--check")) return LOCAL_MUTATION_TIMEOUT_MS;
     if (NETWORK_MUTATION_VERBS.has(verb)) {
         return NETWORK_MUTATION_TIMEOUT_MS;
     }
@@ -223,6 +226,7 @@ export function invokeGitReview(
     return new Promise((resolve) => {
         const child = spawn(command, commandArgs, {
             cwd: options.cwd,
+            windowsHide: true,
             signal: options.signal,
             // Sólo POSIX: en Windows `detached` abriría una consola nueva, y no
             // compra nada (no hay grupos de procesos a los que señalizar).
@@ -255,7 +259,7 @@ export function invokeGitReview(
                 exitCode: result.exitCode,
                 errorCode: result.errorCode,
                 durationMs: Date.now() - started,
-                stderr: result.stderr,
+                stderr: options.stdin === undefined ? result.stderr : "",
                 timedOut: result.timedOut,
             });
             resolve(result);
@@ -294,5 +298,7 @@ export function invokeGitReview(
         child.on("close", (code) => {
             settle({stdout, stderr, exitCode: code});
         });
+        child.stdin?.on("error", () => { /* Process exit supplies the diagnostic. */ });
+        child.stdin?.end(options.stdin ?? "", "utf8");
     });
 }

@@ -22,6 +22,10 @@ public sealed record DiffRequest(string Title, DiffSide Left, DiffSide Right);
 /// </summary>
 public sealed class PanelHost
 {
+    public Func<Task<GitReview.Domain.CommentCapture?>>? CaptureComment { get; init; }
+    public Func<string, Task<bool>>? SaveCommentPath { get; init; }
+    public Func<GitReview.Domain.CommentsReport,Task>? OpenCommentBlobs { get; init; }
+    public Func<GitReview.Domain.CommentsReport,Task>? OpenCommentDelivery { get; init; }
     /// <summary>The single git root the review runs in, or null when there isn't one.</summary>
     public Func<string?>? Cwd { get; init; }
 

@@ -80,6 +80,11 @@ git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null &&
 # (tracked or untracked — same rule as start/compare).
 require_clean_work_tree
 
+comments_lock_branch "$saved" || exit 1
+trap 'comments_unlock' 0
+trap 'exit 1' 1 2 15
+comments_transfer_preflight "$saved" "$rb" || exit 1
+
 mode="$(git config "branch.$saved.reviewmode" || echo whole)"
 
 # restore_draft: bring the reviewer's walkthrough draft back to the active
@@ -184,6 +189,7 @@ if [ "$mode" = "step" ]; then
 	# save copies it in every mode: the resumed review has to look the file up under
 	# the name it was written to, not under its own source.
 	restore_meta reviewdraft
+	comments_transfer "$saved" "$rb" || exit 1
 
 	git branch -D "$saved" >/dev/null
 
@@ -217,6 +223,7 @@ else
 	restore_meta reviewreturn
 	# The name the draft was filed under (see the step path above).
 	restore_meta reviewdraft
+	comments_transfer "$saved" "$rb" || exit 1
 
 	if [ "$mode" = "walk" ]; then
 		git config "branch.$rb.reviewmode" walk

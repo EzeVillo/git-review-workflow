@@ -18,8 +18,9 @@ namespace GitReview.VS.ToolWindows;
 /// </summary>
 internal static class PanelReveal
 {
-    public static void Reveal(ControlId id, PanelHost? host)
+    public static void Reveal(ControlId id, PanelHost? host, bool commentsBlockBorn = false)
     {
+        if (id == ControlId.AddComment && !commentsBlockBorn) return;
         if (!PanelLayoutBuilder.RevealsPanel(id))
         {
             // An id the canonical does not declare does NOT reveal: here the safe

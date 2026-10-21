@@ -59,6 +59,11 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         [ControlId.OpenGuide] = "file",
         [ControlId.OpenWalkthrough] = "file",
         [ControlId.OpenEntry] = "file",
+        [ControlId.OpenComments] = "file",
+        [ControlId.CopyCommentPath] = "copy",
+        [ControlId.DeleteComments] = "trash",
+        [ControlId.OpenCommentDiff] = "eye",
+        [ControlId.RenumberComments] = "numbered",
         [ControlId.DiscardDraft] = "trash",
         [ControlId.DiscardGuide] = "trash",
         [ControlId.DiscardFixes] = "trash",
@@ -84,6 +89,7 @@ public sealed class PanelView : System.Windows.Controls.UserControl
     private readonly Style _secondaryButton;
     private readonly Style _bareButton;
     private readonly Dictionary<string, bool> _sectionOpen = new();
+    private readonly Dictionary<int, Button> _commentPathButtons = new();
     private readonly ScrollViewer _scroll;
     private readonly StackPanel _body;
     private readonly StackPanel _footer;
@@ -101,6 +107,13 @@ public sealed class PanelView : System.Windows.Controls.UserControl
     /// preview has no window frame to hang a toolbar on, so it keeps them.
     /// </summary>
     public bool ShowTitleActions { get; set; } = true;
+    private string? _commentTarget;
+    private TextBlock? _commentHint;
+    public void SetCommentTarget(string? text)
+    {
+        _commentTarget=text;
+        if(_commentHint is not null){_commentHint.Text=text??"";_commentHint.Visibility=text is null?Visibility.Collapsed:Visibility.Visible;}
+    }
 
     public PanelView(PanelChrome? chrome = null)
     {
@@ -196,8 +209,18 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         });
     }
 
+    public void ShowCommentPathCopied(int index)
+    {
+        if (!_commentPathButtons.TryGetValue(index, out var button)) return;
+        var feedback = new ToolTip { Content = CommentsCopy.pathCopied, PlacementTarget = button, IsOpen = true, StaysOpen = true };
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
+        timer.Tick += (_, _) => { feedback.IsOpen = false; timer.Stop(); };
+        timer.Start();
+    }
+
     public void Render(PanelLayout layout)
     {
+        _commentPathButtons.Clear();
         _titleBar.Children.Clear();
         _body.Children.Clear();
         _footer.Children.Clear();
@@ -450,6 +473,14 @@ public sealed class PanelView : System.Windows.Controls.UserControl
     }
 
     private UIElement RenderRow(IReadOnlyList<DomainControl> controls)
+    {
+        var row=RenderRowControls(controls);
+        if(!controls.Any(c=>c.Id==ControlId.AddComment))return row;
+        _commentHint=new TextBlock{Text=_commentTarget??"",Visibility=_commentTarget is null?Visibility.Collapsed:Visibility.Visible,TextWrapping=TextWrapping.Wrap,Foreground=_chrome.Foreground,ToolTip=CommentsCopy.selectionHint,Margin=new Thickness(0,0,0,4)};
+        var group=new StackPanel();group.Children.Add(_commentHint);group.Children.Add(row);return group;
+    }
+
+    private UIElement RenderRowControls(IReadOnlyList<DomainControl> controls)
     {
         if (controls.Count == 1 && controls[0].Emphasis == Emphasis.Link)
         {
@@ -802,6 +833,23 @@ public sealed class PanelView : System.Windows.Controls.UserControl
                 // command they run.
                 ToolTip = c.Tooltip ?? c.AccessibleName,
             };
+            if (IconOf.TryGetValue(c.Id, out var semanticIcon) && (semanticIcon == "eye" || semanticIcon == "numbered" || semanticIcon == "copy"))
+            {
+                var path = new System.Windows.Shapes.Path
+                {
+                    Width = 16, Height = 16, Stretch = Stretch.None,
+                    StrokeThickness = 1.2, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
+                    StrokeLineJoin = PenLineJoin.Round,
+                    Data = Geometry.Parse(semanticIcon == "copy"
+                        ? "M5.5 5.5H13.5V14.5H5.5Z M10.5 5.5V1.5H2.5V10.5H5.5"
+                        : semanticIcon == "eye"
+                        ? "M1.5 8C4.5 2.5 11.5 2.5 14.5 8C11.5 13.5 4.5 13.5 1.5 8Z M10 8A2 2 0 1 1 6 8A2 2 0 1 1 10 8"
+                        : "M2 2.5L3 2V5 M2 5H4 M1.8 7.5C1.8 6.2 4 6.2 4 7.5C4 8.2 1.8 8.7 1.8 9.5H4 M1.8 11.5C3.1 10.7 4.5 11.5 3.1 12.5C4.6 12.9 3.6 14.5 1.8 13.7 M6.5 3.5H13.5 M6.5 8H13.5 M6.5 12.5H13.5"),
+                };
+                // Bind to the button so the existing theme/disabled triggers also color the icon.
+                path.SetBinding(System.Windows.Shapes.Shape.StrokeProperty, new System.Windows.Data.Binding("Foreground") { Source = b });
+                b.Content = path;
+            }
             if (bare)
             {
                 // A glyph in a row header is an affordance over that row, not an
@@ -841,6 +889,7 @@ public sealed class PanelView : System.Windows.Controls.UserControl
                 b.Height = 28;
             }
             System.Windows.Automation.AutomationProperties.SetName(b, c.AccessibleName);
+            if (c.Id == ControlId.CopyCommentPath && c.Index is int documentIndex) _commentPathButtons[documentIndex] = b;
             b.Click += (_, _) => ActionRequested?.Invoke(c.Id.Wire(), c.Index, c.SupportLinkId);
             return b;
         }

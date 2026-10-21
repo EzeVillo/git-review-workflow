@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import {saveSessionComments} from "./comments";
 import {invokeGitReview, InvokeOptions} from "../cli/invoke";
 import {MutationLock} from "../review/mutationLock";
 import {
@@ -60,6 +61,8 @@ export async function runHousekeeping(
                     stale = true;
                     return undefined;
                 }
+                if (action.kind.startsWith("forget-saved") && !(await saveSessionComments(stateManager, getInvokeOptions(), action.source, "saved"))) return undefined;
+                if (["clean-one", "clean-keep-fixes", "clean-all"].includes(action.kind) && !(await saveSessionComments(stateManager, getInvokeOptions(), action.source, "all"))) return undefined;
                 const invocation = await invokeGitReview(verb, args, {
                     ...getInvokeOptions(),
                     network,

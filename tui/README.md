@@ -89,6 +89,8 @@ bindings stay consistent throughout the interface:
 
 Mouse controls are available too. Files and diffs open through your Git/editor
 configuration; the UI never hides or replaces the staged working-tree change.
+Long reviews scroll to keep the focused control visible. The mouse wheel also
+scrolls the review content; the key bar stays visible while you reach Comments.
 
 ## Refresh and terminal compatibility
 
@@ -134,3 +136,40 @@ The terminal client and CLI version independently. Check them with
 ## License
 
 [MIT](../LICENSE)
+
+## Review comments
+
+Open the action list (`:`) and choose **Add comment**. Use Tab to move between
+text, destination, optional path/side/line range and Save/Cancel. Every submission
+requires a fresh **Local** or **Shared** choice. Enter in the body adds a line;
+Ctrl+Enter submits where the terminal supports it. Tab to **Save**, then Enter,
+is always available. Esc closes the form; errors keep its text and destination.
+
+Scope defaults to the current file when available. Entering a complete line range
+selects those lines; use the Scope control to choose File or General while keeping
+your text and coordinates. Saving disables the form; success closes it and errors
+keep it open. Only existing documents appear; Delete removes a preparation,
+retained Local result or pending Shared preparation after confirmation.
+
+The Comments block keeps Local and Shared separate. Copy path sends the
+absolute path of an existing Local document to the terminal clipboard, including
+retained results. Open uses your configured editor; Renumber numbers that document's entries. Diff selects a physical entry
+and displays its captured changes in the terminal, provided the original Git
+objects remain available. It does not depend on the current file still existing.
+
+Local stays in Git's data directory. Shared starts from the branch's document
+during a review. Save/Continue keeps its private preparation, including
+deletions. After Finish stages it, that editable preparation is removed.
+Outside a review, Comments sits between Walkthrough and Compare and reads Shared
+from the current branch, taking precedence over saved preparations. Continue
+restores the saved preparation. Finish delivers Shared to
+`.review/comments.md`; pending delivery offers Prepare with document comparison
+and retry. Comparisons retain Local comments automatically when closed.
+Finishing does not open an editor automatically.
+The comment form labels the text field explicitly. The Diff browser shows a
+compact location and a one-line preview, with `…` when the comment is shortened.
+The complete comment scrolls below; original revision IDs are folded under
+Details, while warnings about unsaved captures stay visible. Press `d` to toggle Details. The diff stays inside the terminal, and Tab
+returns to the complete comment. Selected lines are marked on the
+recorded version. Local results and pending Shared preparations can be deleted
+after Finish; delivered Shared offers reading and historical diffs.

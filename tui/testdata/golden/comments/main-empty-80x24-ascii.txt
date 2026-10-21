@@ -1,0 +1,18 @@
+No active review on this branch.
+> [ [1;32mStart a review[0m ]
+
+[1mWalkthrough[0m
+ [ [34mInit[0m ]   [ [34mBuild[0m ]
+
+[1mComments[0m
+Local
+No local comments.
+Shared
+No shared comments.
+
+[1mCompare[0m
+  [ [34mCompare revisions[0m ]
+
+[2m… footer [#.........]: 0 line(s) above, 9 below — j/k or mouse wheel[0m
+
+[2mj[0m:up  [2mk[0m:down  [2menter[0m:select  [2mr[0m:refresh  [2m:[0m:actions  [2mm[0m:mouse on  [2mq[0m:quit

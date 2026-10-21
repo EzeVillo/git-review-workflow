@@ -30,6 +30,7 @@ public static class EmphasisExt
 /// <summary>Closed set of 25 control ids: 20 body + 5 title bar.</summary>
 public enum ControlId
 {
+    DeleteCommentEntry, DeleteComments, AddComment, InitComments, OpenComments, CopyCommentPath, RenumberComments, OpenCommentDiff, PrepareSharedComments,
     OpenEntry,
     OpenChange,
     ShowWhy,
@@ -78,6 +79,15 @@ public static class ControlIdExt
 {
     public static string Wire(this ControlId id) => id switch
     {
+        ControlId.DeleteCommentEntry => "deleteCommentEntry",
+        ControlId.DeleteComments => "deleteComments",
+        ControlId.AddComment => "addComment",
+        ControlId.InitComments => "initComments",
+        ControlId.OpenComments => "openComments",
+        ControlId.CopyCommentPath => "copyCommentPath",
+        ControlId.RenumberComments => "renumberComments",
+        ControlId.OpenCommentDiff => "openCommentDiff",
+        ControlId.PrepareSharedComments => "prepareSharedComments",
         ControlId.OpenEntry => "openEntry",
         ControlId.OpenChange => "openChange",
         ControlId.ShowWhy => "showWhy",
@@ -447,6 +457,8 @@ public static class PanelLayoutBuilder
     // se cancela con un boton del panel. Ver el canonico, bloque no-review.
     private static readonly HashSet<ControlId> ConfirmingIds = new()
     {
+        ControlId.DeleteComments,
+        ControlId.DeleteCommentEntry,
         ControlId.ContinueReview,
         ControlId.DiscardInventory,
         ControlId.DiscardDraft,
@@ -472,6 +484,7 @@ public static class PanelLayoutBuilder
     /// </summary>
     private static readonly HashSet<ControlId> RevealingIds = new()
     {
+        ControlId.AddComment,
         ControlId.StartReview,
         ControlId.StartFromDraft,
         ControlId.ContinueReview,
@@ -1242,6 +1255,60 @@ public static class PanelLayoutBuilder
                 break;
         }
 
-        return new PanelLayout(model.Situation, blocks, title, fills);
+        var body = blocks.TakeWhile(b => b is not Block.ToolsSection);
+        var footer = blocks.SkipWhile(b => b is not Block.ToolsSection);
+        IEnumerable<Block> projected;
+        if (model.Situation == Situation.NoReview)
+        {
+            var content = CommentsBlocks(model, heading: false);
+            var section = content.Count == 0 ? Array.Empty<Block>() : new Block[] { new Block.ToolsSection(CommentsCopy.title, content) };
+            projected = model.NoBaseConfigured ? blocks.Concat(section) : blocks.SelectMany(b =>
+                b is Block.ToolsSection tools && tools.Title == "Walkthrough" ? new[] { b }.Concat(section) : new[] { b });
+        }
+        else projected = body.Concat(CommentsBlocks(model)).Concat(footer);
+        return new PanelLayout(model.Situation, projected.ToArray(), title, fills);
+    }
+
+    private static IReadOnlyList<Block> CommentsBlocks(PanelModel model, bool heading = true)
+    {
+        var report = model.Comments;
+        if (report is null) return Array.Empty<Block>();
+        var capture = model.Situation is Situation.Review or Situation.FinishConflict && report.Guard is not null;
+        bool VisibleDocument(CommentDocument doc) => doc.Presence == "present" || doc.Kind == "shared" && report.Records("comments-delivery").Any(d => d[0] == doc.Context && d[1] == "pending");
+        var visible = report.Documents.Any(VisibleDocument);
+        var output = new List<Block>();
+        Control Button(ControlId id, string label, string? tip = null, int? index = null, bool enabled = true) =>
+            id is ControlId.OpenComments or ControlId.CopyCommentPath or ControlId.RenumberComments or ControlId.OpenCommentDiff or ControlId.DeleteComments
+                ? new(id, null, label, Emphasis.Icon, enabled: !model.Busy && enabled, tooltip: tip, index: index)
+                : new(id, label, label, Emphasis.Secondary, enabled: !model.Busy && enabled, tooltip: tip, index: index);
+        if (visible && heading) output.Add(new Block.Heading(CommentsCopy.title));
+        if (capture) output.Add(new Block.Row(new[]{ Button(ControlId.AddComment, CommentsCopy.add) }));
+        void EmptyRow(string kind, string label, string text)
+        {
+            if (model.Situation == Situation.NoReview && !report.Records("comments-diagnostic").Any() && !report.Documents.Any(d => d.Kind == kind && VisibleDocument(d)))
+                output.Add(new Block.GuideRows(new[]{new GuideRow(label, text, Array.Empty<Control>())}));
+        }
+        EmptyRow("local", CommentsCopy.local, CommentsCopy.emptyLocal);
+        if (visible) for (var index=0; index<report.Documents.Count; index++)
+        {
+            var doc = report.Documents[index];
+            if (!VisibleDocument(doc)) continue;
+            var context = report.Records("comments-context").FirstOrDefault(c => c[0] == doc.Context);
+            var label = (context is not null && context[2] != "active" ? context[4] + " · " : "") + (doc.Kind == "local" ? CommentsCopy.local : CommentsCopy.shared);
+            var controls = new List<Control>();
+            if (doc.Presence == "present") {
+                var editable = context is not null && (context[2] == "active" || context[2] == "result" || context[2] == "repository" && doc.Kind == "local");
+                controls.Add(Button(ControlId.OpenComments, CommentsCopy.open, CommentsCopy.tooltipOpen, index));
+                if (doc.Kind == "local") controls.Add(Button(ControlId.CopyCommentPath, CommentsCopy.copyPath, CommentsCopy.tooltipCopyPath, index));
+                if (editable) controls.Add(Button(ControlId.RenumberComments, CommentsCopy.renumber, CommentsCopy.tooltipRenumber, index, doc.Revision != "unreadable"));
+                controls.Add(Button(ControlId.OpenCommentDiff, CommentsCopy.diff, CommentsCopy.tooltipDiff, index, doc.Revision != "unreadable"));
+                if (editable) controls.Add(Button(ControlId.DeleteComments, CommentsCopy.delete, CommentsCopy.tooltipDelete, index, doc.Revision != "unreadable"));
+            } else if (capture && context is not null && context[2] == "active") controls.Add(Button(ControlId.InitComments, CommentsCopy.create, CommentsCopy.tooltipCreate, index));
+            if (doc.Kind == "shared" && context is not null && context[1] == "review" && context[2] == "result" && report.Records("comments-delivery").Any(d => d[0] == doc.Context && d[1] == "pending")) controls.Add(Button(ControlId.PrepareSharedComments, CommentsCopy.prepare, CommentsCopy.tooltipPrepare, index));
+            output.Add(new Block.GuideRows(new[]{new GuideRow(label, doc.Count?.ToString() ?? "", controls)}));
+        }
+        EmptyRow("shared", CommentsCopy.shared, CommentsCopy.emptyShared);
+        foreach (var diagnostic in report.Records("comments-diagnostic")) output.Add(new Block.Stderr(diagnostic[2]));
+        return output;
     }
 }

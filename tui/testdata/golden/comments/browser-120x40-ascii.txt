@@ -1,0 +1,16 @@
+Choose a comment
+  7. sample.go · General comment
+    Keep this behavior documented.
+> 7. sample.go:40–41 · Previous version
+    Can this return before releasing the lock?
+
+Can this return before releasing the lock?
+
+The error path needs the same cleanup.
+
+    defer release()
+
+This paragraph remains readable without opening Markdown.
+
+
+up/down choose | PgUp/Dn scroll | Enter diff | d Details | Tab text | Esc Close

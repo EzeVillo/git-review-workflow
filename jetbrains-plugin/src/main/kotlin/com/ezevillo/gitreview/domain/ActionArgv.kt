@@ -42,6 +42,7 @@ sealed class ActionParams {
  */
 fun actionToArgv(action: String, params: ActionParams = ActionParams.Empty): ActionArgv {
     return when (action) {
+        "addComment" -> ActionArgv("", emptyList()) // Guarded multi-step host flows.
         "startReview" -> {
             val p = params as ActionParams.Start
             ActionArgv("start", intentToArgs(p.intent, p.currentBranch), network = true)
@@ -121,6 +122,7 @@ fun actionToArgv(action: String, params: ActionParams = ActionParams.Empty): Act
 
 /** The 27 command ids from contributes.commands (without gitReview. prefix). */
 val PRODUCT_ACTIONS: List<String> = listOf(
+    "addComment",
     "openEntry",
     "openChange",
     "openAllChanges",

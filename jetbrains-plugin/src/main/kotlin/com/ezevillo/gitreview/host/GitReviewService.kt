@@ -188,7 +188,7 @@ class GitReviewService(private val project: Project) : Disposable {
         // still say what it said before.
         draftWatcher.sync(
             draftWatchDirs(state),
-            state.guides.orEmpty().map { it.path } + listOfNotNull(state.walkthrough?.path),
+            state.guides.orEmpty().map { it.path } + listOfNotNull(state.walkthrough?.path) + state.comments?.documents.orEmpty().map { it.path },
         )
         stateResolved = true
         lastWhy = null

@@ -11,6 +11,8 @@
  * Lo único que se mantiene a mano es *qué* estados vale la pena mirar.
  */
 import {parseConfigPorcelain} from "../src/cli/configPorcelain";
+import {parseComments} from "../src/cli/commentsPorcelain";
+import {COMMENTS_COPY} from "../src/review/userCopy";
 import {parseListFixes, parseListPorcelain, parsePorcelain} from "../src/cli/porcelain";
 import {buildPanelModel, PanelInputs, PanelModel} from "../src/views/panelModel";
 import type {Situation} from "../src/review/situation";
@@ -231,7 +233,31 @@ const WHY = `El HTML del panel vive aparte del provider y sin dependencia de
 \`vscode\`: es lo que permite abrirlo en un navegador con un modelo de ejemplo
 y verificar el render, que ninguna de las dos suites puede afirmar.`;
 
+/** Mismo review con selección, sin editor y con documentos ya creados. */
+function commentsReview(target: string, documents = false): PanelModel {
+    const model = review([
+        ["state", "review/feature/discount", "feature/discount", "6801cb6", "walk", "applied", "2", "3", "3", "src/pricing.js", "1"],
+        ["entry", "1", "src/cart.js", "0"], ["entry", "2", "src/pricing.js", "1"], ["entry", "3", "tests/pricing.js", "0"],
+        ["draft"],
+    ], {busy: false, why: {state: "present", text: "Trace how the discount basis points become a cents amount and inspect the half-up rounding before the result is returned, since this is the per-item monetary boundary used by the cart."}});
+    model.commentTarget = target;
+    model.comments = parseComments(porcelain([
+        ["comments-context", "c", "review", "active", "guard", "feature/discount"],
+        ["comments-guard", "guard"],
+        ...(documents ? [
+            ["comments-document", "/repo/.git/review-comments/local.md", "c", "local", "present", "r1"],
+            ["comments-count", "/repo/.git/review-comments/local.md", "2"],
+            ["comments-document", "/repo/.git/review-comments/shared.md", "c", "shared", "present", "r2"],
+            ["comments-count", "/repo/.git/review-comments/shared.md", "1"],
+        ] : []),
+    ]));
+    return model;
+}
+
 export const PREVIEW_PANES: PreviewPane[] = [
+    {name: "comments-file", caption: "Comentarios — archivo abierto, sin documentos todavía", model: commentsReview("File · src/pricing.js (New version)")},
+    {name: "comments-general", caption: "Comentarios — al cerrar el archivo queda disponible el comentario general", model: commentsReview(COMMENTS_COPY.general)},
+    {name: "comments-documents", caption: "Comentarios — selección larga y documentos Local y Shared", model: commentsReview("Selected code · src/pricing/discount-calculation.js:12:1–18:24 (New version)", true)},
     {
         name: "walk",
         caption: "walk — entrada key, why presente, tres no anotadas al final del orden",

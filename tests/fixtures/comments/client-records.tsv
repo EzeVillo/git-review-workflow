@@ -1,0 +1,33 @@
+comments-context	c1	review	active	step1	Feature	extra
+comments-owner	c1	feature/comments	review/feature/comments
+comments-context	c2	compare	result	guard2	Other
+comments-owner	c2	other	
+comments-guard	step1
+comments-document	/private/local.md	c1	local	present	unreadable
+comments-document	/private/shared.md	c1	shared	absent	absent	extra
+comments-document	/other/local.md	c2	local	present	revision-other
+comments-document	/other/shared.md	c2	shared	absent	absent
+comments-count	/private/shared.md	0
+comments-count	/private/local.md	bad
+comments-diagnostic	/private/local.md	read	Cannot read
+comments-identity	ambiguous	Choose a context
+comments-candidate	c1	Feature
+comments-delivery	c1	pending	Destination changed
+comments-capture	step1	B1	H1
+comment-entry	2	7	12	Second
+comment-entry	1	7	2	First
+comment-scope	2	selection	base
+comment-body	2	The old path is 100%25 intentional.
+comment-body	2	
+comment-body	2	A second%09paragraph.
+comment-version	2	B1	H1
+comment-path	2	base	old%2525name
+comment-location	2	base	3	5
+comment-unversioned	1
+comment-diagnostic	1	unversioned	Buffer cannot be reproduced
+comment-diff	2	B1	H1
+comment-blob	old%25name	base	present	blob1
+comment-blob	new	head	absent
+comments-delivery-file	/tmp/prepared	prepared	present	rev1
+future-tag	ignored
+comments-document	truncated

@@ -252,3 +252,50 @@ split por espacios. Ausente o inexistente: el mensaje dice **qué no pasó**, no
 9. Leer o escribir cualquier clave `reviewworkflow.*` que no sea a través de un verbo. Y del otro
    lado de la frontera: **la CLI no lee ninguna clave `reviewui.*`** (FR-077).
 10. Exportar `GIT_REVIEW_ADVICE` desde más de un lugar.
+
+## Ampliación: comentarios (CLI candidata 0.10.0)
+
+Contrato detallado: `specs/016-comentarios-review/contracts/cli-porcelain.md`.
+Esta ampliación no habilita otros verbos ni interpretación de Markdown en el cliente.
+
+| Operación | Invocación permitida |
+|---|---|
+| Estado independiente | `comments status --porcelain [--context <id> | --all]` |
+| Crear un documento | `comments init --document <local|shared> [--context <id>] [context-options] [guards]` |
+| Capturar | `comments add --document <local|shared> --stdin [context-options] [location-options] [guards]` |
+| Eliminar documento activo | `comments delete --document <local|shared> --context <id> --expect-context <guard> --expect-document <revision>` |
+| Renumerar | `comments renumber --document <local|shared> [--context <id>] [guards]` |
+| Selector | `comments entries --document <local|shared> --context <id> --porcelain` |
+| Histórico | `comments diff --document <local|shared> --context <id> --entry <ordinal> [--porcelain] [guards]` |
+| Conservar comparación | `comments save --expect-context <guard> --expect-local <revision> --expect-shared <revision>` |
+| Entrega pendiente | `comments prepare --context <id> [--check --porcelain] [guards]` |
+| Contenido histórico | `git cat-file blob <OID completo de comment-blob>`, con `GIT_NO_LAZY_FETCH=1` |
+
+`context-options` es una elección explícita `--new-context` o `--use-context <id>`.
+`location-options` admite `--path`, `--side`, `--start-line`, `--end-line`,
+`--base`, `--head`, `--base-path`, `--head-path` y `--unversioned`.
+`guards` conserva `--expect-context` y las revisiones exactas de documento.
+El cuerpo no entra en argv ni logs; stdin se cierra. Un lado vacío se representa
+sólo cuando la CLI declara `absent`. La comparación de prosa de Prepare usa los
+archivos de `comments-delivery-file` y no crea una sesión de código histórica.
+El selector de comentarios consume `comment-body` (líneas escapadas) y
+`comment-scope` de `entries`; muestra fragmento, ubicación y detalle completo.
+La receta de diff se pide con el mismo ordinal y revisión de documento. Delete
+admite resultados de Finish además de preparaciones activas y nunca borra la
+copia entregada. El visor mantiene la prosa accesible y señala el rango original.
+El extracto de líneas originales se lee con `git cat-file blob <OID>` validado,
+sin lazy fetch y sin interpretar paths ni sustituir objetos faltantes por HEAD.
+
+Las capturas exactas de `comments add` envían `--start-column` y `--end-column`
+junto con ambos extremos de línea, en unidades UTF-16 1-based y con fin
+exclusivo. `entries` y `diff --porcelain` emiten el registro opcional
+`comment-columns` (ordinal, lado, columna inicial, columna final). Los clientes
+lo asocian por ordinal y lado; si falta, conservan las líneas inclusivas de
+los comentarios anteriores. Archivo/general no envía columnas.
+
+El explorador permite `comments delete --document <local|shared> --context <id> --entry <ordinal> --expect-context <token> --expect-document <revision>` para borrar una entrada física sin renumerar ni cambiar las demás. Sólo se ofrece en preparaciones activas o resultados retenidos; tras borrar se vuelve a consultar `entries --porcelain`. Los comentarios generales no ofrecen abrir un diff.
+
+La captura usa `comments-capability <init|add> <local|shared>` de `comments status
+--porcelain`: compare ofrece sólo Local. Un único destino se envía explícitamente
+sin selector; varios requieren elección por captura. No hay acción Save comments: las
+notas de compare se conservan automáticamente al cerrar o limpiar la comparación.

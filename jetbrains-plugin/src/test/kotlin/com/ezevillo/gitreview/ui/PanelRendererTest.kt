@@ -15,6 +15,18 @@ import javax.swing.JPanel
 import javax.swing.SwingConstants
 
 class PanelRendererTest {
+    @Test fun commentTargetIsInsideTheAddCommentGroup() {
+        val hint=JLabel("Selected lines · parser.kt:4–8")
+        val renderer=PanelRenderer(PreviewPanelChrome()).apply { commentTargetHint=hint }
+        val report=com.ezevillo.gitreview.domain.parseComments("comments-guard\tg")
+        val root=renderer.render(panelLayout(PanelFixtures.reviewWhole().copy(comments=report)))
+        assertTrue(javax.swing.SwingUtilities.isDescendingFrom(hint,root))
+        val buttons=PanelRenderer.collectButtons(hint.parent as javax.swing.JComponent)
+        assertEquals(listOf(com.ezevillo.gitreview.domain.CommentsCopy.add),buttons.map { it.text })
+        renderer.render(panelLayout(PanelFixtures.reviewWhole().copy(comments=report)))
+        assertEquals(1,PanelRenderer.collectButtons(hint.parent as javax.swing.JComponent).size)
+    }
+
     @Test
     fun `renderer produces controls in layout order with enabled state`() {
         val model = PanelFixtures.reviewWalk(atFirst = true)

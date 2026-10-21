@@ -1,0 +1,10 @@
+[1mContinue a previous review?[0m
+
+[2mShared comments come from this branch in either case.[0m
+
+> [1;32mStart a new review[0m
+    [2mKeep previous Local notes separate.[0m
+  [34mContinue: Earlier review[0m
+    [2mRestore previous Local notes.[0m
+
+[2mj/k[0m:move  [2menter[0m:pick  [2mesc[0m:cancel

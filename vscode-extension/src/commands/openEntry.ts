@@ -1,6 +1,7 @@
 import * as cp from "node:child_process";
 import {promisify} from "node:util";
 import * as vscode from "vscode";
+import {commentRange, rememberCommentSide} from "./comments";
 import {CommitChange, parseNameStatus} from "../cli/nameStatus";
 import {EntryRecord, ReviewMode} from "../cli/porcelain";
 import {PathRef} from "../cli/unquote";
@@ -77,7 +78,8 @@ export async function openWorkingTreeFile(rootUri: vscode.Uri, display: string):
             await reportMissingGitApi("a deleted file's contents");
             return;
         }
-        const document = await vscode.workspace.openTextDocument(gitApi.toGitUri(fileUri, "HEAD"));
+        const uri = rememberCommentSide(rootUri.fsPath, gitApi.toGitUri(fileUri, commentRange(rootUri.fsPath)?.base ?? "HEAD"), display, "base", display);
+        const document = await vscode.workspace.openTextDocument(uri);
         await vscode.window.showTextDocument(document);
         return;
     }
@@ -211,10 +213,12 @@ async function openFileChange(rootUri: vscode.Uri, display: string): Promise<voi
 
     const gitUri = (path: string, ref: string) => gitApi.toGitUri(vscode.Uri.joinPath(rootUri, path), ref);
     if (change.before !== undefined && change.after !== undefined) {
+        const left = rememberCommentSide(rootUri.fsPath, gitUri(change.before, commentRange(rootUri.fsPath)?.base ?? "HEAD"), change.before, "base", change.before, change.after);
+        const right = rememberCommentSide(rootUri.fsPath, vscode.Uri.joinPath(rootUri, change.after), change.after, "head", change.before, change.after);
         await vscode.commands.executeCommand(
             "vscode.diff",
-            gitUri(change.before, "HEAD"),
-            vscode.Uri.joinPath(rootUri, change.after),
+            left,
+            right,
             `${fileName(display)} (Review)`
         );
         return;
@@ -226,7 +230,7 @@ async function openFileChange(rootUri: vscode.Uri, display: string): Promise<voi
         return;
     }
     const document = await vscode.workspace.openTextDocument(
-        gitUri(single, change.after !== undefined ? "" : "HEAD")
+        rememberCommentSide(rootUri.fsPath, gitUri(single, change.after !== undefined ? "" : commentRange(rootUri.fsPath)?.base ?? "HEAD"), single, change.after !== undefined ? "head" : "base", change.before, change.after)
     );
     await vscode.window.showTextDocument(document);
 }
@@ -276,11 +280,10 @@ export function commitChangeResources(
     sha: string,
     changes: CommitChange[]
 ): [vscode.Uri, vscode.Uri | undefined, vscode.Uri | undefined][] {
-    const gitUri = (path: string, ref: string) => gitApi.toGitUri(vscode.Uri.joinPath(rootUri, path), ref);
     return changes.map((change) => [
         vscode.Uri.joinPath(rootUri, change.path),
-        change.before === undefined ? undefined : gitUri(change.before, `${sha}^`),
-        change.after === undefined ? undefined : gitUri(change.after, sha),
+        change.before === undefined ? undefined : rememberCommentSide(rootUri.fsPath, gitApi.toGitUri(vscode.Uri.joinPath(rootUri, change.before), sha + "^"), change.before, "base", change.before, change.after, sha),
+        change.after === undefined ? undefined : rememberCommentSide(rootUri.fsPath, gitApi.toGitUri(vscode.Uri.joinPath(rootUri, change.after), sha), change.after, "head", change.before, change.after, sha),
     ]);
 }
 
@@ -352,8 +355,8 @@ export function rangeChangeResources(
         vscode.Uri.joinPath(rootUri, change.path),
         change.before === undefined
             ? undefined
-            : gitApi.toGitUri(vscode.Uri.joinPath(rootUri, change.before), "HEAD"),
-        change.after === undefined ? undefined : vscode.Uri.joinPath(rootUri, change.after),
+            : rememberCommentSide(rootUri.fsPath, gitApi.toGitUri(vscode.Uri.joinPath(rootUri, change.before), commentRange(rootUri.fsPath)?.base ?? "HEAD"), change.before, "base", change.before, change.after),
+        change.after === undefined ? undefined : rememberCommentSide(rootUri.fsPath, vscode.Uri.joinPath(rootUri, change.after), change.after, "head", change.before, change.after),
     ]);
 }
 

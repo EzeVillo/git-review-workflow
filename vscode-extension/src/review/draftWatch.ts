@@ -23,6 +23,7 @@
  * módulo que importa `vscode`.
  */
 export interface DraftPathSource {
+    comments?: {documents: readonly {path: string}[]};
     /** Registros `draft` de `config --porcelain` (uno por rama con borrador). */
     drafts?: readonly {path: string}[];
     /** Ruta del borrador en vigor de la review activa (`status --porcelain`). */
@@ -64,6 +65,7 @@ export function draftWatchDirs(state: DraftPathSource): string[] {
         }
     };
     add(state.draftPath);
+    for (const document of state.comments?.documents ?? []) add(document.path);
     for (const draft of state.drafts ?? []) {
         add(draft?.path);
     }
@@ -75,6 +77,7 @@ export function draftWatchDirs(state: DraftPathSource): string[] {
  * guía de autoría. Estructural, por lo mismo que `DraftPathSource`.
  */
 export interface GuidePathSource {
+    comments?: {documents: readonly {path: string}[]};
     /** Registros `guide` de `config --porcelain` (siempre los dos). */
     guides?: readonly {path: string}[];
     /**
@@ -111,6 +114,7 @@ export function isReportedGuide(
         return platform === "win32" ? slashed.toLowerCase() : slashed;
     };
     const target = normalise(file);
+    if (state.comments?.documents.some(doc => normalise(doc.path) === target)) return true;
     if ((state.guides ?? []).some((guide) => normalise(guide.path) === target)) {
         return true;
     }

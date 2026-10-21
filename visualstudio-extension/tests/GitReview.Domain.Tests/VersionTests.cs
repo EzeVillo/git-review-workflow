@@ -5,6 +5,14 @@ namespace GitReview.Domain.Tests;
 public class VersionTests
 {
     [Fact]
+    public void Comments_requires_updating_an_older_cli()
+    {
+        Assert.True(CliVersion.IsOutdated("0.9.0"));
+        Assert.True(CliVersion.IsOutdated("0.9.99"));
+        Assert.False(CliVersion.IsOutdated("0.10.0"));
+    }
+
+    [Fact]
     public void Compare_equal()
     {
         Assert.Equal(0, CliVersion.CompareVersions("0.4.0", "0.4.0"));
@@ -36,20 +44,20 @@ public class VersionTests
     public void Surrounding_whitespace_is_tolerated()
     {
         Assert.Equal(0, CliVersion.CompareVersions(" 0.8.0 ", "0.8.0"));
-        Assert.False(CliVersion.IsOutdated(" 0.8.0\n"));
+        Assert.False(CliVersion.IsOutdated(" 0.10.0\n"));
     }
 
     [Fact]
     public void Is_outdated_against_min()
     {
-        Assert.Equal("0.8.0", CliVersion.MinCliVersion);
+        Assert.Equal("0.10.0", CliVersion.MinCliVersion);
         Assert.False(CliVersion.IsOutdated(CliVersion.MinCliVersion));
         // 0.7.x carries no `walkthrough draft --porcelain`: sending it would be
         // an `unknown option`, that is, the draft that never gets written.
         foreach (var older in new[]
                  { "0.2.1", "0.3.0", "0.4.0", "0.5.0", "0.5.9", "0.6.0", "0.6.9", "0.7.0", "0.7.9" })
             Assert.True(CliVersion.IsOutdated(older), $"{older} is older than the minimum");
-        foreach (var newer in new[] { "0.8.1", "1.0.0", "10.0.0" })
+        foreach (var newer in new[] { "0.10.1", "1.0.0", "10.0.0" })
             Assert.False(CliVersion.IsOutdated(newer), $"{newer} is not older than the minimum");
     }
 

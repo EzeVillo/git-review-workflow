@@ -59,6 +59,9 @@ cur="$(git symbolic-ref --quiet --short HEAD || true)"
 	exit 1
 }
 
+# shellcheck source=../git-review-lib.sh
+. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
+
 # worktree_tree: the tree of the current working tree captured with `git add -A`
 # (so brand-new untracked files count too), via a throwaway index that leaves the
 # real index untouched. Used to snapshot state and to detect later divergence.
@@ -77,9 +80,12 @@ worktree_tree() {
 # silently throw that work away. Recorded only on a completed finish, never for one
 # stopped mid-conflict.
 record_exit() {
+	_finish_comments_failed=0
+	comments_finish_complete "$cur" "$1" || _finish_comments_failed=1
 	git config "branch.$cur.reviewundoouthead" "$(git rev-parse HEAD)"
 	git config "branch.$cur.reviewundoouttree" "$(worktree_tree)"
 	echo "note: commits you make on $1 are kept, and uncommitted edits too while you stay on $1$(advice_suffix ' — git review finish --abort refuses to discard them without --force')." >&2
+	if [ "$_finish_comments_failed" -ne 0 ]; then exit 1; fi
 }
 
 # --abort restores the undo point of the finish being undone. Runs before the
@@ -251,6 +257,9 @@ do_abort() {
 	# captured untracked files), then the index. Skip the checkout when already on
 	# the review branch (mid-conflict abort): the index may hold unmerged entries a
 	# same-branch checkout chokes on; reset --hard below clears them.
+	comments_lock_branch "$rb" || exit 1
+	trap 'comments_unlock' 0
+	comments_finish_undo "$rb" || exit 1
 	if [ "$cur" != "$rb" ]; then
 		git checkout -q -f "$rb"
 	fi
@@ -318,6 +327,23 @@ if [ "$force" -eq 1 ]; then
 	exit 1
 fi
 
+if [ "$resume" -eq 1 ]; then
+	_resume_comments_context=''
+	for _resume_review in $(git for-each-ref --format='%(refname:short)' refs/heads/review/); do
+		comments_preflight_branch "$_resume_review" || exit 1
+		[ -n "$cc_session" ] || continue
+		if [ "$(comments_field "$cc_dir/delivery" state)" = pending ] && [ "$(comments_field "$cc_dir/delivery" branch)" = "$cur" ]; then
+			if [ -n "$_resume_comments_context" ]; then comments_error 'more than one comments delivery is pending'; exit 1; fi
+			_resume_comments_context=$cc_context
+		fi
+	done
+	if [ -n "$_resume_comments_context" ]; then
+		trap 'comments_unlock' 0
+		comments_prepare "$_resume_comments_context" 0 0 '' ''
+		exit $?
+	fi
+fi
+
 case "$cur" in
 review/*) ;;
 *)
@@ -351,6 +377,10 @@ fi
 # and the final extract onto review-fixes / the PR branch).
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
+
+comments_lock_branch "$cur" || exit 1
+trap 'comments_unlock' 0
+trap 'exit 1' 1 2 15
 
 # A step review records reviewmode=step alongside reviewstart/reviewcount/
 # reviewstep; a whole review records none of them (walk's mirror keys are

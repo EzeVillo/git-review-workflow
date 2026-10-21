@@ -62,10 +62,13 @@ func decodeUTF8(b []byte) string {
 // PUBLIC entry points below (InvokeReview, InvokeSupportGit) are the only
 // callers, and both hardcode "git" (FR-007): there is no exported way to
 // pick a different binary.
-func runProcess(ctx context.Context, name string, argv []string, extraEnv []string) Result {
+func runProcess(ctx context.Context, name string, argv []string, extraEnv []string, input ...string) Result {
 	cwd, _ := os.Getwd() // best-effort, only used for the invocation log
 	cmd := exec.CommandContext(ctx, name, argv...)
 	cmd.Env = append(os.Environ(), extraEnv...)
+	if len(input) > 0 {
+		cmd.Stdin = strings.NewReader(input[0])
+	}
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -170,6 +173,12 @@ func appendResultLog(res Result, startedAt time.Time) {
 // via context.WithTimeout, so a caller in a test can impose a much shorter
 // deadline than the class would without this function knowing it.
 func InvokeReview(ctx context.Context, verb string, args []string) Result {
+	return invokeReview(ctx, verb, args)
+}
+func InvokeReviewWithInput(ctx context.Context, verb string, args []string, input string) Result {
+	return invokeReview(ctx, verb, args, input)
+}
+func invokeReview(ctx context.Context, verb string, args []string, input ...string) Result {
 	class := domain.ClassForVerb(verb, args)
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(class.TimeoutMillis())*time.Millisecond)
 	defer cancel()
@@ -183,8 +192,12 @@ func InvokeReview(ctx context.Context, verb string, args []string) Result {
 		extraEnv = append(extraEnv, networkEnv()...)
 	}
 
-	res := runProcess(runCtx, "git", argv, extraEnv)
-	appendResultLog(res, time.Now().Add(-res.Duration))
+	res := runProcess(runCtx, "git", argv, extraEnv, input...)
+	logged := res
+	if len(input) > 0 {
+		logged.Stderr = ""
+	}
+	appendResultLog(logged, time.Now().Add(-res.Duration))
 	return res
 }
 
@@ -198,6 +211,21 @@ func InvokeSupportGit(ctx context.Context, args []string) Result {
 	res := runProcess(runCtx, "git", args, []string{gitReviewAdviceEnv})
 	appendResultLog(res, time.Now().Add(-res.Duration))
 	return res
+}
+
+// Historical comment content is read by OID, without network or path interpretation.
+func ReadCommentBlob(ctx context.Context, oid string) Result {
+	if len(oid) != 40 && len(oid) != 64 {
+		return Result{ExitCode: 5, Stderr: domain.CommentsHistoryFailed}
+	}
+	for _, c := range oid {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return Result{ExitCode: 5, Stderr: domain.CommentsHistoryFailed}
+		}
+	}
+	runCtx, cancel := context.WithTimeout(ctx, time.Duration(domain.SupportGit.TimeoutMillis())*time.Millisecond)
+	defer cancel()
+	return runProcess(runCtx, "git", []string{"cat-file", "blob", oid}, []string{gitReviewAdviceEnv, "GIT_NO_LAZY_FETCH=1"})
 }
 
 // --- in-memory invocation log (T039, FR-078) --------------------------------

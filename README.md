@@ -134,6 +134,42 @@ does not need Node? See [Installation](#installation). If you prefer scripting
 or working directly from a shell, the [CLI reference](CLI.md) documents that
 separate interface.
 
+Comparisons offer Local comments only and retain them automatically when closed. Comment forms skip the destination selector when the CLI permits a single option.
+
+Local notes stay private; Shared comments are prepared for the PR. Both documents
+coexist, and the destination only applies to the new comment. If asked whether to
+continue a previous review, choose whether to restore its Local notes or keep them
+separate. Shared comes from the current branch in either case.
+
+From the CLI, `git review comments add --document local` opens your Git editor
+for a private observation; choose `--document shared` for prose intended for
+the PR. Both documents remain editable Markdown outside the working tree while
+reviewing. `finish` leaves changed Shared comments as `.review/comments.md` on
+the output branch, staged together with your code edits and ready to commit.
+The private Shared preparation is then removed. Save/Continue keeps it until
+Finish, including deleted comments. Undo returns it to the review; Cancel
+discards that pass and preserves the branch's original comments. Outside a
+review, Comments sits between Walkthrough and Compare and reads Shared from
+the current branch, including on a fresh clone. Comments inherited from a merged
+PR are not copied into a new review. Adding comments requires an active session.
+Local comments stay private. **Copy path** copies the absolute path of an existing Local
+document from its panel row, including retained results. See [review comments](CLI.md#review-comments) for renumbering,
+historical diffs and keeping comparison comments locally.
+
+IDE comment forms offer the exact selected code fragment, the current file, and General, defaulting to the most specific available scope. You can change scope before saving. Existing Local and Shared preparations appear separately and can be deleted during the review. Local results remain editable after Finish.
+
+The comment form labels the text field explicitly. The Diff browser shows a
+compact location and a one-line preview, with `…` when the comment is shortened.
+The complete comment scrolls below; original revision IDs are folded under
+Details, while warnings about unsaved captures stay visible. Diffs open inside
+the IDE, with the comment still accessible. In the terminal, `d` toggles Details
+and Tab returns to the complete comment. Selected lines are marked on the
+recorded version. Local results and pending Shared preparations can also be
+deleted after Finish; delivered Shared is read from `.review/comments.md`.
+
+The comment browser also lets you delete an individual comment without changing
+the others or their numbers. General comments do not offer a diff.
+
 ## Installation
 
 The visual clients share a small command-line foundation. The

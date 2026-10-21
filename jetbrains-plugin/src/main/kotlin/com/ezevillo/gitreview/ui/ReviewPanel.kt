@@ -23,12 +23,22 @@ class ReviewPanel(
     private val project: Project,
     private val service: GitReviewService,
 ) : JPanel(BorderLayout()) {
+    private val captureTracker = project.getService(com.ezevillo.gitreview.host.CommentEditorTracker::class.java)
+    private val commentHint = JLabel()
+    private val hintTimer = Timer(180) { updateCommentHint() }.apply { start() }
+    private fun updateCommentHint() {
+        if (!isShowing) return
+        commentHint.isVisible = service.hasResolvedState() && isReviewReadable(service.currentModel().situation)
+        val capture = com.ezevillo.gitreview.host.CommentsActions(project, service).capture(captureTracker.editor())
+        commentHint.text = if (service.currentModel().situation == com.ezevillo.gitreview.domain.Situation.FINISH_CONFLICT) com.ezevillo.gitreview.domain.CommentsCopy.general else capture?.label(capture.scopes.first()) ?: if (captureTracker.editor() != null) com.ezevillo.gitreview.domain.CommentsCopy.opaque else com.ezevillo.gitreview.domain.CommentsCopy.general
+        commentHint.toolTipText = com.ezevillo.gitreview.domain.CommentsCopy.selectionHint
+    }
     private val chrome = PluginPanelChrome()
     private val dispatcher = PanelActionDispatcher(project, service)
     private val renderer = PanelRenderer(chrome) { id, index, supportLinkId ->
         if (stale) return@PanelRenderer false
         dispatcher.dispatch(id, index, supportLinkId)
-    }
+    }.apply { commentTargetHint = commentHint }
 
     private var disposeListener: (() -> Unit)? = null
     private var skeletonTimer: Timer? = null
@@ -59,6 +69,7 @@ class ReviewPanel(
         disposeListener = null
         skeletonTimer?.stop()
         whyCeilingTimer?.stop()
+        hintTimer.stop()
     }
 
     private fun onModel(model: PanelModel) {
@@ -127,6 +138,7 @@ class ReviewPanel(
         val layout = panelLayout(model, loading = loading)
         removeAll()
         add(renderer.render(layout), BorderLayout.CENTER)
+        updateCommentHint()
         revalidate()
         repaint()
     }

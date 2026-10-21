@@ -32,6 +32,7 @@ type PaletteAction struct {
 	Situations          []Situation
 	RequiresNotBusy     bool
 	RequiresNotReadonly bool
+	RequiresReadonly    bool
 }
 
 // allEightSituations is the shorthand `situations:` uses in the canonical
@@ -58,6 +59,7 @@ var allEightSituations = []Situation{
 // same question ControlsFor already answers for whichever subset also gets
 // a body control.
 var PaletteActions = []PaletteAction{
+	{ID: "addComment", Situations: []Situation{SituationReview, SituationFinishConflict}, RequiresNotBusy: true},
 	{ID: "openEntry", Situations: []Situation{SituationReview, SituationFinishConflict}},
 	{ID: "openChange", Situations: []Situation{SituationReview, SituationFinishConflict}},
 	{ID: "showWhy", Situations: []Situation{SituationReview, SituationFinishConflict}},
@@ -94,6 +96,7 @@ var PaletteActions = []PaletteAction{
 // discardInventory (PanelOnlyActions): they never appear in the palette,
 // so nothing here would ever read it.
 var PaletteLabel = map[string]string{
+	"addComment":       CommentsAdd,
 	"openEntry":        "Open file",
 	"openChange":       "Open diff",
 	"showWhy":          OpenInEditorLabel,
@@ -135,6 +138,9 @@ func PaletteActionsFor(situation Situation, busy, readonly bool) []PaletteAction
 			continue
 		}
 		if a.RequiresNotReadonly && readonly {
+			continue
+		}
+		if a.RequiresReadonly && !readonly {
 			continue
 		}
 		out = append(out, a)

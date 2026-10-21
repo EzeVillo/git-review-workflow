@@ -61,7 +61,7 @@ public class ConfirmationContractTests
         // guide_rows, walkthrough_row and fixes_rows: same role as the two above
         // (controls whose subject is the row), but theirs hang off a "controls" key
         // because the block also declares the rows and their states.
-        foreach (var key in new[] { "guide_rows", "walkthrough_row", "fixes_rows" })
+        foreach (var key in new[] { "guide_rows", "walkthrough_row", "fixes_rows", "comments_rows", "comments_browser" })
         {
             if (Get(root, key) is not YamlMappingNode block) continue;
             if (Get(block, "controls") is not YamlMappingNode rowControls) continue;

@@ -49,7 +49,7 @@ jobs:
       - name: shellcheck
         # find recorre bin/ (incl. bin/git-review-verbs/, fuera del glob bin/*) y
         # excluye .gitkeep; cubre el dispatcher y todos los verbos.
-        run: shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh tui/bump-version.sh vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh visualstudio-extension/bump-version.sh jetbrains-plugin/verification-report.sh tests/sandbox.sh tests/sandbox-min.sh
+        run: shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh tui/bump-version.sh vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh visualstudio-extension/bump-version.sh jetbrains-plugin/verification-report.sh tests/sandbox.sh tests/sandbox-min.sh tests/helpers/sandbox-comments.sh
 
   test:
     strategy:
@@ -69,6 +69,8 @@ jobs:
       # Keep in sync with tests/Dockerfile, which runs the same suite locally.
       - name: Install bats
         run: npm install -g bats@1.13.0
+      - name: Comments status contract
+        run: bats tests/comments-status.bats
       - name: Run tests
         run: bats tests/
 
@@ -122,7 +124,9 @@ jobs:
         with:
           node-version: 20
       - name: Check multi-client product surface
-        run: node scripts/check-client-product-surface.mjs
+        run: |
+          node --test scripts/check-client-product-surface.test.mjs
+          node scripts/check-client-product-surface.mjs
       # Same job on purpose: node is already set up, and both checks guard the
       # same thing — a surface the clients share drifting apart in one of them.
       - name: Check logo assets

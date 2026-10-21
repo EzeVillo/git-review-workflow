@@ -1,3 +1,4 @@
+import {saveSessionComments} from "./comments";
 import * as vscode from "vscode";
 import {invokeGitReview, InvokeOptions} from "../cli/invoke";
 import {MutationLock} from "../review/mutationLock";
@@ -76,6 +77,7 @@ export async function abortReview(
                     stale = true;
                     return undefined;
                 }
+                if (!(await saveSessionComments(stateManager, getInvokeOptions(), undefined, "active"))) return undefined;
                 const invocation = await invokeGitReview("abort", [], getInvokeOptions());
                 // Refrescar pase lo que pase (ver continueReview.ts): dice dónde
                 // quedó el repositorio; la salida humana no se parsea nunca.

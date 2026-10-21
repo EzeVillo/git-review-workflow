@@ -37,6 +37,183 @@ lista, o `git review <verbo> -h` para el detalle de un verbo.
 | `git review forget --draft ([--] <rama> \| --all \| --reviewed) [--dry-run]`                                                                             | Borra un walkthrough que escribiste para el PR de otra persona.                                                                                                                                                                                                                                                                                                                        |
 | `git review config [<clave> [<valor>]] [--unset <clave>] [--porcelain [<rama>]]`                                                           | Lee o escribe la config del producto (`base`, `remote`); `--porcelain` también lista las ramas candidatas a revisar.                                                                                                                                                                                                                                                                   |
 
+## Comentarios de revisión
+
+Las comparaciones admiten sólo comentarios **Local**. Su Markdown guardado se conserva automáticamente al cerrar con `abort` o eliminar con `clean`; las ediciones de código se descartan. No hace falta una acción Save comments. En reviews se elige Local o Shared en cada captura. Los clientes obtienen los destinos permitidos de `comments status --porcelain`; si hay uno solo, lo envían automáticamente sin selector.
+
+Durante una review, mantené documentos Markdown independientes para
+observaciones **Local** y comentarios **Shared** destinados al PR. Las dos
+preparaciones viven en el gitdir de la review: escribir un comentario no stagea
+ni guarda código. Elegí el documento en cada captura; no se recuerda un destino.
+
+Local y Shared conviven: elegir un destino sólo decide dónde va el comentario
+nuevo. Local es privado; Shared está destinado a compartirse con el PR. La
+preparación privada de Shared durante la review sigue siendo Shared, no Local.
+La pregunta independiente **Continue a previous review?** decide si recuperar
+las notas Local anteriores o mantenerlas separadas. Shared viene de la rama actual
+en ambos casos; esa elección no sustituye un documento por el otro.
+
+```sh
+git review comments add --document local --text '¿Por qué reintentar esta operación?'
+git review comments add --document shared --path src/api.ts --side head \
+  --start-line 12 --end-line 16 --stdin < preguntas.md
+git review comments status
+git review comments status --all --porcelain
+git review comments renumber --document shared
+```
+
+Sin `--text` ni `--stdin`, `add` abre el editor configurado en Git
+(`git var GIT_EDITOR`). Un texto vacío o sólo whitespace cancela. Comillas,
+backticks y `$()` dentro del texto son datos. Para crear un documento antes de
+escribir, usá `init --document local` o `init --document shared`; repetirlo no
+trunca un archivo existente. Abrí la ruta absoluta informada por `status` en
+tu editor Markdown habitual para editar, mover o borrar entradas.
+
+| Comando después de `git review comments` | Propósito |
+|------------------------------------------|-----------|
+| `status [--porcelain] [--context <id>]` | Consultar identidad, ambos documentos, recuentos, diagnósticos y entrega. Fuera de sesión, enumera resultados conservados y preparaciones guardadas. |
+| `init --document <local\|shared> [context-options] [guards]` | Crear sólo el documento elegido, si está ausente. |
+| `add --document <local\|shared> [context-options] [location-options] [--text <text>\|--stdin] [guards]` | Añadir una entrada; las ubicaciones repetidas siguen siendo entradas distintas. |
+| `delete --document <local\|shared> [--entry <ordinal>] [--context <id>] [guards]` | Eliminar una entrada o el documento preparado/conservado elegido; mantener las copias entregadas. |
+| `renumber --document <local\|shared> [--context <id>] [guards]` | Numerar las entradas reales `## N. Título` en orden físico, conservando cuerpos, metadata y finales de línea. |
+| `entries --document <local\|shared> [--context <id>] --porcelain` | Listar entradas por ordinal físico y revisión del documento, con alcance y cuerpos completos por líneas escapadas. |
+| `diff --document <local\|shared> --entry <ordinal> [--context <id>] [--porcelain] [guards]` | Mostrar el código capturado por los OID originales de la entrada; porcelain devuelve árboles, blobs y coordenadas. |
+| `save [--expect-context <token>] [--expect-local <revision>] [--expect-shared <revision>]` | En una comparación, conservar ambos documentos localmente y seguir comparando. |
+| `prepare --context <id> [--check [--porcelain]] [guards]` | Inspeccionar o reintentar una entrega Shared pendiente después de extraer código. |
+
+`context-options` son `--context <id>`, `--new-context` o `--use-context <id>`;
+elegí sólo una. Se puede declarar otro contexto antes de hacer ediciones nuevas
+sin conservar. Si la identidad es ambigua, creá o elegí un contexto explícitamente.
+Si hay varios contextos conservados, requieren selección; la CLI nunca elige
+el más reciente.
+Copiar un contexto portable conocido a otra rama con historia incompatible también
+exige esa elección; renombrar una rama con historia compatible no la exige.
+Elegir un contexto nuevo en ese selector conserva la prosa Shared entrante y las
+referencias de sus entradas, cambia la identidad del documento y separa Local.
+Continuar explícitamente recupera el Local anterior y sigue tomando Shared de la
+rama. Un clon nuevo sin antecedentes privados puede leer Shared normalmente.
+
+La identidad de comentarios usa el merge-base completo elegido por Start y lo
+conserva durante la sesión. Una review remota usa la base traída por fetch aunque
+tu rama base local esté atrasada. Una rama nueva después del merge empieza de
+cero, sin adoptar el contexto heredado de `.review/comments.md`. Shared se
+prepara desde la rama revisada, nunca desde un resultado Shared privado anterior.
+Las respuestas del autor y los comentarios eliminados se respetan en la próxima review.
+
+Fuera de una review, `comments status`, `entries` y `diff` leen Shared directamente
+de `.review/comments.md` del working tree actual, incluso después de clonar o
+abrir una rama sin historia privada de reviews. El panel ubica Comments entre
+Walkthrough y Compare. Agregar comentarios requiere una review o compare activa;
+los controles de Shared del repositorio son de lectura fuera de una review.
+Si hay Shared del repositorio y una preparación guardada, el panel muestra el
+del repositorio. Local sigue saliendo de la sesión guardada, incluso si ambos
+documentos tienen el mismo contexto o existe un resultado Local anterior. El contexto
+conserva su custodia y los permisos de la sesión pausada; `--all` también expone la preparación
+privada de Shared. Continue retoma la preparación guardada, incluidos sus borrados.
+
+Un merge de Git sin resolver en `.review/comments.md` informa una revisión ilegible
+y un diagnóstico en lugar de un conteo. Resolvé y stageá el merge antes de consultar
+sus entradas o diffs históricos desde la CLI.
+
+`comments status --porcelain` informa descripciones distintas con fecha de
+creación cuando esté disponible, counts de documentos y asunto del último commit
+revisado. Los clientes muestran esos datos sin exponer los tokens internos.
+
+`add` usa el mayor número de entrada existente en el documento elegido más uno,
+o 1 si no tiene entradas. Los saltos, duplicados y el orden físico no cambian esta
+regla; las entradas existentes conservan sus números. No cuentan los encabezados
+dentro de código cercado, citas o comentarios HTML.
+
+`location-options` son `--path <path>`, `--side base|head`,
+`--start-line <n> --end-line <n>`, `--start-column <n> --end-column <n>`,
+`--base <OID> --head <OID>`,
+`--base-path <path> --head-path <path>` y `--unversioned`. Las rutas son relativas
+a la raíz del repositorio. Las líneas exigen ruta y lado; los extremos de línea
+y los OID explícitos se proporcionan por pares. Los OID deben ser completos, de
+commit o tree. Sin OID explícitos, la CLI registra el rango real de la review o
+del paso seleccionado. El contenido sucio se marca como unversioned; su código
+nunca se conserva dentro del comentario. Los comentarios generales no necesitan
+ruta ni líneas.
+
+Las columnas son opcionales y cuentan unidades UTF-16 desde 1 (un tabulador
+cuenta como una unidad). Con columnas, ambas posiciones son extremos y el fin
+es exclusivo: seleccionar los caracteres 3 a 5 de la línea 12 usa
+`--start-line 12 --end-line 12 --start-column 3 --end-column 6`. Sin columnas,
+las líneas siguen siendo inclusivas. Se exigen ambas columnas; se rechazan
+selecciones vacías o invertidas.
+
+`guards` son `--expect-context <token>` y `--expect-document <revision>`, obtenidos
+de `status --porcelain` o `entries --porcelain`. Protegen sesión, cursor y
+bytes/presencia originales del documento, incluido `absent`. Un documento ilegible
+informa `unreadable` y un diagnóstico; resolvé el error de lectura antes de escribir.
+Todos aceptan `-h`/`--help` y `--`; los valores son argumentos separados y pueden
+empezar con guion. Desde terminal podés omitir guards para usar el estado actual.
+
+`save`/`continue` conservan las dos preparaciones al pausar una review. `abort`
+de sesión descarta la preparación nueva y respeta los resultados anteriores;
+las notas de compare se conservan automáticamente al cerrar o limpiar la comparación. `comments save` sigue disponible como checkpoint opcional desde la CLI. Un `finish` exitoso
+conserva Local de forma privada y deja la prosa Shared modificada en
+`.review/comments.md` sobre la rama de salida, staged junto con las correcciones,
+sin commitearla ni pushearla. Sólo se stagea el archivo entregado; los reintentos
+conservan las demás entradas del índice y rechazan sobrescribir comentarios stageados
+concurrentemente. La entrega stagea el blob exacto de la preparación y registra
+esa misma revisión para recuperación. Los cambios concurrentes de la preparación,
+el destino o el índice conservan la preparación y dejan la entrega recuperable,
+sin descartar prosa que todavía no se compartió.
+Cuando Git habilita conversión de texto para esa ruta, una diferencia de checkout
+entre LF y CRLF no bloquea la entrega. Los cambios de prosa, espacios o salto final
+siguen siendo conflictos; la comparación no ejecuta filtros de contenido y la entrega
+stagea los bytes de la preparación.
+Después de entregar y publicar la metadata de recuperación,
+se elimina la preparación privada editable de Shared. Una entrega fallida la
+conserva para reintentar. La limpieza conserva Local y el Shared del repositorio
+accesibles. Los resultados Local privados se pueden editar; Shared ofrece lectura
+y diffs históricos. Save/Continue conserva ambas preparaciones, incluidos los
+borrados. Finish/Undo conserva la preparación actual; Cancel descarta esta pasada,
+incluidas sus eliminaciones, sin cambiar los comentarios ya commiteados en la rama de origen.
+
+Si hay conflicto de entrega Shared después de extraer el código, `finish`
+retorna `1` y registra la salida de código. Inspeccioná
+`prepare --context <id> --check` y editá preparado y destino hasta que tengan
+el mismo contenido deseado. Reintentá con `prepare --context <id>` o
+`finish --resume`; no se repite la extracción de código. No hay reemplazo forzado
+de prosa concurrente. `finish --abort` restaura el código de la review y mantiene
+ambos documentos actuales como preparación de la review, quitando del índice su
+entrega Shared. También restaura el resultado conservado anterior (o su ausencia),
+para que cancelar después descarte los comentarios de esta pasada y respete sólo
+lo que ya existía antes.
+
+Estos comandos retornan `0` por éxito/cancelación, `1` por uso, I/O o conflicto de
+prosa, `2` sin sesión compatible, `4` por guards obsoletos y `5` si falta código
+histórico requerido. Las consultas históricas nunca sustituyen código actual
+ni descargan objetos faltantes. Un archivo ausente del working tree no impide
+abrir historia disponible. Los diagnósticos no bloquean la navegación del código.
+
+
+### Eliminar un documento de comentarios
+
+Usá `git review comments delete --document local` (o `shared`) durante una review
+o compare activa, o agregá `--context <id>` para elegir un resultado conservado
+después de Finish. Una vez entregado, sólo se puede borrar Local conservado o
+la preparación Shared pendiente con estos comandos. Borra la copia privada elegida; conserva un
+`.review/comments.md` ya entregado. Borrar Shared conservado también descarta su
+entrega pendiente. Acepta las guardas `--expect-context` y `--expect-document`.
+Local y Shared siguen siendo independientes.
+
+Agregá `--entry <ordinal>` para borrar sólo un comentario, identificado por su
+posición física en `entries --porcelain`. Los demás conservan sus números,
+texto, metadatos y orden; no se renumeran. El documento sigue presente aunque
+se borre su última entrada y se conserva cualquier entrega pendiente.
+Los clientes ofrecen este borrado en el explorador de comentarios y lo mantienen
+abierto después. Los comentarios generales no ofrecen Open diff.
+
+`entries --porcelain` incluye el comentario completo en registros `comment-body`
+(una línea escapada por registro), y `comment-scope` distingue General, archivo
+y líneas seleccionadas con el lado original. Estas consultas no requieren tener
+el Markdown abierto en un editor. Los visores de IDE y terminal muestran un
+fragmento en la lista y el comentario completo antes de abrir sus cambios
+originales; las líneas seleccionadas se identifican sobre la versión registrada.
+
 ## Interfaz de terminal
 
 Abrí la interfaz visual de terminal desde adentro de un repositorio:
@@ -1087,3 +1264,12 @@ el PR de otra persona* para precedencia, ediciones a mitad de review, y cómo
 `save`/`continue` llevan el borrador con una review pausada.
 
 </details>
+
+
+Para la custodia de buffers de los clientes, `comments status --all --porcelain`
+incluye los contextos retenidos aunque haya una review activa. Es incompatible
+con `--context`. El registro `comments-owner` informa contexto, origen y rama
+custodia (o campo vacío si ninguna sesión lo reclama); ni labels ni rutas son
+claves de custodia.
+La etiqueta de `comments-context` nombra la rama de origen, también en resultados
+retenidos tras Finish o una comparación guardada, aunque esa rama ya no exista.

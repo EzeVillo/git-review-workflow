@@ -2,6 +2,17 @@ package domain
 
 import "testing"
 
+func TestCommentsRequiresUpdatingAnOlderCLI(t *testing.T) {
+	for _, version := range []string{"0.9.0", "0.9.99"} {
+		if !IsOutdated(version, MinCLIVersion) {
+			t.Errorf("CLI %s lacks comments and must require an update", version)
+		}
+	}
+	if IsOutdated("0.10.0", MinCLIVersion) {
+		t.Error("CLI 0.10.0 supplies the comments contract")
+	}
+}
+
 func TestParseVersion(t *testing.T) {
 	if v, ok := ParseVersion("0.8.0"); !ok || v != (Version{0, 8, 0}) {
 		t.Errorf("ParseVersion(0.8.0) = %+v, %v", v, ok)

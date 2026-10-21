@@ -28,6 +28,7 @@ public static class DraftWatch
         var dirs = new SortedSet<string>(StringComparer.Ordinal);
         Add(state.DraftPath);
         foreach (var draft in state.DraftsList) Add(draft.Path);
+        foreach (var document in state.Comments?.Documents ?? Array.Empty<CommentDocument>()) Add(document.Path);
         return dirs.ToArray();
 
         void Add(string? file)
@@ -56,6 +57,7 @@ public static class DraftWatch
     {
         if (string.IsNullOrWhiteSpace(file)) return false;
         var target = Normalise(file!);
+        if (state.Comments?.Documents.Any(d => string.Equals(Normalise(d.Path), target, StringComparison.OrdinalIgnoreCase)) == true) return true;
         foreach (var guide in state.GuidesList)
         {
             if (string.Equals(Normalise(guide.Path), target, StringComparison.OrdinalIgnoreCase))

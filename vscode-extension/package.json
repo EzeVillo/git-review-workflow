@@ -2,7 +2,7 @@
   "name": "git-review-workflow",
   "displayName": "git review workflow",
   "description": "Walk a PR in order, then edit and run it — not just read the diff",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "publisher": "EzeVillo",
   "license": "MIT",
   "icon": "media/icon.png",
@@ -201,6 +201,11 @@
         "command": "gitReview.showCliLog",
         "title": "Show CLI Log",
         "category": "git review"
+      },
+      {
+        "command": "gitReview.addComment",
+        "title": "Add comment",
+        "category": "git review"
       }
     ],
     "menus": {
@@ -334,6 +339,10 @@
         },
         {
           "command": "gitReview.showCliLog"
+        },
+        {
+          "command": "gitReview.addComment",
+          "when": "!gitReview.busy && (gitReview.situation == review || gitReview.situation == finish-conflict)"
         }
       ]
     },

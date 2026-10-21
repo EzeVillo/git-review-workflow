@@ -8,7 +8,7 @@
 set -eu
 
 prog="git review"
-VERSION="0.9.0"
+VERSION="0.10.0"
 
 usage() {
 	cat <<EOF
@@ -27,6 +27,8 @@ Commands:
                      stage the diff between two commit-ish, read-only (finish refuses)
   git review walkthrough (init [--base <base>] [--force] | build [--check])
                      author a reading walkthrough for the current branch's PR
+  git review comments <command>
+                     capture and inspect independent local and shared comments
   git review next    advance a commit-by-commit or walkthrough review one entry
   git review prev    step a commit-by-commit or walkthrough review back one entry
   git review config [<key> [<value>]] [--unset <key>] [--porcelain [<branch>]]

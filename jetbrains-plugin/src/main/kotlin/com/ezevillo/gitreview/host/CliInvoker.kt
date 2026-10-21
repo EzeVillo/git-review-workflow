@@ -52,6 +52,8 @@ class CliInvoker(
     private val askpassCommand: () -> String = { resolveAskpassCommand() },
     private val logger: Logger = Logger.getInstance(CliInvoker::class.java),
 ) : CliRunner {
+    fun invokeWithInput(verb: String, args: List<String>, cwd: String, stdin: String): InvokeResult =
+        invokeResolved(resolveCommand(verb, args, gitReviewPath()), cwd, timeoutMs = timeoutForClass(verb, args), stdin = stdin)
     override fun invoke(
         verb: String,
         args: List<String>,
@@ -68,6 +70,7 @@ class CliInvoker(
         cwd: String,
         network: Boolean = false,
         timeoutMs: Long,
+        stdin: String? = null,
     ): InvokeResult {
         val start = System.currentTimeMillis()
         val line = formatCommandLine(resolved.command, resolved.args)
@@ -101,7 +104,12 @@ class CliInvoker(
             }
 
             val handler = CapturingProcessHandler(cmd)
+            val inputThread = Thread({
+                try { handler.processInput?.use { it.write((stdin ?: "").toByteArray(StandardCharsets.UTF_8)) } }
+                catch (_: java.io.IOException) { /* Exit/timeout remains the source of diagnostics. */ }
+            }, "git-review-stdin").apply { isDaemon = true; start() }
             val output: ProcessOutput = handler.runProcess(timeoutMs.toInt())
+            inputThread.interrupt()
             val duration = System.currentTimeMillis() - start
 
             if (output.isTimeout) {
@@ -112,7 +120,7 @@ class CliInvoker(
                     exitCode = null,
                     timedOut = true,
                 )
-                logEnd(result, duration)
+                logEnd(if (stdin == null) result else result.copy(stderr = ""), duration)
                 return result
             }
 
@@ -121,7 +129,7 @@ class CliInvoker(
                 stderr = output.stderr,
                 exitCode = output.exitCode,
             )
-            logEnd(result, duration)
+            logEnd(if (stdin == null) result else result.copy(stderr = ""), duration)
             result
         } catch (e: Exception) {
             val duration = System.currentTimeMillis() - start

@@ -78,6 +78,12 @@ func TestPanelExcludedActionsAreAllInPalette(t *testing.T) {
 // readonly all narrow the offered set — the palette's own equivalent of
 // ControlsFor's Enabled bit for ids that never get a body row.
 func TestPaletteActionsForFiltersByAllThreeGates(t *testing.T) {
+	if got := PaletteActionsFor(SituationReview, false, false); containsPaletteID(got, "saveComments") {
+		t.Error("saveComments must not appear in the palette")
+	}
+	if got := PaletteActionsFor(SituationReview, false, true); containsPaletteID(got, "saveComments") {
+		t.Error("compare notes are retained automatically without saveComments")
+	}
 	if got := PaletteActionsFor(SituationReview, true, false); containsPaletteID(got, "next") {
 		t.Error("next requires_not_busy: true and must not be offered while busy")
 	}

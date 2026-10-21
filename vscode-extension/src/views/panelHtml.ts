@@ -1,5 +1,6 @@
 import {NPM_INSTALL_CMD, NPM_UPDATE_CMD} from "../cli/installHint";
 import {MIN_CLI_VERSION} from "../cli/version";
+import {COMMENTS_COPY} from "../review/userCopy";
 
 /**
  * HTML del panel, separado del provider y sin depender de `vscode`: así se abre
@@ -268,6 +269,36 @@ export function panelHtml(nonce: string): string {
     outline-offset: 2px;
   }
   button[disabled] { opacity: .5; cursor: default; }
+  /* El mismo margen que la entrada y su botonera. El destino acompaña a Add
+     comment; los documentos existentes forman sus propias filas debajo. */
+  .comments-block {
+    padding: .8em .8em 1em;
+    border-top: 1px solid var(--vscode-panel-border);
+  }
+  .comments-block:empty { display: none; }
+  .comments-block h3 { margin: 0 0 .7em; font-size: 1em; font-weight: 600; }
+  .comment-target {
+    margin: 0 0 .5em;
+    font-size: .9em;
+    line-height: 1.5;
+    color: var(--vscode-descriptionForeground);
+    overflow-wrap: anywhere;
+  }
+  .comments-actions { display: flex; flex-wrap: wrap; gap: .4em; margin-bottom: .8em; }
+  .comments-actions:last-child { margin-bottom: 0; }
+  .comments-actions button {
+    flex: 1;
+    min-width: 0;
+    padding: .45em .6em;
+    border: 1px solid var(--vscode-contrastBorder, var(--vscode-button-border, var(--vscode-panel-border)));
+  }
+  .comments-row { display: flex; align-items: center; flex-wrap: wrap; gap: .3em; margin-top: .5em; }
+  .comments-context { flex-basis: 100%; color: var(--vscode-descriptionForeground); overflow-wrap: anywhere; }
+  .comments-row button[aria-label] { padding: .2em .3em; background: none; color: var(--vscode-descriptionForeground); }
+  .comments-row button[aria-label]:hover:not([disabled]) {
+    background: var(--vscode-toolbar-hoverBackground);
+    color: var(--vscode-foreground);
+  }
   .empty { padding: 1.2em .9em; line-height: 1.6; }
   .empty p { margin: 0 0 1em; }
   /* El inventario del estado vacío: una fila por review del repositorio. Va
@@ -563,7 +594,13 @@ export function panelHtml(nonce: string): string {
   // un ? de ayuda para las filas del inventario sin verbo.
   const SVG_NS = "http://www.w3.org/2000/svg";
   const ICONS = {
+    copy: ["M5.5 5.5h8v9h-8z", "M10.5 5.5v-4h-8v9h3"],
     file: ["M4 1.6h5l3 3v9.8H4z", "M9 1.6v3h3"],
+    eye: ["M1.5 8C4.5 2.5 11.5 2.5 14.5 8C11.5 13.5 4.5 13.5 1.5 8Z", "M10 8a2 2 0 1 1-4 0a2 2 0 1 1 4 0"],
+    numbered: [
+      "M2 2.5l1-.5v3M2 5h2", "M1.8 7.5c0-1.3 2.2-1.3 2.2 0c0 .7-2.2 1.2-2.2 2H4",
+      "M1.8 11.5c1.3-.8 2.7 0 1.3 1c1.5.4.5 2-1.3 1.2", "M6.5 3.5h7M6.5 8h7M6.5 12.5h7"
+    ],
     diff: ["M2.5 5.6h8.4", "M8.1 2.8 10.9 5.6 8.1 8.4", "M13.5 10.4H5.1", "M7.9 7.6 5.1 10.4 7.9 13.2"],
     prev: ["M10 3.4 5.4 8 10 12.6"],
     next: ["M6 3.4 10.6 8 6 12.6"],
@@ -1039,6 +1076,7 @@ export function panelHtml(nonce: string): string {
   // / Compare / Settings / Support se pliega al primer refresh (busy, etc.).
   let compareSectionOpen = false;
   let walkthroughSectionOpen = false;
+  let commentsSectionOpen = false;
   let spentDraftsOpen = false;
   let fixesOpen = false;
   let settingsOpen = false;
@@ -1302,6 +1340,8 @@ export function panelHtml(nonce: string): string {
   function renderPaneFooter(model) {
     const footer = el("div", "pane-footer");
     footer.appendChild(renderWalkthroughSection(model, model.guides || []));
+    const comments = renderCommentsSection(model);
+    if (comments) footer.appendChild(comments);
     const spent = renderSpentDrafts(model);
     if (spent) {
       footer.appendChild(spent);
@@ -1321,7 +1361,10 @@ export function panelHtml(nonce: string): string {
       case "no-review": {
         // Setup gate: sin base solo se dibuja la configuración.
         if (model.noBaseConfigured) {
-          return renderSetup(model);
+          const setup = renderSetup(model);
+          const comments = renderCommentsSection(model);
+          if (comments) setup.appendChild(comments);
+          return setup;
         }
         // El fallback a lista vacía no sobra: el webview redibuja el modelo que
         // guardó con setState, que puede venir de una versión sin este campo.
@@ -1692,6 +1735,61 @@ export function panelHtml(nonce: string): string {
     if (model.base !== undefined) { root.appendChild(note("Range built against " + model.base + ".")); }
   }
 
+  const COMMENTS = ${JSON.stringify(COMMENTS_COPY)};
+  function renderCommentsSection(model) {
+    const content = renderComments(model, false);
+    if (content.children.length === 0) return null;
+    return toolsSection(COMMENTS.title, commentsSectionOpen, function(open) {
+      commentsSectionOpen = open;
+    }, [content]);
+  }
+  function renderComments(model, heading = true) {
+    const report = model.comments;
+    const capture = (model.situation === "review" || model.situation === "finish-conflict") && report && report.guard;
+    const docs = report ? report.documents || [] : [];
+    function visibleDocument(doc) { return doc.presence === "present" || (doc.kind === "shared" && report.deliveries.some(function(d) {return d.context === doc.context && d.state === "pending";})); }
+    const visible = docs.some(visibleDocument);
+    const box = el("section", "comments-block");
+    // La ausencia se muestra sólo tras consultar; un diagnóstico no es un vacío.
+    function emptyRow(kind, label, text) {
+      if (heading || !report || report.diagnostics.length || docs.some(function(doc) { return doc.kind === kind && visibleDocument(doc); })) return;
+      const row = el("div", "comments-row");
+      row.appendChild(el("strong", null, label));
+      row.appendChild(el("span", null, text));
+      box.appendChild(row);
+    }
+    if (visible && heading) box.appendChild(el("h3", null, COMMENTS.title));
+    if (capture) {
+      const hint = el("p", "comment-target", model.commentTarget || COMMENTS.general);
+      hint.id = "comment-target"; hint.title = COMMENTS.selectionHint; box.appendChild(hint);
+      const actions = el("div", "comments-actions");
+      const add = button(COMMENTS.add, "addComment", null); add.disabled = model.busy; actions.appendChild(add);
+      box.appendChild(actions);
+    }
+    emptyRow("local", COMMENTS.local, COMMENTS.emptyLocal);
+    if (visible) docs.forEach(function(doc, index) {
+      if (!visibleDocument(doc)) return;
+      const row = el("div", "comments-row");
+      const context = report.contexts.find(function(c) { return c.id === doc.context; });
+      if (context && context.state !== "active") row.appendChild(el("span", "comments-context", context.label));
+      row.appendChild(el("strong", null, doc.kind === "local" ? COMMENTS.local : COMMENTS.shared));
+      if (doc.count !== undefined) row.appendChild(el("span", "badge", String(doc.count)));
+      function control(b, tooltip, allowUnreadable) { b.title = tooltip; b.disabled = model.busy || (!allowUnreadable && doc.revision === "unreadable"); row.appendChild(b); }
+      if (doc.presence === "present") {
+        control(iconButton("file", "openComments", COMMENTS.open, index), COMMENTS.tooltipOpen, true);
+        if (doc.kind === "local") control(iconButton("copy", "copyCommentPath", COMMENTS.copyPath, index), COMMENTS.tooltipCopyPath, true);
+        const editable = context && (["active", "result"].includes(context.state) || (context.state === "repository" && doc.kind === "local"));
+        if (editable) control(iconButton("numbered", "renumberComments", COMMENTS.renumber, index), COMMENTS.tooltipRenumber);
+        control(iconButton("eye", "openCommentDiff", COMMENTS.diff, index), COMMENTS.tooltipDiff);
+        if (editable) control(iconButton("trash", "deleteComments", COMMENTS.delete, index), COMMENTS.tooltipDelete);
+      } else if (context && ["active", "result"].includes(context.state)) control(button(COMMENTS.create, "initComments", null, null, index), COMMENTS.tooltipCreate);
+      if (doc.kind === "shared" && report.deliveries.some(function(d) {return d.context === doc.context && d.state === "pending";}) && context && context.kind === "review" && context.state === "result") control(button(COMMENTS.prepare, "prepareSharedComments", null, null, index), COMMENTS.tooltipPrepare);
+      box.appendChild(row);
+    });
+    emptyRow("shared", COMMENTS.shared, COMMENTS.emptyShared);
+    if (report) report.diagnostics.forEach(function(d) { const details=el("details"); details.appendChild(el("summary", null, d.code)); details.appendChild(el("p", null, d.message)); box.appendChild(details); });
+    return box;
+  }
   function render(model) {
     root.textContent = "";
     // fills solo en no-review configurado: body scrollea y el footer
@@ -1702,6 +1800,7 @@ export function panelHtml(nonce: string): string {
     // vacío es sólo para no-review/out-of-range/error/cli-*.
     if (model.situation !== "review" && model.situation !== "finish-conflict") {
       root.appendChild(renderEmptyState(model));
+      if (model.comments && model.situation !== "no-review" && model.situation !== "cli-outdated" && model.situation !== "cli-missing") root.appendChild(renderComments(model));
       return;
     }
 
@@ -1716,6 +1815,7 @@ export function panelHtml(nonce: string): string {
     } else {
       root.appendChild(empty("The cursor does not point at any entry in the sequence."));
     }
+    root.appendChild(renderComments(model));
   }
 
   /*
@@ -1827,6 +1927,11 @@ export function panelHtml(nonce: string): string {
   }
 
   window.addEventListener("message", function (event) {
+    if (event.data && event.data.type === "commentTarget") {
+      if (model) { model.commentTarget = event.data.text; vscode.setState(model); }
+      const hint = document.getElementById("comment-target");
+      if (hint) hint.textContent = event.data.text || COMMENTS.general;
+    }
     if (event.data && event.data.type === "model") {
       // El modelo se guarda en el estado del webview: no es estado propio del
       // panel (FR-019), es la última copia de lo que mandó el host, para poder

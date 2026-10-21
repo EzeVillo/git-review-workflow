@@ -11,15 +11,16 @@ import com.ezevillo.gitreview.host.refreshAndFind
 import com.ezevillo.gitreview.settings.LastOpenedStore
 import com.ezevillo.gitreview.ui.UiMessages
 import com.intellij.diff.DiffContentFactory
-import com.intellij.diff.DiffDialogHints
-import com.intellij.diff.DiffManager
-import com.intellij.diff.chains.SimpleDiffRequestChain
 import com.intellij.diff.contents.DiffContent
 import com.intellij.diff.requests.SimpleDiffRequest
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
+import com.ezevillo.gitreview.host.COMMENT_CAPTURE_KEY
+import com.ezevillo.gitreview.host.CommentCapture
+import com.ezevillo.gitreview.domain.CommentsReport
+import com.intellij.diff.contents.DocumentContent
 import java.io.File
 
 private fun EntryRecord.displayPath(): String = when (val id = this.id) {
@@ -44,17 +45,15 @@ private class DiffSide(
     val bytes: ByteArray? = null,
     val file: VirtualFile? = null,
     val fileName: String = "",
+    val capture: CommentCapture? = null,
 ) {
     fun content(project: Project): DiffContent {
         val factory = DiffContentFactory.getInstance()
-        if (file != null) return factory.create(project, file)
-        if (bytes == null) return factory.createEmpty()
-        val type = FileTypeManager.getInstance().getFileTypeByFileName(fileName)
-        return try {
-            factory.createFromBytes(project, bytes, type, fileName)
-        } catch (_: Exception) {
-            factory.createEmpty()
-        }
+        val content = if (file != null) factory.create(project, file)
+            else if (bytes == null) factory.createEmpty()
+            else factory.createFromBytes(project, bytes, FileTypeManager.getInstance().getFileTypeByFileName(fileName), fileName)
+        if (content is DocumentContent && capture != null) content.document.putUserData(COMMENT_CAPTURE_KEY, capture)
+        return content
     }
 }
 
@@ -76,7 +75,7 @@ object OpenEntryActions {
             ReviewMode.STEP -> {
                 // For step, open the commit diff for the SHA
                 val sha = entry.id as? String ?: return
-                openCommitDiff(project, cwd, sha)
+                openCommitDiff(project, cwd, sha, state.comments)
             }
         }
         if (mode == ReviewMode.WHOLE) {
@@ -99,7 +98,7 @@ object OpenEntryActions {
                             val change = changes.find {
                                 it.path == path || it.after == path || it.before == path
                             }
-                            Pair(true, change?.let { listOf(rangeDiff(cwd, it)) })
+                            Pair(true, change?.let { listOf(rangeDiff(cwd, it, state.comments)) })
                         } catch (_: Exception) {
                             Pair(false, null)
                         }
@@ -118,12 +117,12 @@ object OpenEntryActions {
                 val path = (entry.id as? PathRef)?.display
                 if (path != null) {
                     val sha = state.state.current as? String ?: return
-                    openCommitFileDiff(project, cwd, sha, path)
+                    openCommitFileDiff(project, cwd, sha, path, state.comments)
                     project.getService(LastOpenedStore::class.java)
                         .set(state.state.branch, path)
                 } else {
                     val sha = entry.id as? String ?: return
-                    openCommitDiff(project, cwd, sha)
+                    openCommitDiff(project, cwd, sha, state.comments)
                 }
             }
         }
@@ -134,7 +133,7 @@ object OpenEntryActions {
     }
 
     /** Single path inside a step commit (parent vs commit blob). */
-    fun openCommitFileDiff(project: Project, cwd: String, sha: String, path: String) {
+    fun openCommitFileDiff(project: Project, cwd: String, sha: String, path: String, comments: CommentsReport? = null) {
         Bg.async(
             project,
             "git review: loading diff",
@@ -144,7 +143,7 @@ object OpenEntryActions {
                     val change = changes.find {
                         it.path == path || it.after == path || it.before == path
                     }
-                    Pair(true, change?.let { listOf(commitDiff(cwd, sha, it)) })
+                    Pair(true, change?.let { listOf(commitDiff(cwd, sha, it, comments)) })
                 } catch (_: Exception) {
                     Pair(false, null)
                 }
@@ -170,7 +169,7 @@ object OpenEntryActions {
             "git review: loading changes",
             work = {
                 try {
-                    Pair(true, RangeChanges.nameStatusHead(cwd).map { rangeDiff(cwd, it) })
+                    Pair(true, RangeChanges.nameStatusHead(cwd).map { rangeDiff(cwd, it, state.comments) })
                 } catch (_: Exception) {
                     Pair(false, emptyList())
                 }
@@ -195,13 +194,13 @@ object OpenEntryActions {
         )
     }
 
-    private fun openCommitDiff(project: Project, cwd: String, sha: String) {
+    private fun openCommitDiff(project: Project, cwd: String, sha: String, comments: CommentsReport? = null) {
         Bg.async(
             project,
             "git review: loading commit",
             work = {
                 try {
-                    Pair(true, RangeChanges.nameStatusCommit(cwd, sha).take(20).map { commitDiff(cwd, sha, it) })
+                    Pair(true, RangeChanges.nameStatusCommit(cwd, sha).take(20).map { commitDiff(cwd, sha, it, comments) })
                 } catch (_: Exception) {
                     Pair(false, emptyList())
                 }
@@ -220,31 +219,23 @@ object OpenEntryActions {
      * Review range: HEAD sits at the lower bound and the PR's changes are staged on top,
      * so *before* is the blob at HEAD and *after* is what the reviewer is editing.
      */
-    private fun rangeDiff(cwd: String, change: CommitChange): FileDiff = FileDiff(
-        title = change.path,
-        before = blobSide(cwd, "HEAD", change.before, "HEAD"),
-        after = change.after
-            ?.let { DiffSide(WORKING_TREE, file = findWorkingTreeFile(File(cwd, it))) }
-            ?: DiffSide(WORKING_TREE),
-    )
-
-    /** Step mode: a single commit against its parent, neither side from the working tree. */
-    private fun commitDiff(cwd: String, sha: String, change: CommitChange): FileDiff {
-        val short = sha.take(7)
-        return FileDiff(
-            title = change.path,
-            before = blobSide(cwd, "$sha^", change.before, "$short^"),
-            after = blobSide(cwd, sha, change.after, short),
-        )
+    private fun rangeDiff(cwd: String, change: CommitChange, comments: CommentsReport?): FileDiff {
+        val pair = comments?.records("comments-capture")?.firstOrNull()
+        val before = blobSide(cwd, pair?.get(1) ?: "HEAD", change.before, "Base", pair, "base", change)
+        val after = change.after?.let { DiffSide(WORKING_TREE, file = findWorkingTreeFile(File(cwd, it)), capture = CommentCapture(it, "head", 1, 1, false, basePath = change.before, headPath = change.after)) } ?: DiffSide(WORKING_TREE)
+        return FileDiff(change.path, before, after)
     }
 
-    private fun blobSide(cwd: String, ref: String, path: String?, label: String): DiffSide {
+    private fun commitDiff(cwd: String, sha: String, change: CommitChange, comments: CommentsReport?): FileDiff {
+        val pair = comments?.records("comments-capture")?.firstOrNull()?.takeIf { it[2].startsWith(sha) }
+        return FileDiff(change.path, blobSide(cwd, pair?.get(1) ?: "$sha^", change.before, "Base", pair, "base", change), blobSide(cwd, pair?.get(2) ?: sha, change.after, "Head", pair, "head", change))
+    }
+
+    private fun blobSide(cwd: String, ref: String, path: String?, label: String, pair: List<String>?, side: String, change: CommitChange): DiffSide {
         if (path == null) return DiffSide(label)
-        return DiffSide(
-            label,
-            bytes = RangeChanges.showBytes(cwd, ref, path),
-            fileName = path.substringAfterLast('/'),
-        )
+        val bytes = RangeChanges.showBytes(cwd, ref, path) ?: error(UserCopy.OPEN_RANGE_FAILED)
+        val capture = pair?.let { CommentCapture(path, side, 1, 1, false, it[1], it[2], change.before, change.after) }
+        return DiffSide(label, bytes = bytes, fileName = path.substringAfterLast('/'), capture = capture)
     }
 
     /** Always inside a [Bg.async] `work` block: resolving a path is not an EDT operation. */
@@ -252,8 +243,7 @@ object OpenEntryActions {
 
     /**
      * One file → single request. Several (step commit or whole open-all) →
-     * [SimpleDiffRequestChain] so IntelliJ keeps one window with Prev/Next file
-     * instead of one editor tab each.
+     * a request chain so IntelliJ keeps one editor tab with Prev/Next file.
      */
     private fun show(project: Project, diffs: List<FileDiff>) {
         if (diffs.isEmpty()) return
@@ -266,14 +256,6 @@ object OpenEntryActions {
                 diff.after.label,
             )
         }
-        if (requests.size == 1) {
-            DiffManager.getInstance().showDiff(project, requests[0])
-        } else {
-            DiffManager.getInstance().showDiff(
-                project,
-                SimpleDiffRequestChain(requests),
-                DiffDialogHints.DEFAULT,
-            )
-        }
+        openEditorDiffs(project, requests)
     }
 }

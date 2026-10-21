@@ -16,7 +16,7 @@ namespace GitReview.VS.ToolWindows;
 /// git review: the menu routes through the panel's own action path, one implementation
 /// per action rather than per surface.
 /// </summary>
-public sealed class ActionDispatcher
+public sealed partial class ActionDispatcher
 {
     private readonly GitReviewPanelController _panel;
     private readonly PanelHost _host;
@@ -36,6 +36,20 @@ public sealed class ActionDispatcher
         _panel = panel;
         _host = host ?? new PanelHost();
         panel.HostAction += HandleAsync;
+        panel.Mutations.BeforeMutation = SaveSessionCommentDocumentsAsync;
+        var hintTimer=new System.Windows.Threading.DispatcherTimer{Interval=TimeSpan.FromMilliseconds(200)};
+        var reading=false;
+        hintTimer.Tick+=async(_,_)=>{
+            if(reading)return;
+            if(State.Situation is not (Situation.Review or Situation.FinishConflict)){panel.View.SetCommentTarget(null);return;}
+            reading=true;
+            try{var capture=State.Situation==Situation.FinishConflict||_host.CaptureComment is null?null:await _host.CaptureComment().ConfigureAwait(true);
+                panel.View.SetCommentTarget(capture is null?CommentsCopy.general:(capture.HasSelection?CommentsCopy.selection+" · "+capture.Path+":"+capture.RangeLabel:CommentsCopy.file+" · "+capture.Path)+" ("+(capture.Side=="base"?CommentsCopy.baseSide:CommentsCopy.headSide)+")");}
+            catch{panel.View.SetCommentTarget(CommentsCopy.general);}
+            finally{reading=false;}
+        };
+        panel.View.Loaded+=(_,_)=>hintTimer.Start();panel.View.Unloaded+=(_,_)=>hintTimer.Stop();
+        if(panel.View.IsLoaded)hintTimer.Start();
     }
 
     private ReviewState State => _panel.State.Current;
@@ -45,6 +59,9 @@ public sealed class ActionDispatcher
     {
         switch (wire)
         {
+            case "addComment": await AddCommentAsync().ConfigureAwait(true); return;
+            case "deleteComments": case "initComments": case "openComments": case "copyCommentPath": case "renumberComments": case "openCommentDiff": case "prepareSharedComments":
+                await CommentRowAsync(wire,index).ConfigureAwait(true); return;
             case "refresh":
                 await _panel.RefreshAsync().ConfigureAwait(true);
                 return;

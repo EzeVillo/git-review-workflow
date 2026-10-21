@@ -10,6 +10,57 @@ import (
 	"github.com/EzeVillo/git-review-workflow/tui/internal/domain"
 )
 
+func TestReportedCommentDocumentParentIsWatchedAtAnySessionDepth(t *testing.T) {
+	root := t.TempDir()
+	gitDir := filepath.Join(root, ".git")
+	doc := filepath.Join(gitDir, "reported", "sessions", "nested", "context", "documents", "local.md")
+	if err := os.MkdirAll(filepath.Dir(doc), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	set := BuildWatchSet(gitDir, gitDir, []string{doc})
+	for _, dir := range set.Dirs {
+		if dir.Path == filepath.Dir(doc) {
+			return
+		}
+	}
+	t.Fatalf("reported document parent was not watched: %+v", set)
+}
+
+func TestReportedRepositorySharedParentIsWatchedOutsideGitDir(t *testing.T) {
+	for _, linked := range []bool{false, true} {
+		name := "regular"
+		if linked {
+			name = "linked"
+		}
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			gitDir := filepath.Join(root, ".git")
+			if linked {
+				gitDir = filepath.Join(t.TempDir(), "worktrees", "linked")
+			}
+			doc := filepath.Join(root, ".review", "comments.md")
+			for _, dir := range []string{gitDir, filepath.Dir(doc)} {
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			set := BuildWatchSet(gitDir, gitDir, []string{doc, doc})
+			count := 0
+			for _, dir := range set.Dirs {
+				if dir.Path == filepath.Dir(doc) {
+					count++
+					if dir.NameFilter != "comments.md" {
+						t.Fatalf("reported Shared parent has the wrong filter: %+v", dir)
+					}
+				}
+			}
+			if count != 1 {
+				t.Fatalf("Shared parent must be watched once, got %d: %+v", count, set)
+			}
+		})
+	}
+}
+
 // mustGitDirs resolves dir's real GitDir/GitCommonDir/Toplevel by actually
 // asking git, the same way host.ReadState does — never assembled from a
 // guess at dir's layout. t.Chdir is required because runProcess (invoke.go)

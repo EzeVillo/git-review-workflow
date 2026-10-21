@@ -130,6 +130,14 @@ public static class GitReviewDialogs
     [DllImport("user32.dll")]
     private static extern IntPtr GetActiveWindow();
 
+    internal static void OwnModeless(Window window)
+    {
+        var owner = GetActiveWindow();
+        if (owner != IntPtr.Zero) new WindowInteropHelper(window) { Owner = owner };
+        window.ShowInTaskbar = false;
+        window.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+    }
+
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetWindowRect(IntPtr hWnd, out Rect32 rect);

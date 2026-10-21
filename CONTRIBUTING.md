@@ -25,7 +25,7 @@ on Windows to be worth avoiding (see
 installed:
 
 ```sh
-shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh visualstudio-extension/bump-version.sh jetbrains-plugin/verification-report.sh tests/sandbox.sh tests/sandbox-min.sh
+shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh visualstudio-extension/bump-version.sh jetbrains-plugin/verification-report.sh tests/sandbox.sh tests/sandbox-min.sh tests/helpers/sandbox-comments.sh
 bats tests/
 ```
 
@@ -67,6 +67,21 @@ git review --version
 ```
 
 ### Running the tests
+
+La familia de comentarios se puede ejecutar por separado desde un shell POSIX:
+
+```sh
+./tests/run-docker.sh tests/comments-*.bats
+```
+
+Sus fixtures de Markdown conservan bytes con `-text`: BOM, EOL mixtos y EOF sin
+LF son parte del contrato. Los helpers comparan presencia, contenido y estado
+de Git fuera del working tree; las consultas no deben escribir objetos ni
+refrescar el índice. Las barreras de concurrencia usan FIFO con timeout en los
+dos extremos, y los fallos de I/O se inyectan por operación para que funcionen
+también como root. No sustituir esas comprobaciones por `chmod` ni por sleeps.
+La evidencia de GNU/BSD/BusyBox awk y los controles negativos está en
+[`specs/016-comentarios-review/quickstart.md`](specs/016-comentarios-review/quickstart.md).
 
 ```sh
 ./tests/run-docker.sh                 # whole suite
@@ -115,6 +130,15 @@ repository directly — the branch config under
 `review-saved/*` is theirs to write, and a second copy of it here would go stale in silence. That
 phase fails soft: if a verb is broken the script warns and the rest of the sandbox still comes out
 usable.
+
+The full sandbox also creates `comments-team/` with four independent repositories:
+`choice-new/` and `choice-continue/` open the existing comment-context selector for
+copied Shared with incompatible history, `renamed/` continues compatible history
+without a prompt, and `stale/` leaves Bob reviewing an old tip after Alice publishes.
+Each starts with an active review. Open one folder per client window and follow
+`comments-team/LEEME.md` for both choices, Finish/Undo/Cancel and the real merge
+conflict. Rebuilding the full sandbox resets these cases too. `sandbox-min.sh`
+keeps its empty setup state.
 
 There is a second, deliberately empty one next to it —
 [`tests/sandbox-min.sh`](tests/sandbox-min.sh) — for the opposite question: what does someone who
@@ -646,3 +670,33 @@ To build the zip locally without releasing anything:
 ```sh
 cd jetbrains-plugin && ./gradlew buildPlugin
 ```
+
+## Comentarios de una review: desarrollo local
+
+Los adaptadores consumen `comments status --porcelain` como consulta independiente;
+los fallos de comments no reemplazan el estado principal. La revisión de bytes
+`unreadable` bloquea escrituras sin inventar un count cero. `comments-owner`
+identifica la custodia de cada sesión y `status --all` permite guardar sólo los
+Markdown afectados por un descarte explícito. No se guarda código ni se usa Save All.
+
+Cada mutación usa el lock del cliente, conserva el guard capturado antes de mover
+el foco, guarda únicamente los Markdown exactos y vuelve a leer su revisión.
+Un save falso, cancelado, con excepción o que deja el buffer sucio impide invocar
+la CLI. El cuerpo viaja por stdin UTF-8 cerrado, separado del argv y del log.
+La selección histórica usa ordinal físico y revisión; los visores leen blobs
+inmutables con `GIT_NO_LAZY_FETCH=1` y no sustituyen objetos perdidos por vacío.
+
+El fixture común es `tests/fixtures/comments/client-records.tsv`; cada cliente
+comprueba todos sus tags. La matriz del canónico tiene 28 acciones (27 donde
+`openAllChanges` está excluida), y los cinco controles de documento no son acciones
+de menú. Los escenarios y la evidencia ejecutada están en
+`specs/016-comentarios-review/quickstart.md`.
+
+Los paquetes locales de comentarios usan la CLI candidata 0.10.0. Esta excepción
+está autorizada únicamente para probar el conjunto: no acredita publicación ni
+habilita tags, npm, Marketplace o cambios remotos. Los smokes reales de IDE siguen
+siendo necesarios antes de publicar.
+Los destinos de captura provienen de `comments-capability` en `comments status
+--porcelain`. Compare sólo permite Local y sus notas se conservan al cerrar o
+limpiar; no existe la acción Save comments. Con un destino el formulario omite
+el selector y lo envía explícitamente; con varios exige elegir en cada captura.

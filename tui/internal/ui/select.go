@@ -22,7 +22,8 @@ type SelectItem struct {
 // ordinary delegated Cmd, or the finished mutationRequest once the LAST
 // question has been answered. At most one outcome is ever set.
 type selectResult struct {
-	next *SelectOverlay
+	commentForm *CommentsForm
+	next        *SelectOverlay
 	// probe is reserved for the Start assistant's config reads. Ordinary
 	// commands (editor/diff delegation) must stay in cmd because their
 	// Bubble Tea messages have a different type and lifecycle.
@@ -50,6 +51,10 @@ type selectResult struct {
 // with no confirmation (startReview's own shape), and cmd is whatever must
 // run before the NEXT question can even be built (a fresh config probe).
 func (m Model) applySelectResult(r selectResult) (Model, tea.Cmd) {
+	if r.commentForm != nil {
+		m.commentsForm = r.commentForm
+		return m, r.commentForm.focus()
+	}
 	m.selectOverlay = r.next
 	m.textPrompt = r.nextPrompt
 	m.confirm = r.confirmNext

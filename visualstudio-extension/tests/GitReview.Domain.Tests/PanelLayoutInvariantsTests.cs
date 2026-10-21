@@ -204,8 +204,8 @@ public class PanelLayoutInvariantsTests
         // and the fixes section's two (per-row discard plus the section's bulk
         // discard) — controls of a ROW or of the SECTION, not product actions:
         // the canonical's actions: matrix is still 26 for this client.
-        Assert.Equal(36, Enum.GetValues<ControlId>().Length);
-        Assert.Equal(36, Enum.GetValues<ControlId>().Select(id => id.Wire()).Distinct().Count());
+        Assert.Equal(45, Enum.GetValues<ControlId>().Length);
+        Assert.Equal(45, Enum.GetValues<ControlId>().Select(id => id.Wire()).Distinct().Count());
     }
 
     /// <summary>

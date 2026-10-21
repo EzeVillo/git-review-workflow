@@ -49,4 +49,5 @@ data class ReviewState(
     /** 012: ruta absoluta del borrador en vigor, reportada por la CLI. */
     val draftPath: String? = null,
     val stderr: String? = null,
+    val comments: CommentsReport? = null,
 )

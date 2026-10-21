@@ -394,3 +394,73 @@ public static class UserCopy
         };
     }
 }
+
+public static class CommentsCopy
+{
+    public const string details = "Details";
+    public const string close = "Close";
+    public const string originalUnversioned = "The captured lines included unsaved changes; this view shows the recorded Git version.";
+    public const string body = "Comment";
+    public const string openDiff = "Open diff";
+    public const string originalChanges = "Original changes";
+    public const string locationUnavailable = "Location unavailable";
+    public const string rangeUnavailable = "The recorded lines are not available in this version.";
+    public const string noBody = "This comment has no text.";
+
+    public const string scope = "Scope";
+    public const string selection = "Selected code";
+    public const string file = "File";
+    public const string saving = "Saving…";
+    public const string delete = "Delete";
+    public const string deleteEntryTitle = "Delete this comment?";
+    public const string deleteEntryDetail = "This permanently deletes the selected comment. An already delivered copy is kept.";
+    public const string deleteTitle = "Delete comments?";
+    public const string deleteDetail = "This deletes the chosen comment document from this review. It does not remove an already delivered copy.";
+    public const string tooltipDelete = "Delete this comment document";
+    public const string baseSide = "Previous version";
+    public const string headSide = "New version";
+    public const string selectionHint = "Select code to comment on that exact fragment.";
+    public const string unreadable = "The comment document cannot be read.";
+    public const string title = "Comments";
+    public const string local = "Local";
+    public const string shared = "Shared";
+    public const string emptyLocal = "No local comments.";
+    public const string emptyShared = "No shared comments.";
+    public const string add = "Add comment";
+    public const string create = "Create";
+    public const string open = "Open";
+    public const string copyPath = "Copy path";
+    public const string pathCopied = "Path copied";
+    public const string renumber = "Renumber";
+    public const string diff = "View changes";
+    public const string prepare = "Prepare";
+    public const string destination = "Choose a destination";
+    public const string submit = "Save";
+    public const string cancel = "Cancel";
+    public const string general = "General comment";
+    public const string chooseContext = "Continue a previous review?";
+    public const string newContext = "Start a new review";
+    public const string contextHint = "Shared comments come from this branch in either case.";
+    public const string localContextHint = "Choose whether to restore previous Local notes.";
+    public const string newContextDetail = "Keep previous Local notes separate.";
+    public const string continueContext = "Continue";
+    public const string continueContextDetail = "Restore previous Local notes.";
+    public const string localDestination = "Local (only for you)";
+    public const string sharedDestination = "Shared (to share with the PR)";
+    public const string entries = "Choose a comment";
+    public const string empty = "No comments are available.";
+    public const string failed = "Could not update the comments.";
+    public const string saveFailed = "Could not save the comment document. Your comment is still open.";
+    public const string historyFailed = "Could not open the historical changes.";
+    public const string unversioned = "The buffer has unsaved changes; its contents cannot be reproduced from Git.";
+    public const string opaque = "This viewer does not identify its original side. You can add a general comment.";
+    public const string tooltipOpen = "Open this comment document";
+    public const string tooltipCreate = "Create this comment document";
+    public const string tooltipCopyPath = "Copy this document's path";
+    public const string tooltipRenumber = "Number this document's entries in their current order";
+    public const string tooltipDiff = "Choose an entry and open its original changes";
+    public const string tooltipPrepare = "Prepare this shared document for delivery";
+    public const string compareDelivery = "Compare documents";
+    public const string retryDelivery = "Prepare";
+    public const string deliveryTitle = "Shared delivery";
+}

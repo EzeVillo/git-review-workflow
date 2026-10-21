@@ -176,6 +176,7 @@ if [ "$step" -eq 1 ]; then
 		git config "branch.$rb.reviewreturn" "$returnbranch"
 	fi
 
+	if ! comments_begin_session "$bcommit"; then echo 'note: comments could not be prepared; their original documents were preserved' >&2; fi
 	echo "$rb ready (compare $a..$b, read-only) — walking $count commit(s) one at a time"
 	show_commit "$first" 1 "$count"
 	exit 0
@@ -287,7 +288,9 @@ if [ "$walk" -eq 1 ]; then
 	cur="$rb"
 	tip="$bcommit"
 	total="$walkcount"
+	if ! comments_begin_session "$bcommit"; then echo 'note: comments could not be prepared; their original documents were preserved' >&2; fi
 	show_walk_entry 1
 else
+	if ! comments_begin_session "$bcommit"; then echo 'note: comments could not be prepared; their original documents were preserved' >&2; fi
 	echo "$rb ready (compare $a..$b, read-only) — the staged diff is for reading; git review finish will refuse"
 fi

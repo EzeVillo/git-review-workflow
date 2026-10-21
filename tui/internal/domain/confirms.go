@@ -23,19 +23,21 @@ package domain
 // eximir el llamador de walkthroughInit del gate 2 (T067) — reformularla
 // rompe el check.
 var ConfirmingIDs = map[string]bool{
-	"continueReview":   true,
-	"discardInventory": true,
-	"discardDraft":     true,
-	"discardGuide":     true,
-	"discardFixes":     true,
-	"discardAllFixes":  true,
-	"cleanReview":      true,
-	"undoFinish":       true,
-	"compareReview":    true,
-	"walkthroughInit":  true,
-	"walkthroughBuild": true,
-	"saveReview":       true,
-	"abortReview":      true,
+	"deleteComments":     true,
+	"deleteCommentEntry": true,
+	"continueReview":     true,
+	"discardInventory":   true,
+	"discardDraft":       true,
+	"discardGuide":       true,
+	"discardFixes":       true,
+	"discardAllFixes":    true,
+	"cleanReview":        true,
+	"undoFinish":         true,
+	"compareReview":      true,
+	"walkthroughInit":    true,
+	"walkthroughBuild":   true,
+	"saveReview":         true,
+	"abortReview":        true,
 }
 
 // ConfirmChoice is what a confirmation overlay resolves to.

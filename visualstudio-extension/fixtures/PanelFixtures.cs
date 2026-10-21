@@ -40,7 +40,19 @@ public static class PanelFixtures
         ("review walk busy", ReviewWalk(busy: true)),
         ("review walk empty cursor", ReviewWalkEmptyCursor()),
         ("review whole empty", ReviewWholeEmpty()),
+        ("comments local", CommentsPanel("present","absent")),
+        ("comments shared", CommentsPanel("absent","present")),
+        ("comments both", CommentsPanel("present","present")),
+        ("comments absent", CommentsPanel("absent","absent")),
+        ("comments pending", CommentsPanel("present","present",pending:true)),
     };
+
+    public static PanelModel CommentsPanel(string local,string shared,bool pending=false)
+    {
+        var wire=$"comments-context\tc\treview\t{(pending ? "result":"active")}\tg\tFeature\ncomments-document\t/local.md\tc\tlocal\t{local}\tl\ncomments-document\t/shared.md\tc\tshared\t{shared}\ts";
+        wire+=pending ? "\ncomments-delivery\tc\tpending\tDestination changed" : "\ncomments-guard\tg";
+        return (pending ? NoReviewReady() : ReviewWhole()) with {Comments=Comments.Parse(wire)};
+    }
 
     public static PanelModel CliMissing() => PanelModelBuilder.BuildPanelModel(
         new ReviewState(Situation.CliMissing, Stderr: "not found"),

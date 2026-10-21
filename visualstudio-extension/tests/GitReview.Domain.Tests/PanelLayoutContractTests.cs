@@ -165,8 +165,8 @@ public class PanelLayoutContractTests
             .ToList();
         Assert.Equal(expected, actual);
         // The count the absence is documented by, kept as a tripwire on the pair above.
-        Assert.Equal(26, ActionArgvMap.ProductActions.Count);
-        Assert.Equal(27, CanonicalActions().Count);
+        Assert.Equal(27, ActionArgvMap.ProductActions.Count);
+        Assert.Equal(28, CanonicalActions().Count);
     }
 
     /// <summary>Every action the map claims to offer has to produce an argv (or a no-op verb).</summary>
@@ -184,7 +184,7 @@ public class PanelLayoutContractTests
     [Fact]
     public void Min_cli_version_constant()
     {
-        Assert.Equal("0.8.0", CliVersion.MinCliVersion);
+        Assert.Equal("0.10.0", CliVersion.MinCliVersion);
         // Per-client map since the TUI came in, and no client inherits from
         // another: this one reads its own key or fails. Asking for the scalar
         // threw a cast on the map, which is a failure and not a false green --

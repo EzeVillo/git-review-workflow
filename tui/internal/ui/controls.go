@@ -30,7 +30,15 @@ type Control struct {
 // LayoutNoReview — one Control per draft/guide/fixes/inventory row, built in
 // noReviewControls below — on top of the fixed body controls Phase 4 already
 // drew.
-func ControlsFor(m domain.PanelModel) (controls []Control) {
+func ControlsFor(m domain.PanelModel) []Control {
+	core := coreControlsFor(m)
+	comments := commentsControls(m)
+	if domain.LayoutSituationFor(m) == domain.LayoutNoReview {
+		return core
+	}
+	return append(core, comments...)
+}
+func coreControlsFor(m domain.PanelModel) (controls []Control) {
 	defer func() {
 		if !m.Busy {
 			return
@@ -179,6 +187,7 @@ func noReviewControls(m domain.PanelModel) []Control {
 		)
 	}
 
+	cs = append(cs, commentsControls(m)...)
 	for _, d := range decodeDraftRows(m.SpentDraftRows) {
 		// A spent draft's row loses the two labelled controls (draft_controls'
 		// own comment: Copy for agent and Validate and start both promise a

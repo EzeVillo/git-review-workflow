@@ -9,11 +9,12 @@ type Argv struct {
 	Args []string
 }
 
-// ProductActions is the 26 ids this client offers: the canonical's 27
+// ProductActions is the 27 ids this client offers: the canonical's 28
 // minus openAllChanges, which is not_in: [tui] (T006) — opening N diffs at
 // once is not a gesture a multiplexer pane can hold, and the inventory's
 // rows already open each diff one at a time.
 var ProductActions = []string{
+	"addComment",
 	"openEntry", "openChange", "showWhy", "next", "prev", "goToEntry",
 	"refresh", "installCli", "continueReview", "startReview", "setBase",
 	"setRemote", "abortReview", "saveReview", "finishReview", "undoFinish",
@@ -163,7 +164,7 @@ type ActionParams struct {
 // this action's own argv.
 func BuildArgv(action string, p ActionParams) (Argv, bool) {
 	switch action {
-	case "openEntry", "openChange", "goToEntry", "installCli", "showCliLog":
+	case "addComment", "openEntry", "openChange", "goToEntry", "installCli", "showCliLog":
 		return Argv{}, false
 	case "refresh":
 		return Argv{Verb: "status", Args: []string{"--porcelain"}}, true

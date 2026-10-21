@@ -8,6 +8,13 @@ import org.junit.jupiter.api.Test
 
 class VersionTest {
     @Test
+    fun commentsRequiresUpdatingAnOlderCli() {
+        assertTrue(isOutdated("0.9.0"))
+        assertTrue(isOutdated("0.9.99"))
+        assertFalse(isOutdated("0.10.0"))
+    }
+
+    @Test
     fun compareEqual() {
         assertEquals(0, compareVersions("0.4.0", "0.4.0"))
     }
@@ -29,7 +36,7 @@ class VersionTest {
     @Test
     fun isOutdatedAgainstMin() {
         assertFalse(isOutdated(MIN_CLI_VERSION))
-        assertEquals("0.8.0", MIN_CLI_VERSION)
+        assertEquals("0.10.0", MIN_CLI_VERSION)
         assertTrue(isOutdated("0.2.1"))
         assertTrue(isOutdated("0.3.0"))
         assertTrue(isOutdated("0.3.9"))
@@ -43,7 +50,7 @@ class VersionTest {
         // `unknown option`, o sea el borrador que no se escribe.
         assertTrue(isOutdated("0.7.0"))
         assertTrue(isOutdated("0.7.9"))
-        assertFalse(isOutdated("0.8.1"))
+        assertFalse(isOutdated("0.10.1"))
         assertTrue(isOutdated("garbage"))
     }
 }

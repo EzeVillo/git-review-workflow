@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/EzeVillo/git-review-workflow/tui/internal/domain"
+
 	"github.com/EzeVillo/git-review-workflow/tui/internal/host"
 	"github.com/EzeVillo/git-review-workflow/tui/internal/ui"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -188,6 +190,9 @@ func rebuildWatcher(w host.Watcher, dirs host.GitDirs, result host.ReadResult) e
 	var paths []string
 	if result.HasStatus && result.Status.DraftPath != "" {
 		paths = append(paths, result.Status.DraftPath)
+	}
+	for _, doc := range domain.ParseComments(result.Comments).Documents() {
+		paths = append(paths, doc.Path)
 	}
 	if result.HasConfig {
 		for _, d := range result.Config.Drafts {

@@ -14,6 +14,7 @@ public sealed class MutationRunner
 
     public MutationLock Lock => _lock;
     public bool IsBusy => _lock.IsBusy;
+    public Func<string,ActionParams?,Task<bool>>? BeforeMutation {get;set;}
 
     public MutationRunner(CliInvoker cli, ReviewStateManager state, Func<string?> cwd)
     {
@@ -37,6 +38,11 @@ public sealed class MutationRunner
             var argv = ActionArgvMap.ActionToArgv(action, params_);
             if (string.IsNullOrEmpty(argv.Verb))
                 return new InvokeResult("", "", 0);
+            if (BeforeMutation is not null && !await BeforeMutation(action,params_).ConfigureAwait(true))
+            {
+                await _state.RefreshAsync(ct).ConfigureAwait(false);
+                return new InvokeResult("",CommentsCopy.saveFailed,1);
+            }
 
             var result = await _cli.InvokeAsync(
                 argv.Verb,

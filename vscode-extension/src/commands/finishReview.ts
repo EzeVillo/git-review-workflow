@@ -1,3 +1,4 @@
+import {saveSessionComments} from "./comments";
 import * as vscode from "vscode";
 import {invokeGitReview, InvokeOptions} from "../cli/invoke";
 import {finishOutcome} from "../review/finishOutcome";
@@ -107,6 +108,7 @@ export async function finishReview(
                     stale = true;
                     return undefined;
                 }
+                if (!(await saveSessionComments(stateManager, getInvokeOptions(), undefined, "all"))) return undefined;
                 const result = await invokeGitReview("finish", args, getInvokeOptions());
                 // Refrescar pase lo que pase: el panel necesita el estado real.
                 await stateManager.refresh();
@@ -199,6 +201,7 @@ export async function undoFinish(
                     stale = true;
                     return undefined;
                 }
+                if (!(await saveSessionComments(stateManager, getInvokeOptions(), undefined, "all"))) return undefined;
                 const result = await invokeGitReview("finish", ["--abort"], getInvokeOptions());
                 await stateManager.refresh();
                 return result;
@@ -260,6 +263,7 @@ export async function undoFinish(
                     stale = true;
                     return undefined;
                 }
+                if (!(await saveSessionComments(stateManager, getInvokeOptions(), undefined, "all"))) return undefined;
                 const result = await invokeGitReview(
                     "finish",
                     ["--abort", "--force"],
@@ -312,12 +316,13 @@ export async function resumeFinish(
         const result = await vscode.window.withProgress(
             {location: vscode.ProgressLocation.Notification, title: "Resuming the finish…"},
             async () => {
+                if (!(await saveSessionComments(stateManager, getInvokeOptions(), undefined, "all"))) return undefined;
                 const invocation = await invokeGitReview("finish", args, getInvokeOptions());
                 await stateManager.refresh();
                 return invocation;
             }
         );
-        if (result.exitCode !== 0) {
+        if (result && result.exitCode !== 0) {
             const text = message(result.stderr);
             void vscode.window.showErrorMessage(
                 text.length > 0 ? text : "Could not continue the finish."

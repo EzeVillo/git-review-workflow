@@ -23,6 +23,7 @@ class GitReviewToolWindowFactory : ToolWindowFactory, DumbAware {
         val service = GitReviewService.getInstance(project)
         val panel = ReviewPanel(project, service)
         val content = ContentFactory.getInstance().createContent(panel, "", false)
+        content.setDisposer(com.intellij.openapi.Disposable { panel.disposePanel() })
         toolWindow.contentManager.addContent(content)
 
         // Title-bar actions: Refresh / Finish / Save / Cancel / Preview edits.

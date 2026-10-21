@@ -131,6 +131,33 @@ func BuildWatchSet(gitDir, gitCommonDir string, draftPaths []string) domain.Watc
 		frontier = next
 	}
 
+	// Session documents can be deeper than the draft closure, and repository
+	// Shared lives outside gitDir. Watch each reported parent without adding
+	// a recursive working-tree watch. draftRoots still accepts only gitdir paths.
+	for _, document := range draftPaths {
+		if !filepath.IsAbs(document) {
+			continue
+		}
+		parent := filepath.Dir(filepath.Clean(document))
+		filter := "*.md"
+		if rel, err := filepath.Rel(gitDir, document); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			// Only the reported repository document participates in Comments.
+			// Neighbouring walkthroughs and guides keep their on-save policy.
+			filter = filepath.Base(document)
+		}
+		seen := false
+		for i, dir := range dirs {
+			if dir.Path == parent {
+				dirs[i].NameFilter = mergeFilterKeys(dir.NameFilter, filter)
+				seen = true
+				break
+			}
+		}
+		if !seen && budget > 0 && dirExists(parent) {
+			dirs = append(dirs, domain.WatchDir{Path: parent, NameFilter: filter})
+			budget--
+		}
+	}
 	set := domain.WatchSet{Dirs: dirs}
 	set.Sort()
 	return set

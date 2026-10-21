@@ -8,6 +8,7 @@ import {PanelModel} from "./panelModel";
  * postea uno de estos y el host decide. Cualquier otro valor se ignora.
  */
 export const PANEL_MESSAGES = [
+    "deleteComments", "addComment", "initComments", "openComments", "copyCommentPath", "renumberComments", "openCommentDiff", "prepareSharedComments",
     "openEntry",
     "openChange",
     "openAllChanges",
@@ -222,6 +223,11 @@ export class WalkthroughViewProvider implements vscode.WebviewViewProvider {
             `${WalkthroughViewProvider.viewId}.focus`,
             {preserveFocus: true}
         );
+    }
+
+    updateCommentTarget(text: string | undefined): void {
+        if (this.model) this.model.commentTarget = text;
+        void this.view?.webview.postMessage({type: "commentTarget", text});
     }
 
     update(model: PanelModel): void {

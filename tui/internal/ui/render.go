@@ -41,11 +41,15 @@ type controlTarget struct {
 type renderState struct {
 	focus, hover *controlTarget
 	footerOffset int
+	bodyOffset   int
+	revealFocus  bool
 }
 
 type renderMetrics struct {
 	footerOffset int
 	footerMax    int
+	bodyOffset   int
+	bodyMax      int
 }
 
 type hit struct {
@@ -157,6 +161,7 @@ type builder struct {
 	metrics     renderMetrics
 	tailReserve int
 	busy        bool
+	scrollBody  bool
 }
 
 func newBuilder(vp Viewport, state renderState) *builder {
@@ -408,6 +413,7 @@ func View(m domain.PanelModel, vp Viewport) (string, HitMap) {
 func viewWithState(m domain.PanelModel, vp Viewport, state renderState) (string, HitMap, renderMetrics) {
 	b := newBuilder(vp, state)
 	b.busy = m.Busy
+	b.scrollBody = m.Situation == domain.SituationReview || m.Situation == domain.SituationFinishConflict || m.Situation == domain.SituationFinishPending
 
 	if m.Situation == domain.SituationWaiting || m.Situation == "" {
 		b.text(domain.WaitingText)
@@ -441,6 +447,9 @@ func viewWithState(m domain.PanelModel, vp Viewport, state renderState) (string,
 		renderOutOfRangeOrError(b, m, domain.ErrorMessage)
 	}
 
+	if domain.LayoutSituationFor(m) != domain.LayoutNoReview {
+		renderComments(b, m)
+	}
 	return b.frameWithTail(tail), b.hm, b.metrics
 }
 
@@ -488,16 +497,52 @@ func (b *builder) frameWithTail(tail []string) string {
 		if limit < 0 {
 			limit = 0
 		}
-		if len(body) > limit {
-			body = body[:limit]
+		offset := 0
+		var scrollLine string
+		if b.scrollBody && limit > 0 && len(body) > limit {
+			// The review has no tools footer. Its whole content gets one
+			// viewport after wrapping, so files and long explanations cannot
+			// push comment controls off-screen permanently.
+			if limit > 1 {
+				limit--
+			}
+			maxOffset := len(body) - limit
+			offset = max(0, min(b.state.bodyOffset, maxOffset))
+			if b.state.revealFocus && b.state.focus != nil {
+				for _, h := range b.hm.hits {
+					if h.id != b.state.focus.id || h.variant != b.state.focus.variant {
+						continue
+					}
+					if h.rect.Row < offset {
+						offset = h.rect.Row
+					} else if h.rect.Row >= offset+limit {
+						offset = h.rect.Row - limit + 1
+					}
+					break
+				}
+			}
+			b.metrics.bodyOffset, b.metrics.bodyMax = offset, maxOffset
+			if b.vp.Rows-len(tail) > 1 {
+				scrollLine = interpolate(domain.ReviewScrollPosition,
+					"{track}", footerScrollbar(offset, maxOffset),
+					"{above}", strconv.Itoa(offset), "{below}", strconv.Itoa(maxOffset-offset))
+				if b.vp.Cols > 0 {
+					scrollLine = ansi.Truncate(scrollLine, b.vp.Cols, "")
+				}
+			}
 		}
+		body = body[offset:min(len(body), offset+limit)]
 		kept := b.hm.hits[:0]
 		for _, h := range b.hm.hits {
-			if h.rect.Row < limit {
+			if h.rect.Row >= offset && h.rect.Row < offset+limit {
+				h.rect.Row -= offset
 				kept = append(kept, h)
 			}
 		}
 		b.hm.hits = kept
+		if scrollLine != "" {
+			body = append(append([]string{}, body...), b.st.note.Render(scrollLine))
+		}
 	}
 	lines := append(append([]string{}, body...), tail...)
 	if b.vp.Rows > 0 && len(lines) > b.vp.Rows {
@@ -633,6 +678,10 @@ func renderNoReview(b *builder, m domain.PanelModel) {
 	b.heading(domain.WalkthroughSectionTitle)
 	renderWalkthroughRow(b, m)
 	renderGuideRows(b, m)
+	if m.Comments != "" || m.CommentsError != "" {
+		b.blank()
+	}
+	renderComments(b, m)
 
 	if m.SpentDraftCount > 0 {
 		b.blank()

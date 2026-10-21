@@ -1,5 +1,42 @@
 # Changelog
 
+## [0.4.0] — 2026-10-19
+
+### Changed
+
+- Explain the previous-review choice through its effect on private Local notes,
+  state that Shared comes from the branch in either case, and describe each new
+  comment destination as private or intended for the PR.
+- Place Comments between Walkthrough and Compare on the main panel. Read
+  delivered Shared from the repository and keep its controls read-only outside
+  reviews; Save/Continue retains the private preparation until Finish.
+- Use CLI comment destinations, omit the selector for a sole option, and
+  remove Save comments: comparison notes are retained automatically.
+- Distinguish previous comment reviews with dates, counts and reviewed subjects.
+- Apply the IDE palette to the comment composer and preserve a usable writing
+  area and full-size buttons at its minimum window size.
+- Hide Open diff for general comments. Delete individual comments from the
+  browser without renumbering or changing other entries, and keep the browser open.
+- Keep the exact selected fragment in comment previews and historical views
+  using line and column endpoints, with support for existing line-only comments.
+- Simplified comment browsing: one compact location, an ellipsized preview and
+  scrollable full prose. Historical revisions are collapsed under Details;
+  unsaved-capture warnings remain visible.
+
+### Added
+
+- Copy the absolute path of an existing Local comment document from its row,
+  during a review or from retained results.
+- Comment browsing with excerpts, full prose, original file/side/line context and
+  marked historical ranges. Comment fields now have a visible label.
+- Delete retained Local or Shared documents after Finish while keeping delivered prose.
+
+- Local and Shared review comments with an explicit destination for every capture,
+  selective Markdown saves, historical changes and pending Shared delivery.
+- Comment state, guards and document ownership supplied by CLI 0.10.0.
+
+
+
 Notable changes to the **git review** Visual Studio extension. The CLI it drives
 has its own
 [releases](https://github.com/EzeVillo/git-review-workflow/releases).
@@ -40,6 +77,8 @@ Requires `git review` **0.8.0** or newer.
 
 ### Changed
 
+- Use CLI comment destinations, omit the selector for a sole option, and
+  remove Save comments: comparison notes are retained automatically.
 - **The panel comes to the front when a block is born that was not there before.** Starting a
   review, starting one from a reading order you had begun, continuing a saved one and finishing one
   all draw something that was not on screen a moment ago — and the wizard that starts them runs

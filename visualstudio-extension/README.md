@@ -200,3 +200,45 @@ GitHub in your browser.
 ## License
 
 [MIT](./LICENSE) © EzeVillo
+
+## Review comments
+
+Use **Add comment** to write a multiline observation and choose **Local** or
+**Shared** for that submission. The next comment starts without a destination.
+Use **Save** (or Ctrl+Enter) to submit; Enter adds a line and Cancel discards the
+form. The selected code is never saved by this action. Unsaved code is marked
+as unversioned; a viewer that cannot identify its original side supports a
+general comment instead.
+
+The scope starts with selected lines, the current file, or General, choosing the
+most specific available context. You can switch scope without losing your text.
+The panel previews the target as you select code; opening the form fixes that
+context, including the original side of a diff. While saving, the form is disabled;
+success closes it and errors preserve your input.
+
+Only existing documents appear in the Comments block. **Delete** removes a chosen
+preparation, retained Local result or pending Shared preparation after confirmation.
+
+The Comments block has separate Local and Shared documents. **Copy path**
+copies the absolute path of an existing Local document, including retained results. **Open** edits the
+Markdown, **Renumber** numbers its current entries and **Diff** selects an entry
+and opens its captured code. Historical views require the original Git objects;
+missing objects or unversioned contents have an explicit diagnostic.
+
+Local stays private in Git's data directory. Shared starts from the branch's
+document during a review. Save/Continue keeps its private preparation,
+including deletions. After Finish stages it, that editable preparation is removed.
+Outside a review, Comments sits between Walkthrough and Compare and reads Shared
+from the current branch, taking precedence over saved preparations. Continue
+restores the saved preparation. Finish delivers Shared to
+`.review/comments.md` when the review finishes. A pending delivery offers
+**Prepare**, with a document comparison and an explicit retry. Finishing does
+not open the documents automatically. Comparisons retain Local comments
+automatically when closed.
+The comment form labels the text field explicitly. The Diff browser shows a
+compact location and a one-line preview, with `…` when the comment is shortened.
+The complete comment scrolls below; original revision IDs are folded under
+Details, while warnings about unsaved captures stay visible. Diffs open inside
+the IDE, with the comment still accessible. Selected lines are marked on the
+recorded version. Local results and pending Shared preparations can be deleted
+after Finish; delivered Shared offers reading and historical diffs.

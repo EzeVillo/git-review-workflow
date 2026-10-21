@@ -1,0 +1,22 @@
+  Scope: File (left/right)
+Add comment
+
+  Destination: Choose a destination (left/right)
+> Comment
+|   1 First line                                                        
+|   2 Second line                                                       
+|                                                                       
+|                                                                       
+|                                                                       
+|                                                                       
+|                                                                       
+|                                                                       
+  Path: > src/file.go 
+  Side: head (left/right)
+  Start line[:column]: >  
+  End line[:column]: >  
+
+  [Save]    [Cancel]
+
+
+Tab / Shift+Tab | Ctrl+Enter: Save | Esc: Cancel

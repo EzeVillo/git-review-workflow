@@ -37,6 +37,177 @@ Every command is a verb under `git review`. Run `git review -h` for the list, or
 | `git review forget --draft ([--] <branch> \| --all \| --reviewed) [--dry-run]`                                                                             | Delete a walkthrough you drafted for someone else's PR.                                                                                                                                                                                                                                                                                                            |
 | `git review config [<key> [<value>]] [--unset <key>] [--porcelain [<branch>]]`                                                               | Read or write the product's config (`base`, `remote`); `--porcelain` also lists candidate branches to review.                                                                                                                                                                                                                                                      |
 
+## Review comments
+
+Comparisons accept **Local** comments only. Their saved Markdown is retained automatically when the comparison is closed with `abort` or removed with `clean`; code edits are discarded. No Save comments action is needed. In reviews, choose Local or Shared on each capture. Clients obtain the permitted destinations from `comments status --porcelain`; a sole destination is sent automatically without a selector.
+
+During a review, keep independent Markdown documents for **Local**
+observations and **Shared** comments intended for the PR. Both preparations live
+under the review's gitdir: writing a comment does not stage or save code.
+Choose the document on every capture; there is no remembered destination.
+
+Local and Shared coexist: choosing a destination only decides where the new
+comment goes. Local is private; Shared is intended to be shared with the PR.
+Shared's private preparation during a review is still Shared, not a Local document.
+The separate question **Continue a previous review?** decides whether to restore
+previous Local notes or keep them separate. Shared comes from the current branch
+in either case; that choice does not replace one document with the other.
+
+```sh
+git review comments add --document local --text 'Why retry this operation?'
+git review comments add --document shared --path src/api.ts --side head \
+  --start-line 12 --end-line 16 --stdin < questions.md
+git review comments status
+git review comments status --all --porcelain
+git review comments renumber --document shared
+```
+
+Without `--text` or `--stdin`, `add` opens the configured Git editor
+(`git var GIT_EDITOR`). Empty or whitespace-only text cancels. Shell quotes,
+backticks and `$()` inside text are data. To create a document before writing,
+use `init --document local` or `init --document shared`; repeating it does not
+truncate an existing file. Open the absolute path reported by `status` in your
+usual Markdown editor to edit, move or delete entries.
+
+| Command after `git review comments` | Purpose |
+|-------------------------------------|---------|
+| `status [--porcelain] [--context <id>]` | Inspect identity, both documents, counts, diagnostics and delivery state. Outside a session, enumerate retained results and saved preparations. |
+| `init --document <local\|shared> [context-options] [guards]` | Create only the chosen document, if absent. |
+| `add --document <local\|shared> [context-options] [location-options] [--text <text>\|--stdin] [guards]` | Append one entry; repeated locations remain separate entries. |
+| `delete --document <local\|shared> [--entry <ordinal>] [--context <id>] [guards]` | Delete one entry or the chosen prepared/retained document; keep delivered copies. |
+| `renumber --document <local\|shared> [--context <id>] [guards]` | Number real `## N. Title` entries in physical order, preserving bodies, metadata and line endings. |
+| `entries --document <local\|shared> [--context <id>] --porcelain` | List entries by physical ordinal and document revision, including scope and complete bodies as escaped lines. |
+| `diff --document <local\|shared> --entry <ordinal> [--context <id>] [--porcelain] [guards]` | Show the code captured by that entry's original object IDs; porcelain returns trees, blobs and coordinates. |
+| `save [--expect-context <token>] [--expect-local <revision>] [--expect-shared <revision>]` | In a comparison, retain both documents locally and continue comparing. |
+| `prepare --context <id> [--check [--porcelain]] [guards]` | Inspect or retry a pending Shared delivery after code extraction. |
+
+`context-options` are `--context <id>`, `--new-context` or `--use-context <id>`;
+choose only one. A new context can be declared before making new unsaved edits.
+When identity is ambiguous, explicitly create or choose a context. Multiple
+retained contexts require selection; the CLI never chooses the newest one.
+Copying a known portable context to a different branch with incompatible history
+also requires this choice; renaming a branch with compatible history does not.
+Choosing a new context at that prompt keeps incoming Shared prose and entry
+references, changes its document identity and starts Local separately. Continuing
+explicitly restores the previous Local while still taking Shared from the branch.
+A fresh clone without private context history can read imported Shared normally.
+
+`comments status --porcelain` supplies distinct review descriptions with creation
+dates when available, document counts and the last reviewed commit subject.
+Clients display those details while keeping context tokens internal.
+
+Comment identity uses the full merge-base selected by Start and keeps it for
+the session. Remote reviews use the fetched base even if your local base branch
+is behind. A new branch after a merge starts fresh instead of adopting an
+inherited `.review/comments.md` context. Shared is prepared from the reviewed
+branch, never from an older private Shared result. Author replies and removed
+entries therefore take effect on the next review.
+
+Outside a review, `comments status`, `entries` and `diff` read Shared directly
+from the current worktree's `.review/comments.md`, including after cloning or
+checking out a branch with no private review history. The panel places Comments
+between Walkthrough and Compare. Adding comments requires an active review or
+compare; repository Shared is read-only through comment controls outside reviews.
+When repository Shared and a saved preparation coexist, the main panel shows
+repository Shared. Local still comes from the saved session, even when both
+documents have the same context or an older Local result exists. The context
+keeps its saved custody and permissions; `--all` also exposes the private Shared
+preparation. Continue resumes the saved preparation, including deletions.
+
+An unresolved Git merge of `.review/comments.md` reports an unreadable revision
+and a diagnostic instead of an entry count. Resolve and stage the merge before
+reading its entries or historical diffs through the CLI.
+
+`add` uses the highest existing entry number in the chosen document plus one,
+or 1 if it has no entries. Gaps, duplicates and physical order do not change this
+rule; existing entries keep their numbers. Headings inside code fences, quotes
+or HTML comments do not count.
+
+`location-options` are `--path <path>`, `--side base|head`,
+`--start-line <n> --end-line <n>`, `--start-column <n> --end-column <n>`,
+`--base <OID> --head <OID>`,
+`--base-path <path> --head-path <path>` and `--unversioned`. Paths are relative
+to the repository root. Lines require a path and side; line endpoints and
+explicit object IDs must be supplied in pairs. OIDs must be full commit/tree
+IDs. Without explicit OIDs, the CLI records the actual review range or selected
+step. Dirty working content is marked unversioned; its code is never retained
+as part of a comment. General comments need no path or lines.
+
+Columns are optional, 1-based UTF-16 code units (a tab counts as one unit).
+With columns, both positions are endpoints and the end is exclusive: selecting
+characters 3 through 5 on line 12 uses `--start-line 12 --end-line 12
+--start-column 3 --end-column 6`. Without columns, lines remain inclusive.
+Both columns must be supplied together; empty or reversed selections are rejected.
+
+`guards` are `--expect-context <token>` and `--expect-document <revision>`, from
+`status --porcelain` or `entries --porcelain`. They protect the original session,
+cursor and document bytes/presence, including `absent`. An unreadable document
+reports `unreadable` and a diagnostic; resolve the read error before writing.
+All commands support `-h`/`--help` and `--`; option values are separate arguments
+and may start with a dash. The terminal user may omit guards to use current state.
+
+`save`/`continue` preserve both preparations while pausing a review. Session
+`abort` discards new preparation and keeps previous retained results; comparison
+notes are retained automatically when closing or cleaning a compare. `comments save` remains available as an optional CLI checkpoint. A successful `finish` retains
+Local privately and leaves changed Shared prose at
+`.review/comments.md` on the output branch, staged together with code edits,
+without committing or pushing it. Only the delivered file is staged; retries
+preserve other index entries and refuse to overwrite concurrently staged comments.
+Delivery stages the exact prepared blob and records the same revision for recovery.
+When Git enables text conversion for the path, LF/CRLF checkout differences alone
+do not block delivery. Prose, spaces and final-newline changes still conflict;
+the comparison runs no content filters and delivery stages the prepared bytes.
+Concurrent changes to the preparation, destination or index preserve the preparation
+and leave the delivery recoverable instead of discarding unshared prose.
+After delivery and recovery metadata are published, the editable private Shared
+preparation is removed. Failed delivery preserves it for retry. Completed-review
+cleanup keeps Local results and repository Shared accessible. Private Local
+results remain editable; repository Shared offers reading and historical diffs.
+Save/Continue keeps both preparations, including deleted entries. Finish/Undo
+preserves the current preparation; Cancel discards this pass, including its
+deletions, without changing comments already committed on the source branch.
+
+If Shared delivery conflicts after code extraction, `finish` returns `1` and
+records the code output. Inspect `prepare --context <id> --check`, then edit
+prepared and destination prose to the same desired content. Retry with
+`prepare --context <id>` or `finish --resume`; code extraction is not repeated.
+There is no forced overwrite of concurrent prose. `finish --abort` restores the
+review's code, removes its staged Shared delivery, and returns both current comment
+documents to the review preparation. It also restores the previously retained
+result (or its absence), so cancelling the review afterward discards this pass's
+comments and preserves only what existed before it.
+
+Comments commands return `0` on success/cancellation, `1` for usage, I/O or a
+prose conflict, `2` without a compatible session, `4` for stale guards, and `5`
+when required historical code is missing. Historical queries never substitute
+current code or fetch missing objects. A missing working file does not prevent
+opening available history. Diagnostics do not block code navigation.
+
+
+### Deleting a comment document
+
+Use `git review comments delete --document local` (or `shared`) during an active
+review or compare, or add `--context <id>` to choose a retained result after
+Finish. After delivery, only retained Local or pending Shared preparation can
+be deleted through these commands. This deletes the chosen private copy; an already delivered
+`.review/comments.md` is preserved. Deleting retained Shared also dismisses its
+pending delivery. The command accepts `--expect-context` and `--expect-document`
+guards. Local and Shared remain independent.
+
+Add `--entry <ordinal>` to delete just one comment, identified by its physical
+position in `entries --porcelain`. The other comments retain their numbers,
+text, metadata and order; no renumbering is performed. This keeps the document
+present even when its last entry is removed, and preserves any pending delivery.
+Clients offer this deletion in the comment browser and keep it open afterward.
+General comments do not offer Open diff.
+
+`entries --porcelain` includes the complete comment as `comment-body` records
+(one escaped line per record), and `comment-scope` distinguishes General, file
+and selected lines with the original side. These queries do not require the
+Markdown document to be open in an editor. IDE and terminal viewers show excerpts
+in the list and the full comment before opening its original changes; selected
+lines are identified on the recorded version.
+
 ## Terminal UI
 
 Run the visual terminal interface from inside a repository:
@@ -1065,3 +1236,11 @@ someone else's PR* for precedence, mid-review edits, and how `save`/`continue`
 carry the draft with a paused review.
 
 </details>
+
+
+For client buffer custody, `comments status --all --porcelain` also reports retained
+contexts while a review is active. It is mutually exclusive with `--context`.
+The `comments-owner` record names its context, source and custodian branch (or an
+empty field when no session claims it); labels and paths are not ownership keys.
+The `comments-context` label names the source branch, including retained results
+after Finish or a saved comparison, even if that branch no longer exists.

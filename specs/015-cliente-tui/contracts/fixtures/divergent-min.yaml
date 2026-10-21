@@ -14,18 +14,12 @@ schema_version: 1
 # lo que realmente necesita, y ningun gate -- presente ni futuro -- puede exigir
 # que sean iguales. La comparacion de cada cliente es un piso estricto: no hay
 # techo, asi que una CLI mas nueva que el minimo nunca se reporta desactualizada.
-# FIXTURE (specs/015-cliente-tui/contracts/fixtures/divergent-min.yaml): los
-# tres clientes ya publicados quedan en el valor que realmente esta hoy en
-# version.ts / Version.kt / Version.cs -- este archivo se corre con el
-# verificador ENTERO, que compara cada uno contra ese literal real y no puede
-# tocarlo -- y `tui` se estampa maximamente distinto de los tres. Alcanza para
-# probar la propiedad: si algun gate exigiera que los cuatro fueran iguales,
-# esta fixture lo pondria en rojo.
 min_cli_version:
-  vscode: "0.8.0"        # verified: vscode-extension/src/cli/version.ts
-  intellij: "0.8.0"      # verified: jetbrains-plugin/.../domain/Version.kt
-  visualstudio: "0.8.0"  # verified: visualstudio-extension/src/GitReview.Domain/Version.cs
-  tui: "999.99.9"        # deliberadamente distinto: nada lo compara todavia (T028)
+  # Candidatos locales autorizados para probar el conjunto; 0.10.0 aún sin publicar.
+  vscode: "0.10.0"
+  intellij: "0.10.0"
+  visualstudio: "0.10.0"
+  tui: "999.99.9"
 npm_install: "npm install -g git-review-workflow" # verified: src/cli/installHint.ts
 npm_update: "npm install -g git-review-workflow@latest" # verified: src/cli/installHint.ts
 docs_readme_url: "https://github.com/EzeVillo/git-review-workflow#readme"
@@ -90,6 +84,15 @@ strings:
 # Que tres valores coincidan hoy NO es drift, por el mismo motivo que en
 # min_cli_version: cada uno es la unica fuente de su cliente y ninguno hereda.
 per_client_strings:
+  comments_path_copied:
+    vscode: >-
+      Path copied
+    intellij: >-
+      Path copied
+    visualstudio: >-
+      Path copied
+    tui: >-
+      The path was sent to the terminal clipboard.
   # Se llamaba multi_root_error. El nombre nuevo dice la situacion y no una de
   # sus dos causas: en una terminal no hay multi-root, y la causa alcanzable es
   # la otra -- arrancar fuera de un repositorio.
@@ -104,7 +107,8 @@ per_client_strings:
       Open a single-folder workspace that is a git repository. git review uses
       one root (like the CLI cwd); multi-root is not supported.
     tui: >-
-      … (copy propia de la TUI, escrita en la tarea que crea su UserCopy)
+      Run git review ui from inside a git repository. A terminal has no
+      multi-root to open — cd into one and try again.
   # Se llamaba reload_or_wait. El texto prometia que el panel vuelve a chequear
   # cada pocos segundos -- un poll, que FR-032 prohibe hacer y FR-069 prohibe
   # decir --, y en una terminal no hay ventana que recargar.
@@ -119,7 +123,8 @@ per_client_strings:
       Reload the window after installing, or wait — the panel checks again
       every few seconds.
     tui: >-
-      … (copy propia de la TUI, escrita en la tarea que crea su UserCopy)
+      Press r to refresh, or focus this pane again — the panel does not
+      poll.
 situations:
   - cli-missing
   - cli-outdated
@@ -137,6 +142,10 @@ situations:
 #   ninguna de sus superficies, y los demas si la siguen teniendo —, para que la
 #   ausencia no se lea como drift y para que reaparecer cueste editar el contrato.
 actions:
+  addComment:
+    surface: both
+    situations: [review, finish-conflict]
+    requires_not_busy: true
   openEntry:
     surface: both
     situations: [review, finish-conflict]
@@ -275,7 +284,7 @@ actions:
 # La dirección es canónico -> clientes. Un cliente puede mapear un id que el
 # canónico no declara (dibujarlo es cosa suya); lo que no puede es dejar sin
 # mapear uno que sí está acá.
-icon_vocabulary: [prev, next, file, trash, diff]
+icon_vocabulary: [prev, next, file, trash, diff, eye, numbered, copy]
 
 # Disposición del panel, en orden. Normativo para:
 #   - intellij: PanelLayoutContractTest compara la estructura completa
@@ -366,6 +375,11 @@ panel_layout:
         blocks:
           - {block: walkthrough_row, controls: [{id: walkthroughInit, label: "Init", emphasis: secondary, confirms: true}, {id: walkthroughBuild, label: "Build", emphasis: secondary, confirms: true}]}
           - {block: guide_rows}
+      - block: tools_section
+        title: "Comments"
+        when: has_comments
+        blocks:
+          - {block: comments_rows}
       # Los borradores gastados. Plegada y no escondida: un archivo que existe y
       # ninguna superficie nombra es el estado que este panel no deja pasar en
       # ningún otro lado, y esconder la fila se llevaría con ella el único
@@ -439,7 +453,7 @@ panel_layout:
       # a borrar el trabajo que acaba de preparar la revision.
       - block: banner
         paragraphs:
-          - "Your edits are on {destination}, staged and ready to commit."
+          - "Your edits are staged and ready to commit to {destination}. Commit them before switching branches."
           - "Commit and push them from Source Control. You can still undo this finish."
         row:
           controls:
@@ -560,9 +574,9 @@ reveals:
   # paleta, donde el panel puede no estar a la vista. Los tres clientes de IDE
   # comparten el mecanismo: un panel que puede quedar fuera de vista y un
   # asistente que corre sobre el editor.
-  vscode: [startReview, startFromDraft, continueReview, finishReview]
-  intellij: [startReview, startFromDraft, continueReview, finishReview]
-  visualstudio: [startReview, startFromDraft, continueReview, finishReview]
+  vscode: [startReview, startFromDraft, continueReview, finishReview, addComment]
+  intellij: [startReview, startFromDraft, continueReview, finishReview, addComment]
+  visualstudio: [startReview, startFromDraft, continueReview, finishReview, addComment]
   # VACIA, Y DECLARADA. No es una ausencia: es la respuesta.
   #
   # Un pane lo abriste vos y ya esta a la vista, asi que no hay nada que
@@ -570,6 +584,89 @@ reveals:
   # acuse. Si esto quedara como hueco, en seis meses alguien agrega un reveal y
   # nada se pone rojo -- que es exactamente lo que le paso a confirms:.
   tui: []
+reveal_conditions:
+  addComment: comments_block_born
+input_dialogs:
+  - walkthroughInit
+  - commentsComposer
+  - commentsContext
+  - commentEntry
+  - commentsDelivery
+comments_rows:
+  placement: footer_after_walkthrough_before_compare
+  title: "Comments"
+  rows: [Local, Shared]
+  destination_default: sole_cli_capability
+  live_target_placement: add_comment_group
+  visibility: main_panel_with_empty_states
+  empty_state: after_successful_read
+  empty_local: "No local comments."
+  empty_shared: "No shared comments."
+  header_controls:
+    addComment: {label: "Add comment", emphasis: secondary, confirms: false}
+  controls:
+    initComments: {label: "Create", emphasis: secondary, confirms: false, tooltip: "Create this comment document"}
+    openComments: {label: null, accessible_name: "Open", emphasis: icon, icon: file, confirms: false, tooltip: "Open this comment document"}
+    copyCommentPath: {label: null, accessible_name: "Copy path", emphasis: icon, icon: copy, confirms: false, only_when: local_document_present, tooltip: "Copy this document's path"}
+    renumberComments: {label: null, accessible_name: "Renumber", emphasis: icon, icon: numbered, confirms: false, tooltip: "Number this document's entries in their current order"}
+    openCommentDiff: {label: null, accessible_name: "View changes", emphasis: icon, icon: eye, confirms: false, tooltip: "Choose an entry and open its original changes"}
+    deleteComments: {label: null, accessible_name: "Delete", emphasis: icon, icon: trash, confirms: true, only_when: active_preparation_or_retained_result, tooltip: "Delete this comment document"}
+    prepareSharedComments: {label: "Prepare", emphasis: secondary, confirms: false, only_when: review_result_pending, tooltip: "Prepare this shared document for delivery"}
+comments_browser:
+  original_unversioned: "The captured lines included unsaved changes; this view shows the recorded Git version."
+  delete_entry_title: "Delete this comment?"
+  delete_entry_detail: "This permanently deletes the selected comment. An already delivered copy is kept."
+  empty_label: "No comments are available."
+  controls:
+    deleteCommentEntry: {label: "Delete", emphasis: secondary, confirms: true, only_when: active_preparation_or_retained_result}
+  open_diff_scope: [selection, file]
+  delete_entry: preserve_other_entries_and_numbers
+  after_delete: select_next_or_previous_keep_browser_open
+  open_label: "Open diff"
+  original_version_label: "Original changes"
+  missing_location: "Location unavailable"
+  missing_range: "The recorded lines are not available in this version."
+  empty_body: "This comment has no text."
+  details_label: "Details"
+  close_label: "Close"
+  list: compact_location_excerpt
+  detail: full_comment
+  version: collapsed_details
+  warning: always_visible
+  preview: single_line_160_with_ellipsis
+  location: list_only
+  diff_host: same_client_surface
+  ide_diff_host: editor_tab
+  keys: {details: d}
+  open_diff: closes_browser_on_success
+  lines: reveal_and_highlight_original_side
+comments_composer:
+  context_prompt: "Continue a previous review?"
+  new_context_label: "Start a new review"
+  new_context_detail: "Keep previous Local notes separate."
+  continue_context_label: "Continue"
+  continue_context_detail: "Restore previous Local notes."
+  context_shared_note: "Shared comments come from this branch in either case."
+  context_local_note: "Choose whether to restore previous Local notes."
+  local_destination: "Local (only for you)"
+  shared_destination: "Shared (to share with the PR)"
+  body_label: "Comment"
+  selection_label: "Selected code"
+  selection_coordinates: utf16_1based_end_exclusive
+  destination_prompt: placeholder_only
+  destination_selector: multiple_cli_capabilities_only
+  compare_notes: retained_automatically
+  preview: selected_text_only
+  field_alignment: shared_edges
+  scope: [selection, file, general]
+  scope_default: most_specific_available
+  freeze_capture_on_open: true
+  disable_while_saving: [save, cancel, inputs]
+  close_on_success: true
+  multiline: true
+  destination: cli_capabilities
+  keys: {newline: enter, save: ctrl+enter, cancel: esc}
+  accessible_save: tab_enter
 # existen como acción, nunca como control del panel
 panel_excluded: [goToEntry, forgetReview, previewEditsStat, showCliLog]
 

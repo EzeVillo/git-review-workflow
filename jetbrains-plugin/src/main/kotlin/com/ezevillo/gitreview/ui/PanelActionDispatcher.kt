@@ -60,6 +60,15 @@ class PanelActionDispatcher(
         if (requiresConfirmation(id)) {
         }
         return when (id) {
+            ControlId.COPY_COMMENT_PATH -> {
+                val doc = service.currentState().comments?.documents?.getOrNull(index ?: -1) ?: return false
+                if (doc.kind != "local" || doc.presence != "present") return false
+                CopyPasteManager.getInstance().setContents(StringSelection(doc.path))
+                true
+            }
+            ControlId.DELETE_COMMENT_ENTRY -> false // The browser owns the selected entry and its revision.
+            ControlId.ADD_COMMENT -> { com.ezevillo.gitreview.host.CommentsActions(project, service).add(); false }
+            ControlId.DELETE_COMMENTS, ControlId.INIT_COMMENTS, ControlId.OPEN_COMMENTS, ControlId.RENUMBER_COMMENTS, ControlId.OPEN_COMMENT_DIFF, ControlId.PREPARE_SHARED_COMMENTS -> { com.ezevillo.gitreview.host.CommentsActions(project, service).row(id, index); false }
             ControlId.REFRESH -> {
                 service.scheduleRefresh()
                 false

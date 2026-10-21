@@ -1,0 +1,26 @@
+No active review on this branch.
+> [ Start a review ]
+
+Walkthrough
+ [ Init ]   [ Build ]
+
+Comments
+Local
+No local comments.
+Shared
+No shared comments.
+
+Compare
+  [ Compare revisions ]
+
+Settings
+Base: .
+  [ Change the base branch ]
+Remote: .
+  [ Change remote ]
+
+Support
+  [ Star on GitHub ]
+  [ Report a bug ]
+
+j:up  k:down  enter:select  r:refresh  ::actions  m:mouse on  q:quit

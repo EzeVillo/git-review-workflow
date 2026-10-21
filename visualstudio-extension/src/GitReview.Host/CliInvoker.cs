@@ -44,6 +44,9 @@ public class CliInvoker
     /// </summary>
     public string? GitReviewPath => _gitReviewPath();
 
+    public virtual Task<InvokeResult> InvokeWithInputAsync(string verb, IReadOnlyList<string> args, string cwd, string input, CancellationToken cancellationToken = default) =>
+        InvokeResolvedWithInputAsync(ResolveCommand.Resolve(verb, args, _gitReviewPath()), cwd, false, TimeoutClass.TimeoutForClass(verb, args), cancellationToken, input);
+
     public virtual async Task<InvokeResult> InvokeAsync(
         string verb,
         IReadOnlyList<string> args,
@@ -58,12 +61,16 @@ public class CliInvoker
             .ConfigureAwait(false);
     }
 
-    public virtual async Task<InvokeResult> InvokeResolvedAsync(
+    public virtual Task<InvokeResult> InvokeResolvedAsync(ResolvedCommand resolved, string cwd, bool network, long timeoutMs, CancellationToken cancellationToken = default) =>
+        InvokeResolvedWithInputAsync(resolved, cwd, network, timeoutMs, cancellationToken, null);
+
+    private async Task<InvokeResult> InvokeResolvedWithInputAsync(
         ResolvedCommand resolved,
         string cwd,
         bool network,
         long timeoutMs,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken,
+        string? input)
     {
         var clock = Stopwatch.StartNew();
         var line = CliLog.FormatCommandLine(resolved.Command, resolved.Args);
@@ -97,6 +104,7 @@ public class CliInvoker
             // que se movio). Ver advice_enabled en bin/git-review-lib.sh; una
             // CLI vieja la ignora y solo imprime de mas.
             psi.Environment["GIT_REVIEW_ADVICE"] = "0";
+            if (resolved.Args.Contains("cat-file")) psi.Environment["GIT_NO_LAZY_FETCH"] = "1";
 
             if (network)
             {
@@ -109,14 +117,6 @@ public class CliInvoker
             using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
             var stdout = new StringBuilder();
             var stderr = new StringBuilder();
-            process.OutputDataReceived += (_, e) =>
-            {
-                if (e.Data is not null) stdout.AppendLine(e.Data);
-            };
-            process.ErrorDataReceived += (_, e) =>
-            {
-                if (e.Data is not null) stderr.AppendLine(e.Data);
-            };
 
             if (!process.Start())
             {
@@ -125,33 +125,35 @@ public class CliInvoker
                 return fail;
             }
 
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
+            var stdoutTask = CaptureOutputAsync(process.StandardOutput, stdout);
+            var stderrTask = CaptureOutputAsync(process.StandardError, stderr);
 
             using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeoutCts.CancelAfter(TimeSpan.FromMilliseconds(timeoutMs));
+            var inputTask = WriteInputAsync(process, input ?? "", timeoutCts.Token);
 
             try
             {
                 await ProcessCompat.WaitForExitAsync(process, timeoutCts.Token).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            catch (OperationCanceledException)
             {
                 try
                 {
                     if (!process.HasExited) ProcessCompat.KillTree(process);
                 }
                 catch { /* best-effort */ }
-                var timed = new InvokeResult(stdout.ToString(), stderr.ToString(), null, TimedOut: true);
-                LogEnd(timed, clock.ElapsedMilliseconds);
+                var timed = new InvokeResult(stdout.ToString(), stderr.ToString(), null, ErrorCode: cancellationToken.IsCancellationRequested ? "Canceled" : null, TimedOut: !cancellationToken.IsCancellationRequested);
+                LogEnd(input is null ? timed : timed with { Stderr = "" }, clock.ElapsedMilliseconds);
                 return timed;
             }
 
             // Drain async readers
-            await Task.Delay(20, CancellationToken.None).ConfigureAwait(false);
+            await inputTask.ConfigureAwait(false);
+            await Task.WhenAll(stdoutTask, stderrTask).ConfigureAwait(false);
 
             var result = new InvokeResult(stdout.ToString(), stderr.ToString(), process.ExitCode);
-            LogEnd(result, clock.ElapsedMilliseconds);
+            LogEnd(input is null ? result : result with { Stderr = "" }, clock.ElapsedMilliseconds);
             return result;
         }
         catch (Exception e)
@@ -164,6 +166,27 @@ public class CliInvoker
             LogEnd(result, clock.ElapsedMilliseconds);
             return result;
         }
+    }
+
+    private static async Task WriteInputAsync(Process process, string input, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var bytes = new UTF8Encoding(false).GetBytes(input);
+            await process.StandardInput.BaseStream.WriteAsync(bytes, 0, bytes.Length, cancellationToken).ConfigureAwait(false);
+            process.StandardInput.Close();
+        }
+        catch (IOException) { /* The process result supplies the diagnostic. */ }
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+    }
+
+    private static async Task CaptureOutputAsync(StreamReader reader, StringBuilder target)
+    {
+        var buffer = new char[4096];
+        int count;
+        while ((count = await reader.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false)) > 0)
+            lock (target) target.Append(buffer, 0, count);
     }
 
     private void LogEnd(InvokeResult result, long durationMs)

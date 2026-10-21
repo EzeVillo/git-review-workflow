@@ -90,10 +90,14 @@ working tree**. El detalle de cada pieza está en `decisiones.md` §2-§8; esto 
 | `reviewwalkstep`, `reviewwalkcount`, `reviewwalkbase` | `walk` | Cursor de lectura (1-based), guard y lower bound |
 | `reviewwalkfromdraft` | `walk` | El orden caminado salió del borrador del revisor |
 | `reviewdraft` | **todos** | Bajo qué nombre vive el borrador de esta review |
+| `reviewcommentscontext`, `reviewcommentssession`, `reviewcommentsowner` | **todos** | Contexto opaco, sesión exclusiva y gitdir propietario de los comentarios |
 
 El guard de metadata de `finish` **aborta si hay claves de step sin `reviewmode=step`**, y hay un
 guard espejo para las de walk. Por eso las claves de walk son propias y nunca se reusan las de step.
-`reviewdraft` es la excepción deliberada al guard: existe en todos los modos.
+`reviewdraft` y las tres claves de comments son comunes a todos los modos y no
+se interpretan como metadata de step o walk. El owner de comments es el
+`--absolute-git-dir`: encontrar config compartida desde otro worktree no permite
+adoptar sus archivos.
 
 **Otros refs y claves**
 
@@ -108,7 +112,7 @@ guard espejo para las de walk. Por eso las claves de walk son propias y nunca se
   `reviewworkflow.advice` (default **encendido**; ver *Advice* abajo). Las tres son claves
   `git config` por repo, por diseño.
 
-**Archivos de prosa** — dos son del **autor** y van trackeados al PR; los tres del **revisor** viven
+**Archivos del walkthrough** — dos son del **autor** y van trackeados al PR; los tres del **revisor** viven
 en el gitdir, así que no se commitean, no se stagean, `git status` no cambia en ningún momento y
 `finish` no se los puede llevar a `review-fixes/`:
 
@@ -124,6 +128,81 @@ en el gitdir, así que no se commitean, no se stagean, `git status` no cambia en
 `status --porcelain` emite `draft` de presencia; `list --porcelain` emite `branch-draft`. Las guías
 y el walkthrough se emiten **siempre**, exista o no el archivo: la ausencia se reporta, no se
 implica con el silencio. Los `draft` solo cuando hay. Detalle en `decisiones.md` §8.
+
+**Comentarios de revisión** — `git review comments` mantiene Local y Shared
+independientes en `<gitdir>/review-comments/`. `contexts/<token>/manifest`
+registra la identidad; `sessions/<token>/` guarda preparación y baselines;
+`results/<context>/<generation>/` conserva Local y metadata después de entregar
+Shared, o el par recuperable si quedó pendiente; `current` lo publica por rename.
+Ausente y vacío son distintos. Los tokens se validan antes
+de construir rutas y las observaciones nunca se usan como nombres internos.
+
+Cada start/compare obtiene una sesión exclusiva, incluso antes de confirmar
+contexto. Consultar una sesión antigua no inicializa custodia. Save/continue
+transfieren el custodio del mismo directorio; perder sus claves no permite borrar
+una preparación cuyo manifest todavía reclama la rama. Los documentos no entran
+en el banco de ediciones. Los comentarios de compare son sólo Local y se conservan automáticamente al cerrar
+o limpiar la comparación, sin conservar código. No hay acción Save comments en los
+clientes. La CLI conserva `comments save` como checkpoint opcional compatible.
+
+Finish conserva Local privado y entrega Shared modificado, después del
+código, como `.review/comments.md` staged junto con las correcciones, sin commit/push adicional. Un fallo
+posterior al código registra el cierre parcial y deja una preparación recuperable.
+Shared se prepara desde la rama, nunca desde un resultado Shared privado anterior.
+Después de entregar y publicar la recuperación se elimina su preparación editable;
+las baselines siguen siendo snapshots internos. Fuera de una review, Shared se
+lee del `.review/comments.md` del working tree actual, incluso sin estado privado.
+Comments vive entre Walkthrough y Compare en el pie del panel principal.
+La sección se mantiene visible después de consultar la CLI, con un estado vacío
+independiente para Local y Shared cuando no hay documento de ese tipo. Una
+consulta pendiente o fallida no se presenta como ausencia de comentarios.
+Si hay Shared del repositorio y una preparación guardada, el panel muestra el
+del repositorio. Local sigue saliendo de la sesión guardada aunque coincida el
+contexto; esa proyección conserva la custodia y los permisos de la sesión.
+La consulta `--all` conserva ambas rutas de Shared para custodia.
+Agregar requiere una sesión activa. Save/Continue conserva ambas preparaciones;
+Undo devuelve la actual sin resucitar entradas borradas y Cancel descarta la pasada,
+respetando los comentarios originales de la rama.
+Prepare reintenta sólo prosa, sin adoptar un destino concurrente como baseline.
+Un marcador portable conocido también contrasta su historia al cambiar de nombre
+de rama: una historia incompatible exige el selector existente. Elegir Start a new review
+en ese caso conserva el Shared entrante, cambia sólo su identidad y separa Local;
+continuar recupera el Local anterior. Un renombre compatible no pide elección.
+El selector explica ambas consecuencias sobre Local y dice que Shared viene de
+la rama en ambos casos. El formulario aclara el destino privado o compartible
+del comentario nuevo; elegir contexto y elegir destino son preguntas distintas.
+Esta copy se declara en `comments_composer` y se usa en los cuatro clientes.
+La entrega stagea sólo ese path bajo el lock del índice, conservando las demás
+entradas y rechazando una versión concurrente ya stageada. Undo incorpora
+únicamente la escritura propia al guard de salida; vuelve con
+la prosa actual y se niega a sobrescribir una preparación editada desde un
+editor antiguo. Las revisiones de publicación quedan en el manifest del resultado.
+Undo restaura además el resultado anterior al cierre (o su ausencia), registrado
+en ese mismo manifest, para que cancelar después descarte la pasada deshecha.
+El blob de entrega sale de la preparación y su OID gobierna tanto el índice
+como el manifest publicado; el working tree nunca vuelve a ser la fuente de
+staging. Antes de liberar la preparación se comprueban sus bytes, el destino y
+la entrada stageada. Una divergencia conserva la preparación pendiente y visible.
+La comparación con la baseline entrante acepta sólo la conversión LF/CRLF
+habilitada por Git para esa ruta, sin ejecutar filtros y conservando prosa,
+espacios y salto final. El blob entregado sigue saliendo de la preparación.
+Shared del repositorio con entradas sin resolver en el índice informa una
+revisión ilegible, sin conteo, y rechaza Entries/Diff hasta resolver el merge.
+
+Comments tiene consultas porcelain propias: no amplía los registros existentes
+de status/config/list. Status informa ambas rutas, revisiones y diagnósticos sin
+cuerpos ni resolución histórica por entrada. `unreadable` no habilita escritura.
+Entries/diff usan ordinal físico y revisión, nunca número visible como identidad;
+entries incluye prosa completa por líneas escapadas y alcance/lado; los clientes
+muestran lista y detalle sin exigir el Markdown abierto. Los rangos se señalan
+sobre el lado original, y Delete también está disponible para Local conservado
+y Shared pendiente después de Finish. Shared ya entregado se consulta desde el
+repositorio. Los diffs usan sus OID originales y paths literales desde la raíz, sin fetch
+implícito, ext-diff, textconv ni sustitución por HEAD. Ver `decisiones.md` §17.
+El explorador no ofrece diff para comentarios generales o sin ubicación. Su
+borrado individual usa `delete --entry` con ordinal físico y revisión capturada;
+conserva los bytes y números de las demás entradas, el documento y su entrega
+pendiente. Recarga la CLI y permanece abierto, incluso vacío.
 
 ## Reglas duras
 
@@ -309,10 +388,10 @@ tui/
 └── bump-version.sh
 ```
 
-El canónico anti-drift vive en **`contracts/client-product-surface.yaml`**: la matriz de **27
+El canónico anti-drift vive en **`contracts/client-product-surface.yaml`**: la matriz de **28
 acciones**, `panel_layout:`, `guide_rows:`, `draft_controls:`, `fixes_rows:`, `icon_vocabulary:`,
 `title_actions:` y `listing:`. CI lo verifica con `node scripts/check-client-product-surface.mjs`:
-`min_cli_version`, npm, strings críticos, las 27 acciones vs el `package.json` de la extensión, las
+`min_cli_version`, npm, strings críticos, las 28 acciones vs el `package.json` de la extensión, las
 seis comprobaciones de layout vs `panelHtml.ts`, y los mismos escalares contra los archivos de
 dominio de `visualstudio-extension/`. Del lado IntelliJ lo ata además `PanelLayoutContractTest` en
 cada `./gradlew test`, del lado Visual Studio `PanelLayoutContractTests` en cada `dotnet test` y del
@@ -327,7 +406,7 @@ terminal fuera de un repositorio no tiene el concepto de workspace multi-root.
 
 - **Un control cuyo sujeto es una FILA no es una acción del producto.** Los de `draft_controls:`,
   `guide_rows.controls:` y `fixes_rows.controls:` viven en mapas propios y **no tocan el conteo de
-  27**: no van a `contributes.commands`, ni al menú *Tools → git review*, ni al `.vsct`. Colar uno
+  28**: no van a `contributes.commands`, ni al menú *Tools → git review*, ni al `.vsct`. Colar uno
   como acción falla CI.
 - **El icono de un control lo declara el contrato, no cada cliente.** `icon_vocabulary:` fija los
   cinco nombres (`prev`, `next`, `file`, `trash`, `diff`) y son semánticos, no del trazo. Cada
@@ -478,3 +557,10 @@ siete binarios estáticos en Ubuntu y adjunta esos assets más `SHA256SUMS` al G
 con **`--latest=false`** para que `releases/latest` siga resolviendo sólo releases `vX.Y.Z` de la CLI;
 después fija los cuatro checksums de `Formula/git-review-ui.rb` en la rama por default. No hay
 registro de paquetes ni job de publicación adicional.
+
+Las capacidades de captura viajan como `comments-capability <init|add> <local|shared>`
+en `comments status --porcelain`, incluso sin contexto. La CLI valida la misma
+regla al escribir: review admite ambos destinos; compare sólo Local; fuera de
+sesión no hay captura. Los cuatro clientes usan esos registros y omiten el
+selector cuando hay un solo destino, enviándolo explícitamente. Los documentos
+Shared de compares antiguos siguen disponibles para consulta y mantenimiento.

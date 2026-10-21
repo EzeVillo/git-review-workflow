@@ -66,6 +66,7 @@ public sealed class GitReviewPackage : AsyncPackage
     /// </summary>
     private static readonly (int Id, string Wire)[] MenuCommands =
     {
+        (0x021C, "addComment"),
         (0x0201, "refresh"),
         (0x0202, "startReview"),
         (0x0203, "continueReview"),

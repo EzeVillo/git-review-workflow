@@ -95,7 +95,7 @@ class RevealContractTest {
         return mine.map { it as String }.toSet()
     }
 
-    private fun uiSources(): List<Pair<File, String>> = sourcesUnder("ui")
+    private fun uiSources(): List<Pair<File, String>> = sourcesUnder("ui") + sourcesUnder("host")
 
     private fun allSources(): List<Pair<File, String>> = sourcesUnder("")
 

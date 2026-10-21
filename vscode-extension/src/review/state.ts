@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import {CommentsReport, parseComments} from "../cli/commentsPorcelain";
 import {
     CandidateBranch,
     CandidateRemote,
@@ -31,6 +32,7 @@ import {Situation, situationFor, situationForExitCode} from "./situation";
 export type {Situation} from "./situation";
 
 export interface ReviewState {
+    comments?: CommentsReport;
     situation: Situation;
     /** Sólo presente cuando situation === "review". */
     state?: StateRecord;
@@ -403,6 +405,12 @@ export class ReviewStateManager {
         }
 
         const baseSituation = situationForExitCode(result.exitCode);
+        let comments: CommentsReport | undefined;
+        if (baseSituation === "review" || baseSituation === "no-review") {
+            const response = await invokeGitReview("comments", ["status", "--porcelain"], options);
+            comments = parseComments(response.stdout);
+            if (response.exitCode !== 0) comments.diagnostics.push({path: "", code: "read", message: response.stderr});
+        }
         if (baseSituation !== "review") {
             // El inventario y la config son contenido del estado vacío de
             // `no-review` y de ningún otro: en out-of-range o error lo que hay
@@ -419,6 +427,7 @@ export class ReviewStateManager {
             const situation = situationFor(result.exitCode, false, hasFinishPending);
             const next: ReviewState = {
                 situation,
+                comments,
                 ...EMPTY_ARRAYS,
                 branches,
                 fixes: inventory.fixes,
@@ -459,6 +468,7 @@ export class ReviewStateManager {
         const situation = situationFor(result.exitCode, parsed.finish !== undefined, false);
         const next: ReviewState = {
             situation,
+            comments,
             state: parsed.state,
             entries: parsed.entries,
             files: parsed.files,

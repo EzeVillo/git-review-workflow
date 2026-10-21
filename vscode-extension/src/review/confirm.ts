@@ -13,6 +13,8 @@ import * as vscode from "vscode";
  * Byte for byte the same set as CONFIRMING_IDS (Kotlin) and ConfirmingIds (C#).
  */
 export const CONFIRMING_IDS = [
+    "deleteComments",
+    "deleteCommentEntry",
     "continueReview",
     "discardInventory",
     "discardDraft",

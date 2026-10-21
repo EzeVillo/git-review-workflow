@@ -1,0 +1,10 @@
+Continue a previous review?
+
+Shared comments come from this branch in either case.
+
+> Start a new review
+    Keep previous Local notes separate.
+  Continue: Earlier review
+    Restore previous Local notes.
+
+j/k:move  enter:pick  esc:cancel

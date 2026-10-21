@@ -1,4 +1,7 @@
+import {commentBrowserState, sendCommentBrowserMessage, CommentBrowserState} from "./views/commentsBrowser";
 import * as vscode from "vscode";
+import {sendCommentComposerMessage, commentComposerState, CommentComposerState} from "./views/commentsComposer";
+import {commentTarget, addComment, commentRowAction, CommentBlobProvider, commentHighlights, COMMENT_BLOB_SCHEME, rememberCommentRange, rememberCommentEditor, commentProvenance, setCommentDocumentSaverForTest} from "./commands/comments";
 import {initCliLog, showCliLog} from "./cli/cliLog";
 import {InvokeOptions} from "./cli/invoke";
 import {EntryRecord} from "./cli/porcelain";
@@ -100,6 +103,11 @@ const LAST_OPENED_LIMIT = 20;
  * 11, "dónde se corta la integración").
  */
 export interface GitReviewTestApi {
+    setCommentSaver(save?: (document: vscode.TextDocument) => Thenable<boolean>): void;
+    sendCommentMessage(message: {type?: string; kind?: string; text?: string}): Promise<void>;
+    commentComposerState(): CommentComposerState | undefined;
+    commentBrowserState(): CommentBrowserState | undefined;
+    sendCommentBrowserMessage(message: {type?: string; ordinal?: number}): Promise<void>;
     refresh(): Promise<ReviewState>;
 
     getState(): ReviewState;
@@ -237,12 +245,15 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
     }
 
     function buildModel(): PanelModel {
-        return buildPanelModel(stateManager.state, {
-            busy: lock.isBusy,
-            repoLabel: multiRootLabel(),
-            why: currentWhy,
-            lastOpened: lastOpenedFor(stateManager.state),
-        });
+        return {
+            ...buildPanelModel(stateManager.state, {
+                busy: lock.isBusy,
+                repoLabel: multiRootLabel(),
+                why: currentWhy,
+                lastOpened: lastOpenedFor(stateManager.state),
+            }),
+            commentTarget: stateManager.state.situation === "finish-conflict" ? undefined : commentTarget(getInvokeOptions().cwd),
+        };
     }
 
     function updateContextKeys(state: ReviewState): void {
@@ -252,6 +263,15 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
         // Compare: finish se oculta en view/title y palette (package.json when).
         void vscode.commands.executeCommand("setContext", "gitReview.readonly", state.readonly === true);
     }
+
+    function updateCommentHint(): void {
+        if (stateManager.hasResolved) panelProvider.updateCommentTarget(stateManager.state.situation === "finish-conflict" ? undefined : commentTarget(getInvokeOptions().cwd));
+    }
+    context.subscriptions.push(
+        vscode.window.onDidChangeTextEditorSelection(event => {rememberCommentEditor(event.textEditor); updateCommentHint();}),
+        vscode.window.onDidChangeActiveTextEditor(editor => {rememberCommentEditor(editor); updateCommentHint();}),
+        vscode.window.onDidChangeVisibleTextEditors(updateCommentHint)
+    );
 
     function updateView(state: ReviewState): void {
         const wanted = whyTarget(state);
@@ -280,6 +300,9 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
      * decide (contracts/extension-surface.md § Protocolo).
      */
     async function handlePanelMessage(message: PanelMessage, extra?: unknown): Promise<void> {
+        if (message === "deleteComments" || message === "initComments" || message === "openComments" || message === "copyCommentPath" || message === "renumberComments" || message === "openCommentDiff" || message === "prepareSharedComments") {
+            await commentRowAction(message, extra, lock, stateManager, getInvokeOptions); return;
+        }
         // Support: no hay comando de paleta; el host resuelve el id contra el
         // allowlist y abre el browser. Un id desconocido se ignora.
         if (message === "openSupport") {
@@ -366,9 +389,11 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
                 | "copyWalkthroughPrompt"
                 | "discardFixes"
                 | "discardAllFixes"
+                | "deleteComments" | "initComments" | "openComments" | "copyCommentPath" | "renumberComments" | "openCommentDiff" | "prepareSharedComments"
             >,
             string
         > = {
+            addComment: "gitReview.addComment",
             openEntry: "gitReview.openEntry",
             openChange: "gitReview.openChange",
             openAllChanges: "gitReview.openAllChanges",
@@ -443,6 +468,7 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
         })
     );
     stateManager.onDidChange((state) => {
+        if (target) rememberCommentRange(target.rootUri.fsPath, state.comments);
         updateView(state);
         syncCliProbe();
         syncDraftWatcher(state);
@@ -541,6 +567,7 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
                 void refresh();
             }
         }),
+        vscode.workspace.onDidCloseTextDocument(doc => commentProvenance.delete(doc.uri.toString())),
         vscode.workspace.onDidChangeConfiguration((e) => {
             if (e.affectsConfiguration("gitReview.path")) {
                 stateManager.invalidateVersionCheck();
@@ -680,6 +707,9 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
             }
         }),
 
+        vscode.workspace.registerTextDocumentContentProvider(COMMENT_BLOB_SCHEME, new CommentBlobProvider()),
+        commentHighlights(),
+        vscode.commands.registerCommand("gitReview.addComment", () => addComment(lock, stateManager, getInvokeOptions, revealPanelView)),
         vscode.commands.registerCommand("gitReview.next", () => navigate("next", lock, stateManager, getInvokeOptions)),
         vscode.commands.registerCommand("gitReview.prev", () => navigate("prev", lock, stateManager, getInvokeOptions)),
         vscode.commands.registerCommand("gitReview.refresh", () => refresh()),
@@ -735,6 +765,13 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
         },
         invalidateVersionCheck: () => stateManager.invalidateVersionCheck(),
         sendPanelMessage: handlePanelMessage,
+        sendCommentMessage: sendCommentComposerMessage,
+        setCommentSaver: save => {
+            if (context.extensionMode !== vscode.ExtensionMode.Test) throw Error("Test API requires a test extension host");
+            setCommentDocumentSaverForTest(save);
+        },
+        commentComposerState,
+        commentBrowserState, sendCommentBrowserMessage,
     };
 }
 

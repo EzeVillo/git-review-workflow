@@ -67,6 +67,7 @@
     <!-- since/until-build are patched from gradle.properties by the platform plugin -->
 
     <extensions defaultExtensionNs="com.intellij">
+        <diff.DiffExtension implementation="com.ezevillo.gitreview.diff.CommentDiffExtension"/>
         <!--
           anchor="right" is the default placement only (FR-008 / invariant exception).
           Nothing in the plugin calls setAnchor/setSplitMode at runtime, so if the
@@ -127,6 +128,10 @@
 
         <group id="GitReview.Menu" text="git review" popup="true">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
+            <action id="GitReview.AddComment" class="com.ezevillo.gitreview.ui.actions.AddCommentAction" text="Add comment">
+                <add-to-group group-id="EditorPopupMenu" anchor="last"/>
+                <add-to-group group-id="Diff.EditorPopupMenu" anchor="last"/>
+            </action>
             <action id="GitReview.Refresh"
                     class="com.ezevillo.gitreview.ui.actions.RefreshAction"
                     text="Refresh"

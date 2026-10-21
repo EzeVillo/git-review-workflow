@@ -170,6 +170,9 @@ if [ "$mode" = saved ]; then
 		fi
 
 		# Roll the --delta marker back to the last actual review before the metadata
+		comments_remove_custody "$saved" 0 || exit 1
+
+		# Roll the --delta marker back to the last actual review before the metadata
 		# disappears with the branch. Local reviews track their marker in a separate
 		# config section, matching git review start / git review abort.
 		if [ "$(git config "branch.$saved.reviewlocal" || true)" = "1" ]; then

@@ -56,6 +56,7 @@ class PanelRenderer(
     private val onAction: (ControlId, Int?, String?) -> Boolean = { _, _, _ -> false },
 ) {
     /** Section open state survives re-renders. */
+    var commentTargetHint: JComponent? = null
     private val sectionOpen = mutableMapOf<String, Boolean>()
     private var copyReset: javax.swing.Timer? = null
 
@@ -500,6 +501,15 @@ class PanelRenderer(
         for (c in controls) {
             panel.add(renderControl(c))
         }
+        val hint = commentTargetHint
+        if (hint != null && controls.any { it.id == ControlId.ADD_COMMENT }) {
+            return object : JPanel(BorderLayout(0, 4)) {
+                override fun getMaximumSize() = Dimension(Int.MAX_VALUE, preferredSize.height)
+            }.apply {
+                isOpaque = false; alignmentX = Component.LEFT_ALIGNMENT
+                add(hint, BorderLayout.NORTH); add(panel, BorderLayout.CENTER)
+            }
+        }
         return panel
     }
 
@@ -789,6 +799,8 @@ class PanelRenderer(
         "file" -> chrome.iconFile()
         "trash" -> chrome.iconTrash()
         "diff" -> chrome.iconDiff()
+        "eye" -> chrome.iconEye()
+        "numbered" -> chrome.iconNumbered()
         else -> null
     }
 
@@ -922,9 +934,23 @@ class PanelRenderer(
             btn.accessibleContext.accessibleName = c.accessibleName
         }
         c.tooltip?.let { btn.toolTipText = it }
+        val copyPathText = btn.text
+        val copyPathIcon = btn.icon
+        var copyPathReset: javax.swing.Timer? = null
         btn.addActionListener {
             if (!btn.isEnabled) return@addActionListener
             val copied = onAction(c.id, c.index, c.supportLinkId)
+            if (copied && c.id == ControlId.COPY_COMMENT_PATH) {
+                btn.icon = null
+                btn.text = "✓"
+                btn.toolTipText = com.ezevillo.gitreview.domain.CommentsCopy.pathCopied
+                copyPathReset?.stop()
+                copyPathReset = javax.swing.Timer(1500) {
+                    btn.text = copyPathText
+                    btn.icon = copyPathIcon
+                    btn.toolTipText = c.tooltip
+                }.also { it.isRepeats = false; it.start() }
+            }
             if (copied && c.id == ControlId.COPY_CLI_INSTALL) {
                 val original = btn.text
                 btn.text = "Copied"
@@ -1070,6 +1096,11 @@ class PanelRenderer(
             ControlId.OPEN_GUIDE to "file",
             ControlId.OPEN_WALKTHROUGH to "file",
             ControlId.OPEN_ENTRY to "file",
+            ControlId.OPEN_COMMENTS to "file",
+            ControlId.COPY_COMMENT_PATH to "copy",
+            ControlId.DELETE_COMMENTS to "trash",
+            ControlId.OPEN_COMMENT_DIFF to "eye",
+            ControlId.RENUMBER_COMMENTS to "numbered",
             ControlId.DISCARD_DRAFT to "trash",
             ControlId.DISCARD_GUIDE to "trash",
             ControlId.DISCARD_FIXES to "trash",

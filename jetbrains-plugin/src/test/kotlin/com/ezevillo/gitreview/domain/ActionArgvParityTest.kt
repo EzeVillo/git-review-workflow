@@ -11,8 +11,8 @@ import org.junit.jupiter.api.Test
  */
 class ActionArgvParityTest {
     @Test
-    fun productActionCountIs27() {
-        assertEquals(27, PRODUCT_ACTIONS.size)
+    fun productActionCountIs28() {
+        assertEquals(28, PRODUCT_ACTIONS.size)
     }
 
     @Test
@@ -151,7 +151,7 @@ class ActionArgvParityTest {
     fun readOnlyActionsCarryNoArgv() {
         val readOnly = listOf(
             "openEntry", "openChange", "openAllChanges", "showWhy",
-            "goToEntry", "refresh", "installCli", "showCliLog",
+            "goToEntry", "refresh", "installCli", "showCliLog", "addComment",
         )
         for (action in readOnly) {
             assertEquals(ActionArgv("", emptyList()), actionToArgv(action), action)

@@ -18,6 +18,13 @@ import org.junit.jupiter.api.Test
  * verdad y se salteaba sola cuando la CLI no estaba en el PATH.
  */
 class ReviewStateManagerTest {
+    @Test fun commentsFailureRemainsAnIndependentDiagnostic() {
+        val cli=FakeCliRunner().answer("status",WALK_STATUS).fails("comments","Comments unreadable")
+        val state=manager(cli).refresh("/repo")
+        assertEquals(Situation.REVIEW,state.situation)
+        assertEquals(3,state.entries.size)
+        assertEquals("Comments unreadable",state.comments?.records("comments-diagnostic")?.single()?.get(2))
+    }
     private fun manager(cli: CliRunner) = ReviewStateManager(cli, gitReviewPath = { null })
 
     @Test
@@ -28,9 +35,9 @@ class ReviewStateManagerTest {
         assertEquals(Situation.REVIEW, state.situation)
         assertEquals(ReviewMode.WALK, state.state?.mode)
         assertEquals(3, state.entries.size)
-        assertEquals(listOf("--version", "status"), cli.verbs)
+        assertEquals(listOf("--version", "status", "comments"), cli.verbs)
         assertTrue(cli.calls.all { it.cwd == "/repo" })
-        assertEquals(listOf("--porcelain"), cli.calls.last().args)
+        assertEquals(listOf("--porcelain"), cli.calls.first { it.verb == "status" }.args)
     }
 
     @Test
@@ -61,7 +68,7 @@ class ReviewStateManagerTest {
         assertEquals("main", state.config?.base)
         assertEquals("origin", state.config?.remote)
         assertEquals(1, state.candidates?.size)
-        assertEquals(listOf("--version", "status", "list", "config"), cli.verbs)
+        assertEquals(listOf("--version", "status", "list", "config", "comments"), cli.verbs)
     }
 
     @Test
@@ -289,7 +296,7 @@ class ReviewStateManagerTest {
         mgr.refresh("/repo")
         mgr.refresh("/repo")
 
-        assertEquals(listOf("--version", "status", "--version", "status"), cli.verbs)
+        assertEquals(listOf("--version", "status", "comments", "--version", "status", "comments"), cli.verbs)
     }
 
     /**

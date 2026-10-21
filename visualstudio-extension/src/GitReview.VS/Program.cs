@@ -55,9 +55,9 @@ public static class Program
             }
         }
 
-        Check("min_cli_version", CliVersion.MinCliVersion == "0.8.0");
-        // 26, not the contract's 27: openAllChanges is not_in: [visualstudio].
-        Check("product_actions_26", ActionArgvMap.ProductActions.Count == 26);
+        Check("min_cli_version", CliVersion.MinCliVersion == "0.10.0");
+        // openAllChanges is not_in: [visualstudio].
+        Check("product_actions_27", ActionArgvMap.ProductActions.Count == 27);
         Check("npm_install", InstallHint.NpmInstallCmd.Contains("git-review-workflow"));
         Check("support_star", SupportLinks.StarUrl.Contains("git-review-workflow"));
 
@@ -117,6 +117,7 @@ public static class Program
         VerifyChrome("dark", PanelChrome.DefaultDark, Check);
         VerifyChrome("light", PanelChrome.DefaultLight, Check);
         VerifyButtons(Check);
+        CommentsComposerChecks.Verify(Check);
 
         Console.WriteLine(failures == 0
             ? $"verify: ok ({PanelFixtures.All().Count} fixtures)"

@@ -116,7 +116,7 @@ public static class ActionArgvMap
                     ? new[] { "init", "--force" }
                     : new[] { "init" }),
             "walkthroughBuild" => new ActionArgv("walkthrough", new[] { "build" }),
-            "openEntry" or "openChange" or "showWhy"
+            "addComment" or "openEntry" or "openChange" or "showWhy"
                 or "goToEntry" or "refresh" or "installCli" or "showCliLog"
                 => new ActionArgv("", Array.Empty<string>()),
             _ => throw new ArgumentException($"unknown action: {action}"),
@@ -132,7 +132,8 @@ public static class ActionArgvMap
     /// </summary>
     public static readonly IReadOnlyList<string> ProductActions = new[]
     {
-        "openEntry",
+        "addComment",
+    "openEntry",
         "openChange",
         "showWhy",
         "next",

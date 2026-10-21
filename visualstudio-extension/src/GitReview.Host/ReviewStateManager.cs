@@ -226,6 +226,13 @@ public sealed class ReviewStateManager
                     status.Stderr, status.Stdout, "Something went wrong reading the review state."));
         }
 
+        if (status.ExitCode is 0 or 2)
+        {
+            var response = await _cli.InvokeAsync("comments", new[]{"status", "--porcelain"}, sole, cancellationToken: ct).ConfigureAwait(false);
+            var comments = Comments.Parse(response.Stdout);
+            if (response.ExitCode != 0) comments = comments with { Rows = comments.Rows.Concat(new[]{new CommentRow("comments-diagnostic", new[]{"", "read", response.Stderr})}).ToArray() };
+            next = next with { Comments = comments };
+        }
         return Publish(next, gen);
     }
 

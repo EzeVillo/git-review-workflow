@@ -1,0 +1,21 @@
+Choose a comment
+sample.go:40–41 · Previous version
+
+Can this return before releasing the lock?
+
+> marks the commented lines.
+
+  39 | acquire()
+> 40 | if failed {
+> 41 |     return err
+  42 | }
+
+@@ -40,2 +40,3 @@
+> -if failed {
+> -    return err
+  +defer release()
+  +if failed {
+  +    return err
+
+
+up/down choose | PgUp/Dn scroll | Enter diff | d Details | Tab text | Esc Close

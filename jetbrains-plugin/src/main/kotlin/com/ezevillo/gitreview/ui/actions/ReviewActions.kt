@@ -33,6 +33,21 @@ import java.io.File
 import com.ezevillo.gitreview.host.revealPanel
 
 private fun service(e: AnActionEvent) = e.project?.let { GitReviewService.getInstance(it) }
+class AddCommentAction : AnAction(), DumbAware {
+    override fun getActionUpdateThread() = com.intellij.openapi.actionSystem.ActionUpdateThread.EDT
+    override fun update(e: AnActionEvent) {
+        val project = e.project ?: return
+        val actions = com.ezevillo.gitreview.host.CommentsActions(project, GitReviewService.getInstance(project))
+        val editor = e.getData(com.intellij.openapi.actionSystem.CommonDataKeys.EDITOR)
+        val capture = if (editor != null) actions.capture(editor) else actions.capture()
+        e.presentation.description = capture?.label(capture.scopes.first()) ?: com.ezevillo.gitreview.domain.CommentsCopy.general
+    }
+    override fun actionPerformed(e: AnActionEvent) { e.project?.let { project ->
+        val actions = com.ezevillo.gitreview.host.CommentsActions(project, GitReviewService.getInstance(project))
+        val editor = e.getData(com.intellij.openapi.actionSystem.CommonDataKeys.EDITOR)
+        actions.add(if (editor != null) actions.capture(editor) else actions.capture())
+    } }
+}
 private fun mutations(e: AnActionEvent): MutationActions? {
     val p = e.project ?: return null
     return MutationActions(p, GitReviewService.getInstance(p))

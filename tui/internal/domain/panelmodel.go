@@ -35,9 +35,11 @@ const (
 // the property is enforced by the compiler, not by a reviewer noticing a
 // slice in a diff.
 type PanelModel struct {
-	Situation Situation
-	Busy      bool
-	RepoLabel string
+	Comments      string
+	CommentsError string
+	Situation     Situation
+	Busy          bool
+	RepoLabel     string
 
 	// Inventory (no-review): the review/saved rows, one line per row,
 	// newline-joined, plus how many. HasReviews distinguishes zero rows

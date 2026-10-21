@@ -216,8 +216,13 @@ class ReviewStateManager(
             )
         }
 
-        if (gen == generation.get()) current = state
-        return state
+        val complete = if (status.exitCode == 0 || status.exitCode == 2) {
+            val report = invoker.invoke("comments", listOf("status", "--porcelain"), cwd)
+            val parsed = com.ezevillo.gitreview.domain.parseComments(report.stdout)
+            state.copy(comments = if (report.exitCode == 0) parsed else parsed.copy(rows = parsed.rows + com.ezevillo.gitreview.domain.CommentRow("comments-diagnostic", listOf("", "read", report.stderr))))
+        } else state
+        if (gen == generation.get()) current = complete
+        return complete
     }
 
     companion object {

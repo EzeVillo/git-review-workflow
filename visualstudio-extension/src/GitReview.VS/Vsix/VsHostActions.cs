@@ -7,6 +7,7 @@ using GitReview.VS.ToolWindows;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
+using Microsoft.VisualStudio.TextManager.Interop;
 
 namespace GitReview.VS.Vsix;
 
@@ -23,6 +24,7 @@ public sealed class VsHostActions
     private readonly Func<IReadOnlyList<string>> _roots;
     private readonly Action _revealPanel;
     private readonly string _scratch;
+    private readonly Dictionary<string,CommentCapture> _commentLocations = new(StringComparer.OrdinalIgnoreCase);
 
     public VsHostActions(
         IServiceProvider serviceProvider,
@@ -51,6 +53,10 @@ public sealed class VsHostActions
                 OpenText = OpenTextAsync,
                 OpenPath = OpenPathAsync,
                 SavePath = SavePathAsync,
+                SaveCommentPath = SaveCommentPathAsync,
+                CaptureComment = CaptureCommentAsync,
+                OpenCommentBlobs = OpenCommentBlobsAsync,
+                OpenCommentDelivery = OpenCommentDeliveryAsync,
                 PreviewEdits = PreviewEditsAsync,
                 DefaultSource = () => GitReviewOptions.Current.DefaultSource,
                 Progress = ShowProgress,
@@ -173,11 +179,13 @@ public sealed class VsHostActions
     /// Saves one document if the editor is holding it unsaved — this one, never
     /// "save all": the wizard asked the reviewer to edit a single file.
     /// </summary>
-    private async Task SavePathAsync(string path)
+    private async Task SavePathAsync(string path) => await SaveCommentPathAsync(path).ConfigureAwait(true);
+
+    private async Task<bool> SaveCommentPathAsync(string path)
     {
         await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
         if (_serviceProvider.GetService(typeof(SVsRunningDocumentTable)) is not IVsRunningDocumentTable rdt)
-            return;
+            return false;
         var hr = rdt.FindAndLockDocument(
             (uint)_VSRDTFLAGS.RDT_NoLock,
             path,
@@ -187,15 +195,88 @@ public sealed class VsHostActions
             out var cookie);
         // FindAndLockDocument AddRefs the doc data even with RDT_NoLock; not releasing it
         // is a document the editor can never close.
-        if (docData != IntPtr.Zero) Marshal.Release(docData);
-        if (ErrorHandler.Failed(hr) || cookie == 0) return;
+        IVsPersistDocData? persisted = null;
+        if (docData != IntPtr.Zero) {
+            try { persisted = Marshal.GetObjectForIUnknown(docData) as IVsPersistDocData; }
+            finally { Marshal.Release(docData); }
+        }
+        if (ErrorHandler.Failed(hr)) return false;
+        if (cookie == 0) return true;
         // The file is not open here at all when there is no cookie — nothing to flush,
         // and the CLI will read what is on disk, which is what the reviewer wrote.
-        rdt.SaveDocuments(
+        var saved = rdt.SaveDocuments(
             (uint)__VSRDTSAVEOPTIONS.RDTSAVEOPT_SaveIfDirty,
             null,
             (uint)VSConstants.VSITEMID.Nil,
             cookie);
+        if (ErrorHandler.Failed(saved) || persisted is null) return false;
+        return ErrorHandler.Succeeded(persisted.IsDocDataDirty(out var dirty)) && dirty == 0;
+    }
+
+    private async Task<CommentCapture?> CaptureCommentAsync()
+    {
+        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+        if (_serviceProvider.GetService(typeof(SVsTextManager)) is not IVsTextManager manager || ErrorHandler.Failed(manager.GetActiveView(0,null,out var view)) || view is null) return null;
+        if (ErrorHandler.Failed(view.GetBuffer(out var buffer)) || buffer is not IPersistFileFormat file || ErrorHandler.Failed(file.GetCurFile(out var path,out _))) return null;
+        if (ErrorHandler.Failed(view.GetSelection(out var firstLine,out var firstColumn,out var lastLine,out var lastColumn))) return null;
+        var lines=Comments.SelectionCoordinates(firstLine,firstColumn,lastLine,lastColumn);
+        var selected=firstLine!=lastLine || firstColumn!=lastColumn;
+        var snippet="";
+        if(selected)buffer.GetLineText(lines.First-1,lines.StartColumn-1,lines.Last-1,lines.EndColumn-1,out snippet);
+        if(snippet.Length>2000)snippet=snippet.Substring(0,2000);
+        var dirty=true;
+        if(buffer is IVsPersistDocData persisted && ErrorHandler.Succeeded(persisted.IsDocDataDirty(out var changed)))dirty=changed!=0;
+        if(_commentLocations.TryGetValue(path,out var original))return original with {First=lines.First,Last=lines.Last,StartColumn=lines.StartColumn,EndColumn=lines.EndColumn,Unversioned=original.Unversioned||dirty,HasSelection=selected,Snippet=snippet};
+        var root=Cwd();if(root is null)return null;
+        var rootPrefix=Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar)+Path.DirectorySeparatorChar;
+        var full=Path.GetFullPath(path);
+        if(!full.StartsWith(rootPrefix,StringComparison.OrdinalIgnoreCase))return null;
+        var relative=full.Substring(rootPrefix.Length).Replace('\\','/');
+        return new CommentCapture(relative,"head",lines.First,lines.Last,dirty,HasSelection:selected,Snippet:snippet,StartColumn:lines.StartColumn,EndColumn:lines.EndColumn);
+    }
+
+    private async Task OpenCommentBlobsAsync(CommentsReport recipe)
+    {
+        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+        var root=Cwd();if(root is null)return;
+        async Task<string> SideAsync(string name)
+        {
+            var row=recipe.Records("comment-blob").SingleOrDefault(b=>b[1]==name) ?? throw new InvalidOperationException(CommentsCopy.historyFailed);
+            if(row[2]=="absent")return "";
+            if(row.Count<4 || !System.Text.RegularExpressions.Regex.IsMatch(row[3],"\\A(?:[0-9a-f]{40}|[0-9a-f]{64})\\z"))throw new InvalidOperationException(CommentsCopy.historyFailed);
+            var result=await _panel.Cli.InvokeResolvedAsync(new ResolvedCommand("git",new[]{"cat-file","blob",row[3]}),root,false,TimeoutClass.SupportGitTimeoutMs).ConfigureAwait(true);
+            if(result.ExitCode!=0)throw new InvalidOperationException(result.Stderr.Length>0?result.Stderr:CommentsCopy.historyFailed);
+            return result.Stdout;
+        }
+        var left=await SideAsync("base").ConfigureAwait(true);var right=await SideAsync("head").ConfigureAwait(true);
+        if(_serviceProvider.GetService(typeof(SVsDifferenceService)) is not IVsDifferenceService diff)throw new InvalidOperationException(CommentsCopy.historyFailed);
+        var folder=Path.Combine(_scratch,"comments",Guid.NewGuid().ToString("N"));
+        var leftPath=WriteScratch(Path.Combine(folder,"base.txt"),left);var rightPath=WriteScratch(Path.Combine(folder,"head.txt"),right);
+        var range=recipe.Records("comment-diff").Single();
+        foreach(var side in new[]{"base","head"}) {
+            var blob=recipe.Records("comment-blob").Single(b=>b[1]==side);
+            if(blob[2]!="present")continue;
+            var originalPath=System.Text.RegularExpressions.Regex.Replace(blob[0],"%(25|09|0D|0A|3E)",m=>m.Groups[1].Value switch {"25"=>"%","09"=>"\t","0D"=>"\r","0A"=>"\n",_=>">"});
+            _commentLocations[side=="base"?leftPath:rightPath]=new CommentCapture(originalPath,side,1,1,false,range[1],range[2]);
+        }
+        var entry = recipe.Records("comment-entry").First();
+        var comment = CommentPresentations.Present(recipe,entry);
+        var frame = diff.OpenComparisonWindow2(leftPath,rightPath,comment.Location+" · "+comment.Preview,comment.Body,CommentsCopy.baseSide,CommentsCopy.headSide,comment.Location,null,(uint)(__VSDIFFSERVICEOPTIONS.VSDIFFOPT_LeftFileIsTemporary|__VSDIFFSERVICEOPTIONS.VSDIFFOPT_RightFileIsTemporary));
+        var location = recipe.Records("comment-location").FirstOrDefault();
+        if(location is not null)CommentDiffSelection.Apply(frame,location,recipe.Records("comment-columns").FirstOrDefault(c=>c[0]==location[0] && c[1]==location[1]));
+    }
+    private async Task OpenCommentDeliveryAsync(CommentsReport report)
+    {
+        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+        if(_serviceProvider.GetService(typeof(SVsDifferenceService)) is not IVsDifferenceService diff)throw new InvalidOperationException(CommentsCopy.historyFailed);
+        string Side(string role) {
+            var row=report.Records("comments-delivery-file").Single(r=>r[1]==role);
+            if(row[2]=="present")return row[0];
+            if(row[2]=="absent")return WriteScratch(Path.Combine(_scratch,"delivery",role+"-empty.md"),"");
+            throw new InvalidOperationException(CommentsCopy.historyFailed);
+        }
+        var left=Side("prepared");var right=Side("destination");
+        diff.OpenComparisonWindow2(left,right,CommentsCopy.deliveryTitle,CommentsCopy.deliveryTitle,CommentsCopy.shared,CommentsCopy.deliveryTitle,CommentsCopy.deliveryTitle,null,0);
     }
 
     /// <summary>
@@ -223,9 +304,21 @@ public sealed class VsHostActions
 
         foreach (var request in requests)
         {
+            var pair=_panel.State.Current.Comments?.Records("comments-capture").FirstOrDefault();
+            if(request.Right.Ref is string rightRef && pair is not null && !pair[2].StartsWith(rightRef,StringComparison.Ordinal))pair=null;
+            var leftSide=request.Left;
+            var rightSide=request.Right;
+            if(pair is not null) {
+                if(leftSide.Ref is not null)leftSide=leftSide with {Ref=pair[1]};
+                if(rightSide.Ref is not null)rightSide=rightSide with {Ref=pair[2]};
+            }
             var workingTree = request.Left.Ref is null || request.Right.Ref is null;
-            var left = await ResolveSideAsync(cwd, request.Left, "left", workingTree).ConfigureAwait(true);
-            var right = await ResolveSideAsync(cwd, request.Right, "right", workingTree).ConfigureAwait(true);
+            var left = await ResolveSideAsync(cwd, leftSide, "left", workingTree).ConfigureAwait(true);
+            var right = await ResolveSideAsync(cwd, rightSide, "right", workingTree).ConfigureAwait(true);
+            if(pair is not null) {
+                if(request.Left.Path is string basePath)_commentLocations[left.Path]=new CommentCapture(basePath,"base",1,1,false,pair[1],pair[2],request.Left.Path,request.Right.Path);
+                if(request.Right.Path is string headPath)_commentLocations[right.Path]=new CommentCapture(headPath,"head",1,1,false,rightSide.Ref is null?null:pair[1],rightSide.Ref is null?null:pair[2],request.Left.Path,request.Right.Path);
+            }
             // Temporary is what keeps the shell from treating a scratch copy as a file the
             // reviewer opened: it does not offer to save it, and it cleans it up.
             uint options = 0;

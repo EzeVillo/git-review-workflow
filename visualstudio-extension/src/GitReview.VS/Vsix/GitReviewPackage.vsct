@@ -157,6 +157,10 @@
           <ButtonText>Refresh</ButtonText>
         </Strings>
       </Button>
+      <Button guid="guidGitReviewCmdSet" id="cmdidMenuAddComment" priority="0x0810" type="Button">
+        <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupReview" />
+        <Strings><ButtonText>Add comment</ButtonText></Strings>
+      </Button>
       <Button guid="guidGitReviewCmdSet" id="cmdidMenuStartReview" priority="0x0200" type="Button">
         <Parent guid="guidGitReviewCmdSet" id="ToolsMenuGroupReview" />
         <Strings>
@@ -358,6 +362,7 @@
       <IDSymbol name="cmdidMenuWalkthroughBuild" value="0x0219" />
       <IDSymbol name="cmdidMenuInstallCli" value="0x021A" />
       <IDSymbol name="cmdidMenuShowCliLog" value="0x021B" />
+      <IDSymbol name="cmdidMenuAddComment" value="0x021C" />
 
       <IDSymbol name="ToolWindowToolbar" value="0x1000" />
       <IDSymbol name="ToolWindowToolbarGroup" value="0x1050" />

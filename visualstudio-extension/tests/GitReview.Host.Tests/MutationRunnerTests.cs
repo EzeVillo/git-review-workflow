@@ -31,7 +31,7 @@ public class MutationRunnerTests
         Assert.NotNull(result);
         Assert.Equal(0, result!.ExitCode);
         // The mutation, then the probe and the status that follow it.
-        Assert.Equal(new[] { "next", "--version", "status" }, cli.Verbs);
+        Assert.Equal(new[] { "next", "--version", "status", "comments" }, cli.Verbs);
         Assert.Equal(Situation.Review, state.Current.Situation);
     }
 

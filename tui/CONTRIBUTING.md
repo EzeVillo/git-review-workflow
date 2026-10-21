@@ -67,6 +67,12 @@ Revisá el diff como UI: jerarquía, truncado, foco, barra de teclas, anchos y l
 variante ASCII. No aceptes una regeneración masiva sin explicar qué decisión
 visual cambió. CI no conoce `-update`, por lo que nunca puede reescribir golden.
 
+Las reviews largas desplazan el contenido completo después del ajuste de líneas,
+conservando la barra de teclas y las coordenadas de clic. `review_scroll_test.go`
+verifica foco en ambos sentidos, rueda y resize con archivos y explicaciones
+largas en whole/step/walk. El pie de la pantalla principal conserva su viewport
+propio; una review activa no incorpora secciones de herramientas.
+
 ## Configuración `reviewui.*`
 
 - `reviewui.startsource`: preselecciona la fuente del asistente de inicio; hoy
@@ -142,3 +148,39 @@ tres sistemas, cross-compila los siete targets con `CGO_ENABLED=0`, comprueba
 existencia y `SHA256SUMS`, crea el Release con `--latest=false` y fija los cuatro
 checksums de la fórmula en la rama por default. No hay paso de publicación en
 un registro ni alta previa que realizar.
+
+## Comentarios de una review: desarrollo local
+
+Los adaptadores consumen `comments status --porcelain` como consulta independiente;
+los fallos de comments no reemplazan el estado principal. La revisión de bytes
+`unreadable` bloquea escrituras sin inventar un count cero. `comments-owner`
+identifica la custodia de cada sesión y `status --all` permite guardar sólo los
+Markdown afectados por un descarte explícito. No se guarda código ni se usa Save All.
+
+Cada mutación usa el lock del cliente, conserva el guard capturado antes de mover
+el foco, guarda únicamente los Markdown exactos y vuelve a leer su revisión.
+Un save falso, cancelado, con excepción o que deja el buffer sucio impide invocar
+la CLI. El cuerpo viaja por stdin UTF-8 cerrado, separado del argv y del log.
+La selección histórica usa ordinal físico y revisión; los visores leen blobs
+inmutables con `GIT_NO_LAZY_FETCH=1` y no sustituyen objetos perdidos por vacío.
+
+El fixture común es `tests/fixtures/comments/client-records.tsv`; cada cliente
+comprueba todos sus tags. La matriz del canónico tiene 28 acciones (27 donde
+`openAllChanges` está excluida), y los seis controles de documento no son acciones
+de menú. Los escenarios y la evidencia ejecutada están en
+`specs/016-comentarios-review/quickstart.md`.
+
+Los paquetes locales de comentarios usan la CLI candidata 0.10.0. Esta excepción
+está autorizada únicamente para probar el conjunto: no acredita publicación ni
+habilita tags, npm, Marketplace o cambios remotos. Los smokes reales de IDE siguen
+siendo necesarios antes de publicar.
+Los destinos de captura provienen de `comments-capability` en `comments status
+--porcelain`. Compare sólo permite Local y sus notas se conservan al cerrar o
+limpiar; no existe la acción Save comments. Con un destino el formulario omite
+el selector y lo envía explícitamente; con varios exige elegir en cada captura.
+
+El watcher acepta los directorios de documentos informados por la CLI aunque
+estén fuera del gitdir: Shared del repositorio vive en el working tree. Allí
+filtra por el nombre exacto informado y no recorre otros directorios. La prueba
+real de fsnotify repite dos reemplazos atómicos de Shared y comprueba que editar
+un walkthrough vecino no dispara eventos de Comments.

@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"crypto/sha1"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,18 @@ import (
 	"testing"
 	"unicode/utf8"
 )
+
+func TestStdinPreservesUtf8AndClosesThePipe(t *testing.T) {
+	input := strings.Repeat("privado ñ\r\n", 12000) + "sin salto final"
+	expected := fmt.Sprintf("%x", sha1.Sum([]byte(fmt.Sprintf("blob %d\x00%s", len([]byte(input)), input))))
+	result := runProcess(context.Background(), "git", []string{"hash-object", "--stdin"}, nil, input)
+	if result.ExitCode != 0 || strings.TrimSpace(result.Stdout) != expected {
+		t.Fatalf("stdin bytes changed: %+v", result)
+	}
+	if strings.Contains(strings.Join(result.Argv, " "), "privado") {
+		t.Fatal("body entered argv")
+	}
+}
 
 func TestRunProcessReportsSpawnFailedForAMissingBinary(t *testing.T) {
 	res := runProcess(context.Background(), "definitely-not-a-real-binary-xyz", nil, nil)

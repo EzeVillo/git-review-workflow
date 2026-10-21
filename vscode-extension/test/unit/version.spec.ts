@@ -29,9 +29,15 @@ describe("compareVersions", () => {
 });
 
 describe("isOutdated", () => {
+	it("requiere actualizar la CLI anterior a comments", () => {
+		assert.strictEqual(isOutdated("0.9.0"), true);
+		assert.strictEqual(isOutdated("0.9.99"), true);
+		assert.strictEqual(isOutdated("0.10.0"), false);
+	});
+
 	it("false para la versión mínima exacta", () => {
 		assert.strictEqual(isOutdated(MIN_CLI_VERSION), false);
-		assert.strictEqual(MIN_CLI_VERSION, "0.8.0");
+		assert.strictEqual(MIN_CLI_VERSION, "0.10.0");
 	});
 
 	it("true para una versión menor (incluye 0.5.x)", () => {
@@ -51,7 +57,7 @@ describe("isOutdated", () => {
 	});
 
 	it("false para una versión mayor", () => {
-		assert.strictEqual(isOutdated("0.8.1"), false);
+		assert.strictEqual(isOutdated("0.10.1"), false);
 	});
 
 	it("true para formato inválido", () => {

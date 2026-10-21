@@ -843,6 +843,12 @@ git clean --quiet -fd
 # The sandbox must run the commands from *this* checkout, not whatever version
 # happens to be installed, so both helpers put bin/ in front of PATH.
 
+comments_note="  comments-team/LEEME.md  selector de contexto, rama renombrada y review desactualizada"
+if ! sh "$script_dir/helpers/sandbox-comments.sh" "$dir/comments-team" "$repo_root" >"$dir/comments-team-build.log" 2>&1; then
+	printf 'warning: comments team cases could not be built; see %s/comments-team-build.log\n' "$dir" >&2
+	comments_note="  (comments team cases failed: see comments-team-build.log)"
+fi
+
 winpath() {
 	if command -v cygpath >/dev/null 2>&1; then
 		cygpath -w "$1"
@@ -894,6 +900,7 @@ Sandbox ready: $dir
   origin.git/  its remote
   env.sh       . env.sh    -> bin/ on PATH + cd work   (bash / Git Bash)
   env.ps1      . env.ps1   -> the same, in PowerShell
+$comments_note
 
 The pull request (feature/checkout): 5 guided walkthrough entries over 4
 commits, plus the committed walkthrough itself as a 6th, unannotated entry at

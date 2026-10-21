@@ -22,6 +22,23 @@ import java.nio.charset.StandardCharsets
  * corrido nada.
  */
 class CliInvokerIT {
+    @Test
+    fun stdinPreservesUtf8AndClosesWithoutLeakingIntoTheLog(@TempDir dir: File) {
+        val body = "privado ñ\r\n".repeat(12000) + "sin salto final"
+        val bytes = body.toByteArray(StandardCharsets.UTF_8)
+        val expected = java.security.MessageDigest.getInstance("SHA-1")
+            .digest("blob ${bytes.size}\u0000".toByteArray(StandardCharsets.UTF_8) + bytes)
+            .joinToString("") { "%02x".format(it.toInt() and 255) }
+        CliLogSink.clear()
+        val result = invoker.invokeResolved(ResolvedCommand("git", listOf("hash-object", "--stdin")), dir.absolutePath, timeoutMs = 30_000, stdin = body)
+        assertEquals(0, result.exitCode)
+        assertEquals(expected, result.stdout.trim())
+        assertTrue(CliLogSink.snapshot().none { it.contains("privado") })
+        val rejected = invoker.invokeResolved(ResolvedCommand("git", listOf("-c", "alias.comments-input=!cat >&2; exit 7", "comments-input")), dir.absolutePath, timeoutMs = 30_000, stdin = body)
+        assertEquals(7, rejected.exitCode)
+        assertTrue(rejected.stderr.contains("privado"))
+        assertTrue(CliLogSink.snapshot().none { it.contains("privado") })
+    }
     private val invoker = CliInvoker(gitReviewPath = { null })
 
     private fun git(cwd: File, vararg args: String): InvokeResult =

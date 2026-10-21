@@ -12,6 +12,73 @@ and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 This file starts at 0.2.1. Earlier versions are only in the
 [GitHub Releases](https://github.com/EzeVillo/git-review-workflow/releases).
 
+## [0.10.0] — 2026-10-18
+
+### Fixed
+
+- Require the existing context choice when a known portable discussion appears
+  under a different branch with incompatible history. Choosing a new discussion
+  preserves incoming Shared prose while separating private Local notes.
+- Accept Git-enabled LF/CRLF checkout conversion when checking the incoming
+  Shared delivery baseline, preserving exact prose and final-newline checks
+  without executing content filters.
+- Report repository Shared with unresolved Git merge entries as unreadable;
+  refuse entry and historical-diff queries until the conflict is resolved.
+- Pin the Shared destination revision before baseline comparison so an editor
+  write during that comparison cannot become the overwrite guard.
+- Stage the exact prepared Shared blob and verify delivery before releasing its
+  private preparation. Concurrent editor or index changes remain recoverable.
+- Keep saved Local visible beside repository Shared when their contexts match,
+  without falling back to an older retained Local result or changing custody.
+- Read Shared from the checked-out branch outside reviews, including fresh
+  clones; repository Shared takes precedence over saved preparations. Prepare
+  new reviews from branch prose and exclude inherited contexts. Release the
+  editable private Shared after successful delivery; preserve deletions across
+  Save/Continue, Finish/Undo/Finish and Finish/Undo/Cancel.
+- Restrict compare comment capture to Local and expose allowed destinations
+  per operation through `comments status --porcelain`. Preserve comparison
+  notes automatically when closing or cleaning the session.
+- Clean CRLF checkouts keep reproducible comment locations and range validation.
+- Shared delivery is staged with the code edits, including comment-only Finish
+  and Prepare retries; concurrent index entries are preserved.
+- Ambiguous comment contexts include review dates, document counts and the
+  last reviewed subject so separate reviews of one branch can be distinguished.
+- Comments use Start's resolved full base, preserving it throughout the session.
+  A stale local base no longer makes a remote review of a new branch adopt the
+  merged PR's comments context.
+- Finishing after deliberately accepting incoming Shared clears the resolved
+  source conflict, including when no new Shared delivery is needed.
+
+### Added
+
+- `comments delete --entry <ordinal>` removes one entry with revision guards,
+  preserving the other entries and their numbers, metadata and exact bytes.
+- Exact comment selections with optional `--start-column` / `--end-column`,
+  UTF-16 endpoints and column records in entries and historical diff recipes.
+- Full comment bodies and explicit scopes in `comments entries --porcelain`, with
+  byte revision checks before returning the selector snapshot.
+- Delete individual retained documents after Finish without removing delivered
+  `.review/comments.md`; deleted pending Shared delivery is dismissed.
+
+
+- **Portable review comments.** `git review comments` captures observations in
+  independent Local and Shared Markdown documents. Choose the document for each
+  capture; use text, stdin or your Git editor, with an optional file, side and
+  line range. Local stays in Git's private storage. A changed Shared document is
+  prepared as `.review/comments.md` after finish, without staging, committing or
+  pushing it. Whole, walk and step reviews preserve both documents through
+  navigation, pause, continuation and finish undo.
+- **Editing, saved results and historical code.** `status`, `init`, `add`,
+  `renumber`, `entries`, `diff`, `save` and `prepare` provide guarded porcelain
+  interfaces as well as terminal output. Renumber changes only entry digits and
+  preserves Markdown bytes. Compare can checkpoint both documents without
+  extracting code. Historical diffs use the captured objects and literal paths;
+  missing objects produce a diagnostic without fetching or substituting HEAD.
+- **Recoverable Shared delivery.** Concurrent destination changes and I/O errors
+  retain the prepared document and report a partial result after code extraction.
+  Inspect baseline, prepared and destination with `prepare --check`, resolve
+  the prose and retry without repeating the code extraction.
+
 ## [0.9.0] — 2026-09-01
 
 ### Added
@@ -120,6 +187,9 @@ This file starts at 0.2.1. Earlier versions are only in the
 
 ### Fixed
 
+- Restrict compare comment capture to Local and expose allowed destinations
+  per operation through `comments status --porcelain`. Preserve comparison
+  notes automatically when closing or cleaning the session.
 - **`walkthrough draft --delta` no longer destroys prose.** Over an existing
   draft it discarded entries whose file fell outside the delta range **even when
   the PR was still changing that file**, and that prose does not come back — a
@@ -159,6 +229,9 @@ This file starts at 0.2.1. Earlier versions are only in the
 
 ### Fixed
 
+- Restrict compare comment capture to Local and expose allowed destinations
+  per operation through `comments status --porcelain`. Preserve comparison
+  notes automatically when closing or cleaning the session.
 - **An empty draft no longer covers the author's walkthrough in silence.** "In
   force" and "the file exists" are two different questions, and there is now one
   function for each.
@@ -175,6 +248,9 @@ This file starts at 0.2.1. Earlier versions are only in the
 
 ### Fixed
 
+- Restrict compare comment capture to Local and expose allowed destinations
+  per operation through `comments status --porcelain`. Preserve comparison
+  notes automatically when closing or cleaning the session.
 - **Walk stopped costing a process per entry.** Four functions spawned an `awk`
   plus one or two `grep` for **every entry** of the reading order; each is now a
   single `awk`. The symptom that exposed it was not "the CLI is slow" — it was the
@@ -188,6 +264,9 @@ This file starts at 0.2.1. Earlier versions are only in the
 
 ### Fixed
 
+- Restrict compare comment capture to Local and expose allowed destinations
+  per operation through `comments status --porcelain`. Preserve comparison
+  notes automatically when closing or cleaning the session.
 Four ways a path written in `.review/walkthrough.md` could stop being byte-equal
 to the path git reports. Each failed **invisibly**: the entry simply vanished from
 the reading order, or `build` reported the same file as both missing and extra. In

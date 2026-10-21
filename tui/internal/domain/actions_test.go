@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-func TestProductActionsHasExactlyTwentySix(t *testing.T) {
-	if len(ProductActions) != 26 {
-		t.Fatalf("expected 26 product actions, got %d: %v", len(ProductActions), ProductActions)
+func TestProductActionsHasExactlyTwentySeven(t *testing.T) {
+	if len(ProductActions) != 27 {
+		t.Fatalf("expected 27 product actions, got %d: %v", len(ProductActions), ProductActions)
 	}
 	for _, id := range ProductActions {
 		if id == "openAllChanges" {
@@ -22,9 +22,10 @@ func TestProductActionsHasExactlyTwentySix(t *testing.T) {
 // surface.mjs does the authoritative version of this against the YAML; this
 // is the same property asserted against a hand-copied list here so `go
 // test` alone already catches an id that only exists on one side).
-func TestProductActionsMatchTheCanonicalTwentySeven(t *testing.T) {
+func TestProductActionsMatchTheCanonicalTwentyEight(t *testing.T) {
 	canonical := map[string]bool{
-		"openEntry": true, "openChange": true, "openAllChanges": true, "showWhy": true,
+		"addComment": true,
+		"openEntry":  true, "openChange": true, "openAllChanges": true, "showWhy": true,
 		"next": true, "prev": true, "goToEntry": true, "refresh": true, "installCli": true,
 		"continueReview": true, "startReview": true, "setBase": true, "setRemote": true,
 		"abortReview": true, "saveReview": true, "finishReview": true, "undoFinish": true,
@@ -32,12 +33,12 @@ func TestProductActionsMatchTheCanonicalTwentySeven(t *testing.T) {
 		"previewEdits": true, "previewEditsStat": true, "compareReview": true,
 		"walkthroughInit": true, "walkthroughBuild": true, "showCliLog": true,
 	}
-	if len(canonical) != 27 {
-		t.Fatalf("test fixture itself is wrong: %d canonical ids, want 27", len(canonical))
+	if len(canonical) != 28 {
+		t.Fatalf("test fixture itself is wrong: %d canonical ids, want 28", len(canonical))
 	}
 	for _, id := range ProductActions {
 		if !canonical[id] {
-			t.Errorf("ProductActions declares %q, which is not one of the canonical's 27", id)
+			t.Errorf("ProductActions declares %q, which is not one of the canonical's 28", id)
 		}
 	}
 	for id := range canonical {

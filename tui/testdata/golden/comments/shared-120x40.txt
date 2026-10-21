@@ -1,0 +1,8 @@
+[1mreview/feature[0m
+[1m0 file(s) in this review[0m
+[1mComments[0m
+> [ [34mAdd comment[0m ]
+Shared  [2m(1)[0m
+ [ [34mOpen[0m ]   [ [34mRenumber[0m ]   [ [34mDiff[0m ]   [ [34mDelete[0m ]
+
+[2mj[0m:up  [2mk[0m:down  [2menter[0m:select  [2mr[0m:refresh  [2mf[0m:finish  [2ms[0m:save  [2ma[0m:cancel  [2m:[0m:actions  [2mm[0m:mouse on  [2mq[0m:quit

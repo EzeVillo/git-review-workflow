@@ -1,5 +1,6 @@
 {
   "require": "ts-node/register/transpile-only",
+  "node-option": ["no-experimental-strip-types"],
   "spec": "test/unit/**/*.spec.ts",
   "extension": [
     "ts"

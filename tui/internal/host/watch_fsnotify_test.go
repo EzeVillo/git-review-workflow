@@ -88,6 +88,31 @@ func TestRenameAtomicGitConfigFiresTwice(t *testing.T) {
 	expectEvent(t, ch, 2*time.Second)
 }
 
+func TestRepositorySharedAtomicSavesFireWithoutGitChanges(t *testing.T) {
+	dir := initRepo(t)
+	dirs := mustGitDirs(t, dir)
+	doc := filepath.Join(dir, ".review", "comments.md")
+	if err := os.MkdirAll(filepath.Dir(doc), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ch := startFsnotifyWatcher(t, dirs.GitDir, dirs.GitCommonDir, []string{doc})
+	for _, body := range []string{"First comment\n", "Second comment\n"} {
+		tmp := doc + ".tmp"
+		if err := os.WriteFile(tmp, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(tmp, doc); err != nil {
+			t.Fatal(err)
+		}
+		expectEvent(t, ch, 2*time.Second)
+	}
+	drainSettled(t, ch, 300*time.Millisecond)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(doc), "walkthrough.md"), []byte("Unrelated document\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	expectNoEvent(t, ch, 400*time.Millisecond)
+}
+
 // --- agujero 2: refs empaquetados --------------------------------------------
 
 func TestPackedRefsCreateAndDelete(t *testing.T) {

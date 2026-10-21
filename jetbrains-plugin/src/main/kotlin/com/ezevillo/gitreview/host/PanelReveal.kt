@@ -34,7 +34,8 @@ private const val TOOL_WINDOW_ID = "gitReview.walkthrough"
  *
  * El gate estatico es `RevealContractTest`.
  */
-fun revealPanel(project: Project, id: ControlId) {
+fun revealPanel(project: Project, id: ControlId, commentsBlockBorn: Boolean = false) {
+    if (id == ControlId.ADD_COMMENT && !commentsBlockBorn) return
     if (!revealsPanel(id)) {
         // Un id que el canonico no declara NO revela: aca la degradacion segura
         // es la contraria a la de UiMessages.confirm -- un reveal de mas hace

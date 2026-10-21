@@ -72,6 +72,8 @@ interface PanelChrome {
     fun iconDiff(): Icon?
     fun iconFile(): Icon?
     fun iconTrash(): Icon?
+    fun iconEye(): Icon = CommentPanelIcon(numbered = false)
+    fun iconNumbered(): Icon = CommentPanelIcon(numbered = true)
     /** Fallback glyph when platform icons are unavailable (preview). */
     fun glyphPrev(): String = "◀"
     fun glyphNext(): String = "▶"
@@ -85,6 +87,38 @@ interface PanelChrome {
     // BMP y de un solo ancho, como los demas: un codepoint astral (el tacho de
     // verdad, U+1F5D1) sale como caja vacia en la fuente que de el tema.
     fun glyphTrash(): String = "✕"
+}
+
+/** Small vector icons follow the button foreground, including hover and disabled states. */
+private class CommentPanelIcon(private val numbered: Boolean) : Icon {
+    override fun getIconWidth() = 16
+    override fun getIconHeight() = 16
+    override fun paintIcon(c: java.awt.Component, g: java.awt.Graphics, x: Int, y: Int) {
+        val g2 = g.create() as java.awt.Graphics2D
+        try {
+            g2.translate(x, y)
+            g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON)
+            g2.color = c.foreground
+            g2.stroke = java.awt.BasicStroke(1.2f, java.awt.BasicStroke.CAP_ROUND, java.awt.BasicStroke.JOIN_ROUND)
+            if (numbered) {
+                g2.font = java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.PLAIN, 6)
+                for (i in 1..3) {
+                    val yLine = 3.5 + (i - 1) * 4.5
+                    g2.drawString(i.toString(), 1f, (yLine + 2).toFloat())
+                    g2.draw(java.awt.geom.Line2D.Double(6.5, yLine, 13.5, yLine))
+                }
+            } else {
+                val eye = java.awt.geom.Path2D.Double().apply {
+                    moveTo(1.5, 8.0)
+                    curveTo(4.5, 2.5, 11.5, 2.5, 14.5, 8.0)
+                    curveTo(11.5, 13.5, 4.5, 13.5, 1.5, 8.0)
+                    closePath()
+                }
+                g2.draw(eye)
+                g2.draw(java.awt.geom.Ellipse2D.Double(6.0, 6.0, 4.0, 4.0))
+            }
+        } finally { g2.dispose() }
+    }
 }
 
 class PluginPanelChrome : PanelChrome {

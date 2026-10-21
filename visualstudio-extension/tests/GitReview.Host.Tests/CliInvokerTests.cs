@@ -36,6 +36,35 @@ public class CliInvokerTests : IDisposable
             new ResolvedCommand("git", args), cwd, network: false, timeoutMs: 30_000);
 
     [Fact]
+    public async Task Stdin_preserves_utf8_closes_and_is_redacted_from_diagnostics()
+    {
+        var input=string.Concat(Enumerable.Repeat("privado ñ\r\n",12000))+"sin salto final";
+        var bytes=Encoding.UTF8.GetBytes(input);
+        var header=Encoding.UTF8.GetBytes($"blob {bytes.Length}\0");
+        var expected=Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(header.Concat(bytes).ToArray())).ToLowerInvariant();
+        var cli=new CliInvoker(gitReviewPath:()=>OperatingSystem.IsWindows()?"git.exe":"git");
+        CliInvoker.CliLogSink.Clear();
+        var hash=await cli.InvokeWithInputAsync("hash-object",new[]{"--stdin"},_dir,input);
+        Assert.Equal(0,hash.ExitCode); Assert.Equal(expected,hash.Stdout.Trim());
+        var rejected=await cli.InvokeWithInputAsync("-c",new[]{"alias.comments-input=!cat >&2; exit 7","comments-input"},_dir,input);
+        Assert.Equal(7,rejected.ExitCode); Assert.Contains("privado",rejected.Stderr);
+        Assert.DoesNotContain(CliInvoker.CliLogSink.Snapshot(),line=>line.Contains("privado",StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Historical_blob_preserves_missing_final_newline()
+    {
+        Assert.Equal(0,(await Git(_dir,"init","-q")).ExitCode);
+        const string body="línea\r\n\nlast without newline";
+        await File.WriteAllTextAsync(Path.Combine(_dir,"blob.txt"),body,new UTF8Encoding(false));
+        var hash=await Git(_dir,"hash-object","-w","--no-filters","blob.txt");
+        Assert.Equal(0,hash.ExitCode);
+        var blob=await Git(_dir,"cat-file","blob",hash.Stdout.Trim());
+        Assert.Equal(0,blob.ExitCode);
+        Assert.Equal(body,blob.Stdout);
+    }
+
+    [Fact]
     public async Task A_real_invocation_captures_stdout_and_the_exit_code()
     {
         var result = await Git(_dir, "--version");

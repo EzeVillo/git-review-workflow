@@ -6,6 +6,7 @@ import type {
     WalkthroughRecord,
     WalkthroughState,
 } from "../cli/configPorcelain";
+import type {CommentsReport} from "../cli/commentsPorcelain";
 import {BranchRecord, EntryRecord, FixesState, ReviewMode, sourceOf} from "../cli/porcelain";
 import type {PathRef} from "../cli/unquote";
 import type {Situation} from "../review/situation";
@@ -197,6 +198,8 @@ export interface PanelGuide {
  * borra), para que se construya y se pruebe sin un editor.
  */
 export interface PanelModel {
+    commentTarget?: string;
+    comments?: CommentsReport;
     situation: Situation;
     busy: boolean;
     /** Sólo con más de un repositorio en la ventana. */
@@ -620,6 +623,7 @@ export function resumableSourceAt(branches: BranchRecord[], index: unknown): str
 
 export function buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelModel {
     const base: PanelModel = {
+        comments: state.comments,
         situation: state.situation,
         busy: inputs.busy,
         // Inventario sólo en no-review: finish-pending es pantalla de

@@ -28,6 +28,9 @@ import (
 // set. action still travels for genericFailureText and mutationDoneMsg's own
 // bookkeeping either way.
 type mutationRequest struct {
+	stdin           string
+	hasInput        bool
+	latestComments  bool
 	action          string
 	params          domain.ActionParams
 	argv            *domain.Argv
@@ -66,7 +69,51 @@ func silenceWindowCmd(gen int) tea.Cmd {
 // construction, exactly like readCmd().
 func mutationCmd(req mutationRequest, argv domain.Argv, activityGeneration int) tea.Cmd {
 	return func() tea.Msg {
-		result := host.InvokeReview(context.Background(), argv.Verb, argv.Args)
+		args := append([]string(nil), argv.Args...)
+		if req.latestComments {
+			current := host.InvokeReview(context.Background(), "comments", []string{"status", "--porcelain"})
+			report := domain.ParseComments(current.Stdout)
+			expected := ""
+			kind := ""
+			for i, a := range args {
+				if a == "--expect-context" && i+1 < len(args) {
+					expected = args[i+1]
+				}
+				if a == "--document" && i+1 < len(args) {
+					kind = args[i+1]
+				}
+			}
+			if current.ExitCode != 0 || report.Guard() != expected {
+				return mutationDoneMsg{action: req.action, result: host.Result{ExitCode: 4, Stderr: domain.StaleNotice}, activityGeneration: activityGeneration}
+			}
+			for i, a := range args {
+				if i+1 >= len(args) {
+					continue
+				}
+				target := kind
+				if a == "--expect-local" {
+					target = "local"
+				}
+				if a == "--expect-shared" {
+					target = "shared"
+				}
+				if a == "--expect-document" || a == "--expect-local" || a == "--expect-shared" {
+					revision := "absent"
+					for _, doc := range report.Documents() {
+						if doc.Kind == target {
+							revision = doc.Revision
+						}
+					}
+					args[i+1] = revision
+				}
+			}
+		}
+		var result host.Result
+		if req.hasInput {
+			result = host.InvokeReviewWithInput(context.Background(), argv.Verb, args, req.stdin)
+		} else {
+			result = host.InvokeReview(context.Background(), argv.Verb, args)
+		}
 		return mutationDoneMsg{action: req.action, params: req.params, result: result, activityGeneration: activityGeneration, successOpenPath: req.successOpenPath, draftStart: req.draftStart, draftFlow: req.draftFlow}
 	}
 }
@@ -249,10 +296,39 @@ func draftConfigCmd(intent domain.ReviewIntent) tea.Cmd {
 // silence-window timer are both scheduled — SC-004's own mechanism, not
 // re-implemented here.
 func (m Model) handleMutationDone(msg mutationDoneMsg) (Model, tea.Cmd) {
+	if msg.action == "addComment" && m.commentsForm != nil {
+		if mutationFailed(msg.result) {
+			m.commentsForm.Busy = false
+			m.commentsForm.Error = failureMessage(msg.action, msg.result)
+			if msg.result.ExitCode == 4 {
+				m.commentsForm.Error = domain.StaleNotice
+			}
+		} else {
+			m.commentsForm = nil
+		}
+	}
 	if msg.activityGeneration != 0 {
 		m = m.clearActivity(msg.activityGeneration)
 	}
 	gen := m.lock.End()
+	if msg.action == "deleteCommentEntry" && m.commentsBrowser != nil {
+		m.pendingFinish = nil
+		b := m.commentsBrowser
+		var reload tea.Cmd
+		if mutationFailed(msg.result) {
+			b.Busy = false
+			b.Error = failureMessage(msg.action, msg.result)
+			if msg.result.ExitCode == 4 {
+				b.Error = domain.StaleNotice
+			}
+		} else {
+			b.Error = ""
+			args, _ := domain.CommentsArgv(b.Report, "entries", b.Document.Kind, b.Document.Context, 0)
+			reload = commentsQueryCmd(args, b.Document, b.Report, true)
+		}
+		m2, read := m.scheduleRead()
+		return m2, tea.Batch(read, reload, silenceWindowCmd(gen))
+	}
 
 	// Cleared UNCONDITIONALLY for every action but finishReview's own — the
 	// lock's depth-1 guard only blocks a SECOND mutation while the first is
@@ -349,6 +425,10 @@ func undoFinishForceRetry(msg mutationDoneMsg, panel domain.PanelModel) (*Confir
 // same activation).
 func (m Model) activateControl(id domain.ControlID, variant string) (Model, tea.Cmd) {
 	switch id {
+	case "addComment":
+		return m.beginAddComment()
+	case "deleteComments", "initComments", "openComments", "copyCommentPath", "renumberComments", "openCommentDiff", "prepareSharedComments":
+		return m.beginCommentsRow(string(id), variant)
 	case "copyCliInstall":
 		return m.beginCopyCliInstall()
 	case "installCli", "openSupport":
@@ -418,6 +498,8 @@ func (m Model) activateControl(id domain.ControlID, variant string) (Model, tea.
 // situation allows it (keys.go's KeyBarFor).
 func (m Model) activateBoundAction(action string) (Model, tea.Cmd) {
 	switch action {
+	case "addComment":
+		return m.beginAddComment()
 	case "finishReview":
 		return m.beginFinish()
 	case "saveReview":
@@ -1240,5 +1322,12 @@ func (m Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if choice != domain.ConfirmAccepted {
 		return m, nil
 	}
-	return m.beginMutation(overlay.Pending, overlay.Token)
+	next, cmd := m.beginMutation(overlay.Pending, overlay.Token)
+	if overlay.Pending.action == "deleteCommentEntry" && next.commentsBrowser != nil {
+		next.commentsBrowser.Busy = cmd != nil
+		if cmd == nil {
+			next.commentsBrowser.Error = next.statusLine
+		}
+	}
+	return next, cmd
 }

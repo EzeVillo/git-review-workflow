@@ -9,6 +9,13 @@ namespace GitReview.Host.Tests;
 /// </summary>
 public class ReviewStateManagerTests
 {
+    [Fact] public async Task Comments_failure_remains_an_independent_diagnostic()
+    {
+        var cli=new FakeCliInvoker().Answer("status",WalkStatus).Fails("comments","Comments unreadable");
+        var state=await Manager(cli,"/repo").RefreshAsync();
+        Assert.Equal(Situation.Review,state.Situation);Assert.Equal(3,state.EntriesList.Count);
+        Assert.Equal("Comments unreadable",state.Comments!.Records("comments-diagnostic").Single()[2]);
+    }
     private static ReviewStateManager Manager(FakeCliInvoker cli, params string[] roots) =>
         new(cli, () => roots);
 
@@ -25,7 +32,7 @@ public class ReviewStateManagerTests
         Assert.Equal(Situation.Review, state.Situation);
         Assert.Equal(ReviewMode.Walk, state.State?.Mode);
         Assert.Equal(3, state.EntriesList.Count);
-        Assert.Equal(new[] { "--version", "status" }, cli.Verbs);
+        Assert.Equal(new[] { "--version", "status", "comments" }, cli.Verbs);
         Assert.All(cli.Calls, c => Assert.Equal("/repo", c.Cwd));
     }
 
@@ -60,7 +67,7 @@ public class ReviewStateManagerTests
         Assert.Equal("main", state.Config?.Base);
         Assert.Equal("origin", state.Config?.Remote);
         Assert.Single(state.Candidates!);
-        Assert.Equal(new[] { "--version", "status", "list", "config" }, cli.Verbs.OrderByVerb());
+        Assert.Equal(new[] { "--version", "status", "list", "config", "comments" }, cli.Verbs.OrderByVerb());
     }
 
     [Fact]

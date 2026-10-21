@@ -1,17 +1,20 @@
 package domain
 
-// IconName is one of the five names contracts/client-product-surface.yaml
+// IconName is one of the semantic names contracts/client-product-surface.yaml
 // fixes under `icon_vocabulary:`. The names are semantic, not about the
 // stroke: `prev`, not `left` — what the canonical fixes is what the icon
 // MEANS, the glyph is this client's own choice.
 type IconName string
 
 const (
-	IconPrev  IconName = "prev"
-	IconNext  IconName = "next"
-	IconFile  IconName = "file"
-	IconTrash IconName = "trash"
-	IconDiff  IconName = "diff"
+	IconPrev     IconName = "prev"
+	IconNext     IconName = "next"
+	IconFile     IconName = "file"
+	IconTrash    IconName = "trash"
+	IconDiff     IconName = "diff"
+	IconEye      IconName = "eye"
+	IconNumbered IconName = "numbered"
+	IconCopy     IconName = "copy"
 )
 
 // Icon is one control's two glyphs: the Unicode one used by default, and
@@ -23,7 +26,7 @@ type Icon struct {
 	ASCII   byte
 }
 
-// IconVocabulary is the ONE map that answers all five names
+// IconVocabulary is the ONE map that answers all canonical names
 // (contracts/client-product-surface.md § 9). Every Unicode glyph here is
 // Narrow or Neutral per IsSafeTerminalGlyph — never Wide or Ambiguous — and
 // every ASCII glyph is a plain printable character (U+0020..U+007E).
@@ -33,7 +36,7 @@ type Icon struct {
 // terminal and two on another, throwing off every row's alignment
 // (contracts/tui-surface.md).
 //
-// Two of the five choices are worth explaining because the obvious pick is
+// Two of the choices are worth explaining because the obvious pick is
 // wrong: the LEFTWARDS/RIGHTWARDS ARROW pair (← U+2190, → U+2192) is
 // Ambiguous, not Narrow — verified against the real table below, not
 // assumed — which is why prev/next use the single angle quotation marks
@@ -41,11 +44,14 @@ type Icon struct {
 // Ambiguous too, which is why `file` uses a ballot box (☐ U+2610) rather
 // than a hamburger-style glyph.
 var IconVocabulary = map[IconName]Icon{
-	IconPrev:  {Unicode: '‹', ASCII: '<'}, // ‹ SINGLE LEFT-POINTING ANGLE QUOTATION MARK
-	IconNext:  {Unicode: '›', ASCII: '>'}, // › SINGLE RIGHT-POINTING ANGLE QUOTATION MARK
-	IconFile:  {Unicode: '☐', ASCII: '#'}, // ☐ BALLOT BOX
-	IconTrash: {Unicode: '✗', ASCII: 'x'}, // ✗ BALLOT X
-	IconDiff:  {Unicode: '≷', ASCII: '~'}, // ≷ GREATER-THAN OR LESS-THAN
+	IconPrev:     {Unicode: '‹', ASCII: '<'}, // ‹ SINGLE LEFT-POINTING ANGLE QUOTATION MARK
+	IconNext:     {Unicode: '›', ASCII: '>'}, // › SINGLE RIGHT-POINTING ANGLE QUOTATION MARK
+	IconFile:     {Unicode: '☐', ASCII: '#'}, // ☐ BALLOT BOX
+	IconTrash:    {Unicode: '✗', ASCII: 'x'}, // ✗ BALLOT X
+	IconDiff:     {Unicode: '≷', ASCII: '~'}, // ≷ GREATER-THAN OR LESS-THAN
+	IconEye:      {Unicode: '◉', ASCII: 'o'}, // ◉ FISHEYE; an eye emoji would occupy two cells.
+	IconNumbered: {Unicode: '#', ASCII: '1'}, // NUMBER SIGN; № has ambiguous width.
+	IconCopy:     {Unicode: '⧉', ASCII: 'c'}, // TWO JOINED SQUARES; Narrow/Neutral.
 }
 
 // eastAsianWidthCategory is the two categories that mean anything OTHER

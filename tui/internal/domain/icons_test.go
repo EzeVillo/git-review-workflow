@@ -1,15 +1,16 @@
 package domain
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
 
-func TestIconVocabularyHasExactlyTheFiveCanonicalNames(t *testing.T) {
-	if len(IconVocabulary) != 5 {
-		t.Fatalf("expected 5 icons, got %d", len(IconVocabulary))
+func TestIconVocabularyHasExactlyTheEightCanonicalNames(t *testing.T) {
+	if len(IconVocabulary) != 8 {
+		t.Fatalf("expected 8 icons, got %d", len(IconVocabulary))
 	}
-	for _, name := range []IconName{IconPrev, IconNext, IconFile, IconTrash, IconDiff} {
+	for _, name := range []IconName{IconPrev, IconNext, IconFile, IconTrash, IconDiff, IconEye, IconNumbered, IconCopy} {
 		if _, ok := IconVocabulary[name]; !ok {
 			t.Errorf("IconVocabulary is missing %q", name)
 		}
@@ -18,8 +19,29 @@ func TestIconVocabularyHasExactlyTheFiveCanonicalNames(t *testing.T) {
 
 func TestIconVocabularyMatchesCanonical(t *testing.T) {
 	yaml := readCanonicalYAML(t)
-	if !strings.Contains(yaml, "icon_vocabulary: [prev, next, file, trash, diff]") {
-		t.Fatal("canonical icon_vocabulary must be exactly [prev, next, file, trash, diff]")
+	match := regexp.MustCompile(`(?m)^icon_vocabulary:\s*\[([^\]]*)\]`).FindStringSubmatch(yaml)
+	if match == nil {
+		t.Fatal("canonical icon_vocabulary is missing")
+	}
+	names := strings.Split(match[1], ",")
+	if len(IconVocabulary) != len(names) {
+		t.Errorf("expected %d canonical icons, got %d", len(names), len(IconVocabulary))
+	}
+	seen := map[IconName]bool{}
+	for _, value := range names {
+		name := IconName(strings.TrimSpace(value))
+		if seen[name] {
+			t.Errorf("canonical icon_vocabulary repeats %q", name)
+		}
+		seen[name] = true
+		if _, ok := IconVocabulary[name]; !ok {
+			t.Errorf("IconVocabulary is missing canonical icon %q", name)
+		}
+	}
+	for name := range IconVocabulary {
+		if !seen[name] {
+			t.Errorf("IconVocabulary contains non-canonical icon %q", name)
+		}
 	}
 }
 

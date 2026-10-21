@@ -160,6 +160,7 @@ data class PanelWalkthrough(
 data class PanelModel(
     val situation: Situation,
     val busy: Boolean,
+    val comments: CommentsReport? = null,
     val repoLabel: String? = null,
     val reviews: List<PanelReview> = emptyList(),
     /**
@@ -461,6 +462,7 @@ fun buildPanelModel(state: ReviewState, inputs: PanelInputs): PanelModel {
     var model = PanelModel(
         situation = state.situation,
         busy = inputs.busy,
+        comments = state.comments,
         reviews = if (state.situation == Situation.NO_REVIEW) toPanelReviews(state.branches) else emptyList(),
         drafts = if (state.situation == Situation.NO_REVIEW) toPanelDrafts(state.drafts ?: emptyList()) else emptyList(),
         // They only arrive by config --porcelain, that is, only outside a review:

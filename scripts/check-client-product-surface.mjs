@@ -9,6 +9,7 @@ import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import {validateCommentsSurface, validateCommentReveal} from "./comments-surface.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -43,6 +44,14 @@ if (!existsSync(yamlPath)) {
 }
 
 const text = readText(yamlPath, "utf8");
+for (const error of validateCommentsSurface(text)) fail(error);
+for (const [client, gateFile, callerFile] of [
+  ["vscode", "vscode-extension/src/views/reveal.ts", "vscode-extension/src/commands/comments.ts"],
+  ["intellij", "jetbrains-plugin/src/main/kotlin/com/ezevillo/gitreview/host/PanelReveal.kt", "jetbrains-plugin/src/main/kotlin/com/ezevillo/gitreview/host/CommentsActions.kt"],
+  ["visualstudio", "visualstudio-extension/src/GitReview.VS/ToolWindows/PanelReveal.cs", "visualstudio-extension/src/GitReview.VS/ToolWindows/CommentActions.cs"],
+]) {
+  for (const error of validateCommentReveal(readText(join(root, gateFile), "utf8"), readText(join(root, callerFile), "utf8"))) fail(`${client}: ${error}`);
+}
 
 function scalar(key) {
   const m = text.match(new RegExp(`^${key}:\\s*"([^"]*)"`, "m"));
@@ -127,8 +136,8 @@ const actionsSplit = text.split(/^actions:\s*$/m)[1];
 if (!actionsSplit) fail("missing actions: block");
 const actionsBlock = actionsSplit.split(/^[a-z_][a-z0-9_]*:\s*$/m)[0];
 const actionKeys = [...actionsBlock.matchAll(/^ {2}([A-Za-z][A-Za-z0-9]*):/gm)].map((m) => m[1]);
-if (actionKeys.length !== 27) {
-  fail(`expected 27 actions, found ${actionKeys.length}: ${actionKeys.join(", ")}`);
+if (actionKeys.length !== 28) {
+  fail(`expected 28 actions, found ${actionKeys.length}: ${actionKeys.join(", ")}`);
 }
 
 /**
@@ -159,8 +168,8 @@ function actionsNotIn(client) {
 const pkgPath = join(root, "vscode-extension", "package.json");
 const pkg = JSON.parse(readText(pkgPath, "utf8"));
 const commands = pkg.contributes?.commands ?? [];
-if (commands.length !== 27) {
-  fail(`vscode package.json has ${commands.length} commands, expected 27`);
+if (commands.length !== 28) {
+  fail(`vscode package.json has ${commands.length} commands, expected 28`);
 }
 const cmdIds = commands.map((c) => c.command.replace(/^gitReview\./, ""));
 for (const id of cmdIds) {
@@ -329,6 +338,9 @@ for (const [label, rel] of userCopyFiles) {
     continue;
   }
   const s = readText(p, "utf8");
+  if (!squash(s).includes(squash(perClientString("comments_path_copied", label)))) {
+    fail(`${label} UserCopy missing comments_path_copied feedback`);
+  }
   // {path} es el placeholder del canonico; cada cliente lo interpola a su
   // manera, asi que se compara lo que lo rodea, que es donde vive la copy.
   const [before, after] = draftPrompt.split("{path}");
@@ -514,6 +526,10 @@ function collectCanonicalControls() {
       tooltipUnfilled: dm[8] || null,
     });
   }
+  const commentsBlock = text.split(/^comments_rows:\s*$/m)[1]?.split(/^[a-z_][a-z0-9_]*:/m)[0] ?? "";
+  for (const m of commentsBlock.matchAll(/^ {4}([A-Za-z][A-Za-z0-9]*):\s*\{label:\s*(null|"[^"]*"),(?:\s*accessible_name:\s*"([^"]*)",)?\s*emphasis:\s*(primary|secondary|link|icon),(?:\s*icon:\s*[a-z]+,)?\s*confirms:\s*(true|false)/gm)) {
+    controls.push({id: m[1], label: m[2] === "null" ? null : m[2].slice(1, -1), accessible: m[3] || null, emphasis: m[4], raw: false, confirms: m[5] === "true"});
+  }
   return controls;
 }
 
@@ -550,11 +566,21 @@ function requireSharedCopy(what, copy, exact, excluded = []) {
       fail(`${label} panel layout missing at ${rel.join("/")}`);
       continue;
     }
-    const src = readText(p, "utf8");
+    const copyPath = label === "vscode" ? join(root, "vscode-extension/src/review/userCopy.ts") : label === "intellij" ? join(root, "jetbrains-plugin/src/main/kotlin/com/ezevillo/gitreview/domain/UserCopy.kt") : join(root, "visualstudio-extension/src/GitReview.Domain/UserCopy.cs");
+    const src = readText(p, "utf8") + readText(copyPath, "utf8");
     const hit = exact
       ? src.includes(`"${copy}"`)
       : squash(src).includes(squash(copy));
     if (!hit) fail(`${label} is missing the ${what}`);
+  }
+}
+
+// Las etiquetas del explorador y del cuerpo se comparten en los cuatro clientes.
+for (const key of ["comments_rows", "comments_browser", "comments_composer"]) {
+  const block = text.split(new RegExp(`^${key}:\\s*$`, "m"))[1]?.split(/^[a-z_][a-z0-9_]*:/m)[0] ?? "";
+  for (const [, field, copy] of block.matchAll(/^ {2}(\w+):\s*"([^"\n]*)"/gm)) {
+    requireSharedCopy(`${key}.${field}`, copy, true);
+    if (!readText(join(root, "tui/internal/domain/usercopy.go"), "utf8").includes(`"${copy}"`)) fail(`tui is missing ${key}.${field}`);
   }
 }
 
@@ -675,13 +701,15 @@ function extractPanelCalls(src) {
     // El cuarto argumento es el indice de la fila, y solo lo llevan los
     // controles de icono que actuan sobre UNA fila del cuerpo.
     const iconRe =
-      /iconButton\(\s*"([^"]*)"\s*,\s*"([A-Za-z][A-Za-z0-9]*)"\s*,\s*"([^"]*)"\s*(?:,\s*[A-Za-z_$][\w$]*\s*)?\)/g;
+      /iconButton\(\s*"([^"]*)"\s*,\s*"([A-Za-z][A-Za-z0-9]*)"\s*,\s*("[^"]*"|COMMENTS\.\w+)\s*(?:,\s*[A-Za-z_$][\w$]*\s*)?\)/g;
     let im;
     while ((im = iconRe.exec(line)) !== null) {
       calls.push({
         kind: "icon",
         label: null,
-        accessible: im[3],
+        accessible: im[3].startsWith("COMMENTS.")
+            ? new RegExp(`\\b${im[3].slice(9)}: "([^"]*)"`).exec(readText(join(root, "vscode-extension/src/review/userCopy.ts"), "utf8"))?.[1]
+            : im[3].slice(1, -1),
         id: im[2],
         emphasis: "icon",
         line: i + 1,
@@ -704,7 +732,7 @@ function extractPanelCalls(src) {
     }
     // button(firstArg, "id", className?, ...) — firstArg may be string, null, ternary, or expression
     const btnRe =
-      /button\(\s*((?:[^,"'()]|"[^"]*"|'[^']*'|\([^)]*\))+?)\s*,\s*"([A-Za-z][A-Za-z0-9]*)"\s*(?:,\s*([^,)]+))?/g;
+      /(?:button|control)\(\s*((?:[^,"'()]|"[^"]*"|'[^']*'|\([^)]*\))+?)\s*,\s*"([A-Za-z][A-Za-z0-9]*)"\s*(?:,\s*([^,)]+))?/g;
     let bm;
     while ((bm = btnRe.exec(line)) !== null) {
       const first = bm[1].trim();
@@ -1455,7 +1483,7 @@ if (guideBlock.length === 0) {
 {
   const sit = situationBlock("no-review");
   const order = [...sit.matchAll(/title:\s*"([^"]+)"/g)].map((m) => m[1]);
-  const want = ["Walkthrough", "Reading orders you finished with", "Edits you extracted", "Compare", "Settings", "Support"];
+  const want = ["Walkthrough", "Comments", "Reading orders you finished with", "Edits you extracted", "Compare", "Settings", "Support"];
   if (order.join("|") !== want.join("|")) {
     fail(`no-review footer sections are [${order.join(", ")}], expected [${want.join(", ")}]`);
   }
@@ -1956,7 +1984,7 @@ if (existsSync(tuiUiDir)) {
   // uses) -- 12 of 13 now covered, everything canonicalConfirming marks
   // except the one declared exception, walkthroughInit.
   const TUI_CONFIRM_WIRED_SO_FAR = new Set([
-    "undoFinish", "saveReview", "abortReview",
+    "deleteComments", "undoFinish", "saveReview", "abortReview",
     "continueReview", "discardInventory", "discardDraft", "discardGuide",
     "discardFixes", "discardAllFixes", "cleanReview", "walkthroughBuild",
     "compareReview",

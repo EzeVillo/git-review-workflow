@@ -1,0 +1,18 @@
+No active review on this branch.
+> [ Start a review ]
+
+Walkthrough
+ [ Init ]   [ Build ]
+
+Comments
+Feature · Local  (2)
+ [ Open ]   [ Copy path ]   [ Renumber ]   [ Diff ]   [ Delete ]
+Feature · Shared  (1)
+ [ Open ]   [ Renumber ]   [ Diff ]   [ Delete ]   [ Prepare ]
+
+Compare
+  [ Compare revisions ]
+
+… footer [#.........]: 0 line(s) above, 9 below — j/k or mouse wheel
+
+j:up  k:down  enter:select  r:refresh  ::actions  m:mouse on  q:quit

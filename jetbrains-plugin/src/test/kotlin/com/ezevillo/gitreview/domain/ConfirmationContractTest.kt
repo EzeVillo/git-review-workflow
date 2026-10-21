@@ -54,7 +54,7 @@ class ConfirmationContractTest {
         // guide_rows, walkthrough_row y fixes_rows: mismo papel (fila, no situación),
         // pero cuelgan de una clave "controls" porque el bloque también declara las
         // filas y sus estados.
-        for (key in listOf("guide_rows", "walkthrough_row", "fixes_rows")) {
+        for (key in listOf("guide_rows", "walkthrough_row", "fixes_rows", "comments_rows", "comments_browser")) {
             @Suppress("UNCHECKED_CAST")
             val rowControls =
                 (yaml[key] as? Map<String, Any?>)?.get("controls") as? Map<String, Any?> ?: continue

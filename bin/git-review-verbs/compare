@@ -115,8 +115,14 @@ returnbranch="$(git symbolic-ref --quiet --short HEAD || true)"
 # reject as a ref component (HEAD~3, a^, x:y) falls back to <b>'s short hash, so
 # the branch and refs/review-edits/<name>/* stay valid. Identity for
 # status/list/clean only, never a writeback target — compare is read-only.
-if git check-ref-format "review/$b" 2>/dev/null; then
-	name="$b"
+bname="$b"
+case "$bname" in
+refs/heads/*) bname="${bname#refs/heads/}" ;;
+refs/remotes/*) bname="${bname#refs/remotes/}" ;;
+refs/tags/*) bname="${bname#refs/tags/}" ;;
+esac
+if git check-ref-format "review/$bname" 2>/dev/null; then
+	name="$bname"
 else
 	name="$(git rev-parse --short "$bcommit")"
 fi
@@ -143,13 +149,18 @@ git rev-parse --verify --quiet "refs/heads/review-saved/$name" >/dev/null &&
 # a remote-tracking branch recorded no name at all and every reader fell back to
 # the review's source.
 draftsrc="$name"
-if git rev-parse --verify --quiet "refs/heads/$b" >/dev/null; then
-	draftsrc="$b"
+bref="$(git rev-parse --symbolic-full-name "$b" 2>/dev/null || true)"
+case "$bref" in
+refs/heads/*)
+	draftsrc="${bref#refs/heads/}"
 	walk_use_draft "$draftsrc"
-elif git rev-parse --verify --quiet "refs/remotes/$b" >/dev/null; then
-	draftsrc="${b#*/}"
+	;;
+refs/remotes/*)
+	draftsrc="${bref#refs/remotes/}"
+	draftsrc="${draftsrc#*/}"
 	walk_use_draft "$draftsrc"
-fi
+	;;
+esac
 
 if [ "$step" -eq 1 ]; then
 	# --first-parent --no-merges: walk only the range's own commits, skipping merge

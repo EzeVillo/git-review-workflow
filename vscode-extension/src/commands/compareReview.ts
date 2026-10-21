@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import {parseConfigPorcelain, CandidateBranch} from "../cli/configPorcelain";
+import {parseConfigPorcelain, CandidateBranch, compareRevisionItems} from "../cli/configPorcelain";
 import {invokeGitReview, InvokeOptions} from "../cli/invoke";
 import {MutationLock} from "../review/mutationLock";
 import {layoutSummary} from "../review/layoutOffers";
@@ -137,16 +137,13 @@ async function pickCommitIsh(
     candidates: CandidateBranch[],
     title: string
 ): Promise<string | undefined> {
-    if (candidates.length === 0) {
+    const branches = compareRevisionItems(candidates);
+    if (branches.length === 0) {
         return inputCommitIsh(title);
     }
-    const branches: vscode.QuickPickItem[] = candidates.map((c) => ({
-        label: c.name,
-        description: c.origin + (c.current ? " · current" : ""),
-    }));
 
     return await new Promise<string | undefined>((resolve) => {
-        const quickPick = vscode.window.createQuickPick();
+        const quickPick = vscode.window.createQuickPick<vscode.QuickPickItem & {value?: string}>();
         quickPick.title = title;
         quickPick.placeholder = "Branch, tag or commit";
         quickPick.items = branches;
@@ -158,7 +155,8 @@ async function pickCommitIsh(
                 : [{label: typed, description: "use as typed"}, ...branches];
         });
         quickPick.onDidAccept(() => {
-            const picked = quickPick.selectedItems[0]?.label ?? quickPick.value.trim();
+            const selected = quickPick.selectedItems[0];
+            const picked = selected?.value ?? selected?.label ?? quickPick.value.trim();
             quickPick.hide();
             resolve(picked === "" ? undefined : picked);
         });

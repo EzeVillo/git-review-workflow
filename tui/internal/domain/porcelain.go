@@ -471,6 +471,7 @@ type CandidateBranch struct {
 	Name    string
 	Origin  string // "remote" | "local"
 	Current bool
+	Ref     string // exact revision supplied by candidate-ref
 }
 
 // CandidateRemote is a `remote-candidate` record.
@@ -778,9 +779,10 @@ type ConfigPorcelainResult struct {
 // always emits it.
 func ParseConfigPorcelain(stdout string) ConfigPorcelainResult {
 	var (
-		base, remote string
-		haveBase     bool
-		result       ConfigPorcelainResult
+		base, remote  string
+		haveBase      bool
+		result        ConfigPorcelainResult
+		candidateRefs = make(map[string]string)
 	)
 
 	for _, line := range splitLines(stdout) {
@@ -805,6 +807,11 @@ func ParseConfigPorcelain(stdout string) ConfigPorcelainResult {
 			name, origin := field(fields, 1), field(fields, 2)
 			if name != "" && (origin == "remote" || origin == "local") {
 				result.Candidates = append(result.Candidates, CandidateBranch{Name: name, Origin: origin, Current: toBool(field(fields, 3))})
+			}
+		case "candidate-ref":
+			name, origin, ref := field(fields, 1), field(fields, 2), field(fields, 3)
+			if name != "" && (origin == "remote" || origin == "local") && strings.HasPrefix(ref, "refs/") {
+				candidateRefs[origin+"\t"+name] = ref
 			}
 		case "delta":
 			name, tip, origin := field(fields, 1), field(fields, 2), field(fields, 3)
@@ -850,6 +857,10 @@ func ParseConfigPorcelain(stdout string) ConfigPorcelainResult {
 
 	if remote == "" {
 		remote = "origin"
+	}
+	for i := range result.Candidates {
+		c := &result.Candidates[i]
+		c.Ref = candidateRefs[c.Origin+"\t"+c.Name]
 	}
 	result.Config = EffectiveConfig{Base: base, HasBase: haveBase, Remote: remote}
 	if result.Candidates == nil {

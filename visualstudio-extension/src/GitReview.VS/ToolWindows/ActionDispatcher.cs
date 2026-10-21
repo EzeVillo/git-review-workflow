@@ -1059,10 +1059,8 @@ public sealed partial class ActionDispatcher
         // Las candidatas que la CLI ya reportó, más lo que se tipee: compare toma un
         // commit-ish, así que un tag o un SHA valen — pero mostrar la lista evita que
         // el caso común (una rama) haya que escribirlo de memoria.
-        var candidates = (State.Candidates ?? Array.Empty<CandidateBranch>())
-            .Select(c => c.Name)
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
+        var revisions = ConfigPorcelain.CompareRevisionItems(State.Candidates ?? Array.Empty<CandidateBranch>());
+        var candidates = revisions.Select(c => c.Label).ToList();
         var lower = PickCommitIsh(UserCopy.CompareLowerTitle, candidates);
         if (lower is null) return;
         var upper = PickCommitIsh(UserCopy.CompareUpperTitle, candidates);
@@ -1102,7 +1100,8 @@ public sealed partial class ActionDispatcher
         };
         await RunAsync(
             "compareReview",
-            new ActionParams.Compare(flags, lower, upper),
+            new ActionParams.Compare(flags, revisions.FirstOrDefault(c => c.Label == lower)?.Value ?? lower,
+                revisions.FirstOrDefault(c => c.Label == upper)?.Value ?? upper),
             network: true,
             progress: UserCopy.ComparingProgress(lower, upper)).ConfigureAwait(true);
     }

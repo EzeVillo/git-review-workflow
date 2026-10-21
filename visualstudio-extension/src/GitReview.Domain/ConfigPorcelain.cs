@@ -2,7 +2,9 @@ namespace GitReview.Domain;
 
 public sealed record EffectiveConfig(string? Base = null, string Remote = "origin");
 
-public sealed record CandidateBranch(string Name, string Origin, bool Current);
+public sealed record CandidateBranch(string Name, string Origin, bool Current, string? Ref = null);
+
+public sealed record CompareRevisionItem(string Label, string Value);
 
 public sealed record CandidateRemote(string Name, bool Current);
 
@@ -334,6 +336,7 @@ public static class ConfigPorcelain
         string? bas = null;
         string? remote = null;
         var candidates = new List<CandidateBranch>();
+        var candidateRefs = new Dictionary<(string Origin, string Name), string>();
         var remotes = new List<CandidateRemote>();
         var deltas = new List<DeltaRecord>();
         var offers = new List<ReadingOffer>();
@@ -369,6 +372,15 @@ public static class ConfigPorcelain
                     var origin = Get(fields, 2);
                     if (name is null || (origin != "remote" && origin != "local")) continue;
                     candidates.Add(new CandidateBranch(name, origin!, ToBool(Get(fields, 3))));
+                    break;
+                }
+                case "candidate-ref":
+                {
+                    var name = Get(fields, 1);
+                    var origin = Get(fields, 2);
+                    var reference = Get(fields, 3);
+                    if (name is not null && (origin == "local" || origin == "remote") && reference?.StartsWith("refs/", StringComparison.Ordinal) == true)
+                        candidateRefs[(origin!, name)] = reference;
                     break;
                 }
                 case "delta":
@@ -428,7 +440,7 @@ public static class ConfigPorcelain
         var config = new EffectiveConfig(bas, remote ?? "origin");
         return new ConfigPorcelainResult(
             config,
-            candidates,
+            candidates.Select(c => candidateRefs.TryGetValue((c.Origin, c.Name), out var reference) ? c with { Ref = reference } : c).ToList(),
             remotes,
             deltas.Count > 0 ? deltas : null,
             offers.Count > 0 ? offers : null,
@@ -482,6 +494,10 @@ public static class ConfigPorcelain
     /// Branches for the start-review picker. Collapse remote+local same name;
     /// prefer current; current sorts first.
     /// </summary>
+    public static IReadOnlyList<CompareRevisionItem> CompareRevisionItems(IReadOnlyList<CandidateBranch> candidates) =>
+        candidates.Where(c => c.Ref is not null).Select(c => new CompareRevisionItem(
+            $"{(c.Ref!.StartsWith("refs/heads/", StringComparison.Ordinal) ? c.Ref.Substring(11) : c.Ref.StartsWith("refs/remotes/", StringComparison.Ordinal) ? c.Ref.Substring(13) : c.Ref)} · {c.Origin}", c.Ref!)).ToList();
+
     public static IReadOnlyList<CandidateBranch> BranchPickerItems(IReadOnlyList<CandidateBranch> candidates)
     {
         var byName = new Dictionary<string, CandidateBranch>();

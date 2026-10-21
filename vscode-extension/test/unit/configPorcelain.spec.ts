@@ -1,5 +1,5 @@
 import * as assert from "node:assert";
-import {branchPickerItems, CandidateBranch, deltaForSource, parseConfigPorcelain} from "../../src/cli/configPorcelain";
+import {compareRevisionItems, branchPickerItems, CandidateBranch, deltaForSource, parseConfigPorcelain} from "../../src/cli/configPorcelain";
 
 describe("parseConfigPorcelain", () => {
     it("config remote sin base configurada", () => {
@@ -141,7 +141,7 @@ describe("parseConfigPorcelain", () => {
         assert.deepStrictEqual(result.candidates, []);
     });
 
-    // ── offer (008 reading layouts) ──────────────────────────────────────────
+    // â”€â”€ offer (008 reading layouts) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     it("parsea offer walk recommended y keys available", () => {
         const out = [
@@ -178,7 +178,7 @@ describe("parseConfigPorcelain", () => {
         assert.deepStrictEqual(result.offers, [{id: "step", rank: "available"}]);
     });
 
-    // ── offer draft / draft-resume (011) ─────────────────────────────────────
+    // â”€â”€ offer draft / draft-resume (011) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     it("parsea draft en un PR sin walkthrough ni borrador", () => {
         const out = [
@@ -285,5 +285,21 @@ describe("branchPickerItems", () => {
 
     it("lista vacía produce lista vacía", () => {
         assert.deepStrictEqual(branchPickerItems([]), []);
+    });
+});
+
+describe("Compare exact revisions", () => {
+    it("keeps local and remote candidates distinct regardless of record order", () => {
+        const r = parseConfigPorcelain([
+            "candidate-ref\tfeature\tremote\trefs/remotes/upstream/feature",
+            "candidate\tfeature\tlocal\t1",
+            "candidate\tfeature\tremote\t0",
+            "candidate-ref\tfeature\tlocal\trefs/heads/feature",
+        ].join("\n"));
+        assert.deepStrictEqual(compareRevisionItems(r.candidates).map(c => [c.label, c.value]), [
+            ["feature", "refs/heads/feature"], ["upstream/feature", "refs/remotes/upstream/feature"],
+        ]);
+        assert.deepStrictEqual(branchPickerItems(r.candidates).map(c => c.name), ["feature"]);
+        assert.deepStrictEqual(compareRevisionItems(parseConfigPorcelain("candidate\tfeature\tremote\t0").candidates), []);
     });
 });

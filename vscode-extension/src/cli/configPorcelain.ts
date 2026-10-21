@@ -23,6 +23,8 @@ export interface CandidateBranch {
     name: string;
     origin: "remote" | "local";
     current: boolean;
+    /** Exact revision for Compare, supplied by candidate-ref. */
+    ref?: string;
 }
 
 /**
@@ -387,6 +389,7 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
     let base: string | undefined;
     let remote: string | undefined;
     const candidates: CandidateBranch[] = [];
+    const candidateRefs = new Map<string, string>();
     const remotes: CandidateRemote[] = [];
     const deltas: DeltaRecord[] = [];
     const offers: ReadingOffer[] = [];
@@ -428,6 +431,13 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
                     break;
                 }
                 candidates.push({name, origin, current: toBool(fields[3])});
+                break;
+            }
+            case "candidate-ref": {
+                const [name, origin, ref] = fields.slice(1);
+                if (name && (origin === "local" || origin === "remote") && ref?.startsWith("refs/")) {
+                    candidateRefs.set(`${origin}\t${name}`, ref);
+                }
                 break;
             }
             case "delta": {
@@ -502,6 +512,10 @@ export function parseConfigPorcelain(stdout: string): ConfigPorcelainResult {
         }
     }
 
+    for (const candidate of candidates) {
+        const ref = candidateRefs.get(`${candidate.origin}\t${candidate.name}`);
+        if (ref !== undefined) candidate.ref = ref;
+    }
     const config: EffectiveConfig = {remote: remote ?? "origin"};
     if (base !== undefined) {
         config.base = base;
@@ -532,4 +546,13 @@ export function deltaForSource(
     }
     const origin: DeltaOrigin = source === "remote" ? "remote" : "local";
     return deltas.find((d) => d.origin === origin);
+}
+
+/** Compare keeps namespaces distinct; names alone are start arguments. */
+export function compareRevisionItems(candidates: readonly CandidateBranch[]): {label: string; value: string; description: string}[] {
+    return candidates.filter((c) => c.ref !== undefined).map((c) => ({
+        label: c.ref!.replace(/^refs\/(heads|remotes)\//, ""),
+        value: c.ref!,
+        description: c.origin + (c.current ? " · current" : ""),
+    }));
 }

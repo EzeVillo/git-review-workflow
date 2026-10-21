@@ -9,6 +9,7 @@ data class CandidateBranch(
     val name: String,
     val origin: String, // "remote" | "local"
     val current: Boolean,
+    val ref: String? = null,
 )
 
 data class CandidateRemote(
@@ -379,6 +380,7 @@ fun parseConfigPorcelain(stdout: String): ConfigPorcelainResult {
     var base: String? = null
     var remote: String? = null
     val candidates = ArrayList<CandidateBranch>()
+    val candidateRefs = HashMap<Pair<String, String>, String>()
     val remotes = ArrayList<CandidateRemote>()
     val deltas = ArrayList<DeltaRecord>()
     val offers = ArrayList<ReadingOffer>()
@@ -410,6 +412,12 @@ fun parseConfigPorcelain(stdout: String): ConfigPorcelainResult {
                 candidates.add(
                     CandidateBranch(name = name, origin = origin, current = toBool(fields.getOrNull(3))),
                 )
+            }
+            "candidate-ref" -> {
+                val name = fields.getOrNull(1) ?: continue
+                val origin = fields.getOrNull(2) ?: continue
+                val ref = fields.getOrNull(3) ?: continue
+                if (origin in listOf("local", "remote") && ref.startsWith("refs/")) candidateRefs[origin to name] = ref
             }
             "delta" -> {
                 val name = fields.getOrNull(1)
@@ -461,7 +469,7 @@ fun parseConfigPorcelain(stdout: String): ConfigPorcelainResult {
     val config = EffectiveConfig(base = base, remote = remote ?: "origin")
     return ConfigPorcelainResult(
         config = config,
-        candidates = candidates,
+        candidates = candidates.map { it.copy(ref = candidateRefs[it.origin to it.name]) },
         remotes = remotes,
         deltas = deltas.takeIf { it.isNotEmpty() },
         offers = offers.takeIf { it.isNotEmpty() },
@@ -508,3 +516,10 @@ fun deltaForSource(
     val origin = if (source == "remote") DeltaOrigin.REMOTE else DeltaOrigin.LOCAL
     return deltas.find { it.origin == origin }
 }
+
+/** Labels are presentation; Compare receives the CLI's exact ref. */
+data class CompareRevisionItem(val label: String, val value: String)
+fun compareRevisionItems(candidates: List<CandidateBranch>): List<CompareRevisionItem> =
+    candidates.mapNotNull { c -> c.ref?.let { ref ->
+        CompareRevisionItem("${ref.removePrefix(if (ref.startsWith("refs/heads/")) "refs/heads/" else "refs/remotes/")} · ${c.origin}", ref)
+    } }

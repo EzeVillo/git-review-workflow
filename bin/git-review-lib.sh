@@ -2303,6 +2303,9 @@ candidate_branches() {
 				_cb_current=1
 			fi
 			porcelain_row candidate "$_cb_name" "$_cb_origin" "$_cb_current"
+			# Compare resolves revisions literally, unlike start's source selector.
+			# Keep the exact ref separate so existing candidate consumers stay intact.
+			porcelain_row candidate-ref "$_cb_name" "$_cb_origin" "$_cb_ref"
 		done
 }
 

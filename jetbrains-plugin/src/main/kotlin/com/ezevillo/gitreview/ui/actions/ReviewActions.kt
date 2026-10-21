@@ -570,16 +570,16 @@ class CompareReviewAction : AnAction(), DumbAware {
         // Las candidatas que la CLI ya reportó, más lo que se tipee: compare toma un
         // commit-ish, así que un tag o un SHA valen — pero mostrar la lista evita que
         // el caso común (una rama) haya que escribirlo de memoria.
-        val candidates = service(e)?.currentState()?.candidates.orEmpty()
-            .map { it.name }
-            .distinct()
-            .toTypedArray()
+        val revisions = com.ezevillo.gitreview.domain.compareRevisionItems(service(e)?.currentState()?.candidates.orEmpty())
+        val candidates = revisions.map { it.label }.toTypedArray()
         val lower = UiMessages.chooseOrType(
             project, "Branch, tag or commit", UserCopy.COMPARE_LOWER_TITLE, candidates,
         ) ?: return
         val upper = UiMessages.chooseOrType(
             project, "Branch, tag or commit", UserCopy.COMPARE_UPPER_TITLE, candidates,
         ) ?: return
+        val lowerRef = revisions.find { it.label == lower }?.value ?: lower
+        val upperRef = revisions.find { it.label == upper }?.value ?: upper
         val layoutOptions = arrayOf(
             "Walkthrough — guided reading order if the upper tip has a walkthrough",
             "Walkthrough — keys only — only entries marked key",
@@ -617,7 +617,7 @@ class CompareReviewAction : AnAction(), DumbAware {
         }
         mutations(e)?.runSimple(
             "compareReview",
-            ActionParams.Compare(flags, lower, upper),
+            ActionParams.Compare(flags, lowerRef, upperRef),
             progressTitle = UserCopy.comparingProgress(lower, upper),
         )
     }

@@ -240,3 +240,48 @@ EOF
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"[3/3] more.txt  (uncovered)"* ]]
 }
+
+@test "compare uses exact candidate refs when local remote and tag tips differ" {
+    git switch --quiet -c feature v1.0
+    printf 'local\n' >local.txt
+    git add local.txt
+    git commit --quiet -m local
+    localtip="$(git rev-parse HEAD)"
+    git tag feature v2.0
+    git update-ref refs/remotes/upstream/feature v2.0
+    git remote add upstream "$TMP/unused.git"
+    git config reviewworkflow.remote upstream
+    git switch --quiet develop
+
+    run git review config --porcelain
+    [ "$status" -eq 0 ]
+    [ "$(printf '%s\n' "$output" | awk -F'\t' '$1=="candidate-ref" && $2=="feature" && $3=="remote"')" = "$(printf 'candidate-ref\tfeature\tremote\trefs/remotes/upstream/feature')" ]
+    [ "$(printf '%s\n' "$output" | awk -F'\t' '$1=="candidate-ref" && $2=="feature" && $3=="local"')" = "$(printf 'candidate-ref\tfeature\tlocal\trefs/heads/feature')" ]
+    run git review compare --no-walk -- v1.0 refs/remotes/upstream/feature
+    [ "$status" -eq 0 ]
+    [ "$(git branch --show-current)" = review/upstream/feature ]
+    [ "$(git config branch.review/upstream/feature.reviewtip)" = "$(git rev-parse v2.0)" ]
+    [ "$(git config branch.review/upstream/feature.reviewdraft)" = feature ]
+    [ "$(git write-tree)" = "$(git rev-parse 'v2.0^{tree}')" ]
+    git review abort
+    run git review compare --no-walk -- v1.0 refs/heads/feature
+    [ "$status" -eq 0 ]
+    [ "$(git branch --show-current)" = review/feature ]
+    [ "$(git config branch.review/feature.reviewtip)" = "$localtip" ]
+    [ "$(git write-tree)" = "$(git rev-parse 'refs/heads/feature^{tree}')" ]
+}
+
+@test "compare accepts the exact ref of a remote-only candidate" {
+    git remote add origin "$TMP/unused.git"
+    git update-ref refs/remotes/origin/remote-only v2.0
+    run git review config --porcelain
+    [ "$status" -eq 0 ]
+    ref="$(printf '%s\n' "$output" | awk -F'\t' '$1=="candidate-ref" && $2=="remote-only" {print $4}')"
+    [ "$ref" = refs/remotes/origin/remote-only ]
+    run git review compare --step -- v1.0 "$ref"
+    [ "$status" -eq 0 ]
+    [ "$(git branch --show-current)" = review/origin/remote-only ]
+    [ "$(git config branch.review/origin/remote-only.reviewdraft)" = remote-only ]
+    [ "$(git config branch.review/origin/remote-only.reviewtip)" = "$(git rev-parse v2.0)" ]
+    [ "$(git diff --cached --name-only)" = app.txt ]
+}

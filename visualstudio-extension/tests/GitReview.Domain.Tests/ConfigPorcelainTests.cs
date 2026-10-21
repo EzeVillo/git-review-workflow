@@ -375,4 +375,18 @@ public class ConfigPorcelainTests
             ConfigPorcelain.ParseConfigPorcelain($"draft\tfeature/x\t{path}\t0\t{bad}\tremote\tfull\n")
                 .Drafts!);
     }
+
+    [Fact]
+    public void Compare_preserves_exact_refs_and_namespaces()
+    {
+        var r = ConfigPorcelain.ParseConfigPorcelain(Lines(
+            "candidate-ref\tfeature\tremote\trefs/remotes/upstream/feature",
+            "candidate\tfeature\tlocal\t1", "candidate\tfeature\tremote\t0",
+            "candidate-ref\tfeature\tlocal\trefs/heads/feature"));
+        var items = ConfigPorcelain.CompareRevisionItems(r.Candidates);
+        Assert.Equal(new[] { "refs/heads/feature", "refs/remotes/upstream/feature" }, items.Select(c => c.Value));
+        Assert.Equal(new[] { "feature · local", "upstream/feature · remote" }, items.Select(c => c.Label));
+        Assert.Single(ConfigPorcelain.BranchPickerItems(r.Candidates));
+        Assert.Empty(ConfigPorcelain.CompareRevisionItems(new[] { new CandidateBranch("feature", "remote", false) }));
+    }
 }

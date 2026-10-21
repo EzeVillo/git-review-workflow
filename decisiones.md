@@ -1766,3 +1766,12 @@ los demás frames quedan iguales. La guía del generador y la del sandbox ya
 creado explican las dos elecciones por separado, y la referencia y los README
 lo explican en ambos idiomas. Si la CLI permite sólo Local, el selector se limita
 a las notas Local y no afirma que exista un destino Shared para esa comparación.
+
+### Compare: identidad de las candidatas
+
+Las candidatas de Start son nombres sin namespace: el origen se elige después.
+Compare resuelve revisiones literalmente, así que reutilizar ese nombre hacía que
+una fila remota abriera la rama local o fallara si sólo existía en el remoto.
+`candidate-ref` conserva la referencia exacta sin alterar el registro anterior ni
+sumar procesos. Los selectores presentan nombres legibles y envían esa ref; los
+nombres de rama de review y la custodia del draft normalizan refs completas.

@@ -214,3 +214,12 @@ salidas humanas del producto (dos columnas alineadas, un renglón por clave) y
 **no** lista ramas candidatas: para una persona, `git branch` ya existe y es
 mejor. Las ramas son un dato para el consumidor programático, que no tiene otra
 forma de obtenerlas sin cruzar la frontera de `002`.
+
+## Referencias exactas para Compare
+
+`candidate-ref<TAB>name<TAB>origin<TAB>ref` complementa cada `candidate` con
+su referencia completa (`refs/heads/...` o `refs/remotes/<remote>/...`). Se
+asocia por nombre y origen, independientemente del orden de los registros.
+Start sigue usando el nombre y su selector de origen; Compare envía la ref
+literal y mantiene separadas las dos candidatas. La ausencia de `candidate-ref`
+no autoriza a adivinar una referencia remota: el selector permite escribirla.

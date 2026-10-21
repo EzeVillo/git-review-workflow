@@ -245,4 +245,17 @@ class ConfigPorcelainTest {
         assertEquals(WalkthroughState.STALE, r?.state)
         assertEquals(null, r?.branch)
     }
+
+    @Test
+    fun compareUsesExactRefsWithoutCollapsingNamespaces() {
+        val r = parseConfigPorcelain(listOf(
+            "candidate-ref\tfeature\tremote\trefs/remotes/upstream/feature",
+            "candidate\tfeature\tlocal\t1", "candidate\tfeature\tremote\t0",
+            "candidate-ref\tfeature\tlocal\trefs/heads/feature",
+        ).joinToString("\n"))
+        assertEquals(listOf("refs/heads/feature", "refs/remotes/upstream/feature"), compareRevisionItems(r.candidates).map { it.value })
+        assertEquals(listOf("feature · local", "upstream/feature · remote"), compareRevisionItems(r.candidates).map { it.label })
+        assertEquals(1, branchPickerItems(r.candidates).size)
+        assertEquals(emptyList<CompareRevisionItem>(), compareRevisionItems(listOf(CandidateBranch("feature", "remote", false))))
+    }
 }

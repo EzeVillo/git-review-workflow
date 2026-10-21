@@ -348,3 +348,10 @@ func TestBranchPickerItemsOrdersCurrentThenName(t *testing.T) {
 		}
 	}
 }
+
+func TestCandidateRefsPreserveNamespaces(t *testing.T) {
+	r := ParseConfigPorcelain("candidate-ref\tfeature\tremote\trefs/remotes/upstream/feature\ncandidate\tfeature\tlocal\t1\ncandidate\tfeature\tremote\t0\ncandidate-ref\tfeature\tlocal\trefs/heads/feature\n")
+	if len(r.Candidates) != 2 || r.Candidates[0].Ref != "refs/heads/feature" || r.Candidates[1].Ref != "refs/remotes/upstream/feature" {
+		t.Fatalf("candidate identities lost: %+v", r.Candidates)
+	}
+}

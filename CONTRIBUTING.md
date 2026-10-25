@@ -248,26 +248,54 @@ Importar `EzeVillo/git-review-workflow` en Netlify, **en el mismo equipo que el 
 
 | Ajuste | Valor |
 |---|---|
-| Rama de producción | `main` |
+| Publicación de producción | Tag `landing-vX.Y.Z` mediante GitHub Actions |
+| Builds automáticos de Netlify | `Stopped builds` |
 | Nombre del sitio | `ezevillo-git-review-workflow` |
 | Configuración | `netlify.toml`, en la raíz del repositorio |
 | Base directory | `docs` |
 | Build command | Vacío |
 | Publish directory | `.` (relativo a `docs`) |
-| Variables de entorno propias | Ninguna |
-| Funciones, plugins de build y secretos | Ninguno |
+| Variables de entorno propias en Netlify | Ninguna |
+| Funciones y plugins de build | Ninguno |
 | Dominio | La dirección `*.netlify.app` del sitio hijo |
 
 Los ajustes de build están versionados en `netlify.toml`, que prevalece sobre la UI. La base
-`docs` evita instalar dependencias o compilar la CLI y los clientes. `ignore` compara el commit
-actual con el último publicado y sólo permite publicar cuando cambian `docs/` o `netlify.toml`.
-La primera publicación siempre continúa. `CACHED_COMMIT_REF` y `COMMIT_REF` los provee Netlify;
-**no se cargan como secretos ni variables del usuario**. Los build hooks manuales no respetan
-`ignore`, así que no hacen falta para este sitio.
+`docs` evita instalar dependencias o compilar la CLI y los clientes. `ignore = "exit 0"` omite
+los builds disparados por Git, incluso si cambian la landing o su configuración. Además, en
+**Project configuration → Developer settings → Continuous deployment → Build settings**, dejar
+**Build status → Stopped builds**. Esto impide también los builds por hooks y los reintentos desde
+Netlify; las publicaciones por CLI siguen disponibles. No usar un build hook para publicar un tag:
+construiría desde la rama en lugar de subir el commit etiquetado.
 
-No agregar un job de deploy a `.github/workflows/`: Netlify se conecta directamente a GitHub.
-Los pipelines de CI, releases, npm, Homebrew y las tiendas siguen usando sus canales actuales;
-no requieren `NETLIFY_AUTH_TOKEN`, `NETLIFY_SITE_ID`, `SITE_URL` ni `APP_BASE_PATH`.
+### Publicar una versión
+
+La landing versiona aparte con **`landing-vX.Y.Z`**. El único workflow que la publica es
+[`.github/workflows/release-landing.yml`](.github/workflows/release-landing.yml): hace checkout
+del commit etiquetado, comprueba los assets del logo y sube sólo `docs/` a producción con Netlify CLI
+fijada a una versión y `--no-build`. Los despliegues se serializan para que no se superpongan.
+Un push a `main`, un PR o un tag de la CLI o de un cliente no publica la landing.
+
+Configurar una vez en **GitHub → Settings → Secrets and variables → Actions**:
+
+| Tipo | Nombre | Valor |
+|---|---|---|
+| Repository secret | `NETLIFY_AUTH_TOKEN` | Token de Netlify con acceso al sitio hijo |
+| Repository variable | `NETLIFY_SITE_ID` | Project ID de `ezevillo-git-review-workflow`, nunca el del sitio principal |
+
+No se necesitan `SITE_URL` ni `APP_BASE_PATH`. Esas credenciales sólo las consume el paso de
+publicación de la landing; npm, Homebrew y las tiendas conservan sus canales actuales.
+
+Después de integrar los cambios que se quieren publicar:
+
+```sh
+git tag landing-vX.Y.Z <commit>
+git push origin landing-vX.Y.Z
+```
+
+El primer tag puede ser `landing-v0.1.0`; no hay que cambiar `VERSION`, ejecutar los bump de los
+clientes ni crear un GitHub Release. El mensaje del deploy registra el tag y el SHA. Para reintentar
+un fallo, volver a ejecutar el workflow de ese tag en Actions. Para publicar otra versión, crear un
+tag nuevo; no mover uno ya publicado. El workflow tiene que existir en el commit que se etiqueta.
 
 ### Ruta en el sitio principal
 
@@ -306,7 +334,7 @@ su próxima versión. Las fichas de tienda editables por portal se revisan por s
 
 Las demos muestran la dirección en su cierre: al cambiarla en `scripts/marketing/render.mjs`,
 recomponer los tres MP4 con el procedimiento siguiente. Videos y GIFs consumen transferencia;
-el filtro de despliegues evita gastar créditos por cambios ajenos a la web.
+la publicación por tag evita gastar créditos de despliegue hasta decidir publicar la web.
 
 ## Marketing video and GIFs
 
@@ -364,7 +392,7 @@ El compositor escribe el MP4 en inglés, el poster y los tres GIF publicables en
 `docs/media/`, con prefijos `vscode`, `jetbrains` y `visualstudio`.
 Las tomas, los capítulos, los frames de QA y las pruebas del estado de git quedan
 en `demo/marketing/`, ignorado por git. La captura y el render no pushean ni
-publican; Netlify publica `docs/` cuando se pushea a `main` y cambia la landing o su configuración.
+publican; el workflow publica `docs/` únicamente al pushear un tag `landing-vX.Y.Z`.
 
 Para recomponer el material existente sin grabar otra review:
 

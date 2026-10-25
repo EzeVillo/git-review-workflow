@@ -473,10 +473,12 @@ favicon, y los 40×40 / 16×16 que exige JetBrains.
 
 ## Landing (Netlify)
 
-`docs/index.html` se publica en **`https://ezevillo.com/git-review-workflow/`** desde `main`.
-`netlify.toml` usa `docs/` como base y publica su contenido **sin build, dependencias ni secretos**.
-El comando `ignore` sólo permite despliegues cuando cambian `docs/` o `netlify.toml`; los cambios de
-la CLI y los clientes no gastan una publicación de la landing.
+`docs/index.html` se publica en **`https://ezevillo.com/git-review-workflow/`** sólo al pushear un
+tag **`landing-vX.Y.Z`**, independiente de la CLI y los clientes. El workflow
+`.github/workflows/release-landing.yml` publica únicamente `docs/` del commit etiquetado, sin build,
+con Netlify CLI fijada a una versión. Necesita el secreto `NETLIFY_AUTH_TOKEN` y la variable de
+repositorio `NETLIFY_SITE_ID`, que apunta al sitio hijo. Los builds automáticos de Netlify deben
+estar detenidos; `netlify.toml` además usa `ignore = "exit 0"` para omitir los pushes comunes.
 
 El dominio pertenece al **sitio principal** de Netlify, que deriva cada path al sitio de su
 proyecto. La landing hija sirve los archivos desde `/`; el proxy del principal quita el prefijo

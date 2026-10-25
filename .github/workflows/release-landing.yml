@@ -1,0 +1,68 @@
+name: release-landing
+
+# The landing has its own release cadence, independent of CLI/client tags.
+on:
+  push:
+    tags:
+      - "landing-v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: landing-production
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Validate landing tag
+        run: |
+          set -eu
+          if ! printf '%s\n' "$GITHUB_REF_NAME" | grep -Eq '^landing-v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'; then
+            echo "Expected a landing-vX.Y.Z tag; got ${GITHUB_REF_NAME}." >&2
+            exit 1
+          fi
+
+      - name: Check Netlify configuration
+        env:
+          NETLIFY_AUTH_TOKEN_CONFIGURED: ${{ secrets.NETLIFY_AUTH_TOKEN != '' }}
+          NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
+        run: |
+          set -eu
+          if [ "$NETLIFY_AUTH_TOKEN_CONFIGURED" != true ]; then
+            echo "NETLIFY_AUTH_TOKEN is not set. Add the repository secret before tagging." >&2
+            exit 1
+          fi
+          if [ -z "$NETLIFY_SITE_ID" ]; then
+            echo "NETLIFY_SITE_ID is not set. Add the repository variable for the landing site." >&2
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check landing assets
+        run: node scripts/check-logo-assets.mjs
+
+      - name: Deploy tagged landing
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
+        run: |
+          set -eu
+          npx --yes netlify-cli@27.14.2 deploy --prod --no-build \
+            --dir "$GITHUB_WORKSPACE/docs" \
+            --message "$GITHUB_REF_NAME ($GITHUB_SHA)"

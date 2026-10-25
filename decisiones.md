@@ -878,11 +878,24 @@ favicon, y los 40×40 / 16×16 que exige JetBrains.
 
 ### La landing
 
-`docs/index.html` se publica con Netlify en `https://ezevillo.com/git-review-workflow/`, desde
-`main`. **No hay build ni workflow de publicación en GitHub Actions**: `netlify.toml` usa `docs/`
-como base y publica `.` sin instalar dependencias ni pedir variables propias. El filtro `ignore`
-sólo compara `docs/` y `netlify.toml`; publicar por cada cambio de la CLI gastaría créditos sin
-cambiar la web. En la primera publicación, sin un commit previo, el filtro permite continuar.
+`docs/index.html` se publica con Netlify en `https://ezevillo.com/git-review-workflow/` al pushear
+un tag **`landing-vX.Y.Z`**. Antes se publicaba desde `main`, filtrando por cambios en `docs/` o
+`netlify.toml`: evitaba deploys por cambios ajenos a la web, pero integrar una edición de la landing
+también la hacía pública. El tag separa integración y publicación, con una cadencia independiente
+de la CLI y los clientes y un commit preciso al que volver.
+
+`.github/workflows/release-landing.yml` hace checkout de ese commit y publica sólo `docs/` con
+Netlify CLI fijada a una versión, sin build. El secreto `NETLIFY_AUTH_TOKEN` y la variable
+`NETLIFY_SITE_ID` pertenecen a GitHub Actions; la landing no tiene variables de runtime ni instala
+dependencias propias. El workflow valida el tag y la configuración antes de publicar y serializa
+los despliegues. No crea un GitHub Release: la landing no distribuye un paquete y no debe alterar
+el `latest` de la CLI.
+
+Los builds automáticos de Netlify quedan detenidos y `netlify.toml` conserva `ignore = "exit 0"`
+como defensa ante pushes comunes. El ajuste externo detiene también hooks y reintentos que podrían
+ignorar ese comando. Un build hook se descartó porque construiría el estado de una rama, en vez de
+subir los archivos exactos del tag. `tests/release-landing.bats` comprueba los guards y el argv real
+de publicación sin acceder a la red.
 Para previsualizarlo, abrilo directo en el navegador — no necesita servidor.
 
 El dominio se comparte con otros proyectos y ya sirve `/ibit-to-btc/` desde un sitio principal de
@@ -902,7 +915,7 @@ sigue siendo estática y no necesita funciones ni variables. El gate son los tes
 
 GitHub Pages quedó desactivado después de comprobar la publicación nueva, por decisión del
 usuario: la landing debe tener una única publicación pública. Se eliminó el marcador de Jekyll,
-que Netlify no necesita. Los pushes futuros sólo publican la landing en Netlify. El detalle de
+que Netlify no necesita. Los tags de la landing sólo la publican en Netlify. El detalle de
 configuración externa y comprobación está en `CONTRIBUTING.md`.
 
 - `docs/logo.svg` es el favicon: copia generada del maestro (ver *Assets del logo*), nunca a mano.

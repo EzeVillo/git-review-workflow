@@ -524,8 +524,12 @@ la landing y las guías; se anuncia desde el `robots.txt` del sitio principal, n
 `robots.txt` bajo el prefijo del proyecto. `node scripts/check-landing.mjs` comprueba rutas,
 assets, fragmentos, canonical, traducciones y sitemap en CI y antes de desplegar un tag.
 
-`docs/analytics.js` solo prepara eventos para un tracker opcional de Umami: no incorpora
-colector, identificador ni envío propio. Los clics usan atributos `data-umami-event`; la copia
+El `head` de las tres páginas carga el tracker público de Umami, con el identificador compartido
+de `ezevillo.com`, `data-domains="ezevillo.com"` y `data-tag="git-review-workflow"`. La etiqueta
+separa este proyecto de los demás dentro del mismo sitio de Umami. No duplicar el snippet por
+página. La verificación local bloquea el tracker para no contaminar las métricas públicas.
+`docs/analytics.js` agrega eventos sin incorporar envío propio. Los clics usan atributos
+`data-umami-event`; la copia
 se cuenta después de que el clipboard acepte la escritura, y la demo una vez por interfaz
 y carga de página. Nunca se envían comandos, código, paths ni datos del repositorio. La
 telemetría de la CLI y de los clientes no forma parte de esta instrumentación web.

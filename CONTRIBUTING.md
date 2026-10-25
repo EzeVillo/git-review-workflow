@@ -371,18 +371,26 @@ Se puede presentar ese mismo sitemap en Search Console. No crear un `robots.txt`
 prefijo del proyecto: el crawler consulta el de la raíz del dominio. El archivo y las guías
 se publican junto con el resto de `docs/`, exclusivamente por el tag de landing.
 
-### Medición web opcional
+### Medición web
 
-La web no incluye un tracker configurado. Para activar Umami hace falta agregar el snippet
-público de la cuenta al `head` de las tres páginas, revisar qué recoge y publicar esa versión
-de la landing. No agregar credenciales privadas ni usar un identificador provisional.
+Las tres páginas incluyen el snippet público de Umami aportado por Ezequiel. El identificador
+se comparte con los demás proyectos de `ezevillo.com`; `data-tag="git-review-workflow"` permite
+filtrar este proyecto en el Overview de Umami. El mismo identificador puede usarse en otras
+secciones del dominio con su propia etiqueta, instalándolo una sola vez por página. El campo
+Domain de Umami debe ser `ezevillo.com`, sin ruta; no crea por sí solo un filtro por proyecto.
+
+`data-domains="ezevillo.com"` limita el tracking a ese hostname, sin contar localhost ni el
+dominio de preview de Netlify. El navegador sigue descargando el script en previews, pero el
+tracker no registra esas visitas. El verificador local bloquea el tracker antes de cargarlo.
+El cambio empieza a recoger visitas públicas cuando se publique esa versión de la landing.
+El identificador es público; no agregar credenciales privadas.
 
 Los enlaces preparados usan `install_click` (`interface`, `method`) y `docs_click`
 (`destination`). `docs/analytics.js` agrega `demo_play` (`interface`), una vez por interfaz
 y carga de página, e `install_command_copy` (`method`) solo cuando la copia terminó bien.
 Copiar la configuración de base no cuenta como instalar. Las propiedades son etiquetas
 cerradas: nunca el comando copiado, URL libre, repositorio, rama o contenido del usuario.
-Sin el snippet no se envían eventos; un fallo del tracker no debe afectar la página.
+Un fallo del tracker no debe afectar la página.
 
 Las visitas y los clics permiten seguir el descubrimiento, no miden instalaciones ni uso real
 de la CLI. No se incorporó telemetría de producto. Evitar interpretar una descarga o un clic

@@ -30,6 +30,8 @@ async function main() {
     const browser = await chromium.launch({executablePath: '/usr/bin/chromium', args: ['--no-sandbox']});
     try {
         const context = await browser.newContext({viewport: {width: 1440, height: 1000}, locale: 'en-US'});
+        // Keep QA traffic out of the shared production metrics.
+        await context.route('https://cloud.umami.is/**', route => route.abort());
         const page = await context.newPage();
         const errors = [];
         const missing = [];
@@ -68,8 +70,8 @@ async function main() {
             assert.equal(await page.locator('html').getAttribute('lang'), other);
         }
 
-        // The default site does not send analytics or load a collector.
-        assert.deepEqual([...outbound], []);
+        // Only the configured tracker is requested; QA blocks it before loading.
+        assert.deepEqual([...outbound], ['cloud.umami.is']);
         await page.addInitScript(() => {
             window.qaEvents = [];
             window.qaCopies = [];
@@ -121,7 +123,7 @@ async function main() {
             await staticPage.goto(base + guideRoutes[lang]);
             assert.ok((await staticPage.locator('article').innerText()).length > 3000, 'Guide works without JavaScript');
         }
-        console.log('PASS: EN/ES guides and landing at 390/768/1440px; public path prefix; translations; clipboard success/failure; demo deduplication; collector failures; no default analytics requests; guides without JavaScript.');
+        console.log('PASS: EN/ES guides and landing at 390/768/1440px; public path prefix; translations; clipboard success/failure; demo deduplication; collector failures; production tracker blocked in QA; guides without JavaScript.');
     } finally {
         await browser.close();
         await new Promise(resolve => server.close(resolve));

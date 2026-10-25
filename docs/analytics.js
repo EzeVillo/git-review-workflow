@@ -1,4 +1,4 @@
-/* Prepared for an optional Umami tracker. No collector or identifier ships here.
+/* Custom events supplement the Umami tracker configured in the page heads.
    Link events use Umami's data attributes; these two events need a success signal. */
 (function () {
     "use strict";

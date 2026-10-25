@@ -22,7 +22,9 @@ comprobará con uso y repetición, no sumando descargas como personas.
 - El sitemap propio enumera las tres páginas. No se crea un `robots.txt` bajo el prefijo:
   debe anunciarse desde el sitio principal o presentarse directamente en Search Console.
 - La tarjeta social se regenera desde `scripts/og/card.html`, con el mismo mensaje principal.
-- La instrumentación web queda preparada, sin tracker ni identificador. Se cuenta copia solo
+- La instrumentación web usa el snippet público de Umami aportado por Ezequiel, compartido
+  con el resto de `ezevillo.com` y separado por la etiqueta `git-review-workflow`. El tracker
+  limita la recolección a ese hostname; las pruebas bloquean su carga. Se cuenta copia solo
   después de que la escritura al clipboard termina bien; la reproducción se cuenta una vez
   por interfaz y carga de página. Los clics usan atributos reconocidos por Umami.
 - CI y la comprobación de un release validan rutas, assets, fragmentos, canonical, traducciones
@@ -61,7 +63,9 @@ separados y consentimiento del usuario de la herramienta.
 ## Antes de publicar
 
 - [ ] Ezequiel revisa los textos, guías y vistas locales.
-- [ ] Si se activa Umami, aporta el snippet público y se revisa su integración en las tres páginas.
+- [x] Ezequiel aportó el snippet público de Umami; se integra en las tres páginas con una etiqueta
+  del proyecto dentro de la medición común del dominio.
+- [ ] Tras publicar, comprobar que las visitas y eventos aparecen al filtrar esa etiqueta.
 - [ ] El sitio principal anuncia el sitemap y se consulta el estado en Search Console.
 - [ ] Las fichas publicadas se actualizan por su mecanismo de publicación, con aprobación previa.
 - [ ] Se decide cuándo publicar la landing. En esta tarea no se crean tags, pushes ni despliegues.

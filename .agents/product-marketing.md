@@ -65,6 +65,11 @@ Los documentos de trabajo se escriben en español. El producto y las tiendas usa
 README y referencia CLI conservan sus pares bilingües. Los cambios de presentación no
 requieren reescribir la referencia técnica, la historia de decisiones o los changelogs.
 
+En esta etapa LinkedIn queda fuera por decisión de Ezequiel. El asistente busca posibles
+participantes en conversaciones públicas afines y prepara invitaciones concretas; no delega
+la búsqueda en los contactos personales del autor. Todo contacto sigue requiriendo aprobación
+previa del destinatario, canal y texto.
+
 ## Publicación
 
 Los textos y artefactos se preparan localmente. Publicar en redes, actualizar fichas,

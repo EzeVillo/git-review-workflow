@@ -1,14 +1,13 @@
 # git review workflow — JetBrains IDE plugin
 
-> Review a pull request by **editing and running** it, not just reading it. The
-> whole PR lands in your working tree as one staged diff; your fixes are then
-> extracted onto a clean branch automatically. This tool window shows where you
-> are in the review and drives every step of it without leaving the IDE.
+> Review a pull request with a **guided reading order and context**: where to
+> start, why each file changed, and what needs attention. Follow a walkthrough
+> from the author or a coding agent, or prepare your own for a PR that has none.
+> The tool window keeps your place while you inspect the change and leave observations.
 >
-> And when an **AI agent** wrote the change, it can write the **reading order**
-> too — a walkthrough committed next to the code saying which file to read first
-> and why. The panel picks it up on its own and walks you through the diff in
-> that order, instead of alphabetically.
+> The whole PR stays available as staged, editable changes in your IDE. Run
+> tests or make corrections when useful; finishing extracts any corrections onto
+> a separate branch. You can also complete a guided review without editing code.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](../LICENSE)
 [![Requires git review 0.8.0+](https://img.shields.io/badge/requires-git%20review%200.7.0%2B-blue.svg)](https://github.com/EzeVillo/git-review-workflow#installation)
@@ -37,12 +36,11 @@
 ---
 
 This is the IntelliJ Platform surface of
-[git-review-workflow](https://github.com/EzeVillo/git-review-workflow), a git
-subcommand that stages an entire PR in your working tree as **staged,
-uncommitted changes** — so you read the diff, edit it inline and run the tests
-like ordinary local work, and `git review finish` then extracts *your* edits
-onto a separate branch. The plugin does not reimplement any of that: it drives
-the same CLI and shows you its state.
+[git-review-workflow](https://github.com/EzeVillo/git-review-workflow). It guides
+you through a reading order while the complete PR stays available in your
+working tree. Inspect the explanation against the code, leave observations,
+and run tests or make corrections when needed. The plugin drives the CLI
+and displays its review state.
 
 > **The CLI is required.** This is a tool window over `git review`, not a
 > standalone reviewer. See [Requirements](#requirements).

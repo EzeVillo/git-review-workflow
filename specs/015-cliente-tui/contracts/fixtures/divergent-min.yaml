@@ -43,7 +43,7 @@ listing:
   # Byte-identical in all three. VS Code: package.json description (this exact
   # string). JetBrains: first sentence of the plugin.xml <description>. Visual
   # Studio: first sentence of vsixmanifest <Description> and of overview.md.
-  tagline: "Walk a PR in order, then edit and run it — not just read the diff"
+  tagline: "Review PRs with a guided reading order and context"
   # Compared as a set, case- and separator-insensitive: VS Code writes them
   # hyphenated in package.json keywords, Visual Studio spaced in vsixmanifest
   # Tags. JetBrains has no keyword field in the descriptor (Marketplace tags are

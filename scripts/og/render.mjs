@@ -50,6 +50,9 @@ const profile = mkdtempSync(join(tmpdir(), 'og-render-'));
 try {
     execFileSync(chrome, [
         '--headless=new',
+        // The isolated Linux render container runs as root; desktop browsers
+        // keep their normal sandbox. This does not change the user's browser.
+        ...(process.platform === 'linux' && process.getuid?.() === 0 ? ['--no-sandbox'] : []),
         '--disable-gpu',
         '--hide-scrollbars',
         '--no-first-run',

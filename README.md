@@ -1,13 +1,13 @@
 # git-review-workflow
 
-> Review a pull request by **editing and running** it, not just reading it. The
-> whole PR lands in your working tree as one staged diff; your fixes are then
-> extracted onto a clean branch automatically. Re-review only what changed.
+> Review AI-written pull requests with a **guided reading order**: which file
+> to read first, why it changed, and where to look closely. The author or a coding
+> agent can commit a walkthrough alongside the change; you can also prepare your
+> own for a PR that has none.
 >
-> And when an **AI agent** wrote the change, it can write the **reading order**
-> too — a walkthrough committed next to the code saying which file to read first
-> and why. The visual clients pick it up automatically and walk you through the
-> diff in that order, instead of alphabetically.
+> Follow the whole change in your usual editor. The PR lands as one **staged,
+> editable diff** you can run and test. When you finish, your corrections are
+> extracted onto a separate branch. Re-review only what changed after an update.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/tag/EzeVillo/git-review-workflow?label=release&sort=semver)](https://github.com/EzeVillo/git-review-workflow/releases)
@@ -25,15 +25,20 @@ and advanced use.
 **[Watch the 40-second IDE demo on the website](https://ezevillo.com/git-review-workflow/#demo-vscode)** — follow the reading order, fix the code,
 run the tests, and take your correction to a separate branch.
 
+[Read the guide: review a pull request locally](https://ezevillo.com/git-review-workflow/guides/review-pull-requests-locally/) — from the first staged diff to your own corrections.
+
 ---
 
-Reviewing in a web UI is fine for leaving comments, but poor for actually
-*running* and *editing* the code. Starting a review puts the entire PR in your
-working tree as **staged, uncommitted changes**. Because it is just your working
-tree, you can open the whole PR in any editor, read the diff, edit inline, and
-run the tests. When you finish, your edits are extracted onto a separate branch,
-cleanly apart from the author's work. You can also re-review only what changed
-after an update.
+A PR can touch many files without telling you where to start. A walkthrough
+provides a reading order, a reason for each entry, and a heads-up on what needs
+attention. Follow it in your editor, inspect the code beyond the diff, and leave
+observations. You can use the author's walkthrough or prepare your own for the
+review.
+
+The entire PR stays available as **staged, uncommitted changes**. Run the tests
+or edit the code when you need to check something. When you finish, any edits you
+made are extracted onto a separate branch. A review can also finish without
+code corrections. After an update, you can re-review only what changed.
 
 ## Reviewing what an agent wrote
 
@@ -42,9 +47,10 @@ diff sorted alphabetically — the one order guaranteed to say nothing about the
 change. Reviewing that means reconstructing, file by file, reasoning you never
 saw in the first place.
 
-The agent that made the change is the one party that *does* know that reasoning.
-As part of the same task, it can create a walkthrough that orders the changed
-files, explains why each one matters, and travels with the PR.
+As part of the same task, the agent can document its intended change in a
+walkthrough: an order for the changed files, why each one matters, and what needs
+attention. That explanation travels with the PR for you to check against the
+implementation.
 
 Then you open the review in one of the visual clients. It finds the walkthrough
 automatically, shows the agent's heads-up on what is delicate, and takes you to
@@ -66,16 +72,16 @@ for anyone who never installs this. And you get the same benefit **without the
 author on board**: on a PR that carries no walkthrough, the panel can help you
 ask your own agent to generate one just for your review.
 
-Reviewing agent-written PRs is where the rest of the workflow pays off too: pull
-the whole change into your working tree, actually run it, and fix the code smells
-and subtle mistakes inline instead of writing comments about them.
+The reading order helps you navigate the change whether your review ends in
+observations, a question for the author, or a correction. When you need to check
+behavior, run the code in the same working tree and make an edit if useful.
 
 ## Why not just use my IDE's PR view?
 
-Most tools let you *see* a PR. Two gaps this fills: *acting* on one — editing
-and running it like ordinary working-tree changes, then handing your fixes back
-without manual stashing or cherry-picking — and giving it a **guided reading
-order**, something neither git nor GitHub offers natively.
+git-review-workflow combines a **guided reading order and context** with a
+complete, editable PR in your working tree. Follow the explanation, inspect the
+implementation, and leave observations. If you make corrections, it separates
+them from the author's work when you finish.
 
 |                                 |    View the PR    | Guided order + why, per file  | Edit & run as working tree | Auto-extract your fixes | Incremental re-review | Editor-agnostic |
 |---------------------------------|:-----------------:|:-----------------------------:|:--------------------------:|:-----------------------:|:---------------------------------:|:---------------:|
@@ -85,27 +91,20 @@ order**, something neither git nor GitHub offers natively.
 | VS Code *GitHub PR* extension   |         ✅         |               ❌               |       ⚠️ in-IDE only       |            ❌            |                 ❌                 |        ❌        |
 | GitHub / GitLab web UI          |         ✅         |               ❌               |             ❌              |            ❌            |            ⚠️ partial             |        ✅        |
 
-None of the alternatives above give you an **author-guided reading order** —
-which file to read first, and why — instead of an alphabetical file list or a
-bare diff. The author (often an AI coding agent) writes it once and commits it
-alongside the PR. The reviewer panel detects it automatically and presents the
-files in that order. You do not even need the author or your team on board: the
-panel can help you create your own reading order for a single review.
+The **reading walkthrough** adds an order and a reason for each entry to the
+diff. The author (often an AI coding agent) can write it and commit it alongside
+the PR. The reviewer panel detects it automatically and presents the files in
+that order. You do not need the author or your team to adopt it first: the panel
+can help you prepare your own reading order for a single review.
 
-Because the PR is just staged changes, anything that reads a Git diff sees all
-of it — including AI coding agents like Claude Code or Codex that have no
-PR-review feature of their own. Point one at the staged diff and it can review or
-fix the whole PR in place.
+Because the PR is staged changes, tools that read a Git diff can inspect all of
+it. You can also ask a coding agent to review that staged diff or help check a
+specific observation in place.
 
-And for the small stuff — a rename, a typo, a clearer variable name — fixing it
-yourself is faster and less bureaucratic than leaving a comment and waiting for a
-round-trip, especially when you are already looking at the PR in your editor.
-Because your edits are extracted automatically, the fix costs about the same as
-the comment would have. Or hand the staged diff to an agent and have it make the
-change for you.
-
-If you mostly *comment*, your IDE's native PR panel is enough. If you review by
-editing and running the code — in any editor or agent — this is the gap it fills.
+When you decide to correct a typo, a name, or a behavior, edit it in your usual
+tools. Automatic extraction keeps those corrections separate. You can also leave
+an observation and let the author make the change. The guided review is useful
+without editing code.
 
 ## Quick start
 

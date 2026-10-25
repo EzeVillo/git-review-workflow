@@ -6,7 +6,7 @@
     <!-- Reader-facing copy, not a summary of the monorepo: no sibling clients, no
          restating the supported-VS list the gallery already shows. Opens with the
          shared tagline (contracts/client-product-surface.yaml → listing.tagline). -->
-    <Description xml:space="preserve">Walk a PR in order, then edit and run it — not just read the diff.</Description>
+    <Description xml:space="preserve">Review PRs with a guided reading order and context.</Description>
     <MoreInfo>https://ezevillo.com/git-review-workflow/#demo-visualstudio</MoreInfo>
     <!-- Flat names: these travel inside the .vsix (see the Content items in the csproj). -->
     <License>LICENSE</License>

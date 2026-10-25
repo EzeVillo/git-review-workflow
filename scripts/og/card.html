@@ -113,8 +113,7 @@
             margin: 0 0 26px;
         }
 
-        /* The second sentence is the turn, so it takes the quieter colour — and
-           a manual break, because left to wrap it drops "order too." alone. */
+        /* Break the outcome into two lines so it stays readable in a feed card. */
         h1 .dim {
             color: var(--muted);
         }
@@ -292,8 +291,7 @@
             <span>git <em>review</em></span>
         </div>
 
-        <h1>An agent wrote the change.<br><span class="dim">Let it write the<br>reading order
-            too.</span></h1>
+        <h1>AI wrote the code.<br><span class="dim">Review it with<br>a reading order.</span></h1>
 
         <div class="cmd"><span class="prompt">$</span> npm install -g git-review-workflow</div>
     </div>

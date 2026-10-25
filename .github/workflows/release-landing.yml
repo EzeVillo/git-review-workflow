@@ -55,7 +55,9 @@ jobs:
           node-version: 22
 
       - name: Check landing assets
-        run: node scripts/check-logo-assets.mjs
+        run: |
+          node scripts/check-logo-assets.mjs
+          node scripts/check-landing.mjs
 
       - name: Deploy tagged landing
         env:

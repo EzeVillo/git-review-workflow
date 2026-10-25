@@ -1,0 +1,71 @@
+:root {
+    color-scheme: dark;
+    --ink: #0B0E14;
+    --panel: #10151F;
+    --rule: #283244;
+    --text: #DCE2ED;
+    --muted: #A1AEC1;
+    --add: #4CC46B;
+    --why: #E6B455;
+    --mono: "IBM Plex Mono", ui-monospace, monospace;
+    --sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 1.5rem; }
+body { margin: 0; background: var(--ink); color: var(--text); font: 1.125rem/1.75 var(--sans); }
+a { color: var(--add); text-underline-offset: .22em; }
+a:hover { color: var(--text); }
+a:focus-visible { outline: 2px solid var(--why); outline-offset: 5px; }
+.wrap { width: min(100% - 3rem, 70rem); margin-inline: auto; }
+.nav { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem 1.5rem; padding-block: 1.25rem; border-bottom: 1px solid var(--rule); font: .875rem var(--mono); }
+.nav a { text-decoration: none; }
+.nav .mark { margin-right: auto; color: var(--text); font-size: 1rem; font-weight: 600; }
+.mark span { color: var(--add); }
+.skip { position: absolute; top: -5rem; left: 1rem; padding: .5rem 1rem; background: var(--panel); z-index: 1; }
+.skip:focus { top: 1rem; }
+.intro { max-width: 55rem; padding-block: 4.5rem 2rem; }
+.eyebrow { color: var(--add); font: .8rem var(--mono); letter-spacing: .08em; text-transform: uppercase; }
+h1, h2, h3 { font-family: var(--mono); font-weight: 500; line-height: 1.3; letter-spacing: -.035em; }
+h1 { font-size: clamp(2rem, 4.5vw, 3.15rem); margin: 1rem 0 1.5rem; text-wrap: balance; }
+h2 { font-size: clamp(1.25rem, 2.5vw, 1.55rem); margin: 3rem 0 1rem; }
+h3 { font-size: 1rem; }
+.lede { color: var(--muted); font-size: 1.25rem; max-width: 63ch; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 14rem; gap: 4rem; align-items: start; padding-bottom: 4rem; }
+article { min-width: 0; max-width: 72ch; }
+article p { margin-block: 1rem; }
+code { font-family: var(--mono); font-size: .84em; overflow-wrap: anywhere; }
+pre { overflow-x: auto; padding: 1.2rem 1.4rem; border: 1px solid var(--rule); border-left: 2px solid var(--add); border-radius: 4px; background: var(--panel); line-height: 1.65; }
+pre code { overflow-wrap: normal; }
+li { padding-left: .25rem; margin-block: .45rem; }
+.state { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; border: 1px solid var(--rule); background: var(--rule); margin-block: 2rem; }
+.state div { min-width: 0; padding: 1.1rem 1.3rem; background: var(--panel); }
+.state h3 { margin-top: 0; color: var(--add); }
+.state p { margin-bottom: 0; font-size: 1rem; }
+.note { padding-left: 1.25rem; border-left: 2px solid var(--why); color: var(--muted); }
+.toc { position: sticky; top: 2rem; padding-left: 1.25rem; border-left: 1px solid var(--rule); font-size: .9rem; }
+.toc h2 { font: .8rem var(--mono); color: var(--muted); margin-top: .25rem; letter-spacing: 0; }
+.toc ol { padding-left: 1.25rem; }
+.toc li { margin-block: .8rem; }
+.toc a { color: var(--muted); text-decoration: none; }
+.toc a:hover { color: var(--add); }
+.next { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--rule); }
+.button { display: inline-block; padding: .7rem 1rem; margin-top: .5rem; border: 1px solid var(--add); border-radius: 4px; text-decoration: none; font: .9rem var(--mono); }
+.footer { display: flex; flex-wrap: wrap; gap: 1rem 2rem; padding-block: 1.5rem 2rem; border-top: 1px solid var(--rule); color: var(--muted); font-size: .875rem; }
+.footer span { margin-left: auto; }
+@media (max-width: 800px) {
+    .layout { display: flex; flex-direction: column; gap: 0; }
+    .toc { position: static; order: -1; padding-bottom: .75rem; }
+    .toc ol { display: flex; flex-wrap: wrap; gap: .25rem 1.75rem; }
+    .toc li { margin-block: .35rem; }
+    .intro { padding-top: 3rem; }
+}
+@media (max-width: 480px) {
+    .wrap { width: calc(100% - 2rem); }
+    body { font-size: 1rem; }
+    .lede { font-size: 1.1rem; }
+    .state { grid-template-columns: 1fr; }
+    pre { padding: 1rem; }
+    .footer span { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }

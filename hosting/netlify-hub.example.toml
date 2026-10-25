@@ -16,3 +16,7 @@
 
 # Unlike ibit-to-btc, this child site serves its files at /, so strip the prefix.
 # Use its .netlify.app origin here, never ezevillo.com (which would loop).
+# In the main site's /robots.txt, also announce the project's own sitemap:
+# Sitemap: https://ezevillo.com/git-review-workflow/sitemap.xml
+# Keep its existing Sitemap entries. A /git-review-workflow/robots.txt is not
+# the domain's robots.txt and will not advertise this sitemap to crawlers.

@@ -1,8 +1,10 @@
 # git review workflow — terminal UI
 
-> Review a pull request by **editing and running** it, not just reading it. The
-> terminal UI keeps the review state, reading order and actions in one pane while
-> the whole PR stays available as staged, editable changes in your working tree.
+> Review a pull request with a **guided reading order and context**. Follow the
+> author's walkthrough or prepare your own, inspect the change and leave
+> observations. The terminal UI keeps your place while the complete PR stays
+> available as staged, editable changes. Run tests and make corrections when
+> useful; editing code is optional.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](../LICENSE)
 [![Requires git review 0.9.0+](https://img.shields.io/badge/requires-git%20review%200.9.0%2B-blue.svg)](../README.md#installation)
@@ -13,8 +15,8 @@ This is the terminal interface for
 [git-review-workflow](https://github.com/EzeVillo/git-review-workflow). It drives
 the same CLI as the editor extensions and reads its porcelain records instead of
 deriving repository state on its own. Start, follow a reading order, inspect the
-change, edit and run it with your usual tools, then finish or save the review
-without leaving the terminal pane.
+change and record observations, then finish or save the review. You can also
+run tests and make corrections with your usual tools when needed.
 
 > **The CLI is required.** The terminal UI is a separately released static
 > binary, not a replacement for `git review`.

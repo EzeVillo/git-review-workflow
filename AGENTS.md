@@ -2,18 +2,26 @@
 
 ## Qué es esto
 
-Una suite de verbos de `git review` (shell POSIX) para revisar un pull request **editándolo y
-ejecutándolo**. Todo cuelga del dispatcher `git review <verbo>`, al estilo de `git bisect`/
-`git stash`. `git review start` materializa el diff completo del PR como cambios *staged y sin
-commitear* sobre una rama `review/<branch>` cuyo `HEAD` queda en el merge-base; editás/ejecutás en
-tu working tree y después `git review finish` extrae *tus* ediciones a una rama aparte
-`review-fixes/<branch>`. Ver `CLI.md` para la superficie completa de comandos.
+Una herramienta para revisar pull requests con un **recorrido guiado y contexto**: por dónde
+empezar, por qué cambió cada archivo y qué merece atención. Apunta especialmente a revisar
+cambios de agentes de IA, y también sirve para PRs escritos por personas. El walkthrough lo
+aporta el autor, un agente o el propio revisor. Leer y dejar observaciones ya es un uso completo;
+ejecutar pruebas y corregir código amplía ese flujo cuando hace falta. Para presentación y
+adquisición, consultar primero `.agents/product-marketing.md`.
+
+La base es una suite de verbos de shell POSIX bajo el dispatcher `git review <verbo>`, al estilo
+de `git bisect`/`git stash`. `git review start` materializa el diff completo del PR como cambios
+*staged y sin commitear* sobre una rama `review/<branch>` cuyo `HEAD` queda en el merge-base.
+Revisás en tu working tree y `git review finish` extrae las ediciones que hayas hecho a una rama
+`review-fixes/<branch>`. No hace falta editar código para aprovechar el recorrido. Ver `CLI.md`
+para la superficie completa de comandos.
 
 ## Dónde está cada cosa
 
 | Documento | Qué contesta |
 |---|---|
 | `AGENTS.md` (este) | Las reglas vinculantes y el mapa del estado. Lo mínimo para no romper nada. |
+| `.agents/product-marketing.md` | Público, problema, propuesta principal y límites de las afirmaciones de producto. |
 | `CONTRIBUTING.md` (raíz + uno por cliente) | Cómo construir, correr, testear y empaquetar cada pieza. |
 | `decisiones.md` | Por qué cada cosa es como es: el bug que la motivó, la alternativa descartada. |
 | Comentarios del código | El rationale por función. `bin/git-review-lib.sh` es 50% comentario. |
@@ -509,6 +517,18 @@ GitHub Pages está desactivado: la landing se publica únicamente en Netlify. No
 la publicación desde `/docs` en GitHub. `docs/logo.svg` y `docs/og.png` son generados
 (ver *Assets del logo* y `decisiones.md` §13), nunca a mano. `docs/` no está en `files` de
 `package.json`, así que no viaja en el tarball de npm.
+
+Las guías de `docs/guides/` y `docs/es/guias/` tienen HTML propio por idioma, canonical propio
+y enlaces `hreflang` recíprocos. Comparten `docs/guides/guide.css`. `docs/sitemap.xml` enumera
+la landing y las guías; se anuncia desde el `robots.txt` del sitio principal, no desde un
+`robots.txt` bajo el prefijo del proyecto. `node scripts/check-landing.mjs` comprueba rutas,
+assets, fragmentos, canonical, traducciones y sitemap en CI y antes de desplegar un tag.
+
+`docs/analytics.js` solo prepara eventos para un tracker opcional de Umami: no incorpora
+colector, identificador ni envío propio. Los clics usan atributos `data-umami-event`; la copia
+se cuenta después de que el clipboard acepte la escritura, y la demo una vez por interfaz
+y carga de página. Nunca se envían comandos, código, paths ni datos del repositorio. La
+telemetría de la CLI y de los clientes no forma parte de esta instrumentación web.
 
 ## Release
 

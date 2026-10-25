@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Revisar un pull request localmente con contexto | git-review-workflow</title>
+    <meta name="description" content="Revisá un pull request localmente con un recorrido guiado. Inspeccioná el código, dejá observaciones y ejecutá tests o corregí cuando haga falta.">
+    <link rel="canonical" href="https://ezevillo.com/git-review-workflow/es/guias/revisar-pull-requests-localmente/">
+    <link rel="alternate" hreflang="en" href="https://ezevillo.com/git-review-workflow/guides/review-pull-requests-locally/">
+    <link rel="alternate" hreflang="es" href="https://ezevillo.com/git-review-workflow/es/guias/revisar-pull-requests-localmente/">
+    <link rel="alternate" hreflang="x-default" href="https://ezevillo.com/git-review-workflow/guides/review-pull-requests-locally/">
+    <meta property="og:type" content="article">
+    <meta property="og:title" content="Revisar un pull request localmente con contexto">
+    <meta property="og:description" content="Seguí un recorrido guiado, inspeccioná el código y dejá observaciones. Ejecutá tests o corregí cuando haga falta.">
+    <meta property="og:url" content="https://ezevillo.com/git-review-workflow/es/guias/revisar-pull-requests-localmente/">
+    <meta property="og:image" content="https://ezevillo.com/git-review-workflow/og.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="icon" href="../../../logo.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500&amp;display=swap">
+    <link rel="stylesheet" href="../../../guides/guide.css">
+</head>
+<body>
+<a class="skip" href="#guide">Ir a la guía</a>
+<div class="wrap">
+    <nav class="nav" aria-label="Principal">
+        <a class="mark" href="../../../">git <span>review</span></a>
+        <a href="../../../guides/review-pull-requests-locally/" lang="en" hreflang="en">English</a>
+        <a href="https://github.com/EzeVillo/git-review-workflow">GitHub</a>
+    </nav>
+    <header class="intro">
+        <p class="eyebrow">Revisión local de código</p>
+        <h1>Revisá un pull request localmente con un recorrido guiado.</h1>
+        <p class="lede">Recorré los archivos cambiados en un orden de lectura y con sus motivos. Inspeccioná el código, dejá observaciones y comprobá o corregí el comportamiento cuando haga falta.</p>
+    </header>
+    <main class="layout" id="guide">
+        <article>
+            <p>Un PR puede tocar muchos archivos sin explicar por dónde empezar. Un walkthrough agrega un orden de lectura, un motivo por entrada y las partes que merecen atención.</p>
+            <p><a href="../../../">git-review-workflow</a> sigue ese orden mientras el PR completo sigue disponible como cambios staged en tu working tree. Podés inspeccionar la implementación y dejar observaciones sin editar código. Corré tests o hacé correcciones cuando te resulte útil; al terminar se extraen las correcciones que hayas hecho a otra rama.</p>
+            <div class="state" aria-label="Qué contiene el diff staged">
+                <div><h3>Durante la revisión</h3><code>review/feature/login</code><p>El diff staged contiene el PR completo del autor.</p></div>
+                <div><h3>Después de terminar</h3><code>review-fixes/feature/login</code><p>Las correcciones que hayas hecho quedan staged sobre el tip del PR.</p></div>
+            </div>
+
+            <h2 id="checkout">Cuándo alcanza con un checkout</h2>
+            <p>Si solo necesitás ejecutar un PR de GitHub, <a href="https://cli.github.com/manual/gh_pr_checkout"><code>gh pr checkout</code> de GitHub CLI</a> hace el checkout:</p>
+            <pre><code>gh pr checkout 123</code></pre>
+            <p>Después podés inspeccionar el proyecto y correr sus tests. El flujo de esta guía agrega un recorrido de lectura, una vista staged del PR completo y la extracción de las correcciones que hagas durante la revisión.</p>
+
+            <h2 id="requirements">Antes de empezar</h2>
+            <p>Necesitás Git 2.23 o posterior, un remote configurado y una shell POSIX. En Windows, ejecutá estos comandos en Git Bash o WSL. La instalación por npm también requiere Node.js y npm.</p>
+            <p>El ejemplo supone que la rama del PR es <code>feature/login</code>, la rama de integración es <code>main</code> y ambas existen en <code>origin</code>. Reemplazá esos nombres por los de tu repositorio y empezá con el working tree limpio.</p>
+            <p class="note">Estos comandos reciben nombres de ramas. El <code>123</code> de arriba corresponde a GitHub CLI; <code>git review start</code> recibe <code>feature/login</code>, en lugar de un número o una URL de PR.</p>
+
+            <h2 id="install">Instalá y configurá</h2>
+            <pre><code>npm install -g git-review-workflow
+git review --version
+git config reviewworkflow.base main</code></pre>
+            <p>La base se configura para este repositorio. Elegí la rama donde tu equipo integra los PRs, como <code>main</code> o <code>develop</code>. Para Homebrew, PowerShell o una instalación sin Node, consultá la <a href="https://github.com/EzeVillo/git-review-workflow/blob/main/README.es.md#instalaci%C3%B3n" data-umami-event="docs_click" data-umami-event-destination="installation">guía de instalación</a>.</p>
+
+            <h2 id="start">Abrí el PR completo</h2>
+            <pre><code>git review start feature/login</code></pre>
+            <p>Por defecto, actualiza el remote y revisa el tip de su rama. Crea <code>review/feature/login</code> con HEAD en el merge-base y deja el cambio completo del PR staged en el working tree.</p>
+            <pre><code>git diff --cached</code></pre>
+            <p>Ese diff es ahora el PR que estás revisando. Abrí el proyecto en tu editor, seguí llamadas fuera del diff y ejecutá los comandos de preparación y tests propios del proyecto.</p>
+            <p>También podés empezar desde un <a href="../../../#editors">panel de VS Code, JetBrains o Visual Studio, o la interfaz de terminal</a>. Todos conducen el mismo flujo.</p>
+
+            <h2 id="correct">Comprobá el comportamiento y corregí si hace falta</h2>
+            <p>Supongamos que el PR cambia la comprobación de un límite y sospechás que permite un intento de más. Cambiá la condición en tu editor y ejecutá el test correspondiente.</p>
+            <p>El comando de tests depende del proyecto. Uno de Node podría usar <code>npm test</code>; seguí las instrucciones del repositorio.</p>
+            <pre><code>git review preview</code></pre>
+            <p>Muestra las correcciones que hiciste respecto del código del PR. Te permite comprobar qué se va a extraer antes de terminar.</p>
+
+            <h2 id="finish">Terminá la revisión</h2>
+            <pre><code>git review finish
+git diff --cached</code></pre>
+            <p>El resultado por defecto es <code>review-fixes/feature/login</code>, basada en el tip del PR, con las correcciones que hayas hecho staged. Revisá ese diff antes de commitear. El resultado queda local: vos elegís cuándo commitearlo y cómo compartirlo con el autor.</p>
+            <p>Una revisión guiada también puede terminar sin correcciones de código. Leer el cambio y dejar observaciones ya es un uso completo del flujo.</p>
+
+            <h2 id="reading-order">Dale un orden de lectura a un PR grande</h2>
+            <p>Un walkthrough es un archivo Markdown con un orden para leer los archivos cambiados y un motivo por entrada. Para un cambio de login, el orden podría ser:</p>
+            <ol>
+                <li>Leer la política para entender el límite previsto.</li>
+                <li>Leer el middleware que lo aplica.</li>
+                <li>Leer los tests de borde para comprobar el comportamiento.</li>
+            </ol>
+            <p>El autor o un agente puede preparar ese recorrido junto con el cambio. Si el PR no tiene uno, el revisor puede preparar su propio orden local. La <a href="https://github.com/EzeVillo/git-review-workflow/blob/main/README.es.md#revisar-lo-que-escribi%C3%B3-un-agente">introducción al walkthrough</a> explica ambos caminos.</p>
+            <p>El recorrido propone una ruta por el código. Vos seguís inspeccionando la implementación y comprobando su comportamiento.</p>
+            <div class="next">
+                <h2 id="try-it">Probalo en tu próxima revisión</h2>
+                <p>Elegí un PR pequeño que necesites entender. Comprobá si el recorrido te ayuda a encontrar por dónde empezar y seguir los motivos del cambio. Corré tests y hacé correcciones si tu revisión lo necesita.</p>
+                <a class="button" href="../../../#demo-vscode">Mirá la demo de 40 segundos →</a>
+                <p><a href="https://github.com/EzeVillo/git-review-workflow/blob/main/CLI.es.md" data-umami-event="docs_click" data-umami-event-destination="cli_reference">Referencia completa de la CLI</a></p>
+            </div>
+        </article>
+        <aside class="toc" aria-label="En esta página">
+            <h2>En esta guía</h2>
+            <ol>
+                <li><a href="#checkout">Un checkout habitual</a></li>
+                <li><a href="#requirements">Requisitos</a></li>
+                <li><a href="#install">Instalar y configurar</a></li>
+                <li><a href="#start">Abrir el PR</a></li>
+                <li><a href="#correct">Editar y probar</a></li>
+                <li><a href="#finish">Terminar la revisión</a></li>
+                <li><a href="#reading-order">Orden de lectura</a></li>
+            </ol>
+        </aside>
+    </main>
+    <footer class="footer">
+        <a href="../../../">git-review-workflow</a>
+        <a href="https://github.com/EzeVillo/git-review-workflow">Código fuente</a>
+        <span>Por EzeVillo · MIT</span>
+    </footer>
+</div>
+</body>
+</html>

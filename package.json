@@ -1,7 +1,7 @@
 {
   "name": "git-review-workflow",
   "version": "0.10.0",
-  "description": "Git commands to review a pull request branch locally as one staged diff - great for auditing AI-generated PRs and fixing code smells",
+  "description": "Review pull requests with a guided reading order and context. Read, comment, run tests, and extract any corrections in your own tools.",
   "keywords": [
     "git",
     "git-subcommand",
@@ -15,6 +15,8 @@
     "diff",
     "cli",
     "workflow",
+    "walkthrough",
+    "reading-order",
     "commit",
     "push",
     "changes",
@@ -42,7 +44,8 @@
     "git-review": "bin/git-review"
   },
   "scripts": {
-    "check:logo-assets": "node scripts/check-logo-assets.mjs"
+    "check:logo-assets": "node scripts/check-logo-assets.mjs",
+    "check:landing": "node scripts/check-landing.mjs"
   },
   "files": [
     "bin/",

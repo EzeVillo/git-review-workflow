@@ -336,6 +336,58 @@ Las demos muestran la dirección en su cierre: al cambiarla en `scripts/marketin
 recomponer los tres MP4 con el procedimiento siguiente. Videos y GIFs consumen transferencia;
 la publicación por tag evita gastar créditos de despliegue hasta decidir publicar la web.
 
+### Guías y descubrimiento
+
+La landing enlaza una guía en dos URLs estables, con HTML legible sin JavaScript:
+
+- `docs/guides/review-pull-requests-locally/index.html` (inglés).
+- `docs/es/guias/revisar-pull-requests-localmente/index.html` (español).
+
+Mantener ambas versiones, sus enlaces `hreflang` y `docs/sitemap.xml` al editar o agregar
+una guía. Las dos usan `docs/guides/guide.css`, con la tipografía y los colores de la landing.
+`node scripts/check-landing.mjs` valida las URLs públicas, rutas locales, assets, fragmentos,
+idiomas y sitemap. Corre en CI y en la validación anterior a publicar la landing.
+
+Con la imagen de marketing disponible, verificar idiomas, navegación bajo el prefijo público,
+responsive y eventos de la página, sin publicar ni cargar un tracker real:
+
+```sh
+mkdir -p demo/marketing/landing-qa
+MSYS_NO_PATHCONV=1 docker run --rm --entrypoint node \
+  -v "$PWD:/src:ro" -v "$PWD/demo/marketing/landing-qa:/output" \
+  git-review-marketing /src/scripts/marketing/verify-landing.cjs
+```
+
+Las capturas quedan en `demo/marketing/landing-qa/`, ignorado por Git. No hace falta volver a
+grabar las demos para verificar una edición de la web.
+
+El sitio principal debe agregar esta línea a su `/robots.txt`, conservando las existentes:
+
+```text
+Sitemap: https://ezevillo.com/git-review-workflow/sitemap.xml
+```
+
+Se puede presentar ese mismo sitemap en Search Console. No crear un `robots.txt` bajo el
+prefijo del proyecto: el crawler consulta el de la raíz del dominio. El archivo y las guías
+se publican junto con el resto de `docs/`, exclusivamente por el tag de landing.
+
+### Medición web opcional
+
+La web no incluye un tracker configurado. Para activar Umami hace falta agregar el snippet
+público de la cuenta al `head` de las tres páginas, revisar qué recoge y publicar esa versión
+de la landing. No agregar credenciales privadas ni usar un identificador provisional.
+
+Los enlaces preparados usan `install_click` (`interface`, `method`) y `docs_click`
+(`destination`). `docs/analytics.js` agrega `demo_play` (`interface`), una vez por interfaz
+y carga de página, e `install_command_copy` (`method`) solo cuando la copia terminó bien.
+Copiar la configuración de base no cuenta como instalar. Las propiedades son etiquetas
+cerradas: nunca el comando copiado, URL libre, repositorio, rama o contenido del usuario.
+Sin el snippet no se envían eventos; un fallo del tracker no debe afectar la página.
+
+Las visitas y los clics permiten seguir el descubrimiento, no miden instalaciones ni uso real
+de la CLI. No se incorporó telemetría de producto. Evitar interpretar una descarga o un clic
+de tienda como un usuario activo.
+
 ## Marketing video and GIFs
 
 La campaña tiene una demo de 40 segundos y tres GIF por cliente: VS Code,

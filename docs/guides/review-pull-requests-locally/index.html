@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Review a pull request locally with context | git-review-workflow</title>
+    <meta name="description" content="Review a pull request locally with a guided reading order. Inspect the code, record observations, and run tests or make corrections when needed.">
+    <link rel="canonical" href="https://ezevillo.com/git-review-workflow/guides/review-pull-requests-locally/">
+    <link rel="alternate" hreflang="en" href="https://ezevillo.com/git-review-workflow/guides/review-pull-requests-locally/">
+    <link rel="alternate" hreflang="es" href="https://ezevillo.com/git-review-workflow/es/guias/revisar-pull-requests-localmente/">
+    <link rel="alternate" hreflang="x-default" href="https://ezevillo.com/git-review-workflow/guides/review-pull-requests-locally/">
+    <meta property="og:type" content="article">
+    <meta property="og:title" content="Review a pull request locally with context">
+    <meta property="og:description" content="Follow a guided reading order, inspect the code, and leave observations. Run tests or make corrections when needed.">
+    <meta property="og:url" content="https://ezevillo.com/git-review-workflow/guides/review-pull-requests-locally/">
+    <meta property="og:image" content="https://ezevillo.com/git-review-workflow/og.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <link rel="icon" href="../../logo.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500&amp;display=swap">
+    <link rel="stylesheet" href="../guide.css">
+</head>
+<body>
+<a class="skip" href="#guide">Skip to the guide</a>
+<div class="wrap">
+    <nav class="nav" aria-label="Main">
+        <a class="mark" href="../../">git <span>review</span></a>
+        <a href="../../es/guias/revisar-pull-requests-localmente/" lang="es" hreflang="es">Español</a>
+        <a href="https://github.com/EzeVillo/git-review-workflow">GitHub</a>
+    </nav>
+    <header class="intro">
+        <p class="eyebrow">Local code review</p>
+        <h1>Review a pull request locally with a guided reading order.</h1>
+        <p class="lede">Follow an order through the changed files and the reasons behind them. Inspect the code, record observations, and test or correct behavior when needed.</p>
+    </header>
+    <main class="layout" id="guide">
+        <article>
+            <p>A PR can touch many files without explaining where to start. A walkthrough adds a reading order, a reason for each entry, and the parts that need attention.</p>
+            <p><a href="../../">git-review-workflow</a> follows that order while the complete PR stays available as staged changes in your working tree. You can inspect the implementation and leave observations without editing code. Run tests or make corrections when useful; finishing extracts any corrections onto a separate branch.</p>
+            <div class="state" aria-label="What the staged diff contains">
+                <div><h3>During the review</h3><code>review/feature/login</code><p>The staged diff contains the author's complete PR.</p></div>
+                <div><h3>After finishing</h3><code>review-fixes/feature/login</code><p>Any corrections you made are staged on top of the PR tip.</p></div>
+            </div>
+
+            <h2 id="checkout">When a checkout is enough</h2>
+            <p>If you just need to run a GitHub PR, <a href="https://cli.github.com/manual/gh_pr_checkout">GitHub CLI's <code>gh pr checkout</code></a> checks it out for you:</p>
+            <pre><code>gh pr checkout 123</code></pre>
+            <p>You can then inspect the project and run its tests. The workflow below adds a reading walkthrough, a staged view of the whole PR, and extraction of any corrections you make during the review.</p>
+
+            <h2 id="requirements">Before you start</h2>
+            <p>You need Git 2.23 or newer, a configured remote, and a POSIX shell. On Windows, run these commands in Git Bash or WSL. The npm installation also requires Node.js and npm.</p>
+            <p>This example assumes the PR branch is <code>feature/login</code>, the merge target is <code>main</code>, and both branches exist on <code>origin</code>. Replace those names with your actual branches and start with a clean working tree.</p>
+            <p class="note">These commands take branch names. The <code>123</code> above belongs to GitHub CLI; <code>git review start</code> takes <code>feature/login</code>, rather than a PR number or URL.</p>
+
+            <h2 id="install">Install and configure</h2>
+            <pre><code>npm install -g git-review-workflow
+git review --version
+git config reviewworkflow.base main</code></pre>
+            <p>The base setting applies to this repository. Choose the branch your team merges PRs into, such as <code>main</code> or <code>develop</code>. For Homebrew, PowerShell, or installation without Node, see the <a href="https://github.com/EzeVillo/git-review-workflow#installation" data-umami-event="docs_click" data-umami-event-destination="installation">installation guide</a>.</p>
+
+            <h2 id="start">Open the whole PR</h2>
+            <pre><code>git review start feature/login</code></pre>
+            <p>By default, this fetches the remote and reviews its branch tip. It creates <code>review/feature/login</code> with HEAD at the merge-base, and stages the PR's complete change in the working tree.</p>
+            <pre><code>git diff --cached</code></pre>
+            <p>That diff is now the PR you are reviewing. Open the project in your editor, follow calls outside the diff, and run the project's own setup and test commands.</p>
+            <p>You can also start from a <a href="../../#editors">VS Code, JetBrains, or Visual Studio panel, or the terminal interface</a>. They drive the same workflow.</p>
+
+            <h2 id="correct">Check behavior and correct it if needed</h2>
+            <p>Suppose the PR changes a limit check and you suspect it allows one attempt too many. Change the condition in your editor and run the relevant test.</p>
+            <p>The test command depends on the project. A Node project might use <code>npm test</code>; follow the repository's own instructions.</p>
+            <pre><code>git review preview</code></pre>
+            <p>This previews the corrections you have made relative to the PR's code. It lets you check what will be extracted before you finish.</p>
+
+            <h2 id="finish">Finish the review</h2>
+            <pre><code>git review finish
+git diff --cached</code></pre>
+            <p>The default result is <code>review-fixes/feature/login</code>, based on the PR tip, with any corrections staged. Review that diff before committing. The result stays local; you choose when to commit and how to share it with the author.</p>
+            <p>A guided review can also finish without code corrections. Reading the change and leaving observations is a complete use of the workflow.</p>
+
+            <h2 id="reading-order">Give a large PR a reading order</h2>
+            <p>A walkthrough is a Markdown file containing an order for reading the changed files and a reason for each entry. For a login change, the order could be:</p>
+            <ol>
+                <li>Read the policy to understand the intended limit.</li>
+                <li>Read the middleware that enforces it.</li>
+                <li>Read the boundary tests to check the behavior.</li>
+            </ol>
+            <p>An author or coding agent can prepare that walkthrough alongside the change. If the PR has none, the reviewer can prepare a local reading order. The <a href="https://github.com/EzeVillo/git-review-workflow#reviewing-what-an-agent-wrote">walkthrough introduction</a> explains both paths.</p>
+            <p>The walkthrough proposes a route through the code. You still inspect the implementation and verify its behavior.</p>
+            <div class="next">
+                <h2 id="try-it">Try it on your next review</h2>
+                <p>Choose a small PR you need to understand. Check whether the walkthrough helps you find where to start and follow the reasons for the change. Run tests and make corrections if your review needs them.</p>
+                <a class="button" href="../../#demo-vscode">Watch the 40-second demo →</a>
+                <p><a href="https://github.com/EzeVillo/git-review-workflow/blob/main/CLI.md" data-umami-event="docs_click" data-umami-event-destination="cli_reference">Complete CLI reference</a></p>
+            </div>
+        </article>
+        <aside class="toc" aria-label="On this page">
+            <h2>In this guide</h2>
+            <ol>
+                <li><a href="#checkout">A normal checkout</a></li>
+                <li><a href="#requirements">Requirements</a></li>
+                <li><a href="#install">Install and configure</a></li>
+                <li><a href="#start">Open the PR</a></li>
+                <li><a href="#correct">Edit and test</a></li>
+                <li><a href="#finish">Finish the review</a></li>
+                <li><a href="#reading-order">Reading order</a></li>
+            </ol>
+        </aside>
+    </main>
+    <footer class="footer">
+        <a href="../../">git-review-workflow</a>
+        <a href="https://github.com/EzeVillo/git-review-workflow">Source code</a>
+        <span>By EzeVillo · MIT</span>
+    </footer>
+</div>
+</body>
+</html>

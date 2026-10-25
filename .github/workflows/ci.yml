@@ -116,6 +116,16 @@ jobs:
             *) npm run test:integration ;;
           esac
 
+  landing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check landing links and discovery metadata
+        run: node scripts/check-landing.mjs
+
   client-product-surface:
     runs-on: ubuntu-latest
     steps:

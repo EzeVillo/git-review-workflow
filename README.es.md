@@ -1,14 +1,14 @@
 # git-review-workflow
 
-> Revisá un pull request **editándolo y corriéndolo**, no solo leyéndolo. Todo el
-> PR aparece en tu working tree como un único diff staged; después tus
-> correcciones se extraen a una rama limpia automáticamente. Re-revisá solo lo
-> que cambió.
+> Revisá los pull requests de agentes con un **orden de lectura guiado**: qué
+> archivo leer primero, por qué cambió y dónde mirar con atención. El autor o un
+> agente puede commitear un walkthrough junto con el cambio; también podés
+> preparar el tuyo para un PR que no tenga uno.
 >
-> Y cuando el cambio lo escribió un **agente de IA**, el agente puede escribir
-> también el **orden de lectura** — un walkthrough committeado junto al código
-> que dice qué archivo leer primero y por qué. Los clientes visuales lo detectan
-> solos y te llevan por el diff en ese orden, en vez de alfabéticamente.
+> Seguí el cambio completo en tu editor habitual. El PR queda como un único
+> **diff staged y editable** que podés ejecutar y probar. Al terminar, tus
+> correcciones se extraen a una rama aparte. Re-revisá solo lo que cambió después
+> de una actualización.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/tag/EzeVillo/git-review-workflow?label=release&sort=semver)](https://github.com/EzeVillo/git-review-workflow/releases)
@@ -24,15 +24,21 @@ para scripts y usos avanzados.
 **[Mirá la demo de 40 segundos en la web](https://ezevillo.com/git-review-workflow/#demo-vscode)** — seguí el orden de lectura,
 corregí el código, corré los tests y llevate tu corrección a una rama aparte.
 
+[Leé la guía: revisar un pull request localmente](https://ezevillo.com/git-review-workflow/es/guias/revisar-pull-requests-localmente/) — desde el primer diff staged hasta tus propias correcciones.
+
 ---
 
-Revisar en una web está bien para dejar comentarios, pero es malo para realmente
-*correr* y *editar* el código. Al iniciar una review, todo el PR aparece en tu
-working tree como **cambios staged sin commitear**. Como es simplemente tu
-working tree, abrís todo el PR en cualquier editor, leés el diff, editás inline
-y corrés los tests. Cuando terminás, tus ediciones se extraen a una rama aparte,
-limpiamente separadas del trabajo del autor. También podés volver a revisar solo
-lo que cambió después de una actualización.
+Un PR puede tocar muchos archivos sin decirte por dónde empezar. Un walkthrough
+aporta un orden de lectura, un motivo por entrada y un heads-up sobre lo que
+merece atención. Seguilo en tu editor, inspeccioná el código fuera del diff y dejá
+observaciones. Podés usar el recorrido del autor o preparar el tuyo para esa
+revisión.
+
+El PR completo sigue disponible como **cambios staged sin commitear**. Corré los
+tests o editá el código cuando necesites comprobar algo. Al terminar, las
+ediciones que hayas hecho se extraen a una rama aparte. Una revisión también
+puede terminar sin correcciones de código. Después de una actualización, podés
+volver a revisar solo lo que cambió.
 
 ## Revisar lo que escribió un agente
 
@@ -41,9 +47,10 @@ diff ordenado alfabéticamente — el único orden que garantiza no decir nada s
 el cambio. Revisar eso es reconstruir, archivo por archivo, un razonamiento que
 nunca viste.
 
-El agente que hizo el cambio es el único que *sí* conoce ese razonamiento. Como
-parte de la misma tarea, puede crear un walkthrough que ordena los archivos
-cambiados, explica por qué importa cada uno y viaja con el PR.
+Como parte de la misma tarea, el agente puede documentar el cambio que quiso
+hacer en un walkthrough: un orden para los archivos cambiados, por qué importa
+cada uno y qué merece atención. Esa explicación viaja con el PR para que la
+contrastes con la implementación.
 
 Después abrís la review en uno de los clientes visuales. El cliente encuentra el
 walkthrough solo, muestra el heads-up del agente sobre qué es delicado y te lleva
@@ -66,17 +73,17 @@ en GitHub para cualquiera que nunca instale esto. Y conseguís lo mismo **sin qu
 el autor se suba**: en un PR que no trae walkthrough, el panel te ayuda a pedirle
 a tu propio agente que genere uno solo para tu review.
 
-Revisar PRs escritos por agentes es también donde rinde el resto del flujo: traés
-todo el cambio a tu working tree, lo corrés de verdad y corregís inline los code
-smells y los errores sutiles en vez de escribir comentarios sobre ellos.
+El orden de lectura te ayuda a recorrer el cambio, tanto si la revisión termina
+en observaciones como en una pregunta para el autor o una corrección. Cuando
+necesitás comprobar un comportamiento, ejecutá el código en el mismo working
+tree y hacé una edición si te resulta útil.
 
 ## ¿Por qué no usar la vista de PR de tu IDE?
 
-La mayoría de las herramientas te dejan *ver* un PR. Esto resuelve dos cosas:
-*actuar* sobre uno — editarlo y correrlo como cambios normales del working tree
-y después devolver tus correcciones sin stash ni cherry-pick manuales — y
-darle un **orden de lectura guiado**, algo que ni git ni GitHub ofrecen de
-forma nativa.
+git-review-workflow combina un **orden de lectura guiado y contexto** con el PR
+completo y editable en tu working tree. Seguí la explicación, inspeccioná la
+implementación y dejá observaciones. Si hacés correcciones, las separa del
+trabajo del autor al terminar.
 
 |                                  |     Ver el PR      | Orden guiado + por qué, por archivo | Editar y correr como working tree | Extraer tus fixes automáticamente | Re-review incremental | Independiente del editor |
 |----------------------------------|:------------------:|:-----------------------------------:|:---------------------------------:|:---------------------------------:|:---------------------------------:|:------------------------:|
@@ -86,28 +93,20 @@ forma nativa.
 | Extensión *GitHub PR* de VS Code |         ✅          |                  ❌                  |         ⚠️ solo en el IDE         |                 ❌                 |                 ❌                 |            ❌             |
 | Web de GitHub / GitLab           |         ✅          |                  ❌                  |                 ❌                 |                 ❌                 |            ⚠️ parcial             |            ✅             |
 
-Ninguna de las alternativas de arriba te da un **orden de lectura guiado por el
-autor** — qué archivo leer primero, y por qué — en vez de una lista alfabética o
-un diff pelado. El autor (a menudo un agente de IA) lo escribe una sola vez y lo
-commitea junto con el PR. El panel del reviewer lo detecta solo y presenta los
-archivos en ese orden. Ni siquiera necesitás que el autor o tu equipo se suban:
-el panel te ayuda a crear tu propio orden de lectura para una review puntual.
+El **recorrido de lectura** agrega al diff un orden y un motivo por entrada. El
+autor (a menudo un agente de IA) puede escribirlo y commitearlo junto con el PR.
+El panel del reviewer lo detecta solo y presenta los archivos en ese orden.
+No necesitás que el autor o tu equipo lo adopten primero: el panel te ayuda a
+preparar tu propio orden de lectura para una review puntual.
 
-Como el PR son simplemente cambios staged, cualquier cosa que lea un diff de Git
-lo ve entero — incluidos agentes de IA como Claude Code o Codex que no tienen una
-función propia para revisar PRs. Apuntás uno al diff staged y puede revisar o
-corregir todo el PR ahí mismo.
+Como el PR son cambios staged, las herramientas que leen un diff de Git pueden
+inspeccionarlo entero. También podés pedirle a un agente que revise ese diff o
+te ayude a comprobar una observación concreta ahí mismo.
 
-Y para las cosas chicas — un rename, un typo, un nombre de variable más claro —
-arreglarlo vos mismo es más rápido y menos burocrático que dejar un comentario y
-esperar la ida y vuelta, sobre todo cuando ya estás mirando el PR en tu editor.
-Como tus ediciones se extraen automáticamente, el arreglo te cuesta más o menos
-lo mismo que habría costado el comentario. O le pasás el diff staged a un agente
-y que haga el cambio por vos.
-
-Si mayormente *comentás*, el panel nativo de PR de tu IDE alcanza. Si revisás
-editando y corriendo el código — en cualquier editor o agente — esto es lo que
-falta.
+Cuando decidís corregir un typo, un nombre o un comportamiento, editalo con tus
+herramientas habituales. La extracción automática mantiene esas correcciones
+separadas. También podés dejar una observación para que el autor haga el cambio.
+La revisión guiada es útil sin editar código.
 
 ## Inicio rápido
 

@@ -1,15 +1,17 @@
 # git review workflow for Visual Studio
 
-**Walk a PR in order, then edit and run it — not just read the diff.**
+**Review PRs with a guided reading order and context.**
 
-[`git review`](https://github.com/EzeVillo/git-review-workflow) stages the entire pull request into your working tree as **uncommitted changes**. Reviewing it is then ordinary local work: go to a definition, find all references, run the tests, fix what you find. When you are done, **your fixes are extracted onto a branch of their own** — the author's commits stay exactly as they were.
+[`git review`](https://github.com/EzeVillo/git-review-workflow) helps you review changes from a coding agent or another developer with a walkthrough: where to start, why each file changed, and what needs attention. Follow the author's reading order or prepare your own, inspect the implementation and leave observations.
+
+The complete PR stays available as **editable changes** in your working tree. Go to a definition, find references, and run tests when useful. If you make corrections, finishing extracts them onto a separate branch. You can also complete a guided review without editing code.
 
 ## What you get
 
 - **A reading order, when the PR has one.** The author (often an AI coding agent) can commit a walkthrough beside the change: one file at a time, in the order that makes the change make sense, each with the reason it is there. The ones that carry the point are marked `key`. No walkthrough? Draft your own, or read the whole range.
 - **The whole range otherwise** — every file in the PR, one diff at a time or all at once.
 - **Your place is kept.** Pause a review and come back to it; switch branches without losing where you were, or what you edited.
-- **Nothing to clean up by hand.** Finishing extracts your edits and restores the branch; undo puts it back if you changed your mind.
+- **Corrections when you need them.** Finishing extracts any edits you made onto a separate branch; undo returns to the review if you changed your mind.
 
 ## Requirements
 

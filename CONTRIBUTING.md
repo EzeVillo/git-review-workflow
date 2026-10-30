@@ -239,102 +239,70 @@ fine in the editor. For behaviour, use F5.
 
 ## Publicación de la landing
 
-La dirección pública es **`https://ezevillo.com/git-review-workflow/`**. La landing sigue siendo
-HTML estático con sus imágenes, videos y GIFs en `docs/`; Netlify publica esos archivos tal cual.
+La dirección pública sigue siendo **https://ezevillo.com/git-review-workflow/**.
+La migración a Cloudflare está preparada localmente desde el 29 de octubre de
+2026. La activación del dominio se coordina desde el repositorio del portfolio;
+un commit local no implica que el sitio ya esté desplegado.
 
-### Sitio de este repositorio
+### Servicio de este repositorio
 
-Importar `EzeVillo/git-review-workflow` en Netlify, **en el mismo equipo que el sitio principal**:
-
-| Ajuste | Valor |
-|---|---|
-| Publicación de producción | Tag `landing-vX.Y.Z` mediante GitHub Actions |
-| Builds automáticos de Netlify | `Stopped builds` |
-| Nombre del sitio | `ezevillo-git-review-workflow` |
-| Configuración | `netlify.toml`, en la raíz del repositorio |
-| Base directory | `docs` |
-| Build command | Vacío |
-| Publish directory | `.` (relativo a `docs`) |
-| Variables de entorno propias en Netlify | Ninguna |
-| Funciones y plugins de build | Ninguno |
-| Dominio | La dirección `*.netlify.app` del sitio hijo |
-
-Los ajustes de build están versionados en `netlify.toml`, que prevalece sobre la UI. La base
-`docs` evita instalar dependencias o compilar la CLI y los clientes. `ignore = "exit 0"` omite
-los builds disparados por Git, incluso si cambian la landing o su configuración. Además, en
-**Project configuration → Developer settings → Continuous deployment → Build settings**, dejar
-**Build status → Stopped builds**. Esto impide también los builds por hooks y los reintentos desde
-Netlify; las publicaciones por CLI siguen disponibles. No usar un build hook para publicar un tag:
-construiría desde la rama en lugar de subir el commit etiquetado.
+`wrangler.jsonc` publica `docs/`, sin compilar CLI ni clientes, como el Worker
+`ezevillo-git-review-workflow`. Conserva HTML, guías, imágenes, videos, GIFs,
+canonical y sitemap. Los archivos reales se sirven directamente y los que no
+existen responden 404. La normalización de directorios usa barra final.
 
 ### Publicar una versión
 
-La landing versiona aparte con **`landing-vX.Y.Z`**. El único workflow que la publica es
-[`.github/workflows/release-landing.yml`](.github/workflows/release-landing.yml): hace checkout
-del commit etiquetado, comprueba los assets del logo y sube sólo `docs/` a producción con Netlify CLI
-fijada a una versión y `--no-build`. Los despliegues se serializan para que no se superpongan.
-Un push a `main`, un PR o un tag de la CLI o de un cliente no publica la landing.
+La landing conserva su cadencia propia con tags **landing-vX.Y.Z**. El workflow
+`.github/workflows/release-landing.yml` hace checkout del commit etiquetado,
+comprueba logo y landing y publica sólo `docs/` con Wrangler 4.148.0. Registra tag
+y SHA y serializa los despliegues. No publica en pushes comunes a `main`, PRs ni
+tags de la CLI o de los clientes. No cambiar `VERSION` ni las versiones de clientes
+para publicar la web; tampoco hace falta crear un GitHub Release.
 
-Configurar una vez en **GitHub → Settings → Secrets and variables → Actions**:
+Configurar en GitHub Actions los secretos `CLOUDFLARE_API_TOKEN` (Workers Scripts:
+Edit) y `CLOUDFLARE_ACCOUNT_ID` de la misma cuenta que el portfolio. No guardar
+sus valores en el repositorio. Para reintentar un fallo, volver a ejecutar el
+workflow del tag. Para una versión nueva, crear otro tag cuyo commit incluya
+este workflow; no mover tags publicados.
 
-| Tipo | Nombre | Valor |
-|---|---|---|
-| Repository secret | `NETLIFY_AUTH_TOKEN` | Token de Netlify con acceso al sitio hijo |
-| Repository variable | `NETLIFY_SITE_ID` | Project ID de `ezevillo-git-review-workflow`, nunca el del sitio principal |
-
-No se necesitan `SITE_URL` ni `APP_BASE_PATH`. Esas credenciales sólo las consume el paso de
-publicación de la landing; npm, Homebrew y las tiendas conservan sus canales actuales.
-
-Después de integrar los cambios que se quieren publicar:
+Comprobaciones locales, ejecutadas en el contenedor según las reglas del repo:
 
 ```sh
-git tag landing-vX.Y.Z <commit>
-git push origin landing-vX.Y.Z
+node scripts/check-logo-assets.mjs
+node scripts/check-landing.mjs
+npx --yes wrangler@4.148.0 deploy --dry-run --outdir dist/landing-worker
+./tests/run-docker.sh release-landing.bats
 ```
 
-El primer tag puede ser `landing-v0.1.0`; no hay que cambiar `VERSION`, ejecutar los bump de los
-clientes ni crear un GitHub Release. El mensaje del deploy registra el tag y el SHA. Para reintentar
-un fallo, volver a ejecutar el workflow de ese tag en Actions. Para publicar otra versión, crear un
-tag nuevo; no mover uno ya publicado. El workflow tiene que existir en el commit que se etiqueta.
+El dry run no publica. Para la primera carga manual, cuando se decida activar,
+se puede usar Wrangler con `deploy` después de esas comprobaciones y autenticar
+con las mismas variables privadas. Los releases habituales siguen usando tags.
 
 ### Ruta en el sitio principal
 
-El sitio principal de Netlify conserva `ezevillo.com` y las reglas existentes de `/ibit-to-btc/`.
-Actualmente es `neon-macaron-a52e5c`, conectado al repositorio `EzeVillo/ibit-to-btc`: las reglas
-nuevas se agregan a su `netlify.toml`. No hace falta mover el dominio para sumar esta landing.
-Agregar las de [`hosting/netlify-hub.example.toml`](hosting/netlify-hub.example.toml) a **su**
-configuración, reemplazando `REPLACE-WITH-LANDING-SITE` por el nombre real del sitio hijo. Deben
-estar antes de cualquier regla comodín `/*`:
+El portfolio conecta el binding interno `GIT_REVIEW` con este Worker y quita
+`/git-review-workflow/` antes de solicitar archivos. Aquí las páginas viven en
+`/` y `/guides/` o `/es/guias/`; el navegador conserva el prefijo público.
+El hub agrega la barra final y repone el prefijo en los redirects del hijo,
+preservando parámetros. Mantiene también las rutas de IBIT y Truco.
 
-- La edge function `netlify/edge-functions/project-slash.ts` del sitio principal redirige
-  `/git-review-workflow` con 301 a `/git-review-workflow/`, conservando los parámetros. No usa
-  variables ni dependencias propias. **No reemplazarla por una regla 301 en `netlify.toml`**:
-  Netlify matchea las dos variantes del path contra esa regla y provoca un bucle.
-- `/git-review-workflow/*` sirve `https://<sitio-hijo>.netlify.app/:splat` con 200: el navegador
-  conserva el dominio y el path públicos.
+No asignar el dominio al hijo, agregar `docs/CNAME` ni reactivar GitHub Pages.
+Los metadatos y las homepages de paquetes conservan el dominio público. El
+registro del dominio puede seguir en DonWeb; el cambio de DNS se coordina en
+`../portfolio/docs/cloudflare-migration.md` después de verificar los servicios.
 
-La landing hija publica en `/`, por lo que el destino **no repite** `/git-review-workflow/`.
-Sus assets usan rutas relativas y el proxy sirve también `media/`, `logo.svg` y `og.png`.
-No configurar `ezevillo.com` en el hijo ni crear `docs/CNAME`: el dominio y el DNS de DonWeb
-siguen apuntando al principal. La portada `/` se mantiene en ese sitio y puede tener su propio
-repositorio; no hace falta juntar los proyectos en un monorepo.
+Verificar HTML, guías en ambos idiomas, assets y sus redirects, favicon,
+tarjetas sociales, videos, GIFs y sitemaps primero bajo el hub de preview y
+después en el dominio. El origen de preview no registra visitas en Umami.
 
-### Comprobación
+### Respaldo en Netlify
 
-Verificar primero el hijo y después la ruta pública: HTML, favicon, tarjeta social, los tres
-videos, GIFs, selector de idioma y enlaces `#demo-vscode`, `#demo-jetbrains` y
-`#demo-visualstudio`. Confirmar que `/ibit-to-btc/` y `/ibit-to-btc/ar/` siguen funcionando.
-
-GitHub Pages está desactivado en la configuración del repositorio. La landing se publica sólo
-en Netlify: los próximos pushes no crean una segunda publicación en GitHub. No volver a activar
-Pages ni agregar un workflow de publicación allí. La página declara el dominio público en
-`canonical`, `og:url` y las tarjetas sociales. Los enlaces de los README y las homepages de los
-paquetes apuntan al dominio nuevo; los metadatos que viajan dentro de una extensión o paquete publicado se actualizan con
-su próxima versión. Las fichas de tienda editables por portal se revisan por separado.
-
-Las demos muestran la dirección en su cierre: al cambiarla en `scripts/marketing/render.mjs`,
-recomponer los tres MP4 con el procedimiento siguiente. Videos y GIFs consumen transferencia;
-la publicación por tag evita gastar créditos de despliegue hasta decidir publicar la web.
+`netlify.toml` y `hosting/netlify-hub.example.toml` se conservan para recuperar la
+publicación anterior. Mantener detenidos sus builds automáticos. El workflow de
+tags preparado ya no usa `NETLIFY_AUTH_TOKEN` ni `NETLIFY_SITE_ID`. No borrar el
+sitio anterior hasta verificar el dominio nuevo. No se ejecutó una migración
+externa por el solo hecho de cambiar estos archivos.
 
 ### Guías y descubrimiento
 

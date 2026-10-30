@@ -479,23 +479,24 @@ multi-cliente) verifica el contrato entero: el maestro sin tamaño fijo ni raste
 geometría contra `media/icon.svg`, la copia de `docs/` idéntica al maestro, que la landing la use de
 favicon, y los 40×40 / 16×16 que exige JetBrains.
 
-## Landing (Netlify)
+## Landing (Cloudflare)
 
-`docs/index.html` se publica en **`https://ezevillo.com/git-review-workflow/`** sólo al pushear un
-tag **`landing-vX.Y.Z`**, independiente de la CLI y los clientes. El workflow
-`.github/workflows/release-landing.yml` publica únicamente `docs/` del commit etiquetado, sin build,
-con Netlify CLI fijada a una versión. Necesita el secreto `NETLIFY_AUTH_TOKEN` y la variable de
-repositorio `NETLIFY_SITE_ID`, que apunta al sitio hijo. Los builds automáticos de Netlify deben
-estar detenidos; `netlify.toml` además usa `ignore = "exit 0"` para omitir los pushes comunes.
+La migración preparada el 29 de octubre de 2026 conserva la dirección
+**https://ezevillo.com/git-review-workflow/**. El workflow
+`.github/workflows/release-landing.yml` publica únicamente `docs/` del commit
+etiquetado `landing-vX.Y.Z` en el Worker `ezevillo-git-review-workflow` mediante
+Wrangler fijado a una versión. Necesita los secretos de Actions
+`CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID`. Un push común a `main` no publica
+la landing. La CLI y los clientes conservan sus canales de release actuales.
 
-El dominio pertenece al **sitio principal** de Netlify, que deriva cada path al sitio de su
-proyecto. La landing hija sirve los archivos desde `/`; el proxy del principal quita el prefijo
-`/git-review-workflow/`. La barra final se agrega en la edge function del principal, nunca con
-una regla 301 que Netlify también matchearía contra su propio destino. Las reglas de proxy están
-en `hosting/netlify-hub.example.toml` y se aplican en el
-principal, conservando las de `/ibit-to-btc/`. **No agregar `docs/CNAME` ni asignar `ezevillo.com`
-al sitio hijo.** Los dos sitios deben estar en el mismo equipo de Netlify. El procedimiento y la
-configuración externa están en `CONTRIBUTING.md`.
+El portfolio es el dueño del dominio: conecta el binding `GIT_REVIEW` con este
+servicio y quita `/git-review-workflow/` antes de solicitar sus archivos. El hijo
+sirve desde `/`; el hub repone el prefijo en redirects y normaliza la barra de
+entrada. No asignar `ezevillo.com` al hijo ni agregar `docs/CNAME`. Los Workers
+deben pertenecer a la misma cuenta. Ver el procedimiento en `CONTRIBUTING.md`.
+
+Netlify se conserva como respaldo hasta activar y verificar Cloudflare. Sus
+builds automáticos deben seguir detenidos; `netlify.toml` mantiene `ignore = "exit 0"`.
 
 **Es pitch, no documentación.** A propósito no documenta flags ni la tabla de verbos: para eso
 linkea a los README. Pero duplica cuatro cosas, y solo esas hay que revisar cuando el cambio las
@@ -513,7 +514,7 @@ diccionario `ES` del `<script>`, emparejados por `data-i18n`. Si editás un text
 editá las dos puntas. La vista mobile del cuadro comparativo se **genera desde la propia `<table>`**:
 no la dupliques a mano.
 
-GitHub Pages está desactivado: la landing se publica únicamente en Netlify. No volver a activar
+GitHub Pages está desactivado: el destino preparado de la landing es Cloudflare. No volver a activar
 la publicación desde `/docs` en GitHub. `docs/logo.svg` y `docs/og.png` son generados
 (ver *Assets del logo* y `decisiones.md` §13), nunca a mano. `docs/` no está en `files` de
 `package.json`, así que no viaja en el tarball de npm.

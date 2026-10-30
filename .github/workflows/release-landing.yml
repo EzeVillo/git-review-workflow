@@ -35,24 +35,24 @@ jobs:
             exit 1
           fi
 
-      - name: Check Netlify configuration
+      - name: Check Cloudflare configuration
         env:
-          NETLIFY_AUTH_TOKEN_CONFIGURED: ${{ secrets.NETLIFY_AUTH_TOKEN != '' }}
-          NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
+          CLOUDFLARE_API_TOKEN_CONFIGURED: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -eu
-          if [ "$NETLIFY_AUTH_TOKEN_CONFIGURED" != true ]; then
-            echo "NETLIFY_AUTH_TOKEN is not set. Add the repository secret before tagging." >&2
+          if [ "$CLOUDFLARE_API_TOKEN_CONFIGURED" != true ]; then
+            echo "CLOUDFLARE_API_TOKEN is not set. Add the repository secret before tagging." >&2
             exit 1
           fi
-          if [ -z "$NETLIFY_SITE_ID" ]; then
-            echo "NETLIFY_SITE_ID is not set. Add the repository variable for the landing site." >&2
+          if [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "CLOUDFLARE_ACCOUNT_ID is not set. Add the repository secret before tagging." >&2
             exit 1
           fi
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
 
       - name: Check landing assets
         run: |
@@ -61,10 +61,11 @@ jobs:
 
       - name: Deploy tagged landing
         env:
-          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
-          NETLIFY_SITE_ID: ${{ vars.NETLIFY_SITE_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -eu
-          npx --yes netlify-cli@27.14.2 deploy --prod --no-build \
-            --dir "$GITHUB_WORKSPACE/docs" \
+          npx --yes wrangler@4.148.0 deploy \
+            --config "$GITHUB_WORKSPACE/wrangler.jsonc" \
+            --assets "$GITHUB_WORKSPACE/docs" \
             --message "$GITHUB_REF_NAME ($GITHUB_SHA)"

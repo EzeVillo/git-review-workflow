@@ -8,8 +8,8 @@ setup() {
 	export GITHUB_REF_NAME=landing-v1.2.3
 	export GITHUB_SHA=0123456789abcdef0123456789abcdef01234567
 	export GITHUB_WORKSPACE="$BATS_TEST_TMPDIR/tagged checkout"
-	export NETLIFY_AUTH_TOKEN_CONFIGURED=true
-	export NETLIFY_SITE_ID=landing-site-id
+	export CLOUDFLARE_API_TOKEN_CONFIGURED=true
+	export CLOUDFLARE_ACCOUNT_ID=cloudflare-account-id
 	export DEPLOY_ARGS="$BATS_TEST_TMPDIR/deploy-args"
 	export DEPLOY_CONTENT="$BATS_TEST_TMPDIR/deployed.html"
 	mkdir -p "$BATS_TEST_TMPDIR/bin" "$GITHUB_WORKSPACE/docs"
@@ -19,7 +19,7 @@ setup() {
 set -eu
 printf '%s\n' "$@" >"$DEPLOY_ARGS"
 while [ "$#" -gt 0 ]; do
-	if [ "$1" = --dir ]; then
+	if [ "$1" = --assets ]; then
 		shift
 		cp "$1/index.html" "$DEPLOY_CONTENT"
 		break
@@ -94,27 +94,27 @@ workflow_step() {
 }
 
 @test "release-landing: missing token fails with a configuration error" {
-	script="$(workflow_step 'Check Netlify configuration')"
+	script="$(workflow_step 'Check Cloudflare configuration')"
 	[ -n "$script" ]
-	run --separate-stderr env NETLIFY_AUTH_TOKEN_CONFIGURED=false sh -c "$script"
+	run --separate-stderr env CLOUDFLARE_API_TOKEN_CONFIGURED=false sh -c "$script"
 	[ "$status" -eq 1 ]
 	[ -z "$output" ]
-	[ "$stderr" = 'NETLIFY_AUTH_TOKEN is not set. Add the repository secret before tagging.' ]
+	[ "$stderr" = 'CLOUDFLARE_API_TOKEN is not set. Add the repository secret before tagging.' ]
 	[ ! -e "$DEPLOY_ARGS" ]
 }
 
-@test "release-landing: missing site fails instead of selecting a site interactively" {
-	script="$(workflow_step 'Check Netlify configuration')"
+@test "release-landing: missing account fails instead of selecting an account interactively" {
+	script="$(workflow_step 'Check Cloudflare configuration')"
 	[ -n "$script" ]
-	run --separate-stderr env NETLIFY_SITE_ID= sh -c "$script"
+	run --separate-stderr env CLOUDFLARE_ACCOUNT_ID= sh -c "$script"
 	[ "$status" -eq 1 ]
 	[ -z "$output" ]
-	[ "$stderr" = 'NETLIFY_SITE_ID is not set. Add the repository variable for the landing site.' ]
+	[ "$stderr" = 'CLOUDFLARE_ACCOUNT_ID is not set. Add the repository secret before tagging.' ]
 	[ ! -e "$DEPLOY_ARGS" ]
 }
 
 @test "release-landing: configured credentials pass preflight" {
-	script="$(workflow_step 'Check Netlify configuration')"
+	script="$(workflow_step 'Check Cloudflare configuration')"
 	[ -n "$script" ]
 	run --separate-stderr sh -c "$script"
 	[ "$status" -eq 0 ]
@@ -130,11 +130,11 @@ workflow_step() {
 	[ -z "$output" ]
 	[ -z "$stderr" ]
 	[ "$(cat "$DEPLOY_ARGS")" = "--yes
-netlify-cli@27.14.2
+wrangler@4.148.0
 deploy
---prod
---no-build
---dir
+--config
+$GITHUB_WORKSPACE/wrangler.jsonc
+--assets
 $GITHUB_WORKSPACE/docs
 --message
 $GITHUB_REF_NAME ($GITHUB_SHA)" ]

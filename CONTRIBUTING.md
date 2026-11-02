@@ -239,70 +239,34 @@ fine in the editor. For behaviour, use F5.
 
 ## Publicación de la landing
 
-La dirección pública sigue siendo **https://ezevillo.com/git-review-workflow/**.
-La migración a Cloudflare está preparada localmente desde el 29 de octubre de
-2026. La activación del dominio se coordina desde el repositorio del portfolio;
-un commit local no implica que el sitio ya esté desplegado.
+La dirección pública es **https://git-review.ezevillo.com/**. La configuración
+preparada el 2 de noviembre de 2026 publica `docs/` directamente en su propio
+subdominio, sin prefijo, proxy del portfolio ni redirects de compatibilidad.
+No mantener Netlify ni reactivar GitHub Pages.
 
-### Servicio de este repositorio
+`wrangler.jsonc` declara el Worker `ezevillo-git-review-workflow` y su Custom
+Domain. Configurar la zona en Cloudflare y los secretos de GitHub Actions
+`CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID`, con los permisos de Workers y
+Custom Domains. El dominio puede seguir registrado en DonWeb.
 
-`wrangler.jsonc` publica `docs/`, sin compilar CLI ni clientes, como el Worker
-`ezevillo-git-review-workflow`. Conserva HTML, guías, imágenes, videos, GIFs,
-canonical y sitemap. Los archivos reales se sirven directamente y los que no
-existen responden 404. La normalización de directorios usa barra final.
+La landing conserva su cadencia independiente con tags `landing-vX.Y.Z`.
+`.github/workflows/release-landing.yml` verifica el commit etiquetado y publica
+con Wrangler 4.148.0. Los pushes comunes a `main` y los tags de CLI/clientes no
+publican la web. No cambiar versiones de CLI/clientes para publicar la landing.
 
-### Publicar una versión
+Verificar en el contenedor según las reglas del repo: checker de logo, checker
+de landing y `tests/run-docker.sh release-landing.bats`. Un dry run de Wrangler
+permite comprobar el empaquetado sin publicar. Para una primera carga manual,
+después de verificar y autenticar, se puede ejecutar Wrangler con `deploy`.
 
-La landing conserva su cadencia propia con tags **landing-vX.Y.Z**. El workflow
-`.github/workflows/release-landing.yml` hace checkout del commit etiquetado,
-comprueba logo y landing y publica sólo `docs/` con Wrangler 4.148.0. Registra tag
-y SHA y serializa los despliegues. No publica en pushes comunes a `main`, PRs ni
-tags de la CLI o de los clientes. No cambiar `VERSION` ni las versiones de clientes
-para publicar la web; tampoco hace falta crear un GitHub Release.
+Cada guía tiene canonical e idiomas bajo este mismo subdominio. `docs/robots.txt`
+anuncia su sitemap. Los trackers de Umami conservan ID y etiqueta pero aceptan
+sólo `git-review.ezevillo.com`; revisar esa propiedad al activar el destino.
+Las homepages de paquetes, extensiones y fórmulas se actualizan en el código;
+las tiendas y paquetes publicados recogen el cambio en sus próximos releases.
 
-Configurar en GitHub Actions los secretos `CLOUDFLARE_API_TOKEN` (Workers Scripts:
-Edit) y `CLOUDFLARE_ACCOUNT_ID` de la misma cuenta que el portfolio. No guardar
-sus valores en el repositorio. Para reintentar un fallo, volver a ejecutar el
-workflow del tag. Para una versión nueva, crear otro tag cuyo commit incluya
-este workflow; no mover tags publicados.
-
-Comprobaciones locales, ejecutadas en el contenedor según las reglas del repo:
-
-```sh
-node scripts/check-logo-assets.mjs
-node scripts/check-landing.mjs
-npx --yes wrangler@4.148.0 deploy --dry-run --outdir dist/landing-worker
-./tests/run-docker.sh release-landing.bats
-```
-
-El dry run no publica. Para la primera carga manual, cuando se decida activar,
-se puede usar Wrangler con `deploy` después de esas comprobaciones y autenticar
-con las mismas variables privadas. Los releases habituales siguen usando tags.
-
-### Ruta en el sitio principal
-
-El portfolio conecta el binding interno `GIT_REVIEW` con este Worker y quita
-`/git-review-workflow/` antes de solicitar archivos. Aquí las páginas viven en
-`/` y `/guides/` o `/es/guias/`; el navegador conserva el prefijo público.
-El hub agrega la barra final y repone el prefijo en los redirects del hijo,
-preservando parámetros. Mantiene también las rutas de IBIT y Truco.
-
-No asignar el dominio al hijo, agregar `docs/CNAME` ni reactivar GitHub Pages.
-Los metadatos y las homepages de paquetes conservan el dominio público. El
-registro del dominio puede seguir en DonWeb; el cambio de DNS se coordina en
-`../portfolio/docs/cloudflare-migration.md` después de verificar los servicios.
-
-Verificar HTML, guías en ambos idiomas, assets y sus redirects, favicon,
-tarjetas sociales, videos, GIFs y sitemaps primero bajo el hub de preview y
-después en el dominio. El origen de preview no registra visitas en Umami.
-
-### Respaldo en Netlify
-
-`netlify.toml` y `hosting/netlify-hub.example.toml` se conservan para recuperar la
-publicación anterior. Mantener detenidos sus builds automáticos. El workflow de
-tags preparado ya no usa `NETLIFY_AUTH_TOKEN` ni `NETLIFY_SITE_ID`. No borrar el
-sitio anterior hasta verificar el dominio nuevo. No se ejecutó una migración
-externa por el solo hecho de cambiar estos archivos.
+La guía común de DNS, secretos y pendientes está en
+`../portfolio/docs/cloudflare-migration.md`. Los commits locales no publican.
 
 ### Guías y descubrimiento
 
@@ -332,7 +296,7 @@ grabar las demos para verificar una edición de la web.
 El sitio principal debe agregar esta línea a su `/robots.txt`, conservando las existentes:
 
 ```text
-Sitemap: https://ezevillo.com/git-review-workflow/sitemap.xml
+Sitemap: https://git-review.ezevillo.com/sitemap.xml
 ```
 
 Se puede presentar ese mismo sitemap en Search Console. No crear un `robots.txt` bajo el
@@ -347,8 +311,8 @@ filtrar este proyecto en el Overview de Umami. El mismo identificador puede usar
 secciones del dominio con su propia etiqueta, instalándolo una sola vez por página. El campo
 Domain de Umami debe ser `ezevillo.com`, sin ruta; no crea por sí solo un filtro por proyecto.
 
-`data-domains="ezevillo.com"` limita el tracking a ese hostname, sin contar localhost ni el
-dominio de preview de Netlify. El navegador sigue descargando el script en previews, pero el
+`data-domains="git-review.ezevillo.com"` limita el tracking a ese hostname, sin contar localhost ni el
+dominio de preview de Cloudflare. El navegador sigue descargando el script en previews, pero el
 tracker no registra esas visitas. El verificador local bloquea el tracker antes de cargarlo.
 El cambio empieza a recoger visitas públicas cuando se publique esa versión de la landing.
 El identificador es público; no agregar credenciales privadas.

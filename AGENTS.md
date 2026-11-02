@@ -481,22 +481,16 @@ favicon, y los 40×40 / 16×16 que exige JetBrains.
 
 ## Landing (Cloudflare)
 
-La migración preparada el 29 de octubre de 2026 conserva la dirección
-**https://ezevillo.com/git-review-workflow/**. El workflow
-`.github/workflows/release-landing.yml` publica únicamente `docs/` del commit
-etiquetado `landing-vX.Y.Z` en el Worker `ezevillo-git-review-workflow` mediante
-Wrangler fijado a una versión. Necesita los secretos de Actions
+El destino preparado es **https://git-review.ezevillo.com/**, en la raíz del Worker
+`ezevillo-git-review-workflow`. `wrangler.jsonc` declara su Custom Domain. El
+portfolio sólo enlaza el sitio: no hay hub, prefijo ni redirects de compatibilidad.
+No mantener Netlify ni reactivar GitHub Pages. `docs/robots.txt` anuncia el sitemap.
+
+`.github/workflows/release-landing.yml` publica `docs/` del commit etiquetado
+`landing-vX.Y.Z` con Wrangler fijado a una versión. Requiere los secretos
 `CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID`. Un push común a `main` no publica
-la landing. La CLI y los clientes conservan sus canales de release actuales.
-
-El portfolio es el dueño del dominio: conecta el binding `GIT_REVIEW` con este
-servicio y quita `/git-review-workflow/` antes de solicitar sus archivos. El hijo
-sirve desde `/`; el hub repone el prefijo en redirects y normaliza la barra de
-entrada. No asignar `ezevillo.com` al hijo ni agregar `docs/CNAME`. Los Workers
-deben pertenecer a la misma cuenta. Ver el procedimiento en `CONTRIBUTING.md`.
-
-Netlify se conserva como respaldo hasta activar y verificar Cloudflare. Sus
-builds automáticos deben seguir detenidos; `netlify.toml` mantiene `ignore = "exit 0"`.
+la landing; la CLI y los clientes conservan sus canales de release.
+Consultar `CONTRIBUTING.md` para publicar y verificar.
 
 **Es pitch, no documentación.** A propósito no documenta flags ni la tabla de verbos: para eso
 linkea a los README. Pero duplica cuatro cosas, y solo esas hay que revisar cuando el cambio las
@@ -526,7 +520,7 @@ la landing y las guías; se anuncia desde el `robots.txt` del sitio principal, n
 assets, fragmentos, canonical, traducciones y sitemap en CI y antes de desplegar un tag.
 
 El `head` de las tres páginas carga el tracker público de Umami, con el identificador compartido
-de `ezevillo.com`, `data-domains="ezevillo.com"` y `data-tag="git-review-workflow"`. La etiqueta
+de `ezevillo.com`, `data-domains="git-review.ezevillo.com"` y `data-tag="git-review-workflow"`. La etiqueta
 separa este proyecto de los demás dentro del mismo sitio de Umami. No duplicar el snippet por
 página. La verificación local bloquea el tracker para no contaminar las métricas públicas.
 `docs/analytics.js` agrega eventos sin incorporar envío propio. Los clics usan atributos

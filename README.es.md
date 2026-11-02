@@ -13,7 +13,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/tag/EzeVillo/git-review-workflow?label=release&sort=semver)](https://github.com/EzeVillo/git-review-workflow/releases)
 
-[English](README.md) · **Español** · [Sitio web](https://ezevillo.com/git-review-workflow/)
+[English](README.md) · **Español** · [Sitio web](https://git-review.ezevillo.com/)
 
 Empezá desde su panel de VS Code, JetBrains o Visual Studio, o usá la interfaz de
 terminal. Esas interfaces guían el flujo y dejan la [CLI](CLI.es.md) disponible
@@ -21,10 +21,10 @@ para scripts y usos avanzados.
 
 ![Lo escribió la IA. Lo revisás vos. Mirá la demo de VS Code.](docs/media/vscode-edit-and-test.gif)
 
-**[Mirá la demo de 40 segundos en la web](https://ezevillo.com/git-review-workflow/#demo-vscode)** — seguí el orden de lectura,
+**[Mirá la demo de 40 segundos en la web](https://git-review.ezevillo.com/#demo-vscode)** — seguí el orden de lectura,
 corregí el código, corré los tests y llevate tu corrección a una rama aparte.
 
-[Leé la guía: revisar un pull request localmente](https://ezevillo.com/git-review-workflow/es/guias/revisar-pull-requests-localmente/) — desde el primer diff staged hasta tus propias correcciones.
+[Leé la guía: revisar un pull request localmente](https://git-review.ezevillo.com/es/guias/revisar-pull-requests-localmente/) — desde el primer diff staged hasta tus propias correcciones.
 
 ---
 

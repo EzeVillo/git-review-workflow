@@ -3,7 +3,7 @@
 # seven assets have been built and published.
 class GitReviewUi < Formula
   desc "Terminal interface for the git review workflow"
-  homepage "https://ezevillo.com/git-review-workflow/"
+  homepage "https://git-review.ezevillo.com/"
   version "0.2.0"
   license "MIT"
 

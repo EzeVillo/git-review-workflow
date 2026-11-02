@@ -1,7 +1,0 @@
-# Static landing only. release-landing.yml uploads docs/ from a landing-v* tag.
-[build]
-  base = "docs"
-  publish = "."
-  command = ""
-  # Skip Git-triggered builds; production is published by the tag workflow.
-  ignore = "exit 0"

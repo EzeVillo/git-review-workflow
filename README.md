@@ -12,7 +12,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/tag/EzeVillo/git-review-workflow?label=release&sort=semver)](https://github.com/EzeVillo/git-review-workflow/releases)
 
-**English** · [Español](README.es.md) · [Website](https://ezevillo.com/git-review-workflow/)
+**English** · [Español](README.es.md) · [Website](https://git-review.ezevillo.com/)
 
 Interfaces: [VS Code extension](vscode-extension/README.md) · [JetBrains IDE plugin](jetbrains-plugin/README.md) · [Visual Studio extension](visualstudio-extension/README.md) · [terminal UI](tui/README.md)
 
@@ -22,10 +22,10 @@ and advanced use.
 
 ![AI wrote it. You own the review. See the VS Code demo.](docs/media/vscode-edit-and-test.gif)
 
-**[Watch the 40-second IDE demo on the website](https://ezevillo.com/git-review-workflow/#demo-vscode)** — follow the reading order, fix the code,
+**[Watch the 40-second IDE demo on the website](https://git-review.ezevillo.com/#demo-vscode)** — follow the reading order, fix the code,
 run the tests, and take your correction to a separate branch.
 
-[Read the guide: review a pull request locally](https://ezevillo.com/git-review-workflow/guides/review-pull-requests-locally/) — from the first staged diff to your own corrections.
+[Read the guide: review a pull request locally](https://git-review.ezevillo.com/guides/review-pull-requests-locally/) — from the first staged diff to your own corrections.
 
 ---
 

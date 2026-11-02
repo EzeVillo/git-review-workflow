@@ -1,12 +1,12 @@
 // Run in git-review-marketing with the checkout at /src and screenshots at /output.
-// Exercises the public path prefix used by Netlify, without publishing anything.
+// Exercises the root deployment on git-review.ezevillo.com, without publishing.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 const {chromium} = require('/opt/marketing/node_modules/playwright-core');
 
-const prefix = '/git-review-workflow/';
+const prefix = '/';
 const root = '/src/docs';
 const out = process.env.MARKETING_QA_OUT || '/output';
 const types = {'.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript',

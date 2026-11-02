@@ -60,16 +60,6 @@ workflow_step() {
 	grep -Fq 'cancel-in-progress: false' "$WORKFLOW"
 }
 
-@test "release-landing: Netlify skips Git builds even without a previous deploy" {
-	command="$(sed -n 's/^  ignore = "\(.*\)"/\1/p' "$REPO/netlify.toml" | tr -d '\r')"
-	[ -n "$command" ]
-	cd "$GITHUB_WORKSPACE/docs"
-	run --separate-stderr env CACHED_COMMIT_REF= COMMIT_REF=unpublished sh -c "$command"
-	[ "$status" -eq 0 ]
-	[ -z "$output" ]
-	[ -z "$stderr" ]
-}
-
 @test "release-landing: valid independent landing versions pass validation" {
 	script="$(workflow_step 'Validate landing tag')"
 	[ -n "$script" ]

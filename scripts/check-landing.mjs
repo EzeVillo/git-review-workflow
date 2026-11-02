@@ -4,7 +4,7 @@ import {existsSync, readFileSync, readdirSync} from 'node:fs';
 import {join, relative, resolve, sep} from 'node:path';
 
 const root = resolve(process.cwd(), 'docs');
-const base = new URL('https://ezevillo.com/git-review-workflow/');
+const base = new URL('https://git-review.ezevillo.com/');
 const read = path => readFileSync(path, 'utf8');
 const attrs = tag => Object.fromEntries([...tag.matchAll(/([\w:-]+)\s*=\s*"([^"]*)"/g)]
     .map(([, name, value]) => [name, value.replaceAll('&amp;', '&')]));

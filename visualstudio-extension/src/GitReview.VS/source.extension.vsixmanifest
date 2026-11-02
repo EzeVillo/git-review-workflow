@@ -7,7 +7,7 @@
          restating the supported-VS list the gallery already shows. Opens with the
          shared tagline (contracts/client-product-surface.yaml → listing.tagline). -->
     <Description xml:space="preserve">Review PRs with a guided reading order and context.</Description>
-    <MoreInfo>https://ezevillo.com/git-review-workflow/#demo-visualstudio</MoreInfo>
+    <MoreInfo>https://git-review.ezevillo.com/#demo-visualstudio</MoreInfo>
     <!-- Flat names: these travel inside the .vsix (see the Content items in the csproj). -->
     <License>LICENSE</License>
     <GettingStartedGuide>README.md</GettingStartedGuide>

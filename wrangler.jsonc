@@ -8,5 +8,11 @@
     "directory": "docs",
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "none"
-  }
+  },
+  "routes": [
+    {
+      "pattern": "git-review.ezevillo.com",
+      "custom_domain": true
+    }
+  ]
 }

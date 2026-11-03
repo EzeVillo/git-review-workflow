@@ -1,6 +1,6 @@
 # Contexto de producto y comunicación
 
-Actualizado: 25 de octubre de 2026.
+Actualizado: 3 de noviembre de 2026.
 
 ## Público y problema
 
@@ -72,9 +72,10 @@ previa del destinatario, canal y texto.
 
 ## Publicación
 
-Los textos y artefactos se preparan localmente. Publicar en redes, actualizar fichas,
-pushear o desplegar requiere la autorización correspondiente de Ezequiel. En esta tanda
-solo se autorizó el commit local; no se crean tags ni se despliega en Netlify.
+La landing se publica en Cloudflare, en `https://git-review.ezevillo.com/`, con
+tags `landing-vX.Y.Z`. Sus releases son independientes de la CLI y los clientes.
+Publicar en redes, actualizar fichas, pushear o desplegar requiere la autorización
+correspondiente de Ezequiel; preparar textos o commits locales no la concede.
 
 ## Referencias
 

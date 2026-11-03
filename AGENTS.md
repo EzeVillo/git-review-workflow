@@ -481,7 +481,7 @@ favicon, y los 40×40 / 16×16 que exige JetBrains.
 
 ## Landing (Cloudflare)
 
-El destino preparado es **https://git-review.ezevillo.com/**, en la raíz del Worker
+La landing está publicada en **https://git-review.ezevillo.com/**, en la raíz del Worker
 `ezevillo-git-review-workflow`. `wrangler.jsonc` declara su Custom Domain. El
 portfolio sólo enlaza el sitio: no hay hub, prefijo ni redirects de compatibilidad.
 No mantener Netlify ni reactivar GitHub Pages. `docs/robots.txt` anuncia el sitemap.
@@ -508,15 +508,15 @@ diccionario `ES` del `<script>`, emparejados por `data-i18n`. Si editás un text
 editá las dos puntas. La vista mobile del cuadro comparativo se **genera desde la propia `<table>`**:
 no la dupliques a mano.
 
-GitHub Pages está desactivado: el destino preparado de la landing es Cloudflare. No volver a activar
+GitHub Pages está desactivado: la landing se publica en Cloudflare. No volver a activar
 la publicación desde `/docs` en GitHub. `docs/logo.svg` y `docs/og.png` son generados
 (ver *Assets del logo* y `decisiones.md` §13), nunca a mano. `docs/` no está en `files` de
 `package.json`, así que no viaja en el tarball de npm.
 
 Las guías de `docs/guides/` y `docs/es/guias/` tienen HTML propio por idioma, canonical propio
 y enlaces `hreflang` recíprocos. Comparten `docs/guides/guide.css`. `docs/sitemap.xml` enumera
-la landing y las guías; se anuncia desde el `robots.txt` del sitio principal, no desde un
-`robots.txt` bajo el prefijo del proyecto. `node scripts/check-landing.mjs` comprueba rutas,
+la landing y las guías; se anuncia desde `https://git-review.ezevillo.com/robots.txt`.
+El portfolio anuncia sólo su propio sitemap. `node scripts/check-landing.mjs` comprueba rutas,
 assets, fragmentos, canonical, traducciones y sitemap en CI y antes de desplegar un tag.
 
 El `head` de las tres páginas carga el tracker público de Umami, con el identificador compartido

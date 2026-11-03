@@ -239,15 +239,15 @@ fine in the editor. For behaviour, use F5.
 
 ## Publicación de la landing
 
-La dirección pública es **https://git-review.ezevillo.com/**. La configuración
-preparada el 2 de noviembre de 2026 publica `docs/` directamente en su propio
+La dirección pública es **https://git-review.ezevillo.com/**. Desde el 3 de
+noviembre de 2026 se publica `docs/` directamente en su propio
 subdominio, sin prefijo, proxy del portfolio ni redirects de compatibilidad.
 No mantener Netlify ni reactivar GitHub Pages.
 
 `wrangler.jsonc` declara el Worker `ezevillo-git-review-workflow` y su Custom
-Domain. Configurar la zona en Cloudflare y los secretos de GitHub Actions
+Domain. La zona está activa en Cloudflare. Conservar los secretos de GitHub Actions
 `CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID`, con los permisos de Workers y
-Custom Domains. El dominio puede seguir registrado en DonWeb.
+Custom Domains. El dominio sigue registrado en DonWeb.
 
 La landing conserva su cadencia independiente con tags `landing-vX.Y.Z`.
 `.github/workflows/release-landing.yml` verifica el commit etiquetado y publica
@@ -261,7 +261,7 @@ después de verificar y autenticar, se puede ejecutar Wrangler con `deploy`.
 
 Cada guía tiene canonical e idiomas bajo este mismo subdominio. `docs/robots.txt`
 anuncia su sitemap. Los trackers de Umami conservan ID y etiqueta pero aceptan
-sólo `git-review.ezevillo.com`; revisar esa propiedad al activar el destino.
+sólo `git-review.ezevillo.com`; la recepción de métricas se comprueba en Umami.
 Las homepages de paquetes, extensiones y fórmulas se actualizan en el código;
 las tiendas y paquetes publicados recogen el cambio en sus próximos releases.
 
@@ -280,7 +280,7 @@ una guía. Las dos usan `docs/guides/guide.css`, con la tipografía y los colore
 `node scripts/check-landing.mjs` valida las URLs públicas, rutas locales, assets, fragmentos,
 idiomas y sitemap. Corre en CI y en la validación anterior a publicar la landing.
 
-Con la imagen de marketing disponible, verificar idiomas, navegación bajo el prefijo público,
+Con la imagen de marketing disponible, verificar idiomas, navegación desde la raíz del sitio,
 responsive y eventos de la página, sin publicar ni cargar un tracker real:
 
 ```sh
@@ -293,28 +293,28 @@ MSYS_NO_PATHCONV=1 docker run --rm --entrypoint node \
 Las capturas quedan en `demo/marketing/landing-qa/`, ignorado por Git. No hace falta volver a
 grabar las demos para verificar una edición de la web.
 
-El sitio principal debe agregar esta línea a su `/robots.txt`, conservando las existentes:
+`docs/robots.txt`, servido desde `https://git-review.ezevillo.com/robots.txt`, anuncia:
 
 ```text
 Sitemap: https://git-review.ezevillo.com/sitemap.xml
 ```
 
-Se puede presentar ese mismo sitemap en Search Console. No crear un `robots.txt` bajo el
-prefijo del proyecto: el crawler consulta el de la raíz del dominio. El archivo y las guías
-se publican junto con el resto de `docs/`, exclusivamente por el tag de landing.
+Se puede presentar ese mismo sitemap en Search Console. El portfolio anuncia sólo
+su propio sitemap. El archivo y las guías se publican junto con el resto de `docs/`,
+exclusivamente por el tag de landing.
 
 ### Medición web
 
 Las tres páginas incluyen el snippet público de Umami aportado por Ezequiel. El identificador
 se comparte con los demás proyectos de `ezevillo.com`; `data-tag="git-review-workflow"` permite
-filtrar este proyecto en el Overview de Umami. El mismo identificador puede usarse en otras
-secciones del dominio con su propia etiqueta, instalándolo una sola vez por página. El campo
+filtrar este proyecto en el Overview de Umami. El mismo identificador puede usarse en otros
+subdominios con su propia etiqueta, instalándolo una sola vez por página. El campo
 Domain de Umami debe ser `ezevillo.com`, sin ruta; no crea por sí solo un filtro por proyecto.
 
 `data-domains="git-review.ezevillo.com"` limita el tracking a ese hostname, sin contar localhost ni el
 dominio de preview de Cloudflare. El navegador sigue descargando el script en previews, pero el
 tracker no registra esas visitas. El verificador local bloquea el tracker antes de cargarlo.
-El cambio empieza a recoger visitas públicas cuando se publique esa versión de la landing.
+La versión publicada incorpora esta integración; verificar los eventos en el panel de Umami.
 El identificador es público; no agregar credenciales privadas.
 
 Los enlaces preparados usan `install_click` (`interface`, `method`) y `docs_click`

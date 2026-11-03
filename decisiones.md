@@ -878,45 +878,29 @@ favicon, y los 40×40 / 16×16 que exige JetBrains.
 
 ### La landing
 
-`docs/index.html` se publica con Netlify en `https://ezevillo.com/git-review-workflow/` al pushear
-un tag **`landing-vX.Y.Z`**. Antes se publicaba desde `main`, filtrando por cambios en `docs/` o
-`netlify.toml`: evitaba deploys por cambios ajenos a la web, pero integrar una edición de la landing
-también la hacía pública. El tag separa integración y publicación, con una cadencia independiente
-de la CLI y los clientes y un commit preciso al que volver.
+`docs/index.html` se publica con Cloudflare Workers Static Assets en
+`https://git-review.ezevillo.com/` al pushear un tag **`landing-vX.Y.Z`**. El tag
+separa integración y publicación, con una cadencia independiente de la CLI y los
+clientes y un commit preciso al que volver. Los pushes comunes a `main` no
+publican la landing. La primera publicación en Cloudflare se comprobó el
+2026-11-03 con `landing-v0.1.0`.
 
-`.github/workflows/release-landing.yml` hace checkout de ese commit y publica sólo `docs/` con
-Netlify CLI fijada a una versión, sin build. El secreto `NETLIFY_AUTH_TOKEN` y la variable
-`NETLIFY_SITE_ID` pertenecen a GitHub Actions; la landing no tiene variables de runtime ni instala
-dependencias propias. El workflow valida el tag y la configuración antes de publicar y serializa
-los despliegues. No crea un GitHub Release: la landing no distribuye un paquete y no debe alterar
-el `latest` de la CLI.
+`.github/workflows/release-landing.yml` hace checkout de ese commit, comprueba
+logo y landing y publica sólo `docs/` con Wrangler fijado a una versión, sin
+build. `CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID` pertenecen a Actions;
+la landing no tiene variables de runtime ni instala dependencias propias.
+El workflow valida el tag y la configuración y serializa los despliegues.
+No crea un GitHub Release ni altera el `latest` de la CLI.
 
-Los builds automáticos de Netlify quedan detenidos y `netlify.toml` conserva `ignore = "exit 0"`
-como defensa ante pushes comunes. El ajuste externo detiene también hooks y reintentos que podrían
-ignorar ese comando. Un build hook se descartó porque construiría el estado de una rama, en vez de
-subir los archivos exactos del tag. `tests/release-landing.bats` comprueba los guards y el argv real
-de publicación sin acceder a la red.
-Para previsualizarlo, abrilo directo en el navegador — no necesita servidor.
+`wrangler.jsonc` declara el Custom Domain y sirve el directorio desde `/`.
+`tests/release-landing.bats` comprueba los guards y el argv real de publicación
+sin acceder a la red. Para previsualizarlo, consultar `CONTRIBUTING.md`.
 
-El dominio se comparte con otros proyectos y ya sirve `/ibit-to-btc/` desde un sitio principal de
-Netlify (`neon-macaron-a52e5c`, conectado hoy a `EzeVillo/ibit-to-btc`). Ese sitio mantiene el dominio y deriva `/git-review-workflow/*` a la dirección
-`*.netlify.app` de esta landing, quitando el prefijo porque el hijo publica en `/`. La configuración
-de ejemplo está en `hosting/netlify-hub.example.toml`; se aplica en el principal y conserva las
-reglas existentes. Asignar el dominio al hijo, cambiar el DNS o agregar `docs/CNAME` se descartó:
-le quitaría al principal la dirección que necesitan los demás proyectos. Ambos sitios pertenecen
-al mismo equipo, como exige Netlify para proxies entre sitios.
-
-La barra final se agrega en una edge function del principal, antes del proxy: las reglas 301 de
-Netlify no distinguen `/git-review-workflow` de `/git-review-workflow/`, así que la regla directa
-que se probó primero también matcheaba el destino y lo redirigía a sí mismo. La función mira el
-path original, conserva los parámetros y deja pasar la URL que ya tiene barra. La landing hija
-sigue siendo estática y no necesita funciones ni variables. El gate son los tests de
-`scripts/project-slash.test.ts` en `ibit-to-btc` y la comprobación HTTP sobre el dominio público.
-
-GitHub Pages quedó desactivado después de comprobar la publicación nueva, por decisión del
-usuario: la landing debe tener una única publicación pública. Se eliminó el marcador de Jekyll,
-que Netlify no necesita. Los tags de la landing sólo la publican en Netlify. El detalle de
-configuración externa y comprobación está en `CONTRIBUTING.md`.
+El portfolio sólo enlaza este subdominio. Se retiraron del código el hub de
+Netlify, su proxy y la edge function de barra final. Las URLs anteriores no se
+conservan ni redirigen por decisión de Ezequiel: los proyectos todavía no tenían
+usuarios. Cada subdominio anuncia su propio sitemap desde `/robots.txt`.
+GitHub Pages sigue desactivado. La guía de operación vigente es `CONTRIBUTING.md`.
 
 - `docs/logo.svg` es el favicon: copia generada del maestro (ver *Assets del logo*), nunca a mano.
 - `docs/og.png` es la preview de los links, y **la genera `scripts/og/render.mjs` desde
@@ -935,8 +919,8 @@ configuración externa y comprobación está en `CONTRIBUTING.md`.
   también en `card.html`. El `<head>` declara `og:image:width`/`height` porque Slack y Discord
   dibujan la card chica hasta que bajan y miden la imagen ellos mismos, y un `…:alt` en las dos
   puntas para quien tiene las imágenes apagadas. Las URLs de `og:image` y `canonical` están
-  hardcodeadas a `ezevillo.com/git-review-workflow/`, junto a `og:url` y `twitter:image`. Las rutas
-  de los assets son relativas para que funcionen tanto en el sitio hijo como bajo el path público.
+  hardcodeadas a `https://git-review.ezevillo.com/`, junto a `og:url` y `twitter:image`.
+  Las rutas de los assets son relativas al directorio de la landing.
 - `docs/` **no** está en `files` de `package.json`, así que no viaja en el tarball de npm ni infla
   el paquete.
 

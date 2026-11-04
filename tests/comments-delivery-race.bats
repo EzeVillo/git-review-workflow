@@ -19,7 +19,7 @@ set -eu
 for argument do
 	if [ "$argument" = "$RACE_DESTINATION" ]; then
 		"$RACE_REAL_MV" "$@"
-		timeout 8 sh -c 'printf "ready\n" >"$1/ready"; read -r message <"$1/release"; [ "$message" = release ]' sh "$RACE_BARRIER"
+		timeout "$COMMENTS_BARRIER_TIMEOUT" sh -c 'printf "ready\n" >"$1/ready"; read -r message <"$1/release"; [ "$message" = release ]' sh "$RACE_BARRIER"
 		exit 0
 	fi
 done

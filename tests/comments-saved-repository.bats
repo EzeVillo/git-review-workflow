@@ -97,7 +97,7 @@ check_saved_local_projection() {
 	[ "$status" -eq 0 ]
 	[ ! -e "$SAVED_LOCAL" ]
 	[ ! -e "$SAVED_SHARED" ]
-	git show feature/comments:.review/comments.md >"$COMMENTS_TMP/after-cancel"
+	MSYS_NO_PATHCONV=1 git show feature/comments:.review/comments.md >"$COMMENTS_TMP/after-cancel"
 	cmp "$COMMENTS_TMP/repository" "$COMMENTS_TMP/after-cancel"
 	[ "$(git status --porcelain)" = '' ]
 }

@@ -37,7 +37,7 @@ case "$operation" in
 		if [ "$#" -gt 1 ]; then
 			printf 'arrived\n' >"$2/arrived"
 			# shellcheck disable=SC2016 # Positional path belongs to the child.
-			timeout 5 sh -c 'printf "ready\n" >"$1/ready"; read -r release <"$1/release" && [ "$release" = release ]' sh "$2"
+			timeout "${COMMENTS_BARRIER_TIMEOUT:-5}" sh -c 'printf "ready\n" >"$1/ready"; read -r release <"$1/release" && [ "$release" = release ]' sh "$2"
 		fi
 		;;
 	write)

@@ -134,7 +134,7 @@ check_deleted_shared_cycle() {
 		run --separate-stderr git review abort
 		[ "$status" -eq 0 ]
 		[ ! -e "$prepared" ]
-		git show feature/comments:.review/comments.md >"$COMMENTS_TMP/source-after"
+		MSYS_NO_PATHCONV=1 git show feature/comments:.review/comments.md >"$COMMENTS_TMP/source-after"
 		cmp "$COMMENTS_TMP/original-shared" "$COMMENTS_TMP/source-after"
 	else
 		run --separate-stderr git review finish

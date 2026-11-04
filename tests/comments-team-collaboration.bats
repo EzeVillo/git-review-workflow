@@ -165,8 +165,8 @@ check_delete_reply() {
 	run --separate-stderr git merge --no-edit origin/feedback-bob
 	[ "$status" -eq 1 ]
 	[[ "$output" == *'CONFLICT (content): Merge conflict in .review/comments.md'* ]]
-	git show origin/feedback-alice:.review/comments.md >"$TEAM_ROOT/deleted.md"
-	git show origin/feedback-bob:.review/comments.md >"$TEAM_ROOT/answered.md"
+	MSYS_NO_PATHCONV=1 git show origin/feedback-alice:.review/comments.md >"$TEAM_ROOT/deleted.md"
+	MSYS_NO_PATHCONV=1 git show origin/feedback-bob:.review/comments.md >"$TEAM_ROOT/answered.md"
 	if [ "$resolution" = delete ]; then cp "$TEAM_ROOT/deleted.md" .review/comments.md
 	else cp "$TEAM_ROOT/answered.md" .review/comments.md
 	fi

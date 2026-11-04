@@ -7,6 +7,11 @@ comments_setup() {
 	export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL="$COMMENTS_TMP/global.config"
 	export GIT_CONFIG_SYSTEM=/dev/null GIT_TERMINAL_PROMPT=0 GIT_OPTIONAL_LOCKS=0
 	export GIT_ALLOW_PROTOCOL=file LC_ALL=C
+	# Windows may spend several seconds spawning the CLI before it reaches a
+	# rendezvous. Keep both FIFO endpoints bounded, with the same host budget.
+	COMMENTS_BARRIER_TIMEOUT=5
+	case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) COMMENTS_BARRIER_TIMEOUT=60 ;; esac
+	export COMMENTS_BARRIER_TIMEOUT
 	unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY
 	unset GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_CONFIG_COUNT
 	export PATH="$BATS_TEST_DIRNAME/../bin:$PATH"
@@ -178,7 +183,7 @@ comments_barrier_create() {
 comments_barrier_wait() {
 	printf 'arrived\n' >"$1/arrived"
 	# shellcheck disable=SC2016 # $1 belongs to the timeout's child shell.
-	if ! timeout "${2:-5}" sh -c 'printf "ready\n" >"$1/ready"; read -r message < "$1/release" && [ "$message" = release ]' sh "$1"; then
+	if ! timeout "${2:-$COMMENTS_BARRIER_TIMEOUT}" sh -c 'printf "ready\n" >"$1/ready"; read -r message < "$1/release" && [ "$message" = release ]' sh "$1"; then
 		printf 'barrier not released: %s\n' "$1" >&2
 		return 1
 	fi
@@ -186,7 +191,7 @@ comments_barrier_wait() {
 
 comments_barrier_arrived() {
 	# shellcheck disable=SC2016 # The complete FIFO handshake is bounded.
-	if ! timeout "${2:-5}" sh -c 'read -r message <"$1/ready" && [ "$message" = ready ]' sh "$1"; then
+	if ! timeout "${2:-$COMMENTS_BARRIER_TIMEOUT}" sh -c 'read -r message <"$1/ready" && [ "$message" = ready ]' sh "$1"; then
 		printf 'barrier not reached: %s\n' "$1" >&2
 		return 1
 	fi
@@ -194,12 +199,12 @@ comments_barrier_arrived() {
 
 comments_barrier_resume() {
 	# shellcheck disable=SC2016 # Pass the path as data to the child shell.
-	timeout "${2:-5}" sh -c 'printf "release\n" > "$1/release"' sh "$1"
+	timeout "${2:-$COMMENTS_BARRIER_TIMEOUT}" sh -c 'printf "release\n" > "$1/release"' sh "$1"
 }
 
 comments_barrier_release() {
-	comments_barrier_arrived "$1" "${2:-5}" || return 1
-	comments_barrier_resume "$1" "${2:-5}"
+	comments_barrier_arrived "$1" "${2:-$COMMENTS_BARRIER_TIMEOUT}" || return 1
+	comments_barrier_resume "$1" "${2:-$COMMENTS_BARRIER_TIMEOUT}"
 }
 
 # Test PATH wrappers inject exactly one observed failure or rendezvous at an
@@ -221,7 +226,7 @@ for argument do
 				case "$COMMENTS_INJECT_ACTION" in
 					fail) printf 'injected operation failure\n' >&2; exit 73 ;;
 					barrier)
-						if ! timeout 5 sh -c 'printf "ready\n" >"$1/ready"; read -r message < "$1/release" && [ "$message" = release ]' sh "$COMMENTS_INJECT_ROOT"; then
+						if ! timeout "$COMMENTS_BARRIER_TIMEOUT" sh -c 'printf "ready\n" >"$1/ready"; read -r message < "$1/release" && [ "$message" = release ]' sh "$COMMENTS_INJECT_ROOT"; then
 							printf 'injected barrier not released\n' >&2; exit 74
 						fi
 						;;

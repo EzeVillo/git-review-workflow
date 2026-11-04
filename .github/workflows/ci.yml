@@ -46,16 +46,27 @@ jobs:
             Windows) choco install shellcheck --no-progress -y ;;
             *) sudo apt-get update && sudo apt-get install -y shellcheck ;;
           esac
+      # macOS still parses /bin/sh with Bash 3.2. ShellCheck on another host
+      # does not catch its command-substitution parser limitations.
+      - name: Check POSIX shell syntax
+        run: |
+          find bin -type f ! -name '.gitkeep' -exec sh -ec 'for script do sh -n "$script"; done' sh {} +
       - name: shellcheck
         # find recorre bin/ (incl. bin/git-review-verbs/, fuera del glob bin/*) y
         # excluye .gitkeep; cubre el dispatcher y todos los verbos.
-        run: shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh tui/bump-version.sh vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh visualstudio-extension/bump-version.sh jetbrains-plugin/verification-report.sh tests/sandbox.sh tests/sandbox-min.sh tests/helpers/sandbox-comments.sh
+        run: find bin -type f ! -name '.gitkeep' -exec shellcheck install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh tui/bump-version.sh vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh visualstudio-extension/bump-version.sh jetbrains-plugin/verification-report.sh tests/sandbox.sh tests/sandbox-min.sh tests/helpers/sandbox-comments.sh {} +
 
   test:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        include:
+          - { os: ubuntu-latest, shard: 1, shards: 1 }
+          - { os: macos-latest, shard: 1, shards: 1 }
+          - { os: windows-latest, shard: 1, shards: 4 }
+          - { os: windows-latest, shard: 2, shards: 4 }
+          - { os: windows-latest, shard: 3, shards: 4 }
+          - { os: windows-latest, shard: 4, shards: 4 }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -72,7 +83,21 @@ jobs:
       - name: Comments status contract
         run: bats tests/comments-status.bats
       - name: Run tests
-        run: bats tests/
+        env:
+          TEST_SHARD: ${{ matrix.shard }}
+          TEST_SHARDS: ${{ matrix.shards }}
+        # Keep every test on every OS. Windows process startup makes a serial
+        # run nearly six hours; distribute complete files without overlap.
+        run: |
+          set --
+          index=0
+          for file in tests/*.bats; do
+            if [ "$((index % TEST_SHARDS + 1))" -eq "$TEST_SHARD" ]; then
+              set -- "$@" "$file"
+            fi
+            index=$((index + 1))
+          done
+          bats --timing --print-output-on-failure "$@"
 
   vscode-extension:
     strategy:

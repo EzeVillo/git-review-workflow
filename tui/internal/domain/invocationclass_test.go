@@ -2,6 +2,19 @@ package domain
 
 import "testing"
 
+func TestCommentsWritesAndQueriesUseTheirOwnBudgets(t *testing.T) {
+	for _, operation := range []string{"init", "add", "delete", "renumber", "save", "prepare"} {
+		if got := ClassForVerb("comments", []string{operation, "--document", "local"}); got != LocalMutation {
+			t.Errorf("comments %s = %v, want LocalMutation", operation, got)
+		}
+	}
+	for _, args := range [][]string{{"status"}, {"entries"}, {"diff"}, {"future"}, {"prepare", "--check", "--porcelain"}, nil} {
+		if got := ClassForVerb("comments", args); got != Read {
+			t.Errorf("comments %v = %v, want Read", args, got)
+		}
+	}
+}
+
 func TestClassForVerbTimeouts(t *testing.T) {
 	cases := []struct {
 		verb string

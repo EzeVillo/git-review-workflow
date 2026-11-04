@@ -2,6 +2,11 @@
 
 ## [0.5.0] — 2026-10-19
 
+### Fixed
+
+- Give comment writes the local mutation timeout while keeping queries and
+  delivery checks on the read timeout.
+
 ### Changed
 
 - Explain the previous-review choice through its effect on private Local notes,

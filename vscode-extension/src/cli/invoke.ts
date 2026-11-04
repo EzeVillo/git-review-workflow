@@ -67,7 +67,7 @@ const NETWORK_MUTATION_VERBS = new Set(["start"]);
  * Un verbo desconocido se trata como lectura, el default más conservador.
  */
 export function timeoutForClass(verb: string, args: string[]): number {
-    if (verb === "comments" && ["init", "add", "renumber", "save", "prepare"].includes(args[0]) && !args.includes("--check")) return LOCAL_MUTATION_TIMEOUT_MS;
+    if (verb === "comments" && ["init", "add", "delete", "renumber", "save", "prepare"].includes(args[0]) && !args.includes("--check")) return LOCAL_MUTATION_TIMEOUT_MS;
     if (NETWORK_MUTATION_VERBS.has(verb)) {
         return NETWORK_MUTATION_TIMEOUT_MS;
     }

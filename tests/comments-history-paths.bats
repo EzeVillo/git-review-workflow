@@ -7,18 +7,15 @@ teardown() { comments_teardown; }
 @test "comments history keeps hostile UTF-8 and metacharacter paths literal and decodes only once" {
 	local names=('a space.txt' 'acentó.txt' '-leading.txt' 'wild*.txt' 'quest?.txt' 'colon:name.txt' 'percent%3E.txt' 'greater>.txt' 'tick`$(oops).txt' 'percent%09.txt')
 	local encoded=('a space.txt' 'acentó.txt' '-leading.txt' 'wild*.txt' 'quest?.txt' 'colon:name.txt' 'percent%253E.txt' 'greater%3E.txt' 'tick`$(oops).txt' 'percent%2509.txt')
-	git switch --quiet feature/comments
-	local name
-	for name in "${names[@]}"; do printf 'old\n' >"$name"; done
-	git add -A
-	git commit --quiet -m 'path base'
-	local base head
-	base=$(git rev-parse HEAD)
-	for name in "${names[@]}"; do printf 'new\n' >"$name"; done
-	git add -A
-	git commit --quiet -m 'path head'
-	head=$(git rev-parse HEAD)
-	git switch --quiet main
+	# Build real Git history without checking out names that Win32 cannot
+	# represent. The historical diff must support them on every host.
+	local name blob base head tree
+	blob=$(printf 'old\n' | git hash-object -w --stdin)
+	tree=$(for name in "${names[@]}"; do printf '100644 blob %s\t%s\0' "$blob" "$name"; done | git mktree -z)
+	base=$(printf 'path base\n' | git commit-tree "$tree" -p "$COMMENTS_TIP")
+	blob=$(printf 'new\n' | git hash-object -w --stdin)
+	tree=$(for name in "${names[@]}"; do printf '100644 blob %s\t%s\0' "$blob" "$name"; done | git mktree -z)
+	head=$(printf 'path head\n' | git commit-tree "$tree" -p "$base")
 	run --separate-stderr comments_start whole
 	[ "$status" -eq 0 ]
 	local i base_tree head_tree base_blob head_blob

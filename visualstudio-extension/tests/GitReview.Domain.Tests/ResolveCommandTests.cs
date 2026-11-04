@@ -58,6 +58,17 @@ public class ResolveCommandTests
 public class TimeoutClassTests
 {
     [Fact]
+    public void Comments_writes_get_mutation_budget_and_queries_stay_reads()
+    {
+        foreach (var operation in new[] { "init", "add", "delete", "renumber", "save", "prepare" })
+            Assert.Equal(TimeoutClass.LocalMutationTimeoutMs, TimeoutClass.TimeoutForClass("comments", new[] { operation, "--document", "local" }));
+        foreach (var operation in new[] { "status", "entries", "diff", "future" })
+            Assert.Equal(TimeoutClass.ReadTimeoutMs, TimeoutClass.TimeoutForClass("comments", new[] { operation, "--porcelain" }));
+        Assert.Equal(TimeoutClass.ReadTimeoutMs, TimeoutClass.TimeoutForClass("comments", new[] { "prepare", "--check", "--porcelain" }));
+        Assert.Equal(TimeoutClass.ReadTimeoutMs, TimeoutClass.TimeoutForClass("comments", Array.Empty<string>()));
+    }
+
+    [Fact]
     public void Reads_get_the_short_timeout()
     {
         Assert.Equal(TimeoutClass.ReadTimeoutMs, TimeoutClass.TimeoutForClass("status", Array.Empty<string>()));

@@ -18,8 +18,11 @@ private val LOCAL_MUTATION_VERBS = setOf(
 )
 
 private val NETWORK_MUTATION_VERBS = setOf("start")
+private val COMMENTS_MUTATION_OPERATIONS = setOf("init", "add", "delete", "renumber", "save", "prepare")
 
 fun timeoutForClass(verb: String, args: List<String>): Long {
+    if (verb == "comments" && args.firstOrNull() in COMMENTS_MUTATION_OPERATIONS && "--check" !in args)
+        return LOCAL_MUTATION_TIMEOUT_MS
     if (verb in NETWORK_MUTATION_VERBS) return NETWORK_MUTATION_TIMEOUT_MS
     if (verb == "forget" && "--stale" in args) return NETWORK_MUTATION_TIMEOUT_MS
     if (verb in LOCAL_MUTATION_VERBS) return LOCAL_MUTATION_TIMEOUT_MS

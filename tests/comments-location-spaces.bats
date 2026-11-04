@@ -5,16 +5,14 @@ setup() { comments_setup; }
 teardown() { comments_teardown; }
 
 @test "comments rename capture keeps leading and trailing spaces in literal argv paths" {
-	git switch --quiet feature/comments
-	printf 'same rename bytes\n' >' old path.txt '
-	git add -A
-	git commit --quiet -m 'spaced base'
-	local base head
-	base=$(git rev-parse HEAD)
-	git mv ' old path.txt ' ' new path.txt '
-	git commit --quiet -m 'spaced head'
-	head=$(git rev-parse HEAD)
-	git switch --quiet main
+	# A trailing space is legal in a Git tree but cannot be checked out by
+	# Win32. Exercise the same real rename through objects on every platform.
+	local base head blob tree
+	blob=$(printf 'same rename bytes\n' | git hash-object -w --stdin)
+	tree=$(printf '100644 blob %s\t old path.txt \0' "$blob" | git mktree -z)
+	base=$(printf 'spaced base\n' | git commit-tree "$tree" -p "$COMMENTS_TIP")
+	tree=$(printf '100644 blob %s\t new path.txt \0' "$blob" | git mktree -z)
+	head=$(printf 'spaced head\n' | git commit-tree "$tree" -p "$base")
 	run --separate-stderr comments_start whole
 	[ "$status" -eq 0 ]
 	run --separate-stderr git review comments add --document local --base "$base" --head "$head" --path ' new path.txt ' --text 'Literal path.'

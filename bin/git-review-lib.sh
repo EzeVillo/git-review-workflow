@@ -396,7 +396,9 @@ comments_scan() {
 }
 
 comments_contours() {
-	awk -v operation="$1" -v original="${2:-}" -v final_lf="${3:-1}" -v ordinal="${4:-}" '
+	# gawk on Windows otherwise strips CR from getline on the original file.
+	# Other POSIX awks treat BINMODE as an ordinary, unused variable.
+	awk -v BINMODE=3 -v operation="$1" -v original="${2:-}" -v final_lf="${3:-1}" -v ordinal="${4:-}" '
 		BEGIN { if(original!="") {while((getline rawline < original)>0) raw[++rawcount]=rawline; close(original)} }
 		function oid(s) {return (length(s)==40 || length(s)==64) && s !~ /[^0-9a-f]/}
 		function positive(s) {return s ~ /^[0-9]+$/ && s !~ /^0+$/}
@@ -1973,10 +1975,11 @@ comments_prepare() {
 			_cprep_released_output=$(
 				porcelain_row comments-delivery "$cm_context" delivered 'Shared comments delivery.'
 				for _cprep_role in baseline prepared destination; do
+					# Balance case patterns inside $() for macOS /bin/sh (Bash 3.2).
 					case "$_cprep_role" in
-						baseline) _cprep_path=$cm_dir/source-baseline.md ;;
-						prepared) _cprep_path=$cm_dir/shared.md ;;
-						destination) _cprep_path=$cm_delivery_path ;;
+						(baseline) _cprep_path=$cm_dir/source-baseline.md ;;
+						(prepared) _cprep_path=$cm_dir/shared.md ;;
+						(destination) _cprep_path=$cm_delivery_path ;;
 					esac
 					_cprep_revision=$(comments_revision "$_cprep_path") || exit 1
 					_cprep_presence=present
@@ -4518,7 +4521,9 @@ compare_load_draft() {
 	bcommit="$(printf '%s\n' "$_cmp_fields" | sed -n '2p')"
 	a="$(printf '%s\n' "$_cmp_fields" | sed -n '3p' | compare_decode_selector)"
 	b="$(printf '%s\n' "$_cmp_fields" | sed -n '4p' | compare_decode_selector)"
-	[ -n "$a" ] && [ -n "$b" ] || die "comparison draft has no revision context: $1"
+	if [ -z "$a" ] || [ -z "$b" ]; then
+		die "comparison draft has no revision context: $1"
+	fi
 	_cmp_expected="compare/$(printf '%s\n%s\n' "$a" "$b" | git hash-object --stdin)"
 	[ "$compare_draft_id" = "$_cmp_expected" ] || die "comparison draft has a mismatched revision context: $1"
 	# Require complete object IDs, not a user-edited ref that could move later.

@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- Give comment writes the local mutation timeout while keeping queries and
+  delivery checks on the read timeout.
 - Keep comment controls visible by scrolling long reviews with keyboard focus
   and the mouse wheel while preserving the key bar and click targets.
 - Refresh repository Shared comments after external saves, including atomic

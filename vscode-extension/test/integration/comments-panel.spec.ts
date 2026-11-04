@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import {parseComments} from "../../src/cli/commentsPorcelain";
+import {sameDraftFile} from "../../src/review/draftFlow";
 import {getTestApi} from "./helpers/extensionApi";
 import {snapshotTabs, waitForNewTab} from "./helpers/editors";
 import {abortReview, createBranchWithChanges, git, gitReviewOrThrow, sharedFixtureRepo, startReview} from "./helpers/fixture";
@@ -237,7 +238,7 @@ describe("comments client integration", function () {
         const editor=await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(local.path));
         await editor.edit(edit=>edit.insert(new vscode.Position(0,0),"unsaved prose\n"));
         let saved=0;
-        api.setCommentSaver(async document=>{assert.strictEqual(document.uri.fsPath,local.path);saved++;if(mode==="throw")throw Error("save failure");return mode!=="false";});
+        api.setCommentSaver(async document=>{assert.ok(sameDraftFile(document.uri.fsPath,local.path));saved++;if(mode==="throw")throw Error("save failure");return mode!=="false";});
         try {
             await vscode.commands.executeCommand("gitReview.addComment");await api.sendCommentMessage({type:"save",kind:"local",text:"Keep this text"});
             assert.strictEqual(saved,1);assert.strictEqual(api.commentComposerState()?.text,"Keep this text");assert.ok(api.commentComposerState()?.error);

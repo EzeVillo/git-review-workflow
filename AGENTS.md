@@ -1,5 +1,12 @@
 # CLAUDE.md
 
+## Flujo de integración
+
+La rama principal de este repositorio es **`main`**. Por preferencia expresa de
+Ezequiel, los cambios se commitean y se pushean directamente a `main`. No crear
+ramas de trabajo ni pull requests salvo que lo pida explícitamente. El seguimiento
+de CI y sus correcciones continúan sobre `main`.
+
 ## Qué es esto
 
 Una herramienta para revisar pull requests con un **recorrido guiado y contexto**: por dónde

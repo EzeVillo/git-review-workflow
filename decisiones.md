@@ -1840,3 +1840,11 @@ archivos completos en cuatro grupos por posición del glob; Linux y macOS siguen
 ejecutando el conjunto entero. No cambia el pin de Bats ni se elimina cobertura.
 Cada grupo imprime tiempos y la salida de los tests fallidos para que una falla
 temprana no necesite otra corrida de seis horas sólo para obtener su diagnóstico.
+
+La corrida nativa posterior expuso una dependencia del arnés que Linux ya tenía:
+macOS no trae `timeout`. CI instala `coreutils` y agrega al PATH un directorio
+privado con un único symlink a `gtimeout`. Agregar todo `libexec/gnubin` habría
+reemplazado también `cp`, `mv` y otras utilidades BSD, escondiendo precisamente
+las diferencias que este runner debe probar. Una comprobación previa ejecuta
+`timeout` antes de los tests y evita gastar la suite completa en una dependencia
+ausente. No cambia la CLI ni se omiten las pruebas de concurrencia.

@@ -86,6 +86,10 @@ de Git fuera del working tree; las consultas no deben escribir objetos ni
 refrescar el índice. Las barreras de concurrencia usan FIFO con timeout en los
 dos extremos, y los fallos de I/O se inyectan por operación para que funcionen
 también como root. No sustituir esas comprobaciones por `chmod` ni por sleeps.
+Al ejecutar Bats directamente en macOS, instalar GNU `timeout` con
+`brew install coreutils`; si sólo está disponible como `gtimeout`, exponer un
+symlink llamado `timeout` en un directorio del PATH. CI expone sólo ese binario
+para conservar la cobertura de las herramientas BSD del sistema.
 La evidencia de GNU/BSD/BusyBox awk y los controles negativos está en
 [`specs/016-comentarios-review/quickstart.md`](specs/016-comentarios-review/quickstart.md).
 

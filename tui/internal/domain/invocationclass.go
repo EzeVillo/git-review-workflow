@@ -46,10 +46,23 @@ var localMutationVerbs = map[string]bool{
 // instead of hanging for five minutes.
 //
 // `forget` is LocalMutation by default and ONLY Network when args carries
-// `--stale` (it checks the remote first); every other verb's class does
-// not depend on its args at all.
+// `--stale` (it checks the remote first). Comments distinguishes local writes
+// from status/entries/diff and the read-only prepare --check.
 func ClassForVerb(verb string, args []string) InvocationClass {
 	switch verb {
+	case "comments":
+		for _, arg := range args {
+			if arg == "--check" {
+				return Read
+			}
+		}
+		if len(args) > 0 {
+			switch args[0] {
+			case "init", "add", "delete", "renumber", "save", "prepare":
+				return LocalMutation
+			}
+		}
+		return Read
 	case "start":
 		return Network
 	case "forget":

@@ -5,6 +5,16 @@ import org.junit.jupiter.api.Test
 
 class ResolveCommandTest {
     @Test
+    fun commentsWritesGetMutationBudgetAndQueriesStayReads() {
+        for (operation in listOf("init", "add", "delete", "renumber", "save", "prepare"))
+            assertEquals(LOCAL_MUTATION_TIMEOUT_MS, timeoutForClass("comments", listOf(operation, "--document", "local")))
+        for (operation in listOf("status", "entries", "diff", "future"))
+            assertEquals(READ_TIMEOUT_MS, timeoutForClass("comments", listOf(operation, "--porcelain")))
+        assertEquals(READ_TIMEOUT_MS, timeoutForClass("comments", listOf("prepare", "--check", "--porcelain")))
+        assertEquals(READ_TIMEOUT_MS, timeoutForClass("comments", emptyList()))
+    }
+
+    @Test
     fun emptyPathUsesGitReview() {
         val r = resolveCommand("status", listOf("--porcelain"), null, "linux")
         assertEquals("git", r.command)

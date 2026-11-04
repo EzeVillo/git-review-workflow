@@ -16,6 +16,8 @@ This file starts at 0.2.1. Earlier versions are only in the
 
 ### Fixed
 
+- Preserve CRLF and mixed line endings when renumbering, deleting, or rebinding
+  comments on Windows, and keep the shared library readable by macOS Bash 3.2.
 - Require the existing context choice when a known portable discussion appears
   under a different branch with incompatible history. Choosing a new discussion
   preserves incoming Shared prose while separating private Local notes.

@@ -66,7 +66,7 @@ copied_branch() {
 	cmp "$TEAM_ROOT/rebound.md" "$prepared"
 	team_review abort
 	cmp "$TEAM_ROOT/old.local" "$OLD_LOCAL"
-	git show feature/copied:.review/comments.md >"$TEAM_ROOT/source.md"
+	MSYS_NO_PATHCONV=1 git show feature/copied:.review/comments.md >"$TEAM_ROOT/source.md"
 	cmp "$TEAM_ROOT/seed.md" "$TEAM_ROOT/source.md"
 }
 

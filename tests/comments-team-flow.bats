@@ -228,8 +228,8 @@ team_flow() {
 	[ "$(git diff --name-only --diff-filter=U)" = .review/comments.md ]
 	[ "$(grep -Fc 'alice public question' .review/comments.md)" = 1 ]
 	[ "$(grep -Fc 'bob public question' .review/comments.md)" = 1 ]
-	git show origin/alice-feedback:.review/comments.md >"$COMMENTS_TMP/alice-from-git.md"
-	git show origin/bob-feedback:.review/comments.md >"$COMMENTS_TMP/bob-from-git.md"
+	MSYS_NO_PATHCONV=1 git show origin/alice-feedback:.review/comments.md >"$COMMENTS_TMP/alice-from-git.md"
+	MSYS_NO_PATHCONV=1 git show origin/bob-feedback:.review/comments.md >"$COMMENTS_TMP/bob-from-git.md"
 	cmp "$COMMENTS_TMP/alice-delivery.md" "$COMMENTS_TMP/alice-from-git.md"
 	cmp "$COMMENTS_TMP/bob-delivery.md" "$COMMENTS_TMP/bob-from-git.md"
 	# Explicitly resolve the document identity and retain both immutable entry

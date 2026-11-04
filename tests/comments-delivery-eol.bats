@@ -100,7 +100,7 @@ case "$*" in
 	*'function equal_line'*)
 		"$COMMENTS_EOL_REAL_AWK" "$@"
 		if mkdir "$COMMENTS_EOL_BARRIER/hit" 2>/dev/null; then
-			timeout 10 sh -c 'printf "ready\n" >"$1/ready"; read -r reply <"$1/release"; [ "$reply" = release ]' sh "$COMMENTS_EOL_BARRIER"
+			timeout "$COMMENTS_BARRIER_TIMEOUT" sh -c 'printf "ready\n" >"$1/ready"; read -r reply <"$1/release"; [ "$reply" = release ]' sh "$COMMENTS_EOL_BARRIER"
 		fi
 		;;
 	*) exec "$COMMENTS_EOL_REAL_AWK" "$@" ;;

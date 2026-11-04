@@ -7,7 +7,7 @@ root=$2
 case "$phase" in
 	init)
 		git init --quiet --bare --initial-branch=main "$root/remote.git"
-		git clone --quiet "$root/remote.git" "$root/author"
+		git clone --quiet --config core.autocrlf=false "$root/remote.git" "$root/author"
 		cd "$root/author"
 		git config user.name Author
 		git config user.email author@example.invalid
@@ -26,7 +26,9 @@ case "$phase" in
 		git commit --quiet -am Feature
 		git push --quiet origin feature/team
 		git switch --quiet main
-		git clone --quiet "$root/remote.git" "$root/reviewer"
+		# The checkout must use the same EOL policy as the later review. Setting
+		# it only after cloning makes the CRLF checkout dirty on Windows.
+		git clone --quiet --config core.autocrlf=false "$root/remote.git" "$root/reviewer"
 		cd "$root/reviewer"
 		git config user.name Reviewer
 		git config user.email reviewer@example.invalid

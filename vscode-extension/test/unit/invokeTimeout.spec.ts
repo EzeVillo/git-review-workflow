@@ -1,5 +1,5 @@
 import * as assert from "node:assert";
-import {invokeGitReview} from "../../src/cli/invoke";
+import {invokeGitReview, timeoutForClass} from "../../src/cli/invoke";
 
 /**
  * El techo que promete `timeoutForClass` tiene que cumplirse de verdad. Antes
@@ -16,6 +16,13 @@ import {invokeGitReview} from "../../src/cli/invoke";
  * sin pasar por la envoltura de `sh`. El "verbo" es `-e` y el arg el script.
  */
 describe("invokeGitReview: timeout", () => {
+    it("gives comments writes the mutation budget and keeps queries short", () => {
+        for (const operation of ["init", "add", "delete", "renumber", "save", "prepare"])
+            assert.strictEqual(timeoutForClass("comments", [operation, "--document", "local"]), 120000);
+        for (const args of [["status"], ["entries"], ["diff"], ["future"], ["prepare", "--check", "--porcelain"], []])
+            assert.strictEqual(timeoutForClass("comments", args), 15000);
+    });
+
     /** Un proceso que no termina solo dentro del horizonte del test. */
     const HANGS = "setTimeout(() => {}, 60000)";
 

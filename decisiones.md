@@ -1814,3 +1814,45 @@ Compare consulta las mismas reglas de ofertas que Start después de resolver sus
 Los borradores propios de Compare llevan `source=compare`, una identidad estable `compare/<hash de los selectores>` y los dos commits fijados en su bloque de instrucciones. Viven en el mismo almacén privado y siguen su custodia de Save/Continue/Forget, pero no sobrescriben el borrador de Start. El lector conserva el fallback anterior al borrador de la rama cuando no existe uno específico de Compare. Si ese borrador está a medio escribir, se ofrece preparar una copia independiente y se conservan sus anotaciones, sin modificar el original. Una actualización por los selectores originales detecta tanto cambios de base como de destino y conserva la prosa pertinente. La continuación desde el panel valida y abre Compare con los commits guardados, sin resolver otra vez referencias móviles.
 
 `draft-title` aporta la etiqueta legible del par sin usarla como identidad ni reconstruir contexto en los clientes. Se extrae durante la enumeración de borradores existente, sin procesos extra por archivo. Los cuatro clientes consumen las ofertas, ofrecen el mismo circuito crear/retomar/actualizar y el botón del borrador conserva `compare --draft`.
+
+## 19. Portabilidad de comentarios y duración del CI
+
+Las corridas del 3 de noviembre de 2026 mostraron fallos que una ejecución Linux
+no detectaba. El `case` dentro de una sustitución de comandos necesita patrones
+con paréntesis de apertura para que Bash 3.2, el `/bin/sh` de macOS, pueda leer
+la biblioteca completa. El lint ahora ejecuta también `sh -n` con el shell real
+de cada runner; actualizar el shell de macOS habría ocultado el problema del
+usuario que conserva el shell del sistema.
+
+En Windows, GNU awk leía el original con `getline` en modo texto y eliminaba CR.
+El lector de contornos usa `BINMODE=3` para conservar entrada y salida binarias;
+en los demás awk es una variable ordinaria sin efecto. Los tests de BOM, EOL
+mixto y EOF siguen comprobando bytes exactos al renumerar, borrar o cambiar
+solamente la identidad de una discusión.
+
+Las fixtures configuran `core.autocrlf=false` durante el clone, antes de su
+checkout. Configurarlo después dejaba archivos CRLF que la nueva política veía
+como cambios locales. Los paths históricos que Win32 no puede materializar se
+construyen mediante blobs, árboles y commits reales: conservan cobertura sin
+depender del filesystem del host. Las consultas de test con selectores
+`rama/con/barra:path` desactivan la conversión MSYS sólo para esa invocación.
+
+Las barreras FIFO siguen siendo rendezvous acotados, sin sleeps ni pruebas
+omitidas. Su presupuesto normal es de cinco segundos y el de Windows de sesenta,
+porque el proceso que debe llegar puede pasar varios segundos iniciando la CLI.
+Los tests de timeout explícito conservan su límite de un segundo. La limpieza de
+los repositorios .NET quita el atributo read-only de los objetos Git antes de
+borrarlos, para no tapar una aserción con un error de permisos.
+
+Las escrituras de comentarios tienen el presupuesto de mutación local de
+120 segundos; `status`, `entries`, `diff` y `prepare --check` conservan los
+15 segundos de lectura. JetBrains y Visual Studio trataban todas como lecturas,
+y VS Code omitía `delete`: con un Windows lento podían interrumpir una escritura
+correcta. Los cuatro clasificadores prueban explícitamente los seis subcomandos
+de escritura y los caminos de consulta, sin ampliar globalmente los límites.
+
+La suite Windows terminó, sin quedar bloqueada, tras 5 h 48 min. CI distribuye
+archivos completos en cuatro grupos por posición del glob; Linux y macOS siguen
+ejecutando el conjunto entero. No cambia el pin de Bats ni se elimina cobertura.
+Cada grupo imprime tiempos y la salida de los tests fallidos para que una falla
+temprana no necesite otra corrida de seis horas sólo para obtener su diagnóstico.

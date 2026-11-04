@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Give comment deletion the local mutation timeout instead of the read timeout.
 - Capture the selected side of review diffs when adding a comment, including
   selections in new or deleted files opened from Changes.
 

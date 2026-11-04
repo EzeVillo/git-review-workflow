@@ -26,8 +26,15 @@ public static class TimeoutClass
         "start",
     };
 
+    private static readonly HashSet<string> CommentsMutationOperations = new(StringComparer.Ordinal)
+    {
+        "init", "add", "delete", "renumber", "save", "prepare",
+    };
+
     public static long TimeoutForClass(string verb, IReadOnlyList<string> args)
     {
+        if (verb == "comments" && args.Count > 0 && CommentsMutationOperations.Contains(args[0]) && !args.Contains("--check"))
+            return LocalMutationTimeoutMs;
         if (NetworkMutationVerbs.Contains(verb)) return NetworkMutationTimeoutMs;
         if (verb == "forget" && args.Contains("--stale")) return NetworkMutationTimeoutMs;
         if (LocalMutationVerbs.Contains(verb)) return LocalMutationTimeoutMs;

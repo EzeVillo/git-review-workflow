@@ -34,6 +34,12 @@ CI runs both on every push and pull request (see
 requesting a review. The extension has its own suite and its own container — see
 [`vscode-extension/CONTRIBUTING.md`](vscode-extension/CONTRIBUTING.md).
 
+CI ejecuta todos los archivos Bats en los tres sistemas. En Windows los reparte
+en cuatro grupos por posición en el glob `tests/*.bats`, sin solapamientos ni
+exclusiones: la suite serial llegó a 5 h 48 min por el costo de crear procesos.
+Cada resultado incluye la duración y la salida del fallo. El lint también valida
+la sintaxis con el `sh` de cada runner, incluido Bash 3.2 de macOS.
+
 ### Pointing `git review` at this checkout
 
 On Linux/macOS, `./install.sh` symlinks `bin/git-review` onto your `PATH`, so edits to this checkout

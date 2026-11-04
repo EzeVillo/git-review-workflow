@@ -33,7 +33,7 @@ public class CommentsTeamIT
             Assert.NotNull(report.Guard);
             var result = await actions.RunAsync(cwd, "add", kind, null, report.Guard!, input: text);
             Assert.NotNull(result);
-            Assert.True(result!.ExitCode == 0, result.Stderr);
+            Assert.True(result!.ExitCode == 0, $"Exit={result.ExitCode}, timed out={result.TimedOut}, error={result.ErrorCode}: {result.Stderr}");
         }
         try
         {
@@ -74,7 +74,14 @@ public class CommentsTeamIT
             }
             Assert.Equal(4, refreshes);
         }
-        finally { Directory.Delete(root, recursive: true); }
+        finally
+        {
+            // Git object files are read-only on Windows, including hardlinks
+            // created by local clones. Do not hide an assertion behind cleanup.
+            foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+                File.SetAttributes(file, FileAttributes.Normal);
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     private static void Run(string script, params string[] args)

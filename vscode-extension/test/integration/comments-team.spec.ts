@@ -7,13 +7,15 @@ import {getTestApi} from "./helpers/extensionApi";
 import {abortReview, createBranchWithChanges, git, gitReviewOrThrow, sharedFixtureRepo} from "./helpers/fixture";
 
 describe("comments across people and merges in the extension host", function () {
-    this.timeout(120000);
+    // This exercises three people and several full review lifecycles. Native
+    // Windows pays the process startup cost of every CLI call in the scenario.
+    this.timeout(process.platform === "win32" ? 600000 : 120000);
     const repo = sharedFixtureRepo();
 
     for (const strategy of ["ff", "merge", "squash"]) it("keeps history and isolates new branches after " + strategy, async () => {
         abortReview(repo);
         const api = await getTestApi();
-        const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "comments-team-"));
+        const temporary = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "comments-team-"));
         const remote = path.join(temporary, "remote.git");
         const author = path.join(temporary, "author");
         const source = "feature/team-" + strategy;
@@ -24,6 +26,7 @@ describe("comments across people and merges in the extension host", function () 
         const originalError = vscode.window.showErrorMessage;
         const errors: string[] = [];
         const previousBase = git(["config", "reviewworkflow.base"], repo.dir).trim();
+        const phase = (name: string): void => console.log(`[comments team ${strategy}] ${name}`);
         // Only the location picker is scripted. The command, selective save,
         // process invocation, refresh and comment browser are production code.
         (vscode.window as unknown as {showQuickPick: unknown}).showQuickPick = async (items: {label: string}[]) => items.find(i => i.label === "A separate branch");
@@ -42,6 +45,7 @@ describe("comments across people and merges in the extension host", function () 
             git(["config", "reviewworkflow.base", base], repo.dir);
             git(["config", "reviewworkflow.remote", "team"], repo.dir);
             gitReviewOrThrow(["start", "--no-walk", source], repo.dir);
+            phase("first review started");
             assert.strictEqual((await api.refresh()).situation, "review");
             const editor = await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(path.join(repo.dir, "README.md")));
             editor.selection = new vscode.Selection(1, 0, 1, 7);
@@ -52,15 +56,17 @@ describe("comments across people and merges in the extension host", function () 
                 assert.strictEqual(api.commentComposerState(), undefined);
             }
             let report = (await api.refresh()).comments!;
+            phase("feedback captured");
             const context = report.documents.find(d => d.kind === "shared")!.context;
             await vscode.commands.executeCommand("gitReview.finishReview");
+            phase("first finish completed");
             assert.deepStrictEqual(errors, []);
             assert.strictEqual(git(["branch", "--show-current"], repo.dir).trim(), "review-fixes/" + source);
             assert.strictEqual(git(["ls-files", "--", ".review/comments.md"], repo.dir).trim(), ".review/comments.md");
             assert.strictEqual(git(["show", ":.review/comments.md"], repo.dir), fs.readFileSync(path.join(repo.dir, ".review/comments.md"), "utf8"));
             git(["commit", "-m", "Alice feedback"], repo.dir);
             git(["push", "team", "HEAD:refs/heads/alice-feedback"], repo.dir);
-            git(["clone", "--branch", source, remote, author], temporary);
+            git(["clone", "--config", "core.autocrlf=false", "--branch", source, remote, author], temporary);
             git(["config", "user.name", "Author"], author);
             git(["config", "user.email", "author@example.invalid"], author);
             git(["merge", "--ff-only", "origin/alice-feedback"], author);
@@ -69,10 +75,12 @@ describe("comments across people and merges in the extension host", function () 
             git(["add", ".review/comments.md"], author);
             git(["commit", "-m", "Author replies"], author);
             git(["push", "origin", source], author);
+            phase("author reply published");
             // Resume from the independent author's commits using the client.
             git(["switch", "main"], repo.dir);
             gitReviewOrThrow(["clean", source], repo.dir);
             gitReviewOrThrow(["start", "--no-walk", source], repo.dir);
+            phase("reply review started");
             report = (await api.refresh()).comments!;
             assert.strictEqual(report.documents.find(d => d.kind === "shared")!.context, context);
             // Shared comes from the branch, including the author's reply.
@@ -89,6 +97,7 @@ describe("comments across people and merges in the extension host", function () 
             const historical = vscode.workspace.textDocuments.filter(d => d.uri.scheme === "git-review-comment");
             assert.ok(historical.some(d => d.getText() === "# fixture\nChanged by author\n"));
             await vscode.commands.executeCommand("gitReview.finishReview");
+            phase("reply finish completed");
             assert.deepStrictEqual(errors, []);
             assert.ok(!(await api.refresh()).comments!.diagnostics.some(d => d.code === "source-conflict"));
             git(["switch", "main"], repo.dir);
@@ -103,6 +112,7 @@ describe("comments across people and merges in the extension host", function () 
             git(["commit", "-m", "Branch after merge"], author);
             git(["push", "origin", after], author);
             for (const branch of [before, after]) {
+                phase("independent review " + branch);
                 gitReviewOrThrow(["start", "--no-walk", branch], repo.dir);
                 await api.refresh();
                 await vscode.commands.executeCommand("gitReview.addComment");
@@ -119,6 +129,7 @@ describe("comments across people and merges in the extension host", function () 
             assert.strictEqual(git(["log", "--all", "--format=", "-p", "-G", "Private Alice"], author), "");
             assert.deepStrictEqual(errors, []);
         } finally {
+            phase("cleanup");
             (vscode.window as unknown as {showQuickPick: unknown}).showQuickPick = originalPick;
             (vscode.window as unknown as {showErrorMessage: unknown}).showErrorMessage = originalError;
             await api.sendCommentMessage({type: "cancel"});
@@ -128,7 +139,17 @@ describe("comments across people and merges in the extension host", function () 
             git(["config", "reviewworkflow.base", previousBase], repo.dir);
             git(["config", "--unset-all", "reviewworkflow.remote"], repo.dir);
             git(["remote", "remove", "team"], repo.dir);
-            fs.rmSync(temporary, {recursive: true, force: true});
+            // Local clones hardlink Git objects, which are read-only on
+            // Windows. Clear that attribute before removing our private tree.
+            const makeWritable = (directory: string): void => {
+                for (const entry of fs.readdirSync(directory, {withFileTypes: true})) {
+                    const file = path.join(directory, entry.name);
+                    if (entry.isDirectory()) makeWritable(file);
+                    else if (entry.isFile()) fs.chmodSync(file, 0o600);
+                }
+            };
+            makeWritable(temporary);
+            fs.rmSync(temporary, {recursive: true, force: true, maxRetries: 15, retryDelay: 200});
             await api.refresh();
         }
     });

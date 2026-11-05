@@ -25,9 +25,10 @@ import (
 // and List (fixes), parsed since Phase 3, and Phase 7 is expected to read it
 // from here rather than re-parse anything.
 type ProjectInput struct {
-	Comments      string
-	CommentsError string
-	Situation     Situation
+	Comments        string
+	CommentsError   string
+	CommentsLoading bool
+	Situation       Situation
 
 	Status    PorcelainResult
 	HasStatus bool
@@ -130,7 +131,7 @@ func entryPickerRows(mode ReviewMode, entries []EntryRecord, subjects map[int]st
 // open — it is not that render.go chooses to skip them.
 func Project(in ProjectInput) PanelModel {
 	m := PanelModel{
-		Comments: in.Comments, CommentsError: in.CommentsError,
+		Comments: in.Comments, CommentsError: in.CommentsError, CommentsLoading: in.CommentsLoading,
 		Situation:    in.Situation,
 		Busy:         in.Busy,
 		MouseEnabled: in.MouseEnabled,

@@ -8,6 +8,7 @@ export const SUPPORT_COPY = {
 } as const;
 
 export const COMMENTS_COPY = {
+    reading: "Reading comments…",
     originalUnversioned: "The captured lines included unsaved changes; this view shows the recorded Git version.",
     details: "Details", close: "Close",
     body: "Comment", openDiff: "Open diff", originalChanges: "Original changes",

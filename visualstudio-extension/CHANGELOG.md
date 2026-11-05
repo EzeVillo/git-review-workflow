@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.1] — 2026-11-04
+
+### Changed
+
+- Show review state before comments finish loading and read each explanation
+  once per refresh. Preserve document watches until comments have been read.
+- Avoid comment reads during mutation checks and remove the duplicate refresh
+  after an action; keep the stale-state and document guards.
+
 ## [0.4.0] — 2026-10-19
 
 ### Fixed

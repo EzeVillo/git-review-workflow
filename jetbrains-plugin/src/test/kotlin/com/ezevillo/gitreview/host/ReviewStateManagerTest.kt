@@ -18,6 +18,45 @@ import org.junit.jupiter.api.Test
  * verdad y se salteaba sola cuando la CLI no estaba en el PATH.
  */
 class ReviewStateManagerTest {
+    @Test fun primaryStateIsPublishedBeforeTheCommentsRead() {
+        val cli = FakeCliRunner().answer("status", WALK_STATUS)
+        val manager = manager(cli)
+        var published = false
+        val complete = manager.refresh("/repo") { primary ->
+            published = true
+            assertEquals(listOf("--version", "status"), cli.verbs)
+            assertEquals(Situation.REVIEW, primary.situation)
+            assertEquals(3, primary.entries.size)
+            assertTrue(primary.comments?.loading == true)
+            assertEquals(primary, manager.current)
+        }
+        assertTrue(published)
+        assertFalse(complete.comments!!.loading)
+        assertEquals(complete, manager.current)
+    }
+
+    @Test fun mutationGuardSkipsCommentsAndDoesNotReplaceThePublishedState() {
+        val cli = FakeCliRunner().answer("status", WALK_STATUS)
+        val manager = manager(cli)
+        val published = manager.refresh("/repo")
+        cli.calls.clear()
+        cli.answer("status", WALK_STATUS.replace("deadbeef", "newtip"))
+        val fresh = manager.readForMutation("/repo")
+        assertEquals("newtip", fresh.state?.tip)
+        assertEquals(listOf("--version", "status"), cli.verbs)
+        assertEquals(published, manager.current)
+    }
+
+    @Test fun olderCommentsCannotReplaceANewerPrimaryState() {
+        val cli = FakeCliRunner().answer("status", WALK_STATUS)
+        val manager = manager(cli)
+        manager.refresh("/repo") {
+            cli.answer("status", WALK_STATUS.replace("deadbeef", "newtip"))
+            manager.refresh("/repo")
+        }
+        assertEquals("newtip", manager.current.state?.tip)
+        assertFalse(manager.current.comments!!.loading)
+    }
     @Test fun commentsFailureRemainsAnIndependentDiagnostic() {
         val cli=FakeCliRunner().answer("status",WALK_STATUS).fails("comments","Comments unreadable")
         val state=manager(cli).refresh("/repo")

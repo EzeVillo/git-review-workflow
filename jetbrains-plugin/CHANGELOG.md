@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.5.1] — 2026-11-04
+
+### Changed
+
+- Show review state while comments load independently. Keep their loading state
+  visible and discard explanations from superseded reads.
+- Check mutation state without reloading comment documents or explanations;
+  preserve the full refresh and comment guards after each action.
+
 ## [0.5.0] — 2026-10-19
 
 ### Fixed

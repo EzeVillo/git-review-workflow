@@ -12,6 +12,14 @@ and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 This file starts at 0.2.1. Earlier versions are only in the
 [GitHub Releases](https://github.com/EzeVillo/git-review-workflow/releases).
 
+## [0.10.1] — 2026-11-04
+
+### Changed
+
+- Reduce Git process creation during review status, inventory, comments queries
+  and cursor navigation, especially on Windows. Read branch metadata once per
+  query and reuse the normalized walkthrough and range within each command.
+
 ## [0.10.0] — 2026-10-18
 
 ### Fixed

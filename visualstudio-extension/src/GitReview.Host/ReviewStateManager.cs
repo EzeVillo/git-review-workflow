@@ -40,24 +40,29 @@ public sealed class ReviewStateManager
         _gitReviewPath = gitReviewPath ?? (() => null);
     }
 
-    public async Task<ReviewState> RefreshAsync(CancellationToken ct = default)
+    public Task<ReviewState> RefreshAsync(CancellationToken ct = default) => ReadAsync(ct, true, true);
+
+    public Task<ReviewState> ReadForMutationAsync(CancellationToken ct = default) => ReadAsync(ct, false, false);
+
+    private async Task<ReviewState> ReadAsync(CancellationToken ct, bool includeComments, bool publish)
     {
         var gen = Interlocked.Increment(ref _refreshGen);
+        ReviewState Complete(ReviewState state) => publish ? Publish(state, gen) : state;
         var roots = _repoRoots();
         var sole = SoleTarget.PickSoleTarget(roots);
 
         if (roots.Count > 1)
         {
-            return Publish(new ReviewState(
+            return Complete(new ReviewState(
                 Situation.Error,
-                Stderr: "Open a single-folder workspace that is a git repository. git review uses one root (like the CLI cwd); multi-root is not supported."), gen);
+                Stderr: "Open a single-folder workspace that is a git repository. git review uses one root (like the CLI cwd); multi-root is not supported."));
         }
 
         if (sole is null)
         {
-            return Publish(new ReviewState(
+            return Complete(new ReviewState(
                 Situation.Error,
-                Stderr: UserCopy.NoSoleRoot), gen);
+                Stderr: UserCopy.NoSoleRoot));
         }
 
         // Version probe: `git review --version` (verb is the flag after "review").
@@ -82,11 +87,11 @@ public sealed class ReviewStateManager
             // A CLI that takes too long is the opposite of a CLI that is not there, and
             // offering "install it with npm" there sends the reviewer to install what is
             // already installed.
-            return Publish(ver.TimedOut
+            return Complete(ver.TimedOut
                 ? new ReviewState(Situation.Error, Stderr: VersionTimeout)
                 : new ReviewState(
                     Situation.CliMissing,
-                    Stderr: string.IsNullOrWhiteSpace(ver.Stderr) ? "not found" : ver.Stderr), gen);
+                    Stderr: string.IsNullOrWhiteSpace(ver.Stderr) ? "not found" : ver.Stderr));
         }
 
         var versionLine = CliMessage.FirstCliLine(ver.Stdout);
@@ -96,7 +101,7 @@ public sealed class ReviewStateManager
         }
         else if (CliVersion.IsOutdated(versionLine))
         {
-            return Publish(new ReviewState(Situation.CliOutdated, Stderr: versionLine), gen);
+            return Complete(new ReviewState(Situation.CliOutdated, Stderr: versionLine));
         }
 
         var status = await _cli.InvokeAsync(
@@ -105,16 +110,16 @@ public sealed class ReviewStateManager
 
         if (IsMissing(status))
         {
-            return Publish(new ReviewState(
+            return Complete(new ReviewState(
                 Situation.CliMissing,
-                Stderr: CliMessage.CliErrorText(status.Stderr, status.Stdout, "CLI not found")), gen);
+                Stderr: CliMessage.CliErrorText(status.Stderr, status.Stdout, "CLI not found")));
         }
 
         if (status.TimedOut)
         {
-            return Publish(new ReviewState(
+            return Complete(new ReviewState(
                 Situation.Error,
-                Stderr: "status --porcelain timed out"), gen);
+                Stderr: "status --porcelain timed out"));
         }
 
         var exit = status.ExitCode;
@@ -227,14 +232,15 @@ public sealed class ReviewStateManager
                     status.Stderr, status.Stdout, "Something went wrong reading the review state."));
         }
 
-        if (status.ExitCode is 0 or 2)
+        if (includeComments && (status.ExitCode is 0 or 2))
         {
+            if (publish) Publish(next with { Comments = new CommentsReport(Array.Empty<CommentRow>(), Loading: true) }, gen);
             var response = await _cli.InvokeAsync("comments", new[]{"status", "--porcelain"}, sole, cancellationToken: ct).ConfigureAwait(false);
             var comments = Comments.Parse(response.Stdout);
             if (response.ExitCode != 0) comments = comments with { Rows = comments.Rows.Concat(new[]{new CommentRow("comments-diagnostic", new[]{"", "read", response.Stderr})}).ToArray() };
             next = next with { Comments = comments };
         }
-        return Publish(next, gen);
+        return Complete(next);
     }
 
     /// <summary>
@@ -256,9 +262,12 @@ public sealed class ReviewStateManager
 
     private ReviewState Publish(ReviewState state, int gen)
     {
-        if (gen != Volatile.Read(ref _refreshGen)) return Current;
-        HasResolved = true;
-        lock (_gate) _state = state;
+        lock (_gate)
+        {
+            if (gen != Volatile.Read(ref _refreshGen)) return _state;
+            HasResolved = true;
+            _state = state;
+        }
         StateChanged?.Invoke(state);
         return state;
     }

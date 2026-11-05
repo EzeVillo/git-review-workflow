@@ -118,6 +118,7 @@ trap 'comments_unlock; if [ -n "$input_file" ]; then rm -f "$input_file"; fi' 0
 trap 'exit 1' 1 2 15
 case "$command" in
 	status)
+		cm_config_snapshot_requested=1
 		comments_status "$context" "$porcelain" "$all"
 		;;
 	init|add)

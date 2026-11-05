@@ -33,6 +33,8 @@ import {Situation, situationFor, situationForExitCode} from "./situation";
 export type {Situation} from "./situation";
 
 export interface ReviewState {
+    /** One primary report and its comment completion share this host read id. */
+    readId?: number;
     comments?: CommentsReport;
     situation: Situation;
     /** Sólo presente cuando situation === "review". */
@@ -275,6 +277,7 @@ export class ReviewStateManager {
     private current: ReviewState = {situation: "no-review", ...EMPTY_ARRAYS};
     private inFlight: Promise<ReviewState> | undefined;
     private resolved = false;
+    private readId = 0;
     private dirty = false;
     private waiters: Array<(state: ReviewState) => void> = [];
 
@@ -349,6 +352,7 @@ export class ReviewStateManager {
 
     private async doRefresh(): Promise<ReviewState> {
         const options = this.getOptions();
+        const readId = ++this.readId;
         // Sin cwd no hay `git review` que invocar (multi-root ambiguo o workspace
         // sin carpeta): no inventar un proceso en process.cwd() del host.
         if (!options.cwd) {
@@ -407,12 +411,19 @@ export class ReviewStateManager {
         }
 
         const baseSituation = situationForExitCode(result.exitCode);
-        let comments: CommentsReport | undefined;
-        if (baseSituation === "review" || baseSituation === "no-review") {
+        const commentsPending = baseSituation === "review" || baseSituation === "no-review";
+        const comments = commentsPending ? {...parseComments(""), loading: true} : undefined;
+        const publish = async (next: ReviewState): Promise<ReviewState> => {
+            next = {...next, readId};
+            this.setState(next);
+            if (!commentsPending) return next;
             const response = await invokeGitReview("comments", ["status", "--porcelain"], options);
-            comments = parseComments(response.stdout);
-            if (response.exitCode !== 0) comments.diagnostics.push({path: "", code: "read", message: response.stderr});
-        }
+            const report = parseComments(response.stdout);
+            if (response.exitCode !== 0 || response.timedOut || response.errorCode) {
+                report.diagnostics.push({path: "", code: "read", message: response.stderr});
+            }
+            return this.setState({...next, comments: report});
+        };
         if (baseSituation !== "review") {
             // El inventario y la config son contenido del estado vacío de
             // `no-review` y de ningún otro: en out-of-range o error lo que hay
@@ -452,7 +463,7 @@ export class ReviewStateManager {
                     }
                 }
             }
-            return this.setState(next);
+            return publish(next);
         }
 
         let parsed;
@@ -503,6 +514,6 @@ export class ReviewStateManager {
         if (parsed.draftPath !== undefined) {
             next.draftPath = parsed.draftPath;
         }
-        return this.setState(next);
+        return publish(next);
     }
 }

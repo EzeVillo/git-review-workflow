@@ -24,6 +24,7 @@ import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vcs.ProjectLevelVcsManager
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 @Service(Service.Level.PROJECT)
 class GitReviewService(private val project: Project) : Disposable {
@@ -41,6 +42,7 @@ class GitReviewService(private val project: Project) : Disposable {
     private val listeners = CopyOnWriteArrayList<(PanelModel) -> Unit>()
     private val refreshScheduled = AtomicBoolean(false)
     private val refreshRequested = AtomicBoolean(false)
+    private val whyGeneration = AtomicLong(0)
     private val vcsWaitRegistered = AtomicBoolean(false)
     private val vcsWaitDone = AtomicBoolean(false)
     @Volatile
@@ -170,6 +172,9 @@ class GitReviewService(private val project: Project) : Disposable {
         doRefresh()
     }
 
+    fun readForMutation(): ReviewState =
+        stateManager.readForMutation(pickSoleTarget(listGitRoots(project))?.rootPath)
+
     private fun doRefresh() {
         val roots = listGitRoots(project)
         if (roots.isEmpty() && !vcsWaitDone.get() && !vcsesActivated()) {
@@ -180,7 +185,19 @@ class GitReviewService(private val project: Project) : Disposable {
             return
         }
         val target = pickSoleTarget(roots)
-        val state = stateManager.refresh(target?.rootPath)
+        var primaryPublished = false
+        val state = stateManager.refresh(target?.rootPath) { primary ->
+            primaryPublished = true
+            stateResolved = true
+            lastWhy = null
+            val gen = whyGeneration.incrementAndGet()
+            if (isReviewReadable(primary.situation) && primary.state?.mode?.id == "walk") {
+                lastWhy = PanelWhy(WhyState.LOADING)
+                fetchWhy(target?.rootPath, primary, gen)
+            }
+            publish()
+        }
+        if (stateManager.current !== state) return
         // The walkthrough travels with the guides in the exact-path list, for the
         // same reason: no watch root of its own (it lives in the work tree, which
         // every git operation moves), but a save on it has to refresh -- you
@@ -191,14 +208,11 @@ class GitReviewService(private val project: Project) : Disposable {
             state.guides.orEmpty().map { it.path } + listOfNotNull(state.walkthrough?.path) + state.comments?.documents.orEmpty().map { it.path },
         )
         stateResolved = true
-        lastWhy = null
-        if (isReviewReadable(state.situation) && state.state?.mode?.id == "walk") {
-            lastWhy = PanelWhy(WhyState.LOADING)
-            publish()
-            fetchWhy(target?.rootPath, state)
-        } else {
-            publish()
+        if (!primaryPublished) {
+            whyGeneration.incrementAndGet()
+            lastWhy = null
         }
+        publish()
     }
 
     private fun vcsesActivated(): Boolean =
@@ -217,7 +231,7 @@ class GitReviewService(private val project: Project) : Disposable {
         }
     }
 
-    private fun fetchWhy(cwd: String?, state: ReviewState) {
+    private fun fetchWhy(cwd: String?, state: ReviewState, generation: Long) {
         if (cwd == null) {
             lastWhy = PanelWhy(WhyState.FAILED)
             publish()
@@ -236,6 +250,7 @@ class GitReviewService(private val project: Project) : Disposable {
         }
         ApplicationManager.getApplication().executeOnPooledThread {
             val result = invoker.invoke("status", listOf("--why", raw), cwd)
+            if (generation != whyGeneration.get()) return@executeOnPooledThread
             lastWhy = when {
                 result.timedOut || result.errorCode != null || (result.exitCode != null && result.exitCode != 0) ->
                     PanelWhy(WhyState.FAILED)

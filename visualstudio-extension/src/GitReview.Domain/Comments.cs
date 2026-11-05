@@ -2,7 +2,7 @@ namespace GitReview.Domain;
 
 public sealed record CommentRow(string Tag, IReadOnlyList<string> Fields);
 public sealed record CommentDocument(string Path, string Context, string Kind, string Presence, string Revision, int? Count = null);
-public sealed record CommentsReport(IReadOnlyList<CommentRow> Rows)
+public sealed record CommentsReport(IReadOnlyList<CommentRow> Rows, bool Loading = false)
 {
     public IEnumerable<IReadOnlyList<string>> Records(string tag) => Rows.Where(r => r.Tag == tag).Select(r => r.Fields);
     public IReadOnlyList<string> Destinations(string operation = "add") => Records("comments-capability").Where(r => r[0] == operation && (r[1] == "local" || r[1] == "shared")).Select(r => r[1]).Distinct().ToArray();

@@ -49,11 +49,12 @@ class MutationActions(
             UserCopy.startingProgress(branch),
             work = {
                 service.mutationLock.run {
-                    service.refreshNow()
-                    if (!tokenStillValid(token, service.currentState())) {
+                    val fresh = service.readForMutation()
+                    if (!tokenStillValid(token, fresh)) {
+                        service.refreshNow()
                         return@run StartRunResult.Stale
                     }
-                    val situation = service.currentState().situation
+                    val situation = fresh.situation
                     if (situation != Situation.NO_REVIEW && situation != Situation.FINISH_PENDING) {
                         return@run StartRunResult.Stale
                     }
@@ -100,8 +101,9 @@ class MutationActions(
             title,
             work = {
                 service.mutationLock.run {
-                    service.refreshNow()
-                    if (!tokenStillValid(token, service.currentState())) {
+                    val fresh = service.readForMutation()
+                    if (!tokenStillValid(token, fresh)) {
+                        service.refreshNow()
                         return@run SimpleOutcome.Stale
                     }
                     val argv = actionToArgv(action, params)

@@ -1228,9 +1228,10 @@ public sealed partial class ActionDispatcher
             ? _host.Progress(progress)
             : null;
         var token = StaleGuard.CaptureToken(_panel.State.Current);
-        await _panel.RefreshAsync().ConfigureAwait(true);
-        if (!StaleGuard.TokenStillValid(token, _panel.State.Current))
+        var fresh = await _panel.State.ReadForMutationAsync().ConfigureAwait(true);
+        if (!StaleGuard.TokenStillValid(token, fresh))
         {
+            await _panel.RefreshAsync().ConfigureAwait(true);
             GitReviewDialogs.Info(UserCopy.Stale);
             return null;
         }
@@ -1247,7 +1248,7 @@ public sealed partial class ActionDispatcher
             GitReviewDialogs.CliError(
                 result.Stderr, UserCopy.FailureFallback(action, params_), result.Stdout);
         }
-        await _panel.RefreshAsync().ConfigureAwait(true);
+        // MutationRunner already refreshed and published the resulting state.
         return result;
     }
 

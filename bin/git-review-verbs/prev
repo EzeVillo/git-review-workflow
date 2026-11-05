@@ -36,9 +36,10 @@ esac
 
 # Dispatch on the review's layout, mirroring git review next.
 cur="$(git symbolic-ref --quiet --short HEAD || true)"
+review_config_init
 require_not_finish_conflict
 require_not_pending_finish
-case "$(git config "branch.$cur.reviewmode" || true)" in
+case "$(review_config_get "branch.$cur.reviewmode" || true)" in
 walk)
 	load_walk_review_meta
 	if [ "$walkstep" -gt 1 ]; then

@@ -97,6 +97,9 @@ public sealed class GitReviewPanelController : IDisposable
     /// drawn anyway with the why loading in place: a slow why must not hold the
     /// entry back.
     /// </summary>
+    private int _whyGeneration;
+    private object? _whyReadState;
+
     private bool Loading =>
         _refreshing || (EffectiveWhy?.State == WhyState.Loading && !_whyCeilingReached);
 
@@ -251,17 +254,7 @@ public sealed class GitReviewPanelController : IDisposable
         {
             await _state.RefreshAsync().ConfigureAwait(true);
             if (seq != _refreshSeq) return;
-            _draftWatcher.Sync(DraftWatch.WatchDirs(_state.Current));
-            if (SituationIds.IsReviewReadable(_state.Current.Situation)
-                && _state.Current.State?.Mode == ReviewMode.Walk)
-            {
-                StartWhy(seq);
-            }
-            else
-            {
-                _why = null;
-                _whyKey = null;
-            }
+            // StateChanged publishes the primary state and synchronizes details.
         }
         finally
         {
@@ -279,8 +272,9 @@ public sealed class GitReviewPanelController : IDisposable
     /// status --porcelain has answered. Awaiting the read here is what kept the whole
     /// panel on the skeleton for as long as the CLI took to produce one entry's prose.
     /// </summary>
-    private void StartWhy(int seq)
+    private void StartWhy()
     {
+        var seq = ++_whyGeneration;
         var st = _state.Current;
         var entry = PanelModelBuilder.CurrentEntry(st.EntriesList, st.State?.Position);
         var cwd = _cwd();
@@ -357,14 +351,44 @@ public sealed class GitReviewPanelController : IDisposable
         }
         // A refresh that started after this read owns the panel now — publishing this
         // text would caption its entry with the why of one the reviewer already left.
-        if (seq != _refreshSeq) return;
+        if (seq != _whyGeneration) return;
         _why = why;
         _whyCeilingTimer.Stop();
         _skeletonTimer.Stop();
         Render();
     }
 
-    private void OnStateChanged(ReviewState _) => Render();
+    private void OnStateChanged(ReviewState state)
+    {
+        if (_disposed) return;
+        if (!_dispatcher.CheckAccess())
+        {
+            _dispatcher.BeginInvoke((Action)(() => OnStateChanged(state)));
+            return;
+        }
+        if (!ReferenceEquals(state, _state.Current)) return;
+        _refreshing = false;
+        if (state.Comments?.Loading != true) _draftWatcher.Sync(DraftWatch.WatchDirs(state));
+        if (SituationIds.IsReviewReadable(state.Situation) && state.State?.Mode == ReviewMode.Walk)
+        {
+            // The primary and complete reports share this parsed state object.
+            // Start prose once per read, including when a draft changes in place.
+            if (!ReferenceEquals(_whyReadState, state.State))
+            {
+                _whyReadState = state.State;
+                _whyCeilingReached = false;
+                StartWhy();
+            }
+        }
+        else
+        {
+            _whyGeneration++;
+            _whyReadState = null;
+            _why = null;
+            _whyKey = null;
+        }
+        Render();
+    }
 
     /// <summary>
     /// Draws the panel. Safe to call from any thread: everything it touches is WPF,

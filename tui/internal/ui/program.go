@@ -178,7 +178,13 @@ func (m Model) Init() tea.Cmd {
 func readCmd(generation int) tea.Cmd {
 	return func() tea.Msg {
 		cwd, _ := os.Getwd()
-		return readDoneMsg{generation: generation, result: host.ReadState(context.Background(), cwd, domain.MinCLIVersion)}
+		return readDoneMsg{generation: generation, result: host.ReadPrimaryState(context.Background(), cwd, domain.MinCLIVersion)}
+	}
+}
+
+func readDetailsCmd(generation int, primary host.ReadResult) tea.Cmd {
+	return func() tea.Msg {
+		return readDoneMsg{generation: generation, result: host.ReadDetails(context.Background(), primary)}
 	}
 }
 
@@ -274,7 +280,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.clearActivity(m.activity.generation)
 		}
 		m.lastRead = msg.result
-		if m.onAcceptedRead != nil {
+		if m.onAcceptedRead != nil && !msg.result.DetailsPending {
 			m.onAcceptedRead(msg.result)
 		}
 		previous := m.Panel
@@ -302,6 +308,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.FocusIndex >= len(ControlsFor(m.Panel)) {
 			m.FocusIndex = 0
+		}
+		if msg.result.DetailsPending {
+			return m, tea.Batch(openCmd, readDetailsCmd(msg.generation, msg.result))
 		}
 		return m, openCmd
 
@@ -595,7 +604,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 // Studio's/JetBrains' host-side adapters.
 func toProjectInput(r host.ReadResult, mouseEnabled, busy bool, statusLine string) domain.ProjectInput {
 	return domain.ProjectInput{
-		Comments: r.Comments, CommentsError: r.CommentsError,
+		Comments: r.Comments, CommentsError: r.CommentsError, CommentsLoading: r.CommentsLoading,
 		Situation:    r.Situation,
 		Status:       r.Status,
 		HasStatus:    r.HasStatus,

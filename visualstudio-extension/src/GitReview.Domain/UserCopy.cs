@@ -441,6 +441,7 @@ public static class UserCopy
 
 public static class CommentsCopy
 {
+    public const string reading = "Reading comments…";
     public const string details = "Details";
     public const string close = "Close";
     public const string originalUnversioned = "The captured lines included unsaved changes; this view shows the recorded Git version.";

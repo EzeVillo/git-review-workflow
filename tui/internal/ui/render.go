@@ -683,7 +683,7 @@ func renderNoReview(b *builder, m domain.PanelModel) {
 	b.heading(domain.WalkthroughSectionTitle)
 	renderWalkthroughRow(b, m)
 	renderGuideRows(b, m)
-	if m.Comments != "" || m.CommentsError != "" {
+	if m.CommentsLoading || m.Comments != "" || m.CommentsError != "" {
 		b.blank()
 	}
 	renderComments(b, m)

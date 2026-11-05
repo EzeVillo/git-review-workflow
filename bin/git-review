@@ -8,7 +8,7 @@
 set -eu
 
 prog="git review"
-VERSION="0.10.0"
+VERSION="0.10.1"
 
 usage() {
 	cat <<EOF

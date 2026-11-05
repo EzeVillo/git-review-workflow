@@ -2,6 +2,14 @@ using Xunit;
 namespace GitReview.Domain.Tests;
 public class CommentsTests
 {
+    [Fact] public void Pending_comments_have_no_empty_states_or_document_controls()
+    {
+        var model = GitReview.Fixtures.PanelFixtures.NoReviewReady() with {Comments = new CommentsReport(Array.Empty<CommentRow>(), Loading: true)};
+        var section = Assert.Single(PanelLayoutBuilder.PanelLayout(model).Blocks.OfType<Block.ToolsSection>(), b => b.Title == CommentsCopy.title);
+        Assert.Equal(CommentsCopy.reading, Assert.Single(section.NestedBlocks.OfType<Block.Paragraph>()).Text);
+        Assert.Empty(section.NestedBlocks.OfType<Block.GuideRows>());
+        Assert.Empty(section.NestedBlocks.OfType<Block.Row>());
+    }
     [Fact] public void Copy_path_belongs_only_to_existing_local_documents_in_every_context()
     {
         foreach (var kind in new[]{"review", "compare"}) foreach (var state in new[]{"active", "result", "repository"}) {

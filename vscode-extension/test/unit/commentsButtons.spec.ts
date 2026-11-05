@@ -45,6 +45,16 @@ function commentRows(documents: object[], pending = false, capture?: {target?: s
 }
 
 describe("comment row buttons", () => {
+    it("keeps pending comments visible without empty rows or document controls", () => {
+        const {footer} = commentRows([]);
+        const node = footer({loading: true, documents: [], contexts: [], deliveries: [], diagnostics: []});
+        const texts: string[] = [];
+        const visit = (child: Element) => {texts.push(child.textContent); child.children.forEach(visit);};
+        visit(node);
+        assert.ok(texts.includes("Reading comments…"));
+        assert.ok(!texts.includes("No local comments."));
+        assert.ok(!texts.includes("No shared comments."));
+    });
     function footerRows(footer: Element) {
         const comments = footer.children.find(section => section.children[0].textContent === "Comments");
         const rows: Element[] = [];

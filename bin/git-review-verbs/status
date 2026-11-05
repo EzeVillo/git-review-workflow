@@ -74,9 +74,14 @@ review/*) ;;
 	;;
 esac
 
-src="$(git config "branch.$cur.reviewsource" || true)"
-tip="$(git config "branch.$cur.reviewtip" || true)"
-mode="$(git config "branch.$cur.reviewmode" || echo whole)"
+# shellcheck source=../git-review-lib.sh
+. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
+
+review_config_init
+
+src="$(review_config_get "branch.$cur.reviewsource" || true)"
+tip="$(review_config_get "branch.$cur.reviewtip" || true)"
+mode="$(review_config_get "branch.$cur.reviewmode" || echo whole)"
 if [ -z "$src" ] || [ -z "$tip" ]; then
 	if [ -z "$src" ]; then
 		echo "error: missing review metadata; was $cur created with git review start? Switch away, then delete it with 'git branch -D $cur'." >&2
@@ -85,9 +90,6 @@ if [ -z "$src" ] || [ -z "$tip" ]; then
 	fi
 	exit 1
 fi
-
-# shellcheck source=../git-review-lib.sh
-. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
 if [ -n "$why" ]; then
 	if [ "$mode" != "walk" ]; then
@@ -105,14 +107,14 @@ fi
 
 # These are the original comparison endpoints, independent of the cursor and
 # of refs moving after start. Older sessions may not carry this additive data.
-is_readonly="$(git config "branch.$cur.reviewreadonly" || true)"
+is_readonly="$(review_config_get "branch.$cur.reviewreadonly" || true)"
 cmpbase=""
 cmpfrom=""
 cmpto=""
 if [ "$is_readonly" = "1" ]; then
-	cmpbase="$(git config "branch.$cur.reviewcomparebase" || true)"
-	cmpfrom="$(git config "branch.$cur.reviewbase" || true)"
-	cmpto="$(git config "branch.$cur.reviewcomparetarget" || true)"
+	cmpbase="$(review_config_get "branch.$cur.reviewcomparebase" || true)"
+	cmpfrom="$(review_config_get "branch.$cur.reviewbase" || true)"
+	cmpto="$(review_config_get "branch.$cur.reviewcomparetarget" || true)"
 fi
 
 if [ "$porcelain" -eq 1 ]; then
@@ -226,7 +228,7 @@ if [ "$porcelain" -eq 1 ]; then
 		# script under set -eu. Omitted entirely when there is none: omit, never
 		# blank, never a sentinel. It goes after `state`, which the contract
 		# keeps as the first line.
-		pbase="$(git config "branch.$cur.reviewbase" || true)"
+		pbase="$(review_config_get "branch.$cur.reviewbase" || true)"
 		if [ -n "$pbase" ]; then
 			porcelain_row base "$pbase"
 		fi
@@ -237,11 +239,11 @@ if [ "$porcelain" -eq 1 ]; then
 	# review/* (list --porcelain reports that one instead). Position relative
 	# to the records above is not significant, so this runs once after the mode
 	# case rather than duplicated inside each branch.
-	pundohead="$(git config "branch.$cur.reviewundohead" || true)"
+	pundohead="$(review_config_get "branch.$cur.reviewundohead" || true)"
 	if [ -n "$pundohead" ]; then
-		presume="$(git config "branch.$cur.reviewresume" || true)"
+		presume="$(review_config_get "branch.$cur.reviewresume" || true)"
 		if [ "$presume" = "conflict" ]; then
-			pkind="$(git config "branch.$cur.reviewundokind" || true)"
+			pkind="$(review_config_get "branch.$cur.reviewundokind" || true)"
 			ponto=0
 			[ "$pkind" = "onto-source" ] && ponto=1
 			porcelain_row finish conflict "$ponto"
@@ -258,7 +260,7 @@ if [ "$porcelain" -eq 1 ]; then
 		fi
 	fi
 	# keys-only walk submode (start/compare --keys): presence record, like readonly.
-	if [ "$(git config "branch.$cur.reviewwalkkeys" || true)" = "1" ]; then
+	if [ "$(review_config_get "branch.$cur.reviewwalkkeys" || true)" = "1" ]; then
 		porcelain_row keys
 	fi
 	# The reading order is the reviewer's own draft, not the PR author's: a
@@ -290,15 +292,15 @@ if [ "$is_readonly" = "1" ]; then
 fi
 # Whole/walk mid-finish conflict (rare for whole; step is the usual path) still
 # needs a banner before the mode block so CLI-only users are not steered to next.
-if [ "$(git config "branch.$cur.reviewresume" || true)" = "conflict" ] && [ "$mode" != "step" ]; then
+if [ "$(review_config_get "branch.$cur.reviewresume" || true)" = "conflict" ] && [ "$mode" != "step" ]; then
 	printf '  note    finish mid-conflict — resolve markers, then git review finish --resume\n'
 	printf '          (or git review finish --abort to back out)\n'
 fi
 
 if [ "$mode" = "step" ]; then
-	count="$(git config "branch.$cur.reviewcount" || true)"
-	step="$(git config "branch.$cur.reviewstep" || true)"
-	start="$(git config "branch.$cur.reviewstart" || true)"
+	count="$(review_config_get "branch.$cur.reviewcount" || true)"
+	step="$(review_config_get "branch.$cur.reviewstep" || true)"
+	start="$(review_config_get "branch.$cur.reviewstart" || true)"
 	# A key deleted by a hand-edit (while reviewmode stays "step") would otherwise
 	# let set -e kill the bare read silently mid-script; read with || true and report
 	# it. reviewstep falls through to the numeric guard below for a precise message.
@@ -366,7 +368,7 @@ if [ "$mode" = "step" ]; then
 
 	# Mid-finish conflict: porcelain already emits finish conflict; human status
 	# must not steer the user toward next/prev while markers are live.
-	if [ "$(git config "branch.$cur.reviewresume" || true)" = "conflict" ]; then
+	if [ "$(review_config_get "branch.$cur.reviewresume" || true)" = "conflict" ]; then
 		printf '  note    finish mid-conflict — resolve markers, then git review finish --resume\n'
 		printf '          (or git review finish --abort to back out; next/prev/save are blocked)\n'
 	else
@@ -382,7 +384,7 @@ elif [ "$mode" = "walk" ]; then
 	# Same load path as --porcelain / next / prev: re-derives the sequence and
 	# rejects corrupt walkstep/walkcount consistently (including keys-only).
 	load_walk_review_meta
-	if [ "$(git config "branch.$cur.reviewwalkkeys" || true)" = "1" ]; then
+	if [ "$(review_config_get "branch.$cur.reviewwalkkeys" || true)" = "1" ]; then
 		keys_only_note="  (keys-only)"
 	else
 		keys_only_note=""
@@ -412,7 +414,7 @@ elif [ "$mode" = "walk" ]; then
 		printf '  next    read, then %s  (git review finish when done)\n' "$hint"
 	fi
 else
-	base="$(git config "branch.$cur.reviewbase" || true)"
+	base="$(review_config_get "branch.$cur.reviewbase" || true)"
 	printf '  mode    whole%s\n' "${base:+  (base $base)}"
 	# The files the range touches: a whole review has no cursor, so this is a
 	# plain listing, not a "[k/N]" line — never omitted, never a blank section

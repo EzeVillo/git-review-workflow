@@ -653,6 +653,7 @@ comments_browser:
   open_diff: closes_browser_on_success
   lines: reveal_and_highlight_original_side
 comments_composer:
+  reading_text: "Reading comments…"
   context_prompt: "Continue a previous review?"
   new_context_label: "Start a new review"
   new_context_detail: "Keep previous Local notes separate."

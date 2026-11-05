@@ -22,6 +22,7 @@ class ReviewStateManager(
     private val gitReviewPath: () -> String?,
 ) {
     private val generation = AtomicLong(0)
+    private val stateGate = Any()
     @Volatile
     var current: ReviewState = ReviewState(situation = Situation.ERROR, stderr = "not refreshed yet")
         private set
@@ -32,17 +33,34 @@ class ReviewStateManager(
         versionCheckedGeneration = -1
     }
 
+    private fun accept(gen: Long, state: ReviewState, onPrimary: ((ReviewState) -> Unit)? = null) {
+        synchronized(stateGate) {
+            if (gen != generation.get()) return
+            current = state
+            // Keep publication and its in-memory notification ordered. Otherwise
+            // an older callback could launch prose after a newer primary report.
+            onPrimary?.invoke(state)
+        }
+    }
+
     /**
      * Full refresh. When [cwd] is null → multi-root / no-repo error situation.
      */
-    fun refresh(cwd: String?): ReviewState {
+    fun refresh(cwd: String?, onPrimary: ((ReviewState) -> Unit)? = null): ReviewState =
+        read(cwd, includeComments = true, publish = true, onPrimary = onPrimary)
+
+    /** The mutation guard needs current product state, not document inventories. */
+    fun readForMutation(cwd: String?): ReviewState =
+        read(cwd, includeComments = false, publish = false)
+
+    private fun read(cwd: String?, includeComments: Boolean, publish: Boolean, onPrimary: ((ReviewState) -> Unit)? = null): ReviewState {
         val gen = generation.incrementAndGet()
         if (cwd == null) {
             val state = ReviewState(
                 situation = Situation.ERROR,
                 stderr = MULTI_ROOT_ERROR,
             )
-            if (gen == generation.get()) current = state
+            if (publish) accept(gen, state)
             return state
         }
 
@@ -77,8 +95,8 @@ class ReviewStateManager(
                         stderr = ver.stderr.ifBlank { "CLI not found" },
                     )
                 }
-                if (gen == generation.get()) {
-                    current = state
+                if (publish && gen == generation.get()) {
+                    accept(gen, state)
                     versionCheckedGeneration = gen
                 }
                 return state
@@ -92,8 +110,8 @@ class ReviewStateManager(
                     situation = Situation.CLI_OUTDATED,
                     stderr = "installed version: $version",
                 )
-                if (gen == generation.get()) {
-                    current = state
+                if (publish && gen == generation.get()) {
+                    accept(gen, state)
                     versionCheckedGeneration = gen
                 }
                 return state
@@ -107,7 +125,7 @@ class ReviewStateManager(
                 situation = Situation.ERROR,
                 stderr = "status --porcelain timed out",
             )
-            if (gen == generation.get()) current = state
+            if (publish) accept(gen, state)
             return state
         }
 
@@ -217,12 +235,16 @@ class ReviewStateManager(
             )
         }
 
-        val complete = if (status.exitCode == 0 || status.exitCode == 2) {
+        val complete = if (includeComments && (status.exitCode == 0 || status.exitCode == 2)) {
+            if (publish && gen == generation.get()) {
+                val primary = state.copy(comments = com.ezevillo.gitreview.domain.CommentsReport(loading = true))
+                accept(gen, primary, onPrimary)
+            }
             val report = invoker.invoke("comments", listOf("status", "--porcelain"), cwd)
             val parsed = com.ezevillo.gitreview.domain.parseComments(report.stdout)
             state.copy(comments = if (report.exitCode == 0) parsed else parsed.copy(rows = parsed.rows + com.ezevillo.gitreview.domain.CommentRow("comments-diagnostic", listOf("", "read", report.stderr))))
         } else state
-        if (gen == generation.get()) current = complete
+        if (publish) accept(gen, complete)
         return complete
     }
 

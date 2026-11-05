@@ -1297,6 +1297,9 @@ public static class PanelLayoutBuilder
     {
         var report = model.Comments;
         if (report is null) return Array.Empty<Block>();
+        if (report.Loading) return heading
+            ? new Block[]{ new Block.Heading(CommentsCopy.title), new Block.Paragraph(CommentsCopy.reading) }
+            : new Block[]{ new Block.Paragraph(CommentsCopy.reading) };
         var capture = model.Situation is Situation.Review or Situation.FinishConflict && report.Guard is not null;
         bool VisibleDocument(CommentDocument doc) => doc.Presence == "present" || doc.Kind == "shared" && report.Records("comments-delivery").Any(d => d[0] == doc.Context && d[1] == "pending");
         var visible = report.Documents.Any(VisibleDocument);

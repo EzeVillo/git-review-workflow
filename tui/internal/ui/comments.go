@@ -429,6 +429,9 @@ func (m Model) handleCommentsQuery(msg commentsQueryDone) (Model, tea.Cmd) {
 }
 
 func commentsControls(m domain.PanelModel) []Control {
+	if m.CommentsLoading {
+		return nil
+	}
 	r := domain.ParseComments(m.Comments)
 	capture := r.Guard() != "" && (m.Situation == domain.SituationReview || m.Situation == domain.SituationFinishConflict)
 	visible := false
@@ -486,9 +489,14 @@ func commentsControls(m domain.PanelModel) []Control {
 	return controls
 }
 func renderComments(b *builder, m domain.PanelModel) {
+	if m.CommentsLoading {
+		b.heading(domain.CommentsTitle)
+		b.text(domain.CommentsReading)
+		return
+	}
 	r := domain.ParseComments(m.Comments)
 	controls := commentsControls(m)
-	mainPanel := m.Situation == domain.SituationNoReview && (m.Comments != "" || m.CommentsError != "")
+	mainPanel := m.Situation == domain.SituationNoReview && (m.CommentsLoading || m.Comments != "" || m.CommentsError != "")
 	visible := false
 	for _, d := range r.Documents() {
 		if commentDocumentVisible(r, d) {

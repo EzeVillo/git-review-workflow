@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+const CommentsReading = "Reading comments…"
+
 // This file carries EVERY string this client shows a person: the copy
 // shared with the other three clients (contracts/client-product-
 // surface.yaml `strings:`), this client's own two situational strings

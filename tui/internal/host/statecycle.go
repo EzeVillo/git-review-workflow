@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"strings"
+	"sync"
 
 	"github.com/EzeVillo/git-review-workflow/tui/internal/domain"
 )
@@ -14,9 +15,11 @@ import (
 // read Branches/Config and assume they are populated just because the field
 // exists on the struct.
 type ReadResult struct {
-	Comments      string
-	CommentsError string
-	Situation     domain.Situation
+	DetailsPending  bool
+	Comments        string
+	CommentsError   string
+	CommentsLoading bool
+	Situation       domain.Situation
 
 	Status    domain.PorcelainResult
 	HasStatus bool
@@ -42,6 +45,12 @@ type ReadResult struct {
 // pressing `r` has to be able to walk the panel out of cli-missing, and that
 // only works if the version probe runs again every time.
 func ReadState(ctx context.Context, cwd, minVersion string) ReadResult {
+	return ReadDetails(ctx, ReadPrimaryState(ctx, cwd, minVersion))
+}
+
+// ReadPrimaryState returns the review before comments and explanatory prose.
+// Both remain explicitly pending until the independent details read completes.
+func ReadPrimaryState(ctx context.Context, cwd, minVersion string) ReadResult {
 	_, _, ok := ResolveGitDirs(ctx, cwd)
 	if !ok {
 		// T100: the panel's own actionable copy (per_client_strings.
@@ -92,10 +101,6 @@ func ReadState(ctx context.Context, cwd, minVersion string) ReadResult {
 	case domain.SituationReview, domain.SituationFinishConflict:
 		result.Status = parsed
 		result.HasStatus = parseOK
-		if parseOK && parsed.State.Mode == domain.ModeWalk && parsed.State.CurrentPath.Raw != "" {
-			why, state := readWhy(ctx, parsed.State.CurrentPath.Raw)
-			result.Why, result.WhyState = why, state
-		}
 
 	case domain.SituationNoReview, domain.SituationFinishPending:
 		// list already ran above (exit 2 always triggers it); config is
@@ -108,13 +113,36 @@ func ReadState(ctx context.Context, cwd, minVersion string) ReadResult {
 		}
 	}
 
-	if statusRes.ExitCode == 0 || statusRes.ExitCode == 2 {
+	result.DetailsPending = statusRes.ExitCode == 0 || statusRes.ExitCode == 2
+	result.CommentsLoading = result.DetailsPending
+	return result
+}
+
+// ReadDetails enriches only the primary state passed by the caller. The UI
+// generation gate rejects this entire result after a newer read or navigation.
+func ReadDetails(ctx context.Context, result ReadResult) ReadResult {
+	if !result.DetailsPending {
+		return result
+	}
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 		comments := InvokeReview(ctx, "comments", []string{"status", "--porcelain"})
 		result.Comments = comments.Stdout
 		if comments.ExitCode != 0 || comments.TimedOut || comments.SpawnFailed {
 			result.CommentsError = comments.Stderr
+			if result.CommentsError == "" {
+				result.CommentsError = domain.CommentsFailed
+			}
 		}
+	}()
+	if result.HasStatus && result.Status.State.Mode == domain.ModeWalk && result.Status.State.CurrentPath.Raw != "" {
+		result.Why, result.WhyState = readWhy(ctx, result.Status.State.CurrentPath.Raw)
 	}
+	wg.Wait()
+	result.DetailsPending = false
+	result.CommentsLoading = false
 	return result
 }
 

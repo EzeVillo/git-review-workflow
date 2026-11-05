@@ -88,6 +88,28 @@ func TestReadStateNoReviewInvokesListAndConfig(t *testing.T) {
 	}
 }
 
+func TestPrimaryReadDefersCommentsUntilTheIndependentDetailsRead(t *testing.T) {
+	work := sandboxWithOrigin(t)
+	t.Chdir(work)
+	if result := InvokeReview(context.Background(), "start", []string{"--offline", "feature/x"}); result.ExitCode != 0 {
+		t.Fatal(result.Stderr)
+	}
+	ResetInvocationLogForTest()
+	primary := ReadPrimaryState(context.Background(), work, domain.MinCLIVersion)
+	if primary.Situation != domain.SituationReview || !primary.HasStatus || !primary.CommentsLoading || !primary.DetailsPending {
+		t.Fatalf("primary read did not expose the review independently: %+v", primary)
+	}
+	for _, entry := range InvocationLog() {
+		if len(entry.Argv) > 2 && entry.Argv[2] == "comments" {
+			t.Fatal("primary read waited for comments")
+		}
+	}
+	complete := ReadDetails(context.Background(), primary)
+	if complete.CommentsLoading || complete.DetailsPending || complete.Comments == "" || complete.Situation != primary.Situation {
+		t.Fatalf("details did not complete independently: %+v", complete)
+	}
+}
+
 // T043's central gate: inside an active review, list/config are never
 // invoked at all — the footer's registers simply do not arrive, because
 // nobody asked for them.

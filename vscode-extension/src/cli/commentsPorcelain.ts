@@ -3,6 +3,7 @@ export interface CommentDocument {path: string; context: string; kind: CommentDo
 export interface CommentContext {id: string; kind: string; state: string; guard: string; label: string; source?: string; owner?: string}
 export interface CommentEntry {ordinal: number; number: string; line: number; title: string}
 export interface CommentsReport {
+    loading?: boolean;
     rows: {tag: string; fields: string[]}[];
     contexts: CommentContext[]; documents: CommentDocument[]; entries: CommentEntry[];
     diagnostics: {path: string; code: string; message: string}[];

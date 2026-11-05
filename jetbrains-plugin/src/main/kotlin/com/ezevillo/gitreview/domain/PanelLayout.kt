@@ -1383,6 +1383,7 @@ fun panelLayout(model: PanelModel, loading: Boolean = false): PanelLayout {
 
 private fun commentsBlocks(model: PanelModel, heading: Boolean = true): List<Block> {
     val report = model.comments ?: return emptyList()
+    if (report.loading) return (if (heading) listOf(Block.Heading(CommentsCopy.title)) else emptyList()) + Block.Paragraph(CommentsCopy.reading)
     val capture = isReviewReadable(model.situation) && report.guard != null
     fun visibleDocument(doc: CommentDocument) = doc.presence == "present" || doc.kind == "shared" && report.records("comments-delivery").any { it[0] == doc.context && it[1] == "pending" }
     val visible = report.documents.any(::visibleDocument)

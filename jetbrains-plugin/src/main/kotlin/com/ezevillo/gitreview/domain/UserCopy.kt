@@ -447,6 +447,7 @@ object UserCopy {
 }
 
 object CommentsCopy {
+    const val reading = "Reading comments…"
     const val details = "Details"
     const val close = "Close"
     const val originalUnversioned = "The captured lines included unsaved changes; this view shows the recorded Git version."

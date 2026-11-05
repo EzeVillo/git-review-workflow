@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.5.1] — 2026-11-04
+
+### Changed
+
+- Show review state before the independent comments query completes. Keep the
+  Comments section visible while loading without claiming documents are absent.
+- Reuse author explanations at the same tip and reload editable draft prose on
+  each refresh without repeating it when the comments query completes.
+
 ## [0.5.0] — 2026-10-19
 
 ### Fixed

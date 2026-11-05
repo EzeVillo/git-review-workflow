@@ -53,6 +53,60 @@ comments_safe_path() {
 	done
 }
 
+# A read-only report can ask for dozens of branch keys. Load them once in the
+# caller's shell. Cursor navigation also uses a snapshot for its read phase,
+# and invalidates it before writing. Other mutations keep live config reads.
+# NUL-delimited Git output is encoded BEFORE entering a shell variable. Values
+# can contain newlines, tabs and backslashes, and are never evaluated as shell.
+# od avoids relying on awk's non-portable handling of NUL record separators.
+review_config_init() {
+	_review_config_ready=0
+	_review_config_records=$(
+		{
+			if git config --null --get-regexp '^branch\..*\.review'; then
+				printf '\000__review_config_ok__\n\000'
+			else
+				_rc_status=$?
+				if [ "$_rc_status" -eq 1 ]; then
+					printf '\000__review_config_ok__\n\000'
+				fi
+			fi
+		} | od -An -v -tu1 | LC_ALL=C awk '
+			{ for (i=1; i<=NF; i++) {
+				b=$i+0
+				if (b==0) {
+					if (value) printf "%s\t%s\n", key, encoded
+					key=""; encoded=""; value=0
+				} else if (!value && b==10) value=1
+				else if (value) encoded=encoded sprintf("\\0%03o", b)
+				else key=key sprintf("%c", b)
+			} }
+		'
+	)
+	_review_config_tab=$(printf '\t')
+	case "$_review_config_records" in
+	*"__review_config_ok__$_review_config_tab") _review_config_ready=1 ;;
+	esac
+}
+
+review_config_get() {
+	if [ "${_review_config_ready:-0}" -ne 1 ]; then
+		git config "$1"
+		return $?
+	fi
+	_rc_found=0 _rc_value=''
+	while IFS= read -r _rc_line; do
+		if [ "${_rc_line%%"$_review_config_tab"*}" = "$1" ]; then
+			_rc_found=1
+			_rc_value=${_rc_line#*"$_review_config_tab"}
+		fi
+	done <<EOF
+$_review_config_records
+EOF
+	[ "$_rc_found" -eq 1 ] || return 1
+	printf '%b\n' "$_rc_value"
+}
+
 # Manifests are data, never shell. Duplicate keys and unsafe file types fail.
 comments_field() {
 	comments_safe_path "$1" || return 1
@@ -135,8 +189,8 @@ comments_repository_state() {
 		_crs_branches=$(git for-each-ref --format='%(refname:short)' refs/heads/review/) || return 1
 		while IFS= read -r _crs_branch; do
 			[ -n "$_crs_branch" ] || continue
-			if [ "$(git config "branch.$_crs_branch.reviewcommentscontext" || true)" = "$cm_context" ] &&
-				[ -n "$(git config "branch.$_crs_branch.reviewundoouthead" || true)" ]; then
+			if [ "$(review_config_get "branch.$_crs_branch.reviewcommentscontext" || true)" = "$cm_context" ] &&
+				[ -n "$(review_config_get "branch.$_crs_branch.reviewundoouthead" || true)" ]; then
 				comments_preflight_branch "$_crs_branch" || return 1
 				if [ "$cc_session" != "$(comments_field "$cm_dir/manifest" session)" ] ||
 					{ [ -f "$cc_dir/shared.md" ] && [ "$(comments_field "$cc_dir/delivery" state)" = pending ] &&
@@ -158,7 +212,7 @@ EOF
 		_crs_saved=$(git for-each-ref --format='%(refname:short)' refs/heads/review-saved/) || return 1
 		while IFS= read -r _crs_branch; do
 			[ -n "$_crs_branch" ] || continue
-			if [ "$(git config "branch.$_crs_branch.reviewcommentscontext" || true)" = "$cm_context" ]; then
+			if [ "$(review_config_get "branch.$_crs_branch.reviewcommentscontext" || true)" = "$cm_context" ]; then
 				comments_load_stored || return 1
 				cm_repository_shared=1
 				cm_guard=$(printf '%s\000' "$cm_guard" "$cm_branch" repository-shared | git hash-object --stdin)
@@ -187,21 +241,22 @@ comments_state() {
 	cm_identity=fresh cm_label='' cm_guard='' cm_capture_guard='' cm_scope=result cm_repository_shared=0
 	case "$cm_branch" in
 		review/*)
-			cm_source=$(git config "branch.$cm_branch.reviewsource" || true)
-			cm_tip=$(git config "branch.$cm_branch.reviewtip" || true)
+			if [ "${cm_config_snapshot_requested:-0}" -eq 1 ]; then review_config_init; fi
+			cm_source=$(review_config_get "branch.$cm_branch.reviewsource" || true)
+			cm_tip=$(review_config_get "branch.$cm_branch.reviewtip" || true)
 			if [ -n "$cm_source" ] && [ -n "$cm_tip" ]; then cm_active=1; fi
 			;;
 	esac
 	if [ "$cm_active" -ne 1 ]; then comments_repository_state; return $?; fi
 	comments_token_valid "$cm_tip" || { comments_error 'comments capture tip is not a full object ID'; return 1; }
 	cm_scope=active cm_label=$cm_source
-	cm_mode=$(git config "branch.$cm_branch.reviewmode" || true)
+	cm_mode=$(review_config_get "branch.$cm_branch.reviewmode" || true)
 	cm_mode=${cm_mode:-whole}
-	cm_target=$(git config "branch.$cm_branch.reviewbase" || true)
+	cm_target=$(review_config_get "branch.$cm_branch.reviewbase" || true)
 	_cm_lower=$(git rev-parse HEAD)
-	if [ "$(git config "branch.$cm_branch.reviewreadonly" || true)" = 1 ]; then
+	if [ "$(review_config_get "branch.$cm_branch.reviewreadonly" || true)" = 1 ]; then
 		cm_kind=compare
-		cm_full_base=$(git config "branch.$cm_branch.reviewstart" || true)
+		cm_full_base=$(review_config_get "branch.$cm_branch.reviewstart" || true)
 		cm_full_base=${cm_full_base:-$_cm_lower}
 	elif [ -n "$cm_target" ]; then
 		# Start passes the exact base it resolved (remote, local or commit-ish).
@@ -216,8 +271,8 @@ comments_state() {
 	cm_capture_base=$_cm_lower cm_capture_head=$cm_tip
 	case "$cm_mode" in
 		step)
-			cm_cursor=$(git config "branch.$cm_branch.reviewstep" || true)
-			_cm_start=$(git config "branch.$cm_branch.reviewstart" || true)
+			cm_cursor=$(review_config_get "branch.$cm_branch.reviewstep" || true)
+			_cm_start=$(review_config_get "branch.$cm_branch.reviewstart" || true)
 			case "$cm_cursor" in
 				''|*[!0-9]*) cm_capture_base='' cm_capture_head='' ;;
 				*)
@@ -230,13 +285,13 @@ comments_state() {
 					;;
 			esac
 			;;
-		walk) cm_cursor=$(git config "branch.$cm_branch.reviewwalkstep" || true) ;;
+		walk) cm_cursor=$(review_config_get "branch.$cm_branch.reviewwalkstep" || true) ;;
 	esac
-	_cm_phase=$(git config "branch.$cm_branch.reviewresume" || true)
+	_cm_phase=$(review_config_get "branch.$cm_branch.reviewresume" || true)
 	if [ "$_cm_phase" = conflict ]; then cm_capture_base='' cm_capture_head=''; fi
-	cm_session=$(git config "branch.$cm_branch.reviewcommentssession" || true)
-	cm_context=$(git config "branch.$cm_branch.reviewcommentscontext" || true)
-	_cm_owner=$(git config "branch.$cm_branch.reviewcommentsowner" || true)
+	cm_session=$(review_config_get "branch.$cm_branch.reviewcommentssession" || true)
+	cm_context=$(review_config_get "branch.$cm_branch.reviewcommentscontext" || true)
+	_cm_owner=$(review_config_get "branch.$cm_branch.reviewcommentsowner" || true)
 	if [ -n "$_cm_owner" ] && [ "$_cm_owner" != "$cm_gitdir" ]; then
 		comments_error 'comments session belongs to another gitdir'; return 1
 	fi
@@ -632,7 +687,7 @@ comments_stored_contexts() {
 	_csc_branches=$(git for-each-ref --format='%(refname:short)' refs/heads/review-saved/) || return 1
 	while IFS= read -r _csc_branch; do
 		[ -n "$_csc_branch" ] || continue
-		_csc_token=$(git config "branch.$_csc_branch.reviewcommentscontext" || true)
+		_csc_token=$(review_config_get "branch.$_csc_branch.reviewcommentscontext" || true)
 		[ -n "$_csc_token" ] || continue
 		comments_require_token "$_csc_token" || return 1
 		printf '%s\n' "$_csc_token"
@@ -642,8 +697,8 @@ EOF
 	_csc_branches=$(git for-each-ref --format='%(refname:short)' refs/heads/review/) || return 1
 	while IFS= read -r _csc_branch; do
 		[ -n "$_csc_branch" ] || continue
-		[ -n "$(git config "branch.$_csc_branch.reviewundoouthead" || true)" ] || continue
-		_csc_token=$(git config "branch.$_csc_branch.reviewcommentscontext" || true)
+		[ -n "$(review_config_get "branch.$_csc_branch.reviewundoouthead" || true)" ] || continue
+		_csc_token=$(review_config_get "branch.$_csc_branch.reviewcommentscontext" || true)
 		[ -n "$_csc_token" ] || continue
 		comments_require_token "$_csc_token" || return 1
 		printf '%s\n' "$_csc_token"
@@ -663,7 +718,7 @@ comments_load_stored() {
 	_cstored_branches=$(git for-each-ref --format='%(refname:short)' refs/heads/review-saved/) || return 1
 	while IFS= read -r _cstored_branch; do
 		[ -n "$_cstored_branch" ] || continue
-		[ "$(git config "branch.$_cstored_branch.reviewcommentscontext" || true)" = "$cm_context" ] || continue
+		[ "$(review_config_get "branch.$_cstored_branch.reviewcommentscontext" || true)" = "$cm_context" ] || continue
 		comments_preflight_branch "$_cstored_branch" || return 1
 		cm_dir=$cc_dir cm_scope=saved cm_label=${_cstored_branch#review-saved/}
 		_cstored_count=$((_cstored_count + 1))
@@ -677,8 +732,8 @@ EOF
 		_cstored_branches=$(git for-each-ref --format='%(refname:short)' refs/heads/review/) || return 1
 		while IFS= read -r _cstored_branch; do
 			[ -n "$_cstored_branch" ] || continue
-			[ "$(git config "branch.$_cstored_branch.reviewcommentscontext" || true)" = "$cm_context" ] || continue
-			[ -n "$(git config "branch.$_cstored_branch.reviewundoouthead" || true)" ] || continue
+			[ "$(review_config_get "branch.$_cstored_branch.reviewcommentscontext" || true)" = "$cm_context" ] || continue
+			[ -n "$(review_config_get "branch.$_cstored_branch.reviewundoouthead" || true)" ] || continue
 			comments_preflight_branch "$_cstored_branch" || return 1
 			_cstored_session=$cc_session
 			if [ "$_cstored_session" = "$_cstored_retained_session" ]; then
@@ -718,7 +773,7 @@ comments_emit_context() {
 	_cec_branch=''
 	for _cec_prefix in review review-saved; do
 		_cec_claim=$_cec_prefix/$_cec_owner
-		if [ "$(git config "branch.$_cec_claim.reviewcommentscontext" || true)" = "$cm_context" ]; then
+		if [ "$(review_config_get "branch.$_cec_claim.reviewcommentscontext" || true)" = "$cm_context" ]; then
 			_cec_branch=$_cec_claim
 		fi
 	done
@@ -1600,9 +1655,9 @@ comments_preflight_branch() {
 	_cc_branch=$1
 	cm_gitdir=$(git rev-parse --absolute-git-dir) || return 1
 	cm_root=$cm_gitdir/review-comments
-	cc_session=$(git config "branch.$_cc_branch.reviewcommentssession" || true)
-	cc_context=$(git config "branch.$_cc_branch.reviewcommentscontext" || true)
-	cc_owner=$(git config "branch.$_cc_branch.reviewcommentsowner" || true)
+	cc_session=$(review_config_get "branch.$_cc_branch.reviewcommentssession" || true)
+	cc_context=$(review_config_get "branch.$_cc_branch.reviewcommentscontext" || true)
+	cc_owner=$(review_config_get "branch.$_cc_branch.reviewcommentsowner" || true)
 	cc_dir=''
 	if [ -z "$cc_session$cc_context$cc_owner" ]; then comments_check_orphan_claim "$_cc_branch"; return $?; fi
 	if [ "$cc_owner" != "$cm_gitdir" ]; then comments_error 'comments session belongs to another gitdir'; return 1; fi
@@ -1634,9 +1689,9 @@ comments_transfer_preflight() {
 	comments_preflight_branch "$1" || return 1
 	[ -n "$cc_session" ] || return 0
 	_ct_target=$2
-	_ct_existing=$(git config "branch.$_ct_target.reviewcommentssession" || true)
-	_ct_owner=$(git config "branch.$_ct_target.reviewcommentsowner" || true)
-	_ct_context=$(git config "branch.$_ct_target.reviewcommentscontext" || true)
+	_ct_existing=$(review_config_get "branch.$_ct_target.reviewcommentssession" || true)
+	_ct_owner=$(review_config_get "branch.$_ct_target.reviewcommentsowner" || true)
+	_ct_context=$(review_config_get "branch.$_ct_target.reviewcommentscontext" || true)
 	if [ -n "$_ct_existing$_ct_owner$_ct_context" ] &&
 		{ [ "$_ct_existing" != "$cc_session" ] || [ "$_ct_owner" != "$cc_owner" ] || [ "$_ct_context" != "$cc_context" ]; }; then
 		comments_error 'another comments session owns the destination'; return 1
@@ -2038,7 +2093,7 @@ comments_prepare() {
 	comments_publish "$_cprep_context" "$_cprep_dir" || return $?
 	# Update only the delivered path in the original exit snapshot. Reading the
 	# whole worktree here would absorb code edited after the partial finish.
-	_cprep_oldtree=$(git config "branch.$cm_delivery_source.reviewundoouttree" || true)
+	_cprep_oldtree=$(review_config_get "branch.$cm_delivery_source.reviewundoouttree" || true)
 	if [ -n "$_cprep_oldtree" ]; then
 		_cprep_index=$(mktemp "$cm_gitdir/comments-undo-index.XXXXXX") || return 1
 		rm -f "$_cprep_index"
@@ -2357,7 +2412,7 @@ show_commit() {
 # Mirror of the same guard in git review preview.
 require_not_finish_conflict() {
 	_rnfc_cur="$(git symbolic-ref --quiet --short HEAD || true)"
-	if [ "$(git config "branch.$_rnfc_cur.reviewresume" || true)" = "conflict" ]; then
+	if [ "$(review_config_get "branch.$_rnfc_cur.reviewresume" || true)" = "conflict" ]; then
 		echo "error: git review finish is mid-conflict; resolve the markers and run git review finish --resume first (or git review finish --abort)" >&2
 		exit 1
 	fi
@@ -2371,7 +2426,7 @@ require_not_finish_conflict() {
 # Shared message for save/next/prev so consumers match one diagnostic.
 require_not_pending_finish() {
 	_rnpf_cur="$(git symbolic-ref --quiet --short HEAD || true)"
-	if [ -n "$(git config "branch.$_rnpf_cur.reviewundohead" || true)" ]; then
+	if [ -n "$(review_config_get "branch.$_rnpf_cur.reviewundohead" || true)" ]; then
 		echo "error: a previous finish on $_rnpf_cur has not been resolved; run git review finish --abort (or git review abort) first" >&2
 		exit 1
 	fi
@@ -2440,17 +2495,17 @@ load_step_review_meta() {
 		;;
 	esac
 
-	mode="$(git config "branch.$cur.reviewmode" || true)"
+	mode="$(review_config_get "branch.$cur.reviewmode" || true)"
 	[ "$mode" = "step" ] || {
 		echo "error: $cur was not started with git review start --step or a walkthrough" >&2
 		exit 1
 	}
 
-	src="$(git config "branch.$cur.reviewsource" || true)"
-	tip="$(git config "branch.$cur.reviewtip" || true)"
-	start="$(git config "branch.$cur.reviewstart" || true)"
-	count="$(git config "branch.$cur.reviewcount" || true)"
-	step="$(git config "branch.$cur.reviewstep" || true)"
+	src="$(review_config_get "branch.$cur.reviewsource" || true)"
+	tip="$(review_config_get "branch.$cur.reviewtip" || true)"
+	start="$(review_config_get "branch.$cur.reviewstart" || true)"
+	count="$(review_config_get "branch.$cur.reviewcount" || true)"
+	step="$(review_config_get "branch.$cur.reviewstep" || true)"
 
 	# A key deleted by a hand-edit (while reviewmode stays "step") would otherwise
 	# let set -e kill us silently mid-script; read with || true and report it.
@@ -2545,6 +2600,7 @@ load_step_texts() {
 # working tree is rolled back to the step we left (cursor unchanged) so the
 # session is not left half-moved on the target with the origin already banked.
 goto_step() {
+	_review_config_ready=0
 	target="$1"
 	prev_step="$step"
 	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
@@ -2649,6 +2705,11 @@ fold_lower() {
 # vanishingly rare elsewhere, and unquoting them here would mean re-implementing
 # git's C escaping in awk.
 changed_paths() {
+	if [ "${_walk_range_ready:-0}" -eq 1 ] && [ "${3:---name-only}" = --name-only ] &&
+		[ "$1" = "$_walk_range_lower" ] && [ "$2" = "$_walk_snapshot_tip" ]; then
+		[ -z "$_walk_range_paths" ] || printf '%s\n' "$_walk_range_paths"
+		return 0
+	fi
 	git -c core.quotePath=false diff "${3:---name-only}" "$1" "$2"
 }
 
@@ -3133,6 +3194,7 @@ _walk_draft_list_dir() {
 # directly.
 walk_use_draft() {
 	walk_draft_src="$1"
+	_walk_snapshot_ready=0 _walk_range_ready=0
 	# Here rather than in walk_draft_path: this runs in the verb's own shell,
 	# where the resolved gitdir survives to be reused (see walk_gitdir_init).
 	walk_gitdir_init
@@ -3151,9 +3213,9 @@ walk_use_draft() {
 # branch, not the ref you named it by. Falls back to reviewsource for reviews
 # created before this key existed, matching what readers derived back then.
 walk_review_draft_src() {
-	_wrds_name="$(git config "branch.$1.reviewdraft" || true)"
+	_wrds_name="$(review_config_get "branch.$1.reviewdraft" || true)"
 	if [ -z "$_wrds_name" ]; then
-		_wrds_name="$(git config "branch.$1.reviewsource" || true)"
+		_wrds_name="$(review_config_get "branch.$1.reviewsource" || true)"
 	fi
 	printf '%s' "$_wrds_name"
 }
@@ -3174,7 +3236,7 @@ walk_review_draft_src() {
 # name is yours" is what every reader assumed anyway, so they keep working across
 # the upgrade.
 walk_saved_draft_filed() {
-	case "$(git config "branch.$1.reviewdraftfiled" || true)" in
+	case "$(review_config_get "branch.$1.reviewdraftfiled" || true)" in
 	1 | "") return 0 ;;
 	esac
 	return 1
@@ -3272,12 +3334,33 @@ walk_has_draft_file() {
 # gets a draft with no change of its own. Consulted only when a caller has named
 # the source with walk_use_draft; unset, this behaves exactly as it always did.
 walk_read() {
+	if [ "${_walk_snapshot_ready:-0}" -eq 1 ] && [ "$1" = "$_walk_snapshot_tip" ] &&
+		[ "${walk_draft_src:-}" = "$_walk_snapshot_source" ]; then
+		[ "$_walk_snapshot_status" -eq 0 ] || return 1
+		printf '%s\n' "$_walk_snapshot_content"
+		return 0
+	fi
 	if [ -n "${walk_draft_src:-}" ] && _wr_body="$(walk_draft_body "$walk_draft_src")"; then
 		printf '%s\n' "$_wr_body"
 		return 0
 	fi
 	_wr_content="$(git show "$1:.review/walkthrough.md" 2>/dev/null)" || return 1
 	printf '%s' "$_wr_content" | walk_normalize
+}
+
+# One command reads one normalized walkthrough and one range. Initialize in the
+# parent shell, never inside $(...), and keep walk_read as the only precedence
+# decision. No snapshot survives a new process or a walk_use_draft context.
+walk_snapshot_init() {
+	_walk_snapshot_ready=0 _walk_range_ready=0
+	_walk_snapshot_tip=$1 _walk_snapshot_source=${walk_draft_src:-}
+	_walk_snapshot_status=0
+	_walk_snapshot_content=$(walk_read "$1") || _walk_snapshot_status=$?
+	_walk_snapshot_ready=1
+	_walk_range_lower=$2
+	if _walk_range_paths=$(changed_paths "$2" "$1" 2>/dev/null); then
+		_walk_range_ready=1
+	fi
 }
 
 # walk_parse  (stdin: walkthrough content)
@@ -3873,7 +3956,7 @@ emit_range_reading_offers() {
 # recorded base, and guessing would repeat the same mistake in reverse — callers
 # fall back to the old inference there.
 walk_at_base() {
-	_wab_base="$(git config "branch.$cur.reviewwalkbase" || true)"
+	_wab_base="$(review_config_get "branch.$cur.reviewwalkbase" || true)"
 	[ -n "$_wab_base" ] || return 2
 	[ "$(git rev-parse HEAD)" = "$_wab_base" ]
 }
@@ -3917,6 +4000,7 @@ walk_recover_cursor() {
 	# Not redundant with the caller's AND-OR list: that only suppresses -e today
 	# because of an invariant living in another function, one refactor away from
 	# turning a lost lock into an aborted status.
+	_review_config_ready=0
 	git config "branch.$cur.reviewwalkstep" "$total" || true
 	git config "branch.$cur.reviewwalkcount" "$total" || true
 	walkstep="$total"
@@ -3959,7 +4043,7 @@ walk_range_error() {
 	# (walk_review_draft_src). The old total==0 test stays as fallback for
 	# reviews started before the flag.
 	_wre_draft=""
-	if [ "$(git config "branch.$cur.reviewwalkfromdraft" || true)" = "1" ]; then
+	if [ "$(review_config_get "branch.$cur.reviewwalkfromdraft" || true)" = "1" ]; then
 		_wre_draft="${walk_draft_src:-$src}"
 	elif [ -n "${walk_draft_src:-}" ] && walk_is_draft "$walk_draft_src"; then
 		# A draft written mid-review carries no flag (nothing to record at
@@ -4047,16 +4131,16 @@ load_walk_review_meta() {
 		;;
 	esac
 
-	mode="$(git config "branch.$cur.reviewmode" || true)"
+	mode="$(review_config_get "branch.$cur.reviewmode" || true)"
 	[ "$mode" = "walk" ] || {
 		echo "error: $cur was not started with a walkthrough" >&2
 		exit 1
 	}
 
-	src="$(git config "branch.$cur.reviewsource" || true)"
-	tip="$(git config "branch.$cur.reviewtip" || true)"
-	walkstep="$(git config "branch.$cur.reviewwalkstep" || true)"
-	walkcount="$(git config "branch.$cur.reviewwalkcount" || true)"
+	src="$(review_config_get "branch.$cur.reviewsource" || true)"
+	tip="$(review_config_get "branch.$cur.reviewtip" || true)"
+	walkstep="$(review_config_get "branch.$cur.reviewwalkstep" || true)"
+	walkcount="$(review_config_get "branch.$cur.reviewwalkcount" || true)"
 
 	if [ -z "$src" ] || [ -z "$tip" ]; then
 		if [ -z "$src" ]; then
@@ -4078,10 +4162,12 @@ load_walk_review_meta() {
 
 	# Keys-only submode (start/compare --keys): sequence is guided ∩ keys, not
 	# the full reading order. The flag lives on the branch; absence is full walk.
-	if [ "$(git config "branch.$cur.reviewwalkkeys" || true)" = "1" ]; then
-		walkpaths="$(walk_keys_order "$tip" "$(git rev-parse HEAD)")"
+	_walk_lower=$(git rev-parse HEAD)
+	walk_snapshot_init "$tip" "$_walk_lower"
+	if [ "$(review_config_get "branch.$cur.reviewwalkkeys" || true)" = "1" ]; then
+		walkpaths="$(walk_keys_order "$tip" "$_walk_lower")"
 	else
-		walkpaths="$(walk_reading_order "$tip" "$(git rev-parse HEAD)")"
+		walkpaths="$(walk_reading_order "$tip" "$_walk_lower")"
 	fi
 	# grep -c returns 1 (aborting under set -e in POSIX sh) when walkpaths is empty;
 	# guard it so a lost sequence reaches the range check below as total=0.
@@ -4141,6 +4227,7 @@ show_walk_entry() {
 # nothing but the cursor key: walk never stages or resets, so working tree and
 # index are left exactly as they were.
 goto_walk_entry() {
+	_review_config_ready=0
 	git config "branch.$cur.reviewwalkstep" "$1"
 	walkstep="$1"
 	show_walk_entry "$1"

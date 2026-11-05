@@ -53,6 +53,7 @@ git rev-parse --git-dir >/dev/null 2>&1 || {
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
+
 # Resolve the gitdir once here rather than inside every draft-path lookup: those
 # happen in command substitutions, one per walk row, and each would otherwise
 # spawn its own git rev-parse (see walk_gitdir_init). No verb with a draft
@@ -78,6 +79,8 @@ if [ -z "$branches" ] && [ -z "$saved" ] && [ -z "$fixes" ]; then
 	fi
 	exit 0
 fi
+
+if [ -n "$branches$saved" ]; then review_config_init; fi
 
 # --- review-fixes/* --------------------------------------------------------
 #
@@ -202,7 +205,7 @@ row_has_draft() {
 describe() {
 	b="$1"
 	label="$2"
-	src="$(git config "branch.$b.reviewsource" || true)"
+	src="$(review_config_get "branch.$b.reviewsource" || true)"
 	# A branch with no reviewsource is an orphan: either hand-made, or left by a
 	# git review save / git review start that died after creating the branch but before
 	# writing its metadata. Surface it instead of skipping silently — otherwise an
@@ -221,8 +224,8 @@ describe() {
 		esac
 		return
 	fi
-	tip="$(git config "branch.$b.reviewtip" || true)"
-	mode="$(git config "branch.$b.reviewmode" || echo whole)"
+	tip="$(review_config_get "branch.$b.reviewtip" || true)"
+	mode="$(review_config_get "branch.$b.reviewmode" || echo whole)"
 
 	shorttip="$tip"
 	[ -n "$tip" ] && shorttip="$(git rev-parse --short "$tip" 2>/dev/null || echo "$tip")"
@@ -235,12 +238,12 @@ describe() {
 	fi
 
 	if [ "$mode" = "step" ]; then
-		count="$(git config "branch.$b.reviewcount" || echo '?')"
-		step="$(git config "branch.$b.reviewstep" || echo '?')"
+		count="$(review_config_get "branch.$b.reviewcount" || echo '?')"
+		step="$(review_config_get "branch.$b.reviewstep" || echo '?')"
 		printf '%s %s  %sstep%s [%s/%s]  tip %s\n' "$label" "$b" "$prefix" "$draft_note" "$step" "$count" "$shorttip"
 	elif [ "$mode" = "walk" ]; then
-		count="$(git config "branch.$b.reviewwalkcount" || echo '?')"
-		step="$(git config "branch.$b.reviewwalkstep" || echo '?')"
+		count="$(review_config_get "branch.$b.reviewwalkcount" || echo '?')"
+		step="$(review_config_get "branch.$b.reviewwalkstep" || echo '?')"
 		printf '%s %s  %swalk%s [%s/%s]  tip %s\n' "$label" "$b" "$prefix" "$draft_note" "$step" "$count" "$shorttip"
 	else
 		printf '%s %s  %swhole%s  tip %s\n' "$label" "$b" "$prefix" "$draft_note" "$shorttip"
@@ -255,19 +258,19 @@ describe_porcelain() {
 	pb="$1"
 	pcurrent=0
 	[ "$pb" = "$cur" ] && pcurrent=1
-	psrc="$(git config "branch.$pb.reviewsource" || true)"
+	psrc="$(review_config_get "branch.$pb.reviewsource" || true)"
 	if [ -z "$psrc" ]; then
 		porcelain_row branch "$pb" "$2" "$pcurrent" 1
 	else
-		pmode="$(git config "branch.$pb.reviewmode" || echo whole)"
+		pmode="$(review_config_get "branch.$pb.reviewmode" || echo whole)"
 		case "$pmode" in
 		step)
-			pposition="$(git config "branch.$pb.reviewstep" || true)"
-			ptotal="$(git config "branch.$pb.reviewcount" || true)"
+			pposition="$(review_config_get "branch.$pb.reviewstep" || true)"
+			ptotal="$(review_config_get "branch.$pb.reviewcount" || true)"
 			;;
 		walk)
-			pposition="$(git config "branch.$pb.reviewwalkstep" || true)"
-			ptotal="$(git config "branch.$pb.reviewwalkcount" || true)"
+			pposition="$(review_config_get "branch.$pb.reviewwalkstep" || true)"
+			ptotal="$(review_config_get "branch.$pb.reviewwalkcount" || true)"
 			;;
 		*)
 			pposition=""
@@ -296,12 +299,12 @@ describe_porcelain() {
 	# (finish never touches a saved review) — checked right after that branch's
 	# own record, regardless of whether it came out orphan above.
 	if [ "$2" -eq 0 ]; then
-		pundohead="$(git config "branch.$pb.reviewundohead" || true)"
+		pundohead="$(review_config_get "branch.$pb.reviewundohead" || true)"
 		if [ -n "$pundohead" ]; then
-			presume="$(git config "branch.$pb.reviewresume" || true)"
+			presume="$(review_config_get "branch.$pb.reviewresume" || true)"
 			pstate=pending
 			[ "$presume" = "conflict" ] && pstate=conflict
-			pkind="$(git config "branch.$pb.reviewundokind" || true)"
+			pkind="$(review_config_get "branch.$pb.reviewundokind" || true)"
 			ponto=0
 			[ "$pkind" = "onto-source" ] && ponto=1
 			porcelain_row finish "$pb" "$pstate" "$ponto"

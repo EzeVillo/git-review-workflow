@@ -31,6 +31,29 @@ func TestMainCommentsKeepsIndependentEmptyStatesAfterReading(t *testing.T) {
 	}
 }
 
+func TestPendingCommentsStayVisibleWithoutEmptyStatesOrControls(t *testing.T) {
+	m := commentFixture("main-empty")
+	m.Panel.CommentsLoading = true
+	frame, _, _ := viewWithState(m.Panel, Viewport{Cols: 120, Rows: 100}, renderState{})
+	if !strings.Contains(frame, domain.CommentsReading) || strings.Contains(frame, domain.CommentsEmptyLocal) || strings.Contains(frame, domain.CommentsEmptyShared) {
+		t.Fatalf("pending comments misrepresented the document state:\n%s", frame)
+	}
+	if len(commentsControls(m.Panel)) != 0 {
+		t.Fatal("pending comments exposed document controls")
+	}
+}
+
+func TestLateCommentDetailsCannotReplaceNewerReviewState(t *testing.T) {
+	m := NewModel()
+	m.readGeneration = 2
+	m.Panel = domain.PanelModel{Situation: domain.SituationReview, Branch: "review/new", Tip: "new"}
+	next, cmd := m.Update(readDoneMsg{generation: 1, result: host.ReadResult{Situation: domain.SituationNoReview, Comments: "comments-identity\tfresh\tOld"}})
+	after := next.(Model)
+	if cmd != nil || after.Panel != m.Panel {
+		t.Fatal("late details replaced the current review")
+	}
+}
+
 func TestMainCommentsMissingKindPreservesPhysicalDocumentIndex(t *testing.T) {
 	for _, kind := range []string{"local", "shared"} {
 		m := commentFixture("main-empty")

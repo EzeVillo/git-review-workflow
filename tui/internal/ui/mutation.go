@@ -161,6 +161,8 @@ func (m Model) beginMutation(req mutationRequest, token domain.StateToken) (Mode
 		argv = a
 	}
 	m.statusLine = ""
+	// Invalidate prose/comments still arriving for the state before this write.
+	m.readGeneration++
 	var activityCmd tea.Cmd
 	progressText := req.progressText
 	if progressText == "" {

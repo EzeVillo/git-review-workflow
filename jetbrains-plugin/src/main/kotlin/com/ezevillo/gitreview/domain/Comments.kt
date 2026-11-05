@@ -2,7 +2,7 @@ package com.ezevillo.gitreview.domain
 
 data class CommentRow(val tag: String, val fields: List<String>)
 data class CommentDocument(val path: String, val context: String, val kind: String, val presence: String, val revision: String, val count: Int? = null)
-data class CommentsReport(val rows: List<CommentRow> = emptyList()) {
+data class CommentsReport(val rows: List<CommentRow> = emptyList(), val loading: Boolean = false) {
     fun records(tag: String) = rows.filter { it.tag == tag }.map { it.fields }
     fun destinations(operation: String = "add"): List<String> = records("comments-capability").filter { it[0] == operation && it[1] in listOf("local", "shared") }.map { it[1] }.distinct()
     val guard: String? get() = records("comments-guard").firstOrNull()?.firstOrNull()

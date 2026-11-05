@@ -1769,6 +1769,11 @@ export function panelHtml(nonce: string): string {
     function visibleDocument(doc) { return doc.presence === "present" || (doc.kind === "shared" && report.deliveries.some(function(d) {return d.context === doc.context && d.state === "pending";})); }
     const visible = docs.some(visibleDocument);
     const box = el("section", "comments-block");
+    if (report && report.loading) {
+      if (heading) box.appendChild(el("h3", null, COMMENTS.title));
+      box.appendChild(el("p", null, COMMENTS.reading));
+      return box;
+    }
     // La ausencia se muestra sólo tras consultar; un diagnóstico no es un vacío.
     function emptyRow(kind, label, text) {
       if (heading || !report || report.diagnostics.length || docs.some(function(doc) { return doc.kind === kind && visibleDocument(doc); })) return;

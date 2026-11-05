@@ -468,11 +468,11 @@ public static class StartWizard
         // that lands on a different situation than the one it was configured for is a
         // start nobody asked for.
         var token = StaleGuard.CaptureToken(ctx.StateManager.Current);
-        await ctx.StateManager.RefreshAsync(ct).ConfigureAwait(true);
-        var current = ctx.StateManager.Current;
+        var current = await ctx.StateManager.ReadForMutationAsync(ct).ConfigureAwait(true);
         if (!StaleGuard.TokenStillValid(token, current)
             || current.Situation is not (Situation.NoReview or Situation.FinishPending))
         {
+            await ctx.StateManager.RefreshAsync(ct).ConfigureAwait(true);
             GitReviewDialogs.Info(UserCopy.Stale);
             return false;
         }

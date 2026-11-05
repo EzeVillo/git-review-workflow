@@ -182,7 +182,9 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
         if (!entry || !isPathRef(entry.id)) {
             return undefined;
         }
-        return {key: `${review.branch}${entry.id.raw}`, raw: entry.id.raw};
+        // Author prose is immutable at tip; an editable draft must be read again
+        // on each refresh. The primary and complete states share one read id.
+        return {key: JSON.stringify([review.branch, review.tip, entry.id.raw, state.draft ? state.readId : null]), raw: entry.id.raw};
     }
 
     function loadWhy(raw: string): void {
@@ -468,10 +470,10 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
         })
     );
     stateManager.onDidChange((state) => {
-        if (target) rememberCommentRange(target.rootUri.fsPath, state.comments);
+        if (target && !state.comments?.loading) rememberCommentRange(target.rootUri.fsPath, state.comments);
         updateView(state);
         syncCliProbe();
-        syncDraftWatcher(state);
+        if (!state.comments?.loading) syncDraftWatcher(state);
     });
 
     /**

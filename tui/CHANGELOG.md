@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.1] — 2026-11-04
+
+### Changed
+
+- Show review state before comments and explanations finish loading. Read those
+  details concurrently and ignore results superseded by a read or mutation.
+- Keep pending comments distinct from absent documents and preserve document
+  watches until the complete report arrives.
+
 ## [0.2.0] — 2026-10-19
 
 ### Fixed

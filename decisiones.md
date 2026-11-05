@@ -1848,3 +1848,60 @@ reemplazado también `cp`, `mv` y otras utilidades BSD, escondiendo precisamente
 las diferencias que este runner debe probar. Una comprobación previa ejecuta
 `timeout` antes de los tests y evita gastar la suite completa en una dependencia
 ausente. No cambia la CLI ni se omiten las pruebas de concurrencia.
+
+
+## 20. Rendimiento de la CLI y lectura progresiva de los cuatro clientes
+
+En Windows, una fixture de dos archivos modificados ya hacía perceptible cada
+consulta. El plugin de IntelliJ encadenaba estado y comentarios antes y después
+de mover el cursor; las explicaciones se volvían a pedir en ambos refrescos.
+Visual Studio sumaba otro refresco al que ya hacía su MutationRunner. Los cuatro
+clientes esperaban comentarios para mostrar el estado principal.
+
+La primera reducción vive en la CLI, compartida por todos. `review_config_init`
+lee las claves de rama en un proceso Git y conserva su precedencia efectiva,
+las claves ausentes y los valores vacíos. El flujo NUL de Git pasa por od y awk
+antes de entrar en una variable del shell: los valores se representan como
+octales y se recuperan con printf, nunca con eval. Así se conservan tabs, CR,
+LF, barras, Unicode y prosa que se parezca a código. No se depende del manejo
+de NUL como separador de registros de cada awk.
+
+La instantánea existe sólo dentro del comando que la pidió: status, list con
+reviews, comments status de una sesión activa y la fase de lectura de next/prev.
+No se carga al sourcear la biblioteca, ni se mantiene entre procesos. Las otras
+mutaciones siguen consultando Git en vivo; los movimientos y la recuperación
+del cursor invalidan la instantánea antes de escribir metadata.
+
+El cargador de walk lee una vez el walkthrough normalizado y una vez el rango.
+`walk_read` sigue resolviendo la precedencia entre borrador y sidecar, y
+`changed_paths` sigue siendo la puerta del diff. Las instantáneas se inicializan
+en el shell padre, porque lo guardado dentro de una sustitución de comandos se
+pierde al salir de ese subshell. Un nuevo contexto de borrador las invalida.
+
+En los clientes se publica primero el estado principal, con Comments en carga,
+y después el reporte de comentarios. Cargando no significa «sin comentarios»:
+no muestra conteos ni acciones de documentos. Los watchers conservan sus rutas
+anteriores hasta recibir ese reporte completo. La TUI separa la lectura del
+estado y los detalles, consulta comentarios y explicación en paralelo y rechaza
+el resultado al cambiar de generación, también cuando empieza una mutación.
+
+IntelliJ y Visual Studio hacen una lectura privada para el guard de la mutación,
+sin consultar comentarios ni publicar un estado incompleto. Se conserva el
+contraste de situación, rama y tip, el lock, las revisiones y el guardado selectivo
+de los documentos cuando la acción los necesita. Las acciones siguen realizando
+su refresco completo al terminar. En Visual Studio, StateChanged sincroniza
+watchers y explicación para todos los caminos, de modo que no hace falta volver
+a invocar el refresco desde ActionDispatcher después de MutationRunner.
+
+Una explicación se inicia una sola vez por lectura; su resultado pertenece a
+una generación. VS Code puede conservar la del autor con igual rama, tip y path,
+pero un borrador editable requiere otra lectura en cada refresco. El reporte
+principal y su complemento comparten un id local para no duplicarla cuando
+terminan los comentarios. No se cachean diagnósticos de entorno ni se elimina
+el chequeo de versión que permite actualizar la CLI con el IDE abierto.
+
+No hay flags ni registros porcelain nuevos: las capacidades y los mínimos de
+CLI de cada cliente permanecen iguales. La indicación Reading comments… vive
+en el canónico y en los UserCopy de los cuatro clientes. Los tests de presupuesto
+cuentan procesos y verifican efectos reales; no imponen tiempos de pared que
+dependan de la máquina o del antivirus.

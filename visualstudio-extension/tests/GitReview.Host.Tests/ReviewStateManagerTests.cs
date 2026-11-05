@@ -9,6 +9,67 @@ namespace GitReview.Host.Tests;
 /// </summary>
 public class ReviewStateManagerTests
 {
+    [Fact] public async Task Older_comments_cannot_replace_a_newer_review()
+    {
+        var comments = new TaskCompletionSource<InvokeResult>();
+        var cli = new CommentsGatedCli(comments.Task);
+        var manager = new ReviewStateManager(cli, () => new[]{"/repo"});
+        var old = manager.RefreshAsync();
+        Assert.True(manager.Current.Comments!.Loading);
+        var latest = await manager.RefreshAsync();
+        Assert.Equal("newtip", latest.State!.Tip);
+        comments.SetResult(new InvokeResult("comments-identity\tfresh\tOld", "", 0));
+        await old;
+        Assert.Same(latest, manager.Current);
+        Assert.False(manager.Current.Comments!.Loading);
+    }
+
+    private sealed class CommentsGatedCli(Task<InvokeResult> comments) : CliInvoker
+    {
+        private int _statusReads;
+        private int _commentsReads;
+        public override Task<InvokeResult> InvokeAsync(string verb, IReadOnlyList<string> args, string cwd,
+            bool network = false, long? timeoutMs = null, CancellationToken cancellationToken = default)
+        {
+            if (verb == "comments" && ++_commentsReads == 1) return comments;
+            var text = verb switch {
+                "--version" => CliVersion.MinCliVersion,
+                "status" => WalkStatus.Replace("deadbeef", ++_statusReads == 1 ? "oldtip" : "newtip"),
+                _ => "comments-identity\tfresh\tCurrent"
+            };
+            return Task.FromResult(new InvokeResult(text, "", 0));
+        }
+    }
+    [Fact] public async Task Primary_state_is_published_before_the_comments_read()
+    {
+        var cli = new FakeCliInvoker().Answer("status", WalkStatus);
+        var manager = Manager(cli, "/repo");
+        var observed = false;
+        manager.StateChanged += state => {
+            if (state.Comments?.Loading != true) return;
+            observed = true;
+            Assert.Equal(new[]{"--version", "status"}, cli.Verbs);
+            Assert.Equal(Situation.Review, state.Situation);
+            Assert.NotEmpty(state.EntriesList);
+        };
+        var complete = await manager.RefreshAsync();
+        Assert.True(observed);
+        Assert.False(complete.Comments!.Loading);
+        Assert.Equal(complete, manager.Current);
+    }
+
+    [Fact] public async Task Mutation_guard_skips_comments_without_replacing_the_published_state()
+    {
+        var cli = new FakeCliInvoker().Answer("status", WalkStatus);
+        var manager = Manager(cli, "/repo");
+        var published = await manager.RefreshAsync();
+        cli.Calls.Clear();
+        cli.Answer("status", WalkStatus.Replace("deadbeef", "newtip"));
+        var fresh = await manager.ReadForMutationAsync();
+        Assert.Equal("newtip", fresh.State!.Tip);
+        Assert.Equal(new[]{"--version", "status"}, cli.Verbs);
+        Assert.Equal(published, manager.Current);
+    }
     [Fact] public async Task Comments_failure_remains_an_independent_diagnostic()
     {
         var cli=new FakeCliInvoker().Answer("status",WalkStatus).Fails("comments","Comments unreadable");
@@ -283,7 +344,7 @@ public class ReviewStateManagerTests
         manager.StateChanged += s => seen.Add(s.Situation);
         await manager.RefreshAsync();
         await manager.RefreshAsync();
-        Assert.Equal(new[] { Situation.Review, Situation.Review }, seen);
+        Assert.Equal(new[] { Situation.Review, Situation.Review, Situation.Review, Situation.Review }, seen);
     }
 
     /// <summary>

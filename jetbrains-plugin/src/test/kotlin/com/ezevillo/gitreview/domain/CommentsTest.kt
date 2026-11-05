@@ -4,6 +4,13 @@ import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 
 class CommentsTest {
+    @Test fun pendingCommentsHaveNoEmptyStatesOrDocumentControls() {
+        val model = com.ezevillo.gitreview.fixtures.PanelFixtures.noReviewReady().copy(comments = CommentsReport(loading = true))
+        val section = panelLayout(model).blocks.filterIsInstance<Block.ToolsSection>().single { it.title == CommentsCopy.title }
+        assertEquals(CommentsCopy.reading, section.blocks.filterIsInstance<Block.Paragraph>().single().text)
+        assertTrue(section.blocks.none { it is Block.GuideRows })
+        assertTrue(section.blocks.none { it is Block.Row })
+    }
     @Test fun copyPathBelongsOnlyToExistingLocalDocumentsInEveryContext() {
         for (kind in listOf("review", "compare")) for (state in listOf("active", "result", "repository")) {
             val report = parseComments("comments-context\tc\t$kind\t$state\tg\tFeature\ncomments-document\t/absent\tc\tlocal\tabsent\tabsent\ncomments-document\t/local\tc\tlocal\tpresent\tunreadable\ncomments-document\t/shared\tc\tshared\tpresent\ts")

@@ -63,10 +63,18 @@ jobs:
         include:
           - { os: ubuntu-latest, shard: 1, shards: 1 }
           - { os: macos-latest, shard: 1, shards: 1 }
-          - { os: windows-latest, shard: 1, shards: 4 }
-          - { os: windows-latest, shard: 2, shards: 4 }
-          - { os: windows-latest, shard: 3, shards: 4 }
-          - { os: windows-latest, shard: 4, shards: 4 }
+          - { os: windows-latest, shard: 1, shards: 12 }
+          - { os: windows-latest, shard: 2, shards: 12 }
+          - { os: windows-latest, shard: 3, shards: 12 }
+          - { os: windows-latest, shard: 4, shards: 12 }
+          - { os: windows-latest, shard: 5, shards: 12 }
+          - { os: windows-latest, shard: 6, shards: 12 }
+          - { os: windows-latest, shard: 7, shards: 12 }
+          - { os: windows-latest, shard: 8, shards: 12 }
+          - { os: windows-latest, shard: 9, shards: 12 }
+          - { os: windows-latest, shard: 10, shards: 12 }
+          - { os: windows-latest, shard: 11, shards: 12 }
+          - { os: windows-latest, shard: 12, shards: 12 }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -92,29 +100,35 @@ jobs:
       - name: Check concurrency test dependency
         run: timeout 5 sh -c 'exit 0'
       - name: Comments status contract
+        if: runner.os != 'Windows' || matrix.shard == 1
         run: bats tests/comments-status.bats
       - name: Run tests
         env:
           TEST_SHARD: ${{ matrix.shard }}
           TEST_SHARDS: ${{ matrix.shards }}
-        # Keep every test on every OS. Windows process startup makes a serial
-        # run nearly six hours; distribute complete files without overlap.
+        # Measured Windows durations balance whole files; every test remains
+        # covered once. Linux/macOS use one shard and retain the full suite.
         run: |
+          selected=$(node scripts/ci-shards.cjs bats "$TEST_SHARD" "$TEST_SHARDS")
           set --
-          index=0
-          for file in tests/*.bats; do
-            if [ "$((index % TEST_SHARDS + 1))" -eq "$TEST_SHARD" ]; then
-              set -- "$@" "$file"
-            fi
-            index=$((index + 1))
-          done
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            set -- "$@" "$file"
+          done <<EOF
+          $selected
+          EOF
           bats --timing --print-output-on-failure "$@"
 
   vscode-extension:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, macos-latest, windows-latest ]
+        include:
+          - { os: ubuntu-latest, shard: 1, shards: 1 }
+          - { os: macos-latest, shard: 1, shards: 1 }
+          - { os: windows-latest, shard: 1, shards: 3 }
+          - { os: windows-latest, shard: 2, shards: 3 }
+          - { os: windows-latest, shard: 3, shards: 3 }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -146,6 +160,9 @@ jobs:
       # tests/install.bats, sobre los mismos tres runners.
       - name: Integration tests
         working-directory: vscode-extension
+        env:
+          VSCODE_TEST_SHARD: ${{ matrix.shard }}
+          VSCODE_TEST_SHARDS: ${{ matrix.shards }}
         run: |
           case "$RUNNER_OS" in
             Linux) xvfb-run -a npm run test:integration ;;
@@ -173,6 +190,10 @@ jobs:
         run: |
           node --test scripts/check-client-product-surface.test.mjs
           node scripts/check-client-product-surface.mjs
+      - name: Check CI shard coverage and planned durations
+        run: |
+          node --test scripts/ci-shards.test.mjs scripts/ci-duration-budget.test.mjs
+          node scripts/ci-shards.cjs check
       # Same job on purpose: node is already set up, and both checks guard the
       # same thing — a surface the clients share drifting apart in one of them.
       - name: Check logo assets
@@ -344,3 +365,22 @@ jobs:
             echo "-> $target"
             CGO_ENABLED=0 GOOS="${target%/*}" GOARCH="${target#*/}" GOARM=7               go build -trimpath -o /dev/null ./cmd/git-review-ui
           done
+
+  windows-duration-budget:
+    name: Windows duration budget
+    needs: [lint, test, vscode-extension, landing, client-product-surface, jetbrains-plugin, visualstudio-extension, tui]
+    if: ${{ always() && !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # Compare completed jobs; never cancel tests just to meet a time limit.
+      - name: Compare all Windows jobs with Linux and macOS
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci-duration-budget.cjs

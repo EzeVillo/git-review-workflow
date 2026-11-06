@@ -1905,3 +1905,41 @@ CLI de cada cliente permanecen iguales. La indicación Reading comments… vive
 en el canónico y en los UserCopy de los cuatro clientes. Los tests de presupuesto
 cuentan procesos y verifican efectos reales; no imponen tiempos de pared que
 dependan de la máquina o del antivirus.
+
+## 21. Reparto Windows por tiempos y presupuesto de CI
+
+La corrida 41948706723 terminó con sus 23 jobs correctos. El mayor job macOS
+tardó 42 min 3 s y el mayor Linux 18 min 4 s. Los cuatro grupos Windows de Bats
+tardaron entre 83 min 42 s y 134 min 23 s; la integración de VS Code, 59 min 39 s.
+Repartir por posición del glob conservaba cobertura pero concentraba varios
+archivos de comentarios costosos en el mismo grupo.
+
+El nuevo selector usa los tiempos de los 1.507 casos Bats y los intervalos
+completos de las 18 suites de integración, con sus hooks. Asigna primero el
+archivo más costoso al grupo menos cargado. No divide casos dentro de un
+archivo: así conserva setup_file y los before/after de Mocha, además de los
+tests que necesitan la misma fixture. Doce grupos Bats y tres de VS Code dejan
+estimaciones máximas de 33,81 y 24,27 minutos, incluida la preparación estimada.
+El objetivo del perfil es el 85 % de los 42,05 minutos de referencia para dejar
+margen a la variación entre runners. Los archivos nuevos reciben cinco minutos
+provisionales y nunca quedan fuera del reparto.
+
+El selector se comparte entre el argv de Bats y el runner de integración. Sin
+variables de partición, Mocha conserva la suite completa y sus filtros locales.
+Los tests del selector verifican que cada archivo aparezca una vez, que ningún
+grupo esté vacío y que la matriz publique todos los grupos previstos. El smoke
+adicional de comments status se conserva en Windows una sola vez, además de su
+presencia normal en la suite, y sigue igual en los otros dos sistemas.
+
+El presupuesto final compara todos los jobs Windows completados con el mayor
+job Linux/macOS de la misma corrida, no con un límite histórico fijo. Espera por
+todos los jobs, excluye su propio reporte y la cola del runner, y exige resultados
+exitosos antes de evaluar duración. Los reruns parciales toman el último intento
+de cada nombre sin perder los jobs que ya habían pasado. Un gate exige que sus
+dependencias incluyan cada job del workflow. Superar el presupuesto falla el
+control después de ejecutar toda la cobertura; un timeout que cortara tests
+habría confundido una cancelación con una mejora de rendimiento.
+
+IntelliJ, Visual Studio, TUI y lint Windows ya estaban por debajo del presupuesto
+y conservan su estructura. El detalle reproducible de mediciones vive en
+`specs/ci/2026-11-05-reparto-windows.md`.

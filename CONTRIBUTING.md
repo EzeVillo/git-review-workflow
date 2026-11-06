@@ -35,9 +35,29 @@ requesting a review. The extension has its own suite and its own container — s
 [`vscode-extension/CONTRIBUTING.md`](vscode-extension/CONTRIBUTING.md).
 
 CI ejecuta todos los archivos Bats en los tres sistemas. En Windows los reparte
-en cuatro grupos por posición en el glob `tests/*.bats`, sin solapamientos ni
-exclusiones: la suite serial llegó a 5 h 48 min por el costo de crear procesos.
-Cada resultado incluye la duración y la salida del fallo. El lint también valida
+en doce grupos por duración medida, y la integración de VS Code en tres.
+Linux y macOS conservan las suites completas. Cada archivo pertenece a un solo
+grupo y conserva sus hooks; los archivos nuevos también entran, con una duración
+provisional. El perfil vive en `.github/ci/windows-timings.json` y el selector
+compartido en `scripts/ci-shards.cjs`. Para comprobar el reparto:
+
+```sh
+node --test scripts/ci-shards.test.mjs scripts/ci-duration-budget.test.mjs
+node scripts/ci-shards.cjs check
+node scripts/ci-shards.cjs bats 1 12  # archivos del primer grupo
+```
+
+El último job compara la duración real de **todos** los jobs Windows con el
+mayor job Linux/macOS de esa misma corrida, después de completar los tests.
+Falla si alguno lo supera o si falta un resultado exitoso; no cancela pruebas
+para cumplir el presupuesto. La espera por un runner queda fuera del tiempo de
+ejecución. El perfil estima con margen respecto de la corrida de referencia;
+si una suite crece, actualizar las mediciones y el reparto juntos. La matriz y
+las dependencias del control tienen gates para no perder grupos ni jobs.
+La medición inicial y su metodología están en
+[`specs/ci/2026-11-05-reparto-windows.md`](specs/ci/2026-11-05-reparto-windows.md).
+
+Cada resultado Bats incluye duración y salida del fallo. El lint también valida
 la sintaxis con el `sh` de cada runner, incluido Bash 3.2 de macOS.
 
 ### Pointing `git review` at this checkout

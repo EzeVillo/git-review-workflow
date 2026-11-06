@@ -1943,3 +1943,35 @@ habría confundido una cancelación con una mejora de rendimiento.
 IntelliJ, Visual Studio, TUI y lint Windows ya estaban por debajo del presupuesto
 y conservan su estructura. El detalle reproducible de mediciones vive en
 `specs/ci/2026-11-05-reparto-windows.md`.
+
+## 22. Presupuesto de diez minutos por job en los tres sistemas
+
+El 6 de noviembre de 2026 Ezequiel pidió bajar cada job a aproximadamente diez
+minutos. El presupuesto relativo de §21 dejaba pasar Windows con 32:45 porque
+macOS todavía tardaba 59:11. Además, un archivo Bats consumía 27 minutos por sí
+solo y un archivo de integración de VS Code, unos veinte: aumentar solamente
+el número de grupos no podía bajar esos pisos.
+
+El perfil pasa a `.github/ci/test-timings.json`, con mediciones propias de
+Linux, macOS y Windows de la corrida 42140635158. El objetivo de planificación
+es ocho minutos, incluidos sesenta segundos estimados de preparación para
+Bats y noventa para VS Code; el control final exige diez minutos para todos
+los jobs. La cola no cuenta y ningún test se cancela para cumplir la cifra.
+Los grupos son 3/10/56 para Bats y 1/3/8 para integración, en ese orden de
+sistemas. Lint, IntelliJ, Visual Studio y TUI conservan su estructura.
+
+Sólo los once archivos Bats y los dos archivos Mocha Windows con fixtures
+independientes auditadas se dividen por casos. Los demás mantienen su ciclo
+completo. Bats usa filtros de nombres literales anclados, por archivo, sin
+eval ni argv enormes. Mocha descubre los tests reales antes de seleccionar,
+conserva su orden y usa grep sin saltear sus hooks. Los casos nuevos entran
+con un costo provisional; un título duplicado o una declaración Bats que el
+lector no entiende aborta, en vez de omitir cobertura silenciosamente.
+
+El reporte final espera a todos los jobs y compara cada duración con el
+presupuesto absoluto, conservando los resultados previos en reruns parciales.
+La matriz tiene gates para los tres sistemas y ambos tipos de suite. El smoke
+independiente de comments status corre una vez por sistema. Más grupos pueden
+crear varias tandas: diez minutos por job no promete diez por corrida completa.
+La metodología y la validación quedan en
+`specs/ci/2026-11-06-presupuesto-diez-minutos.md`.

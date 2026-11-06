@@ -153,19 +153,22 @@ and stopped shipping a symlink for, which fails on macOS alone with
 `spawn .../Contents/MacOS/Electron ENOENT`. On Linux without a display, run it
 under `xvfb-run -a`.
 
-En CI, Windows reparte los archivos de integración en tres grupos según los
-tiempos medidos de sus suites completas, incluidos los hooks. Linux y macOS
-siguen ejecutando todo. Para reproducir un grupo desde este directorio:
+En CI, la integración se reparte en un grupo Linux, tres macOS y ocho Windows,
+con tiempos medidos por sistema y un objetivo planificado de ocho minutos por
+job. Los dos archivos Windows más costosos tienen casos independientes y se
+seleccionan por título; los demás conservan su ejecución completa. Mocha
+mantiene el orden original y ejecuta sus hooks alrededor de los casos elegidos.
+Para reproducir un grupo desde este directorio en el sistema correspondiente:
 
 ```sh
-VSCODE_TEST_SHARD=1 VSCODE_TEST_SHARDS=3 npm run test:integration
+VSCODE_TEST_SHARD=1 VSCODE_TEST_SHARDS=8 npm run test:integration
 ```
 
 Las dos variables son obligatorias juntas; sin ellas se ejecuta la suite
 completa. `MOCHA_FILE` y `MOCHA_GREP` conservan su uso de diagnóstico. El selector
 y su perfil viven en `../scripts/ci-shards.cjs` y
-`../.github/ci/windows-timings.json`. El gate de CI comprueba cobertura completa
-y compara todos los jobs Windows con el mayor job Linux/macOS de la corrida.
+`../.github/ci/test-timings.json`. El gate de CI comprueba cobertura completa
+y compara todos los jobs con diez minutos al terminar, sin cancelar tests.
 
 Whichever way you run them, the tests resolve the `git review` in this checkout:
 `runTests.ts` puts `../bin` at the front of the `PATH` it hands to the test

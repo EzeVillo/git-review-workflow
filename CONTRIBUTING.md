@@ -25,7 +25,7 @@ on Windows to be worth avoiding (see
 installed:
 
 ```sh
-shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh visualstudio-extension/bump-version.sh jetbrains-plugin/verification-report.sh tests/sandbox.sh tests/sandbox-min.sh tests/helpers/sandbox-comments.sh
+shellcheck $(find bin -type f ! -name '.gitkeep') install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh visualstudio-extension/bump-version.sh jetbrains-plugin/verification-report.sh tests/sandbox.sh tests/sandbox-min.sh tests/helpers/sandbox-comments.sh scripts/ci-bats.sh
 bats tests/
 ```
 
@@ -34,28 +34,34 @@ CI runs both on every push and pull request (see
 requesting a review. The extension has its own suite and its own container — see
 [`vscode-extension/CONTRIBUTING.md`](vscode-extension/CONTRIBUTING.md).
 
-CI ejecuta todos los archivos Bats en los tres sistemas. En Windows los reparte
-en doce grupos por duración medida, y la integración de VS Code en tres.
-Linux y macOS conservan las suites completas. Cada archivo pertenece a un solo
-grupo y conserva sus hooks; los archivos nuevos también entran, con una duración
-provisional. El perfil vive en `.github/ci/windows-timings.json` y el selector
-compartido en `scripts/ci-shards.cjs`. Para comprobar el reparto:
+CI conserva toda la cobertura en los tres sistemas y apunta a ocho minutos
+planificados por job, con un máximo medido de diez. Bats se reparte en 3 grupos
+Linux, 10 macOS y 56 Windows; la integración de VS Code en 1, 3 y 8,
+respectivamente. El perfil `.github/ci/test-timings.json` registra tiempos
+propios de cada sistema. `scripts/ci-shards.cjs` asigna primero lo más costoso
+al grupo menos cargado. Los archivos grandes auditados se separan por casos
+independientes, conservando sus hooks; los demás se ejecutan completos. Los
+casos y archivos nuevos también entran, con una duración provisional.
+Para comprobar el reparto:
 
 ```sh
 node --test scripts/ci-shards.test.mjs scripts/ci-duration-budget.test.mjs
 node scripts/ci-shards.cjs check
-node scripts/ci-shards.cjs bats 1 12  # archivos del primer grupo
+node scripts/ci-shards.cjs bats 1 56 Windows  # paths, filtros y conteos del primer grupo
+TEST_SHARD=1 TEST_SHARDS=56 RUNNER_OS=Windows sh scripts/ci-bats.sh
 ```
 
-El último job compara la duración real de **todos** los jobs Windows con el
-mayor job Linux/macOS de esa misma corrida, después de completar los tests.
-Falla si alguno lo supera o si falta un resultado exitoso; no cancela pruebas
-para cumplir el presupuesto. La espera por un runner queda fuera del tiempo de
-ejecución. El perfil estima con margen respecto de la corrida de referencia;
-si una suite crece, actualizar las mediciones y el reparto juntos. La matriz y
-las dependencias del control tienen gates para no perder grupos ni jobs.
+El último job compara la duración real de **todos** los jobs con diez minutos,
+después de completar los tests. Falla si alguno supera el presupuesto o falta
+un resultado exitoso; no cancela pruebas para cumplirlo. La espera por un runner
+queda fuera del tiempo de ejecución y puede producir varias tandas. El perfil
+deja dos minutos de margen y conserva la procedencia de sus mediciones; si una
+suite crece, actualizar las mediciones y el reparto juntos. La matriz y las
+dependencias del control tienen gates para no perder grupos, casos ni jobs.
 La medición inicial y su metodología están en
 [`specs/ci/2026-11-05-reparto-windows.md`](specs/ci/2026-11-05-reparto-windows.md).
+El objetivo absoluto y su verificación están en
+[`specs/ci/2026-11-06-presupuesto-diez-minutos.md`](specs/ci/2026-11-06-presupuesto-diez-minutos.md).
 
 Cada resultado Bats incluye duración y salida del fallo. El lint también valida
 la sintaxis con el `sh` de cada runner, incluido Bash 3.2 de macOS.

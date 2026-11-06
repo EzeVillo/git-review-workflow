@@ -47,7 +47,13 @@ describe("comments client integration", function () {
             await api.sendPanelMessage("copyCommentPath", invalid);
             assert.strictEqual(await vscode.env.clipboard.readText(), "Keep the clipboard");
         }
-        await api.sendPanelMessage("copyCommentPath", index);
+        // Opening/editing the document can start a watcher refresh, whose first
+        // phase temporarily has no comment rows. Resolve it before clicking a
+        // current row; keep the unsaved-buffer assertions below unchanged.
+        const current = (await api.refresh()).comments!;
+        const currentIndex = current.documents.findIndex(doc => doc.kind === "local" && doc.path === local.path);
+        assert.ok(currentIndex >= 0);
+        await api.sendPanelMessage("copyCommentPath", currentIndex);
         assert.strictEqual(await vscode.env.clipboard.readText(), local.path);
         assert.ok(document.isDirty, "copying a path must not save a comment buffer");
         assert.strictEqual(fs.readFileSync(local.path, "utf8"), before);

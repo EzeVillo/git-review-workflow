@@ -2,7 +2,8 @@
 
 const {appendFileSync} = require("node:fs");
 const {execFileSync} = require("node:child_process");
-const reportJob = "Windows duration budget";
+const {readProfile} = require("./ci-shards.cjs");
+const reportJob = "CI duration budget";
 
 function latestJobs(jobs) {
     const latest = new Map();
@@ -14,7 +15,8 @@ function latestJobs(jobs) {
     return [...latest.values()];
 }
 
-function compareDurations(jobs) {
+function compareDurations(jobs, maximumMilliseconds = readProfile().maximumMilliseconds) {
+    if (!Number.isFinite(maximumMilliseconds) || maximumMilliseconds <= 0) throw new Error("Invalid job duration budget.");
     const complete = latestJobs(jobs).filter(job => job.name !== reportJob);
     const incomplete = complete.filter(job => job.status !== "completed" || job.conclusion !== "success").map(job => job.name);
     const timed = complete.filter(job => job.status === "completed" && job.conclusion === "success").map(job => {
@@ -22,22 +24,19 @@ function compareDurations(jobs) {
         if (!Number.isFinite(milliseconds) || milliseconds < 0) throw new Error(`Invalid timestamps for ${job.name}`);
         return {...job, milliseconds};
     });
-    const hasLabel = (job, regex) => job.labels?.some(label => regex.test(label));
-    const unix = timed.filter(job => hasLabel(job, /^(ubuntu|macos)(-|$)|^linux$/i));
-    const windows = timed.filter(job => hasLabel(job, /^windows(-|$)/i)).sort((a, b) => b.milliseconds - a.milliseconds);
-    if (!unix.length || !windows.length) throw new Error("Both Windows and Linux/macOS job results are required.");
-    const reference = unix.reduce((max, job) => job.milliseconds > max.milliseconds ? job : max);
-    const exceeded = windows.filter(job => job.milliseconds > reference.milliseconds);
-    return {reference, windows, exceeded, incomplete, passed: !exceeded.length && !incomplete.length};
+    if (!complete.length) throw new Error("Completed CI jobs are required.");
+    timed.sort((a, b) => b.milliseconds - a.milliseconds);
+    const exceeded = timed.filter(job => job.milliseconds > maximumMilliseconds);
+    return {maximumMilliseconds, jobs: timed, exceeded, incomplete, passed: !exceeded.length && !incomplete.length};
 }
 
 function markdown(result) {
     const name = value => value.replaceAll("|", "\\|").replaceAll("\n", " ");
-    return ["## Windows duration budget", "",
-        `Reference: **${name(result.reference.name)} — ${(result.reference.milliseconds / 60000).toFixed(2)} min**.`,
+    return ["## CI duration budget", "",
+        `Maximum execution time per job: **${(result.maximumMilliseconds / 60000).toFixed(2)} min**.`,
         "Execution time excludes time waiting for a runner. All tests finish before this comparison runs.", "",
-        "| Windows job | Minutes | Within reference |", "|---|---:|---|",
-        ...result.windows.map(job => `| ${name(job.name)} | ${(job.milliseconds / 60000).toFixed(2)} | ${job.milliseconds <= result.reference.milliseconds ? "yes" : "no"} |`),
+        "| Job | Minutes | Within budget |", "|---|---:|---|",
+        ...result.jobs.map(job => `| ${name(job.name)} | ${(job.milliseconds / 60000).toFixed(2)} | ${job.milliseconds <= result.maximumMilliseconds ? "yes" : "no"} |`),
         ...(result.incomplete.length ? ["", `Checks without a successful result: ${result.incomplete.map(name).join(", ")}.`] : [])
     ].join("\n") + "\n";
 }
@@ -59,7 +58,7 @@ if (require.main === module) {
         if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
         if (!result.passed) throw new Error(result.incomplete.length
             ? "The timing budget requires all checks to pass."
-            : `Windows jobs exceeded the Linux/macOS reference: ${result.exceeded.map(job => job.name).join(", ")}`);
+            : `Jobs exceeded the ten-minute budget: ${result.exceeded.map(job => job.name).join(", ")}`);
     } catch (error) {
         console.error(error.message);
         process.exitCode = 1;

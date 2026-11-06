@@ -54,27 +54,82 @@ jobs:
       - name: shellcheck
         # find recorre bin/ (incl. bin/git-review-verbs/, fuera del glob bin/*) y
         # excluye .gitkeep; cubre el dispatcher y todos los verbos.
-        run: find bin -type f ! -name '.gitkeep' -exec shellcheck install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh tui/bump-version.sh vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh visualstudio-extension/bump-version.sh jetbrains-plugin/verification-report.sh tests/sandbox.sh tests/sandbox-min.sh tests/helpers/sandbox-comments.sh {} +
+        run: find bin -type f ! -name '.gitkeep' -exec shellcheck install.sh uninstall.sh web-install.sh web-uninstall.sh bump-version.sh tui/bump-version.sh vscode-extension/bump-version.sh jetbrains-plugin/bump-version.sh visualstudio-extension/bump-version.sh jetbrains-plugin/verification-report.sh tests/sandbox.sh tests/sandbox-min.sh tests/helpers/sandbox-comments.sh scripts/ci-bats.sh {} +
 
   test:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest, shard: 1, shards: 1 }
-          - { os: macos-latest, shard: 1, shards: 1 }
-          - { os: windows-latest, shard: 1, shards: 12 }
-          - { os: windows-latest, shard: 2, shards: 12 }
-          - { os: windows-latest, shard: 3, shards: 12 }
-          - { os: windows-latest, shard: 4, shards: 12 }
-          - { os: windows-latest, shard: 5, shards: 12 }
-          - { os: windows-latest, shard: 6, shards: 12 }
-          - { os: windows-latest, shard: 7, shards: 12 }
-          - { os: windows-latest, shard: 8, shards: 12 }
-          - { os: windows-latest, shard: 9, shards: 12 }
-          - { os: windows-latest, shard: 10, shards: 12 }
-          - { os: windows-latest, shard: 11, shards: 12 }
-          - { os: windows-latest, shard: 12, shards: 12 }
+          - { os: ubuntu-latest, shard: 1, shards: 3 }
+          - { os: ubuntu-latest, shard: 2, shards: 3 }
+          - { os: ubuntu-latest, shard: 3, shards: 3 }
+          - { os: macos-latest, shard: 1, shards: 10 }
+          - { os: macos-latest, shard: 2, shards: 10 }
+          - { os: macos-latest, shard: 3, shards: 10 }
+          - { os: macos-latest, shard: 4, shards: 10 }
+          - { os: macos-latest, shard: 5, shards: 10 }
+          - { os: macos-latest, shard: 6, shards: 10 }
+          - { os: macos-latest, shard: 7, shards: 10 }
+          - { os: macos-latest, shard: 8, shards: 10 }
+          - { os: macos-latest, shard: 9, shards: 10 }
+          - { os: macos-latest, shard: 10, shards: 10 }
+          - { os: windows-latest, shard: 1, shards: 56 }
+          - { os: windows-latest, shard: 2, shards: 56 }
+          - { os: windows-latest, shard: 3, shards: 56 }
+          - { os: windows-latest, shard: 4, shards: 56 }
+          - { os: windows-latest, shard: 5, shards: 56 }
+          - { os: windows-latest, shard: 6, shards: 56 }
+          - { os: windows-latest, shard: 7, shards: 56 }
+          - { os: windows-latest, shard: 8, shards: 56 }
+          - { os: windows-latest, shard: 9, shards: 56 }
+          - { os: windows-latest, shard: 10, shards: 56 }
+          - { os: windows-latest, shard: 11, shards: 56 }
+          - { os: windows-latest, shard: 12, shards: 56 }
+          - { os: windows-latest, shard: 13, shards: 56 }
+          - { os: windows-latest, shard: 14, shards: 56 }
+          - { os: windows-latest, shard: 15, shards: 56 }
+          - { os: windows-latest, shard: 16, shards: 56 }
+          - { os: windows-latest, shard: 17, shards: 56 }
+          - { os: windows-latest, shard: 18, shards: 56 }
+          - { os: windows-latest, shard: 19, shards: 56 }
+          - { os: windows-latest, shard: 20, shards: 56 }
+          - { os: windows-latest, shard: 21, shards: 56 }
+          - { os: windows-latest, shard: 22, shards: 56 }
+          - { os: windows-latest, shard: 23, shards: 56 }
+          - { os: windows-latest, shard: 24, shards: 56 }
+          - { os: windows-latest, shard: 25, shards: 56 }
+          - { os: windows-latest, shard: 26, shards: 56 }
+          - { os: windows-latest, shard: 27, shards: 56 }
+          - { os: windows-latest, shard: 28, shards: 56 }
+          - { os: windows-latest, shard: 29, shards: 56 }
+          - { os: windows-latest, shard: 30, shards: 56 }
+          - { os: windows-latest, shard: 31, shards: 56 }
+          - { os: windows-latest, shard: 32, shards: 56 }
+          - { os: windows-latest, shard: 33, shards: 56 }
+          - { os: windows-latest, shard: 34, shards: 56 }
+          - { os: windows-latest, shard: 35, shards: 56 }
+          - { os: windows-latest, shard: 36, shards: 56 }
+          - { os: windows-latest, shard: 37, shards: 56 }
+          - { os: windows-latest, shard: 38, shards: 56 }
+          - { os: windows-latest, shard: 39, shards: 56 }
+          - { os: windows-latest, shard: 40, shards: 56 }
+          - { os: windows-latest, shard: 41, shards: 56 }
+          - { os: windows-latest, shard: 42, shards: 56 }
+          - { os: windows-latest, shard: 43, shards: 56 }
+          - { os: windows-latest, shard: 44, shards: 56 }
+          - { os: windows-latest, shard: 45, shards: 56 }
+          - { os: windows-latest, shard: 46, shards: 56 }
+          - { os: windows-latest, shard: 47, shards: 56 }
+          - { os: windows-latest, shard: 48, shards: 56 }
+          - { os: windows-latest, shard: 49, shards: 56 }
+          - { os: windows-latest, shard: 50, shards: 56 }
+          - { os: windows-latest, shard: 51, shards: 56 }
+          - { os: windows-latest, shard: 52, shards: 56 }
+          - { os: windows-latest, shard: 53, shards: 56 }
+          - { os: windows-latest, shard: 54, shards: 56 }
+          - { os: windows-latest, shard: 55, shards: 56 }
+          - { os: windows-latest, shard: 56, shards: 56 }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -100,24 +155,15 @@ jobs:
       - name: Check concurrency test dependency
         run: timeout 5 sh -c 'exit 0'
       - name: Comments status contract
-        if: runner.os != 'Windows' || matrix.shard == 1
+        if: matrix.shard == 1
         run: bats tests/comments-status.bats
       - name: Run tests
         env:
           TEST_SHARD: ${{ matrix.shard }}
           TEST_SHARDS: ${{ matrix.shards }}
-        # Measured Windows durations balance whole files; every test remains
-        # covered once. Linux/macOS use one shard and retain the full suite.
-        run: |
-          selected=$(node scripts/ci-shards.cjs bats "$TEST_SHARD" "$TEST_SHARDS")
-          set --
-          while IFS= read -r file; do
-            [ -n "$file" ] || continue
-            set -- "$@" "$file"
-          done <<EOF
-          $selected
-          EOF
-          bats --timing --print-output-on-failure "$@"
+        # The manifest preserves whole files unless their fixtures have been
+        # audited for independent case selection. No test names are evaluated.
+        run: sh scripts/ci-bats.sh
 
   vscode-extension:
     strategy:
@@ -125,10 +171,17 @@ jobs:
       matrix:
         include:
           - { os: ubuntu-latest, shard: 1, shards: 1 }
-          - { os: macos-latest, shard: 1, shards: 1 }
-          - { os: windows-latest, shard: 1, shards: 3 }
-          - { os: windows-latest, shard: 2, shards: 3 }
-          - { os: windows-latest, shard: 3, shards: 3 }
+          - { os: macos-latest, shard: 1, shards: 3 }
+          - { os: macos-latest, shard: 2, shards: 3 }
+          - { os: macos-latest, shard: 3, shards: 3 }
+          - { os: windows-latest, shard: 1, shards: 8 }
+          - { os: windows-latest, shard: 2, shards: 8 }
+          - { os: windows-latest, shard: 3, shards: 8 }
+          - { os: windows-latest, shard: 4, shards: 8 }
+          - { os: windows-latest, shard: 5, shards: 8 }
+          - { os: windows-latest, shard: 6, shards: 8 }
+          - { os: windows-latest, shard: 7, shards: 8 }
+          - { os: windows-latest, shard: 8, shards: 8 }
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -366,8 +419,8 @@ jobs:
             CGO_ENABLED=0 GOOS="${target%/*}" GOARCH="${target#*/}" GOARM=7               go build -trimpath -o /dev/null ./cmd/git-review-ui
           done
 
-  windows-duration-budget:
-    name: Windows duration budget
+  duration-budget:
+    name: CI duration budget
     needs: [lint, test, vscode-extension, landing, client-product-surface, jetbrains-plugin, visualstudio-extension, tui]
     if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-latest
@@ -380,7 +433,7 @@ jobs:
         with:
           node-version: 20
       # Compare completed jobs; never cancel tests just to meet a time limit.
-      - name: Compare all Windows jobs with Linux and macOS
+      - name: Check every job against ten minutes
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/ci-duration-budget.cjs

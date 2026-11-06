@@ -138,4 +138,23 @@ casos físicos una sola vez, sin faltantes ni duplicados. Los quince tests del
 reparto y presupuesto, ShellCheck y diff check también pasaron con la
 corrección. El cambio no modifica los parámetros ni el límite de duración.
 
-Falta registrar la corrida nativa del runner con stdin aislado.
+## Resultado nativo final
+
+[CI 42256885831](https://github.com/EzeVillo/git-review-workflow/actions/runs/42256885831), commit `b3418b3`: **106/106 jobs correctos**, incluido el control absoluto de duración.
+
+El mayor job fue [test (macos-latest, 10, 10)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42256885831/job/128026314433), **9:12**. Todos quedaron por debajo de diez minutos de ejecución, incluidos preparación y cierre.
+
+La corrida completa, desde su creación hasta el último cierre, tardó **44:14**, incluida la cola y el reporte; la referencia previa era **64:32**. La disponibilidad de runners sigue afectando este total.
+
+| Suite | Sistema | Grupos | Duración mínima–máxima |
+|---|---|---:|---:|
+| Bats | Linux | 3 | 4:58–6:04 |
+| Bats | macOS | 10 | 5:04–9:12 |
+| Bats | Windows | 64 | 4:23–8:43 |
+| VS Code | Linux | 1 | 3:18–3:18 |
+| VS Code | macOS | 3 | 4:29–5:01 |
+| VS Code | Windows | 10 | 4:08–7:26 |
+
+La auditoría de los logs nativos confirma **1.507 casos Bats por sistema**, sin faltantes ni duplicados, incluidas las omisiones normales de plataforma. El smoke independiente de comments status se excluye de ese total. Las integraciones cubren **121 casos distintos por sistema**, con toda la lista cargada representada una sola vez.
+
+Los checks finales incluyen todos los jobs; los tiempos de la tabla excluyen la cola. No se cancelaron pruebas de esta versión para cumplir el presupuesto. Las dos corridas anteriores quedaron como calibraciones reemplazadas y no se usaron como evidencia de aprobación.

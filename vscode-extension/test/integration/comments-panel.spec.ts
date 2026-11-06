@@ -159,6 +159,13 @@ describe("comments client integration", function () {
             await vscode.commands.executeCommand("gitReview.openChange", entry);
         } else await vscode.commands.executeCommand("gitReview.openAllChanges");
         assert.ok(await waitForNewTab(previous), "the review changes opened");
+        if (view === "diff") {
+            // Settle the diff's initial focus before assigning the selection;
+            // otherwise a late focus event can replace it with the empty side.
+            await vscode.commands.executeCommand(side === "base"
+                ? "workbench.action.compareEditor.focusSecondarySide"
+                : "workbench.action.compareEditor.focusPrimarySide");
+        }
         const editor = vscode.window.visibleTextEditors.find(editor => path.basename(editor.document.uri.fsPath) === "README.md" && editor.document.uri.scheme === (side === "base" ? "git" : "file"));
         assert.ok(editor, "the selected side is visible");
         const selection = side === "base" ? new vscode.Selection(0, 2, 0, 5) : new vscode.Selection(1, 0, 2, 3);

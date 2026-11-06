@@ -290,7 +290,7 @@
         "cases": {}
       },
       "windows": {
-        "shards": 56,
+        "shards": 64,
         "fixedMilliseconds": 60000,
         "defaultMilliseconds": 300000,
         "splitFiles": [
@@ -732,7 +732,8 @@
             "a review on the author's walkthrough emits no draft record": 9398,
             "deleting the draft mid-review names the real cause, not HEAD": 7840
           }
-        }
+        },
+        "partialFileMilliseconds": 15000
       }
     },
     "vscode": {
@@ -791,7 +792,7 @@
         "cases": {}
       },
       "windows": {
-        "shards": 8,
+        "shards": 10,
         "fixedMilliseconds": 90000,
         "defaultMilliseconds": 300000,
         "splitFiles": [

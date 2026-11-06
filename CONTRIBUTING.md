@@ -36,7 +36,7 @@ requesting a review. The extension has its own suite and its own container — s
 
 CI conserva toda la cobertura en los tres sistemas y apunta a ocho minutos
 planificados por job, con un máximo medido de diez. Bats se reparte en 3 grupos
-Linux, 10 macOS y 56 Windows; la integración de VS Code en 1, 3 y 8,
+Linux, 10 macOS y 64 Windows; la integración de VS Code en 1, 3 y 10,
 respectivamente. El perfil `.github/ci/test-timings.json` registra tiempos
 propios de cada sistema. `scripts/ci-shards.cjs` asigna primero lo más costoso
 al grupo menos cargado. Los archivos grandes auditados se separan por casos
@@ -47,8 +47,8 @@ Para comprobar el reparto:
 ```sh
 node --test scripts/ci-shards.test.mjs scripts/ci-duration-budget.test.mjs
 node scripts/ci-shards.cjs check
-node scripts/ci-shards.cjs bats 1 56 Windows  # paths, filtros y conteos del primer grupo
-TEST_SHARD=1 TEST_SHARDS=56 RUNNER_OS=Windows sh scripts/ci-bats.sh
+node scripts/ci-shards.cjs bats 1 64 Windows  # paths, filtros y conteos del primer grupo
+TEST_SHARD=1 TEST_SHARDS=64 RUNNER_OS=Windows sh scripts/ci-bats.sh
 ```
 
 El último job compara la duración real de **todos** los jobs con diez minutos,

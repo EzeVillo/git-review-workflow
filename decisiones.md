@@ -1957,7 +1957,7 @@ Linux, macOS y Windows de la corrida 42140635158. El objetivo de planificación
 es ocho minutos, incluidos sesenta segundos estimados de preparación para
 Bats y noventa para VS Code; el control final exige diez minutos para todos
 los jobs. La cola no cuenta y ningún test se cancela para cumplir la cifra.
-Los grupos son 3/10/56 para Bats y 1/3/8 para integración, en ese orden de
+Los grupos son 3/10/64 para Bats y 1/3/10 para integración, en ese orden de
 sistemas. Lint, IntelliJ, Visual Studio y TUI conservan su estructura.
 
 Sólo los once archivos Bats y los dos archivos Mocha Windows con fixtures
@@ -1975,3 +1975,12 @@ independiente de comments status corre una vez por sistema. Más grupos pueden
 crear varias tandas: diez minutos por job no promete diez por corrida completa.
 La metodología y la validación quedan en
 `specs/ci/2026-11-06-presupuesto-diez-minutos.md`.
+
+La primera medición nativa llevó a ajustar el runner: una preconsulta de
+`bats --count` volvía a procesar cada archivo completo y agregaba decenas de
+segundos por selección parcial en Windows. El guard usa ahora el plan TAP de
+la misma ejecución, con salida en vivo y preservación del exit code sin
+pipefail. El reparto cuenta además quince segundos por archivo parcial en
+Windows, una sola vez por grupo, y favorece reutilizar su preparación. Los
+64 grupos Bats y diez de VS Code dejan margen frente a los 10:33 y 10:02 que
+mostró la calibración inicial; no se amplió el límite para hacerla pasar.

@@ -153,7 +153,7 @@ and stopped shipping a symlink for, which fails on macOS alone with
 `spawn .../Contents/MacOS/Electron ENOENT`. On Linux without a display, run it
 under `xvfb-run -a`.
 
-En CI, la integración se reparte en un grupo Linux, tres macOS y ocho Windows,
+En CI, la integración se reparte en un grupo Linux, tres macOS y diez Windows,
 con tiempos medidos por sistema y un objetivo planificado de ocho minutos por
 job. Los dos archivos Windows más costosos tienen casos independientes y se
 seleccionan por título; los demás conservan su ejecución completa. Mocha
@@ -161,7 +161,7 @@ mantiene el orden original y ejecuta sus hooks alrededor de los casos elegidos.
 Para reproducir un grupo desde este directorio en el sistema correspondiente:
 
 ```sh
-VSCODE_TEST_SHARD=1 VSCODE_TEST_SHARDS=8 npm run test:integration
+VSCODE_TEST_SHARD=1 VSCODE_TEST_SHARDS=10 npm run test:integration
 ```
 
 Las dos variables son obligatorias juntas; sin ellas se ejecuta la suite

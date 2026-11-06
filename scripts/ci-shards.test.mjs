@@ -49,6 +49,16 @@ test("zero-cost skips produce nonempty partitions and enumeration order is irrel
     assert.deepEqual(plan(["c", "a", "b"], 1)[0].files, ["a", "b", "c"]);
 });
 
+test("partial-file preprocessing is charged once and affects case placement", () => {
+    const config = {fixedMilliseconds: 0, partialFileMilliseconds: 20, defaultMilliseconds: 10,
+        files: {a: 60, b: 35}, splitFiles: ["a"], cases: {a: {slow: 30, medium: 20, quick: 10}}};
+    const shards = planShards("vscode", ["a", "b"], 2, {suites: {vscode: {windows: config}}}, "windows");
+    assert.deepEqual(shards.map(shard => shard.estimatedMilliseconds), [65, 70]);
+    assert.equal(shards[1].units.filter(unit => unit.file === "a").length, 2);
+    assert.throws(() => planShards("vscode", ["a"], 1,
+        {suites: {vscode: {windows: {...config, partialFileMilliseconds: -1}}}}, "windows"));
+});
+
 test("Bats filters match literal complete titles and keep files with duplicate titles separate", () => {
     const title = 'a [path].* (x)? $name + "quoted" | end';
     const manifest = batsManifest({files: ["one.bats", "two.bats"], units: [{file: "one.bats", name: title}, {file: "two.bats"}]});
@@ -126,18 +136,17 @@ test("the Bats runner preserves execution and selection failures while checking 
         for (const wrongCount of [false, true]) {
             const cases = selected.files.map(file => {
                 assert.match(file, /^[a-zA-Z0-9/.\-]+$/);
-                return `'${file}') printf '%s\\n' ${selected.units.filter(unit => unit.file === file).length + Number(wrongCount)};;`;
+                return `'${file}') printf '1..%s\\r\\n' ${selected.units.filter(unit => unit.file === file).length + Number(wrongCount)};;`;
             }).join("\n");
             writeFileSync(calls, "");
-            writeFileSync(stub, `#!/bin/sh\nset -eu\nfor value; do :; done\nif [ "$1" = --count ]; then\ncase "$value" in\n${cases}\nesac\nexit 0\nfi\nprintf "%s\\n" "$value" >>"$CI_BATS_CALLS"\nexit 1\n`);
+            writeFileSync(stub, `#!/bin/sh\nset -eu\nfor value; do :; done\ncase "$value" in\n${cases}\nesac\nprintf "%s\\n" "$value" >>"$CI_BATS_CALLS"\nexit ${wrongCount ? 0 : 1}\n`);
             chmodSync(stub, 0o755);
             assert.throws(() => execFileSync("sh", ["scripts/ci-bats.sh"], {
                 cwd: new URL("..", import.meta.url), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: {...process.env,
                     PATH: `${temporary}${path.delimiter}${process.env.PATH}`, CI_BATS_CALLS: calls,
                     TEST_SHARD: String(index + 1), TEST_SHARDS: String(config.shards), RUNNER_OS: "Windows"}
-            }), error => error.status === 1 && (!wrongCount || /selected \d+ cases; expected \d+/.test(error.stderr)));
-            const expected = wrongCount ? selected.files.filter(file => selected.units.some(unit => unit.file === file && unit.name === undefined)) : selected.files;
-            assert.deepEqual(readFileSync(calls, "utf8").trim().split("\n"), expected);
+            }), error => error.status === 1 && /selected \d+ cases; expected \d+/.test(error.stderr) === wrongCount);
+            assert.deepEqual(readFileSync(calls, "utf8").trim().split("\n"), selected.files);
         }
     } finally { rmSync(temporary, {recursive: true, force: true}); }
 });

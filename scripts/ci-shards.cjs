@@ -65,14 +65,19 @@ function planShards(suite, files, count, profile = readProfile(), platform = pla
     const config = profile.suites[suite]?.[platform];
     if (!config) throw new Error(`Unknown test suite/platform: ${suite}/${platform}`);
     if (!Number.isFinite(config.fixedMilliseconds) || config.fixedMilliseconds < 0) throw new Error("Invalid fixed runner duration.");
+    const partialFileMilliseconds = config.partialFileMilliseconds ?? 0;
+    if (!Number.isFinite(partialFileMilliseconds) || partialFileMilliseconds < 0) throw new Error("Invalid partial-file preparation duration.");
     if (!files.length || new Set(files).size !== files.length) throw new Error("Test files must be nonempty and unique.");
     const key = unit => `${unit.file}\0${unit.name ?? ""}`;
     const units = unitsFor(suite, files, config, inventory).sort((a, b) => b.milliseconds - a.milliseconds || (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
     if (!Number.isSafeInteger(count) || count < 1 || count > units.length) throw new Error("Invalid shard count.");
     const shards = Array.from({length: count}, () => ({files: [], units: [], estimatedMilliseconds: config.fixedMilliseconds}));
     for (const item of units) {
-        const shard = shards.reduce((best, candidate) => candidate.estimatedMilliseconds < best.estimatedMilliseconds ||
-            (candidate.estimatedMilliseconds === best.estimatedMilliseconds && candidate.units.length < best.units.length) ? candidate : best);
+        const preparation = shard => item.name !== undefined && !shard.units.some(unit => unit.file === item.file) ? partialFileMilliseconds : 0;
+        const cost = shard => shard.estimatedMilliseconds + preparation(shard);
+        const shard = shards.reduce((best, candidate) => cost(candidate) < cost(best) ||
+            (cost(candidate) === cost(best) && candidate.units.length < best.units.length) ? candidate : best);
+        shard.estimatedMilliseconds += preparation(shard);
         shard.units.push(item);
         shard.estimatedMilliseconds += item.milliseconds;
     }

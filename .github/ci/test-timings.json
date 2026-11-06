@@ -5,8 +5,6 @@
     "commit": "966ca7422ab55f6c339631f2eebac117750194b0",
     "url": "https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158"
   },
-  "targetMilliseconds": 480000,
-  "maximumMilliseconds": 600000,
   "suites": {
     "bats": {
       "linux": {

@@ -1990,3 +1990,16 @@ pesar de un job verde: un hijo podía consumir el stdin del bucle que leía el
 manifest. Cada proceso Bats recibe ahora EOF y el runner compara la cantidad
 de archivos procesados con el manifest. La regresión reproduce explícitamente
 un hijo que lee stdin; no alcanza con comprobar sólo planes o exit codes.
+
+## 23. Diez minutos como objetivo, sin fallo por duración
+
+El 6 de noviembre de 2026 Ezequiel pidió retirar el control de duración de
+§22. Se elimina el job final `CI duration budget`, su implementación y sus
+tests, junto con el rechazo de planes estimados por encima de ocho minutos.
+Los tiempos sirven para equilibrar y observar el reparto; exceder el objetivo
+no es un fallo de corrección y reintentar no mejora la capacidad disponible.
+
+Se conservan todos los grupos, los pesos medidos y las selecciones de casos.
+Los controles de cobertura, filtros, conteos TAP y aislamiento de stdin siguen
+siendo obligatorios. El objetivo aproximado de diez minutos continúa guiando
+la distribución, pero no genera un resultado rojo por variaciones del runner.

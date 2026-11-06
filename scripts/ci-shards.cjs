@@ -133,13 +133,6 @@ function validateWorkflow(yaml, profile = readProfile()) {
             }
         }
     }
-    const jobs = (yaml.split(/^jobs:\s*$/m)[1] ?? "").match(/^  [\w-]+:\s*$/gm)?.map(line => line.trim().slice(0, -1)) ?? [];
-    const report = yaml.split(/^  duration-budget:\s*$/m)[1] ?? "";
-    const awaited = report.match(/^    needs:\s*\[([^\]]+)\]/m)?.[1].split(",").map(job => job.trim()).sort();
-    if (JSON.stringify(awaited) !== JSON.stringify(jobs.filter(job => job !== "duration-budget").sort())) {
-        errors.push("The duration budget must wait for every CI job.");
-    }
-    if (!/^    name: CI duration budget\s*$/m.test(report)) errors.push("The reporting job name must match its exclusion from timing.");
     return errors;
 }
 
@@ -157,7 +150,6 @@ function check() {
         if (JSON.stringify(expected) !== JSON.stringify(selected)) errors.push(`${suite}/${platform}: incomplete or duplicate case coverage`);
         const maximum = Math.max(...plan.map(shard => shard.estimatedMilliseconds));
         lines.push(`| ${suite} | ${platform} | ${config.shards} | ${(maximum / 60000).toFixed(2)} |`);
-        if (maximum > profile.targetMilliseconds) errors.push(`${suite}/${platform} exceeds the planned eight-minute budget`);
     }
     console.log(lines.join("\n"));
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");

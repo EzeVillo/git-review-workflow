@@ -167,8 +167,8 @@ VSCODE_TEST_SHARD=1 VSCODE_TEST_SHARDS=10 npm run test:integration
 Las dos variables son obligatorias juntas; sin ellas se ejecuta la suite
 completa. `MOCHA_FILE` y `MOCHA_GREP` conservan su uso de diagnóstico. El selector
 y su perfil viven en `../scripts/ci-shards.cjs` y
-`../.github/ci/test-timings.json`. El gate de CI comprueba cobertura completa
-y compara todos los jobs con diez minutos al terminar, sin cancelar tests.
+`../.github/ci/test-timings.json`. CI comprueba cobertura completa y publica
+las estimaciones; no falla ni cancela tests por superar un objetivo de duración.
 
 Whichever way you run them, the tests resolve the `git review` in this checkout:
 `runTests.ts` puts `../bin` at the front of the `PATH` it hands to the test

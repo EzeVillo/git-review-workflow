@@ -4,8 +4,9 @@
 
 Pedido de Ezequiel del 6 de noviembre de 2026: que cada job del CI habitual
 tarde aproximadamente diez minutos como máximo. Se planifica para ocho, con
-margen de dos minutos. El reporte espera que terminen las pruebas: exceder el
-presupuesto falla el control, sin cancelar tests ni reducir cobertura.
+margen de dos minutos. Por pedido posterior de Ezequiel del mismo día, se
+retiró el control que fallaba por duración, tanto medida como estimada. Se
+conservan el reparto, las estimaciones informativas y los controles de cobertura.
 La cola queda fuera de la ejecución y puede agregar tandas. No se publican
 versiones ni se cambian los workflows de publicación en este trabajo.
 
@@ -158,3 +159,31 @@ La corrida completa, desde su creación hasta el último cierre, tardó **44:14*
 La auditoría de los logs nativos confirma **1.507 casos Bats por sistema**, sin faltantes ni duplicados, incluidas las omisiones normales de plataforma. El smoke independiente de comments status se excluye de ese total. Las integraciones cubren **121 casos distintos por sistema**, con toda la lista cargada representada una sola vez.
 
 Los checks finales incluyen todos los jobs; los tiempos de la tabla excluyen la cola. No se cancelaron pruebas de esta versión para cumplir el presupuesto. Las dos corridas anteriores quedaron como calibraciones reemplazadas y no se usaron como evidencia de aprobación.
+
+## Retiro del control y análisis de la cola
+
+Por pedido de Ezequiel del mismo día, se elimina el job final de duración y
+el rechazo de planes de más de ocho minutos. El workflow conserva sus 105
+jobs de pruebas y verificaciones, los mismos pesos, grupos y casos. El
+resumen del reparto sigue mostrando estimaciones, sin usarlas como aprobación.
+Validación local en contenedor: diez tests del selector y runner Bats,
+comprobación de las seis distribuciones y Actionlint correctos.
+
+La corrida 42256885831 alcanzó veinte jobs simultáneos en total y cinco en
+macOS. Los diecisiete jobs macOS acumularon 104,4 minutos de ejecución; el
+último esperó 35:25 antes de empezar. Estos datos son de este workflow, no
+una medición de toda la cuenta ni una confirmación de su plan contratado.
+
+La [documentación de límites de GitHub](https://docs.github.com/en/actions/reference/limits),
+consultada el 6 de noviembre de 2026, ofrece veinte jobs simultáneos en Free,
+cuarenta en Pro y sesenta en Team; los tres mantienen un máximo de cinco
+macOS. Pro podría aliviar la cola general, pero no aumenta ese máximo de
+macOS. GitHub permite solicitar un aumento mediante soporte. Los runners
+propios aportan capacidad independiente de los alojados por GitHub.
+
+Para reducir trabajo en cola sin comprar capacidad, una opción pendiente
+es cancelar corridas reemplazadas por otro push de la misma rama mediante
+`concurrency`, y evitar el CI duplicado de push y pull_request. No se
+configuraron estas políticas en este cambio. Los runners estándar de este
+[repositorio público son gratuitos](https://docs.github.com/en/billing/concepts/product-billing/github-actions);
+comprar minutos adicionales no es lo que resuelve esta cola.

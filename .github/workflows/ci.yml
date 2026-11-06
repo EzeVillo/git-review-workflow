@@ -253,9 +253,9 @@ jobs:
         run: |
           node --test scripts/check-client-product-surface.test.mjs
           node scripts/check-client-product-surface.mjs
-      - name: Check CI shard coverage and planned durations
+      - name: Check CI shard coverage and report estimated durations
         run: |
-          node --test scripts/ci-shards.test.mjs scripts/ci-duration-budget.test.mjs
+          node --test scripts/ci-shards.test.mjs
           node scripts/ci-shards.cjs check
       # Same job on purpose: node is already set up, and both checks guard the
       # same thing — a surface the clients share drifting apart in one of them.
@@ -428,22 +428,3 @@ jobs:
             echo "-> $target"
             CGO_ENABLED=0 GOOS="${target%/*}" GOARCH="${target#*/}" GOARM=7               go build -trimpath -o /dev/null ./cmd/git-review-ui
           done
-
-  duration-budget:
-    name: CI duration budget
-    needs: [lint, test, vscode-extension, landing, client-product-surface, jetbrains-plugin, visualstudio-extension, tui]
-    if: ${{ always() && !cancelled() }}
-    runs-on: ubuntu-latest
-    permissions:
-      actions: read
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      # Compare completed jobs; never cancel tests just to meet a time limit.
-      - name: Check every job against ten minutes
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node scripts/ci-duration-budget.cjs

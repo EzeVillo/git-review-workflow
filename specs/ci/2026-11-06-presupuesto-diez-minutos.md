@@ -116,4 +116,26 @@ del host no la reemplace por una selección vacía al abrir el panel.
 Los 64 y diez grupos de la versión calibrada se ejecutaron de nuevo en
 contenedor; sus logs vuelven a cubrir exactamente 1.507 y 121 casos.
 
-Falta registrar la corrida nativa de la versión calibrada.
+## Auditoría física nativa y stdin
+
+La auditoría de los logs de Linux en la
+[corrida calibrada](https://github.com/EzeVillo/git-review-workflow/actions/runs/42252306481)
+encontró 1.392 de los 1.507 casos esperados, aunque los tres jobs habían pasado.
+El segundo grupo procesó 40 de sus 44 archivos: una prueba que leía stdin
+podía consumir las líneas pendientes del manifest del bucle. Faltaron los
+archivos walkthrough-draft-progress, walkthrough-draft-read, walkthrough-guide
+y walkthrough-update: 115 casos en total.
+
+Se reprodujo primero con un Bats simulado que consume stdin: el test falló al
+encontrar sólo el primer archivo procesado. El runner ahora entrega EOF al
+proceso Bats y comprueba además la cantidad total de archivos procesados contra
+el manifest. La regresión conserva la lectura de stdin y pasa con el arreglo,
+tanto para errores del productor como para cantidades TAP equivocadas.
+
+Se ejecutaron en contenedor las selecciones exactas de los tres sistemas:
+3 grupos Linux, 10 macOS y 64 Windows. Cada reparto volvió a cubrir los 1.507
+casos físicos una sola vez, sin faltantes ni duplicados. Los quince tests del
+reparto y presupuesto, ShellCheck y diff check también pasaron con la
+corrección. El cambio no modifica los parámetros ni el límite de duración.
+
+Falta registrar la corrida nativa del runner con stdin aislado.

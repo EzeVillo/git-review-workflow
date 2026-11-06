@@ -124,7 +124,7 @@ test("workflow drift cannot drop or duplicate shards on any platform or omit a d
     assert.ok(validateWorkflow(yaml.replace("name: CI duration budget", "name: Other report"), actual).length > 0);
 });
 
-test("the Bats runner preserves execution and selection failures while checking remaining files", {skip: process.platform === "win32"}, () => {
+test("the Bats runner isolates stdin and preserves failures while checking every file", {skip: process.platform === "win32"}, () => {
     const temporary = mkdtempSync(path.join(tmpdir(), "ci-bats-runner-"));
     try {
         const stub = path.join(temporary, "bats"), calls = path.join(temporary, "calls");
@@ -139,7 +139,7 @@ test("the Bats runner preserves execution and selection failures while checking 
                 return `'${file}') printf '1..%s\\r\\n' ${selected.units.filter(unit => unit.file === file).length + Number(wrongCount)};;`;
             }).join("\n");
             writeFileSync(calls, "");
-            writeFileSync(stub, `#!/bin/sh\nset -eu\nfor value; do :; done\ncase "$value" in\n${cases}\nesac\nprintf "%s\\n" "$value" >>"$CI_BATS_CALLS"\nexit ${wrongCount ? 0 : 1}\n`);
+            writeFileSync(stub, `#!/bin/sh\nset -eu\nfor value; do :; done\ncat >/dev/null\ncase "$value" in\n${cases}\nesac\nprintf "%s\\n" "$value" >>"$CI_BATS_CALLS"\nexit ${wrongCount ? 0 : 1}\n`);
             chmodSync(stub, 0o755);
             assert.throws(() => execFileSync("sh", ["scripts/ci-bats.sh"], {
                 cwd: new URL("..", import.meta.url), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: {...process.env,

@@ -1984,3 +1984,9 @@ pipefail. El reparto cuenta además quince segundos por archivo parcial en
 Windows, una sola vez por grupo, y favorece reutilizar su preparación. Los
 64 grupos Bats y diez de VS Code dejan margen frente a los 10:33 y 10:02 que
 mostró la calibración inicial; no se amplió el límite para hacerla pasar.
+
+La auditoría física posterior encontró cuatro archivos omitidos en Linux a
+pesar de un job verde: un hijo podía consumir el stdin del bucle que leía el
+manifest. Cada proceso Bats recibe ahora EOF y el runner compara la cantidad
+de archivos procesados con el manifest. La regresión reproduce explícitamente
+un hijo que lee stdin; no alcanza con comprobar sólo planes o exit codes.

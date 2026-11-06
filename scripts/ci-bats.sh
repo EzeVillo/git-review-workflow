@@ -9,15 +9,19 @@ manifest="$scratch/manifest"
 node scripts/ci-shards.cjs bats "${TEST_SHARD:?}" "${TEST_SHARDS:?}" "${RUNNER_OS:?}" >"$manifest"
 tab=$(printf '\t')
 failed=0
+expected_files=$(awk 'END { print NR }' "$manifest")
+processed_files=0
 while IFS="$tab" read -r file filter expected; do
 	[ -n "$file" ] || continue
+	processed_files=$((processed_files + 1))
 	printf '\nCI file: %s; filter: %s\n' "$file" "$filter"
 	# Preserve the producer's exit status without pipefail (not POSIX), while
 	# tee keeps live CI output. Check this run's TAP plan instead of invoking
 	# --count: preprocessing each excluded case again is expensive on Windows.
+	# Tests get EOF, never the manifest that this loop is still reading.
 	printf '1\n' >"$scratch/status"
 	if {
-		if bats --formatter tap --timing --print-output-on-failure --filter "$filter" "$file"; then
+		if bats --formatter tap --timing --print-output-on-failure --filter "$filter" "$file" </dev/null; then
 			printf '0\n' >"$scratch/status"
 		fi
 	} 2>&1 | tee "$scratch/output"; then
@@ -34,4 +38,8 @@ while IFS="$tab" read -r file filter expected; do
 		fi
 	fi
 done <"$manifest"
+if [ "$processed_files" != "$expected_files" ]; then
+	printf 'error: processed %s test files; expected %s\n' "$processed_files" "$expected_files" >&2
+	failed=1
+fi
 exit "$failed"

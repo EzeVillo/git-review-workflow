@@ -75,5 +75,55 @@ Validación local en contenedor:
 - Actionlint, los 52 tests del contrato de producto, su gate y el de logos,
   además de `git diff --check`, correctos.
 
-El tiempo Windows nuevo se verificará con la corrida nativa del commit que
-introduce este reparto; las cifras de planificación de arriba son estimaciones.
+Las cifras de planificación de arriba conservan su carácter de estimaciones;
+la medición nativa se registra a continuación.
+
+## Resultado nativo del reparto
+
+[CI 42140635158](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158), commit `966ca74`: **34/34 jobs correctos**, incluido el control de duración. Los **19 jobs Windows** quedaron por debajo de la referencia Unix de esta corrida: **test (macos-latest, 1, 1), 59 min 11 s**. El máximo Windows de **32 min 45 s** también quedó por debajo de los **42 min 03 s** de referencia original.
+
+| Suite Windows | Antes | Después |
+|---|---:|---:|
+| Bats | 83 min 42 s – 134 min 23 s | 20 min 48 s – 32 min 45 s |
+| Integración VS Code | 59 min 39 s | 12 min 17 s – 20 min 40 s |
+
+Desde la creación hasta el cierre del último job, incluida la cola y el reporte, la corrida pasó de **134 min 26 s a 64 min 32 s** (52,0 % menos). La comparación por job sigue excluyendo cola. En esta corrida macOS pasó de 42 min 03 s a 59 min 11 s y quedó como tramo que determina el cierre del CI.
+
+Se contrastaron además los logs nativos: los doce grupos Bats publicaron sus 1.507 casos en orden, sin faltantes ni duplicados dentro de cada grupo, con cuatro omisiones de plataforma. Los tres grupos VS Code publicaron 26, 44 y 51 tests y 18 archivos distintos. El smoke Bats independiente se excluye de ese total.
+
+| Job nuevo | Duración |
+|---|---:|---:|
+| [test (macos-latest, 1, 1)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639792114) | 59 min 11 s |
+| [test (windows-latest, 12, 12)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639792193) | 32 min 45 s |
+| [test (windows-latest, 7, 12)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639792081) | 32 min 25 s |
+| [test (windows-latest, 2, 12)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639792263) | 31 min 56 s |
+| [test (windows-latest, 11, 12)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639792025) | 31 min 50 s |
+| [test (windows-latest, 1, 12)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639791916) | 31 min 10 s |
+| [test (windows-latest, 4, 12)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639792069) | 27 min 05 s |
+| [test (windows-latest, 6, 12)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639792310) | 26 min 49 s |
+| [test (windows-latest, 9, 12)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639792088) | 26 min 35 s |
+| [test (windows-latest, 8, 12)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639792185) | 26 min 32 s |
+| [test (windows-latest, 3, 12)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639791931) | 23 min 49 s |
+| [test (windows-latest, 5, 12)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639792037) | 22 min 44 s |
+| [test (windows-latest, 10, 12)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639792005) | 20 min 48 s |
+| [vscode-extension (windows-latest, 1, 3)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639791708) | 20 min 40 s |
+| [vscode-extension (windows-latest, 3, 3)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639791855) | 14 min 48 s |
+| [test (ubuntu-latest, 1, 1)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639792137) | 14 min 45 s |
+| [vscode-extension (macos-latest, 1, 1)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639792029) | 13 min 02 s |
+| [vscode-extension (windows-latest, 2, 3)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639791871) | 12 min 17 s |
+| [jetbrains-plugin (windows-latest)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639791656) | 6 min 03 s |
+| [tui (windows-latest)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639791827) | 5 min 46 s |
+| [visualstudio-extension (windows-latest)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639791804) | 5 min 11 s |
+| [jetbrains-plugin (ubuntu-latest)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639791777) | 5 min 03 s |
+| [jetbrains-plugin (macos-latest)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639791778) | 4 min 28 s |
+| [vscode-extension (ubuntu-latest, 1, 1)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639791762) | 3 min 16 s |
+| [lint (macos-latest)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639791641) | 2 min 16 s |
+| [lint (windows-latest)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639791599) | 2 min 06 s |
+| [tui (macos-latest)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639791815) | 1 min 49 s |
+| [tui (ubuntu-latest)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639791659) | 1 min 21 s |
+| [lint (ubuntu-latest)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639791795) | 1 min 20 s |
+| [visualstudio-extension (ubuntu-latest)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639791772) | 1 min 05 s |
+| [visualstudio-extension (macos-latest)](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639791695) | 0 min 58 s |
+| [client-product-surface](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639791685) | 0 min 10 s |
+| [Windows duration budget](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127663341388) | 0 min 10 s |
+| [landing](https://github.com/EzeVillo/git-review-workflow/actions/runs/42140635158/job/127639791369) | 0 min 09 s |

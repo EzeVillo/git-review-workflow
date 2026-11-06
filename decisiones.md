@@ -2003,3 +2003,18 @@ Se conservan todos los grupos, los pesos medidos y las selecciones de casos.
 Los controles de cobertura, filtros, conteos TAP y aislamiento de stdin siguen
 siendo obligatorios. El objetivo aproximado de diez minutos continúa guiando
 la distribución, pero no genera un resultado rojo por variaciones del runner.
+
+## 24. Cancelar corridas de CI reemplazadas
+
+El 6 de noviembre de 2026 Ezequiel autorizó empezar a reducir la cola cancelando
+corridas obsoletas automáticamente. `ci.yml` declara concurrencia al nivel del
+workflow, con un grupo formado por `github.workflow` y `github.ref`, y
+`cancel-in-progress: true`. Una corrida nueva reemplaza la ejecución y los
+jobs pendientes de la anterior para la misma referencia. Las referencias de
+PR, ramas y tags son distintas; el nombre del workflow evita interferencias
+con los workflows de publicación.
+
+No se serializan los jobs de la matriz: los 105 jobs del commit vigente
+mantienen su reparto paralelo. Evitar la duplicación entre push y PR queda
+para otro cambio, porque son referencias distintas y esta política conserva
+sus verificaciones independientes.

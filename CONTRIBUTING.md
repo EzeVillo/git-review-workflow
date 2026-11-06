@@ -34,6 +34,11 @@ CI runs both on every push and pull request (see
 requesting a review. The extension has its own suite and its own container — see
 [`vscode-extension/CONTRIBUTING.md`](vscode-extension/CONTRIBUTING.md).
 
+Una corrida nueva de CI cancela la anterior de la misma rama o PR, incluidos
+sus jobs pendientes, para liberar capacidad para el cambio más reciente.
+La agrupación usa el workflow y la referencia completa de GitHub; ramas y PR
+distintos conservan sus corridas independientes.
+
 CI conserva toda la cobertura en los tres sistemas y apunta a unos diez minutos
 de ejecución por job, sin fallar por duración. Bats se reparte en 3 grupos
 Linux, 10 macOS y 64 Windows; la integración de VS Code en 1, 3 y 10,

@@ -4,6 +4,11 @@ on:
   push:
   pull_request:
 
+# Reemplazar corridas obsoletas de la misma rama o PR sin mezclar workflows.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 defaults:
   run:
     shell: bash

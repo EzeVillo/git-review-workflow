@@ -5,6 +5,7 @@ import com.ezevillo.gitreview.domain.FinishOutcome
 import com.ezevillo.gitreview.domain.HousekeepingAction
 import com.ezevillo.gitreview.domain.ReviewIntent
 import com.ezevillo.gitreview.domain.Situation
+import com.ezevillo.gitreview.domain.StateToken
 import com.ezevillo.gitreview.domain.StartFailureCategory
 import com.ezevillo.gitreview.domain.UserCopy
 import com.ezevillo.gitreview.domain.actionToArgv
@@ -56,12 +57,14 @@ class MutationActions(
                     }
                     val situation = fresh.situation
                     if (situation != Situation.NO_REVIEW && situation != Situation.FINISH_PENDING) {
+                        service.refreshNow()
                         return@run StartRunResult.Stale
                     }
                     val argv = actionToArgv("startReview", ActionParams.Start(intent, branch))
-                    val result = service.cliInvoker.invoke(argv.verb, argv.args, cwd, network = argv.network)
+                    val result = service.cliInvoker.invokeWithStateGuard(argv.verb, argv.args, cwd, token.guard, network = argv.network)
                     refreshIdeRepository(project)
                     service.refreshNow()
+                    if (result.exitCode == 4) return@run StartRunResult.Stale
                     if (result.exitCode == 0 && !result.timedOut) {
                         val note = flattenCliMessage(result.stderr)
                         StartRunResult.Ok(note.takeIf { it.isNotEmpty() })
@@ -87,6 +90,7 @@ class MutationActions(
         showFailure: Boolean = true,
         showStale: Boolean = true,
         progressTitle: String? = null,
+        expected: StateToken? = null,
         onDone: ((MutationDone) -> Unit)? = null,
     ) {
         val cwd = cwdOrNull()
@@ -94,7 +98,7 @@ class MutationActions(
             onDone?.invoke(MutationDone(ok = false, stderr = "", stdout = "", noCwd = true))
             return
         }
-        val token = captureToken(service.currentState())
+        val token = expected ?: captureToken(service.currentState())
         val title = progressTitle ?: "git review $action"
         Bg.async(
             project,
@@ -112,14 +116,16 @@ class MutationActions(
                         service.refreshNow()
                         return@run SimpleOutcome.Done(MutationDone(false, stderr = com.ezevillo.gitreview.domain.CommentsCopy.saveFailed))
                     }
-                    val result = service.cliInvoker.invoke(
+                    val result = service.cliInvoker.invokeWithStateGuard(
                         argv.verb,
                         argv.args,
                         cwd,
+                        token.guard,
                         network = argv.network,
                     )
                     refreshIdeRepository(project)
                     service.refreshNow()
+                    if (result.exitCode == 4) return@run SimpleOutcome.Stale
                     SimpleOutcome.Done(
                         MutationDone(
                             ok = result.exitCode == 0 && !result.timedOut,
@@ -181,15 +187,15 @@ class MutationActions(
         }
     }
 
-    fun runHousekeeping(action: HousekeepingAction) {
-        runSimple("cleanReview", ActionParams.Housekeeping(action))
+    fun runHousekeeping(action: HousekeepingAction, expected: StateToken? = null) {
+        runSimple("cleanReview", ActionParams.Housekeeping(action), expected = expected)
     }
 
     /**
      * Finish with VS Code success toasts derived from refreshed state only
      * (never from finish human stdout).
      */
-    fun runFinish(ontoSource: Boolean, onDone: (String?) -> Unit) {
+    fun runFinish(ontoSource: Boolean, expected: StateToken? = null, onDone: (String?) -> Unit) {
         val stateRec = service.currentState().state
         if (stateRec == null) {
             onDone(null)
@@ -206,6 +212,7 @@ class MutationActions(
             "finishReview",
             ActionParams.FinishOnto(ontoSource),
             progressTitle = UserCopy.finishingProgress(source),
+            expected = expected,
         ) { done ->
             if (!done.ok) {
                 onDone(null)

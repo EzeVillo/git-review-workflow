@@ -12,6 +12,14 @@ and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 This file starts at 0.2.1. Earlier versions are only in the
 [GitHub Releases](https://github.com/EzeVillo/git-review-workflow/releases).
 
+## [0.10.2] — 2026-11-06
+
+### Added
+
+- Publish an opaque context guard in active review status reports and accept
+  `--expect-state <token>` before a command. Reject changed review contexts
+  before executing the command, without requiring a full status preflight.
+
 ## [0.10.1] — 2026-11-04
 
 ### Changed

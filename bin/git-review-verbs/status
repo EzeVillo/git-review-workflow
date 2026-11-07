@@ -279,6 +279,8 @@ if [ "$porcelain" -eq 1 ]; then
 		walk_gitdir_abs_init
 		porcelain_row draft "$_walk_gitdir_abs/review-walkthrough/${walk_draft_src:-$src}.md"
 	fi
+	review_guard_capture "$cur" "${_walk_lower:-}"
+	porcelain_row guard "$review_guard"
 	exit 0
 fi
 

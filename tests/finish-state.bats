@@ -309,9 +309,13 @@ EOF
 
 	run git review status --porcelain
 	[ "$status" -eq 0 ]
-	# Se compara entero: sin cierre en curso no aparece ninguna fila `finish`,
-	# y este reporte no lleva nada mas.
-	expected="$(printf 'state\treview/feature/x\tfeature/x\t%s\twhole\tnone\nentry\t1\ta.txt\nbase\tdevelop' "$tip")"
+	# No closure record; the additive context guard must also be usable.
+	guard=$(printf '%s\n' "$output" | awk -F '\t' '$1 == "guard" {print $2}')
+	[[ "$guard" =~ ^[0-9a-f]{40}$ ]]
+	expected="$(printf 'state\treview/feature/x\tfeature/x\t%s\twhole\tnone\nentry\t1\ta.txt\nbase\tdevelop\nguard\t%s' "$tip" "$guard")"
+	[ "$output" = "$expected" ]
+	run git review --expect-state "$guard" status --porcelain
+	[ "$status" -eq 0 ]
 	[ "$output" = "$expected" ]
 
 	git switch --quiet --discard-changes develop

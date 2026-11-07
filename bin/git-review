@@ -8,13 +8,14 @@
 set -eu
 
 prog="git review"
-VERSION="0.10.1"
+VERSION="0.10.2"
 
 usage() {
 	cat <<EOF
 git review workflow — review a pull request branch locally
 
 usage: $prog <command> [<args>]
+       $prog --expect-state <token> <command> [<args>]
        $prog (-h | --version)
 
 Commands:
@@ -56,6 +57,24 @@ Run '$prog <command> -h' for details on each command (git reserves
 EOF
 }
 
+expected_state=''
+if [ "${1:-}" = --expect-state ]; then
+	if [ "$#" -lt 3 ]; then
+		echo 'error: --expect-state requires a token and a command' >&2
+		exit 1
+	fi
+	expected_state=$2
+	case "$expected_state" in
+	''|*[!0-9a-f]*) echo 'error: invalid expected review state' >&2; exit 1 ;;
+	esac
+	if [ "${#expected_state}" -ne 40 ] && [ "${#expected_state}" -ne 64 ]; then
+		echo 'error: invalid expected review state' >&2
+		exit 1
+	fi
+	shift 2
+fi
+
+if [ -z "$expected_state" ]; then
 case "${1:-}" in
 -h | --h | "")
 	usage
@@ -66,6 +85,7 @@ case "${1:-}" in
 	exit 0
 	;;
 esac
+fi
 
 verb="$1"
 
@@ -73,7 +93,7 @@ verb="$1"
 # dot-path like '..' / '.foo'. (A leading '-' was already handled above.) This
 # keeps `git review ../some-binary` from reaching a sibling binary.
 case "$verb" in
-*/* | .*)
+*/* | .* | '')
 	echo "error: '$verb' is not a git review command. See '$prog -h'." >&2
 	exit 1
 	;;
@@ -107,4 +127,22 @@ fi
 # Verbs that use shared helpers source "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh".
 export GIT_REVIEW_LIBEXEC="$libexec"
 shift
+if [ -n "$expected_state" ]; then
+	# The comparison is part of this invocation, before any verb-side effect.
+	# It does not replace the verb's index, document or recovery guards.
+	# shellcheck source=git-review-lib.sh
+	. "$libexec/git-review-lib.sh"
+	# shellcheck disable=SC2119 # No args: read Git, not the verb's arguments.
+	if review_guard_capture; then
+		:
+	else
+		_guard_status=$?
+		if [ "$_guard_status" -eq 4 ]; then echo 'error: review state changed' >&2; fi
+		exit "$_guard_status"
+	fi
+	if [ "$review_guard" != "$expected_state" ]; then
+		echo 'error: review state changed' >&2
+		exit 4
+	fi
+fi
 exec "$target" "$@"

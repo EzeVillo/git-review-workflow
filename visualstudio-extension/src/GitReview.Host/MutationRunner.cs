@@ -15,6 +15,7 @@ public sealed class MutationRunner
     public MutationLock Lock => _lock;
     public bool IsBusy => _lock.IsBusy;
     public Func<string,ActionParams?,Task<bool>>? BeforeMutation {get;set;}
+    public Func<StateToken?>? ExpectedState {get;set;}
 
     public MutationRunner(CliInvoker cli, ReviewStateManager state, Func<string?> cwd)
     {
@@ -27,8 +28,10 @@ public sealed class MutationRunner
         string action,
         ActionParams? params_ = null,
         bool network = false,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        StateToken? expected = null)
     {
+        var token = expected ?? ExpectedState?.Invoke() ?? StaleGuard.CaptureToken(_state.Current);
         var cwd = _cwd();
         if (cwd is null)
             return new InvokeResult("", UserCopy.NoSoleRoot, 1);
@@ -44,14 +47,16 @@ public sealed class MutationRunner
                 return new InvokeResult("",CommentsCopy.saveFailed,1);
             }
 
-            var result = await _cli.InvokeAsync(
+            var result = await _cli.InvokeWithStateGuardAsync(
                 argv.Verb,
                 argv.Args,
                 cwd,
+                token.Guard,
                 network: network || argv.Network,
                 cancellationToken: ct).ConfigureAwait(false);
 
             await _state.RefreshAsync(ct).ConfigureAwait(false);
+            if (result.ExitCode == 4) result = result with { Stderr = UserCopy.Stale };
             return result;
         }).ConfigureAwait(false);
     }
@@ -60,17 +65,20 @@ public sealed class MutationRunner
         string verb,
         IReadOnlyList<string> args,
         bool network = false,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        StateToken? expected = null)
     {
+        var token = expected ?? ExpectedState?.Invoke() ?? StaleGuard.CaptureToken(_state.Current);
         var cwd = _cwd();
         if (cwd is null)
             return new InvokeResult("", UserCopy.NoSoleRoot, 1);
 
         return await _lock.RunAsync(async () =>
         {
-            var result = await _cli.InvokeAsync(verb, args, cwd, network, cancellationToken: ct)
+            var result = await _cli.InvokeWithStateGuardAsync(verb, args, cwd, token.Guard, network, ct)
                 .ConfigureAwait(false);
             await _state.RefreshAsync(ct).ConfigureAwait(false);
+            if (result.ExitCode == 4) result = result with { Stderr = UserCopy.Stale };
             return result;
         }).ConfigureAwait(false);
     }

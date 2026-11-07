@@ -89,6 +89,17 @@ func TestInvokeReviewPrependsReviewVerb(t *testing.T) {
 	}
 }
 
+func TestGuardedInvocationPreservesTheCommandAndArgumentBoundaries(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 0)
+	defer cancel()
+	guard := strings.Repeat("a", 40)
+	res := InvokeReviewGuarded(ctx, "start", []string{"--", "feature/with space"}, guard)
+	want := []string{"git", "review", "--expect-state", guard, "start", "--", "feature/with space"}
+	if !reflect.DeepEqual(res.Argv, want) {
+		t.Fatalf("got %v, want %v", res.Argv, want)
+	}
+}
+
 func TestInvocationLogRecordsStartAndEnd(t *testing.T) {
 	ResetInvocationLogForTest()
 	ctx, cancel := context.WithTimeout(context.Background(), 0)

@@ -1,6 +1,27 @@
 package domain
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+func TestCLIGuardIsOpaqueAndBindsTheCapturedState(t *testing.T) {
+	guard := strings.Repeat("a", 40)
+	if ParseStateGuard("guard\t"+guard+"\r\n") != guard {
+		t.Fatal("missing CLI guard")
+	}
+	for _, invalid := range []string{"", "guard\tbad", "guard\t" + guard + "\nguard\t" + guard} {
+		if ParseStateGuard(invalid) != "" {
+			t.Fatal("accepted an ambiguous or invalid guard")
+		}
+	}
+	a := StateToken{Situation: SituationNoReview, Guard: guard}
+	b := a
+	b.Guard = strings.Repeat("b", 40)
+	if a.Matches(b) {
+		t.Fatal("a changed CLI guard must be stale")
+	}
+}
 
 func TestStateTokenMatches(t *testing.T) {
 	a := StateToken{Branch: "feature", HasBranch: true, Tip: "abc123", HasTip: true, Situation: SituationReview}

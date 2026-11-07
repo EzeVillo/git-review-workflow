@@ -43,6 +43,11 @@ interface CliRunner {
     ): InvokeResult
 }
 
+fun CliRunner.invokeWithStateGuard(
+    verb: String, args: List<String>, cwd: String, guard: String?, network: Boolean = false,
+): InvokeResult = if (guard == null) invoke(verb, args, cwd, network)
+else invoke("--expect-state", listOf(guard, verb) + args, cwd, network, timeoutForClass(verb, args))
+
 /**
  * Spawns git-review via [GeneralCommandLine] with forced UTF-8 capture.
  * Domain-facing: no UI.

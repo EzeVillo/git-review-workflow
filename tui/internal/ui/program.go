@@ -604,6 +604,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 // Studio's/JetBrains' host-side adapters.
 func toProjectInput(r host.ReadResult, mouseEnabled, busy bool, statusLine string) domain.ProjectInput {
 	return domain.ProjectInput{
+		Guard:    r.Guard,
 		Comments: r.Comments, CommentsError: r.CommentsError, CommentsLoading: r.CommentsLoading,
 		Situation:    r.Situation,
 		Status:       r.Status,

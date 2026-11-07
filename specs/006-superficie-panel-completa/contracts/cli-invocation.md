@@ -1,5 +1,10 @@
 # Contrato: invocaciones permitidas (enmienda 006)
 
+Enmienda de validación: [guard del contexto de review](../../../contracts/review-state-guard.md).
+El prefijo global `--expect-state <guard>` se permite en las mutaciones del
+contexto mostrado. Las lecturas, `--check` y los comentarios con guards propios
+no lo llevan. El código 4 exige refresco completo y el aviso `STALE` existente.
+
 **Enmienda** de
 [
 `005-ciclo-review-panel/contracts/cli-invocation.md`](../../005-ciclo-review-panel/contracts/cli-invocation.md).

@@ -42,7 +42,13 @@ public sealed class ReviewStateManager
 
     public Task<ReviewState> RefreshAsync(CancellationToken ct = default) => ReadAsync(ct, true, true);
 
-    public Task<ReviewState> ReadForMutationAsync(CancellationToken ct = default) => ReadAsync(ct, false, false);
+    public Task<ReviewState> ReadForMutationAsync(CancellationToken ct = default)
+    {
+        var captured = Current;
+        if (captured.Guard is null) return ReadAsync(ct, false, false);
+        Interlocked.Increment(ref _refreshGen);
+        return Task.FromResult(captured);
+    }
 
     private async Task<ReviewState> ReadAsync(CancellationToken ct, bool includeComments, bool publish)
     {
@@ -232,6 +238,7 @@ public sealed class ReviewStateManager
                     status.Stderr, status.Stdout, "Something went wrong reading the review state."));
         }
 
+        next = next with { Guard = StaleGuard.Parse(status.Stdout) };
         if (includeComments && (status.ExitCode is 0 or 2))
         {
             if (publish) Publish(next with { Comments = new CommentsReport(Array.Empty<CommentRow>(), Loading: true) }, gen);

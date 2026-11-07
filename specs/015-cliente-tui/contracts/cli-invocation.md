@@ -1,5 +1,10 @@
 # Contract: CLI invocation (cliente TUI)
 
+Enmienda de validación: [guard del contexto de review](../../../contracts/review-state-guard.md).
+Las mutaciones de una review activa envían el guard capturado con el gesto.
+Los comandos de lectura y los comentarios con guards propios conservan su argv.
+El código 4 no reintenta: publica `STALE` y programa la lectura completa habitual.
+
 **Consumidor normativo**: `tui/internal/host/invoke.go`
 **Consumidores hermanos**: `vscode-extension/`, `jetbrains-plugin/`, `visualstudio-extension/`
 (misma semántica, cuatro implementaciones)

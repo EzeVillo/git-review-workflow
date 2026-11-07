@@ -51,4 +51,6 @@ data class ReviewState(
     val draftPath: String? = null,
     val stderr: String? = null,
     val comments: CommentsReport? = null,
+    /** CLI-authored context; never derived from panel fields. */
+    val guard: String? = null,
 )

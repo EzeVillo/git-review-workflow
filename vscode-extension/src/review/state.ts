@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import {parseStateGuard} from "./staleGuard";
 import {CommentsReport, parseComments} from "../cli/commentsPorcelain";
 import {
     CandidateBranch,
@@ -33,6 +34,7 @@ import {Situation, situationFor, situationForExitCode} from "./situation";
 export type {Situation} from "./situation";
 
 export interface ReviewState {
+    guard?: string;
     /** One primary report and its comment completion share this host read id. */
     readId?: number;
     comments?: CommentsReport;
@@ -414,7 +416,7 @@ export class ReviewStateManager {
         const commentsPending = baseSituation === "review" || baseSituation === "no-review";
         const comments = commentsPending ? {...parseComments(""), loading: true} : undefined;
         const publish = async (next: ReviewState): Promise<ReviewState> => {
-            next = {...next, readId};
+            next = {...next, readId, guard: parseStateGuard(result.stdout)};
             this.setState(next);
             if (!commentsPending) return next;
             const response = await invokeGitReview("comments", ["status", "--porcelain"], options);

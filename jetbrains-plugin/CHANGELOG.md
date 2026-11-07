@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.2] — 2026-11-06
+
+### Changed
+
+- Validate active review actions inside the CLI invocation instead of reading
+  the complete state before each action. Reload changed contexts without
+  retrying the action; keep the existing checks with older CLI versions.
+
 ## [0.5.1] — 2026-11-04
 
 ### Changed

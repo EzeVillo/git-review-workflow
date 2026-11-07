@@ -173,18 +173,25 @@ func appendResultLog(res Result, startedAt time.Time) {
 // via context.WithTimeout, so a caller in a test can impose a much shorter
 // deadline than the class would without this function knowing it.
 func InvokeReview(ctx context.Context, verb string, args []string) Result {
-	return invokeReview(ctx, verb, args)
+	return invokeReview(ctx, verb, args, "")
+}
+func InvokeReviewGuarded(ctx context.Context, verb string, args []string, guard string) Result {
+	return invokeReview(ctx, verb, args, guard)
 }
 func InvokeReviewWithInput(ctx context.Context, verb string, args []string, input string) Result {
-	return invokeReview(ctx, verb, args, input)
+	return invokeReview(ctx, verb, args, "", input)
 }
-func invokeReview(ctx context.Context, verb string, args []string, input ...string) Result {
+func invokeReview(ctx context.Context, verb string, args []string, guard string, input ...string) Result {
 	class := domain.ClassForVerb(verb, args)
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(class.TimeoutMillis())*time.Millisecond)
 	defer cancel()
 
 	argv := make([]string, 0, len(args)+2)
-	argv = append(argv, "review", verb)
+	argv = append(argv, "review")
+	if guard != "" {
+		argv = append(argv, "--expect-state", guard)
+	}
+	argv = append(argv, verb)
 	argv = append(argv, args...)
 
 	extraEnv := []string{gitReviewAdviceEnv}

@@ -15,6 +15,7 @@ import (
 // read Branches/Config and assume they are populated just because the field
 // exists on the struct.
 type ReadResult struct {
+	Guard           string
 	DetailsPending  bool
 	Comments        string
 	CommentsError   string
@@ -77,7 +78,7 @@ func ReadPrimaryState(ctx context.Context, cwd, minVersion string) ReadResult {
 		HasFinishConflict: parseOK && parsed.Finish != nil,
 	}
 
-	result := ReadResult{Stderr: statusRes.Stderr}
+	result := ReadResult{Stderr: statusRes.Stderr, Guard: domain.ParseStateGuard(statusRes.Stdout)}
 
 	switch statusOutcome.ExitCode {
 	case 2:

@@ -2018,3 +2018,31 @@ No se serializan los jobs de la matriz: los 105 jobs del commit vigente
 mantienen su reparto paralelo. Evitar la duplicación entre push y PR queda
 para otro cambio, porque son referencias distintas y esta política conserva
 sus verificaciones independientes.
+
+## 25. Validar el contexto sin reconstruir el panel
+
+El 6 de noviembre de 2026, al medir Next en el sandbox de IntelliJ, el verbo
+costaba unos 1,45 s y cada lectura completa de estado otros 1,4 s. La validación
+previa sólo comparaba situación, rama y tip. Se reemplaza esa consulta por un
+testigo opaco emitido en `status --porcelain` y enviado como prefijo
+`--expect-state <token>` en la misma invocación que ejecuta la operación.
+
+La CLI calcula y compara el contexto antes de entrar al verbo. Una diferencia
+devuelve código 4 sin ejecutarlo; los clientes recargan el reporte y muestran
+el aviso de estado obsoleto, sin repetir una acción sobre un contexto distinto.
+El testigo incluye gitdir, HEAD, rama y metadata de la review activa, incluido
+el cursor y la sesión de Comments. Excluye contenido editable e índice.
+
+Los cuatro clientes conservan el contexto del gesto durante confirmaciones y
+esperas. IntelliJ y las mutaciones de Visual Studio que hacían una prelectura
+completa pueden omitirla. VS Code, TUI y la navegación de Visual Studio ya
+contrastaban modelos en memoria: allí el cambio agrega validación real en la
+CLI, sin prometer el mismo ahorro. Sin testigo válido se conserva la ruta previa.
+
+Fuera de una review activa se mantienen las lecturas de inventario y config.
+Esta precondición optimista no es una transacción ni un lock global frente a
+Git externo concurrente, y no reemplaza las guardas propias de cada verbo.
+El contrato está en `contracts/review-state-guard.md`; el diagnóstico y las
+mediciones, en `specs/rendimiento/2026-11-06-validacion-contexto-clientes.md`.
+Devolver estado desde mutaciones y separar Comments del bloqueo quedan fuera
+de este cambio.

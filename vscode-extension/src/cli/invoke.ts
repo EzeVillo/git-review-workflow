@@ -2,8 +2,12 @@ import type {ChildProcess} from "node:child_process";
 import * as path from "node:path";
 import spawn from "cross-spawn";
 import {logCliEnd, logCliStart} from "./cliLog";
+import {STALE} from "../review/userCopy";
 
 export interface InvokeOptions {
+    /** CLI-authored guard of the state which originated a mutation. */
+    expectedState?: string;
+    onStateMismatch?: () => Promise<unknown>;
     /** UTF-8 body, never included in argv or CLI logs. */
     stdin?: string;
     cwd: string;
@@ -60,6 +64,12 @@ const LOCAL_MUTATION_VERBS = new Set([
 // `start` hace fetch del tip; `forget --delta --stale` hace fetch --prune.
 // El resto de forget es local — ver timeoutForClass + args.
 const NETWORK_MUTATION_VERBS = new Set(["start"]);
+
+export function isContextMutation(verb: string, args: string[]): boolean {
+    if (verb === "comments" || verb === "preview" || args.includes("--check") || args.includes("--stdout")) return false;
+    if (verb === "config") return args.includes("--unset") || (args.length >= 2 && !args.includes("--porcelain"));
+    return LOCAL_MUTATION_VERBS.has(verb) || NETWORK_MUTATION_VERBS.has(verb);
+}
 
 /**
  * Timeout según la clase de la invocación (research.md Decisión 6 de `005`,
@@ -218,7 +228,10 @@ export function invokeGitReview(
     args: string[],
     options: InvokeOptions
 ): Promise<InvokeResult> {
-    const {command, args: commandArgs} = resolveCommand(verb, args, options.gitReviewPath);
+    const guarded = options.expectedState !== undefined && isContextMutation(verb, args);
+    const {command, args: commandArgs} = guarded
+        ? resolveCommand("--expect-state", [options.expectedState!, verb, ...args], options.gitReviewPath)
+        : resolveCommand(verb, args, options.gitReviewPath);
     const timeoutMs = options.timeoutMs ?? timeoutForClass(verb, args);
     const started = Date.now();
     logCliStart(command, commandArgs, options.cwd);
@@ -262,7 +275,12 @@ export function invokeGitReview(
                 stderr: options.stdin === undefined ? result.stderr : "",
                 timedOut: result.timedOut,
             });
-            resolve(result);
+            if (guarded && result.exitCode === 4) {
+                const stale = {...result, stderr: STALE};
+                Promise.resolve().then(() => options.onStateMismatch?.()).then(
+                    () => resolve(stale), () => resolve(stale),
+                );
+            } else resolve(result);
         };
 
         timer = setTimeout(() => {

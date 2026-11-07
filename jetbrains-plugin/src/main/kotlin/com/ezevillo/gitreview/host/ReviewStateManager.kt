@@ -50,8 +50,14 @@ class ReviewStateManager(
         read(cwd, includeComments = true, publish = true, onPrimary = onPrimary)
 
     /** The mutation guard needs current product state, not document inventories. */
-    fun readForMutation(cwd: String?): ReviewState =
-        read(cwd, includeComments = false, publish = false)
+    fun readForMutation(cwd: String?): ReviewState {
+        val captured = current
+        if (captured.guard != null) {
+            generation.incrementAndGet()
+            return captured
+        }
+        return read(cwd, includeComments = false, publish = false)
+    }
 
     private fun read(cwd: String?, includeComments: Boolean, publish: Boolean, onPrimary: ((ReviewState) -> Unit)? = null): ReviewState {
         val gen = generation.incrementAndGet()
@@ -235,15 +241,16 @@ class ReviewStateManager(
             )
         }
 
+        val guarded = state.copy(guard = com.ezevillo.gitreview.domain.parseStateGuard(status.stdout))
         val complete = if (includeComments && (status.exitCode == 0 || status.exitCode == 2)) {
             if (publish && gen == generation.get()) {
-                val primary = state.copy(comments = com.ezevillo.gitreview.domain.CommentsReport(loading = true))
+                val primary = guarded.copy(comments = com.ezevillo.gitreview.domain.CommentsReport(loading = true))
                 accept(gen, primary, onPrimary)
             }
             val report = invoker.invoke("comments", listOf("status", "--porcelain"), cwd)
             val parsed = com.ezevillo.gitreview.domain.parseComments(report.stdout)
-            state.copy(comments = if (report.exitCode == 0) parsed else parsed.copy(rows = parsed.rows + com.ezevillo.gitreview.domain.CommentRow("comments-diagnostic", listOf("", "read", report.stderr))))
-        } else state
+            guarded.copy(comments = if (report.exitCode == 0) parsed else parsed.copy(rows = parsed.rows + com.ezevillo.gitreview.domain.CommentRow("comments-diagnostic", listOf("", "read", report.stderr))))
+        } else guarded
         if (publish) accept(gen, complete)
         return complete
     }

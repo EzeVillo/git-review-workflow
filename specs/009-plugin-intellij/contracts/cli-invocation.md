@@ -1,5 +1,10 @@
 # Contract: CLI invocation (IntelliJ plugin client)
 
+Enmienda de validación: [guard del contexto de review](../../../contracts/review-state-guard.md).
+El prefijo global `--expect-state <guard>` no cambia el verbo lógico ni su clase
+de timeout/red. Sustituye la prelectura completa sólo cuando existe un testigo
+válido emitido por la CLI; el código 4 exige refresco completo y aviso `STALE`.
+
 **Normative consumer**: `jetbrains-plugin/`  
 **Sibling consumer**: `vscode-extension/` (misma semántica; distinta implementación)  
 **Source of truth for wire format**: CLI `bin/` + parsers de referencia en

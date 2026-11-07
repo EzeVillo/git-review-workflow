@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.2] — 2026-11-06
+
+### Changed
+
+- Send the displayed review context with CLI mutations, preserving it across
+  confirmations and document saves. Reload stale contexts without retrying
+  the action; keep compatibility with older CLI versions.
+
 ## [0.5.1] — 2026-11-04
 
 ### Changed

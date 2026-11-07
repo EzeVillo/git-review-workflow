@@ -18,6 +18,33 @@ import org.junit.jupiter.api.Test
  * verdad y se salteaba sola cuando la CLI no estaba en el PATH.
  */
 class ReviewStateManagerTest {
+    @Test fun cliGuardAvoidsTheFullPreMutationReadAndIsForwardedToTheOperation() {
+        val guard = "a".repeat(40)
+        val cli = FakeCliRunner().answer("status", WALK_STATUS + "\nguard\t$guard")
+        val manager = manager(cli)
+        val published = manager.refresh("/repo")
+        cli.calls.clear()
+        assertEquals(guard, published.guard)
+        assertEquals(published, manager.readForMutation("/repo"))
+        assertTrue(cli.calls.isEmpty())
+        cli.answer("--expect-state", InvokeResult("", "error: review state changed", 4))
+        val result = cli.invokeWithStateGuard("next", emptyList(), "/repo", published.guard)
+        assertEquals(4, result.exitCode)
+        assertEquals(listOf("--expect-state"), cli.verbs)
+        assertEquals(listOf(guard, "next"), cli.calls.single().args)
+    }
+
+    @Test fun malformedOrRepeatedCliGuardsCannotEnableTheFastPath() {
+        for (guard in listOf("bad", "a".repeat(40) + "\nguard\t" + "b".repeat(40))) {
+            val cli = FakeCliRunner().answer("status", WALK_STATUS + "\nguard\t$guard")
+            val manager = manager(cli)
+            assertNull(manager.refresh("/repo").guard)
+            cli.calls.clear()
+            manager.readForMutation("/repo")
+            assertEquals(listOf("--version", "status"), cli.verbs)
+        }
+    }
+
     @Test fun primaryStateIsPublishedBeforeTheCommentsRead() {
         val cli = FakeCliRunner().answer("status", WALK_STATUS)
         val manager = manager(cli)

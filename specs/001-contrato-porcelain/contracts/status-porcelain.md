@@ -48,6 +48,12 @@ código, sin importar quién lo detecte ni si se pidió salida porcelain.
 
 ## Registro `state` (exactamente una línea, siempre la primera)
 
+Enmienda del 6 de noviembre de 2026: las reviews activas también emiten un
+registro opcional `guard<TAB><token>` para validar el contexto dentro de la
+invocación de una mutación. No agrega campos a `state`. El protocolo y el
+fallback para CLI anteriores se especifican en
+[`contracts/review-state-guard.md`](../../../contracts/review-state-guard.md).
+
 ```
 state<TAB>branch<TAB>source<TAB>tip<TAB>mode<TAB>walkthrough[<TAB>position<TAB>total<TAB>recorded<TAB>current[<TAB>essential]]
 ```

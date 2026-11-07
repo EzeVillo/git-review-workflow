@@ -35,6 +35,7 @@ const (
 // the property is enforced by the compiler, not by a reviewer noticing a
 // slice in a diff.
 type PanelModel struct {
+	Guard           string
 	Comments        string
 	CommentsError   string
 	CommentsLoading bool

@@ -49,7 +49,8 @@ public sealed record ReviewState(
     /// <summary>012: absolute path of the draft in force, reported by the CLI.</summary>
     string? DraftPath = null,
     string? Stderr = null,
-    CommentsReport? Comments = null)
+    CommentsReport? Comments = null,
+    string? Guard = null)
 {
     public IReadOnlyList<EntryRecord> EntriesList => Entries ?? Array.Empty<EntryRecord>();
     public IReadOnlyList<EntryRecord> FilesList => Files ?? Array.Empty<EntryRecord>();

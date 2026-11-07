@@ -7,6 +7,7 @@ import type {Situation} from "./situation";
  * siendo un testigo válido, sólo que de "no había nada".
  */
 export interface StateToken {
+    guard?: string;
     branch?: string;
     tip?: string;
     situation: Situation;
@@ -14,6 +15,7 @@ export interface StateToken {
 
 export function captureToken(state: ReviewState): StateToken {
     return {
+        guard: state.guard,
         branch: state.state?.branch,
         tip: state.state?.tip,
         situation: state.situation,
@@ -29,6 +31,12 @@ export function tokenStillValid(token: StateToken, state: ReviewState): boolean 
     return (
         token.situation === state.situation &&
         token.branch === state.state?.branch &&
-        token.tip === state.state?.tip
+        token.tip === state.state?.tip && token.guard === state.guard
     );
+}
+
+export function parseStateGuard(output: string): string | undefined {
+    const guards = output.split("\n").map(line => line.replace(/\r$/, ""))
+        .filter(line => line.startsWith("guard\t")).map(line => line.slice(6));
+    return guards.length === 1 && /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(guards[0]) ? guards[0] : undefined;
 }

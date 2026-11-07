@@ -1,5 +1,17 @@
 import * as assert from "node:assert";
-import {resolveCommand, timeoutForClass} from "../../src/cli/invoke";
+import {resolveCommand, timeoutForClass, isContextMutation} from "../../src/cli/invoke";
+
+describe("review context validation scope", () => {
+    it("guards review mutations while preserving dedicated document guards and reads", () => {
+        for (const verb of ["next", "prev", "abort", "finish", "save", "continue", "clean", "forget", "start", "compare"]) {
+            assert.strictEqual(isContextMutation(verb, []), true, verb);
+        }
+        for (const [verb, args] of [["status", ["--porcelain"]], ["comments", ["add"]], ["preview", []],
+            ["config", ["--porcelain"]], ["walkthrough", ["draft", "--build", "--check"]]] as [string, string[]][]) {
+            assert.strictEqual(isContextMutation(verb, args), false, verb);
+        }
+    });
+});
 
 describe("timeoutForClass", () => {
     it("15000 para verbos de lectura", () => {

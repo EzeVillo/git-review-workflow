@@ -78,7 +78,7 @@ export async function abortReview(
                     return undefined;
                 }
                 if (!(await saveSessionComments(stateManager, getInvokeOptions(), undefined, "active"))) return undefined;
-                const invocation = await invokeGitReview("abort", [], getInvokeOptions());
+                const invocation = await invokeGitReview("abort", [], {...getInvokeOptions(), expectedState: token.guard});
                 // Refrescar pase lo que pase (ver continueReview.ts): dice dónde
                 // quedó el repositorio; la salida humana no se parsea nunca.
                 await stateManager.refresh();

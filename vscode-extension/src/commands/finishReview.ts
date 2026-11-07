@@ -109,7 +109,7 @@ export async function finishReview(
                     return undefined;
                 }
                 if (!(await saveSessionComments(stateManager, getInvokeOptions(), undefined, "all"))) return undefined;
-                const result = await invokeGitReview("finish", args, getInvokeOptions());
+                const result = await invokeGitReview("finish", args, {...getInvokeOptions(), expectedState: token.guard});
                 // Refrescar pase lo que pase: el panel necesita el estado real.
                 await stateManager.refresh();
                 return result;
@@ -202,7 +202,7 @@ export async function undoFinish(
                     return undefined;
                 }
                 if (!(await saveSessionComments(stateManager, getInvokeOptions(), undefined, "all"))) return undefined;
-                const result = await invokeGitReview("finish", ["--abort"], getInvokeOptions());
+                const result = await invokeGitReview("finish", ["--abort"], {...getInvokeOptions(), expectedState: token.guard});
                 await stateManager.refresh();
                 return result;
             }
@@ -267,7 +267,7 @@ export async function undoFinish(
                 const result = await invokeGitReview(
                     "finish",
                     ["--abort", "--force"],
-                    getInvokeOptions()
+                    {...getInvokeOptions(), expectedState: token.guard}
                 );
                 await stateManager.refresh();
                 return result;
@@ -317,7 +317,7 @@ export async function resumeFinish(
             {location: vscode.ProgressLocation.Notification, title: "Resuming the finish…"},
             async () => {
                 if (!(await saveSessionComments(stateManager, getInvokeOptions(), undefined, "all"))) return undefined;
-                const invocation = await invokeGitReview("finish", args, getInvokeOptions());
+                const invocation = await invokeGitReview("finish", args, {...getInvokeOptions(), expectedState: state.guard});
                 await stateManager.refresh();
                 return invocation;
             }

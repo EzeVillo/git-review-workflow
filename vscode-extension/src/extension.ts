@@ -141,7 +141,8 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
     initCliLog(context.subscriptions);
 
     function getInvokeOptions(): InvokeOptions {
-        return {cwd: target?.rootUri.fsPath ?? "", gitReviewPath: configuredGitReviewPath()};
+        return {cwd: target?.rootUri.fsPath ?? "", gitReviewPath: configuredGitReviewPath(),
+            expectedState: stateManager.state.guard, onStateMismatch: () => stateManager.refresh()};
     }
 
     const stateManager = new ReviewStateManager(getInvokeOptions);

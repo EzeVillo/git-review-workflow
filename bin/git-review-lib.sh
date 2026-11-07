@@ -107,6 +107,39 @@ EOF
 	printf '%b\n' "$_rc_value"
 }
 
+# A command-local context fingerprint, not a hash of the panel or working tree.
+# Reports reuse their already loaded config/current branch/walk lower. Guarded
+# invocations read those from Git, without parsing a walkthrough or Comments.
+# No -w, filters or index refresh: producing a guard creates no Git objects.
+review_guard_capture() {
+	_rg_gitdir=$(git rev-parse --absolute-git-dir) || return 1
+	if [ "$#" -ge 1 ]; then
+		_rg_cur=$1
+	else
+		_rg_cur=$(git symbolic-ref --quiet --short HEAD || true)
+	fi
+	case "$_rg_cur" in review/*) ;; *) return 4 ;; esac
+	_rg_head=${2:-}
+	if [ -z "$_rg_head" ]; then
+		_rg_head=$(git rev-parse --verify HEAD 2>/dev/null || printf unborn)
+	fi
+	if [ "${_review_config_ready:-0}" -ne 1 ]; then review_config_init; fi
+	[ "${_review_config_ready:-0}" -eq 1 ] || return 1
+	# shellcheck disable=SC2034 # Output for callers of this sourced library.
+	review_guard=$(
+		{
+			printf '%s\000' git-review-state-v1 "$_rg_gitdir" "$_rg_cur" "$_rg_head"
+			while IFS= read -r _rg_line; do
+				[ -n "$_rg_line" ] || continue
+				_rg_key=${_rg_line%%"$_review_config_tab"*}
+				case "$_rg_key" in "branch.$_rg_cur.review"*) printf '%s\000' "$_rg_line" ;; esac
+			done <<EOF
+$_review_config_records
+EOF
+		} | git hash-object --stdin
+	) || return 1
+}
+
 # Manifests are data, never shell. Duplicate keys and unsafe file types fail.
 comments_field() {
 	comments_safe_path "$1" || return 1

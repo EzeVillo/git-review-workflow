@@ -4,6 +4,15 @@ Referencia completa de la línea de comandos de git-review-workflow.
 
 [Volver al README](README.es.md) · [English](CLI.md)
 
+## Validar una review mostrada antes de actuar
+
+Durante una review activa, `status --porcelain` incluye un registro `guard` opaco.
+Los clientes y automatizaciones pueden devolverlo mediante
+`git review --expect-state <token> <comando> [<args>]`. Si difiere, devuelve el
+código 4 sin ejecutar el comando; hay que leer el estado completo antes de decidir
+qué hacer. Editar código no invalida el token. Las invocaciones existentes no
+cambian. Ver [el contrato de validación](contracts/review-state-guard.md).
+
 ## Comandos
 
 > **Cómo leer la sintaxis:** `<x>` es **obligatorio**, `[x]` es **opcional**, y

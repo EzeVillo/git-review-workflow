@@ -28,6 +28,7 @@ import (
 // set. action still travels for genericFailureText and mutationDoneMsg's own
 // bookkeeping either way.
 type mutationRequest struct {
+	stateGuard      string
 	stdin           string
 	hasInput        bool
 	latestComments  bool
@@ -112,7 +113,7 @@ func mutationCmd(req mutationRequest, argv domain.Argv, activityGeneration int) 
 		if req.hasInput {
 			result = host.InvokeReviewWithInput(context.Background(), argv.Verb, args, req.stdin)
 		} else {
-			result = host.InvokeReview(context.Background(), argv.Verb, args)
+			result = host.InvokeReviewGuarded(context.Background(), argv.Verb, args, req.stateGuard)
 		}
 		return mutationDoneMsg{action: req.action, params: req.params, result: result, activityGeneration: activityGeneration, successOpenPath: req.successOpenPath, draftStart: req.draftStart, draftFlow: req.draftFlow}
 	}
@@ -125,12 +126,13 @@ func mutationCmd(req mutationRequest, argv domain.Argv, activityGeneration int) 
 func currentStateToken(p domain.PanelModel) domain.StateToken {
 	if p.Situation == domain.SituationReview || p.Situation == domain.SituationFinishConflict {
 		return domain.StateToken{
+			Guard:  p.Guard,
 			Branch: p.Branch, HasBranch: true,
 			Tip: p.Tip, HasTip: p.Tip != "",
 			Situation: p.Situation,
 		}
 	}
-	return domain.StateToken{Situation: p.Situation}
+	return domain.StateToken{Situation: p.Situation, Guard: p.Guard}
 }
 
 // beginMutation is where the lock actually lives: Begin() first — depth 1,
@@ -148,6 +150,9 @@ func (m Model) beginMutation(req mutationRequest, token domain.StateToken) (Mode
 		m.lock.Cancel()
 		m.statusLine = domain.StaleNotice
 		return m, nil
+	}
+	if req.action != "" && (req.argv == nil || req.argv.Verb != "comments") {
+		req.stateGuard = token.Guard
 	}
 	var argv domain.Argv
 	if req.argv != nil {
@@ -214,6 +219,9 @@ var genericFailureText = map[string]string{
 }
 
 func failureMessage(action string, r host.Result) string {
+	if r.ExitCode == 4 {
+		return domain.StaleNotice
+	}
 	if r.TimedOut {
 		return "That command timed out."
 	}

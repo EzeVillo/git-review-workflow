@@ -1,5 +1,5 @@
 import * as assert from "node:assert";
-import {captureToken, tokenStillValid} from "../../src/review/staleGuard";
+import {captureToken, tokenStillValid, parseStateGuard} from "../../src/review/staleGuard";
 // `import type`: `review/state.ts` importa `vscode`, que no existe fuera del
 // host — el tipo se borra en compilación y el módulo no llega a cargarse.
 import type {ReviewState} from "../../src/review/state";
@@ -19,6 +19,14 @@ function noReviewState(): ReviewState {
 }
 
 describe("staleGuard", () => {
+    it("uses only an unambiguous CLI guard and detects changes within the same review", () => {
+        const guard = "a".repeat(40);
+        assert.strictEqual(parseStateGuard(`guard\t${guard}\r\n`), guard);
+        assert.strictEqual(parseStateGuard("guard\tbad"), undefined);
+        assert.strictEqual(parseStateGuard(`guard\t${guard}\nguard\t${guard}`), undefined);
+        const state = {...reviewState("review/feat", "abc123"), guard};
+        assert.strictEqual(tokenStillValid(captureToken(state), {...state, guard: "b".repeat(40)}), false);
+    });
     it("revalidado contra el mismo testigo, aprueba", () => {
         const state = reviewState("review/feat", "abc123");
         const token = captureToken(state);

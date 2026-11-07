@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.2] — 2026-11-06
+
+### Changed
+
+- Validate active review mutations against the displayed CLI context, including
+  actions delayed by confirmation. Reload changed contexts without retrying
+  and retain the previous behavior with older CLI versions.
+
 ## [0.2.1] — 2026-11-04
 
 ### Changed

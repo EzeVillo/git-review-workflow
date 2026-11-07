@@ -20,6 +20,7 @@ public sealed partial class ActionDispatcher
 {
     private readonly GitReviewPanelController _panel;
     private readonly PanelHost _host;
+    private readonly MutationExpectation _expectation = new();
 
     /// <summary>The walkthrough the author commits, relative to the repository root.</summary>
     private const string WalkthroughPath = ".review/walkthrough.md";
@@ -37,6 +38,7 @@ public sealed partial class ActionDispatcher
         _host = host ?? new PanelHost();
         panel.HostAction += HandleAsync;
         panel.Mutations.BeforeMutation = SaveSessionCommentDocumentsAsync;
+        panel.Mutations.ExpectedState = () => _expectation.Current;
         var hintTimer=new System.Windows.Threading.DispatcherTimer{Interval=TimeSpan.FromMilliseconds(200)};
         var reading=false;
         hintTimer.Tick+=async(_,_)=>{
@@ -56,6 +58,12 @@ public sealed partial class ActionDispatcher
     private string? Cwd => _host.Cwd?.Invoke();
 
     public async Task HandleAsync(string wire, int? index, string? supportLinkId)
+    {
+        using var expectation = _expectation.Capture(State);
+        await HandleCoreAsync(wire, index, supportLinkId).ConfigureAwait(true);
+    }
+
+    private async Task HandleCoreAsync(string wire, int? index, string? supportLinkId)
     {
         switch (wire)
         {
@@ -305,7 +313,7 @@ public sealed partial class ActionDispatcher
     {
         if (State.Situation != Situation.Review) return;
         var before = State.State?.Position;
-        var result = await _panel.Mutations.RunActionAsync(wire).ConfigureAwait(true);
+        var result = await _panel.Mutations.RunActionAsync(wire, expected: _expectation.Current).ConfigureAwait(true);
         await _panel.RefreshAsync().ConfigureAwait(true);
         if (result is null) return;
         if (result.ExitCode is not 0 || result.TimedOut)
@@ -1227,7 +1235,7 @@ public sealed partial class ActionDispatcher
         using var reporting = progress is not null && _host.Progress is not null
             ? _host.Progress(progress)
             : null;
-        var token = StaleGuard.CaptureToken(_panel.State.Current);
+        var token = _expectation.Current ?? StaleGuard.CaptureToken(_panel.State.Current);
         var fresh = await _panel.State.ReadForMutationAsync().ConfigureAwait(true);
         if (!StaleGuard.TokenStillValid(token, fresh))
         {
@@ -1237,12 +1245,17 @@ public sealed partial class ActionDispatcher
         }
 
         var result = await _panel.Mutations
-            .RunActionAsync(action, params_, network: network)
+            .RunActionAsync(action, params_, network: network, expected: token)
             .ConfigureAwait(true);
         // Discarded because another mutation holds the lock. The notice belongs to
         // the lock's own listener, which says it for every surface; saying it here
         // as well would show it twice for a click in the panel.
         if (result is null) return null;
+        if (result.ExitCode == 4)
+        {
+            GitReviewDialogs.Info(UserCopy.Stale);
+            return null;
+        }
         if ((result.ExitCode is not 0 || result.TimedOut) && showFailure)
         {
             GitReviewDialogs.CliError(

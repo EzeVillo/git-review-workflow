@@ -8,6 +8,7 @@ import com.ezevillo.gitreview.domain.HousekeepingKind
 import com.ezevillo.gitreview.domain.ReviewLayout
 import com.ezevillo.gitreview.domain.Situation
 import com.ezevillo.gitreview.domain.UserCopy
+import com.ezevillo.gitreview.domain.captureToken
 import com.ezevillo.gitreview.domain.branchPickerItems
 import com.ezevillo.gitreview.domain.branchPickerLabel
 import com.ezevillo.gitreview.domain.confirmCopyFor
@@ -97,6 +98,7 @@ class ContinueReviewAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
         val service = GitReviewService.getInstance(project)
+        val expected = captureToken(service.currentState())
         val branches = service.currentState().branches
         if (branches.isEmpty()) {
             UiMessages.info(project, UserCopy.NO_SAVED_REVIEWS)
@@ -130,6 +132,7 @@ class ContinueReviewAction : AnAction(), DumbAware {
         mutations(e)?.runSimple(
             "continueReview",
             ActionParams.Continue(source),
+            expected = expected,
             progressTitle = UserCopy.continuingProgress(source),
             // La situacion entera cambia --no-review pasa a review--, y esto se
             // dispara tambien desde el menu Tools, con el panel cerrado.
@@ -157,7 +160,7 @@ class FinishReviewAction : AnAction(), DumbAware {
         )
         if (idx < 0) return
         val onto = idx == 1
-        mutations(e)?.runFinish(onto) { msg ->
+        mutations(e)?.runFinish(onto, expected = captureToken(state)) { msg ->
             // El acuse del caso normal es el banner de finish-pending, asi que
             // el panel tiene que estar a la vista: Finish esta en su titulo pero
             // tambien en el menu Tools, donde puede no estarlo.
@@ -184,7 +187,8 @@ class FinishReviewAction : AnAction(), DumbAware {
 class AbortReviewAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        val source = service(e)?.currentState()?.state?.source ?: return
+        val initial = service(e)?.currentState() ?: return
+        val source = initial.state?.source ?: return
         if (!UiMessages.confirm(
                 project,
                 ControlId.ABORT_REVIEW,
@@ -197,6 +201,7 @@ class AbortReviewAction : AnAction(), DumbAware {
         }
         mutations(e)?.runSimple(
             "abortReview",
+            expected = captureToken(initial),
             progressTitle = UserCopy.abortingProgress(source),
         )
     }
@@ -217,7 +222,8 @@ class AbortReviewAction : AnAction(), DumbAware {
 class SaveReviewAction : AnAction(), DumbAware {
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        val source = service(e)?.currentState()?.state?.source ?: return
+        val initial = service(e)?.currentState() ?: return
+        val source = initial.state?.source ?: return
         if (!UiMessages.confirm(
                 project,
                 ControlId.SAVE_REVIEW,
@@ -230,6 +236,7 @@ class SaveReviewAction : AnAction(), DumbAware {
         }
         mutations(e)?.runSimple(
             "saveReview",
+            expected = captureToken(initial),
             progressTitle = UserCopy.savingProgress(source),
         )
     }
@@ -256,6 +263,7 @@ class UndoFinishAction : AnAction(), DumbAware {
 
 /** Shared by the menu action and the panel control. */
 internal fun runUndoFinish(project: Project, mutations: MutationActions, situation: Situation?) {
+    val expected = captureToken(GitReviewService.getInstance(project).currentState())
     val detail = if (situation == Situation.FINISH_CONFLICT) {
         UserCopy.UNDO_DETAIL_CONFLICT
     } else {
@@ -267,6 +275,7 @@ internal fun runUndoFinish(project: Project, mutations: MutationActions, situati
     mutations.runSimple(
         "undoFinish",
         ActionParams.UndoFinish(false),
+        expected = expected,
         showFailure = false,
         progressTitle = UserCopy.UNDOING_PROGRESS,
     ) { done ->
@@ -294,6 +303,7 @@ internal fun runUndoFinish(project: Project, mutations: MutationActions, situati
         mutations.runSimple(
             "undoFinish",
             ActionParams.UndoFinish(true),
+            expected = expected,
             progressTitle = UserCopy.FORCE_UNDOING_PROGRESS,
         )
     }
@@ -493,6 +503,7 @@ class DiscardInventoryAction : AnAction(), DumbAware {
     companion object {
         /** Panel path: review name already known from the inventory row. Confirmation still required. */
         fun discardResolved(project: Project, name: String) {
+            val expected = captureToken(GitReviewService.getInstance(project).currentState())
             val src = sourceFromReviewName(name)
             val action = if (name.startsWith("review-saved/")) {
                 HousekeepingAction(HousekeepingKind.FORGET_SAVED_ONE, src)
@@ -501,7 +512,7 @@ class DiscardInventoryAction : AnAction(), DumbAware {
             }
             val copy = confirmCopyFor(action)
             if (!UiMessages.confirm(project, ControlId.DISCARD_INVENTORY, copy.title, copy.detail, copy.button)) return
-            MutationActions(project, GitReviewService.getInstance(project)).runHousekeeping(action)
+            MutationActions(project, GitReviewService.getInstance(project)).runHousekeeping(action, expected)
         }
     }
 }
@@ -756,9 +767,10 @@ class ShowWhyAction : AnAction(), DumbAware {
 }
 
 private fun confirmAndRun(project: Project, e: AnActionEvent, action: HousekeepingAction) {
+    val expected = captureToken(GitReviewService.getInstance(project).currentState())
     val copy = confirmCopyFor(action)
     if (!UiMessages.confirm(project, ControlId.CLEAN_REVIEW, copy.title, copy.detail, copy.button)) return
-    mutations(e)?.runHousekeeping(action)
+    mutations(e)?.runHousekeeping(action, expected)
 }
 
 /**

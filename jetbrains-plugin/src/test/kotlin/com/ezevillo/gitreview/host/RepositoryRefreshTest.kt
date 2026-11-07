@@ -22,7 +22,7 @@ class RepositoryRefreshTest {
     @Test
     fun `every completed mutation refreshes IntelliJ before the panel state`() {
         val source = source("host/MutationActions.kt")
-        val invocations = source.split("service.cliInvoker.invoke(").drop(1)
+        val invocations = Regex("service\\.cliInvoker\\.invoke(?:WithStateGuard)?\\(").split(source).drop(1)
         assertEquals(2, invocations.size, "new mutation invocation sites must join the same refresh path")
         invocations.forEach { afterInvocation ->
             val ideRefresh = afterInvocation.indexOf("refreshIdeRepository(project)")

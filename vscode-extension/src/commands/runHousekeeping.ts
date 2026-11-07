@@ -65,6 +65,7 @@ export async function runHousekeeping(
                 if (["clean-one", "clean-keep-fixes", "clean-all"].includes(action.kind) && !(await saveSessionComments(stateManager, getInvokeOptions(), action.source, "all"))) return undefined;
                 const invocation = await invokeGitReview(verb, args, {
                     ...getInvokeOptions(),
+                    expectedState: guard.guard,
                     network,
                 });
                 await stateManager.refresh();

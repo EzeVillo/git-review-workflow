@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.2] — 2026-11-06
+
+### Changed
+
+- Validate active review actions inside the CLI invocation and avoid a full
+  preflight where one was needed. Preserve the originating context across
+  confirmations and reload stale state without retrying the action.
+
 ## [0.4.1] — 2026-11-04
 
 ### Changed

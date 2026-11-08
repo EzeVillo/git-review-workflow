@@ -905,6 +905,10 @@ back on the same commit, with `git review next` / `git review prev` working as
 before. With no argument it resumes the only saved review, or lists them if there
 is more than one; name a branch to pick a specific one.
 
+Both operations recheck comments custody before publishing its transfer. If
+the source session, destination or manifest changes concurrently, they stop
+and preserve the original manifest and any prepared recovery candidate.
+
 Starting a fresh `git review start` on a branch that already has a saved review
 is refused, so you do not silently lose the paused one — resume it or discard it
 with `git review forget --saved` first.

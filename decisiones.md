@@ -2153,3 +2153,25 @@ Después de revisar las mediciones, Ezequiel autorizó commitear estos cortes
 en main. La autorización no incluye push ni publicación. El próximo perfil
 se concentra en el costo interno de Save y en su refresco posterior; las
 muestras únicas del IDE todavía no demuestran una mejora de latencia total.
+
+## 29. Transferir custodia con su propia guarda de publicación
+
+El perfil de Save 0.10.5 mostró 3,62–3,66 s dentro de la transferencia de
+custodia, sobre 8,71–8,80 s totales. El candidato de manifest pasaba por la
+puerta de documentos, que reconstruía dos veces el estado completo de Comments
+y creaba otra copia temporal. Esa lectura no era la comprobación específica
+de origen y destino que requiere una transferencia de custodia.
+
+Save y Continue preparan ahora un único candidato hermano del manifest y
+fijan la identidad de su sesión. Antes del rename releen custodia de ambos
+extremos, rechazan una sesión diferente y comparan la revisión de los bytes.
+Se conserva el lock y se agrega un preflight en el límite de publicación. El
+manifest y la prosa originales no se pierden si cambia la custodia, se edita
+el manifest o falla el rename; el candidato queda recuperable.
+
+La prueba dirigida mostró que, con el código anterior, cambiar el propietario,
+el destino o la sesión mientras se escribía el candidato podía completar Save.
+La relectura específica evita ese resultado sin reconstruir captura o historia.
+`comments_replace` conserva la lectura completa para los documentos que sí la
+necesitan. La optimización vive en la CLI común y no requiere versiones nuevas
+de los clientes.

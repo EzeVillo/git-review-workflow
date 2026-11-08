@@ -41,8 +41,11 @@ guard() { git review status --porcelain | awk -F '\t' '$1=="guard" {print $2}'; 
 	run --separate-stderr sh "$BATS_TEST_DIRNAME/../bin/git-review" --expect-state "$token" save
 	[ "$status" -eq 0 ]
 	[ "$stderr" = '' ]
-	[ "$(awk '$1=="config" && $2=="--null" {n++} END {print n+0}' "$CLOSE_CALLS")" -eq 5 ]
+	# The sixth snapshot is the fresh custody check immediately before publishing
+	# the transfer manifest; full Comments state is no longer reconstructed there.
+	[ "$(awk '$1=="config" && $2=="--null" {n++} END {print n+0}' "$CLOSE_CALLS")" -eq 6 ]
 	[ "$(awk '$1=="config" && $2 ~ /^branch.review\/feature\/comments\./ {n++} END {print n+0}' "$CLOSE_CALLS")" -eq 0 ]
+	[ "$(awk '$1=="merge-base" {n++} END {print n+0}' "$CLOSE_CALLS")" -eq 0 ]
 	[ "$(git branch --show-current)" = main ]
 	git show-ref --verify --quiet refs/heads/review-saved/feature/comments
 	[ "$(cat "$COMMENTS_LOCAL")" = "$before" ]

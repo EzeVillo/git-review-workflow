@@ -929,6 +929,11 @@ vuelta en el mismo commit, con `git review next` / `git review prev` funcionando
 como antes. Sin argumento retoma la única review guardada, o las lista si hay más
 de una; nombrá una rama para elegir cuál.
 
+Ambas operaciones vuelven a comprobar la custodia de comentarios antes de
+publicar su transferencia. Si cambia la sesión de origen, el destino o el
+manifest en paralelo, se detienen y conservan el manifest original y cualquier
+candidato preparado para recuperación.
+
 Empezar un `git review start` nuevo sobre una rama que ya tiene una review
 guardada se rechaza, para que no pierdas la pausada sin querer — retomala o
 descartala con `git review forget --saved` primero.

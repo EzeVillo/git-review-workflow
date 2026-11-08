@@ -12,6 +12,20 @@ and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 This file starts at 0.2.1. Earlier versions are only in the
 [GitHub Releases](https://github.com/EzeVillo/git-review-workflow/releases).
 
+## [0.10.6] — 2026-11-07
+
+### Changed
+
+- Transfer comments custody in Save/Continue without rebuilding the complete
+  comments reading state. Publish one sibling manifest candidate after fresh
+  custody and revision checks.
+
+### Fixed
+
+- Recheck both transfer endpoints after preparing the manifest, reject a
+  changed session, and preserve the original manifest and recovery candidate
+  when concurrent metadata, document bytes or publication prevent transfer.
+
 ## [0.10.5] — 2026-11-07
 
 ### Changed

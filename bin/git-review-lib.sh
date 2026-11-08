@@ -1834,11 +1834,33 @@ comments_transfer_preflight() {
 comments_transfer() {
 	comments_transfer_preflight "$1" "$2" || return 1
 	[ -n "$cc_session" ] || return 0
+	# A custody manifest is not a comment document. Pin this session and publish
+	# its already-sibling candidate directly; comments_replace would rebuild the
+	# full reading/capture state twice without checking the transfer destination.
+	_ct_manifest=$cc_dir/manifest
+	_ct_pinned_session=$cc_session _ct_pinned_context=$cc_context _ct_pinned_owner=$cc_owner
+	_ct_pinned_gitdir=$cm_gitdir
 	_ct_candidate=$(mktemp "$cc_dir/manifest.candidate.XXXXXX") || return 1
-	_ct_original_revision=$(comments_revision "$cc_dir/manifest") || return 1
-	COMMENTS_CUSTODIAN=$_ct_target awk -F '\t' 'BEGIN {OFS="\t"} $1=="custodian" {$0="custodian\t" ENVIRON["COMMENTS_CUSTODIAN"]} {print}' "$cc_dir/manifest" >"$_ct_candidate" || return 1
-	comments_replace "$cc_dir/manifest" "$_ct_candidate" "$_ct_original_revision" || return $?
-	rm -f "$_ct_candidate"
+	_ct_original_revision=$(comments_revision "$_ct_manifest") || return 1
+	COMMENTS_CUSTODIAN=$_ct_target awk -F '\t' 'BEGIN {OFS="\t"} $1=="custodian" {$0="custodian\t" ENVIRON["COMMENTS_CUSTODIAN"]} {print}' "$_ct_manifest" >"$_ct_candidate" || return 1
+	comments_safe_path "$_ct_candidate" || return 1
+	if [ ! -f "$_ct_candidate" ] || [ -L "$_ct_candidate" ]; then
+		comments_error 'comments candidate is not a readable regular file'; return 1
+	fi
+	# Re-read custody at the publication boundary, including config and gitdir.
+	# A different valid session is still not the one whose candidate we prepared.
+	# Keep the candidate on every conflict for recovery, as comments_replace does.
+	comments_transfer_preflight "$1" "$2" || return 1
+	if [ "$cc_dir/manifest" != "$_ct_manifest" ] || [ "$cc_session" != "$_ct_pinned_session" ] ||
+		[ "$cc_context" != "$_ct_pinned_context" ] || [ "$cc_owner" != "$_ct_pinned_owner" ] || [ "$cm_gitdir" != "$_ct_pinned_gitdir" ]; then
+		printf 'error: comments session changed; candidate preserved at %s\n' "$_ct_candidate" >&2; return 4
+	fi
+	if ! comments_check_guards '' "$_ct_original_revision" "$_ct_manifest" 2>/dev/null; then
+		printf 'error: comments document is stale; candidate preserved at %s\n' "$_ct_candidate" >&2; return 4
+	fi
+	if ! mv "$_ct_candidate" "$_ct_manifest"; then
+		comments_error "could not replace comments document; candidate preserved at $_ct_candidate"; return 1
+	fi
 	if [ -n "$cc_context" ]; then git config "branch.$_ct_target.reviewcommentscontext" "$cc_context" || return 1
 	else git config --unset "branch.$_ct_target.reviewcommentscontext" || true
 	fi

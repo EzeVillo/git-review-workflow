@@ -134,6 +134,16 @@ continuar. No se guardan archivos de código ni documentos de otra sesión por
 este atajo, y las guardas de custodia y cierre de la CLI siguen vigentes.
 La TUI no tiene buffers de un editor que deba guardar.
 
+### Transferencia de custodia
+
+Save y Continue publican el manifest de custodia desde un único candidato
+hermano. La sesión, contexto, propietario, gitdir y ruta se fijan al prepararlo.
+Inmediatamente antes de publicar se releen origen y destino y se contrasta
+la revisión de bytes del manifest. Una sesión distinta no se adopta aunque
+sea válida; un conflicto o fallo de rename conserva original y candidato.
+Esta escritura interna de metadata no reconstruye el estado de lectura de
+Comments. Los documentos Local/Shared mantienen sus guardas propias.
+
 ### Refrescos observados durante una operación
 
 En los tres IDE, los watchers conservan las señales mientras el lock de

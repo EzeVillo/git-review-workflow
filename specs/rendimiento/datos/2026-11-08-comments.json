@@ -1,0 +1,1269 @@
+{
+  "schema": 1,
+  "date": "2026-11-08",
+  "product_commit": "492877b",
+  "checkout": "a7517f0",
+  "versions": {
+    "published_plugin": "0.4.0",
+    "published_cli": "0.9.0",
+    "current_plugin": "0.5.7",
+    "current_cli": "0.10.9"
+  },
+  "ui": {
+    "method": "Actual isolated IntelliJ2026.1. Same seed and path, old then current; no alternating order. Primary pipeline is first CLI start through final primary CLI end. Excludes secondary why/comments status; does not measure last paint or whole click latency. Warmups excluded from reported medians.",
+    "samples": [
+      {
+        "id": "prod-warm-next",
+        "verb": "next",
+        "variant": "prod",
+        "mode": "warmup",
+        "mutation_seconds": 2.3025197982788086,
+        "principal_pipeline_seconds": 7.228810787200928,
+        "all_cli_pipeline_seconds": 9.044334888458252,
+        "paths_seconds": 0,
+        "calls": 7,
+        "warmup": true
+      },
+      {
+        "id": "prod-warm-prev",
+        "verb": "prev",
+        "variant": "prod",
+        "mode": "warmup",
+        "mutation_seconds": 3.1271719932556152,
+        "principal_pipeline_seconds": 8.356231927871704,
+        "all_cli_pipeline_seconds": 10.109267950057983,
+        "paths_seconds": 0,
+        "calls": 7,
+        "warmup": true
+      },
+      {
+        "id": "prod-warm-save",
+        "verb": "save",
+        "variant": "prod",
+        "mode": "warmup",
+        "mutation_seconds": 5.395968914031982,
+        "principal_pipeline_seconds": 11.143198013305664,
+        "all_cli_pipeline_seconds": 11.143198013305664,
+        "paths_seconds": 0,
+        "calls": 8,
+        "warmup": true
+      },
+      {
+        "id": "prod-warm-continue",
+        "verb": "continue",
+        "variant": "prod",
+        "mode": "warmup",
+        "mutation_seconds": 3.9221620559692383,
+        "principal_pipeline_seconds": 8.60451889038086,
+        "all_cli_pipeline_seconds": 10.508283853530884,
+        "paths_seconds": 0,
+        "calls": 8,
+        "warmup": true
+      },
+      {
+        "id": "prod-1-next",
+        "verb": "next",
+        "variant": "prod",
+        "mode": "measured",
+        "mutation_seconds": 2.507391929626465,
+        "principal_pipeline_seconds": 7.37273383140564,
+        "all_cli_pipeline_seconds": 9.105691909790039,
+        "paths_seconds": 0,
+        "calls": 7,
+        "warmup": false
+      },
+      {
+        "id": "prod-1-prev",
+        "verb": "prev",
+        "variant": "prod",
+        "mode": "measured",
+        "mutation_seconds": 2.4072699546813965,
+        "principal_pipeline_seconds": 7.235175132751465,
+        "all_cli_pipeline_seconds": 8.988533020019531,
+        "paths_seconds": 0,
+        "calls": 7,
+        "warmup": false
+      },
+      {
+        "id": "prod-1-save",
+        "verb": "save",
+        "variant": "prod",
+        "mode": "measured",
+        "mutation_seconds": 2.9959771633148193,
+        "principal_pipeline_seconds": 7.7676849365234375,
+        "all_cli_pipeline_seconds": 7.7676849365234375,
+        "paths_seconds": 0,
+        "calls": 8,
+        "warmup": false
+      },
+      {
+        "id": "prod-1-continue",
+        "verb": "continue",
+        "variant": "prod",
+        "mode": "measured",
+        "mutation_seconds": 3.9340600967407227,
+        "principal_pipeline_seconds": 8.705780029296875,
+        "all_cli_pipeline_seconds": 10.430320024490356,
+        "paths_seconds": 0,
+        "calls": 8,
+        "warmup": false
+      },
+      {
+        "id": "prod-2-save",
+        "verb": "save",
+        "variant": "prod",
+        "mode": "measured",
+        "mutation_seconds": 2.841792106628418,
+        "principal_pipeline_seconds": 7.479932069778442,
+        "all_cli_pipeline_seconds": 7.479932069778442,
+        "paths_seconds": 0,
+        "calls": 8,
+        "warmup": false
+      },
+      {
+        "id": "current-warm-next",
+        "verb": "next",
+        "variant": "current",
+        "mode": "clean",
+        "mutation_seconds": 1.9353339672088623,
+        "principal_pipeline_seconds": 1.9353339672088623,
+        "all_cli_pipeline_seconds": 3.592620849609375,
+        "paths_seconds": 0,
+        "calls": 2,
+        "warmup": true
+      },
+      {
+        "id": "current-1-prev",
+        "verb": "prev",
+        "variant": "current",
+        "mode": "clean",
+        "mutation_seconds": 1.743685007095337,
+        "principal_pipeline_seconds": 1.743685007095337,
+        "all_cli_pipeline_seconds": 3.468244791030884,
+        "paths_seconds": 0,
+        "calls": 2,
+        "warmup": false
+      },
+      {
+        "id": "current-warm-save",
+        "verb": "save",
+        "variant": "current",
+        "mode": "clean",
+        "mutation_seconds": 4.690770864486694,
+        "principal_pipeline_seconds": 4.690770864486694,
+        "all_cli_pipeline_seconds": 5.761704921722412,
+        "paths_seconds": 0,
+        "calls": 2,
+        "warmup": true
+      },
+      {
+        "id": "current-empty-1-save",
+        "verb": "save",
+        "variant": "current",
+        "mode": "clean",
+        "mutation_seconds": 4.525962829589844,
+        "principal_pipeline_seconds": 4.525962829589844,
+        "all_cli_pipeline_seconds": 5.442631959915161,
+        "paths_seconds": 0,
+        "calls": 2,
+        "warmup": false
+      },
+      {
+        "id": "current-1-continue",
+        "verb": "continue",
+        "variant": "current",
+        "mode": "clean",
+        "mutation_seconds": 7.362167835235596,
+        "principal_pipeline_seconds": 12.341736793518066,
+        "all_cli_pipeline_seconds": 13.871259927749634,
+        "paths_seconds": 0,
+        "calls": 9,
+        "warmup": false
+      },
+      {
+        "id": "current-1-next",
+        "verb": "next",
+        "variant": "current",
+        "mode": "clean",
+        "mutation_seconds": 1.6902461051940918,
+        "principal_pipeline_seconds": 1.6902461051940918,
+        "all_cli_pipeline_seconds": 5.269931077957153,
+        "paths_seconds": 0,
+        "calls": 2,
+        "warmup": false
+      },
+      {
+        "id": "current-2-prev",
+        "verb": "prev",
+        "variant": "current",
+        "mode": "clean",
+        "mutation_seconds": 1.7933800220489502,
+        "principal_pipeline_seconds": 1.7933800220489502,
+        "all_cli_pipeline_seconds": 3.5311279296875,
+        "paths_seconds": 0,
+        "calls": 2,
+        "warmup": false
+      },
+      {
+        "id": "current-empty-2-save",
+        "verb": "save",
+        "variant": "current",
+        "mode": "clean",
+        "mutation_seconds": 4.401285886764526,
+        "principal_pipeline_seconds": 4.401285886764526,
+        "all_cli_pipeline_seconds": 5.3587799072265625,
+        "paths_seconds": 0,
+        "calls": 2,
+        "warmup": false
+      },
+      {
+        "id": "current-notes-1-save",
+        "verb": "save",
+        "variant": "current",
+        "mode": "clean",
+        "mutation_seconds": 5.943586111068726,
+        "principal_pipeline_seconds": 5.943586111068726,
+        "all_cli_pipeline_seconds": 8.261857032775879,
+        "paths_seconds": 0,
+        "calls": 2,
+        "warmup": false
+      },
+      {
+        "id": "current-notes-2-save",
+        "verb": "save",
+        "variant": "current",
+        "mode": "clean",
+        "mutation_seconds": 4.862709045410156,
+        "principal_pipeline_seconds": 4.862709045410156,
+        "all_cli_pipeline_seconds": 7.419161081314087,
+        "paths_seconds": 0,
+        "calls": 2,
+        "warmup": false
+      },
+      {
+        "id": "current-dirty-code-save",
+        "verb": "save",
+        "variant": "current",
+        "mode": "dirty_code",
+        "mutation_seconds": 4.790751934051514,
+        "principal_pipeline_seconds": 5.553807020187378,
+        "all_cli_pipeline_seconds": 7.924610137939453,
+        "paths_seconds": 0.692857027053833,
+        "calls": 3,
+        "warmup": false
+      }
+    ],
+    "aborted": [
+      {
+        "id": "current-dirty-1-save",
+        "reason": "IDE Non-Project Files Protection blocked synthetic editing; permission was not changed"
+      }
+    ]
+  },
+  "native": {
+    "method": "Native Windows. Same seed, three small changed files plus author walkthrough and one private code edit. Prod is CLI0.9.0; legacy is CLI0.10.9 on a review started with0.9.0; empty is a fresh0.10.9 review without comment documents; notes is a fresh0.10.9 review with Local+Shared saved. One warmup per variant then balanced alternating rounds. Save is guarded on current CLI and returns human output in every variant. Three fresh primary reports measured separately. Continue is timed separately, without IDE. Setup, guard capture and assertions excluded. Trace2 enabled equally. No own IDE or test suite runs during measurement. This isolates session/content cost within current engine, not every historical change that shipped with Comments.",
+    "samples": [
+      {
+        "variant": "prod",
+        "warmup": true,
+        "round": 0,
+        "save_seconds": 4.030111399944872,
+        "save_and_reports_seconds": 6.081041999859735,
+        "report_seconds": {
+          "status": 0.33389540016651154,
+          "list": 1.0060094001237303,
+          "config": 0.7107626001816243
+        },
+        "continue_seconds": 5.2660765999462456,
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 35,
+          "rev-parse": 4,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 6,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 34,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 4,
+          "-c": 2
+        }
+      },
+      {
+        "variant": "legacy",
+        "warmup": true,
+        "round": 0,
+        "save_seconds": 3.7292623999528587,
+        "save_and_reports_seconds": 5.526833100011572,
+        "report_seconds": {
+          "status": 0.30260760011151433,
+          "list": 0.8088777998927981,
+          "config": 0.6858584000729024
+        },
+        "continue_seconds": 6.347925300011411,
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 16,
+          "rev-parse": 9,
+          "hash-object": 1,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 9,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 45,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 1,
+          "-c": 1
+        }
+      },
+      {
+        "variant": "empty",
+        "warmup": true,
+        "round": 0,
+        "save_seconds": 4.602260100189596,
+        "save_and_reports_seconds": 6.436585900140926,
+        "report_seconds": {
+          "status": 0.30385660007596016,
+          "list": 0.8776782001368701,
+          "config": 0.6525326000992209
+        },
+        "continue_seconds": 8.388192499987781,
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 21,
+          "rev-parse": 11,
+          "hash-object": 3,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 11,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 63,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "hash-object": 2,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 1,
+          "-c": 1
+        }
+      },
+      {
+        "variant": "notes",
+        "warmup": true,
+        "round": 0,
+        "save_seconds": 4.833202000008896,
+        "save_and_reports_seconds": 6.609369500074536,
+        "report_seconds": {
+          "status": 0.29816569993272424,
+          "list": 0.792983700055629,
+          "config": 0.684780899900943
+        },
+        "continue_seconds": 8.551866499939933,
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 21,
+          "rev-parse": 11,
+          "hash-object": 3,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 11,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 63,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "hash-object": 2,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 1,
+          "-c": 1
+        }
+      },
+      {
+        "variant": "notes",
+        "warmup": false,
+        "round": 1,
+        "save_seconds": 4.694878199836239,
+        "save_and_reports_seconds": 6.548304099822417,
+        "report_seconds": {
+          "status": 0.2792686999309808,
+          "list": 0.8431331999599934,
+          "config": 0.7307887000497431
+        },
+        "continue_seconds": 8.636311399983242,
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 21,
+          "rev-parse": 11,
+          "hash-object": 3,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 11,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 63,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "hash-object": 2,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 1,
+          "-c": 1
+        }
+      },
+      {
+        "variant": "empty",
+        "warmup": false,
+        "round": 1,
+        "save_seconds": 4.547888400033116,
+        "save_and_reports_seconds": 6.300894299987704,
+        "report_seconds": {
+          "status": 0.2983101001009345,
+          "list": 0.8032969001214951,
+          "config": 0.6511534999590367
+        },
+        "continue_seconds": 8.540040000109002,
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 21,
+          "rev-parse": 11,
+          "hash-object": 3,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 11,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 63,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "hash-object": 2,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 1,
+          "-c": 1
+        }
+      },
+      {
+        "variant": "legacy",
+        "warmup": false,
+        "round": 1,
+        "save_seconds": 3.1730704999063164,
+        "save_and_reports_seconds": 4.928368699969724,
+        "report_seconds": {
+          "status": 0.3017837998922914,
+          "list": 0.7698202000465244,
+          "config": 0.6834585999604315
+        },
+        "continue_seconds": 6.077312899986282,
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 16,
+          "rev-parse": 9,
+          "hash-object": 1,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 9,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 45,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 1,
+          "-c": 1
+        }
+      },
+      {
+        "variant": "prod",
+        "warmup": false,
+        "round": 1,
+        "save_seconds": 4.061619200045243,
+        "save_and_reports_seconds": 5.950144700007513,
+        "report_seconds": {
+          "status": 0.2772503001615405,
+          "list": 1.0052445998881012,
+          "config": 0.6057996000163257
+        },
+        "continue_seconds": 5.44392089988105,
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 35,
+          "rev-parse": 4,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 6,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 34,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 4,
+          "-c": 2
+        }
+      },
+      {
+        "variant": "prod",
+        "warmup": false,
+        "round": 2,
+        "save_seconds": 3.902260300004855,
+        "save_and_reports_seconds": 5.749159900005907,
+        "report_seconds": {
+          "status": 0.2762283000629395,
+          "list": 0.9387183000799268,
+          "config": 0.6317187000531703
+        },
+        "continue_seconds": 5.354896500008181,
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 35,
+          "rev-parse": 4,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 6,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 34,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 4,
+          "-c": 2
+        }
+      },
+      {
+        "variant": "legacy",
+        "warmup": false,
+        "round": 2,
+        "save_seconds": 3.3122270999010652,
+        "save_and_reports_seconds": 5.01825930015184,
+        "report_seconds": {
+          "status": 0.27661680011078715,
+          "list": 0.789013999979943,
+          "config": 0.6401609000749886
+        },
+        "continue_seconds": 6.083820400061086,
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 16,
+          "rev-parse": 9,
+          "hash-object": 1,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 9,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 45,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 1,
+          "-c": 1
+        }
+      },
+      {
+        "variant": "empty",
+        "warmup": false,
+        "round": 2,
+        "save_seconds": 4.524995099985972,
+        "save_and_reports_seconds": 6.266934899846092,
+        "report_seconds": {
+          "status": 0.2887020001653582,
+          "list": 0.783215600065887,
+          "config": 0.6697696000337601
+        },
+        "continue_seconds": 8.264235200127587,
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 21,
+          "rev-parse": 11,
+          "hash-object": 3,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 11,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 63,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "hash-object": 2,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 1,
+          "-c": 1
+        }
+      },
+      {
+        "variant": "notes",
+        "warmup": false,
+        "round": 2,
+        "save_seconds": 4.850063200108707,
+        "save_and_reports_seconds": 6.607569299871102,
+        "report_seconds": {
+          "status": 0.2945275001693517,
+          "list": 0.7950121001340449,
+          "config": 0.6677339999005198
+        },
+        "continue_seconds": 9.35833130008541,
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 21,
+          "rev-parse": 11,
+          "hash-object": 3,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 11,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 63,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "hash-object": 2,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 1,
+          "-c": 1
+        }
+      },
+      {
+        "variant": "notes",
+        "warmup": false,
+        "round": 3,
+        "save_seconds": 4.811667899833992,
+        "save_and_reports_seconds": 6.682892000069842,
+        "report_seconds": {
+          "status": 0.29548679990693927,
+          "list": 0.8195662999060005,
+          "config": 0.7559265999589115
+        },
+        "continue_seconds": 8.551126100122929,
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 21,
+          "rev-parse": 11,
+          "hash-object": 3,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 11,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 63,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "hash-object": 2,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 1,
+          "-c": 1
+        }
+      },
+      {
+        "variant": "empty",
+        "warmup": false,
+        "round": 3,
+        "save_seconds": 4.568041800055653,
+        "save_and_reports_seconds": 6.330301199806854,
+        "report_seconds": {
+          "status": 0.27923260000534356,
+          "list": 0.8213997001294047,
+          "config": 0.6613934999331832
+        },
+        "continue_seconds": 8.242836799938232,
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 21,
+          "rev-parse": 11,
+          "hash-object": 3,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 11,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 63,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "hash-object": 2,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 1,
+          "-c": 1
+        }
+      },
+      {
+        "variant": "legacy",
+        "warmup": false,
+        "round": 3,
+        "save_seconds": 3.4540608001407236,
+        "save_and_reports_seconds": 5.2071100999601185,
+        "report_seconds": {
+          "status": 0.2851978000253439,
+          "list": 0.751073099905625,
+          "config": 0.7165440001990646
+        },
+        "continue_seconds": 6.298007299890742,
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 16,
+          "rev-parse": 9,
+          "hash-object": 1,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 9,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 45,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 1,
+          "-c": 1
+        }
+      },
+      {
+        "variant": "prod",
+        "warmup": false,
+        "round": 3,
+        "save_seconds": 3.912518300116062,
+        "save_and_reports_seconds": 5.75390679994598,
+        "report_seconds": {
+          "status": 0.28212860017083585,
+          "list": 0.923515300033614,
+          "config": 0.6355225001461804
+        },
+        "continue_seconds": 5.441110600018874,
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 35,
+          "rev-parse": 4,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 6,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 34,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 4,
+          "-c": 2
+        }
+      },
+      {
+        "variant": "prod",
+        "warmup": false,
+        "round": 4,
+        "save_seconds": 3.9574946998618543,
+        "save_and_reports_seconds": 5.808653800049797,
+        "report_seconds": {
+          "status": 0.2945962999947369,
+          "list": 0.9192278999835253,
+          "config": 0.6371108000166714
+        },
+        "continue_seconds": 5.141615100204945,
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 35,
+          "rev-parse": 4,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 6,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 34,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 4,
+          "-c": 2
+        }
+      },
+      {
+        "variant": "legacy",
+        "warmup": false,
+        "round": 4,
+        "save_seconds": 3.22114560008049,
+        "save_and_reports_seconds": 5.0056153000332415,
+        "report_seconds": {
+          "status": 0.3004483000840992,
+          "list": 0.8192241999786347,
+          "config": 0.6645640002097934
+        },
+        "continue_seconds": 6.147880199830979,
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 16,
+          "rev-parse": 9,
+          "hash-object": 1,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 9,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 45,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 1,
+          "-c": 1
+        }
+      },
+      {
+        "variant": "empty",
+        "warmup": false,
+        "round": 4,
+        "save_seconds": 4.541057700058445,
+        "save_and_reports_seconds": 6.298692400101572,
+        "report_seconds": {
+          "status": 0.2746834000572562,
+          "list": 0.7699231000151485,
+          "config": 0.712806100025773
+        },
+        "continue_seconds": 8.129944099811837,
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 21,
+          "rev-parse": 11,
+          "hash-object": 3,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 11,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 63,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "hash-object": 2,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 1,
+          "-c": 1
+        }
+      },
+      {
+        "variant": "notes",
+        "warmup": false,
+        "round": 4,
+        "save_seconds": 4.97873459989205,
+        "save_and_reports_seconds": 6.85775229986757,
+        "report_seconds": {
+          "status": 0.3324051999952644,
+          "list": 0.8772879999596626,
+          "config": 0.6690693001728505
+        },
+        "continue_seconds": 8.35576320020482,
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 21,
+          "rev-parse": 11,
+          "hash-object": 3,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 11,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 63,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "hash-object": 2,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 1,
+          "-c": 1
+        }
+      }
+    ],
+    "statistics": {
+      "prod": {
+        "save_seconds": {
+          "median": 3.9350064999889582,
+          "min": 3.902260300004855,
+          "max": 4.061619200045243
+        },
+        "save_and_reports_seconds": {
+          "median": 5.7812802999978885,
+          "min": 5.749159900005907,
+          "max": 5.950144700007513
+        },
+        "continue_seconds": {
+          "median": 5.398003550013527,
+          "min": 5.141615100204945,
+          "max": 5.44392089988105
+        },
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 35,
+          "rev-parse": 4,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "save_git_process_count": 49,
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 6,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 34,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 4,
+          "-c": 2
+        },
+        "continue_git_process_count": 57
+      },
+      "legacy": {
+        "save_seconds": {
+          "median": 3.2666863499907777,
+          "min": 3.1730704999063164,
+          "max": 3.4540608001407236
+        },
+        "save_and_reports_seconds": {
+          "median": 5.011937300092541,
+          "min": 4.928368699969724,
+          "max": 5.2071100999601185
+        },
+        "continue_seconds": {
+          "median": 6.1158502999460325,
+          "min": 6.077312899986282,
+          "max": 6.298007299890742
+        },
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 16,
+          "rev-parse": 9,
+          "hash-object": 1,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "save_git_process_count": 36,
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 9,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 45,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 1,
+          "-c": 1
+        },
+        "continue_git_process_count": 67
+      },
+      "empty": {
+        "save_seconds": {
+          "median": 4.544473050045781,
+          "min": 4.524995099985972,
+          "max": 4.568041800055653
+        },
+        "save_and_reports_seconds": {
+          "median": 6.299793350044638,
+          "min": 6.266934899846092,
+          "max": 6.330301199806854
+        },
+        "continue_seconds": {
+          "median": 8.25353600003291,
+          "min": 8.129944099811837,
+          "max": 8.540040000109002
+        },
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 21,
+          "rev-parse": 11,
+          "hash-object": 3,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "save_git_process_count": 45,
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 11,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 63,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "hash-object": 2,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 1,
+          "-c": 1
+        },
+        "continue_git_process_count": 89
+      },
+      "notes": {
+        "save_seconds": {
+          "median": 4.8308655499713495,
+          "min": 4.694878199836239,
+          "max": 4.97873459989205
+        },
+        "save_and_reports_seconds": {
+          "median": 6.645230649970472,
+          "min": 6.548304099822417,
+          "max": 6.85775229986757
+        },
+        "continue_seconds": {
+          "median": 8.593718750053085,
+          "min": 8.35576320020482,
+          "max": 9.35833130008541
+        },
+        "save_git_commands": {
+          "review": 1,
+          "symbolic-ref": 3,
+          "config": 21,
+          "rev-parse": 11,
+          "hash-object": 3,
+          "add": 1,
+          "write-tree": 1,
+          "commit-tree": 1,
+          "update-ref": 1,
+          "switch": 1,
+          "branch": 1
+        },
+        "save_git_process_count": 45,
+        "continue_git_commands": {
+          "review": 1,
+          "rev-parse": 11,
+          "diff": 4,
+          "ls-files": 1,
+          "config": 63,
+          "switch": 1,
+          "reset": 1,
+          "apply": 1,
+          "hash-object": 2,
+          "branch": 1,
+          "symbolic-ref": 1,
+          "show": 1,
+          "-c": 1
+        },
+        "continue_git_process_count": 89
+      }
+    },
+    "assertions": [
+      "Saved main clean",
+      "Continue restores private code and cursor",
+      "Same session through Save/Continue",
+      "Local/Shared byte-identical",
+      "Legacy remains without comments custody metadata"
+    ]
+  },
+  "source_artifacts": "C:\\Users\\ezevi_30ey2ks\\.codex\\visualizations\\2026\\11\\04\\01a1a8ee-2d7a-7dc3-8eab-a6b1de179fec\\comments-audit",
+  "native_artifacts": "C:\\Users\\ezevi_30ey2ks\\.codex\\visualizations\\2026\\11\\04\\01a1a8ee-2d7a-7dc3-8eab-a6b1de179fec\\comments-audit\\native-1794173889935905100"
+}

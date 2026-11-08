@@ -12,6 +12,36 @@ and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 This file starts at 0.2.1. Earlier versions are only in the
 [GitHub Releases](https://github.com/EzeVillo/git-review-workflow/releases).
 
+## [0.10.5] — 2026-11-07
+
+### Changed
+
+- Batch metadata reads during Save and Cancel, validating the displayed context
+  inside the operation. Reload custody metadata after locking and before
+  transferring or discarding comments, preserving concurrent ownership checks.
+
+## [0.10.4] — 2026-11-07
+
+### Changed
+
+- Include the current walk entry's explanation in porcelain navigation replies,
+  using the same walkthrough scan as the entry inventory. Older clients can
+  ignore these optional records; ordinary status output is unchanged.
+
+## [0.10.3] — 2026-11-07
+
+### Added
+
+- Return the complete updated review status from `next --porcelain` and
+  `prev --porcelain`, including the context guard and typed boundary notices.
+  Advertise support through `capability navigation-state` in active status.
+
+### Fixed
+
+- Restore compatibility with macOS's Bash 3.2 POSIX parser in context guards.
+- Validate guarded navigation using the operation's own metadata snapshot and
+  reuse its sequence when producing the reply.
+
 ## [0.10.2] — 2026-11-06
 
 ### Added

@@ -13,6 +13,20 @@ código 4 sin ejecutar el comando; hay que leer el estado completo antes de deci
 qué hacer. Editar código no invalida el token. Las invocaciones existentes no
 cambian. Ver [el contrato de validación](contracts/review-state-guard.md).
 
+En reviews walk y step, `next --porcelain` y `prev --porcelain` devuelven el
+reporte completo de `status --porcelain` actualizado, más `navigation moved|unchanged`
+y un registro `notice` opcional en un extremo. Status anuncia el soporte con
+`capability navigation-state`; los clientes deben comprobar esa capacidad antes
+de usar el flag con una CLI anterior. La salida humana sin el flag no cambia.
+
+La respuesta de navegación walk también puede incluir el porqué de la entrada
+actual: `why<TAB>present<TAB>N` seguido de `why-line<TAB>ordinal<TAB>texto`, o
+`why<TAB>absent<TAB>0`. Los ordinales empiezan en 1; el texto escapa barra
+invertida, tab y CR como `\\`, `\t` y `\r`. Decodificá cada línea y agregá LF
+para reconstruir `status --why <path>`. Son registros opcionales y no aparecen
+en status común. Si faltan o son inválidos, consultá `status --why` como antes.
+Ver el [contrato de respuesta de navegación](contracts/review-state-guard.md#respuesta-de-navegación).
+
 ## Comandos
 
 > **Cómo leer la sintaxis:** `<x>` es **obligatorio**, `[x]` es **opcional**, y

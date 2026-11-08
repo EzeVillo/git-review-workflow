@@ -12,53 +12,63 @@ prog="git review next"
 
 usage() {
 	cat <<EOF
-usage: $prog
+usage: $prog [--porcelain]
 
 Advance a commit-by-commit review to the next commit. Your edits are remembered;
 run git review prev to go back, or git review finish when you are done.
 EOF
 }
 
-case "${1:-}" in
--h | --h)
-	usage
-	exit 0
-	;;
-"") ;;
-*)
-	echo "error: unexpected argument $1" >&2
-	usage >&2
-	exit 1
-	;;
-esac
+porcelain=0
+_navigation_notice=''
+while [ "$#" -gt 0 ]; do
+	case "$1" in
+	-h | --h) usage; exit 0 ;;
+	--porcelain) porcelain=1 ;;
+	*) echo "error: unexpected argument $1" >&2; usage >&2; exit 1 ;;
+	esac
+	shift
+done
 
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
 # Dispatch on the review's layout. Anything else (whole, or not a review) falls
 # through to load_step_review_meta, whose diagnostics cover every wrong-state case.
-cur="$(git symbolic-ref --quiet --short HEAD || true)"
-review_config_init
-require_not_finish_conflict
-require_not_pending_finish
+review_navigation_init
+require_not_finish_conflict "$cur"
+require_not_pending_finish "$cur"
 case "$(review_config_get "branch.$cur.reviewmode" || true)" in
 walk)
-	load_walk_review_meta
+	load_walk_review_meta "$cur" "$_review_head"
 	if [ "$walkstep" -lt "$total" ]; then
-		goto_walk_entry "$((walkstep + 1))"
+		goto_walk_entry "$((walkstep + 1))" "$porcelain"
 	else
-		echo "no more entries — run git review finish"
+		if [ "$porcelain" -eq 1 ]; then _navigation_notice="no more entries"
+		else echo "no more entries — run git review finish"; fi
 	fi
 	;;
 step)
-	load_step_review_meta
+	load_step_review_meta "$cur"
 	if [ "$step" -lt "$count" ]; then
-		goto_step "$((step + 1))"
+		goto_step "$((step + 1))" "$porcelain"
 	else
-		echo "no more commits — run git review finish"
+		if [ "$porcelain" -eq 1 ]; then _navigation_notice="no more commits"
+		else echo "no more commits — run git review finish"; fi
 	fi
 	;;
 *)
 	load_step_review_meta
 	;;
 esac
+
+if [ "$porcelain" -eq 1 ]; then
+	_review_navigation_loaded=1
+	review_status_porcelain
+	if [ -n "${_navigation_notice:-}" ]; then
+		porcelain_row navigation unchanged
+		porcelain_row notice "$_navigation_notice"
+	else
+		porcelain_row navigation moved
+	fi
+fi

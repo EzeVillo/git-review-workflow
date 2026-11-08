@@ -54,6 +54,12 @@ invocación de una mutación. No agrega campos a `state`. El protocolo y el
 fallback para CLI anteriores se especifican en
 [`contracts/review-state-guard.md`](../../../contracts/review-state-guard.md).
 
+Enmienda del 7 de noviembre de 2026: walk/step anuncian la capacidad opcional
+`capability<TAB>navigation-state`. Su reporte también puede llegar de
+`next --porcelain` o `prev --porcelain`, con el registro adicional `navigation`
+y el `notice` opcional definidos en ese mismo contrato. La proyección del
+estado principal es idéntica a la de status.
+
 ```
 state<TAB>branch<TAB>source<TAB>tip<TAB>mode<TAB>walkthrough[<TAB>position<TAB>total<TAB>recorded<TAB>current[<TAB>essential]]
 ```

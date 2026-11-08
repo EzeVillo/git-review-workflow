@@ -11,52 +11,62 @@ prog="git review prev"
 
 usage() {
 	cat <<EOF
-usage: $prog
+usage: $prog [--porcelain]
 
 Go back to the previous commit of a commit-by-commit review. Your edits are
 remembered in both directions.
 EOF
 }
 
-case "${1:-}" in
--h | --h)
-	usage
-	exit 0
-	;;
-"") ;;
-*)
-	echo "error: unexpected argument $1" >&2
-	usage >&2
-	exit 1
-	;;
-esac
+porcelain=0
+_navigation_notice=''
+while [ "$#" -gt 0 ]; do
+	case "$1" in
+	-h | --h) usage; exit 0 ;;
+	--porcelain) porcelain=1 ;;
+	*) echo "error: unexpected argument $1" >&2; usage >&2; exit 1 ;;
+	esac
+	shift
+done
 
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 
 # Dispatch on the review's layout, mirroring git review next.
-cur="$(git symbolic-ref --quiet --short HEAD || true)"
-review_config_init
-require_not_finish_conflict
-require_not_pending_finish
+review_navigation_init
+require_not_finish_conflict "$cur"
+require_not_pending_finish "$cur"
 case "$(review_config_get "branch.$cur.reviewmode" || true)" in
 walk)
-	load_walk_review_meta
+	load_walk_review_meta "$cur" "$_review_head"
 	if [ "$walkstep" -gt 1 ]; then
-		goto_walk_entry "$((walkstep - 1))"
+		goto_walk_entry "$((walkstep - 1))" "$porcelain"
 	else
-		echo "already at the first entry"
+		if [ "$porcelain" -eq 1 ]; then _navigation_notice="already at the first entry"
+		else echo "already at the first entry"; fi
 	fi
 	;;
 step)
-	load_step_review_meta
+	load_step_review_meta "$cur"
 	if [ "$step" -gt 1 ]; then
-		goto_step "$((step - 1))"
+		goto_step "$((step - 1))" "$porcelain"
 	else
-		echo "already at the first commit"
+		if [ "$porcelain" -eq 1 ]; then _navigation_notice="already at the first commit"
+		else echo "already at the first commit"; fi
 	fi
 	;;
 *)
 	load_step_review_meta
 	;;
 esac
+
+if [ "$porcelain" -eq 1 ]; then
+	_review_navigation_loaded=1
+	review_status_porcelain
+	if [ -n "${_navigation_notice:-}" ]; then
+		porcelain_row navigation unchanged
+		porcelain_row notice "$_navigation_notice"
+	else
+		porcelain_row navigation moved
+	fi
+fi

@@ -54,8 +54,8 @@ comments_safe_path() {
 }
 
 # A read-only report can ask for dozens of branch keys. Load them once in the
-# caller's shell. Cursor navigation also uses a snapshot for its read phase,
-# and invalidates it before writing. Other mutations keep live config reads.
+# caller's shell. Navigation and closes also batch reads within a phase.
+# Closes reload at each custody boundary; other mutations keep live reads.
 # NUL-delimited Git output is encoded BEFORE entering a shell variable. Values
 # can contain newlines, tabs and backslashes, and are never evaluated as shell.
 # od avoids relying on awk's non-portable handling of NUL record separators.
@@ -112,7 +112,9 @@ EOF
 # invocations read those from Git, without parsing a walkthrough or Comments.
 # No -w, filters or index refresh: producing a guard creates no Git objects.
 review_guard_capture() {
-	_rg_gitdir=$(git rev-parse --absolute-git-dir) || return 1
+	if [ -z "${_review_guard_gitdir:-}" ]; then
+		_review_guard_gitdir=$(git rev-parse --absolute-git-dir) || return 1
+	fi
 	if [ "$#" -ge 1 ]; then
 		_rg_cur=$1
 	else
@@ -128,16 +130,105 @@ review_guard_capture() {
 	# shellcheck disable=SC2034 # Output for callers of this sourced library.
 	review_guard=$(
 		{
-			printf '%s\000' git-review-state-v1 "$_rg_gitdir" "$_rg_cur" "$_rg_head"
+			printf '%s\000' git-review-state-v1 "$_review_guard_gitdir" "$_rg_cur" "$_rg_head"
 			while IFS= read -r _rg_line; do
 				[ -n "$_rg_line" ] || continue
 				_rg_key=${_rg_line%%"$_review_config_tab"*}
-				case "$_rg_key" in "branch.$_rg_cur.review"*) printf '%s\000' "$_rg_line" ;; esac
+				# Keep case patterns out of this command substitution: macOS sh
+				# (Bash 3.2) misparses their closing parenthesis here.
+				if [ "${_rg_key#"branch.$_rg_cur.review"}" != "$_rg_key" ]; then
+					printf '%s\000' "$_rg_line"
+				fi
 			done <<EOF
 $_review_config_records
 EOF
 		} | git hash-object --stdin
 	) || return 1
+}
+
+# Navigation owns this snapshot from validation through its cursor write and
+# reply. It never crosses an exec or gets exported as an environment payload.
+review_navigation_init() {
+	cur=$(git symbolic-ref --quiet --short HEAD || true)
+	review_config_init
+	if [ "${porcelain:-0}" -eq 1 ] && [ "${_review_config_ready:-0}" -ne 1 ]; then
+		echo 'error: could not read review metadata' >&2
+		return 1
+	fi
+	_review_head=$(git rev-parse --verify HEAD 2>/dev/null || printf unborn)
+	if [ -n "${GIT_REVIEW_EXPECT_STATE:-}" ]; then
+		if review_guard_capture "$cur" "$_review_head"; then :
+		else
+			_rni_status=$?
+			if [ "$_rni_status" -eq 4 ]; then echo 'error: review state changed' >&2; fi
+			exit "$_rni_status"
+		fi
+		if [ "$review_guard" != "$GIT_REVIEW_EXPECT_STATE" ]; then
+			echo 'error: review state changed' >&2
+			exit 4
+		fi
+	fi
+}
+
+# Close operations batch their stable source metadata, but custody boundaries
+# must load a FRESH snapshot. No snapshot crosses an exec or a CLI invocation.
+review_close_init() {
+	cur=$(git symbolic-ref --quiet --short HEAD || true)
+	if [ -z "${GIT_REVIEW_EXPECT_STATE:-}" ]; then
+		case "$cur" in review/*) ;; *) return 0 ;; esac
+	fi
+	review_config_init
+	if [ "${_review_config_ready:-0}" -ne 1 ]; then
+		echo 'error: could not read review metadata' >&2
+		exit 1
+	fi
+	_review_close_snapshot=1
+	if [ -n "${GIT_REVIEW_EXPECT_STATE:-}" ]; then
+		_rci_head=$(git rev-parse --verify HEAD 2>/dev/null || printf unborn)
+		if review_guard_capture "$cur" "$_rci_head"; then :
+		else
+			_rci_status=$?
+			if [ "$_rci_status" -eq 4 ]; then echo 'error: review state changed' >&2; fi
+			exit "$_rci_status"
+		fi
+		if [ "$review_guard" != "$GIT_REVIEW_EXPECT_STATE" ]; then
+			echo 'error: review state changed' >&2
+			exit 4
+		fi
+	fi
+}
+
+# The operation writes only this numeric cursor key. Reflect that successful
+# write in its command-local snapshot, retaining the wire encoding/order used
+# by Git so the reply's guard equals a fresh status guard. Failed writes must
+# never publish a cursor that did not reach Git.
+review_config_cursor() {
+	_rcc_key=$1 _rcc_value=$2
+	if [ "${_review_config_ready:-0}" -ne 1 ]; then review_config_init; fi
+	if [ "${_review_config_ready:-0}" -ne 1 ]; then
+		echo 'error: could not read review metadata' >&2
+		return 1
+	fi
+	git config "$_rcc_key" "$_rcc_value" || return 1
+	_rcc_encoded='' _rcc_rest=$_rcc_value
+	while [ -n "$_rcc_rest" ]; do
+		_rcc_digit=${_rcc_rest%"${_rcc_rest#?}"}
+		_rcc_rest=${_rcc_rest#?}
+		_rcc_encoded=$_rcc_encoded$(printf '\\0%03o' "$((48 + _rcc_digit))")
+	done
+	_rcc_records=''
+	while IFS= read -r _rcc_line; do
+		if [ "${_rcc_line%%"$_review_config_tab"*}" = "$_rcc_key" ]; then
+			_rcc_line=$_rcc_key$_review_config_tab$_rcc_encoded
+		fi
+		_rcc_records=$_rcc_records$_rcc_line'
+'
+	done <<EOF
+$_review_config_records
+EOF
+	_review_config_records=${_rcc_records%'
+'}
+	_review_config_ready=1
 }
 
 # Manifests are data, never shell. Duplicate keys and unsafe file types fail.
@@ -1688,6 +1779,15 @@ comments_preflight_branch() {
 	_cc_branch=$1
 	cm_gitdir=$(git rev-parse --absolute-git-dir) || return 1
 	cm_root=$cm_gitdir/review-comments
+	if [ "${_review_close_snapshot:-0}" -eq 1 ]; then
+		# Recheck after acquiring the custody lock and before transfer/delete.
+		# A cached owner/session would defeat those guards. Batch each phase,
+		# not the whole operation; keep resolving its Git owner live as well.
+		review_config_init
+		if [ "${_review_config_ready:-0}" -ne 1 ]; then
+			comments_error 'could not read review metadata'; return 1
+		fi
+	fi
 	cc_session=$(review_config_get "branch.$_cc_branch.reviewcommentssession" || true)
 	cc_context=$(review_config_get "branch.$_cc_branch.reviewcommentscontext" || true)
 	cc_owner=$(review_config_get "branch.$_cc_branch.reviewcommentsowner" || true)
@@ -2444,7 +2544,8 @@ show_commit() {
 # conflict markers as "edits" or delete the review branch that holds the undo.
 # Mirror of the same guard in git review preview.
 require_not_finish_conflict() {
-	_rnfc_cur="$(git symbolic-ref --quiet --short HEAD || true)"
+	_rnfc_cur=${1:-}
+	if [ -z "$_rnfc_cur" ]; then _rnfc_cur=$(git symbolic-ref --quiet --short HEAD || true); fi
 	if [ "$(review_config_get "branch.$_rnfc_cur.reviewresume" || true)" = "conflict" ]; then
 		echo "error: git review finish is mid-conflict; resolve the markers and run git review finish --resume first (or git review finish --abort)" >&2
 		exit 1
@@ -2458,7 +2559,8 @@ require_not_finish_conflict() {
 # running next/prev/save would desync the cursor/banks and break finish --abort.
 # Shared message for save/next/prev so consumers match one diagnostic.
 require_not_pending_finish() {
-	_rnpf_cur="$(git symbolic-ref --quiet --short HEAD || true)"
+	_rnpf_cur=${1:-}
+	if [ -z "$_rnpf_cur" ]; then _rnpf_cur=$(git symbolic-ref --quiet --short HEAD || true); fi
 	if [ -n "$(review_config_get "branch.$_rnpf_cur.reviewundohead" || true)" ]; then
 		echo "error: a previous finish on $_rnpf_cur has not been resolved; run git review finish --abort (or git review abort) first" >&2
 		exit 1
@@ -2515,7 +2617,8 @@ entry_noun() {
 # step, commits and total. Exits with a diagnostic on any inconsistency (wrong
 # branch, wrong mode, or missing/corrupt metadata).
 load_step_review_meta() {
-	cur="$(git symbolic-ref --quiet --short HEAD || true)"
+	cur=${1:-}
+	if [ -z "$cur" ]; then cur=$(git symbolic-ref --quiet --short HEAD || true); fi
 	[ -n "$cur" ] || {
 		echo "error: not on a branch" >&2
 		exit 1
@@ -2667,8 +2770,17 @@ goto_step() {
 		fi
 	fi
 	git reset -q --soft "$ctarget^"
-	git config "branch.$cur.reviewstep" "$target"
-	show_commit "$ctarget" "$target" "$count"
+	if [ "${2:-0}" -eq 1 ]; then
+		# Code/index/ref writes above did not change branch metadata. Resume
+		# that snapshot only for this final cursor write and its reply.
+		_review_config_ready=1
+		review_config_cursor "branch.$cur.reviewstep" "$target"
+		step=$target
+		_review_head=$(git rev-parse HEAD)
+	else
+		git config "branch.$cur.reviewstep" "$target"
+		show_commit "$ctarget" "$target" "$count"
+	fi
 }
 
 # ── Walkthrough (walk) mode helpers ───────────────────────────────────────────
@@ -3430,23 +3542,69 @@ walk_parse() {
 # its "## N. <path>" (or "## ?. <path>") header, up to the next "## " header or
 # EOF. Empty when the path has no entry. The header's path is trimmed exactly as
 # walk_parse trims it, so a <path> that came from walk_parse still finds its body.
-walk_body() {
-	awk -v want="$1" '
-		/^## / {
-			line = $0
-			sub(/^## /, "", line)
-			if (sub(/^[0-9]+\. /, "", line) || sub(/^\?\. /, "", line)) {
-				sub(/[ \t]+$/, "", line)
-				cur = (line == want)
-			} else {
-				cur = 0
+# Shared scanner: header/path interpretation belongs to walk_body and the
+# entry fields it feeds. The optional why uses that SAME pass, never another
+# document read or parser process. -v would reinterpret backslashes in paths.
+walk_scanner_init() {
+	# shellcheck disable=SC2016 # This is an awk program, not shell interpolation.
+	_walk_scanner_program='
+		BEGIN { want = ENVIRON["GIT_REVIEW_WALK_WANT"] }
+		function escaped(text, result, j, c) {
+			result = ""
+			for (j = 1; j <= length(text); j++) {
+				c = substr(text, j, 1)
+				if (c == "\\") result = result "\\\\"
+				else if (c == "\t") result = result "\\t"
+				else if (c == "\r") result = result "\\r"
+				else result = result c
 			}
+			return result
+		}
+		mode == "fields" && !tail {
+			if ($0 == "\t") { tail = 1; next }
+			if ($0 != "") { n++; p[n] = $0 }
 			next
 		}
-		cur { print }
+		/^## / {
+			line = substr($0, 4)
+			numbered = sub(/^[0-9]+\. /, "", line)
+			if (numbered || sub(/^\?\. /, "", line)) {
+				sub(/[ \t]+$/, "", line)
+				cur = line
+				body = (line == want)
+				if (numbered && line != "") ann[line] = 1
+			} else { cur = ""; body = 0 }
+			next
+		}
+		cur != "" && /^> key[[:space:]]*$/ { key[cur] = 1 }
+		body {
+			if (mode == "body") print
+			else if ($0 !~ /^> at: / && $0 !~ /^> key[[:space:]]*$/) why[++wn] = $0
+		}
+		END {
+			if (mode == "body") exit
+			if (mode == "fields") {
+				for (i = 1; i <= n; i++)
+					printf "%s\t%s\t%s\t%s\n", i, p[i], (p[i] in key) ? 1 : 0, (p[i] in ann) ? 1 : 0
+				if (want == "") exit
+			}
+			start = 1; while (start <= wn && why[start] ~ /^[ \t]*$/) start++
+			end = wn; while (end >= start && why[end] ~ /^[ \t]*$/) end--
+			if (mode == "why") {
+				for (i = start; i <= end; i++) print why[i]
+			} else if (end < start) print "why\tabsent\t0"
+			else {
+				printf "why\tpresent\t%d\n", end - start + 1
+				for (i = start; i <= end; i++) printf "why-line\t%d\t%s\n", i - start + 1, escaped(why[i])
+			}
+		}
 	'
 }
 
+walk_body() {
+	walk_scanner_init
+	GIT_REVIEW_WALK_WANT=$1 awk -v mode=body "$_walk_scanner_program"
+}
 # walk_preamble  (stdin: walkthrough content)
 # Print the author's preamble: everything between the "# Walkthrough" heading and
 # the first entry, with HTML comments stripped and leading/trailing blank lines
@@ -3660,63 +3818,26 @@ walk_is_annotated() {
 # The content cannot travel as `awk -v`: -v rewrites escape sequences, and BSD awk
 # refuses a -v value containing a newline outright (see walk_reading_order).
 walk_entry_fields() {
-	_we_content="$(walk_read "$1" || true)"
+	_we_status=0
+	_we_content="$(walk_read "$1")" || _we_status=$?
+	_we_want=${2:-}
+	# A failed document read is unknown, not an absent explanation.
+	if [ "$_we_status" -ne 0 ]; then _we_want=''; fi
+	walk_scanner_init
 	{
 		cat
 		printf '\t\n'
 		printf '%s\n' "$_we_content"
-	} | awk '
-		# Phase 1: the caller path list, up to the lone-tab sentinel.
-		!tail {
-			if ($0 == "\t") { tail = 1; next }
-			if ($0 != "") { n++; p[n] = $0 }
-			next
-		}
-		# Phase 2: the walkthrough. Entry headers are recognised exactly as
-		# walk_body does it (numbered AND skeleton "?." entries carry a body),
-		# while "annotated" follows walk_parse instead (numbered entries only,
-		# empty path skipped) — the two differ on purpose and the flags must
-		# keep differing the same way. A "## " heading that is not an entry
-		# (## Heads-up) closes the current body, as it does there.
-		/^## / {
-			line = substr($0, 4)
-			if (sub(/^[0-9]+\. /, "", line)) {
-				sub(/[ \t]+$/, "", line)
-				cur = line
-				if (line != "") ann[line] = 1
-			} else if (sub(/^\?\. /, "", line)) {
-				sub(/[ \t]+$/, "", line)
-				cur = line
-			} else {
-				cur = ""
-			}
-			next
-		}
-		cur != "" && /^> key[[:space:]]*$/ { key[cur] = 1 }
-		END {
-			for (i = 1; i <= n; i++)
-				printf "%s\t%s\t%s\t%s\n", i, p[i], \
-					(p[i] in key) ? 1 : 0, (p[i] in ann) ? 1 : 0
-		}
-	'
+	} | GIT_REVIEW_WALK_WANT=$_we_want awk -v mode=fields "$_walk_scanner_program"
 }
-
 # walk_why <tip> <path>
 # The "why" prose a reviewer sees for <path>: the entry body from the walkthrough
 # at <tip>, with the reserved marker lines ("> key", and the "> at:" anchor of v2)
 # dropped and leading/trailing blank lines trimmed.
 walk_why() {
-	walk_read "$1" | walk_body "$2" |
-		grep -v -e '^> at: ' -e '^> key[[:space:]]*$' | awk '
-		{ buf[NR] = $0 }
-		END {
-			s = 1; while (s <= NR && buf[s] ~ /^[ \t]*$/) s++
-			e = NR; while (e >= s && buf[e] ~ /^[ \t]*$/) e--
-			for (i = s; i <= e; i++) print buf[i]
-		}
-	'
+	walk_scanner_init
+	walk_read "$1" | GIT_REVIEW_WALK_WANT=$2 awk -v mode=why "$_walk_scanner_program"
 }
-
 # walk_sequence <tip> <lower>
 # The ordered, range-filtered reading sequence for a review: parse the
 # walkthrough at <tip>, keep only entries whose path is in the review range
@@ -4151,7 +4272,8 @@ walk_range_error() {
 # lower bound for a walk review's life, so the derivation is stable across edits.
 # Exits with a diagnostic on any inconsistency.
 load_walk_review_meta() {
-	cur="$(git symbolic-ref --quiet --short HEAD || true)"
+	cur=${1:-}
+	if [ -z "$cur" ]; then cur=$(git symbolic-ref --quiet --short HEAD || true); fi
 	[ -n "$cur" ] || {
 		echo "error: not on a branch" >&2
 		exit 1
@@ -4195,7 +4317,8 @@ load_walk_review_meta() {
 
 	# Keys-only submode (start/compare --keys): sequence is guided ∩ keys, not
 	# the full reading order. The flag lives on the branch; absence is full walk.
-	_walk_lower=$(git rev-parse HEAD)
+	_walk_lower=${2:-}
+	if [ -z "$_walk_lower" ]; then _walk_lower=$(git rev-parse HEAD); fi
 	walk_snapshot_init "$tip" "$_walk_lower"
 	if [ "$(review_config_get "branch.$cur.reviewwalkkeys" || true)" = "1" ]; then
 		walkpaths="$(walk_keys_order "$tip" "$_walk_lower")"
@@ -4260,10 +4383,14 @@ show_walk_entry() {
 # nothing but the cursor key: walk never stages or resets, so working tree and
 # index are left exactly as they were.
 goto_walk_entry() {
-	_review_config_ready=0
-	git config "branch.$cur.reviewwalkstep" "$1"
+	if [ "${2:-0}" -eq 1 ]; then
+		review_config_cursor "branch.$cur.reviewwalkstep" "$1"
+	else
+		_review_config_ready=0
+		git config "branch.$cur.reviewwalkstep" "$1"
+	fi
 	walkstep="$1"
-	show_walk_entry "$1"
+	if [ "${2:-0}" -eq 0 ]; then show_walk_entry "$1"; fi
 }
 
 # ── Authoring guides ──────────────────────────────────────────────────────────
@@ -4698,4 +4825,188 @@ compare_has_unfinished_fallback() {
 	[ "$walk_draft_src" != "$compare_draft_id" ] || return 1
 	walk_has_draft_file "$walk_draft_src" || return 1
 	! walk_draft_filled "$(walk_draft_path "$walk_draft_src")"
+}
+
+# Complete status reply shared by status and navigation. Navigation supplies its
+# already validated sequence and updated cursor; no second walkthrough/range load.
+review_status_porcelain() {
+	if [ "${_review_config_ready:-0}" -ne 1 ]; then review_config_init; fi
+	is_readonly=$(review_config_get "branch.$cur.reviewreadonly" || true)
+	cmpbase='' cmpfrom='' cmpto=''
+	if [ "$is_readonly" = 1 ]; then
+		cmpbase=$(review_config_get "branch.$cur.reviewcomparebase" || true)
+		cmpfrom=$(review_config_get "branch.$cur.reviewbase" || true)
+		cmpto=$(review_config_get "branch.$cur.reviewcomparetarget" || true)
+	fi
+	tab="$(printf '\t')"
+	case "$mode" in
+	step)
+		if [ "${_review_navigation_loaded:-0}" -ne 1 ]; then load_step_review_meta; fi
+		load_step_texts
+		nl="$(printf '\nx')"
+		nl="${nl%x}"
+		# The two lists the entry records need, each in ONE process instead of one
+		# per position: the naive loop cost four processes per commit and, under Git
+		# Bash on Windows where fork() is emulated, that was ~9s of a ~9s 50-commit
+		# status.
+		#
+		# Same traversal flags as `commits` in load_step_review_meta, so the n-th
+		# line is the n-th commit; the trailing newline is kept with the `printf x`
+		# / ${var%x} idiom, since command substitution would strip it and the list
+		# must hold exactly $total lines.
+		#
+		# --abbrev-commit is left WITHOUT an explicit --abbrev=<n>: it and git
+		# rev-parse --short abbreviate through the same default (core.abbrev plus
+		# git's uniqueness rule), so pinning a length here would silently diverge
+		# from --short wherever core.abbrev is set.
+		shorts="$(git rev-list --abbrev-commit --reverse --first-parent --no-merges "$start..$tip"; printf x)"
+		shorts="${shorts%x}"
+		# Every banked ref at once, wrapped in newlines so a membership test can
+		# match a whole line: without the trailing newline in the pattern, step 1
+		# would match refs/review-edits/<src>/10 and report edits it does not have.
+		banked_refs="$nl$(git for-each-ref --format='%(refname)' "refs/review-edits/$src/")$nl"
+		pcurrent="$(printf '%s' "$shorts" | sed -n "${step}p")"
+		porcelain_row state "$cur" "$src" "$tip" step none "$step" "$total" "$count" "$pcurrent"
+		printf '%s' "$shorts" | { i=1; while IFS= read -r ish; do
+			banked=0
+			case "$banked_refs" in
+			*"${nl}refs/review-edits/$src/$i$nl"*) banked=1 ;;
+			esac
+			porcelain_row entry "$i" "$ish" "$banked"
+			i=$((i + 1))
+		done; }
+		# Free text goes in its own record, last field, one per record: a subject
+		# and an author name can both contain a literal tab (the free-text rule in
+		# contracts/status-porcelain.md), and only the last field of a line
+		# survives that without shifting anything.
+		#
+		# Each list is streamed in ONE pass rather than indexed with sed line by
+		# line: porcelain_row is a shell function, so a pass costs one subshell
+		# instead of two processes per position (indexing cost 2N processes, and
+		# under Git Bash on Windows — where fork() is emulated — added ~75% to a
+		# 50-commit status, measured). The line count is exactly $total because
+		# load_step_texts keeps the trailing newline, so an empty subject still
+		# gets its own record instead of vanishing.
+		printf '%s' "$subjects" | { i=1; while IFS= read -r text; do
+			porcelain_row subject "$i" "$text"
+			i=$((i + 1))
+		done; }
+		printf '%s' "$authors" | { i=1; while IFS= read -r text; do
+			porcelain_row author "$i" "$text"
+			i=$((i + 1))
+		done; }
+		# Files of the *current* step commit only — not every commit in the
+		# range. entry/subject/author still describe the full sequence; this is
+		# the inventory for the commit under the cursor (panel file list).
+		# Position is 1-based within that commit, independent of reviewstep.
+		# state.total still counts entry lines only (commits), never these.
+		# Full SHA from `commits` (load_step_review_meta), not the short pcurrent:
+		# same object, one less rev-parse, and independent of core.abbrev.
+		i=1
+		pfull="$(printf '%s\n' "$commits" | sed -n "${step}p")"
+		commit_files "$pfull" | while IFS= read -r pfile; do
+			[ -n "$pfile" ] || continue
+			porcelain_row file "$i" "$pfile"
+			i=$((i + 1))
+		done
+		;;
+	walk)
+		if [ "${_review_navigation_loaded:-0}" -ne 1 ]; then load_walk_review_meta; fi
+		pcurrent="$(printf '%s\n' "$walkpaths" | sed -n "${walkstep}p")"
+		essential=0
+		if walk_is_key "$tip" "$pcurrent"; then
+			essential=1
+		fi
+		porcelain_row state "$cur" "$src" "$tip" walk applied "$walkstep" "$total" "$walkcount" "$pcurrent" "$essential"
+		pwhy=''
+		if [ "${_review_navigation_loaded:-0}" -eq 1 ]; then pwhy=$pcurrent; fi
+		printf '%s\n' "$walkpaths" | walk_entry_fields "$tip" "$pwhy" | while IFS="$tab" read -r epos epath eess eann; do
+			case "$epos" in
+			why) porcelain_row why "$epath" "$eess" ;;
+			why-line) porcelain_row why-line "$epath" "$eess" ;;
+			*) porcelain_row entry "$epos" "$epath" "$eess" "$eann" ;;
+			esac
+		done
+		;;
+	*)
+		pwalkthrough=none
+		if walk_read "$tip" >/dev/null; then
+			pwalkpaths="$(walk_sequence "$tip" "$(git rev-parse HEAD)")"
+			if [ -n "$pwalkpaths" ]; then
+				pwalkthrough=applied
+			else
+				pwalkthrough=degraded
+			fi
+		fi
+		porcelain_row state "$cur" "$src" "$tip" "$mode" "$pwalkthrough"
+		# Whole mode's inventory: one entry per file the range touches, in git's own
+		# order. No essential/annotated/banked fields (whole has no walkthrough or
+		# bank) and no cursor on `state` above — a listing, not a sequence.
+		i=1
+		range_files "$tip" "$(git rev-parse HEAD)" | while IFS= read -r pfile; do
+			[ -n "$pfile" ] || continue
+			porcelain_row entry "$i" "$pfile"
+			i=$((i + 1))
+		done
+		# The base is what a review without a walkthrough has instead of a
+		# reading order: the ref its range was built against. Read with || true
+		# like the human path does — a key deleted by hand must not abort the
+		# script under set -eu. Omitted entirely when there is none: omit, never
+		# blank, never a sentinel. It goes after `state`, which the contract
+		# keeps as the first line.
+		pbase="$(review_config_get "branch.$cur.reviewbase" || true)"
+		if [ -n "$pbase" ]; then
+			porcelain_row base "$pbase"
+		fi
+		;;
+	esac
+	# finish (contracts/finish-state.md): the ONLY closure state status can see
+	# is a stopped-mid-conflict one — a completed finish already moved HEAD off
+	# review/* (list --porcelain reports that one instead). Position relative
+	# to the records above is not significant, so this runs once after the mode
+	# case rather than duplicated inside each branch.
+	pundohead="$(review_config_get "branch.$cur.reviewundohead" || true)"
+	if [ -n "$pundohead" ]; then
+		presume="$(review_config_get "branch.$cur.reviewresume" || true)"
+		if [ "$presume" = "conflict" ]; then
+			pkind="$(review_config_get "branch.$cur.reviewundokind" || true)"
+			ponto=0
+			[ "$pkind" = "onto-source" ] && ponto=1
+			porcelain_row finish conflict "$ponto"
+		fi
+	fi
+	# compare (git review compare): reviewreadonly=1 means finish will refuse.
+	# Separate record, omitted when not set — additive, same pattern as base/finish.
+	if [ "$is_readonly" = "1" ]; then
+		porcelain_row readonly
+		if [ -n "$cmpbase" ] && [ -n "$cmpfrom" ] && [ -n "$cmpto" ]; then
+			porcelain_row comparison "$cmpbase" "$tip"
+			porcelain_row comparison-base "$cmpfrom"
+			porcelain_row comparison-target "$cmpto"
+		fi
+	fi
+	# keys-only walk submode (start/compare --keys): presence record, like readonly.
+	if [ "$(review_config_get "branch.$cur.reviewwalkkeys" || true)" = "1" ]; then
+		porcelain_row keys
+	fi
+	# The reading order is the reviewer's own draft, not the PR author's: a
+	# presence record, like keys/readonly. Published clients parse `state` by
+	# position, so widening it risks misaligning a consumer, while an unknown label
+	# is one porcelain v1 clients already promise to ignore.
+	#
+	# walk_draft_src, not $src: load_walk_review_meta resolved which draft this
+	# review reads (they differ for a compare of a remote-tracking branch). Carries
+	# the absolute path so a client can open it without resolving the gitdir.
+	#
+	# Goes LAST as a field and not a new record (the contract's free-text rule --
+	# it is the only field here that could hold a tab): all three clients parse
+	# this record by label and ignore trailing fields, unlike `state`.
+	if [ "$mode" = walk ] && walk_is_draft "${walk_draft_src:-$src}"; then
+		walk_gitdir_abs_init
+		porcelain_row draft "$_walk_gitdir_abs/review-walkthrough/${walk_draft_src:-$src}.md"
+	fi
+	if [ "$mode" = step ] || [ "$mode" = walk ]; then porcelain_row capability navigation-state; fi
+	review_guard_capture "$cur" "${_review_head:-${_walk_lower:-}}"
+	porcelain_row guard "$review_guard"
+	return 0
 }

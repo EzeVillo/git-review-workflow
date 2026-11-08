@@ -8,7 +8,7 @@
 set -eu
 
 prog="git review"
-VERSION="0.10.2"
+VERSION="0.10.5"
 
 usage() {
 	cat <<EOF
@@ -58,6 +58,8 @@ EOF
 }
 
 expected_state=''
+# This is an internal handoff, never an inherited authorization.
+unset GIT_REVIEW_EXPECT_STATE
 if [ "${1:-}" = --expect-state ]; then
 	if [ "$#" -lt 3 ]; then
 		echo 'error: --expect-state requires a token and a command' >&2
@@ -128,6 +130,16 @@ fi
 export GIT_REVIEW_LIBEXEC="$libexec"
 shift
 if [ -n "$expected_state" ]; then
+	case "$verb:$#" in
+	next:*|prev:*|save:0|abort:0)
+		# The verb validates its own read before any effect. Help/invalid
+		# close arguments retain the dispatcher's original error precedence.
+		# No duplicate config read, shell-library load or branch probe here.
+		GIT_REVIEW_EXPECT_STATE=$expected_state
+		export GIT_REVIEW_EXPECT_STATE
+		exec "$target" "$@"
+		;;
+	esac
 	# The comparison is part of this invocation, before any verb-side effect.
 	# It does not replace the verb's index, document or recovery guards.
 	# shellcheck source=git-review-lib.sh

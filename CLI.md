@@ -13,6 +13,20 @@ Automation and clients can pass it back as
 what to do. Code edits do not invalidate the token. Existing invocations remain
 unchanged. See [the state guard contract](contracts/review-state-guard.md).
 
+For walk and step reviews, `next --porcelain` and `prev --porcelain` return the
+complete updated `status --porcelain` report, plus `navigation moved|unchanged`
+and an optional `notice` record at a boundary. Status advertises support with
+`capability navigation-state`; clients must check this capability before using
+the flag with an older CLI. Human output without the flag is unchanged.
+
+Walk navigation replies can also include the current entry's explanation:
+`why<TAB>present<TAB>N` followed by `why-line<TAB>ordinal<TAB>text`, or
+`why<TAB>absent<TAB>0`. Ordinals start at 1; text escapes backslash, tab and CR
+as `\\`, `\t` and `\r`. Decode each line and append LF to reproduce
+`status --why <path>`. These records are optional and do not appear in ordinary
+status. If absent or invalid, query `status --why` as before. See the
+[navigation response contract](contracts/review-state-guard.md#respuesta-de-navegación).
+
 ## Commands
 
 > **How to read the syntax:** `<x>` is **required**, `[x]` is **optional**, and

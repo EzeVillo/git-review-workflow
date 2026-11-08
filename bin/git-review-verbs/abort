@@ -32,7 +32,9 @@ case "${1:-}" in
 	;;
 esac
 
-cur="$(git symbolic-ref --quiet --short HEAD || true)"
+# shellcheck source=../git-review-lib.sh
+. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
+review_close_init
 case "$cur" in
 review/*) ;;
 *)
@@ -41,18 +43,18 @@ review/*) ;;
 	;;
 esac
 
-src="$(git config "branch.$cur.reviewsource" || true)"
+src="$(review_config_get "branch.$cur.reviewsource" || true)"
 [ -n "$src" ] || {
 	echo "error: missing review metadata; was $cur created with git review start? Switch away, then delete it with 'git branch -D $cur'." >&2
 	exit 1
 }
-base="$(git config "branch.$cur.reviewbase" || true)"
-ret="$(git config "branch.$cur.reviewreturn" || true)"
-prevreviewed="$(git config "branch.$cur.reviewprevreviewed" || true)"
+base="$(review_config_get "branch.$cur.reviewbase" || true)"
+ret="$(review_config_get "branch.$cur.reviewreturn" || true)"
+prevreviewed="$(review_config_get "branch.$cur.reviewprevreviewed" || true)"
 
 # A local review tracks its delta progress in its own config section
 # (reviewworkflowlocal.*); roll back the matching one, never the other side's.
-if [ "$(git config "branch.$cur.reviewlocal" || true)" = "1" ]; then
+if [ "$(review_config_get "branch.$cur.reviewlocal" || true)" = "1" ]; then
 	markerkey="reviewworkflowlocal.$src.reviewed"
 else
 	markerkey="reviewworkflow.$src.reviewed"
@@ -69,8 +71,6 @@ fi
 	exit 1
 }
 
-# shellcheck source=../git-review-lib.sh
-. "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
 comments_lock_branch "$cur" || exit 1
 trap 'comments_unlock' 0
 trap 'exit 1' 1 2 15

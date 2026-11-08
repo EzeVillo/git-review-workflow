@@ -126,7 +126,11 @@ test("the Bats runner isolates stdin and preserves failures while checking every
         const stub = path.join(temporary, "bats"), calls = path.join(temporary, "calls");
         const actual = readProfile(), config = actual.suites.bats.windows;
         const shards = planShards("bats", listSuiteFiles("bats"), config.shards, actual, "windows");
-        const index = shards.findIndex(shard => shard.files.length > 1);
+        // The mismatch assertion needs a case-filtered file. Adding a new test
+        // can make the first multi-file shard contain only whole-file runs,
+        // whose TAP count is deliberately unrestricted by the runner.
+        const index = shards.findIndex(shard => shard.files.length > 1 &&
+            shard.units.some(unit => unit.name !== undefined));
         assert.ok(index >= 0);
         const selected = shards[index];
         for (const wrongCount of [false, true]) {

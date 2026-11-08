@@ -2212,3 +2212,26 @@ pero también recibe el ahorro de la lectura conjunta del manifest dentro de los
 preflights compartidos. Se conservan relecturas frescas en cada fase, locks y
 guardas existentes. Método, pruebas y mediciones en
 `specs/rendimiento/2026-11-08-rutas-custodia.md`.
+
+## 32. Leer campos de metadata sin crear otra shell por valor
+
+El perfil de escalabilidad mostró un piso alto incluso con un PR pequeño.
+Aunque config ya se consultaba en bloque por fase, cada extracción volvía a
+crear una sustitución de comandos para decodificar un campo. En Windows esa
+coordinación tiene un costo apreciable sin hacer trabajo sobre los archivos.
+
+El mismo cargador produce ahora una vista de valores comunes para consumirlos
+en la shell del llamador. La vista canónica octal permanece byte por byte igual:
+los guards existentes conservan su significado y compatibilidad. Controles y
+backslashes siguen pasando por el decodificador anterior, con su semántica de
+saltos finales. No se evalúa metadata como shell; ausente y vacío se distinguen.
+Una escritura de cursor exitosa invalida la vista rápida para evitar leer el
+valor anterior. Una recarga fallida invalida ambas vistas.
+
+Save, los preflights compartidos de custodia y el listado porcelain usan el
+lector. Cada límite de custodia vuelve a consultar Git y resolver el gitdir,
+igual que antes; el ahorro es dentro de cada fase, sin caché entre operaciones.
+No se agrupan todavía las escrituras de config ni se modifica el checkout.
+El corte beneficia a todos los clientes mediante la CLI, sin cambiar su contrato
+ni requerir otra versión del plugin. Método, límites y resultados en
+`specs/rendimiento/2026-11-08-lectura-metadata.md`.

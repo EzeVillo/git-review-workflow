@@ -12,6 +12,12 @@ and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 This file starts at 0.2.1. Earlier versions are only in the
 [GitHub Releases](https://github.com/EzeVillo/git-review-workflow/releases).
 
+## [0.10.9] — 2026-11-08
+
+### Changed
+
+- Read ordinary Save and custody metadata in the calling shell instead of spawning a command substitution per field. Preserve canonical state guards, exceptional bytes, fresh custody checks and existing command output. Reuse the same reader in porcelain branch listings.
+
 ## [0.10.8] — 2026-11-08
 
 ### Changed

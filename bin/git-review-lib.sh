@@ -61,7 +61,9 @@ comments_safe_path() {
 # od avoids relying on awk's non-portable handling of NUL record separators.
 review_config_init() {
 	_review_config_ready=0
-	_review_config_records=$(
+	_review_config_values_ready=0
+	_review_config_records='' _review_config_values=''
+	_review_config_snapshot=$(
 		{
 			if git config --null --get-regexp '^branch\..*\.review'; then
 				printf '\000__review_config_ok__\n\000'
@@ -75,17 +77,48 @@ review_config_init() {
 			{ for (i=1; i<=NF; i++) {
 				b=$i+0
 				if (b==0) {
-					if (value) printf "%s\t%s\n", key, encoded
-					key=""; encoded=""; value=0
+					if (value) {
+						printf "%s\t%s\n", key, encoded
+						if (key!="__review_config_ok__") raw[++n]=key "\t" readable
+					}
+					key=""; encoded=""; readable=""; value=0
 				} else if (!value && b==10) value=1
-				else if (value) encoded=encoded sprintf("\\0%03o", b)
+				else if (value) {
+					encoded=encoded sprintf("\\0%03o", b)
+					if (b<32 || b==92 || b==127) readable=readable sprintf("\\0%03o", b)
+					else readable=readable sprintf("%c", b)
+				}
 				else key=key sprintf("%c", b)
 			} }
+			END {
+				print "__review_config_values__"
+				for (j=1; j<=n; j++) print raw[j]
+				print "__review_config_end__"
+			}
 		'
 	)
+	# Keep the canonical octal records byte-identical: existing guards hash them.
+	# A separate view lets ordinary values stay in this shell, without printf in
+	# a command substitution for every field. Controls/backslashes retain the
+	# old decoder. The framing lines cannot be records (records always have TAB).
+	_review_config_separator='
+__review_config_values__
+'
+	case "$_review_config_snapshot" in
+	*"$_review_config_separator"*'
+__review_config_end__'|*"$_review_config_separator"'__review_config_end__')
+		_review_config_records=${_review_config_snapshot%%"$_review_config_separator"*}
+		_review_config_values=${_review_config_snapshot#*"$_review_config_separator"}
+		_review_config_values=${_review_config_values%'__review_config_end__'}
+		_review_config_values=${_review_config_values%'
+'}
+		;;
+	esac
+	_review_config_snapshot=''
 	_review_config_tab=$(printf '\t')
 	case "$_review_config_records" in
-	*"__review_config_ok__$_review_config_tab") _review_config_ready=1 ;;
+	*"__review_config_ok__$_review_config_tab")
+		_review_config_ready=1 _review_config_values_ready=1 ;;
 	esac
 }
 
@@ -105,6 +138,34 @@ $_review_config_records
 EOF
 	[ "$_rc_found" -eq 1 ] || return 1
 	printf '%b\n' "$_rc_value"
+}
+
+# Read into _review_config_value in the caller's shell; no output, always success.
+# Missing keys use the optional default; an explicitly empty value stays empty.
+# Like $(review_config_get ...), decoded exceptional values lose trailing LFs.
+# No eval or persistent cache: custody boundaries still reload the snapshot.
+review_config_read() {
+	_review_config_found=0 _review_config_value=${2-}
+	if [ "${_review_config_ready:-0}" -eq 1 ] && [ "${_review_config_values_ready:-0}" -eq 1 ]; then
+		while IFS= read -r _rc_read_line; do
+			if [ "${_rc_read_line%%"$_review_config_tab"*}" = "$1" ]; then
+				_review_config_found=1
+				_review_config_value=${_rc_read_line#*"$_review_config_tab"}
+			fi
+		done <<EOF
+$_review_config_values
+EOF
+		case "$_review_config_value" in
+		*\\*) ;;
+		*) return 0 ;;
+		esac
+	fi
+	if _review_config_value=$(review_config_get "$1"); then
+		_review_config_found=1
+	else
+		_review_config_found=0 _review_config_value=${2-}
+	fi
+	return 0
 }
 
 # A command-local context fingerprint, not a hash of the panel or working tree.
@@ -210,6 +271,7 @@ review_config_cursor() {
 		return 1
 	fi
 	git config "$_rcc_key" "$_rcc_value" || return 1
+	_review_config_values_ready=0
 	_rcc_encoded='' _rcc_rest=$_rcc_value
 	while [ -n "$_rcc_rest" ]; do
 		_rcc_digit=${_rcc_rest%"${_rcc_rest#?}"}
@@ -1815,9 +1877,12 @@ comments_preflight_branch() {
 			comments_error 'could not read review metadata'; return 1
 		fi
 	fi
-	cc_session=$(review_config_get "branch.$_cc_branch.reviewcommentssession" || true)
-	cc_context=$(review_config_get "branch.$_cc_branch.reviewcommentscontext" || true)
-	cc_owner=$(review_config_get "branch.$_cc_branch.reviewcommentsowner" || true)
+	review_config_read "branch.$_cc_branch.reviewcommentssession"
+	cc_session=$_review_config_value
+	review_config_read "branch.$_cc_branch.reviewcommentscontext"
+	cc_context=$_review_config_value
+	review_config_read "branch.$_cc_branch.reviewcommentsowner"
+	cc_owner=$_review_config_value
 	cc_dir=''
 	if [ -z "$cc_session$cc_context$cc_owner" ]; then comments_check_orphan_claim "$_cc_branch"; return $?; fi
 	if [ "$cc_owner" != "$cm_gitdir" ]; then comments_error 'comments session belongs to another gitdir'; return 1; fi
@@ -1847,9 +1912,12 @@ comments_transfer_preflight() {
 	comments_preflight_branch "$1" || return 1
 	[ -n "$cc_session" ] || return 0
 	_ct_target=$2
-	_ct_existing=$(review_config_get "branch.$_ct_target.reviewcommentssession" || true)
-	_ct_owner=$(review_config_get "branch.$_ct_target.reviewcommentsowner" || true)
-	_ct_context=$(review_config_get "branch.$_ct_target.reviewcommentscontext" || true)
+	review_config_read "branch.$_ct_target.reviewcommentssession"
+	_ct_existing=$_review_config_value
+	review_config_read "branch.$_ct_target.reviewcommentsowner"
+	_ct_owner=$_review_config_value
+	review_config_read "branch.$_ct_target.reviewcommentscontext"
+	_ct_context=$_review_config_value
 	if [ -n "$_ct_existing$_ct_owner$_ct_context" ] &&
 		{ [ "$_ct_existing" != "$cc_session" ] || [ "$_ct_owner" != "$cc_owner" ] || [ "$_ct_context" != "$cc_context" ]; }; then
 		comments_error 'another comments session owns the destination'; return 1
@@ -5274,19 +5342,25 @@ describe_porcelain() {
 	pb="$1"
 	pcurrent=0
 	[ "$pb" = "$cur" ] && pcurrent=1
-	psrc="$(review_config_get "branch.$pb.reviewsource" || true)"
+	review_config_read "branch.$pb.reviewsource"
+	psrc=$_review_config_value
 	if [ -z "$psrc" ]; then
 		porcelain_row branch "$pb" "$2" "$pcurrent" 1
 	else
-		pmode="$(review_config_get "branch.$pb.reviewmode" || echo whole)"
+		review_config_read "branch.$pb.reviewmode" whole
+		pmode=$_review_config_value
 		case "$pmode" in
 		step)
-			pposition="$(review_config_get "branch.$pb.reviewstep" || true)"
-			ptotal="$(review_config_get "branch.$pb.reviewcount" || true)"
+			review_config_read "branch.$pb.reviewstep"
+			pposition=$_review_config_value
+			review_config_read "branch.$pb.reviewcount"
+			ptotal=$_review_config_value
 			;;
 		walk)
-			pposition="$(review_config_get "branch.$pb.reviewwalkstep" || true)"
-			ptotal="$(review_config_get "branch.$pb.reviewwalkcount" || true)"
+			review_config_read "branch.$pb.reviewwalkstep"
+			pposition=$_review_config_value
+			review_config_read "branch.$pb.reviewwalkcount"
+			ptotal=$_review_config_value
 			;;
 		*)
 			pposition=""
@@ -5315,12 +5389,15 @@ describe_porcelain() {
 	# (finish never touches a saved review) — checked right after that branch's
 	# own record, regardless of whether it came out orphan above.
 	if [ "$2" -eq 0 ]; then
-		pundohead="$(review_config_get "branch.$pb.reviewundohead" || true)"
+		review_config_read "branch.$pb.reviewundohead"
+		pundohead=$_review_config_value
 		if [ -n "$pundohead" ]; then
-			presume="$(review_config_get "branch.$pb.reviewresume" || true)"
+			review_config_read "branch.$pb.reviewresume"
+			presume=$_review_config_value
 			pstate=pending
 			[ "$presume" = "conflict" ] && pstate=conflict
-			pkind="$(review_config_get "branch.$pb.reviewundokind" || true)"
+			review_config_read "branch.$pb.reviewundokind"
+			pkind=$_review_config_value
 			ponto=0
 			[ "$pkind" = "onto-source" ] && ponto=1
 			porcelain_row finish "$pb" "$pstate" "$ponto"

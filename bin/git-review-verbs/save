@@ -61,8 +61,10 @@ require_not_finish_conflict
 # the undo and orphan review-fixes / the undo point.
 require_not_pending_finish
 
-src="$(review_config_get "branch.$cur.reviewsource" || true)"
-tip="$(review_config_get "branch.$cur.reviewtip" || true)"
+review_config_read "branch.$cur.reviewsource"
+src=$_review_config_value
+review_config_read "branch.$cur.reviewtip"
+tip=$_review_config_value
 if [ -z "$src" ] || [ -z "$tip" ]; then
 	if [ -z "$src" ]; then
 		die "missing review metadata; was $cur created with git review start? Switch away, then delete it with 'git branch -D $cur'."
@@ -79,11 +81,14 @@ trap 'comments_unlock' 0
 trap 'exit 1' 1 2 15
 comments_transfer_preflight "$cur" "$saved" || exit 1
 
-mode="$(review_config_get "branch.$cur.reviewmode" || echo whole)"
+review_config_read "branch.$cur.reviewmode" whole
+mode=$_review_config_value
 
 # Where to return to: the branch you started from, else the base — like abort.
-ret="$(review_config_get "branch.$cur.reviewreturn" || true)"
-base="$(review_config_get "branch.$cur.reviewbase" || true)"
+review_config_read "branch.$cur.reviewreturn"
+ret=$_review_config_value
+review_config_read "branch.$cur.reviewbase"
+base=$_review_config_value
 target=""
 if [ -n "$ret" ] && git rev-parse --verify --quiet "refs/heads/$ret" >/dev/null; then
 	target="$ret"
@@ -131,16 +136,20 @@ fi
 # The explicit if (rather than a && one-liner) keeps the function's exit status 0
 # when the key is absent, so it does not trip set -e for the optional keys.
 copy_meta() {
-	v="$(review_config_get "branch.$cur.$1" || true)"
+	review_config_read "branch.$cur.$1"
+	v=$_review_config_value
 	if [ -n "$v" ]; then
 		git config "branch.$saved.$1" "$v"
 	fi
 }
 
 if [ "$mode" = "step" ]; then
-	start="$(review_config_get "branch.$cur.reviewstart" || true)"
-	count="$(review_config_get "branch.$cur.reviewcount" || true)"
-	step="$(review_config_get "branch.$cur.reviewstep" || true)"
+	review_config_read "branch.$cur.reviewstart"
+	start=$_review_config_value
+	review_config_read "branch.$cur.reviewcount"
+	count=$_review_config_value
+	review_config_read "branch.$cur.reviewstep"
+	step=$_review_config_value
 	# A key deleted by a hand-edit (while reviewmode stays "step") would otherwise
 	# let set -e kill the bare read silently mid-script; read with || true and report
 	# it. Unlike status/preview there is no later numeric guard, so cover step too.
@@ -202,8 +211,10 @@ else
 		copy_meta reviewwalkkeys
 		copy_meta reviewwalkfromdraft
 		copy_meta reviewwalkbase
-		wstep="$(review_config_get "branch.$cur.reviewwalkstep" || echo '?')"
-		wcount="$(review_config_get "branch.$cur.reviewwalkcount" || echo '?')"
+		review_config_read "branch.$cur.reviewwalkstep" '?'
+		wstep=$_review_config_value
+		review_config_read "branch.$cur.reviewwalkcount" '?'
+		wcount=$_review_config_value
 		note="walkthrough review on entry $wstep/$wcount"
 	else
 		git config "branch.$saved.reviewmode" whole

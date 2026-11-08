@@ -88,6 +88,57 @@ bytes de Local, diff y cursor después de Continue. Son tiempos de CLI en este
 fixture, no del clic del IDE ni una garantía para otros repositorios.
 `benchmark-summary.json` conserva muestras, comandos, hash del código y método.
 
-La comparación pareada del tiempo total en IntelliJ queda para la validación
-posterior al commit del código verificado. Se usará el mismo plugin 0.5.5 y se
-alternarán ambas CLI, con buffers limpios y modificados.
+## Comparación pareada en IntelliJ
+
+Después del commit de código `5ea915d` se hicieron ocho Save reales en una misma
+instancia caliente de IntelliJ 2026.1 con plugin 0.5.5. Un wrapper idéntico para
+ambas variantes alternó CLI 0.10.5 y 0.10.6. Hubo dos muestras por versión y
+condición: editor limpio y Local modificado. Continue usó siempre 0.10.6 fuera
+del intervalo de Save; se esperó el fin de las lecturas secundarias antes de
+comenzar la siguiente muestra. Las suites estaban detenidas.
+
+| Save en IntelliJ | Mediana con 0.10.5 | Mediana con 0.10.6 | Reducción |
+| --- | ---: | ---: | ---: |
+| Editor limpio | 8,84 s | 7,27 s | 17,8 % |
+| Local modificado | 10,52 s | 9,24 s | 12,2 % |
+
+Es la duración hasta liberar el lock de la operación: excluye decidir en el
+modal y no instrumenta el paint del EDT. En este fixture, la repetición sí
+confirma una mejora total de la acción; dos muestras por combinación no
+caracterizan otros repositorios ni garantizan ese porcentaje en toda máquina.
+
+Los casos limpios omitieron el inventario previo y los modificados lo
+conservaron. Antes de confirmar se contrastó que el marcador se veía en el
+editor y todavía no estaba en disco; después se verificaron todos los bytes,
+la misma sesión y main limpio. Se conservaron cursor y diff en cada Continue.
+No hubo otra invocación de CLI mientras corría Save. El fixture terminó pausado
+con toda la prosa de prueba y los archivos base restaurados.
+
+Se habilitó edición sólo para el Local sintético hasta cerrar el IDE. El primer
+pegado fue interceptado por la protección del editor: se deshizo y se repitió
+antes de la verificación válida. La instancia emitió errores de su daemon
+JetBrains al arrancar; las mediciones comenzaron una vez estabilizada, sin
+errores del plugin en las acciones medidas. Se cerró sólo la instancia propia
+y se restauró su ruta de CLI; las dos ventanas originales siguieron abiertas.
+
+`ui-summary.json` conserva las ocho muestras y sus medianas; `ui-cases.json`
+registra las comprobaciones, `ui-plugin-calls.log` y `ui-wrapper-calls.log`
+identifican cada invocación y `ui-final-git.json` verifica el estado final.
+
+## Evaluación del refresco posterior
+
+El cliente todavía invoca `--version`, `status --porcelain`, `list --porcelain`
+y `config --porcelain` después de Save. En las cuatro muestras con 0.10.6 esas
+consultas sumaron 1,95 s de mediana. El resto del intervalo fuera del verbo y
+del inventario previo fue aproximadamente 0,32 s. El inventario necesario con
+Local modificado costó 1,89 s de mediana.
+
+El siguiente corte puede reunir las lecturas principales en la CLI para
+compartir metadata y resolver menos veces el mismo repositorio. No se presume
+que desaparezcan los 1,95 s completos: parte corresponde a calcular el reporte
+que todavía necesita el panel. Esa superficie debe conservar compatibilidad
+y la autoridad de la CLI en los cuatro clientes, y medirse como un cambio
+separado. Este corte no agrega una respuesta nueva de cierre.
+
+Código commiteado en main y mediciones registradas por separado. Sin push,
+tags ni publicación; los clientes conservan sus versiones y usan CLI 0.10.6.

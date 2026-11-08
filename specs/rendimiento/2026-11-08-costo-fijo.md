@@ -209,14 +209,15 @@ por sí solo no justifica prometer una latencia integral nueva.
 | Alternativa | Ventaja principal | Costo o incertidumbre |
 | --- | --- | --- |
 | Git config actual con menos procesos de shell | Conserva almacenamiento e instalación | Recorte integral probado de unos 0,47 s; paridad del prototipo todavía incompleta |
-| Git config con auxiliar nativo transaccional | Explorar lotes sin migrar las claves existentes | Distribuir un binario/biblioteca y verificar equivalencia con Git; rendimiento integral no medido |
+| Git config con auxiliar nativo transaccional | Explorar lotes sin migrar las claves existentes | Distribuir un binario/biblioteca y verificar equivalencia; almacenamiento medido abajo, Save integral pendiente |
 | SQLite para metadata de sesión en gitdir | Transacciones, constraints, consultas y concurrencia estándar | Empaquetado, esquema/migración, diagnóstico y coordinación con Git |
 | Archivo de sesión propio | Mantiene dependencia mínima si sigue siendo POSIX | Mantener serialización, locks, revisiones y publicación/recuperación propias |
 
 La segunda opción no depende de una API imaginaria de Git CLI:
 [git_config_lock de libgit2](https://libgit2.org/docs/reference/v1.9.2/config/git_config_lock.html)
 permite bloquear el backend y agrupar cambios antes de git_transaction_commit.
-Esto abre una vía que se había omitido. **No está implementada ni comparada aquí.**
+Esto abre una vía que se había omitido. La comparación de almacenamiento se
+incorpora abajo; **todavía no hay un auxiliar integrado en el producto**.
 Hay que seleccionar explícitamente el destino de escritura y comprobar includes,
 config por worktree, duplicados, bytes y compatibilidad con las fuentes que
 actualmente interpreta Git. No se propone sustituir los comandos de objetos,
@@ -242,14 +243,78 @@ el índice y los Markdown. La recuperación entre fases sigue siendo necesaria.
 La comparación de producto debe considerar ese protocolo y la compatibilidad,
 además de cuántos milisegundos tarda una escritura.
 
-**Prioridad revisada:** comparar un auxiliar que conserve config y una solución
-SQLite con el mismo Save y garantías antes de elegir una migración. Un archivo
-propio sigue siendo una posibilidad, pero no una preferencia ya justificada.
+**Prioridad revisada tras la comparación directa siguiente:** probar primero
+un auxiliar de lotes que conserve config dentro del mismo Save. SQLite queda
+como candidata si demuestra una ventaja integral que justifique la migración.
+Un archivo propio sigue siendo una posibilidad, no una preferencia justificada.
 El objetivo de cuatro segundos del apartado anterior es un criterio propuesto
 para ese prototipo integral, no una proyección obtenida sumando microbenchmarks.
 
 Evidencia de SQLite, JSON completo y script:
 `C:/Users/ezevi_30ey2ks/.codex/visualizations/2026/11/04/01a1a8ee-2d7a-7dc3-8eab-a6b1de179fec/sqlite-options/`.
+
+## Comparación directa de velocidad: lotes de config y SQLite
+
+Ezequiel aclaró que una migración a SQLite sólo tendría sentido si logra una
+mejora relevante de velocidad. No fijó un umbral numérico. Para comparar la
+oportunidad se midieron ambos motores, sin convertir una medición de escritura
+en una promesa sobre Save.
+
+Se obtuvo la biblioteca Win64 de
+[LibGit2Sharp.NativeBinaries 2.0.324](https://www.nuget.org/packages/LibGit2Sharp.NativeBinaries/2.0.324)
+desde NuGet en un directorio de experimentos. El paquete contiene libgit2 1.8.6;
+se registró el SHA-512. Se invocaron sus APIs de config mediante ctypes y SQLite
+3.50.4 mediante el módulo de Python existente. No se instaló una dependencia
+del producto ni se modificaron archivos reales de un repositorio del usuario.
+
+Un calentamiento y cinco muestras por método, orden alternado. Quince claves
+de metadata y los mismos valores, incluidos vacío, comillas, backslash, TAB,
+LF y UTF-8. Las bibliotecas ya estaban cargadas; se mide apertura, operaciones,
+publicación y cierre. El caso Git CLI sí incluye sus 15 procesos nativos, pero
+no agrega la shell de la CLI de producto.
+
+| Operación aislada | Mediana |
+| --- | ---: |
+| Quince escrituras por el ejecutable Git | 738,30 ms |
+| Quince escrituras libgit2 sin lote | 27,30 ms |
+| Un lote libgit2 | 2,75 ms |
+| Un lote libgit2 y flush explícito del archivo resultante | 4,98 ms |
+| Una transacción SQLite | 7,17 ms |
+| Seis snapshots completos con libgit2 | 3,19 ms |
+| Seis aperturas/lecturas/cierres SQLite | 4,19 ms |
+
+SQLite usa journal DELETE y synchronous FULL. Se activó explícitamente
+[GIT_OPT_ENABLE_FSYNC_GITDIR](https://libgit2.org/docs/reference/v1.8.7/common/git_libgit2_opts.html)
+y se agregó el ensayo con flush del archivo. Esto **no certifica equivalencia
+exacta de durabilidad ante corte de energía** entre motores ni con Git.
+Los números no incluyen arranque/import/carga de un auxiliar, protocolo con
+la shell, lectura de todas las fuentes de configuración ni el resto de Save.
+
+Se contrastaron los valores escritos por libgit2 con el propio Git, incluidos
+bytes especiales. Se conservaron una clave ajena y un comentario. Descartar una
+transacción sin commit dejó el archivo original intacto. Mientras el lote tenía
+config.lock, el escritor Git externo fue rechazado (exit 255), sin sobrescribir
+la configuración. No equivale a verificar todavía toda la semántica de Git.
+
+**Conclusión de velocidad:** ambos accesos agrupados están en milisegundos para
+este volumen. La diferencia absoluta entre 5 y 7 ms no justifica una decisión
+de arquitectura para un Save de seis segundos. La ganancia importante aparece
+al quitar procesos, lecturas repetidas y escrituras separadas. SQLite es rápida,
+pero conservar Git config no impide obtener ese tipo de acceso rápido.
+
+Esto cambia el orden del próximo experimento: integrar un auxiliar acotado para
+lectura/escritura de metadata agrupada, con config actual, preservando los
+comandos Git para el código. Medir Save completo con la misma respuesta y las
+mismas guardas. Si el resultado integral queda casi igual, este ensayo aislado
+no autoriza afirmar que se resolvió la latencia ni justifica adoptar el auxiliar.
+Tampoco justifica migrar a SQLite sólo por su tiempo de escritura.
+
+No se proyecta que Save vaya a tardar 5 o 7 ms. Los otros procesos y controles
+siguen presentes; tampoco se suman los recortes de ensayos distintos como si
+fueran una muestra de Save. La decisión final requiere la comparación integral.
+
+Evidencia, paquete aislado, versiones, valores completos, script y JSON:
+`C:/Users/ezevi_30ey2ks/.codex/visualizations/2026/11/04/01a1a8ee-2d7a-7dc3-8eab-a6b1de179fec/backend-compare/`.
 
 ## Evidencia y reproducción
 

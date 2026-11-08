@@ -80,12 +80,16 @@ git rev-parse --verify --quiet "refs/heads/$rb" >/dev/null &&
 # (tracked or untracked — same rule as start/compare).
 require_clean_work_tree
 
+# Like Save, batch each custody phase while retaining fresh reads before/after
+# the lock and immediately before publication. No snapshot crosses a boundary.
+_review_close_snapshot=1
 comments_lock_branch "$saved" || exit 1
 trap 'comments_unlock' 0
 trap 'exit 1' 1 2 15
 comments_transfer_preflight "$saved" "$rb" || exit 1
 
-mode="$(git config "branch.$saved.reviewmode" || echo whole)"
+review_config_read "branch.$saved.reviewmode" whole
+mode=$_review_config_value
 
 # restore_draft: bring the reviewer's walkthrough draft back to the active
 # namespace. Called from both mode paths immediately before the review branch is
@@ -128,7 +132,8 @@ restore_draft() {
 	fi
 }
 
-tip="$(git config "branch.$saved.reviewtip" || true)"
+review_config_read "branch.$saved.reviewtip"
+tip=$_review_config_value
 # A saved review missing its tip (hand-edited or half-deleted config) would let
 # set -e kill us silently while restoring; report it instead.
 [ -n "$tip" ] || die "missing review metadata for $saved; was it created with git review start? Discard it with 'git review forget --saved $src'."
@@ -136,16 +141,20 @@ tip="$(git config "branch.$saved.reviewtip" || true)"
 # restore_meta <key>: copy branch.<saved>.<key> to branch.<rb>.<key> when set.
 # Explicit if so the function returns 0 for absent optional keys (set -e safety).
 restore_meta() {
-	v="$(git config "branch.$saved.$1" || true)"
+	review_config_read "branch.$saved.$1"
+	v=$_review_config_value
 	if [ -n "$v" ]; then
 		git config "branch.$rb.$1" "$v"
 	fi
 }
 
 if [ "$mode" = "step" ]; then
-	start="$(git config "branch.$saved.reviewstart" || true)"
-	count="$(git config "branch.$saved.reviewcount" || true)"
-	step="$(git config "branch.$saved.reviewstep" || true)"
+	review_config_read "branch.$saved.reviewstart"
+	start=$_review_config_value
+	review_config_read "branch.$saved.reviewcount"
+	count=$_review_config_value
+	review_config_read "branch.$saved.reviewstep"
+	step=$_review_config_value
 	if [ -z "$start" ] || [ -z "$count" ] || [ -z "$step" ]; then
 		die "missing review metadata for $saved; was it created with git review start? Discard it with 'git review forget --saved $src'."
 	fi
@@ -203,7 +212,8 @@ else
 	# reading cursor on top. Read with || true and reported: a deleted
 	# reviewsavedlower would otherwise let set -e kill us mid-restore with no
 	# message, so bail before creating the branch, as the step path does above.
-	lower="$(git config "branch.$saved.reviewsavedlower" || true)"
+	review_config_read "branch.$saved.reviewsavedlower"
+	lower=$_review_config_value
 	[ -n "$lower" ] || die "missing review metadata for $saved; was it created with git review start? Discard it with 'git review forget --saved $src'."
 
 	restore_draft
@@ -242,6 +252,10 @@ else
 		# path reprints its commit. load_walk_review_meta applies the keys-only filter
 		# when reviewwalkkeys is set.
 		cur="$rb"
+		# Walk keys were restored after the transfer's final custody snapshot.
+		# Reporting must see those writes, never the pre-transfer active metadata.
+		review_config_init
+		[ "$_review_config_ready" -eq 1 ] || die 'could not read review metadata'
 		load_walk_review_meta
 		echo "resumed review of $src — walkthrough entry $walkstep/$total"
 		show_walk_entry "$walkstep"

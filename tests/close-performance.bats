@@ -17,10 +17,10 @@ if [ "${1:-}" = config ] && [ "${2:-}" = --null ]; then
 	if [ "${CLOSE_FAIL:-0}" = 1 ]; then exit 7; fi
 	if [ "$n" -eq "${CLOSE_FAIL_AT:-0}" ]; then exit 7; fi
 	if [ "$n" -eq "${CLOSE_CHANGE_AT:-0}" ]; then
-		"$CLOSE_REAL_GIT" config branch.review/feature/comments.reviewcommentsowner /another/gitdir
+		"$CLOSE_REAL_GIT" config "branch.${CLOSE_SOURCE:-review/feature/comments}.reviewcommentsowner" /another/gitdir
 	fi
 	if [ "$n" -eq "${CLOSE_DEST_AT:-0}" ]; then
-		"$CLOSE_REAL_GIT" config branch.review-saved/feature/comments.reviewcommentssession bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+		"$CLOSE_REAL_GIT" config "branch.${CLOSE_TARGET:-review-saved/feature/comments}.reviewcommentssession" bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 	fi
 fi
 exec "$CLOSE_REAL_GIT" "$@"
@@ -139,4 +139,71 @@ check_changed_owner() {
 	unset CLOSE_FAIL
 	comments_snapshot "$COMMENTS_TMP/after"
 	comments_assert_snapshot "$COMMENTS_TMP/before" "$COMMENTS_TMP/after"
+}
+
+check_continue_batches() {
+	comments_start "$1" >/dev/null
+	git review comments add --document local --text 'Private prose survives resume.' >/dev/null
+	git review comments add --document shared --text 'Shared preparation survives resume.' >/dev/null
+	comments_refresh_paths
+	cp "$COMMENTS_LOCAL" "$COMMENTS_TMP/local-before"
+	cp "$COMMENTS_SHARED" "$COMMENTS_TMP/shared-before"
+	printf 'private code edit\n' >>sample.txt
+	comments_snapshot "$COMMENTS_TMP/before"
+	git review save >/dev/null
+	trace_close
+	run --separate-stderr sh "$BATS_TEST_DIRNAME/../bin/git-review" continue feature/comments
+	[ "$status" -eq 0 ]
+	[ "$stderr" = '' ]
+	[ "$(git branch --show-current)" = review/feature/comments ]
+	[ "$(git branch --list review-saved/feature/comments)" = '' ]
+	# Source metadata is read in snapshots, including each custody boundary.
+	[ "$(awk '$1=="config" && NF==2 && $2 ~ /^branch.review-saved\/feature\/comments\./ {n++} END {print n+0}' "$CLOSE_CALLS")" -eq 0 ]
+	local snapshots=5
+	if [ "$1" = walk ]; then snapshots=6; fi
+	[ "$(awk '$1=="config" && $2=="--null" {n++} END {print n+0}' "$CLOSE_CALLS")" -eq "$snapshots" ]
+	cmp "$COMMENTS_TMP/local-before" "$COMMENTS_LOCAL"
+	cmp "$COMMENTS_TMP/shared-before" "$COMMENTS_SHARED"
+	comments_snapshot "$COMMENTS_TMP/after"
+	comments_assert_snapshot "$COMMENTS_TMP/before" "$COMMENTS_TMP/after" index staged unstaged worktree
+}
+
+@test "whole continue batches metadata and preserves code and both preparations" { check_continue_batches whole; }
+@test "step continue batches metadata and preserves code and both preparations" { check_continue_batches step; }
+@test "walk continue reloads restored cursor metadata before reporting" { check_continue_batches walk; }
+
+@test "continue rereads saved ownership after acquiring its lock" {
+	comments_start whole >/dev/null
+	git review comments add --document local --text 'Do not lose this preparation.' >/dev/null
+	comments_refresh_paths
+	cp "$COMMENTS_LOCAL" "$COMMENTS_TMP/local-before"
+	git review save >/dev/null
+	local saved_tip
+	saved_tip=$(git rev-parse review-saved/feature/comments)
+	export CLOSE_SOURCE=review-saved/feature/comments CLOSE_CHANGE_AT=2
+	trace_close
+	run --separate-stderr sh "$BATS_TEST_DIRNAME/../bin/git-review" continue feature/comments
+	[ "$status" -eq 1 ]
+	[ "$stderr" = 'error: comments session belongs to another gitdir' ]
+	[ "$output" = '' ]
+	[ "$(git branch --show-current)" = main ]
+	[ "$(git status --porcelain)" = '' ]
+	[ "$(git rev-parse review-saved/feature/comments)" = "$saved_tip" ]
+	[ "$(git branch --list review/feature/comments)" = '' ]
+	cmp "$COMMENTS_TMP/local-before" "$COMMENTS_LOCAL"
+}
+
+@test "continue stops on a failed post-lock metadata snapshot" {
+	comments_start whole >/dev/null
+	git review save >/dev/null
+	export CLOSE_FAIL_AT=2
+	trace_close
+	run --separate-stderr sh "$BATS_TEST_DIRNAME/../bin/git-review" continue feature/comments
+	[ "$status" -eq 1 ]
+	[ "$stderr" = 'error: could not read review metadata' ]
+	[ "$output" = '' ]
+	[ "$(git branch --show-current)" = main ]
+	[ "$(git status --porcelain)" = '' ]
+	git show-ref --verify --quiet refs/heads/review-saved/feature/comments
+	[ "$(git branch --list review/feature/comments)" = '' ]
 }

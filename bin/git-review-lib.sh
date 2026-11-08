@@ -1775,6 +1775,33 @@ comments_check_orphan_claim() {
 	done
 }
 
+# Read the four custody fields together. The sentinel preserves empty context
+# and missing fields through command substitution; values remain literal bytes.
+# No document body, identity resolution or history belongs to this check.
+comments_session_manifest() {
+	_csm_session='' _csm_context='' _csm_owner='' _csm_custodian=''
+	comments_safe_path "$1" || return 1
+	if [ -e "$1" ] && [ ! -f "$1" ]; then comments_error "unsafe comments path: $1"; return 1; fi
+	[ -f "$1" ] || return 0
+	_csm_fields=$(awk -F '\t' '
+		$1=="session" || $1=="context" || $1=="owner_gitdir" || $1=="custodian" {
+			if (++seen[$1]>1) bad=1
+			value[$1]=substr($0,length($1)+2)
+		}
+		END {
+			if(bad) exit 1
+			printf "%s\n%s\n%s\n%s\n.\n",value["session"],value["context"],value["owner_gitdir"],value["custodian"]
+		}' "$1") || { comments_error 'comments session ownership does not match'; return 1; }
+	{
+		IFS= read -r _csm_session
+		IFS= read -r _csm_context
+		IFS= read -r _csm_owner
+		IFS= read -r _csm_custodian
+	} <<EOF
+$_csm_fields
+EOF
+}
+
 comments_preflight_branch() {
 	_cc_branch=$1
 	cm_gitdir=$(git rev-parse --absolute-git-dir) || return 1
@@ -1800,11 +1827,9 @@ comments_preflight_branch() {
 		comments_error 'comments context belongs to another gitdir'; return 1
 	fi
 	cc_dir=$cm_root/sessions/$cc_session
-	comments_safe_path "$cc_dir/manifest" || return 1
-	if [ "$(comments_field "$cc_dir/manifest" session)" != "$cc_session" ] ||
-		[ "$(comments_field "$cc_dir/manifest" context)" != "$cc_context" ] ||
-		[ "$(comments_field "$cc_dir/manifest" owner_gitdir)" != "$cm_gitdir" ] ||
-		[ "$(comments_field "$cc_dir/manifest" custodian)" != "$_cc_branch" ]; then
+	comments_session_manifest "$cc_dir/manifest" || return 1
+	if [ "$_csm_session" != "$cc_session" ] || [ "$_csm_context" != "$cc_context" ] ||
+		[ "$_csm_owner" != "$cm_gitdir" ] || [ "$_csm_custodian" != "$_cc_branch" ]; then
 		comments_error 'comments session ownership does not match'; return 1
 	fi
 	comments_safe_path "$cc_dir/local.md" || return 1
@@ -5030,6 +5055,7 @@ review_status_porcelain() {
 	if [ "$mode" = step ] || [ "$mode" = walk ]; then porcelain_row capability navigation-state; fi
 	review_guard_capture "$cur" "${_review_head:-${_walk_lower:-}}"
 	porcelain_row capability save-state
+	porcelain_row capability comments-paths
 	porcelain_row guard "$review_guard"
 	return 0
 }
@@ -5483,4 +5509,34 @@ review_saved_state() {
 	_reply_config=$(review_config_report)
 	printf '%s\n' "$_reply_config" | awk '{print "config\t" $0}'
 	porcelain_row save-state complete
+}
+
+# Only the active session's editor paths. Reuse custody validation, without
+# loading capture history, scanning prose, hashing documents or enumerating
+# other sessions. The caller binds this report to its displayed state guard.
+comments_paths() {
+	_cp_branch=$(git symbolic-ref --quiet --short HEAD || true)
+	case "$_cp_branch" in review/*) ;; *) printf '%s\n' 'error: comments paths requires an active review' >&2; return 2 ;; esac
+	review_config_init
+	if [ "${_review_config_ready:-0}" -ne 1 ]; then comments_error 'could not read review metadata'; return 1; fi
+	comments_preflight_branch "$_cp_branch" || return 1
+	_review_guard_gitdir=$cm_gitdir
+	review_guard_capture "$_cp_branch" || return 1
+	# No owned session means legacy metadata. Say so explicitly: absence of
+	# paths must not masquerade as proof that there are no editor documents.
+	if [ -z "$cc_session" ]; then
+		porcelain_row comments-paths 1 "$review_guard" legacy
+		porcelain_row comments-paths complete
+		return 0
+	fi
+	for _cp_kind in local shared; do
+		_cp_path=$cc_dir/$_cp_kind.md
+		if [ -e "$_cp_path" ] && [ ! -f "$_cp_path" ]; then comments_error "unsafe comments path: $_cp_path"; return 1; fi
+	done
+	# Use the existing literal-path encoding once for the common directory.
+	_cp_dir=$(comments_encode_path "$cc_dir") || return 1
+	porcelain_row comments-paths 1 "$review_guard" "$cc_session"
+	porcelain_row comments-path local "$_cp_dir/local.md"
+	porcelain_row comments-path shared "$_cp_dir/shared.md"
+	porcelain_row comments-paths complete
 }

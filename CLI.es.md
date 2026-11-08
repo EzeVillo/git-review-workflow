@@ -105,6 +105,7 @@ tu editor Markdown habitual para editar, mover o borrar entradas.
 
 | Comando después de `git review comments` | Propósito |
 |------------------------------------------|-----------|
+| `paths --porcelain` | Informa las rutas de edición de la sesión activa sin leer prosa ni historia. Requiere contrastar el guard de la review mostrada; ver [el contrato de rutas](contracts/comments-paths.md). |
 | `status [--porcelain] [--context <id>]` | Consultar identidad, ambos documentos, recuentos, diagnósticos y entrega. Fuera de sesión, enumera resultados conservados y preparaciones guardadas. |
 | `init --document <local\|shared> [context-options] [guards]` | Crear sólo el documento elegido, si está ausente. |
 | `add --document <local\|shared> [context-options] [location-options] [--text <text>\|--stdin] [guards]` | Añadir una entrada; las ubicaciones repetidas siguen siendo entradas distintas. |

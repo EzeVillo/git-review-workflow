@@ -123,7 +123,7 @@ _git_review_comments() {
 	case "$state" in
 	commentsub)
 		local -a comment_commands
-		comment_commands=('status:inspect comments' 'init:create one document' 'add:compose a comment'
+		comment_commands=('paths:report active session editor paths' 'status:inspect comments' 'init:create one document' 'add:compose a comment'
 			'delete:delete an active prepared document' 'renumber:number entries in physical order' 'entries:list physical entries'
 			'diff:show the captured historical code' 'save:retain compare comments locally'
 			'prepare:prepare pending Shared comments')
@@ -134,7 +134,7 @@ _git_review_comments() {
 		comment_options=('(-h --help)'{-h,--help}'[show help]')
 		if [[ "$line[1]" == status ]]; then comment_options+=('(--context)--all[include all retained contexts]'); fi
 		case "$line[1]" in
-		status|entries|diff|prepare) comment_options+=('--porcelain[machine-readable output]') ;;
+		paths|status|entries|diff|prepare) comment_options+=('--porcelain[machine-readable output]') ;;
 		esac
 		if [[ "$line[1]" != save ]]; then comment_options+=('--context[select an existing context]:context:'); fi
 		case "$line[1]" in

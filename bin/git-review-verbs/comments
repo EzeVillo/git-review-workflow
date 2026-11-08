@@ -7,6 +7,7 @@ usage() {
 usage: $prog <command> [options]
 
 Commands:
+  paths --porcelain                     report active session editor paths only
   status [--porcelain] [--context <id> | --all] inspect comments without writing
   init --document <local|shared>          create the chosen document
   add --document <local|shared>           compose a comment
@@ -30,7 +31,7 @@ Location (add):  --path <path>, --side base|head, --start-line <n> --end-line <n
 Guards:          --expect-context <token>, --expect-document <revision>
 Save guards:     --expect-context <token>, --expect-local <revision>,
                  --expect-shared <revision>
-Queries:         --porcelain (status/entries/diff), --entry <ordinal> (diff/delete),
+Queries:         --porcelain (paths/status/entries/diff), --entry <ordinal> (diff/delete),
                  --check [--porcelain] (prepare)
 
 Each subcommand accepts only its applicable options. Empty text cancels.
@@ -41,7 +42,7 @@ EOF
 
 case "${1:-}" in
 	''|-h|--help) usage; exit 0 ;;
-	status|init|add|delete|renumber|entries|diff|save|prepare) command=$1; shift ;;
+	status|paths|init|add|delete|renumber|entries|diff|save|prepare) command=$1; shift ;;
 	*) printf 'error: unknown comments command: %s\n' "$1" >&2; exit 1 ;;
 esac
 # shellcheck source=../git-review-lib.sh
@@ -60,6 +61,7 @@ expect_context='' expect_document='' expect_local='' expect_shared=''
 seen=''
 case "$command" in
 	status) allowed=' --porcelain --context --all ' ;;
+	paths) allowed=' --porcelain ' ;;
 	init) allowed=' --document --context --new-context --use-context --expect-context --expect-document ' ;;
 	add) allowed=' --document --context --new-context --use-context --path --side --start-line --end-line --start-column --end-column --base --head --base-path --head-path --unversioned --text --stdin --expect-context --expect-document ' ;;
 	delete) allowed=' --document --context --entry --expect-context --expect-document ' ;;
@@ -111,12 +113,14 @@ esac
 if [ "$stdin" -eq 1 ]; then
 	case " $seen " in *' --text '*) comments_error '--text and --stdin are mutually exclusive'; exit 1 ;; esac
 fi
+if [ "$command" = paths ] && [ "$porcelain" -ne 1 ]; then comments_error 'paths requires --porcelain'; exit 1; fi
 if [ "$command" = entries ] && [ "$porcelain" -ne 1 ]; then comments_error 'entries requires --porcelain'; exit 1; fi
 if [ "$command" = prepare ] && { [ -z "$context" ] || { [ "$porcelain" -eq 1 ] && [ "$check" -ne 1 ]; }; }; then comments_error 'prepare requires --context; --porcelain requires --check'; exit 1; fi
 input_file=''
 trap 'comments_unlock; if [ -n "$input_file" ]; then rm -f "$input_file"; fi' 0
 trap 'exit 1' 1 2 15
 case "$command" in
+	paths) comments_paths ;;
 	status)
 		cm_config_snapshot_requested=1
 		comments_status "$context" "$porcelain" "$all"

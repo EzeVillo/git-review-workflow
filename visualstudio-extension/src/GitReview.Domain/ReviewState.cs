@@ -53,6 +53,7 @@ public sealed record ReviewState(
     string? Guard = null,
     bool NavigationState = false,
     bool SaveState = false,
+    bool CommentsPaths = false,
     string? InlineWhy = null)
 {
     public IReadOnlyList<EntryRecord> EntriesList => Entries ?? Array.Empty<EntryRecord>();

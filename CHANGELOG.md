@@ -12,6 +12,12 @@ and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 This file starts at 0.2.1. Earlier versions are only in the
 [GitHub Releases](https://github.com/EzeVillo/git-review-workflow/releases).
 
+## [0.10.8] — 2026-11-08
+
+### Changed
+
+- Add an opt-in comments paths query for saving active session buffers without loading capture history or scanning documents. Read custody manifest fields together while preserving fresh checks at every custody boundary.
+
 ## [0.10.7] — 2026-11-08
 
 ### Changed

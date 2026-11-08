@@ -105,6 +105,7 @@ usual Markdown editor to edit, move or delete entries.
 
 | Command after `git review comments` | Purpose |
 |-------------------------------------|---------|
+| `paths --porcelain` | Report the active session’s owned editor paths without loading comment bodies or history. Requires a displayed review guard check; see [the paths contract](contracts/comments-paths.md). |
 | `status [--porcelain] [--context <id>]` | Inspect identity, both documents, counts, diagnostics and delivery state. Outside a session, enumerate retained results and saved preparations. |
 | `init --document <local\|shared> [context-options] [guards]` | Create only the chosen document, if absent. |
 | `add --document <local\|shared> [context-options] [location-options] [--text <text>\|--stdin] [guards]` | Append one entry; repeated locations remain separate entries. |

@@ -312,7 +312,7 @@ EOF
 	# No closure record; the additive context guard must also be usable.
 	guard=$(printf '%s\n' "$output" | awk -F '\t' '$1 == "guard" {print $2}')
 	[[ "$guard" =~ ^[0-9a-f]{40}$ ]]
-	expected="$(printf 'state\treview/feature/x\tfeature/x\t%s\twhole\tnone\nentry\t1\ta.txt\nbase\tdevelop\ncapability\tsave-state\nguard\t%s' "$tip" "$guard")"
+	expected="$(printf 'state\treview/feature/x\tfeature/x\t%s\twhole\tnone\nentry\t1\ta.txt\nbase\tdevelop\ncapability\tsave-state\ncapability\tcomments-paths\nguard\t%s' "$tip" "$guard")"
 	[ "$output" = "$expected" ]
 	run git review --expect-state "$guard" status --porcelain
 	[ "$status" -eq 0 ]

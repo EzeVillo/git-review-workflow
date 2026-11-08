@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.7] — 2026-11-08
+
+### Changed
+
+- Save active session comment buffers using the focused paths query when supported. Validate the displayed review guard before saving; retain full inventory for recovery, housekeeping and legacy CLI sessions.
+
 ## [0.5.6] — 2026-11-08
 
 ### Changed

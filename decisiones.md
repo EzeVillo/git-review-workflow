@@ -2195,3 +2195,20 @@ completado en error de mutación. Se conserva compatibilidad con CLI anteriores
 sin elevar el mínimo: la opción sólo se envía cuando se anunció la capacidad.
 La verificación y las mediciones viven en
 `specs/rendimiento/2026-11-08-respuesta-save.md`.
+
+## 31. Consultar custodia y rutas antes de guardar buffers
+
+El inventario de Comments resolvía captura, historia, revisiones y conteos para
+obtener sólo dos rutas de edición antes de Save. Se agrega la consulta acotada
+`comments paths --porcelain`, negociada con comments-paths en status. Sus rutas
+salen del mismo preflight de custodia; el guard de la review mostrada impide
+que un informe de otra sesión autorice el guardado de buffers. No cambia el
+contrato de status ni convierte el inventario pendiente/fallido en ausencia.
+
+Se conserva el inventario completo para recuperación, limpieza y legacy. Sólo
+un sobre legacy explícito vuelve al flujo anterior; errores o sobres inválidos
+bloquean el cierre sin guardar buffers. La TUI no tiene documentos del editor,
+pero también recibe el ahorro de la lectura conjunta del manifest dentro de los
+preflights compartidos. Se conservan relecturas frescas en cada fase, locks y
+guardas existentes. Método, pruebas y mediciones en
+`specs/rendimiento/2026-11-08-rutas-custodia.md`.

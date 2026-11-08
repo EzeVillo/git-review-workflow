@@ -13,6 +13,14 @@ fun saveSessionComments(
             HousekeepingKind.CLEAN_ALL, HousekeepingKind.FORGET_SAVED_ONE, HousekeepingKind.FORGET_SAVED_ALL)
     if (!relevant) return true
     if (runCatching { hasUnsaved() }.getOrNull() == false) return true
+    if (state.commentsPaths && state.guard != null &&
+        state.situation in setOf(Situation.REVIEW, Situation.FINISH_CONFLICT) &&
+        action in setOf("saveReview", "abortReview", "finishReview", "undoFinish", "resumeFinish")) {
+        val response = cli.invoke("comments", listOf("paths", "--porcelain"), root)
+        if (response.exitCode != 0 || response.timedOut || response.errorCode != null) return false
+        val report = parseCommentPaths(response.stdout, state.guard) ?: return false
+        if (report.paths != null) return save(report.paths)
+    }
     val response = cli.invoke("comments", listOf("status", "--porcelain", "--all"), root)
     if (response.exitCode != 0 || response.timedOut || response.errorCode != null) return false
     val report = parseComments(response.stdout)

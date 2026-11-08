@@ -271,6 +271,7 @@ class ReviewStateManager(
         val guarded = state.copy(guard = com.ezevillo.gitreview.domain.parseStateGuard(status.stdout),
             navigationState = hasNavigationState(status.stdout),
             saveState = hasSaveState(status.stdout),
+            commentsPaths = com.ezevillo.gitreview.domain.hasCommentPaths(status.stdout),
             inlineWhy = com.ezevillo.gitreview.domain.parseInlineWhy(status.stdout),
             comments = if (commentsPending) com.ezevillo.gitreview.domain.CommentsReport(loading = true) else state.comments)
         val complete = if (includeComments && (status.exitCode == 0 || status.exitCode == 2)) {

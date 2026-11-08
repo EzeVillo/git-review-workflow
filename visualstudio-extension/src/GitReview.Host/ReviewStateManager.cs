@@ -254,7 +254,7 @@ public sealed class ReviewStateManager
                     status.Stderr, status.Stdout, "Something went wrong reading the review state."));
         }
 
-        next = next with { Guard = StaleGuard.Parse(status.Stdout), NavigationState = NavigationReply.Supported(status.Stdout), SaveState = SaveReply.Supported(status.Stdout), InlineWhy = NavigationReply.InlineWhy(status.Stdout) };
+        next = next with { Guard = StaleGuard.Parse(status.Stdout), NavigationState = NavigationReply.Supported(status.Stdout), SaveState = SaveReply.Supported(status.Stdout), CommentsPaths = CommentPaths.Supported(status.Stdout), InlineWhy = NavigationReply.InlineWhy(status.Stdout) };
         if (deferComments && (status.ExitCode is 0 or 2))
         {
             var primary = Complete(next with { Comments = new CommentsReport(Array.Empty<CommentRow>(), Loading: true) });

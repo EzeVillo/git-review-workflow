@@ -118,10 +118,10 @@ function __grw_comments_bare
     test (count $tokens) -eq 3
 end
 
-complete -c git -n '__grw_comments_bare' -f -a 'status init add delete renumber entries diff save prepare'
+complete -c git -n '__grw_comments_bare' -f -a 'status paths init add delete renumber entries diff save prepare'
 complete -c git -n '__grw_comments_using status' -f -l all -d 'include all retained contexts'
 complete -c git -n '__grw_review_using comments' -f -s h -l help -d 'show help'
-complete -c git -n '__grw_comments_using "status entries diff prepare"' -f -l porcelain -d 'machine-readable output'
+complete -c git -n '__grw_comments_using "paths status entries diff prepare"' -f -l porcelain -d 'machine-readable output'
 complete -c git -n '__grw_comments_using "status init add delete renumber entries diff prepare"' -f -r -l context -d 'select an existing context'
 complete -c git -n '__grw_comments_using "init add delete renumber entries diff"' -f -r -l document -a 'local shared' -d 'choose the document'
 complete -c git -n '__grw_comments_using "init add"' -f -l new-context -d 'declare a different context'

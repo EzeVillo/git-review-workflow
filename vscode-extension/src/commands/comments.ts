@@ -1,3 +1,4 @@
+import {parseCommentPaths} from "../review/commentPaths";
 import * as vscode from "vscode";
 import {confirmMutation} from "../review/confirm";
 import {execFile} from "node:child_process";
@@ -57,13 +58,31 @@ export async function readComments(options: InvokeOptions, context?: string, all
     if (result.exitCode !== 0) report.diagnostics.push({path: "", code: "read", message: result.stderr.trim() || copy.failed});
     return report;
 }
-async function savePaths(documents: readonly CommentDocument[]): Promise<boolean> {
+async function savePaths(documents: readonly Pick<CommentDocument, "path">[]): Promise<boolean> {
     return saveCommentBuffers(vscode.workspace.textDocuments.filter(doc => doc.uri.scheme === "file" && documents.some(row => sameDraftFile(doc.uri.fsPath, row.path))).map(doc => ({get isDirty() {return doc.isDirty;}, save: () => saveCommentDocument(doc)})));
 }
-export async function saveSessionComments(manager: ReviewStateManager, options: InvokeOptions, source?: string, scope = "active"): Promise<boolean> {
+export async function saveSessionComments(manager: ReviewStateManager, options: InvokeOptions, source?: string, scope = "active", closingSession = false): Promise<boolean> {
     try {
         if (vscode.workspace.textDocuments.every(document => document.isDirty === false)) return true;
     } catch { /* Unknown keeps the selective ownership query. */ }
+    const state = manager.state;
+    if (state.commentsPaths && state.guard && source === undefined && (scope === "active" || closingSession) &&
+        (state.situation === "review" || state.situation === "finish-conflict")) {
+        const response = await invokeGitReview("comments", ["paths", "--porcelain"], options);
+        const report = response.exitCode === 0 && !response.timedOut && !response.errorCode
+            ? parseCommentPaths(response.stdout, state.guard) : undefined;
+        if (!report) {
+            await manager.refreshPrimary();
+            void vscode.window.showErrorMessage(copy.saveFailed);
+            return false;
+        }
+        if (report.paths !== null) {
+            if (await savePaths(report.paths.map(path => ({path})))) return true;
+            await manager.refreshPrimary();
+            void vscode.window.showErrorMessage(copy.saveFailed);
+            return false;
+        }
+    }
     const response = await invokeGitReview("comments", ["status", "--porcelain", ...(scope !== "active" ? ["--all"] : [])], options);
     if (response.exitCode !== 0 || response.timedOut || response.errorCode) {
         await manager.refreshPrimary();

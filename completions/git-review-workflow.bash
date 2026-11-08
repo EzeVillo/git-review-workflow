@@ -100,7 +100,7 @@ _git_review_finish() {
 
 _git_review_comments() {
 	local comments_command
-	comments_command="$(__git_find_on_cmdline "status init add delete renumber entries diff save prepare")"
+	comments_command="$(__git_find_on_cmdline "status paths init add delete renumber entries diff save prepare")"
 	case "$prev" in
 	--document) __gitcomp "local shared"; return ;;
 	--side) __gitcomp "base head"; return ;;
@@ -108,6 +108,7 @@ _git_review_comments() {
 	esac
 	case "$comments_command" in
 	status) __gitcomp "--porcelain --context --all --help" ;;
+	paths) __gitcomp "--porcelain --help" ;;
 	init) __gitcomp "--document --context --new-context --use-context --expect-context --expect-document --help" ;;
 	add) __gitcomp "--document --context --new-context --use-context --text --stdin --path --side --start-line --end-line --start-column --end-column --base --head --base-path --head-path --unversioned --expect-context --expect-document --help" ;;
 	delete) __gitcomp "--document --context --entry --expect-context --expect-document --help" ;;
@@ -116,7 +117,7 @@ _git_review_comments() {
 	diff) __gitcomp "--document --context --entry --porcelain --expect-context --expect-document --help" ;;
 	save) __gitcomp "--expect-context --expect-local --expect-shared --help" ;;
 	prepare) __gitcomp "--context --check --porcelain --expect-context --expect-document --help" ;;
-	*) __gitcomp "status init add delete renumber entries diff save prepare --help" ;;
+	*) __gitcomp "status paths init add delete renumber entries diff save prepare --help" ;;
 	esac
 }
 

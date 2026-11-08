@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import {hasCommentPaths} from "./commentPaths";
 import {hasSaveState, parseSaveReply, SaveReply} from "./saveReply";
 import {parseStateGuard} from "./staleGuard";
 import {hasNavigationState, isNavigationReply, parseInlineWhy} from "./navigationReply";
@@ -39,6 +40,7 @@ export interface ReviewState {
     guard?: string;
     navigationState?: boolean;
     saveState?: boolean;
+    commentsPaths?: boolean;
     inlineWhy?: string;
     /** One primary report and its comment completion share this host read id. */
     readId?: number;
@@ -456,7 +458,7 @@ export class ReviewStateManager {
         const comments = commentsPending ? {...parseComments(""), loading: true} : undefined;
         const publish = async (next: ReviewState): Promise<ReviewState> => {
             if (readId !== this.readId) return this.current;
-            next = {...next, readId, guard: parseStateGuard(result.stdout), navigationState: hasNavigationState(result.stdout), saveState: hasSaveState(result.stdout), inlineWhy: parseInlineWhy(result.stdout)};
+            next = {...next, readId, guard: parseStateGuard(result.stdout), navigationState: hasNavigationState(result.stdout), saveState: hasSaveState(result.stdout), commentsPaths: hasCommentPaths(result.stdout), inlineWhy: parseInlineWhy(result.stdout)};
             accept(next);
             if (!commentsPending) return next;
             const complete = async (): Promise<ReviewState> => {

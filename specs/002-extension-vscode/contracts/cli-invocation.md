@@ -255,3 +255,12 @@ los parsers de list/config. Sin capacidad se conserva argv y refresco anterior;
 un sobre inválido o un error refrescan sin repetir la mutación. Comments sigue
 asíncrono. El formato y los fallos están en
 `contracts/review-state-guard.md`, «Respuesta opcional de Save».
+
+## Rutas previas al cierre
+
+Con la capacidad comments-paths y guard válido, los cierres de una review activa
+pueden consultar `comments paths --porcelain`. El sobre debe coincidir con el
+guard mostrado antes de guardar buffers. La respuesta legacy explícita vuelve
+a status; un error o respuesta inválida bloquea la operación y refresca. La
+limpieza de sesiones y los cierres ya completados mantienen el inventario
+anterior. Contrato y encoding: `contracts/comments-paths.md`.

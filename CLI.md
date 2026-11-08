@@ -27,6 +27,17 @@ as `\\`, `\t` and `\r`. Decode each line and append LF to reproduce
 status. If absent or invalid, query `status --why` as before. See the
 [navigation response contract](contracts/review-state-guard.md#respuesta-de-navegación).
 
+
+With `save --porcelain`, automation can request the final panel state instead
+of human output. Active status reports advertise `capability save-state`;
+clients must check it before passing the flag to an older CLI. The response
+starts with `save-state<TAB>1` and `status<TAB>2`, contains ordinary list and
+config records prefixed with `list<TAB>` and `config<TAB>`, and ends with
+`save-state<TAB>complete`. Without the flag, output and reporting cost are
+unchanged. If saving succeeds but the final report fails, exit remains 0 and
+the completion marker is omitted: query state again without repeating Save.
+See [the Save response contract](contracts/review-state-guard.md#respuesta-opcional-de-save).
+
 ## Commands
 
 > **How to read the syntax:** `<x>` is **required**, `[x]` is **optional**, and
@@ -49,7 +60,7 @@ Every command is a verb under `git review`. Run `git review -h` for the list, or
 | `git review next` / `git review prev`                                                                                                        | Move a `--step` or walkthrough review to the next / previous entry.                                                                                                                                                                                                                                                                                                |
 | `git review status [--porcelain \| --why <path>]`                                                                                            | Show the state of the review on the current branch (`--porcelain` for machine-readable output, including a `finish` record when a closure is mid-conflict; `--why <path>` for a walkthrough entry's explanation).                                                                                                                                                  |
 | `git review list [--porcelain]`                                                                                                              | List every review in progress and every saved one (current branch marked `*`; `--porcelain` also reports unresolved finishes as `pending` or `conflict`).                                                                                                                                                                                                          |
-| `git review save`                                                                                                                            | Pause the current review as `review-saved/<branch>` and return to where you started.                                                                                                                                                                                                                                                                               |
+| `git review save [--porcelain]`                                                                                                                            | Pause the current review as `review-saved/<branch>` and return to where you started.                                                                                                                                                                                                                                                                               |
 | `git review continue [branch]`                                                                                                               | Resume a review saved with `git review save`.                                                                                                                                                                                                                                                                                                                      |
 | `git review finish [--onto-source] [--resume \| --abort [--force]]`                                                                          | From a `review/*` branch, extract your edits onto `review-fixes/<branch>` (or the PR branch); `--abort` undoes the last finish.                                                                                                                                                                                                                                    |
 | `git review preview [--stat]`                                                                                                                | Show the edits you have made so far — the diff `finish` would extract — without committing or switching branch.                                                                                                                                                                                                                                                    |

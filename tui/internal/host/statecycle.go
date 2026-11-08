@@ -16,6 +16,7 @@ import (
 // exists on the struct.
 type ReadResult struct {
 	Guard           string
+	SaveState       bool
 	NavigationState bool
 	WhyIncluded     bool
 	DetailsPending  bool
@@ -80,7 +81,7 @@ func ReadPrimaryState(ctx context.Context, cwd, minVersion string) ReadResult {
 		HasFinishConflict: parseOK && parsed.Finish != nil,
 	}
 
-	result := ReadResult{Stderr: statusRes.Stderr, Guard: domain.ParseStateGuard(statusRes.Stdout), NavigationState: domain.HasNavigationState(statusRes.Stdout)}
+	result := ReadResult{Stderr: statusRes.Stderr, Guard: domain.ParseStateGuard(statusRes.Stdout), SaveState: domain.HasSaveState(statusRes.Stdout), NavigationState: domain.HasNavigationState(statusRes.Stdout)}
 
 	switch statusOutcome.ExitCode {
 	case 2:
@@ -187,4 +188,23 @@ func whyFromText(stdout string) (string, domain.WhyState) {
 		return "", domain.WhyAbsent
 	}
 	return why, domain.WhyPresent
+}
+
+// Save's authoritative final inventory/config use the ordinary projection and
+// generation-protected details path without starting another primary read.
+func ReadSaveReply(output string) (ReadResult, bool) {
+	reply, ok := domain.ParseSaveReply(output)
+	if !ok {
+		return ReadResult{}, false
+	}
+	branches := domain.ParseListPorcelain(reply.List)
+	_, pending := domain.PendingFinish(branches)
+	situation := domain.SituationNoReview
+	if pending {
+		situation = domain.SituationFinishPending
+	}
+	return ReadResult{Situation: situation, Branches: branches,
+		Fixes: domain.ParseListFixes(reply.List), HasList: true,
+		Config: domain.ParseConfigPorcelain(reply.Config), HasConfig: true,
+		DetailsPending: true, CommentsLoading: true}, true
 }

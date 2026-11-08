@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.5] — 2026-11-08
+
+### Changed
+
+- Use the optional final state returned by Save when the CLI advertises support, avoiding another primary read. Fall back to a normal refresh for older CLI versions or incomplete replies.
+
 ## [0.2.4] — 2026-11-07
 
 ### Changed

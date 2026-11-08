@@ -29,6 +29,7 @@ import (
 // bookkeeping either way.
 type mutationRequest struct {
 	stateGuard      string
+	saveState       bool
 	navigationState bool
 	stdin           string
 	hasInput        bool
@@ -123,6 +124,12 @@ func mutationCmd(req mutationRequest, argv domain.Argv, activityGeneration int) 
 				result.Stdout = notice
 			}
 		}
+		if req.saveState && !mutationFailed(result) {
+			if primary, ok := host.ReadSaveReply(result.Stdout); ok {
+				reply = &primary
+			}
+			result.Stdout = ""
+		}
 		return mutationDoneMsg{navigation: reply, action: req.action, params: req.params, result: result, activityGeneration: activityGeneration, successOpenPath: req.successOpenPath, draftStart: req.draftStart, draftFlow: req.draftFlow}
 	}
 }
@@ -175,6 +182,10 @@ func (m Model) beginMutation(req mutationRequest, token domain.StateToken) (Mode
 	}
 	if (req.action == "next" || req.action == "prev") && m.Panel.NavigationState && req.stateGuard != "" {
 		req.navigationState = true
+		argv.Args = append(argv.Args, "--porcelain")
+	}
+	if req.action == "saveReview" && m.Panel.SaveState && req.stateGuard != "" {
+		req.saveState = true
 		argv.Args = append(argv.Args, "--porcelain")
 	}
 	m.statusLine = ""

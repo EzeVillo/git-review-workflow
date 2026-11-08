@@ -216,7 +216,10 @@ complete -c git -n '__grw_review_using forget; and not __fish_contains_opt saved
 # ── git review ui ──────────────────────────────────────────────────────────────
 complete -c git -n '__grw_review_using ui' -f -l h -d 'show help'
 
-# ── Verbs that take no arguments beyond --h ───────────────────────────────────
+# Save can return the final panel state for automation.
+complete -c git -n '__grw_review_using save' -f -l porcelain -d 'return the final panel state'
+
+# ── Verbs with common help completion ───────────────────────────────────
 for verb in next prev status list abort save
     complete -c git -n "__grw_review_using $verb" -f -l h -d 'show help'
 end

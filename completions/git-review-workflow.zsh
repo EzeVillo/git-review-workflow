@@ -272,7 +272,10 @@ _git-review() {
 		clean) _git_review_clean ;;
 		forget) _git_review_forget ;;
 		ui) _git_review_ui ;;
-		next|prev|status|list|save|abort)
+		save)
+			_arguments '--porcelain[return the final panel state]' '(-h --h)'{-h,--h}'[show help]'
+			;;
+		next|prev|status|list|abort)
 			_arguments '(-h --h)'{-h,--h}'[show help]'
 			;;
 		esac

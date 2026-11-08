@@ -26,6 +26,7 @@ import (
 // from here rather than re-parse anything.
 type ProjectInput struct {
 	Guard           string
+	SaveState       bool
 	NavigationState bool
 	Comments        string
 	CommentsError   string
@@ -135,6 +136,7 @@ func Project(in ProjectInput) PanelModel {
 	m := PanelModel{
 		Guard:           in.Guard,
 		NavigationState: in.NavigationState,
+		SaveState:       in.SaveState,
 		Comments:        in.Comments, CommentsError: in.CommentsError, CommentsLoading: in.CommentsLoading,
 		Situation:    in.Situation,
 		Busy:         in.Busy,

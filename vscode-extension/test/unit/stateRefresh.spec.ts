@@ -182,3 +182,30 @@ describe("incremental review refresh", () => {
         assert.strictEqual(events[0].readId, events[1].readId);
     });
 });
+
+describe("optional Save state", () => {
+    const wire = "save-state\t1\nstatus\t2\nlist\tbranch\treview-saved/feature\t1\t0\t0\twalk\t2\t3\nconfig\tconfig\tbase\tmain\nconfig\tconfig\tremote\torigin\nsave-state\tcomplete\n";
+    it("publishes the final inventory and config without another primary query", async () => {
+        const calls: string[] = [];
+        const {manager} = pipeline(async verb => { calls.push(verb); return {stdout:"",stderr:"",exitCode:0}; });
+        const state = await manager.refreshPrimary(wire);
+        assert.deepStrictEqual(calls,["comments"]);
+        assert.strictEqual(state.situation,"no-review");
+        assert.strictEqual(state.branches[0].saved,true);
+        assert.strictEqual(state.branches[0].position,2);
+        assert.strictEqual(state.config.base,"main");
+    });
+    it("falls back without repeating a successful Save", async () => {
+        const {parseSaveReply} = require("../../src/review/saveReply");
+        for (const bad of ["",wire.replace("save-state\tcomplete\n",""),wire+"save-state\tcomplete\n",
+            wire.replace("status\t2","status\t0"),wire.replace("list\tbranch","unknown\tbranch"),
+            wire.replace("config\tconfig\tremote\torigin\n","")]) {
+            assert.strictEqual(parseSaveReply(bad),undefined);
+            const calls: string[] = [];
+            const {manager} = pipeline(async verb => { calls.push(verb); return {stdout:"",stderr:"",exitCode:verb === "status" ? 2 : 0}; });
+            await manager.refreshPrimary(bad);
+            assert.deepStrictEqual(calls,["--version","status","list","config","comments"]);
+        }
+        assert.ok(parseSaveReply(wire.replace(/\n/g,"\r\n")));
+    });
+});

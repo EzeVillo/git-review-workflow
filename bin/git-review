@@ -8,7 +8,7 @@
 set -eu
 
 prog="git review"
-VERSION="0.10.6"
+VERSION="0.10.7"
 
 usage() {
 	cat <<EOF
@@ -131,13 +131,18 @@ export GIT_REVIEW_LIBEXEC="$libexec"
 shift
 if [ -n "$expected_state" ]; then
 	case "$verb:$#" in
-	next:*|prev:*|save:0|abort:0)
-		# The verb validates its own read before any effect. Help/invalid
-		# close arguments retain the dispatcher's original error precedence.
-		# No duplicate config read, shell-library load or branch probe here.
-		GIT_REVIEW_EXPECT_STATE=$expected_state
-		export GIT_REVIEW_EXPECT_STATE
-		exec "$target" "$@"
+	next:*|prev:*|save:0|save:1|abort:0)
+		if [ "$verb:$#" = save:1 ] && [ "$1" != --porcelain ]; then
+			# Preserve generic guard precedence for help and invalid arguments.
+			:
+		else
+			# The verb validates its own read before any effect. Help/invalid
+			# close arguments retain the dispatcher's original error precedence.
+			# No duplicate config read, shell-library load or branch probe here.
+			GIT_REVIEW_EXPECT_STATE=$expected_state
+			export GIT_REVIEW_EXPECT_STATE
+			exec "$target" "$@"
+		fi
 		;;
 	esac
 	# The comparison is part of this invocation, before any verb-side effect.

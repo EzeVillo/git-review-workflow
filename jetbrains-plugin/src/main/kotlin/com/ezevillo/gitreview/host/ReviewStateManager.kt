@@ -14,6 +14,9 @@ import com.ezevillo.gitreview.domain.situationFor
 import com.ezevillo.gitreview.domain.versionVerdict
 import com.ezevillo.gitreview.domain.hasNavigationState
 import com.ezevillo.gitreview.domain.isNavigationReply
+import com.ezevillo.gitreview.domain.parseSaveReply
+import com.ezevillo.gitreview.domain.hasSaveState
+import com.ezevillo.gitreview.domain.SaveReply
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -55,8 +58,9 @@ class ReviewStateManager(
 
     fun refreshPrimary(cwd: String?, navigationOutput: String? = null, onPrimary: ((ReviewState) -> Unit)? = null): PendingRead {
         val gen = generation.incrementAndGet()
-        val reply = navigationOutput?.takeIf { isNavigationReply(it) }?.let { InvokeResult(it, "", 0) }
-        val state = read(cwd, false, true, onPrimary, reply, true, gen)
+        val saved = navigationOutput?.let { parseSaveReply(it) }
+        val reply = if (saved != null) InvokeResult("", "", 2) else navigationOutput?.takeIf { isNavigationReply(it) }?.let { InvokeResult(it, "", 0) }
+        val state = read(cwd, false, true, onPrimary, reply, true, gen, saved)
         return PendingRead(gen, state, cwd)
     }
 
@@ -81,7 +85,7 @@ class ReviewStateManager(
     }
 
     private fun read(cwd: String?, includeComments: Boolean, publish: Boolean, onPrimary: ((ReviewState) -> Unit)? = null,
-                     statusReply: InvokeResult? = null, deferComments: Boolean = false, readGeneration: Long? = null): ReviewState {
+                     statusReply: InvokeResult? = null, deferComments: Boolean = false, readGeneration: Long? = null, saveReply: SaveReply? = null): ReviewState {
         val gen = readGeneration ?: generation.incrementAndGet()
         if (cwd == null) {
             val state = ReviewState(
@@ -175,7 +179,7 @@ class ReviewStateManager(
         } else false
 
         if (status.exitCode == 2) {
-            val list = invoker.invoke("list", listOf("--porcelain"), cwd)
+            val list = saveReply?.let { InvokeResult(it.list, "", 0) } ?: invoker.invoke("list", listOf("--porcelain"), cwd)
             if (list.exitCode == 0 && !list.timedOut) {
                 try {
                     // One invocation, two readings: the fixes branches travel in
@@ -188,7 +192,7 @@ class ReviewStateManager(
                     fixes = emptyList()
                 }
             }
-            val cfg = invoker.invoke("config", listOf("--porcelain"), cwd)
+            val cfg = saveReply?.let { InvokeResult(it.config, "", 0) } ?: invoker.invoke("config", listOf("--porcelain"), cwd)
             if (cfg.exitCode == 0 && !cfg.timedOut) {
                 try {
                     val parsed = parseConfigPorcelain(cfg.stdout)
@@ -266,6 +270,7 @@ class ReviewStateManager(
         val commentsPending = deferComments && (status.exitCode == 0 || status.exitCode == 2)
         val guarded = state.copy(guard = com.ezevillo.gitreview.domain.parseStateGuard(status.stdout),
             navigationState = hasNavigationState(status.stdout),
+            saveState = hasSaveState(status.stdout),
             inlineWhy = com.ezevillo.gitreview.domain.parseInlineWhy(status.stdout),
             comments = if (commentsPending) com.ezevillo.gitreview.domain.CommentsReport(loading = true) else state.comments)
         val complete = if (includeComments && (status.exitCode == 0 || status.exitCode == 2)) {

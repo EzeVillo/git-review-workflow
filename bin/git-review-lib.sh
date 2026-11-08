@@ -5029,6 +5029,458 @@ review_status_porcelain() {
 	fi
 	if [ "$mode" = step ] || [ "$mode" = walk ]; then porcelain_row capability navigation-state; fi
 	review_guard_capture "$cur" "${_review_head:-${_walk_lower:-}}"
+	porcelain_row capability save-state
 	porcelain_row guard "$review_guard"
 	return 0
+}
+
+# Shared list renderer. Callers isolate legacy report variables/functions in
+# a subshell. No writer uses these report-local caches.
+review_list_report() {
+set -e
+porcelain=$1
+# Resolve the gitdir once here rather than inside every draft-path lookup: those
+# happen in command substitutions, one per walk row, and each would otherwise
+# spawn its own git rev-parse (see walk_gitdir_init). No verb with a draft
+# context needs this — walk_use_draft does it — but list has no review loaded.
+walk_gitdir_init
+
+if [ "${_review_report_context:-0}" -ne 1 ]; then
+	cur="$(git symbolic-ref --quiet --short HEAD || true)"
+fi
+branches="$(git for-each-ref --format='%(refname:short)' refs/heads/review/)"
+saved="$(git for-each-ref --format='%(refname:short)' refs/heads/review-saved/)"
+
+# Remote the sources were reviewed from, for the remote-tracking half of the
+# "did you commit anything here" question below.
+if [ "${_review_report_context:-0}" -ne 1 ]; then
+	remote="$(git config reviewworkflow.remote || echo origin)"
+fi
+
+# The branches a finish left behind. Tip and name in one call: the tip is what
+# tells an untouched fixes branch from one carrying commits, and asking for it
+# per branch would be a process each.
+fixes="$(git for-each-ref --format='%(objectname) %(refname:short)' refs/heads/review-fixes/)"
+
+if [ -z "$branches" ] && [ -z "$saved" ] && [ -z "$fixes" ]; then
+	if [ "$porcelain" -eq 0 ]; then
+		echo "no reviews in progress"
+	fi
+	exit 0
+fi
+
+if [ -n "$branches$saved" ] && [ "${_review_config_ready:-0}" -ne 1 ]; then review_config_init; fi
+
+# --- review-fixes/* --------------------------------------------------------
+#
+# Everything the fixes rows need, computed in a CONSTANT number of processes:
+# this verb runs on every panel refresh, and a rev-list per branch would put the
+# cost back on the number of reviews you have ever finished.
+#
+# Both lists are kept with a leading and a trailing newline so the substring
+# `case` below can anchor on them: without the anchors, refs/heads/feature/x
+# would match inside refs/heads/feature/xy.
+fixes_src_tips=""
+fixes_merged=""
+fixes_base_known=0
+
+fixes_scan() {
+	[ -n "$fixes" ] || return 0
+
+	# One for-each-ref for every source a fixes branch could have come from --
+	# the local branch and its remote-tracking twin -- with the patterns built
+	# from the fixes names themselves. Enumerating refs/heads instead would make
+	# a repository with thousands of branches pay for all of them here, and refs
+	# that do not exist are simply not printed rather than erroring.
+	set --
+	while read -r _fs_line; do
+		[ -n "$_fs_line" ] || continue
+		_fs_b="${_fs_line#* }"
+		_fs_src="${_fs_b#review-fixes/}"
+		set -- "$@" "refs/heads/$_fs_src" "refs/remotes/$remote/$_fs_src"
+	done <<EOF
+$fixes
+EOF
+	if [ $# -gt 0 ]; then
+		fixes_src_tips="
+$(git for-each-ref --format='%(objectname) %(refname)' "$@" 2>/dev/null || true)
+"
+	fi
+
+	# The base, resolved the way start resolves it: the local branch if there is
+	# one, else the remote-tracking copy. Without a usable base there is no
+	# "already integrated" to compare against, and the state is unknown rather
+	# than a guess in either direction.
+	if [ "${_review_report_context:-0}" -eq 1 ]; then _fs_base=$base_val
+	else _fs_base="$(git config reviewworkflow.base || true)"; fi
+	if [ -n "$_fs_base" ]; then
+		if ! git rev-parse --verify --quiet "$_fs_base^{commit}" >/dev/null 2>&1; then
+			if git rev-parse --verify --quiet "$remote/$_fs_base^{commit}" >/dev/null 2>&1; then
+				_fs_base="$remote/$_fs_base"
+			else
+				_fs_base=""
+			fi
+		fi
+	fi
+	if [ -n "$_fs_base" ]; then
+		fixes_merged="
+$(git for-each-ref --merged "$_fs_base" --format='%(refname:short)' refs/heads/review-fixes/ 2>/dev/null || true)
+"
+		fixes_base_known=1
+	fi
+}
+
+# fixes_state <tip> <branch>: empty | merged | unmerged | unknown.
+#
+# empty is asked first and is the strongest answer: finish STAGES your edits, it
+# does not commit them, so a fixes branch you never committed on still points
+# exactly where it was created and holds nothing of yours -- regardless of what
+# the base does or does not contain.
+fixes_state() {
+	case "$fixes_src_tips" in
+	*"
+$1 refs/heads/${2#review-fixes/}
+"*) echo empty ; return 0 ;;
+	*"
+$1 refs/remotes/$remote/${2#review-fixes/}
+"*) echo empty ; return 0 ;;
+	esac
+	if [ "$fixes_base_known" -eq 0 ]; then
+		echo unknown
+		return 0
+	fi
+	case "$fixes_merged" in
+	*"
+$2
+"*) echo merged ; return 0 ;;
+	esac
+	echo unmerged
+}
+
+fixes_scan
+
+# row_has_draft <branch>: whether this review row carries a walkthrough draft.
+#
+# Looks in the namespace of THIS row's review (saved rows check the saved one).
+# Named via walk_review_draft_src, not the review's own source: that is wrong for
+# a compare of a remote-tracking branch, and this row is what hands the file to
+# forget --saved.
+#
+# Checked in every mode, not only walk: save moves the draft regardless of mode,
+# so marking only walk rows used to delist that prose the moment the review
+# paused.
+#
+# CUSTODY, not "what is being read" (walk_has_draft_file, not walk_is_draft): the
+# file existing is what matters, empty or not. One function for describe() and
+# describe_porcelain(), so the three-part condition cannot be copied minus a
+# part.
+row_has_draft() {
+	_rhd_src="$(walk_review_draft_src "$1")"
+	[ -n "$_rhd_src" ] || return 1
+	case "$1" in
+	review-saved/*)
+		# And only if this row's review is the one that filed it: two paused
+		# reviews of a branch share the name, so the badge used to promise a
+		# reading order to a review that will not come back with one.
+		walk_saved_draft_filed "$1" || return 1
+		_rhd_path="$(walk_saved_draft_path "$_rhd_src")"
+		;;
+	*) _rhd_path="$(walk_draft_path "$_rhd_src")" ;;
+	esac
+	[ -f "$_rhd_path" ]
+}
+
+# describe <branch> <marker>: print one line for a review branch, reading its
+# mode and position from the branch config. Used for both active and saved reviews.
+describe() {
+	_rl_branch="$1"
+	label="$2"
+	src="$(review_config_get "branch.$_rl_branch.reviewsource" || true)"
+	# A branch with no reviewsource is an orphan: either hand-made, or left by a
+	# git review save / git review start that died after creating the branch but before
+	# writing its metadata. Surface it instead of skipping silently — otherwise an
+	# orphan-only state prints nothing at all — and name the cleanup command so the
+	# line is actionable (abort cannot run without reviewsource).
+	if [ -z "$src" ]; then
+		case "$_rl_branch" in
+		review-saved/*)
+			printf '%s %s  %s(no metadata — discard with: git review forget --saved %s)\n' \
+				"$label" "$_rl_branch" "$prefix" "${_rl_branch#review-saved/}"
+			;;
+		*)
+			printf '%s %s  %s(no metadata — switch away, then: git branch -D %s)\n' \
+				"$label" "$_rl_branch" "$prefix" "$_rl_branch"
+			;;
+		esac
+		return
+	fi
+	tip="$(review_config_get "branch.$_rl_branch.reviewtip" || true)"
+	mode="$(review_config_get "branch.$_rl_branch.reviewmode" || echo whole)"
+
+	shorttip="$tip"
+	[ -n "$tip" ] && shorttip="$(git rev-parse --short "$tip" 2>/dev/null || echo "$tip")"
+
+	# Whose reading order it is, and why every mode (not only walk) is checked — see
+	# row_has_draft above; describe_porcelain shares the same call.
+	draft_note=""
+	if row_has_draft "$_rl_branch"; then
+		draft_note=" (draft)"
+	fi
+
+	if [ "$mode" = "step" ]; then
+		count="$(review_config_get "branch.$_rl_branch.reviewcount" || echo '?')"
+		step="$(review_config_get "branch.$_rl_branch.reviewstep" || echo '?')"
+		printf '%s %s  %sstep%s [%s/%s]  tip %s\n' "$label" "$_rl_branch" "$prefix" "$draft_note" "$step" "$count" "$shorttip"
+	elif [ "$mode" = "walk" ]; then
+		count="$(review_config_get "branch.$_rl_branch.reviewwalkcount" || echo '?')"
+		step="$(review_config_get "branch.$_rl_branch.reviewwalkstep" || echo '?')"
+		printf '%s %s  %swalk%s [%s/%s]  tip %s\n' "$label" "$_rl_branch" "$prefix" "$draft_note" "$step" "$count" "$shorttip"
+	else
+		printf '%s %s  %swhole%s  tip %s\n' "$label" "$_rl_branch" "$prefix" "$draft_note" "$shorttip"
+	fi
+}
+
+# describe_porcelain <branch> <is_saved>: print one porcelain "branch" record,
+# reading its mode and position from the branch config — same data describe()
+# shows a human, never re-derived. Position/total are omitted, not "?", when
+# either config key is missing (contracts/list-porcelain.md).
+describe_porcelain() {
+	pb="$1"
+	pcurrent=0
+	[ "$pb" = "$cur" ] && pcurrent=1
+	psrc="$(review_config_get "branch.$pb.reviewsource" || true)"
+	if [ -z "$psrc" ]; then
+		porcelain_row branch "$pb" "$2" "$pcurrent" 1
+	else
+		pmode="$(review_config_get "branch.$pb.reviewmode" || echo whole)"
+		case "$pmode" in
+		step)
+			pposition="$(review_config_get "branch.$pb.reviewstep" || true)"
+			ptotal="$(review_config_get "branch.$pb.reviewcount" || true)"
+			;;
+		walk)
+			pposition="$(review_config_get "branch.$pb.reviewwalkstep" || true)"
+			ptotal="$(review_config_get "branch.$pb.reviewwalkcount" || true)"
+			;;
+		*)
+			pposition=""
+			ptotal=""
+			;;
+		esac
+		if [ -n "$pposition" ] && [ -n "$ptotal" ]; then
+			porcelain_row branch "$pb" "$2" "$pcurrent" 0 "$pmode" "$pposition" "$ptotal"
+		else
+			porcelain_row branch "$pb" "$2" "$pcurrent" 0 "$pmode"
+		fi
+	fi
+
+	# The same custody question the readable row answers with "(draft)", through
+	# the same function so the two cannot disagree. Its own record rather than a
+	# field, because the branch record ends in two optional fields that are
+	# omitted together — a sixth field could not be told apart from `position`.
+	# Position is fixed at "right after its branch row, before any finish record"
+	# so tests/porcelain-bytes.bats compares against one determinate output.
+	if row_has_draft "$pb"; then
+		porcelain_row branch-draft "$pb"
+	fi
+
+	# finish (contracts/finish-state.md): a finish's undo point lives on the
+	# config of the review/* branch it left behind, never on review-saved/*
+	# (finish never touches a saved review) — checked right after that branch's
+	# own record, regardless of whether it came out orphan above.
+	if [ "$2" -eq 0 ]; then
+		pundohead="$(review_config_get "branch.$pb.reviewundohead" || true)"
+		if [ -n "$pundohead" ]; then
+			presume="$(review_config_get "branch.$pb.reviewresume" || true)"
+			pstate=pending
+			[ "$presume" = "conflict" ] && pstate=conflict
+			pkind="$(review_config_get "branch.$pb.reviewundokind" || true)"
+			ponto=0
+			[ "$pkind" = "onto-source" ] && ponto=1
+			porcelain_row finish "$pb" "$pstate" "$ponto"
+		fi
+	fi
+}
+
+# describe_fixes_porcelain <tip> <branch>: one porcelain "fixes" record.
+#
+# `session` is read off the review/* list already in hand rather than asked of
+# git again: it is what tells a plain leftover from one whose review is still
+# open, which is the difference between clean <branch> being enough and needing
+# --fixes-only to spare the session.
+describe_fixes_porcelain() {
+	fpcurrent=0
+	[ "$2" = "$cur" ] && fpcurrent=1
+	fpsession=0
+	case "
+$branches
+" in
+	*"
+review/${2#review-fixes/}
+"*) fpsession=1 ;;
+	esac
+	porcelain_row fixes "$2" "$fpcurrent" "$fpsession" "$(fixes_state "$1" "$2")"
+}
+
+if [ "$porcelain" -eq 1 ]; then
+	printf '%s\n' "$branches" | while read -r _rl_branch; do
+		[ -n "$_rl_branch" ] || continue
+		describe_porcelain "$_rl_branch" 0
+	done
+	if [ -n "$saved" ]; then
+		printf '%s\n' "$saved" | while read -r _rl_branch; do
+			[ -n "$_rl_branch" ] || continue
+			describe_porcelain "$_rl_branch" 1
+		done
+	fi
+	# Last, and after every branch record: these are not reviews -- there is
+	# nothing to resume on them -- and a fixed position keeps the byte-for-byte
+	# porcelain test comparing against one determinate output.
+	if [ -n "$fixes" ]; then
+		printf '%s\n' "$fixes" | while read -r fsha fb; do
+			[ -n "$fb" ] || continue
+			describe_fixes_porcelain "$fsha" "$fb"
+		done
+	fi
+	exit 0
+fi
+
+prefix=""
+printf '%s\n' "$branches" | while read -r _rl_branch; do
+	[ -n "$_rl_branch" ] || continue
+	marker=" "
+	[ "$_rl_branch" = "$cur" ] && marker="*"
+	describe "$_rl_branch" "$marker"
+done
+
+# Reviews put aside with git review save, tagged so they are not mistaken for
+# active ones. The branch you are on is still marked with "*".
+if [ -n "$saved" ]; then
+	prefix="saved  "
+	printf '%s\n' "$saved" | while read -r _rl_branch; do
+		[ -n "$_rl_branch" ] || continue
+		marker=" "
+		[ "$_rl_branch" = "$cur" ] && marker="*"
+		describe "$_rl_branch" "$marker"
+	done
+fi
+
+# The branches a finish left behind. Not reviews: nothing to resume, nothing to
+# abort -- what you can do with one is commit it, push it, or drop it. So each
+# line says what git can tell about that, and the closing note names the verb,
+# the same way an orphan review names git branch -D on its own line.
+if [ -n "$fixes" ]; then
+	printf '%s\n' "$fixes" | while read -r fsha fb; do
+		[ -n "$fb" ] || continue
+		marker=" "
+		[ "$fb" = "$cur" ] && marker="*"
+		case "$(fixes_state "$fsha" "$fb")" in
+		empty) note="nothing committed on it" ;;
+		merged) note="already in the base" ;;
+		unmerged) note="has commits the base does not have" ;;
+		*) note="no base set, cannot tell" ;;
+		esac
+		printf '%s %s  fixes  (%s)\n' "$marker" "$fb" "$note"
+	done
+	echo "drop one with: git review clean --fixes-only <branch>"
+fi
+}
+
+# Config porcelain uses the same emitter for the public query and Save reply.
+review_config_report() {
+	set -e
+	if [ "$compare_mode" -eq 1 ]; then
+		if [ "$pos_count" -eq 2 ]; then compare_resolve "${pos1:?}" "${pos2:?}"; else compare_load_draft "${pos1:?}"; fi
+	fi
+
+	if [ "${_review_report_context:-0}" -ne 1 ]; then
+	remote_val="$(git config reviewworkflow.remote || echo origin)"
+	base_val="$(git config reviewworkflow.base || true)"
+	fi
+
+	if [ -n "$base_val" ]; then
+		porcelain_row config base "$base_val"
+	fi
+	porcelain_row config remote "$remote_val"
+
+	# Remotes first (for config remote), then branch candidates (for start / config
+	# base). Constant process budget: one `git remote` call, not one per name.
+	candidate_remotes "$remote_val"
+	candidate_branches "$remote_val"
+
+	# Loose walkthrough drafts, with and without a branch argument alike: a draft is
+	# a fact about the WORKING TREE, not about the branch you asked after, so
+	# conditioning it on the argument would make one repository report different
+	# drafts per question. Zero drafts emits — and spends — nothing (the guard in
+	# emit_draft_records).
+	emit_draft_records
+
+	# The two authoring guides, always both, present or not: unlike the drafts above,
+	# absence is REPORTED rather than implied by silence — a client cannot offer to
+	# create a guide it was never told about, and rebuilding the path on its own side
+	# is what the reported-path rule prevents. A fact about the REPOSITORY, so
+	# unconditioned on the branch argument too.
+	emit_guide_records
+
+	# The author's own walkthrough for the branch they are STANDING ON, and its state
+	# against what that branch now holds. Present or absent like the guides, and
+	# unconditioned on the branch argument like the drafts: a file of this working
+	# tree, not a property of whatever branch the caller asked about.
+	emit_walkthrough_record "$base_val" "$remote_val"
+
+	if [ "$compare_mode" -eq 1 ]; then
+		emit_compare_offers
+	elif [ -n "$branch" ]; then
+		# Same pair of keys start reads for --delta: reviewworkflow.<branch>.reviewed
+		# for a remote review, reviewworkflowlocal.<branch>.reviewed for --local/
+		# --offline. Zero, one or two rows — never OR'd into a single tip — so a
+		# consumer offers --delta only for the source that actually has a marker
+		# (start --offline --delta must not see a remote-only tip).
+		remote_tip="$(git config "reviewworkflow.$branch.reviewed" || true)"
+		local_tip="$(git config "reviewworkflowlocal.$branch.reviewed" || true)"
+		if [ -n "$remote_tip" ]; then
+			porcelain_row delta "$branch" "$remote_tip" remote
+		fi
+		if [ -n "$local_tip" ]; then
+			porcelain_row delta "$branch" "$local_tip" local
+		fi
+
+		# Reading offers for this tip/range; default context = remote full.
+		# --local/--offline/--delta select the same axes as start, without fetch.
+		_offer_source=remote
+		if [ "$offline_mode" -eq 1 ]; then
+			_offer_source=offline
+		elif [ "$local_mode" -eq 1 ]; then
+			_offer_source=local
+		fi
+		emit_reading_offers "$branch" "$remote_val" "$_offer_source" "$delta_mode" || exit 1
+	fi
+}
+
+# A successful Save may optionally report the resulting no-review panel. Fresh
+# data only, after all mutations and custody locks; never the pre-Save snapshot.
+# The terminal marker is emitted only after both ordinary report renderers finish.
+# A reporting error cannot turn the completed Save into a retryable mutation.
+review_saved_state() {
+	set -e
+	cur=$(git symbolic-ref --quiet --short HEAD || true)
+	case "$cur" in review/*) exit 1 ;; esac
+	review_config_init
+	[ "$_review_config_ready" -eq 1 ]
+	remote=$(git config reviewworkflow.remote || echo origin)
+	remote_val=$remote
+	base_val=$(git config reviewworkflow.base || true)
+	_review_report_context=1
+	_cur_branch=$cur _cur_branch_done=1
+	_walk_snapshot_ready=0 _walk_range_ready=0
+	porcelain_row save-state 1
+	porcelain_row status 2
+	_reply_list=$(review_list_report 1)
+	if [ -n "$_reply_list" ]; then
+		printf '%s\n' "$_reply_list" | awk '{print "list\t" $0}'
+	fi
+	compare_mode=0 pos_count=0 branch='' local_mode=0 offline_mode=0 delta_mode=0
+	_reply_config=$(review_config_report)
+	printf '%s\n' "$_reply_config" | awk '{print "config\t" $0}'
+	porcelain_row save-state complete
 }

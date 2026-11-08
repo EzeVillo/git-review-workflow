@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import {hasSaveState, parseSaveReply, SaveReply} from "./saveReply";
 import {parseStateGuard} from "./staleGuard";
 import {hasNavigationState, isNavigationReply, parseInlineWhy} from "./navigationReply";
 import {CommentsReport, parseComments} from "../cli/commentsPorcelain";
@@ -37,6 +38,7 @@ export type {Situation} from "./situation";
 export interface ReviewState {
     guard?: string;
     navigationState?: boolean;
+    saveState?: boolean;
     inlineWhy?: string;
     /** One primary report and its comment completion share this host read id. */
     readId?: number;
@@ -349,13 +351,14 @@ export class ReviewStateManager {
 
     /** Mutations wait for authoritative primary state; documents complete independently. */
     async refreshPrimary(navigationOutput?: string): Promise<ReviewState> {
-        const reply = navigationOutput && isNavigationReply(navigationOutput)
+        const saved = navigationOutput ? parseSaveReply(navigationOutput) : undefined;
+        const reply = saved ? {stdout: "", stderr: "", exitCode: 2} : navigationOutput && isNavigationReply(navigationOutput)
             ? {stdout: navigationOutput, stderr: "", exitCode: 0} : undefined;
         // Reserve the publication before starting it: filesystem callbacks may
         // request a read while the mutation's status/list/config is in flight.
         const pending = Promise.resolve().then(() => {
             this.onPrimaryReadStarting?.();
-            return this.doRefresh(true, reply);
+            return this.doRefresh(true, reply, saved);
         });
         this.primaryInFlight = pending;
         try {
@@ -386,7 +389,7 @@ export class ReviewStateManager {
         return next;
     }
 
-    private async doRefresh(primaryOnly = false, statusReply?: Awaited<ReturnType<typeof invokeGitReview>>): Promise<ReviewState> {
+    private async doRefresh(primaryOnly = false, statusReply?: Awaited<ReturnType<typeof invokeGitReview>>, saveReply?: SaveReply): Promise<ReviewState> {
         const options = this.getOptions();
         const readId = ++this.readId;
         const accept = (next: ReviewState): ReviewState => readId === this.readId ? this.setState(next) : this.current;
@@ -453,7 +456,7 @@ export class ReviewStateManager {
         const comments = commentsPending ? {...parseComments(""), loading: true} : undefined;
         const publish = async (next: ReviewState): Promise<ReviewState> => {
             if (readId !== this.readId) return this.current;
-            next = {...next, readId, guard: parseStateGuard(result.stdout), navigationState: hasNavigationState(result.stdout), inlineWhy: parseInlineWhy(result.stdout)};
+            next = {...next, readId, guard: parseStateGuard(result.stdout), navigationState: hasNavigationState(result.stdout), saveState: hasSaveState(result.stdout), inlineWhy: parseInlineWhy(result.stdout)};
             accept(next);
             if (!commentsPending) return next;
             const complete = async (): Promise<ReviewState> => {
@@ -485,7 +488,7 @@ export class ReviewStateManager {
             // ya se llama a `listBranches` con exit 2, sólo falta mirar si
             // trae una fila `finish … pending`.
             const inventory = baseSituation === "no-review"
-                ? await listBranches(options)
+                ? saveReply ? {branches: parseListPorcelain(saveReply.list), fixes: parseListFixes(saveReply.list)} : await listBranches(options)
                 : {branches: [] as BranchRecord[], fixes: [] as FixesRecord[]};
             const branches = inventory.branches;
             const hasFinishPending = branches.some((branch) => branch.finish?.state === "pending");
@@ -499,7 +502,7 @@ export class ReviewStateManager {
                 stderr: result.stderr,
             };
             if (situation === "no-review" || situation === "finish-pending") {
-                const report = await loadConfigReport(options);
+                const report = saveReply ? parseConfigPorcelain(saveReply.config) : await loadConfigReport(options);
                 // La señal de "el reporte llegó" es config, no el largo de
                 // candidates: con esa condición, un reporte exitoso con cero
                 // candidatas (un repositorio sin ramas elegibles) era

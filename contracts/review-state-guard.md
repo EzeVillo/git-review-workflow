@@ -157,3 +157,42 @@ guardas de generación para no publicar resultados obsoletos.
 La TUI conserva su política de señales diferidas y su ventana posterior al
 lock. Estas políticas coordinan invocaciones; no derivan ni almacenan estado
 de producto fuera de la CLI.
+
+## Respuesta opcional de Save
+
+`status --porcelain` anuncia `capability<TAB>save-state` durante una review.
+Los clientes que reciben esa capacidad y un guard válido pueden invocar
+`git review --expect-state <guard> save --porcelain`. Sin la opción, Save
+conserva su salida humana y no calcula el informe final. La capacidad es
+independiente de navigation-state y no se infiere de una versión o del guard.
+
+La salida exitosa tiene este sobre, con tabs literales:
+
+```text
+save-state<TAB>1
+status<TAB>2
+list<TAB><registro de list --porcelain>
+config<TAB><registro de config --porcelain>
+save-state<TAB>complete
+```
+
+Hay una o más filas `list` seguidas por las filas `config`; el contenido tras
+el primer tab es el registro original, sin otra capa de escapes. Se conservan
+los parsers existentes. El `status 2` declara que HEAD ya no está en una review;
+`finish-pending` se resuelve desde el inventario igual que en una lectura normal.
+Los informes se generan con los mismos emisores públicos, después del cambio
+de rama y de liberar custodia. Comparten una lectura nueva de metadata, rama y
+config efectiva; nunca reutilizan el snapshot anterior a Save para este estado.
+No se invoca status, list o config como otro verbo. Comments completa aparte.
+
+El receptor exige inicio, código, orden de secciones y final únicos, al menos
+una rama guardada y exactamente un remoto efectivo. Una salida humana, vacía,
+truncada, duplicada o incompatible usa el refresco normal. Sólo se consume una
+respuesta con exit 0 sin timeout ni error de proceso; nunca se repite Save.
+
+Un error del guardado conserva sus códigos anteriores, sin respuesta exitosa.
+Si el guardado terminó pero falla el informe, Save conserva exit 0, escribe la
+nota de lectura por stderr y omite el final. El receptor refresca el estado;
+la falta del informe no significa que deba intentar guardar nuevamente.
+Si HEAD terminó en otra review por un cambio concurrente, también se omite el
+informe y se relee. Esto no promete una transacción global contra Git externo.

@@ -567,6 +567,7 @@ func toProjectInput(r host.ReadResult, mouseEnabled, busy bool, statusLine strin
 	return domain.ProjectInput{
 		Guard:           r.Guard,
 		NavigationState: r.NavigationState,
+		SaveState:       r.SaveState,
 		Comments:        r.Comments, CommentsError: r.CommentsError, CommentsLoading: r.CommentsLoading,
 		Situation:    r.Situation,
 		Status:       r.Status,

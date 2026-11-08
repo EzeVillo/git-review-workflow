@@ -27,6 +27,17 @@ para reconstruir `status --why <path>`. Son registros opcionales y no aparecen
 en status común. Si faltan o son inválidos, consultá `status --why` como antes.
 Ver el [contrato de respuesta de navegación](contracts/review-state-guard.md#respuesta-de-navegación).
 
+
+Con `save --porcelain`, la automatización puede pedir el estado final del panel
+en lugar de salida humana. Status activo anuncia `capability save-state`;
+los clientes comprueban esa capacidad antes de enviar la opción a una CLI
+anterior. La respuesta empieza con `save-state<TAB>1` y `status<TAB>2`, contiene
+registros ordinarios de list y config precedidos por `list<TAB>` y
+`config<TAB>`, y termina con `save-state<TAB>complete`. Sin la opción, la salida
+y el costo de lectura permanecen iguales. Si se guarda pero falla el informe,
+el código sigue siendo 0 y se omite el final: se consulta el estado de nuevo
+sin repetir Save. Ver [el contrato de respuesta](contracts/review-state-guard.md#respuesta-opcional-de-save).
+
 ## Comandos
 
 > **Cómo leer la sintaxis:** `<x>` es **obligatorio**, `[x]` es **opcional**, y
@@ -49,7 +60,7 @@ lista, o `git review <verbo> -h` para el detalle de un verbo.
 | `git review next` / `git review prev`                                                                                                      | Mueve una review `--step` o walkthrough a la entrada siguiente / anterior.                                                                                                                                                                                                                                                                                                             |
 | `git review status [--porcelain \| --why <path>]`                                                                                          | Muestra el estado de la review en la rama actual (`--porcelain` para salida legible por programas, incluido un registro `finish` cuando un cierre quedó trabado por conflicto; `--why <path>` para el porqué de una entrada del walkthrough).                                                                                                                                          |
 | `git review list [--porcelain]`                                                                                                            | Lista todas las reviews en curso y las guardadas (la rama actual marcada con `*`; `--porcelain` también reporta cierres sin resolver como `pending` o `conflict`).                                                                                                                                                                                                                     |
-| `git review save`                                                                                                                          | Pausa la review actual como `review-saved/<rama>` y vuelve a donde empezaste.                                                                                                                                                                                                                                                                                                          |
+| `git review save [--porcelain]`                                                                                                                          | Pausa la review actual como `review-saved/<rama>` y vuelve a donde empezaste.                                                                                                                                                                                                                                                                                                          |
 | `git review continue [rama]`                                                                                                               | Retoma una review guardada con `git review save`.                                                                                                                                                                                                                                                                                                                                      |
 | `git review finish [--onto-source] [--resume \| --abort [--force]]`                                                                        | Desde una rama `review/*`, extrae tus ediciones a `review-fixes/<rama>` (o la rama del PR); `--abort` deshace el último finish.                                                                                                                                                                                                                                                        |
 | `git review preview [--stat]`                                                                                                              | Muestra las ediciones que hiciste hasta ahora — el diff que `finish` extraería — sin commitear ni cambiar de rama.                                                                                                                                                                                                                                                                     |

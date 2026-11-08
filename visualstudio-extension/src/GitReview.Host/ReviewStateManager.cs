@@ -46,8 +46,9 @@ public sealed class ReviewStateManager
     public Task<ReviewState> RefreshPrimaryAsync(CancellationToken ct = default, string? navigationOutput = null)
     {
         PrimaryReadStarting?.Invoke();
-        return ReadAsync(ct, false, true, true,
-            navigationOutput is not null && NavigationReply.IsValid(navigationOutput) ? new InvokeResult(navigationOutput, "", 0) : null);
+        var saved = navigationOutput is null ? null : SaveReply.Parse(navigationOutput);
+        return ReadAsync(ct, false, true, true, saved is not null ? new InvokeResult("", "", 2) :
+            navigationOutput is not null && NavigationReply.IsValid(navigationOutput) ? new InvokeResult(navigationOutput, "", 0) : null, saved);
     }
 
     public void InvalidatePendingReads() => Interlocked.Increment(ref _refreshGen);
@@ -61,7 +62,7 @@ public sealed class ReviewStateManager
     }
 
     private async Task<ReviewState> ReadAsync(CancellationToken ct, bool includeComments, bool publish,
-        bool deferComments = false, InvokeResult? statusReply = null)
+        bool deferComments = false, InvokeResult? statusReply = null, SaveReply? saveReply = null)
     {
         var gen = Interlocked.Increment(ref _refreshGen);
         ReviewState Complete(ReviewState state) => publish ? Publish(state, gen) : state;
@@ -191,8 +192,8 @@ public sealed class ReviewStateManager
         else if (exit == 2)
         {
             // no-review: list + config
-            var listTask = _cli.InvokeAsync("list", new[] { "--porcelain" }, sole, cancellationToken: ct);
-            var configTask = _cli.InvokeAsync("config", new[] { "--porcelain" }, sole, cancellationToken: ct);
+            var listTask = saveReply is not null ? Task.FromResult(new InvokeResult(saveReply.List, "", 0)) : _cli.InvokeAsync("list", new[] { "--porcelain" }, sole, cancellationToken: ct);
+            var configTask = saveReply is not null ? Task.FromResult(new InvokeResult(saveReply.Config, "", 0)) : _cli.InvokeAsync("config", new[] { "--porcelain" }, sole, cancellationToken: ct);
             await Task.WhenAll(listTask, configTask).ConfigureAwait(false);
             var list = await listTask.ConfigureAwait(false);
             var config = await configTask.ConfigureAwait(false);
@@ -253,7 +254,7 @@ public sealed class ReviewStateManager
                     status.Stderr, status.Stdout, "Something went wrong reading the review state."));
         }
 
-        next = next with { Guard = StaleGuard.Parse(status.Stdout), NavigationState = NavigationReply.Supported(status.Stdout), InlineWhy = NavigationReply.InlineWhy(status.Stdout) };
+        next = next with { Guard = StaleGuard.Parse(status.Stdout), NavigationState = NavigationReply.Supported(status.Stdout), SaveState = SaveReply.Supported(status.Stdout), InlineWhy = NavigationReply.InlineWhy(status.Stdout) };
         if (deferComments && (status.ExitCode is 0 or 2))
         {
             var primary = Complete(next with { Comments = new CommentsReport(Array.Empty<CommentRow>(), Loading: true) });

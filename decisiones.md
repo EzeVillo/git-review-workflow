@@ -2175,3 +2175,23 @@ La relectura específica evita ese resultado sin reconstruir captura o historia.
 `comments_replace` conserva la lectura completa para los documentos que sí la
 necesitan. La optimización vive en la CLI común y no requiere versiones nuevas
 de los clientes.
+
+## 30. Save ofrece estado final sólo por opción explícita
+
+Ezequiel descartó justificar una migración general de lenguaje con una mejora
+no demostrada. Se conserva POSIX y se empieza por el diseño de la lectura:
+`save --porcelain`, negociado con una capacidad independiente en status.
+Next/Prev ya usan esa forma. El uso humano no paga un reporte que no pidió.
+
+La implementación comparte los emisores de list/config con los verbos públicos,
+los aísla en subshells para no contaminar la mutación y carga metadata nueva
+al terminar Save. Se libera el lock de Comments antes de informar. El cliente
+consume los registros de CLI y conserva generación/Comments asíncronos; no
+infiere el estado final a partir del botón ni mantiene otra fuente de verdad.
+
+El sobre lleva inicio, status y final. Un informe incompleto vuelve al refresco
+normal sin repetir Save. Un fallo posterior de lectura no transforma un Save
+completado en error de mutación. Se conserva compatibilidad con CLI anteriores
+sin elevar el mínimo: la opción sólo se envía cuando se anunció la capacidad.
+La verificación y las mediciones viven en
+`specs/rendimiento/2026-11-08-respuesta-save.md`.

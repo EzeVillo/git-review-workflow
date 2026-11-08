@@ -224,6 +224,7 @@ _git_review() {
 	comments) _git_review_comments ;;
 	config) _git_review_config ;;
 	finish) _git_review_finish ;;
+	save) __gitcomp "--porcelain --h" ;;
 	preview) _git_review_preview ;;
 	continue) _git_review_continue ;;
 	clean) _git_review_clean ;;

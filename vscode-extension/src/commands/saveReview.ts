@@ -70,10 +70,11 @@ export async function saveReview(
                     return undefined;
                 }
                 if (!(await saveSessionComments(stateManager, getInvokeOptions(), undefined, "active"))) return undefined;
-                const invocation = await invokeGitReview("save", [], {...getInvokeOptions(), expectedState: token.guard});
+                const saved = state.saveState && token.guard !== undefined;
+                const invocation = await invokeGitReview("save", saved ? ["--porcelain"] : [], {...getInvokeOptions(), expectedState: token.guard});
                 // Refrescar pase lo que pase (ver continueReview.ts): dice dónde
                 // quedó el repositorio; la salida humana no se parsea nunca.
-                await stateManager.refreshPrimary();
+                await stateManager.refreshPrimary(saved && invocation.exitCode === 0 && !invocation.timedOut && !invocation.errorCode ? invocation.stdout : undefined);
                 return invocation;
             }
         );

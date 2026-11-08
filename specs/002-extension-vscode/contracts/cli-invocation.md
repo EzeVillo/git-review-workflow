@@ -246,3 +246,12 @@ notas de compare se conservan automáticamente al cerrar o limpiar la comparaci�
 Se permiten `config --porcelain --compare -- <a> <b>` y `config --porcelain --compare -- <draft-id>` (lecturas, sin red). El primero resuelve el par literal actual; el segundo consulta los commits guardados. La CLI decide walk, keys, step, whole y draft/draft-resume/draft-update. No se reutilizan ofertas de Start ni se enumeran layouts fijos.
 
 Crear/actualizar usa `walkthrough draft --porcelain --compare -- <a> <b>`. Retomar sólo revela el bloque de borradores. El registro `draft` admite `source=compare` y `range=full`; `draft-title<TAB>src<TAB>texto` es aditivo, se asocia por `src` sin depender del orden y no reemplaza la identidad. Validate and start usa `walkthrough draft --build --compare -- <src>`, luego el probe del draft y finalmente `compare [--keys] --draft -- <src>`. Ningún paso deriva revisiones en el cliente. Crear y retomar no notifican lo que ya muestra el panel; actualizar sí informa los números del registro `merged`.
+
+## Respuesta opcional de guardado
+
+Save admite `--porcelain` sólo cuando status anunció `save-state` y hay guard
+válido. El sobre completo reemplaza la lectura principal posterior y reutiliza
+los parsers de list/config. Sin capacidad se conserva argv y refresco anterior;
+un sobre inválido o un error refrescan sin repetir la mutación. Comments sigue
+asíncrono. El formato y los fallos están en
+`contracts/review-state-guard.md`, «Respuesta opcional de Save».

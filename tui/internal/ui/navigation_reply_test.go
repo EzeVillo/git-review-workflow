@@ -26,3 +26,21 @@ func TestNavigationPublishesTheReplyAndRejectsOldDetails(t *testing.T) {
 		t.Fatal("old details overwrote navigation")
 	}
 }
+
+func TestSaveReplyPublishesSavedReviewAndRejectsOldDetails(t *testing.T) {
+	wire := "save-state\t1\nstatus\t2\nlist\tbranch\treview-saved/feature\t1\t0\t0\twalk\t2\t3\nconfig\tconfig\tbase\tmain\nconfig\tconfig\tremote\torigin\nsave-state\tcomplete\n"
+	primary, ok := host.ReadSaveReply(wire)
+	if !ok || !primary.HasList || !primary.HasConfig {
+		t.Fatal("final reports missing")
+	}
+	m := Model{Panel: domain.PanelModel{Situation: domain.SituationReview}, readGeneration: 4}
+	m.lock.Begin()
+	got, cmd := m.handleMutationDone(mutationDoneMsg{action: "saveReview", result: host.Result{ExitCode: 0}, navigation: &primary})
+	if cmd == nil || got.Panel.Situation != domain.SituationNoReview || got.lock.Busy() || !got.Panel.CommentsLoading {
+		t.Fatalf("Save did not publish and unlock: %#v", got.Panel)
+	}
+	after, _ := got.handleReadDone(readDoneMsg{generation: 4, result: host.ReadResult{Situation: domain.SituationReview}})
+	if after.Panel != got.Panel {
+		t.Fatal("old details overwrote Save")
+	}
+}

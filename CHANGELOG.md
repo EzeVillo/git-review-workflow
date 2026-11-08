@@ -12,6 +12,12 @@ and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 This file starts at 0.2.1. Earlier versions are only in the
 [GitHub Releases](https://github.com/EzeVillo/git-review-workflow/releases).
 
+## [0.10.7] — 2026-11-08
+
+### Changed
+
+- Add opt-in `save --porcelain` with the final panel inventory and configuration. Share report renderers and fresh metadata within the reply; preserve human output without the flag and successful saves if only reporting fails.
+
 ## [0.10.6] — 2026-11-07
 
 ### Changed

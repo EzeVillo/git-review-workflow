@@ -17,10 +17,11 @@ prog="git review save"
 
 usage() {
 	cat <<EOF
-usage: $prog
+usage: $prog [--porcelain]
 
 Pause the review on the current review/* branch: stash it as review-saved/<branch>
 and return to the branch you started from. Resume it later with git review continue.
+  --porcelain  return the resulting panel state instead of human output
 EOF
 }
 
@@ -29,18 +30,15 @@ die() {
 	exit 1
 }
 
-case "${1:-}" in
--h | --h)
-	usage
-	exit 0
-	;;
-"") ;;
-*)
-	echo "error: unexpected argument $1" >&2
-	usage >&2
-	exit 1
-	;;
-esac
+porcelain=0
+while [ $# -gt 0 ]; do
+	case "$1" in
+	-h | --h) usage; exit 0 ;;
+	--porcelain) porcelain=1 ;;
+	*) echo "error: unexpected argument $1" >&2; usage >&2; exit 1 ;;
+	esac
+	shift
+done
 
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
@@ -281,5 +279,17 @@ git config "branch.$saved.reviewdraftfiled" "$_save_filed"
 git switch -q --discard-changes "$target"
 git branch -D "$cur" >/dev/null
 
-echo "saved review of $src ($note) as $saved; returned to $target"
-echo "resume it with git review continue"
+# Reporting must not hold Comments custody or change the successful result.
+comments_unlock
+if [ "$porcelain" -eq 1 ]; then
+	set +e
+	(review_saved_state)
+	_reply_status=$?
+	set -e
+	if [ "$_reply_status" -ne 0 ]; then
+		echo "note: review saved; final state could not be read" >&2
+	fi
+else
+	echo "saved review of $src ($note) as $saved; returned to $target"
+	echo "resume it with git review continue"
+fi

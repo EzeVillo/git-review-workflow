@@ -15,6 +15,7 @@ public sealed class GitReviewPanelController : IDisposable
 {
     private readonly PanelView _view;
     private readonly ReviewStateManager _state;
+    private readonly RefreshGate _refreshGate = new();
     private readonly MutationRunner _mutations;
     private readonly CliInvoker _cli;
     private readonly Func<IReadOnlyList<string>> _roots;
@@ -141,6 +142,7 @@ public sealed class GitReviewPanelController : IDisposable
         _cwd = () => SoleTarget.PickSoleTarget(roots());
         _cli = new CliInvoker(gitReviewPath, log: log);
         _state = new ReviewStateManager(_cli, roots, gitReviewPath);
+        _state.PrimaryReadStarting = _refreshGate.PrimaryStarting;
         _mutations = new MutationRunner(_cli, _state, _cwd);
         _view = new PanelView(chrome);
         // The dialogs the action matrix opens are plain WPF windows with no host theme of
@@ -151,7 +153,13 @@ public sealed class GitReviewPanelController : IDisposable
         _dispatcher = Dispatcher.CurrentDispatcher;
 
         _state.StateChanged += OnStateChanged;
-        _busySub = _mutations.Lock.OnDidChangeBusy(_ => Render());
+        _busySub = _mutations.Lock.OnDidChangeBusy(busy =>
+        {
+            _refreshGate.MutationChanged(busy);
+            Render();
+            if (!busy && !_disposed)
+                _dispatcher.BeginInvoke((Action)(() => _ = DrainRefreshAsync()));
+        });
         // A discarded mutation is reported here and nowhere else, so whoever asked
         // for it gets told: the panel's own buttons go through a path that could say
         // it, but Tools -> git review and the toolbar don't, and a navigation dropped
@@ -234,7 +242,29 @@ public sealed class GitReviewPanelController : IDisposable
         _ = RefreshAsync();
     }
 
-    public async Task RefreshAsync()
+    public Task RefreshAsync()
+    {
+        _refreshGate.Request();
+        return DrainRefreshAsync();
+    }
+
+    private async Task DrainRefreshAsync()
+    {
+        while (!_disposed && _refreshGate.TryStart())
+        {
+            var failed = false;
+            try { await RefreshCoreAsync().ConfigureAwait(true); }
+            catch { failed = true; throw; }
+            finally
+            {
+                _refreshGate.Finished();
+                if (failed && !_disposed)
+                    _dispatcher.BeginInvoke((Action)(() => _ = DrainRefreshAsync()));
+            }
+        }
+    }
+
+    private async Task RefreshCoreAsync()
     {
         if (_workspacePending())
         {
@@ -252,7 +282,7 @@ public sealed class GitReviewPanelController : IDisposable
         _skeletonTimer.Start();
         try
         {
-            await _state.RefreshAsync().ConfigureAwait(true);
+            await _state.RefreshPrimaryAsync().ConfigureAwait(true);
             if (seq != _refreshSeq) return;
             // StateChanged publishes the primary state and synchronizes details.
         }
@@ -279,6 +309,12 @@ public sealed class GitReviewPanelController : IDisposable
         var entry = PanelModelBuilder.CurrentEntry(st.EntriesList, st.State?.Position);
         var cwd = _cwd();
         _whyKey = WhyKeyOf(st);
+        if (st.InlineWhy is string inline)
+        {
+            _whyCeilingTimer.Stop();
+            _why = WhyFromText(inline);
+            return;
+        }
         if (entry is null)
         {
             _why = new PanelWhy(WhyState.Absent);
@@ -317,10 +353,7 @@ public sealed class GitReviewPanelController : IDisposable
                 .ConfigureAwait(true);
             if (result.ExitCode == 0 && !result.TimedOut)
             {
-                var text = result.Stdout.TrimEnd();
-                why = string.IsNullOrEmpty(text)
-                    ? new PanelWhy(WhyState.Absent)
-                    : new PanelWhy(WhyState.Present, text);
+                why = WhyFromText(result.Stdout);
             }
             else
             {
@@ -333,6 +366,12 @@ public sealed class GitReviewPanelController : IDisposable
         }
 
         PublishWhy(seq, why);
+    }
+
+    private static PanelWhy WhyFromText(string stdout)
+    {
+        var text = stdout.TrimEnd();
+        return string.IsNullOrEmpty(text) ? new PanelWhy(WhyState.Absent) : new PanelWhy(WhyState.Present, text);
     }
 
     /// <summary>
@@ -491,7 +530,6 @@ public sealed class GitReviewPanelController : IDisposable
             case "next":
             case "prev":
                 await _mutations.RunActionAsync(wire).ConfigureAwait(true);
-                await RefreshAsync().ConfigureAwait(true);
                 break;
             case "copyCliInstall":
                 var cmd = _state.Current.Situation == Situation.CliOutdated

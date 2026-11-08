@@ -81,7 +81,7 @@ export async function abortReview(
                 const invocation = await invokeGitReview("abort", [], {...getInvokeOptions(), expectedState: token.guard});
                 // Refrescar pase lo que pase (ver continueReview.ts): dice dónde
                 // quedó el repositorio; la salida humana no se parsea nunca.
-                await stateManager.refresh();
+                await stateManager.refreshPrimary();
                 return invocation;
             }
         );

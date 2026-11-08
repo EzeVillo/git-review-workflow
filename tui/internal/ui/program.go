@@ -273,46 +273,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case readDoneMsg:
-		if msg.generation != m.readGeneration {
-			return m, nil
-		}
-		if m.activity.active && m.activity.phase == activityReading {
-			m = m.clearActivity(m.activity.generation)
-		}
-		m.lastRead = msg.result
-		if m.onAcceptedRead != nil && !msg.result.DetailsPending {
-			m.onAcceptedRead(msg.result)
-		}
-		previous := m.Panel
-		m.Panel = domain.Project(toProjectInput(msg.result, m.Panel.MouseEnabled, m.lock.Busy(), m.statusLine))
-		if m.Panel.Situation != previous.Situation || m.Panel.Branch != previous.Branch || m.Panel.Position != previous.Position {
-			m.bodyOffset = 0
-		}
-		if m.pendingFinish != nil {
-			// finishReview's own deferred outcome (T074): the fresh read's
-			// matching list record is the only honest answer to "did THIS
-			// source land pending or not" — never the verb's own stdout or
-			// another review's repository-wide pending state (FR-013).
-			if !m.pendingFinish.matchesPending(msg.result) {
-				text := m.pendingFinish.destination() + domain.FinishReadySuffix
-				m.statusLine = text
-				m.Panel.StatusLine = text
-			}
-			m.pendingFinish = nil
-		}
-		var openCmd tea.Cmd
-		if m.pendingOpenPath != "" {
-			path := m.pendingOpenPath
-			m.pendingOpenPath = ""
-			openCmd = createdGuideOpenCmd(path)
-		}
-		if m.FocusIndex >= len(ControlsFor(m.Panel)) {
-			m.FocusIndex = 0
-		}
-		if msg.result.DetailsPending {
-			return m, tea.Batch(openCmd, readDetailsCmd(msg.generation, msg.result))
-		}
-		return m, openCmd
+		return m.handleReadDone(msg)
 
 	case mutationDoneMsg:
 		return m.handleMutationDone(msg)
@@ -604,8 +565,9 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 // Studio's/JetBrains' host-side adapters.
 func toProjectInput(r host.ReadResult, mouseEnabled, busy bool, statusLine string) domain.ProjectInput {
 	return domain.ProjectInput{
-		Guard:    r.Guard,
-		Comments: r.Comments, CommentsError: r.CommentsError, CommentsLoading: r.CommentsLoading,
+		Guard:           r.Guard,
+		NavigationState: r.NavigationState,
+		Comments:        r.Comments, CommentsError: r.CommentsError, CommentsLoading: r.CommentsLoading,
 		Situation:    r.Situation,
 		Status:       r.Status,
 		HasStatus:    r.HasStatus,
@@ -621,4 +583,48 @@ func toProjectInput(r host.ReadResult, mouseEnabled, busy bool, statusLine strin
 		Stderr:       r.Stderr,
 		StatusLine:   statusLine,
 	}
+}
+
+func (m Model) handleReadDone(msg readDoneMsg) (Model, tea.Cmd) {
+	if msg.generation != m.readGeneration {
+		return m, nil
+	}
+	if m.activity.active && m.activity.phase == activityReading {
+		m = m.clearActivity(m.activity.generation)
+	}
+	m.lastRead = msg.result
+	if m.onAcceptedRead != nil && !msg.result.DetailsPending {
+		m.onAcceptedRead(msg.result)
+	}
+	previous := m.Panel
+	m.Panel = domain.Project(toProjectInput(msg.result, m.Panel.MouseEnabled, m.lock.Busy(), m.statusLine))
+	if m.Panel.Situation != previous.Situation || m.Panel.Branch != previous.Branch || m.Panel.Position != previous.Position {
+		m.bodyOffset = 0
+	}
+	if m.pendingFinish != nil {
+		// finishReview's own deferred outcome (T074): the fresh read's
+		// matching list record is the only honest answer to "did THIS
+		// source land pending or not" — never the verb's own stdout or
+		// another review's repository-wide pending state (FR-013).
+		if !m.pendingFinish.matchesPending(msg.result) {
+			text := m.pendingFinish.destination() + domain.FinishReadySuffix
+			m.statusLine = text
+			m.Panel.StatusLine = text
+		}
+		m.pendingFinish = nil
+	}
+	var openCmd tea.Cmd
+	if m.pendingOpenPath != "" {
+		path := m.pendingOpenPath
+		m.pendingOpenPath = ""
+		openCmd = createdGuideOpenCmd(path)
+	}
+	if m.FocusIndex >= len(ControlsFor(m.Panel)) {
+		m.FocusIndex = 0
+	}
+	if msg.result.DetailsPending {
+		return m, tea.Batch(openCmd, readDetailsCmd(msg.generation, msg.result))
+	}
+	return m, openCmd
+
 }

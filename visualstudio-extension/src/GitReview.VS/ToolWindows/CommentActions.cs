@@ -5,22 +5,10 @@ namespace GitReview.VS.ToolWindows;
 
 public sealed partial class ActionDispatcher
 {
-    private async Task<bool> SaveSessionCommentDocumentsAsync(string action,ActionParams? parameters)
-    {
-        var housekeeping=(parameters as ActionParams.Housekeeping)?.Action;
-        var relevant=action is "saveReview" or "abortReview" or "finishReview" or "undoFinish" or "resumeFinish" || housekeeping?.Kind is HousekeepingKind.CleanOne or HousekeepingKind.CleanKeepFixes or HousekeepingKind.CleanAll or HousekeepingKind.ForgetSavedOne or HousekeepingKind.ForgetSavedAll;
-        if(!relevant || _host.SaveCommentPath is null || Cwd is not string cwd)return true;
-        var response=await _panel.Cli.InvokeAsync("comments",new[]{"status","--porcelain","--all"},cwd).ConfigureAwait(true);
-        if(response.ExitCode!=0)return false;
-        var report=Comments.Parse(response.Stdout);
-        var saved=housekeeping?.Kind is HousekeepingKind.ForgetSavedOne or HousekeepingKind.ForgetSavedAll;
-        var prefix=saved?"review-saved/":"review/";
-        var source=housekeeping?.Source ?? State.State?.Source ?? State.FixesList.FirstOrDefault(f=>f.Current)?.Name?.Substring("review-fixes/".Length);
-        var all=housekeeping?.Kind is HousekeepingKind.CleanAll or HousekeepingKind.ForgetSavedAll;
-        var owners=report.Records("comments-owner").Where(r=>r.Count>=3 && (all ? r[2].StartsWith(prefix,StringComparison.Ordinal) : r[2]==prefix+source)).Select(r=>r[2]).ToArray();
-        foreach(var doc in Comments.OwnedBy(report,owners))if(!await _host.SaveCommentPath(doc.Path).ConfigureAwait(true))return false;
-        return true;
-    }
+    private Task<bool> SaveSessionCommentDocumentsAsync(string action,ActionParams? parameters) =>
+        _host.SaveCommentPath is null || Cwd is not string cwd ? Task.FromResult(true) :
+            SessionCommentSave.SaveAsync(_panel.Cli,cwd,State,action,parameters,_host.HasUnsavedDocuments,_host.SaveCommentPath);
+
     private CommentsActions CommentFlow() => new(_panel.Cli,_panel.Mutations.Lock,
         _host.SaveCommentPath ?? (_ => Task.FromResult(true)), async()=>await _panel.RefreshAsync().ConfigureAwait(true));
     private static string? CommentFailure(InvokeResult? result) => result is null ? CommentsCopy.failed : result.ExitCode==0 ? null : result.ExitCode==4 ? UserCopy.Stale : result.Stderr.Trim().Length>0 ? result.Stderr.Trim() : CommentsCopy.failed;

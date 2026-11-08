@@ -372,7 +372,7 @@ La CLI es la única fuente de verdad. Los cuatro leen solo porcelain/argv; ningu
 cuenta.
 
 - **`vscode-extension/`** — proyecto npm aparte (TypeScript + esbuild). Nunca deriva estado: todo
-  sale de reinvocar `git review status --porcelain` / `--why`.
+  sale de `git review status --porcelain` / `--why` o de la respuesta porcelain de navegación.
   `specs/002-extension-vscode/contracts/cli-invocation.md` es la **lista cerrada** de lo que puede
   invocar.
 - **`jetbrains-plugin/`** — módulo Gradle aparte (JDK 21). El pin de platform en

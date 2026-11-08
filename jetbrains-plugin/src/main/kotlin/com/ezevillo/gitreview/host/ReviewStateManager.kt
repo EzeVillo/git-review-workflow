@@ -12,6 +12,8 @@ import com.ezevillo.gitreview.domain.parseListPorcelain
 import com.ezevillo.gitreview.domain.parsePorcelain
 import com.ezevillo.gitreview.domain.situationFor
 import com.ezevillo.gitreview.domain.versionVerdict
+import com.ezevillo.gitreview.domain.hasNavigationState
+import com.ezevillo.gitreview.domain.isNavigationReply
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -49,6 +51,25 @@ class ReviewStateManager(
     fun refresh(cwd: String?, onPrimary: ((ReviewState) -> Unit)? = null): ReviewState =
         read(cwd, includeComments = true, publish = true, onPrimary = onPrimary)
 
+    data class PendingRead(val generation: Long, val state: ReviewState, val cwd: String?)
+
+    fun refreshPrimary(cwd: String?, navigationOutput: String? = null, onPrimary: ((ReviewState) -> Unit)? = null): PendingRead {
+        val gen = generation.incrementAndGet()
+        val reply = navigationOutput?.takeIf { isNavigationReply(it) }?.let { InvokeResult(it, "", 0) }
+        val state = read(cwd, false, true, onPrimary, reply, true, gen)
+        return PendingRead(gen, state, cwd)
+    }
+
+    fun completeComments(pending: PendingRead): ReviewState? {
+        if (pending.state.comments?.loading != true || pending.cwd == null || pending.generation != generation.get()) return null
+        val report = invoker.invoke("comments", listOf("status", "--porcelain"), pending.cwd)
+        val parsed = com.ezevillo.gitreview.domain.parseComments(report.stdout)
+        val complete = pending.state.copy(comments = if (report.exitCode == 0 && !report.timedOut && report.errorCode == null) parsed else
+            parsed.copy(rows = parsed.rows + com.ezevillo.gitreview.domain.CommentRow("comments-diagnostic", listOf("", "read", report.stderr))))
+        accept(pending.generation, complete)
+        return complete.takeIf { current === it }
+    }
+
     /** The mutation guard needs current product state, not document inventories. */
     fun readForMutation(cwd: String?): ReviewState {
         val captured = current
@@ -59,8 +80,9 @@ class ReviewStateManager(
         return read(cwd, includeComments = false, publish = false)
     }
 
-    private fun read(cwd: String?, includeComments: Boolean, publish: Boolean, onPrimary: ((ReviewState) -> Unit)? = null): ReviewState {
-        val gen = generation.incrementAndGet()
+    private fun read(cwd: String?, includeComments: Boolean, publish: Boolean, onPrimary: ((ReviewState) -> Unit)? = null,
+                     statusReply: InvokeResult? = null, deferComments: Boolean = false, readGeneration: Long? = null): ReviewState {
+        val gen = readGeneration ?: generation.incrementAndGet()
         if (cwd == null) {
             val state = ReviewState(
                 situation = Situation.ERROR,
@@ -70,7 +92,7 @@ class ReviewStateManager(
             return state
         }
 
-        if (versionCheckedGeneration != gen || current.situation == Situation.CLI_MISSING) {
+        if (statusReply == null && (versionCheckedGeneration != gen || current.situation == Situation.CLI_MISSING)) {
             // Declaring the CLI missing takes EVIDENCE of absence, not any
             // failure at all: the first invocation of a startup is the one most
             // likely to go wrong for reasons that are not the CLI, and that is
@@ -125,7 +147,7 @@ class ReviewStateManager(
             versionCheckedGeneration = gen
         }
 
-        val status = invoker.invoke("status", listOf("--porcelain"), cwd)
+        val status = statusReply ?: invoker.invoke("status", listOf("--porcelain"), cwd)
         if (status.timedOut) {
             val state = ReviewState(
                 situation = Situation.ERROR,
@@ -241,7 +263,11 @@ class ReviewStateManager(
             )
         }
 
-        val guarded = state.copy(guard = com.ezevillo.gitreview.domain.parseStateGuard(status.stdout))
+        val commentsPending = deferComments && (status.exitCode == 0 || status.exitCode == 2)
+        val guarded = state.copy(guard = com.ezevillo.gitreview.domain.parseStateGuard(status.stdout),
+            navigationState = hasNavigationState(status.stdout),
+            inlineWhy = com.ezevillo.gitreview.domain.parseInlineWhy(status.stdout),
+            comments = if (commentsPending) com.ezevillo.gitreview.domain.CommentsReport(loading = true) else state.comments)
         val complete = if (includeComments && (status.exitCode == 0 || status.exitCode == 2)) {
             if (publish && gen == generation.get()) {
                 val primary = guarded.copy(comments = com.ezevillo.gitreview.domain.CommentsReport(loading = true))
@@ -251,7 +277,7 @@ class ReviewStateManager(
             val parsed = com.ezevillo.gitreview.domain.parseComments(report.stdout)
             guarded.copy(comments = if (report.exitCode == 0) parsed else parsed.copy(rows = parsed.rows + com.ezevillo.gitreview.domain.CommentRow("comments-diagnostic", listOf("", "read", report.stderr))))
         } else guarded
-        if (publish) accept(gen, complete)
+        if (publish) accept(gen, complete, if (deferComments) onPrimary else null)
         return complete
     }
 

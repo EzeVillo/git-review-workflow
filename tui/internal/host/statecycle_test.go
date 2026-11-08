@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/EzeVillo/git-review-workflow/tui/internal/domain"
@@ -107,6 +108,27 @@ func TestPrimaryReadDefersCommentsUntilTheIndependentDetailsRead(t *testing.T) {
 	complete := ReadDetails(context.Background(), primary)
 	if complete.CommentsLoading || complete.DetailsPending || complete.Comments == "" || complete.Situation != primary.Situation {
 		t.Fatalf("details did not complete independently: %+v", complete)
+	}
+}
+
+func TestNavigationWhyIsPublishedBeforeCommentsWithoutAnotherWhyRead(t *testing.T) {
+	work := sandboxWithOrigin(t)
+	t.Chdir(work)
+	reply := "state\treview/x\tx\tdeadbeef\twalk\tapplied\t2\t2\t2\tb.txt\t0\n" +
+		"capability\tnavigation-state\nguard\t" + strings.Repeat("b", 40) +
+		"\nnavigation\tmoved\nwhy\tpresent\t1\nwhy-line\t1\tSelected explanation.\n"
+	primary, _, ok := ReadNavigationReply(reply)
+	if !ok || !primary.WhyIncluded || primary.WhyState != domain.WhyPresent || primary.Why != "Selected explanation." {
+		t.Fatalf("primary navigation lost its explanation: %+v", primary)
+	}
+	ResetInvocationLogForTest()
+	complete := ReadDetails(context.Background(), primary)
+	if complete.CommentsLoading || complete.DetailsPending || complete.CommentsError != "" || complete.Why != primary.Why {
+		t.Fatalf("details lost the explanation or failed to load comments: %+v", complete)
+	}
+	log := InvocationLog()
+	if len(log) != 1 || strings.Join(log[0].Argv, " ") != "git review comments status --porcelain" {
+		t.Fatalf("inline explanation caused a redundant process: %+v", log)
 	}
 }
 

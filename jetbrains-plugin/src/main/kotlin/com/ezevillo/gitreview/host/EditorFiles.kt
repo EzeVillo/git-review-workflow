@@ -14,6 +14,15 @@ fun openCommentText(project: Project, text: String) {
     FileEditorManager.getInstance(project).openFile(file, true)
 }
 
+/** null cannot prove clean and therefore keeps the ownership query. No VFS lookup. */
+fun hasUnsavedEditorDocuments(): Boolean? = runCatching {
+    val app = ApplicationManager.getApplication()
+    var dirty = true
+    val read = Runnable { dirty = FileDocumentManager.getInstance().unsavedDocuments.isNotEmpty() }
+    if (app.isDispatchThread) read.run() else app.invokeAndWait(read)
+    dirty
+}.getOrNull()
+
 /** Called off EDT: VFS resolution here, selective save and verification on EDT. */
 fun saveCommentFiles(paths: List<String>): Boolean {
     check(!ApplicationManager.getApplication().isDispatchThread)

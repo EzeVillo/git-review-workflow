@@ -251,7 +251,7 @@ export async function startFromDraft(
             },
             async () => {
                 const invocation = await invokeGitReview(source === "compare" ? "compare" : "start", args, options);
-                await stateManager.refresh();
+                await stateManager.refreshPrimary();
                 return invocation;
             }
         );
@@ -310,7 +310,7 @@ export async function discardDraft(
             ...getInvokeOptions(),
             network: false,
         });
-        await stateManager.refresh();
+        await stateManager.refreshPrimary();
         if (result.errorCode || result.exitCode !== 0) {
             const text = flatten(result.stderr);
             void vscode.window.showErrorMessage(

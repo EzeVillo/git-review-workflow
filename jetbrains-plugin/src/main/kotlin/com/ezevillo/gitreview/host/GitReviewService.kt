@@ -40,15 +40,13 @@ class GitReviewService(private val project: Project) : Disposable {
     )
 
     private val listeners = CopyOnWriteArrayList<(PanelModel) -> Unit>()
-    private val refreshScheduled = AtomicBoolean(false)
-    private val refreshRequested = AtomicBoolean(false)
-    private val whyGeneration = AtomicLong(0)
+    private val refreshGate = RefreshGate()
+    private val whyRead = WhyReadState()
+    private val publicationGeneration = AtomicLong(0)
     private val vcsWaitRegistered = AtomicBoolean(false)
     private val vcsWaitDone = AtomicBoolean(false)
     @Volatile
     private var panelVisible: Boolean = false
-    @Volatile
-    private var lastWhy: PanelWhy? = null
 
     /**
      * Refresh signal for the one thing that is neither git nor a mutation of
@@ -73,10 +71,21 @@ class GitReviewService(private val project: Project) : Disposable {
 
     init {
         Disposer.register(this, draftWatcher)
-        // Mutations run off the EDT now, so busy/idle is a real interval the panel can
-        // paint. Both refreshes of a mutation happen while the lock is held; without
-        // this the model would stay busy until some later refresh cleared it.
-        lock.onDidChangeBusy { publish() }
+        // Busy covers the mutation and authoritative primary state. Comments and
+        // prose finish independently; releasing the lock must repaint immediately.
+        var mutationStartedAt = 0L
+        lock.onDidChangeBusy { busy ->
+            refreshGate.mutationChanged(busy)
+            if (busy) mutationStartedAt = System.nanoTime()
+            else {
+                val elapsed = (System.nanoTime() - mutationStartedAt) / 1_000_000
+                val line = "Mutation lock released after ${elapsed}ms (comments pending=${stateManager.current.comments?.loading == true})"
+                com.intellij.openapi.diagnostic.Logger.getInstance(GitReviewService::class.java).info(line)
+                CliLogSink.append(line)
+            }
+            publish()
+            if (!busy) drainRefresh()
+        }
         // FR-036: palette/shortcuts do not see panel busy — surface the discard reason
         // (same string as VS Code: "Another operation is already in progress").
         lock.onDidDiscard { reason ->
@@ -121,7 +130,8 @@ class GitReviewService(private val project: Project) : Disposable {
             state,
             PanelInputs(
                 busy = lock.isBusy,
-                why = lastWhy,
+                why = whyRead.valueFor(state.state) ?: if (isReviewReadable(state.situation) &&
+                    state.state?.mode?.id == "walk") PanelWhy(WhyState.LOADING) else null,
                 lastOpened = lastOpened,
             ),
         )
@@ -148,34 +158,34 @@ class GitReviewService(private val project: Project) : Disposable {
      * reviewer refreshes by hand.
      */
     fun scheduleRefresh() {
-        if (!panelVisible && listeners.isEmpty()) {
-            // Lazy: no CLI until someone is listening (tool window shown) or refresh forced.
-        }
-        refreshRequested.set(true)
-        if (!refreshScheduled.compareAndSet(false, true)) return
+        refreshGate.request()
+        drainRefresh()
+    }
+
+    private fun drainRefresh() {
+        if (project.isDisposed || !refreshGate.tryStart()) return
         ApplicationManager.getApplication().executeOnPooledThread {
             try {
-                while (refreshRequested.compareAndSet(true, false)) {
-                    doRefresh()
-                }
+                doRefresh()
             } finally {
-                refreshScheduled.set(false)
+                refreshGate.finished()
+                drainRefresh()
             }
-            // A request between the loop exit and releasing the flag would have
-            // no one to run it.
-            if (refreshRequested.get()) scheduleRefresh()
         }
     }
 
     /** Blocking refresh — spawns CLI processes, so never call it from the EDT. */
-    fun refreshNow() {
-        doRefresh()
+    fun refreshNow(navigationOutput: String? = null) {
+        refreshGate.primaryStarting()
+        doRefresh(navigationOutput)
     }
 
     fun readForMutation(): ReviewState =
         stateManager.readForMutation(pickSoleTarget(listGitRoots(project))?.rootPath)
 
-    private fun doRefresh() {
+    private var commentWatchPaths: List<String> = emptyList()
+
+    private fun doRefresh(navigationOutput: String? = null) {
         val roots = listGitRoots(project)
         if (roots.isEmpty() && !vcsWaitDone.get() && !vcsesActivated()) {
             // Not "this project has no git root" — nobody looked yet. Publishing
@@ -186,33 +196,44 @@ class GitReviewService(private val project: Project) : Disposable {
         }
         val target = pickSoleTarget(roots)
         var primaryPublished = false
-        val state = stateManager.refresh(target?.rootPath) { primary ->
+        val pending = stateManager.refreshPrimary(target?.rootPath, navigationOutput) { primary ->
             primaryPublished = true
             stateResolved = true
-            lastWhy = null
-            val gen = whyGeneration.incrementAndGet()
-            if (isReviewReadable(primary.situation) && primary.state?.mode?.id == "walk") {
-                lastWhy = PanelWhy(WhyState.LOADING)
-                fetchWhy(target?.rootPath, primary, gen)
-            }
+            val needsWhy = isReviewReadable(primary.situation) && primary.state?.mode?.id == "walk"
+            val loading = if (!needsWhy) null else primary.inlineWhy?.let { com.ezevillo.gitreview.domain.whyFromText(it) } ?: PanelWhy(WhyState.LOADING)
+            val ticket = whyRead.begin(primary.state, loading)
+            if (needsWhy && primary.inlineWhy == null) fetchWhy(target?.rootPath, primary, ticket)
             publish()
         }
+        val state = pending.state
         if (stateManager.current !== state) return
         // The walkthrough travels with the guides in the exact-path list, for the
         // same reason: no watch root of its own (it lives in the work tree, which
         // every git operation moves), but a save on it has to refresh -- you
         // write the reading order by hand and press Ctrl+S, and the badge would
         // still say what it said before.
-        draftWatcher.sync(
-            draftWatchDirs(state),
-            state.guides.orEmpty().map { it.path } + listOfNotNull(state.walkthrough?.path) + state.comments?.documents.orEmpty().map { it.path },
-        )
+        syncWatchedFiles(state)
         stateResolved = true
         if (!primaryPublished) {
-            whyGeneration.incrementAndGet()
-            lastWhy = null
+            whyRead.begin(state.state, null)
         }
         publish()
+        if (state.comments?.loading == true) {
+            ApplicationManager.getApplication().executeOnPooledThread {
+                val complete = stateManager.completeComments(pending) ?: return@executeOnPooledThread
+                if (project.isDisposed) return@executeOnPooledThread
+                syncWatchedFiles(complete)
+                publish()
+            }
+        }
+    }
+
+    @Synchronized
+    private fun syncWatchedFiles(state: ReviewState) {
+        if (stateManager.current !== state) return
+        if (state.comments?.loading != true) commentWatchPaths = state.comments?.documents.orEmpty().map { it.path }
+        draftWatcher.sync(draftWatchDirs(state), state.guides.orEmpty().map { it.path } +
+            listOfNotNull(state.walkthrough?.path) + commentWatchPaths)
     }
 
     private fun vcsesActivated(): Boolean =
@@ -231,10 +252,9 @@ class GitReviewService(private val project: Project) : Disposable {
         }
     }
 
-    private fun fetchWhy(cwd: String?, state: ReviewState, generation: Long) {
+    private fun fetchWhy(cwd: String?, state: ReviewState, ticket: WhyReadState.Ticket) {
         if (cwd == null) {
-            lastWhy = PanelWhy(WhyState.FAILED)
-            publish()
+            if (whyRead.complete(ticket, PanelWhy(WhyState.FAILED))) publish()
             return
         }
         val current = state.state?.current
@@ -244,26 +264,25 @@ class GitReviewService(private val project: Project) : Disposable {
             else -> null
         }
         if (raw == null) {
-            lastWhy = PanelWhy(WhyState.ABSENT)
-            publish()
+            if (whyRead.complete(ticket, PanelWhy(WhyState.ABSENT))) publish()
             return
         }
         ApplicationManager.getApplication().executeOnPooledThread {
             val result = invoker.invoke("status", listOf("--why", raw), cwd)
-            if (generation != whyGeneration.get()) return@executeOnPooledThread
-            lastWhy = when {
+            val why = when {
                 result.timedOut || result.errorCode != null || (result.exitCode != null && result.exitCode != 0) ->
                     PanelWhy(WhyState.FAILED)
-                result.stdout.trim().isEmpty() -> PanelWhy(WhyState.ABSENT)
-                else -> PanelWhy(WhyState.PRESENT, text = result.stdout.trimEnd())
+                else -> com.ezevillo.gitreview.domain.whyFromText(result.stdout)
             }
-            publish()
+            if (whyRead.complete(ticket, why)) publish()
         }
     }
 
     private fun publish() {
+        val generation = publicationGeneration.incrementAndGet()
         val model = currentModel()
         ApplicationManager.getApplication().invokeLater {
+            if (project.isDisposed || generation != publicationGeneration.get()) return@invokeLater
             listeners.forEach { it(model) }
         }
     }

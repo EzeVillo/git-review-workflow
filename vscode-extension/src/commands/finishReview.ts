@@ -111,7 +111,7 @@ export async function finishReview(
                 if (!(await saveSessionComments(stateManager, getInvokeOptions(), undefined, "all"))) return undefined;
                 const result = await invokeGitReview("finish", args, {...getInvokeOptions(), expectedState: token.guard});
                 // Refrescar pase lo que pase: el panel necesita el estado real.
-                await stateManager.refresh();
+                await stateManager.refreshPrimary();
                 return result;
             }
         );
@@ -203,7 +203,7 @@ export async function undoFinish(
                 }
                 if (!(await saveSessionComments(stateManager, getInvokeOptions(), undefined, "all"))) return undefined;
                 const result = await invokeGitReview("finish", ["--abort"], {...getInvokeOptions(), expectedState: token.guard});
-                await stateManager.refresh();
+                await stateManager.refreshPrimary();
                 return result;
             }
         );
@@ -269,7 +269,7 @@ export async function undoFinish(
                     ["--abort", "--force"],
                     {...getInvokeOptions(), expectedState: token.guard}
                 );
-                await stateManager.refresh();
+                await stateManager.refreshPrimary();
                 return result;
             }
         );
@@ -318,7 +318,7 @@ export async function resumeFinish(
             async () => {
                 if (!(await saveSessionComments(stateManager, getInvokeOptions(), undefined, "all"))) return undefined;
                 const invocation = await invokeGitReview("finish", args, {...getInvokeOptions(), expectedState: state.guard});
-                await stateManager.refresh();
+                await stateManager.refreshPrimary();
                 return invocation;
             }
         );

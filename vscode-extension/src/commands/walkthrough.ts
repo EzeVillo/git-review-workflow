@@ -79,7 +79,7 @@ export async function walkthroughInit(
             {location: vscode.ProgressLocation.Notification, title},
             async () => invokeGitReview("walkthrough", args, options)
         );
-        await stateManager.refresh();
+        await stateManager.refreshPrimary();
         if (result.exitCode !== 0) {
             const err = result.stderr.trim() || result.stdout.trim();
             void vscode.window.showErrorMessage(
@@ -114,7 +114,7 @@ export async function walkthroughBuild(
             },
             async () => {
                 const invocation = await invokeGitReview("walkthrough", ["build"], getInvokeOptions());
-                await stateManager.refresh();
+                await stateManager.refreshPrimary();
                 return invocation;
             }
         );

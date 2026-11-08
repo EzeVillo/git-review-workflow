@@ -56,7 +56,7 @@ export async function setBase(
     await lock.run(async () => {
         const options = getInvokeOptions();
         const result = await invokeGitReview("config", ["base", "--", picked.candidate.name], options);
-        await stateManager.refresh();
+        await stateManager.refreshPrimary();
         if (result.exitCode !== 0) {
             const text = result.stderr.trim();
             void vscode.window.showErrorMessage(

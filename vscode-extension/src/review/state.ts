@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import {parseStateGuard} from "./staleGuard";
+import {hasNavigationState, isNavigationReply, parseInlineWhy} from "./navigationReply";
 import {CommentsReport, parseComments} from "../cli/commentsPorcelain";
 import {
     CandidateBranch,
@@ -35,6 +36,8 @@ export type {Situation} from "./situation";
 
 export interface ReviewState {
     guard?: string;
+    navigationState?: boolean;
+    inlineWhy?: string;
     /** One primary report and its comment completion share this host read id. */
     readId?: number;
     comments?: CommentsReport;
@@ -269,6 +272,8 @@ async function loadConfigReport(
  * uno en vuelo se marca "sucio" y se re-corre una sola vez al terminar.
  */
 export class ReviewStateManager {
+    /** Observations received before this read are covered by its result. */
+    onPrimaryReadStarting?: () => void;
     // Generación en vez de booleano: invalidar mientras un checkCliVersion
     // viejo está en vuelo (p. ej. gitReview.path editado dos veces seguidas)
     // no puede dejar que ese resultado obsoleto marque la generación NUEVA
@@ -278,6 +283,7 @@ export class ReviewStateManager {
     private versionCheckedGeneration = -1;
     private current: ReviewState = {situation: "no-review", ...EMPTY_ARRAYS};
     private inFlight: Promise<ReviewState> | undefined;
+    private primaryInFlight: Promise<ReviewState> | undefined;
     private resolved = false;
     private readId = 0;
     private dirty = false;
@@ -328,7 +334,7 @@ export class ReviewStateManager {
         let result: ReviewState;
         do {
             this.dirty = false;
-            this.inFlight = this.doRefresh();
+            this.inFlight = this.readAfterPrimary();
             result = await this.inFlight;
             this.inFlight = undefined;
         } while (this.dirty);
@@ -341,6 +347,34 @@ export class ReviewStateManager {
         return result;
     }
 
+    /** Mutations wait for authoritative primary state; documents complete independently. */
+    async refreshPrimary(navigationOutput?: string): Promise<ReviewState> {
+        const reply = navigationOutput && isNavigationReply(navigationOutput)
+            ? {stdout: navigationOutput, stderr: "", exitCode: 0} : undefined;
+        // Reserve the publication before starting it: filesystem callbacks may
+        // request a read while the mutation's status/list/config is in flight.
+        const pending = Promise.resolve().then(() => {
+            this.onPrimaryReadStarting?.();
+            return this.doRefresh(true, reply);
+        });
+        this.primaryInFlight = pending;
+        try {
+            return await pending;
+        } finally {
+            if (this.primaryInFlight === pending) this.primaryInFlight = undefined;
+        }
+    }
+
+    private async readAfterPrimary(): Promise<ReviewState> {
+        // Also applies to a dirty rerun of an older background read. Waiting
+        // only at refresh() entry would let that rerun supersede the mutation
+        // and release its lock with the previous panel still on screen.
+        while (this.primaryInFlight) await this.primaryInFlight;
+        return this.doRefresh();
+    }
+
+    invalidatePendingReads(): void { this.readId++; }
+
     dispose(): void {
         this.changeEmitter.dispose();
     }
@@ -352,13 +386,14 @@ export class ReviewStateManager {
         return next;
     }
 
-    private async doRefresh(): Promise<ReviewState> {
+    private async doRefresh(primaryOnly = false, statusReply?: Awaited<ReturnType<typeof invokeGitReview>>): Promise<ReviewState> {
         const options = this.getOptions();
         const readId = ++this.readId;
+        const accept = (next: ReviewState): ReviewState => readId === this.readId ? this.setState(next) : this.current;
         // Sin cwd no hay `git review` que invocar (multi-root ambiguo o workspace
         // sin carpeta): no inventar un proceso en process.cwd() del host.
         if (!options.cwd) {
-            return this.setState({
+            return accept({
                 situation: "error",
                 ...EMPTY_ARRAYS,
                 stderr:
@@ -367,10 +402,10 @@ export class ReviewStateManager {
         }
         const generation = this.versionCheckGeneration;
 
-        if (this.versionCheckedGeneration !== generation || this.current.situation === "cli-missing") {
+        if (!statusReply && (this.versionCheckedGeneration !== generation || this.current.situation === "cli-missing")) {
             const versionIssue = await checkCliVersion(options);
             if (versionIssue) {
-                return this.setState({
+                return accept({
                     situation: versionIssue.situation,
                     ...EMPTY_ARRAYS,
                     ...(versionIssue.stderr === undefined ? {} : {stderr: versionIssue.stderr}),
@@ -384,14 +419,15 @@ export class ReviewStateManager {
             }
         }
 
-        const result = await invokeGitReview("status", ["--porcelain"], options);
+        const result = statusReply ?? await invokeGitReview("status", ["--porcelain"], options);
+        if (readId !== this.readId) return this.current;
         if (result.errorCode) {
             this.invalidateVersionCheck();
             // Un spawn que falló no es por sí solo una CLI ausente: con el mismo
             // criterio que el sondeo de versión, sin evidencia esto es un error
             // con su diagnóstico, y el `--version` que acaba de invalidarse lo
             // vuelve a mirar en el refresco siguiente.
-            return this.setState({
+            return accept({
                 situation: cliLooksMissing(result.errorCode, result.stderr) ? "cli-missing" : "error",
                 ...EMPTY_ARRAYS,
                 stderr: result.stderr,
@@ -403,7 +439,7 @@ export class ReviewStateManager {
         // sólo tardó. La situación sigue siendo `error` (no hay estado que
         // mostrar), pero con un diagnóstico que apunta a dónde mirar.
         if (result.timedOut) {
-            return this.setState({
+            return accept({
                 situation: "error", ...EMPTY_ARRAYS,
                 stderr:
                     "`git review status --porcelain` did not finish in time and was stopped. " +
@@ -416,15 +452,29 @@ export class ReviewStateManager {
         const commentsPending = baseSituation === "review" || baseSituation === "no-review";
         const comments = commentsPending ? {...parseComments(""), loading: true} : undefined;
         const publish = async (next: ReviewState): Promise<ReviewState> => {
-            next = {...next, readId, guard: parseStateGuard(result.stdout)};
-            this.setState(next);
+            if (readId !== this.readId) return this.current;
+            next = {...next, readId, guard: parseStateGuard(result.stdout), navigationState: hasNavigationState(result.stdout), inlineWhy: parseInlineWhy(result.stdout)};
+            accept(next);
             if (!commentsPending) return next;
-            const response = await invokeGitReview("comments", ["status", "--porcelain"], options);
-            const report = parseComments(response.stdout);
-            if (response.exitCode !== 0 || response.timedOut || response.errorCode) {
-                report.diagnostics.push({path: "", code: "read", message: response.stderr});
+            const complete = async (): Promise<ReviewState> => {
+                const response = await invokeGitReview("comments", ["status", "--porcelain"], options);
+                if (readId !== this.readId) return this.current;
+                const report = parseComments(response.stdout);
+                if (response.exitCode !== 0 || response.timedOut || response.errorCode) {
+                    report.diagnostics.push({path: "", code: "read", message: response.stderr});
+                }
+                return accept({...next, comments: report});
+            };
+            if (primaryOnly) {
+                void complete().catch(error => {
+                    if (readId !== this.readId) return;
+                    const report = parseComments("");
+                    report.diagnostics.push({path: "", code: "read", message: String(error)});
+                    accept({...next, comments: report});
+                });
+                return next;
             }
-            return this.setState({...next, comments: report});
+            return complete();
         };
         if (baseSituation !== "review") {
             // El inventario y la config son contenido del estado vacío de
@@ -474,7 +524,7 @@ export class ReviewStateManager {
         } catch (err) {
             const message =
                 err instanceof Error ? err.message : "failed to parse git review status --porcelain";
-            return this.setState({
+            return accept({
                 situation: "error",
                 ...EMPTY_ARRAYS,
                 stderr: result.stderr.trim().length > 0 ? result.stderr : message,

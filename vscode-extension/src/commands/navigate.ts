@@ -4,6 +4,7 @@ import {EntryRecord, ReviewMode} from "../cli/porcelain";
 import {MutationLock} from "../review/mutationLock";
 import {ReviewStateManager} from "../review/state";
 import {openChange} from "./openEntry";
+import {navigationNotice} from "../review/navigationReply";
 
 export type NavigateDirection = "next" | "prev";
 
@@ -46,8 +47,10 @@ export async function navigate(
     await lock.run(async () => {
         const options = getInvokeOptions();
         const before = stateManager.state.state?.position;
-        const result = await invokeGitReview(direction, [], options);
-        const state = await stateManager.refresh();
+        const navigation = stateManager.state.navigationState && options.expectedState !== undefined;
+        stateManager.invalidatePendingReads();
+        const result = await invokeGitReview(direction, navigation ? ["--porcelain"] : [], options);
+        const state = await stateManager.refreshPrimary(navigation && result.exitCode === 0 ? result.stdout : undefined);
 
         if (result.exitCode !== 0) {
             // stderr de la CLI tal cual; si viene vacío (CLI matada / rota),
@@ -69,7 +72,7 @@ export async function navigate(
         // no uno propio — y no se reabre lo que ya está abierto. La señal es que
         // el cursor no se movió, no el texto del verbo.
         if (state.state.position === before) {
-            const message = firstLine(result.stdout);
+            const message = navigation ? navigationNotice(result.stdout) : firstLine(result.stdout);
             if (message.length > 0) {
                 void vscode.window.showInformationMessage(message);
             }

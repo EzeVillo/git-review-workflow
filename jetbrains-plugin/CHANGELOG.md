@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.5.5] — 2026-11-07
+
+### Changed
+
+- Coalesce watcher refreshes with running review actions. The final state read
+  covers earlier signals; changes arriving after that read starts still refresh
+  the panel, without launching competing reads while an action is running.
+
+## [0.5.4] — 2026-11-07
+
+### Changed
+
+- Display explanations returned with navigation without another CLI read.
+  Retain the separate explanation query when the optional data is unavailable.
+- Skip the comments inventory before closing or saving a review when the IDE
+  confirms every document is saved. Dirty or unknown buffers retain selective
+  comment saves and the CLI's ownership checks.
+
+## [0.5.3] — 2026-11-07
+
+### Changed
+
+- Consume updated navigation state directly from the CLI without another
+  version/status preflight. Fall back to a full read with older CLI versions
+  or an invalid reply.
+- Release review actions after the primary state arrives, while comments and
+  explanations finish independently. Discard superseded document responses.
+
 ## [0.5.2] — 2026-11-06
 
 ### Changed

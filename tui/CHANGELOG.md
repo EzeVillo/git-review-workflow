@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.4] — 2026-11-07
+
+### Changed
+
+- Display explanations returned with navigation immediately, while comments
+  load independently. Query explanations separately when optional data is
+  missing or invalid, including with older CLI versions.
+
+## [0.2.3] — 2026-11-07
+
+### Changed
+
+- Consume the CLI's updated navigation state without rebuilding it through a
+  separate status call. Keep independent comments/prose reads and their stale
+  response protection, with the previous read path for older CLI versions.
+
 ## [0.2.2] — 2026-11-06
 
 ### Changed

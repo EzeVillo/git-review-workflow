@@ -36,6 +36,7 @@ const (
 // slice in a diff.
 type PanelModel struct {
 	Guard           string
+	NavigationState bool
 	Comments        string
 	CommentsError   string
 	CommentsLoading bool

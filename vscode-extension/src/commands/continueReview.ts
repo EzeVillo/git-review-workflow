@@ -87,7 +87,7 @@ export async function continueReview(
                 // Refrescar pase lo que pase: aunque el verbo falle, es lo que
                 // dice dónde quedó el repositorio — la salida humana no se
                 // parsea nunca.
-                await stateManager.refresh();
+                await stateManager.refreshPrimary();
                 return invocation;
             }
         );

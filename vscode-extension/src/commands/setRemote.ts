@@ -43,7 +43,7 @@ export async function setRemote(
     await lock.run(async () => {
         const options = getInvokeOptions();
         const result = await invokeGitReview("config", ["remote", "--", picked.remote.name], options);
-        await stateManager.refresh();
+        await stateManager.refreshPrimary();
         if (result.exitCode !== 0) {
             const text = result.stderr.trim();
             void vscode.window.showErrorMessage(

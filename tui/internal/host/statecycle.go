@@ -16,6 +16,8 @@ import (
 // exists on the struct.
 type ReadResult struct {
 	Guard           string
+	NavigationState bool
+	WhyIncluded     bool
 	DetailsPending  bool
 	Comments        string
 	CommentsError   string
@@ -78,7 +80,7 @@ func ReadPrimaryState(ctx context.Context, cwd, minVersion string) ReadResult {
 		HasFinishConflict: parseOK && parsed.Finish != nil,
 	}
 
-	result := ReadResult{Stderr: statusRes.Stderr, Guard: domain.ParseStateGuard(statusRes.Stdout)}
+	result := ReadResult{Stderr: statusRes.Stderr, Guard: domain.ParseStateGuard(statusRes.Stdout), NavigationState: domain.HasNavigationState(statusRes.Stdout)}
 
 	switch statusOutcome.ExitCode {
 	case 2:
@@ -119,6 +121,22 @@ func ReadPrimaryState(ctx context.Context, cwd, minVersion string) ReadResult {
 	return result
 }
 
+// Navigation uses the ordinary generation-protected details path.
+func ReadNavigationReply(output string) (ReadResult, string, bool) {
+	parsed, notice, ok := domain.ParseNavigationReply(output)
+	if !ok {
+		return ReadResult{}, "", false
+	}
+	result := ReadResult{Guard: domain.ParseStateGuard(output), NavigationState: true,
+		Status: parsed, HasStatus: true, Situation: domain.SituationReview,
+		DetailsPending: true, CommentsLoading: true}
+	if text, ok := domain.ParseInlineWhy(output); ok {
+		result.WhyIncluded = true
+		result.Why, result.WhyState = whyFromText(text)
+	}
+	return result, notice, true
+}
+
 // ReadDetails enriches only the primary state passed by the caller. The UI
 // generation gate rejects this entire result after a newer read or navigation.
 func ReadDetails(ctx context.Context, result ReadResult) ReadResult {
@@ -138,7 +156,7 @@ func ReadDetails(ctx context.Context, result ReadResult) ReadResult {
 			}
 		}
 	}()
-	if result.HasStatus && result.Status.State.Mode == domain.ModeWalk && result.Status.State.CurrentPath.Raw != "" {
+	if !result.WhyIncluded && result.HasStatus && result.Status.State.Mode == domain.ModeWalk && result.Status.State.CurrentPath.Raw != "" {
 		result.Why, result.WhyState = readWhy(ctx, result.Status.State.CurrentPath.Raw)
 	}
 	wg.Wait()
@@ -160,7 +178,11 @@ func readWhy(ctx context.Context, raw string) (string, domain.WhyState) {
 	if res.TimedOut || res.SpawnFailed || res.ExitCode != 0 {
 		return "", domain.WhyFailed
 	}
-	why := strings.TrimRight(res.Stdout, "\n")
+	return whyFromText(res.Stdout)
+}
+
+func whyFromText(stdout string) (string, domain.WhyState) {
+	why := strings.TrimRight(stdout, "\n")
 	if why == "" {
 		return "", domain.WhyAbsent
 	}

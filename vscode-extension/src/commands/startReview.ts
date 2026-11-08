@@ -260,7 +260,7 @@ async function invokeDraft(
                 // borradores sólo mira directorios que la CLI YA reportó: el
                 // primero de una rama estrena carpeta, y sin esto su fila no
                 // aparecía hasta que algo ajeno refrescara.
-                await stateManager.refresh();
+                await stateManager.refreshPrimary();
                 return invocation;
             }
         )
@@ -543,7 +543,7 @@ export async function startReview(
                 });
                 // Refrescar pase lo que pase (ver continueReview.ts), aunque
                 // start falle: la salida humana no se parsea nunca.
-                await stateManager.refresh();
+                await stateManager.refreshPrimary();
                 return invocation;
             }
         );

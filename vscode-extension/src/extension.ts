@@ -50,6 +50,7 @@ import {
 import {CLI_PROBE_INTERVAL_MS, shouldProbeCli} from "./review/cliProbe";
 import {DRAFT_WATCH_DEBOUNCE_MS, draftWatchDirs, isReportedGuide} from "./review/draftWatch";
 import {MutationLock} from "./review/mutationLock";
+import {RefreshGate} from "./review/refreshGate";
 import {resolveEntryArg} from "./review/entryArg";
 import {isReviewReadable} from "./review/situation";
 import {ReviewState, ReviewStateManager} from "./review/state";
@@ -142,11 +143,15 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
 
     function getInvokeOptions(): InvokeOptions {
         return {cwd: target?.rootUri.fsPath ?? "", gitReviewPath: configuredGitReviewPath(),
-            expectedState: stateManager.state.guard, onStateMismatch: () => stateManager.refresh()};
+            expectedState: stateManager.state.guard};
     }
 
     const stateManager = new ReviewStateManager(getInvokeOptions);
     const lock = new MutationLock();
+    const observedRefresh = new RefreshGate();
+    let observedRefreshDisposed = false;
+    context.subscriptions.push({dispose: () => { observedRefreshDisposed = true; }});
+    stateManager.onPrimaryReadStarting = () => observedRefresh.primaryStarting();
     const whyProvider = new WhyContentProvider(getInvokeOptions);
     const panelProvider = new WalkthroughViewProvider(handlePanelMessage);
     /**
@@ -163,6 +168,7 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
     // revisor puede avanzar dos veces antes de que la primera explicación vuelva.
     let whyGeneration = 0;
     let whyKey: string | undefined;
+    let inlineWhyReadId: number | undefined;
     let currentWhy: PanelWhy | undefined;
     let whyPending: Promise<void> | undefined;
 
@@ -284,8 +290,14 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
             whyGeneration++;
             whyPending = undefined;
             if (wanted) {
-                loadWhy(wanted.raw);
+                if (state.inlineWhy === undefined) loadWhy(wanted.raw);
             }
+        }
+        if (wanted && state.inlineWhy !== undefined && (inlineWhyReadId !== state.readId || currentWhy === undefined)) {
+            inlineWhyReadId = state.readId;
+            whyGeneration++;
+            whyPending = undefined;
+            currentWhy = state.inlineWhy.length > 0 ? {state: "present", text: state.inlineWhy} : {state: "absent"};
         }
         // Nada se dibuja antes de la primera situación resuelta: la semilla del
         // manager es un marcador de posición y publicarla sería contestar por él
@@ -463,7 +475,25 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
         return state;
     }
 
-    lock.onDidChangeBusy(() => updateView(stateManager.state));
+    function drainObservedRefresh(): void {
+        if (observedRefreshDisposed || !observedRefresh.tryStart()) return;
+        void refresh().finally(() => {
+            observedRefresh.finished();
+            drainObservedRefresh();
+        });
+    }
+
+    function requestObservedRefresh(): void {
+        observedRefresh.request();
+        drainObservedRefresh();
+    }
+
+    lock.onDidChangeBusy(busy => {
+        observedRefresh.mutationChanged(busy);
+        if (busy) stateManager.invalidatePendingReads();
+        updateView(stateManager.state);
+        if (!busy) drainObservedRefresh();
+    });
     // La paleta y los atajos no ven gitReview.busy del panel; avisar el descarte.
     context.subscriptions.push(
         lock.onDidDiscard((reason) => {
@@ -507,7 +537,7 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
                 return;
             }
             stateManager.invalidateVersionCheck();
-            void refresh();
+            requestObservedRefresh();
         }, CLI_PROBE_INTERVAL_MS);
     }
 
@@ -524,12 +554,13 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
     let draftDebounce: ReturnType<typeof setTimeout> | undefined;
 
     function onDraftFileChanged(): void {
+        observedRefresh.request();
         if (draftDebounce !== undefined) {
             clearTimeout(draftDebounce);
         }
         draftDebounce = setTimeout(() => {
             draftDebounce = undefined;
-            void refresh();
+            drainObservedRefresh();
         }, DRAFT_WATCH_DEBOUNCE_MS);
     }
 
@@ -567,14 +598,14 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
         // sobre las rutas que la CLI ya reportó.
         vscode.workspace.onDidSaveTextDocument((doc) => {
             if (isReportedGuide(stateManager.state, doc.uri.fsPath)) {
-                void refresh();
+                requestObservedRefresh();
             }
         }),
         vscode.workspace.onDidCloseTextDocument(doc => commentProvenance.delete(doc.uri.toString())),
         vscode.workspace.onDidChangeConfiguration((e) => {
             if (e.affectsConfiguration("gitReview.path")) {
                 stateManager.invalidateVersionCheck();
-                void refresh();
+                requestObservedRefresh();
             }
         })
     );
@@ -605,7 +636,7 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
         gitWatcher?.dispose();
         gitWatcher = watchGitApiChanges(api, () => {
             resolveTargets();
-            void refresh();
+            requestObservedRefresh();
         });
     }
 
@@ -615,7 +646,7 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
         watchWithGitApi(gitApi);
     } else {
         if (target) {
-            gitWatcher = watchGitDirFallback(target.rootUri, () => void refresh());
+            gitWatcher = watchGitDirFallback(target.rootUri, () => requestObservedRefresh());
         }
         // La extensión git no había terminado de activarse: se la espera y, si
         // llega, se pasa a su señal de cambio y se re-resuelven los targets con
@@ -627,7 +658,7 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
             gitApi = api;
             watchWithGitApi(api);
             resolveTargets();
-            void refresh();
+            requestObservedRefresh();
         });
     }
     context.subscriptions.push({dispose: () => gitWatcher?.dispose()});
@@ -757,7 +788,7 @@ export function activate(context: vscode.ExtensionContext): GitReviewTestApi {
     );
 
     updateContextKeys(stateManager.state);
-    void refresh();
+    requestObservedRefresh();
 
     return {
         refresh,

@@ -314,7 +314,6 @@ public sealed partial class ActionDispatcher
         if (State.Situation != Situation.Review) return;
         var before = State.State?.Position;
         var result = await _panel.Mutations.RunActionAsync(wire, expected: _expectation.Current).ConfigureAwait(true);
-        await _panel.RefreshAsync().ConfigureAwait(true);
         if (result is null) return;
         if (result.ExitCode is not 0 || result.TimedOut)
         {

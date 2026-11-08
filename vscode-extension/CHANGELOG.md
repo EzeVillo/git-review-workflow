@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.5.5] — 2026-11-07
+
+### Changed
+
+- Coalesce watcher refreshes with running review actions. Keep events received
+  after the final state read starts, and avoid competing background reads while
+  the action is still running.
+
+## [0.5.4] — 2026-11-07
+
+### Changed
+
+- Display explanations returned with navigation without another CLI read,
+  keeping the previous query when the optional data is unavailable.
+- Skip the comments inventory before closing or saving a review when all editor
+  documents are saved. Dirty or unknown buffers retain selective comment saves;
+  a failed inventory query prevents the action.
+- Coordinate watcher reads with the mutation's primary publication so actions
+  finish with the updated panel even when filesystem events arrive together.
+
+## [0.5.3] — 2026-11-07
+
+### Changed
+
+- Consume updated navigation state directly from the CLI and release review
+  actions before comments finish loading. Discard outdated primary and comment
+  responses, and retain full reads for older CLI versions or invalid replies.
+
 ## [0.5.2] — 2026-11-06
 
 ### Changed

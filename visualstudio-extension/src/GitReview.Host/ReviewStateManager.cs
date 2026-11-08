@@ -8,6 +8,7 @@ namespace GitReview.Host;
 /// </summary>
 public sealed class ReviewStateManager
 {
+    public Action? PrimaryReadStarting { get; set; }
     private readonly CliInvoker _cli;
     private readonly Func<IReadOnlyList<string>> _repoRoots;
     private readonly Func<string?> _gitReviewPath;
@@ -42,6 +43,15 @@ public sealed class ReviewStateManager
 
     public Task<ReviewState> RefreshAsync(CancellationToken ct = default) => ReadAsync(ct, true, true);
 
+    public Task<ReviewState> RefreshPrimaryAsync(CancellationToken ct = default, string? navigationOutput = null)
+    {
+        PrimaryReadStarting?.Invoke();
+        return ReadAsync(ct, false, true, true,
+            navigationOutput is not null && NavigationReply.IsValid(navigationOutput) ? new InvokeResult(navigationOutput, "", 0) : null);
+    }
+
+    public void InvalidatePendingReads() => Interlocked.Increment(ref _refreshGen);
+
     public Task<ReviewState> ReadForMutationAsync(CancellationToken ct = default)
     {
         var captured = Current;
@@ -50,7 +60,8 @@ public sealed class ReviewStateManager
         return Task.FromResult(captured);
     }
 
-    private async Task<ReviewState> ReadAsync(CancellationToken ct, bool includeComments, bool publish)
+    private async Task<ReviewState> ReadAsync(CancellationToken ct, bool includeComments, bool publish,
+        bool deferComments = false, InvokeResult? statusReply = null)
     {
         var gen = Interlocked.Increment(ref _refreshGen);
         ReviewState Complete(ReviewState state) => publish ? Publish(state, gen) : state;
@@ -77,40 +88,44 @@ public sealed class ReviewStateManager
         // reasons that are not the CLI, and that is where the install screen landed on
         // top of an installed CLI. With no evidence the probe is retried and the panel
         // keeps waiting -- nothing has been published yet -- instead of answering.
-        var ver = await _cli.InvokeAsync("--version", Array.Empty<string>(), sole, cancellationToken: ct)
-            .ConfigureAwait(false);
-        var verdict = CliProbe.VersionVerdict(ver.Stderr, ver.ExitCode, ver.ErrorCode, ver.TimedOut);
-        for (var attempt = 0; verdict == CliVerdict.Unknown && attempt < CliProbe.CliProbeRetries; attempt++)
+        if (statusReply is null)
         {
-            await Task.Delay(CliProbe.CliProbeRetryDelayMs, ct).ConfigureAwait(false);
-            ver = await _cli.InvokeAsync("--version", Array.Empty<string>(), sole, cancellationToken: ct)
+            var ver = await _cli.InvokeAsync("--version", Array.Empty<string>(), sole, cancellationToken: ct)
                 .ConfigureAwait(false);
-            verdict = CliProbe.VersionVerdict(ver.Stderr, ver.ExitCode, ver.ErrorCode, ver.TimedOut);
+            var verdict = CliProbe.VersionVerdict(ver.Stderr, ver.ExitCode, ver.ErrorCode, ver.TimedOut);
+            for (var attempt = 0; verdict == CliVerdict.Unknown && attempt < CliProbe.CliProbeRetries; attempt++)
+            {
+                await Task.Delay(CliProbe.CliProbeRetryDelayMs, ct).ConfigureAwait(false);
+                ver = await _cli.InvokeAsync("--version", Array.Empty<string>(), sole, cancellationToken: ct)
+                    .ConfigureAwait(false);
+                verdict = CliProbe.VersionVerdict(ver.Stderr, ver.ExitCode, ver.ErrorCode, ver.TimedOut);
+            }
+
+            if (verdict != CliVerdict.Ok)
+            {
+                // A CLI that takes too long is the opposite of a CLI that is not there, and
+                // offering "install it with npm" there sends the reviewer to install what is
+                // already installed.
+                return Complete(ver.TimedOut
+                    ? new ReviewState(Situation.Error, Stderr: VersionTimeout)
+                    : new ReviewState(
+                        Situation.CliMissing,
+                        Stderr: string.IsNullOrWhiteSpace(ver.Stderr) ? "not found" : ver.Stderr));
+            }
+
+            var versionLine = CliMessage.FirstCliLine(ver.Stdout);
+            if (string.IsNullOrEmpty(versionLine))
+            {
+                // Some builds print version on stderr or fail only on status; continue.
+            }
+            else if (CliVersion.IsOutdated(versionLine))
+            {
+                return Complete(new ReviewState(Situation.CliOutdated, Stderr: versionLine));
+            }
+
         }
 
-        if (verdict != CliVerdict.Ok)
-        {
-            // A CLI that takes too long is the opposite of a CLI that is not there, and
-            // offering "install it with npm" there sends the reviewer to install what is
-            // already installed.
-            return Complete(ver.TimedOut
-                ? new ReviewState(Situation.Error, Stderr: VersionTimeout)
-                : new ReviewState(
-                    Situation.CliMissing,
-                    Stderr: string.IsNullOrWhiteSpace(ver.Stderr) ? "not found" : ver.Stderr));
-        }
-
-        var versionLine = CliMessage.FirstCliLine(ver.Stdout);
-        if (string.IsNullOrEmpty(versionLine))
-        {
-            // Some builds print version on stderr or fail only on status; continue.
-        }
-        else if (CliVersion.IsOutdated(versionLine))
-        {
-            return Complete(new ReviewState(Situation.CliOutdated, Stderr: versionLine));
-        }
-
-        var status = await _cli.InvokeAsync(
+        var status = statusReply ?? await _cli.InvokeAsync(
                 "status", new[] { "--porcelain" }, sole, cancellationToken: ct)
             .ConfigureAwait(false);
 
@@ -238,7 +253,13 @@ public sealed class ReviewStateManager
                     status.Stderr, status.Stdout, "Something went wrong reading the review state."));
         }
 
-        next = next with { Guard = StaleGuard.Parse(status.Stdout) };
+        next = next with { Guard = StaleGuard.Parse(status.Stdout), NavigationState = NavigationReply.Supported(status.Stdout), InlineWhy = NavigationReply.InlineWhy(status.Stdout) };
+        if (deferComments && (status.ExitCode is 0 or 2))
+        {
+            var primary = Complete(next with { Comments = new CommentsReport(Array.Empty<CommentRow>(), Loading: true) });
+            _ = CompleteCommentsAsync(primary, gen, sole, ct);
+            return primary;
+        }
         if (includeComments && (status.ExitCode is 0 or 2))
         {
             if (publish) Publish(next with { Comments = new CommentsReport(Array.Empty<CommentRow>(), Loading: true) }, gen);
@@ -248,6 +269,25 @@ public sealed class ReviewStateManager
             next = next with { Comments = comments };
         }
         return Complete(next);
+    }
+
+    private async Task CompleteCommentsAsync(ReviewState primary, int gen, string cwd, CancellationToken ct)
+    {
+        if (gen != Volatile.Read(ref _refreshGen)) return;
+        CommentsReport comments;
+        try
+        {
+            var response = await _cli.InvokeAsync("comments", new[]{"status", "--porcelain"}, cwd, cancellationToken: ct).ConfigureAwait(false);
+            comments = Comments.Parse(response.Stdout);
+            if (response.ExitCode != 0 || response.TimedOut || response.ErrorCode is not null)
+                comments = comments with { Rows = comments.Rows.Concat(new[]{new CommentRow("comments-diagnostic", new[]{"", "read", response.Stderr})}).ToArray() };
+        }
+        catch (OperationCanceledException) { return; }
+        catch (Exception ex)
+        {
+            comments = new CommentsReport(new[]{new CommentRow("comments-diagnostic", new[]{"", "read", ex.Message})});
+        }
+        Publish(primary with { Comments = comments }, gen);
     }
 
     /// <summary>

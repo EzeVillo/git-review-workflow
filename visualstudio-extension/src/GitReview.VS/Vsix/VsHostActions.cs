@@ -54,6 +54,7 @@ public sealed class VsHostActions
                 OpenPath = OpenPathAsync,
                 SavePath = SavePathAsync,
                 SaveCommentPath = SaveCommentPathAsync,
+                HasUnsavedDocuments = HasUnsavedDocumentsAsync,
                 CaptureComment = CaptureCommentAsync,
                 OpenCommentBlobs = OpenCommentBlobsAsync,
                 OpenCommentDelivery = OpenCommentDeliveryAsync,
@@ -180,6 +181,32 @@ public sealed class VsHostActions
     /// "save all": the wizard asked the reviewer to edit a single file.
     /// </summary>
     private async Task SavePathAsync(string path) => await SaveCommentPathAsync(path).ConfigureAwait(true);
+
+    private async Task<bool?> HasUnsavedDocumentsAsync()
+    {
+        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+        try
+        {
+            if (_serviceProvider.GetService(typeof(SVsRunningDocumentTable)) is not IVsRunningDocumentTable rdt ||
+                ErrorHandler.Failed(rdt.GetRunningDocumentsEnum(out var documents)) || documents is null) return null;
+            var cookies = new uint[1];
+            while (true)
+            {
+                if (ErrorHandler.Failed(documents.Next(1,cookies,out var fetched))) return null;
+                if (fetched == 0) return false;
+                var hr = rdt.GetDocumentInfo(cookies[0],out _,out _,out _,out _,out _,out _,out var data);
+                IVsPersistDocData? persisted = null;
+                if (data != IntPtr.Zero)
+                {
+                    try { persisted = Marshal.GetObjectForIUnknown(data) as IVsPersistDocData; }
+                    finally { Marshal.Release(data); }
+                }
+                if (ErrorHandler.Failed(hr) || persisted is null || ErrorHandler.Failed(persisted.IsDocDataDirty(out var dirty))) return null;
+                if (dirty != 0) return true;
+            }
+        }
+        catch (Exception) { return null; }
+    }
 
     private async Task<bool> SaveCommentPathAsync(string path)
     {

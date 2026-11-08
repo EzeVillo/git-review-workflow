@@ -51,7 +51,7 @@ export async function compareReview(
         if (layoutPick.draft !== "resume") {
             const result = await lock.run(async () => {
                 const invocation = await invokeGitReview("walkthrough", ["draft", "--porcelain", "--compare", "--", lower, upper], {...options, network: false});
-                await stateManager.refresh();
+                await stateManager.refreshPrimary();
                 return invocation;
             });
             if (!result) return;
@@ -64,7 +64,7 @@ export async function compareReview(
                 if (merged) void vscode.window.showInformationMessage(draftUpdated(merged.kept, merged.added, merged.dropped));
             }
         } else {
-            await stateManager.refresh();
+            await stateManager.refreshPrimary();
         }
         revealPanel("compareReview", reveal);
         return;
@@ -102,7 +102,7 @@ export async function compareReview(
             },
             async () => {
                 const invocation = await invokeGitReview("compare", args, getInvokeOptions());
-                await stateManager.refresh();
+                await stateManager.refreshPrimary();
                 return invocation;
             }
         );

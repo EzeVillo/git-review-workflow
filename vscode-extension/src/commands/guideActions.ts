@@ -92,7 +92,7 @@ export async function createGuide(
             ...getInvokeOptions(),
             network: false,
         });
-        await stateManager.refresh();
+        await stateManager.refreshPrimary();
         if (result.errorCode || result.exitCode !== 0) {
             const text = flatten(result.stderr);
             void vscode.window.showErrorMessage(
@@ -159,7 +159,7 @@ export async function discardGuide(
             ...getInvokeOptions(),
             network: false,
         });
-        await stateManager.refresh();
+        await stateManager.refreshPrimary();
         if (result.errorCode || result.exitCode !== 0) {
             const text = flatten(result.stderr);
             void vscode.window.showErrorMessage(

@@ -20,21 +20,9 @@ typealias CommentCapture = com.ezevillo.gitreview.domain.CommentCapture
 val COMMENT_CAPTURE_RESOLVER = com.intellij.openapi.util.Key.create<(com.intellij.openapi.editor.Editor) -> CommentCapture?>("git.review.comment.resolver")
 val COMMENT_CAPTURE_KEY = com.intellij.openapi.util.Key.create<CommentCapture>("git.review.comment.capture")
 
-fun saveSessionCommentDocuments(service: GitReviewService, root: String, action: String, params: ActionParams): Boolean {
-    val housekeeping = (params as? ActionParams.Housekeeping)?.action
-    val relevant = action in setOf("saveReview", "abortReview", "finishReview", "undoFinish", "resumeFinish") || housekeeping?.kind in setOf(HousekeepingKind.CLEAN_ONE, HousekeepingKind.CLEAN_KEEP_FIXES, HousekeepingKind.CLEAN_ALL, HousekeepingKind.FORGET_SAVED_ONE, HousekeepingKind.FORGET_SAVED_ALL)
-    if (!relevant) return true
-    val response = service.cliInvoker.invoke("comments", listOf("status", "--porcelain", "--all"), root)
-    if (response.exitCode != 0) return false
-    val report = parseComments(response.stdout)
-    val saved = housekeeping?.kind in setOf(HousekeepingKind.FORGET_SAVED_ONE, HousekeepingKind.FORGET_SAVED_ALL)
-    val prefix = if (saved) "review-saved/" else "review/"
-    val source = housekeeping?.source ?: service.currentState().state?.source
-        ?: service.currentState().fixes.firstOrNull { it.current }?.name?.removePrefix("review-fixes/")
-    val all = housekeeping?.kind in setOf(HousekeepingKind.CLEAN_ALL, HousekeepingKind.FORGET_SAVED_ALL)
-    val owners = report.records("comments-owner").filter { it.size >= 3 && if (all) it[2].startsWith(prefix) else it[2] == prefix + source }.map { it[2] }.toSet()
-    return saveCommentFiles(commentsOwnedBy(report, owners).map { it.path })
-}
+fun saveSessionCommentDocuments(service: GitReviewService, root: String, action: String, params: ActionParams): Boolean =
+    saveSessionComments(service.cliInvoker, root, service.currentState(), action, params,
+        ::hasUnsavedEditorDocuments, ::saveCommentFiles)
 
 class CommentsActions(private val project: Project, private val service: GitReviewService) {
     private fun commentsFailure(work: () -> String?): String? {

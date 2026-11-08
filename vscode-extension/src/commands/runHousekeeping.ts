@@ -68,7 +68,7 @@ export async function runHousekeeping(
                     expectedState: guard.guard,
                     network,
                 });
-                await stateManager.refresh();
+                await stateManager.refreshPrimary();
                 return invocation;
             }
         );

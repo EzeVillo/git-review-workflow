@@ -61,7 +61,16 @@ async function savePaths(documents: readonly CommentDocument[]): Promise<boolean
     return saveCommentBuffers(vscode.workspace.textDocuments.filter(doc => doc.uri.scheme === "file" && documents.some(row => sameDraftFile(doc.uri.fsPath, row.path))).map(doc => ({get isDirty() {return doc.isDirty;}, save: () => saveCommentDocument(doc)})));
 }
 export async function saveSessionComments(manager: ReviewStateManager, options: InvokeOptions, source?: string, scope = "active"): Promise<boolean> {
-    const report = await readComments(options, undefined, scope !== "active");
+    try {
+        if (vscode.workspace.textDocuments.every(document => document.isDirty === false)) return true;
+    } catch { /* Unknown keeps the selective ownership query. */ }
+    const response = await invokeGitReview("comments", ["status", "--porcelain", ...(scope !== "active" ? ["--all"] : [])], options);
+    if (response.exitCode !== 0 || response.timedOut || response.errorCode) {
+        await manager.refreshPrimary();
+        void vscode.window.showErrorMessage(copy.saveFailed);
+        return false;
+    }
+    const report = parseComments(response.stdout);
     if (source === undefined && scope === "all") {
         source = manager.state.state?.source;
         const current = manager.state.fixes?.find(row => row.current);

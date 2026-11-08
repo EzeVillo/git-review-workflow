@@ -41,21 +41,24 @@ public sealed class MutationRunner
             var argv = ActionArgvMap.ActionToArgv(action, params_);
             if (string.IsNullOrEmpty(argv.Verb))
                 return new InvokeResult("", "", 0);
+            _state.InvalidatePendingReads();
             if (BeforeMutation is not null && !await BeforeMutation(action,params_).ConfigureAwait(true))
             {
-                await _state.RefreshAsync(ct).ConfigureAwait(false);
+                await _state.RefreshPrimaryAsync(ct).ConfigureAwait(false);
                 return new InvokeResult("",CommentsCopy.saveFailed,1);
             }
 
+            var navigation = action is "next" or "prev" && _state.Current.NavigationState && token.Guard is not null;
             var result = await _cli.InvokeWithStateGuardAsync(
                 argv.Verb,
-                argv.Args,
+                navigation ? argv.Args.Concat(new[]{"--porcelain"}).ToArray() : argv.Args,
                 cwd,
                 token.Guard,
                 network: network || argv.Network,
                 cancellationToken: ct).ConfigureAwait(false);
 
-            await _state.RefreshAsync(ct).ConfigureAwait(false);
+            await _state.RefreshPrimaryAsync(ct, navigation && result.ExitCode == 0 ? result.Stdout : null).ConfigureAwait(false);
+            if (navigation && result.ExitCode == 0) result = result with { Stdout = NavigationReply.Notice(result.Stdout) };
             if (result.ExitCode == 4) result = result with { Stderr = UserCopy.Stale };
             return result;
         }).ConfigureAwait(false);
@@ -75,9 +78,10 @@ public sealed class MutationRunner
 
         return await _lock.RunAsync(async () =>
         {
+            _state.InvalidatePendingReads();
             var result = await _cli.InvokeWithStateGuardAsync(verb, args, cwd, token.Guard, network, ct)
                 .ConfigureAwait(false);
-            await _state.RefreshAsync(ct).ConfigureAwait(false);
+            await _state.RefreshPrimaryAsync(ct).ConfigureAwait(false);
             if (result.ExitCode == 4) result = result with { Stderr = UserCopy.Stale };
             return result;
         }).ConfigureAwait(false);

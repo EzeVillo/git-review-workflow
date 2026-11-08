@@ -29,6 +29,7 @@ import (
 // bookkeeping either way.
 type mutationRequest struct {
 	stateGuard      string
+	navigationState bool
 	stdin           string
 	hasInput        bool
 	latestComments  bool
@@ -115,7 +116,14 @@ func mutationCmd(req mutationRequest, argv domain.Argv, activityGeneration int) 
 		} else {
 			result = host.InvokeReviewGuarded(context.Background(), argv.Verb, args, req.stateGuard)
 		}
-		return mutationDoneMsg{action: req.action, params: req.params, result: result, activityGeneration: activityGeneration, successOpenPath: req.successOpenPath, draftStart: req.draftStart, draftFlow: req.draftFlow}
+		var reply *host.ReadResult
+		if req.navigationState && !mutationFailed(result) {
+			if primary, notice, ok := host.ReadNavigationReply(result.Stdout); ok {
+				reply = &primary
+				result.Stdout = notice
+			}
+		}
+		return mutationDoneMsg{navigation: reply, action: req.action, params: req.params, result: result, activityGeneration: activityGeneration, successOpenPath: req.successOpenPath, draftStart: req.draftStart, draftFlow: req.draftFlow}
 	}
 }
 
@@ -164,6 +172,10 @@ func (m Model) beginMutation(req mutationRequest, token domain.StateToken) (Mode
 			return m, nil
 		}
 		argv = a
+	}
+	if (req.action == "next" || req.action == "prev") && m.Panel.NavigationState && req.stateGuard != "" {
+		req.navigationState = true
+		argv.Args = append(argv.Args, "--porcelain")
 	}
 	m.statusLine = ""
 	// Invalidate prose/comments still arriving for the state before this write.
@@ -276,6 +288,7 @@ func (o pendingFinishOutcome) matchesPending(result host.ReadResult) bool {
 // the status line, and undoFinish's --force follow-up, depends on what was
 // requested — never on parsing the verb's own stdout (FR-013).
 type mutationDoneMsg struct {
+	navigation         *host.ReadResult
 	action             string
 	params             domain.ActionParams
 	result             host.Result
@@ -395,6 +408,12 @@ func (m Model) handleMutationDone(msg mutationDoneMsg) (Model, tea.Cmd) {
 		}
 	}
 
+	if msg.navigation != nil {
+		m.statusLine = msg.result.Stdout
+		m.readGeneration++
+		m2, details := m.handleReadDone(readDoneMsg{generation: m.readGeneration, result: *msg.navigation})
+		return m2, tea.Batch(details, silenceWindowCmd(gen))
+	}
 	m2, readCmd := m.scheduleRead()
 	return m2, tea.Batch(readCmd, silenceWindowCmd(gen))
 }

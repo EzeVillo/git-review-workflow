@@ -26,7 +26,7 @@ class RepositoryRefreshTest {
         assertEquals(2, invocations.size, "new mutation invocation sites must join the same refresh path")
         invocations.forEach { afterInvocation ->
             val ideRefresh = afterInvocation.indexOf("refreshIdeRepository(project)")
-            val panelRefresh = afterInvocation.indexOf("service.refreshNow()")
+            val panelRefresh = afterInvocation.indexOf("service.refreshNow(")
             assertTrue(ideRefresh >= 0, "a completed mutation did not refresh GitRepository")
             assertTrue(panelRefresh >= 0 && ideRefresh < panelRefresh, "refresh GitRepository before porcelain")
         }

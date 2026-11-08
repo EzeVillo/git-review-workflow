@@ -116,21 +116,22 @@ class MutationActions(
                         service.refreshNow()
                         return@run SimpleOutcome.Done(MutationDone(false, stderr = com.ezevillo.gitreview.domain.CommentsCopy.saveFailed))
                     }
+                    val navigation = action in setOf("next", "prev") && fresh.navigationState && token.guard != null
                     val result = service.cliInvoker.invokeWithStateGuard(
                         argv.verb,
-                        argv.args,
+                        if (navigation) argv.args + "--porcelain" else argv.args,
                         cwd,
                         token.guard,
                         network = argv.network,
                     )
                     refreshIdeRepository(project)
-                    service.refreshNow()
+                    service.refreshNow(if (navigation && result.exitCode == 0) result.stdout else null)
                     if (result.exitCode == 4) return@run SimpleOutcome.Stale
                     SimpleOutcome.Done(
                         MutationDone(
                             ok = result.exitCode == 0 && !result.timedOut,
                             stderr = result.stderr,
-                            stdout = result.stdout,
+                            stdout = if (navigation && result.exitCode == 0) com.ezevillo.gitreview.domain.navigationNotice(result.stdout) else result.stdout,
                         ),
                     )
                 } ?: SimpleOutcome.Discarded

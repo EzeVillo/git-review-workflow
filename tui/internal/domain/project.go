@@ -26,6 +26,7 @@ import (
 // from here rather than re-parse anything.
 type ProjectInput struct {
 	Guard           string
+	NavigationState bool
 	Comments        string
 	CommentsError   string
 	CommentsLoading bool
@@ -132,8 +133,9 @@ func entryPickerRows(mode ReviewMode, entries []EntryRecord, subjects map[int]st
 // open — it is not that render.go chooses to skip them.
 func Project(in ProjectInput) PanelModel {
 	m := PanelModel{
-		Guard:    in.Guard,
-		Comments: in.Comments, CommentsError: in.CommentsError, CommentsLoading: in.CommentsLoading,
+		Guard:           in.Guard,
+		NavigationState: in.NavigationState,
+		Comments:        in.Comments, CommentsError: in.CommentsError, CommentsLoading: in.CommentsLoading,
 		Situation:    in.Situation,
 		Busy:         in.Busy,
 		MouseEnabled: in.MouseEnabled,

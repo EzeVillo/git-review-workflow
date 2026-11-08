@@ -53,4 +53,7 @@ data class ReviewState(
     val comments: CommentsReport? = null,
     /** CLI-authored context; never derived from panel fields. */
     val guard: String? = null,
+    val navigationState: Boolean = false,
+    /** Exact --why stdout from the same snapshot; null keeps the separate query. */
+    val inlineWhy: String? = null,
 )

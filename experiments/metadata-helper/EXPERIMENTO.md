@@ -5,6 +5,12 @@ clientes, el instalador ni la CLI instalada. No es una nueva dependencia del
 producto. La decisión y las mediciones están en
 [`specs/rendimiento/2026-11-08-costo-fijo.md`](../../specs/rendimiento/2026-11-08-costo-fijo.md).
 
+Resultado del 08/11/2026 en Windows: Save completo **5,904 → 5,159 s (12,6 %)**;
+consulta previa + Save **6,804 → 6,001 s (11,8 %)**. No se adopta por ahora:
+el ahorro no alcanzó el objetivo propuesto de cuatro segundos y todavía debe
+justificar la distribución y compatibilidad de otra biblioteca nativa. No es
+una medición de clic/buffers/UI de IntelliJ ni de un backend SQLite integrado.
+
 ## Qué se compara
 
 `make_overlay.py` copia la CLI a un directorio externo y modifica únicamente esa

@@ -3,16 +3,18 @@
 ## Conclusión y alcance
 
 Ezequiel pidió concentrarse en operaciones pequeñas y decidir si queda margen
-viable. **Todavía no daría por agotado el costo fijo.** Hay un recorte incremental
-demostrado de unos 0,47 s y una oportunidad mayor en la persistencia de la sesión.
-Esta última merece un prototipo completo; no tiene todavía una mejora integral
-demostrada. Los ajustes pequeños por sí solos no justifican prometer un Save de
-uno o dos segundos.
+viable. **Todavía no daría por agotado el costo fijo**, pero ya se midió el
+auxiliar de metadata dentro de Save y su recorte fue moderado: **5,90 → 5,16 s
+(12,6 %)**, conservando config, controles y respuesta completa. No alcanzó el
+objetivo propuesto de cuatro segundos. Se conserva como experimento reproducible;
+esa ganancia todavía no justifica incorporar una biblioteca nativa al producto.
+Tampoco justifica prometer uno o dos segundos con SQLite u otro soporte.
 
 Producto medido: commit 492877b, CLI 0.10.9. Se trabajó con copias aisladas,
 sin cambiar código de producto, instalaciones, ventanas ni configuración del
-sistema. El único cambio propio del repositorio es este informe; se conservan los archivos
-ajenos. Sin push ni tags.
+sistema. Además del informe se incorpora el prototipo aislado bajo
+`experiments/metadata-helper/`, sin modificar `bin/` ni clientes. Se conservan
+los archivos ajenos. Sin push ni tags.
 
 Fixture pequeño: walk de una entrada, un archivo de texto y el walkthrough del
 autor, una corrección privada, Local y Shared preparados. Se contrastan rutas,
@@ -152,6 +154,9 @@ El origen debe seguir recuperable hasta completar el destino. Tampoco se deben
 reemplazar las claves sueltas por un blob que pierda actualizaciones concurrentes.
 
 ## Recomendación
+
+Esta fue la prioridad de evaluación antes de los ensayos siguientes. El
+prototipo integral y la decisión actual se registran al final del informe.
 
 1. Los recortes compatibles siguen siendo posibles, pero su magnitud probada
    ronda medio segundo. Integrarlos exige cerrar la paridad del parser y correr
@@ -315,6 +320,116 @@ fueran una muestra de Save. La decisión final requiere la comparación integral
 
 Evidencia, paquete aislado, versiones, valores completos, script y JSON:
 `C:/Users/ezevi_30ey2ks/.codex/visualizations/2026/11/04/01a1a8ee-2d7a-7dc3-8eab-a6b1de179fec/backend-compare/`.
+
+## Prototipo integral: auxiliar de metadata conservando config
+
+Ante la autorización de Ezequiel se implementó un auxiliar C experimental y
+una integración en una copia externa de la CLI. El checkout de producto,
+versiones, instalaciones y clientes siguen iguales. El código reproducible
+está en [`experiments/metadata-helper/`](../../experiments/metadata-helper/EXPERIMENTO.md).
+
+### Alcance real del auxiliar
+
+Git sigue leyendo todas las fuentes de configuración; el auxiliar sólo
+codifica esa salida con la representación existente. Sustituye `od | awk`,
+sin cambiar bytes del guard ni quitar las relecturas frescas del cierre.
+El escritor agrupa los metadatos de la rama guardada y, en otra fase,
+las tres claves de transferencia de custodia. Sigue descubriendo el destino
+mediante Git en cada fase. El resto de Save y su respuesta final completa
+permanecen; no se sustituyen comandos de objetos, refs, índice o checkout.
+
+Se compila con libgit2: Windows usa la DLL 1.8.6 del paquete oficial ya
+comparado; el contenedor de pruebas usa 1.9.7. El escritor recibe un mensaje
+NUL-delimitado completo, toma config.lock, comprueba todas las operaciones
+antes de encolar cambios, publica el lote y hace flush explícito. No es una
+certificación de durabilidad idéntica ni una transacción de todo Save.
+
+La compatibilidad impidió tratar a libgit2 como reemplazo transparente de
+Git config. Las claves que provienen de includes tienen restricciones del
+setter simple, y el setter multivar de la versión probada no escapa valores
+como el simple. Se descartó ese camino. Los valores con controles, claves
+incluidas y destinos symlink/no regulares salen con código 78 **antes de
+publicar** y la copia experimental ejecuta los comandos originales de Git.
+Sólo 78 permite esa delegación: un error de publicación o flush no se reintenta.
+Se conserva el origen recuperable ante un cierre fallido.
+
+### Medición nativa de Save completo
+
+Windows 11, Git 2.52.0.windows.1; baseline HEAD 576639a, cuyo código de producto
+sigue siendo 492877b / CLI 0.10.9. Dos calentamientos y cuatro muestras medidas
+por variante, en pares alternados con el orden invertido. Sin suites de pruebas
+concurrentes y con Trace2 en ambas. El mismo fixture pequeño tiene walk,
+corrección privada y comentarios Local/Shared. Los comandos y el informe
+final solicitado son los mismos en ambas variantes.
+
+| Operación | CLI actual | Auxiliar experimental | Reducción |
+| --- | ---: | ---: | ---: |
+| Consulta previa de rutas de comentarios | 0,840 s | 0,842 s | Sin mejora observable |
+| Save con guard e informe completo | 5,904 s | 5,159 s | 0,745 s; 12,6 % |
+| Secuencia de consulta + Save | 6,804 s | 6,001 s | 0,803 s; 11,8 % |
+
+Save medido: baseline entre 5,808 y 6,155 s; auxiliar entre 5,088 y 5,255 s.
+No son percentiles. Las medianas de las partes no se suman para inventar la
+mediana de la secuencia. Setup, obtención del guard, Continue y aserciones
+quedan fuera del intervalo; tampoco se miden buffers ni UI de IntelliJ.
+
+Los Git de Save bajan **55 → 43**, y config **24 → 10**. Se eliminan catorce
+escrituras individuales y se agregan dos descubrimientos del destino; los
+auxiliares nativos y el resto de las utilidades no cuentan como procesos Git.
+La consulta de rutas conserva sus seis Git, sin mejora observable.
+La diferencia confirma un recorte, pero no transforma la latencia total.
+
+En las mismas trazas, la mediana de la suma de intervalos internos de Git
+hijos, excluido el Git exterior `review`, pasa de 1,72 a 1,35 s. Es tiempo
+interno reportado por esos procesos, no CPU ni una atribución exacta del resto
+de la operación. No permite asignar automáticamente los segundos restantes
+al disco o a SQLite; siguen el arranque/coordinación de procesos y el código
+de shell que no agrupa este auxiliar.
+
+Cada muestra comprobó guards compatibles entre CLI original y experimental,
+rutas exactas, informe final list/config idéntico al original, rama principal
+limpia, prosa Local/Shared byte por byte y restauración del diff, sesión y cursor
+al continuar. El experimento terminó pausado. Los scripts conservan hashes de
+la biblioteca, Save y ejecutable usados, junto con las trazas y todas las muestras.
+
+### Decisión
+
+**No incorporar por ahora el auxiliar al producto.** El ahorro integral fue de
+0,75 s y Save sigue sobre cinco segundos. No se alcanzó el objetivo de evaluación
+de cuatro segundos. Distribuir y mantener otra biblioteca nativa, con sus casos
+de compatibilidad, exige una ganancia más clara. Se conserva el experimento
+para poder contrastar otra integración, sin activar una dependencia opcional
+ni un segundo motor en las instalaciones actuales.
+
+Esto tampoco demuestra que SQLite tarde lo mismo en un Save integrado: todavía
+no se implementó ese backend. Sí evita justificar una migración sólo por sus
+milisegundos de almacenamiento. Cambiar la escritura de config por una escritura
+SQLite no elimina por sí solo la coordinación shell, las transformaciones y las
+revalidaciones restantes. Para buscar un salto mayor hay que evaluar la unidad
+de trabajo del motor de metadata y custodia, preservando esas garantías y los
+comandos Git del código; no dar por ganada una reescritura completa ni cambiar
+el flujo visible del usuario por este resultado.
+
+Verificación del prototipo: compilación con warnings como errores en MSVC y
+Linux; 19 pruebas del auxiliar en Linux y 18 más un skip de symlink por permisos
+en Windows; las 19 con UndefinedBehaviorSanitizer; integración Save/Continue en
+los cuatro modos, delegación por includes/controles y fallo posterior al commit;
+42 Bats dirigidos con la shell del contenedor y 42 con Bash 3.2; ShellCheck de
+los dos archivos modificados en la copia experimental. El test de no reintento
+usa Trace2: el primer spy extensionless no interceptaba Git en Windows; se
+corrigió el harness y pasó el caso en ambas plataformas. Las otras integraciones
+nativas pasaron sin cambios. AddressSanitizer no pudo enlazar con el runtime
+del compilador del contenedor; no se registra como una prueba aprobada.
+
+La suite Bats completa sobre la copia experimental terminó con exit 0:
+**1562 casos, cinco skips previstos y ningún fallo**. Los skips corresponden
+a npm ausente, dos condiciones del entorno (permisos/pty) y dos comprobaciones
+de User PATH que necesitan Windows. El código de producto en el checkout sigue
+sin cambios respecto de 492877b; no se rehacen builds de los clientes por un
+experimento que no se integra ni les cambia el contrato.
+
+Evidencia nativa, JSON, trazas y baseline:
+`C:/Users/ezevi_30ey2ks/.codex/visualizations/2026/11/04/01a1a8ee-2d7a-7dc3-8eab-a6b1de179fec/native-prototype/full-save/`.
 
 ## Evidencia y reproducción
 

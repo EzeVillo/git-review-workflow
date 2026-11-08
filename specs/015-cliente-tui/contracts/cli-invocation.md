@@ -5,6 +5,16 @@ Las mutaciones de una review activa envían el guard capturado con el gesto.
 Los comandos de lectura y los comentarios con guards propios conservan su argv.
 El código 4 no reintenta: publica `STALE` y programa la lectura completa habitual.
 
+Enmienda del 7 de noviembre de 2026: cuando status emite
+`capability<TAB>navigation-state`, Next/Prev agregan `--porcelain` y consumen
+su respuesta como estado principal completo. Si falta la capacidad o la respuesta
+es inválida, se conserva la lectura completa. Comments y explicación usan la
+misma lectura secundaria protegida por generación que los refrescos ordinarios.
+Si la respuesta incluye un bloque opcional `why`/`why-line` válido, su porqué
+se publica con el estado principal y la lectura secundaria consulta sólo
+Comments. Si falta o es inválido, conserva `status --why`. El formato y las
+reglas de fallback están en `contracts/review-state-guard.md`.
+
 **Consumidor normativo**: `tui/internal/host/invoke.go`
 **Consumidores hermanos**: `vscode-extension/`, `jetbrains-plugin/`, `visualstudio-extension/`
 (misma semántica, cuatro implementaciones)

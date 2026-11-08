@@ -2046,3 +2046,110 @@ El contrato está en `contracts/review-state-guard.md`; el diagnóstico y las
 mediciones, en `specs/rendimiento/2026-11-06-validacion-contexto-clientes.md`.
 Devolver estado desde mutaciones y separar Comments del bloqueo quedan fuera
 de este cambio.
+
+## 26. Una navegación devuelve el estado que acaba de producir
+
+El 7 de noviembre de 2026, la prueba manual de IntelliJ 0.5.2 siguió mostrando
+una mejora leve: un Next ocupó 5,08 s, de los cuales 1,50 s eran el status
+posterior y 1,38 s la consulta de Comments. La validación del contexto se
+conserva por su corrección y por evitar la prelectura, pero se integra con la
+lectura propia del verbo en Next/Prev para eliminar su snapshot duplicado.
+
+`capability navigation-state` anuncia `next/prev --porcelain`. Su respuesta es
+el estado principal completo, emitido por la misma función que status. El verbo
+reutiliza su secuencia y actualiza el snapshot con la escritura exitosa del
+cursor. Step incorpora su HEAD y bancos nuevos. La validación ocurre antes de
+recuperar un cursor o escribir. Una falla de lectura o escritura no emite una
+respuesta exitosa. En los extremos se devuelve un aviso tipado, sin reenviar
+el comando siguiente como texto del panel.
+
+Los cuatro clientes consumen ese reporte, sin inventar el cursor resultante ni
+repetir status. La capacidad es independiente de `guard`: una CLI anterior que
+sólo valida sigue funcionando con su refresco habitual. Una respuesta inválida
+también conserva ese fallback; un rechazo de contexto no reintenta la acción.
+Los otros verbos mantienen su validación genérica y las lecturas que requieren.
+
+Las acciones liberan su lock después del estado principal. Comments y el porqué
+se completan aparte, con rechazo de respuestas antiguas y conservación de la
+vigilancia mientras están pendientes. IntelliJ liga la finalización del porqué
+a un ticket con comparación atómica y filtra publicaciones obsoletas en el EDT;
+comparar un contador y escribir después dejaba una ventana entre ambas cosas.
+Visual Studio retira además su refresco duplicado de navegación.
+
+Se corrige también la regresión de la fase anterior en el parser POSIX de Bash
+3.2: un patrón `case` dentro de una sustitución de comandos no se interpretaba
+en macOS. La comparación de prefijo evita ese patrón y se prueba con Bash 3.2.
+
+La aceptación combina equivalencia del reporte, efectos reales sobre Git,
+compatibilidad y respuestas secundarias obsoletas. El benchmark Windows mide
+llamadas de CLI; el clic real de IntelliJ requiere la prueba del ZIP nuevo y su
+log de duración del lock. El segundo corte queda local para esa prueba, sin
+commit ni push por pedido del usuario.
+
+## 27. Reutilizar la prosa y consultar custodia sólo cuando hay buffers que guardar
+
+El 7 de noviembre de 2026 Ezequiel confirmó una mejora clara con IntelliJ 0.5.3.
+El log de tres Prev muestra locks de 1,74–1,79 s; Comments y el porqué terminan
+después. La siguiente mejora elimina trabajo repetido sin cambiar el modelo
+de autoridad ni introducir un caché global.
+
+La respuesta de navegación walk incluye opcionalmente el porqué de la entrada
+actual. El mismo scanner que reúne las banderas de las entradas extrae esa
+prosa del documento ya cargado; `status --why` comparte ese scanner. Se conserva
+el texto con un encuadre por líneas y escapes explícitos. Los cuatro clientes
+usan el bloque válido inmediatamente; si falta o es inválido, consultan sólo
+el porqué por la ruta anterior. No vuelven a pedir el estado principal por una
+extensión opcional defectuosa ni publican ausencia a partir de un fallo.
+
+Antes de guardar o cerrar, los IDE preguntan primero a su propio gestor de
+documentos si existe algún buffer sin guardar. Sólo un `false` confirmado
+omite la consulta de inventario de Comments, porque no hay nada que volcar.
+Un buffer sucio de cualquier tipo, una respuesta desconocida o una excepción
+mantienen la consulta de custodia y el guardado dirigido a los documentos de
+la sesión. No se usa la lista de documentos del panel como prueba de limpieza:
+podría estar pendiente o corresponder a una generación anterior. La CLI sigue
+validando la revisión, la custodia y los documentos en cada operación.
+
+La optimización afecta a los tres IDE; la respuesta de prosa también a la TUI.
+Las consultas duplicadas de arranque y el perfil de procesos restantes quedan
+para otra medición. El tercer corte se entrega local para probar, sin commit,
+push, instalación automática ni cambios sobre el IDE abierto.
+
+La integración detectó además una carrera de refresco en VS Code: el borrado
+del borrador terminaba en disco, pero un watcher podía invalidar la lectura
+principal de la mutación antes de su publicación. La acción regresaba con la
+fila anterior todavía visible. Los refrescos de fondo, incluidos sus reruns
+coalescidos, esperan ahora esa publicación. La barrera termina con el estado
+principal y no espera Comments. Dos pruebas controlan el orden de respuestas
+sin depender de tiempos de proceso; la primera falla con el código anterior.
+
+## 28. Coordinar los watchers y agrupar metadata al guardar o cancelar
+
+La prueba real de IntelliJ 0.5.4 encontró un refresco del watcher durante Save:
+version, status, why y Comments competían con el verbo y luego se repetía la
+lectura principal del cierre. Los tres IDE conservan ahora las señales mientras
+el lock de mutación está ocupado. La lectura principal posterior consume las
+anteriores a su inicio; una señal posterior solicita otra lectura al liberar
+el lock. Si la operación falla antes de esa lectura, las señales siguen
+pendientes. El trabajo observado se serializa, sin esperar Comments para
+liberar la mutación. La TUI ya tiene coordinación de señales con su lock y
+conserva esa política.
+
+Save y Cancel leen las claves de rama por lotes, incluidos los metadatos que
+Save copia a la rama pausada. El dispatcher entrega el contexto esperado al
+verbo, que lo comprueba con su propia lectura antes de escribir, como Next y
+Prev. No se agrega un proceso de validación ni se omite la validación. Las
+escrituras siguen siendo comandos de Git.
+
+La custodia necesita información fresca: cada preflight vuelve a resolver el
+gitdir y cargar config, antes y después del lock y antes de transferir o
+descartar los documentos. Cachear el gitdir entre esas fases podría ocultar un
+cambio de enrutamiento de `.git`; no se hace. Una snapshot fallida aborta y un
+propietario o destino concurrente sigue impidiendo el cierre. La optimización
+reduce consultas por clave dentro de una fase; no pretende convertir todo el
+verbo en una transacción de config.
+
+Después de revisar las mediciones, Ezequiel autorizó commitear estos cortes
+en main. La autorización no incluye push ni publicación. El próximo perfil
+se concentra en el costo interno de Save y en su refresco posterior; las
+muestras únicas del IDE todavía no demuestran una mejora de latencia total.

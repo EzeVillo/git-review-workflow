@@ -5,6 +5,19 @@ El prefijo global `--expect-state <guard>` se permite en las mutaciones del
 contexto mostrado. Las lecturas, `--check` y los comentarios con guards propios
 no lo llevan. El código 4 exige refresco completo y el aviso `STALE` existente.
 
+Enmienda del 7 de noviembre de 2026: cuando status emite
+`capability<TAB>navigation-state`, Next/Prev pueden agregar `--porcelain` y
+consumir su respuesta como estado principal completo. Si falta la capacidad
+o la respuesta es inválida, se conserva el refresco completo. Comments y la
+explicación se completan por separado, rechazando generaciones antiguas.
+Si la respuesta incluye un bloque opcional `why`/`why-line` válido, se publica
+ese porqué sin consultar `status --why`; si falta o es inválido, sólo el porqué
+conserva su consulta anterior. Antes de cerrar o guardar, un editor confirmado
+limpio omite el inventario previo de Comments; con buffers sucios o desconocidos
+se conserva la consulta de custodia y el guardado selectivo. Ver el contrato
+completo en `contracts/review-state-guard.md`.
+El formato y las guardas están en el contrato de contexto enlazado arriba.
+
 **Enmienda** de
 [
 `005-ciclo-review-panel/contracts/cli-invocation.md`](../../005-ciclo-review-panel/contracts/cli-invocation.md).

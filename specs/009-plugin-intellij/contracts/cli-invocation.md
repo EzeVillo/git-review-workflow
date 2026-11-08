@@ -5,6 +5,19 @@ El prefijo global `--expect-state <guard>` no cambia el verbo lógico ni su clas
 de timeout/red. Sustituye la prelectura completa sólo cuando existe un testigo
 válido emitido por la CLI; el código 4 exige refresco completo y aviso `STALE`.
 
+Enmienda del 7 de noviembre de 2026: cuando status emite
+`capability<TAB>navigation-state`, Next/Prev pueden agregar `--porcelain` y
+consumir su respuesta como estado principal completo. Si falta la capacidad
+o la respuesta es inválida, se conserva el refresco completo. Comments y la
+explicación se completan por separado, rechazando generaciones antiguas.
+Un bloque opcional `why`/`why-line` válido publica el porqué sin otra consulta;
+si falta o es inválido, sólo el porqué vuelve a `status --why`. El host consulta
+los documentos pendientes en el EDT, sin resolver nodos VFS. Sólo un editor
+confirmado limpio omite el inventario previo de Comments; un estado sucio o
+desconocido mantiene la consulta y el guardado selectivo. Ver el contrato
+completo en `contracts/review-state-guard.md`.
+El formato y las guardas están en el contrato de contexto enlazado arriba.
+
 **Normative consumer**: `jetbrains-plugin/`  
 **Sibling consumer**: `vscode-extension/` (misma semántica; distinta implementación)  
 **Source of truth for wire format**: CLI `bin/` + parsers de referencia en

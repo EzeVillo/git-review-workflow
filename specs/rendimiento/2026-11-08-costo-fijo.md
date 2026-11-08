@@ -137,11 +137,12 @@ resuelve agregando un flag de lote a las llamadas actuales. La
 pero el ensayo anterior ya mostró conflictos con config huérfana y fallos
 parciales con config.lock. No se considera un reemplazo directo validado.
 
-La opción que merece el siguiente prototipo es **representar y publicar el
-estado de sesión como una unidad versionada dentro del gitdir**, conservando
-los comandos Git actuales para índice, objetos y ramas. Los clientes podrían
-seguir leyendo el mismo porcelain. El beneficio vendría de reducir consultas,
-serializaciones y escrituras, con un formato propio acotado a nuestro estado.
+El objetivo del siguiente prototipo es **agrupar lectura y publicación del
+estado de sesión**, conservando los comandos Git para índice, objetos y ramas
+y el mismo porcelain. Esto no elige por sí solo un formato propio. La comparación
+de alternativas se amplía abajo: SQLite y un auxiliar que agrupe config también
+pueden lograrlo, con costos de producto diferentes. La recomendación inicial de
+un formato propio fue prematura frente a esa comparación incompleta.
 
 La contrapartida es real: hay que definir lectura legacy, comportamiento ante
 CLI antiguas, exclusión entre mutaciones, relecturas frescas, bytes especiales,
@@ -167,6 +168,88 @@ reemplazar las claves sueltas por un blob que pierda actualizaciones concurrente
 No hay evidencia para conformarse ya con seis segundos. Tampoco para prometer
 uno o dos con otra ronda de ajustes locales. La investigación cambia la
 prioridad: el siguiente experimento valioso es la persistencia de la sesión.
+
+## Ampliación: SQLite y alternativas que conservan config
+
+Ante la pregunta de Ezequiel se separan dos decisiones: agrupar operaciones y
+elegir el soporte. La primera tiene evidencia de costo; la segunda sigue abierta.
+SQLite es una candidata razonable para estado local de una aplicación, un uso
+que la [documentación oficial](https://www.sqlite.org/whentouse.html) contempla.
+[No necesita un servidor](https://www.sqlite.org/serverless.html).
+
+### Prueba aislada de SQLite en Windows
+
+Se utilizó el módulo sqlite3 de Python ya instalado, SQLite 3.50.4, sin instalar
+dependencias del producto ni cambiar su estado. Journal DELETE y synchronous
+FULL, un calentamiento y cinco muestras medidas. Quince campos se insertan
+nuevos en cada ensayo; se incluyen valores vacíos, apóstrofe, backslash, TAB,
+LF y UTF-8 como BLOB con parámetros enlazados.
+
+| Operación aislada | Mediana |
+| --- | ---: |
+| 15 inserciones, 15 commits, un proceso | 74 ms |
+| 15 inserciones, una transacción, un proceso | 6,86 ms |
+| Seis aperturas, lectura completa y cierre | 2,86 ms |
+| Un auxiliar Python nuevo que guarda los 15 campos | 110 ms |
+| 15 auxiliares Python nuevos, uno por campo | 1686 ms |
+
+Los primeros tres ensayos incluyen conexión, lectura/escritura, commit cuando
+corresponde y cierre; excluyen el arranque del intérprete. Los otros dos incluyen
+arranque/import de Python. **No son mediciones de sqlite3.exe ni de Save.**
+Se comprobaron bytes exactos, vacío frente a ausente, rollback, rechazo de un
+segundo escritor durante una transacción y quick_check correcto.
+
+SQLite no queda descartada por velocidad. La comparación demuestra también
+que sustituir cada llamada individual por otro proceso puede mantener o
+empeorar el problema. La integración debe agrupar trabajo. El formato de archivo
+por sí solo no justifica prometer una latencia integral nueva.
+
+### Opciones de producto
+
+| Alternativa | Ventaja principal | Costo o incertidumbre |
+| --- | --- | --- |
+| Git config actual con menos procesos de shell | Conserva almacenamiento e instalación | Recorte integral probado de unos 0,47 s; paridad del prototipo todavía incompleta |
+| Git config con auxiliar nativo transaccional | Explorar lotes sin migrar las claves existentes | Distribuir un binario/biblioteca y verificar equivalencia con Git; rendimiento integral no medido |
+| SQLite para metadata de sesión en gitdir | Transacciones, constraints, consultas y concurrencia estándar | Empaquetado, esquema/migración, diagnóstico y coordinación con Git |
+| Archivo de sesión propio | Mantiene dependencia mínima si sigue siendo POSIX | Mantener serialización, locks, revisiones y publicación/recuperación propias |
+
+La segunda opción no depende de una API imaginaria de Git CLI:
+[git_config_lock de libgit2](https://libgit2.org/docs/reference/v1.9.2/config/git_config_lock.html)
+permite bloquear el backend y agrupar cambios antes de git_transaction_commit.
+Esto abre una vía que se había omitido. **No está implementada ni comparada aquí.**
+Hay que seleccionar explícitamente el destino de escritura y comprobar includes,
+config por worktree, duplicados, bytes y compatibilidad con las fuentes que
+actualmente interpreta Git. No se propone sustituir los comandos de objetos,
+índice o checkout por libgit2.
+
+SQLite puede evitar código propio de transacciones y parsing de metadata.
+Los cuatro clientes podrían seguir usando la CLI y su mismo porcelain. Bajo la
+arquitectura POSIX actual necesitaríamos empaquetar SQLite o un auxiliar que lo
+integre; no conviene suponer que sqlite3 está instalado. En este Windows no se
+encontró el ejecutable en PATH ni entre los archivos de Git, aunque hay un módulo
+SQLite en Python y bibliotecas de SQLite incluidas en otras herramientas.
+
+SQLite admite varios lectores y
+[un escritor simultáneo](https://www.sqlite.org/lang_transaction.html).
+Las transacciones de metadata deben ser cortas, con esperas acotadas y snapshots
+nuevos donde el protocolo exige revalidar. No se debe sostener una transacción
+vieja durante toda la operación y dar por vistas modificaciones concurrentes.
+WAL no es obligatorio para este volumen; además tiene
+[restricciones en sistemas de archivos de red](https://www.sqlite.org/wal.html).
+
+Ninguna de estas opciones vuelve atómicos a la vez la base/config, los refs,
+el índice y los Markdown. La recuperación entre fases sigue siendo necesaria.
+La comparación de producto debe considerar ese protocolo y la compatibilidad,
+además de cuántos milisegundos tarda una escritura.
+
+**Prioridad revisada:** comparar un auxiliar que conserve config y una solución
+SQLite con el mismo Save y garantías antes de elegir una migración. Un archivo
+propio sigue siendo una posibilidad, pero no una preferencia ya justificada.
+El objetivo de cuatro segundos del apartado anterior es un criterio propuesto
+para ese prototipo integral, no una proyección obtenida sumando microbenchmarks.
+
+Evidencia de SQLite, JSON completo y script:
+`C:/Users/ezevi_30ey2ks/.codex/visualizations/2026/11/04/01a1a8ee-2d7a-7dc3-8eab-a6b1de179fec/sqlite-options/`.
 
 ## Evidencia y reproducción
 

@@ -449,25 +449,32 @@ comments_state() {
 	cm_capture_base='' cm_capture_head='' cm_cursor='' cm_mode=whole cm_kind=review
 	cm_context='' cm_session='' cm_dir='' cm_candidates='' cm_seed=0 cm_provisional=0 cm_recovery=0
 	cm_identity=fresh cm_label='' cm_guard='' cm_capture_guard='' cm_scope=result cm_repository_shared=0
+	if [ "${cm_config_snapshot_requested:-0}" -eq 1 ]; then
+		_review_config_ready=0
+		case "$cm_branch" in review/*) review_config_init ;; esac
+	fi
 	case "$cm_branch" in
 		review/*)
-			if [ "${cm_config_snapshot_requested:-0}" -eq 1 ]; then review_config_init; fi
-			cm_source=$(review_config_get "branch.$cm_branch.reviewsource" || true)
-			cm_tip=$(review_config_get "branch.$cm_branch.reviewtip" || true)
+			review_config_read "branch.$cm_branch.reviewsource"
+			cm_source=$_review_config_value
+			review_config_read "branch.$cm_branch.reviewtip"
+			cm_tip=$_review_config_value
 			if [ -n "$cm_source" ] && [ -n "$cm_tip" ]; then cm_active=1; fi
 			;;
 	esac
 	if [ "$cm_active" -ne 1 ]; then comments_repository_state; return $?; fi
 	comments_token_valid "$cm_tip" || { comments_error 'comments capture tip is not a full object ID'; return 1; }
 	cm_scope=active cm_label=$cm_source
-	cm_mode=$(review_config_get "branch.$cm_branch.reviewmode" || true)
-	cm_mode=${cm_mode:-whole}
-	cm_target=$(review_config_get "branch.$cm_branch.reviewbase" || true)
+	review_config_read "branch.$cm_branch.reviewmode"
+	cm_mode=${_review_config_value:-whole}
+	review_config_read "branch.$cm_branch.reviewbase"
+	cm_target=$_review_config_value
 	_cm_lower=$(git rev-parse HEAD)
-	if [ "$(review_config_get "branch.$cm_branch.reviewreadonly" || true)" = 1 ]; then
+	review_config_read "branch.$cm_branch.reviewreadonly"
+	if [ "$_review_config_value" = 1 ]; then
 		cm_kind=compare
-		cm_full_base=$(review_config_get "branch.$cm_branch.reviewstart" || true)
-		cm_full_base=${cm_full_base:-$_cm_lower}
+		review_config_read "branch.$cm_branch.reviewstart"
+		cm_full_base=${_review_config_value:-$_cm_lower}
 	elif [ -n "$cm_target" ]; then
 		# Start passes the exact base it resolved (remote, local or commit-ish).
 		# A stale local branch must not replace the fetched remote base here.
@@ -481,8 +488,10 @@ comments_state() {
 	cm_capture_base=$_cm_lower cm_capture_head=$cm_tip
 	case "$cm_mode" in
 		step)
-			cm_cursor=$(review_config_get "branch.$cm_branch.reviewstep" || true)
-			_cm_start=$(review_config_get "branch.$cm_branch.reviewstart" || true)
+			review_config_read "branch.$cm_branch.reviewstep"
+			cm_cursor=$_review_config_value
+			review_config_read "branch.$cm_branch.reviewstart"
+			_cm_start=$_review_config_value
 			case "$cm_cursor" in
 				''|*[!0-9]*) cm_capture_base='' cm_capture_head='' ;;
 				*)
@@ -495,13 +504,20 @@ comments_state() {
 					;;
 			esac
 			;;
-		walk) cm_cursor=$(review_config_get "branch.$cm_branch.reviewwalkstep" || true) ;;
+		walk)
+			review_config_read "branch.$cm_branch.reviewwalkstep"
+			cm_cursor=$_review_config_value
+			;;
 	esac
-	_cm_phase=$(review_config_get "branch.$cm_branch.reviewresume" || true)
+	review_config_read "branch.$cm_branch.reviewresume"
+	_cm_phase=$_review_config_value
 	if [ "$_cm_phase" = conflict ]; then cm_capture_base='' cm_capture_head=''; fi
-	cm_session=$(review_config_get "branch.$cm_branch.reviewcommentssession" || true)
-	cm_context=$(review_config_get "branch.$cm_branch.reviewcommentscontext" || true)
-	_cm_owner=$(review_config_get "branch.$cm_branch.reviewcommentsowner" || true)
+	review_config_read "branch.$cm_branch.reviewcommentssession"
+	cm_session=$_review_config_value
+	review_config_read "branch.$cm_branch.reviewcommentscontext"
+	cm_context=$_review_config_value
+	review_config_read "branch.$cm_branch.reviewcommentsowner"
+	_cm_owner=$_review_config_value
 	if [ -n "$_cm_owner" ] && [ "$_cm_owner" != "$cm_gitdir" ]; then
 		comments_error 'comments session belongs to another gitdir'; return 1
 	fi

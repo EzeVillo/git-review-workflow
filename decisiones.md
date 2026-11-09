@@ -2235,3 +2235,9 @@ No se agrupan todavía las escrituras de config ni se modifica el checkout.
 El corte beneficia a todos los clientes mediante la CLI, sin cambiar su contrato
 ni requerir otra versión del plugin. Método, límites y resultados en
 `specs/rendimiento/2026-11-08-lectura-metadata.md`.
+
+La captura de comentarios reutiliza el lector para `comments add` e `init`.
+Cada control vuelve a leer las claves de rama en bloque. Los controles después
+del lock y antes de publicar el candidato vuelven a resolver el estado y a
+comprobar la revisión del documento, de modo que una edición o un movimiento de
+cursor concurrentes siguen deteniendo la escritura.

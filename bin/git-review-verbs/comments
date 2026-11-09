@@ -126,6 +126,9 @@ case "$command" in
 		comments_status "$context" "$porcelain" "$all"
 		;;
 	init|add)
+		# Each state check reloads the branch metadata, including after locking
+		# and after preparing the candidate. Batch keys within each check.
+		cm_config_snapshot_requested=1
 		comments_state || exit 1
 		[ "$cm_active" -eq 1 ] || { printf 'error: comments capture requires an active review or compare\n' >&2; exit 2; }
 		comments_require_capture "$document" || exit $?

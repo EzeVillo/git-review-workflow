@@ -231,6 +231,30 @@ review_navigation_init() {
 	fi
 }
 
+# Continue starts from the inventory, outside an active review. Bind that
+# inventory to its Git owner, checkout, saved refs and review metadata. This is
+# deliberately a separate domain from an active review's guard. No bodies,
+# index or worktree bytes; their existing guards still apply during the verb.
+# Reports pass the current branch and saved-ref scan already in hand.
+review_continue_guard_capture() {
+	if [ "$#" -eq 2 ]; then
+		_rcg_cur=$1 _rcg_refs=$2
+	else
+		_rcg_cur=$(git symbolic-ref --quiet --short HEAD || true)
+		_rcg_refs=$(git for-each-ref --format='%(objectname) %(refname:short)' refs/heads/review-saved/) || return 1
+	fi
+	_rcg_gitdir=${_review_guard_gitdir:-${_walk_gitdir_abs:-}}
+	if [ -z "$_rcg_gitdir" ]; then _rcg_gitdir=$(git rev-parse --absolute-git-dir) || return 1; fi
+	_rcg_head=$(git rev-parse --verify HEAD 2>/dev/null || printf unborn)
+	if [ "${_review_config_ready:-0}" -ne 1 ]; then review_config_init; fi
+	[ "${_review_config_ready:-0}" -eq 1 ] || return 1
+	continue_guard=$(
+		{
+			printf '%s\000' git-review-continue-state-v1 "$_rcg_gitdir" "$_rcg_cur" "$_rcg_head" "$_rcg_refs" "$_review_config_records"
+		} | git hash-object --stdin
+	) || return 1
+}
+
 # Close operations batch their stable source metadata, but custody boundaries
 # must load a FRESH snapshot. No snapshot crosses an exec or a CLI invocation.
 review_close_init() {
@@ -5143,7 +5167,21 @@ if [ "${_review_report_context:-0}" -ne 1 ]; then
 	cur="$(git symbolic-ref --quiet --short HEAD || true)"
 fi
 branches="$(git for-each-ref --format='%(refname:short)' refs/heads/review/)"
-saved="$(git for-each-ref --format='%(refname:short)' refs/heads/review-saved/)"
+if [ "$porcelain" -eq 1 ]; then
+	_rl_saved_refs=$(git for-each-ref --format='%(objectname) %(refname:short)' refs/heads/review-saved/)
+	saved=''
+	while read -r _rl_saved_oid _rl_saved_ref; do
+		[ -n "$_rl_saved_ref" ] || continue
+		saved=$saved$_rl_saved_ref'
+'
+	done <<EOF
+$_rl_saved_refs
+EOF
+	saved=${saved%'
+'}
+else
+	saved="$(git for-each-ref --format='%(refname:short)' refs/heads/review-saved/)"
+fi
 
 # Remote the sources were reviewed from, for the remote-tracking half of the
 # "did you commit anything here" question below.
@@ -5426,6 +5464,12 @@ review/${2#review-fixes/}
 }
 
 if [ "$porcelain" -eq 1 ]; then
+	# Emit only a complete capability/token pair. Old clients ignore both and
+	# new clients keep the legacy preflight if a fingerprint could not be read.
+	if [ -n "$saved" ] && review_continue_guard_capture "$cur" "$_rl_saved_refs"; then
+		porcelain_row capability continue-state
+		porcelain_row continue-guard "$continue_guard"
+	fi
 	printf '%s\n' "$branches" | while read -r _rl_branch; do
 		[ -n "$_rl_branch" ] || continue
 		describe_porcelain "$_rl_branch" 0
@@ -5558,6 +5602,27 @@ review_config_report() {
 		fi
 		emit_reading_offers "$branch" "$remote_val" "$_offer_source" "$delta_mode" || exit 1
 	fi
+}
+
+# Report a resumed review from fresh metadata after custody has been released.
+# A terminal marker distinguishes a completed read from a partial report.
+review_continued_state() {
+	set -e
+	cur=$(git symbolic-ref --quiet --short HEAD || true)
+	case "$cur" in review/*) ;; *) exit 1 ;; esac
+	review_config_init
+	[ "$_review_config_ready" -eq 1 ]
+	review_config_read "branch.$cur.reviewsource"
+	src=$_review_config_value
+	review_config_read "branch.$cur.reviewtip"
+	tip=$_review_config_value
+	if [ -z "$src" ] || [ -z "$tip" ]; then exit 1; fi
+	review_config_read "branch.$cur.reviewmode" whole
+	mode=$_review_config_value
+	_review_navigation_loaded=0 _walk_snapshot_ready=0 _walk_range_ready=0
+	porcelain_row continue-state 1
+	review_status_porcelain
+	porcelain_row continue-state complete
 }
 
 # A successful Save may optionally report the resulting no-review panel. Fresh

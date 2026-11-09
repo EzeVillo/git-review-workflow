@@ -113,3 +113,20 @@ fixes	review-fixes/feat-w	0	0	merged
 Sin reviews ni ramas de fixes en el repositorio: sin líneas, exit `0`. La
 presencia de `review-fixes/*` **sí** produce salida aunque no haya ninguna
 review: son el único leftover que ninguna superficie nombraba.
+
+## Testigo de continuación
+
+Cuando hay refs guardados, el informe puede agregar un par de registros aditivos:
+
+```text
+capability<TAB>continue-state
+continue-guard<TAB><token>
+```
+
+El token opaco hexadecimal de 40 o 64 caracteres liga el inventario al gitdir,
+rama/HEAD actuales, refs guardados con sus OID y metadata review. El par se
+emite antes de las filas, sólo cuando se pudo leer completo. No cambia los
+campos de `branch`, `branch-draft`, `finish` o `fixes`, ni la salida humana.
+Los clientes antiguos ignoran ambos registros; los nuevos exigen un único
+par válido y conservan su ruta anterior cuando falta o está mal formado.
+Su consumo y vigencia se especifican en `contracts/review-state-guard.md`.

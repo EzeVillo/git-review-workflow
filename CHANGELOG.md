@@ -12,6 +12,13 @@ and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 This file starts at 0.2.1. Earlier versions are only in the
 [GitHub Releases](https://github.com/EzeVillo/git-review-workflow/releases).
 
+## [0.10.10] — 2026-11-08
+
+### Changed
+
+- Batch Continue metadata reads per custody phase while retaining fresh ownership and destination checks.
+- Offer an inventory-bound Continue guard and an opt-in final status reply, preserving human output and refreshing incomplete reports without retrying a completed resume.
+
 ## [0.10.9] — 2026-11-08
 
 ### Changed

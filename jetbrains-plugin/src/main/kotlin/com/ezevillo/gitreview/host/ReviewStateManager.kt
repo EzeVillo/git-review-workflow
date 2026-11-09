@@ -1,4 +1,6 @@
 package com.ezevillo.gitreview.host
+import com.ezevillo.gitreview.domain.isContinueReply
+import com.ezevillo.gitreview.domain.parseContinueGuard
 
 import com.ezevillo.gitreview.domain.CLI_PROBE_RETRIES
 import com.ezevillo.gitreview.domain.CLI_PROBE_RETRY_DELAY_MS
@@ -59,7 +61,7 @@ class ReviewStateManager(
     fun refreshPrimary(cwd: String?, navigationOutput: String? = null, onPrimary: ((ReviewState) -> Unit)? = null): PendingRead {
         val gen = generation.incrementAndGet()
         val saved = navigationOutput?.let { parseSaveReply(it) }
-        val reply = if (saved != null) InvokeResult("", "", 2) else navigationOutput?.takeIf { isNavigationReply(it) }?.let { InvokeResult(it, "", 0) }
+        val reply = if (saved != null) InvokeResult("", "", 2) else navigationOutput?.takeIf { isNavigationReply(it) || isContinueReply(it) }?.let { InvokeResult(it, "", 0) }
         val state = read(cwd, false, true, onPrimary, reply, true, gen, saved)
         return PendingRead(gen, state, cwd)
     }
@@ -75,9 +77,9 @@ class ReviewStateManager(
     }
 
     /** The mutation guard needs current product state, not document inventories. */
-    fun readForMutation(cwd: String?): ReviewState {
+    fun readForMutation(cwd: String?, continueAction: Boolean = false): ReviewState {
         val captured = current
-        if (captured.guard != null) {
+        if (captured.guard != null || (continueAction && captured.continueGuard != null)) {
             generation.incrementAndGet()
             return captured
         }
@@ -162,6 +164,7 @@ class ReviewStateManager(
         }
 
         var branches = emptyList<com.ezevillo.gitreview.domain.BranchRecord>()
+        var continueGuard: String? = null
         var fixes = emptyList<com.ezevillo.gitreview.domain.FixesRecord>()
         var config: com.ezevillo.gitreview.domain.EffectiveConfig? = null
         var candidates: List<com.ezevillo.gitreview.domain.CandidateBranch>? = null
@@ -180,12 +183,13 @@ class ReviewStateManager(
 
         if (status.exitCode == 2) {
             val list = saveReply?.let { InvokeResult(it.list, "", 0) } ?: invoker.invoke("list", listOf("--porcelain"), cwd)
-            if (list.exitCode == 0 && !list.timedOut) {
+            if (list.exitCode == 0 && !list.timedOut && list.errorCode == null) {
                 try {
                     // One invocation, two readings: the fixes branches travel in
                     // the same output as the inventory, so the footer section
                     // costs no extra process per refresh.
                     branches = parseListPorcelain(list.stdout)
+                    continueGuard = parseContinueGuard(list.stdout)
                     fixes = parseListFixes(list.stdout)
                 } catch (_: Exception) {
                     branches = emptyList()
@@ -248,6 +252,7 @@ class ReviewStateManager(
             }
             Situation.NO_REVIEW, Situation.FINISH_PENDING -> ReviewState(
                 situation = situation,
+                continueGuard = continueGuard,
                 branches = branches,
                 fixes = fixes,
                 config = config,

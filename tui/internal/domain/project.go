@@ -26,6 +26,7 @@ import (
 // from here rather than re-parse anything.
 type ProjectInput struct {
 	Guard           string
+	ContinueGuard   string
 	SaveState       bool
 	NavigationState bool
 	Comments        string
@@ -135,6 +136,7 @@ func entryPickerRows(mode ReviewMode, entries []EntryRecord, subjects map[int]st
 func Project(in ProjectInput) PanelModel {
 	m := PanelModel{
 		Guard:           in.Guard,
+		ContinueGuard:   in.ContinueGuard,
 		NavigationState: in.NavigationState,
 		SaveState:       in.SaveState,
 		Comments:        in.Comments, CommentsError: in.CommentsError, CommentsLoading: in.CommentsLoading,

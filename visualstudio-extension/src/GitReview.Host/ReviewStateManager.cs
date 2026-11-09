@@ -48,15 +48,15 @@ public sealed class ReviewStateManager
         PrimaryReadStarting?.Invoke();
         var saved = navigationOutput is null ? null : SaveReply.Parse(navigationOutput);
         return ReadAsync(ct, false, true, true, saved is not null ? new InvokeResult("", "", 2) :
-            navigationOutput is not null && NavigationReply.IsValid(navigationOutput) ? new InvokeResult(navigationOutput, "", 0) : null, saved);
+            navigationOutput is not null && (NavigationReply.IsValid(navigationOutput) || ContinueReply.IsValid(navigationOutput)) ? new InvokeResult(navigationOutput, "", 0) : null, saved);
     }
 
     public void InvalidatePendingReads() => Interlocked.Increment(ref _refreshGen);
 
-    public Task<ReviewState> ReadForMutationAsync(CancellationToken ct = default)
+    public Task<ReviewState> ReadForMutationAsync(CancellationToken ct = default, bool continueAction = false)
     {
         var captured = Current;
-        if (captured.Guard is null) return ReadAsync(ct, false, false);
+        if (captured.Guard is null && !(continueAction && captured.ContinueGuard is not null)) return ReadAsync(ct, false, false);
         Interlocked.Increment(ref _refreshGen);
         return Task.FromResult(captured);
     }
@@ -238,6 +238,7 @@ public sealed class ReviewStateManager
             next = new ReviewState(
                 Situation: situation,
                 Branches: branches,
+                ContinueGuard: list.ExitCode == 0 && !list.TimedOut && list.ErrorCode is null ? ContinueReply.ParseGuard(list.Stdout) : null,
                 Fixes: fixes,
                 Config: eff,
                 Candidates: candidates,

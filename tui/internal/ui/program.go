@@ -566,6 +566,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 func toProjectInput(r host.ReadResult, mouseEnabled, busy bool, statusLine string) domain.ProjectInput {
 	return domain.ProjectInput{
 		Guard:           r.Guard,
+		ContinueGuard:   r.ContinueGuard,
 		NavigationState: r.NavigationState,
 		SaveState:       r.SaveState,
 		Comments:        r.Comments, CommentsError: r.CommentsError, CommentsLoading: r.CommentsLoading,

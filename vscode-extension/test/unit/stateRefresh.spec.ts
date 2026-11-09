@@ -23,6 +23,32 @@ function pipeline(invoke: (verb: string) => Promise<object>) {
     return {manager: new exported.ReviewStateManager(() => ({cwd: "/repo"})), events};
 }
 
+describe("Continue primary state", () => {
+    const guard = "b".repeat(40);
+    const wire = `continue-state\t1\nstate\treview/feature\tfeature\tdeadbeef\twhole\tnone\ncapability\tsave-state\nguard\t${guard}\ncontinue-state\tcomplete\n`;
+    it("publishes Continue without another primary query", async () => {
+        const calls: string[] = [];
+        const {manager} = pipeline(async verb => { calls.push(verb); return {stdout:"",stderr:"",exitCode:0}; });
+        await manager.refreshPrimary(wire);
+        assert.deepStrictEqual(calls,["comments"]);
+        assert.strictEqual(manager.state.guard,guard);
+        assert.strictEqual(manager.state.saveState,true);
+        assert.strictEqual(manager.state.situation,"review");
+    });
+    it("keeps the inventory token from a normal or fallback read", async () => {
+        const calls: string[] = [];
+        const {manager} = pipeline(async verb => {
+            calls.push(verb);
+            if (verb === "status") return {stdout:"",stderr:"",exitCode:2};
+            if (verb === "list") return {stdout:`capability\tcontinue-state\ncontinue-guard\t${guard}\nbranch\treview-saved/feature\t1\t0\t0\twhole\n`,stderr:"",exitCode:0};
+            return {stdout:"",stderr:"",exitCode:0};
+        });
+        await manager.refreshPrimary(wire.replace("continue-state\tcomplete\n",""));
+        assert.deepStrictEqual(calls,["--version","status","list","config","comments"]);
+        assert.strictEqual(manager.state.continueGuard,guard);
+    });
+});
+
 describe("incremental review refresh", () => {
     const reply = (guard = "a".repeat(40), position = 1) =>
         `state\treview/feature\tfeature\tdeadbeef\twalk\tapplied\t${position}\t2\t2\ta.txt\t0\n` +

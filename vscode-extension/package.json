@@ -2,7 +2,7 @@
   "name": "git-review-workflow",
   "displayName": "git review workflow",
   "description": "Review PRs with a guided reading order and context",
-  "version": "0.5.7",
+  "version": "0.5.8",
   "publisher": "EzeVillo",
   "license": "MIT",
   "icon": "media/icon.png",

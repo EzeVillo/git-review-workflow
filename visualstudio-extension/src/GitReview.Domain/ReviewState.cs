@@ -51,6 +51,7 @@ public sealed record ReviewState(
     string? Stderr = null,
     CommentsReport? Comments = null,
     string? Guard = null,
+    string? ContinueGuard = null,
     bool NavigationState = false,
     bool SaveState = false,
     bool CommentsPaths = false,

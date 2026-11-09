@@ -30,6 +30,7 @@ import (
 type mutationRequest struct {
 	stateGuard      string
 	saveState       bool
+	continueState   bool
 	navigationState bool
 	stdin           string
 	hasInput        bool
@@ -130,6 +131,12 @@ func mutationCmd(req mutationRequest, argv domain.Argv, activityGeneration int) 
 			}
 			result.Stdout = ""
 		}
+		if req.continueState && !mutationFailed(result) {
+			if primary, ok := host.ReadContinueReply(result.Stdout); ok {
+				reply = &primary
+			}
+			result.Stdout = ""
+		}
 		return mutationDoneMsg{navigation: reply, action: req.action, params: req.params, result: result, activityGeneration: activityGeneration, successOpenPath: req.successOpenPath, draftStart: req.draftStart, draftFlow: req.draftFlow}
 	}
 }
@@ -147,7 +154,7 @@ func currentStateToken(p domain.PanelModel) domain.StateToken {
 			Situation: p.Situation,
 		}
 	}
-	return domain.StateToken{Situation: p.Situation, Guard: p.Guard}
+	return domain.StateToken{Situation: p.Situation, Guard: p.Guard, ContinueGuard: p.ContinueGuard}
 }
 
 // beginMutation is where the lock actually lives: Begin() first — depth 1,
@@ -186,6 +193,11 @@ func (m Model) beginMutation(req mutationRequest, token domain.StateToken) (Mode
 	}
 	if req.action == "saveReview" && m.Panel.SaveState && req.stateGuard != "" {
 		req.saveState = true
+		argv.Args = append(argv.Args, "--porcelain")
+	}
+	if req.action == "continueReview" && token.ContinueGuard != "" {
+		req.continueState = true
+		req.stateGuard = token.ContinueGuard
 		argv.Args = append(argv.Args, "--porcelain")
 	}
 	m.statusLine = ""

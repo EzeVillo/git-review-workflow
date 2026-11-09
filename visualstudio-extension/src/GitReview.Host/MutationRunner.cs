@@ -50,15 +50,16 @@ public sealed class MutationRunner
 
             var navigation = action is "next" or "prev" && _state.Current.NavigationState && token.Guard is not null;
             var saved = action == "saveReview" && _state.Current.SaveState && token.Guard is not null;
+            var continued = action == "continueReview" && token.ContinueGuard is not null;
             var result = await _cli.InvokeWithStateGuardAsync(
                 argv.Verb,
-                (navigation || saved) ? argv.Args.Concat(new[]{"--porcelain"}).ToArray() : argv.Args,
+                (navigation || saved || continued) ? argv.Args.Concat(new[]{"--porcelain"}).ToArray() : argv.Args,
                 cwd,
-                token.Guard,
+                continued ? token.ContinueGuard : token.Guard,
                 network: network || argv.Network,
                 cancellationToken: ct).ConfigureAwait(false);
 
-            await _state.RefreshPrimaryAsync(ct, (navigation || saved) && result.ExitCode == 0 && !result.TimedOut && result.ErrorCode is null ? result.Stdout : null).ConfigureAwait(false);
+            await _state.RefreshPrimaryAsync(ct, (navigation || saved || continued) && result.ExitCode == 0 && !result.TimedOut && result.ErrorCode is null ? result.Stdout : null).ConfigureAwait(false);
             if (navigation && result.ExitCode == 0) result = result with { Stdout = NavigationReply.Notice(result.Stdout) };
             if (result.ExitCode == 4) result = result with { Stderr = UserCopy.Stale };
             return result;

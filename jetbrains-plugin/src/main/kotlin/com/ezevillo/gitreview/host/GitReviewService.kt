@@ -180,8 +180,8 @@ class GitReviewService(private val project: Project) : Disposable {
         doRefresh(navigationOutput)
     }
 
-    fun readForMutation(): ReviewState =
-        stateManager.readForMutation(pickSoleTarget(listGitRoots(project))?.rootPath)
+    fun readForMutation(continueAction: Boolean = false): ReviewState =
+        stateManager.readForMutation(pickSoleTarget(listGitRoots(project))?.rootPath, continueAction)
 
     private var commentWatchPaths: List<String> = emptyList()
 

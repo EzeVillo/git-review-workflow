@@ -1235,7 +1235,7 @@ public sealed partial class ActionDispatcher
             ? _host.Progress(progress)
             : null;
         var token = _expectation.Current ?? StaleGuard.CaptureToken(_panel.State.Current);
-        var fresh = await _panel.State.ReadForMutationAsync().ConfigureAwait(true);
+        var fresh = await _panel.State.ReadForMutationAsync(continueAction: action == "continueReview").ConfigureAwait(true);
         if (!StaleGuard.TokenStillValid(token, fresh))
         {
             await _panel.RefreshAsync().ConfigureAwait(true);

@@ -83,11 +83,13 @@ export async function continueReview(
                 if (stale) {
                     return undefined;
                 }
-                const invocation = await invokeGitReview("continue", [source], getInvokeOptions());
+                const continued = token.continueGuard !== undefined;
+                const invocation = await invokeGitReview("continue", continued ? [source, "--porcelain"] : [source],
+                    {...getInvokeOptions(), expectedState: token.continueGuard});
                 // Refrescar pase lo que pase: aunque el verbo falle, es lo que
                 // dice dónde quedó el repositorio — la salida humana no se
                 // parsea nunca.
-                await stateManager.refreshPrimary();
+                await stateManager.refreshPrimary(continued && invocation.exitCode === 0 && !invocation.timedOut && !invocation.errorCode ? invocation.stdout : undefined);
                 return invocation;
             }
         );
@@ -99,7 +101,9 @@ export async function continueReview(
             return;
         }
 
-        if (result.exitCode === 0) {
+        if (result.exitCode === 4) {
+            void vscode.window.showInformationMessage(STALE);
+        } else if (result.exitCode === 0 && !result.timedOut && !result.errorCode) {
             // La situación entera cambia —no-review pasa a review—, y esto se
             // puede disparar desde la paleta con el panel cerrado.
             revealPanel("continueReview", reveal);

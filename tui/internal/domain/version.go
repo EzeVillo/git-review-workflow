@@ -8,7 +8,7 @@ import (
 // TUIVersion is the independently released terminal client version. The
 // release tag and Homebrew formula are stamped from this value; it is
 // deliberately not injected through ldflags.
-const TUIVersion = "0.2.5"
+const TUIVersion = "0.2.6"
 
 // MinCLIVersion is this client's own floor (min_cli_version.tui in
 // contracts/client-product-surface.yaml, FR-028). It is a floor and nothing

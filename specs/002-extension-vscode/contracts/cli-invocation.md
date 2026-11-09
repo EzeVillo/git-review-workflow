@@ -264,3 +264,19 @@ guard mostrado antes de guardar buffers. La respuesta legacy explícita vuelve
 a status; un error o respuesta inválida bloquea la operación y refresca. La
 limpieza de sesiones y los cierres ya completados mantienen el inventario
 anterior. Contrato y encoding: `contracts/comments-paths.md`.
+
+## Continue con estado final
+
+Si `list --porcelain` anuncia `capability continue-state` y un único
+`continue-guard` válido, el cliente captura ese testigo al abrir la confirmación
+y puede invocar `git review --expect-state <token> continue <source> --porcelain`.
+La CLI valida inventario y checkout dentro de la operación. El prefijo usa el
+token del inventario exclusivamente para Continue; los otros verbos conservan
+sus reglas. Sin el par capacidad/token se mantiene la ruta anterior.
+
+Un sobre `continue-state 1` / `continue-state complete` con un único status y
+guard válidos sustituye la lectura principal posterior. Una respuesta incompleta
+o inválida provoca un refresco normal, sin repetir Continue. Los errores y el
+código 4 también refrescan, y el 4 muestra el aviso Stale habitual. Comments y
+el porqué completan por separado con sus guardas de generación. Ver el contrato
+canónico `contracts/review-state-guard.md`.

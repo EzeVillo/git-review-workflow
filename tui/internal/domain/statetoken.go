@@ -29,12 +29,13 @@ func ParseStateGuard(output string) string {
 // watching, more than in an IDE, because the panel may have already
 // repainted while the overlay sat open.
 type StateToken struct {
-	Guard     string
-	Branch    string
-	HasBranch bool
-	Tip       string
-	HasTip    bool
-	Situation Situation
+	ContinueGuard string
+	Guard         string
+	Branch        string
+	HasBranch     bool
+	Tip           string
+	HasTip        bool
+	Situation     Situation
 }
 
 // Matches reports whether two tokens describe the same state. Two absent
@@ -51,5 +52,5 @@ func (a StateToken) Matches(b StateToken) bool {
 	if a.HasTip != b.HasTip || (a.HasTip && a.Tip != b.Tip) {
 		return false
 	}
-	return a.Guard == b.Guard
+	return a.Guard == b.Guard && a.ContinueGuard == b.ContinueGuard
 }

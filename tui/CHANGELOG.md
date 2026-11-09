@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.6] — 2026-11-08
+
+### Changed
+
+- Validate the selected saved review inside Continue and consume its optional final state, avoiding another primary read when supported. Preserve the legacy path and refresh incomplete replies without repeating Continue.
+
 ## [0.2.5] — 2026-11-08
 
 ### Changed

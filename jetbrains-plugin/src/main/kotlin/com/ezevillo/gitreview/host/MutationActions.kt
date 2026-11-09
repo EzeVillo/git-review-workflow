@@ -105,7 +105,7 @@ class MutationActions(
             title,
             work = {
                 service.mutationLock.run {
-                    val fresh = service.readForMutation()
+                    val fresh = service.readForMutation(continueAction = action == "continueReview")
                     if (!tokenStillValid(token, fresh)) {
                         service.refreshNow()
                         return@run SimpleOutcome.Stale
@@ -118,15 +118,16 @@ class MutationActions(
                     }
                     val navigation = action in setOf("next", "prev") && fresh.navigationState && token.guard != null
                     val saved = action == "saveReview" && fresh.saveState && token.guard != null
+                    val continued = action == "continueReview" && token.continueGuard != null
                     val result = service.cliInvoker.invokeWithStateGuard(
                         argv.verb,
-                        if (navigation || saved) argv.args + "--porcelain" else argv.args,
+                        if (navigation || saved || continued) argv.args + "--porcelain" else argv.args,
                         cwd,
-                        token.guard,
+                        if (continued) token.continueGuard else token.guard,
                         network = argv.network,
                     )
                     refreshIdeRepository(project)
-                    service.refreshNow(if ((navigation || saved) && result.exitCode == 0 && !result.timedOut && result.errorCode == null) result.stdout else null)
+                    service.refreshNow(if ((navigation || saved || continued) && result.exitCode == 0 && !result.timedOut && result.errorCode == null) result.stdout else null)
                     if (result.exitCode == 4) return@run SimpleOutcome.Stale
                     SimpleOutcome.Done(
                         MutationDone(

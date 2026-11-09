@@ -53,6 +53,7 @@ data class ReviewState(
     val comments: CommentsReport? = null,
     /** CLI-authored context; never derived from panel fields. */
     val guard: String? = null,
+    val continueGuard: String? = null,
     val navigationState: Boolean = false,
     val saveState: Boolean = false,
     val commentsPaths: Boolean = false,

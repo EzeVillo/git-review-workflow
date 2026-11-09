@@ -16,6 +16,7 @@ import (
 // exists on the struct.
 type ReadResult struct {
 	Guard           string
+	ContinueGuard   string
 	SaveState       bool
 	NavigationState bool
 	WhyIncluded     bool
@@ -92,6 +93,7 @@ func ReadPrimaryState(ctx context.Context, cwd, minVersion string) ReadResult {
 		listRes := InvokeReview(ctx, "list", []string{"--porcelain"})
 		listOK := !listRes.TimedOut && !listRes.SpawnFailed && listRes.ExitCode == 0
 		if listOK {
+			result.ContinueGuard = domain.ParseContinueGuard(listRes.Stdout)
 			result.Branches = domain.ParseListPorcelain(listRes.Stdout)
 			result.Fixes = domain.ParseListFixes(listRes.Stdout)
 			result.HasList = true
@@ -203,8 +205,18 @@ func ReadSaveReply(output string) (ReadResult, bool) {
 	if pending {
 		situation = domain.SituationFinishPending
 	}
-	return ReadResult{Situation: situation, Branches: branches,
+	return ReadResult{Situation: situation, Branches: branches, ContinueGuard: domain.ParseContinueGuard(reply.List),
 		Fixes: domain.ParseListFixes(reply.List), HasList: true,
 		Config: domain.ParseConfigPorcelain(reply.Config), HasConfig: true,
 		DetailsPending: true, CommentsLoading: true}, true
+}
+
+func ReadContinueReply(output string) (ReadResult, bool) {
+	parsed, ok := domain.ParseContinueReply(output)
+	if !ok {
+		return ReadResult{}, false
+	}
+	return ReadResult{Guard: domain.ParseStateGuard(output), SaveState: domain.HasSaveState(output),
+		NavigationState: domain.HasNavigationState(output), Status: parsed, HasStatus: true,
+		Situation: domain.SituationReview, DetailsPending: true, CommentsLoading: true}, true
 }

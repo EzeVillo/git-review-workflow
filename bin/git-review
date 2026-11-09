@@ -8,7 +8,7 @@
 set -eu
 
 prog="git review"
-VERSION="0.10.9"
+VERSION="0.10.10"
 
 usage() {
 	cat <<EOF
@@ -131,7 +131,7 @@ export GIT_REVIEW_LIBEXEC="$libexec"
 shift
 if [ -n "$expected_state" ]; then
 	case "$verb:$#" in
-	next:*|prev:*|save:0|save:1|abort:0)
+	next:*|prev:*|save:0|save:1|abort:0|continue:*)
 		if [ "$verb:$#" = save:1 ] && [ "$1" != --porcelain ]; then
 			# Preserve generic guard precedence for help and invalid arguments.
 			:

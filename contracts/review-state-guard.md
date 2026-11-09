@@ -1,5 +1,48 @@
 # Validación del contexto de una review
 
+## Continuación desde el inventario
+
+Con reviews guardadas, `list --porcelain` agrega un par de registros:
+
+```text
+capability<TAB>continue-state
+continue-guard<TAB><token>
+```
+
+El testigo opaco, hexadecimal de 40 o 64 caracteres, pertenece al inventario:
+gitdir absoluto, rama y HEAD actuales, refs guardados con sus OID y snapshot
+de metadata review. Es un dominio distinto del guard de una review activa.
+Puede invalidarse por otra modificación de esa metadata; no cambia la regla
+de independencia de los guards activos. No incluye buffers, texto de comentarios,
+índice ni working tree. Status fuera de una review conserva stdout vacío y exit 2.
+
+El cliente captura ese token al abrir la confirmación de Continue. Sólo con
+ambos registros únicos y válidos envía
+`git review --expect-state <token> continue --porcelain <source>` y omite la
+prelectura principal. Otros verbos conservan sus reglas actuales. Continue
+comprueba el inventario dentro del verbo, antes de los efectos: una diferencia
+sale con 4, stdout vacío y el stderr habitual `error: review state changed`.
+Las guardas de limpieza, destinos y custodia continúan vigentes y frescas en
+cada frontera. Sin capacidad/token, los clientes mantienen el camino anterior.
+
+`continue --porcelain [source]`, con o sin guard, devuelve:
+
+```text
+continue-state<TAB>1
+<status completo de la review resultante, incluido su nuevo guard>
+continue-state<TAB>complete
+```
+
+La respuesta usa el mismo emisor de status y metadata fresca después de la
+mutación, una vez liberada la custodia. No ejecuta otro verbo. Sin la opción,
+se conserva la salida humana y no se calcula ese informe. Si el informe final
+falla, la mutación exitosa sigue devolviendo 0 y no emite el marcador completo:
+el cliente refresca sin repetir Continue. Un sobre ausente, duplicado,
+incompleto o sin un único estado de review/guard válido usa el mismo fallback.
+La publicación principal y los detalles secundarios conservan sus generaciones.
+
+## Review activa
+
 `status --porcelain` agrega, durante una review activa, un registro:
 
 ```text

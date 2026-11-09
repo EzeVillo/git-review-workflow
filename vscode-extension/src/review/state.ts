@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import {isContinueReply, parseContinueGuard} from "./continueReply";
 import {hasCommentPaths} from "./commentPaths";
 import {hasSaveState, parseSaveReply, SaveReply} from "./saveReply";
 import {parseStateGuard} from "./staleGuard";
@@ -37,6 +38,7 @@ import {Situation, situationFor, situationForExitCode} from "./situation";
 export type {Situation} from "./situation";
 
 export interface ReviewState {
+    continueGuard?: string;
     guard?: string;
     navigationState?: boolean;
     saveState?: boolean;
@@ -221,9 +223,9 @@ async function checkCliVersion(options: ReviewStateOptions): Promise<VersionIssu
  */
 async function listBranches(
     options: ReviewStateOptions
-): Promise<{branches: BranchRecord[]; fixes: FixesRecord[]}> {
+): Promise<{branches: BranchRecord[]; fixes: FixesRecord[]; continueGuard?: string}> {
     const result = await invokeGitReview("list", ["--porcelain"], options);
-    if (result.errorCode || result.exitCode !== 0) {
+    if (result.errorCode || result.timedOut || result.exitCode !== 0) {
         return {branches: [], fixes: []};
     }
     // Una invocación, dos lecturas: las ramas de fixes viajan en la misma
@@ -232,6 +234,7 @@ async function listBranches(
     return {
         branches: parseListPorcelain(result.stdout),
         fixes: parseListFixes(result.stdout),
+        continueGuard: parseContinueGuard(result.stdout),
     };
 }
 
@@ -354,7 +357,7 @@ export class ReviewStateManager {
     /** Mutations wait for authoritative primary state; documents complete independently. */
     async refreshPrimary(navigationOutput?: string): Promise<ReviewState> {
         const saved = navigationOutput ? parseSaveReply(navigationOutput) : undefined;
-        const reply = saved ? {stdout: "", stderr: "", exitCode: 2} : navigationOutput && isNavigationReply(navigationOutput)
+        const reply = saved ? {stdout: "", stderr: "", exitCode: 2} : navigationOutput && (isNavigationReply(navigationOutput) || isContinueReply(navigationOutput))
             ? {stdout: navigationOutput, stderr: "", exitCode: 0} : undefined;
         // Reserve the publication before starting it: filesystem callbacks may
         // request a read while the mutation's status/list/config is in flight.
@@ -490,8 +493,8 @@ export class ReviewStateManager {
             // ya se llama a `listBranches` con exit 2, sólo falta mirar si
             // trae una fila `finish … pending`.
             const inventory = baseSituation === "no-review"
-                ? saveReply ? {branches: parseListPorcelain(saveReply.list), fixes: parseListFixes(saveReply.list)} : await listBranches(options)
-                : {branches: [] as BranchRecord[], fixes: [] as FixesRecord[]};
+                ? saveReply ? {branches: parseListPorcelain(saveReply.list), fixes: parseListFixes(saveReply.list), continueGuard: parseContinueGuard(saveReply.list)} : await listBranches(options)
+                : {branches: [] as BranchRecord[], fixes: [] as FixesRecord[], continueGuard: undefined};
             const branches = inventory.branches;
             const hasFinishPending = branches.some((branch) => branch.finish?.state === "pending");
             const situation = situationFor(result.exitCode, false, hasFinishPending);
@@ -501,6 +504,7 @@ export class ReviewStateManager {
                 ...EMPTY_ARRAYS,
                 branches,
                 fixes: inventory.fixes,
+                continueGuard: inventory.continueGuard,
                 stderr: result.stderr,
             };
             if (situation === "no-review" || situation === "finish-pending") {

@@ -13,10 +13,11 @@ prog="git review continue"
 
 usage() {
 	cat <<EOF
-usage: $prog [<branch>]
+usage: $prog [--porcelain] [<branch>]
 
 Resume a review saved with git review save. With no argument, resume the only
 saved review (or list them if there is more than one).
+  --porcelain  return the resulting panel state instead of human output
 EOF
 }
 
@@ -26,12 +27,14 @@ die() {
 }
 
 arg=""
+porcelain=0
 while [ $# -gt 0 ]; do
 	case "$1" in
 	-h | --h)
 		usage
 		exit 0
 		;;
+	--porcelain) porcelain=1 ;;
 	-*)
 		echo "error: unknown option $1" >&2
 		usage >&2
@@ -52,6 +55,14 @@ git rev-parse --git-dir >/dev/null 2>&1 || die "not a git repository"
 
 # shellcheck source=../git-review-lib.sh
 . "${GIT_REVIEW_LIBEXEC:?}/git-review-lib.sh"
+
+if [ -n "${GIT_REVIEW_EXPECT_STATE:-}" ]; then
+	if ! review_continue_guard_capture; then die 'could not read review metadata'; fi
+	if [ "$continue_guard" != "$GIT_REVIEW_EXPECT_STATE" ]; then
+		echo 'error: review state changed' >&2
+		exit 4
+	fi
+fi
 
 # Pick the saved review to resume.
 if [ -n "$arg" ]; then
@@ -204,8 +215,10 @@ if [ "$mode" = "step" ]; then
 
 	git branch -D "$saved" >/dev/null
 
-	echo "resumed review of $src — step $step/$count"
-	show_commit "$cstep" "$step" "$count"
+	if [ "$porcelain" -eq 0 ]; then
+		echo "resumed review of $src — step $step/$count"
+		show_commit "$cstep" "$step" "$count"
+	fi
 else
 	# whole and walk mode: rebuild the pristine review state (PR diff staged at the
 	# lower bound) and replay your edits into the working tree; walk restores its
@@ -251,16 +264,33 @@ else
 		# Re-derive the sequence and reprint the entry you were on, the way the step
 		# path reprints its commit. load_walk_review_meta applies the keys-only filter
 		# when reviewwalkkeys is set.
-		cur="$rb"
-		# Walk keys were restored after the transfer's final custody snapshot.
-		# Reporting must see those writes, never the pre-transfer active metadata.
-		review_config_init
-		[ "$_review_config_ready" -eq 1 ] || die 'could not read review metadata'
-		load_walk_review_meta
-		echo "resumed review of $src — walkthrough entry $walkstep/$total"
-		show_walk_entry "$walkstep"
+		if [ "$porcelain" -eq 0 ]; then
+			cur="$rb"
+			# Walk keys were restored after the transfer's final custody snapshot.
+			# Reporting must see those writes, never the pre-transfer active metadata.
+			review_config_init
+			[ "$_review_config_ready" -eq 1 ] || die 'could not read review metadata'
+			load_walk_review_meta
+			echo "resumed review of $src — walkthrough entry $walkstep/$total"
+			show_walk_entry "$walkstep"
+		fi
 	else
 		git branch -D "$saved" >/dev/null
-		echo "resumed review of $src — the staged diff is the PR; edit, then run git review finish"
+		if [ "$porcelain" -eq 0 ]; then
+			echo "resumed review of $src — the staged diff is the PR; edit, then run git review finish"
+		fi
+	fi
+fi
+
+# As with Save, a failed final read must not invite a second mutation. Release
+# custody first; only a complete envelope is an authoritative reply to clients.
+comments_unlock
+if [ "$porcelain" -eq 1 ]; then
+	set +e
+	(review_continued_state)
+	_reply_status=$?
+	set -e
+	if [ "$_reply_status" -ne 0 ]; then
+		echo 'note: review resumed; final state could not be read' >&2
 	fi
 fi

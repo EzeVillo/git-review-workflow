@@ -1006,8 +1006,11 @@ git review config --porcelain [<branch>]  # machine-readable + candidate branche
   branch at the tip (and the same undo point is kept).
 - Either way the result stays local — review it and push it yourself when ready.
 - `--resume` — in `--step` mode, if banked edits overlap the PR tip, the replay
-  leaves conflict markers and stops. Resolve them in the working tree, then run
-  `git review finish --resume` (with the same flags) to continue.
+  stops at the conflict. Resolve it in the working tree, then run
+  `git review finish --resume` to continue to the original destination. Finish
+  rejects conflict markers added relative to the reviewed tip. If Git still
+  lists a path as unmerged and you want to keep the version the replay left
+  there, confirm your choice with `git add` or `git rm` first.
 - `--abort` — undo the last finish and drop you back on `review/<branch>` exactly
   where you were editing, the same way `git merge --abort` backs out a merge. It
   refuses if you have changed the finish branch since, so you do not lose work;

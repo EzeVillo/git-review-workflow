@@ -1037,8 +1037,11 @@ git review config --porcelain [<rama>]    # legible por máquina + candidatas
 - En cualquiera de los dos casos el resultado queda local — revisalo y pusheá a
   mano cuando estés listo.
 - `--resume` — en modo `--step`, si las ediciones bancadas chocan con el tip del
-  PR, el replay deja marcadores de conflicto y se detiene. Resolvélos en el árbol
-  y corré `git review finish --resume` (con los mismos flags) para seguir.
+  PR, el replay se detiene en el conflicto. Resolvelo en el árbol y corré
+  `git review finish --resume` para seguir al destino original. Finish rechaza
+  los marcadores de conflicto agregados respecto del tip revisado. Si Git
+  todavía lista un archivo como no resuelto y querés conservar la versión que
+  dejó el replay, confirmá tu elección con `git add` o `git rm` primero.
 - `--abort` — deshace el último finish y te devuelve a `review/<rama>` justo donde
   estabas editando, igual que `git merge --abort` revierte un merge. Se niega si
   cambiaste la rama del finish desde entonces, para que no pierdas trabajo; agregá

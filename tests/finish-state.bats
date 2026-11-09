@@ -9,6 +9,8 @@
 # its own tests in tests/status-porcelain.bats, next to the rest of that
 # verb's contract.
 
+setup_file() { bats_require_minimum_version 1.13.0; }
+
 setup() {
 	TMP="$(mktemp -d)"
 	export HOME="$TMP/home"
@@ -55,18 +57,22 @@ teardown() {
 # (on cfa.txt) live in the working tree and cf1's overlapping edit (on x.txt)
 # banked at ref 2, ready for a `git review finish` that stops mid-conflict.
 setup_conflict_pr() {
+	binary_prefix=''
+	if [ "${1:-}" = binary ]; then
+		binary_prefix='\000'
+	fi
 	git switch --quiet -c feature/conflict
-	printf 'X0\n' >x.txt
+	printf '%bX0\n' "$binary_prefix" >x.txt
 	printf 'A0\n' >cfa.txt
 	git add x.txt cfa.txt
 	git commit --quiet -m cf-base
-	printf 'X0\nX1\n' >x.txt
+	printf '%bX0\nX1\n' "$binary_prefix" >x.txt
 	git add x.txt
 	git commit --quiet -m cf1-touch-x
 	printf 'A0\nA1\n' >cfa.txt
 	git add cfa.txt
 	git commit --quiet -m cf2-touch-a
-	printf 'X0\nX1-CHANGED\n' >x.txt
+	printf '%bX0\nX1-CHANGED\n' "$binary_prefix" >x.txt
 	git add x.txt
 	git commit --quiet -m cf3-change-x
 	git push --quiet -u origin feature/conflict
@@ -74,7 +80,7 @@ setup_conflict_pr() {
 
 	git review start feature/conflict --step # step 1 (cf-base)
 	git review next                          # step 2 (cf1, x.txt = X0\nX1)
-	printf 'X0\nX1-EDITED\n' >x.txt           # edit that will overlap the tip
+	printf '%bX0\nX1-EDITED\n' "$binary_prefix" >x.txt  # edit that will overlap the tip
 	git review next                          # bank step 2, now step 3 (cf2)
 	printf 'A0\nA1-EDITED\n' >cfa.txt         # edit that applies cleanly onto the tip
 }
@@ -149,6 +155,84 @@ setup_conflict_pr() {
 }
 
 # ── the record disappears once the closure resolves (T040) ─────────────────
+
+@test "finish resume rejects unstaged conflict markers without changing the review" {
+	setup_conflict_pr
+	run --separate-stderr git review finish
+	[ "$status" -eq 1 ]
+	cp x.txt "$TMP/conflicted"
+	before_index="$(git ls-files --stage)"
+	before_head="$(git rev-parse HEAD)"
+	before_undo="$(git for-each-ref --format='%(objectname) %(refname)' refs/review-undo/)"
+
+	run --separate-stderr git review finish --resume
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *"leftover conflict marker"* ]]
+	[ "$(git branch --show-current)" = review/feature/conflict ]
+	[ "$(git rev-parse HEAD)" = "$before_head" ]
+	[ "$(git ls-files --stage)" = "$before_index" ]
+	[ "$(git for-each-ref --format='%(objectname) %(refname)' refs/review-undo/)" = "$before_undo" ]
+	[ "$(git config branch.review/feature/conflict.reviewresume)" = conflict ]
+	[ -z "$(git branch --list review-fixes/feature/conflict)" ]
+	cmp x.txt "$TMP/conflicted"
+}
+
+@test "finish resume rejects staged markers and accepts a resolution with trailing whitespace" {
+	printf 'Example\n<<<<<<< ours\n=======\n>>>>>>> theirs\n' >example.txt
+	git add example.txt
+	git commit --quiet -m 'existing marker example'
+	git push --quiet origin develop
+	setup_conflict_pr
+	run --separate-stderr git review finish
+	[ "$status" -eq 1 ]
+	git add -- x.txt
+	before_index="$(git ls-files --stage)"
+
+	run --separate-stderr git review finish --resume
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *"x.txt:"*"leftover conflict marker"* ]]
+	[ "$(git branch --show-current)" = review/feature/conflict ]
+	[ "$(git ls-files --stage)" = "$before_index" ]
+	[ "$(git config branch.review/feature/conflict.reviewresume)" = conflict ]
+	[ -z "$(git branch --list review-fixes/feature/conflict)" ]
+
+	printf 'X0\nX1-RESOLVED  \n' >x.txt
+	printf 'Keep the existing example.\n' >>example.txt
+	git add -- x.txt
+	run --separate-stderr git review finish --resume
+	[ "$status" -eq 0 ]
+	[ "$(git branch --show-current)" = review-fixes/feature/conflict ]
+	[ "$(git show :x.txt)" = "$(printf 'X0\nX1-RESOLVED  ')" ]
+	[ "$(git show :cfa.txt)" = "$(printf 'A0\nA1-EDITED')" ]
+	[ "$(git show :example.txt)" = "$(printf 'Example\n<<<<<<< ours\n=======\n>>>>>>> theirs\nKeep the existing example.')" ]
+}
+
+@test "finish resume requires an explicit choice for a binary conflict left at ours" {
+	setup_conflict_pr binary
+	run --separate-stderr git review finish
+	[ "$status" -eq 1 ]
+	[ -n "$(git ls-files --unmerged -- x.txt)" ]
+	git show :2:x.txt >"$TMP/ours"
+	cmp x.txt "$TMP/ours"
+	before_index="$(git ls-files --stage)"
+
+	run --separate-stderr git review finish --resume
+	[ "$status" -eq 1 ]
+	[[ "$stderr" == *"confirm the resolution of these paths with git add or git rm"* ]]
+	[ "$(git branch --show-current)" = review/feature/conflict ]
+	[ "$(git ls-files --stage)" = "$before_index" ]
+	[ "$(git config branch.review/feature/conflict.reviewresume)" = conflict ]
+	[ -z "$(git branch --list review-fixes/feature/conflict)" ]
+	cmp x.txt "$TMP/ours"
+
+	git add -- x.txt
+	run --separate-stderr git review finish --resume
+	[ "$status" -eq 0 ]
+	[ "$(git branch --show-current)" = review-fixes/feature/conflict ]
+	git show :x.txt >"$TMP/resolved"
+	cmp "$TMP/resolved" "$TMP/ours"
+	[ "$(git show :cfa.txt)" = "$(printf 'A0\nA1-EDITED')" ]
+}
 
 @test "the finish conflict record leaves status --porcelain once --resume completes the closure" {
 	setup_conflict_pr

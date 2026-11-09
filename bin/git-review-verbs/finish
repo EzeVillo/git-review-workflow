@@ -74,6 +74,79 @@ worktree_tree() {
 	rm -f "$_ti"
 }
 
+# Stage the same bytes as the ordinary finish, but keep the real index (and
+# its unmerged entries) intact until the candidate passes the conflict check.
+stage_finish_resolution() (
+	index=$(git rev-parse --git-path index) || exit 1
+	lock=$index.lock
+	if ! (set -C; : >"$lock") 2>/dev/null; then
+		echo "error: could not stage the finish resolution; the Git index is locked" >&2
+		exit 1
+	fi
+	candidate=
+	trap 'rm -f "$lock" "$lock.lock" ${candidate:+"$candidate"}' 0
+	trap 'exit 1' 1 2 15
+	cp "$index" "$lock" || exit 1
+	export GIT_INDEX_FILE="$lock"
+	unmerged=$(git -c core.quotePath=true ls-files --unmerged --full-name) || exit 1
+	git add -A || exit 1
+
+	# Git checks added lines and respects conflict-marker-size. A whitespace
+	# diagnostic alone is not a conflict and must not block an otherwise valid
+	# resolution. Suppress whitespace rules by default; paths can override them.
+	if diagnostics=$(LC_ALL=C git -c core.whitespace=-blank-at-eol,-blank-at-eof,-space-before-tab \
+		diff --cached --check --no-color --no-ext-diff --no-textconv --no-relative "$tip" --); then
+		:
+	elif [ "$?" -ne 2 ]; then
+		echo "error: could not check the finish resolution" >&2
+		exit 1
+	fi
+	markers=$(printf '%s\n' "$diagnostics" | sed -n '/:[0-9][0-9]*: leftover conflict marker$/p')
+	if [ -n "$markers" ]; then
+		echo "error: resolve the remaining conflict markers before continuing the finish:" >&2
+		printf '%s\n' "$markers" >&2
+		exit 1
+	fi
+
+	# A binary conflict can leave stage 2 in the working tree without markers.
+	# Keeping that version needs an explicit git add/rm, otherwise it is
+	# indistinguishable from leaving the conflict untouched.
+	if [ -n "$unmerged" ]; then
+		candidate=$(mktemp "$lock.XXXXXX") || exit 1
+		git -c core.quotePath=true ls-files --stage --full-name >"$candidate" || exit 1
+		unconfirmed=$(printf '%s\n' "$unmerged" | awk -F '\t' '
+			FILENAME == "-" {
+				split($1, entry, " ")
+				paths[$2] = 1
+				if (entry[3] == 2) ours[$2] = entry[1] " " entry[2]
+				next
+			}
+			$2 in paths {
+				split($1, entry, " ")
+				if (ours[$2] == entry[1] " " entry[2]) print $2
+				delete paths[$2]
+			}
+			END {
+				for (path in paths)
+					if (!(path in ours)) print path
+			}
+		' - "$candidate") || exit 1
+		if [ -n "$unconfirmed" ]; then
+			echo "error: confirm the resolution of these paths with git add or git rm before continuing the finish:" >&2
+			printf '%s\n' "$unconfirmed" >&2
+			exit 1
+		fi
+		rm -f "$candidate" || exit 1
+	fi
+
+	# The lock path may immediately belong to another writer after publication.
+	trap - 0 1 2 15
+	if ! mv "$lock" "$index"; then
+		rm -f "$lock" "$lock.lock"
+		exit 1
+	fi
+)
+
 # record_exit: once a finish has produced its branch ($1), snapshot that branch's
 # HEAD and working tree onto the review branch's config so a later --abort can tell
 # whether you have changed it since — and tell you up front that abort will not
@@ -530,7 +603,7 @@ if [ "$mode" = "step" ] && [ "$resume" -eq 0 ]; then
 	if [ "$conflict" -eq 1 ]; then
 		git config "branch.$cur.reviewresume" conflict
 		echo "conflict: some banked edits overlap the PR tip." >&2
-		echo "the working tree has conflict markers — resolve them, then run:" >&2
+		echo "resolve the conflicts, then run:" >&2
 		echo "    git review finish --resume" >&2
 		echo "(destination is remembered from this finish; --onto-source is not required again.)" >&2
 		echo "(git review finish --abort here discards the resolution, like git rebase --abort.)" >&2
@@ -554,6 +627,7 @@ elif [ "$resume" -eq 1 ]; then
 		exit 1
 		;;
 	esac
+	stage_finish_resolution || exit 1
 	git config --unset "branch.$cur.reviewresume" || true
 fi
 
@@ -564,7 +638,9 @@ fi
 # commit when they differ; finish always lands on the destination branch and
 # keeps the undo point either way, including the empty-extract case
 # (review-fixes/<src> at the tip with nothing staged).
-git add -A
+if [ "$resume" -eq 0 ]; then
+	git add -A
+fi
 has_edits=1
 if git diff --cached --quiet "$tip"; then
 	has_edits=0

@@ -24,22 +24,30 @@ fun hasUnsavedEditorDocuments(): Boolean? = runCatching {
     dirty
 }.getOrNull()
 
+enum class CommentBufferSave { UNCHANGED, SAVED, FAILED }
+
 /** Called off EDT: VFS resolution here, selective save and verification on EDT. */
-fun saveCommentFiles(paths: List<String>): Boolean {
+fun saveCommentFiles(paths: List<String>): CommentBufferSave {
     check(!ApplicationManager.getApplication().isDispatchThread)
     val files = paths.mapNotNull { refreshAndFind(File(it)) }
-    var saved = true
+    var outcome = CommentBufferSave.UNCHANGED
     ApplicationManager.getApplication().invokeAndWait {
         val manager = FileDocumentManager.getInstance()
         for (file in files) {
             val document = manager.getCachedDocument(file) ?: continue
             if (!manager.isDocumentUnsaved(document)) continue
-            try { manager.saveDocument(document) } catch (_: Exception) { saved = false }
-            if (manager.isDocumentUnsaved(document)) saved = false
-            if (!saved) break
+            try { manager.saveDocument(document) } catch (_: Exception) {
+                outcome = CommentBufferSave.FAILED
+                break
+            }
+            if (manager.isDocumentUnsaved(document)) {
+                outcome = CommentBufferSave.FAILED
+                break
+            }
+            outcome = CommentBufferSave.SAVED
         }
     }
-    return saved
+    return outcome
 }
 
 /**

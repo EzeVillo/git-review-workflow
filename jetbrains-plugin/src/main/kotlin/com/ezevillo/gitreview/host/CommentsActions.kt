@@ -22,7 +22,7 @@ val COMMENT_CAPTURE_KEY = com.intellij.openapi.util.Key.create<CommentCapture>("
 
 fun saveSessionCommentDocuments(service: GitReviewService, root: String, action: String, params: ActionParams): Boolean =
     saveSessionComments(service.cliInvoker, root, service.currentState(), action, params,
-        ::hasUnsavedEditorDocuments, ::saveCommentFiles)
+        ::hasUnsavedEditorDocuments) { saveCommentFiles(it) != CommentBufferSave.FAILED }
 
 class CommentsActions(private val project: Project, private val service: GitReviewService) {
     private fun commentsFailure(work: () -> String?): String? {
@@ -60,8 +60,11 @@ class CommentsActions(private val project: Project, private val service: GitRevi
                     service.mutationLock.run {
                         val current = read(root)
                         if (current.guard != initial.guard) return@run UserCopy.STALE
-                        if (!saveCommentFiles(current.documents.filter { it.kind == kind }.map { it.path })) return@run CommentsCopy.saveFailed
-                        val fresh = read(root)
+                        val fresh = when (saveCommentFiles(current.documents.filter { it.kind == kind }.map { it.path })) {
+                            CommentBufferSave.UNCHANGED -> current
+                            CommentBufferSave.SAVED -> read(root)
+                            CommentBufferSave.FAILED -> return@run CommentsCopy.saveFailed
+                        }
                         if (fresh.guard != initial.guard) return@run UserCopy.STALE
                         val born = fresh.documents.none { it.presence == "present" }
                         val args = commentsArgv(fresh, "add", kind).toMutableList()
@@ -86,7 +89,7 @@ class CommentsActions(private val project: Project, private val service: GitRevi
         Bg.async(project, CommentsCopy.title, work = { commentsFailure {
             service.mutationLock.run {
                 val initial = read(root, doc.context)
-                if (!saveCommentFiles(listOf(doc.path))) return@run CommentsCopy.saveFailed
+                if (saveCommentFiles(listOf(doc.path)) == CommentBufferSave.FAILED) return@run CommentsCopy.saveFailed
                 val fresh = read(root, doc.context)
                 if (fresh.guard != initial.guard || fresh.records("comments-context") != initial.records("comments-context")) return@run UserCopy.STALE
                 if (action == ControlId.OPEN_COMMENT_DIFF) { openDiff(root, doc, fresh); return@run null }
@@ -139,7 +142,7 @@ class CommentsActions(private val project: Project, private val service: GitRevi
             }
             return null
         }
-        if (!saveCommentFiles(files.filter { it[1] != "baseline" }.map { it[0] })) return CommentsCopy.saveFailed
+        if (saveCommentFiles(files.filter { it[1] != "baseline" }.map { it[0] }) == CommentBufferSave.FAILED) return CommentsCopy.saveFailed
         val fresh = read(root, doc.context)
         if (fresh.guard != report.guard || fresh.records("comments-context") != report.records("comments-context")) return UserCopy.STALE
         val result = service.cliInvoker.invoke("comments", commentsArgv(fresh, "prepare", "shared", doc.context), root)
@@ -165,7 +168,7 @@ class CommentsActions(private val project: Project, private val service: GitRevi
                         val message = service.mutationLock.run {
                             entered = true
                             try {
-                                if (!saveCommentFiles(listOf(doc.path))) return@run CommentsCopy.saveFailed
+                                if (saveCommentFiles(listOf(doc.path)) == CommentBufferSave.FAILED) return@run CommentsCopy.saveFailed
                                 val result = service.cliInvoker.invoke("comments", commentsArgv(snapshot(), "delete", doc.kind, doc.context, comment.ordinal), root)
                                 error(result)?.let { return@run it }
                                 val updated = service.cliInvoker.invoke("comments", commentsArgv(fresh, "entries", doc.kind, doc.context), root)

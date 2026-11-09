@@ -6,7 +6,7 @@ import {promisify} from "node:util";
 import * as path from "node:path";
 import {CommentDocument, CommentsReport, parseComments} from "../cli/commentsPorcelain";
 import {invokeGitReview, InvokeOptions, InvokeResult} from "../cli/invoke";
-import {commentsArgs, commentsOwnedBy, commentDestinations, CommentLocation, saveCommentBuffers, selectionCoordinates, commentRangeEndpoints} from "../review/commentsFlow";
+import {commentsArgs, commentsOwnedBy, commentDestinations, CommentLocation, CommentBufferSave, saveCommentBuffers, selectionCoordinates, commentRangeEndpoints} from "../review/commentsFlow";
 import {sameDraftFile} from "../review/draftFlow";
 import {MutationLock} from "../review/mutationLock";
 import {ReviewStateManager} from "../review/state";
@@ -58,7 +58,7 @@ export async function readComments(options: InvokeOptions, context?: string, all
     if (result.exitCode !== 0) report.diagnostics.push({path: "", code: "read", message: result.stderr.trim() || copy.failed});
     return report;
 }
-async function savePaths(documents: readonly Pick<CommentDocument, "path">[]): Promise<boolean> {
+async function savePaths(documents: readonly Pick<CommentDocument, "path">[]): Promise<CommentBufferSave> {
     return saveCommentBuffers(vscode.workspace.textDocuments.filter(doc => doc.uri.scheme === "file" && documents.some(row => sameDraftFile(doc.uri.fsPath, row.path))).map(doc => ({get isDirty() {return doc.isDirty;}, save: () => saveCommentDocument(doc)})));
 }
 export async function saveSessionComments(manager: ReviewStateManager, options: InvokeOptions, source?: string, scope = "active", closingSession = false): Promise<boolean> {
@@ -77,7 +77,7 @@ export async function saveSessionComments(manager: ReviewStateManager, options: 
             return false;
         }
         if (report.paths !== null) {
-            if (await savePaths(report.paths.map(path => ({path})))) return true;
+            if (await savePaths(report.paths.map(path => ({path}))) !== "failed") return true;
             await manager.refreshPrimary();
             void vscode.window.showErrorMessage(copy.saveFailed);
             return false;
@@ -97,7 +97,7 @@ export async function saveSessionComments(manager: ReviewStateManager, options: 
         if (source === undefined) return true;
     }
     const owners = report.contexts.filter(c => (scope === "all" || c.state === scope) && (source === undefined || c.source === source) && (scope !== "all" || c.owner === "review/" + source)).map(c => c.owner).filter((owner): owner is string => owner !== undefined);
-    if (await savePaths(commentsOwnedBy(report, owners))) return true;
+    if (await savePaths(commentsOwnedBy(report, owners)) !== "failed") return true;
     await manager.refresh();
     void vscode.window.showErrorMessage(copy.saveFailed);
     return false;
@@ -148,8 +148,9 @@ export async function addComment(lock: MutationLock, manager: ReviewStateManager
             entered = true;
             const current = await readComments(options);
             if (current.guard !== initial.guard) {await manager.refresh(); return STALE;}
-            if (!(await savePaths(current.documents.filter(d => d.kind === kind)))) {await manager.refresh(); return copy.saveFailed;}
-            const fresh = await readComments(options);
+            const saved = await savePaths(current.documents.filter(d => d.kind === kind));
+            if (saved === "failed") {await manager.refresh(); return copy.saveFailed;}
+            const fresh = saved === "saved" ? await readComments(options) : current;
             if (fresh.guard !== initial.guard) {await manager.refresh(); return STALE;}
             const born = !fresh.documents.some(d => d.presence === "present");
             const args = commentsArgs(fresh, "add", kind);
@@ -187,7 +188,7 @@ export async function commentRowAction(action: string, index: unknown, lock: Mut
     if (action === "deleteComments" && !await confirmMutation("deleteComments", copy.deleteTitle, copy.deleteDetail, copy.delete)) return;
     await lock.run(async () => {
         const options = getOptions(), initial = await readComments(options, row.context);
-        if (!(await savePaths([row]))) {void vscode.window.showErrorMessage(copy.saveFailed); return;}
+        if (await savePaths([row]) === "failed") {void vscode.window.showErrorMessage(copy.saveFailed); return;}
         const fresh = await readComments(options, row.context);
         if ((fresh.guard ?? fresh.contexts[0]?.guard) !== (initial.guard ?? initial.contexts[0]?.guard)) {void vscode.window.showInformationMessage(STALE); return;}
         if (action === "prepareSharedComments") {
@@ -205,7 +206,7 @@ export async function commentRowAction(action: string, index: unknown, lock: Mut
                 await vscode.commands.executeCommand("vscode.diff", side("prepared"), side("destination"), copy.deliveryTitle);
                 return;
             }
-            if (!(await savePaths(files.filter(f => f.role !== "baseline").map(f => ({path: f.path, context: row.context, kind: "shared" as const, presence: f.presence, revision: f.revision}))))) {void vscode.window.showErrorMessage(copy.saveFailed); return;}
+            if (await savePaths(files.filter(f => f.role !== "baseline").map(f => ({path: f.path}))) === "failed") {void vscode.window.showErrorMessage(copy.saveFailed); return;}
             const ready = await readComments(options, row.context);
             if ((ready.guard ?? ready.contexts[0]?.guard) !== (fresh.guard ?? fresh.contexts[0]?.guard)) {void vscode.window.showInformationMessage(STALE); return;}
             const result = await invokeGitReview("comments", commentsArgs(ready, "prepare", "shared", row.context), options);
@@ -231,7 +232,7 @@ export async function commentRowAction(action: string, index: unknown, lock: Mut
                 let outcome: CommentPresentation[] | undefined;
                 const entered = await lock.run(async () => {
                     try {
-                        if (!await savePaths([row])) throw Error(copy.saveFailed);
+                        if (await savePaths([row]) === "failed") throw Error(copy.saveFailed);
                         const args = commentsArgs({...fresh, documents: report.documents}, "delete", row.kind, row.context, ordinal);
                         const result = await invokeGitReview("comments", args, options);
                         if (failure(result)) throw Error(failure(result));

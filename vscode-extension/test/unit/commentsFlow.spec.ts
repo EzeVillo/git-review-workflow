@@ -35,10 +35,16 @@ describe("comments flow", () => {
         assert.deepStrictEqual(selectionLines({line: 5, character: 0}, {line: 2, character: 4}), [3, 5]);
         assert.deepStrictEqual(selectionLines({line: 2, character: 4}, {line: 2, character: 4}), [3, 3]);
     });
+    it("distinguishes a clean buffer from a saved buffer", async () => {
+        const clean = {isDirty: false, save: async () => assert.fail("clean buffers are skipped")};
+        const dirty = {isDirty: true, save: async () => {dirty.isDirty = false; return true;}};
+        assert.strictEqual(await saveCommentBuffers([clean]), "unchanged");
+        assert.strictEqual(await saveCommentBuffers([dirty, clean]), "saved");
+    });
     for (const failure of ["false", "throw", "dirty"]) it("stops selective saving on " + failure, async () => {
         let secondSaved = false;
         const first = {isDirty: true, save: async () => {if (failure === "throw") throw Error("disk"); first.isDirty = failure === "dirty"; return failure !== "false";}};
-        assert.strictEqual(await saveCommentBuffers([first, {isDirty: true, save: async () => {secondSaved = true; return true;}}]), false);
+        assert.strictEqual(await saveCommentBuffers([first, {isDirty: true, save: async () => {secondSaved = true; return true;}}]), "failed");
         assert.strictEqual(secondSaved, false);
     });
 });

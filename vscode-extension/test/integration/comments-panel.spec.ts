@@ -245,6 +245,22 @@ describe("comments client integration", function () {
         assert.ok(api.commentComposerState()?.active);assert.strictEqual((await api.refresh()).comments?.documents.length,0);
         await api.sendCommentMessage({type:"cancel"});assert.strictEqual(api.commentComposerState(),undefined);
     });
+    it("adds against the new revision after saving pending Local edits", async () => {
+        const api = await getTestApi();
+        gitReviewOrThrow(["comments", "add", "--document", "local", "--text", "Initial note"], repo.dir);
+        const local = (await api.refresh()).comments!.documents.find(d => d.kind === "local")!;
+        const document = await vscode.workspace.openTextDocument(local.path);
+        const editor = await vscode.window.showTextDocument(document);
+        assert.ok(await editor.edit(edit => edit.insert(new vscode.Position(document.lineCount, 0), "Pending edit\n")));
+        assert.ok(document.isDirty);
+        await api.sendPanelMessage("addComment");
+        await api.sendCommentMessage({type: "save", kind: "local", text: "New comment"});
+        assert.strictEqual(api.commentComposerState(), undefined);
+        assert.strictEqual(document.isDirty, false);
+        const stored = fs.readFileSync(local.path, "utf8");
+        assert.ok(stored.includes("Initial note\nPending edit\n"));
+        assert.ok(stored.includes("New comment\n"));
+    });
     for(const mode of ["false","throw","dirty"])it("failed selective save retains the form: "+mode,async()=>{
         const api=await getTestApi();gitReviewOrThrow(["comments","add","--document","local","--text","Initial"],repo.dir);
         const report=(await api.refresh()).comments!;const local=report.documents.find(d=>d.kind==="local")!;

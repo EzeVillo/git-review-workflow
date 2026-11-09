@@ -2241,3 +2241,9 @@ Cada control vuelve a leer las claves de rama en bloque. Los controles después
 del lock y antes de publicar el candidato vuelven a resolver el estado y a
 comprobar la revisión del documento, de modo que una edición o un movimiento de
 cursor concurrentes siguen deteniendo la escritura.
+
+Cada lectura de una sesión obtiene dueño, contexto, custodio, sesión y, cuando
+corresponde, la base fijada en una sola pasada del manifest. Al enviar un
+comentario desde IntelliJ, VS Code o Visual Studio, el cliente reutiliza la
+lectura hecha dentro del lock de mutación si el editor no escribió el Markdown.
+Si lo escribió, consulta la nueva revisión antes de enviarla a la CLI.

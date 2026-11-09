@@ -53,10 +53,13 @@ export function commentsArgs(report: CommentsReport, operation: string, kind?: C
     return args;
 }
 export interface SavableComment {isDirty: boolean; save(): PromiseLike<boolean>}
-export async function saveCommentBuffers(documents: readonly SavableComment[]): Promise<boolean> {
+export type CommentBufferSave = "unchanged" | "saved" | "failed";
+export async function saveCommentBuffers(documents: readonly SavableComment[]): Promise<CommentBufferSave> {
+    let outcome: CommentBufferSave = "unchanged";
     for (const doc of documents) {
         if (!doc.isDirty) continue;
-        try {if (!(await doc.save()) || doc.isDirty) return false;} catch {return false;}
+        try {if (!(await doc.save()) || doc.isDirty) return "failed";} catch {return "failed";}
+        outcome = "saved";
     }
-    return true;
+    return outcome;
 }

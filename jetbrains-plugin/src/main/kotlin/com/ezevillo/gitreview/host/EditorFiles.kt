@@ -3,6 +3,7 @@ package com.ezevillo.gitreview.host
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
+import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
 import java.io.File
 import com.intellij.openapi.application.ApplicationManager
@@ -59,13 +60,19 @@ fun saveCommentFiles(paths: List<String>): Boolean {
  * both halves -- the same shape the diff path already used.
  */
 fun openInEditor(project: Project, path: String, onMissing: () -> Unit = {}) =
-    openInEditor(project, File(path), onMissing)
+    openInEditor(project, File(path), onMissing = onMissing)
 
-fun openInEditor(project: Project, file: File, onMissing: () -> Unit = {}) {
+fun openInEditor(project: Project, file: File, refreshContents: Boolean = false, onMissing: () -> Unit = {}) {
     Bg.async(
         project,
         "git review: opening ${file.name}",
-        work = { refreshAndFind(file) },
+        work = {
+            refreshAndFind(file)?.also { vf ->
+                // Path lookup may return the cached node after the CLI replaced
+                // its contents. Let VFS notify the open editor before focusing it.
+                if (refreshContents) VfsUtil.markDirtyAndRefresh(false, false, false, vf)
+            }
+        },
         then = { vf ->
             if (vf != null && vf.isValid) {
                 FileEditorManager.getInstance(project).openFile(vf, true)

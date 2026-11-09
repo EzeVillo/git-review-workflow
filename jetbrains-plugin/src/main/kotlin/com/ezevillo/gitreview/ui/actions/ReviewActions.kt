@@ -817,5 +817,5 @@ private fun pickSourceName(
 
 private fun openWalkthroughFile(project: Project, cwd: String?) {
     if (cwd == null) return
-    openInEditor(project, File(cwd, ".review/walkthrough.md"))
+    openInEditor(project, File(cwd, ".review/walkthrough.md"), refreshContents = true)
 }

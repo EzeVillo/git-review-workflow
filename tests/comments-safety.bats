@@ -58,6 +58,20 @@ teardown() { comments_teardown; }
 	comments_assert_snapshot "$COMMENTS_TMP/before" "$COMMENTS_TMP/after"
 }
 
+@test "comments add rejects duplicate pinned bases without changing the session" {
+	run --separate-stderr comments_start whole
+	[ "$status" -eq 0 ]
+	comments_fixture_session
+	printf 'full_base\t%s\nfull_base\t%s\n' "$COMMENTS_BASE" "$COMMENTS_TIP" >>"$COMMENTS_SESSION_DIR/manifest"
+	comments_snapshot "$COMMENTS_TMP/before"
+	run --separate-stderr git review comments add --document local --text 'Do not append.'
+	[ "$status" -eq 1 ]
+	[ "$output" = '' ]
+	[ "$stderr" = 'error: comments session ownership does not match' ]
+	comments_snapshot "$COMMENTS_TMP/after"
+	comments_assert_snapshot "$COMMENTS_TMP/before" "$COMMENTS_TMP/after"
+}
+
 @test "comments lock refuses an existing unknown owner and preserves it" {
 	mkdir -p "$COMMENTS_ROOT/locks/$COMMENTS_CONTEXT.lock"
 	printf 'unknown owner\n' >"$COMMENTS_ROOT/locks/$COMMENTS_CONTEXT.lock/owner"

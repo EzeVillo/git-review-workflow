@@ -528,17 +528,14 @@ comments_state() {
 		comments_require_token "$cm_session" || return 1
 		if [ -n "$cm_context" ]; then comments_require_token "$cm_context" || return 1; fi
 		cm_dir=$cm_root/sessions/$cm_session
-		_cm_manifest=$cm_dir/manifest
-		_cm_manifest_owner=$(comments_field "$_cm_manifest" owner_gitdir) || return 1
-		_cm_manifest_context=$(comments_field "$_cm_manifest" context) || return 1
-		_cm_custodian=$(comments_field "$_cm_manifest" custodian) || return 1
-		_cm_manifest_session=$(comments_field "$_cm_manifest" session) || return 1
-		if [ "$_cm_manifest_session" != "$cm_session" ] || [ "$_cm_manifest_owner" != "$cm_gitdir" ] || [ "$_cm_manifest_context" != "$cm_context" ] || [ "$_cm_custodian" != "$cm_branch" ]; then
+		comments_session_manifest "$cm_dir/manifest" "${cm_full_base:+full_base}" || return 1
+		if [ "$_csm_session" != "$cm_session" ] || [ "$_csm_owner" != "$cm_gitdir" ] ||
+			[ "$_csm_context" != "$cm_context" ] || [ "$_csm_custodian" != "$cm_branch" ]; then
 			comments_error 'comments session ownership does not match'; return 1
 		fi
 		# Identity belongs to the original full range, including after a fetch or
 		# a base advance while this session is materialized, saved or continued.
-		if [ -n "$cm_full_base" ]; then cm_full_base=$(comments_field "$_cm_manifest" full_base) || return 1; fi
+		cm_full_base=$_csm_full_base
 		if [ -n "$cm_context" ]; then cm_identity=resolved
 		else
 			cm_provisional=1
@@ -1879,26 +1876,29 @@ comments_check_orphan_claim() {
 
 # Read the four custody fields together. The sentinel preserves empty context
 # and missing fields through command substitution; values remain literal bytes.
-# No document body, identity resolution or history belongs to this check.
+# Capture can also read its pinned full_base from the same manifest. Custody
+# alone does not require it. No document bodies or history resolution here.
 comments_session_manifest() {
-	_csm_session='' _csm_context='' _csm_owner='' _csm_custodian=''
+	_csm_session='' _csm_context='' _csm_owner='' _csm_custodian='' _csm_full_base=''
 	comments_safe_path "$1" || return 1
 	if [ -e "$1" ] && [ ! -f "$1" ]; then comments_error "unsafe comments path: $1"; return 1; fi
 	[ -f "$1" ] || return 0
-	_csm_fields=$(awk -F '\t' '
-		$1=="session" || $1=="context" || $1=="owner_gitdir" || $1=="custodian" {
+	_csm_fields=$(awk -F '\t' -v capture="${2:-}" '
+		$1=="session" || $1=="context" || $1=="owner_gitdir" || $1=="custodian" ||
+			(capture=="full_base" && $1=="full_base") {
 			if (++seen[$1]>1) bad=1
 			value[$1]=substr($0,length($1)+2)
 		}
 		END {
 			if(bad) exit 1
-			printf "%s\n%s\n%s\n%s\n.\n",value["session"],value["context"],value["owner_gitdir"],value["custodian"]
+			printf "%s\n%s\n%s\n%s\n%s\n.\n",value["session"],value["context"],value["owner_gitdir"],value["custodian"],value["full_base"]
 		}' "$1") || { comments_error 'comments session ownership does not match'; return 1; }
 	{
 		IFS= read -r _csm_session
 		IFS= read -r _csm_context
 		IFS= read -r _csm_owner
 		IFS= read -r _csm_custodian
+		IFS= read -r _csm_full_base
 	} <<EOF
 $_csm_fields
 EOF

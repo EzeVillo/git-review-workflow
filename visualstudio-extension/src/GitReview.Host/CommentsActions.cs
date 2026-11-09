@@ -2,14 +2,21 @@ using GitReview.Domain;
 
 namespace GitReview.Host;
 
+public enum CommentBufferSave
+{
+    Unchanged,
+    Saved,
+    Failed,
+}
+
 /// <summary>Selective saves and CLI guards share the client's mutation lock.</summary>
 public sealed class CommentsActions
 {
     private readonly CliInvoker _cli;
     private readonly MutationLock _lock;
-    private readonly Func<string, Task<bool>> _save;
+    private readonly Func<string, Task<CommentBufferSave>> _save;
     private readonly Func<Task> _refresh;
-    public CommentsActions(CliInvoker cli, MutationLock mutationLock, Func<string, Task<bool>> save, Func<Task> refresh)
+    public CommentsActions(CliInvoker cli, MutationLock mutationLock, Func<string, Task<CommentBufferSave>> save, Func<Task> refresh)
     { _cli=cli; _lock=mutationLock; _save=save; _refresh=refresh; }
 
     public async Task<CommentsReport> ReadAsync(string cwd, string? context = null)
@@ -21,7 +28,8 @@ public sealed class CommentsActions
     public static string? Guard(CommentsReport report, string? context) => report.Guard ?? report.Records("comments-context").FirstOrDefault(c=>c[0]==context)?[3];
 
     public Task<InvokeResult?> RunAsync(string cwd, string operation, string? document, string? context, string capturedGuard,
-        string? input = null, CommentCapture? capture = null, int? ordinal = null, string? expectedRevision = null, string? contextChoice = null, bool porcelain = false, bool check = false, IReadOnlyList<string>? additionalSavePaths = null)
+        string? input = null, CommentCapture? capture = null, int? ordinal = null, string? expectedRevision = null, string? contextChoice = null, bool porcelain = false, bool check = false, IReadOnlyList<string>? additionalSavePaths = null,
+        Action<CommentsReport>? beforeInvoke = null)
         => _lock.RunAsync(async () => {
             try
             {
@@ -29,10 +37,21 @@ public sealed class CommentsActions
                 if (Guard(current,context)!=capturedGuard) return new InvokeResult("",UserCopy.Stale,4);
                 var active=new HashSet<string>(current.Records("comments-context").Where(c=>c[2]=="active").Select(c=>c[0]));
                 var affected=current.Documents.Where(d=>(context is null ? active.Contains(d.Context) : d.Context==context) && (operation=="save" || d.Kind==document)).ToArray();
-                foreach (var path in affected.Select(d=>d.Path).Concat(additionalSavePaths ?? Array.Empty<string>()).Distinct(StringComparer.OrdinalIgnoreCase)) if (!await _save(path).ConfigureAwait(true)) return new InvokeResult("",CommentsCopy.saveFailed,1);
-                var fresh=await ReadAsync(cwd,context).ConfigureAwait(true);
-                if (Guard(fresh,context)!=capturedGuard) return new InvokeResult("",UserCopy.Stale,4);
-                var args=Comments.Argv(fresh,operation,document,context,ordinal).ToList();
+                var saved = false;
+                foreach (var path in affected.Select(d=>d.Path).Concat(additionalSavePaths ?? Array.Empty<string>()).Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    var outcome = await _save(path).ConfigureAwait(true);
+                    if (outcome == CommentBufferSave.Failed) return new InvokeResult("",CommentsCopy.saveFailed,1);
+                    saved |= outcome == CommentBufferSave.Saved;
+                }
+                // Add already passes the context and document revision to the CLI.
+                // Only a buffer we wrote requires another read to get its revision.
+                if (operation != "add" || saved)
+                {
+                    current = await ReadAsync(cwd,context).ConfigureAwait(true);
+                    if (Guard(current,context)!=capturedGuard) return new InvokeResult("",UserCopy.Stale,4);
+                }
+                var args=Comments.Argv(current,operation,document,context,ordinal).ToList();
                 if (porcelain) args.Add("--porcelain");
                 if (check) args.Add("--check");
                 if (expectedRevision is not null) {var i=args.IndexOf("--expect-document");if(i>=0)args[i+1]=expectedRevision;}
@@ -47,6 +66,7 @@ public sealed class CommentsActions
                     if(capture.BasePath is not null)args.AddRange(new[]{"--base-path",capture.BasePath});
                     if(capture.HeadPath is not null)args.AddRange(new[]{"--head-path",capture.HeadPath});
                 }
+                beforeInvoke?.Invoke(current);
                 return input is null ? await _cli.InvokeAsync("comments",args,cwd).ConfigureAwait(true) : await _cli.InvokeWithInputAsync("comments",args,cwd,input).ConfigureAwait(true);
             }
             catch(Exception error){return new InvokeResult("",error.Message,1);}

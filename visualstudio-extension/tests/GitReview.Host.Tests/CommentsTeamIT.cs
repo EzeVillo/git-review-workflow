@@ -21,7 +21,7 @@ public class CommentsTeamIT
         var cwd = Path.Combine(root, "reviewer");
         var cli = new CliInvoker(() => Path.Combine(source.FullName, "bin/git-review"));
         var refreshes = 0;
-        var actions = new CommentsActions(cli, new MutationLock(), _ => Task.FromResult(true), () => { refreshes++; return Task.CompletedTask; });
+        var actions = new CommentsActions(cli, new MutationLock(), _ => Task.FromResult(CommentBufferSave.Unchanged), () => { refreshes++; return Task.CompletedTask; });
         async Task Review(string verb, params string[] args)
         {
             var result = await cli.InvokeAsync(verb, args, cwd);

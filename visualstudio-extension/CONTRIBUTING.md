@@ -269,7 +269,9 @@ identifica la custodia de cada sesión y `status --all` permite guardar sólo lo
 Markdown afectados por un descarte explícito. No se guarda código ni se usa Save All.
 
 Cada mutación usa el lock del cliente, conserva el guard capturado antes de mover
-el foco, guarda únicamente los Markdown exactos y vuelve a leer su revisión.
+el foco y guarda únicamente los Markdown exactos. Al agregar un comentario,
+el cliente reutiliza la lectura bajo el lock para el documento y para detectar
+el primer comentario. Si se guardó un buffer, vuelve a leer su revisión.
 Un save falso, cancelado, con excepción o que deja el buffer sucio impide invocar
 la CLI. El cuerpo viaja por stdin UTF-8 cerrado, separado del argv y del log.
 La selección histórica usa ordinal físico y revisión; los visores leen blobs

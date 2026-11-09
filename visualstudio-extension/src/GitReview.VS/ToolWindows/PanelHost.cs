@@ -1,3 +1,5 @@
+using GitReview.Host;
+
 namespace GitReview.VS.ToolWindows;
 
 /// <summary>
@@ -23,7 +25,7 @@ public sealed record DiffRequest(string Title, DiffSide Left, DiffSide Right);
 public sealed class PanelHost
 {
     public Func<Task<GitReview.Domain.CommentCapture?>>? CaptureComment { get; init; }
-    public Func<string, Task<bool>>? SaveCommentPath { get; init; }
+    public Func<string, Task<CommentBufferSave>>? SaveCommentPath { get; init; }
     /// <summary>False proves there is nothing to save; null preserves the CLI inventory query.</summary>
     public Func<Task<bool?>>? HasUnsavedDocuments { get; init; }
     public Func<GitReview.Domain.CommentsReport,Task>? OpenCommentBlobs { get; init; }

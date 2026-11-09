@@ -2,6 +2,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using GitReview.Domain;
+using GitReview.Host;
 using GitReview.VS.Settings;
 using GitReview.VS.ToolWindows;
 using Microsoft.VisualStudio;
@@ -208,11 +209,11 @@ public sealed class VsHostActions
         catch (Exception) { return null; }
     }
 
-    private async Task<bool> SaveCommentPathAsync(string path)
+    private async Task<CommentBufferSave> SaveCommentPathAsync(string path)
     {
         await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
         if (_serviceProvider.GetService(typeof(SVsRunningDocumentTable)) is not IVsRunningDocumentTable rdt)
-            return false;
+            return CommentBufferSave.Failed;
         var hr = rdt.FindAndLockDocument(
             (uint)_VSRDTFLAGS.RDT_NoLock,
             path,
@@ -227,17 +228,21 @@ public sealed class VsHostActions
             try { persisted = Marshal.GetObjectForIUnknown(docData) as IVsPersistDocData; }
             finally { Marshal.Release(docData); }
         }
-        if (ErrorHandler.Failed(hr)) return false;
-        if (cookie == 0) return true;
         // The file is not open here at all when there is no cookie — nothing to flush,
         // and the CLI will read what is on disk, which is what the reviewer wrote.
+        if (ErrorHandler.Failed(hr)) return CommentBufferSave.Failed;
+        if (cookie == 0) return CommentBufferSave.Unchanged;
+        if (persisted is null || ErrorHandler.Failed(persisted.IsDocDataDirty(out var dirty)))
+            return CommentBufferSave.Failed;
+        if (dirty == 0) return CommentBufferSave.Unchanged;
         var saved = rdt.SaveDocuments(
             (uint)__VSRDTSAVEOPTIONS.RDTSAVEOPT_SaveIfDirty,
             null,
             (uint)VSConstants.VSITEMID.Nil,
             cookie);
-        if (ErrorHandler.Failed(saved) || persisted is null) return false;
-        return ErrorHandler.Succeeded(persisted.IsDocDataDirty(out var dirty)) && dirty == 0;
+        return ErrorHandler.Succeeded(saved) && ErrorHandler.Succeeded(persisted.IsDocDataDirty(out dirty)) && dirty == 0
+            ? CommentBufferSave.Saved
+            : CommentBufferSave.Failed;
     }
 
     private async Task<CommentCapture?> CaptureCommentAsync()

@@ -2203,6 +2203,12 @@ sin elevar el mínimo: la opción sólo se envía cuando se anunció la capacida
 La verificación y las mediciones viven en
 `specs/rendimiento/2026-11-08-respuesta-save.md`.
 
+Save comprueba la rama de regreso con `git worktree list --porcelain` antes de
+transferir la custodia, cambiar el índice o archivar el borrador. Git no permite
+volver a una rama que está activa en otro worktree; si lo descubre en el
+`switch` final, quedan dos refs y Save y Continue se bloquean entre sí. El
+diagnóstico ahora permite liberar la rama y reintentar con la review intacta.
+
 ## 31. Consultar custodia y rutas antes de guardar buffers
 
 El inventario de Comments resolvía captura, historia, revisiones y conteos para

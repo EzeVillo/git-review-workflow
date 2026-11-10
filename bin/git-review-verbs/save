@@ -97,6 +97,14 @@ elif [ -n "$base" ] && git rev-parse --verify --quiet "refs/heads/$base" >/dev/n
 fi
 [ -n "$target" ] || die "could not determine a branch to return to; switch away manually first"
 
+# Git refuses to switch to a branch checked out elsewhere. Ask before banking
+# edits, transferring comments or moving a draft. Match the complete porcelain
+# ref, without interpreting the worktree path or relying on newer Git atoms.
+_save_worktrees="$(git worktree list --porcelain)" || die "could not check worktrees for the return branch '$target'"
+if printf '%s\n' "$_save_worktrees" | grep -Fqx "branch refs/heads/$target"; then
+	die "cannot save: return branch '$target' is checked out in another worktree; switch that worktree to a different branch and retry"
+fi
+
 # Does the archive already hold a draft under the name this review would file its
 # own under? The move at the end of this script is an mv: without this guard it
 # replaced whatever was there and said nothing — the one place in the suite where

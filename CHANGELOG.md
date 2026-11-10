@@ -49,6 +49,8 @@ This file starts at 0.2.1. Earlier versions are only in the
 
 ### Fixed
 
+- Save leaves the review untouched when the return branch is checked out in
+  another worktree, so you can free that branch and retry.
 - When resuming Finish, reject unresolved conflicts introduced by the replay.
   Confirm an unmerged path with Git if keeping the version the replay left in
   the working tree.

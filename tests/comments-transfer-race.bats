@@ -12,6 +12,42 @@ setup() {
 }
 teardown() { comments_teardown; }
 
+@test "save leaves the review intact when the return branch is in another worktree" {
+	local linked="$COMMENTS_TMP/return worktree"
+	local draft=.git/review-walkthrough/feature/comments.md
+	local archived=.git/review-saved-walkthrough/feature/comments.md
+	mkdir -p "$(dirname "$draft")"
+	sed 's/Read the changed line\./Keep this draft./' .review/walkthrough.md >"$COMMENTS_TMP/draft-before"
+	cp "$COMMENTS_TMP/draft-before" "$draft"
+	printf 'unstaged edit\n' >>sample.txt
+	git worktree add -q "$linked" main
+	comments_snapshot "$COMMENTS_TMP/before"
+
+	run --separate-stderr git review save --porcelain
+	[ "$status" -eq 1 ]
+	[ "$output" = '' ]
+	[ "$stderr" = "error: cannot save: return branch 'main' is checked out in another worktree; switch that worktree to a different branch and retry" ]
+	comments_snapshot "$COMMENTS_TMP/after"
+	comments_assert_snapshot "$COMMENTS_TMP/before" "$COMMENTS_TMP/after"
+	cmp "$COMMENTS_TMP/draft-before" "$draft"
+	[ ! -e "$archived" ]
+	[ "$(git -C "$linked" symbolic-ref --short HEAD)" = main ]
+
+	git -C "$linked" switch -qc main-other
+	run --separate-stderr git review save --porcelain
+	[ "$status" -eq 0 ]
+	[ "$stderr" = '' ]
+	cmp "$COMMENTS_TMP/draft-before" "$archived"
+	run --separate-stderr git review continue feature/comments
+	[ "$status" -eq 0 ]
+	[ "$stderr" = '' ]
+	comments_snapshot "$COMMENTS_TMP/resumed"
+	comments_assert_snapshot "$COMMENTS_TMP/before" "$COMMENTS_TMP/resumed" branch head index staged unstaged worktree
+	cmp "$COMMENTS_TMP/draft-before" "$draft"
+	cmp "$COMMENTS_TMP/local-before" "$COMMENTS_LOCAL"
+	[ ! -e "$archived" ]
+}
+
 intercept_transfer() {
 	export TRANSFER_REAL_AWK="$(command -v awk)" TRANSFER_REAL_GIT="$(command -v git)" TRANSFER_REAL_MV="$(command -v mv)" TRANSFER_FAULT="$1"
 	mkdir "$COMMENTS_TMP/transfer-bin"

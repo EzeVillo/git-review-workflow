@@ -925,6 +925,9 @@ left off:
   `refs/review-edits/` (which `git review clean` prunes) into
   `refs/review-saved-edits/`, so a `git review clean` never touches a saved review.
 
+If the return branch is checked out in another worktree, Save leaves the review
+as it is. Switch that worktree to a different branch, then retry.
+
 `git review continue` turns `review-saved/<branch>` back into the active
 `review/<branch>` and restores that exact state — in `--step` mode it drops you
 back on the same commit, with `git review next` / `git review prev` working as

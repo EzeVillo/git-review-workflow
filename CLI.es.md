@@ -949,6 +949,9 @@ que empezaste, llevándose todo lo necesario para retomar justo donde lo dejaste
   `refs/review-saved-edits/`, así un `git review clean` nunca toca una review
   guardada.
 
+Si la rama de regreso está activa en otro worktree, Save deja la review como
+está. Cambiá ese worktree a otra rama y volvé a intentar.
+
 `git review continue` convierte `review-saved/<rama>` de nuevo en la
 `review/<rama>` activa y restaura ese estado exacto — en modo `--step` te deja de
 vuelta en el mismo commit, con `git review next` / `git review prev` funcionando

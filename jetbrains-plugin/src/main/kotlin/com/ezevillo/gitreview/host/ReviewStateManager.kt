@@ -20,6 +20,7 @@ import com.ezevillo.gitreview.domain.parseSaveReply
 import com.ezevillo.gitreview.domain.hasSaveState
 import com.ezevillo.gitreview.domain.SaveReply
 import com.ezevillo.gitreview.domain.CommentsAddReply
+import com.ezevillo.gitreview.domain.CommentsReport
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -34,6 +35,8 @@ class ReviewStateManager(
     @Volatile
     var current: ReviewState = ReviewState(situation = Situation.ERROR, stderr = "not refreshed yet")
         private set
+    private var currentGeneration = -1L
+    private var currentCwd: String? = null
 
     private var versionCheckedGeneration: Long = -1
 
@@ -41,14 +44,24 @@ class ReviewStateManager(
         versionCheckedGeneration = -1
     }
 
-    private fun accept(gen: Long, state: ReviewState, onPrimary: ((ReviewState) -> Unit)? = null) {
+    private fun accept(gen: Long, state: ReviewState, onPrimary: ((ReviewState) -> Unit)? = null, cwd: String? = null) {
         synchronized(stateGate) {
             if (gen != generation.get()) return
             current = state
+            currentGeneration = gen
+            currentCwd = cwd
             // Keep publication and its in-memory notification ordered. Otherwise
             // an older callback could launch prose after a newer primary report.
             onPrimary?.invoke(state)
         }
+    }
+
+    fun commentsForComposer(cwd: String): CommentsReport? = synchronized(stateGate) {
+        if (currentCwd != cwd || currentGeneration != generation.get() || current.guard == null) return@synchronized null
+        val report = current.comments ?: return@synchronized null
+        val identity = report.records("comments-identity").singleOrNull()?.firstOrNull()
+        report.takeIf { it.guard != null && !it.loading && (identity == "fresh" || identity == "resolved") &&
+            it.records("comments-diagnostic").none { diagnostic -> diagnostic[1] == "read" } }
     }
 
     fun captureCommentsAdd() = synchronized(stateGate) { PendingRead(generation.get(), current, null) }
@@ -56,7 +69,10 @@ class ReviewStateManager(
     fun applyCommentsAdd(snapshot: PendingRead, reply: CommentsAddReply): ReviewState? = synchronized(stateGate) {
         if (current !== snapshot.state || snapshot.state.guard != reply.before ||
             !generation.compareAndSet(snapshot.generation, snapshot.generation + 1)) return@synchronized null
-        snapshot.state.copy(guard = reply.after, comments = reply.report).also { current = it }
+        snapshot.state.copy(guard = reply.after, comments = reply.report).also {
+            current = it
+            currentGeneration = snapshot.generation + 1
+        }
     }
 
     /**
@@ -81,7 +97,7 @@ class ReviewStateManager(
         val parsed = com.ezevillo.gitreview.domain.parseComments(report.stdout)
         val complete = pending.state.copy(comments = if (report.exitCode == 0 && !report.timedOut && report.errorCode == null) parsed else
             parsed.copy(rows = parsed.rows + com.ezevillo.gitreview.domain.CommentRow("comments-diagnostic", listOf("", "read", report.stderr))))
-        accept(pending.generation, complete)
+        accept(pending.generation, complete, cwd = pending.cwd)
         return complete.takeIf { current === it }
     }
 
@@ -291,13 +307,14 @@ class ReviewStateManager(
         val complete = if (includeComments && (status.exitCode == 0 || status.exitCode == 2)) {
             if (publish && gen == generation.get()) {
                 val primary = guarded.copy(comments = com.ezevillo.gitreview.domain.CommentsReport(loading = true))
-                accept(gen, primary, onPrimary)
+                accept(gen, primary, onPrimary, cwd)
             }
             val report = invoker.invoke("comments", listOf("status", "--porcelain"), cwd)
             val parsed = com.ezevillo.gitreview.domain.parseComments(report.stdout)
-            guarded.copy(comments = if (report.exitCode == 0) parsed else parsed.copy(rows = parsed.rows + com.ezevillo.gitreview.domain.CommentRow("comments-diagnostic", listOf("", "read", report.stderr))))
+            guarded.copy(comments = if (report.exitCode == 0 && !report.timedOut && report.errorCode == null) parsed else
+                parsed.copy(rows = parsed.rows + com.ezevillo.gitreview.domain.CommentRow("comments-diagnostic", listOf("", "read", report.stderr))))
         } else guarded
-        if (publish) accept(gen, complete, if (deferComments) onPrimary else null)
+        if (publish) accept(gen, complete, if (deferComments) onPrimary else null, cwd)
         return complete
     }
 

@@ -289,6 +289,7 @@ export class ReviewStateManager {
     private versionCheckGeneration = 0;
     private versionCheckedGeneration = -1;
     private current: ReviewState = {situation: "no-review", ...EMPTY_ARRAYS};
+    private currentCwd?: string;
     private inFlight: Promise<ReviewState> | undefined;
     private primaryInFlight: Promise<ReviewState> | undefined;
     private resolved = false;
@@ -383,6 +384,15 @@ export class ReviewStateManager {
 
     invalidatePendingReads(): void { this.readId++; }
 
+    commentsForComposer(cwd: string | undefined): CommentsReport | undefined {
+        const report = this.current.comments;
+        if (!cwd || this.currentCwd !== cwd || this.current.readId !== this.readId || this.primaryInFlight ||
+            this.versionCheckedGeneration !== this.versionCheckGeneration || !this.current.guard ||
+            !report?.guard || report.loading || (report.identity !== "resolved" && report.identity !== "fresh") ||
+            report.diagnostics.some(diagnostic => diagnostic.code === "read")) return undefined;
+        return report;
+    }
+
     captureCommentsAdd() {
         return {state: this.current, generation: this.readId};
     }
@@ -391,7 +401,7 @@ export class ReviewStateManager {
         const reply = parseCommentsAddReply(stdout, document);
         if (!reply || this.current !== snapshot.state || snapshot.generation !== this.readId || snapshot.state.guard !== reply.before ||
             this.getOptions().cwd !== cwd) return false;
-        this.setState({...snapshot.state, readId: ++this.readId, guard: reply.after, comments: reply.report});
+        this.setState({...snapshot.state, readId: ++this.readId, guard: reply.after, comments: reply.report}, cwd);
         return true;
     }
 
@@ -399,9 +409,10 @@ export class ReviewStateManager {
         this.changeEmitter.dispose();
     }
 
-    private setState(next: ReviewState): ReviewState {
+    private setState(next: ReviewState, cwd: string | undefined): ReviewState {
         this.resolved = true;
         this.current = next;
+        this.currentCwd = cwd;
         this.changeEmitter.fire(next);
         return next;
     }
@@ -409,7 +420,7 @@ export class ReviewStateManager {
     private async doRefresh(primaryOnly = false, statusReply?: Awaited<ReturnType<typeof invokeGitReview>>, saveReply?: SaveReply): Promise<ReviewState> {
         const options = this.getOptions();
         const readId = ++this.readId;
-        const accept = (next: ReviewState): ReviewState => readId === this.readId ? this.setState(next) : this.current;
+        const accept = (next: ReviewState): ReviewState => readId === this.readId ? this.setState(next, options.cwd) : this.current;
         // Sin cwd no hay `git review` que invocar (multi-root ambiguo o workspace
         // sin carpeta): no inventar un proceso en process.cwd() del host.
         if (!options.cwd) {

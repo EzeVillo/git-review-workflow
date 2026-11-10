@@ -2265,3 +2265,9 @@ sobre la misma lectura que originó el envío. Una respuesta ausente, incompleta
 u obsoleta vuelve al refresco completo sin repetir la escritura.
 El informe obtiene recuento y diagnósticos en una pasada por documento, sin
 armar los registros de prosa y ubicación de `comments entries`.
+
+Para abrir el formulario, la TUI ya usa el informe publicado en el panel.
+Los IDE lo reutilizan si la generación y el repositorio siguen vigentes y
+el informe está completo. Si todavía carga, falló o hay una elección ambigua
+de contexto, consultan la CLI. El guard del informe sigue siendo obligatorio
+al enviar.

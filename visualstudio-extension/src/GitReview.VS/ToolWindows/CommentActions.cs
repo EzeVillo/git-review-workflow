@@ -18,7 +18,9 @@ public sealed partial class ActionDispatcher
         var cwd=Cwd;if(cwd is null || State.Situation is not (Situation.Review or Situation.FinishConflict))return;
         var capture=_host.CaptureComment is null ? null : await _host.CaptureComment().ConfigureAwait(true);
         if(State.Situation==Situation.FinishConflict)capture=null;
-        var flow=CommentFlow();var initial=await flow.ReadAsync(cwd).ConfigureAwait(true);if(initial.Guard is null || initial.Destinations().Count==0)return;
+        var flow = CommentFlow();
+        var initial = _panel.State.CommentsForComposer(cwd) ?? await flow.ReadAsync(cwd).ConfigureAwait(true);
+        if (initial.Guard is null || initial.Destinations().Count == 0) return;
         string? contextChoice=null;
         if(initial.Records("comments-identity").Any(i=>i[0]=="ambiguous")) {
             var candidates=initial.Records("comments-candidate").ToArray();

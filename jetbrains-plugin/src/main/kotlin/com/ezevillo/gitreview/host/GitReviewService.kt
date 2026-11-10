@@ -119,6 +119,8 @@ class GitReviewService(private val project: Project) : Disposable {
 
     fun currentState(): ReviewState = stateManager.current
 
+    fun commentsForComposer(root: String) = stateManager.commentsForComposer(root)
+
     fun captureCommentsAdd() = stateManager.captureCommentsAdd()
 
     fun applyCommentsAdd(root: String, snapshot: ReviewStateManager.PendingRead, reply: CommentsAddReply): Boolean {

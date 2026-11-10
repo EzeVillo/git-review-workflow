@@ -9,6 +9,31 @@ namespace GitReview.Host.Tests;
 /// </summary>
 public class ReviewStateManagerTests
 {
+    [Fact] public async Task Composer_reuses_only_completed_comments_for_the_current_read_and_root()
+    {
+        const string report = "comments-guard\tcomment-guard\ncomments-capability\tadd\tlocal\ncomments-identity\t";
+        var cli = new FakeCliInvoker().Answer("status", WalkStatus + "\nguard\t" + new string('a', 40))
+            .Answer("comments", report + "fresh\tContext");
+        var manager = Manager(cli, "/repo");
+        manager.StateChanged += state =>
+        {
+            if (state.Comments?.Loading == true) Assert.Null(manager.CommentsForComposer("/repo"));
+        };
+        var current = await manager.RefreshAsync();
+        cli.Calls.Clear();
+        Assert.Same(current.Comments, manager.CommentsForComposer("/repo"));
+        Assert.Null(manager.CommentsForComposer("/other"));
+        manager.InvalidatePendingReads();
+        Assert.Null(manager.CommentsForComposer("/repo"));
+        Assert.Empty(cli.Calls);
+        cli.Answer("comments", report + "ambiguous\tChoose");
+        await manager.RefreshAsync();
+        Assert.Null(manager.CommentsForComposer("/repo"));
+        cli.Fails("comments", "Read failed");
+        await manager.RefreshAsync();
+        Assert.Null(manager.CommentsForComposer("/repo"));
+    }
+
     [Fact] public async Task Comment_reply_replaces_only_the_current_read()
     {
         var before = new string('a', 40);

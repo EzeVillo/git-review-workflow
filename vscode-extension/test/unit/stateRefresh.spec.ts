@@ -55,6 +55,32 @@ describe("incremental review refresh", () => {
         "entry\t1\ta.txt\t0\t1\nentry\t2\tb.txt\t0\t1\ncapability\tnavigation-state\n" +
         `guard\t${guard}\nnavigation\tmoved\n`;
 
+    it("reuses only the complete comments report for the current workspace read", async () => {
+        const calls: string[] = [];
+        let identity = "fresh";
+        let commentsExit = 0;
+        const {manager} = pipeline(async verb => {
+            calls.push(verb);
+            return {exitCode: verb === "comments" ? commentsExit : 0, stderr: "", stdout:
+                verb === "--version" ? "999.0.0\n" : verb === "status" ? reply() :
+                    `comments-guard\tcomment-guard\ncomments-identity\t${identity}\tContext\ncomments-capability\tadd\tlocal\n`};
+        });
+        const current = await manager.refresh();
+        calls.length = 0;
+        assert.strictEqual(manager.commentsForComposer("/repo"), current.comments);
+        assert.strictEqual(manager.commentsForComposer("/other"), undefined);
+        manager.invalidatePendingReads();
+        assert.strictEqual(manager.commentsForComposer("/repo"), undefined);
+        assert.deepStrictEqual(calls, []);
+        identity = "ambiguous";
+        await manager.refresh();
+        assert.strictEqual(manager.commentsForComposer("/repo"), undefined);
+        identity = "resolved";
+        commentsExit = 1;
+        await manager.refresh();
+        assert.strictEqual(manager.commentsForComposer("/repo"), undefined);
+    });
+
     it("the mutation's actual primary read consumes earlier watcher requests before querying the CLI", async () => {
         const gate = new RefreshGate();
         const calls: string[] = [];

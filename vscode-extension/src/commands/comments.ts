@@ -133,7 +133,7 @@ export async function addComment(lock: MutationLock, manager: ReviewStateManager
     const location = manager.state.situation === "finish-conflict" ? undefined : captureLocation(options.cwd);
     const opaque = !location && !!vscode.window.activeTextEditor && manager.state.situation !== "finish-conflict";
     if (!["review", "finish-conflict"].includes(manager.state.situation)) return;
-    const initial = await readComments(options);
+    const initial = manager.commentsForComposer(options.cwd) ?? await readComments(options);
     const destinations = commentDestinations(initial);
     const guard = initial.guard;
     if (!guard || !destinations.length) return;

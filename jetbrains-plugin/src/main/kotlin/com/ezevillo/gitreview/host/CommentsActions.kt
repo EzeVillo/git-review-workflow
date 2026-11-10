@@ -41,7 +41,7 @@ class CommentsActions(private val project: Project, private val service: GitRevi
         val location = captured.takeUnless { service.currentState().situation == Situation.FINISH_CONFLICT }
         val root = cwd() ?: return
         if (!isReviewReadable(service.currentState().situation)) return
-        Bg.async(project, CommentsCopy.add, work = { read(root) }, then = { initial ->
+        Bg.async(project, CommentsCopy.add, work = { service.commentsForComposer(root) ?: read(root) }, then = { initial ->
             val destinations = initial.destinations()
             val guard = initial.guard ?: return@async
             if (destinations.isEmpty()) return@async

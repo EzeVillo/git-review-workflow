@@ -140,6 +140,28 @@ func TestSoleCliDestinationSkipsSelectorAndSubmits(t *testing.T) {
 		}
 	}
 }
+
+func TestCommentComposerWaitsForCompletePanelReport(t *testing.T) {
+	m := commentModel()
+	m.commentsForm = nil
+	m.Panel.CommentsLoading = true
+	waiting, cmd := m.beginAddComment()
+	if waiting.commentsForm != nil || cmd != nil {
+		t.Fatal("pending report opened the composer")
+	}
+	m.Panel.CommentsLoading = false
+	m.Panel.CommentsError = "Read failed"
+	failed, cmd := m.beginAddComment()
+	if failed.commentsForm != nil || cmd != nil {
+		t.Fatal("failed report opened the composer")
+	}
+	m.Panel.CommentsError = ""
+	ready, _ := m.beginAddComment()
+	if ready.commentsForm == nil || ready.commentsForm.Guard != "step1" {
+		t.Fatal("complete report did not open a guarded composer")
+	}
+}
+
 func TestCommentsContextPickerShowsDetailsAndKeepsOpaqueIdentity(t *testing.T) {
 	m := commentModel()
 	m.Panel.Comments = "comments-capability\tadd\tlocal\ncomments-capability\tadd\tshared\ncomments-guard\tg\ncomments-identity\tambiguous\tChoose\ncomments-candidate\tc1\tfeature\tReview 1 · shared: 2\ncomments-candidate\tc2\tfeature\tReview 2 · shared: 1"

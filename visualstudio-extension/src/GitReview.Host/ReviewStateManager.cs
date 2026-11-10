@@ -15,6 +15,8 @@ public sealed class ReviewStateManager
     private ReviewState _state = new(Situation.CliMissing);
     private readonly object _gate = new();
     private int _refreshGen;
+    private int _publishedGen = -1;
+    private string? _publishedCwd;
 
     public event Action<ReviewState>? StateChanged;
 
@@ -53,6 +55,20 @@ public sealed class ReviewStateManager
 
     public void InvalidatePendingReads() => Interlocked.Increment(ref _refreshGen);
 
+    public CommentsReport? CommentsForComposer(string cwd)
+    {
+        lock (_gate)
+        {
+            var report = _state.Comments;
+            if (_publishedGen != Volatile.Read(ref _refreshGen) ||
+                !string.Equals(_publishedCwd, cwd, StringComparison.OrdinalIgnoreCase) ||
+                _state.Guard is null || report is null || report.Guard is null || report.Loading ||
+                report.Records("comments-identity").FirstOrDefault()?.FirstOrDefault() is not ("fresh" or "resolved") ||
+                report.Records("comments-diagnostic").Any(diagnostic => diagnostic[1] == "read")) return null;
+            return report;
+        }
+    }
+
     public (ReviewState State, int Generation) CaptureCommentsAdd()
     {
         lock (_gate) return (_state, Volatile.Read(ref _refreshGen));
@@ -68,6 +84,8 @@ public sealed class ReviewStateManager
                 Interlocked.CompareExchange(ref _refreshGen, snapshot.Generation + 1, snapshot.Generation) != snapshot.Generation) return false;
             next = snapshot.State with { Guard = reply.After, Comments = reply.Report };
             _state = next;
+            _publishedGen = snapshot.Generation + 1;
+            _publishedCwd = cwd;
         }
         StateChanged?.Invoke(next);
         return true;
@@ -85,9 +103,9 @@ public sealed class ReviewStateManager
         bool deferComments = false, InvokeResult? statusReply = null, SaveReply? saveReply = null)
     {
         var gen = Interlocked.Increment(ref _refreshGen);
-        ReviewState Complete(ReviewState state) => publish ? Publish(state, gen) : state;
         var roots = _repoRoots();
         var sole = SoleTarget.PickSoleTarget(roots);
+        ReviewState Complete(ReviewState state) => publish ? Publish(state, gen, sole) : state;
 
         if (roots.Count > 1)
         {
@@ -284,10 +302,11 @@ public sealed class ReviewStateManager
         }
         if (includeComments && (status.ExitCode is 0 or 2))
         {
-            if (publish) Publish(next with { Comments = new CommentsReport(Array.Empty<CommentRow>(), Loading: true) }, gen);
+            if (publish) Publish(next with { Comments = new CommentsReport(Array.Empty<CommentRow>(), Loading: true) }, gen, sole);
             var response = await _cli.InvokeAsync("comments", new[]{"status", "--porcelain"}, sole, cancellationToken: ct).ConfigureAwait(false);
             var comments = Comments.Parse(response.Stdout);
-            if (response.ExitCode != 0) comments = comments with { Rows = comments.Rows.Concat(new[]{new CommentRow("comments-diagnostic", new[]{"", "read", response.Stderr})}).ToArray() };
+            if (response.ExitCode != 0 || response.TimedOut || response.ErrorCode is not null)
+                comments = comments with { Rows = comments.Rows.Concat(new[]{new CommentRow("comments-diagnostic", new[]{"", "read", response.Stderr})}).ToArray() };
             next = next with { Comments = comments };
         }
         return Complete(next);
@@ -309,7 +328,7 @@ public sealed class ReviewStateManager
         {
             comments = new CommentsReport(new[]{new CommentRow("comments-diagnostic", new[]{"", "read", ex.Message})});
         }
-        Publish(primary with { Comments = comments }, gen);
+        Publish(primary with { Comments = comments }, gen, cwd);
     }
 
     /// <summary>
@@ -329,13 +348,15 @@ public sealed class ReviewStateManager
                 || r.Stderr.Contains("ENOENT", StringComparison.OrdinalIgnoreCase)
                 || r.ErrorCode is "Win32Exception" or "FileNotFoundException"));
 
-    private ReviewState Publish(ReviewState state, int gen)
+    private ReviewState Publish(ReviewState state, int gen, string? cwd)
     {
         lock (_gate)
         {
             if (gen != Volatile.Read(ref _refreshGen)) return _state;
             HasResolved = true;
             _state = state;
+            _publishedGen = gen;
+            _publishedCwd = cwd;
         }
         StateChanged?.Invoke(state);
         return state;

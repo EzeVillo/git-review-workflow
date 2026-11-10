@@ -130,6 +130,11 @@ func (f *CommentsForm) render(vp Viewport) string {
 	return marker(8) + domain.CommentsScope + ": " + scope + " (" + arrows + ")\n" + fmt.Sprintf("%s\n\n%s%s%s\n%s%s: %s\n%s%s: %s (%s)\n%s%s: %s\n%s%s: %s\n\n%s[%s]  %s[%s]\n%s\n\n%s", domain.CommentsAdd, destinationField, marker(1), domain.CommentsBody+"\n"+f.Text.View(), marker(2), domain.CommentsPathLabel, f.Path.View(), marker(3), domain.CommentsSideLabel, f.Side, arrows, marker(4), domain.CommentsFirstLineLabel, f.Start.View(), marker(5), domain.CommentsLastLineLabel, f.End.View(), marker(6), submit, marker(7), cancel, f.Error, help)
 }
 func (m Model) beginAddComment() (Model, tea.Cmd) {
+	// The panel already reads Comments independently of the primary state.
+	// Wait for that report before using it to open the composer.
+	if m.Panel.CommentsLoading || m.Panel.CommentsError != "" {
+		return m, nil
+	}
 	report := domain.ParseComments(m.Panel.Comments)
 	if report.Guard() == "" || len(report.Destinations("add")) == 0 {
 		return m, nil

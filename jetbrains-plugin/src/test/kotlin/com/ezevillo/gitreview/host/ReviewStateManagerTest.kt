@@ -20,6 +20,26 @@ import org.junit.jupiter.api.Test
  * verdad y se salteaba sola cuando la CLI no estaba en el PATH.
  */
 class ReviewStateManagerTest {
+    @Test fun composerReusesOnlyTheCompletedCommentsForTheCurrentReadAndRoot() {
+        val cli = FakeCliRunner().answer("status", WALK_STATUS + "\nguard\t${"a".repeat(40)}")
+        val report = "comments-guard\tcomment-guard\ncomments-capability\tadd\tlocal\ncomments-identity\t"
+        cli.answer("comments", report + "fresh\tContext")
+        val manager = manager(cli)
+        val current = manager.refresh("/repo") { assertNull(manager.commentsForComposer("/repo")) }
+        cli.calls.clear()
+        assertEquals(current.comments, manager.commentsForComposer("/repo"))
+        assertNull(manager.commentsForComposer("/other"))
+        manager.readForMutation("/repo")
+        assertNull(manager.commentsForComposer("/repo"))
+        assertTrue(cli.calls.isEmpty())
+        cli.answer("comments", report + "ambiguous\tChoose")
+        manager.refresh("/repo")
+        assertNull(manager.commentsForComposer("/repo"))
+        cli.answer("comments", InvokeResult(report + "resolved\tContext", "Read failed", 1))
+        manager.refresh("/repo")
+        assertNull(manager.commentsForComposer("/repo"))
+    }
+
     @Test fun commentsAddReplyReplacesOnlyTheCurrentRead() {
         val before = "a".repeat(40)
         val after = "b".repeat(40)

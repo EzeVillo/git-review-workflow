@@ -98,7 +98,7 @@ teardown() { comments_teardown; }
 @test "comments public add rechecks the capture cursor before replacing even without caller guards" {
 	printf '## 1. Existing\nKeep the original.\n' >"$COMMENTS_SESSION_DIR/local.md"
 	cp "$COMMENTS_SESSION_DIR/local.md" "$COMMENTS_TMP/original"
-	comments_inject_operation cp '*/local.md.candidate.*' barrier
+	comments_inject_operation tail '*/local.md.candidate.*' barrier
 	git-review comments add --document local --text 'New body from the old cursor.' >"$COMMENTS_TMP/writer.out" 2>"$COMMENTS_TMP/writer.err" &
 	local writer=$!
 	comments_barrier_arrived "$COMMENTS_TMP/inject"
@@ -108,10 +108,10 @@ teardown() { comments_teardown; }
 	wait "$writer" || writer_status=$?
 	[ "$writer_status" -eq 4 ]
 	[ ! -s "$COMMENTS_TMP/writer.out" ]
-	[[ "$(cat "$COMMENTS_TMP/writer.err")" == 'error: comments document is stale; candidate preserved at '* ]]
 	cmp "$COMMENTS_TMP/original" "$COMMENTS_SESSION_DIR/local.md"
 	local recovery
 	recovery=$(cat "$COMMENTS_TMP/inject/hit/argument")
+	[ "$(cat "$COMMENTS_TMP/writer.err")" = "error: comments document is stale; candidate preserved at $recovery" ]
 	[ "$(tail -n 1 "$recovery")" = 'New body from the old cursor.' ]
 	[ ! -e "$COMMENTS_SESSION_DIR/shared.md" ]
 }
@@ -132,7 +132,7 @@ teardown() { comments_teardown; }
 }
 
 @test "comments add omits the partial reply when other review metadata changes" {
-	comments_inject_operation cp '*/local.md.candidate.*' barrier
+	comments_inject_operation tail '*/local.md.candidate.*' barrier
 	git-review comments add --document local --text 'Durable note.' --porcelain >"$COMMENTS_TMP/writer.out" 2>"$COMMENTS_TMP/writer.err" &
 	local writer=$!
 	comments_barrier_arrived "$COMMENTS_TMP/inject"

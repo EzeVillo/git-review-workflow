@@ -2244,7 +2244,8 @@ cursor concurrentes siguen deteniendo la escritura.
 Si `add` conserva la sesión y el mismo lock, reutiliza la lectura hecha bajo
 ese lock al preparar el candidato. Cuando materializa una sesión o cambia de
 lock, vuelve a leer el estado antes de preparar el candidato. La validación
-final se hace en ambos casos.
+final se hace en ambos casos. La publicación usa el mismo archivo temporal
+que `add` armó y validó junto al destino.
 
 Cada lectura de una sesión obtiene dueño, contexto, custodio, sesión y, cuando
 corresponde, la base fijada en una sola pasada del manifest. La TUI y los
@@ -2259,3 +2260,5 @@ el primer comentario puede materializar la custodia y cambiarlo. La CLI omite
 el sobre si cambió otra clave de la review. Cada cliente aplica el informe sólo
 sobre la misma lectura que originó el envío. Una respuesta ausente, incompleta
 u obsoleta vuelve al refresco completo sin repetir la escritura.
+El informe obtiene recuento y diagnósticos en una pasada por documento, sin
+armar los registros de prosa y ubicación de `comments entries`.

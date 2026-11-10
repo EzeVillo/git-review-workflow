@@ -670,14 +670,19 @@ comments_candidate_description() (
 comments_scan() {
 	comments_document_safe_path "$1" || return 1
 	[ -f "$1" ] || return 1
-	walk_normalize <"$1" | comments_contours count
+	_cscan_path=$1
+	walk_normalize <"$1" | COMMENTS_STATUS_PATH="$_cscan_path" comments_contours "${2:-count}"
 }
 
 comments_contours() {
 	# gawk on Windows otherwise strips CR from getline on the original file.
 	# Other POSIX awks treat BINMODE as an ordinary, unused variable.
 	awk -v BINMODE=3 -v operation="$1" -v original="${2:-}" -v final_lf="${3:-1}" -v ordinal="${4:-}" '
-		BEGIN { if(original!="") {while((getline rawline < original)>0) raw[++rawcount]=rawline; close(original)} }
+		BEGIN {
+			scanmeta=(operation=="entries" || operation=="status")
+			metadata_error="Comment location metadata is incomplete or invalid."
+			if(original!="") {while((getline rawline < original)>0) raw[++rawcount]=rawline; close(original)}
+		}
 		function oid(s) {return (length(s)==40 || length(s)==64) && s !~ /[^0-9a-f]/}
 		function positive(s) {return s ~ /^[0-9]+$/ && s !~ /^0+$/}
 		function ordered(a,b) {
@@ -753,8 +758,10 @@ comments_contours() {
 			# Materialize optional fields as strings: gawk 5.2.1 can double-free
 			# an unset array element passed directly to the path predicate.
 			if(!encoded_path(values["base-path"] "") || !encoded_path(values["head-path"] "")) badmeta=1
-			if(badmeta) printf "comment-diagnostic\t%d\tmetadata\tComment location metadata is incomplete or invalid.\n",count
-			else {
+			if(badmeta) {
+				if(operation=="status") diagnostics++
+				else printf "comment-diagnostic\t%d\tmetadata\t%s\n",count,metadata_error
+			} else if(operation=="entries") {
 				if(values["side"]!="") printf "comment-scope\t%d\t%s\t%s\n",count,(values["start"]!="" ? "selection" : "file"),values["side"]
 				else printf "comment-scope\t%d\tgeneral\t\n",count
 				if(values["base"]!="") printf "comment-version\t%d\t%s\t%s\n",count,values["base"],values["head"]
@@ -804,7 +811,7 @@ comments_contours() {
 					printf "comment-entry\t%d\t%s\t%d\t%s\n",count,number,NR,title
 				}
 			}
-			if(operation=="entries") {
+			if(scanmeta) {
 				if(!html && metadata_allowed && (NR==headingline+1 || NR==headingline+2) && line ~ /^<!-- git-review-comment /) {
 					suppressbody=1; metadata=1; if(line!="<!-- git-review-comment v1") badmeta=1
 				}
@@ -835,6 +842,12 @@ comments_contours() {
 				if(badmarker || markers!=1 || marker || html) exit 1
 			} else if(operation=="delete") {
 				if(html || infence || count<ordinal) exit 1
+			} else if(operation=="status") {
+				if(html) exit 1
+				path=ENVIRON["COMMENTS_STATUS_PATH"]
+				printf "comments-count\t%s\t%s\n",path,count+0
+				for(i=0;i<diagnostics;i++)
+					printf "comments-diagnostic\t%s\tmetadata\t%s\n",path,metadata_error
 			} else if(operation=="entries" || operation=="renumber") {
 				if(html) exit 1
 			} else {
@@ -885,10 +898,8 @@ comments_emit_document() {
 	if [ "$_ced_revision" = absent ]; then _ced_presence=absent; fi
 	porcelain_row comments-document "$_ced_path" "$cm_context" "$1" "$_ced_presence" "$_ced_revision"
 	if [ "$_ced_presence" = present ]; then
-		if _ced_count=$(comments_scan "$_ced_path"); then
-			porcelain_row comments-count "$_ced_path" "$_ced_count"
-			_ced_entries=$(walk_normalize <"$_ced_path" | comments_contours entries) || return 1
-			printf '%s\n' "$_ced_entries" | COMMENTS_DIAGNOSTIC_PATH="$_ced_path" awk -F '\t' '$1=="comment-diagnostic" {printf "comments-diagnostic\t%s\t%s\t%s\n",ENVIRON["COMMENTS_DIAGNOSTIC_PATH"],$3,$4}'
+		if _ced_summary=$(comments_scan "$_ced_path" status); then
+			printf '%s\n' "$_ced_summary"
 		else
 			porcelain_row comments-diagnostic "$_ced_path" format 'The document could not be read without ambiguous entry boundaries.'
 		fi
@@ -1217,16 +1228,18 @@ comments_replace() {
 	_cr_context=${cm_context:-} _cr_scope=${cm_scope:-active}
 	comments_safe_path "$_cr_path" || return 1
 	if [ ! -f "$_cr_source" ] || [ -L "$_cr_source" ]; then comments_error 'comments candidate is not a readable regular file'; return 1; fi
-	# Append already captured the session and original revision under the
-	# same lock. Still recheck both immediately before publishing below.
-	if [ "${5:-}" != append ]; then
+	# Append already prepared and validated a sibling under the same lock.
+	# Other callers supply a source that still needs its own sibling.
+	if [ "${5:-}" = append ]; then
+		_cr_candidate=$_cr_source
+	else
 		comments_state || return 1
 		if [ "$_cr_scope" != active ] && [ -n "$_cr_context" ] && [ -n "$_cr_guard" ]; then comments_select_context "$_cr_context" || return 1; fi
 		comments_check_guards "$_cr_guard" "$_cr_expected" "$_cr_path" || return $?
-	fi
-	_cr_candidate=$(mktemp "$_cr_path.candidate.XXXXXX") || { comments_error 'could not create comments candidate'; return 1; }
-	if ! cp "$_cr_source" "$_cr_candidate"; then
-		comments_error "could not write comments candidate: $_cr_candidate"; return 1
+		_cr_candidate=$(mktemp "$_cr_path.candidate.XXXXXX") || { comments_error 'could not create comments candidate'; return 1; }
+		if ! cp "$_cr_source" "$_cr_candidate"; then
+			comments_error "could not write comments candidate: $_cr_candidate"; return 1
+		fi
 	fi
 	comments_state || return 1
 	if [ "$_cr_scope" != active ] && [ -n "$_cr_context" ] && [ -n "$_cr_guard" ]; then comments_select_context "$_cr_context" || return 1; fi
@@ -1812,8 +1825,7 @@ comments_append() {
 	} >>"$_ca_candidate" || return 1
 	_ca_new_count=$(comments_scan "$_ca_candidate") || return 1
 	[ "$_ca_new_count" -eq "$((_ca_count + 1))" ] || { comments_error 'comment would create ambiguous entry boundaries'; return 1; }
-	comments_replace "$_ca_path" "$_ca_candidate" "$_ca_revision" "$_ca_guard" append || return $?
-	rm -f "$_ca_candidate"
+	comments_replace "$_ca_path" "$_ca_candidate" "$_ca_revision" "$_ca_guard" append
 }
 
 comments_decode_path() {

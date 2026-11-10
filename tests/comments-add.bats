@@ -7,11 +7,14 @@ teardown() { comments_teardown; }
 @test "comments add porcelain returns both review guards and the current Comments report" {
 	run --separate-stderr comments_start whole
 	[ "$status" -eq 0 ]
-	local before after reply body text
+	local before after reply body text guard
 	for text in 'First Local note.' 'Second Local note.'; do
 		before=$(git review status --porcelain | awk -F '\t' '$1=="guard" {print $2}')
 		[ -n "$before" ]
-		run --separate-stderr git review comments add --document local --text "$text" --porcelain
+		guard=$(git review comments status --porcelain | awk -F '\t' '$1=="comments-guard" {print $2}')
+		[ -n "$guard" ]
+		printf '%s\n' "$text" >"$COMMENTS_TMP/add-input"
+		run --separate-stderr git review comments add --document local --stdin --expect-context "$guard" --porcelain <"$COMMENTS_TMP/add-input"
 		[ "$status" -eq 0 ]
 		[ "$stderr" = '' ]
 		reply=$output

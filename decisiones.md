@@ -2250,8 +2250,11 @@ que `add` armó y validó junto al destino.
 Cada lectura de una sesión obtiene dueño, contexto, custodio, sesión y, cuando
 corresponde, la base fijada en una sola pasada del manifest. La TUI y los
 editores que pueden comprobar que están limpios envían el guard del formulario.
-La CLI captura la revisión actual bajo su lock. Si puede haber un búfer sin
-guardar, el editor consulta las rutas vigentes y guarda sólo el documento elegido.
+Para ese envío, el contexto configurado de una sesión confirmada permite
+localizar el lock antes de leer el estado completo. Bajo el lock, la CLI
+comprueba el custodio y el guard del formulario y captura la revisión actual.
+Si puede haber un búfer sin guardar, el editor consulta las rutas vigentes y
+guarda sólo el documento elegido.
 Si escribió el Markdown, consulta la nueva revisión antes de enviarla a la CLI.
 
 `comments add --porcelain` puede devolver el informe desde la validación que

@@ -116,6 +116,34 @@ fi
 if [ "$command" = paths ] && [ "$porcelain" -ne 1 ]; then comments_error 'paths requires --porcelain'; exit 1; fi
 if [ "$command" = entries ] && [ "$porcelain" -ne 1 ]; then comments_error 'entries requires --porcelain'; exit 1; fi
 if [ "$command" = prepare ] && { [ -z "$context" ] || { [ "$porcelain" -eq 1 ] && [ "$check" -ne 1 ]; }; }; then comments_error 'prepare requires --context; --porcelain requires --check'; exit 1; fi
+
+require_capture_state() {
+	comments_state || return 1
+	if [ "$cm_active" -ne 1 ]; then
+		# A submitted form can outlive the review it was opened on.
+		if [ "$command" = add ]; then comments_check_guards "$expect_context" '' '' || return $?; fi
+		printf 'error: comments capture requires an active review or compare\n' >&2
+		return 2
+	fi
+	comments_require_capture "$document"
+}
+
+# Use the configured context only to find its lock. Ownership and capture
+# state are read from Git and the session manifest after taking that lock.
+comments_add_lock_hint() {
+	_clh_repo=$(git rev-parse --absolute-git-dir --symbolic-full-name HEAD 2>/dev/null) || return 1
+	_clh_newline='
+'
+	_clh_ref=${_clh_repo##*"$_clh_newline"}
+	case "$_clh_ref" in refs/heads/review/*) ;; *) return 1 ;; esac
+	cm_gitdir=${_clh_repo%"$_clh_newline"*}
+	cm_root=$cm_gitdir/review-comments
+	[ -d "$cm_root/contexts" ] && [ -d "$cm_root/sessions" ] || return 1
+	_clh_context=$(git config --get "branch.${_clh_ref#refs/heads/}.reviewcommentscontext" 2>/dev/null) || return 1
+	comments_token_valid "$_clh_context" || return 1
+	lock_hint=$_clh_context
+}
+
 input_file=''
 trap 'comments_unlock; if [ -n "$input_file" ]; then rm -f "$input_file"; fi' 0
 trap 'exit 1' 1 2 15
@@ -129,14 +157,13 @@ case "$command" in
 		# Each state check reloads the branch metadata, including after locking
 		# and after preparing the candidate. Batch keys within each check.
 		cm_config_snapshot_requested=1
-		comments_state || exit 1
-		if [ "$cm_active" -ne 1 ]; then
-			# A submitted form can outlive the review it was opened on.
-			if [ "$command" = add ]; then comments_check_guards "$expect_context" '' '' || exit $?; fi
-			printf 'error: comments capture requires an active review or compare\n' >&2
-			exit 2
+		lock_hint=''
+		if [ "$command" = add ] && [ "$stdin" -eq 1 ] && [ "$porcelain" -eq 1 ] &&
+			[ -z "$expect_document$context$use_context" ] && [ "$new_context" -eq 0 ] &&
+			comments_token_valid "$expect_context"; then
+			comments_add_lock_hint || true
 		fi
-		comments_require_capture "$document" || exit $?
+		if [ -z "$lock_hint" ]; then require_capture_state || exit $?; fi
 		if [ "$command" = add ]; then
 			input_file=$(mktemp "${TMPDIR:-/tmp}/git-review-comment.XXXXXX")
 			case " $seen " in
@@ -153,8 +180,12 @@ case "$command" in
 					fi
 					;;
 			esac
-			if ! LC_ALL=C grep -q '[^[:space:]]' "$input_file"; then exit 0; fi
+			if ! LC_ALL=C grep -q '[^[:space:]]' "$input_file"; then
+				if [ -n "$lock_hint" ]; then require_capture_state || exit $?; fi
+				exit 0
+			fi
 			if ! walk_normalize <"$input_file" | comments_contours input >/dev/null; then
+				if [ -n "$lock_hint" ]; then require_capture_state || exit $?; fi
 				comments_error 'fence or quote reserved headings and close code or HTML containers in the comment text'; exit 1
 			fi
 		fi
@@ -163,16 +194,24 @@ case "$command" in
 			elif [ "$expect_document" != absent ]; then printf 'error: comments document is stale\n' >&2; exit 4
 			fi
 		fi
-		initial_guard=$cm_guard
 		initial_preparation=0
-		if [ -n "$cm_session" ] && [ "$cm_provisional" -eq 0 ]; then initial_preparation=1; fi
-		lock_context=${use_context:-${context:-${cm_context:-$cm_guard}}}
+		if [ -n "$lock_hint" ]; then
+			initial_guard=$expect_context
+			lock_context=$lock_hint
+		else
+			initial_guard=$cm_guard
+			if [ -n "$cm_session" ] && [ "$cm_provisional" -eq 0 ]; then initial_preparation=1; fi
+			lock_context=${use_context:-${context:-${cm_context:-$cm_guard}}}
+		fi
 		comments_lock "$lock_context" || exit 1
 		comments_state || exit 1
-		# Always recheck the state observed before locking, including a first
-		# composition whose context did not exist when its form was opened.
+		# A lock hint can never authorize materialization or a lock transfer.
+		if [ -n "$lock_hint" ] && { [ -z "$cm_session" ] || [ "$cm_provisional" -ne 0 ] ||
+			[ "$cm_lock" != "$cm_root/locks/$cm_context.lock" ]; }; then
+			printf 'error: comments context is stale\n' >&2; exit 4
+		fi
 		comments_check_guards "$initial_guard" '' '' || exit $?
-		comments_check_guards "$expect_context" '' '' || exit $?
+		if [ -z "$lock_hint" ]; then comments_check_guards "$expect_context" '' '' || exit $?; fi
 		comments_require_capture "$document" || exit $?
 		initial_capture_guard=$cm_capture_guard
 		add_before_guard='' add_before_config=''

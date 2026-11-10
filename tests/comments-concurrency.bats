@@ -175,6 +175,33 @@ teardown() { comments_teardown; }
 	comments_assert_snapshot "$COMMENTS_TMP/before" "$COMMENTS_TMP/after"
 }
 
+@test "comments guarded stdin add refuses a lock for a different context" {
+	local guard hint=2222222222222222222222222222222222222222
+	guard=$(comments_driver guard)
+	printf '## 1. Existing\nKeep the original.\n' >"$COMMENTS_SESSION_DIR/local.md"
+	cp "$COMMENTS_SESSION_DIR/local.md" "$COMMENTS_TMP/original"
+	printf 'Stale note.\n' >"$COMMENTS_TMP/add-input"
+	git config branch.review/feature/comments.reviewcommentscontext "$hint"
+	comments_inject_operation mkdir "*/locks/$hint.lock" barrier
+	git-review comments add --document local --stdin --expect-context "$guard" --porcelain \
+		<"$COMMENTS_TMP/add-input" >"$COMMENTS_TMP/writer.out" 2>"$COMMENTS_TMP/writer.err" &
+	local writer=$!
+	comments_barrier_arrived "$COMMENTS_TMP/inject"
+	# The original guard is valid again under the lock, but the hint isn't.
+	git config branch.review/feature/comments.reviewcommentscontext "$COMMENTS_CONTEXT"
+	comments_barrier_resume "$COMMENTS_TMP/inject"
+	local writer_status=0
+	wait "$writer" || writer_status=$?
+	[ "$writer_status" -eq 4 ]
+	[ ! -s "$COMMENTS_TMP/writer.out" ]
+	[ "$(cat "$COMMENTS_TMP/writer.err")" = 'error: comments context is stale' ]
+	cmp "$COMMENTS_TMP/original" "$COMMENTS_SESSION_DIR/local.md"
+	[ ! -e "$COMMENTS_SESSION_DIR/shared.md" ]
+	[ ! -e "$COMMENTS_ROOT/locks/$hint.lock" ]
+	[ ! -e "$COMMENTS_ROOT/locks/$COMMENTS_CONTEXT.lock" ]
+	[ "$(comments_driver guard)" = "$guard" ]
+}
+
 reset_comments_fixture() {
 	git config --unset branch.review/feature/comments.reviewcommentscontext
 	git config --unset branch.review/feature/comments.reviewcommentssession

@@ -1193,7 +1193,8 @@ comments_unlock() {
 	if [ "${cm_lock_owned:-0}" -eq 1 ]; then
 		# The path and file were created by this invocation; never recursively
 		# remove a directory whose contents may now belong to somebody else.
-		if [ ! -L "$cm_lock" ] && [ ! -L "$cm_lock/owner" ] && [ "$(comments_field "$cm_lock/owner" pid)" = "$$" ]; then
+		# A later state read can have discovered a different gitdir.
+		if [ ! -L "$cm_lock" ] && [ ! -L "$cm_lock/owner" ] && [ "$(cm_root=$cm_lock_root comments_field "$cm_lock/owner" pid)" = "$$" ]; then
 			rm -f "$cm_lock/owner"
 			rmdir "$cm_lock" 2>/dev/null || true
 		fi

@@ -272,12 +272,14 @@ func (m Model) submitComment() (Model, tea.Cmd) {
 		f.Error = domain.StaleNotice
 		return m, nil
 	}
-	args, err := domain.CommentsArgv(report, "add", f.Destination, "", 0)
-	if err != nil {
-		f.Error = err.Error()
-		return m, nil
+	// The TUI has no editor buffer to save. The CLI binds the form's context
+	// and captures the document revision under its lock.
+	args := []string{"add", "--document", f.Destination, "--expect-context", f.Guard, "--stdin"}
+	replyDocument := ""
+	if m.Panel.Guard != "" && report.SupportsAddReply() {
+		args = append(args, "--porcelain")
+		replyDocument = f.Destination
 	}
-	args = append(args, "--stdin")
 	if f.ContextChoice == "*" {
 		args = append(args, "--new-context")
 	} else if f.ContextChoice != "" {
@@ -295,7 +297,7 @@ func (m Model) submitComment() (Model, tea.Cmd) {
 		}
 	}
 	f.Busy = true
-	return m.beginMutation(mutationRequest{action: "addComment", argv: &domain.Argv{Verb: "comments", Args: args}, stdin: f.Text.Value(), hasInput: true, latestComments: true}, currentStateToken(m.Panel))
+	return m.beginMutation(mutationRequest{action: "addComment", argv: &domain.Argv{Verb: "comments", Args: args}, stdin: f.Text.Value(), hasInput: true, commentsReplyDocument: replyDocument}, currentStateToken(m.Panel))
 }
 
 type commentsQueryDone struct {

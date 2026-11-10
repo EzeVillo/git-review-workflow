@@ -43,7 +43,8 @@ class CommentsActions(private val project: Project, private val service: GitRevi
         if (!isReviewReadable(service.currentState().situation)) return
         Bg.async(project, CommentsCopy.add, work = { read(root) }, then = { initial ->
             val destinations = initial.destinations()
-            if (initial.guard == null || destinations.isEmpty()) return@async
+            val guard = initial.guard ?: return@async
+            if (destinations.isEmpty()) return@async
             var choice: String? = null
             if (initial.records("comments-identity").any { it[0] == "ambiguous" }) {
                 val candidates = initial.records("comments-candidate")
@@ -58,16 +59,22 @@ class CommentsActions(private val project: Project, private val service: GitRevi
             CommentsComposer(project, location, destinations, if (location == null && service.currentState().situation != Situation.FINISH_CONFLICT && project.getService(CommentEditorTracker::class.java).editor() != null) CommentsCopy.opaque else null) { kind, text, scope, done ->
                 Bg.async(project, CommentsCopy.add, work = { commentsFailure {
                     service.mutationLock.run {
-                        val current = read(root)
-                        if (current.guard != initial.guard) return@run UserCopy.STALE
-                        val fresh = when (saveCommentFiles(current.documents.filter { it.kind == kind }.map { it.path })) {
-                            CommentBufferSave.UNCHANGED -> current
-                            CommentBufferSave.SAVED -> read(root)
-                            CommentBufferSave.FAILED -> return@run CommentsCopy.saveFailed
+                        val useLatestDocument = initial.supportsAddReply && hasUnsavedEditorDocuments() == false
+                        val fresh = if (useLatestDocument) initial else {
+                            val current = read(root)
+                            if (current.guard != guard) return@run UserCopy.STALE
+                            when (saveCommentFiles(current.documents.filter { it.kind == kind }.map { it.path })) {
+                                CommentBufferSave.UNCHANGED -> current
+                                CommentBufferSave.SAVED -> read(root)
+                                CommentBufferSave.FAILED -> return@run CommentsCopy.saveFailed
+                            }
                         }
-                        if (fresh.guard != initial.guard) return@run UserCopy.STALE
+                        if (fresh.guard != guard) return@run UserCopy.STALE
                         val born = fresh.documents.none { it.presence == "present" }
-                        val args = commentsArgv(fresh, "add", kind).toMutableList()
+                        // A clean editor has no bytes to flush. The CLI binds the
+                        // form's context and appends to the current disk revision.
+                        val args = if (useLatestDocument) mutableListOf("add", "--document", kind, "--expect-context", guard)
+                        else commentsArgv(fresh, "add", kind).toMutableList()
                         args += "--stdin"
                         choice?.let { args += if (it.isEmpty()) listOf("--new-context") else listOf("--use-context", it) }
                         if (location != null) args += location.locationArgs(scope)

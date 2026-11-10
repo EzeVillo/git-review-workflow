@@ -61,10 +61,13 @@ export async function readComments(options: InvokeOptions, context?: string, all
 async function savePaths(documents: readonly Pick<CommentDocument, "path">[]): Promise<CommentBufferSave> {
     return saveCommentBuffers(vscode.workspace.textDocuments.filter(doc => doc.uri.scheme === "file" && documents.some(row => sameDraftFile(doc.uri.fsPath, row.path))).map(doc => ({get isDirty() {return doc.isDirty;}, save: () => saveCommentDocument(doc)})));
 }
-export async function saveSessionComments(manager: ReviewStateManager, options: InvokeOptions, source?: string, scope = "active", closingSession = false): Promise<boolean> {
+function editorIsClean(): boolean {
     try {
-        if (vscode.workspace.textDocuments.every(document => document.isDirty === false)) return true;
-    } catch { /* Unknown keeps the selective ownership query. */ }
+        return vscode.workspace.textDocuments.every(document => document.isDirty === false);
+    } catch { return false; }
+}
+export async function saveSessionComments(manager: ReviewStateManager, options: InvokeOptions, source?: string, scope = "active", closingSession = false): Promise<boolean> {
+    if (editorIsClean()) return true;
     const state = manager.state;
     if (state.commentsPaths && state.guard && source === undefined && (scope === "active" || closingSession) &&
         (state.situation === "review" || state.situation === "finish-conflict")) {
@@ -132,7 +135,8 @@ export async function addComment(lock: MutationLock, manager: ReviewStateManager
     if (!["review", "finish-conflict"].includes(manager.state.situation)) return;
     const initial = await readComments(options);
     const destinations = commentDestinations(initial);
-    if (!initial.guard || !destinations.length) return;
+    const guard = initial.guard;
+    if (!guard || !destinations.length) return;
     let choice: string | undefined;
     if (initial.identity === "ambiguous") {
         const selected = await vscode.window.showQuickPick([
@@ -146,14 +150,18 @@ export async function addComment(lock: MutationLock, manager: ReviewStateManager
         let entered = false;
         const outcome = await lock.run(async () => {
             entered = true;
-            const current = await readComments(options);
-            if (current.guard !== initial.guard) {await manager.refresh(); return STALE;}
-            const saved = await savePaths(current.documents.filter(d => d.kind === kind));
-            if (saved === "failed") {await manager.refresh(); return copy.saveFailed;}
-            const fresh = saved === "saved" ? await readComments(options) : current;
-            if (fresh.guard !== initial.guard) {await manager.refresh(); return STALE;}
+            const useLatestDocument = supportsCommentsAddReply(initial) && editorIsClean();
+            let fresh = initial;
+            if (!useLatestDocument) {
+                fresh = await readComments(options);
+                if (fresh.guard !== guard) {await manager.refresh(); return STALE;}
+                const saved = await savePaths(fresh.documents.filter(d => d.kind === kind));
+                if (saved === "failed") {await manager.refresh(); return copy.saveFailed;}
+                if (saved === "saved") fresh = await readComments(options);
+                if (fresh.guard !== guard) {await manager.refresh(); return STALE;}
+            }
             const born = !fresh.documents.some(d => d.presence === "present");
-            const args = commentsArgs(fresh, "add", kind);
+            const args = useLatestDocument ? ["add", "--document", kind, "--expect-context", guard] : commentsArgs(fresh, "add", kind);
             args.push("--stdin");
             if (choice !== undefined) args.push(choice ? "--use-context" : "--new-context", ...(choice ? [choice] : []));
             if (location && scope !== "general" && manager.state.situation !== "finish-conflict") {

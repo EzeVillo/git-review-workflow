@@ -28,19 +28,19 @@ import (
 // set. action still travels for genericFailureText and mutationDoneMsg's own
 // bookkeeping either way.
 type mutationRequest struct {
-	stateGuard      string
-	saveState       bool
-	continueState   bool
-	navigationState bool
-	stdin           string
-	hasInput        bool
-	latestComments  bool
-	commentsReadGen int
-	action          string
-	params          domain.ActionParams
-	argv            *domain.Argv
-	successOpenPath string
-	progressText    string
+	stateGuard            string
+	saveState             bool
+	continueState         bool
+	navigationState       bool
+	stdin                 string
+	hasInput              bool
+	commentsReplyDocument string
+	commentsReadGen       int
+	action                string
+	params                domain.ActionParams
+	argv                  *domain.Argv
+	successOpenPath       string
+	progressText          string
 	// draftStart marks the first half of Validate and start. A green
 	// walkthrough draft --build continues with a read-only config probe;
 	// only that probe may produce the final start request.
@@ -74,57 +74,11 @@ func silenceWindowCmd(gen int) tea.Cmd {
 // construction, exactly like readCmd().
 func mutationCmd(req mutationRequest, argv domain.Argv, activityGeneration int) tea.Cmd {
 	return func() tea.Msg {
-		args := append([]string(nil), argv.Args...)
-		commentDocument := ""
-		wantsCommentsReply := false
-		if req.latestComments {
-			current := host.InvokeReview(context.Background(), "comments", []string{"status", "--porcelain"})
-			report := domain.ParseComments(current.Stdout)
-			expected := ""
-			kind := ""
-			for i, a := range args {
-				if a == "--expect-context" && i+1 < len(args) {
-					expected = args[i+1]
-				}
-				if a == "--document" && i+1 < len(args) {
-					kind = args[i+1]
-				}
-			}
-			if current.ExitCode != 0 || report.Guard() != expected {
-				return mutationDoneMsg{action: req.action, result: host.Result{ExitCode: 4, Stderr: domain.StaleNotice}, activityGeneration: activityGeneration}
-			}
-			for i, a := range args {
-				if i+1 >= len(args) {
-					continue
-				}
-				target := kind
-				if a == "--expect-local" {
-					target = "local"
-				}
-				if a == "--expect-shared" {
-					target = "shared"
-				}
-				if a == "--expect-document" || a == "--expect-local" || a == "--expect-shared" {
-					revision := "absent"
-					for _, doc := range report.Documents() {
-						if doc.Kind == target {
-							revision = doc.Revision
-						}
-					}
-					args[i+1] = revision
-				}
-			}
-			commentDocument = kind
-			wantsCommentsReply = req.action == "addComment" && req.stateGuard != "" && report.SupportsAddReply()
-			if wantsCommentsReply {
-				args = append(args, "--porcelain")
-			}
-		}
 		var result host.Result
 		if req.hasInput {
-			result = host.InvokeReviewWithInput(context.Background(), argv.Verb, args, req.stdin)
+			result = host.InvokeReviewWithInput(context.Background(), argv.Verb, argv.Args, req.stdin)
 		} else {
-			result = host.InvokeReviewGuarded(context.Background(), argv.Verb, args, req.stateGuard)
+			result = host.InvokeReviewGuarded(context.Background(), argv.Verb, argv.Args, req.stateGuard)
 		}
 		var reply *host.ReadResult
 		if req.navigationState && !mutationFailed(result) {
@@ -146,8 +100,8 @@ func mutationCmd(req mutationRequest, argv domain.Argv, activityGeneration int) 
 			result.Stdout = ""
 		}
 		var commentsReply *domain.CommentsAddReply
-		if wantsCommentsReply && !mutationFailed(result) {
-			if parsed, ok := domain.ParseCommentsAddReply(result.Stdout, commentDocument); ok && parsed.Before == req.stateGuard {
+		if req.commentsReplyDocument != "" && !mutationFailed(result) {
+			if parsed, ok := domain.ParseCommentsAddReply(result.Stdout, req.commentsReplyDocument); ok && parsed.Before == req.stateGuard {
 				commentsReply = &parsed
 			}
 		}

@@ -218,6 +218,10 @@ Esta ampliación no habilita otros verbos ni interpretación de Markdown en el c
 `location-options` admite `--path`, `--side`, `--start-line`, `--end-line`,
 `--base`, `--head`, `--base-path`, `--head-path` y `--unversioned`.
 `guards` conserva `--expect-context` y las revisiones exactas de documento.
+Al enviar un comentario con el editor limpio y una CLI que anuncia
+`comments-add-reply 1`, se envía el guard del formulario y la CLI toma la
+revisión actual del documento bajo su lock. Si puede haber un búfer sin guardar,
+se mantienen la consulta previa, el guardado selectivo y `--expect-document`.
 El cuerpo no entra en argv ni logs; stdin se cierra. Un lado vacío se representa
 sólo cuando la CLI declara `absent`. La comparación de prosa de Prepare usa los
 archivos de `comments-delivery-file` y no crea una sesión de código histórica.

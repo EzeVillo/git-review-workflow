@@ -17,8 +17,9 @@ public sealed class CommentsActions
     private readonly Func<string, Task<CommentBufferSave>> _save;
     private readonly Func<Task> _refresh;
     private readonly ReviewStateManager? _state;
-    public CommentsActions(CliInvoker cli, MutationLock mutationLock, Func<string, Task<CommentBufferSave>> save, Func<Task> refresh, ReviewStateManager? state = null)
-    { _cli=cli; _lock=mutationLock; _save=save; _refresh=refresh; _state=state; }
+    private readonly Func<Task<bool?>>? _hasUnsavedDocuments;
+    public CommentsActions(CliInvoker cli, MutationLock mutationLock, Func<string, Task<CommentBufferSave>> save, Func<Task> refresh, ReviewStateManager? state = null, Func<Task<bool?>>? hasUnsavedDocuments = null)
+    { _cli=cli; _lock=mutationLock; _save=save; _refresh=refresh; _state=state; _hasUnsavedDocuments=hasUnsavedDocuments; }
 
     public async Task<CommentsReport> ReadAsync(string cwd, string? context = null)
     {
@@ -30,30 +31,36 @@ public sealed class CommentsActions
 
     public Task<InvokeResult?> RunAsync(string cwd, string operation, string? document, string? context, string capturedGuard,
         string? input = null, CommentCapture? capture = null, int? ordinal = null, string? expectedRevision = null, string? contextChoice = null, bool porcelain = false, bool check = false, IReadOnlyList<string>? additionalSavePaths = null,
-        Action<CommentsReport>? beforeInvoke = null)
+        Action<CommentsReport>? beforeInvoke = null, CommentsReport? composerReport = null)
         => _lock.RunAsync(async () => {
             var applied = false;
             try
             {
-                var current=await ReadAsync(cwd,context).ConfigureAwait(true);
+                var useLatestDocument = operation == "add" && document is not null && context is null &&
+                    expectedRevision is null && additionalSavePaths is null && composerReport?.SupportsAddReply == true &&
+                    composerReport.Guard == capturedGuard && _hasUnsavedDocuments is not null &&
+                    await _hasUnsavedDocuments().ConfigureAwait(true) == false;
+                var current = useLatestDocument ? composerReport! : await ReadAsync(cwd,context).ConfigureAwait(true);
                 if (Guard(current,context)!=capturedGuard) return new InvokeResult("",UserCopy.Stale,4);
-                var active=new HashSet<string>(current.Records("comments-context").Where(c=>c[2]=="active").Select(c=>c[0]));
-                var affected=current.Documents.Where(d=>(context is null ? active.Contains(d.Context) : d.Context==context) && (operation=="save" || d.Kind==document)).ToArray();
-                var saved = false;
-                foreach (var path in affected.Select(d=>d.Path).Concat(additionalSavePaths ?? Array.Empty<string>()).Distinct(StringComparer.OrdinalIgnoreCase))
+                if (!useLatestDocument)
                 {
-                    var outcome = await _save(path).ConfigureAwait(true);
-                    if (outcome == CommentBufferSave.Failed) return new InvokeResult("",CommentsCopy.saveFailed,1);
-                    saved |= outcome == CommentBufferSave.Saved;
+                    var active=new HashSet<string>(current.Records("comments-context").Where(c=>c[2]=="active").Select(c=>c[0]));
+                    var affected=current.Documents.Where(d=>(context is null ? active.Contains(d.Context) : d.Context==context) && (operation=="save" || d.Kind==document)).ToArray();
+                    var saved = false;
+                    foreach (var path in affected.Select(d=>d.Path).Concat(additionalSavePaths ?? Array.Empty<string>()).Distinct(StringComparer.OrdinalIgnoreCase))
+                    {
+                        var outcome = await _save(path).ConfigureAwait(true);
+                        if (outcome == CommentBufferSave.Failed) return new InvokeResult("",CommentsCopy.saveFailed,1);
+                        saved |= outcome == CommentBufferSave.Saved;
+                    }
+                    if (operation != "add" || saved)
+                    {
+                        current = await ReadAsync(cwd,context).ConfigureAwait(true);
+                        if (Guard(current,context)!=capturedGuard) return new InvokeResult("",UserCopy.Stale,4);
+                    }
                 }
-                // Add already passes the context and document revision to the CLI.
-                // Only a buffer we wrote requires another read to get its revision.
-                if (operation != "add" || saved)
-                {
-                    current = await ReadAsync(cwd,context).ConfigureAwait(true);
-                    if (Guard(current,context)!=capturedGuard) return new InvokeResult("",UserCopy.Stale,4);
-                }
-                var args=Comments.Argv(current,operation,document,context,ordinal).ToList();
+                var args = useLatestDocument ? new List<string>{"add","--document",document!,"--expect-context",capturedGuard}
+                    : Comments.Argv(current,operation,document,context,ordinal).ToList();
                 if (porcelain) args.Add("--porcelain");
                 if (check) args.Add("--check");
                 if (expectedRevision is not null) {var i=args.IndexOf("--expect-document");if(i>=0)args[i+1]=expectedRevision;}

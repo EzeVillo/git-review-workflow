@@ -86,6 +86,29 @@ public class CommentsActionsTests
     }
 
     [Fact]
+    public async Task Add_with_clean_editor_uses_the_form_guard_and_skips_the_document_read()
+    {
+        var cli = new ScriptedCli();
+        var mutationLock = new MutationLock();
+        var initial = Comments.Parse("comments-guard\tstep1\ncomments-add-reply\t1");
+        var flow = new CommentsActions(cli, mutationLock,
+            _ => throw new InvalidOperationException("A clean editor has nothing to save"),
+            () => Task.CompletedTask,
+            hasUnsavedDocuments: () =>
+            {
+                Assert.True(mutationLock.IsBusy);
+                return Task.FromResult<bool?>(false);
+            });
+
+        var result = await flow.RunAsync("/repo", "add", "local", null, "step1", input: "note", composerReport: initial);
+
+        Assert.Equal(0, result?.ExitCode);
+        Assert.Equal(new[] { "add" }, cli.Trace);
+        Assert.Equal(new[] { "add", "--document", "local", "--expect-context", "step1", "--stdin" }, cli.LastArgs);
+        Assert.Equal("note", cli.Input);
+    }
+
+    [Fact]
     public async Task External_edit_without_a_buffer_save_is_rejected_by_the_CLI_guard()
     {
         var cli = new ScriptedCli { ValidateAddRevision = true };

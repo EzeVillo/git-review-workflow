@@ -96,7 +96,7 @@ if [ -n "$why" ]; then
 		echo "error: --why only applies to a review with a walkthrough (mode is $mode)" >&2
 		exit 1
 	fi
-	load_walk_review_meta
+	load_walk_review_meta "$cur"
 	if ! printf '%s\n' "$walkpaths" | grep -Fxq "$why"; then
 		echo "error: $why is not in the current walkthrough sequence" >&2
 		exit 1
@@ -224,7 +224,7 @@ if [ "$mode" = "step" ]; then
 elif [ "$mode" = "walk" ]; then
 	# Same load path as --porcelain / next / prev: re-derives the sequence and
 	# rejects corrupt walkstep/walkcount consistently (including keys-only).
-	load_walk_review_meta
+	load_walk_review_meta "$cur"
 	if [ "$(review_config_get "branch.$cur.reviewwalkkeys" || true)" = "1" ]; then
 		keys_only_note="  (keys-only)"
 	else

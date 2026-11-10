@@ -5051,7 +5051,7 @@ review_status_porcelain() {
 	tab="$(printf '\t')"
 	case "$mode" in
 	step)
-		if [ "${_review_navigation_loaded:-0}" -ne 1 ]; then load_step_review_meta; fi
+		if [ "${_review_navigation_loaded:-0}" -ne 1 ]; then load_step_review_meta "$cur"; fi
 		load_step_texts
 		nl="$(printf '\nx')"
 		nl="${nl%x}"
@@ -5121,7 +5121,7 @@ review_status_porcelain() {
 		done
 		;;
 	walk)
-		if [ "${_review_navigation_loaded:-0}" -ne 1 ]; then load_walk_review_meta; fi
+		if [ "${_review_navigation_loaded:-0}" -ne 1 ]; then load_walk_review_meta "$cur"; fi
 		pcurrent="$(printf '%s\n' "$walkpaths" | sed -n "${walkstep}p")"
 		essential=0
 		if walk_is_key "$tip" "$pcurrent"; then

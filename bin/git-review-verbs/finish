@@ -574,7 +574,7 @@ if [ "$mode" = "step" ] && [ "$resume" -eq 0 ]; then
 	# shared helper, reported the same way other step commands do — instead of
 	# defaulting count to 0 (silently discarding every banked edit) or letting a
 	# missing reviewstart kill us under set -e with no message.
-	load_step_review_meta
+	load_step_review_meta "$cur"
 	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
 	git add -A
 	tree="$(git write-tree)"

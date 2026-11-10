@@ -270,7 +270,7 @@ else
 			# Reporting must see those writes, never the pre-transfer active metadata.
 			review_config_init
 			[ "$_review_config_ready" -eq 1 ] || die 'could not read review metadata'
-			load_walk_review_meta
+			load_walk_review_meta "$cur"
 			echo "resumed review of $src — walkthrough entry $walkstep/$total"
 			show_walk_entry "$walkstep"
 		fi

@@ -56,7 +56,7 @@ step)
 	fi
 	;;
 *)
-	load_step_review_meta
+	load_step_review_meta "$cur"
 	;;
 esac
 

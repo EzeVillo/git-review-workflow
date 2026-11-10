@@ -54,12 +54,12 @@ esac
 
 # A mid-finish conflict keeps undo/resume on this branch; saving would rename it
 # away and leave refs/review-undo orphaned with conflict markers banked as edits.
-require_not_finish_conflict
+require_not_finish_conflict "$cur"
 
 # A completed finish leaves reviewundohead while you sit on review-fixes (or the PR
 # branch); saving from a hand-switched review/* would rename the branch that owns
 # the undo and orphan review-fixes / the undo point.
-require_not_pending_finish
+require_not_pending_finish "$cur"
 
 review_config_read "branch.$cur.reviewsource"
 src=$_review_config_value

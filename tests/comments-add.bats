@@ -4,6 +4,32 @@ setup_file() { bats_require_minimum_version 1.13.0; }
 setup() { comments_setup; }
 teardown() { comments_teardown; }
 
+@test "comments add porcelain returns both review guards and the current Comments report" {
+	run --separate-stderr comments_start whole
+	[ "$status" -eq 0 ]
+	local before after reply body text
+	for text in 'First Local note.' 'Second Local note.'; do
+		before=$(git review status --porcelain | awk -F '\t' '$1=="guard" {print $2}')
+		[ -n "$before" ]
+		run --separate-stderr git review comments add --document local --text "$text" --porcelain
+		[ "$status" -eq 0 ]
+		[ "$stderr" = '' ]
+		reply=$output
+		after=$(git review status --porcelain | awk -F '\t' '$1=="guard" {print $2}')
+		[ -n "$after" ]
+		[ "${reply%%$'\n'*}" = "$(printf 'comments-add-result\t1\t%s\t%s' "$before" "$after")" ]
+		[ "${reply##*$'\n'}" = $'comments-add-result-end\t1' ]
+		if [ "$text" = 'First Local note.' ]; then [ "$before" != "$after" ]; else [ "$before" = "$after" ]; fi
+		body=$(printf '%s\n' "$reply" | sed '1d;$d')
+		run --separate-stderr git review comments status --porcelain
+		[ "$status" -eq 0 ]
+		[ "$output" = "$body" ]
+		[[ "$body" == *$'comments-add-reply\t1'* ]]
+		comments_refresh_paths
+		[ "$(tail -n 1 "$COMMENTS_LOCAL")" = "$text" ]
+	done
+}
+
 @test "comments capture Local Shared Local stays independent in whole walk and step" {
 	local mode
 	for mode in whole walk step; do

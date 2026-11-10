@@ -205,7 +205,7 @@ Esta ampliación no habilita otros verbos ni interpretación de Markdown en el c
 |---|---|
 | Estado independiente | `comments status --porcelain [--context <id> | --all]` |
 | Crear un documento | `comments init --document <local|shared> [--context <id>] [context-options] [guards]` |
-| Capturar | `comments add --document <local|shared> --stdin [context-options] [location-options] [guards]` |
+| Capturar | `comments add --document <local|shared> --stdin [context-options] [location-options] [guards] [--porcelain]` |
 | Eliminar documento activo | `comments delete --document <local|shared> --context <id> --expect-context <guard> --expect-document <revision>` |
 | Renumerar | `comments renumber --document <local|shared> [--context <id>] [guards]` |
 | Selector | `comments entries --document <local|shared> --context <id> --porcelain` |

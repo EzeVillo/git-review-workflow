@@ -17,10 +17,58 @@ type CommentDocument struct {
 }
 type CommentsReport struct{ Rows []CommentRecord }
 
+func (r CommentsReport) SupportsAddReply() bool {
+	for _, fields := range r.Records("comments-add-reply") {
+		if fields[0] == "1" {
+			return true
+		}
+	}
+	return false
+}
+
+type CommentsAddReply struct {
+	Before, After string
+	Report        string
+}
+
+func ParseCommentsAddReply(text, document string) (CommentsAddReply, bool) {
+	lines := strings.Split(strings.TrimRight(text, "\r\n"), "\n")
+	header := strings.Split(strings.TrimSuffix(lines[0], "\r"), "\t")
+	if len(header) != 4 || header[0] != "comments-add-result" || header[1] != "1" ||
+		!stateGuardPattern.MatchString(header[2]) || !stateGuardPattern.MatchString(header[3]) ||
+		lines[len(lines)-1] != "comments-add-result-end\t1" {
+		return CommentsAddReply{}, false
+	}
+	body := strings.Join(lines[1:len(lines)-1], "\n")
+	report := ParseComments(body)
+	guard := report.Guard()
+	identity := report.Records("comments-identity")
+	if !stateGuardPattern.MatchString(guard) || len(identity) != 1 || identity[0][0] != "resolved" {
+		return CommentsAddReply{}, false
+	}
+	active := ""
+	for _, fields := range report.Records("comments-context") {
+		if fields[2] == "active" {
+			if active != "" || fields[3] != guard {
+				return CommentsAddReply{}, false
+			}
+			active = fields[0]
+		}
+	}
+	for _, doc := range report.Documents() {
+		if active != "" && doc.Context == active && doc.Kind == document && doc.Presence == "present" &&
+			stateGuardPattern.MatchString(doc.Revision) && doc.Count != nil && *doc.Count > 0 {
+			return CommentsAddReply{Before: header[2], After: header[3], Report: body}, true
+		}
+	}
+	return CommentsAddReply{}, false
+}
+
 func ParseComments(text string) CommentsReport {
 	minimum := map[string]int{"comments-capability": 2, "comments-owner": 2, "comments-context": 5, "comments-guard": 1, "comments-document": 5, "comments-count": 2, "comments-diagnostic": 3, "comments-identity": 2, "comments-candidate": 2, "comments-delivery": 3, "comments-capture": 3, "comment-body": 2, "comment-scope": 3, "comment-entry": 4, "comment-version": 3, "comment-path": 3, "comment-location": 4, "comment-unversioned": 1, "comment-diagnostic": 3, "comment-diff": 3, "comment-blob": 3, "comments-delivery-file": 4}
 	r := CommentsReport{Rows: []CommentRecord{}}
 	minimum["comment-columns"] = 4
+	minimum["comments-add-reply"] = 1
 	for _, line := range strings.Split(text, "\n") {
 		f := strings.Split(strings.TrimSuffix(line, "\r"), "\t")
 		if n, ok := minimum[f[0]]; ok && len(f) > n {

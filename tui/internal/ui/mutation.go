@@ -35,6 +35,7 @@ type mutationRequest struct {
 	stdin           string
 	hasInput        bool
 	latestComments  bool
+	commentsReadGen int
 	action          string
 	params          domain.ActionParams
 	argv            *domain.Argv
@@ -74,6 +75,8 @@ func silenceWindowCmd(gen int) tea.Cmd {
 func mutationCmd(req mutationRequest, argv domain.Argv, activityGeneration int) tea.Cmd {
 	return func() tea.Msg {
 		args := append([]string(nil), argv.Args...)
+		commentDocument := ""
+		wantsCommentsReply := false
 		if req.latestComments {
 			current := host.InvokeReview(context.Background(), "comments", []string{"status", "--porcelain"})
 			report := domain.ParseComments(current.Stdout)
@@ -111,6 +114,11 @@ func mutationCmd(req mutationRequest, argv domain.Argv, activityGeneration int) 
 					args[i+1] = revision
 				}
 			}
+			commentDocument = kind
+			wantsCommentsReply = req.action == "addComment" && req.stateGuard != "" && report.SupportsAddReply()
+			if wantsCommentsReply {
+				args = append(args, "--porcelain")
+			}
 		}
 		var result host.Result
 		if req.hasInput {
@@ -137,7 +145,13 @@ func mutationCmd(req mutationRequest, argv domain.Argv, activityGeneration int) 
 			}
 			result.Stdout = ""
 		}
-		return mutationDoneMsg{navigation: reply, action: req.action, params: req.params, result: result, activityGeneration: activityGeneration, successOpenPath: req.successOpenPath, draftStart: req.draftStart, draftFlow: req.draftFlow}
+		var commentsReply *domain.CommentsAddReply
+		if wantsCommentsReply && !mutationFailed(result) {
+			if parsed, ok := domain.ParseCommentsAddReply(result.Stdout, commentDocument); ok && parsed.Before == req.stateGuard {
+				commentsReply = &parsed
+			}
+		}
+		return mutationDoneMsg{navigation: reply, commentsReply: commentsReply, commentsReadGen: req.commentsReadGen, action: req.action, params: req.params, result: result, activityGeneration: activityGeneration, successOpenPath: req.successOpenPath, draftStart: req.draftStart, draftFlow: req.draftFlow}
 	}
 }
 
@@ -203,6 +217,10 @@ func (m Model) beginMutation(req mutationRequest, token domain.StateToken) (Mode
 	m.statusLine = ""
 	// Invalidate prose/comments still arriving for the state before this write.
 	m.readGeneration++
+	if req.action == "addComment" && !m.lastRead.DetailsPending && m.lastRead.Guard == token.Guard {
+		req.stateGuard = token.Guard
+		req.commentsReadGen = m.readGeneration
+	}
 	var activityCmd tea.Cmd
 	progressText := req.progressText
 	if progressText == "" {
@@ -312,6 +330,8 @@ func (o pendingFinishOutcome) matchesPending(result host.ReadResult) bool {
 // requested — never on parsing the verb's own stdout (FR-013).
 type mutationDoneMsg struct {
 	navigation         *host.ReadResult
+	commentsReply      *domain.CommentsAddReply
+	commentsReadGen    int
 	action             string
 	params             domain.ActionParams
 	result             host.Result
@@ -435,6 +455,14 @@ func (m Model) handleMutationDone(msg mutationDoneMsg) (Model, tea.Cmd) {
 		m.statusLine = msg.result.Stdout
 		m.readGeneration++
 		m2, details := m.handleReadDone(readDoneMsg{generation: m.readGeneration, result: *msg.navigation})
+		return m2, tea.Batch(details, silenceWindowCmd(gen))
+	}
+	if reply := msg.commentsReply; reply != nil && m.readGeneration == msg.commentsReadGen && m.Panel.Guard == reply.Before {
+		current := m.lastRead
+		current.Guard, current.Comments = reply.After, reply.Report
+		current.CommentsLoading, current.CommentsError = false, ""
+		m.readGeneration++
+		m2, details := m.handleReadDone(readDoneMsg{generation: m.readGeneration, result: current})
 		return m2, tea.Batch(details, silenceWindowCmd(gen))
 	}
 	m2, readCmd := m.scheduleRead()

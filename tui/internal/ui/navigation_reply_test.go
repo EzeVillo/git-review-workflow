@@ -8,6 +8,32 @@ import (
 	"github.com/EzeVillo/git-review-workflow/tui/internal/host"
 )
 
+func TestCommentsAddReplyUsesOnlyTheCurrentRead(t *testing.T) {
+	before, after, guard, revision := strings.Repeat("a", 40), strings.Repeat("b", 40), strings.Repeat("c", 40), strings.Repeat("d", 40)
+	wire := "comments-add-result\t1\t" + before + "\t" + after + "\n" +
+		"comments-identity\tresolved\tCurrent\ncomments-guard\t" + guard + "\ncomments-context\tc1\treview\tactive\t" + guard + "\tCurrent\n" +
+		"comments-document\t/local.md\tc1\tlocal\tpresent\t" + revision + "\ncomments-count\t/local.md\t1\ncomments-add-result-end\t1\n"
+	reply, ok := domain.ParseCommentsAddReply(wire, "local")
+	if !ok {
+		t.Fatal("invalid reply fixture")
+	}
+	if _, ok := domain.ParseCommentsAddReply(strings.TrimSuffix(wire, "comments-add-result-end\t1\n"), "local"); ok {
+		t.Fatal("accepted an incomplete reply")
+	}
+	primary := host.ReadResult{Situation: domain.SituationReview, Guard: before}
+	for _, generation := range []int{4, 5} {
+		m := Model{Panel: domain.Project(toProjectInput(primary, false, false, "")), lastRead: primary, readGeneration: generation}
+		m.lock.Begin()
+		got, _ := m.handleMutationDone(mutationDoneMsg{action: "addComment", result: host.Result{ExitCode: 0}, commentsReply: &reply, commentsReadGen: 4})
+		if generation == 4 && (got.Panel.Guard != after || got.Panel.Comments != reply.Report) {
+			t.Fatal("current reply did not update the panel")
+		}
+		if generation == 5 && (got.Panel.Guard != before || got.Panel.Comments != "") {
+			t.Fatal("obsolete reply replaced the panel")
+		}
+	}
+}
+
 func TestNavigationPublishesTheReplyAndRejectsOldDetails(t *testing.T) {
 	reply := "state\treview/x\tx\tdeadbeef\twalk\tapplied\t2\t2\t2\tb.txt\t0\nentry\t1\ta.txt\t0\t1\nentry\t2\tb.txt\t0\t1\ncapability\tnavigation-state\nguard\t" + strings.Repeat("b", 40) + "\nnavigation\tmoved\n"
 	primary, _, ok := host.ReadNavigationReply(reply)

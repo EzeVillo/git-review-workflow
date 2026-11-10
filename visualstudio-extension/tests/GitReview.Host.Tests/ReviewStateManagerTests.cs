@@ -9,6 +9,24 @@ namespace GitReview.Host.Tests;
 /// </summary>
 public class ReviewStateManagerTests
 {
+    [Fact] public async Task Comment_reply_replaces_only_the_current_read()
+    {
+        var before = new string('a', 40);
+        var after = new string('b', 40);
+        var cli = new FakeCliInvoker().Answer("status", WalkStatus + "\nguard\t" + before);
+        var manager = Manager(cli, "/repo");
+        await manager.RefreshAsync();
+        var previous = manager.CaptureCommentsAdd();
+        var current = await manager.RefreshAsync();
+        cli.Calls.Clear();
+        var reply = new CommentsAddReply(before, after, Comments.Parse("comments-identity\tresolved\tCurrent"));
+        Assert.False(manager.ApplyCommentsAdd(previous, "/repo", reply));
+        var snapshot = manager.CaptureCommentsAdd();
+        Assert.False(manager.ApplyCommentsAdd(snapshot, "/other", reply));
+        Assert.True(manager.ApplyCommentsAdd(snapshot, "/repo", reply));
+        Assert.Equal(current with { Guard = after, Comments = reply.Report }, manager.Current);
+        Assert.Empty(cli.Calls);
+    }
     [Fact] public async Task Older_comments_cannot_replace_a_newer_review()
     {
         var comments = new TaskCompletionSource<InvokeResult>();

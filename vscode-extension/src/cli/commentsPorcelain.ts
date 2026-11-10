@@ -15,10 +15,28 @@ export interface CommentsReport {
     range?: {ordinal: number; base: string; head: string};
     locations: {ordinal: number; side: string; start: number; end: number; startColumn?: number; endColumn?: number}[];
 }
+export function supportsCommentsAddReply(report: CommentsReport): boolean {
+    return report.rows.some(row => row.tag === "comments-add-reply" && row.fields[0] === "1");
+}
+
+export function parseCommentsAddReply(text: string, document: CommentDocumentKind) {
+    const lines = text.replace(/[\r\n]+$/, "").split(/\r?\n/);
+    const header = lines.shift()?.split("\t");
+    const token = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
+    if (header?.length !== 4 || header[0] !== "comments-add-result" || header[1] !== "1" ||
+        !token.test(header[2]) || !token.test(header[3]) || lines.pop() !== "comments-add-result-end\t1") return undefined;
+    const report = parseComments(lines.join("\n"));
+    const active = report.contexts.filter(context => context.state === "active");
+    if (report.identity !== "resolved" || !report.guard || !token.test(report.guard) || active.length !== 1 ||
+        active[0].guard !== report.guard || !report.documents.some(doc => doc.kind === document && doc.context === active[0].id &&
+            doc.presence === "present" && token.test(doc.revision) && (doc.count ?? 0) > 0)) return undefined;
+    return {before: header[2], after: header[3], report};
+}
 export function parseComments(text: string): CommentsReport {
     const report: CommentsReport = {rows: [], contexts: [], documents: [], entries: [], diagnostics: [], candidates: [], deliveries: [], blobs: [], deliveryFiles: [], locations: []};
     const minimum: Record<string, number> = {"comments-context": 5, "comments-owner": 2, "comments-guard": 1, "comments-document": 5, "comments-count": 2, "comments-diagnostic": 3, "comments-identity": 2, "comments-candidate": 2, "comments-delivery": 3, "comments-capture": 3, "comment-body": 2, "comment-scope": 3, "comment-entry": 4, "comment-version": 3, "comment-path": 3, "comment-location": 4, "comment-unversioned": 1, "comment-diagnostic": 3, "comment-diff": 3, "comment-blob": 3, "comments-delivery-file": 4};
     minimum["comments-capability"] = 2;
+    minimum["comments-add-reply"] = 1;
     const counts = new Map<string, number>();
     minimum["comment-columns"] = 4;
     const owners = new Map<string, string[]>();

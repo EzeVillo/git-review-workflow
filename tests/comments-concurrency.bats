@@ -131,6 +131,22 @@ teardown() { comments_teardown; }
 	comments_assert_snapshot "$COMMENTS_TMP/before" "$COMMENTS_TMP/after"
 }
 
+@test "comments add omits the partial reply when other review metadata changes" {
+	comments_inject_operation cp '*/local.md.candidate.*' barrier
+	git-review comments add --document local --text 'Durable note.' --porcelain >"$COMMENTS_TMP/writer.out" 2>"$COMMENTS_TMP/writer.err" &
+	local writer=$!
+	comments_barrier_arrived "$COMMENTS_TMP/inject"
+	git config branch.review/feature/comments.reviewdraft feature/another-draft
+	comments_barrier_resume "$COMMENTS_TMP/inject"
+	local writer_status=0
+	wait "$writer" || writer_status=$?
+	[ "$writer_status" -eq 0 ]
+	[ ! -s "$COMMENTS_TMP/writer.out" ]
+	[ ! -s "$COMMENTS_TMP/writer.err" ]
+	[ "$(tail -n 1 "$COMMENTS_SESSION_DIR/local.md")" = 'Durable note.' ]
+	[ "$(git config branch.review/feature/comments.reviewdraft)" = feature/another-draft ]
+}
+
 reset_comments_fixture() {
 	git config --unset branch.review/feature/comments.reviewcommentscontext
 	git config --unset branch.review/feature/comments.reviewcommentssession

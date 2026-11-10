@@ -1033,6 +1033,7 @@ comments_require_capture() {
 }
 
 comments_emit_capabilities() {
+	if comments_capture_allowed local; then porcelain_row comments-add-reply 1; fi
 	for _cec_operation in init add; do
 		for _cec_document in local shared; do
 			if comments_capture_allowed "$_cec_document"; then
@@ -1044,6 +1045,10 @@ comments_emit_capabilities() {
 
 comments_status() {
 	comments_state || return 1
+	comments_status_loaded "$@"
+}
+
+comments_status_loaded() {
 	_cs_requested=$1 _cs_porcelain=$2 _cs_all=${3:-0}
 	if [ -n "$_cs_requested" ]; then
 		comments_require_token "$_cs_requested" || return 1
@@ -1118,6 +1123,39 @@ EOF
 			$1=="comments-diagnostic" { print $4 }
 		'
 	fi
+}
+
+# The primary panel's review guard includes comment custody. Its other branch
+# keys must still describe the same view before a comments-only reply can be
+# applied. Use the canonical records, including their order and escaping.
+comments_add_panel_config() {
+	_capc_prefix=branch.$cm_branch.review
+	while IFS= read -r _capc_record; do
+		_capc_key=${_capc_record%%"$_review_config_tab"*}
+		case "$_capc_key" in
+			"${_capc_prefix}commentscontext"|"${_capc_prefix}commentssession"|"${_capc_prefix}commentsowner") ;;
+			"$_capc_prefix"*) printf '%s\n' "$_capc_record" ;;
+		esac
+	done <<EOF
+$1
+EOF
+}
+
+comments_add_reply() {
+	[ "${_review_config_ready:-0}" -eq 1 ] && [ "$cm_scope" = active ] && [ "$cm_identity" = resolved ] || return 1
+	# comments_replace left a fresh capture and metadata snapshot from just
+	# before publication. Its guards already bind the branch, HEAD and cursor.
+	_car_before=$1 _car_after=$1
+	if [ "$_review_config_records" != "$2" ]; then
+		_car_before_config=$(comments_add_panel_config "$2") || return 1
+		_car_after_config=$(comments_add_panel_config "$_review_config_records") || return 1
+		[ "$_car_before_config" = "$_car_after_config" ] || return 1
+		review_guard_capture "$cm_branch" "$_cm_lower" || return 1
+		_car_after=$review_guard
+	fi
+	porcelain_row comments-add-result 1 "$_car_before" "$_car_after" || return 1
+	comments_status_loaded '' 1 || return 1
+	porcelain_row comments-add-result-end 1
 }
 
 # Mutation doors are shared by public handlers and the focused test driver.

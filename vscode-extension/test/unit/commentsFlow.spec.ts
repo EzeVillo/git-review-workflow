@@ -1,7 +1,15 @@
 import * as assert from "node:assert";
 import {commentsArgs, commentDestinations, saveCommentBuffers, selectionLines, selectionCoordinates, commentRangeEndpoints} from "../../src/review/commentsFlow";
-import {parseComments} from "../../src/cli/commentsPorcelain";
+import {parseComments, parseCommentsAddReply} from "../../src/cli/commentsPorcelain";
 describe("comments flow", () => {
+    it("accepts only a complete add reply with the written document", () => {
+        const [before, after, guard, revision] = ["a", "b", "c", "d"].map(c => c.repeat(40));
+        const body = `comments-identity\tresolved\tCurrent\ncomments-guard\t${guard}\ncomments-context\tc1\treview\tactive\t${guard}\tCurrent\ncomments-document\t/local.md\tc1\tlocal\tpresent\t${revision}\ncomments-count\t/local.md\t1`;
+        const reply = `comments-add-result\t1\t${before}\t${after}\n${body}\ncomments-add-result-end\t1\n`;
+        assert.deepStrictEqual(parseCommentsAddReply(reply, "local"), {before, after, report: parseComments(body)});
+        assert.strictEqual(parseCommentsAddReply(reply, "shared"), undefined);
+        assert.strictEqual(parseCommentsAddReply(reply.replace("comments-add-result-end\t1", ""), "local"), undefined);
+    });
     it("uses only the CLI capture capabilities regardless of document presence or context kind", () => {
         const report = parseComments("comments-capability\tinit\tshared\ncomments-capability\tadd\tshared\ncomments-capability\tadd\tshared\ncomments-capability\tadd\tunknown\ncomments-capability\tadd\ncomments-context\tc\tcompare\tactive\tg\tCompare\ncomments-document\t/local\tc\tlocal\tpresent\tr");
         assert.deepStrictEqual(commentDestinations(report), ["shared"]);

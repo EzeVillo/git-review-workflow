@@ -1,6 +1,7 @@
 package com.ezevillo.gitreview.host
 
 import com.ezevillo.gitreview.domain.MutationLock
+import com.ezevillo.gitreview.domain.CommentsAddReply
 import com.ezevillo.gitreview.domain.PanelInputs
 import com.ezevillo.gitreview.domain.PanelModel
 import com.ezevillo.gitreview.domain.ReviewState
@@ -117,6 +118,16 @@ class GitReviewService(private val project: Project) : Disposable {
     }
 
     fun currentState(): ReviewState = stateManager.current
+
+    fun captureCommentsAdd() = stateManager.captureCommentsAdd()
+
+    fun applyCommentsAdd(root: String, snapshot: ReviewStateManager.PendingRead, reply: CommentsAddReply): Boolean {
+        if (pickSoleTarget(listGitRoots(project))?.rootPath != root) return false
+        val state = stateManager.applyCommentsAdd(snapshot, reply) ?: return false
+        syncWatchedFiles(state)
+        publish()
+        return true
+    }
 
     /** False until a refresh resolved a state — the panel has nothing to draw yet. */
     fun hasResolvedState(): Boolean = stateResolved

@@ -19,6 +19,7 @@ import com.ezevillo.gitreview.domain.isNavigationReply
 import com.ezevillo.gitreview.domain.parseSaveReply
 import com.ezevillo.gitreview.domain.hasSaveState
 import com.ezevillo.gitreview.domain.SaveReply
+import com.ezevillo.gitreview.domain.CommentsAddReply
 import java.util.concurrent.atomic.AtomicLong
 
 /**
@@ -48,6 +49,14 @@ class ReviewStateManager(
             // an older callback could launch prose after a newer primary report.
             onPrimary?.invoke(state)
         }
+    }
+
+    fun captureCommentsAdd() = synchronized(stateGate) { PendingRead(generation.get(), current, null) }
+
+    fun applyCommentsAdd(snapshot: PendingRead, reply: CommentsAddReply): ReviewState? = synchronized(stateGate) {
+        if (current !== snapshot.state || snapshot.state.guard != reply.before ||
+            !generation.compareAndSet(snapshot.generation, snapshot.generation + 1)) return@synchronized null
+        snapshot.state.copy(guard = reply.after, comments = reply.report).also { current = it }
     }
 
     /**

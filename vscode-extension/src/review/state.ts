@@ -4,7 +4,7 @@ import {hasCommentPaths} from "./commentPaths";
 import {hasSaveState, parseSaveReply, SaveReply} from "./saveReply";
 import {parseStateGuard} from "./staleGuard";
 import {hasNavigationState, isNavigationReply, parseInlineWhy} from "./navigationReply";
-import {CommentsReport, parseComments} from "../cli/commentsPorcelain";
+import {CommentDocumentKind, CommentsReport, parseComments, parseCommentsAddReply} from "../cli/commentsPorcelain";
 import {
     CandidateBranch,
     CandidateRemote,
@@ -382,6 +382,18 @@ export class ReviewStateManager {
     }
 
     invalidatePendingReads(): void { this.readId++; }
+
+    captureCommentsAdd() {
+        return {state: this.current, generation: this.readId};
+    }
+
+    applyCommentsAdd(snapshot: ReturnType<ReviewStateManager["captureCommentsAdd"]>, cwd: string, stdout: string, document: CommentDocumentKind): boolean {
+        const reply = parseCommentsAddReply(stdout, document);
+        if (!reply || this.current !== snapshot.state || snapshot.generation !== this.readId || snapshot.state.guard !== reply.before ||
+            this.getOptions().cwd !== cwd) return false;
+        this.setState({...snapshot.state, readId: ++this.readId, guard: reply.after, comments: reply.report});
+        return true;
+    }
 
     dispose(): void {
         this.changeEmitter.dispose();

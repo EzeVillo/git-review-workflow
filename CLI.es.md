@@ -103,6 +103,13 @@ escribir, usá `init --document local` o `init --document shared`; repetirlo no
 trunca un archivo existente. Abrí la ruta absoluta informada por `status` en
 tu editor Markdown habitual para editar, mover o borrar entradas.
 
+`comments add --porcelain` devuelve opcionalmente un sobre `comments-add-result`
+versión 1 con los guards de la review antes y después de la escritura y el
+informe actual de Comments. Los clientes lo descubren mediante
+`comments-add-reply 1` en `comments status --porcelain`. Si una escritura
+exitosa no devuelve un sobre completo, refrescá el estado mostrado sin repetir
+la escritura. Sin el flag, `add` imprime la ruta absoluta del documento.
+
 | Comando después de `git review comments` | Propósito |
 |------------------------------------------|-----------|
 | `paths --porcelain` | Informa las rutas de edición de la sesión activa sin leer prosa ni historia. Requiere contrastar el guard de la review mostrada; ver [el contrato de rutas](contracts/comments-paths.md). |

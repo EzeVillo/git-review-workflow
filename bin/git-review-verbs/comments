@@ -10,7 +10,7 @@ Commands:
   paths --porcelain                     report active session editor paths only
   status [--porcelain] [--context <id> | --all] inspect comments without writing
   init --document <local|shared>          create the chosen document
-  add --document <local|shared>           compose a comment
+  add --document <local|shared> [--porcelain] compose a comment
   delete --document <local|shared> [--entry <ordinal>]
                                         delete one entry or the whole document
   renumber --document <local|shared>      number entries in physical order
@@ -63,7 +63,7 @@ case "$command" in
 	status) allowed=' --porcelain --context --all ' ;;
 	paths) allowed=' --porcelain ' ;;
 	init) allowed=' --document --context --new-context --use-context --expect-context --expect-document ' ;;
-	add) allowed=' --document --context --new-context --use-context --path --side --start-line --end-line --start-column --end-column --base --head --base-path --head-path --unversioned --text --stdin --expect-context --expect-document ' ;;
+	add) allowed=' --document --context --new-context --use-context --path --side --start-line --end-line --start-column --end-column --base --head --base-path --head-path --unversioned --text --stdin --expect-context --expect-document --porcelain ' ;;
 	delete) allowed=' --document --context --entry --expect-context --expect-document ' ;;
 	renumber) allowed=' --document --context --expect-context --expect-document ' ;;
 	entries) allowed=' --document --context --porcelain ' ;;
@@ -170,6 +170,13 @@ case "$command" in
 		comments_check_guards "$expect_context" '' '' || exit $?
 		comments_require_capture "$document" || exit $?
 		initial_capture_guard=$cm_capture_guard
+		add_before_guard='' add_before_config=''
+		if [ "$porcelain" -eq 1 ] && [ "${_review_config_ready:-0}" -eq 1 ]; then
+			_review_guard_gitdir=$cm_gitdir
+			if review_guard_capture "$cm_branch" "$_cm_lower" 2>/dev/null; then
+				add_before_guard=$review_guard add_before_config=$_review_config_records
+			fi
+		fi
 		if [ "$command" = add ]; then comments_capture_location || exit 1; fi
 		comments_materialize "$context" "$new_context" "$use_context" || exit 1
 		target=$cm_dir/$document.md
@@ -193,7 +200,13 @@ case "$command" in
 			fi
 		else comments_append "$target" "$input_file" "$revision" "$cm_guard" || exit $?
 		fi
-		printf '%s\n' "$target"
+		if [ "$porcelain" -eq 1 ]; then
+			# The document is already written. A failed read only omits the reply.
+			if [ -n "$add_before_guard" ] && add_reply=$(comments_add_reply "$add_before_guard" "$add_before_config" 2>/dev/null); then
+				printf '%s\n' "$add_reply"
+			fi
+		else printf '%s\n' "$target"
+		fi
 		;;
 	entries)
 		comments_select_context "$context" || exit 1

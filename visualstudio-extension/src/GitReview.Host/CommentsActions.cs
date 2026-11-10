@@ -16,8 +16,9 @@ public sealed class CommentsActions
     private readonly MutationLock _lock;
     private readonly Func<string, Task<CommentBufferSave>> _save;
     private readonly Func<Task> _refresh;
-    public CommentsActions(CliInvoker cli, MutationLock mutationLock, Func<string, Task<CommentBufferSave>> save, Func<Task> refresh)
-    { _cli=cli; _lock=mutationLock; _save=save; _refresh=refresh; }
+    private readonly ReviewStateManager? _state;
+    public CommentsActions(CliInvoker cli, MutationLock mutationLock, Func<string, Task<CommentBufferSave>> save, Func<Task> refresh, ReviewStateManager? state = null)
+    { _cli=cli; _lock=mutationLock; _save=save; _refresh=refresh; _state=state; }
 
     public async Task<CommentsReport> ReadAsync(string cwd, string? context = null)
     {
@@ -31,6 +32,7 @@ public sealed class CommentsActions
         string? input = null, CommentCapture? capture = null, int? ordinal = null, string? expectedRevision = null, string? contextChoice = null, bool porcelain = false, bool check = false, IReadOnlyList<string>? additionalSavePaths = null,
         Action<CommentsReport>? beforeInvoke = null)
         => _lock.RunAsync(async () => {
+            var applied = false;
             try
             {
                 var current=await ReadAsync(cwd,context).ConfigureAwait(true);
@@ -67,9 +69,15 @@ public sealed class CommentsActions
                     if(capture.HeadPath is not null)args.AddRange(new[]{"--head-path",capture.HeadPath});
                 }
                 beforeInvoke?.Invoke(current);
-                return input is null ? await _cli.InvokeAsync("comments",args,cwd).ConfigureAwait(true) : await _cli.InvokeWithInputAsync("comments",args,cwd,input).ConfigureAwait(true);
+                var snapshot = operation == "add" && document is not null && current.SupportsAddReply ? _state?.CaptureCommentsAdd() : null;
+                var wantsReply = snapshot?.State.Guard is not null;
+                if (wantsReply && !porcelain) args.Add("--porcelain");
+                var result = input is null ? await _cli.InvokeAsync("comments",args,cwd).ConfigureAwait(true) : await _cli.InvokeWithInputAsync("comments",args,cwd,input).ConfigureAwait(true);
+                if (wantsReply && result.ExitCode == 0 && !result.TimedOut && Comments.ParseAddReply(result.Stdout, document!) is { } reply)
+                    applied = _state!.ApplyCommentsAdd(snapshot!.Value, cwd, reply);
+                return result;
             }
             catch(Exception error){return new InvokeResult("",error.Message,1);}
-            finally {await _refresh().ConfigureAwait(true);}
+            finally {if (!applied) await _refresh().ConfigureAwait(true);}
         });
 }

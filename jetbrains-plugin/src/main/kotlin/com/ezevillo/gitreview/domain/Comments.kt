@@ -6,16 +6,33 @@ data class CommentsReport(val rows: List<CommentRow> = emptyList(), val loading:
     fun records(tag: String) = rows.filter { it.tag == tag }.map { it.fields }
     fun destinations(operation: String = "add"): List<String> = records("comments-capability").filter { it[0] == operation && it[1] in listOf("local", "shared") }.map { it[1] }.distinct()
     val guard: String? get() = records("comments-guard").firstOrNull()?.firstOrNull()
+    val supportsAddReply: Boolean get() = records("comments-add-reply").any { it[0] == "1" }
     val documents: List<CommentDocument> get() = records("comments-document").filter { it.size >= 5 }.map { f ->
         CommentDocument(f[0], f[1], f[2], f[3], f[4], records("comments-count").firstOrNull { it.size >= 2 && it[0] == f[0] }?.get(1)?.toIntOrNull()?.takeIf { it >= 0 })
     }
+}
+
+data class CommentsAddReply(val before: String, val after: String, val report: CommentsReport)
+
+fun parseCommentsAddReply(text: String, document: String): CommentsAddReply? {
+    val lines = text.trimEnd('\r', '\n').lines()
+    val header = lines.first().split('\t')
+    val token = Regex("[0-9a-f]{40}(?:[0-9a-f]{24})?")
+    if (header.size != 4 || header[0] != "comments-add-result" || header[1] != "1" ||
+        !token.matches(header[2]) || !token.matches(header[3]) || lines.last() != "comments-add-result-end\t1") return null
+    val report = parseComments(lines.drop(1).dropLast(1).joinToString("\n"))
+    val active = report.records("comments-context").singleOrNull { it[2] == "active" } ?: return null
+    val guard = report.guard ?: return null
+    if (!token.matches(guard) || active[3] != guard || report.records("comments-identity").singleOrNull()?.get(0) != "resolved" ||
+        report.documents.none { it.context == active[0] && it.kind == document && it.presence == "present" && token.matches(it.revision) && (it.count ?: 0) > 0 }) return null
+    return CommentsAddReply(header[2], header[3], report)
 }
 fun commentsOwnedBy(report: CommentsReport, owners: Set<String>): List<CommentDocument> {
     val contexts = report.records("comments-owner").filter { it.size >= 3 && it[2] in owners }.map { it[0] }.toSet()
     return report.documents.filter { it.context in contexts }
 }
 fun parseComments(text: String): CommentsReport {
-    val minimum = mapOf("comments-capability" to 2, "comments-owner" to 2, "comments-context" to 5, "comments-guard" to 1, "comments-document" to 5, "comments-count" to 2, "comments-diagnostic" to 3, "comments-identity" to 2, "comments-candidate" to 2, "comments-delivery" to 3, "comments-capture" to 3, "comment-body" to 2, "comment-scope" to 3, "comment-entry" to 4, "comment-version" to 3, "comment-path" to 3, "comment-location" to 4, "comment-unversioned" to 1, "comment-diagnostic" to 3, "comment-diff" to 3, "comment-blob" to 3, "comments-delivery-file" to 4)
+    val minimum = mapOf("comments-add-reply" to 1, "comments-capability" to 2, "comments-owner" to 2, "comments-context" to 5, "comments-guard" to 1, "comments-document" to 5, "comments-count" to 2, "comments-diagnostic" to 3, "comments-identity" to 2, "comments-candidate" to 2, "comments-delivery" to 3, "comments-capture" to 3, "comment-body" to 2, "comment-scope" to 3, "comment-entry" to 4, "comment-version" to 3, "comment-path" to 3, "comment-location" to 4, "comment-unversioned" to 1, "comment-diagnostic" to 3, "comment-diff" to 3, "comment-blob" to 3, "comments-delivery-file" to 4)
     return CommentsReport(text.lineSequence().map { it.trimEnd('\r').split('\t') }.filter { f -> (if (f[0] == "comment-columns") 4 else minimum[f[0]])?.let { f.size > it } == true }.map { CommentRow(it[0], it.drop(1)) }.toList())
 }
 fun commentsArgv(report: CommentsReport, operation: String, document: String? = null, context: String? = null, ordinal: Int? = null): List<String> {

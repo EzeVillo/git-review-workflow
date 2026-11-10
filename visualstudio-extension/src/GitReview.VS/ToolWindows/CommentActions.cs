@@ -11,7 +11,7 @@ public sealed partial class ActionDispatcher
                 async path => await save(path).ConfigureAwait(true) != CommentBufferSave.Failed);
 
     private CommentsActions CommentFlow() => new(_panel.Cli,_panel.Mutations.Lock,
-        _host.SaveCommentPath ?? (_ => Task.FromResult(CommentBufferSave.Unchanged)), async()=>await _panel.RefreshAsync().ConfigureAwait(true));
+        _host.SaveCommentPath ?? (_ => Task.FromResult(CommentBufferSave.Unchanged)), async()=>await _panel.RefreshAsync().ConfigureAwait(true), _panel.State);
     private static string? CommentFailure(InvokeResult? result) => result is null ? CommentsCopy.failed : result.ExitCode==0 ? null : result.ExitCode==4 ? UserCopy.Stale : result.Stderr.Trim().Length>0 ? result.Stderr.Trim() : CommentsCopy.failed;
     private async Task AddCommentAsync()
     {

@@ -53,6 +53,26 @@ public sealed class ReviewStateManager
 
     public void InvalidatePendingReads() => Interlocked.Increment(ref _refreshGen);
 
+    public (ReviewState State, int Generation) CaptureCommentsAdd()
+    {
+        lock (_gate) return (_state, Volatile.Read(ref _refreshGen));
+    }
+
+    public bool ApplyCommentsAdd((ReviewState State, int Generation) snapshot, string cwd, CommentsAddReply reply)
+    {
+        if (!string.Equals(SoleTarget.PickSoleTarget(_repoRoots()), cwd, StringComparison.OrdinalIgnoreCase)) return false;
+        ReviewState next;
+        lock (_gate)
+        {
+            if (!ReferenceEquals(_state, snapshot.State) || snapshot.State.Guard != reply.Before ||
+                Interlocked.CompareExchange(ref _refreshGen, snapshot.Generation + 1, snapshot.Generation) != snapshot.Generation) return false;
+            next = snapshot.State with { Guard = reply.After, Comments = reply.Report };
+            _state = next;
+        }
+        StateChanged?.Invoke(next);
+        return true;
+    }
+
     public Task<ReviewState> ReadForMutationAsync(CancellationToken ct = default, bool continueAction = false)
     {
         var captured = Current;

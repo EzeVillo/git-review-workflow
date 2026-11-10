@@ -29,7 +29,7 @@ teardown() { comments_teardown; }
 	local guard
 	guard=$(printf '%s\n' "$output" | awk -F '\t' '$1 == "comments-guard" {print $2}')
 	[[ "$guard" =~ ^[0-9a-f]{40,64}$ ]]
-	[ "$output" = "$(printf 'comments-guard\t%s\ncomments-capability\tinit\tlocal\ncomments-capability\tinit\tshared\ncomments-capability\tadd\tlocal\ncomments-capability\tadd\tshared\ncomments-identity\tfresh\tNo comments context yet.\ncomments-capture\t%s\t%s\t%s' "$guard" "$guard" "$COMMENTS_BASE" "$COMMENTS_TIP")" ]
+	[ "$output" = "$(printf 'comments-guard\t%s\ncomments-add-reply\t1\ncomments-capability\tinit\tlocal\ncomments-capability\tinit\tshared\ncomments-capability\tadd\tlocal\ncomments-capability\tadd\tshared\ncomments-identity\tfresh\tNo comments context yet.\ncomments-capture\t%s\t%s\t%s' "$guard" "$guard" "$COMMENTS_BASE" "$COMMENTS_TIP")" ]
 	comments_snapshot "$COMMENTS_TMP/after"
 	comments_assert_snapshot "$COMMENTS_TMP/before" "$COMMENTS_TMP/after"
 }
@@ -49,7 +49,7 @@ teardown() { comments_teardown; }
 	[ "$status" -eq 0 ]
 	[ "$stderr" = '' ]
 	guard=$(printf '%s\n' "$output" | awk -F '\t' '$1 == "comments-guard" {print $2}')
-	[ "$output" = "$(printf 'comments-guard\t%s\ncomments-capability\tinit\tlocal\ncomments-capability\tinit\tshared\ncomments-capability\tadd\tlocal\ncomments-capability\tadd\tshared\ncomments-identity\tresolved\tComments context selected.\ncomments-context\t%s\treview\tactive\t%s\tfeature/comments\ncomments-owner\t%s\tfeature/comments\treview/feature/comments\ncomments-document\t%s\t%s\tlocal\tpresent\t%s\ncomments-count\t%s\t3\ncomments-document\t%s\t%s\tshared\tabsent\tabsent\ncomments-capture\t%s\t%s\t%s' "$guard" "$COMMENTS_CONTEXT" "$guard" "$COMMENTS_CONTEXT" "$local_path" "$COMMENTS_CONTEXT" "$revision" "$local_path" "$shared_path" "$COMMENTS_CONTEXT" "$guard" "$COMMENTS_BASE" "$COMMENTS_TIP")" ]
+	[ "$output" = "$(printf 'comments-guard\t%s\ncomments-add-reply\t1\ncomments-capability\tinit\tlocal\ncomments-capability\tinit\tshared\ncomments-capability\tadd\tlocal\ncomments-capability\tadd\tshared\ncomments-identity\tresolved\tComments context selected.\ncomments-context\t%s\treview\tactive\t%s\tfeature/comments\ncomments-owner\t%s\tfeature/comments\treview/feature/comments\ncomments-document\t%s\t%s\tlocal\tpresent\t%s\ncomments-count\t%s\t3\ncomments-document\t%s\t%s\tshared\tabsent\tabsent\ncomments-capture\t%s\t%s\t%s' "$guard" "$COMMENTS_CONTEXT" "$guard" "$COMMENTS_CONTEXT" "$local_path" "$COMMENTS_CONTEXT" "$revision" "$local_path" "$shared_path" "$COMMENTS_CONTEXT" "$guard" "$COMMENTS_BASE" "$COMMENTS_TIP")" ]
 	comments_snapshot "$COMMENTS_TMP/after"
 	comments_assert_snapshot "$COMMENTS_TMP/before" "$COMMENTS_TMP/after"
 }

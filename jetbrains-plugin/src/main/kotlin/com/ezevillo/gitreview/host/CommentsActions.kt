@@ -71,8 +71,12 @@ class CommentsActions(private val project: Project, private val service: GitRevi
                         args += "--stdin"
                         choice?.let { args += if (it.isEmpty()) listOf("--new-context") else listOf("--use-context", it) }
                         if (location != null) args += location.locationArgs(scope)
+                        val snapshot = service.captureCommentsAdd()
+                        val wantsReply = snapshot.state.guard != null && fresh.supportsAddReply
+                        if (wantsReply) args += "--porcelain"
                         val result = service.cliInvoker.invokeWithInput("comments", args, root, text)
-                        service.refreshNow()
+                        val reply = if (wantsReply && result.exitCode == 0 && !result.timedOut) parseCommentsAddReply(result.stdout, kind) else null
+                        if (reply == null || !service.applyCommentsAdd(root, snapshot, reply)) service.refreshNow()
                         val message = error(result)
                         if (message == null && born) revealPanel(project, ControlId.ADD_COMMENT, commentsBlockBorn = true)
                         message ?: ""

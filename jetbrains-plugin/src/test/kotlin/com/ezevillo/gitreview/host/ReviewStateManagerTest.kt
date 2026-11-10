@@ -1,6 +1,8 @@
 package com.ezevillo.gitreview.host
 
 import com.ezevillo.gitreview.domain.CLI_PROBE_RETRIES
+import com.ezevillo.gitreview.domain.CommentsAddReply
+import com.ezevillo.gitreview.domain.CommentsReport
 import com.ezevillo.gitreview.domain.MIN_CLI_VERSION
 import com.ezevillo.gitreview.domain.ReviewMode
 import com.ezevillo.gitreview.domain.Situation
@@ -18,6 +20,22 @@ import org.junit.jupiter.api.Test
  * verdad y se salteaba sola cuando la CLI no estaba en el PATH.
  */
 class ReviewStateManagerTest {
+    @Test fun commentsAddReplyReplacesOnlyTheCurrentRead() {
+        val before = "a".repeat(40)
+        val after = "b".repeat(40)
+        val cli = FakeCliRunner().answer("status", WALK_STATUS + "\nguard\t$before")
+        val manager = manager(cli)
+        manager.refresh("/repo")
+        val previous = manager.captureCommentsAdd()
+        val current = manager.refresh("/repo")
+        cli.calls.clear()
+        val reply = CommentsAddReply(before, after, CommentsReport())
+        assertNull(manager.applyCommentsAdd(previous, reply))
+        val applied = manager.applyCommentsAdd(manager.captureCommentsAdd(), reply)
+        assertEquals(current.copy(guard = after, comments = reply.report), applied)
+        assertEquals(applied, manager.current)
+        assertTrue(cli.calls.isEmpty())
+    }
     @Test fun cliGuardAvoidsTheFullPreMutationReadAndIsForwardedToTheOperation() {
         val guard = "a".repeat(40)
         val cli = FakeCliRunner().answer("status", WALK_STATUS + "\nguard\t$guard")

@@ -103,6 +103,13 @@ use `init --document local` or `init --document shared`; repeating it does not
 truncate an existing file. Open the absolute path reported by `status` in your
 usual Markdown editor to edit, move or delete entries.
 
+`comments add --porcelain` optionally returns a `comments-add-result` version 1
+envelope with the review guards before and after the write and the current
+Comments report. Clients discover it through `comments-add-reply 1` in
+`comments status --porcelain`. When a successful write yields no complete
+envelope, refresh the displayed state without repeating the write. Without the
+flag, `add` prints the absolute document path.
+
 | Command after `git review comments` | Purpose |
 |-------------------------------------|---------|
 | `paths --porcelain` | Report the active session’s owned editor paths without loading comment bodies or history. Requires a displayed review guard check; see [the paths contract](contracts/comments-paths.md). |

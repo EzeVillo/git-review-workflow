@@ -7,13 +7,32 @@ public sealed record CommentsReport(IReadOnlyList<CommentRow> Rows, bool Loading
     public IEnumerable<IReadOnlyList<string>> Records(string tag) => Rows.Where(r => r.Tag == tag).Select(r => r.Fields);
     public IReadOnlyList<string> Destinations(string operation = "add") => Records("comments-capability").Where(r => r[0] == operation && (r[1] == "local" || r[1] == "shared")).Select(r => r[1]).Distinct().ToArray();
     public string? Guard => Records("comments-guard").FirstOrDefault()?.FirstOrDefault();
+    public bool SupportsAddReply => Records("comments-add-reply").Any(r => r[0] == "1");
     public IReadOnlyList<CommentDocument> Documents => Records("comments-document").Where(f => f.Count >= 5).Select(f => {
         var count = Records("comments-count").FirstOrDefault(c => c.Count >= 2 && c[0] == f[0]);
         return new CommentDocument(f[0], f[1], f[2], f[3], f[4], count is not null && int.TryParse(count[1], out var n) && n >= 0 ? n : null);
     }).ToArray();
 }
+public sealed record CommentsAddReply(string Before, string After, CommentsReport Report);
+
 public static class Comments
 {
+    public static CommentsAddReply? ParseAddReply(string text, string document)
+    {
+        var lines = text.TrimEnd('\r', '\n').Split('\n').Select(line => line.TrimEnd('\r')).ToArray();
+        var header = lines[0].Split('\t');
+        bool Token(string? value) => value is not null && (value.Length == 40 || value.Length == 64) &&
+            value.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
+        if (header.Length != 4 || header[0] != "comments-add-result" || header[1] != "1" ||
+            !Token(header[2]) || !Token(header[3]) || lines[lines.Length - 1] != "comments-add-result-end\t1") return null;
+        var report = Parse(string.Join("\n", lines.Skip(1).Take(lines.Length - 2)));
+        var active = report.Records("comments-context").Where(row => row[2] == "active").ToArray();
+        if (!Token(report.Guard) || active.Length != 1 || active[0][3] != report.Guard ||
+            report.Records("comments-identity").FirstOrDefault()?[0] != "resolved" ||
+            !report.Documents.Any(d => d.Kind == document && d.Context == active[0][0] && d.Presence == "present" && Token(d.Revision) && d.Count > 0)) return null;
+        return new CommentsAddReply(header[2], header[3], report);
+    }
+
     public static IReadOnlyList<CommentDocument> OwnedBy(CommentsReport report, IReadOnlyCollection<string> owners)
     {
         var contexts=new HashSet<string>(report.Records("comments-owner").Where(r=>r.Count>=3 && owners.Contains(r[2])).Select(r=>r[0]));
@@ -44,7 +63,7 @@ public static class Comments
         return (lines.Take(first-1).Sum(l=>l.Length+1)+start, lines.Take(last-1).Sum(l=>l.Length+1)+end);
     }
     private static readonly IReadOnlyDictionary<string, int> Fields = new Dictionary<string, int> {
-        ["comments-capability"]=2, ["comments-owner"]=2, ["comments-context"]=5, ["comments-guard"]=1, ["comments-document"]=5, ["comments-count"]=2,
+        ["comments-capability"]=2, ["comments-add-reply"]=1, ["comments-owner"]=2, ["comments-context"]=5, ["comments-guard"]=1, ["comments-document"]=5, ["comments-count"]=2,
         ["comments-diagnostic"]=3, ["comments-identity"]=2, ["comments-candidate"]=2, ["comments-delivery"]=3,
         ["comments-capture"]=3, ["comment-body"]=2, ["comment-scope"]=3, ["comment-entry"]=4, ["comment-version"]=3, ["comment-path"]=3,
         ["comment-location"]=4, ["comment-columns"]=4, ["comment-unversioned"]=1, ["comment-diagnostic"]=3, ["comment-diff"]=3,

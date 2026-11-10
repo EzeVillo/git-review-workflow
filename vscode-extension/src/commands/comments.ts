@@ -4,7 +4,7 @@ import {confirmMutation} from "../review/confirm";
 import {execFile} from "node:child_process";
 import {promisify} from "node:util";
 import * as path from "node:path";
-import {CommentDocument, CommentsReport, parseComments} from "../cli/commentsPorcelain";
+import {CommentDocument, CommentsReport, parseComments, supportsCommentsAddReply} from "../cli/commentsPorcelain";
 import {invokeGitReview, InvokeOptions, InvokeResult} from "../cli/invoke";
 import {commentsArgs, commentsOwnedBy, commentDestinations, CommentLocation, CommentBufferSave, saveCommentBuffers, selectionCoordinates, commentRangeEndpoints} from "../review/commentsFlow";
 import {sameDraftFile} from "../review/draftFlow";
@@ -165,8 +165,11 @@ export async function addComment(lock: MutationLock, manager: ReviewStateManager
                 if (location.basePath) args.push("--base-path", location.basePath);
                 if (location.headPath) args.push("--head-path", location.headPath);
             }
+            const snapshot = manager.captureCommentsAdd();
+            const wantsReply = !!snapshot.state.guard && supportsCommentsAddReply(fresh);
+            if (wantsReply) args.push("--porcelain");
             const result = await invokeGitReview("comments", args, {...options, stdin: text});
-            await manager.refresh();
+            if (!wantsReply || result.exitCode !== 0 || !manager.applyCommentsAdd(snapshot, options.cwd, result.stdout, kind)) await manager.refresh();
             const error = failure(result);
             if (!error && born) revealPanel("addComment", reveal, true);
             return error;

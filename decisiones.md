@@ -2247,3 +2247,10 @@ corresponde, la base fijada en una sola pasada del manifest. Al enviar un
 comentario desde IntelliJ, VS Code o Visual Studio, el cliente reutiliza la
 lectura hecha dentro del lock de mutación si el editor no escribió el Markdown.
 Si lo escribió, consulta la nueva revisión antes de enviarla a la CLI.
+
+`comments add --porcelain` puede devolver el informe desde la validación que
+precedió la escritura. El sobre incluye el guard anterior y el posterior, porque
+el primer comentario puede materializar la custodia y cambiarlo. La CLI omite
+el sobre si cambió otra clave de la review. Cada cliente aplica el informe sólo
+sobre la misma lectura que originó el envío. Una respuesta ausente, incompleta
+u obsoleta vuelve al refresco completo sin repetir la escritura.

@@ -50,9 +50,50 @@ release" ]
 	[[ "$build_block" == *"path: tui/dist/"* ]]
 }
 
-@test "release-tui: formula pin handles every platform indentation" {
-	# Linux arm URLs are nested one level deeper than the other platforms. The
-	# replacement must preserve arbitrary leading spaces or those checksums stay
-	# placeholders after a successful release.
-	grep -Fq 's#^([ ]+sha256 ).*#\1' "$WORKFLOW"
+@test "release-tui: pin advances the stable formula to the published assets" {
+	work="$BATS_TEST_TMPDIR"
+	export GIT_CONFIG_GLOBAL="$work/gitconfig" GIT_CONFIG_NOSYSTEM=1 GIT_ALLOW_PROTOCOL=file
+	export GH_TOKEN=fixture DEFAULT_BRANCH=main GITHUB_REPOSITORY=example/git-review-workflow
+	export GITHUB_REF_NAME=tui-v9.8.7 GITHUB_WORKSPACE="$work"
+	mkdir -p "$work/source/Formula" "$work/dist"
+	formula=Formula/git-review-ui.rb
+	cp "$REPO/$formula" "$work/source/$formula"
+	git -C "$work/source" init -q -b main
+	git -C "$work/source" add "$formula"
+	git -C "$work/source" -c user.name=fixture -c user.email=fixture@example.com commit -qm stable
+	git clone -q --bare "$work/source" "$work/remote.git"
+	remote="$(git -C "$work/remote.git" rev-parse --absolute-git-dir)"
+	git config --global "url.$remote.insteadOf" "https://x-access-token:fixture@github.com/$GITHUB_REPOSITORY.git"
+
+	i=1
+	for suffix in darwin_arm64 darwin_amd64 linux_amd64 linux_arm64; do
+		printf '%064d  git-review-ui_9.8.7_%s.tar.gz\n' "$i" "$suffix"
+		i=$((i + 1))
+	done >"$work/dist/SHA256SUMS"
+	awk '
+		{ sub(/\r$/, "") }
+		/^      - name: Pin the Homebrew formula on the default branch$/ { step=1 }
+		step && /^        run: \|$/ { body=1; next }
+		body && /^          / { print substr($0, 11); next }
+		body && NF { exit }
+	' "$WORKFLOW" >"$work/pin.sh"
+	[ -s "$work/pin.sh" ]
+
+	run bash -e "$work/pin.sh"
+	[ "$status" -eq 0 ]
+	git -C "$remote" show "main:$formula" >"$work/pinned.rb"
+	grep -Fxq '  version "9.8.7"' "$work/pinned.rb"
+	while read -r sum asset; do
+		pinned="$(awk -v asset="$asset" 'index($0, asset) { print; getline; print }' "$work/pinned.rb")"
+		expected="      url \"https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME/$asset\"
+      sha256 \"$sum\""
+		[ "$pinned" = "$expected" ] || {
+			printf 'expected for %s:\n%s\nactual:\n%s\n' "$asset" "$expected" "$pinned"
+			return 1
+		}
+	done <"$work/dist/SHA256SUMS"
+	pin="$(git -C "$remote" rev-parse main)"
+	run bash -e "$work/pin.sh"
+	[ "$status" -eq 0 ]
+	[ "$(git -C "$remote" rev-parse main)" = "$pin" ]
 }

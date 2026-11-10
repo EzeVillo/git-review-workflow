@@ -12,8 +12,13 @@ setup() {
 
 # ── Homebrew formula ──────────────────────────────────────────────────────────
 
-@test "homebrew: formula version matches VERSION file" {
-	grep -qE 'version "'"$VERSION"'"' "$FORMULA"
+@test "homebrew: stable formula pins a version URL and checksum" {
+	version="$(sed -nE 's#^  version "([^"]*)".*#\1#p' "$FORMULA")"
+	url="$(sed -nE 's#^  url "([^"]*)".*#\1#p' "$FORMULA")"
+	checksum="$(sed -nE 's#^  sha256 "([^"]*)".*#\1#p' "$FORMULA")"
+	[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+	[ "$url" = "https://github.com/EzeVillo/git-review-workflow/archive/refs/tags/v$version.tar.gz" ]
+	[[ "$checksum" =~ ^[0-9a-f]{64}$ ]]
 }
 
 @test "homebrew: all bin files referenced in the formula exist and are executable" {

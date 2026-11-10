@@ -1,19 +1,12 @@
 # Homebrew formula for git-review-workflow.
 #
-# The `url`/`sha256`/`version` below are kept in sync with the latest tag by the
-# release workflow (.github/workflows/release.yml). Until the first `v*` tag is
-# cut the stable `url` points at a tag that does not exist yet and `sha256` is a
-# placeholder, so install the tip of the default branch instead:
-#
-#     brew tap EzeVillo/git-review-workflow https://github.com/EzeVillo/git-review-workflow
-#     brew install --HEAD EzeVillo/git-review-workflow/git-review-workflow
-#
-# After a release, the same commands without --HEAD install the tagged version.
+# The release workflow (.github/workflows/release.yml) pins the version, URL
+# and SHA-256 together after publishing the release.
 class GitReviewWorkflow < Formula
   desc "Git commands to review a pull request branch locally as one staged diff"
   homepage "https://git-review.ezevillo.com/"
-  version "0.10.0"
-  url "https://github.com/EzeVillo/git-review-workflow/archive/refs/tags/v0.10.0.tar.gz"
+  version "0.9.0"
+  url "https://github.com/EzeVillo/git-review-workflow/archive/refs/tags/v0.9.0.tar.gz"
   sha256 "65798824b884c13540654bb254906504510e462794f611573e906a8dc97904a5"
   license "MIT"
   head "https://github.com/EzeVillo/git-review-workflow.git"

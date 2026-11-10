@@ -30,7 +30,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const tool = path.basename(process.argv[1]);
 const args = process.argv.slice(2);
-const asset = tool === "npx" && args[1] === "publish" ? fs.readFileSync(args[3], "utf8") : undefined;
+const asset = tool === "vsce" && args[0] === "publish" ? fs.readFileSync(args[2], "utf8") : undefined;
 fs.appendFileSync(process.env.AUDIT_LOG, JSON.stringify({tool, args, asset}) + "\\n");
 if (tool === "gh") {
     switch (args[1]) {
@@ -44,10 +44,10 @@ if (tool === "gh") {
     case "edit": break;
     default: process.exit(93);
     }
-} else if (args[1] === "show") {
+} else if (tool === "vsce" && args[0] === "show") {
     if (process.env.AUDIT_METADATA === "unavailable") process.exit(1);
     console.log(process.env.AUDIT_METADATA);
-} else if (args[1] === "publish") {
+} else if (tool === "vsce" && args[0] === "publish") {
     process.exit(Number(process.env.AUDIT_PUBLISH_EXIT));
 } else {
     process.exit(94);
@@ -73,12 +73,15 @@ for (const scenario of [
         const output = join(cwd, "output");
         const trace = join(cwd, "trace");
         mkdirSync(tools);
+        const npmBin = join(cwd, "vscode-extension", "node_modules", ".bin");
+        mkdirSync(npmBin, {recursive: true});
         mkdirSync(join(cwd, "vscode-extension", "scripts"), {recursive: true});
         writeFileSync(join(cwd, built), "new build bytes");
         writeFileSync(join(cwd, "vscode-extension", "CHANGELOG.md"), "## [1.2.3]\n\nRelease notes.\n");
         copyFileSync(new URL("../vscode-extension/scripts/marketplace-vsix-status.mjs", import.meta.url),
             join(cwd, "vscode-extension", "scripts", "marketplace-vsix-status.mjs"));
         for (const tool of ["npx", "gh"]) writeFileSync(join(tools, tool), mock, {mode: 0o755});
+        writeFileSync(join(npmBin, "vsce"), mock, {mode: 0o755});
         const env = {
             ...process.env, PATH: tools + delimiter + process.env.PATH, TMPDIR: cwd,
             GITHUB_OUTPUT: output, GITHUB_REF_NAME: tag, GITHUB_REPOSITORY: repository,
@@ -100,14 +103,14 @@ for (const scenario of [
         }
 
         const calls = readFileSync(trace, "utf8").trimEnd().split("\n").map(line => JSON.parse(line));
-        assert.deepEqual(calls.map(({tool, args}) => [tool, ...args.slice(0, 2)]), [
+        assert.deepEqual(calls.map(({tool, args}) => [tool, ...args.slice(0, tool === "gh" ? 2 : 1)]), [
             ["gh", "release", "view"],
             ["gh", "release", scenario.recover ? "download" : "create"],
-            ["npx", "vsce", "show"],
-            ...(scenario.publishes ? [["npx", "vsce", "publish"]] : []),
+            ["vsce", "show"],
+            ...(scenario.publishes ? [["vsce", "publish"]] : []),
             ...(scenario.status === 0 ? [["gh", "release", "edit"]] : []),
         ]);
-        assert.deepEqual(calls[2].args, ["vsce", "show", "EzeVillo.git-review-workflow", "--json"]);
+        assert.deepEqual(calls[2].args, ["show", "EzeVillo.git-review-workflow", "--json"]);
         if (scenario.recover) {
             assert.deepEqual(calls[1].args.slice(0, 8),
                 ["release", "download", tag, "--repo", repository, "--pattern", filename, "--dir"]);
@@ -119,7 +122,7 @@ for (const scenario of [
         }
         if (scenario.publishes) {
             assert.deepEqual(calls[3], {
-                tool: "npx", args: ["vsce", "publish", "--packagePath", asset, "--pat", "fake-test-token"],
+                tool: "vsce", args: ["publish", "--packagePath", asset, "--pat", "fake-test-token"],
                 asset: scenario.recover ? "original tagged bytes" : "new build bytes",
             });
         }

@@ -2,12 +2,8 @@
 #
 # A release bumps the version in several places at once. The files that ship
 # *inside* the tarball (VERSION, bin/git-review, package.json) must be bumped in
-# the tagged commit; the file that points *at* the tarball (the Homebrew formula)
-# is pinned afterwards by the release workflow. If any of them drift out of sync,
-# the tag would ship — or advertise, or publish to npm — the wrong version.
-#
-# These tests assert that single invariant directly, so a partial bump fails
-# loudly and names exactly which file lagged behind.
+# the tagged commit. Homebrew keeps its published version until the release
+# workflow has artifacts to pin.
 
 setup() {
 	REPO="$BATS_TEST_DIRNAME/.."
@@ -23,9 +19,20 @@ setup() {
 	[ "$embedded" = "$VERSION" ]
 }
 
-@test "version: Homebrew formula matches the VERSION file" {
-	pinned="$(sed -nE 's#^  version "([^"]*)".*#\1#p' "$REPO/Formula/git-review-workflow.rb")"
-	[ "$pinned" = "$VERSION" ]
+@test "version: CLI bump stamps shipped files and leaves Homebrew pinned" {
+	work="$BATS_TEST_TMPDIR/bump-cli"
+	mkdir -p "$work/bin" "$work/Formula"
+	cp "$REPO/bump-version.sh" "$REPO/VERSION" "$REPO/package.json" "$work/"
+	cp "$REPO/bin/git-review" "$work/bin/"
+	cp "$REPO/Formula/git-review-workflow.rb" "$work/Formula/"
+
+	run sh "$work/bump-version.sh" 9.8.7
+	[ "$status" -eq 0 ]
+	[ "$(cat "$work/VERSION")" = "9.8.7" ]
+	[ "$(sed -nE 's#^VERSION="([^"]*)".*#\1#p' "$work/bin/git-review")" = "9.8.7" ]
+	[ "$(sed -nE 's#^  "version": "([^"]*)".*#\1#p' "$work/package.json")" = "9.8.7" ]
+	[ -x "$work/bin/git-review" ]
+	cmp "$REPO/Formula/git-review-workflow.rb" "$work/Formula/git-review-workflow.rb"
 }
 
 @test "version: package.json matches the VERSION file" {
@@ -129,15 +136,6 @@ tui_version() {
 	}
 }
 
-@test "version: tui Homebrew formula matches version.go" {
-	tui="$(tui_version)"
-	formula="$(sed -nE 's#^  version "([^"]*)"#\1#p' "$REPO/Formula/git-review-ui.rb")"
-	[ "$formula" = "$tui" ] || {
-		echo "Formula/git-review-ui.rb version $formula != tui/internal/domain/version.go $tui"
-		false
-	}
-}
-
 @test "version: tui has no package.json" {
 	packages="$(find "$REPO/tui" -name package.json -type f -print)"
 	[ -z "$packages" ] || {
@@ -146,24 +144,17 @@ tui_version() {
 	}
 }
 
-@test "version: tui bump stamps version.go and formula but preserves checksums" {
-	work="$(mktemp -d)"
+@test "version: tui bump stamps version.go and leaves Homebrew pinned" {
+	work="$BATS_TEST_TMPDIR/bump-tui"
 	mkdir -p "$work/tui/internal/domain" "$work/Formula"
 	cp "$REPO/tui/bump-version.sh" "$work/tui/bump-version.sh"
 	cp "$REPO/tui/internal/domain/version.go" "$work/tui/internal/domain/version.go"
 	cp "$REPO/Formula/git-review-ui.rb" "$work/Formula/git-review-ui.rb"
-	before="$(sed -nE 's#^[ ]+sha256 "([^"]*)"#\1#p' "$work/Formula/git-review-ui.rb")"
 
 	run sh "$work/tui/bump-version.sh" 9.8.7
 	[ "$status" -eq 0 ]
 	[ "$(sed -nE 's#^const TUIVersion = "([^"]*)"#\1#p' "$work/tui/internal/domain/version.go")" = "9.8.7" ]
-	[ "$(sed -nE 's#^  version "([^"]*)"#\1#p' "$work/Formula/git-review-ui.rb")" = "9.8.7" ]
-	urls="$(sed -nE 's#^[ ]+url "([^"]*)"#\1#p' "$work/Formula/git-review-ui.rb")"
-	[ "$(printf '%s\n' "$urls" | grep -c '/tui-v9.8.7/git-review-ui_9.8.7_')" -eq 4 ]
-	! printf '%s\n' "$urls" | grep -q '0.1.0'
-	after="$(sed -nE 's#^[ ]+sha256 "([^"]*)"#\1#p' "$work/Formula/git-review-ui.rb")"
-	[ "$after" = "$before" ]
-	rm -rf "$work"
+	cmp "$REPO/Formula/git-review-ui.rb" "$work/Formula/git-review-ui.rb"
 }
 
 # --- Client CHANGELOGs name the version being shipped -----------------------

@@ -540,11 +540,10 @@ telemetría de la CLI y de los clientes no forma parte de esta instrumentación 
 
 La versión de la **CLI** está duplicada a propósito en `VERSION`, `bin/git-review` y `package.json`
 (los tres viajan en el tarball; npm publica la de `package.json`);
-`Formula/git-review-workflow.rb` apunta al tarball. `./bump-version.sh X.Y.Z` estampa los tres desde
-un solo argumento y deja **a propósito** el `sha256` de la fórmula, desconocido hasta que existe el
-tarball del tag: lo fija el workflow de release. Los releases se cortan pusheando un tag `vX.Y.Z`, que
-crea el GitHub Release, fija la fórmula y publica a npm vía Trusted Publishing (OIDC, sin
-`NPM_TOKEN`).
+`./bump-version.sh X.Y.Z` estampa los tres desde un solo argumento. La fórmula de Homebrew sigue
+apuntando al último tarball publicado. Al pushear `vX.Y.Z`, el workflow crea el GitHub Release, fija
+juntos la versión, la URL y el SHA-256 de la fórmula, y publica a npm vía Trusted Publishing
+(OIDC, sin `NPM_TOKEN`).
 
 Los clientes versionan **aparte** de la CLI y entre sí, con el mismo patrón:
 
@@ -553,7 +552,7 @@ Los clientes versionan **aparte** de la CLI y entre sí, con el mismo patrón:
 | `./vscode-extension/bump-version.sh X.Y.Z` | `package.json` + las entradas propias de `package-lock.json` |
 | `./jetbrains-plugin/bump-version.sh X.Y.Z` | `pluginVersion` en `gradle.properties` |
 | `./visualstudio-extension/bump-version.sh X.Y.Z` | `GitReview.VS.csproj`, `source.extension.vsixmanifest` y `Directory.Build.props` |
-| `./tui/bump-version.sh X.Y.Z` | `tui/internal/domain/version.go` + `Formula/git-review-ui.rb` (conserva sus cuatro `sha256`) |
+| `./tui/bump-version.sh X.Y.Z` | `tui/internal/domain/version.go` |
 
 `tests/version-consistency.bats` protege contra el drift de la CLI y de los cuatro clientes.
 
@@ -584,7 +583,7 @@ CLI. Detalle en `decisiones.md` §13.
 `.github/workflows/release-tui.yml`, que verifica el commit taggeado en tres SO, cross-compila los
 siete binarios estáticos en Ubuntu y adjunta esos assets más `SHA256SUMS` al GitHub Release. Se crea
 con **`--latest=false`** para que `releases/latest` siga resolviendo sólo releases `vX.Y.Z` de la CLI;
-después fija los cuatro checksums de `Formula/git-review-ui.rb` en la rama por default. No hay
+después fija la versión, las cuatro URLs y sus checksums en `Formula/git-review-ui.rb`. No hay
 registro de paquetes ni job de publicación adicional.
 
 Las capacidades de captura viajan como `comments-capability <init|add> <local|shared>`

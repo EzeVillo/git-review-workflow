@@ -160,7 +160,7 @@ jobs:
             --title "Terminal TUI ${GITHUB_REF_NAME#tui-v}" \
             --latest=false \
             --notes-file "$notes"
-      - name: Pin Homebrew checksums on the default branch
+      - name: Pin the Homebrew formula on the default branch
         env:
           GH_TOKEN: ${{ github.token }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
@@ -175,19 +175,26 @@ jobs:
             sed -E "$1" "$2" >"$_t" && mv "$_t" "$2"
           }
           f="Formula/git-review-ui.rb"
-          for suffix in \
-            darwin_arm64.tar.gz darwin_amd64.tar.gz \
-            linux_amd64.tar.gz linux_arm64.tar.gz; do
-            asset="git-review-ui_${GITHUB_REF_NAME#tui-v}_${suffix}"
+          version="${GITHUB_REF_NAME#tui-v}"
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+          sed_i "s#^(  version ).*#\1\"${version}\"#" "$f"
+          for suffix in darwin_arm64 darwin_amd64 linux_amd64 linux_arm64; do
+            asset="git-review-ui_${version}_${suffix}.tar.gz"
             sum="$(awk -v name="$asset" '$2 == name {print $1}' "$GITHUB_WORKSPACE/dist/SHA256SUMS")"
             if [ -z "$sum" ]; then
               echo "SHA256SUMS has no entry for $asset" >&2
               exit 1
             fi
-            sed_i "/_${suffix}/{n;s#^([ ]+sha256 ).*#\1\"${sum}\"#;}" "$f"
+            sed_i "
+              /_${suffix}\.tar\.gz\"[[:space:]]*$/ {
+                s#^([ ]+url ).*#\1\"${url}/${asset}\"#
+                n
+                s#^([ ]+sha256 ).*#\1\"${sum}\"#
+              }
+            " "$f"
           done
           if git diff --quiet -- "$f"; then
-            echo "formula checksums already pinned; nothing to commit"
+            echo "formula already pinned to ${GITHUB_REF_NAME}; nothing to commit"
             exit 0
           fi
           git config user.name "github-actions[bot]"

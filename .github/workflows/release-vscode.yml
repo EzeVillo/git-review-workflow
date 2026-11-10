@@ -133,20 +133,21 @@ jobs:
         run: |
           set -eu
           vsix="$VSIX"
+          vsce="./vscode-extension/node_modules/.bin/vsce"
           checksum="$(sha256sum "$vsix" | awk '{ print tolower($1) }')"
-          if metadata="$(npx vsce show EzeVillo.git-review-workflow --json 2>/dev/null)"; then
+          if metadata="$("$vsce" show EzeVillo.git-review-workflow --json 2>/dev/null)"; then
             if printf '%s' "$metadata" | node vscode-extension/scripts/marketplace-vsix-status.mjs "$VERSION" "$checksum"; then
               echo "VS Code Marketplace already has the matching VSIX for version ${VERSION}; continuing the release recovery."
             else
               status=$?
               if [ "$status" -eq 3 ]; then
-                npx vsce publish --packagePath "$vsix" --pat "$PUBLISH_TOKEN"
+                "$vsce" publish --packagePath "$vsix" --pat "$PUBLISH_TOKEN"
               else
                 exit "$status"
               fi
             fi
           else
-            npx vsce publish --packagePath "$vsix" --pat "$PUBLISH_TOKEN"
+            "$vsce" publish --packagePath "$vsix" --pat "$PUBLISH_TOKEN"
           fi
 
       - name: Publish the GitHub release

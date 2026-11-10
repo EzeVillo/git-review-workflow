@@ -616,12 +616,9 @@ and `dotnet test`.
 
 CLI releases are cut by pushing a `vX.Y.Z` tag.
 
-1. Bump the version everywhere it must agree, then tag that commit. The version lives in several
-   files on purpose — `VERSION`, `bin/git-review` and
-   `package.json` ship *inside* the tarball (npm publishes the version from
-   `package.json`), while the Homebrew formula points *at* it — so
-   [`bump-version.sh`](bump-version.sh) stamps all of them from one argument and they can never
-   drift out of sync:
+1. Use [`bump-version.sh`](bump-version.sh) to stamp `VERSION`, `bin/git-review` and `package.json`
+   together. All three ship in the tarball. Homebrew continues to serve the last published version
+   while you prepare the release.
 
    ```sh
    ./bump-version.sh X.Y.Z
@@ -631,9 +628,6 @@ CLI releases are cut by pushing a `vX.Y.Z` tag.
    git tag vX.Y.Z
    git push origin HEAD --tags
    ```
-
-   The script leaves the formula's `sha256` untouched on purpose: it depends on the tarball GitHub
-   builds for the tag, which does not exist until the tag is pushed.
 
    **The CHANGELOG section is written by hand before tagging, and it is what gets published.** The
    release body is that section, not `--generate-notes`, which enumerated every commit since the
@@ -646,8 +640,7 @@ CLI releases are cut by pushing a `vX.Y.Z` tag.
    verb this release introduces, this `vX.Y.Z` is cut *first* and the client's floor moves after — see
    [`decisiones.md`](decisiones.md) §14.
 
-2. The release workflow ([`.github/workflows/release.yml`](.github/workflows/release.yml)) then pins
-   that `sha256` (the one thing not known before the tag):
+2. Pushing the tag triggers the [release workflow](.github/workflows/release.yml).
 
     - creates a GitHub Release for the tag, with the matching `CHANGELOG.md` section as its body,
     - pins the Homebrew formula (`url`, `sha256`, `version`) to the tag on the default branch, so

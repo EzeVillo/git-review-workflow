@@ -943,9 +943,11 @@ estampa todos los sitios que deben coincidir:
 - `./visualstudio-extension/bump-version.sh X.Y.Z` — `<Version>` en
   `GitReview.VS.csproj`, `Identity Version=` en `source.extension.vsixmanifest`
   y `GitReviewClientVersion` en `Directory.Build.props`
-- `./tui/bump-version.sh X.Y.Z` — `TUIVersion` en `tui/internal/domain/version.go` y la `version` de
-  `Formula/git-review-ui.rb`, **conservando sus cuatro `sha256`** en placeholder: dependen del
-  tarball que GitHub construye para el tag, que todavía no existe
+- `./tui/bump-version.sh X.Y.Z` — `TUIVersion` en `tui/internal/domain/version.go`
+
+Los bumps de la CLI y la TUI conservan las fórmulas completas. Estampar la versión y las URLs antes
+de publicar dejaba a Homebrew apuntando a archivos inexistentes. Cada workflow actualiza la versión,
+las URLs y sus hashes en el mismo commit después de publicar el GitHub Release.
 
 Los headings del CHANGELOG de cada cliente se escriben a mano. Un
 `tests/version-consistency.bats` protege contra el drift de la CLI y de los cuatro clientes.
@@ -985,11 +987,9 @@ desaparece del `build.gradle.kts`.
 **La TUI también tiene namespace y workflow propios**, y ninguna tienda: `tui-v*` dispara
 `release-tui.yml`, que verifica el commit taggeado en los tres sistemas, cross-compila los siete
 binarios estáticos con `CGO_ENABLED=0` en Ubuntu, comprueba que existan los siete y que `SHA256SUMS`
-los cubra exactamente, crea el Release y fija los cuatro checksums de la fórmula en la rama por
-default. Va con **`--latest=false`** por el mismo motivo que el del plugin —los dos `web-install`
-resuelven `releases/latest` para elegir el ref de la CLI—, y sus notas salen de `--generate-notes`
-en vez de un CHANGELOG: no hay ficha de tienda que renderizarlas, que es la única razón por la que el
-de JetBrains se escribe a mano.
+los cubra exactamente, crea el Release y actualiza la fórmula en la rama por default. Usa
+**`--latest=false`** para que los dos `web-install` sigan resolviendo `releases/latest` a la CLI.
+Las notas salen de la sección del tag en `tui/CHANGELOG.md`.
 
 **El plugin de JetBrains tiene su propio namespace de tags y su propio workflow**
 (`release-jetbrains.yml`): un `jetbrains-v*` lo publica al Marketplace (`publishPlugin`, con el

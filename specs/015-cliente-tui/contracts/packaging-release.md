@@ -151,11 +151,10 @@ La TUI versiona **aparte de la CLI y de los otros tres clientes**, con el mismo 
 
 | Comando | Qué estampa |
 |---|---|
-| `./tui/bump-version.sh X.Y.Z` | `tui/internal/domain/version.go` y la `version` de `Formula/git-review-ui.rb` (los `sha256` quedan para el workflow) |
+| `./tui/bump-version.sh X.Y.Z` | `tui/internal/domain/version.go` |
 
-**Dos archivos.** Es la simplificación que compra no publicar en ningún registro: no hay
-`package.json` que mantener alineado ni pines de dependencias por plataforma que puedan quedar atrás
-de a uno.
+La fórmula conserva la versión publicada durante el bump. El workflow la actualiza cuando publica
+los archivos del nuevo tag.
 
 Escrito en shell POSIX con `set -eu`, con el mismo `sed_i` por archivo temporal que usa
 `./bump-version.sh` (GNU y BSD difieren en `-i`), y se suma a las dos listas de `shellcheck`
@@ -164,7 +163,7 @@ Escrito en shell POSIX con `set -eu`, con el mismo `sed_i` por archivo temporal 
 `tests/version-consistency.bats` gana su bloque, con nombres de `@test` en **ASCII puro**:
 
 - el `version.go` de la TUI es semver pelado;
-- la fórmula coincide con `version.go`;
+- el bump conserva la fórmula byte por byte;
 - **no existe ningún `package.json` bajo `tui/`** — el gate que impide que la vía descartada vuelva
   por la ventana sin que nadie lo note.
 
@@ -182,7 +181,7 @@ plugin.
 |---|---|---|
 | `verify` | ubuntu, macos, windows | `gofmt -l` (vacío), `go vet ./...`, `go test ./...`, `node scripts/check-client-product-surface.mjs`. Un tag no puede publicar código roto, y el gate corre **contra el commit tageado** |
 | `build` | **ubuntu** | los siete targets con `CGO_ENABLED=0 -trimpath`, empaquetados (`.tar.gz` / `.zip`) + `SHA256SUMS` |
-| `release` | ubuntu | `gh release create "$GITHUB_REF_NAME" --latest=false --generate-notes` + sube los archivos y el `SHA256SUMS`; después fija los `sha256` de la fórmula en la rama por default, con el mismo `sed_i` del workflow de la CLI |
+| `release` | ubuntu | Publica los archivos y `SHA256SUMS` con `--latest=false` y las notas del changelog. Después fija la versión, las URLs y los hashes de la fórmula en la rama por default |
 
 **Tres jobs, no cuatro.** No hay job de publicación: el Release *es* la publicación.
 
@@ -216,13 +215,11 @@ publicación confiable, ni acertar un orden de publicación entre paquetes. Tamp
 de Homebrew: la fórmula vive en este mismo repo, como la de la CLI, y se instala con el mismo
 `brew tap`.
 
-Queda lo de siempre en este repo: el `sha256` de la fórmula es desconocido hasta que el asset existe,
-así que `bump-version.sh` lo deja **a propósito** y lo fija el workflow después del tag.
+El workflow fija la fórmula después de publicar los assets del tag.
 
 ### Checklist de pre-release, para que el primero no sea el que descubre esto
 
-- [ ] `Formula/git-review-ui.rb` en la rama por default, con la `version` estampada y los `sha256`
-      en placeholder
+- [ ] `Formula/git-review-ui.rb` en la rama por default, apuntando al último release publicado
 - [ ] `tests/version-consistency.bats` verde con el bloque de la TUI
 - [ ] `tui/bump-version.sh` en las dos listas de `shellcheck`
 - [ ] los dos README y las dos puntas de la landing actualizados

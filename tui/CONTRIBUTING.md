@@ -131,12 +131,10 @@ corresponden a macOS/Linux × ARM/Intel.
    puede decir `cli-outdated`, porque la comparación da igual. Si el piso subió,
    el `v*` de la CLI se corta **primero**. Ver `decisiones.md` §14.
 1. Elegí la versión y ejecutá `./tui/bump-version.sh X.Y.Z` desde la raíz.
-2. Revisá que cambien sólo `tui/internal/domain/version.go` y la `version` de
-   `Formula/git-review-ui.rb`; sus cuatro `sha256` deben seguir en placeholder.
-   Escribí a mano el heading `## [X.Y.Z]` y su sección en `CHANGELOG.md`: el
-   workflow la extrae al cuerpo del Release, y sin sección sale un puntero al
-   archivo. `tests/release-notes.bats` falla si `TUIVersion` nombra una versión
-   que el CHANGELOG no documenta.
+2. Revisá la versión en `tui/internal/domain/version.go` y escribí el heading
+   `## [X.Y.Z]` con sus notas en `CHANGELOG.md`. El workflow usa esa sección
+   como cuerpo del Release. `tests/release-notes.bats` comprueba que la sección
+   exista. Homebrew sigue ofreciendo la última versión publicada.
 3. Corré `./lint-docker.sh tui/bump-version.sh`,
    `./tests/run-docker.sh version-consistency.bats`, los gates Go y el checker
    del canónico.
@@ -145,9 +143,9 @@ corresponden a macOS/Linux × ARM/Intel.
 
 `.github/workflows/release-tui.yml` vuelve a verificar el commit taggeado en los
 tres sistemas, cross-compila los siete targets con `CGO_ENABLED=0`, comprueba
-existencia y `SHA256SUMS`, crea el Release con `--latest=false` y fija los cuatro
-checksums de la fórmula en la rama por default. No hay paso de publicación en
-un registro ni alta previa que realizar.
+existencia y `SHA256SUMS`, y crea el Release con `--latest=false`. Después
+actualiza la versión, las cuatro URLs y los checksums de la fórmula Homebrew
+en la rama por default.
 
 ## Comentarios de una review: desarrollo local
 

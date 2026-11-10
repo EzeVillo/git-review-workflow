@@ -52,7 +52,7 @@ setup() {
 
 @test "release-clients: VS Code publishes and attaches its packaged VSIX" {
 	grep -Fq 'npm run package' "$VSCODE"
-	grep -Fq 'vsce publish --packagePath' "$VSCODE"
+	grep -Fq '"$vsce" publish --packagePath' "$VSCODE"
 	grep -Fq 'git-review-workflow-${VERSION}.vsix' "$VSCODE"
 	grep -Fq 'gh release create' "$VSCODE"
 	grep -Fq -- '--latest=false' "$VSCODE"
@@ -69,7 +69,7 @@ setup() {
 }
 
 @test "release-clients: retries recover the Marketplace and GitHub release separately" {
-	grep -Fq 'vsce show EzeVillo.git-review-workflow --json' "$VSCODE"
+	grep -Fq '"$vsce" show EzeVillo.git-review-workflow --json' "$VSCODE"
 	grep -Fq 'marketplace-vsix-status.mjs' "$VSCODE"
 	grep -Fq 'sha256sum "$vsix"' "$VSCODE"
 	grep -Fq 'gh release download' "$VSCODE"

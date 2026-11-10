@@ -130,7 +130,12 @@ case "$command" in
 		# and after preparing the candidate. Batch keys within each check.
 		cm_config_snapshot_requested=1
 		comments_state || exit 1
-		[ "$cm_active" -eq 1 ] || { printf 'error: comments capture requires an active review or compare\n' >&2; exit 2; }
+		if [ "$cm_active" -ne 1 ]; then
+			# A submitted form can outlive the review it was opened on.
+			if [ "$command" = add ]; then comments_check_guards "$expect_context" '' '' || exit $?; fi
+			printf 'error: comments capture requires an active review or compare\n' >&2
+			exit 2
+		fi
 		comments_require_capture "$document" || exit $?
 		if [ "$command" = add ]; then
 			input_file=$(mktemp "${TMPDIR:-/tmp}/git-review-comment.XXXXXX")
@@ -178,6 +183,7 @@ case "$command" in
 			fi
 		fi
 		if [ "$command" = add ]; then comments_capture_location || exit 1; fi
+		session_before_materialize=$cm_session
 		comments_materialize "$context" "$new_context" "$use_context" || exit 1
 		target=$cm_dir/$document.md
 		revision=$(comments_revision "$target") || exit 1
@@ -185,13 +191,21 @@ case "$command" in
 		if [ "$cm_lock" != "$cm_root/locks/$cm_context.lock" ]; then
 			comments_unlock
 			comments_lock "$cm_context" || exit 1
+			session_before_materialize=''
 		fi
-		comments_state || exit 1
-		if [ "$cm_session" != "$materialized_session" ] || [ "$cm_capture_guard" != "$initial_capture_guard" ]; then
-			printf 'error: comments context is stale\n' >&2; exit 4
+		# An established session kept under the same lock needs no new
+		# snapshot here. Materialization or a lock transfer still does.
+		if [ "$command" = init ] || [ -z "$session_before_materialize" ] ||
+			[ "$session_before_materialize" != "$materialized_session" ]; then
+			comments_state || exit 1
+			if [ "$cm_session" != "$materialized_session" ] || [ "$cm_capture_guard" != "$initial_capture_guard" ]; then
+				printf 'error: comments context is stale\n' >&2; exit 4
+			fi
+			comments_check_guards '' "$revision" "$target" || exit $?
 		fi
-		comments_check_guards '' "$revision" "$target" || exit $?
-		if [ "$initial_preparation" -eq 1 ]; then comments_check_guards '' "$expect_document" "$target" || exit $?; fi
+		if [ "$initial_preparation" -eq 1 ] && [ -n "$expect_document" ] && [ "$expect_document" != "$revision" ]; then
+			printf 'error: comments document is stale\n' >&2; exit 4
+		fi
 		if [ "$command" = init ]; then
 			if [ "$revision" = absent ]; then
 				input_file=$(mktemp "${TMPDIR:-/tmp}/git-review-comment.XXXXXX")

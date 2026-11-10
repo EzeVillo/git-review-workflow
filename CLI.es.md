@@ -110,6 +110,11 @@ informe actual de Comments. Los clientes lo descubren mediante
 exitosa no devuelve un sobre completo, refrescá el estado mostrado sin repetir
 la escritura. Sin el flag, `add` imprime la ruta absoluta del documento.
 
+Para añadir al documento actual, pasá el `--expect-context` del formulario
+y omití `--expect-document`. La CLI captura la revisión del documento bajo
+su lock y la vuelve a comprobar justo antes de publicar. Pasá ambos guards
+cuando la operación dependa de una revisión específica del documento.
+
 | Comando después de `git review comments` | Propósito |
 |------------------------------------------|-----------|
 | `paths --porcelain` | Informa las rutas de edición de la sesión activa sin leer prosa ni historia. Requiere contrastar el guard de la review mostrada; ver [el contrato de rutas](contracts/comments-paths.md). |

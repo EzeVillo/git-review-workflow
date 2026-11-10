@@ -1217,9 +1217,13 @@ comments_replace() {
 	_cr_context=${cm_context:-} _cr_scope=${cm_scope:-active}
 	comments_safe_path "$_cr_path" || return 1
 	if [ ! -f "$_cr_source" ] || [ -L "$_cr_source" ]; then comments_error 'comments candidate is not a readable regular file'; return 1; fi
-	comments_state || return 1
-	if [ "$_cr_scope" != active ] && [ -n "$_cr_context" ] && [ -n "$_cr_guard" ]; then comments_select_context "$_cr_context" || return 1; fi
-	comments_check_guards "$_cr_guard" "$_cr_expected" "$_cr_path" || return $?
+	# Append already captured the session and original revision under the
+	# same lock. Still recheck both immediately before publishing below.
+	if [ "${5:-}" != append ]; then
+		comments_state || return 1
+		if [ "$_cr_scope" != active ] && [ -n "$_cr_context" ] && [ -n "$_cr_guard" ]; then comments_select_context "$_cr_context" || return 1; fi
+		comments_check_guards "$_cr_guard" "$_cr_expected" "$_cr_path" || return $?
+	fi
 	_cr_candidate=$(mktemp "$_cr_path.candidate.XXXXXX") || { comments_error 'could not create comments candidate'; return 1; }
 	if ! cp "$_cr_source" "$_cr_candidate"; then
 		comments_error "could not write comments candidate: $_cr_candidate"; return 1
@@ -1808,7 +1812,7 @@ comments_append() {
 	} >>"$_ca_candidate" || return 1
 	_ca_new_count=$(comments_scan "$_ca_candidate") || return 1
 	[ "$_ca_new_count" -eq "$((_ca_count + 1))" ] || { comments_error 'comment would create ambiguous entry boundaries'; return 1; }
-	comments_replace "$_ca_path" "$_ca_candidate" "$_ca_revision" "$_ca_guard" || return $?
+	comments_replace "$_ca_path" "$_ca_candidate" "$_ca_revision" "$_ca_guard" append || return $?
 	rm -f "$_ca_candidate"
 }
 

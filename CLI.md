@@ -110,6 +110,11 @@ Comments report. Clients discover it through `comments-add-reply 1` in
 envelope, refresh the displayed state without repeating the write. Without the
 flag, `add` prints the absolute document path.
 
+To append to the current document, pass the form's `--expect-context` and
+omit `--expect-document`. The CLI captures the document revision under its
+lock and rechecks it immediately before publishing. Pass both guards when
+the operation depends on a specific document revision.
+
 | Command after `git review comments` | Purpose |
 |-------------------------------------|---------|
 | `paths --porcelain` | Report the active session’s owned editor paths without loading comment bodies or history. Requires a displayed review guard check; see [the paths contract](contracts/comments-paths.md). |

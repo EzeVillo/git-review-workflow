@@ -147,6 +147,34 @@ teardown() { comments_teardown; }
 	[ "$(git config branch.review/feature/comments.reviewdraft)" = feature/another-draft ]
 }
 
+@test "comments add with only a context guard appends to the current Markdown" {
+	local guard
+	guard=$(comments_driver guard)
+	printf '## 7. External entry\nKeep these bytes.\n' >"$COMMENTS_SESSION_DIR/local.md"
+	run --separate-stderr git review comments add --document local --expect-context "$guard" --text 'New entry.'
+	[ "$status" -eq 0 ]
+	[ "$stderr" = '' ]
+	[ "$output" = "$COMMENTS_SESSION_DIR/local.md" ]
+	printf '## 7. External entry\nKeep these bytes.\n\n## 8. General\n' >"$COMMENTS_TMP/expected"
+	# A general note can still carry the capture range for its review.
+	[ "$(head -n 4 "$output")" = "$(cat "$COMMENTS_TMP/expected")" ]
+	[ "$(tail -n 1 "$output")" = 'New entry.' ]
+	[ ! -e "$COMMENTS_SESSION_DIR/shared.md" ]
+}
+
+@test "comments add with only a context guard rejects leaving the review" {
+	local guard
+	guard=$(comments_driver guard)
+	git switch --quiet --detach HEAD
+	comments_snapshot "$COMMENTS_TMP/before"
+	run --separate-stderr git review comments add --document local --expect-context "$guard" --text 'Stale note.'
+	[ "$status" -eq 4 ]
+	[ "$output" = '' ]
+	[ "$stderr" = 'error: comments context is stale' ]
+	comments_snapshot "$COMMENTS_TMP/after"
+	comments_assert_snapshot "$COMMENTS_TMP/before" "$COMMENTS_TMP/after"
+}
+
 reset_comments_fixture() {
 	git config --unset branch.review/feature/comments.reviewcommentscontext
 	git config --unset branch.review/feature/comments.reviewcommentssession

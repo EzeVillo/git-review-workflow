@@ -15,7 +15,7 @@ schema_version: 1
 # que sean iguales. La comparacion de cada cliente es un piso estricto: no hay
 # techo, asi que una CLI mas nueva que el minimo nunca se reporta desactualizada.
 min_cli_version:
-  # Candidatos locales autorizados para probar el conjunto; 0.10.0 aún sin publicar.
+  # Publicar la CLI 0.10.0 antes de publicar los clientes que la requieren.
   vscode: "0.10.0"
   intellij: "0.10.0"
   visualstudio: "0.10.0"

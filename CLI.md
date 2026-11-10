@@ -125,7 +125,7 @@ the operation depends on a specific document revision.
 | `renumber --document <local\|shared> [--context <id>] [guards]` | Number real `## N. Title` entries in physical order, preserving bodies, metadata and line endings. |
 | `entries --document <local\|shared> [--context <id>] --porcelain` | List entries by physical ordinal and document revision, including scope and complete bodies as escaped lines. |
 | `diff --document <local\|shared> --entry <ordinal> [--context <id>] [--porcelain] [guards]` | Show the code captured by that entry's original object IDs; porcelain returns trees, blobs and coordinates. |
-| `save [--expect-context <token>] [--expect-local <revision>] [--expect-shared <revision>]` | In a comparison, retain both documents locally and continue comparing. |
+| `save [--expect-context <token>] [--expect-local <revision>] [--expect-shared <revision>]` | Save an optional local checkpoint and continue comparing. Preserves any legacy Shared preparation. |
 | `prepare --context <id> [--check [--porcelain]] [guards]` | Inspect or retry a pending Shared delivery after code extraction. |
 
 `context-options` are `--context <id>`, `--new-context` or `--use-context <id>`;

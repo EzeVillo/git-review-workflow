@@ -12,159 +12,52 @@ and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
 This file starts at 0.2.1. Earlier versions are only in the
 [GitHub Releases](https://github.com/EzeVillo/git-review-workflow/releases).
 
-## [0.10.10] — 2026-11-08
-
-### Changed
-
-- Batch Continue metadata reads per custody phase while retaining fresh ownership and destination checks.
-- Offer an inventory-bound Continue guard and an opt-in final status reply, preserving human output and refreshing incomplete reports without retrying a completed resume.
-
-## [0.10.9] — 2026-11-08
-
-### Changed
-
-- Read ordinary Save and custody metadata in the calling shell instead of spawning a command substitution per field. Preserve canonical state guards, exceptional bytes, fresh custody checks and existing command output. Reuse the same reader in porcelain branch listings.
-
-## [0.10.8] — 2026-11-08
-
-### Changed
-
-- Add an opt-in comments paths query for saving active session buffers without loading capture history or scanning documents. Read custody manifest fields together while preserving fresh checks at every custody boundary.
-
-## [0.10.7] — 2026-11-08
-
-### Changed
-
-- Add opt-in `save --porcelain` with the final panel inventory and configuration. Share report renderers and fresh metadata within the reply; preserve human output without the flag and successful saves if only reporting fails.
-
-## [0.10.6] — 2026-11-07
-
-### Changed
-
-- Transfer comments custody in Save/Continue without rebuilding the complete
-  comments reading state. Publish one sibling manifest candidate after fresh
-  custody and revision checks.
-
-### Fixed
-
-- Recheck both transfer endpoints after preparing the manifest, reject a
-  changed session, and preserve the original manifest and recovery candidate
-  when concurrent metadata, document bytes or publication prevent transfer.
-
-## [0.10.5] — 2026-11-07
-
-### Changed
-
-- Batch metadata reads during Save and Cancel, validating the displayed context
-  inside the operation. Reload custody metadata after locking and before
-  transferring or discarding comments, preserving concurrent ownership checks.
-
-## [0.10.4] — 2026-11-07
-
-### Changed
-
-- Include the current walk entry's explanation in porcelain navigation replies,
-  using the same walkthrough scan as the entry inventory. Older clients can
-  ignore these optional records; ordinary status output is unchanged.
-
-## [0.10.3] — 2026-11-07
+## [0.10.0] — 2026-11-10
 
 ### Added
 
-- Return the complete updated review status from `next --porcelain` and
-  `prev --porcelain`, including the context guard and typed boundary notices.
-  Advertise support through `capability navigation-state` in active status.
-
-### Fixed
-
-- Restore compatibility with macOS's Bash 3.2 POSIX parser in context guards.
-- Validate guarded navigation using the operation's own metadata snapshot and
-  reuse its sequence when producing the reply.
-
-## [0.10.2] — 2026-11-06
-
-### Added
-
-- Publish an opaque context guard in active review status reports and accept
-  `--expect-state <token>` before a command. Reject changed review contexts
-  before executing the command, without requiring a full status preflight.
-
-## [0.10.1] — 2026-11-04
+- **Review comments.** `git review comments` records observations in separate
+  Local and Shared Markdown documents. Capture a general note or attach it to
+  a file, side, line range or exact column selection. Browse the full prose and
+  its historical diff, edit the Markdown directly, or delete and renumber
+  entries while preserving the rest of the document.
+- **Comment delivery and recovery.** Save and Continue keep both preparations.
+  Finish keeps Local private and stages changed Shared at `.review/comments.md`
+  alongside any code fixes, including when Shared is the only change. A
+  conflicting delivery keeps the preparation available for inspection and retry
+  through `comments prepare`. Undo restores the current preparations.
+- **Guarded automation.** Use `--expect-state` to validate the displayed review
+  inside an operation. Opt in to updated state from Next, Previous, Save and
+  Continue with `--porcelain`. Comment clients can request owned paths with
+  `comments paths --porcelain` and read the updated report from
+  `comments add --porcelain`.
 
 ### Changed
 
-- Reduce Git process creation during review status, inventory, comments queries
-  and cursor navigation, especially on Windows. Read branch metadata once per
-  query and reuse the normalized walkthrough and range within each command.
-
-## [0.10.0] — 2026-10-18
+- **Compare** resolves local branches, remote-tracking branches and tags
+  explicitly. Whole and walkthrough modes compare the exact selected endpoints.
+  Commit by commit follows the destination's first-parent history for commits
+  exclusive to it. Compare reading drafts have their own identity and pin both
+  endpoints. Closing a comparison retains Local notes automatically.
+- Reduce Git process creation for status, navigation and comments, especially on
+  Windows. Reuse metadata within operations and keep Save and Continue
+  responsive by transferring comment ownership without rebuilding the full
+  report. Keep the fresh checks before publishing changes.
+- Read delivered Shared directly from the checked-out branch, even in a fresh
+  clone. Prepare Shared from branch prose and keep it independent of the
+  decision to restore Local notes from a previous review.
 
 ### Fixed
 
-- Preserve CRLF and mixed line endings when renumbering, deleting, or rebinding
-  comments on Windows, and keep the shared library readable by macOS Bash 3.2.
-- Require the existing context choice when a known portable discussion appears
-  under a different branch with incompatible history. Choosing a new discussion
-  preserves incoming Shared prose while separating private Local notes.
-- Accept Git-enabled LF/CRLF checkout conversion when checking the incoming
-  Shared delivery baseline, preserving exact prose and final-newline checks
-  without executing content filters.
-- Report repository Shared with unresolved Git merge entries as unreadable;
-  refuse entry and historical-diff queries until the conflict is resolved.
-- Pin the Shared destination revision before baseline comparison so an editor
-  write during that comparison cannot become the overwrite guard.
-- Stage the exact prepared Shared blob and verify delivery before releasing its
-  private preparation. Concurrent editor or index changes remain recoverable.
-- Keep saved Local visible beside repository Shared when their contexts match,
-  without falling back to an older retained Local result or changing custody.
-- Read Shared from the checked-out branch outside reviews, including fresh
-  clones; repository Shared takes precedence over saved preparations. Prepare
-  new reviews from branch prose and exclude inherited contexts. Release the
-  editable private Shared after successful delivery; preserve deletions across
-  Save/Continue, Finish/Undo/Finish and Finish/Undo/Cancel.
-- Restrict compare comment capture to Local and expose allowed destinations
-  per operation through `comments status --porcelain`. Preserve comparison
-  notes automatically when closing or cleaning the session.
-- Clean CRLF checkouts keep reproducible comment locations and range validation.
-- Shared delivery is staged with the code edits, including comment-only Finish
-  and Prepare retries; concurrent index entries are preserved.
-- Ambiguous comment contexts include review dates, document counts and the
-  last reviewed subject so separate reviews of one branch can be distinguished.
-- Comments use Start's resolved full base, preserving it throughout the session.
-  A stale local base no longer makes a remote review of a new branch adopt the
-  merged PR's comments context.
-- Finishing after deliberately accepting incoming Shared clears the resolved
-  source conflict, including when no new Shared delivery is needed.
-
-### Added
-
-- `comments delete --entry <ordinal>` removes one entry with revision guards,
-  preserving the other entries and their numbers, metadata and exact bytes.
-- Exact comment selections with optional `--start-column` / `--end-column`,
-  UTF-16 endpoints and column records in entries and historical diff recipes.
-- Full comment bodies and explicit scopes in `comments entries --porcelain`, with
-  byte revision checks before returning the selector snapshot.
-- Delete individual retained documents after Finish without removing delivered
-  `.review/comments.md`; deleted pending Shared delivery is dismissed.
-
-
-- **Portable review comments.** `git review comments` captures observations in
-  independent Local and Shared Markdown documents. Choose the document for each
-  capture; use text, stdin or your Git editor, with an optional file, side and
-  line range. Local stays in Git's private storage. A changed Shared document is
-  prepared as `.review/comments.md` after finish, without staging, committing or
-  pushing it. Whole, walk and step reviews preserve both documents through
-  navigation, pause, continuation and finish undo.
-- **Editing, saved results and historical code.** `status`, `init`, `add`,
-  `renumber`, `entries`, `diff`, `save` and `prepare` provide guarded porcelain
-  interfaces as well as terminal output. Renumber changes only entry digits and
-  preserves Markdown bytes. Compare can checkpoint both documents without
-  extracting code. Historical diffs use the captured objects and literal paths;
-  missing objects produce a diagnostic without fetching or substituting HEAD.
-- **Recoverable Shared delivery.** Concurrent destination changes and I/O errors
-  retain the prepared document and report a partial result after code extraction.
-  Inspect baseline, prepared and destination with `prepare --check`, resolve
-  the prose and retry without repeating the code extraction.
+- When resuming Finish, reject unresolved conflicts introduced by the replay.
+  Confirm an unmerged path with Git if keeping the version the replay left in
+  the working tree.
+- Preserve comment prose and line endings on Windows, accept Git's configured
+  LF/CRLF checkout conversion for an unchanged delivery baseline, and support
+  the macOS Bash 3.2 shell.
+- Report Shared with unresolved index entries as unreadable. Stage the exact
+  prepared Shared bytes and preserve concurrent edits or index changes for
+  recovery.
 
 ## [0.9.0] — 2026-09-01
 

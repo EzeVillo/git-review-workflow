@@ -1,101 +1,48 @@
 # Changelog
 
-## [0.2.6] — 2026-11-08
-
-### Changed
-
-- Validate the selected saved review inside Continue and consume its optional final state, avoiding another primary read when supported. Preserve the legacy path and refresh incomplete replies without repeating Continue.
-
-## [0.2.5] — 2026-11-08
-
-### Changed
-
-- Use the optional final state returned by Save when the CLI advertises support, avoiding another primary read. Fall back to a normal refresh for older CLI versions or incomplete replies.
-
-## [0.2.4] — 2026-11-07
-
-### Changed
-
-- Display explanations returned with navigation immediately, while comments
-  load independently. Query explanations separately when optional data is
-  missing or invalid, including with older CLI versions.
-
-## [0.2.3] — 2026-11-07
-
-### Changed
-
-- Consume the CLI's updated navigation state without rebuilding it through a
-  separate status call. Keep independent comments/prose reads and their stale
-  response protection, with the previous read path for older CLI versions.
-
-## [0.2.2] — 2026-11-06
-
-### Changed
-
-- Validate active review mutations against the displayed CLI context, including
-  actions delayed by confirmation. Reload changed contexts without retrying
-  and retain the previous behavior with older CLI versions.
-
-## [0.2.1] — 2026-11-04
-
-### Changed
-
-- Show review state before comments and explanations finish loading. Read those
-  details concurrently and ignore results superseded by a read or mutation.
-- Keep pending comments distinct from absent documents and preserve document
-  watches until the complete report arrives.
-
-## [0.2.0] — 2026-10-19
-
-### Fixed
-
-- Give comment writes the local mutation timeout while keeping queries and
-  delivery checks on the read timeout.
-- Keep comment controls visible by scrolling long reviews with keyboard focus
-  and the mouse wheel while preserving the key bar and click targets.
-- Refresh repository Shared comments after external saves, including atomic
-  file replacement and linked worktrees.
-
-### Changed
-
-- Explain the previous-review choice through its effect on private Local notes,
-  state that Shared comes from the branch in either case, and describe each new
-  comment destination as private or intended for the PR.
-- Place Comments between Walkthrough and Compare on the main panel, including
-  keyboard focus order. Read delivered Shared from the repository; Save/Continue
-  retains the private preparation until Finish.
-- Use CLI comment destinations, omit the selector for a sole option, and
-  remove Save comments: comparison notes are retained automatically.
-- Distinguish previous comment reviews with dates, counts and reviewed subjects.
-- Hide Open diff for general comments. Delete individual comments from the
-  browser without renumbering or changing other entries, and keep the browser open.
-- Accept `line:column` comment endpoints and mark exact historical fragments
-  with carets, including monochrome and ASCII views. Line-only ranges still work.
-- Simplified comment browsing: one compact location, an ellipsized preview and
-  scrollable full prose. Historical revisions are collapsed under Details;
-  unsaved-capture warnings remain visible.
-- Toggle historical revision details with `d` in the comment browser.
-
-### Added
-
-- Copy the absolute path of an existing Local comment document from its row,
-  during a review or from retained results.
-- Comment browsing with excerpts, full prose, original file/side/line context and
-  marked historical ranges. Comment fields now have a visible label.
-- Delete retained Local or Shared documents after Finish while keeping delivered prose.
-
-- Local and Shared review comments with an explicit destination for every capture,
-  selective Markdown saves, historical changes and pending Shared delivery.
-- Comment state, guards and document ownership supplied by CLI 0.10.0.
-
-
-
 Notable changes to the **git review** terminal UI. The CLI it drives has its own
 [changelog](../CHANGELOG.md) and its own
 [releases](https://github.com/EzeVillo/git-review-workflow/releases).
 
 This project follows [semantic versioning](https://semver.org/spec/v2.0.0.html)
 and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
+
+## [0.2.0] — 2026-11-10
+
+Requires `git review` CLI 0.10.0 or newer.
+
+### Added
+
+- **Review comments.** Capture private Local notes or Shared comments intended
+  for the pull request. Add general notes or attach them to an exact code
+  selection. Browse full text and the original diff, delete individual entries
+  without renumbering, and copy the path of a Local document.
+- Find delivered Shared comments on the branch, including in a fresh clone.
+  Save and Continue preserve both preparations. Finish stages changed Shared
+  comments with any code fixes, and Local stays private. Comparisons retain Local
+  notes automatically when closed.
+- Find Sponsor and Contact in Support.
+
+### Changed
+
+- **Compare** distinguishes local branches, remote-tracking branches and tags
+  with the same name. The panel shows the Base and Inspect revisions throughout
+  the review. Compare offers modes for the selected range and keeps its own
+  reading order pinned to that range.
+- Show the main review state while Comments loads independently. Reuse the
+  state returned by the CLI for Next, Previous, Save, Continue and Add comment
+  when available. This cuts repeated reads, especially on Windows.
+- Validate review actions against the displayed state inside the CLI. If that
+  state changed, refresh the panel so the reviewer can decide how to proceed.
+- Show exact comment ranges in historical diffs, including ASCII and
+  monochrome views. Press `d` in the comment browser for revision details.
+
+### Fixed
+
+- Keep comment controls reachable with keyboard focus and the mouse wheel
+  while preserving the key bar and click targets.
+- Detect external saves of repository Shared, including atomic file
+  replacement and linked worktrees.
 
 ## [0.1.0] — 2026-09-01
 

@@ -125,7 +125,7 @@ cuando la operación dependa de una revisión específica del documento.
 | `renumber --document <local\|shared> [--context <id>] [guards]` | Numerar las entradas reales `## N. Título` en orden físico, conservando cuerpos, metadata y finales de línea. |
 | `entries --document <local\|shared> [--context <id>] --porcelain` | Listar entradas por ordinal físico y revisión del documento, con alcance y cuerpos completos por líneas escapadas. |
 | `diff --document <local\|shared> --entry <ordinal> [--context <id>] [--porcelain] [guards]` | Mostrar el código capturado por los OID originales de la entrada; porcelain devuelve árboles, blobs y coordenadas. |
-| `save [--expect-context <token>] [--expect-local <revision>] [--expect-shared <revision>]` | En una comparación, conservar ambos documentos localmente y seguir comparando. |
+| `save [--expect-context <token>] [--expect-local <revision>] [--expect-shared <revision>]` | Guardar un checkpoint local opcional y seguir comparando. Conserva cualquier preparación Shared de versiones anteriores. |
 | `prepare --context <id> [--check [--porcelain]] [guards]` | Inspeccionar o reintentar una entrega Shared pendiente después de extraer código. |
 
 `context-options` son `--context <id>`, `--new-context` o `--use-context <id>`;

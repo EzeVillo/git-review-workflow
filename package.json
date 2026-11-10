@@ -1,6 +1,6 @@
 {
   "name": "git-review-workflow",
-  "version": "0.10.10",
+  "version": "0.10.0",
   "description": "Review pull requests with a guided reading order and context. Read, comment, run tests, and extract any corrections in your own tools.",
   "keywords": [
     "git",

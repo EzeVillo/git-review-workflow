@@ -1,115 +1,49 @@
 # Changelog
 
-## [0.4.8] — 2026-11-08
-
-### Changed
-
-- Validate the selected saved review inside Continue and consume its optional final state, avoiding primary queries before and after the operation when supported. Preserve the legacy path and refresh incomplete replies without repeating Continue.
-
-## [0.4.7] — 2026-11-08
-
-### Changed
-
-- Save active session comment buffers using the focused paths query when supported. Validate the displayed review guard before saving; retain full inventory for recovery, housekeeping and legacy CLI sessions.
-
-## [0.4.6] — 2026-11-08
-
-### Changed
-
-- Use the optional final state returned by Save when the CLI advertises support, avoiding another primary read. Fall back to a normal refresh for older CLI versions or incomplete replies.
-
-## [0.4.5] — 2026-11-07
-
-### Changed
-
-- Coalesce watcher refreshes with running review actions. The final state read
-  covers earlier signals, while later changes trigger another read after the
-  action releases its lock.
-
-## [0.4.4] — 2026-11-07
-
-### Changed
-
-- Display explanations returned with navigation without another CLI read,
-  keeping the previous query when the optional data is unavailable.
-- Skip the comments inventory before closing or saving a review when the IDE
-  confirms every running document is saved. Dirty or unknown buffers retain
-  selective comment saves and the CLI's ownership checks.
-
-## [0.4.3] — 2026-11-07
-
-### Changed
-
-- Consume updated navigation state directly from the CLI, removing the repeated
-  navigation refresh. Release review actions after the primary state arrives
-  and complete comments independently, rejecting superseded responses.
-- Retain full reads for older CLI versions or invalid navigation replies.
-
-## [0.4.2] — 2026-11-06
-
-### Changed
-
-- Validate active review actions inside the CLI invocation and avoid a full
-  preflight where one was needed. Preserve the originating context across
-  confirmations and reload stale state without retrying the action.
-
-## [0.4.1] — 2026-11-04
-
-### Changed
-
-- Show review state before comments finish loading and read each explanation
-  once per refresh. Preserve document watches until comments have been read.
-- Avoid comment reads during mutation checks and remove the duplicate refresh
-  after an action; keep the stale-state and document guards.
-
-## [0.4.0] — 2026-10-19
-
-### Fixed
-
-- Give comment writes the local mutation timeout while keeping queries and
-  delivery checks on the read timeout.
-
-### Changed
-
-- Explain the previous-review choice through its effect on private Local notes,
-  state that Shared comes from the branch in either case, and describe each new
-  comment destination as private or intended for the PR.
-- Place Comments between Walkthrough and Compare on the main panel. Read
-  delivered Shared from the repository and keep its controls read-only outside
-  reviews; Save/Continue retains the private preparation until Finish.
-- Use CLI comment destinations, omit the selector for a sole option, and
-  remove Save comments: comparison notes are retained automatically.
-- Distinguish previous comment reviews with dates, counts and reviewed subjects.
-- Apply the IDE palette to the comment composer and preserve a usable writing
-  area and full-size buttons at its minimum window size.
-- Hide Open diff for general comments. Delete individual comments from the
-  browser without renumbering or changing other entries, and keep the browser open.
-- Keep the exact selected fragment in comment previews and historical views
-  using line and column endpoints, with support for existing line-only comments.
-- Simplified comment browsing: one compact location, an ellipsized preview and
-  scrollable full prose. Historical revisions are collapsed under Details;
-  unsaved-capture warnings remain visible.
-
-### Added
-
-- Copy the absolute path of an existing Local comment document from its row,
-  during a review or from retained results.
-- Comment browsing with excerpts, full prose, original file/side/line context and
-  marked historical ranges. Comment fields now have a visible label.
-- Delete retained Local or Shared documents after Finish while keeping delivered prose.
-
-- Local and Shared review comments with an explicit destination for every capture,
-  selective Markdown saves, historical changes and pending Shared delivery.
-- Comment state, guards and document ownership supplied by CLI 0.10.0.
-
-
-
 Notable changes to the **git review** Visual Studio extension. The CLI it drives
 has its own
 [releases](https://github.com/EzeVillo/git-review-workflow/releases).
 
 This project follows [semantic versioning](https://semver.org/spec/v2.0.0.html)
 and the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format.
+
+## [0.4.0] — 2026-11-10
+
+Requires `git review` CLI 0.10.0 or newer.
+
+### Added
+
+- **Review comments.** Capture private Local notes or Shared comments intended
+  for the pull request. Add general notes or attach them to an exact code
+  selection. Browse full text and the original diff, delete individual entries
+  without renumbering, and copy the path of a Local document.
+- Find delivered Shared comments on the branch, including in a fresh clone.
+  Save and Continue preserve both preparations. Finish stages changed Shared
+  comments with any code fixes, and Local stays private. Comparisons retain Local
+  notes automatically when closed.
+- Find Sponsor and Contact in Support.
+
+### Changed
+
+- **Compare** distinguishes local branches, remote-tracking branches and tags
+  with the same name. The panel shows the Base and Inspect revisions throughout
+  the review. Compare offers modes for the selected range and keeps its own
+  reading order pinned to that range.
+- Show the main review state while Comments loads independently. Reuse the
+  state returned by the CLI for Next, Previous, Save, Continue and Add comment
+  when available. This cuts repeated reads, especially on Windows.
+- Validate review actions against the displayed state inside the CLI. If that
+  state changed, refresh the panel so the reviewer can decide how to proceed.
+- Open Add comment from the current report when it is ready. Save only the
+  relevant comment buffers during review actions, and skip the buffer inventory
+  when the editor confirms everything is saved.
+- Use the IDE palette in the comment composer and keep the writing area and
+  buttons usable at its minimum window size.
+
+### Fixed
+
+- Refresh the comment state once after a write when a fresh read is needed.
+  Comment writes use the local mutation timeout.
 
 ## [0.3.0] — 2026-09-05
 

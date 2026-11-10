@@ -17,6 +17,31 @@ teardown() { comments_teardown; }
 @test "comments renumber preserves missing final LF" { comments_check_renumber_fixture no-final-lf; }
 @test "comments renumber preserves an existing empty file" { comments_check_renumber_fixture empty; }
 
+@test "comments mutations preserve raw bytes in a gitdir containing a literal backslash" {
+	case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) skip 'Windows cannot name a directory with a literal backslash' ;; esac
+	local literal="$COMMENTS_TMP/work\tree"
+	git clone --quiet --no-local --branch main "$COMMENTS_WORK" "$literal"
+	cd "$literal"
+	git branch feature/comments origin/feature/comments
+	git config reviewworkflow.base main
+	run --separate-stderr comments_start whole
+	[ "$status" -eq 0 ]
+	run --separate-stderr git review comments init --document local
+	[ "$status" -eq 0 ]
+	comments_refresh_paths
+	printf 'Preface\r\n\r\n## 8. First\r\nFirst body.\r\n## 9. Second\nKeep this.' >"$COMMENTS_LOCAL"
+	printf 'Preface\r\n\r\n## 1. First\r\nFirst body.\r\n## 2. Second\nKeep this.' >"$COMMENTS_TMP/numbered"
+	run --separate-stderr git review comments renumber --document local
+	[ "$status" -eq 0 ]
+	[ "$stderr" = '' ]
+	cmp "$COMMENTS_TMP/numbered" "$COMMENTS_LOCAL"
+	printf 'Preface\r\n\r\n## 2. Second\nKeep this.' >"$COMMENTS_TMP/remaining"
+	run --separate-stderr git review comments delete --document local --entry 1
+	[ "$status" -eq 0 ]
+	[ "$stderr" = '' ]
+	cmp "$COMMENTS_TMP/remaining" "$COMMENTS_LOCAL"
+}
+
 @test "comments prose only document remains byte identical and counts zero" {
 	printf '# Prose\n\nA [link](https://example.invalid/).\n\n- A list.\n> A quote.\n### A heading.\nNo final LF' >"$COMMENTS_LOCAL"
 	cp "$COMMENTS_LOCAL" "$COMMENTS_TMP/expected"

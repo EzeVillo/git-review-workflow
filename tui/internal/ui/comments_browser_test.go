@@ -21,6 +21,37 @@ func TestCommentsBrowserShowsFullProseAndScrollsBeforeOpening(t *testing.T) {
 	}
 }
 
+func TestCommentsBrowserRendersUntrustedCommentsAndDiffAsText(t *testing.T) {
+	const terminalCommands = "\x1b[H\x1b]52;c;YXVkaXQ=\x07\u009c"
+	m := NewModel()
+	m.Viewport = Viewport{Cols: 120, Rows: 40}
+	m, _ = m.handleCommentsQuery(commentsQueryDone{entries: true, result: host.Result{
+		Stdout: "comment-entry\t1\t1\t1\tHeading " + terminalCommands +
+			"\ncomment-scope\t1\tgeneral\t\ncomment-body\t1\tBefore " + terminalCommands + "after",
+	}})
+	view := m.View()
+	if !strings.Contains(view, "Heading") || !strings.Contains(view, "Before after") {
+		t.Fatalf("lost the comment text: %q", view)
+	}
+	if strings.ContainsAny(view, "\x1b\x07\u009c") {
+		t.Fatalf("emitted terminal controls from comments: %q", view)
+	}
+	m.commentsDiff = m.commentsBrowser
+	m.commentsBrowser = nil
+	m.commentsDiff.ShowingDiff = true
+	m.commentsDiff.Diff = "+changed " + terminalCommands + "line"
+	view = m.View()
+	if !strings.Contains(view, "+changed line") || strings.ContainsAny(view, "\x1b\x07\u009c") {
+		t.Fatalf("historical diff was not rendered as text: %q", view)
+	}
+	m.commentsDiff = nil
+	m, _ = m.handleCommentsQuery(commentsQueryDone{result: host.Result{Stdout: "+prepared " + terminalCommands + "line"}})
+	view = m.View()
+	if !strings.Contains(view, "+prepared line") || strings.ContainsAny(view, "\x1b\x07\u009c") {
+		t.Fatalf("delivery comparison was not rendered as text: %q", view)
+	}
+}
+
 func TestCommentsDiffClosesBrowserAndReturnsDirectlyToPanel(t *testing.T) {
 	m := NewModel()
 	m.Viewport = Viewport{Cols: 80, Rows: 24}

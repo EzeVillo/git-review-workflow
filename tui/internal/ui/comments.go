@@ -396,7 +396,7 @@ func (m Model) handleCommentsQuery(msg commentsQueryDone) (Model, tea.Cmd) {
 			m.commentsBrowser = nil
 			return m, nil
 		}
-		m.textOverlay = &TextOverlay{Title: msg.title, Body: msg.result.Stdout}
+		m.textOverlay = &TextOverlay{Title: msg.title, Body: safeCommentText(msg.result.Stdout)}
 		return m, nil
 	}
 	entries := domain.ParseComments(msg.result.Stdout)

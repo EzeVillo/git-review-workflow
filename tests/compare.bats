@@ -392,6 +392,42 @@ fill_compare_draft() {
 	[ "$(git config branch.review/v2.0.reviewmode)" = walk ]
 }
 
+@test "compare draft round trips pinned SHA256 endpoints and the exact staged diff" {
+	git init --quiet --object-format=sha256 "$TMP/sha256"
+	cd "$TMP/sha256"
+	printf 'base\n' >app.txt
+	git add app.txt
+	git commit --quiet -m base
+	git tag v1.0
+	printf 'target\n' >app.txt
+	printf 'more\n' >more.txt
+	git add more.txt
+	git commit --quiet -am target
+	git tag v2.0
+	local base_oid target_oid
+	base_oid=$(git rev-parse v1.0)
+	target_oid=$(git rev-parse v2.0)
+	git diff --binary "$base_oid" "$target_oid" >"$TMP/expected"
+
+	run git review walkthrough draft --compare -- v1.0 v2.0
+	[ "$status" -eq 0 ]
+	fill_compare_draft
+	run git review walkthrough draft --build --compare -- "$DRAFT_ID"
+	[ "$status" -eq 0 ]
+	run git review config --porcelain --compare -- v1.0 v2.0
+	[ "$status" -eq 0 ]
+	[[ "$output" == *$'offer\twalk\trecommended'* ]]
+	[[ "$output" != *$'offer\tdraft-update\t'* ]]
+	git tag -f v2.0 v1.0
+	run git review compare --draft -- "$DRAFT_ID"
+	[ "$status" -eq 0 ]
+	[ "$(git rev-parse HEAD)" = "$base_oid" ]
+	[ "$(git config branch.review/v2.0.reviewtip)" = "$target_oid" ]
+	git diff --cached --binary >"$TMP/staged"
+	cmp "$TMP/expected" "$TMP/staged"
+	git diff --quiet
+}
+
 @test "compare draft updates when either endpoint moves without touching branch drafts" {
 	git branch target v2.0
 	git branch from v1.0

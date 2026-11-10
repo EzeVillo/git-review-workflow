@@ -193,6 +193,8 @@ selecciones vacías o invertidas.
 de `status --porcelain` o `entries --porcelain`. Protegen sesión, cursor y
 bytes/presencia originales del documento, incluido `absent`. Un documento ilegible
 informa `unreadable` y un diagnóstico; resolvé el error de lectura antes de escribir.
+Con `comments diff --expect-document`, el ordinal se lee de esos bytes exactos.
+Si el documento se reemplaza durante la lectura, el comando sale con código 4 sin emitir un diff.
 Todos aceptan `-h`/`--help` y `--`; los valores son argumentos separados y pueden
 empezar con guion. Desde terminal podés omitir guards para usar el estado actual.
 
@@ -437,7 +439,7 @@ git review walkthrough draft --build --compare -- <draft-id>
 git review compare --draft -- <draft-id>
 ```
 
-El borrador guarda ambos commits resueltos. **Validate and start** usa esos extremos fijados, aunque las referencias hayan avanzado. Volvé a abrir Compare con los selectores originales para actualizar el borrador a sus extremos actuales; se conservan las anotaciones de archivos que siguen en rango. Invertir los extremos crea otro orden de lectura. `config --porcelain --compare -- <draft-id>` informa las ofertas del rango guardado.
+El borrador guarda ambos commits resueltos como identificadores completos en el formato del repositorio (SHA-1 o SHA-256). **Validate and start** usa esos extremos fijados, aunque las referencias hayan avanzado. Volvé a abrir Compare con los selectores originales para actualizar el borrador a sus extremos actuales; se conservan las anotaciones de archivos que siguen en rango. Invertir los extremos crea otro orden de lectura. `config --porcelain --compare -- <draft-id>` informa las ofertas del rango guardado.
 
 </details>
 
@@ -964,10 +966,10 @@ inventario mostrado y la rama actual dentro de la operación. Una diferencia sal
 con código 4 antes de los efectos; siguen vigentes las guardas de custodia y
 working tree.
 
-Ambas operaciones vuelven a comprobar la custodia de comentarios antes de
-publicar su transferencia. Si cambia la sesión de origen, el destino o el
-manifest en paralelo, se detienen y conservan el manifest original y cualquier
-candidato preparado para recuperación.
+Ambas operaciones vuelven a comprobar y transfieren la custodia de comentarios
+antes de crear una rama o cambiar el índice o el checkout. Si la transferencia
+falla, la sesión original y cualquier candidato de recuperación quedan
+disponibles. Podés reintentar cuando se resuelva la causa del fallo.
 
 Empezar un `git review start` nuevo sobre una rama que ya tiene una review
 guardada se rechaza, para que no pierdas la pausada sin querer — retomala o

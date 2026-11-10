@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/EzeVillo/git-review-workflow/tui/internal/domain"
 	"github.com/EzeVillo/git-review-workflow/tui/internal/host"
@@ -20,6 +21,17 @@ type CommentsBrowser struct {
 	CanDelete                         bool
 	Document                          domain.CommentDocument
 	Report                            domain.CommentsReport
+}
+
+// Markdown and historical blobs come from the reviewed branch. Strip terminal
+// sequences before layout so truncation cannot leave a partial escape behind.
+func safeCommentText(text string) string {
+	return strings.Map(func(r rune) rune {
+		if r != '\n' && r != '\t' && unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, ansi.Strip(text))
 }
 
 func (b *CommentsBrowser) Render(vp Viewport) string {
@@ -41,7 +53,7 @@ func (b *CommentsBrowser) Render(vp Viewport) string {
 			if i == b.Cursor {
 				prefix = "> "
 			}
-			header = append(header, ansi.Truncate(prefix+b.Entries[i].Label, width, ellipsis), ansi.Truncate("    "+b.Entries[i].Preview, width, ellipsis))
+			header = append(header, ansi.Truncate(prefix+safeCommentText(b.Entries[i].Label), width, ellipsis), ansi.Truncate("    "+safeCommentText(b.Entries[i].Preview), width, ellipsis))
 		}
 	} else {
 		header = append(header, entry.Location)
@@ -58,12 +70,12 @@ func (b *CommentsBrowser) Render(vp Viewport) string {
 		body = entry.Preview + "\n\n" + b.Diff
 	}
 	lines := []string{}
-	for _, line := range strings.Split(body, "\n") {
+	for _, line := range strings.Split(safeCommentText(body), "\n") {
 		lines = append(lines, wrapLine(line, width)...)
 	}
 	wrapped := []string{}
 	for _, line := range header {
-		wrapped = append(wrapped, wrapLine(line, width)...)
+		wrapped = append(wrapped, wrapLine(safeCommentText(line), width)...)
 	}
 	help := domain.CommentsBrowserKeys
 	if vp.ASCII {
@@ -81,7 +93,7 @@ func (b *CommentsBrowser) Render(vp Viewport) string {
 	}
 	footer := []string{}
 	for _, line := range []string{b.Error, help} {
-		footer = append(footer, wrapLine(line, width)...)
+		footer = append(footer, wrapLine(safeCommentText(line), width)...)
 	}
 	height := max(1, vp.Rows-len(wrapped)-len(footer)-1)
 	b.Offset = min(b.Offset, max(0, len(lines)-height))

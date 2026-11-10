@@ -37,13 +37,25 @@ set -eu
 if [ "$TRANSFER_FAULT" = rename ] && [ "$#" -eq 2 ] && [ "$2" = "$TRANSFER_MANIFEST" ]; then exit 71; fi
 exec "$TRANSFER_REAL_MV" "$@"
 EOF
-	chmod +x "$COMMENTS_TMP/transfer-bin/awk" "$COMMENTS_TMP/transfer-bin/mv"
+	cat >"$COMMENTS_TMP/transfer-bin/git" <<'EOF'
+#!/bin/sh
+set -eu
+if [ "$TRANSFER_FAULT" = config ] && [ "${1:-}" = config ] &&
+	[ "${2:-}" = --local ] && [ "${3:-}" = "branch.$TRANSFER_TARGET.reviewcommentsowner" ] &&
+	[ "$#" -eq 4 ]; then
+	printf 'error: injected destination owner write failure\n' >&2
+	exit 71
+fi
+exec "$TRANSFER_REAL_GIT" "$@"
+EOF
+	chmod +x "$COMMENTS_TMP/transfer-bin/awk" "$COMMENTS_TMP/transfer-bin/mv" "$COMMENTS_TMP/transfer-bin/git"
 	export PATH="$COMMENTS_TMP/transfer-bin:$PATH"
 }
 
 assert_transfer_preserved() {
 	[ "$(cat "$COMMENTS_TMP/transfer.hit")" = hit ]
 	[ "$(git branch --show-current)" = review/feature/comments ]
+	! git show-ref --verify --quiet refs/heads/review-saved/feature/comments
 	cmp "$COMMENTS_TMP/local-before" "$COMMENTS_LOCAL"
 	[ "$(awk -F '\t' '$1=="custodian" {print $2}' "$TRANSFER_MANIFEST")" = review/feature/comments ]
 	set -- "${TRANSFER_MANIFEST}.candidate."*
@@ -98,12 +110,27 @@ assert_transfer_preserved() {
 }
 
 @test "save preserves its original manifest and sibling candidate when transfer rename fails" {
+	printf 'unstaged edit\n' >>sample.txt
+	comments_snapshot "$COMMENTS_TMP/before"
+	local original_path="$PATH"
 	intercept_transfer rename
 	run --separate-stderr git review save
 	[ "$status" -eq 1 ]
 	[ "$output" = '' ]
 	case "$stderr" in 'error: could not replace comments document; candidate preserved at '*) ;; *) false ;; esac
 	assert_transfer_preserved
+	export PATH="$original_path"
+	comments_snapshot "$COMMENTS_TMP/after"
+	comments_assert_snapshot "$COMMENTS_TMP/before" "$COMMENTS_TMP/after" branch head refs config index raw-index.bytes staged unstaged worktree
+	run --separate-stderr git review save
+	[ "$status" -eq 0 ]
+	[ "$stderr" = '' ]
+	run --separate-stderr git review continue feature/comments
+	[ "$status" -eq 0 ]
+	[ "$stderr" = '' ]
+	comments_snapshot "$COMMENTS_TMP/resumed"
+	comments_assert_snapshot "$COMMENTS_TMP/before" "$COMMENTS_TMP/resumed" branch head refs index staged unstaged worktree
+	cmp "$COMMENTS_TMP/local-before" "$COMMENTS_LOCAL"
 }
 
 @test "continue rechecks saved custody after preparing its transfer manifest" {
@@ -116,6 +143,8 @@ assert_transfer_preserved() {
 	[ "$output" = '' ]
 	[ "$stderr" = 'error: comments session belongs to another gitdir' ]
 	[ "$(cat "$COMMENTS_TMP/transfer.hit")" = hit ]
+	[ "$(git branch --show-current)" = main ]
+	! git show-ref --verify --quiet refs/heads/review/feature/comments
 	git show-ref --verify --quiet refs/heads/review-saved/feature/comments
 	[ "$(awk -F '\t' '$1=="custodian" {print $2}' "$TRANSFER_MANIFEST")" = review-saved/feature/comments ]
 	cmp "$COMMENTS_TMP/local-before" "$COMMENTS_LOCAL"
@@ -123,4 +152,80 @@ assert_transfer_preserved() {
 	[ "$#" -eq 1 ]
 	[ -f "$1" ]
 	[ "$(awk -F '\t' '$1=="custodian" {print $2}' "$1")" = review/feature/comments ]
+}
+
+@test "save removes only its partial custody keys after a config write fails" {
+	git config "branch.$TRANSFER_TARGET.description" 'User metadata to preserve'
+	comments_snapshot "$COMMENTS_TMP/before"
+	local original_path="$PATH"
+	intercept_transfer config
+	run --separate-stderr sh "$BATS_TEST_DIRNAME/../bin/git-review" save
+	[ "$status" -eq 1 ]
+	[ "$output" = '' ]
+	[ "$stderr" = 'error: injected destination owner write failure' ]
+	assert_transfer_preserved
+	export PATH="$original_path"
+	comments_snapshot "$COMMENTS_TMP/after"
+	comments_assert_snapshot "$COMMENTS_TMP/before" "$COMMENTS_TMP/after" branch head refs config index raw-index.bytes staged unstaged worktree
+	run --separate-stderr git review save
+	[ "$status" -eq 0 ]
+	[ "$stderr" = '' ]
+	[ "$(git config "branch.$TRANSFER_TARGET.description")" = 'User metadata to preserve' ]
+}
+
+@test "continue rolls comments custody back when restoring a draft fails" {
+	mkdir -p .git/review-walkthrough/feature
+	cp .review/walkthrough.md "$COMMENTS_TMP/original-draft"
+	cp "$COMMENTS_TMP/original-draft" .git/review-walkthrough/feature/comments.md
+	run --separate-stderr git review save
+	[ "$status" -eq 0 ]
+	printf 'New draft while paused.\n' >.git/review-walkthrough/feature/comments.md
+	comments_snapshot "$COMMENTS_TMP/before"
+	run --separate-stderr git review continue feature/comments
+	[ "$status" -eq 1 ]
+	[ "$output" = '' ]
+	case "$stderr" in 'error: a walkthrough draft for feature/comments already exists,'*) ;; *) false ;; esac
+	comments_snapshot "$COMMENTS_TMP/after"
+	comments_assert_snapshot "$COMMENTS_TMP/before" "$COMMENTS_TMP/after"
+	[ "$(cat .git/review-walkthrough/feature/comments.md)" = 'New draft while paused.' ]
+	cmp "$COMMENTS_TMP/original-draft" .git/review-saved-walkthrough/feature/comments.md
+	mv .git/review-walkthrough/feature/comments.md "$COMMENTS_TMP/new-draft"
+	run --separate-stderr git review continue feature/comments
+	[ "$status" -eq 0 ]
+	cmp "$COMMENTS_TMP/original-draft" .git/review-walkthrough/feature/comments.md
+	cmp "$COMMENTS_TMP/local-before" "$COMMENTS_LOCAL"
+}
+
+@test "continue leaves a failed transfer retryable with banked edits and private prose" {
+	git review abort >/dev/null
+	comments_start step >/dev/null
+	printf 'edit on step one\n' >>sample.txt
+	git review next >/dev/null
+	git review comments add --document local --text 'Preserve this step comment.' >/dev/null
+	comments_refresh_paths
+	cp "$COMMENTS_LOCAL" "$COMMENTS_TMP/local-before"
+	export TRANSFER_MANIFEST=${COMMENTS_LOCAL%/*}/manifest
+	printf 'unstaged edit\n' >>sample.txt
+	comments_snapshot "$COMMENTS_TMP/review-before"
+	run --separate-stderr git review save
+	[ "$status" -eq 0 ]
+	comments_snapshot "$COMMENTS_TMP/saved-before"
+	local original_path="$PATH"
+	export TRANSFER_SOURCE=review-saved/feature/comments TRANSFER_TARGET=review/feature/comments
+	intercept_transfer rename
+	run --separate-stderr git review continue feature/comments
+	[ "$status" -eq 1 ]
+	[ "$output" = '' ]
+	case "$stderr" in 'error: could not replace comments document; candidate preserved at '*) ;; *) false ;; esac
+	export PATH="$original_path"
+	comments_snapshot "$COMMENTS_TMP/saved-after"
+	comments_assert_snapshot "$COMMENTS_TMP/saved-before" "$COMMENTS_TMP/saved-after" branch head refs config index raw-index.bytes staged unstaged worktree
+	[ "$(awk -F '\t' '$1=="custodian" {print $2}' "$TRANSFER_MANIFEST")" = review-saved/feature/comments ]
+	run --separate-stderr git review continue feature/comments
+	[ "$status" -eq 0 ]
+	[ "$stderr" = '' ]
+	comments_snapshot "$COMMENTS_TMP/review-after"
+	comments_assert_snapshot "$COMMENTS_TMP/review-before" "$COMMENTS_TMP/review-after" branch head index staged unstaged worktree
+	git show-ref --verify --quiet refs/review-edits/feature/comments/1
+	cmp "$COMMENTS_TMP/local-before" "$COMMENTS_LOCAL"
 }

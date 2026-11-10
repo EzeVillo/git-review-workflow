@@ -41,3 +41,32 @@ teardown() { comments_teardown; }
 	comments_snapshot "$COMMENTS_TMP/after"
 	comments_assert_snapshot "$COMMENTS_TMP/before" "$COMMENTS_TMP/after"
 }
+
+@test "comments history rejects a replacement between revision validation and reading the entry" {
+	run --separate-stderr git review comments add --document local --path 'other file.txt' --side head --text 'Second physical entry.'
+	[ "$status" -eq 0 ]
+	local revision
+	revision=$(git hash-object --no-filters "$COMMENTS_LOCAL")
+	sed -n '/^## 2\./,$p' "$COMMENTS_LOCAL" >"$COMMENTS_TMP/replacement"
+	export HISTORY_REAL_GIT="$(command -v git)" HISTORY_PATH="$COMMENTS_LOCAL"
+	mkdir "$COMMENTS_TMP/race"
+	cat >"$COMMENTS_TMP/race/git" <<'EOF'
+#!/bin/sh
+set -eu
+if [ "${1:-}" = hash-object ] && [ "${2:-}" = --no-filters ] &&
+	[ "${4:-}" = "$HISTORY_PATH" ] && [ ! -e "$COMMENTS_TMP/race/hit" ]; then
+	"$HISTORY_REAL_GIT" "$@"
+	cp "$COMMENTS_TMP/replacement" "$HISTORY_PATH"
+	: >"$COMMENTS_TMP/race/hit"
+	exit 0
+fi
+exec "$HISTORY_REAL_GIT" "$@"
+EOF
+	chmod +x "$COMMENTS_TMP/race/git"
+	run --separate-stderr env PATH="$COMMENTS_TMP/race:$PATH" sh "$BATS_TEST_DIRNAME/../bin/git-review" comments diff --document local --entry 1 --expect-document "$revision" --porcelain
+	[ -f "$COMMENTS_TMP/race/hit" ]
+	[ "$status" -eq 4 ]
+	[ "$output" = '' ]
+	[ "$stderr" = 'error: comments document is stale' ]
+	cmp "$COMMENTS_TMP/replacement" "$COMMENTS_LOCAL"
+}

@@ -190,6 +190,8 @@ Both columns must be supplied together; empty or reversed selections are rejecte
 `status --porcelain` or `entries --porcelain`. They protect the original session,
 cursor and document bytes/presence, including `absent`. An unreadable document
 reports `unreadable` and a diagnostic; resolve the read error before writing.
+With `comments diff --expect-document`, the ordinal is read from those exact
+document bytes. A replacement during the read returns exit 4 without a diff.
 All commands support `-h`/`--help` and `--`; option values are separate arguments
 and may start with a dash. The terminal user may omit guards to use current state.
 
@@ -425,7 +427,7 @@ git review walkthrough draft --build --compare -- <draft-id>
 git review compare --draft -- <draft-id>
 ```
 
-The draft stores both resolved commits. **Validate and start** uses those pinned endpoints, even if the named refs have moved. Reopen Compare with the original selectors to update the draft for their current endpoints; annotations for files still in range are preserved. Swapping the endpoints creates a separate reading order. `config --porcelain --compare -- <draft-id>` reports the stored range's offers.
+The draft stores both resolved commits as full object IDs in the repository's format (SHA-1 or SHA-256). **Validate and start** uses those pinned endpoints, even if the named refs have moved. Reopen Compare with the original selectors to update the draft for their current endpoints; annotations for files still in range are preserved. Swapping the endpoints creates a separate reading order. `config --porcelain --compare -- <draft-id>` reports the stored range's offers.
 
 </details>
 
@@ -939,9 +941,10 @@ resume and omits the completion marker; clients refresh without repeating it.
 displayed inventory and current checkout inside the operation. A mismatch exits
 4 before effects; comments custody and working-tree guards still apply.
 
-Both operations recheck comments custody before publishing its transfer. If
-the source session, destination or manifest changes concurrently, they stop
-and preserve the original manifest and any prepared recovery candidate.
+Both operations recheck and transfer comments custody before creating a branch
+or changing the index or checkout. If the transfer fails, the original session
+and any prepared recovery candidate remain available. You can retry once the
+cause of the transfer failure is resolved.
 
 Starting a fresh `git review start` on a branch that already has a saved review
 is refused, so you do not silently lose the paused one — resume it or discard it

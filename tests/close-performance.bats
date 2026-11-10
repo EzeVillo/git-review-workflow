@@ -89,7 +89,7 @@ check_changed_owner() {
 @test "save rereads ownership after acquiring its lock" { check_changed_owner save; }
 @test "cancel rereads ownership after acquiring its lock" { check_changed_owner abort; }
 
-@test "save refuses a destination claimed after its metadata copy" {
+@test "save refuses a destination claimed after its first custody preflight" {
 	comments_start walk >/dev/null
 	git review comments add --document local --text 'Keep private prose on failure.' >/dev/null
 	comments_refresh_paths
@@ -102,6 +102,7 @@ check_changed_owner() {
 	[ "$stderr" = 'error: another comments session owns the destination' ]
 	[ "$output" = '' ]
 	[ "$(git branch --show-current)" = review/feature/comments ]
+	! git show-ref --verify --quiet refs/heads/review-saved/feature/comments
 	[ "$(cat "$COMMENTS_LOCAL")" = "$before" ]
 	[ "$(awk -F '\t' '$1=="custodian" {print $2}' "${COMMENTS_LOCAL%/*}/manifest")" = review/feature/comments ]
 	[ "$(git config branch.review-saved/feature/comments.reviewcommentssession)" = bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb ]

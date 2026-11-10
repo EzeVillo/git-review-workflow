@@ -262,6 +262,8 @@ jobs:
         run: |
           node --test scripts/ci-shards.test.mjs
           node scripts/ci-shards.cjs check
+      - name: Test VS Code publication and release recovery with stubbed services
+        run: node --test scripts/release-vscode.test.mjs
       # Same job on purpose: node is already set up, and both checks guard the
       # same thing — a surface the clients share drifting apart in one of them.
       - name: Check logo assets

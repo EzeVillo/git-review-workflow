@@ -95,16 +95,15 @@ require_clean_work_tree
 # the lock and immediately before publication. No snapshot crosses a boundary.
 _review_close_snapshot=1
 comments_lock_branch "$saved" || exit 1
-trap 'comments_unlock' 0
+trap 'comments_transfer_rollback || true; comments_unlock' 0
 trap 'exit 1' 1 2 15
 comments_transfer_preflight "$saved" "$rb" || exit 1
 
 review_config_read "branch.$saved.reviewmode" whole
 mode=$_review_config_value
 
-# restore_draft: bring the reviewer's walkthrough draft back to the active
-# namespace. Called from both mode paths immediately before the review branch is
-# created — the one point that satisfies both constraints at once:
+# Restore the draft before creating the review branch. A collision aborts the
+# operation, and the exit trap returns comments custody to the saved review.
 #
 #   * late enough that every guard which can still die has already run: moving it
 #     back and then aborting leaves the draft in the active namespace with the
@@ -169,18 +168,24 @@ if [ "$mode" = "step" ]; then
 	if [ -z "$start" ] || [ -z "$count" ] || [ -z "$step" ]; then
 		die "missing review metadata for $saved; was it created with git review start? Discard it with 'git review forget --saved $src'."
 	fi
+	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
+	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
+else
+	review_config_read "branch.$saved.reviewsavedlower"
+	lower=$_review_config_value
+	[ -n "$lower" ] || die "missing review metadata for $saved; was it created with git review start? Discard it with 'git review forget --saved $src'."
+fi
 
-	restore_draft
+comments_transfer "$saved" "$rb" || exit 1
+restore_draft
 
+if [ "$mode" = "step" ]; then
 	# Bring the banked edits back to where git review next/prev expect them.
 	git for-each-ref --format='%(refname)' "refs/review-saved-edits/$src/" | while read -r ref; do
 		n="${ref##*/}"
 		git update-ref "refs/review-edits/$src/$n" "$(git rev-parse "$ref")"
 		git update-ref -d "$ref"
 	done
-
-	commits="$(git rev-list --reverse --first-parent --no-merges "$start..$tip")"
-	cstep="$(printf '%s\n' "$commits" | sed -n "${step}p")"
 
 	# Land on the saved step exactly like review-next's goto_step does: hard-reset
 	# to the commit, re-apply its banked edits (temp file, worktree-only — not
@@ -198,39 +203,10 @@ if [ "$mode" = "step" ]; then
 	restore_meta reviewstart
 	restore_meta reviewcount
 	git config "branch.$rb.reviewstep" "$step"
-	restore_meta reviewsource
-	restore_meta reviewbase
-	restore_meta reviewtip
-	restore_meta reviewprevreviewed
-	restore_meta reviewlocal
-	restore_meta reviewreadonly
-	restore_meta reviewcomparebase
-	restore_meta reviewcomparetarget
-	restore_meta reviewreturn
-	# The name the draft was filed under, restored in every mode for the same reason
-	# save copies it in every mode: the resumed review has to look the file up under
-	# the name it was written to, not under its own source.
-	restore_meta reviewdraft
-	comments_transfer "$saved" "$rb" || exit 1
-
-	git branch -D "$saved" >/dev/null
-
-	if [ "$porcelain" -eq 0 ]; then
-		echo "resumed review of $src — step $step/$count"
-		show_commit "$cstep" "$step" "$count"
-	fi
 else
 	# whole and walk mode: rebuild the pristine review state (PR diff staged at the
 	# lower bound) and replay your edits into the working tree; walk restores its
-	# reading cursor on top. Read with || true and reported: a deleted
-	# reviewsavedlower would otherwise let set -e kill us mid-restore with no
-	# message, so bail before creating the branch, as the step path does above.
-	review_config_read "branch.$saved.reviewsavedlower"
-	lower=$_review_config_value
-	[ -n "$lower" ] || die "missing review metadata for $saved; was it created with git review start? Discard it with 'git review forget --saved $src'."
-
-	restore_draft
-
+	# reading cursor on top.
 	git switch -q -c "$rb" "$tip"
 	git reset -q --soft "$lower"
 	# Binary-safe apply via apply_review_patch (temp file, not command substitution).
@@ -239,19 +215,6 @@ else
 			die "could not restore your edits"
 	fi
 
-	restore_meta reviewsource
-	restore_meta reviewbase
-	restore_meta reviewtip
-	restore_meta reviewprevreviewed
-	restore_meta reviewlocal
-	restore_meta reviewreadonly
-	restore_meta reviewcomparebase
-	restore_meta reviewcomparetarget
-	restore_meta reviewreturn
-	# The name the draft was filed under (see the step path above).
-	restore_meta reviewdraft
-	comments_transfer "$saved" "$rb" || exit 1
-
 	if [ "$mode" = "walk" ]; then
 		git config "branch.$rb.reviewmode" walk
 		restore_meta reviewwalkstep
@@ -259,28 +222,21 @@ else
 		restore_meta reviewwalkkeys
 		restore_meta reviewwalkfromdraft
 		restore_meta reviewwalkbase
-		git branch -D "$saved" >/dev/null
-
-		# Re-derive the sequence and reprint the entry you were on, the way the step
-		# path reprints its commit. load_walk_review_meta applies the keys-only filter
-		# when reviewwalkkeys is set.
-		if [ "$porcelain" -eq 0 ]; then
-			cur="$rb"
-			# Walk keys were restored after the transfer's final custody snapshot.
-			# Reporting must see those writes, never the pre-transfer active metadata.
-			review_config_init
-			[ "$_review_config_ready" -eq 1 ] || die 'could not read review metadata'
-			load_walk_review_meta "$cur"
-			echo "resumed review of $src — walkthrough entry $walkstep/$total"
-			show_walk_entry "$walkstep"
-		fi
-	else
-		git branch -D "$saved" >/dev/null
-		if [ "$porcelain" -eq 0 ]; then
-			echo "resumed review of $src — the staged diff is the PR; edit, then run git review finish"
-		fi
 	fi
 fi
+
+restore_meta reviewsource
+restore_meta reviewbase
+restore_meta reviewtip
+restore_meta reviewprevreviewed
+restore_meta reviewlocal
+restore_meta reviewreadonly
+restore_meta reviewcomparebase
+restore_meta reviewcomparetarget
+restore_meta reviewreturn
+restore_meta reviewdraft
+comments_transfer_commit || echo 'note: could not remove the comments rollback manifest' >&2
+git branch -D "$saved" >/dev/null
 
 # As with Save, a failed final read must not invite a second mutation. Release
 # custody first; only a complete envelope is an authoritative reply to clients.
@@ -293,4 +249,23 @@ if [ "$porcelain" -eq 1 ]; then
 	if [ "$_reply_status" -ne 0 ]; then
 		echo 'note: review resumed; final state could not be read' >&2
 	fi
+else
+	case "$mode" in
+	step)
+		echo "resumed review of $src — step $step/$count"
+		show_commit "$cstep" "$step" "$count"
+		;;
+	walk)
+		# Report the restored cursor (including the keys-only filter).
+		cur="$rb"
+		review_config_init
+		[ "$_review_config_ready" -eq 1 ] || die 'could not read review metadata'
+		load_walk_review_meta "$cur"
+		echo "resumed review of $src — walkthrough entry $walkstep/$total"
+		show_walk_entry "$walkstep"
+		;;
+	*)
+		echo "resumed review of $src — the staged diff is the PR; edit, then run git review finish"
+		;;
+	esac
 fi

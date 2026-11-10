@@ -677,11 +677,17 @@ comments_scan() {
 comments_contours() {
 	# gawk on Windows otherwise strips CR from getline on the original file.
 	# Other POSIX awks treat BINMODE as an ordinary, unused variable.
-	awk -v BINMODE=3 -v operation="$1" -v original="${2:-}" -v final_lf="${3:-1}" -v ordinal="${4:-}" '
+	COMMENTS_ORIGINAL="${2:-}" awk -v BINMODE=3 -v operation="$1" -v final_lf="${3:-1}" -v ordinal="${4:-}" '
 		BEGIN {
 			scanmeta=(operation=="entries" || operation=="status")
 			metadata_error="Comment location metadata is incomplete or invalid."
-			if(original!="") {while((getline rawline < original)>0) raw[++rawcount]=rawline; close(original)}
+			# ENVIRON preserves literal backslashes. A failed getline must never
+			# produce a candidate reconstructed from missing raw lines.
+			original=ENVIRON["COMMENTS_ORIGINAL"]
+			if(original!="") {
+				while((read_status=getline rawline < original)>0) raw[++rawcount]=rawline
+				if(read_status<0 || close(original)!=0) exit 1
+			}
 		}
 		function oid(s) {return (length(s)==40 || length(s)==64) && s !~ /[^0-9a-f]/}
 		function positive(s) {return s ~ /^[0-9]+$/ && s !~ /^0+$/}
@@ -835,6 +841,7 @@ comments_contours() {
 			emitraw(isentry)
 		}
 		END {
+			if(original!="" && (read_status<0 || rawcount!=NR)) exit 1
 			if(operation=="marker") {
 				if(badmarker || markers>1 || marker) print "invalid"
 				else if(markers==1 && !html) print token
@@ -1405,11 +1412,21 @@ EOF
 	[ -n "$cm_dir" ] || { comments_error 'comments context has no retained documents'; return 1; }
 }
 
-comments_entries() {
+comments_entries() (
 	_ce_path=$(comments_document_path "$1") || return 1
 	_ce_revision=$(comments_revision "$_ce_path") || return 1
+	if [ -n "${2:-}" ] && [ "$2" != "$_ce_revision" ]; then
+		printf 'error: comments document is stale\n' >&2; return 4
+	fi
 	[ "$_ce_revision" != absent ] || { comments_error 'comments document is absent'; return 1; }
-	if ! _ce_rows=$(walk_normalize <"$_ce_path" | comments_contours entries); then
+	_ce_snapshot=$(mktemp "${TMPDIR:-/tmp}/git-review-entries.XXXXXX") || return 1
+	trap 'rm -f "$_ce_snapshot"' 0
+	cp "$_ce_path" "$_ce_snapshot" || return 1
+	_ce_snapshot_revision=$(git hash-object --no-filters -- "$_ce_snapshot") || return 1
+	if [ "$_ce_snapshot_revision" != "$_ce_revision" ]; then
+		printf 'error: comments document is stale\n' >&2; return 4
+	fi
+	if ! _ce_rows=$(walk_normalize <"$_ce_snapshot" | comments_contours entries); then
 		comments_error 'comment boundaries could not be preserved; document unchanged'; return 1
 	fi
 	_ce_after=$(comments_revision "$_ce_path") || return 1
@@ -1418,7 +1435,7 @@ comments_entries() {
 	fi
 	porcelain_row comments-document "$_ce_path" "$cm_context" "$1" present "$_ce_revision"
 	if [ -n "$_ce_rows" ]; then printf '%s\n' "$_ce_rows"; fi
-}
+)
 
 comments_renumber() {
 	_cn_path=$cm_dir/$1.md
@@ -1850,9 +1867,8 @@ comments_diff() {
 	_cd_document=$1 _cd_entry=$2 _cd_porcelain=$3
 	case "$_cd_entry" in ''|*[!0-9]*) comments_error '--entry requires a positive physical ordinal'; return 1 ;; esac
 	comments_positive_le "$_cd_entry" "$_cd_entry" || { comments_error '--entry requires a positive physical ordinal'; return 1; }
-	_cd_path=$(comments_document_path "$_cd_document") || return 1
-	comments_check_guards "$4" "$5" "$_cd_path" || return $?
-	_cd_rows=$(comments_entries "$_cd_document") || return $?
+	comments_check_guards "$4" '' '' || return $?
+	_cd_rows=$(comments_entries "$_cd_document" "$5") || return $?
 	_cd_selected=$(printf '%s\n' "$_cd_rows" | awk -F '\t' -v ordinal="$_cd_entry" '$2==ordinal && $1!="comments-document" {print}')
 	if ! printf '%s\n' "$_cd_selected" | grep -q '^comment-entry'; then comments_error 'comment entry not found'; return 1; fi
 	_cd_version=$(printf '%s\n' "$_cd_selected" | awk -F '\t' '$1=="comment-version" {print $3 " " $4}')
@@ -2029,8 +2045,10 @@ comments_transfer() {
 	_ct_pinned_session=$cc_session _ct_pinned_context=$cc_context _ct_pinned_owner=$cc_owner
 	_ct_pinned_gitdir=$cm_gitdir
 	_ct_candidate=$(mktemp "$cc_dir/manifest.candidate.XXXXXX") || return 1
-	_ct_original_revision=$(comments_revision "$_ct_manifest") || return 1
-	COMMENTS_CUSTODIAN=$_ct_target awk -F '\t' 'BEGIN {OFS="\t"} $1=="custodian" {$0="custodian\t" ENVIRON["COMMENTS_CUSTODIAN"]} {print}' "$_ct_manifest" >"$_ct_candidate" || return 1
+	_ct_backup=$(mktemp "$cc_dir/manifest.rollback.XXXXXX") || return 1
+	cp "$_ct_manifest" "$_ct_backup" || return 1
+	_ct_original_revision=$(comments_revision "$_ct_backup") || return 1
+	COMMENTS_CUSTODIAN=$_ct_target awk -F '\t' 'BEGIN {OFS="\t"} $1=="custodian" {$0="custodian\t" ENVIRON["COMMENTS_CUSTODIAN"]} {print}' "$_ct_backup" >"$_ct_candidate" || return 1
 	comments_safe_path "$_ct_candidate" || return 1
 	if [ ! -f "$_ct_candidate" ] || [ -L "$_ct_candidate" ]; then
 		comments_error 'comments candidate is not a readable regular file'; return 1
@@ -2046,14 +2064,60 @@ comments_transfer() {
 	if ! comments_check_guards '' "$_ct_original_revision" "$_ct_manifest" 2>/dev/null; then
 		printf 'error: comments document is stale; candidate preserved at %s\n' "$_ct_candidate" >&2; return 4
 	fi
+	# Reserve destination metadata while the source manifest is still authoritative.
+	# Remember only new writes so a failed publication leaves other claims alone.
+	if [ -z "$_ct_existing" ]; then
+		if [ -n "$cc_context" ]; then
+			git config --local "branch.$_ct_target.reviewcommentscontext" "$cc_context" || return 1
+			_ct_added_context=$cc_context
+		fi
+		git config --local "branch.$_ct_target.reviewcommentssession" "$cc_session" || return 1
+		_ct_added_session=$cc_session
+		git config --local "branch.$_ct_target.reviewcommentsowner" "$cc_owner" || return 1
+		_ct_added_owner=$cc_owner
+	fi
+	_ct_published_revision=$(comments_revision "$_ct_candidate") || return 1
+	if ! comments_check_guards '' "$_ct_original_revision" "$_ct_manifest" 2>/dev/null; then
+		printf 'error: comments document is stale; candidate preserved at %s\n' "$_ct_candidate" >&2; return 4
+	fi
 	if ! mv "$_ct_candidate" "$_ct_manifest"; then
 		comments_error "could not replace comments document; candidate preserved at $_ct_candidate"; return 1
 	fi
-	if [ -n "$cc_context" ]; then git config "branch.$_ct_target.reviewcommentscontext" "$cc_context" || return 1
-	else git config --unset "branch.$_ct_target.reviewcommentscontext" || true
+	_ct_moved=1
+}
+
+comments_transfer_commit() {
+	_ct_moved=0 _ct_added_context='' _ct_added_session='' _ct_added_owner=''
+	if [ -n "${_ct_backup:-}" ]; then
+		rm -f "$_ct_backup" || return 1
+		_ct_backup=''
 	fi
-	git config "branch.$_ct_target.reviewcommentssession" "$cc_session" || return 1
-	git config "branch.$_ct_target.reviewcommentsowner" "$cc_owner"
+}
+
+comments_transfer_unset() {
+	[ -n "$2" ] || return 0
+	# Match our exact value inside Git's config lock, including literal paths.
+	_ct_pattern=$(printf '%s\n' "$2" | sed 's/[][\\.^$*+?(){}|]/\\&/g') || return 1
+	if git config --local --unset "branch.$_ct_target.reviewcomments$1" "^$_ct_pattern\$"; then return 0; fi
+	[ "$(git config --local "branch.$_ct_target.reviewcomments$1" || true)" != "$2" ]
+}
+
+comments_transfer_rollback() {
+	[ -n "${_ct_backup:-}" ] || return 0
+	if [ "${_ct_moved:-0}" -eq 1 ]; then
+		if ! comments_check_guards '' "$_ct_published_revision" "$_ct_manifest" ||
+			! mv "$_ct_backup" "$_ct_manifest"; then
+			comments_error "could not restore comments custody; original manifest preserved at $_ct_backup"; return 1
+		fi
+	fi
+	_ct_rollback_failed=0
+	comments_transfer_unset context "${_ct_added_context:-}" || _ct_rollback_failed=1
+	comments_transfer_unset session "${_ct_added_session:-}" || _ct_rollback_failed=1
+	comments_transfer_unset owner "${_ct_added_owner:-}" || _ct_rollback_failed=1
+	if [ "$_ct_rollback_failed" -ne 0 ]; then
+		comments_error 'could not release destination comments metadata'; return 1
+	fi
+	comments_transfer_commit
 }
 
 # Compare notes are durable Local work, not disposable review corrections.
@@ -3236,11 +3300,11 @@ walk_draft_progress() {
 		inblock && index($0, "-->") { inblock = 0 }
 		# The upper bound of the range this file was last written against, read
 		# from inside the block for the same reason as the flags, and validated to
-		# 40 hex exactly as walk_sidecar_block_tip validates it: the value ends up
+		# full hex exactly as walk_sidecar_block_tip validates it: the value ends up
 		# compared against a recorded SHA, so prose that happens to sit on a "tip"
 		# line must not become one. A match plus length() rather than an interval
-		# {40}, which mawk and BSD awk do not all accept.
-		inblock && $1 == "tip" && $2 ~ /^[0-9a-f]+$/ && length($2) == 40 {
+		# intervals, which mawk and BSD awk do not all accept.
+		inblock && $1 == "tip" && $2 ~ /^[0-9a-f]+$/ && (length($2) == 40 || length($2) == 64) {
 			tp[cur] = $2
 			next
 		}
@@ -4773,12 +4837,14 @@ walk_sidecar_block_tip() {
 		tip)
 			# Validated here rather than trusted: the value is about to be handed
 			# to git as a revision, and a "tip" that is somebody's prose must not
-			# become a git argument. 40 hex characters, no more, no less.
+			# become a git argument. Accept a full SHA-1 or SHA-256 object ID.
 			case "$_wsbt_v" in
-			*[!0-9a-f]* | '') ;;
-			????????????????????????????????????????)
-				printf '%s' "$_wsbt_v"
-				return 0
+			*[!0-9a-f]*) ;;
+			*)
+				if [ "${#_wsbt_v}" -eq 40 ] || [ "${#_wsbt_v}" -eq 64 ]; then
+					printf '%s' "$_wsbt_v"
+					return 0
+				fi
 				;;
 			esac
 			;;
@@ -4981,12 +5047,12 @@ compare_load_draft() {
 	if [ -z "$a" ] || [ -z "$b" ]; then
 		die "comparison draft has no revision context: $1"
 	fi
-	_cmp_expected="compare/$(printf '%s\n%s\n' "$a" "$b" | git hash-object --stdin)"
-	[ "$compare_draft_id" = "$_cmp_expected" ] || die "comparison draft has a mismatched revision context: $1"
+	_cmp_expected_oid=$(printf '%s\n%s\n' "$a" "$b" | git hash-object --stdin) || die "could not validate comparison draft: $1"
+	[ "$compare_draft_id" = "compare/$_cmp_expected_oid" ] || die "comparison draft has a mismatched revision context: $1"
 	# Require complete object IDs, not a user-edited ref that could move later.
 	for _cmp_oid in "$acommit" "$bcommit"; do
 		case "$_cmp_oid" in *[!0-9a-f]* | '') die "invalid comparison draft endpoint: $1" ;; esac
-		[ "${#_cmp_oid}" -eq 40 ] || die "invalid comparison draft endpoint: $1"
+		[ "${#_cmp_oid}" -eq "${#_cmp_expected_oid}" ] || die "invalid comparison draft endpoint: $1"
 		git cat-file -e "$_cmp_oid^{commit}" 2>/dev/null || die "comparison draft endpoint is unavailable: $_cmp_oid"
 	done
 	[ "$acommit" != "$bcommit" ] || die "comparison draft endpoints are identical"

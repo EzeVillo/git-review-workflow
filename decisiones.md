@@ -2169,6 +2169,13 @@ Se conserva el lock y se agrega un preflight en el límite de publicación. El
 manifest y la prosa originales no se pierden si cambia la custodia, se edita
 el manifest o falla el rename; el candidato queda recuperable.
 
+Desde la auditoría del 10 de noviembre, la transferencia ocurre antes de crear
+la rama destino, tocar el índice o mover las ediciones bancadas. Si falla,
+se retiran las claves de destino escritas por el intento. Si la transferencia
+terminó pero la operación de Git se interrumpe antes de completar el destino,
+se restaura la custodia original mientras el manifest siga siendo el publicado
+por ese intento.
+
 La prueba dirigida mostró que, con el código anterior, cambiar el propietario,
 el destino o la sesión mientras se escribía el candidato podía completar Save.
 La relectura específica evita ese resultado sin reconstruir captura o historia.

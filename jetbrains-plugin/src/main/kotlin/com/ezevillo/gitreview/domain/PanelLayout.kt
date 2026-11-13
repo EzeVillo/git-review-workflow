@@ -372,11 +372,14 @@ sealed class Block {
     data class Skeleton(val shape: SkeletonShape) : Block()
 }
 
+data class ReviewComments(val details: List<Block>, val capture: Block.Row?)
+
 data class PanelLayout(
     val situation: Situation,
     val blocks: List<Block>,
     val titleActions: List<Control>,
     val fillsHeight: Boolean = false,
+    val reviewComments: ReviewComments? = null,
 ) {
     init {
         val controls = collectControls()
@@ -391,7 +394,7 @@ data class PanelLayout(
         // index on FileRow, not on a Control.
         for (c in controls) {
             if (c.index != null) {
-                require(hostedByInventory(blocks, c)) {
+                require(hostedByInventory(blocks, c) || reviewComments?.let { hostedByInventory(it.details, c) } == true) {
                     "index only allowed on InventoryRows controls (${c.id.wire})"
                 }
             }
@@ -422,6 +425,10 @@ data class PanelLayout(
             }
         }
         walk(blocks)
+        reviewComments?.let {
+            walk(it.details)
+            it.capture?.let { row -> out.addAll(row.controls) }
+        }
         out.addAll(titleActions)
         return out
     }
@@ -1324,7 +1331,7 @@ fun panelLayout(model: PanelModel, loading: Boolean = false): PanelLayout {
             situation = model.situation,
             blocks = skeletonBody(model),
             titleActions = title.map { it.copy(enabled = false) },
-            fillsHeight = false,
+            reviewComments = reviewComments(model.copy(busy = true)),
         )
     }
 
@@ -1375,16 +1382,28 @@ fun panelLayout(model: PanelModel, loading: Boolean = false): PanelLayout {
             if (model.noBaseConfigured) blocks + section else blocks.flatMap { b ->
                 if (b is Block.ToolsSection && b.title == "Walkthrough") listOf(b) + section else listOf(b)
             }
-        } else blocks.takeWhile { it !is Block.ToolsSection } + commentsBlocks(model) + blocks.dropWhile { it !is Block.ToolsSection },
+        } else if (isReviewReadable(model.situation)) blocks else blocks + commentsBlocks(model),
         titleActions = title,
         fillsHeight = fills,
+        reviewComments = if (isReviewReadable(model.situation)) reviewComments(model) else null,
     )
+}
+
+private fun canCaptureComment(model: PanelModel): Boolean =
+    isReviewReadable(model.situation) && model.comments?.loading == false && model.comments.guard != null
+
+private fun reviewComments(model: PanelModel): ReviewComments? {
+    val details = commentsBlocks(model, heading = false)
+    val capture = if (canCaptureComment(model)) {
+        Block.Row(listOf(ctrl(ControlId.ADD_COMMENT, CommentsCopy.add, Emphasis.SECONDARY, !model.busy)))
+    } else null
+    return if (details.isEmpty() && capture == null) null else ReviewComments(details, capture)
 }
 
 private fun commentsBlocks(model: PanelModel, heading: Boolean = true): List<Block> {
     val report = model.comments ?: return emptyList()
     if (report.loading) return (if (heading) listOf(Block.Heading(CommentsCopy.title)) else emptyList()) + Block.Paragraph(CommentsCopy.reading)
-    val capture = isReviewReadable(model.situation) && report.guard != null
+    val capture = canCaptureComment(model)
     fun visibleDocument(doc: CommentDocument) = doc.presence == "present" || doc.kind == "shared" && report.records("comments-delivery").any { it[0] == doc.context && it[1] == "pending" }
     val visible = report.documents.any(::visibleDocument)
     val out = mutableListOf<Block>()
@@ -1393,7 +1412,6 @@ private fun commentsBlocks(model: PanelModel, heading: Boolean = true): List<Blo
             Control(id, null, label, Emphasis.ICON, !model.busy && enabled, tooltip, index)
         else Control(id, label, label, Emphasis.SECONDARY, !model.busy && enabled, tooltip, index)
     if (visible && heading) out += Block.Heading(CommentsCopy.title)
-    if (capture) out += Block.Row(listOf(control(ControlId.ADD_COMMENT, CommentsCopy.add)))
     fun emptyRow(kind: String, label: String, text: String) {
         if (model.situation == Situation.NO_REVIEW && report.records("comments-diagnostic").isEmpty() && report.documents.none { it.kind == kind && visibleDocument(it) }) {
             out += Block.GuideRows(listOf(GuideRow(label, text, emptyList())))

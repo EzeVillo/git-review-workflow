@@ -389,7 +389,7 @@ que sigue existe porque una superficie decidió por su cuenta algo que otra ya h
 
 - **El registro `guide` de `config --porcelain`:** `guide<TAB><kind><TAB><path><TAB><state>`, con
   `kind` = `team|own` y `state` = `in-force|empty|absent`. **Sólo de ese verbo**, y por eso sólo
-  fuera de una review: las guías se dibujan en el pie del panel y una review no tiene pie, así que
+  fuera de una review: las guías se dibujan en el pie del panel principal, así que
   `status --porcelain` no las nombra — sería un dato que nadie pide en el camino que tiene que salir
   barato. **Siempre las dos filas**, exista o no
   cada archivo, y ahí está la diferencia con los registros `draft`: la ausencia se **reporta**, no
@@ -496,13 +496,20 @@ tool window a mano. Por eso el listener sube hasta el `JComponent` más alto del
 ahí, que es donde el alto se decide. El gate es el test del renderer que cuenta las revalidaciones
 sobre un host propio, en las dos direcciones: abrir y cerrar.
 
-**Una review no tiene pie: ninguna `tools_section`.** Todo lo que cuelga de `walkthrough` —los dos
+**El pie de la review es para comentarios.** Todo lo que cuelga de `walkthrough` —los dos
 verbos del autor y las dos guías de autoría— es de quien está parado en **su** PR, y adentro de una
 review estás parado en el de otro; una sección titulada «Walkthrough» al pie del orden de lectura
 que estás caminando diría además ese sustantivo por dos cosas distintas en la misma pantalla. Todo
 eso vive en `no-review`. Y los registros ni siquiera llegan hasta ahí: son de `config --porcelain`,
 que adentro de una review no se invoca, así que el modelo de los tres clientes tiene la lista vacía
 y ninguna superficie puede ofrecer nada sobre ellas por accidente.
+
+En una review legible, **Add comment** y su ubicación viven en una banda fija bajo el cuerpo.
+El listado de Whole, los archivos del commit en Step y la explicación de Walk pueden pasar el
+alto del panel. En los IDE, Local y Shared quedan plegados en el pie y se desplazan en una
+franja acotada cuando se abren. La banda de captura queda visible al recorrer ambos espacios.
+En la TUI, los documentos se desplazan con la review y la captura queda encima de las teclas.
+El mismo layout cubre Compare y Finish con conflicto cuando hay una sesión habilitada para comentar.
 
 **Ninguno de los tres vigila el archivo de una guía, pero los tres escuchan el guardado.** El
 watcher no las mira a propósito (la propia vive en la raíz del gitdir, que cambia en cada operación

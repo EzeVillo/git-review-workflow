@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type CommentsForm struct {
@@ -139,11 +140,7 @@ func (m Model) beginAddComment() (Model, tea.Cmd) {
 	if report.Guard() == "" || len(report.Destinations("add")) == 0 {
 		return m, nil
 	}
-	path := m.Panel.CurrentPath.Display
-	if m.Panel.Situation == domain.SituationFinishConflict {
-		path = ""
-	}
-	form := newCommentsForm(report.Guard(), path, report.Destinations("add"))
+	form := newCommentsForm(report.Guard(), commentPath(m.Panel), report.Destinations("add"))
 	for _, id := range report.Records("comments-identity") {
 		if id[0] == "ambiguous" {
 			items := []SelectItem{{Label: domain.CommentsNewContext, Detail: domain.CommentsNewContextDetail, Value: "*"}}
@@ -305,6 +302,13 @@ func (m Model) submitComment() (Model, tea.Cmd) {
 	return m.beginMutation(mutationRequest{action: "addComment", argv: &domain.Argv{Verb: "comments", Args: args}, stdin: f.Text.Value(), hasInput: true, commentsReplyDocument: replyDocument}, currentStateToken(m.Panel))
 }
 
+func commentPath(m domain.PanelModel) string {
+	if m.Situation == domain.SituationFinishConflict {
+		return ""
+	}
+	return m.CurrentPath.Display
+}
+
 type commentsQueryDone struct {
 	excerpt  string
 	title    string
@@ -440,20 +444,8 @@ func commentsControls(m domain.PanelModel) []Control {
 		return nil
 	}
 	r := domain.ParseComments(m.Comments)
-	capture := r.Guard() != "" && (m.Situation == domain.SituationReview || m.Situation == domain.SituationFinishConflict)
-	visible := false
-	for _, doc := range r.Documents() {
-		if commentDocumentVisible(r, doc) {
-			visible = true
-		}
-	}
+	capture := canCaptureComment(m, r)
 	controls := []Control{}
-	if capture {
-		controls = append(controls, Control{ID: "addComment", Enabled: !m.Busy})
-	}
-	if !visible {
-		return controls
-	}
 	for index, doc := range r.Documents() {
 		if !commentDocumentVisible(r, doc) {
 			continue
@@ -493,7 +485,37 @@ func commentsControls(m domain.PanelModel) []Control {
 			}
 		}
 	}
+	if capture {
+		controls = append(controls, Control{ID: "addComment", Enabled: !m.Busy})
+	}
 	return controls
+}
+
+func canCaptureComment(m domain.PanelModel, report domain.CommentsReport) bool {
+	return !m.CommentsLoading && report.Guard() != "" &&
+		(m.Situation == domain.SituationReview || m.Situation == domain.SituationFinishConflict)
+}
+
+func renderCommentCapture(m domain.PanelModel, vp Viewport, state renderState) *builder {
+	if !canCaptureComment(m, domain.ParseComments(m.Comments)) {
+		return nil
+	}
+	b := newBuilder(vp, state)
+	b.button("addComment", "", domain.CommentsAdd, b.st.secondary, !m.Busy)
+	target := domain.CommentsGeneral
+	if path := commentPath(m); path != "" {
+		target = domain.CommentsScopeFile + " · " + safeCommentText(path)
+	}
+	target = strings.NewReplacer("\n", " ", "\t", " ").Replace(target)
+	if vp.Cols > 0 {
+		width := vp.Cols - b.hm.hits[0].rect.Width - 2
+		if width <= 0 {
+			return b
+		}
+		target = ansi.Truncate(target, width, "…")
+	}
+	b.lines[0] += "  " + b.st.note.Render(target)
+	return b
 }
 func renderComments(b *builder, m domain.PanelModel) {
 	if m.CommentsLoading {
@@ -525,12 +547,7 @@ func renderComments(b *builder, m domain.PanelModel) {
 		b.rowHeader(label, "", "")
 		b.text(text)
 	}
-	labels := map[domain.ControlID]string{"deleteComments": domain.CommentsDelete, "addComment": domain.CommentsAdd, "initComments": domain.CommentsCreate, "openComments": domain.CommentsOpen, "copyCommentPath": domain.CommentsCopyPath, "renumberComments": domain.CommentsRenumber, "openCommentDiff": domain.CommentsDiff, "prepareSharedComments": domain.CommentsPrepare}
-	for _, c := range controls {
-		if c.Variant == "" {
-			b.button(c.ID, "", labels[c.ID], b.st.secondary, c.Enabled)
-		}
-	}
+	labels := map[domain.ControlID]string{"deleteComments": domain.CommentsDelete, "initComments": domain.CommentsCreate, "openComments": domain.CommentsOpen, "copyCommentPath": domain.CommentsCopyPath, "renumberComments": domain.CommentsRenumber, "openCommentDiff": domain.CommentsDiff, "prepareSharedComments": domain.CommentsPrepare}
 	emptyRow("local", domain.CommentsLocal, domain.CommentsEmptyLocal)
 	if visible {
 		for index, doc := range r.Documents() {

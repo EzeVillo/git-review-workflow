@@ -1,6 +1,7 @@
 package com.ezevillo.gitreview.ui
 
 import com.ezevillo.gitreview.domain.Block
+import com.ezevillo.gitreview.domain.CommentsCopy
 import com.ezevillo.gitreview.domain.Control
 import com.ezevillo.gitreview.domain.ControlId
 import com.ezevillo.gitreview.domain.Emphasis
@@ -33,6 +34,7 @@ import javax.swing.JTextArea
 import javax.swing.Scrollable
 import javax.swing.ScrollPaneConstants
 import javax.swing.SwingConstants
+import javax.swing.SwingUtilities
 import javax.swing.border.EmptyBorder
 
 /** The bar at the margin of the last opened row (the extension's `border-left`). */
@@ -95,7 +97,32 @@ class PanelRenderer(
             footer.add(renderBlock(b))
         }
 
-        val scrollHost = if (layout.fillsHeight) {
+        val reviewComments = layout.reviewComments
+        val scrollHost = if (reviewComments != null) {
+            val wrap = JPanel(BorderLayout())
+            wrap.background = chrome.background()
+            wrap.add(scrollPane(body), BorderLayout.CENTER)
+            if (reviewComments.details.isNotEmpty()) {
+                if (reviewComments.details.any { it is Block.GuideRows }) {
+                    val section = Block.ToolsSection(CommentsCopy.title, reviewComments.details)
+                    footer.add(renderToolsSection(section, "review-comments"))
+                } else {
+                    reviewComments.details.forEach { footer.add(renderBlock(it)) }
+                }
+                wrap.add(cappedFooter(footer), BorderLayout.SOUTH)
+            }
+            reviewComments.capture?.let {
+                val capture = JPanel(BorderLayout())
+                capture.background = chrome.background()
+                capture.border = javax.swing.BorderFactory.createCompoundBorder(
+                    javax.swing.BorderFactory.createMatteBorder(1, 0, 0, 0, chrome.borderColor()),
+                    chrome.emptyBorder(6, 8, 8, 8),
+                )
+                capture.add(renderBlock(it), BorderLayout.CENTER)
+                root.add(capture, BorderLayout.SOUTH)
+            }
+            wrap
+        } else if (layout.fillsHeight) {
             val wrap = JPanel(BorderLayout())
             wrap.background = chrome.background()
             val scroll = scrollPane(body)
@@ -724,8 +751,8 @@ class PanelRenderer(
         return box
     }
 
-    private fun renderToolsSection(section: Block.ToolsSection): JComponent {
-        val open = sectionOpen.getOrDefault(section.title, false)
+    private fun renderToolsSection(section: Block.ToolsSection, key: String = section.title): JComponent {
+        val open = sectionOpen.getOrDefault(key, false)
         val box = JPanel()
         box.layout = BoxLayout(box, BoxLayout.Y_AXIS)
         box.background = chrome.background()
@@ -757,8 +784,15 @@ class PanelRenderer(
         toggle.addActionListener {
             val next = !content.isVisible
             content.isVisible = next
-            sectionOpen[section.title] = next
+            sectionOpen[key] = next
             toggle.text = (if (next) "▼ " else "▶ ") + section.title
+            // The scroll pane caches its view size even when its parent is
+            // revalidated. Refresh both so the capped band can grow on open.
+            box.invalidate()
+            (SwingUtilities.getAncestorOfClass(JScrollPane::class.java, box) as? JScrollPane)?.let { scroll ->
+                scroll.viewport.view.invalidate()
+                scroll.invalidate()
+            }
             revalidatePanel(box)
         }
         box.add(toggle)

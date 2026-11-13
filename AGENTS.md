@@ -446,9 +446,11 @@ terminal fuera de un repositorio no tiene el concepto de workspace multi-root.
   ninguna capaz de mostrar la suya entera. En JetBrains, además, el toggle revalida desde el
   `JComponent` más alto del árbol: un `JScrollPane` es validate root, y revalidando la sección el
   alto del pie no se recalcula nunca.
-- **Una review no tiene pie: ninguna `tools_section`.** Todo lo que cuelga de `walkthrough` es de
-  quien está parado en **su** PR, y adentro de una review estás parado en el de otro. Los registros
-  ni llegan: son de `config --porcelain`, que adentro de una review no se invoca.
+- **La review tiene un pie de comentarios.** La ubicación y el botón de captura quedan fijos por
+  debajo del contenido desplazable. En los IDE, los documentos Local y Shared se pliegan y se
+  desplazan en su propio espacio por encima del botón. En la TUI, sus filas se desplazan con el
+  cuerpo. Las herramientas de autoría siguen en el panel principal, que las lee de
+  `config --porcelain`.
 - **El resultado del verbo está en stdout, no en stderr.** Los verbos imprimen su resultado por
   stdout y reservan stderr para errores y notas. Un camino que solo lee stderr en verde se queda sin
   la única frase que contesta qué pasó.

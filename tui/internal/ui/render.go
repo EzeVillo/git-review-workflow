@@ -450,7 +450,8 @@ func viewWithState(m domain.PanelModel, vp Viewport, state renderState) (string,
 	if domain.LayoutSituationFor(m) != domain.LayoutNoReview {
 		renderComments(b, m)
 	}
-	return b.frameWithTail(tail), b.hm, b.metrics
+	frame := b.frameWithTail(tail, renderCommentCapture(m, vp, state))
+	return frame, b.hm, b.metrics
 }
 
 func fixedTailLines(m domain.PanelModel, vp Viewport, st styles) []string {
@@ -475,35 +476,20 @@ func fixedTailLines(m domain.PanelModel, vp Viewport, st styles) []string {
 	return lines
 }
 
-func (b *builder) frameWithTail(tail []string) string {
-	body := b.lines
-	if b.vp.Cols > 0 {
-		var wrapped []string
-		rowStarts := make([]int, len(body))
-		for i, line := range body {
-			rowStarts[i] = len(wrapped)
-			parts := wrapLine(line, b.vp.Cols)
-			if hasHitOnRow(b.hm.hits, i) {
-				parts = hardWrapLine(line, b.vp.Cols)
-			}
-			wrapped = append(wrapped, parts...)
-		}
-		body = wrapped
-		b.hm.hits = remapWrappedHits(b.hm.hits, rowStarts, b.vp.Cols)
+func (b *builder) frameWithTail(tail []string, footer *builder) string {
+	body := b.wrapRows()
+	var footerLines []string
+	if footer != nil {
+		footerLines = footer.wrapRows()
 	}
 	limit := len(body)
 	if b.vp.Rows > 0 {
-		limit = b.vp.Rows - len(tail)
-		if limit < 0 {
-			limit = 0
-		}
+		limit = max(0, b.vp.Rows-len(tail)-len(footerLines))
 		offset := 0
 		var scrollLine string
 		if b.scrollBody && limit > 0 && len(body) > limit {
-			// The review has no tools footer. Its whole content gets one
-			// viewport after wrapping, so files and long explanations cannot
-			// push comment controls off-screen permanently.
-			if limit > 1 {
+			showTrack := limit > 1
+			if showTrack {
 				limit--
 			}
 			maxOffset := len(body) - limit
@@ -522,7 +508,7 @@ func (b *builder) frameWithTail(tail []string) string {
 				}
 			}
 			b.metrics.bodyOffset, b.metrics.bodyMax = offset, maxOffset
-			if b.vp.Rows-len(tail) > 1 {
+			if showTrack {
 				scrollLine = interpolate(domain.ReviewScrollPosition,
 					"{track}", footerScrollbar(offset, maxOffset),
 					"{above}", strconv.Itoa(offset), "{below}", strconv.Itoa(maxOffset-offset))
@@ -532,23 +518,59 @@ func (b *builder) frameWithTail(tail []string) string {
 			}
 		}
 		body = body[offset:min(len(body), offset+limit)]
-		kept := b.hm.hits[:0]
-		for _, h := range b.hm.hits {
-			if h.rect.Row >= offset && h.rect.Row < offset+limit {
-				h.rect.Row -= offset
-				kept = append(kept, h)
-			}
-		}
-		b.hm.hits = kept
+		b.clipHits(offset, len(body))
 		if scrollLine != "" {
 			body = append(append([]string{}, body...), b.st.note.Render(scrollLine))
 		}
 	}
-	lines := append(append([]string{}, body...), tail...)
+	lines := append([]string{}, body...)
+	if footer != nil {
+		for len(lines)+len(footerLines)+len(tail) < b.vp.Rows {
+			lines = append(lines, "")
+		}
+		for _, h := range footer.hm.hits {
+			h.rect.Row += len(lines)
+			b.hm.hits = append(b.hm.hits, h)
+		}
+		lines = append(lines, footerLines...)
+	}
+	lines = append(lines, tail...)
 	if b.vp.Rows > 0 && len(lines) > b.vp.Rows {
-		lines = lines[len(lines)-b.vp.Rows:]
+		first := len(lines) - b.vp.Rows
+		b.clipHits(first, b.vp.Rows)
+		lines = lines[first:]
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (b *builder) clipHits(first, count int) {
+	kept := b.hm.hits[:0]
+	for _, h := range b.hm.hits {
+		if h.rect.Row >= first && h.rect.Row < first+count {
+			h.rect.Row -= first
+			kept = append(kept, h)
+		}
+	}
+	b.hm.hits = kept
+}
+
+func (b *builder) wrapRows() []string {
+	body := b.lines
+	if b.vp.Cols > 0 {
+		var wrapped []string
+		rowStarts := make([]int, len(body))
+		for i, line := range body {
+			rowStarts[i] = len(wrapped)
+			parts := wrapLine(line, b.vp.Cols)
+			if hasHitOnRow(b.hm.hits, i) {
+				parts = hardWrapLine(line, b.vp.Cols)
+			}
+			wrapped = append(wrapped, parts...)
+		}
+		body = wrapped
+		b.hm.hits = remapWrappedHits(b.hm.hits, rowStarts, b.vp.Cols)
+	}
+	return body
 }
 
 func hasHitOnRow(hits []hit, row int) bool {

@@ -1,8 +1,13 @@
 package com.ezevillo.gitreview.ui
 
 import com.ezevillo.gitreview.domain.ControlId
+import com.ezevillo.gitreview.domain.CommentsCopy
 import com.ezevillo.gitreview.domain.Emphasis
+import com.ezevillo.gitreview.domain.PanelWhy
+import com.ezevillo.gitreview.domain.Situation
+import com.ezevillo.gitreview.domain.WhyState
 import com.ezevillo.gitreview.domain.panelLayout
+import com.ezevillo.gitreview.domain.parseComments
 import com.ezevillo.gitreview.fixtures.PanelFixtures
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -13,6 +18,7 @@ import java.awt.GridLayout
 import javax.swing.JLabel
 import javax.swing.JPanel
 import javax.swing.SwingConstants
+import javax.swing.SwingUtilities
 
 class PanelRendererTest {
     @Test fun commentTargetIsInsideTheAddCommentGroup() {
@@ -25,6 +31,45 @@ class PanelRendererTest {
         assertEquals(listOf(com.ezevillo.gitreview.domain.CommentsCopy.add),buttons.map { it.text })
         renderer.render(panelLayout(PanelFixtures.reviewWhole().copy(comments=report)))
         assertEquals(1,PanelRenderer.collectButtons(hint.parent as javax.swing.JComponent).size)
+    }
+
+    @Test
+    fun `comment capture stays visible while review content and documents scroll`() {
+        val whole = PanelFixtures.reviewWhole(fileCount = 60)
+        val step = PanelFixtures.reviewStep().copy(files = whole.files, entryCount = 60)
+        val walk = PanelFixtures.reviewWalk(why = PanelWhy(WhyState.PRESENT, "Read before editing.\n".repeat(60)))
+        val reports = (1..30).joinToString("\n") {
+            "comments-context\tc$it\treview\tactive\tg\tFeature\ncomments-document\t/l$it\tc$it\tlocal\tpresent\tr"
+        }
+        val report = parseComments("comments-guard\tg\n$reports")
+        for (model in listOf(whole, step, walk, whole.copy(readonly = true), step.copy(situation = Situation.FINISH_CONFLICT))) {
+            val hint = JLabel(CommentsCopy.general)
+            val actions = mutableListOf<ControlId>()
+            val renderer = PanelRenderer(PreviewPanelChrome()) { id, _, _ -> actions.add(id) }.apply {
+                commentTargetHint = hint
+            }
+            val root = renderer.render(panelLayout(model.copy(comments = report)))
+            layoutOffscreen(root, 320, 400)
+            val buttons = PanelRenderer.collectButtons(root)
+            val add = buttons.single { it.text == CommentsCopy.add }
+            val initial = SwingUtilities.convertRectangle(add.parent, add.bounds, root)
+            assertTrue(initial.height > 0 && initial.y + initial.height <= root.height, "${model.mode}: $initial")
+            buttons.single { it.text == "▶ ${CommentsCopy.title}" }.doClick()
+            layoutOffscreen(root, 320, 400)
+            val scrolls = collectScrollPanes(root)
+            assertEquals(2, scrolls.size)
+            for ((index, scroll) in scrolls.withIndex()) {
+                assertFalse(SwingUtilities.isDescendingFrom(add, scroll))
+                assertTrue(
+                    scroll.viewport.view.preferredSize.height > scroll.viewport.extentSize.height,
+                    "${model.mode}, scroll $index: view=${scroll.viewport.view.preferredSize}, extent=${scroll.viewport.extentSize}",
+                )
+                scroll.verticalScrollBar.value = scroll.verticalScrollBar.maximum
+            }
+            assertEquals(initial, SwingUtilities.convertRectangle(add.parent, add.bounds, root))
+            add.doClick()
+            assertEquals(listOf(ControlId.ADD_COMMENT), actions)
+        }
     }
 
     @Test

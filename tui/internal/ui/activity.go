@@ -87,5 +87,5 @@ func (o ProgressOverlay) RenderWithPanel(panel domain.PanelModel, vp Viewport) s
 	b.heading(o.Text)
 	tail := fixedTailLines(panel, vp, b.st)
 	b.tailReserve = len(tail)
-	return b.frameWithTail(tail)
+	return b.frameWithTail(tail, nil)
 }

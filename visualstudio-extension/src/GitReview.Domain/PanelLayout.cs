@@ -368,23 +368,28 @@ public abstract record Block
     public sealed record Skeleton(SkeletonShape Shape) : Block;
 }
 
+public sealed record ReviewComments(IReadOnlyList<Block> Details, Block.Row? Capture);
+
 public sealed class PanelLayout
 {
     public Situation Situation { get; }
     public IReadOnlyList<Block> Blocks { get; }
     public IReadOnlyList<Control> TitleActions { get; }
     public bool FillsHeight { get; }
+    public ReviewComments? ReviewComments { get; }
 
     public PanelLayout(
         Situation situation,
         IReadOnlyList<Block> blocks,
         IReadOnlyList<Control> titleActions,
-        bool fillsHeight = false)
+        bool fillsHeight = false,
+        ReviewComments? reviewComments = null)
     {
         Situation = situation;
         Blocks = blocks;
         TitleActions = titleActions;
         FillsHeight = fillsHeight;
+        ReviewComments = reviewComments;
 
         var controls = CollectControls();
         // One PRIMARY per situation, counted over non-row controls only: a row
@@ -396,7 +401,8 @@ public sealed class PanelLayout
             throw new ArgumentException($"At most one PRIMARY control per situation, found {primaries}");
         foreach (var c in controls)
         {
-            if (c.Index is not null && !HostedByInventory(blocks, c))
+            if (c.Index is not null && !HostedByInventory(blocks, c)
+                && (reviewComments is null || !HostedByInventory(reviewComments.Details, c)))
                 throw new ArgumentException($"index only allowed on InventoryRows controls ({c.Id.Wire()})");
         }
     }
@@ -405,6 +411,11 @@ public sealed class PanelLayout
     {
         var list = new List<Control>();
         Walk(Blocks, list);
+        if (ReviewComments is { } comments)
+        {
+            Walk(comments.Details, list);
+            if (comments.Capture is { } capture) list.AddRange(capture.Controls);
+        }
         list.AddRange(TitleActions);
         return list;
     }
@@ -1221,7 +1232,7 @@ public static class PanelLayoutBuilder
                 model.Situation,
                 SkeletonBody(model),
                 title.Select(t => t with { Enabled = false }).ToList(),
-                fillsHeight: false);
+                reviewComments: BuildReviewComments(model with { Busy = true }));
         }
 
         List<Block> blocks;
@@ -1279,8 +1290,8 @@ public static class PanelLayoutBuilder
                 break;
         }
 
-        var body = blocks.TakeWhile(b => b is not Block.ToolsSection);
-        var footer = blocks.SkipWhile(b => b is not Block.ToolsSection);
+        if (SituationIds.IsReviewReadable(model.Situation))
+            return new PanelLayout(model.Situation, blocks, title, reviewComments: BuildReviewComments(model));
         IEnumerable<Block> projected;
         if (model.Situation == Situation.NoReview)
         {
@@ -1289,8 +1300,20 @@ public static class PanelLayoutBuilder
             projected = model.NoBaseConfigured ? blocks.Concat(section) : blocks.SelectMany(b =>
                 b is Block.ToolsSection tools && tools.Title == "Walkthrough" ? new[] { b }.Concat(section) : new[] { b });
         }
-        else projected = body.Concat(CommentsBlocks(model)).Concat(footer);
+        else projected = blocks.Concat(CommentsBlocks(model));
         return new PanelLayout(model.Situation, projected.ToArray(), title, fills);
+    }
+
+    private static bool CanCaptureComment(PanelModel model) =>
+        SituationIds.IsReviewReadable(model.Situation) && model.Comments is { Loading: false, Guard: not null };
+
+    private static ReviewComments? BuildReviewComments(PanelModel model)
+    {
+        var details = CommentsBlocks(model, heading: false);
+        var capture = CanCaptureComment(model)
+            ? new Block.Row(new[] { Ctrl(ControlId.AddComment, CommentsCopy.add, Emphasis.Secondary, !model.Busy) })
+            : null;
+        return details.Count == 0 && capture is null ? null : new ReviewComments(details, capture);
     }
 
     private static IReadOnlyList<Block> CommentsBlocks(PanelModel model, bool heading = true)
@@ -1300,7 +1323,7 @@ public static class PanelLayoutBuilder
         if (report.Loading) return heading
             ? new Block[]{ new Block.Heading(CommentsCopy.title), new Block.Paragraph(CommentsCopy.reading) }
             : new Block[]{ new Block.Paragraph(CommentsCopy.reading) };
-        var capture = model.Situation is Situation.Review or Situation.FinishConflict && report.Guard is not null;
+        var capture = CanCaptureComment(model);
         bool VisibleDocument(CommentDocument doc) => doc.Presence == "present" || doc.Kind == "shared" && report.Records("comments-delivery").Any(d => d[0] == doc.Context && d[1] == "pending");
         var visible = report.Documents.Any(VisibleDocument);
         var output = new List<Block>();
@@ -1309,7 +1332,6 @@ public static class PanelLayoutBuilder
                 ? new(id, null, label, Emphasis.Icon, enabled: !model.Busy && enabled, tooltip: tip, index: index)
                 : new(id, label, label, Emphasis.Secondary, enabled: !model.Busy && enabled, tooltip: tip, index: index);
         if (visible && heading) output.Add(new Block.Heading(CommentsCopy.title));
-        if (capture) output.Add(new Block.Row(new[]{ Button(ControlId.AddComment, CommentsCopy.add) }));
         void EmptyRow(string kind, string label, string text)
         {
             if (model.Situation == Situation.NoReview && !report.Records("comments-diagnostic").Any() && !report.Documents.Any(d => d.Kind == kind && VisibleDocument(d)))

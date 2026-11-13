@@ -94,6 +94,7 @@ public sealed class PanelView : System.Windows.Controls.UserControl
     private readonly StackPanel _body;
     private readonly StackPanel _footer;
     private readonly ScrollViewer _footerScroll;
+    private readonly Border _commentCapture;
     private readonly DockPanel _root;
     private readonly StackPanel _titleBar;
 
@@ -111,8 +112,12 @@ public sealed class PanelView : System.Windows.Controls.UserControl
     private TextBlock? _commentHint;
     public void SetCommentTarget(string? text)
     {
-        _commentTarget=text;
-        if(_commentHint is not null){_commentHint.Text=text??"";_commentHint.Visibility=text is null?Visibility.Collapsed:Visibility.Visible;}
+        _commentTarget = text;
+        if (_commentHint is not null)
+        {
+            _commentHint.Text = text ?? CommentsCopy.general;
+            _commentHint.ToolTip = _commentHint.Text + "\n" + CommentsCopy.selectionHint;
+        }
     }
 
     public PanelView(PanelChrome? chrome = null)
@@ -150,10 +155,19 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             Content = _footer,
         };
 
+        _commentCapture = new Border
+        {
+            BorderBrush = _chrome.Border,
+            BorderThickness = new Thickness(0, 1, 0, 0),
+            Padding = new Thickness(8, 6, 8, 8),
+            Visibility = Visibility.Collapsed,
+        };
         _root = new DockPanel { Background = _chrome.Background };
         DockPanel.SetDock(_titleBar, Dock.Top);
+        DockPanel.SetDock(_commentCapture, Dock.Bottom);
         DockPanel.SetDock(_footerScroll, Dock.Bottom);
         _root.Children.Add(_titleBar);
+        _root.Children.Add(_commentCapture);
         _root.Children.Add(_footerScroll);
         _root.Children.Add(_scroll);
         // A binding would need a converter for the fraction; the cap is one line here
@@ -174,6 +188,7 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         _titleBar.Visibility = Visibility.Collapsed;
         _body.Children.Clear();
         _footer.Children.Clear();
+        ClearCommentCapture();
         _body.Children.Add(new TextBlock
         {
             Text = WaitingText,
@@ -199,6 +214,7 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         _titleBar.Visibility = Visibility.Collapsed;
         _body.Children.Clear();
         _footer.Children.Clear();
+        ClearCommentCapture();
         _body.Children.Add(new TextBlock
         {
             Text = "git review panel failed to render:\n" + ex,
@@ -224,6 +240,7 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         _titleBar.Children.Clear();
         _body.Children.Clear();
         _footer.Children.Clear();
+        ClearCommentCapture();
 
         if (ShowTitleActions)
         {
@@ -249,7 +266,20 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             _body.Children.Add(new Border { Height = 4, Background = Brushes.Transparent });
         }
 
-        if (layout.FillsHeight)
+        if (layout.ReviewComments is { } comments)
+        {
+            if (comments.Details.Any(b => b is Block.GuideRows))
+                _footer.Children.Add(RenderToolsSection(new Block.ToolsSection(CommentsCopy.title, comments.Details), "review-comments"));
+            else
+                foreach (var b in comments.Details) _footer.Children.Add(RenderBlock(b));
+
+            if (comments.Capture is { } capture)
+            {
+                _commentCapture.Child = RenderBlock(capture);
+                _commentCapture.Visibility = Visibility.Visible;
+            }
+        }
+        else if (layout.FillsHeight)
         {
             // Spacer so tools sit at the bottom of the tool window
             _body.Children.Add(new Border { Height = 1, Background = Brushes.Transparent });
@@ -261,6 +291,13 @@ public sealed class PanelView : System.Windows.Controls.UserControl
             foreach (var b in footerBlocks)
                 _body.Children.Add(RenderBlock(b));
         }
+    }
+
+    private void ClearCommentCapture()
+    {
+        _commentHint = null;
+        _commentCapture.Child = null;
+        _commentCapture.Visibility = Visibility.Collapsed;
     }
 
     private UIElement RenderBlock(Block block) => block switch
@@ -474,10 +511,19 @@ public sealed class PanelView : System.Windows.Controls.UserControl
 
     private UIElement RenderRow(IReadOnlyList<DomainControl> controls)
     {
-        var row=RenderRowControls(controls);
-        if(!controls.Any(c=>c.Id==ControlId.AddComment))return row;
-        _commentHint=new TextBlock{Text=_commentTarget??"",Visibility=_commentTarget is null?Visibility.Collapsed:Visibility.Visible,TextWrapping=TextWrapping.Wrap,Foreground=_chrome.Foreground,ToolTip=CommentsCopy.selectionHint,Margin=new Thickness(0,0,0,4)};
-        var group=new StackPanel();group.Children.Add(_commentHint);group.Children.Add(row);return group;
+        var row = RenderRowControls(controls);
+        if (!controls.Any(c => c.Id == ControlId.AddComment)) return row;
+        _commentHint = new TextBlock
+        {
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Foreground = _chrome.Foreground,
+            Margin = new Thickness(0, 0, 0, 4),
+        };
+        SetCommentTarget(_commentTarget);
+        var group = new StackPanel();
+        group.Children.Add(_commentHint);
+        group.Children.Add(row);
+        return group;
     }
 
     private UIElement RenderRowControls(IReadOnlyList<DomainControl> controls)
@@ -712,9 +758,10 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         return stack;
     }
 
-    private UIElement RenderToolsSection(Block.ToolsSection section)
+    private UIElement RenderToolsSection(Block.ToolsSection section, string? key = null)
     {
-        var open = _sectionOpen.GetValueOrDefault(section.Title, false);
+        var sectionKey = key ?? section.Title;
+        var open = _sectionOpen.GetValueOrDefault(sectionKey, false);
         var stack = new StackPanel
         {
             Margin = new Thickness(0, 4, 0, 0),
@@ -743,10 +790,10 @@ public sealed class PanelView : System.Windows.Controls.UserControl
         toggle.MouseLeave += (_, _) => toggle.Foreground = _chrome.MutedForeground;
         toggle.Click += (_, _) =>
         {
-            _sectionOpen[section.Title] = !_sectionOpen.GetValueOrDefault(section.Title, false);
+            var now = !_sectionOpen.GetValueOrDefault(sectionKey, false);
+            _sectionOpen[sectionKey] = now;
             // Local toggle, not a full re-render: that would need the parent model
             // this view doesn't have.
-            var now = _sectionOpen[section.Title];
             toggle.Content = (now ? "▼ " : "▶ ") + section.Title;
             body.Visibility = now ? Visibility.Visible : Visibility.Collapsed;
         };

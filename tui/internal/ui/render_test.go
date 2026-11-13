@@ -184,7 +184,7 @@ func TestFixedTailRemapsAndClipsHitMapAfterWrapping(t *testing.T) {
 	b := newBuilder(Viewport{Cols: 10, Rows: 5}, renderState{})
 	b.text(strings.Repeat("x", 20))
 	b.button("startReview", "", "Start", b.st.primary, true)
-	b.frameWithTail([]string{"", "q:quit"})
+	b.frameWithTail([]string{"", "q:quit"}, nil)
 	rect, ok := b.hm.Rect("startReview", "")
 	if !ok || rect.Row != 2 {
 		t.Fatalf("wrapped control rect = %+v, ok=%v; want row 2", rect, ok)
@@ -193,7 +193,7 @@ func TestFixedTailRemapsAndClipsHitMapAfterWrapping(t *testing.T) {
 	clipped := newBuilder(Viewport{Cols: 10, Rows: 4}, renderState{})
 	clipped.text(strings.Repeat("x", 20))
 	clipped.button("startReview", "", "Start", clipped.st.primary, true)
-	clipped.frameWithTail([]string{"", "q:quit"})
+	clipped.frameWithTail([]string{"", "q:quit"}, nil)
 	if _, ok := clipped.hm.Rect("startReview", ""); ok {
 		t.Fatal("control clipped by wrapping retained a stale hit rectangle")
 	}
@@ -205,7 +205,7 @@ func TestInteractiveRowsHardWrapInTheSameGeometryAsTheirHitMap(t *testing.T) {
 		rowButton{id: "continueReview", label: "First action", style: b.st.primary, enabled: true},
 		rowButton{id: "discardInventory", label: "Second action", style: b.st.secondary, enabled: true},
 	)
-	frame := b.frameWithTail(nil)
+	frame := b.frameWithTail(nil, nil)
 	lines := strings.Split(frame, "\n")
 	if len(lines) != 2 || lines[0] != "[ First action ]  [ " || lines[1] != "Second action ]" {
 		t.Fatalf("interactive row did not hard-wrap predictably: %#v", lines)

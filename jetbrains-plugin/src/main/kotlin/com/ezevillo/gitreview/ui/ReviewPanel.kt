@@ -31,7 +31,7 @@ class ReviewPanel(
         commentHint.isVisible = service.hasResolvedState() && isReviewReadable(service.currentModel().situation)
         val capture = com.ezevillo.gitreview.host.CommentsActions(project, service).capture(captureTracker.editor())
         commentHint.text = if (service.currentModel().situation == com.ezevillo.gitreview.domain.Situation.FINISH_CONFLICT) com.ezevillo.gitreview.domain.CommentsCopy.general else capture?.label(capture.scopes.first()) ?: if (captureTracker.editor() != null) com.ezevillo.gitreview.domain.CommentsCopy.opaque else com.ezevillo.gitreview.domain.CommentsCopy.general
-        commentHint.toolTipText = com.ezevillo.gitreview.domain.CommentsCopy.selectionHint
+        commentHint.toolTipText = commentHint.text + " — " + com.ezevillo.gitreview.domain.CommentsCopy.selectionHint
     }
     private val chrome = PluginPanelChrome()
     private val dispatcher = PanelActionDispatcher(project, service)

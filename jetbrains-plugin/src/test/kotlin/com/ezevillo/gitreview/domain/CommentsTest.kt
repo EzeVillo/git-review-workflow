@@ -118,7 +118,7 @@ class CommentsTest {
     @Test fun activeDocumentsAppearIndividuallyAndDeleteUsesOriginalIndex() {
         val report = parseComments("comments-guard\tg\ncomments-context\tc\treview\tactive\tg\tFeature\ncomments-document\t/l\tc\tlocal\tabsent\tabsent\ncomments-document\t/s\tc\tshared\tpresent\tr\ncomments-count\t/s\t0")
         val layout = panelLayout(com.ezevillo.gitreview.fixtures.PanelFixtures.reviewWhole().copy(comments = report))
-        val rows = layout.blocks.filterIsInstance<Block.GuideRows>().flatMap { it.rows }.filter { it.name in setOf(CommentsCopy.local, CommentsCopy.shared) }
+        val rows = layout.reviewComments!!.details.filterIsInstance<Block.GuideRows>().flatMap { it.rows }
         assertEquals(listOf(CommentsCopy.shared), rows.map { it.name })
         val deletes = layout.collectControls().filter { it.id == ControlId.DELETE_COMMENTS }
         assertEquals(listOf(1), deletes.map { it.index })

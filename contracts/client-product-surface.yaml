@@ -482,7 +482,7 @@ panel_layout:
       - {block: paragraph, text: "Something went wrong reading the review state."}
       - {block: row, controls: [{id: outOfRangeHelp, label: "How to fix it", emphasis: primary, confirms: false}]}
       - {block: stderr, when: present}
-  # UNA REVIEW NO TIENE PIE: ninguna tools_section. Todo lo que cuelga de
+  # Las herramientas del panel principal quedan fuera de la review. Todo lo que cuelga de
   # `walkthrough` -- los dos verbos del autor y las dos guias de autoria -- es de
   # quien esta parado en SU PR, y adentro de una review estas parado en el de
   # otro. Una seccion titulada "Walkthrough" al pie del orden de lectura que
@@ -605,6 +605,9 @@ input_dialogs:
   - commentsDelivery
 comments_rows:
   placement: footer_after_walkthrough_before_compare
+  review_placement: fixed_footer_below_scrollable_review
+  review_capture: always_visible_when_eligible
+  review_documents: collapsible_in_ide_footer_scrollable_with_tui_review
   title: "Comments"
   rows: [Local, Shared]
   destination_default: sole_cli_capability

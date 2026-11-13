@@ -52,6 +52,42 @@ func TestReviewCommentControlsStayVisibleDuringKeyboardNavigation(t *testing.T) 
 	}
 }
 
+func TestAddCommentStaysAtTheBottomWhileReviewContentScrolls(t *testing.T) {
+	for _, mode := range []domain.ReviewMode{domain.ModeWhole, domain.ModeStep, domain.ModeWalk} {
+		t.Run(string(mode), func(t *testing.T) {
+			m := overflowingCommentReview(mode)
+			wantTarget := domain.CommentsGeneral
+			if mode == domain.ModeWalk {
+				wantTarget = "File · src/file-00.go"
+			}
+			for i := 0; i < 35; i++ {
+				panel := m.presentationPanel()
+				frame, hits, metrics := viewWithState(panel, m.Viewport, m.presentationState())
+				rect, ok := hits.Rect("addComment", "")
+				keys := fixedTailLines(panel, m.Viewport, stylesFor(m.Viewport.Color))
+				if !ok || rect.Row != m.Viewport.Rows-len(keys)-1 || !strings.Contains(strings.Split(frame, "\n")[rect.Row], wantTarget) {
+					t.Fatalf("scroll offset %d lost the comment action or its target:\n%s", metrics.bodyOffset, frame)
+				}
+				id, _, ok := hits.At(rect.Col, rect.Row)
+				if !ok || id != "addComment" {
+					t.Fatalf("footer click resolves to %s at scroll offset %d", id, metrics.bodyOffset)
+				}
+				if i == 34 {
+					if metrics.bodyOffset == 0 {
+						t.Fatal("the review body did not scroll")
+					}
+					next, _ := m.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: rect.Col, Y: rect.Row})
+					if next.(Model).commentsForm == nil {
+						t.Fatal("clicking the fixed button did not open the composer")
+					}
+				}
+				next, _ := m.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown})
+				m = next.(Model)
+			}
+		})
+	}
+}
+
 func TestReviewMouseWheelRevealsCommentsAndPreservesClickTargets(t *testing.T) {
 	m := overflowingCommentReview(domain.ModeWhole)
 	before := m.View()

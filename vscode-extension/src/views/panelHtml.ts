@@ -39,8 +39,7 @@ export function panelHtml(nonce: string): string {
     font-size: var(--vscode-font-size);
   }
   #root { min-height: 100%; box-sizing: border-box; }
-  /* Solo no-review fija el alto y recorta: el split body/footer maneja el scroll.
-     En review el root sigue creciendo y el body del documento scrollea. */
+  /* El split fija el alto del panel y deja el scroll en el cuerpo. */
   #root.fills {
     display: flex;
     flex-direction: column;
@@ -276,6 +275,14 @@ export function panelHtml(nonce: string): string {
     border-top: 1px solid var(--vscode-panel-border);
   }
   .comments-block:empty { display: none; }
+  .review-comment-capture { flex: 0 0 auto; }
+  .review-comments { flex-shrink: 0; }
+  .review-comment-capture .comment-target {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .review-comments .tools .comments-block { border-top: 0; padding: 0; }
   .comments-block h3 { margin: 0 0 .7em; font-size: 1em; font-weight: 600; }
   .comment-target {
     margin: 0 0 .5em;
@@ -1077,6 +1084,7 @@ export function panelHtml(nonce: string): string {
   let compareSectionOpen = false;
   let walkthroughSectionOpen = false;
   let commentsSectionOpen = false;
+  let reviewCommentsOpen = false;
   let spentDraftsOpen = false;
   let fixesOpen = false;
   let settingsOpen = false;
@@ -1731,30 +1739,52 @@ export function panelHtml(nonce: string): string {
   // carga haría saltar el panel dos veces por cada paso.
   const COMPARISON = ${JSON.stringify(COMPARISON_COPY)};
   const COMPARE = ${JSON.stringify(COMPARE_COPY)};
-  function renderNotes(model) {
+  function renderNotes(model, body) {
     if (model.comparison) {
       const c = model.comparison;
       const label = function (value) { return value.replace(/^refs\\/(heads|remotes|tags)\\//, ""); };
-      root.appendChild(note(COMPARISON.base.replace("{oid}", c.baseOid.slice(0, 7)).replace("{revision}", function () { return label(c.baseLabel); })));
-      root.appendChild(note(COMPARISON.target.replace("{oid}", c.targetOid.slice(0, 7)).replace("{revision}", function () { return label(c.targetLabel); })));
+      body.appendChild(note(COMPARISON.base.replace("{oid}", c.baseOid.slice(0, 7)).replace("{revision}", function () { return label(c.baseLabel); })));
+      body.appendChild(note(COMPARISON.target.replace("{oid}", c.targetOid.slice(0, 7)).replace("{revision}", function () { return label(c.targetLabel); })));
     }
     if (model.readonly) {
-      root.appendChild(note(COMPARE.readonlyNote));
+      body.appendChild(note(COMPARE.readonlyNote));
     }
     if (model.keysOnly) {
-      root.appendChild(note("Keys-only: reading order is restricted to walkthrough entries marked key."));
+      body.appendChild(note("Keys-only: reading order is restricted to walkthrough entries marked key."));
     }
-    if (model.baseMoved) { root.appendChild(note("The base moved: fewer entries remain in range than when the review started.")); }
+    if (model.baseMoved) { body.appendChild(note("The base moved: fewer entries remain in range than when the review started.")); }
     if (model.degraded) {
-      root.appendChild(note("The walkthrough does not cover the review's current range; showing the full range diff."));
+      body.appendChild(note("The walkthrough does not cover the review's current range; showing the full range diff."));
     }
     // Sólo llega en whole, que es donde reemplaza a la secuencia como respuesta
     // a "¿contra qué estoy comparando?". Sin base registrada no se dibuja nada
     // en su lugar: ni un hueco, ni un vacío, ni un error (FR-009).
-    if (!model.comparison && model.base !== undefined) { root.appendChild(note("Range built against " + model.base + ".")); }
+    if (!model.comparison && model.base !== undefined) { body.appendChild(note("Range built against " + model.base + ".")); }
   }
 
   const COMMENTS = ${JSON.stringify(COMMENTS_COPY)};
+  function canCaptureComment(model) {
+    return (model.situation === "review" || model.situation === "finish-conflict") &&
+      model.comments && !model.comments.loading && model.comments.guard;
+  }
+  function updateCommentTarget(hint, text) {
+    hint.textContent = text || COMMENTS.general;
+    hint.title = hint.textContent + "\\n" + COMMENTS.selectionHint;
+  }
+  function renderCommentCapture(model, loading) {
+    const box = el("section", "comments-block review-comment-capture");
+    box.setAttribute("aria-label", COMMENTS.title);
+    const hint = el("p", "comment-target");
+    hint.id = "comment-target";
+    updateCommentTarget(hint, model.commentTarget);
+    box.appendChild(hint);
+    const actions = el("div", "comments-actions");
+    const add = button(COMMENTS.add, "addComment");
+    add.disabled = loading || model.busy;
+    actions.appendChild(add);
+    box.appendChild(actions);
+    return box;
+  }
   function renderCommentsSection(model) {
     const content = renderComments(model, false);
     if (content.children.length === 0) return null;
@@ -1764,7 +1794,7 @@ export function panelHtml(nonce: string): string {
   }
   function renderComments(model, heading = true) {
     const report = model.comments;
-    const capture = (model.situation === "review" || model.situation === "finish-conflict") && report && report.guard;
+    const capture = canCaptureComment(model);
     const docs = report ? report.documents || [] : [];
     function visibleDocument(doc) { return doc.presence === "present" || (doc.kind === "shared" && report.deliveries.some(function(d) {return d.context === doc.context && d.state === "pending";})); }
     const visible = docs.some(visibleDocument);
@@ -1776,20 +1806,13 @@ export function panelHtml(nonce: string): string {
     }
     // La ausencia se muestra sólo tras consultar; un diagnóstico no es un vacío.
     function emptyRow(kind, label, text) {
-      if (heading || !report || report.diagnostics.length || docs.some(function(doc) { return doc.kind === kind && visibleDocument(doc); })) return;
+      if (heading || model.situation !== "no-review" || !report || report.diagnostics.length || docs.some(function(doc) { return doc.kind === kind && visibleDocument(doc); })) return;
       const row = el("div", "comments-row");
       row.appendChild(el("strong", null, label));
       row.appendChild(el("span", null, text));
       box.appendChild(row);
     }
     if (visible && heading) box.appendChild(el("h3", null, COMMENTS.title));
-    if (capture) {
-      const hint = el("p", "comment-target", model.commentTarget || COMMENTS.general);
-      hint.id = "comment-target"; hint.title = COMMENTS.selectionHint; box.appendChild(hint);
-      const actions = el("div", "comments-actions");
-      const add = button(COMMENTS.add, "addComment", null); add.disabled = model.busy; actions.appendChild(add);
-      box.appendChild(actions);
-    }
     emptyRow("local", COMMENTS.local, COMMENTS.emptyLocal);
     if (visible) docs.forEach(function(doc, index) {
       if (!visibleDocument(doc)) return;
@@ -1816,9 +1839,6 @@ export function panelHtml(nonce: string): string {
   }
   function render(model) {
     root.textContent = "";
-    // fills solo en no-review configurado: body scrollea y el footer
-    // (Walkthrough / Compare / Settings / Support) queda anclado abajo. Setup
-    // (sin base) y el resto de situaciones no estiran en flex.
     root.className = model.situation === "no-review" && !model.noBaseConfigured ? "fills" : "";
     // finish-conflict sigue siendo una review legible (FR-027) — el estado
     // vacío es sólo para no-review/out-of-range/error/cli-*.
@@ -1828,18 +1848,42 @@ export function panelHtml(nonce: string): string {
       return;
     }
 
-    root.appendChild(renderBar(model, false));
-    if (model.situation === "finish-conflict") { root.appendChild(renderFinishConflictBanner()); }
-    renderNotes(model);
+    renderReviewPanel(model, false);
+  }
 
-    if (model.mode === "whole") {
-      root.appendChild(renderFiles(model));
+  function renderReviewPanel(model, loading) {
+    root.className = "fills";
+    const main = el("div", "pane-main");
+    const body = el("div", "pane-body");
+    body.appendChild(renderBar(model, loading));
+    if (model.situation === "finish-conflict") { body.appendChild(renderFinishConflictBanner()); }
+    renderNotes(model, body);
+
+    if (loading) {
+      body.appendChild(renderPending(model));
+    } else if (model.mode === "whole") {
+      body.appendChild(renderFiles(model));
     } else if (model.current) {
-      root.appendChild(renderEntry(model));
+      body.appendChild(renderEntry(model));
     } else {
-      root.appendChild(empty("The cursor does not point at any entry in the sequence."));
+      body.appendChild(empty("The cursor does not point at any entry in the sequence."));
     }
-    root.appendChild(renderComments(model));
+    main.appendChild(body);
+
+    const comments = renderComments(loading ? {...model, busy: true} : model, false);
+    if (comments.children.length) {
+      const footer = el("div", "pane-footer review-comments");
+      if (Array.from(comments.children).some(child => child.className === "comments-row")) {
+        footer.appendChild(toolsSection(COMMENTS.title, reviewCommentsOpen, function (open) {
+          reviewCommentsOpen = open;
+        }, [comments]));
+      } else {
+        footer.appendChild(comments);
+      }
+      main.appendChild(footer);
+    }
+    root.appendChild(main);
+    if (canCaptureComment(model)) root.appendChild(renderCommentCapture(model, loading));
   }
 
   /*
@@ -1917,10 +1961,7 @@ export function panelHtml(nonce: string): string {
     showTimer = 0;
     painted = SKELETON;
     root.textContent = "";
-    root.className = "";
-    root.appendChild(renderBar(model, true));
-    renderNotes(model);
-    root.appendChild(renderPending(model));
+    renderReviewPanel(model, true);
   }
 
   function receive(next) {
@@ -1954,7 +1995,7 @@ export function panelHtml(nonce: string): string {
     if (event.data && event.data.type === "commentTarget") {
       if (model) { model.commentTarget = event.data.text; vscode.setState(model); }
       const hint = document.getElementById("comment-target");
-      if (hint) hint.textContent = event.data.text || COMMENTS.general;
+      if (hint) updateCommentTarget(hint, event.data.text);
     }
     if (event.data && event.data.type === "model") {
       // El modelo se guarda en el estado del webview: no es estado propio del

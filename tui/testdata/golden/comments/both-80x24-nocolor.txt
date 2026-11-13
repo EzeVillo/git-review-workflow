@@ -1,11 +1,24 @@
 review/feature
 0 file(s) in this review
 Comments
-> [ Add comment ]
 Local  (2)
- [ Open ]   [ Copy path ]   [ Renumber ]   [ Diff ]   [ Delete ]
+>[ Open ]   [ Copy path ]   [ Renumber ]   [ Diff ]   [ Delete ]
 Shared  (1)
  [ Open ]   [ Renumber ]   [ Diff ]   [ Delete ]
+
+
+
+
+
+
+
+
+
+
+
+
+
+  [ Add comment ]  General comment
 
 j:up  k:down  enter:select  r:refresh  f:finish  s:save  a:cancel  ::actions    
 m:mouse on  q:quit                                                              

@@ -117,12 +117,57 @@ public static class Program
         VerifyChrome("dark", PanelChrome.DefaultDark, Check);
         VerifyChrome("light", PanelChrome.DefaultLight, Check);
         VerifyButtons(Check);
+        VerifyCommentFooter(Check);
         CommentsComposerChecks.Verify(Check);
 
         Console.WriteLine(failures == 0
             ? $"verify: ok ({PanelFixtures.All().Count} fixtures)"
             : $"verify: {failures} failure(s)");
         return failures == 0 ? 0 : 1;
+    }
+
+    private static void VerifyCommentFooter(Action<string, bool, string> check)
+    {
+        const double width = 320, height = 400;
+        var whole = PanelFixtures.ReviewWhole(60);
+        var step = PanelFixtures.ReviewStep() with { Files = whole.Files, EntryCount = 60 };
+        var why = new PanelWhy(WhyState.Present, string.Concat(Enumerable.Repeat("Read before editing.\n", 60)));
+        var walk = PanelFixtures.ReviewWalk() with { Why = why };
+        var reports = Enumerable.Range(1, 30).Select(i =>
+            $"comments-context\tc{i}\treview\tactive\tg\tFeature\ncomments-document\t/l{i}\tc{i}\tlocal\tpresent\tr");
+        var report = Comments.Parse("comments-guard\tg\n" + string.Join("\n", reports));
+
+        foreach (var (name, model) in new[]
+        {
+            ("whole", whole), ("step", step), ("walk", walk),
+            ("compare", whole with { Readonly = true }),
+            ("conflict", step with { Situation = Situation.FinishConflict }),
+        })
+        {
+            var panel = new PanelView { ShowTitleActions = false };
+            var actions = new List<string>();
+            panel.ActionRequested += (id, _, _) => actions.Add(id);
+            panel.Render(PanelLayoutBuilder.PanelLayout(model with { Comments = report }));
+            Layout(panel, width, height);
+            var buttons = Descendants(panel).OfType<Button>().ToList();
+            var add = buttons.Single(b => (b.Content as string) == CommentsCopy.add);
+            var before = add.TranslatePoint(new Point(0, 0), panel).Y;
+            var initiallyVisible = before >= 0 && add.ActualHeight > 0 && before + add.ActualHeight <= height;
+
+            buttons.Single(b => (b.Content as string) == "▶ " + CommentsCopy.title)
+                .RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+            Layout(panel, width, height);
+            var scrolls = Descendants(panel).OfType<ScrollViewer>().Where(s => s.ScrollableHeight > 0).ToList();
+            foreach (var scroll in scrolls) scroll.ScrollToEnd();
+            Layout(panel, width, height);
+            var after = add.TranslatePoint(new Point(0, 0), panel).Y;
+            add.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+
+            check($"comment-footer:{name}", initiallyVisible && Math.Abs(before - after) < 1 && scrolls.Count == 2
+                && scrolls.All(s => !add.IsDescendantOf(s) && s.VerticalOffset > 0)
+                && actions.SequenceEqual(new[] { "addComment" }),
+                $"button y={before:0}/{after:0}, height={add.ActualHeight:0}, scrolling regions={scrolls.Count}");
+        }
     }
 
     /// <summary>

@@ -13,8 +13,12 @@ class Element {
     className = "";
     title = "";
     disabled = false;
+    open = false;
     constructor(readonly tag: string) {}
     appendChild(child: Element) { this.children.push(child); return child; }
+    querySelectorAll(tag: string): Element[] {
+        return this.children.flatMap(child => [...(child.tag === tag ? [child] : []), ...child.querySelectorAll(tag)]);
+    }
     setAttribute(name: string, value: string) { this.attributes[name] = value; }
     addEventListener(name: string, listener: () => void) { this.listeners[name] = listener; }
 }
@@ -32,15 +36,18 @@ function commentRows(documents: object[], pending = false, capture?: {target?: s
         document: {getElementById: (id: string) => id === "root" ? root : elements.find(node => node.id === id), createElement: create, createElementNS: (_ns: string, tag: string) => create(tag)},
         window: {addEventListener: (_name: string, listener: (event: object) => void) => {receive = listener;}},
     };
-    runInNewContext(script.replace(/\}\(\)\);\s*$/, "globalThis.footerForTest = renderPaneFooter; globalThis.commentsForTest = function(next) { model = painted = next; return renderComments(next); };}());"), context);
-    const section: Element = context.commentsForTest({situation: "review", commentTarget: capture?.target, busy: capture?.busy ?? false, readonly: capture?.readonly, comments: {
+    runInNewContext(script.replace(/\}\(\)\);\s*$/, "globalThis.footerForTest = renderPaneFooter; globalThis.commentsForTest = renderComments; globalThis.reviewForTest = function(next, loading) { model = painted = next; root.children.length = 0; renderReviewPanel(next, loading); return root; };}());"), context);
+    const review = {situation: "review", mode: "whole", files: [], commentTarget: capture?.target, busy: capture?.busy ?? false, readonly: capture?.readonly, comments: {
         guard: capture ? "guard" : undefined,
         documents, contexts: [{id: "c", kind: "review", state, label: "Feature"}],
         deliveries: pending ? [{context: "c", state: "pending"}] : [], diagnostics: [],
-    }});
+    }};
+    const section: Element = context.commentsForTest(review);
+    const renderReview = (overrides: object = {}, loading = false) => context.reviewForTest({...review, ...overrides}, loading) as Element;
+    const captureSection = renderReview().children.find(child => child.className.includes("review-comment-capture"));
     messages.length = 0;
-    return {section, rows: section.children.filter(c => c.className === "comments-row"), messages, saved,
-        footer: (comments: object | null = {documents, contexts: [{id: "c", state}], deliveries: [], diagnostics: []}) => context.footerForTest({busy: false, comments}) as Element,
+    return {section: captureSection!, rows: section.children.filter(c => c.className === "comments-row"), messages, saved, renderReview,
+        footer: (comments: object | null = {documents, contexts: [{id: "c", state}], deliveries: [], diagnostics: []}) => context.footerForTest({situation: "no-review", busy: false, comments}) as Element,
         updateTarget: (text?: string) => receive({data: {type: "commentTarget", text}})};
 }
 
@@ -127,6 +134,29 @@ describe("comment row buttons", () => {
         const buttons = section.children[1].children;
         assert.deepStrictEqual(buttons.map(button => button.children[0].textContent), ["Add comment"]);
         assert.deepStrictEqual(buttons.map(button => button.disabled), [true]);
+    });
+    it("renders capture below both scroll regions even when the documents are expanded", () => {
+        const {renderReview, messages} = commentRows([{context: "c", kind: "local", presence: "present", revision: "r"}], false, {});
+        const files = Array.from({length: 60}, (_, position) => ({position: position + 1, display: `src/file-${position}.ts`}));
+        const current = {position: 1, display: "src/file-0.ts", annotated: true};
+        for (const mode of ["whole", "step", "walk"]) {
+            const why = mode === "walk" ? {state: "present", text: "Read before editing.\n".repeat(60)} : undefined;
+            const [main, capture] = renderReview({mode, current, files, why}).children;
+            const [body, documents] = main.children;
+            assert.strictEqual(body.className, "pane-body");
+            assert.strictEqual(documents.className, "pane-footer review-comments");
+            const details = documents.children[0];
+            assert.strictEqual(details.tag, "details");
+            details.open = true;
+            details.listeners.toggle();
+            assert.strictEqual(renderReview({mode, current, files, why}).children[0].children[1].children[0].open, true);
+            const add = capture.children[1].children[0];
+            assert.strictEqual(add.children[0].textContent, "Add comment");
+            add.listeners.click();
+            assert.deepStrictEqual(JSON.parse(JSON.stringify(messages.pop())), {type: "addComment"});
+        }
+        const loading = renderReview({mode: "walk", current, files}, true).children.at(-1)!;
+        assert.strictEqual(loading.children[1].children[0].disabled, true);
     });
     it("sends each visible row's physical document index from accessible icon buttons", () => {
         const {rows, messages} = commentRows([

@@ -526,7 +526,7 @@ describe("panelHtml", () => {
             "finish-conflict tiene que seguir mostrando mode/branch/current, no un estado vacio"
         );
         assert.ok(
-            /if \(model\.situation === "finish-conflict"\) \{ root\.appendChild\(renderFinishConflictBanner\(\)\); \}/.test(html),
+            /if \(model\.situation === "finish-conflict"\) \{ body\.appendChild\(renderFinishConflictBanner\(\)\); \}/.test(html),
             "falta insertar el banner cuando el situation es finish-conflict"
         );
     });

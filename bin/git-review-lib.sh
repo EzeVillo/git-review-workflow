@@ -5115,7 +5115,7 @@ compare_pack_range() {
 compare_lease_commit() {
 	_compare_lease_message=$1; shift
 	_compare_lease_tree=$(git mktree) || return 1
-	GIT_AUTHOR_DATE= GIT_COMMITTER_DATE= \
+	GIT_AUTHOR_DATE='' GIT_COMMITTER_DATE='' \
 		git -c user.name='Git Review' -c user.email='git-review@localhost' -c commit.gpgSign=false \
 		commit-tree "$_compare_lease_tree" "$@" -m "$_compare_lease_message"
 }

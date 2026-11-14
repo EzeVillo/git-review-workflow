@@ -2,6 +2,13 @@
 
 Thanks for taking the time to contribute! Bug reports, fixes and ideas are all welcome.
 
+For Windows setup and local testing of VS Code, the TUI, Visual Studio, and
+JetBrains, see the [English guide](LOCAL-TESTING.md) or the
+[Spanish guide](PRUEBAS-LOCALES.md).
+
+Para compilar y probar VS Code, la TUI, Visual Studio o JetBrains en Windows, seguí la
+[guía rápida de pruebas locales](PRUEBAS-LOCALES.md).
+
 Two companion documents are worth knowing about: `AGENTS.md` holds the binding rules and a map of
 where review state lives, and `decisiones.md` (in Spanish) records why things are the way they
 are — the bug that motivated a decision and the alternative that was ruled out. Neither is required
